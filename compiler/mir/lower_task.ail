@@ -514,7 +514,7 @@ fn root_of(e ast.Expr) str
 ## overflow, the only way to report the sequential trap (conc.par.11).
 fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos)
     plan := par_plan(var, iter, body, pos) else
-        lower_for(var, iter, body)
+        lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
     mut lo := -1
@@ -600,7 +600,7 @@ fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], po
         write_var(key, cur, prim_op("load64", [at], Ty.Int))
     jump(join, [])
     cur = seq
-    lower_for(var, seq_iter, body)
+    lower_for(var, seq_iter, body, false, pos)
     jump(join, [])
     seal(join)
     cur = join
@@ -652,9 +652,9 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         )
         mut body := [take]
         body.extend(p.body)
-        lower_for("__k", range, body)
+        lower_for("__k", range, body, false, pos)
     else
-        lower_for(p.var, range, p.body)
+        lower_for(p.var, range, p.body, false, pos)
     for a in 0..p.accs.len()
         base := T_ARGS + 8 * (3 + 3 * a)
         for part in 0..3

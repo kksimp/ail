@@ -1,0 +1,14 @@
+struct Pos
+    line int
+    col int
+
+struct Span
+    from Pos
+    to Pos
+
+error struct Wide
+    span Span
+    n int
+
+fn main() ! Wide
+    return Wide(span: Span(from: Pos(line: 1, col: 2), to: Pos(line: 3, col: 4)), n: 9)
