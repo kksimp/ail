@@ -175,6 +175,18 @@ events, the list ends with `{"api":1,"trace":"dropped","count":N}` (text:
 `trace: N more events dropped`). Tracing never changes a test's result.
 *(ADR 0326)*
 
+```ail tool=test,--trace=calls,--trace-limit,2,FILE status=1 expect=dropped rules=trace.test.2
+fn step(n int) int
+    n + 1
+
+@test
+fn counts()
+    mut n := 0
+    for i in 0..5
+        n = step(n)
+    assert_eq(n, 99)
+```
+
 ## Trap snapshots
 
 **trace.snap.1** — A trap that ends `ail run` (err.trap.3) is reported with
