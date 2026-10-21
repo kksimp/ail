@@ -22,7 +22,7 @@ Keep the per-operand bounds checks. The loader validates every register and
 constant index, but the compiler cannot see that proof across the loader:
 `regs[i]` and `consts[i]` stay checked unless the access is `unsafe`
 (`get_unchecked`), which the designer has not approved (decision card open).
-Safe forms do not help: fixed-length slices and one up-front assert don't let
+Safe forms are not expected to help (reasoned, not built): fixed-length slices and one up-front assert don't let
 the optimiser drop checks on indices that come from instruction fields at run
 time, and replacing `mem::replace` with an enum swap moves the same stores.
 
