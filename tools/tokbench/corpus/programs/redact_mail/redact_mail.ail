@@ -1,0 +1,10 @@
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/agent-data/records.txt")? "reading records"
+    mail := regex.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")?
+    mut hidden := 0
+    for line in text.lines()
+        if regex.is_match(mail, line)
+            hidden += 1
+        print(regex.replace(mail, line, "<email>"))
+    print("{hidden} lines redacted")

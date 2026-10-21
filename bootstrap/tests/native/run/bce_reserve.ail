@@ -1,0 +1,46 @@
+# Lists filled by counted loops are sized first (native.bce.3); that is an
+# allocation only, so the contents stay as they are, even when the loop
+# stops early or never runs.
+fn squares(n int) List[int]
+    mut out := []
+    for i in 0..n
+        out.push(i * i)
+    out
+
+fn until(n int, stop int) List[int]
+    mut out := []
+    for i in 0..n
+        if i == stop
+            break
+        out.push(i)
+    out
+
+fn flags(n int) List[bool]
+    mut out := []
+    for i in 0..n
+        out.push(i % 3 == 0)
+    out
+
+fn rows(n int) List[List[int]]
+    mut out := []
+    for i in 0..n
+        mut row := []
+        for j in 0..i
+            row.push(i * j)
+        out.push(row)
+    out
+
+fn main()
+    print(squares(10))
+    print(squares(0).len())
+    print(until(1000000, 3))
+    print(until(5, 99))
+    print(flags(7))
+    r := rows(4)
+    print(r.len())
+    print(r[3])
+    mut big := squares(5000)
+    for i in 0..3000
+        big.push(i)
+    print(big.len())
+    print(big[7999])

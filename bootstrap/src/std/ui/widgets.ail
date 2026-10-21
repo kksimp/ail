@@ -111,7 +111,12 @@ pub fn fuzzy(item str, filter str) bool
 fn clicked(ev ui.Event, r Rect) Rect?
     match ev
         Mouse(c, row, button, kind) =>
-            if button == "left" and kind == "down" and c >= r.col and c < r.col + r.cols and row >= r.row and row < r.row + r.rows
+            if button == "left"
+                and kind == "down"
+                and c >= r.col
+                and c < r.col + r.cols
+                and row >= r.row
+                and row < r.row + r.rows
                 return Rect(col: c - r.col, row: row - r.row, cols: 1, rows: 1)
             none
         Key(_, _, _, _) | Resize(_, _) | Close | Scroll(_) => none

@@ -1,0 +1,5 @@
+# An empty separator traps (type.str.4).
+fn main()
+    print("a,b".split(","))
+    sep := ""
+    print("a,b".split(sep))

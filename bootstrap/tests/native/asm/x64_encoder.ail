@@ -1,0 +1,314 @@
+## Test driver for the x86-64 encoder (`compiler/x64/asm.ail`, ADR 0385),
+## run by bootstrap/tests/native_asm.rs. The harness copies the module to
+## `x64/asm/` next to this file as `main.ail`, runs it, and checks each line
+## `intent|bytes` against objdump's disassembly of the bytes. `intent` is the
+## instruction as the encoder was asked for it, in objdump's Intel syntax.
+
+use x64.asm
+
+R64 := [
+    "rax",
+    "rcx",
+    "rdx",
+    "rbx",
+    "rsp",
+    "rbp",
+    "rsi",
+    "rdi",
+    "r8",
+    "r9",
+    "r10",
+    "r11",
+    "r12",
+    "r13",
+    "r14",
+    "r15",
+]
+
+R32 := [
+    "eax",
+    "ecx",
+    "edx",
+    "ebx",
+    "esp",
+    "ebp",
+    "esi",
+    "edi",
+    "r8d",
+    "r9d",
+    "r10d",
+    "r11d",
+    "r12d",
+    "r13d",
+    "r14d",
+    "r15d",
+]
+
+R8 := [
+    "al",
+    "cl",
+    "dl",
+    "bl",
+    "spl",
+    "bpl",
+    "sil",
+    "dil",
+    "r8b",
+    "r9b",
+    "r10b",
+    "r11b",
+    "r12b",
+    "r13b",
+    "r14b",
+    "r15b",
+]
+
+CC := ["o", "", "b", "ae", "e", "ne", "be", "a", "", "", "p", "np", "l", "ge", "le", "g"]
+SD_OPS := ["fadd", "fsub", "fmul", "fdiv", "sqrt"]
+SD_NAMES := ["add", "sub", "mul", "div", "sqrt"]
+
+fn disp(d int) str
+    if d < 0 then "-{-d}" else "+{d}"
+
+fn mem(m asm.Mem) str
+    if m.base < 0
+        return "[rip{disp(m.disp)}]"
+    b := R64[m.base]
+    mut s := "[{b}"
+    if m.index >= 0
+        i := R64[m.index]
+        s = "{s}+{i}*{m.scale}"
+    "{s}{disp(m.disp)}]"
+
+fn emit(text str, a asm.Asm)
+    mut s := ""
+    for b in a.code
+        s = "{s} {b}"
+    print("{text}|{s}")
+
+# `mov dst, imm` is the shortest form of four: see Asm.mov_ri.
+fn mov_ri_text(d int, v int) str
+    if v == 0
+        return "xor {R32[d]}, {R32[d]}"
+    if v > 0 and v <= 4294967295
+        return "mov {R32[d]}, {v}"
+    if v >= -2147483648 and v <= 2147483647
+        return "mov {R64[d]}, {v}"
+    "movabs {R64[d]}, {v}"
+
+fn main()
+    # ---- moves ----
+    for d in [0, 4, 8, 13]
+        for s in [1, 5, 12, 15]
+            mut a := asm.new_asm()
+            a.mov_rr(d, s)
+            emit("mov {R64[d]}, {R64[s]}", a)
+    for d in [0, 8]
+        for v in [
+            0,
+            1,
+            127,
+            128,
+            4294967295,
+            4294967296,
+            -1,
+            -129,
+            2147483647,
+            2147483648,
+            -2147483648,
+            -2147483649,
+            1234605616436508552,
+        ]
+            mut a := asm.new_asm()
+            a.mov_ri(d, v)
+            emit(mov_ri_text(d, v), a)
+    for d in [0, 5, 8]
+        for m in [
+            asm.at(asm.RBX, 0),
+            asm.at(asm.RBP, 0),
+            asm.at(4, 8),
+            asm.at(12, -8),
+            asm.at(13, 300),
+            asm.at_index(3, 6, 8, 16),
+            asm.at_index(13, 12, 4, -4),
+        ]
+            mut a := asm.new_asm()
+            a.mov_rm(d, m)
+            emit("mov {R64[d]}, {mem(m)}", a)
+            mut b := asm.new_asm()
+            b.mov_mr(m, d)
+            emit("mov {mem(m)}, {R64[d]}", b)
+            mut c := asm.new_asm()
+            c.lea(d, m)
+            emit("lea {R64[d]}, {mem(m)}", c)
+    for m in [asm.at(asm.RBP, 8), asm.at(12, 0)]
+        mut a := asm.new_asm()
+        a.mov_mi(m, -5)
+        emit("mov QWORD PTR {mem(m)}, -5", a)
+        mut z := asm.new_asm()
+        z.movzx8_rm(0, m)
+        emit("movzx eax, BYTE PTR {mem(m)}", z)
+        mut s := asm.new_asm()
+        s.mov8_mr(m, 6)
+        emit("mov BYTE PTR {mem(m)}, sil", s)
+    for r in [0, 3, 4, 6, 8, 15]
+        mut a := asm.new_asm()
+        a.movzx8_rr(r, 4)
+        emit("movzx {R32[r]}, spl", a)
+    # ---- integer arithmetic ----
+    for op in ["add", "or", "and", "sub", "xor", "cmp"]
+        for d in [0, 5, 12]
+            mut a := asm.new_asm()
+            a.alu_rr(op, d, 9)
+            emit("{op} {R64[d]}, {R64[9]}", a)
+            mut b := asm.new_asm()
+            b.alu_rm(op, d, asm.at(asm.RSP, 16))
+            emit("{op} {R64[d]}, QWORD PTR [rsp+16]", b)
+        for v in [5, -5, 127, -128, 128, 100000]
+            mut a := asm.new_asm()
+            a.alu_ri(op, 7, v)
+            emit("{op} rdi, {v}", a)
+            mut b := asm.new_asm()
+            b.alu_mi(op, asm.at(asm.RBP, -16), v)
+            emit("{op} QWORD PTR [rbp-16], {v}", b)
+    for r in [0, 8]
+        mut a := asm.new_asm()
+        a.imul_rr(r, 2)
+        emit("imul {R64[r]}, rdx", a)
+        mut b := asm.new_asm()
+        b.imul_rm(r, asm.at(3, 4))
+        emit("imul {R64[r]}, QWORD PTR [rbx+4]", b)
+        for v in [3, -3, 1000]
+            mut c := asm.new_asm()
+            c.imul_rri(r, 1, v)
+            emit("imul {R64[r]}, rcx, {v}", c)
+    mut t := asm.new_asm()
+    t.test_rr(0, 1)
+    emit("test rax, rcx", t)
+    for r in [0, 5, 9, 13]
+        for v in [1, 255, 65536]
+            mut ti := asm.new_asm()
+            ti.test_ri(r, v)
+            emit("test {R64[r]}, {v}", ti)
+    mut ng := asm.new_asm()
+    ng.neg(12)
+    emit("neg r12", ng)
+    mut nt := asm.new_asm()
+    nt.not_reg(3)
+    emit("not rbx", nt)
+    mut cq := asm.new_asm()
+    cq.cqo()
+    emit("cqo", cq)
+    mut id := asm.new_asm()
+    id.idiv(9)
+    emit("idiv r9", id)
+    mut im := asm.new_asm()
+    im.imul1(12)
+    emit("imul r12", im)
+    for op in ["shl", "shr", "sar"]
+        for k in [1, 3, 63]
+            mut a := asm.new_asm()
+            a.shift_ri(op, 2, k)
+            emit("{op} rdx, {k}", a)
+        mut b := asm.new_asm()
+        b.shift_cl(op, 10)
+        emit("{op} r10, cl", b)
+    # ---- conditions ----
+    for cc in [0, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 14, 15]
+        cn := CC[cc]
+        mut a := asm.new_asm()
+        a.setcc(cc, 0)
+        emit("set{cn} al", a)
+        mut b := asm.new_asm()
+        b.setcc(cc, 12)
+        emit("set{cn} r12b", b)
+    # ---- control ----
+    for r in [0, 5, 8, 15]
+        mut p := asm.new_asm()
+        p.push(r)
+        emit("push {R64[r]}", p)
+        mut q := asm.new_asm()
+        q.pop(r)
+        emit("pop {R64[r]}", q)
+    mut ret := asm.new_asm()
+    ret.ret()
+    emit("ret", ret)
+    mut sc := asm.new_asm()
+    sc.syscall()
+    emit("syscall", sc)
+    mut ud := asm.new_asm()
+    ud.ud2()
+    emit("ud2", ud)
+    mut cs := asm.new_asm()
+    cs.call_sym("rt.trap")
+    emit("call 5", cs)
+    # Labels: the code is laid out and patched with `resolve_labels`. The
+    # label list is pub, so a label is made here as `Asm.label` and `Asm.bind`
+    # do it.
+    mut fwd := asm.new_asm()
+    fwd.labels.push(-1)
+    fwd.jmp(0)
+    fwd.ret()
+    fwd.labels[0] = fwd.code.len()
+    fwd.resolve_labels()
+    emit("jmp 6; ret", fwd)
+    mut back := asm.new_asm()
+    back.ret()
+    back.labels.push(1)
+    back.jcc(asm.CC_NE, 0)
+    back.resolve_labels()
+    emit("ret; jne 1", back)
+    # ---- vector (VEX) ----
+    for d in [0, 9, 15]
+        for m in [asm.at(asm.RBP, 8), asm.at(12, 0)]
+            mut a := asm.new_asm()
+            a.vmovsd_rm(d, m)
+            emit("vmovsd xmm{d}, QWORD PTR {mem(m)}", a)
+            mut b := asm.new_asm()
+            b.vmovsd_mr(m, d)
+            emit("vmovsd QWORD PTR {mem(m)}, xmm{d}", b)
+    for d in [0, 8, 15]
+        mut a := asm.new_asm()
+        a.vmov_rr(d, 3)
+        emit("vmovapd xmm{d}, xmm3", a)
+        for i in 0..5
+            op := SD_OPS[i]
+            mnem := SD_NAMES[i]
+            mut b := asm.new_asm()
+            b.vsd_rrr(op, d, 1, 10)
+            emit("v{mnem}sd xmm{d}, xmm1, xmm10", b)
+        mut c := asm.new_asm()
+        c.vsd_rrm("fmul", d, 2, asm.at(asm.RSP, 24))
+        emit("vmulsd xmm{d}, xmm2, QWORD PTR [rsp+24]", c)
+        for k in [84, 87]
+            mut e := asm.new_asm()
+            e.vpd_rrr(k, d, 4, 5)
+            pd := if k == 84 then "andpd" else "xorpd"
+            emit("v{pd} xmm{d}, xmm4, xmm5", e)
+    mut rd := asm.new_asm()
+    rd.vroundsd(0, 0, 1, 9)
+    emit("vroundsd xmm0, xmm0, xmm1, 9", rd)
+    mut ce := asm.new_asm()
+    ce.vroundsd(8, 8, 9, 10)
+    emit("vroundsd xmm8, xmm8, xmm9, 10", ce)
+    mut uc := asm.new_asm()
+    uc.vucomisd(0, 1)
+    emit("vucomisd xmm0, xmm1", uc)
+    mut ci := asm.new_asm()
+    ci.vcvtsi2sd(2, 8)
+    emit("vcvtsi2sd xmm2, xmm2, r8", ci)
+    mut ct := asm.new_asm()
+    ct.vcvttsd2si(0, 9)
+    emit("vcvttsd2si rax, xmm9", ct)
+    mut qx := asm.new_asm()
+    qx.vmovq_xr(1, 12)
+    emit("vmovq xmm1, r12", qx)
+    mut qr := asm.new_asm()
+    qr.vmovq_rx(13, 2)
+    emit("vmovq r13, xmm2", qr)
+    mut sh := asm.new_asm()
+    sh.shlx(0, 1, 2)
+    emit("shlx rax, rcx, rdx", sh)
+    mut sa := asm.new_asm()
+    sa.sarx(9, 14, 15)
+    emit("sarx r9, r14, r15", sa)

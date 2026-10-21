@@ -1,0 +1,7 @@
+# `xs[xs.len()]` isn't vouched for without a `push` in between (type.coll.4).
+fn main()
+    mut xs := [1, 2, 3]
+    n := xs.len()
+    xs[n - 1] = 4
+    xs[n] = 5
+    print(xs)

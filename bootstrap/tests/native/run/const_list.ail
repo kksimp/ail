@@ -1,0 +1,18 @@
+# A module-level list is computed once into a program global (ADR 0604, ADR 0735):
+# indexing, len and iteration read it, and a copy bound to a `mut` variable is independent.
+NAMES := ["ann", "bo", "cy"]
+SIZES := [len_of("ann"), 2, 3]
+
+fn len_of(s str) int
+    s.len()
+
+fn main()
+    mut total := 0
+    for i in 0..9
+        total += NAMES[i % NAMES.len()].len() + SIZES[i % 3]
+    print(total)
+    mut copy := NAMES
+    copy.push("di")
+    print("{NAMES.len()} {copy.len()} {copy[3]}")
+    for n in NAMES
+        print(n)

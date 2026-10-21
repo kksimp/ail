@@ -1,0 +1,15 @@
+# A call in the loop can lengthen the list, never shorten it: a loop that
+# reads past the end of a list traps at the first index past it (type.coll.4).
+fn more(mut xs List[int], i int)
+    xs.push(i)
+
+fn run(mut xs List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        more(mut xs, i)
+        s += xs[i * 2]
+    s
+
+fn main()
+    mut xs := [1]
+    print(run(mut xs, 4))

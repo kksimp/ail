@@ -1,0 +1,4 @@
+fn main()
+    names := ["a", "b"]
+    quoted := ["`{n}`" for n in names]
+    print(quoted.join(", "))

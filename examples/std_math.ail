@@ -1,0 +1,16 @@
+## std.math float methods in a small numeric task: the distance of each point
+## from the origin, the root-mean-square of the distances, and a decibel level.
+##   ./ail run examples/std_math.ail
+
+fn main()
+    xs := [3.0, 1.0, 0.0]
+    ys := [4.0, 1.0, 2.5]
+    mut total := 0.0
+    for i in 0..xs.len()
+        d := xs[i].hypot(ys[i])
+        print("point {i}: distance {d}")
+        total = total + d * d
+    rms := (total / xs.len().to_float()).pow(0.5)
+    print("rms {rms}")
+    print("level {20.0 * 10.0.log10()} dB")
+    print("angle {1.0.atan2(1.0)}")

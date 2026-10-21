@@ -1,0 +1,7 @@
+fn sign(n int) str
+    match n
+        x if x > 0 => "pos"
+        _ => "other"
+
+fn main()
+    print("ok")

@@ -56,3 +56,10 @@ token; the syntax API shows them as lowercase hex.
   payload is rare, and `"...".to_bytes()` covers text.
 - The AIL lexer, parser and syntax JSON gained `Tok.Bytes(hex)` and
   `Expr.Bytes(hex, pos)`.
+
+## Rejected alternatives
+
+- `"...".to_bytes()` only (option B): rejected because it cannot write `0x89` or any non-UTF-8 byte, and it allocates at run time. Measured mean 102.2 tokens against 89.0 for the chosen form.
+- `bytes.from_hex("...")` (option C): rejected because it costs 54% more tokens (137.4 against 89.0), is fallible, and is unreadable for text.
+- `bytes.from_list([137, 80, ...])`: measured at 204.6 tokens, the most expensive form, so rejected on token usage.
+- `b"..."` accepting any Unicode, encoded as UTF-8 (option D): rejected because it gives two ways to spell text bytes, and the byte count would depend on the editor's normalisation.

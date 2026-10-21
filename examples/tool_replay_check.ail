@@ -1,0 +1,15 @@
+## Agent task: record a run's effects with `ail run --record`, replay them with
+## `--replay`, and check that the replayed run prints the same output.
+##   ./ail run examples/tool_replay_check.ail
+
+fn main() !
+    here := path.dir(env.program())
+    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    rec := "{data}/replay.rec"
+    program := "{data}/replay_fixture.ail"
+    recorded := proc.run("{here}/../ail", ["run", "--record", rec, program])? "recording"
+    replayed := proc.run("{here}/../ail", ["run", "--replay", rec, program])? "replaying"
+    print("recorded: status {recorded.status}, {recorded.out.lines().len()} lines")
+    print("replayed: status {replayed.status}, {replayed.out.lines().len()} lines")
+    print("same output: {recorded.out == replayed.out}")
+    fs.remove(rec)? "removing the recording"

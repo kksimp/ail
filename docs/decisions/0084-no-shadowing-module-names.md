@@ -26,3 +26,7 @@ offers renames.
   common local names (`count`, `max`, `total`) stay available. Prefer
   methods (`xs.len()`, `a.max(b)`) over free functions in the prelude.
 - Relaxing this later wouldn't break existing code.
+
+## Rejected alternatives
+
+- Allow locals to shadow module-level, imported and prelude names: rejected because "one name, one meaning" (ai-author-wishlist 1.2) extends from locals to every name visible in a file. (reconstructed 2026-10-21: the record gives the principle, not a named alternative.)

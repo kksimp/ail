@@ -25,3 +25,7 @@ fn find(id int) User?
         return none
     users[id]
 ```
+
+## Rejected alternatives
+
+- Explicit wrapping `some(x)` on every present value: 24.2 tokens against 22.8 for implicit conversion (6% more). Rejected on token usage.

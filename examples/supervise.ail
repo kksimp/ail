@@ -12,7 +12,7 @@ fn run_job(job Job) str
         if err.kind == "timed_out"
             return "timed out after {job.limit} ms"
         return "could not start"
-    if r.status == 0
+    if r.ok()
         return "ok"
     "exit {r.status}: {r.err.trim()}"
 

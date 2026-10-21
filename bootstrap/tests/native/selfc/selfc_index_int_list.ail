@@ -1,0 +1,4 @@
+fn main()
+    xs := [4, 5, 6]
+    i := 2
+    print(xs[i])

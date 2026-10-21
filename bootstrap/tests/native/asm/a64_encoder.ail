@@ -1,0 +1,241 @@
+## Test driver for the ARM64 encoder (`compiler/a64/asm.ail`, ADR 0388),
+## run by bootstrap/tests/native_asm.rs. The harness copies the module to
+## `a64/asm/` next to this file as `main.ail`, runs it, and checks each line
+## `intent|words` against the disassembly of the 32-bit words by llvm-mc.
+## `intent` is the instruction as the encoder was asked for it, in the
+## syntax llvm-mc prints (aliases such as `mov` and `cmp` included).
+
+use a64.asm
+
+COND := ["eq", "ne", "hs", "lo", "mi", "pl", "vs", "vc", "hi", "ls", "ge", "lt", "gt", "le"]
+
+fn emit(text str, a asm.Asm)
+    mut s := ""
+    for b in a.code
+        s = "{s} {b}"
+    print("{text}|{s}")
+
+fn main()
+    # ---- moves ----
+    for d in [0, 8, 19, 29]
+        for m in [1, 16, 30]
+            mut a := asm.new_asm()
+            a.mov_rr(d, m)
+            emit("mov x{d}, x{m}", a)
+    mut ms := asm.new_asm()
+    ms.mov_rr(0, asm.SP)
+    emit("mov x0, sp", ms)
+    mut md := asm.new_asm()
+    md.mov_rr(asm.SP, 5)
+    emit("mov sp, x5", md)
+    # The encoder picks movz, movn or movk per 16-bit part, so the intent is
+    # the constant, and the harness checks the instructions compute it.
+    for d in [0, 9, 27]
+        for v in [
+            0,
+            1,
+            4095,
+            65536,
+            1234,
+            -1,
+            -2,
+            4294967296,
+            1311768467463790320,
+            81985529216486895,
+        ]
+            mut a := asm.new_asm()
+            a.mov_ri(d, v)
+            emit("const x{d}={v}", a)
+    # ---- integer arithmetic ----
+    for op in ["add", "sub", "adds", "subs", "and", "orr", "eor"]
+        mut a := asm.new_asm()
+        a.alu_rr(op, 0, 1, 2)
+        emit("{op} x0, x1, x2", a)
+        mut b := asm.new_asm()
+        b.alu_rr(op, 20, 10, 30)
+        emit("{op} x20, x10, x30", b)
+    mut ta := asm.new_asm()
+    ta.tst_rr(3, 4)
+    emit("tst x3, x4", ta)
+    mut ca := asm.new_asm()
+    ca.cmp_rr(3, 4)
+    emit("cmp x3, x4", ca)
+    mut cs := asm.new_asm()
+    cs.cmp_ri(5, 100)
+    emit("cmp x5, #100", cs)
+    mut cn := asm.new_asm()
+    cn.cmn_ri(6, 7)
+    emit("cmn x6, #7", cn)
+    mut sg := asm.new_asm()
+    sg.cmp_sign(1, 2)
+    emit("cmp x1, x2, asr #63", sg)
+    for v in [1, 16, 4095]
+        mut a := asm.new_asm()
+        a.alu_ri("add", 0, 1, v)
+        emit("add x0, x1, #{v}", a)
+        mut b := asm.new_asm()
+        b.alu_ri("sub", 9, 9, v)
+        emit("sub x9, x9, #{v}", b)
+        mut c := asm.new_asm()
+        c.alu_ri("subs", 2, 3, v)
+        emit("subs x2, x3, #{v}", c)
+    mut sp := asm.new_asm()
+    sp.alu_ri("add", asm.SP, asm.SP, 16)
+    emit("add sp, sp, #16", sp)
+    mut e1 := asm.new_asm()
+    e1.eor1(4, 5)
+    emit("eor x4, x5, #0x1", e1)
+    mut ng := asm.new_asm()
+    ng.neg(7, 8)
+    emit("neg x7, x8", ng)
+    mut ngs := asm.new_asm()
+    ngs.negs(7, 8)
+    emit("negs x7, x8", ngs)
+    mut mv := asm.new_asm()
+    mv.mvn(1, 2)
+    emit("mvn x1, x2", mv)
+    for c in [0, 1, 10, 11, 12, 13]
+        mut a := asm.new_asm()
+        a.cset(3, c)
+        emit("cset x3, {COND[c]}", a)
+    mut mu := asm.new_asm()
+    mu.mul(0, 1, 2)
+    emit("mul x0, x1, x2", mu)
+    mut sm := asm.new_asm()
+    sm.smulh(5, 6, 7)
+    emit("smulh x5, x6, x7", sm)
+    mut ms2 := asm.new_asm()
+    ms2.msub(0, 1, 2, 3)
+    emit("msub x0, x1, x2, x3", ms2)
+    mut sd := asm.new_asm()
+    sd.sdiv(9, 10, 11)
+    emit("sdiv x9, x10, x11", sd)
+    mut slr := asm.new_asm()
+    slr.shift_rr("lsl", 0, 1, 2)
+    emit("lsl x0, x1, x2", slr)
+    mut sar := asm.new_asm()
+    sar.shift_rr("asr", 0, 1, 2)
+    emit("asr x0, x1, x2", sar)
+    for k in [1, 3, 31, 63]
+        mut a := asm.new_asm()
+        a.shift_ri("lsl", 4, 5, k)
+        emit("lsl x4, x5, #{k}", a)
+        mut b := asm.new_asm()
+        b.shift_ri("lsr", 4, 5, k)
+        emit("lsr x4, x5, #{k}", b)
+        mut c := asm.new_asm()
+        c.shift_ri("asr", 4, 5, k)
+        emit("asr x4, x5, #{k}", c)
+    # ---- memory ----
+    for off in [0, 8, 256, 32760]
+        mut a := asm.new_asm()
+        a.ldr(0, 1, off)
+        emit("ldr x0, [x1, #{off}]", a)
+        mut b := asm.new_asm()
+        b.str(2, 3, off)
+        emit("str x2, [x3, #{off}]", b)
+        mut c := asm.new_asm()
+        c.ldr_d(4, 5, off)
+        emit("ldr d4, [x5, #{off}]", c)
+        mut e := asm.new_asm()
+        e.str_d(6, 7, off)
+        emit("str d6, [x7, #{off}]", e)
+    for off in [-8, -256, 4, 255]
+        mut a := asm.new_asm()
+        a.ldr(0, 1, off)
+        emit("ldur x0, [x1, #{off}]", a)
+        mut b := asm.new_asm()
+        b.str(2, 3, off)
+        emit("stur x2, [x3, #{off}]", b)
+    mut li := asm.new_asm()
+    li.ldr_idx(0, 1, 2)
+    emit("ldr x0, [x1, x2, lsl #3]", li)
+    mut si := asm.new_asm()
+    si.str_idx(3, 4, 5)
+    emit("str x3, [x4, x5, lsl #3]", si)
+    mut ldi := asm.new_asm()
+    ldi.ldr_d_idx(6, 7, 8)
+    emit("ldr d6, [x7, x8, lsl #3]", ldi)
+    mut sdi := asm.new_asm()
+    sdi.str_d_idx(9, 10, 11)
+    emit("str d9, [x10, x11, lsl #3]", sdi)
+    mut lb := asm.new_asm()
+    lb.ldrb(0, 1)
+    emit("ldrb w0, [x1]", lb)
+    mut sb := asm.new_asm()
+    sb.strb(2, 3)
+    emit("strb w2, [x3]", sb)
+    mut lbo := asm.new_asm()
+    lbo.ldrb_off(0, 1, 4)
+    emit("ldrb w0, [x1, #4]", lbo)
+    mut sbo := asm.new_asm()
+    sbo.strb_off(2, 3, 255)
+    emit("strb w2, [x3, #255]", sbo)
+    mut lbi := asm.new_asm()
+    lbi.ldrb_idx(0, 1, 2)
+    emit("ldrb w0, [x1, x2]", lbi)
+    mut sbi := asm.new_asm()
+    sbi.strb_idx(3, 4, 5)
+    emit("strb w3, [x4, x5]", sbi)
+    mut pp := asm.new_asm()
+    pp.push_pair(29, 30)
+    emit("stp x29, x30, [sp, #-16]!", pp)
+    mut qp := asm.new_asm()
+    qp.pop_pair(29, 30)
+    emit("ldp x29, x30, [sp], #16", qp)
+    # ---- floating point ----
+    for op in ["fadd", "fsub", "fmul", "fdiv"]
+        mut a := asm.new_asm()
+        a.fop(op, 0, 1, 2)
+        emit("{op} d0, d1, d2", a)
+    for op in ["fsqrt", "fneg", "fabs", "frintm", "frintp", "frintz", "fmov"]
+        mut a := asm.new_asm()
+        a.fop1(op, 3, 4)
+        emit("{op} d3, d4", a)
+    mut fc := asm.new_asm()
+    fc.fcmp(5, 6)
+    emit("fcmp d5, d6", fc)
+    mut sc := asm.new_asm()
+    sc.scvtf(7, 8)
+    emit("scvtf d7, x8", sc)
+    mut fz := asm.new_asm()
+    fz.fcvtzs(9, 10)
+    emit("fcvtzs x9, d10", fz)
+    mut fx := asm.new_asm()
+    fx.fmov_xd(11, 12)
+    emit("fmov x11, d12", fx)
+    mut fd := asm.new_asm()
+    fd.fmov_dx(13, 14)
+    emit("fmov d13, x14", fd)
+    # ---- control ----
+    # Labels: `labels` is pub, so a label placed at offset 8 is made here as
+    # `Asm.label` and `Asm.bind` do it, before the branch that names it.
+    mut b0 := asm.new_asm()
+    b0.labels.push(8)
+    b0.b(0)
+    b0.resolve_labels()
+    emit("b 8", b0)
+    for c in [0, 1, 11]
+        mut a := asm.new_asm()
+        a.labels.push(8)
+        a.b_cond(c, 0)
+        a.resolve_labels()
+        emit("b.{COND[c]} 8", a)
+    mut cb := asm.new_asm()
+    cb.labels.push(8)
+    cb.cbz(3, 0)
+    cb.ret()
+    cb.resolve_labels()
+    emit("cbz x3, 8; ret", cb)
+    mut rt := asm.new_asm()
+    rt.ret()
+    emit("ret", rt)
+    mut sv := asm.new_asm()
+    sv.svc(128)
+    emit("svc #128", sv)
+    mut bk := asm.new_asm()
+    bk.brk()
+    emit("brk #0", bk)
+    mut bl := asm.new_asm()
+    bl.bl("rt.trap")
+    emit("bl #0", bl)

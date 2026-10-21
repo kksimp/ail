@@ -301,8 +301,51 @@ impl<'p> Checker<'p> {
                 "remove the `mut`, and send results back through the task's result or a `Channel`",
             );
         }
+        // own.ref.2: a `ref` is reachable from one task only, so it isn't passed to another.
+        let target = match operand {
+            Expr::Call { callee, .. } => match &**callee {
+                Expr::Name(n, _) | Expr::TypeArgs { name: n, .. } => self.fns.get(n.as_str()).copied(),
+                _ => None,
+            },
+            _ => self.resolved.targets.get(&at).copied(),
+        };
+        if let Some(i) = target.filter(|i| *i < self.sigs.len()) {
+            let params: Vec<Ty> = self.sigs[i].params.iter().map(|(_, t)| t.clone()).collect();
+            for (a, pt) in args.iter().zip(params.iter()) {
+                if self.holds_ref(pt, 0) {
+                    self.error_help(
+                        "own.ref.2",
+                        a.value.pos(),
+                        "a `ref` can't be passed to a spawned task: only one task may reach it",
+                        "send the value through a `Channel`, or hold the shared state in a `Mutex`",
+                    );
+                }
+            }
+        }
         let t = if t == Ty::Never { Ty::Unit } else { t };
         Ty::Conc(Conc::Task, Box::new(t))
+    }
+
+    /// Whether a value of type `t` can hold a `ref` cell (own.ref.2): a `ref`, or a
+    /// collection, optional, result, struct or enum that holds one.
+    pub(super) fn holds_ref(&self, t: &Ty, depth: usize) -> bool {
+        if depth > 6 {
+            return false;
+        }
+        match t {
+            Ty::Ref(_) => true,
+            Ty::List(e) | Ty::Set(e) | Ty::Opt(e) | Ty::Res(e, _) => self.holds_ref(e, depth + 1),
+            Ty::Map(k, v) => self.holds_ref(k, depth + 1) || self.holds_ref(v, depth + 1),
+            Ty::Struct(..) | Ty::Enum(..) => {
+                self.field_types_of(t, match t {
+                    Ty::Struct(_, a) | Ty::Enum(_, a) => a,
+                    _ => &[],
+                })
+                .iter()
+                .any(|f| self.holds_ref(f, depth + 1))
+            }
+            _ => false,
+        }
     }
 
     fn not_spawnable(&mut self, pos: Pos) -> Ty {

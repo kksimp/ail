@@ -13,6 +13,9 @@ OUT_LEN := 1
 ARGC := 5
 ARGV := 6
 PARSE_OK := 7
+## A trap's third number (a slice's list length); the program ends after
+## it, so it shares `PARSE_OK`'s slot.
+TRAP_LEN := 7
 
 OUT_CAP := 65536
 
@@ -24,6 +27,8 @@ fn sys_write(fd int, p int, n int)
     while done < n
         k := if t == 0 then 1 else if t == 1 then 64 else 4
         r := syscall(k, fd, p + done, n - done, 0, 0, 0)
+        if r == -4
+            continue
         if r <= 0
             return
         done += r
@@ -48,9 +53,16 @@ fn init(argc int, argv int)
     store64(global(OUT_BUF), sys_mmap(OUT_CAP))
     store64(global(OUT_LEN), 0)
     heap_init(argv)
+    limits_init()
 
 fn copy_bytes(dst int, src int, n int)
     mut i := 0
+    while i + 32 <= n
+        store64(dst + i, load64(src + i))
+        store64(dst + i + 8, load64(src + i + 8))
+        store64(dst + i + 16, load64(src + i + 16))
+        store64(dst + i + 24, load64(src + i + 24))
+        i += 32
     while i + 8 <= n
         store64(dst + i, load64(src + i))
         i += 8
@@ -67,10 +79,11 @@ fn flush_to(fd int)
         store64(global(OUT_LEN), 0)
 
 fn flush()
-    flush_to(1)
+    flush_to(if load64(global(OUT_FD)) == 2 then 2 else 1)
 
 ## Flush, then end the process.
 fn exit(code int)
+    err_report()
     flush()
     sys_exit(code)
 
@@ -116,22 +129,6 @@ fn str_new(n int, chars int) int
 fn str_len(s str) int
     load64(str_addr(s) + 8)
 
-## `s.chars()`: each character as a string of its own.
-fn str_chars(s str) List[int]
-    p := str_addr(s)
-    n := load64(p)
-    out := list_new(load64(p + 8))
-    mut i := 0
-    while i < n
-        mut j := i + 1
-        while j < n and load8(p + 16 + j).bit_and(192) == 128
-            j += 1
-        c := str_new(j - i, 1)
-        copy_bytes(c + 16, p + 16 + i, j - i)
-        list_push(out, c)
-        i = j
-    out
-
 ## `xs.join(sep)` for a list of strings.
 fn list_join(xs List[int], sep str) str
     q := list_addr(xs)
@@ -158,27 +155,90 @@ fn list_join(xs List[int], sep str) str
         at += load64(e)
     str_at(r)
 
+## UTF-8 bytes of the scalar value `c`.
+fn char_width(c int) int
+    if c < 128
+        return 1
+    if c < 2048
+        return 2
+    if c < 65536
+        return 3
+    4
+
+## Write the UTF-8 of `c` at `p`; the address after it.
+fn char_put(p int, c int) int
+    w := char_width(c)
+    if w == 1
+        store8(p, c)
+    elif w == 2
+        store8(p, 192 + c / 64)
+        store8(p + 1, 128 + c % 64)
+    elif w == 3
+        store8(p, 224 + c / 4096)
+        store8(p + 1, 128 + c / 64 % 64)
+        store8(p + 2, 128 + c % 64)
+    else
+        store8(p, 240 + c / 262144)
+        store8(p + 1, 128 + c / 4096 % 64)
+        store8(p + 2, 128 + c / 64 % 64)
+        store8(p + 3, 128 + c % 64)
+    p + w
+
+## `xs.join(sep)` for a list of characters (type.coll.9).
+fn list_join_chars(xs List[int], sep str) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sp := str_addr(sep)
+    mut n := 0
+    for i in 0..k
+        n += char_width(load64(items + 8 * i))
+    if k > 1
+        n += (k - 1) * load64(sp)
+    chars := if k > 1 then k + (k - 1) * load64(sp + 8) else k
+    r := str_new(n, chars)
+    mut at := r + 16
+    for i in 0..k
+        if i > 0
+            copy_bytes(at, sp + 16, load64(sp))
+            at += load64(sp)
+        at = char_put(at, load64(items + 8 * i))
+    str_at(r)
+
 fn out_nl()
     out_byte(10)
+    if line_buffered()
+        flush()
 
-## Decimal, working on negative remainders so the smallest `int` needs no
-## negation.
-fn out_int(n int)
-    if n == 0
-        out_byte(48)
-        return
+## Decimal `n` written at address `at`, which has 48 bytes to use (24 for the
+## window, 24 read past it); the count of bytes. It works on negative remainders so the smallest `int` needs no
+## negation. The digits are produced from the end of that window, one
+## division by 10 each, then moved down to `at` in three 8-byte pieces (the
+## bytes after the number are scratch).
+fn write_int(at int, n int) int
+    mut v := if n < 0 then n else 0 - n
+    mut q := at + 23
+    store8(q, 48 - v % 10)
+    v = v / 10
+    while v != 0
+        q -= 1
+        r := v / 10
+        store8(q, 48 + r * 10 - v)
+        v = r
     if n < 0
-        out_byte(45)
-    mut v := n
-    mut scale := 1
-    while v / 10 != 0
-        v = v / 10
-        scale *= 10
-    v = n
-    while scale > 0
-        d := v / scale % 10
-        out_byte(48 + d.abs())
-        scale = scale / 10
+        q -= 1
+        store8(q, 45)
+    store64(at, load64(q))
+    store64(at + 8, load64(q + 8))
+    store64(at + 16, load64(q + 16))
+    at + 24 - q
+
+fn out_int(n int)
+    mut used := load64(global(OUT_LEN))
+    if OUT_CAP - used < 48
+        flush()
+        used = 0
+    store64(global(OUT_LEN), used + write_int(load64(global(OUT_BUF)) + used, n))
 
 fn out_bool(b bool)
     if b
@@ -278,7 +338,7 @@ fn hex_digit(d int) int
     if d < 10 then 48 + d else 87 + d
 
 ## A list of lists or strings: `depth` levels of lists around elements of
-## kind `leaf` (0 int, 1 float, 2 bool, 3 str).
+## kind `leaf` (0 int, 1 float, 2 bool, 3 str, 4 char).
 fn out_list_deep(xs List[int], depth int, leaf int)
     if depth == 0
         if leaf == 0
@@ -287,6 +347,8 @@ fn out_list_deep(xs List[int], depth int, leaf int)
             out_list_float(xs)
         elif leaf == 2
             out_list_bool(xs)
+        elif leaf == 4
+            out_list_char(xs)
         else
             p := list_addr(xs)
             data := load64(p + 16)
@@ -303,6 +365,19 @@ fn out_list_deep(xs List[int], depth int, leaf int)
         out_sep(i)
         out_list_deep(list_at(load64(data + 8 * i)), depth - 1, leaf)
     out_byte(93)
+
+## Record the length a slice trap reports (kind 7).
+fn note_len(n int)
+    store64(global(TRAP_LEN), n)
+
+## `xs[lo..hi]`, checked by the caller: a new list of `size`-byte elements.
+fn list_slice(xs List[int], lo int, hi int, size int) List[int]
+    p := list_addr(xs)
+    n := hi - lo
+    q := list_addr(list_alloc(n, size))
+    copy_bytes(load64(q + 16), load64(p + 16) + size * lo, size * n)
+    store64(q, n)
+    list_at(q)
 
 ## A heap object of `size` bytes with its header word (native-abi.md §2);
 ## the pointer is to the first byte after the header.
@@ -330,12 +405,53 @@ fn list_alloc(cap int, size int) List[int]
 fn list_new(cap int) List[int]
     list_alloc(cap, 8)
 
+## A list made with room for a loop's pushes (`list_reserve` would regrow
+## it): `(hi - lo) * per` elements, at most 2^20 iterations' worth.
+fn list_new_for(lo int, hi int, per int) List[int]
+    mut want := hi - lo
+    if want > 1048576
+        want = 1048576
+    if want < 0
+        want = 0
+    list_alloc(want * per, 8)
+
 fn list_grow(p int, size int)
     cap := load64(p + 8) * 2
     data := alloc(size * cap, data_kind(size))
     copy_bytes(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
     store64(p + 16, data)
+
+## Room for `(hi - lo) * per` more elements of `size` bytes, at most
+## 2^20 of them, called before a loop that pushes that many (ADR 0578).
+## Only the capacity changes.
+fn list_reserve(xs List[int], lo int, hi int, per int, size int)
+    if hi <= lo
+        return
+    p := list_addr(xs)
+    mut want := hi - lo
+    if want > 1048576
+        want = 1048576
+    need := load64(p) + want * per
+    if need <= load64(p + 8)
+        return
+    data := alloc(size * need, data_kind(size))
+    copy_bytes(data, load64(p + 16), size * load64(p))
+    store64(p + 8, need)
+    store64(p + 16, data)
+
+## The shortest length among the rows of a list of lists (2^62 if there are
+## none), called before a loop nest that only reads them (ADR 0611).
+fn list_rows_min(xs List[int]) int
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    mut least := 4611686018427387904
+    for i in 0..n
+        k := load64(load64(data + 8 * i))
+        if k < least
+            least = k
+    least
 
 ## The slow paths of `push`: the code generator stores in place while the
 ## list has room, and calls these when it is full.
@@ -474,6 +590,30 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("shift count `")
         out_int(a)
         out_str("` is outside `0..=63`")
+    elif kind == 7
+        # `xs[a..b]` (type.coll.4); `op` is `..` or `..=`.
+        out_str("slice ")
+        out_int(a)
+        out_str(op)
+        out_int(b)
+        out_str(" is out of bounds for a list of length ")
+        out_int(load64(global(TRAP_LEN)))
+    elif kind == 8
+        # `xs.insert(a, x)` on a list of length `b` (type.coll.4).
+        out_str("insert index ")
+        out_int(a)
+        out_str(" is out of bounds for a list of length ")
+        out_int(b)
+    elif kind == 9
+        # io.exit(a) outside 0 to 255 (std.io.4)
+        out_str("exit status ")
+        out_int(a)
+        out_str(" is outside 0 to 255")
+    elif kind == 10
+        # time.sleep_ms(a) with a negative a (std.time.2)
+        out_str("can't sleep for ")
+        out_int(a)
+        out_str(" milliseconds")
     out_byte(10)
     out_str(tail)
     flush_to(2)
@@ -485,353 +625,3 @@ fn fail(kind int, a int, b int)
     out_str("trap[run.limit.2]: out of memory\n")
     flush_to(2)
     sys_exit(1)
-
-# ---- float text (ADR 0409) ----
-#
-# Lane 122's algorithm from `compiler/rt/rt.ail`, in the native subset: the
-# shortest digits that read back as the same value, closest when several
-# are as short (Steele and White, with Burger and Dybvig's exact
-# arithmetic), in fixed notation for decimal exponents -4 to 15 and
-# `d.ddde+XX` otherwise. Big numbers are little-endian base 10^9 limbs.
-
-BASE := 1000000000
-
-## A float as the interpreter prints it (type.num.7).
-fn out_float(x float)
-    if x != x
-        out_str("nan")
-        return
-    if x > 1.7976931348623157e308
-        out_str("inf")
-        return
-    if x < -1.7976931348623157e308
-        out_str("-inf")
-        return
-    if x == 0.0
-        if 1.0 / x < 0.0
-            out_byte(45)
-        out_str("0.0")
-        return
-    neg := x < 0.0
-    if neg
-        out_byte(45)
-    ds := digits_of(if neg then 0.0 - x else x)
-    # The last element is the decimal point's position `p`: x = 0.DIGITS * 10^p.
-    n := ds.len() - 1
-    p := ds[n]
-    if p >= -3 and p <= 16
-        if p <= 0
-            out_byte(48)
-            out_byte(46)
-            for _ in 0..0 - p
-                out_byte(48)
-            for i in 0..n
-                out_byte(48 + ds[i])
-        elif p >= n
-            for i in 0..n
-                out_byte(48 + ds[i])
-            for _ in 0..p - n
-                out_byte(48)
-            out_byte(46)
-            out_byte(48)
-        else
-            for i in 0..n
-                if i == p
-                    out_byte(46)
-                out_byte(48 + ds[i])
-        return
-    out_byte(48 + ds[0])
-    if n > 1
-        out_byte(46)
-        for i in 1..n
-            out_byte(48 + ds[i])
-    out_byte(101)
-    e := p - 1
-    out_byte(if e < 0 then 45 else 43)
-    a := e.abs()
-    if a < 10
-        out_byte(48)
-    out_int(a)
-
-## `{x:.n}` (lex.str.7, type.str.11): `x` rounded to `n` decimals, half to
-## even on its exact value, with the sign of a negative or `-0.0`.
-fn out_float_fixed(x float, n int)
-    if x != x or x > 1.7976931348623157e308 or x < -1.7976931348623157e308
-        out_float(x)
-        return
-    bits := float_bits(x)
-    if bits < 0
-        out_byte(45)
-    be := bits.shr(52).bit_and(2047)
-    mut f := bits.bit_and(4503599627370495)
-    mut e := -1074
-    if be > 0
-        f += 4503599627370496
-        e = be - 1075
-    # q = x * 10^n, rounded.
-    mut q := big_pow10(big_of(f), n)
-    if e >= 0
-        q = big_pow2(q, e)
-    else
-        mut round := 0
-        mut sticky := 0
-        mut left := 0 - e
-        while left > 0
-            m := if left > 29 then 29 else left
-            qr := big_div(q, 1.shl(m))
-            r := qr[qr.len() - 1]
-            sticky = sticky.bit_or(round)
-            if r.bit_and(1.shl(m - 1) - 1) != 0
-                sticky = 1
-            round = r.shr(m - 1).bit_and(1)
-            q = trim_last(qr)
-            left -= m
-        odd := q.len() > 0 and q[0] % 2 == 1
-        if round == 1 and (sticky == 1 or odd)
-            q = big_add(q, big_of(1))
-    digits := big_digits(q)
-    mut ds := List[int]()
-    for _ in digits.len()..n + 1
-        ds.push(0)
-    for d in digits
-        ds.push(d)
-    whole := ds.len() - n
-    for i in 0..whole
-        out_byte(48 + ds[i])
-    if n > 0
-        out_byte(46)
-        for i in whole..ds.len()
-            out_byte(48 + ds[i])
-
-## `a / d` for a small `d`, then the remainder as one more element.
-fn big_div(a List[int], d int) List[int]
-    mut q := List[int]()
-    for _ in 0..a.len()
-        q.push(0)
-    mut r := 0
-    mut i := a.len() - 1
-    while i >= 0
-        t := r * BASE + a[i]
-        q[i] = t / d
-        r = t % d
-        i -= 1
-    q = trim(q)
-    q.push(r)
-    q
-
-## All but the last element, trimmed.
-fn trim_last(a List[int]) List[int]
-    mut out := List[int]()
-    for i in 0..a.len() - 1
-        out.push(a[i])
-    trim(out)
-
-## The decimal digits of a big number, most significant first.
-fn big_digits(a List[int]) List[int]
-    mut ds := List[int]()
-    if a.len() == 0
-        ds.push(0)
-        return ds
-    mut i := a.len() - 1
-    while i >= 0
-        mut limb := a[i]
-        mut part := List[int]()
-        for _ in 0..9
-            part.push(limb % 10)
-            limb = limb / 10
-        mut k := 8
-        if i == a.len() - 1
-            while k > 0 and part[k] == 0
-                k -= 1
-        while k >= 0
-            ds.push(part[k])
-            k -= 1
-        i -= 1
-    ds
-
-fn trim(a List[int]) List[int]
-    mut n := a.len()
-    while n > 0 and a[n - 1] == 0
-        n -= 1
-    mut out := List[int]()
-    for i in 0..n
-        out.push(a[i])
-    out
-
-fn big_of(v int) List[int]
-    mut out := List[int]()
-    mut x := v
-    while x > 0
-        out.push(x % BASE)
-        x = x / BASE
-    out
-
-fn big_mul(a List[int], k int) List[int]
-    mut out := List[int]()
-    if k == 0
-        return out
-    mut carry := 0
-    for limb in a
-        t := limb * k + carry
-        out.push(t % BASE)
-        carry = t / BASE
-    while carry > 0
-        out.push(carry % BASE)
-        carry = carry / BASE
-    out
-
-fn big_add(a List[int], b List[int]) List[int]
-    mut out := List[int]()
-    mut carry := 0
-    n := if a.len() > b.len() then a.len() else b.len()
-    for i in 0..n
-        x := if i < a.len() then a[i] else 0
-        y := if i < b.len() then b[i] else 0
-        t := x + y + carry
-        out.push(t % BASE)
-        carry = t / BASE
-    if carry > 0
-        out.push(carry)
-    out
-
-## `a - b`, for `a >= b`.
-fn big_sub(a List[int], b List[int]) List[int]
-    mut out := List[int]()
-    mut borrow := 0
-    for i in 0..a.len()
-        y := if i < b.len() then b[i] else 0
-        mut t := a[i] - y - borrow
-        if t < 0
-            t += BASE
-            borrow = 1
-        else
-            borrow = 0
-        out.push(t)
-    trim(out)
-
-## -1, 0 or 1.
-fn big_cmp(a List[int], b List[int]) int
-    if a.len() != b.len()
-        return if a.len() < b.len() then - 1 else 1
-    mut i := a.len() - 1
-    while i >= 0
-        if a[i] != b[i]
-            return if a[i] < b[i] then - 1 else 1
-        i -= 1
-    0
-
-fn big_pow2(a List[int], k int) List[int]
-    mut out := a
-    mut left := k
-    while left >= 29
-        out = big_mul(out, 536870912)
-        left -= 29
-    if left > 0
-        out = big_mul(out, 1.shl(left))
-    out
-
-fn big_pow10(a List[int], k int) List[int]
-    mut out := a
-    mut left := k
-    while left >= 9
-        out = big_mul(out, BASE)
-        left -= 9
-    if left > 0
-        mut p := 1
-        for _ in 0..left
-            p *= 10
-        out = big_mul(out, p)
-    out
-
-## The shortest digits of the positive finite `x`, then the decimal point's
-## position `k`, so that x = 0.DIGITS * 10^k.
-fn digits_of(x float) List[int]
-    # x = f * 2^e, f an integer below 2^53, from the bits.
-    bits := float_bits(x)
-    be := bits.shr(52).bit_and(2047)
-    mut f := bits.bit_and(4503599627370495)
-    mut e := -1074
-    if be > 0
-        f += 4503599627370496
-        e = be - 1075
-    # r/s = x; mp/s and mm/s are half the gaps above and below x.
-    mut r := List[int]()
-    mut s := List[int]()
-    mut mp := List[int]()
-    mut mm := List[int]()
-    wide := f == 4503599627370496 and be > 1
-    if e >= 0
-        if wide
-            r = big_pow2(big_of(f), e + 2)
-            s = big_of(4)
-            mp = big_pow2(big_of(1), e + 1)
-            mm = big_pow2(big_of(1), e)
-        else
-            r = big_pow2(big_of(f), e + 1)
-            s = big_of(2)
-            mp = big_pow2(big_of(1), e)
-            mm = mp
-    elif wide
-        r = big_of(f * 4)
-        s = big_pow2(big_of(1), 2 - e)
-        mp = big_of(2)
-        mm = big_of(1)
-    else
-        r = big_of(f * 2)
-        s = big_pow2(big_of(1), 1 - e)
-        mp = big_of(1)
-        mm = big_of(1)
-    even := f % 2 == 0
-    # Estimate k = ceil(log10 x), then fix it up exactly.
-    mut k := (53 + e) * 30103 / 100000
-    if k >= 0
-        s = big_pow10(s, k)
-    else
-        r = big_pow10(r, 0 - k)
-        mp = big_pow10(mp, 0 - k)
-        mm = big_pow10(mm, 0 - k)
-    # Too small: r + mp >= s (> when the high end is excluded).
-    while true
-        c := big_cmp(big_add(r, mp), s)
-        if c > 0 or c == 0 and even
-            s = big_mul(s, 10)
-            k += 1
-        else
-            break
-    # Too large: (r + mp) * 10 < s.
-    while true
-        c := big_cmp(big_mul(big_add(r, mp), 10), s)
-        if c < 0 or c == 0 and not even
-            r = big_mul(r, 10)
-            mp = big_mul(mp, 10)
-            mm = big_mul(mm, 10)
-            k -= 1
-        else
-            break
-    mut ds := List[int]()
-    while true
-        r = big_mul(r, 10)
-        mp = big_mul(mp, 10)
-        mm = big_mul(mm, 10)
-        mut d := 0
-        while big_cmp(r, s) >= 0
-            r = big_sub(r, s)
-            d += 1
-        cl := big_cmp(r, mm)
-        low := cl < 0 or cl == 0 and even
-        ch := big_cmp(big_add(r, mp), s)
-        high := ch > 0 or ch == 0 and even
-        if not low and not high
-            ds.push(d)
-            continue
-        if low and not high
-            ds.push(d)
-        elif high and not low
-            ds.push(d + 1)
-        elif big_cmp(big_add(r, r), s) < 0
-            ds.push(d)
-        else
-            ds.push(d + 1)
-        break
-    ds.push(k)
-    ds

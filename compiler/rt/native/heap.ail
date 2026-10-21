@@ -7,9 +7,9 @@
 ## minus 8: bits 0-7 kind, bit 8 mark, bits 16-63 payload bytes.
 ## The collector is in `gc.ail`.
 
-# Global slots 8 and 9: the heap state block, and the stack top.
-HEAP := 8
-STACK_TOP := 9
+# Global slots 10 and 11: the heap state block, and the stack top.
+HEAP := 10
+STACK_TOP := 11
 
 # Words of the state block (`HEAP`'s target).
 H_BASE := 0
@@ -126,6 +126,10 @@ fn zero_words(p int, n int)
 ## `np` zeroed, contiguous, unused pages: the lowest run that fits, else
 ## new pages at the top (which the kernel has zeroed).
 fn heap_pages(np int) int
+    heap_pages_try(np, 0)
+
+## `tried` is 1 after a collection made room for a memory cap.
+fn heap_pages_try(np int, tried int) int
     base := hs(H_BASE)
     top := hs(H_TOP)
     pt := hs(H_PAGES)
@@ -158,6 +162,12 @@ fn heap_pages(np int) int
     end := p + np * PAGE
     if end > hs(H_LIMIT) or end < p
         fail(1, 0, 0)
+    if limits_over(end - hs(H_BASE))
+        if tried == 0
+            gc_collect()
+            return heap_pages_try(np, 1)
+        limits_trap()
+    limits_pages()
     if run > 0
         zero_words(p, run * PAGE)
     hset(H_TOP, end)
@@ -186,6 +196,9 @@ fn alloc_large(n int, kind int) int
 ## A zeroed object of `n` payload bytes and kind `kind`, 8-byte aligned
 ## (native-abi.md §5). Collects first when enough has been allocated.
 fn alloc(n int, kind int) int
+    tick := load64(global(LIM_TICK))
+    if tick != 0
+        limits_tick(tick)
     need := (n + 23) / 16 * 16
     if need > MAX_SMALL
         return alloc_large(n, kind)

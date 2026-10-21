@@ -60,6 +60,10 @@ fn bits_float(n int) float
 fn gc_regs(buf int) int
     todo
 
+## The address after the last global slot: the runtime's and the program's.
+fn globals_end() int
+    todo
+
 ## The target: 0 Linux x86-64, 1 Linux ARM64, 2 macOS ARM64.
 fn target() int
     todo

@@ -1,0 +1,30 @@
+# A loop `while j < n` that adds an unchanging `s` to `j` loses its bounds
+# and overflow checks when `s` is at least 1 and `j` starts at 0 or more
+# (native.bce.9); any other `s` runs the checked loop.
+fn mark(mut flags List[bool], from int, step int)
+    mut j := from
+    while j < flags.len()
+        flags[j] = true
+        j += step
+
+fn count(flags List[bool]) int
+    mut c := 0
+    for f in flags
+        if f
+            c += 1
+    c
+
+fn main()
+    mut flags := [false for _ in 0..50]
+    mark(mut flags, 3, 7)
+    print(count(flags))
+    mark(mut flags, 0, 1)
+    print(count(flags))
+    mut more := [false for _ in 0..50]
+    mark(mut more, 60, 2)
+    print(count(more))
+    mark(mut more, 5, 1073741825)
+    print(count(more))
+    mark(mut more, 4, 9223372036854775807)
+    print(count(more))
+    mark(mut more, -3, 1)

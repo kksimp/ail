@@ -1,0 +1,23 @@
+## Agent task: search local PDFs for a word with the PDF reader's grep command,
+## and report each hit's page and text, so an agent can jump to the right page.
+##   ./ail run examples/tool_pdf_grep.ail
+
+fn main() !
+    here := path.dir(env.program())
+    pdfs := "{here}/../tools/tokbench/corpus/agent-r5/data/pdf"
+    reader := "{here}/../tools/pdf/pdf.ail"
+    for name in fs.list_dir(pdfs)?.sorted()
+        r := proc.run("{here}/../ail", [
+            "run",
+            reader,
+            "grep",
+            "--json",
+            "ledger",
+            "{pdfs}/{name}",
+        ])? "searching {name}"
+        mut hits := 0
+        for line in r.out.lines()
+            d := parse_json(line) else continue
+            hits += 1
+            print("{name} page {d.num("page") else 0.0} : {d.str("text") else ""}")
+        print("{name}: {hits} hits")

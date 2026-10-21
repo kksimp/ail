@@ -1,0 +1,12 @@
+# A store past the end of a list in a loop traps on that iteration with
+# the elements' address taken ahead of the loop (type.coll.4).
+fn fill(mut xs List[int], n int)
+    for i in 0..n
+        xs[i] = i * i
+
+fn main()
+    mut xs := [0, 0, 0]
+    fill(mut xs, 3)
+    print(xs)
+    fill(mut xs, 4)
+    print(xs)

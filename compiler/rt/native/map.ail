@@ -1,0 +1,370 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `Map[K, V]` and `Set[T]` (type.map.*, ADRs 0568-0570, native-abi.md §2).
+## One object serves both. Entries sit in an array in insertion order, which
+## is the iteration order (type.map.1); an open-addressing index of entry
+## numbers finds them. A removed entry stays in the array with hash -1 until
+## the next rebuild, so the index never needs tombstones of its own.
+##
+## Object (a Set uses the same layout and ignores the value word):
+##   +0 len     live entries        +8 used     array slots used, live or dead
+##   +16 ecap   array capacity      +24 mask    index size - 1 (a power of two)
+##   +32 kind   0 int, 1 str, 2 bool keys
+##   +40 ents   ecap * 24 bytes: hash (-1 when dead), key, value
+##   +48 index  (mask + 1) * 8 bytes: 0 empty, else entry number + 1
+##   +56 vmode  0 plain values, 1 lists (copied on copy), 2 maps and sets
+##   +64 vinfo  vmode 1: nesting depth * 256 + element bytes
+##   +72 lastkey, +80 laste: the last key found or added and its entry (0: none)
+## The index has twice the array's capacity, so it is at most half full.
+
+MAP_BYTES := 88
+
+## Heap kinds (native-abi.md): 7 table, 3 entries (scanned word by word),
+## 11 index (no pointers). `alloc(n, kind)`.
+fn map_alloc(n int, kind int) int
+    alloc(n, kind)
+
+fn map_zero(p int, words int)
+    for i in 0..words
+        store64(p + 8 * i, 0)
+
+# ---- hashing and equality ----
+
+fn map_hash_int(k int) int
+    mut h := k * -7046029254386353131
+    h = h.bit_xor(h.shr(29).bit_and(34359738367))
+    h.bit_and(4611686018427387903)
+
+## FNV-1a over a string object's bytes.
+fn map_hash_str(s int) int
+    n := load64(s)
+    mut h := -3750763034362895579
+    mut i := 0
+    while i < n
+        h = h.bit_xor(load8(s + 16 + i)) * 1099511628211
+        i += 1
+    h = h.bit_xor(h.shr(32).bit_and(4294967295))
+    h.bit_and(4611686018427387903)
+
+fn map_hash(kind int, k int) int
+    if kind == 1
+        return map_hash_str(k)
+    map_hash_int(k)
+
+fn map_key_eq(kind int, a int, b int) bool
+    if a == b
+        return true
+    if kind != 1
+        return false
+    n := load64(a)
+    if n != load64(b)
+        return false
+    mut i := 0
+    while i + 8 <= n
+        if load64(a + 16 + i) != load64(b + 16 + i)
+            return false
+        i += 8
+    while i < n
+        if load8(a + 16 + i) != load8(b + 16 + i)
+            return false
+        i += 1
+    true
+
+# ---- tables ----
+
+## Fresh tables of capacity `ecap` (a power of two); `used` is not changed.
+fn map_tables(m int, ecap int)
+    store64(m + 16, ecap)
+    store64(m + 24, ecap * 2 - 1)
+    store64(m + 40, map_alloc(ecap * 24, 3))
+    idx := map_alloc(ecap * 16, 11)
+    map_zero(idx, ecap * 2)
+    store64(m + 48, idx)
+
+## An empty map or set. `kind` is the key kind; `vmode` and `vinfo` say how
+## a copy treats values.
+fn map_new(kind int, vmode int, vinfo int) int
+    m := map_alloc(MAP_BYTES, 7)
+    store64(m, 0)
+    store64(m + 8, 0)
+    store64(m + 32, kind)
+    store64(m + 56, vmode)
+    store64(m + 64, vinfo)
+    store64(m + 80, 0)
+    map_tables(m, 8)
+    m
+
+## The entry for key `k` (hash `h`), or 0.
+fn map_find_h(m int, k int, h int) int
+    mask := load64(m + 24)
+    idx := load64(m + 48)
+    ents := load64(m + 40)
+    kind := load64(m + 32)
+    mut i := h.bit_and(mask)
+    mut s := load64(idx + 8 * i)
+    while s != 0
+        e := ents + 24 * (s - 1)
+        if load64(e) == h and map_key_eq(kind, load64(e + 8), k)
+            return e
+        i = (i + 1).bit_and(mask)
+        s = load64(idx + 8 * i)
+    0
+
+## `get` then assignment on one key is the common pattern: the entry of the
+## last key found or added is remembered, so the second lookup skips the
+## hash and the probe. A rebuild or a removal forgets it.
+fn map_find(m int, k int) int
+    if load64(m + 80) != 0 and load64(m + 72) == k
+        return load64(m + 80)
+    e := map_find_h(m, k, map_hash(load64(m + 32), k))
+    if e != 0
+        store64(m + 72, k)
+        store64(m + 80, e)
+    e
+
+fn map_index_put(m int, h int, number int)
+    mask := load64(m + 24)
+    idx := load64(m + 48)
+    mut i := h.bit_and(mask)
+    while load64(idx + 8 * i) != 0
+        i = (i + 1).bit_and(mask)
+    store64(idx + 8 * i, number)
+
+## Make room for one more entry: compact when at least half the slots are
+## dead, else double.
+fn map_rebuild(m int)
+    used := load64(m + 8)
+    ecap := load64(m + 16)
+    ncap := if load64(m) * 2 >= ecap then ecap * 2 else ecap
+    old := load64(m + 40)
+    store64(m + 80, 0)
+    map_tables(m, ncap)
+    ents := load64(m + 40)
+    mut j := 0
+    for i in 0..used
+        e := old + 24 * i
+        h := load64(e)
+        if h >= 0
+            d := ents + 24 * j
+            store64(d, h)
+            store64(d + 8, load64(e + 8))
+            store64(d + 16, load64(e + 16))
+            j += 1
+            map_index_put(m, h, j)
+    store64(m + 8, j)
+
+## Append an entry for a key known to be absent; its address.
+fn map_append(m int, h int, k int, v int) int
+    if load64(m + 8) == load64(m + 16)
+        map_rebuild(m)
+    used := load64(m + 8)
+    e := load64(m + 40) + 24 * used
+    store64(e, h)
+    store64(e + 8, k)
+    store64(e + 16, v)
+    store64(m + 8, used + 1)
+    store64(m, load64(m) + 1)
+    map_index_put(m, h, used + 1)
+    store64(m + 72, k)
+    store64(m + 80, e)
+    e
+
+## `m[k] = v`: replace in place, or insert last (type.map.1, type.map.3).
+fn map_set(m int, k int, v int)
+    e := map_find(m, k)
+    if e != 0
+        store64(e + 16, v)
+        return
+    map_append(m, map_hash(load64(m + 32), k), k, v)
+
+## `s.add(x)`: whether `x` was new.
+fn map_add(m int, k int) bool
+    if map_find(m, k) != 0
+        return false
+    map_append(m, map_hash(load64(m + 32), k), k, 0)
+    true
+
+fn map_has(m int, k int) bool
+    map_find(m, k) != 0
+
+## `m.remove(k)` and `s.remove(x)`: whether the key was there.
+fn map_remove(m int, k int) bool
+    e := map_find(m, k)
+    if e == 0
+        return false
+    store64(m + 80, 0)
+    store64(e, -1)
+    store64(e + 8, 0)
+    store64(e + 16, 0)
+    store64(m, load64(m) - 1)
+    true
+
+# ---- lists out of a map ----
+
+fn map_keys(m int) List[int]
+    out := list_new(load64(m))
+    ents := load64(m + 40)
+    for i in 0..load64(m + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            list_push(out, load64(e + 8))
+    out
+
+fn map_keys_bool(m int) List[int]
+    out := list_new(load64(m))
+    ents := load64(m + 40)
+    for i in 0..load64(m + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            list_pushb(out, load64(e + 8) != 0)
+    out
+
+fn map_values(m int) List[int]
+    out := list_new(load64(m))
+    ents := load64(m + 40)
+    for i in 0..load64(m + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            list_push(out, load64(e + 16))
+    out
+
+fn map_values_bool(m int) List[int]
+    out := list_new(load64(m))
+    ents := load64(m + 40)
+    for i in 0..load64(m + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            list_pushb(out, load64(e + 16) != 0)
+    out
+
+# ---- value semantics (own.val.1) ----
+
+## A copy that shares nothing with `m`: tables, and the lists and maps in it.
+fn map_copy(m int) int
+    n := map_alloc(MAP_BYTES, 7)
+    copy_bytes(n, m, MAP_BYTES)
+    store64(n + 80, 0)
+    used := load64(m + 8)
+    ents := map_alloc(load64(m + 16) * 24, 3)
+    copy_bytes(ents, load64(m + 40), 24 * used)
+    store64(n + 40, ents)
+    size := load64(m + 24) + 1
+    idx := map_alloc(size * 8, 11)
+    copy_bytes(idx, load64(m + 48), size * 8)
+    store64(n + 48, idx)
+    vmode := load64(m + 56)
+    if vmode != 0
+        info := load64(m + 64)
+        for i in 0..used
+            e := ents + 24 * i
+            if load64(e) >= 0
+                v := load64(e + 16)
+                if vmode == 2
+                    store64(e + 16, map_copy(v))
+                else
+                    depth := info / 256
+                    bytes := info.bit_and(255)
+                    c := if depth == 0 then list_copy(list_at(v), bytes) else list_copy_deep(
+                        list_at(v),
+                        depth,
+                        bytes,
+                    )
+                    store64(e + 16, list_addr(c))
+    n
+
+# ---- traps and text ----
+
+fn map_out_hex(n int)
+    if n >= 16
+        map_out_hex(n / 16)
+    d := n % 16
+    out_byte(if d < 10 then 48 + d else 87 + d)
+
+## A string as it appears inside another value: quoted, with `\`, the quote
+## and control characters escaped (trait.auto.2).
+fn map_out_quoted(s int)
+    out_byte(34)
+    n := load64(s)
+    for i in 0..n
+        c := load8(s + 16 + i)
+        if c == 92 or c == 34
+            out_byte(92)
+            out_byte(c)
+        elif c == 10
+            out_byte(92)
+            out_byte(110)
+        elif c == 9
+            out_byte(92)
+            out_byte(116)
+        elif c == 13
+            out_byte(92)
+            out_byte(114)
+        elif c == 0
+            out_byte(92)
+            out_byte(48)
+        elif c < 32 or c == 127
+            out_str("\\u\{")
+            map_out_hex(c)
+            out_byte(125)
+        else
+            out_byte(c)
+    out_byte(34)
+
+## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float.
+fn out_scalar(kind int, v int)
+    if kind == 1
+        map_out_quoted(v)
+    elif kind == 2
+        out_bool(v != 0)
+    elif kind == 3
+        out_float(bits_float(v))
+    else
+        out_int(v)
+
+## `print(m)` for a map: `{"a": 1, "b": 2}`, or `{}` (type.map.4).
+fn out_map(m int, kk int, vk int)
+    ents := load64(m + 40)
+    out_byte(123)
+    mut first := true
+    for i in 0..load64(m + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            if not first
+                out_sep(1)
+            first = false
+            out_scalar(kk, load64(e + 8))
+            out_byte(58)
+            out_byte(32)
+            out_scalar(vk, load64(e + 16))
+    out_byte(125)
+
+## `print(s)` for a set: `{1, 2}`.
+fn out_set(m int, kk int)
+    ents := load64(m + 40)
+    out_byte(123)
+    mut first := true
+    for i in 0..load64(m + 8)
+        e := ents + 24 * i
+        if load64(e) >= 0
+            if not first
+                out_sep(1)
+            first = false
+            out_scalar(kk, load64(e + 8))
+    out_byte(125)
+
+## `m[k]`: the value, or the interpreter's trap when `k` is missing
+## (type.map.3). `head` and `tail` are the trap's first line and excerpt.
+fn map_at(m int, k int, head str, tail str) int
+    e := map_find(m, k)
+    if e != 0
+        return load64(e + 16)
+    flush()
+    out_str(head)
+    out_str("the map has no key ")
+    out_scalar(load64(m + 32), k)
+    out_byte(10)
+    out_str(tail)
+    flush_to(2)
+    sys_exit(1)
+    0

@@ -1,0 +1,35 @@
+# Two pointers that meet: `i` up from 0, `j` down from a start, both
+# indexing (native.bce.1). The sums must not change.
+fn reverse(mut xs List[int], j0 int)
+    mut i := 0
+    mut j := j0
+    while i < j
+        t := xs[i]
+        xs[i] = xs[j]
+        xs[j] = t
+        i += 1
+        j -= 1
+
+fn palindrome(xs List[int], n int) bool
+    mut i := 0
+    mut j := n - 1
+    while i < j
+        if xs[i] != xs[j]
+            return false
+        i += 1
+        j -= 1
+    true
+
+fn main()
+    mut a := [1, 2, 3, 4, 5, 6, 7]
+    reverse(mut a, 6)
+    print(a)
+    reverse(mut a, 3)
+    print(a)
+    reverse(mut a, 0)
+    print(a)
+    reverse(mut a, -4)
+    print(a)
+    print(palindrome([1, 2, 3, 2, 1], 5))
+    print(palindrome([1, 2, 3, 2, 2], 5))
+    print(palindrome([1, 2, 3], 0))

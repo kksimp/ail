@@ -1,0 +1,24 @@
+## Fixture for `ail test --native` (native.test.1-4): one passing test, one
+## failing assertion, one test the native subset can't build yet, and a
+## property test that the runner leaves out.
+
+fn add(a int, b int) int
+    return a + b
+
+@test fn adds()
+    assert_eq(add(2, 3), 5)
+    assert(add(1, 1) == 2)
+
+@test
+fn fails_on_purpose()
+    assert_eq(
+        add(2, 2),
+        5,
+    )
+
+@test fn uses_defer()
+    defer print(1)
+    assert_eq(add(1, 1), 2)
+
+@test fn holds_for_all(a int, b int)
+    assert_eq(add(a, b), add(b, a))

@@ -1,0 +1,24 @@
+# A counted loop whose start is computed before it (`for j in i + 1..n`) runs
+# without bounds checks when the start is not negative (native.bce.7); a
+# negative start takes the checked loop and traps with the same message.
+fn pairs(xs List[int], from int) int
+    mut s := 0
+    for j in from..xs.len()
+        s += xs[j] * (j + 1)
+    s
+
+fn triangle(xs List[int]) int
+    mut s := 0
+    for i in 0..xs.len()
+        for j in i + 1..xs.len()
+            s += xs[i] * xs[j] - j
+    s
+
+fn main()
+    xs := [3, 1, 4, 1, 5, 9, 2, 6]
+    print(triangle(xs))
+    print(pairs(xs, 0))
+    print(pairs(xs, 5))
+    print(pairs(xs, 8))
+    print(pairs(xs, 20))
+    print(pairs(xs, -1))

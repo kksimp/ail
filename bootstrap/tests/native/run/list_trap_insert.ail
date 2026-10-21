@@ -1,0 +1,6 @@
+# type.coll.4: insert past the end.
+fn main()
+    mut xs := [1, 2, 3]
+    xs.insert(3, 4)
+    print(xs)
+    xs.insert(5, 1)
