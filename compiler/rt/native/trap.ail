@@ -1,0 +1,96 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The stack of a trap (trace.frame.1, ADR 0641). The code generators keep a
+## frame pointer in every function and write a call table (`code_tab`, see
+## `codegen.add_call_table`) with one row per user call: the return address
+## and the position and function of the call. `trace_frames` walks the frame
+## pointers and prints one `  at LINE:COL in NAME(..)` line for each caller
+## of the trapping function, innermost first. The trapping function's own
+## line is part of the trap's excerpt text, built when the program is
+## compiled.
+
+## The most stack lines in a report: the interpreter's ten lines less the
+## message and its excerpt (trace.snap.3).
+LINES := 7
+
+## The row of the call table for return address offset `off`, or -1.
+fn trace_find(ents int, n int, off int) int
+    mut lo := 0
+    mut hi := n - 1
+    while lo <= hi
+        mid := (lo + hi) / 2
+        v := load64(ents + 16 * mid).bit_and(4294967295)
+        if v == off
+            return mid
+        if v < off
+            lo = mid + 1
+        else
+            hi = mid - 1
+    -1
+
+## The caller's frame pointer, or 0 at the end of the chain. A frame's saved
+## pointer lies above it (the stack grows down), so a smaller one is not a
+## frame.
+fn trace_next(p int) int
+    q := load64(p)
+    if q <= p
+        return 0
+    q
+
+## The lines of the excerpt text `tail` past its two source lines: the
+## frames the compiler already knows.
+fn trace_lead(tail str) int
+    p := str_addr(tail)
+    n := load64(p)
+    mut lines := 0
+    for k in 0..n
+        if load8(p + 16 + k) == 10
+            lines += 1
+    lines - 2
+
+## Print the callers of the function that trapped, after `tail`'s frames.
+fn trace_frames(tail str)
+    tab := code_tab()
+    n := load64(tab)
+    base := tab - load64(tab + 8)
+    ents := tab + 24
+    names := ents + 16 * n
+    lead := trace_lead(tail)
+    # One pass counts the frames, the next prints them.
+    mut total := lead
+    mut p := frame_ptr()
+    while p != 0
+        if trace_find(ents, n, load64(p + 8) - base) >= 0
+            total += 1
+        p = trace_next(p)
+    limit := if total > LINES then LINES - 1 - lead else total
+    mut shown := 0
+    p = frame_ptr()
+    while p != 0 and shown < limit
+        k := trace_find(ents, n, load64(p + 8) - base)
+        if k >= 0
+            w0 := load64(ents + 16 * k)
+            w1 := load64(ents + 16 * k + 8)
+            fn_row := names + 16 * w1.shr(32)
+            file := load64(fn_row + 8)
+            out_str("  at ")
+            if file != 0
+                out_str(str_at(tab + file))
+            out_int(w0.shr(32))
+            out_byte(58)
+            out_int(w1.bit_and(4294967295))
+            out_str(" in ")
+            out_str(str_at(tab + load64(fn_row)))
+            out_byte(10)
+            shown += 1
+        p = trace_next(p)
+    if total > LINES
+        # The ellipsis, U+2026, as UTF-8.
+        out_str("  ")
+        out_byte(226)
+        out_byte(128)
+        out_byte(166)
+        out_byte(32)
+        out_int(total - LINES + 1)
+        out_str(" more frames\n")

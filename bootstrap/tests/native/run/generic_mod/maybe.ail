@@ -1,0 +1,2 @@
+fn absent[T]() T?
+    none

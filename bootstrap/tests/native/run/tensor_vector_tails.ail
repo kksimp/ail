@@ -1,0 +1,43 @@
+# std.tensor.4, std.tensor.7, std.tensor.21: the vector kernels handle every
+# length (whole vectors plus a tail), each operator with the scalar on either
+# side, and the f32 rounding, bit for bit as the scalar loops do.
+fn data(n int, k float) List[float]
+    mut xs := List[float]()
+    for i in 0..n
+        xs.push(k * (i + 1).to_float() / 7.0 - 0.3 * i.to_float())
+    xs
+
+fn show(t tensor.Tensor[float])
+    print(t.to_list())
+
+fn show32(t tensor.Tensor[f32])
+    print(t.to_float().to_list())
+
+fn main()
+    for n in 1..10
+        a := tensor.from(data(n, 1.1))
+        b := tensor.from(data(n, 2.3))
+        show(a + b)
+        show(a - b)
+        show(a * b)
+        show(b / a)
+        show(a + 0.7)
+        show(0.7 - a)
+        show(a * 1.9)
+        show(2.0 / b)
+        a32 := a.to_f32()
+        b32 := b.to_f32()
+        show32(a32 + b32)
+        show32(a32 - b32)
+        show32(a32 * b32)
+        show32(b32 / a32)
+        show32(a32 + 0.7)
+        show32(0.7 - a32)
+        show32(2.0 / b32)
+    for m in 1..4
+        for k in 1..5
+            for n in 1..6
+                x := tensor.from(data(m * k, 0.9), [m, k])
+                y := tensor.from(data(k * n, 1.7), [k, n])
+                show(x.matmul(y))
+                show32(x.to_f32().matmul(y.to_f32()))

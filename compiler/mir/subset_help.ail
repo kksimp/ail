@@ -1,12 +1,25 @@
 ## The `help:` line for a `native.subset.1` problem (ADR 0722). The problem's
 ## message is written by `lower.ail` and its siblings; this file only reads it,
-## so the messages can change without touching the lowering. A message with no
-## entry here gets no help line. `owner` names the queued PR when the night-run
+## so the messages can change without touching the lowering. `owner` names the queued PR when the night-run
 ## merge order has one; `ail run` runs everything the backend refuses.
+
+## The help text for a message (native.subset.1 names the construct and the position; this line
+## says what to do). Every help tells the reader that `ail run` still runs the program: an entry
+## that doesn't say so gets the suffix, and a message with no entry gets the generic line. An
+## internal error has no help.
+pub fn subset_help(message str) str
+    if message.starts_with("internal error")
+        return ""
+    h := entry_help(message)
+    if h == ""
+        return "`ail run` runs this program"
+    if h.contains("`ail run`")
+        return h
+    return "{h}; or `ail run`"
 
 ## The help text for a message, or "" when no entry matches. The first match
 ## wins, so the more specific forms come first.
-pub fn subset_help(message str) str
+fn entry_help(message str) str
     if message.contains("calling `TaskGroup`")
         or message.contains("Channel[")
         or message.contains("calling `Mutex`")

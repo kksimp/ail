@@ -144,6 +144,7 @@ bootstrap/                Rust bootstrap: lexer, parser, checker, interpreter (A
 compiler/                 the front end, checker and native backend written in AIL (ADR 0022)
 examples/                 example programs; NAME.out holds the expected output
 tools/
+  app-host/macos/          the std.app host: SwiftUI, built by run.sh (ADR 0838)
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
   check-doc-snippets.py   runs `ail check` on every `ail` and `ail fragment` block in the docs, outside `docs/spec/`
@@ -156,6 +157,8 @@ tools/
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
   native-coverage/        which native subset constructs block the examples
+  native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
+  native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
   pdf/                    PDF reader, searcher and viewer written in AIL (ADR 0520)
   perfbench/              drag-race programs: AIL, C and Python twins

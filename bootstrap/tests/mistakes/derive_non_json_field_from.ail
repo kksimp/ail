@@ -1,0 +1,10 @@
+struct W
+    n int
+
+struct P
+    w W
+
+impl FromJson for P
+
+fn main()
+    print(1)

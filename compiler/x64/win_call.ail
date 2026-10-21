@@ -111,5 +111,32 @@ pub fn win_sample() mir.Module
     load.name = "load64"
     insts := [h, get, s, sixteen, buf, len, one, written, zero, write, load]
     block := mir.Block(params: List[int](), insts: insts, term: mir.return_of(10))
-    main := mir.Func(name: "main", params: [], ret: mir.Ty.Int, blocks: [block], vals: [mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int, mir.Ty.Int], names: ["", "", "", "", "", "", "", "", "", "", ""])
-    mir.Module(path: "win_sample.ail", funcs: [main], strs: [msg], sites: [], lines: [], files: ["win_sample.ail"], file_lines: [[]])
+    main := mir.Func(
+        name: "main",
+        params: [],
+        ret: mir.Ty.Int,
+        blocks: [block],
+        vals: [
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+        ],
+        names: ["", "", "", "", "", "", "", "", "", "", ""],
+    )
+    mir.Module(
+        path: "win_sample.ail",
+        funcs: [main],
+        strs: [msg],
+        sites: [],
+        lines: [],
+        files: ["win_sample.ail"],
+        file_lines: [[]],
+    )

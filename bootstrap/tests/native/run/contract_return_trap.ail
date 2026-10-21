@@ -1,0 +1,13 @@
+# contract.ens.1: an early `return` is checked where it returns.
+fn clamp(x int) int
+    ensures result >= 0
+    if x < -5
+        return x
+    if x < 0
+        return 0
+    x
+
+fn main()
+    print(clamp(3))
+    print(clamp(-2))
+    print(clamp(-9))

@@ -90,8 +90,12 @@ fn net_is_a_capability() {
 /// binds. A server that exits without binding is retried on a fresh port. `s_server` has no
 /// `-naccept`, so it keeps accepting after the readiness probe: the probe costs nothing.
 fn start_tls_server(data: &str) -> (std::process::Child, u16) {
-    for _ in 0..5 {
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    for attempt in 0..8u32 {
+        // Below the ephemeral range (Linux 32768 and up), so no outgoing connection of a parallel
+        // test can be handed this port between here and `s_server`'s bind.
+        let port = (0..).map(|k: u32| 20000 + ((std::process::id() * 7 + attempt * 131 + k * 17) % 10000) as u16)
+            .find(|p| TcpListener::bind(("127.0.0.1", *p)).is_ok())
+            .unwrap();
         let mut server = Command::new("openssl")
             .args(["s_server", "-quiet", "-www", "-tls1_3", "-accept", &port.to_string()])
             .args(["-key", "localhost_leaf.key.pem", "-cert", "localhost_leaf.pem", "-cert_chain", "inter.pem"])
@@ -107,13 +111,19 @@ fn start_tls_server(data: &str) -> (std::process::Child, u16) {
                 break;
             }
             if TcpStream::connect(("127.0.0.1", port)).is_ok() {
-                return (server, port);
+                // A listener that isn't ours would also accept the probe; `s_server` exits at
+                // once when its bind fails, so a server still running a moment later owns the port.
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                if server.try_wait().unwrap().is_none() && TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                    return (server, port);
+                }
+                break;
             }
             assert!(start.elapsed().as_secs() < 30, "openssl s_server didn't start");
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
     }
-    panic!("openssl s_server didn't bind a free port in 5 tries");
+    panic!("openssl s_server didn't bind a free port in 8 tries");
 }
 
 #[test]

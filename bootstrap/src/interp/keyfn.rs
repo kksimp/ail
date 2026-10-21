@@ -22,11 +22,11 @@ impl<'a, W: Write> Interp<'a, W> {
         env: &mut Env<'a>,
     ) -> Flow<Value> {
         let items = match &recv {
-            Operand::Place(p) => peek(env, p)?.clone(),
+            Operand::Place(p) => peek(env, p)?.into_owned(),
             Operand::Value(v) => v.clone(),
         };
         let items: Vec<Value> = match items {
-            Value::List(xs) => Rc::unwrap_or_clone(xs),
+            Value::List(xs) => Rc::unwrap_or_clone(xs).into_vec(),
             Value::Set(t) => t.key_list(),
             other => unreachable!("checked: a list or set, found {other:?}"),
         };
@@ -54,21 +54,21 @@ impl<'a, W: Write> Interp<'a, W> {
             return Ok(best.map_or(Value::None, |i| items[i].clone()));
         }
         let pairs: Vec<Value> =
-            keys.into_iter().zip(items).map(|(k, x)| Value::List(Rc::new(vec![k, x]))).collect();
+            keys.into_iter().zip(items).map(|(k, x)| Value::list(vec![k, x])).collect();
         let order = self.sorted_by_first(pairs, pos)?;
         let out: Vec<Value> = order
             .into_iter()
             .map(|p| match p {
-                Value::List(kx) => kx[1].clone(),
+                Value::List(kx) => kx.at(1),
                 _ => unreachable!("a key and an element"),
             })
             .collect();
         if name == "sort" {
             let Operand::Place(p) = recv else { unreachable!("checked: `sort` needs a mutable place") };
-            *slot_mut(env, &p, false)? = Value::List(Rc::new(out));
+            *slot_mut(env, &p, false)? = Value::list(out);
             return Ok(Value::Unit);
         }
-        Ok(Value::List(Rc::new(out)))
+        Ok(Value::list(out))
     }
 
     /// A stable merge sort of `[key, element]` pairs by key.
@@ -80,7 +80,7 @@ impl<'a, W: Write> Interp<'a, W> {
         let left = self.sorted_by_first(xs, pos)?;
         let right = self.sorted_by_first(right, pos)?;
         let key = |v: &Value| match v {
-            Value::List(kx) => kx[0].clone(),
+            Value::List(kx) => kx.at(0),
             _ => unreachable!("a key and an element"),
         };
         let mut out = Vec::with_capacity(left.len() + right.len());

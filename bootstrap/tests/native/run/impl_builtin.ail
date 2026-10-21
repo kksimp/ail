@@ -1,0 +1,54 @@
+# `impl` blocks for built-in types in native code (ADR 0536): methods of
+# `int`, `str` and `List[T]` from a trait, a generic `List[T]` impl that
+# calls its elements' methods, and associated calls `T.f()` in a generic.
+trait Size
+    fn size(self) int
+
+trait Zero
+    fn zero() Self
+
+impl Size for int
+    fn size(self) int
+        if self < 0 then -self else self
+
+impl Size for str
+    fn size(self) int
+        self.len()
+
+impl Size for List[T Size]
+    fn size(self) int
+        mut n := 0
+        for x in self
+            n += x.size()
+        n
+
+struct Box
+    n int
+
+impl Size for Box
+    fn size(self) int
+        n.size() * 10
+
+impl Zero for int
+    fn zero() int
+        0
+
+impl Zero for Box
+    fn zero() Box
+        Box(n: 0)
+
+fn total[T Size](xs List[T]) int
+    xs.size()
+
+fn first_or_zero[T Zero](xs List[T]) T
+    if xs.len() > 0 then xs[0] else T.zero()
+
+fn main()
+    print((-5).size())
+    print("abc".size())
+    print([1, -2, 3].size())
+    print([["ab", "c"], ["def"]].size())
+    print(total([Box(n: 2), Box(n: -3)]))
+    print(first_or_zero(List[int]()))
+    print(first_or_zero([Box(n: 4)]).n)
+    print(first_or_zero(List[Box]()).n)

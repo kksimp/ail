@@ -32,6 +32,13 @@ ALLOC_OWNER := 24
 ## A trap's third number (a slice's list length); the program ends after
 ## it, so it shares `PARSE_OK`'s slot.
 TRAP_LEN := 7
+## The lowest stack address a program's call may start from (err.trap.1,
+## ADR 0535).
+STACK_LIMIT := 15
+## The stack kept free below the limit for the trap's own calls.
+STACK_RESERVE := 1048576
+## The stack size assumed when the limit is unknown or unlimited.
+STACK_DEFAULT := 8388608
 
 OUT_CAP := 65536
 
@@ -193,6 +200,24 @@ fn init(argc int, argv int)
     store64(global(OUT_LEN), 0)
     heap_init(argv)
     limits_init()
+    # The argument vector sits at the top of the main stack. Windows
+    # (target 3) has no limit yet: a zero limit is never reached.
+    if target() != 3
+        store64(global(STACK_LIMIT), argv - stack_use())
+
+## How much of the main stack a program may use: its size limit
+## (`RLIMIT_STACK`, 3) less the reserve, capped at 1 GiB.
+fn stack_use() int
+    p := alloc(16, KIND_ATOMIC)
+    t := target()
+    if t == 2
+        syscall(194, 3, p, 0, 0, 0, 0)
+    else
+        syscall(if t == 0 then 302 else 261, 0, 3, 0, p, 0, 0)
+    mut size := load64(p)
+    if size <= 0 or size > 1073741824
+        size = STACK_DEFAULT
+    if size > 2 * STACK_RESERVE then size - STACK_RESERVE else size / 2
 
 ## `copy_bytes` for blocks of 256 bytes or more (list growth and extension):
 ## 64 bytes per round with two moving pointers, then the short rest. It is
@@ -350,14 +375,25 @@ fn list_join_chars(xs List[int], sep str) str
     k := load64(q)
     items := load64(q + 16)
     sp := str_addr(sep)
-    mut n := 0
+    # One pass for the bits of every character: below 128 means all ASCII,
+    # one byte each, so the width pass and `char_put` are skipped.
+    mut bits := 0
     for i in 0..k
-        n += char_width(load64(items + 8 * i))
+        bits = bits.bit_or(load64(items + 8 * i))
+    mut n := k
+    if bits >= 128
+        n = 0
+        for i in 0..k
+            n += char_width(load64(items + 8 * i))
     if k > 1
         n += (k - 1) * load64(sp)
     chars := if k > 1 then k + (k - 1) * load64(sp + 8) else k
     r := str_new(n, chars)
     mut at := r + 16
+    if bits < 128 and load64(sp) == 0
+        for i in 0..k
+            store8(at + i, load64(items + 8 * i))
+        return str_at(r)
     for i in 0..k
         if i > 0
             copy_bytes(at, sp + 16, load64(sp))
@@ -726,6 +762,7 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
     trap_body(kind, a, b, op)
     out_byte(10)
     out_str(tail)
+    trace_frames(tail)
     flush_to(2)
     sys_exit(1)
 
@@ -796,6 +833,25 @@ fn trap_body(kind int, a int, b int, op str)
         out_str("can't sleep for ")
         out_int(a)
         out_str(" milliseconds")
+    elif kind == 11
+        # A call with the stack nearly exhausted (err.trap.1); `op` is
+        # the callee.
+        out_str("call depth exceeded the native stack in `")
+        out_str(op)
+        out_byte(96)
+    elif kind == 12
+        # `b[a]` of `bytes` (type.bytes.3); `b` is the length.
+        out_str("index ")
+        out_int(a)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(b)
+    elif kind == 13
+        out_str("slice ")
+        out_int(a)
+        out_str(op)
+        out_int(b)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(load64(global(TRAP_LEN)))
     elif kind == 14
         # `unreachable(message)` (err.model.2): `a` is the message
         out_str("unreachable: ")
@@ -807,6 +863,20 @@ fn trap_body(kind int, a int, b int, op str)
         out_str(" + ")
         out_int(b)
         out_str(" is outside int")
+
+## A contract trap is written in pieces (ADR 0612): `trap_begin` flushes
+## the output and writes the head, the message follows with the `out_*`
+## functions, and `trap_end` writes the excerpt and exits.
+fn trap_begin(head str)
+    flush()
+    out_str(head)
+
+fn trap_end(tail str)
+    out_byte(10)
+    out_str(tail)
+    trace_frames(tail)
+    flush_to(2)
+    sys_exit(1)
 
 ## A failure of the runtime itself: out of memory (run.limit.2).
 fn fail(kind int, a int, b int)

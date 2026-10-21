@@ -295,9 +295,14 @@ fn report_trapped(rec int, at1 str, at2 str)
     out_str("\", message: \"")
     out_bytes(d + j + 1, t - j - 2)
     out_byte(32)
-    trap_body(load64(rec + T_KIND), load64(rec + T_A), load64(rec + T_B), str_at(load64(rec + T_OP)))
+    trap_body(
+        load64(rec + T_KIND),
+        load64(rec + T_A),
+        load64(rec + T_B),
+        str_at(load64(rec + T_OP)),
+    )
     out_str("\")\n")
-    # The trace: the `wait` and the `?` that passed the trap on (err.trace.1).
+    # The trace: the `wait` and the `?` that passed the trap on (err.ctx.1).
     out_str(at1)
     out_byte(10)
     out_str(at2)
@@ -306,7 +311,11 @@ fn report_trapped(rec int, at1 str, at2 str)
     sys_exit(1)
 
 fn is_trap_mark(a int) bool
-    load8(a) == 116 and load8(a + 1) == 114 and load8(a + 2) == 97 and load8(a + 3) == 112 and load8(a + 4) == 91
+    load8(a) == 116
+        and load8(a + 1) == 114
+        and load8(a + 2) == 97
+        and load8(a + 3) == 112
+        and load8(a + 4) == 91
 
 ## The function of task `id`: written by the compiler, one case per `spawn`
 ## site and parallel loop.
@@ -368,7 +377,12 @@ fn par_fail(grp int)
         if atomic_load(rec + T_STATE) == 3
             flush()
             out_str(str_at(load64(rec + T_HEAD)))
-            trap_body(load64(rec + T_KIND), load64(rec + T_A), load64(rec + T_B), str_at(load64(rec + T_OP)))
+            trap_body(
+                load64(rec + T_KIND),
+                load64(rec + T_A),
+                load64(rec + T_B),
+                str_at(load64(rec + T_OP)),
+            )
             out_byte(10)
             out_str(str_at(load64(rec + T_TAIL)))
             flush_to(2)
@@ -482,6 +496,7 @@ fn gc_scan_threads()
     for t in 0..n
         if t != me
             s := load64(p + P_PARK + 8 * t)
-            top := if t == 0 then load64(global(STACK_TOP)) else load64(global(STACKS)) + t * STACK_SZ
+            top := if t
+                == 0 then load64(global(STACK_TOP)) else load64(global(STACKS)) + t * STACK_SZ
             gc_scan_range(p + P_REGS + 80 * t, p + P_REGS + 80 * t + 80)
             gc_scan_range(s, top)

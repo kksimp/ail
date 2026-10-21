@@ -240,7 +240,26 @@ fn alloc(n int, kind int) int
 ## can only keep a dead block alive a little longer, and a list's scan stops
 ## at its length (ADR 0564).
 fn alloc_raw(n int, kind int) int
-    alloc_z(n, kind, 0)
+    if n <= 232 and load64(global(LIM_TICK)) == 0 and load64(global(MULTI)) == 0
+        idx := (n + 23).shr(4)
+        csz := idx.shl(4)
+        m := load64(global(HEAP))
+        a := load64(m + 8 * H_ALLOCD) + csz
+        if a <= load64(m + 8 * H_THRESH)
+            s := m + idx.shl(3)
+            b := load64(s + 8 * H_HEADS)
+            if b != 0
+                store64(s + 8 * H_HEADS, load64(b + 8))
+                store64(m + 8 * H_ALLOCD, a)
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(s + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(s + 8 * H_BEND)
+                store64(s + 8 * H_BUMP, c + csz)
+                store64(m + 8 * H_ALLOCD, a)
+                store64(c, kind + n.shl(16))
+                return c + 8
+    alloc_slow(n, kind, 0)
 
 ## The common case, a small object served from a free list or the page being
 ## filled while no collection or time check is due, is straight-line code

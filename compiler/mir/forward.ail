@@ -1,0 +1,156 @@
+## Load forwarding (ADR 0816): a load of memory that an earlier load or store
+## in the same straight-line run of blocks already produced reuses that
+## value. The run is a block and the chain of blocks below it that each have
+## only the one predecessor; every other block starts with nothing known.
+##
+## Four kinds of memory are tracked apart: list headers (`len`, `cap`,
+## `data`), list elements (`get`, `ldx`), struct slots (`load`) and raw
+## memory (`prim load64`, `load8`, `loadf`). A write forgets what it can
+## reach: an element store the elements and raw memory, a slot store the
+## slots, raw memory and headers, a raw store everything, and a call (or changed
+## primitive with effects) everything. A store also remembers its value for
+## the load that reads it back. Nothing is carried over a loop's back edge,
+## since the header has two predecessors.
+
+struct Known
+    header Map[str, int]
+    elem Map[str, int]
+    slot Map[str, int]
+    raw Map[str, int]
+
+struct Visit
+    block int
+    known Known
+
+pub fn forward_loads(f Func) Func
+    n := f.blocks.len()
+    mut preds := [0 for _ in 0..n]
+    for blk in f.blocks
+        for t in blk.term.targets
+            preds[t] += 1
+    mut repl := [v for v in 0..f.vals.len()]
+    mut gone := [[false for _ in blk.insts] for blk in f.blocks]
+    mut changed := false
+    mut done := [false for _ in 0..n]
+    mut roots := rpo(f)
+    mut r := roots.len() - 1
+    mut stack := List[Visit]()
+    while r >= 0
+        b := roots[r]
+        r -= 1
+        if preds[b] == 1 and b != 0
+            continue
+        stack.push(Visit(block: b, known: empty_known()))
+        while stack.len() > 0
+            v := stack.pop() else break
+            if done[v.block]
+                continue
+            done[v.block] = true
+            mut k := v.known
+            for at in 0..f.blocks[v.block].insts.len()
+                i := f.blocks[v.block].insts[at]
+                found := remember(f, i, mut k, mut repl)
+                if found >= 0
+                    repl[i.dst] = found
+                    gone[v.block][at] = true
+                    changed = true
+            for t in f.blocks[v.block].term.targets
+                if preds[t] == 1 and t != v.block
+                    stack.push(Visit(block: t, known: k))
+    if not changed
+        return f
+    mut g := f
+    for b in 0..n
+        for at in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[at].args = [resolve_val(repl, a) for a in g.blocks[b].insts[at].args]
+        g.blocks[b].insts = [
+            g.blocks[b].insts[at]
+            for at in 0..g.blocks[b].insts.len() if not gone[b][at]
+        ]
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = resolve_val(repl, t.cond)
+        if t.value >= 0
+            t.value = resolve_val(repl, t.value)
+        t.args = [[resolve_val(repl, a) for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    g
+
+fn empty_known() Known
+    Known(
+        header: Map[str, int](),
+        elem: Map[str, int](),
+        slot: Map[str, int](),
+        raw: Map[str, int](),
+    )
+
+fn resolve_val(repl List[int], v int) int
+    mut x := v
+    while repl[x] != x
+        x = repl[x]
+    x
+
+## What one instruction does to `k`: the value an earlier instruction
+## already produced for it (else -1), after recording what it reads and
+## forgetting what it writes.
+fn remember(f Func, i Inst, mut k Known, mut repl List[int]) int
+    args := [resolve_val(repl, a) for a in i.args]
+    if i.op == "len" or i.op == "cap" or i.op == "data"
+        return look(f, i, args, mut k.header)
+    if i.op == "get" or i.op == "ldx"
+        return look(f, i, args, mut k.elem)
+    if i.op == "load"
+        return look(f, i, args, mut k.slot)
+    if i.op == "prim" and (i.name == "load64" or i.name == "load8" or i.name == "loadf")
+        return look(f, i, args, mut k.raw)
+    if i.op == "set" or i.op == "stx"
+        k.elem = Map[str, int]()
+        k.raw = Map[str, int]()
+        op := if i.op == "set" then "get" else "ldx"
+        k.elem[key_of(op, [args[0], args[1]], i)] = args[2]
+    elif i.op == "store"
+        # A list's own length can change under a store.
+        if f.vals[args[0]].elem() != none
+            clear(mut k)
+        else
+            k.slot = Map[str, int]()
+            k.raw = Map[str, int]()
+            k.header = Map[str, int]()
+            k.slot[key_of("load", [args[0]], i)] = args[1]
+    elif i.op == "prim" and (i.name == "store64" or i.name == "store8" or i.name == "storef")
+        clear(mut k)
+    elif i.op == "prim" and not pure_prim(i.name)
+        clear(mut k)
+    elif i.op == "call" or i.op == "icall" or i.op == "utrap" or i.op == "trap"
+        clear(mut k)
+    -1
+
+fn pure_prim(name str) bool
+    name == "list_addr"
+        or name == "list_at"
+        or name == "str_addr"
+        or name == "str_at"
+        or name == "float_bits"
+        or name == "bits_float"
+        or name == "target"
+        or name == "global"
+        or name == "globals_end"
+
+fn clear(mut k Known)
+    k.header = Map[str, int]()
+    k.elem = Map[str, int]()
+    k.slot = Map[str, int]()
+    k.raw = Map[str, int]()
+
+fn key_of(op str, args List[int], i Inst) str
+    "{op}|{args}|{i.imm}|{i.fimm}|{i.name}"
+
+## The earlier value for a load, else -1 after remembering this one. A value
+## of another type (a stored `int` read as a `float`) isn't reused.
+fn look(f Func, i Inst, args List[int], mut seen Map[str, int]) int
+    key := key_of(i.op, args, i)
+    if prior := seen.get(key)
+        if f.vals[prior].name() == f.vals[i.dst].name()
+            return prior
+    seen[key] = i.dst
+    -1

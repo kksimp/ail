@@ -112,7 +112,7 @@ fn comparison(s str) ast.BinOp?
 
 ## Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
 ## these, `[` starts type arguments rather than an index (gen.infer.2).
-fn generic_names(tokens List[Token]) Set[str]
+pub fn generic_names(tokens List[Token]) Set[str]
     mut names := {"List", "Map", "Set", "Channel", "Mutex", "Atomic"}
     for k in 2..tokens.len()
         a := tok_text(tokens[k - 2].tok)
@@ -146,8 +146,15 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
 pub fn parse(tokens List[Token]) Parsed
+    parse_with(tokens, Set[str]())
+
+## `parse` of a file whose module's other files declare generic names too:
+## `extra` are theirs (`absent[int]()` in a file that doesn't declare `absent`).
+pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
     mut p := new_parser(tokens, [])
     p.generic_names = generic_names(tokens)
+    for n in extra.sorted()
+        p.generic_names.add(n)
     p.top_level()
     public := p.public.sorted()
     program := ast.Program(
@@ -249,12 +256,25 @@ fn Parser.top_level(mut self)
                 unexpected("`struct` or `enum` after `error`", "err.decl.1")
                 skip_statement()
         elif tag == "kw" and text == "mut" and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            error_text(
+                "mod.const.1",
+                here(),
+                "there are no mutable top-level variables",
+                "declare a constant `NAME := value`, or pass the value to the functions that change it",
+                "",
+            )
             skip_statement()
         elif tag == "id"
             and (text == "const" or text == "let" or text == "var")
             and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            fix := if sym_at(2) == "=" then "declare the constant with `:=`" else ""
+            error_text(
+                "mod.const.1",
+                here(),
+                "AIL has no `{text}`; a constant is declared `NAME := value`",
+                "remove the keyword and write `NAME := value`",
+                fix,
+            )
             skip_statement()
         elif tag == "id" and foreign_decl(text)
             i += 0

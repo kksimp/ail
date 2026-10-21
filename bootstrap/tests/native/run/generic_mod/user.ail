@@ -1,0 +1,4 @@
+pub fn other() int
+    mut y := absent[int]()
+    y = 2
+    y else 0

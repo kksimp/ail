@@ -71,6 +71,8 @@ struct Stub
 
 ## Integer arguments passed in x0-x7 (native-abi.md §1).
 INT_ARGS := 8
+## The runtime global holding the stack limit (`rt.STACK_LIMIT`, ADR 0535).
+STACK_LIMIT := 15
 
 struct Gen
     a Asm
@@ -119,7 +121,11 @@ pub fn generate(m mir.Module, os int) codegen.Image
     a.brk()
     add_code(mut img, a, "")
     for f in m.funcs
-        gen_func(mut img, m, f, os)
+        if is_kernel(f.name)
+            gen_kernel(mut img, f.name)
+        else
+            gen_func(mut img, m, f, os)
+    codegen.add_call_table(mut img, m)
     img
 
 fn add_code(mut img codegen.Image, a Asm, name str)
@@ -143,6 +149,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    first := img.calls.len()
     mut g := Gen(
         a: new_asm(),
         img: img,
@@ -174,6 +181,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
     g.gen_stubs()
     g.a.resolve_labels()
     img = g.img
+    for k in first..img.calls.len()
+        img.calls[k].off += img.code.len()
     add_code(mut img, g.a, f.name)
 
 # ---- frame ----
@@ -847,6 +856,12 @@ fn Gen.push(mut self, i mir.Inst)
     a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
+    if i.site >= 0
+        # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
+        a.adr_sym(S0, "globals")
+        a.ldr(S0, S0, 8 * STACK_LIMIT)
+        a.cmp_sp(S0)
+        a.b_cond(LO, stub(11, -1, -1, i.site, m.sites[i.site].op))
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -890,6 +905,9 @@ fn Gen.call_out(mut self, i mir.Inst)
             a.blr(S0)
     else
         a.bl(i.name)
+    if i.imm != 0
+        # The return address, for a trap's stack (trace.frame.1).
+        img.calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: f.name))
     if room > 0
         adjust_sp("add", room)
         sp_shift = 0
@@ -1010,6 +1028,14 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, os)
             put_gpr(i.dst, d)
+        "code_tab" =>
+            d := out_gpr(i.dst, S1)
+            a.adr_sym(d, "trace.tab")
+            put_gpr(i.dst, d)
+        "frame_ptr" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, FP)
+            put_gpr(i.dst, d)
         # Threads and atomics (ADRs 0599, 0600): ARMv8.1 LSE read-modify-write
         # operations, `ldar`/`stlr`, all sequentially consistent.
         "atomic_load" =>
@@ -1076,6 +1102,12 @@ fn Gen.prim(mut self, i mir.Inst)
         "bits_float" =>
             d := out_fpr(i.dst, X0)
             a.fmov_dx(d, gpr(i.args[0], S0))
+            put_fpr(i.dst, d)
+        "f32_round" =>
+            xa := fpr(i.args[0], X0)
+            d := out_fpr(i.dst, X0)
+            a.fop1("fcvt_sd", X1, xa)
+            a.fop1("fcvt_ds", d, X1)
             put_fpr(i.dst, d)
         _ => unreachable("a64: unknown primitive {i.name}")
 
@@ -1215,7 +1247,7 @@ fn Gen.gen_stubs(mut self)
         if s.kind == 4
             # The float's bits.
             a.fmov_xd(1, fpr(s.a, X0))
-        else
+        elif s.kind != 11
             moves.push(move_of(1, s.a))
             moves.push(move_of(2, s.b))
         moves.push(Move(dst: 3, src: -1, imm: 0, sym: "d:h{s.site}", float: false))

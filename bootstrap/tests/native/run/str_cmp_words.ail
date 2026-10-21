@@ -1,0 +1,41 @@
+# native.str.1, trait.std.4: `==` and ordering on strings compare by bytes,
+# a word at a time, across lengths 0-20, shared prefixes, a difference in
+# each byte position and non-ASCII text.
+fn main()
+    base := "abcdefghijklmnopqrst"
+    mut texts := List[str]()
+    for n in 0..21
+        texts.push(base.slice(0, n))
+    texts.push("abcdefghijklmnopqrsu")
+    texts.push("abcdefgh")
+    texts.push("abcdefgi")
+    texts.push("abcdefghz")
+    texts.push("é")
+    texts.push("éa")
+    texts.push("ée")
+    texts.push("ß")
+    texts.push("日本語")
+    texts.push("日本語x")
+    texts.push("日本")
+    texts.push("zzzzzzzzé")
+    texts.push("zzzzzzzzf")
+    mut lt := 0
+    mut eq := 0
+    mut gt := 0
+    for a in texts
+        for b in texts
+            if a == b
+                eq += 1
+            if a < b
+                lt += 1
+            if a > b
+                gt += 1
+            if a <= b and a >= b and a != b
+                print("inconsistent {a} {b}")
+    print("{texts.len()} {lt} {eq} {gt}")
+    for t in texts.sorted()
+        print(t)
+    copy := "{base}"
+    print(copy == base)
+    print(base.slice(0, 8) == "abcdefgh")
+    print(base.slice(0, 9) == "abcdefghi")

@@ -1656,6 +1656,24 @@ fn main()
     print(why(["in.txt"]))                 # in.txt, then ok
 ```
 
+**std.args.7** — `impl FromArgs for Opts` on a struct derives
+`Opts.parse(name, about, words) Opts ! ArgsFailure`. A field is a switch
+(`bool`), an option (`str?`, `int?` or `float?`; `none` when absent), the rest
+(`List[str]`) or a required positional (`str`, `int` or `float`, in field
+order). The field's `##` comment (`ct.derive.5`) is its help. A switch or
+option has the short name of its first letter unless an earlier one has it or
+it is `h`. An `int` or `float` word that doesn't parse, and everything
+`args.parse` rejects, is an `ArgsFailure` (an error with `why str` and
+`usage str`, like `ArgsError`); any other field type is a `DeriveError` at the
+`impl`. *(ADR 0777)*
+
+**std.args.8** — `Args.has(name)` says whether an option or positional was
+given; `Args.opt(name) str?`, `Args.opt_int(name) int?` and
+`Args.opt_float(name) float?` give `none` when it was absent (or, for the
+numbers, isn't one); `Args.int(name) int ! ArgsError` and
+`Args.float(name) float ! ArgsError` fail on text that isn't a number. The
+derive calls them. *(ADR 0777)*
+
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
 
@@ -1675,6 +1693,26 @@ fn main()
         print(err.why)
         return
     print(a.get("input"))
+```
+
+```ail rules=std.args.7,std.args.8,ct.derive.6
+use std.args
+
+struct Opts
+    ## more output
+    verbose bool
+    ## worker count
+    jobs int?
+    ## file to read
+    input str
+
+impl FromArgs for Opts
+
+fn main()
+    o := Opts.parse("tool", "demo", ["-v", "-j", "4", "in.txt"]) else e
+        print(e.why)
+        return
+    print("{o.verbose} {o.jobs} {o.input}") # true 4 in.txt
 ```
 
 ## Logging: `std.log`
@@ -2061,13 +2099,28 @@ row's largest element. The sum runs in element order. A row that holds a NaN
 or an infinity gives NaN for that row. An empty last axis traps. An `f32`
 tensor is computed in `float` and rounded once, as std.tensor.21 does for the
 other activations. On a `Tensor[int]` it is a compile-time error. Fusion
-(std.tensor.20) does not cover it. *(ADR TBD, requested from the integrator)*
+(std.tensor.20) does not cover it. *(ADR 0827)*
 
 ```ail rules=std.tensor.24
 fn main()
     print(tensor.from([0.0, 0.0]).softmax())    # tensor.from([0.5, 0.5])
     a := tensor.from([1.0, 3.0, 2.0, 2.0, 2.0, 2.0], [2, 3])
     print(a.softmax().map(|x| x * 100.0).round())   # per row: 9 67 24, then 33 33 33
+```
+
+**std.tensor.25** — `tensor.from_fn(shape, |i| e)` builds a tensor whose element
+at flat (row-major) index `i` is `e`, computed in index order. `shape` is an
+`int` (a 1-D tensor of that length) or a `List[int]` as in `tensor.zeros`; a
+negative size or too many elements traps with std.tensor.2. The function takes
+the `int` index and gives an `int`, a `float` or an `f32`, and that is the
+element type. A call with another argument count, a function that is not
+written `|i| e`, a shape of another type, or a function that gives another type
+is a compile-time error. *(ADR 0831)*
+
+```ail rules=std.tensor.25
+fn main()
+    print(tensor.from_fn(4, |i| i.to_float() * 0.5))   # tensor.from([0.0, 0.5, 1.0, 1.5])
+    print(tensor.from_fn([2, 3], |i| i * i))           # tensor.from([0, 1, 4, 9, 16, 25], [2, 3])
 ```
 
 **std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has

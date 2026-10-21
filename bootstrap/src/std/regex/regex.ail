@@ -32,6 +32,14 @@ pub struct Regex
     ## start) the offset of its precomputed empty-transition closure, which is a
     ## count then the instructions in priority order. Empty when not built.
     clo List[int]
+    ## The reversed program with its tables, and two lazily-free (eagerly built,
+    ## bounded) DFAs over ASCII: `fwd` finds where the leftmost-first match ends,
+    ## `rev` walks back from there to where it starts. `k` is 0 when not built.
+    rcode List[int]
+    rtab List[int]
+    rclo List[int]
+    fwd Dfa
+    rev Dfa
 
 pub struct Match
     pub start int
@@ -1128,6 +1136,7 @@ struct C
     code List[int]
     full bool
     classes int
+    rev bool
 
 fn C.push(mut self, op int, x int, y int) int
     if self.code.len() / 4 >= MAX_PROG
@@ -1167,10 +1176,15 @@ fn C.emit(mut self, n int)
     elif k == 4
         self.push(I_ASSERT, self.p.na[n], 0)
     elif k == 5
+        mut kids := List[int]()
         mut c := self.p.na[n]
         while c >= 0
-            self.emit(c)
+            kids.push(c)
             c = self.p.nx[c]
+        mut i := 0
+        while i < kids.len()
+            self.emit(if self.rev then kids[kids.len() - 1 - i] else kids[i])
+            i += 1
     elif k == 6
         mut jumps := List[int]()
         mut a := self.p.na[n]
@@ -1189,7 +1203,7 @@ fn C.emit(mut self, n int)
             self.patch(j, end, 0)
     elif k == 7
         i := self.p.na[n]
-        if i >= 0
+        if i >= 0 and not self.rev
             self.push(I_SAVE, 2 * i, 0)
             self.emit(self.p.nb[n])
             self.push(I_SAVE, 2 * i + 1, 0)
@@ -1303,22 +1317,34 @@ fn start_set(re Regex) List[int]
 
 ## The ASCII table of every class instruction, in program order; word 3 of the
 ## instruction is its offset (the matcher reads one flag for an ASCII character).
-fn class_tables(re Regex) List[int]
+fn class_tables(re Regex, code List[int]) List[int]
     mut tab := List[int]()
+    mut memo_key := List[int]()
+    mut memo_at := List[int]()
     mut pc := 0
-    while pc < re.code.len() / 4
-        if re.code[pc * 4] == I_CLASS
-            mut c := 0
-            while c < 128
-                tab.push(
-                    if class_matches(
-                        re,
-                        re.code[pc * 4 + 1],
-                        c,
-                        re.code[pc * 4 + 2] == 1,
-                    ) then 1 else 0,
-                )
-                c += 1
+    while pc < code.len() / 4
+        if code[pc * 4] == I_CLASS
+            key := code[pc * 4 + 1] * 2 + code[pc * 4 + 2]
+            at := memo_key.index_of(key) else -1
+            if at >= 0
+                mut c := 0
+                while c < 128
+                    tab.push(tab[memo_at[at] + c])
+                    c += 1
+            else
+                memo_key.push(key)
+                memo_at.push(tab.len())
+                mut c := 0
+                while c < 128
+                    tab.push(
+                        if class_matches(
+                            re,
+                            code[pc * 4 + 1],
+                            c,
+                            code[pc * 4 + 2] == 1,
+                        ) then 1 else 0,
+                    )
+                    c += 1
         pc += 1
     tab
 
@@ -1326,11 +1352,11 @@ fn class_tables(re Regex) List[int]
 ## wanted and the program has no assertion: the same instructions in the same
 ## order that following `Jmp`, `Split` and `Save` from an instruction would
 ## reach. See `clo`; empty when there is an assertion or the table would be huge.
-fn closures(re Regex) List[int]
-    n := re.code.len() / 4
+fn closures(code List[int]) List[int]
+    n := code.len() / 4
     mut pc := 0
     while pc < n
-        if re.code[pc * 4] == I_ASSERT
+        if code[pc * 4] == I_ASSERT
             return []
         pc += 1
     mut out := List[int]()
@@ -1343,7 +1369,7 @@ fn closures(re Regex) List[int]
     mut stamp := 0
     pc = 0
     while pc <= n
-        op := if pc < n then re.code[pc * 4] else I_SAVE
+        op := if pc < n then code[pc * 4] else I_SAVE
         if pc == n or (op != I_JMP and op != I_SPLIT and op != I_SAVE and op != I_MATCH)
             stamp += 1
             out[pc] = out.len()
@@ -1356,12 +1382,12 @@ fn closures(re Regex) List[int]
                 if seen[q] == stamp
                     continue
                 seen[q] = stamp
-                o := re.code[q * 4]
+                o := code[q * 4]
                 if o == I_JMP
-                    stack.push(re.code[q * 4 + 1])
+                    stack.push(code[q * 4 + 1])
                 elif o == I_SPLIT
-                    stack.push(re.code[q * 4 + 2])
-                    stack.push(re.code[q * 4 + 1])
+                    stack.push(code[q * 4 + 2])
+                    stack.push(code[q * 4 + 1])
                 elif o == I_SAVE
                     stack.push(q + 1)
                 else
@@ -1411,7 +1437,7 @@ pub fn compile(pattern str) Regex ! RegexError
             rule: rule_of(p.fail_kind),
             message: p.fail_msg,
         )
-    mut c := C(p: p, code: [], full: false, classes: 0)
+    mut c := C(p: p, code: [], full: false, classes: 0, rev: false)
     c.push(I_SAVE, 0, 0)
     c.emit(node)
     c.push(I_SAVE, 1, 0)
@@ -1438,11 +1464,265 @@ pub fn compile(pattern str) Regex ! RegexError
         start: [],
         tab: [],
         clo: [],
+        rcode: [],
+        rtab: [],
+        rclo: [],
+        fwd: Dfa(k: 0, cmap: [], trans: [], hit0: 0),
+        rev: Dfa(k: 0, cmap: [], trans: [], hit0: 0),
     )
     re.start = start_set(re)
-    re.tab = class_tables(re)
-    re.clo = closures(re)
+    re.tab = class_tables(re, re.code)
+    re.clo = closures(re.code)
+    if re.clo.len() > 0
+        mut rc := C(p: p, code: [], full: false, classes: 0, rev: true)
+        rc.emit(node)
+        rc.push(I_MATCH, 0, 0)
+        if not rc.full
+            re.rcode = rc.code
+            re.rtab = class_tables(re, rc.code)
+            re.rclo = closures(rc.code)
+            re.fwd = build_dfa(re, re.code, re.tab, re.clo, true)
+            re.rev = build_dfa(re, re.rcode, re.rtab, re.rclo, false)
+            if re.rev.k == 0
+                re.fwd = Dfa(k: 0, cmap: [], trans: [], hit0: 0)
     re
+
+# ---- the DFAs ----
+
+## A DFA over the ASCII characters (`k` classes of characters no instruction
+## tells apart, `cmap` maps a character to its class; 0 classes: not built).
+## `trans[state * 128 + c]` is the next state times 4, plus 2
+## when that state holds `Match` and 1 when it is dead (no threads).
+struct Dfa
+    k int
+    cmap List[int]
+    trans List[int]
+    hit0 int
+
+## The states being built: the instructions of each, in priority order.
+struct B
+    hashes List[int]
+    sat List[int]
+    slen List[int]
+    sdata List[int]
+    m List[int]
+    flags List[int]
+    trans List[int]
+    kc int
+
+fn B.intern(mut self, items List[int], mk int, code List[int]) int
+    mut h := mk
+    for x in items
+        h = (h * 1000003 + x + 1) % 2147483647
+    mut i := 0
+    while i < self.hashes.len()
+        if self.hashes[i] == h and self.slen[i] == items.len() and self.m[i] == mk
+            mut same := true
+            mut j := 0
+            while j < items.len()
+                if self.sdata[self.sat[i] + j] != items[j]
+                    same = false
+                    break
+                j += 1
+            if same
+                return i
+        i += 1
+    self.hashes.push(h)
+    self.sat.push(self.sdata.len())
+    self.slen.push(items.len())
+    self.m.push(mk)
+    mut flag := if items.len() == 0 then 1 else 0
+    for x in items
+        self.sdata.push(x)
+        if code[x * 4] == I_MATCH
+            flag += 2
+    self.flags.push(flag)
+    mut j2 := 0
+    while j2 < self.kc
+        self.trans.push(-1)
+        j2 += 1
+    self.hashes.len() - 1
+
+## Whether consuming instruction `pc` of `code` takes ASCII character `c`.
+fn takes(re Regex, code List[int], tab List[int], pc int, c int) bool
+    op := code[pc * 4]
+    x := code[pc * 4 + 1]
+    if op == I_CHAR
+        return c == x
+    if op == I_FOLD
+        return lower_of(c) == x
+    if op == I_ANY
+        return true
+    if op == I_ANYNL
+        return c != 10
+    tab[code[pc * 4 + 3] + c] == 1
+
+## The most states a DFA is built with; a pattern needing more matches with the VM.
+MAX_STATES := 256
+MAX_DFA_PROG := 1500
+
+## Build the DFA of `code` by exploring every state over the ASCII character
+## classes. Forward: the unanchored leftmost-first search (the states are the
+## VM's thread lists in priority order, cut at `Match`, with a new thread
+## appended while nothing has matched). Backward: the set of instructions
+## reached reading the text in reverse from a match end.
+fn build_dfa(re Regex, code List[int], tab List[int], clo List[int], forward bool) Dfa
+    n := code.len() / 4
+    empty := Dfa(k: 0, cmap: [], trans: [], hit0: 0)
+    if clo.len() == 0 or n > MAX_DFA_PROG
+        return empty
+    # Split the characters into classes no instruction tells apart: each
+    # consuming instruction splits every class into those it takes and those it doesn't.
+    mut cmap := [0 for k0 in 0..128]
+    mut kc := 1
+    mut ip := 0
+    while ip < n
+        op := code[ip * 4]
+        x := code[ip * 4 + 1]
+        if op == I_CHAR or op == I_FOLD or op == I_ANYNL or op == I_CLASS
+            ux := if op == I_FOLD and x < 128 then upper_of(x) else x
+            off := code[ip * 4 + 3]
+            mut remap := [-1 for k5 in 0..(2 * kc)]
+            mut next := 0
+            mut c := 0
+            while c < 128
+                mut bit := 0
+                if op == I_CHAR
+                    bit = if c == x then 1 else 0
+                elif op == I_FOLD
+                    bit = if c == x or c == ux then 1 else 0
+                elif op == I_ANYNL
+                    bit = if c == 10 then 1 else 0
+                else
+                    bit = tab[off + c]
+                key := cmap[c] * 2 + bit
+                if remap[key] < 0
+                    remap[key] = next
+                    next += 1
+                cmap[c] = remap[key]
+                c += 1
+            kc = next
+        ip += 1
+    mut reps := [0 for k6 in 0..kc]
+    mut c3 := 127
+    while c3 >= 0
+        reps[cmap[c3]] = c3
+        c3 -= 1
+    mut b := B(hashes: [], sat: [], slen: [], sdata: [], m: [], flags: [], trans: [], kc: kc)
+    mut seen := [0 for k1 in 0..n]
+    mut stamp := 0
+    mut out := List[int]()
+    mut first := List[int]()
+    off0 := clo[n]
+    mut j0 := 1
+    while j0 <= clo[off0]
+        first.push(clo[off0 + j0])
+        j0 += 1
+    b.intern(if forward then first else first.sorted(), 0, code)
+    mut cur := 0
+    while cur < b.hashes.len()
+        if b.hashes.len() > MAX_STATES
+            return empty
+        mut cls := 0
+        while cls < kc
+            c2 := reps[cls]
+            stamp += 1
+            out.clear()
+            mut matched := false
+            mut j := 0
+            while j < b.slen[cur]
+                pc := b.sdata[b.sat[cur] + j]
+                if code[pc * 4] == I_MATCH
+                    if forward
+                        matched = true
+                        break
+                elif takes(re, code, tab, pc, c2)
+                    off := clo[pc]
+                    mut q := 1
+                    while q <= clo[off]
+                        t := clo[off + q]
+                        if seen[t] != stamp
+                            seen[t] = stamp
+                            out.push(t)
+                        q += 1
+                j += 1
+            m2 := if b.m[cur] == 1 or matched then 1 else 0
+            if forward and m2 == 0
+                off := clo[n]
+                mut q := 1
+                while q <= clo[off]
+                    t := clo[off + q]
+                    if seen[t] != stamp
+                        seen[t] = stamp
+                        out.push(t)
+                    q += 1
+            id := b.intern(if forward then out else out.sorted(), m2, code)
+            b.trans[cur * kc + cls] = id
+            cls += 1
+        cur += 1
+    if b.hashes.len() > MAX_STATES
+        return empty
+    mut i := 0
+    while i < b.trans.len()
+        b.trans[i] = b.trans[i] * 4 + b.flags[b.trans[i]]
+        i += 1
+    mut full := List[int]()
+    mut st := 0
+    while st < b.hashes.len()
+        mut ch := 0
+        while ch < 128
+            full.push(b.trans[st * kc + cmap[ch]])
+            ch += 1
+        st += 1
+    Dfa(k: kc, cmap: cmap, trans: full, hit0: b.flags[0].bit_and(2))
+
+## Where the leftmost-first match from `start` ends: -1 for none, -2 when the
+## text has a character outside ASCII (the VM takes over). With `earliest`,
+## any end will do.
+fn dfa_forward(d Dfa, text List[char], start int, earliest bool) int
+    mut s := 0
+    mut last := -1
+    mut pos := start
+    end := text.len()
+    if d.hit0 != 0
+        if earliest
+            return pos
+        last = pos
+    while pos < end
+        c := text[pos].code()
+        if c >= 128
+            return -2
+        t := d.trans[s * 128 + c]
+        s = t / 4
+        pos += 1
+        if t.bit_and(2) != 0
+            if earliest
+                return pos
+            last = pos
+        if t.bit_and(1) != 0
+            break
+    last
+
+## The smallest `s` in `start..=end` with `text[s..end]` matching, scanning back
+## from `end`: -1 for none, -2 for a character outside ASCII.
+fn dfa_backward(d Dfa, text List[char], start int, end int) int
+    mut s := 0
+    mut found := -1
+    mut pos := end
+    if d.hit0 != 0
+        found = pos
+    while pos > start
+        c := text[pos - 1].code()
+        if c >= 128
+            return -2
+        t := d.trans[s * 128 + c]
+        s = t / 4
+        pos -= 1
+        if t.bit_and(2) != 0
+            found = pos
+        if t.bit_and(1) != 0
+            break
+    found
 
 # ---- the matcher ----
 
@@ -1497,17 +1777,33 @@ struct Vm
     work_at int
     st List[int]
     res List[int]
+    ready bool
 
 fn new_vm(re Regex, slots int) Vm
+    n := re.code.len() / 4
+    if re.fwd.k == 0 or slots > 2
+        return full_vm(re, slots)
+    Vm(
+        n: n,
+        slots: slots,
+        mem: [0],
+        seen_at: 2 * n,
+        cnt_at: 4 * n,
+        stamp_at: 4 * n + 2,
+        caps: [0],
+        work_at: 2 * n * slots,
+        st: [0],
+        res: if slots == 2 then [-1, -1] else [],
+        ready: false,
+    )
+
+fn full_vm(re Regex, slots int) Vm
     n := re.code.len() / 4
     mut mem := [0 for k1 in 0..(4 * n + 4)]
     mem[4 * n + 2] = 1
     mem[4 * n + 3] = 1
     caps := [-1 for k2 in 0..(2 * n * slots + slots)]
-    res := [-1 for k3 in 0..slots]
-    mut st := [0]
-    if re.clo.len() == 0 or slots > 2
-        st = [0 for k4 in 0..(4 * n + 8)]
+    st := if re.clo.len() == 0 or slots > 2 then [0 for k4 in 0..(4 * n + 8)] else [0]
     Vm(
         n: n,
         slots: slots,
@@ -1518,8 +1814,21 @@ fn new_vm(re Regex, slots int) Vm
         caps: caps,
         work_at: 2 * n * slots,
         st: st,
-        res: res,
+        res: [-1 for k3 in 0..slots],
+        ready: true,
     )
+
+## Allocate the scratch space of the Pike VM (`new_vm` leaves it out when the
+## DFAs can answer).
+fn Vm.fill(mut self, re Regex)
+    np := self.n
+    self.mem = [0 for k1 in 0..(4 * np + 4)]
+    self.mem[4 * np + 2] = 1
+    self.mem[4 * np + 3] = 1
+    self.caps = [-1 for k2 in 0..(2 * np * self.slots + self.slots)]
+    if re.clo.len() == 0 or self.slots > 2
+        self.st = [0 for k4 in 0..(4 * np + 8)]
+    self.ready = true
 
 ## `add` through a closure (see `Regex.clo`): the threads of its instructions
 ## that list `w` doesn't have yet, each with the start in `vm.caps[vm.work_at + 0]`.
@@ -1596,6 +1905,26 @@ fn add(re Regex, mut vm Vm, w int, pc0 int, pos int, text List[char])
 ## `vm.res`. With `earliest` the first match found is returned without
 ## resolving priorities, which is enough to say whether there is one.
 fn exec(re Regex, text List[char], start int, earliest bool, mut vm Vm) bool
+    if re.fwd.k > 0
+        e := dfa_forward(re.fwd, text, start, earliest)
+        if e == -1
+            return false
+        if e >= 0
+            if earliest
+                return true
+            s := dfa_backward(re.rev, text, start, e)
+            if s >= 0
+                if vm.slots == 2
+                    vm.res[0] = s
+                    vm.res[1] = e
+                    return true
+                return pike(re, text, s, earliest, mut vm)
+    pike(re, text, start, earliest, mut vm)
+
+## The Pike VM search (see `exec`).
+fn pike(re Regex, text List[char], start int, earliest bool, mut vm Vm) bool
+    if not vm.ready
+        vm.fill(re)
     if re.anchored and start > 0
         return false
     vm.mem[vm.cnt_at + 0] = 0
@@ -1710,10 +2039,8 @@ fn cut(text str, cs List[char], a int, b int) str
     out.join("")
 
 ## The trap of std.regex.7 and std.regex.24: a group the pattern doesn't have.
-fn no_group(why str) int
-    # Native traps don't carry a message yet; an index trap stops the program.
-    mut none_ := List[int]()
-    none_[0]
+fn no_group(rule str, why str) int
+    unreachable("{rule}: {why}")
 
 # ---- the API ----
 
@@ -1741,7 +2068,7 @@ fn m_find_all(re Regex, text str) List[Match]
 
 fn m_group_all(re Regex, text str, group int) List[str]
     if group < 0 or group >= re.groups
-        no_group("group {group}")
+        no_group("std.regex.24", "the pattern has groups 0 to {re.groups - 1}, not group {group}")
     cs := text.chars()
     mut vm := new_vm(re, 2 * re.groups)
     sp := spans(re, cs, 1073741824, mut vm)
@@ -1761,7 +2088,8 @@ fn m_group_all(re Regex, text str, group int) List[str]
 struct Template
     lits List[str]
     refs List[int]
-    bad bool
+    ## Why the template is wrong (empty when it is fine).
+    bad str
 
 ## The group a template reference names, or -1.
 fn ref_of(re Regex, name str) int
@@ -1772,6 +2100,15 @@ fn ref_of(re Regex, name str) int
         return re.name_ix[k]
     -1
 
+## What a template reference to `name` that names no group says (std.regex.7).
+fn bad_ref(re Regex, name str) str
+    if name != "" and all_digits(name)
+        return "group {name}; the pattern has groups 0 to {re.groups - 1}"
+    mut have := List[str]()
+    for n in re.names
+        have.push("\"{n}\"")
+    "group `{name}`; the pattern's named groups are [{have.join(", ")}]"
+
 fn all_digits(s str) bool
     for c in s.chars()
         if not is_digit(c.code())
@@ -1780,7 +2117,7 @@ fn all_digits(s str) bool
 
 fn template(re Regex, rep str) Template
     cs := rep.chars()
-    mut t := Template(lits: [], refs: [], bad: false)
+    mut t := Template(lits: [], refs: [], bad: "")
     mut lit := ""
     mut i := 0
     while i < cs.len()
@@ -1802,11 +2139,12 @@ fn template(re Regex, rep str) Template
                     break
                 j += 1
             if end < 0
-                t.bad = true
+                t.bad = "`$\{` without a closing `}`"
                 return t
-            g := ref_of(re, cs[i + 2..end].join(""))
+            name := cs[i + 2..end].join("")
+            g := ref_of(re, name)
             if g < 0
-                t.bad = true
+                t.bad = bad_ref(re, name)
                 return t
             t.lits.push(lit)
             lit = ""
@@ -1816,9 +2154,10 @@ fn template(re Regex, rep str) Template
             mut j := i + 1
             while j < cs.len() and is_word(cs[j].code())
                 j += 1
-            g := ref_of(re, cs[i + 1..j].join(""))
+            name := cs[i + 1..j].join("")
+            g := ref_of(re, name)
             if g < 0
-                t.bad = true
+                t.bad = bad_ref(re, name)
                 return t
             t.lits.push(lit)
             lit = ""
@@ -1833,8 +2172,8 @@ fn template(re Regex, rep str) Template
 ## Replace the first `limit` matches (std.regex.7).
 fn replace_n(re Regex, text str, rep str, limit int) str
     t := template(re, rep)
-    if t.bad
-        no_group("the replacement")
+    if t.bad != ""
+        no_group("std.regex.7", "the replacement refers to {t.bad}")
     cs := text.chars()
     stride := if t.refs.len() == 0 then 2 else 2 * re.groups
     mut vm := new_vm(re, stride)

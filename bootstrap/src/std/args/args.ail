@@ -22,6 +22,8 @@ pub struct Spec
 pub struct Args
     values Map[str, str]
     flags Set[str]
+    given Set[str]
+    text str
     ## The words left over after the named positionals, in order.
     pub rest List[str]
 
@@ -42,6 +44,45 @@ pub fn pos(name str, help str) Spec
 ## (std.args.2).
 pub fn rest(name str, help str) Spec
     Spec(kind: "rest", name: name, short: "", help: help, default: "")
+
+## Whether option or positional `name` was given on the command line
+## (std.args.8).
+pub fn Args.has(self, name str) bool
+    given.contains(name)
+
+## Option or positional `name` as a `str`, `none` when absent (std.args.8).
+pub fn Args.opt(self, name str) str?
+    if given.contains(name)
+        return values.get(name)
+    none
+
+## `name` as an `int`; text that isn't one is an `ArgsError` (std.args.8).
+pub fn Args.int(self, name str) int ! ArgsError
+    v := values.get(name) else ""
+    got := v.to_int()
+    n := got else
+        return ArgsError(why: "{name} needs an integer, got `{v}`", usage: text)
+    n
+
+## `name` as a `float` (std.args.8).
+pub fn Args.float(self, name str) float ! ArgsError
+    v := values.get(name) else ""
+    got := v.to_float()
+    n := got else
+        return ArgsError(why: "{name} needs a number, got `{v}`", usage: text)
+    n
+
+## `name` as an `int` when given and a number, else `none` (std.args.8).
+pub fn Args.opt_int(self, name str) int?
+    if given.contains(name)
+        return values.get(name)?.to_int()
+    none
+
+## `name` as a `float` when given and a number, else `none` (std.args.8).
+pub fn Args.opt_float(self, name str) float?
+    if given.contains(name)
+        return values.get(name)?.to_float()
+    none
 
 ## Whether switch `name` was given (std.args.4).
 pub fn Args.flag(self, name str) bool
@@ -92,6 +133,7 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
     text := usage(name, about, specs)
     mut values := Map[str, str]()
     mut flags := Set[str]()
+    mut given := Set[str]()
     mut positional := List[str]()
     for s in specs
         if s.kind == "opt"
@@ -123,8 +165,10 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
                 flags.add(s.name)
             elif eq >= 0
                 values[s.name] = inline
+                given.add(s.name)
             elif i < words.len()
                 values[s.name] = words[i]
+                given.add(s.name)
                 i += 1
             else
                 return ArgsError(why: "--{s.name} needs a value", usage: text)
@@ -135,6 +179,7 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
             if next >= positional.len()
                 return ArgsError(why: "missing {s.name.to_upper()}", usage: text)
             values[s.name] = positional[next]
+            given.add(s.name)
             next += 1
     left = positional[next..]
     mut has_rest := false
@@ -143,4 +188,4 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
             has_rest = true
     if left.len() > 0 and not has_rest
         return ArgsError(why: "unexpected argument {left[0]}", usage: text)
-    Args(values: values, flags: flags, rest: left)
+    Args(values: values, flags: flags, given: given, text: text, rest: left)

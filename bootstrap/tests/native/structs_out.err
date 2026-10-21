@@ -1,3 +1,2 @@
-bootstrap/tests/native/structs_out.ail:2:8: error[native.subset.1]: generic struct `Box` isn't in the native subset yet
-bootstrap/tests/native/structs_out.ail:5:8: error[native.subset.1]: struct `Checked`: invariants aren't in the native subset yet
-bootstrap/tests/native/structs_out.ail:14:10: error[native.subset.1]: not in the native subset yet: printing a `Point`
+bootstrap/tests/native/structs_out.ail:5:15: error[native.subset.1]: unique struct `Checked` isn't in the native subset yet
+bootstrap/tests/native/structs_out.ail:13:10: error[native.subset.1]: not in the native subset yet: printing a `Point`
