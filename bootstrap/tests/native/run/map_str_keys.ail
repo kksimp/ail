@@ -1,0 +1,61 @@
+# String-keyed maps and sets under random operations: keys of every length
+# from 0 to 40, built fresh each time (equal contents, different objects),
+# with inserts, lookups, removals and iteration order checked against `ail run`
+# (type.map.1; ADR 0766-0767). The seed is the first argument (default 1).
+
+struct Rng
+    state int
+
+## An integer in lo..=hi from a linear congruential generator.
+fn Rng.int(mut self, lo int, hi int) int
+    state = (state * 3877 + 29573) % 139968
+    lo + state / 7 % (hi - lo + 1)
+
+fn make_key(mut r Rng, len int, alpha int) str
+    letters := "abcdefghij".chars()
+    mut chars := List[char]()
+    for _ in 0..len
+        chars.push(letters[r.int(0, alpha - 1)])
+    chars.join("")
+
+fn size() int
+    args := env.args()
+    if args.len() == 0
+        return 1
+    n := args[0].to_int() else return 1
+    n
+
+fn main()
+    mut r := Rng(state: size())
+    mut m := Map[str, int]()
+    mut s := Set[str]()
+    mut sum := 0
+    for step in 0..4000
+        alpha := r.int(1, 4)
+        key := make_key(mut r, r.int(0, 40), alpha)
+        op := r.int(0, 5)
+        if op <= 2
+            m[key] = step
+            s.add(key)
+        elif op == 3
+            if m.contains(key)
+                sum += m[key]
+            if s.contains(key)
+                sum += 1
+        elif op == 4
+            m.remove(key)
+            s.remove(key)
+        else
+            c := m.get(key) else 0
+            m[key] = c + 1
+        if step % 500 == 499
+            print("step {step}: {m.len()} {s.len()} {sum}")
+            mut firsts := 0
+            for k in m.keys()
+                firsts = (firsts * 31 + k.len() + m[k]) % 1000003
+            print("order {firsts}")
+            mut shown := 0
+            for k in s
+                if shown < 3
+                    print("first {k}")
+                shown += 1
