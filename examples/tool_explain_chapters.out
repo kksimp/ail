@@ -2,7 +2,7 @@ api 43 0
 budget 6 0
 conc 44 1
 contract 18 0
-ct 17 0
+ct 18 0
 diff 7 0
 edit 17 0
 eff 15 0
@@ -24,10 +24,10 @@ refl 4 0
 replay 10 0
 run 6 0
 snap 6 0
-std 194 1
+std 196 1
 test 23 0
 trace 17 0
 trait 43 3
 type 107 10
 unsafe 16 0
-all 895 48
+all 898 48
