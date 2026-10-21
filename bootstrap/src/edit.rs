@@ -864,22 +864,39 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
             changed.push(f.clone());
         }
     }
-    let saved = match save(&work) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: {e}");
-            return ExitCode::from(2);
-        }
-    };
+    // A single file is checked from memory, so a preview or a refused edit never shows
+    // another process the edited text; a package is written, checked and put back.
+    let single = !Path::new(path).is_dir() && work.files.len() == 1;
+    let mut saved = Vec::new();
+    if !single {
+        saved = match save(&work) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::from(2);
+            }
+        };
+    }
     // edit.out.2: the new state's diagnostics.
-    let Some((prog, diags)) = check_quietly(path) else {
+    let checked = if single {
+        let src = work.files.values().next().map(String::as_str).unwrap_or_default();
+        check_source(path, src)
+    } else {
+        check_quietly(path)
+    };
+    let Some((prog, diags)) = checked else {
         restore(saved);
         return ExitCode::from(2);
     };
     let errors = diags.iter().filter(|d| !d.warning).count();
     let warnings = diags.len() - errors;
     let kept = !dry && !(if_clean && errors > 0);
-    if !kept {
+    if single && kept {
+        if let Err(e) = save(&work) {
+            eprintln!("error: {e}");
+            return ExitCode::from(2);
+        }
+    } else if !kept {
         restore(saved);
     }
     let mut out = String::new();
@@ -928,6 +945,16 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
         };
     }
     ExitCode::SUCCESS
+}
+
+/// Check `src` as the text of the file `path` without reporting; a file without `main` is fine.
+fn check_source(path: &str, src: &str) -> Option<(crate::ast::Program, Vec<crate::diag::Diagnostic>)> {
+    let (prog, mut diags) = crate::modules::load_src(path, src);
+    if diags.is_empty() {
+        diags = crate::check::check(&prog).0;
+    }
+    diags.retain(|d| d.rule != "mod.main.1");
+    Some((prog, diags))
 }
 
 /// Load and check `path` without reporting; a file without `main` is fine.
