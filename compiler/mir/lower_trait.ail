@@ -153,3 +153,29 @@ fn Lower.gen_any_copy(mut self, x int, t str)
         else
             store(b, 1, copy_value(Val(id: load(x, 1, st), ty: st)))
             finish(return_of(b))
+
+## The text of an `any T` value: a chain of tests on the tag, then the
+## display text of the value's own type.
+fn Lower.any_text(mut self, t str, v Val) int?
+    impls := traits.impls.get(t) else return none
+    join := new_block()
+    result := new_value(Ty.Str, "")
+    blocks[join].params.push(result)
+    tag := load(v.id, 0, Ty.Int)
+    for k in 0..impls.len()
+        mut no := -1
+        if k + 1 < impls.len()
+            yes := new_block()
+            no = new_block()
+            branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+            seal(yes)
+            seal(no)
+            cur = yes
+        st := Ty.Struct(impls[k])
+        text := display_call(Val(id: load(v.id, 1, st), ty: st)) else return none
+        jump(join, [text])
+        if no >= 0
+            cur = no
+    seal(join)
+    cur = join
+    result

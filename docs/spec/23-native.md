@@ -21,8 +21,10 @@ with its own encoders and object writers (ADR 0010).
 implementations are structs: a struct converts to `any Trait` where one is
 expected (trait.any.3), and a method call on an `any Trait` value runs the
 method of the value's type (trait.any.1). Impls for other types, generic
-impls in an `any`, and printing an `any` value are reported under
-native.subset.1. *(ADRs 0536, 0616)*
+impls in an `any` are reported under native.subset.1. A struct or enum
+with no `to_str`, and an `any Trait` value, print as the interpreter prints
+them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`.
+*(ADRs 0536, 0616)*
 
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
