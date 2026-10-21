@@ -15,6 +15,9 @@ module. Every top-level name declared in any of its files is visible in all of
 them without import. Duplicate top-level names within a module are a
 compile-time error. *(ADR 0097)*
 
+```ail pkg=dupes tool=check,DIR status=2 expect=mod.unit.1 rules=mod.unit.1
+```
+
 **mod.unit.2** — A module's import path is its directory path relative to the
 package root, with segments separated by `.`. *(ADR 0097)*
 
@@ -32,6 +35,9 @@ files directly in `DIR` form the root module, which declares `main`.
 `ail run FILE` runs `FILE` as the root module, with its directory as the
 package root. The import path `a.b` names the directory `ROOT/a/b`. Only
 imported modules are loaded. *(ADR 0153)*
+
+```ail pkg=module_local_names tool=run,DIR expect=6 rules=mod.unit.5
+```
 
 ```
 geometry/          ail run geometry
@@ -148,6 +154,9 @@ each path dependency, before any source file. Only the root's own directory
 is searched, not its parents. Without a manifest a package has no
 dependencies and no capability limit. *(ADR 0230)*
 
+```ail pkg=deps_path tool=run,DIR expect=12 rules=mod.pkg.1
+```
+
 **mod.pkg.2** — A manifest is lines of words separated by spaces; `#` starts
 a comment and `"..."` quotes a word. Its first line is `package NAME`,
 optionally followed by `caps LIST` (`eff.cap.5`) and `unsafe allow`
@@ -156,6 +165,9 @@ by key-value pairs: `path`, `git`, `rev`, `tag`, `caps` (`eff.cap.4`) and
 `unsafe` (`unsafe allow`, `unsafe.block.3`). A `NAME` is lowercase letters, digits and `_`.
 An unknown line or key, a repeated key, or a key without a value is a
 compile-time error at its position in the manifest. *(ADR 0230)*
+
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.2 rules=mod.pkg.2
+```
 
 ```
 package notes caps fs
@@ -171,20 +183,32 @@ resolves against that package's root and its own manifest: importing a
 package that the importing package doesn't declare is a compile-time error.
 *(ADR 0231)*
 
+```ail pkg=undeclared_dep tool=check,DIR status=2 expect=mod.pkg.3 rules=mod.pkg.3
+```
+
 **mod.pkg.4** — Package names are unique in a program: two packages with
 one name must be the same directory, and a dependency with its own manifest
 must be declared by its `package` name. A manifest can't declare a name
 twice or declare `std`, and the root package can't have a module directory
 with a package's name. *(ADR 0231)*
 
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.4 rules=mod.pkg.4
+```
+
 **mod.pkg.5** — Package dependencies must not form a cycle; the error names
 the cycle at the `dep` line that closes it. *(ADR 0231)*
+
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.5 rules=mod.pkg.5
+```
 
 **mod.pkg.6** — `dep NAME git URL` names a repository and needs exactly one of
 `rev COMMIT` and `tag TAG`; `rev` and `tag` are errors on a `path`
 dependency. A git dependency is a package like a path one: `use NAME`
 imports it, it resolves its own imports and manifest (`mod.pkg.3`), and its
 `caps` grant applies to it unchanged (`eff.cap.4`). *(ADR 0231, ADR 0355)*
+
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.6 rules=mod.pkg.6
+```
 
 ```
 package notes

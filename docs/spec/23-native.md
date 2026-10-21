@@ -186,10 +186,39 @@ treated as a counted loop where that start is tested, before the loop, to be
 at least 0 and at most 2^30; otherwise the loop with its checks runs.
 *(ADR 0622)*
 
+```ail rules=native.bce.7
+fn main()
+    xs := [1, 2, 3, 4]
+    mut total := 0
+    mut i := 1
+    while i < 3
+        total += xs[i]
+        i += 1
+    print(total)
+```
+
 **native.bce.8** — The check on `xs[e]` may be removed where the arithmetic of
 the loop bounds `e` between 0 and a constant `hi`, from a constant loop bound
 and operands tested before the loop, and `xs` is longer than `hi`. *(ADR 0622)*
 
+```ail rules=native.bce.8
+fn main()
+    xs := [1, 2, 3]
+    mut total := 0
+    for i in 0..xs.len()
+        total += xs[i] + xs[i]
+    print(total)
+```
+
 **native.bce.9** — A loop that adds an unchanging `s` to its induction value
 is treated as a counted loop where `s` is tested, before the loop, to be
 between 1 and 2^30. *(ADR 0622)*
+
+```ail rules=native.bce.9
+fn main()
+    mut total := 0
+    mut s := 2
+    for i in 0..4
+        total += i + s
+    print(total)
+```
