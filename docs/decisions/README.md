@@ -524,6 +524,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0679](0679-native-test-runner.md) | `ail test --native`: build each `@test` function natively and compare it with the interpreter *(delegated)* | Accepted | 2026-10-21 |
 | [0675](0675-round-4-syntax-candidates.md) | Round-4 syntax candidates: no `for i, x`, no inferred `main !`; `par` over chunks already works *(delegated)* | Accepted | 2026-10-21 |
 | [0698](0698-card-spec-audit-for-std.md) | A std audit: every std function has a spec mention, checked by `tools/rules-audit.sh` *(delegated)* | Accepted | 2026-10-21 |
+| [0565](0565-native-string-runtime-calls.md) | A native `str` method is one runtime call, and its traps carry constant text *(delegated)* | Accepted | 2026-10-20 |
+| [0566](0566-native-char-type.md) | `char` is a MIR type held in a register as an `int`, and `chars()` gives `List[char]` *(delegated)* | Accepted | 2026-10-20 |
+| [0567](0567-native-text-of-numbers-and-unicode-tables.md) | Native text of numbers reuses the output routines, and character predicates use generated Unicode tables *(delegated)* | Accepted | 2026-10-20 |
 | [0631](0631-json-whole-numbers-print-without-fraction.md) | `Json.to_text` prints whole numbers without a fraction *(delegated)* | Accepted | 2026-10-21 |
 | [0637](0637-http-persistent-connections-and-timeouts.md) | HTTP/1.1 client: a connection pool (keep-alive), chunked request bodies, `connect_ms` and `total_ms` timeouts *(delegated)* | Accepted | 2026-10-21 |
 | [0638](0638-cookie-jar.md) | A cookie jar in the standard library, `std.net.jar`: RFC 6265 domain, path, expiry, `Secure`, `HttpOnly`; the one jar for Garlic *(delegated)* | Accepted | 2026-10-21 |
