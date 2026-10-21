@@ -15,8 +15,8 @@ use crate::diag::{Diagnostic, Pos};
 const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
-/// `std.net` gives `net` (std.net.1).
-pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui"];
+/// `std.net` gives `net` (std.net.1); `std.app` gives `app` (std.app.12).
+pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"];
 
 /// What `ail run --deterministic` denies (std.random.5, eff.det.2, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
@@ -121,6 +121,9 @@ impl<'p> Effects<'p> {
         let mut calls = Vec::with_capacity(nodes);
         for f in &prog.fns {
             w.direct = signature_effects(f);
+            if starts_host(f) {
+                w.direct.insert("app", "app.run_host".to_string());
+            }
             w.calls = Vec::new();
             if let Some(body) = &f.body {
                 w.block(body);
@@ -460,6 +463,14 @@ fn signature_effects(f: &FnDecl) -> BTreeMap<&'static str, String> {
         d.insert("mutates", "a `mut` parameter".to_string());
     }
     d
+}
+
+/// std.app.12: `app.run_host` of the standard module `std.app` (and so
+/// `app.run`) gives `app`; the module is AIL source, so the rest of its
+/// effects are inferred like any other code.
+fn starts_host(f: &FnDecl) -> bool {
+    // Module items carry their qualified names (`modules.rs`).
+    f.name == "std.app.run_host" && f.owner.is_none()
 }
 
 /// `x.name(...)` through trait `tr` on a value whose type has `impl` block
@@ -893,7 +904,7 @@ mod tests {
     #[test]
     fn parse_deny_lists() {
         assert_eq!(parse_deny("proc,fs").unwrap(), ["fs", "proc"]);
-        assert_eq!(parse_deny("all").unwrap(), ["clock", "env", "fs", "net", "net.serve", "proc", "random", "ui"]);
+        assert_eq!(parse_deny("all").unwrap(), ["app", "clock", "env", "fs", "net", "net.serve", "proc", "random", "ui"]);
         assert!(parse_deny("io").unwrap_err().contains("(eff.cap.3)"));
         assert!(parse_deny("disk").unwrap_err().contains("(eff.cap.2)"));
     }
