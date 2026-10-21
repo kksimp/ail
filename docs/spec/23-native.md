@@ -73,6 +73,9 @@ the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values that
 include structs and enums (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values of
+any type in the subset, enums included (`Map[K, V]()`,
+`Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k)` (a `V?`, type.map.6) and `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
 `Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table; a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
 that are lists of constants, `join` on lists of strings or characters, and the
