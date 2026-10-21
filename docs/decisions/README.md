@@ -551,3 +551,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0720](0720-package-index-card.md) | `ail api --card --index` lists a package's modules (api.card.7) *(delegated)* | Accepted | 2026-10-21 |
 | [0630](0630-is-empty-and-path-stem.md) | `is_empty` on strings and collections, and `path.stem` *(delegated)* | Accepted | 2026-10-21 |
 | [0690](0690-fuzz-csv-args.md) | Fuzzers for std.csv and std.args; `csv.write` quotes a row of one empty field *(delegated)* | Accepted | 2026-10-21 |
+| [0691](0691-fuzz-group-all-native-bytes.md) | Fuzzers for `regex.group_all` and native `bytes` literals *(delegated)* | Accepted | 2026-10-21 |
