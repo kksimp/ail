@@ -1,0 +1,10 @@
+## std.csv.3: `quote` wraps a field in double quotes, doubling the quotes
+## inside it, only when it holds a comma, a quote or a line break.
+use std.csv
+
+fn main()
+    print(csv.quote("plain"))
+    print(csv.quote("a,b"))
+    print(csv.quote("say \"hi\""))
+    print(csv.quote("line\nbreak"))
+    print("[{csv.quote("")}]")

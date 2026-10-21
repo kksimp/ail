@@ -1,0 +1,6 @@
+# std.tensor.6: an `int` sum that does not fit traps.
+fn main()
+    big := 9223372036854775807
+    t := tensor.from([big, 1])
+    print(t.sum(0))
+    print(t.sum())

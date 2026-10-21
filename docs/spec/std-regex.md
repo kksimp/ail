@@ -324,6 +324,17 @@ fn main()
 `re.captures(text)`, `re.replace(text, with)`, `re.replace_first(text, with)`
 and `re.split(text)` mean `regex.NAME(re, ...)` and give the same result.
 Another method name is an error. *(ADR 0749)*
+
+**std.regex.26** — `regex.escape(s str) str` returns `s` with a `\` before every
+character that is special in a pattern, so the result, used as a pattern, matches
+`s` as plain text. *(ADR 0439)*
+
+```ail rules=std.regex.26
+use std.regex
+
+fn main()
+    print(regex.escape("a.b"))   # a\.b
+```
 ```ail rules=std.regex.25
 use std.regex
 

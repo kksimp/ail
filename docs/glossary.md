@@ -67,6 +67,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Dependency** | A package another package declares with a `dep` line in its `ail.pkg` and imports by that name (`use geo.shapes`) (ADR 0231). |
 | **Derive generator** | A compile-time function `fn(TypeInfo) str ! DeriveError` that a trait names with `@derive(f)`; an empty `impl` of the trait runs it and checks the AIL text it returns as the impl's body, plus associated functions of the type (`ct.derive.*`, ADRs 0227, 0306, 0307). `ToJson` and `FromJson` are prelude examples (ADR 0308). |
 | **Derived implementation** | An `impl` of `Eq`, `Ord` or `ToStr` with no methods; the language supplies it field by field (ADR 0127). An empty `impl` of a trait with a derive generator is derived by the generator instead. |
+| **Destructuring** | Binding each element of a tuple to its own name: `a, b := t`, `for k, v in m`, and the first statement the parser adds to the body of `for a, b in xs` (`type.tuple.4-5`, ADR 0792). |
 | **Deterministic mode** | `ail run --deterministic`: denies `clock`, `random`, `proc` and `net` so a program gives the same output for the same inputs (`eff.det.1–3`, ADR 0207). |
 | **Diagnostics schema** | The versioned JSON form of `ail check --json`: one object per line, tagged `"api":1`, with span, notes and fixes; see [semantic-api.md](design/semantic-api.md) (ADR 0145). |
 | **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
@@ -167,6 +168,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
 | **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)). |
 | **Stderr capture** | `ail test` collects a test's `io.eprint` output and shows it only under a failing test's `FAIL` line ([ADR 0693](decisions/0693-test-captures-stderr.md)). |
+| **Tuple** | An anonymous value of two or more elements with their own types, written `(1, "a")` and typed `(int, str)`; elements are `t.0`, `t.1`, ... (`type.tuple.1-9`, ADRs 0791-0795). |
 | **Typed fast path** | A bytecode instruction specialised to the operand types the compiler knows, which skips the checks the general path makes ([ADR 0618](decisions/0618-bytecode-typed-fast-paths.md)). |
 | **Replay** | Running a program again with the same inputs and thread schedule so a failure reproduces exactly. Property tests print the seed that replays a failing case (ADR 0199); random schedule testing reproduces from its seed on every target (ADR 0322). |
 | **Stack trace** | The chain of calls from the point of a trap outward. A trap's diagnostic includes it (ADR 0047). |

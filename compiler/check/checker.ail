@@ -764,6 +764,9 @@ fn Checker.collect_consts(mut self)
         SetLit(items, _) =>
             for x in items
                 constant_expr(x)
+        TupleLit(items, _) =>
+            for x in items
+                constant_expr(x)
         MapLit(entries, _) =>
             for m in entries
                 constant_expr(m.key)
@@ -930,6 +933,11 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
         RefTo => "ref"
         PtrTo => "a raw pointer"
         FnType => "fn"
+        TupleType(elems) =>
+            for el in elems
+                if bad := ungeneratable(el, seen)
+                    return bad
+            none
         AnyTrait(tr) => "any {tr}"
         Fallible => "a fallible type"
         Named(n, args) =>

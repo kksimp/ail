@@ -1,0 +1,5 @@
+# std.tensor.11: `mean(axis)` of an empty axis traps.
+fn main()
+    e := tensor.from([0.5][0..0], [2, 0])
+    print(e.sum(1))
+    print(e.mean(1))
