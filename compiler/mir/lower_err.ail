@@ -262,12 +262,29 @@ fn Lower.method_key(self, recv ast.Expr, name str) str?
         return "{a}.{name}"
     if t := type_name(recv)
         return "{t}.{name}"
-    match recv
+    if en := enum_ref(recv)
+        return "{en}.{name}"
+    match recv_ty(recv)?
+        Struct(s) => "{s}.{name}"
+        Enum(s) => "{s}.{name}"
+        _ => none
+
+## The type of a receiver written as a local, an element `xs[i]` of a list
+## local, or a field `x.f` of one, without lowering it.
+fn Lower.recv_ty(self, e ast.Expr) Ty?
+    match e
         Name(n, _) =>
-            k := lookup(n) else return none
-            match var_ty[k]
-                Struct(s) => "{s}.{name}"
-                Enum(s) => "{s}.{name}"
+            k := lookup(n)?
+            t := var_ty[k]
+            if t.is_unknown() then none else t
+        Index(r, _, _) => recv_ty(r)?.elem()
+        Member(r, f, _) =>
+            match recv_ty(r)?
+                Struct(s) =>
+                    for slot in structs.get(s)?
+                        if slot.name == f
+                            return slot.ty
+                    none
                 _ => none
         _ => none
 

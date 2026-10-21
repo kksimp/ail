@@ -17,6 +17,28 @@ struct Order
 impl ToJson for Order
 impl FromJson for Order
 
+enum Tree
+    A
+    B(n int)
+    C(left Tree, right Tree)
+
+impl ToJson for Tree
+impl FromJson for Tree
+
+struct Shape
+    e Tree
+
+impl ToJson for Shape
+impl FromJson for Shape
+
+struct Table
+    xs List[int]
+    ys List[List[str]]
+    o int?
+
+impl ToJson for Table
+impl FromJson for Table
+
 fn show(text str)
     if j := parse_json(text)
         if o := Order.from_json(j)
@@ -39,3 +61,14 @@ fn main()
     if a := j.get("a")
         if b := a.at(1)
             print(b.kind())
+    tj := parse_json("\{\"xs\": [1, 2], \"ys\": [[\"a\"], []], \"o\": 4}") else return
+    b := Table.from_json(tj) else return
+    print(b.to_json().to_text())
+    for text in ["\{\"e\": \"A\"}", "\{\"e\": \{\"kind\": \"C\", \"left\": \"A\", \"right\": \{\"kind\": \"B\", \"n\": 3}}}", "\{\"e\": \"Z\"}"]
+        if sj := parse_json(text)
+            if s := Shape.from_json(sj)
+                print(s.to_json().to_text())
+            else err
+                print("shape error: {err}")
+        else err
+            print("parse error: {err}")
