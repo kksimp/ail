@@ -1,0 +1,6 @@
+fn first(xs List[int]) int
+    xs.get(0) else unreachable("empty list")
+
+fn main()
+    print(first([1]))
+    print(first(List[int]()))
