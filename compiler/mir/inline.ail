@@ -44,7 +44,7 @@ pub fn inline_module(m Module) Module
                 reserve and grow_only,
             )),
         )
-    out
+    reuse_lists(out)
 
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool

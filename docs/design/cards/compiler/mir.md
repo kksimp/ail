@@ -147,6 +147,7 @@ pub struct mir.Proven
     pub lows Map[int, int]
     pub highs Map[int, int]
 pub fn mir.prove(f mir.Func, defs List[mir.Def], lp mir.LoopInfo, c mir.Counted, order List[int], held List[bool]) mir.Proven
+pub fn mir.reuse_lists(m mir.Module) mir.Module
 pub fn mir.simplify(f mir.Func) mir.Func
 pub fn mir.subset_help(message str) str
 pub fn mir.module_text(m mir.Module) str
@@ -157,3 +158,4 @@ pub fn mir.dominators(f mir.Func) List[List[bool]]
 
 trimmed to fit 2000 tokens (~1511); dropped: private items, doc comments
 trimmed to fit 2000 tokens (~1496); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1513); dropped: private items, doc comments
