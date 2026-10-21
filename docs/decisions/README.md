@@ -620,3 +620,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
 | [0811](0811-fix-for-over-recv.md) | `ail fix` turns `for v in ch.recv()` into `for v in ch` *(delegated)* | Accepted | 2026-10-21 |
+| [0812](0812-fix-ternary.md) | `ail fix` writes `c ? a : b` as `if c then a else b` *(delegated)* | Accepted | 2026-10-21 |
