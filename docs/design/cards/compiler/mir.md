@@ -104,6 +104,7 @@ pub enum mir.Ty
     F32
     Tuple(elems List[mir.Ty])
     Any(trait_name str)
+    Ref(inner mir.Ty)
     Unknown
     Unit
     Atomic(elem mir.Ty)
@@ -111,6 +112,7 @@ pub enum mir.Ty
     Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
     pub fn mir.Ty.is_fn(self) bool
+    pub fn mir.Ty.is_ref(self) bool
     pub fn mir.Ty.is_float(self) bool
     pub fn mir.Ty.is_unit(self) bool
     pub fn mir.Ty.is_unknown(self) bool
@@ -193,4 +195,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1931); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1952); dropped: private items, doc comments

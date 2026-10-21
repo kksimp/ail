@@ -1,4 +1,4 @@
-## `ref S` in the native subset (own.ref.1-6, ADR 0067): a shared, mutable
+## `ref S` in the native subset (native.subset.4, own.ref.1-6, ADR 0067): a shared, mutable
 ## cell holding a struct. The cell is the struct object itself, so a `ref S`
 ## is the object's pointer: copies of the reference share it, field and
 ## method access apply to it without a dereference (own.ref.3), `ref e`
