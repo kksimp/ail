@@ -108,7 +108,8 @@ fn prog_wait(a int, v int, what str, report bool) bool
             e := atomic_load(global(CHAN_EPOCH))
             futex_wait_timed(a, v, 25)
             blocked := atomic_load(global(BLOCKED_N))
-            if atomic_load(global(CHAN_EPOCH)) == e and blocked == atomic_load(global(TASKS_LIVE)) + 1
+            if atomic_load(global(CHAN_EPOCH)) == e
+                and blocked == atomic_load(global(TASKS_LIVE)) + 1
                 idle += 1
             else
                 idle = 0
@@ -267,7 +268,12 @@ fn chan_select_index(chans int, n int) int
             k := worker_index()
             if k >= 0
                 wait_enter()
-            dead := prog_wait(global(CHAN_EPOCH), e.bit_and(4294967295), "a value from one of several channels", true)
+            dead := prog_wait(
+                global(CHAN_EPOCH),
+                e.bit_and(4294967295),
+                "a value from one of several channels",
+                true,
+            )
             if k >= 0
                 wait_leave()
             atomic_add(global(CHAN_SEL), -1)
