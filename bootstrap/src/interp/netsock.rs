@@ -605,6 +605,7 @@ fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_o
     if !has_type && !body.is_empty() && !no_body {
         out.push_str("Content-Type: text/plain; charset=utf-8\r\n");
     }
+    // http.serve.3: a response is framed by Content-Length, never chunked (std.net.11).
     if !(status / 100 == 1 || status == 204) {
         out.push_str(&format!("Content-Length: {}\r\n", if no_body { 0 } else { body.len() }));
     }

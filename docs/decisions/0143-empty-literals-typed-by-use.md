@@ -29,7 +29,7 @@ their tokens. Python and Rust programmers write the bare form first.
    `Map[K, V]()` or `Set[T]()`. So is a declaration that is never used in a
    way that fixes the type.
 
-```ail
+```ail excerpt
 mut out := []
 for x in xs
     out.push("{x}")     # out is List[str]

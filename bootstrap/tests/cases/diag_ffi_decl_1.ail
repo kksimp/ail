@@ -1,0 +1,3 @@
+fn main()
+    as := 1
+    print(as)

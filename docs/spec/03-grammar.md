@@ -165,6 +165,30 @@ block demonstrates (ADR 0498). Where a rule describes how the checker
 reports, the block shows one reported case; the rest of the rule is checked
 by the mistakes corpus (`bootstrap/tests/mistakes/`).
 
+```ail rules=gram.attr.5
+enum Role
+    Admin
+    Editor
+    Guest
+
+@allow("expr.match.3") fn is_admin(r Role) bool
+    match r
+        Admin => true
+        _ => false
+
+fn main()
+    print(is_admin(Admin))
+```
+
+```ail error=gram.attr.5
+@allow("type.num.1")
+fn f() int
+    1
+
+fn main()
+    print(f())
+```
+
 ```ail error=gram.syntax.1
 fn main()
     x := 1 +            # an operator with nothing after it doesn't parse

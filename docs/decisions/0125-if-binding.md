@@ -47,7 +47,7 @@ and the case is common. **AI understanding** agrees:
 3. An `if` whose condition binds a `T ! E` must have an `else`, so a failure
    is never ignored silently. An optional's absence may be ignored.
 
-```ail
+```ail excerpt
 if cfg := parse(lines)
     print("ok: {cfg.width}x{cfg.height}")
 else err

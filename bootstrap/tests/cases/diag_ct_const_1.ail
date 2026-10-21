@@ -1,0 +1,4 @@
+X := "5".to_int() else return
+
+fn main()
+    print(X)
