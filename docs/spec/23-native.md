@@ -120,3 +120,28 @@ operation in the program shortens a list. *(ADR 0611)*
 list is full where, before the loop, the list's spare room is at least the
 number of pushes the loop can make; otherwise the loop with the test runs.
 *(ADR 0611)*
+
+**native.test.1** — `ail test --native [PATH...]` takes files and directories
+(by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
+`@test` function with no parameters in a file that has one, builds the
+function natively (native.build.3), runs it as its own process, and compares
+the result with `ail test` in the interpreter. A passing native run exits 0.
+*(ADR 0679)*
+
+**native.test.2** — The native build is of a rewritten copy of the file: `@test`
+marks go, `assert(c)` and `assert_eq(a, b)` become a check of `c` and of
+`(a) == (b)` that prints the original line and exits with status 1, and the
+copy's `main` is a dispatcher. The rewrite keeps every line number, so a
+construct the backend refuses is reported at its place in the original file.
+*(ADR 0679)*
+
+**native.test.3** — A test the backend refuses (native.subset.1) is reported
+as not in the native subset yet, with the first blocking construct and its
+line. The same holds for a test whose file has a refused construct outside any
+test; the report says so. A property test, which takes arguments, is skipped.
+*(ADR 0679)*
+
+**native.test.4** — Each test is `match` (native and interpreter agree on pass
+or fail), `DIFF` (they disagree), `not-native` or `skipped`, and the command
+ends with the counts. The exit status is 1 if any test is `DIFF`, otherwise 0.
+`--json` writes one object per test and a final summary. *(ADR 0679)*
