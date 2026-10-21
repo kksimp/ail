@@ -285,7 +285,7 @@ fn Gen.stmt(mut self)
     if mistake > 0 and stmts == mistake_at
         wrong()
         return
-    k := random.int(0, 28)
+    k := random.int(0, 31)
     if k <= 2
         ty := pick_of(["int", "bool", "str", "ints", "pt", "shape", "opt"])
         e := expr(ty, 2)
@@ -407,6 +407,13 @@ fn Gen.stmt(mut self)
         v := name()
         emit("{v} := geo.Vec2(x: 1, y: {expr("int", 1)})")
         emit("print(geo.len2({v}) + {v}.x)")
+    elif k == 29
+        emit("print([q1 * {random.int(1, 4)} + {expr("int", 1)} for q1 in 0..{random.int(0, 8)} if q1 % {random.int(2, 3)} != {random.int(0, 1)}])")
+    elif k == 30
+        emit("print([q1 + q2 * {random.int(1, 3)} for q1 in {expr("ints", 1)} for q2 in 0..{random.int(0, 4)} if q1 > q2])")
+    elif k == 31
+        emit("print(\{q1 % {random.int(2, 5)} for q1 in 0..{random.int(0, 9)}\}.len())")
+        emit("print(\{q1: q1 * {expr("int", 1)} for q1 in 0..{random.int(1, 5)}\}[0])")
     elif k == 11
         emit("print(chain({expr("int", 1)}) else 0)")
     elif k == 12

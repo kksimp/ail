@@ -32,7 +32,7 @@ Changing every element of a list needed indexes (`for i in 0..xs.len()`,
 3. Because the body can't use `e`, the list's length can't change during
    the loop. Each element is visited once, in order.
 
-```ail
+```ail excerpt
 for mut item in items
     if item.qty < min
         item.qty = min

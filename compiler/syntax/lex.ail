@@ -143,6 +143,8 @@ pub struct Diag
     pub pos ast.Pos
     pub msg str
     pub fixed bool
+    pub help str
+    pub fix str
 
 ## A comment (lex.comment.1): `text` runs from the `#` to the end of the line.
 pub struct Comment
@@ -382,7 +384,11 @@ fn Lexer.push(mut self, tok Tok, pos ast.Pos)
     tokens.push(Token(tok: tok, pos: pos))
 
 fn Lexer.diag(mut self, rule str, pos ast.Pos)
-    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false))
+    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: ""))
+
+## A diagnostic with its message and a fix, as the Rust front end gives it.
+fn Lexer.diag_fix(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: fix))
 
 ## Record the comment at `line[start..]`, if there is one.
 fn Lexer.comment(mut self, line List[char], start int, line_no int)
@@ -503,7 +509,13 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             diag("gram.foreign.1", pos)
             i += 2
         elif c == '&' and at(line, i + 1) != '&'
-            diag("gram.foreign.1", pos)
+            diag_fix(
+                "gram.foreign.1",
+                pos,
+                "AIL has no `&`",
+                "bit operations are methods: `a.bit_and(b)` (expr.bit.1); write `and` for logic; there are no references to take, values are passed by value and `mut` marks changes",
+                "write `.bit_and`",
+            )
             i += 1
         elif c == '^' or c == '~'
             diag("gram.foreign.1", pos)

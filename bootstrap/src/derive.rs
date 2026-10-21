@@ -11,6 +11,7 @@
 //! hand-written ones (ct.gen.1), and `remap` reports a problem in them at
 //! the `impl` with a note in the generated text (ct.gen.3).
 
+use std::collections::HashMap;
 use crate::ast::*;
 use crate::diag::{Diagnostic, Note, Pos};
 use crate::lexer::{Part, Tok, Token, lex};
@@ -129,6 +130,13 @@ pub fn expand(
 /// The deriving `impl`s: no methods, and a trait with a generator
 /// (ct.derive.2). A problem with one is an error in `errors`.
 fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
+    let mut docs = HashMap::new();
+    for f in &prog.files {
+        for (line, doc) in crate::docs::by_line(&f.src) {
+            docs.insert(f.base + line, doc);
+        }
+    }
+    let docs = &docs;
     let mut jobs = Vec::new();
     for (i, imp) in prog.impls.iter().enumerate() {
         if !imp.methods.is_empty() {
@@ -167,7 +175,7 @@ fn jobs(prog: &Program, errors: &mut Vec<Diagnostic>) -> Vec<Job> {
         {
             continue;
         }
-        let Some(info) = type_info(prog, &type_name, prog.module_at(imp.pos)) else {
+        let Some(info) = type_info(prog, docs, &type_name, prog.module_at(imp.pos)) else {
             errors.push(
                 Diagnostic::new(
                     "ct.derive.2",
@@ -220,18 +228,20 @@ fn unqualify(text: &str, module: &str) -> String {
 }
 
 /// The `TypeInfo(...)` expression describing the struct or enum `name`,
-/// preferring one declared in `module` (refl.info.1, refl.info.3).
-fn type_info(prog: &Program, name: &str, module: &str) -> Option<String> {
+/// preferring one declared in `module` (refl.info.1, refl.info.3). `doc` is the
+/// field's `##` comment (ct.derive.5).
+fn type_info(prog: &Program, docs: &HashMap<usize, String>, name: &str, module: &str) -> Option<String> {
     let pick = |pos: Pos| prog.module_at(pos) == module;
     // A module's types are named `a.b.T` by now (mod.unit.2).
     let s = prog.structs.iter().filter(|s| last(&s.name) == name).min_by_key(|s| !pick(s.pos));
     let e = prog.enums.iter().filter(|e| last(&e.name) == name).min_by_key(|e| !pick(e.pos));
     let field = |f: &Field| {
         format!(
-            "FieldInfo(name: {}, type_text: {}, public: {})",
+            "FieldInfo(name: {}, type_text: {}, public: {}, doc: {})",
             quote(&f.name),
             quote(&unqualify(&crate::api::type_text(&f.ty), prog.module_at(f.pos))),
-            prog.public.contains(&f.pos.line)
+            prog.public.contains(&f.pos.line),
+            quote(docs.get(&f.pos.line).map_or("", |d| d.as_str()))
         )
     };
     let list = |items: Vec<String>, ty: &str| {

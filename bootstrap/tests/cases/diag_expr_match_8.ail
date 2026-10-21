@@ -1,0 +1,5 @@
+fn main()
+    n := 3
+    match n
+        1 | _ => print(1)
+        _ => print(2)

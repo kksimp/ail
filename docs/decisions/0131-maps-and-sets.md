@@ -88,7 +88,7 @@ an entry by accident wins: only a whole-entry assignment inserts.
    compile-time error. Otherwise a later duplicate replaces the value and keeps
    the first position.
 
-```ail
+```ail fragment
 mut seen := Map[str, int]()
 seen["a"] = 1                 # inserts
 seen["a"] += 1                # the key exists: fine

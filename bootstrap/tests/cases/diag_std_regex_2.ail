@@ -1,0 +1,5 @@
+use std.regex
+
+fn main()
+    re := regex.Regex(pat: "(")
+    print(regex.find(re, "a"))

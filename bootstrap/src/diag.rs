@@ -349,6 +349,18 @@ impl Edit {
                 let recv = it.next_if_eq(&'r').is_some();
                 match it.next() {
                     Some('a') => out.push_str(&args.join(", ")),
+                    // The one argument, in parentheses unless it is a single name or call.
+                    Some('p') => match args.as_slice() {
+                        [a] => {
+                            let chars: Vec<char> = a.chars().collect();
+                            if rewrite::atom_after(&chars, 0) == Some(chars.len()) {
+                                out.push_str(a);
+                            } else {
+                                out.push_str(&format!("({a})"));
+                            }
+                        }
+                        _ => return false,
+                    },
                     Some('%') => match rewrite::printf_text(&args) {
                         Some(text) => out.push_str(&text),
                         None => return false,

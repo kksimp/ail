@@ -34,6 +34,17 @@ fn main() !
                 if args.len() > 2
                     print("== {path}")
                 print(syntax.tokens_text(syntax.lex(fs.read_text(path)?)))
+        "diagnose" =>
+            for path in args[1..]
+                text := fs.read_text(path)?
+                lexed := syntax.lex(text)
+                mut diags := lexed.diags
+                diags.extend(syntax.parse(lexed.tokens).diags)
+                report := syntax.report_text(path, text, diags)
+                if report.len() > 0
+                    if args.len() > 2
+                        print("== {path}")
+                    print(report)
         "parse" =>
             for path in args[1..]
                 if args.len() > 2
@@ -179,8 +190,8 @@ fn parse_source(module str, path str) !mir.Source
     parsed := syntax.parse(lexed.tokens)
     mut diags := lexed.diags
     diags.extend(parsed.diags)
-    if diags.len() > 0
-        for d in diags
-            io.eprint("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
+    report := syntax.report_text(path, text, diags)
+    if report.len() > 0
+        io.eprint(report)
         io.exit(1)
     mir.Source(module: module, path: path, text: text, prog: parsed.program)

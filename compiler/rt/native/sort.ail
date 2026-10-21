@@ -1,0 +1,61 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Sorting for `sorted(by:)` and `sort(by:)` (expr.key.4, ADR 0572). The
+## compiler evaluates the key function inline, once per element, into a list
+## of `int` keys (ADR 0571); this orders the indices.
+
+## The indices `0..keys.len()` in the stable order of `keys` (a bottom-up
+## merge sort: the left run wins a tie).
+fn sort_perm(keys List[int]) List[int]
+    kp := list_addr(keys)
+    n := load64(kp)
+    kd := load64(kp + 16)
+    out := list_alloc(n, 8)
+    q := list_addr(out)
+    store64(q, n)
+    if n < 2
+        if n == 1
+            store64(load64(q + 16), 0)
+        return out
+    mut src := load64(q + 16)
+    mut dst := alloc(8 * n, KIND_ATOMIC)
+    for i in 0..n
+        store64(src + 8 * i, i)
+    mut width := 1
+    while width < n
+        mut lo := 0
+        while lo < n
+            mid := if lo + width < n then lo + width else n
+            hi := if lo + 2 * width < n then lo + 2 * width else n
+            mut a := lo
+            mut b := mid
+            mut o := lo
+            while a < mid and b < hi
+                ia := load64(src + 8 * a)
+                ib := load64(src + 8 * b)
+                if load64(kd + 8 * ib) < load64(kd + 8 * ia)
+                    store64(dst + 8 * o, ib)
+                    b += 1
+                else
+                    store64(dst + 8 * o, ia)
+                    a += 1
+                o += 1
+            while a < mid
+                store64(dst + 8 * o, load64(src + 8 * a))
+                a += 1
+                o += 1
+            while b < hi
+                store64(dst + 8 * o, load64(src + 8 * b))
+                b += 1
+                o += 1
+            lo += 2 * width
+        t := src
+        src = dst
+        dst = t
+        width *= 2
+    # After the last pass the result is in `src`; copy it if that isn't the list's own data.
+    data := load64(q + 16)
+    if src != data
+        copy_bytes(data, src, 8 * n)
+    out
