@@ -81,6 +81,23 @@ impl<W: Write> Interp<'_, W> {
                 let ms = prog.find_all(&chars, 2, usize::MAX);
                 Value::List(Rc::new(ms.iter().map(|m| self.match_value(&chars, m)).collect()))
             }
+            "group_all" => {
+                let Value::Int(g) = values[2] else { unreachable!("checked: an int group") };
+                if g < 0 || g as usize >= prog.groups {
+                    return stop(
+                        "std.regex.24",
+                        pos,
+                        format!("the pattern has groups 0 to {}, not group {g}", prog.groups - 1),
+                    );
+                }
+                let g = g as usize;
+                let ms = prog.find_all(&chars, 2 * prog.groups, usize::MAX);
+                Value::List(Rc::new(
+                    ms.iter()
+                        .map(|m| if m[2 * g] == UNSET { text("") } else { text(regex::slice(&chars, m[2 * g], m[2 * g + 1])) })
+                        .collect(),
+                ))
+            }
             "captures" => match prog.exec(&chars, 0, 2 * prog.groups, false) {
                 None => Value::None,
                 Some(m) => {

@@ -517,3 +517,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
 | [0629](0629-list-chunks-windows-counts-str-center.md) | `chunks`, `windows`, `counts` on lists and `center` on strings *(delegated)* | Accepted | 2026-10-21 |
+| [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |

@@ -15,7 +15,9 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 AGENT = {"logscan", "tasks", "build", "snapdiff", "csvreport", "scan", "tail", "merge", "digest", "runner",
-         "logwatch", "backup", "poller", "supervise", "report_dates", "hexdump", "route", "perms", "csv2json", "matrix"}
+         "logwatch", "backup", "poller", "supervise", "report_dates", "hexdump", "route", "perms", "csv2json", "matrix",
+         "digest_lines", "regex_codes", "redact_mail", "gz_check", "shift_dates", "days_left", "frames", "hex_base64",
+         "task_sum", "chan_pipe"}
 
 
 def strip(src):

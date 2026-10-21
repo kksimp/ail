@@ -84,7 +84,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         // std.regex.1: text in, text out, so no effects.
         "regex" => (
-            &["compile", "is_match", "find", "find_all", "captures", "replace", "replace_first", "split", "escape"],
+            &["compile", "is_match", "find", "find_all", "group_all", "captures", "replace", "replace_first", "split", "escape"],
             &[],
         ),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),

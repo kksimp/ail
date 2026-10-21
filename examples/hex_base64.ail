@@ -1,0 +1,10 @@
+## Decode hex into bytes, encode them as base64, and decode that back.
+## `from_hex` and `from_base64` give an optional, so each one is checked.
+##   ./ail run examples/hex_base64.ail
+
+fn main() !
+    raw := bytes.from_hex("48656c6c6f2c2041494c")?
+    print("{raw.text()} as base64: {raw.base64()}")
+    back := bytes.from_base64(raw.base64())?
+    print("round trip: {back == raw}")
+    print("hex again: {back.hex()}")
