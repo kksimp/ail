@@ -649,3 +649,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0829](0829-native-tuples.md) | Native tuples: a kind-4 struct object with one slot per element; `eq.T`, `lt.T` and `copy.T` generated; table keys stay out | Accepted | 2026-10-21 |
 | [0838](0838-std-app-native-windows.md) | `std.app`: native windows from a view tree, drawn by a generic host (SwiftUI on macOS) over JSON lines; capability `app` | Accepted | 2026-10-21 |
 | [0825](0825-native-ascii-join-chars.md) | Native: an ASCII path for joining characters *(delegated)* | Accepted | 2026-10-21 |
+| [0606](0606-win64-calls-to-system-dlls.md) | Win64 calls to system DLL functions: `libsys.NAME` through the PE import table *(delegated)* | Accepted | 2026-10-20 |
+| [0607](0607-windows-runtime-guard.md) | `ail build --target x86_64-windows` is refused until the Windows runtime lands *(delegated)* | Accepted | 2026-10-20 |
+| [0608](0608-windows-target-and-runtime.md) | The Windows x86-64 target: `target()` is 3, the entry runs the runtime, and output, exit and the heap use kernel32 *(delegated)* | Accepted | 2026-10-20 |

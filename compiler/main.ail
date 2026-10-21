@@ -59,6 +59,8 @@ fn main() !
                 print(mir.module_text(lower_file(args[1], runtime(args[2])?, "")?))
             else
                 print(mir.module_text(lower_file(args[1], none, "")?))
+        "pe-mir-sample" =>
+            print(obj.hex(obj.pe_image(x64.generate_windows(x64.win_sample()))))
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
         "build" =>
@@ -136,6 +138,7 @@ fn executable_hex(m mir.Module, path str, target str) str
     match target
         "x86_64-linux" => obj.hex(obj.elf(x64.generate(m), obj.X86_64))
         "aarch64-linux" => obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64))
+        "x86_64-windows" => obj.hex(obj.pe_image(x64.generate_windows(m)))
         "aarch64-macos" =>
             name := path.split("/").last() else path
             obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", "")))
