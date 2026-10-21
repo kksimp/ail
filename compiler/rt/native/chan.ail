@@ -1,0 +1,235 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `Channel[str]` (native.chan.1, conc.share.3-4, conc.share.7, conc.select.1; ADR 0599). A
+## channel is a record of nine words (heap kind 13, scanned conservatively),
+## and a value is the record's address; a copy of the handle is the same
+## channel. The queue is a ring of string pointers. All fields are guarded by
+## the record's lock word; a thread that must wait releases the lock and
+## sleeps on the wake word, which every change bumps. A thread of the pool
+## that sleeps stops counting as running, as in `wait`, so a replacement
+## starts when work is queued (task.ail).
+##
+## A channel with a nonzero `source` is fed from outside, as a child's output
+## streams are (std.proc.5): an empty, open one calls `chan_pump`, `send`
+## calls `chan_source_send` and `close` calls `chan_source_close`. The runtime
+## of the child process defines those three; the stubs here are for programs
+## without one.
+
+C_LOCK := 0
+C_CAP := 8
+C_COUNT := 16
+C_HEAD := 24
+C_CLOSED := 32
+C_RING := 40
+C_SOURCE := 48
+C_WAKE := 56
+C_RCAP := 64
+C_ID := 72
+
+# Global slots 25 and 26: a counter every channel change bumps, and how many
+# `select`s sleep on it.
+CHAN_EPOCH := 25
+CHAN_SEL := 26
+# Global slot 27: channels made so far; a channel's id is its number in order,
+# as the interpreter names it (`Channel#N`).
+CHAN_COUNT := 27
+
+## A channel that holds up to `cap` values (the lowering has checked `cap >= 1`).
+fn chan_new_cap(cap int) int
+    ch := alloc(80, KIND_ENV)
+    store64(ch + C_CAP, cap)
+    store64(ch + C_ID, atomic_add(global(CHAN_COUNT), 1))
+    ch
+
+## A channel for a feeder (`chan_push`) with room for any number of values.
+fn chan_new() int
+    chan_new_cap(1152921504606846976)
+
+## The message when `cap` is not a valid capacity, else 0 (conc.share.4).
+fn chan_cap_fault(cap int) int
+    if cap >= 1
+        return 0
+    sb_reset()
+    sb_text("a channel's capacity must be at least 1, found ")
+    put_int(cap)
+    str_addr(sb_str())
+
+## A trap message naming the channel as the interpreter does.
+fn chan_msg(head str, ch int, tail str) int
+    sb_reset()
+    sb_text(head)
+    sb_text("Channel#")
+    put_int(load64(ch + C_ID))
+    sb_text(tail)
+    str_addr(sb_str())
+
+## A change: bump the wake word and the global counter, and wake sleepers.
+fn chan_wake(ch int)
+    store64(ch + C_WAKE, (load64(ch + C_WAKE) + 1).bit_and(4294967295))
+    futex_wake(ch + C_WAKE, 1000000)
+    atomic_add(global(CHAN_EPOCH), 1)
+    if atomic_load(global(CHAN_SEL)) != 0
+        futex_wake(global(CHAN_EPOCH), 1000000)
+
+## Called holding the lock: release it, sleep until the channel changes, take
+## it again.
+fn chan_sleep(ch int)
+    w := load64(ch + C_WAKE)
+    unlock(ch + C_LOCK)
+    k := worker_index()
+    if k >= 0
+        wait_enter()
+    futex_wait(ch + C_WAKE, w)
+    if k >= 0
+        wait_leave()
+    lock(ch + C_LOCK)
+
+## Called holding the lock: add `v` at the tail, growing the ring if it is full.
+fn chan_put(ch int, v int)
+    n := load64(ch + C_COUNT)
+    rc := load64(ch + C_RCAP)
+    if n == rc
+        nc := if rc == 0 then 8 else rc * 2
+        ring := alloc(nc * 8, KIND_ENV)
+        old := load64(ch + C_RING)
+        head := load64(ch + C_HEAD)
+        for i in 0..n
+            store64(ring + 8 * i, load64(old + 8 * ((head + i) % rc)))
+        store64(ch + C_RING, ring)
+        store64(ch + C_RCAP, nc)
+        store64(ch + C_HEAD, 0)
+    rc2 := load64(ch + C_RCAP)
+    store64(load64(ch + C_RING) + 8 * ((load64(ch + C_HEAD) + n) % rc2), v)
+    store64(ch + C_COUNT, n + 1)
+    chan_wake(ch)
+
+## Queue `s` without waiting for room: what a feeder does with a line it read.
+fn chan_push(ch int, s str)
+    lock(ch + C_LOCK)
+    chan_put(ch, str_addr(s))
+    unlock(ch + C_LOCK)
+
+## The feeder has no more text: a receiver that finds the queue empty gets `none`.
+fn chan_mark_closed(ch int)
+    lock(ch + C_LOCK)
+    store64(ch + C_CLOSED, 1)
+    chan_wake(ch)
+    unlock(ch + C_LOCK)
+
+## `ch.send(v)`: 0, or the message of the trap (conc.share.4).
+fn chan_send(ch int, v int) int
+    if load64(ch + C_SOURCE) != 0
+        chan_source_send(ch, v)
+        return 0
+    lock(ch + C_LOCK)
+    while true
+        if load64(ch + C_CLOSED) != 0
+            unlock(ch + C_LOCK)
+            return chan_msg("send on a closed channel `", ch, "`")
+        if load64(ch + C_COUNT) < load64(ch + C_CAP)
+            chan_put(ch, v)
+            unlock(ch + C_LOCK)
+            return 0
+        chan_sleep(ch)
+    0
+
+## `ch.recv()`: the oldest value, or 0 once the channel is closed and empty.
+fn chan_recv(ch int) int
+    lock(ch + C_LOCK)
+    while true
+        n := load64(ch + C_COUNT)
+        if n > 0
+            head := load64(ch + C_HEAD)
+            ring := load64(ch + C_RING)
+            v := load64(ring + 8 * head)
+            store64(ring + 8 * head, 0)
+            store64(ch + C_HEAD, (head + 1) % load64(ch + C_RCAP))
+            store64(ch + C_COUNT, n - 1)
+            chan_wake(ch)
+            unlock(ch + C_LOCK)
+            return v
+        if load64(ch + C_CLOSED) != 0
+            unlock(ch + C_LOCK)
+            return 0
+        if load64(ch + C_SOURCE) != 0
+            unlock(ch + C_LOCK)
+            chan_pump(ch)
+            lock(ch + C_LOCK)
+        else
+            chan_sleep(ch)
+    0
+
+## `ch.close()`: 0, or the message of the trap when it was closed already.
+fn chan_close(ch int) int
+    if load64(ch + C_SOURCE) != 0
+        chan_source_close(ch)
+        return 0
+    lock(ch + C_LOCK)
+    if load64(ch + C_CLOSED) != 0
+        unlock(ch + C_LOCK)
+        return chan_msg("channel `", ch, "` is already closed")
+    store64(ch + C_CLOSED, 1)
+    chan_wake(ch)
+    unlock(ch + C_LOCK)
+    0
+
+fn chan_slot(arr int, k int, ch int)
+    store64(arr + 8 * k, ch)
+
+## `task.select`: the index of the first of the `n` channels at `chans` that
+## has a value waiting, as an `int?` (none when all are closed and empty).
+fn chan_select(chans int, n int) int
+    i := chan_select_index(chans, n)
+    if i < 0
+        return 0
+    box(i)
+
+fn chan_select_index(chans int, n int) int
+    while true
+        e := atomic_load(global(CHAN_EPOCH))
+        mut open := 0
+        mut feeder := 0
+        for i in 0..n
+            ch := load64(chans + 8 * i)
+            lock(ch + C_LOCK)
+            ready := load64(ch + C_COUNT) > 0
+            closed := load64(ch + C_CLOSED) != 0
+            src := load64(ch + C_SOURCE)
+            unlock(ch + C_LOCK)
+            if ready
+                return i
+            if not closed
+                open += 1
+                if src != 0 and feeder == 0
+                    feeder = ch
+        if open == 0
+            return -1
+        if feeder != 0
+            chan_pump(feeder)
+        else
+            atomic_add(global(CHAN_SEL), 1)
+            k := worker_index()
+            if k >= 0
+                wait_enter()
+            futex_wait(global(CHAN_EPOCH), e.bit_and(4294967295))
+            if k >= 0
+                wait_leave()
+            atomic_add(global(CHAN_SEL), -1)
+    -1
+
+# ---- hooks for fed channels (a child's streams) ----
+
+fn chan_pump(ch int)
+    lock(ch + C_LOCK)
+    if load64(ch + C_COUNT) == 0 and load64(ch + C_CLOSED) == 0
+        chan_sleep(ch)
+    unlock(ch + C_LOCK)
+
+fn chan_source_send(ch int, s int)
+    lock(ch + C_LOCK)
+    chan_put(ch, s)
+    unlock(ch + C_LOCK)
+
+fn chan_source_close(ch int)
+    chan_mark_closed(ch)

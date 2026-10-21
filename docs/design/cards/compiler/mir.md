@@ -99,6 +99,7 @@ pub enum mir.Ty
     Unknown
     Unit
     Atomic(elem mir.Ty)
+    Chan(elem mir.Ty)
     Fn(params List[mir.Ty], ret mir.Ty)
     Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
@@ -184,4 +185,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1850); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1858); dropped: private items, doc comments

@@ -100,7 +100,8 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
 readable yet, and on macOS the program traps at `proc.run`); `t := spawn f(args)`
 and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
-`store`, `cas` and `add` (`native.task.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
+`store`, `cas` and `add` (`native.task.1`); `Channel[str]` with `send`, `recv`, `close`, `for v in ch`
+and `task.select` of channels written out in a list (`native.chan.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
 `net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
 `close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
 per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
@@ -146,6 +147,18 @@ on a `str`, are those of the interpreter on every scalar value, read from
 tables generated from it (a capital sigma becomes the final form by the
 Unicode rule, with its case-ignorable set approximated by the apostrophes,
 dots, accents and combining marks). *(ADRs 0565, 0566, 0567)*
+
+**native.chan.1** — `Channel[str](capacity)` is a bounded channel the runtime
+builds (conc.share.3, conc.share.4): `send` waits while it is full, `recv`
+returns `str?`, `close` ends it, `for v in ch` receives until it is closed
+and empty (conc.share.7), and `task.select([a, b, ...])` returns the lowest
+ready index or `none` (conc.select.1); a handle and its copies are the same
+channel. A trap (`Channel(0)`, `send` on a closed channel, closing twice)
+names the channel `Channel#N` in the order the program made them, as the
+interpreter does. Other element types, a `select` over a list that isn't
+written out, and cancellation (conc.cancel.2, conc.cancel.4) are not built; a
+program whose tasks all wait on channels hangs instead of trapping
+(conc.task.7). *(ADR 0599)*
 
 **native.task.1** — Native code runs tasks and `par for` iterations in
 parallel on a pool of threads, at most 8 and no more than the cores the

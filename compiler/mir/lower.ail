@@ -555,6 +555,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                     if e == Ty.Int or e == Ty.Bool
                         return Ty.Atomic(e)
                     none
+                "Channel" => chan_type_of(args)
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
@@ -1244,6 +1245,9 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
             inclusive = incl
         _ =>
             l0 := lower_value(iter, none) else return
+            if chan_elem(l0.ty) != none
+                lower_chan_for(var, l0, body)
+                return
             if is_pair_loop(var, l0, body)
                 scopes.pop()
                 for_pairs(var, iter, l0, body)
@@ -1667,6 +1671,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         TypeArgs(name, targs, tpos) =>
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(targs, args, pos)
+            if name == "Channel" and tk.on and not is_rt
+                return lower_chan_new(targs, args, pos)
             if (name == "Map" or name == "Set") and args.len() == 0
                 return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
@@ -1794,6 +1800,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_char_from_code(args, npos)
     if name == "from" and is_module(recv, "tensor")
         return lower_tensor_from(args, npos)
+    if name == "select" and tk.on and is_module(recv, "task")
+        return lower_chan_select(args, npos)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1818,6 +1826,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     r := lower_value(recv, none)?
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
+    if chan_elem(r.ty) != none
+        return lower_chan_method(r, name, npos, args)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none
