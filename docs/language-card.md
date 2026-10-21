@@ -25,7 +25,7 @@ E
 ./ail diff OLD NEW               # changed declarations with their lines, diagnostics, tests
 ```
 
-`todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
+`todo` is a typed hole: `ail check` warns with its expected type and the names in scope.
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. Standard
 modules need no `use` (`fs.read_text(p)`); a local of the same name hides one.
@@ -333,7 +333,7 @@ calls `f(x)`, and `apply(double, 4)` passes it. Not generic, `mut` or fallible o
 
 - `+ - * / %` on `int`. Overflow and division by zero stop the program (a
   trap). `/` rounds toward zero.
-- `== != < <= > >=` (see above for which types). Comparisons can't be
+- `== != < <= > >=`. Comparisons can't be
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
   `if n != 0`, not `if n`.
@@ -396,7 +396,7 @@ themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["dan"] += 1                       # `op=` on a missing key starts at 0
-mut counts := {}                       # typed by first use: counts[w] += 1; `counts.top(3)`
+mut counts := {}                       # typed by first use: counts[w] += 1
 b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
 for name in ages.keys()                # `for k in m` is an error; also values()
     print("{name}: {ages[name]}")
