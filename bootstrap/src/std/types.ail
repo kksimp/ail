@@ -81,6 +81,13 @@ struct Request
     peer str
     data bytes
 
+## std.net.25: a response whose body is read in pieces.
+struct Body
+    status int
+    headers Map[str, str]
+    all_headers Map[str, List[str]]
+    handle int
+
 struct Server
     handle int
 

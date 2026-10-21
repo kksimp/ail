@@ -706,7 +706,19 @@ idle connections. A request that has already started to arrive is still
 accepted and answered, with `Connection: close`; when none is left `accept`
 fails with kind `closed`, as after `close`. *(ADR 0640)*
 
-```ail rules=std.net.23,std.net.24
+**std.net.25** — Streaming bodies. `net.open(method, url, opts) Body !
+NetError` sends the request like `net.request` (redirects of `GET` and `HEAD`
+included, their bodies read out) and returns after the response head, as
+`struct Body { status int, headers Map[str, str], all_headers Map[str,
+List[str]], handle int }`. `b.read_bytes(max) bytes ! NetError` gives the
+next 1 to `max` bytes of the body, and no bytes once it has all been read;
+whatever the framing (length, chunks, or up to the end of the connection).
+`b.close()` ends it early and closes the connection; a body read to its end
+returns its connection to the pool (`std.net.19`). Reading after `close`
+fails with kind `closed`. `timeout_ms` bounds each wait for the next piece
+and `total_ms` the whole request including the reading. *(ADR 0716)*
+
+```ail rules=std.net.23,std.net.24,std.net.25
 use std.net
 use std.net.http
 use std.net.jar
@@ -723,6 +735,9 @@ fn main() !
     srv := net.serve("127.0.0.1:0")?
     t := spawn http.run(srv, hi)
     print(net.get("http://{srv.addr()}/")?.body)
+    b := net.open("GET", "http://{srv.addr()}/", net.options())?
+    print(b.read_bytes(100)?.len())
+    b.close()
     srv.shutdown()
     t.wait()?
 ```
