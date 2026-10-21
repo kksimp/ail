@@ -127,9 +127,9 @@ impl G<'_> {
                 let (n, m) = (self.id(), self.id());
                 let (q, q2) = (format!("q{n}"), format!("q{m}"));
                 let (lo, hi) = (self.r.below(3), self.r.below(7));
-                let kind = self.r.below(6);
+                let kind = self.r.below(9);
                 self.ints.push(q.clone());
-                if kind == 3 {
+                if kind == 3 || kind >= 6 {
                     self.ints.push(q2.clone());
                 }
                 let (e, c, e2) = (self.expr(2), self.cond(1), self.expr(1));
@@ -139,9 +139,13 @@ impl G<'_> {
                     2 => format!("print([if {c} then {e} else {e2} for {q} in {lo}..={hi}])"),
                     3 => format!("print([{e} for {q} in 0..{hi} for {q2} in 0..{q} % 4 if {c}])"),
                     4 => format!("print({{{e} % 7 for {q} in {lo}..{hi}}}.len())"),
-                    _ => format!("print({{{q}: {e} for {q} in {lo}..{hi}}}.len())"),
+                    5 => format!("print({{{q}: {e} for {q} in {lo}..{hi}}}.len())"),
+                    // type.tuple.5: `for a, b in xs` clauses, alone, after a range clause, and in a map.
+                    6 => format!("print([{e} for {q}, {q2} in [(1, {lo}), (2, {hi}), (3, 4)] if {c}])"),
+                    7 => format!("print([{e} for {q2} in 0..{hi} for {q}, _ in [({q2}, 1), (2, 3)]])"),
+                    _ => format!("print({{{q}: {q2} + {e} % 5 for {q}, {q2} in [(1, {lo}), (2, {hi})]}}.len())"),
                 };
-                if kind == 3 {
+                if kind == 3 || kind >= 6 {
                     self.ints.pop();
                 }
                 self.ints.pop();
