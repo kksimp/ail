@@ -70,6 +70,44 @@ PRELUDE := [
     "        return xs[i]",
     "    none",
     "",
+    "struct Stack[T]",
+    "    items List[T]",
+    "",
+    "fn Stack.push(mut self, x T)",
+    "    self.items.push(x)",
+    "",
+    "fn Stack.peek(self) T?",
+    "    n := self.items.len()",
+    "    if n == 0",
+    "        return none",
+    "    self.items[n - 1]",
+    "",
+    "fn Stack.len(self) int",
+    "    self.items.len()",
+    "",
+    "fn Stack[T Ord].max(self) T?",
+    "    if self.items.len() == 0",
+    "        return none",
+    "    mut best := self.items[0]",
+    "    for x in self.items",
+    "        if x > best",
+    "            best = x",
+    "    best",
+    "",
+    "struct Pair[A, B]",
+    "    first A",
+    "    second B",
+    "",
+    "fn Pair.swap(self) Pair[B, A]",
+    "    Pair(first: self.second, second: self.first)",
+    "",
+    "fn largest[T Ord](items List[T]) T",
+    "    mut best := items[0]",
+    "    for x in items",
+    "        if x > best",
+    "            best = x",
+    "    best",
+    "",
 ]
 
 fn Gen.emit(mut self, s str)
@@ -191,7 +229,7 @@ fn Gen.stmt(mut self)
     if mistake > 0 and stmts == mistake_at
         wrong()
         return
-    k := random.int(0, 13)
+    k := random.int(0, 16)
     if k <= 2
         ty := pick_of(["int", "bool", "str", "ints", "pt", "shape", "opt"])
         e := expr(ty, 2)
@@ -248,6 +286,19 @@ fn Gen.stmt(mut self)
             ind -= 1
         else
             emit("print(3)")
+    elif k == 14
+        emit("print(largest({expr("ints", 1)}))")
+    elif k == 15
+        s := name()
+        emit("mut {s} := Stack(items: {expr("ints", 1)})")
+        emit("{s}.push({expr("int", 1)})")
+        emit("print({s}.peek() else 0)")
+        emit("print({s}.max() else {expr("int", 0)} + {s}.len())")
+    elif k == 16
+        p := name()
+        emit("{p} := Pair(first: {expr("int", 1)}, second: {expr("str", 1)})")
+        emit("print({p}.swap().first)")
+        emit("print({p}.swap().swap().second)")
     elif k == 11
         emit("print(chain({expr("int", 1)}) else 0)")
     elif k == 12
@@ -283,7 +334,12 @@ fn Gen.wrong(mut self)
         16 => emit("{name()} := mul({iv}, {iv}, {iv})")
         17 => emit("{name()} := Shape.Square")
         18 => emit("print({name()}.len())")
-        _ => emit("{name()} := chain({iv})")
+        19 => emit("{name()} := chain({iv})")
+        20 => emit("{name()} := largest([Pt(a: 1, b: 2)])")
+        21 => emit("{name()} := Stack(items: [{iv}]).push(\"x\")")
+        22 => emit("{name()} := Pair(first: {iv})")
+        23 => emit("{name()} := largest({iv})")
+        _ => emit("{name()} := Stack(items: [Pt(a: 1, b: 2)]).max()")
 
 fn program(seed int) str
     random.seed(seed)
@@ -298,7 +354,7 @@ fn program(seed int) str
         stmts: 0,
     )
     if random.int(0, 3) == 0
-        g.mistake = random.int(1, 19)
+        g.mistake = random.int(1, 24)
         g.mistake_at = random.int(1, 12)
     # a few helper functions of two ints, then main
     mut helpers := ""
