@@ -244,7 +244,7 @@ impl<'p> Checker<'p> {
         let help = match (list, name) {
             (true, "push" | "extend") => return vec![true],
             (true, "insert") => return vec![false, true],
-            (true, "pop" | "remove_at" | "len" | "swap" | "clear" | "reverse" | "sort" | "contains" | "index_of" | "bump") => {
+            (true, "pop" | "remove_at" | "len" | "swap" | "clear" | "reverse" | "sort" | "contains" | "index_of") => {
                 return vec![false; nparams];
             }
             (false, "remove" | "len" | "contains" | "keys" | "top") => return vec![false; nparams],

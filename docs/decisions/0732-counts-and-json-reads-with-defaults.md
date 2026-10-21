@@ -15,7 +15,8 @@ per log line while skipping the bad ones. The savings are measured in the round-
 
 ## Decision
 
-1. `m.bump(k)` adds one to the count at `k`, starting at zero (`std.count.1`). `m.top(n)` gives the
+1. `m[k] += 1` adds one to the count at `k`, starting at zero (`std.count.1`). No new method: the
+   language already did this, and `bump` was dropped in review as a duplicate. `m.top(n)` gives the
    `n` keys with the largest counts, ties in insertion order (`std.count.2`).
 2. `j.text(key, default)` and `j.flag(key, default)` read a string or bool member, or the default
    when the member is missing or of another kind. They never fail (`json.query.5`, `json.query.6`).

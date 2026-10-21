@@ -255,7 +255,7 @@ impl<'a, W: Write> Interp<'a, W> {
     ) -> Flow<Value> {
         let mutating = |v: &Value| match v {
             Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
-            Value::Map(_) => matches!(name, "remove" | "push" | "bump"),
+            Value::Map(_) => matches!(name, "remove" | "push"),
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
         };
@@ -359,17 +359,6 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Unit
             }
             (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
-            // std.count.1: add one to the count at `k`, starting at zero.
-            (Value::Map(t), "bump") => {
-                let table = Rc::make_mut(t);
-                let i = match table.get(&a[0]) {
-                    Some(i) => i,
-                    None => table.insert(a[0].clone(), Some(Value::Int(0))),
-                };
-                let Value::Int(n) = table.val_mut(i) else { unreachable!("checked: an int value") };
-                *n += 1;
-                Value::Unit
-            }
             (Value::Set(t), "add") => {
                 let x = a.pop().expect("checked: one argument");
                 let new = t.get(&x).is_none();

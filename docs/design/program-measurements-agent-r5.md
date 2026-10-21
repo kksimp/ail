@@ -151,7 +151,7 @@ measurement before it becomes an open question.
 ## Library additions (lane 234): before and after
 
 The three proposals above are now in the language (ADRs 0732 and 0733):
-`m.bump(k)` and `m.top(n)`, `j.text(key, default)`, `j.flag(key, default)`,
+`m.top(n)`, `j.text(key, default)`, `j.flag(key, default)`,
 `parse_json_lines(text)`, and `r.ok()` and `r.text()` on a `proc.Output`. Each
 program that uses a pattern they replace was rewritten with the helper, and its
 expected output was checked: identical, except `check_rules`, whose ties now keep
@@ -165,27 +165,29 @@ tokenizers, the committed version against the rewritten one.
 | `supervise (r4)` | 265.6 | 264.4 | -0% |
 | `tasks (r4)` | 596.0 | 597.0 | +0% |
 | `api_signatures` | 197.8 | 193.8 | -2% |
-| `check_rules` | 206.0 | 188.4 | -9% |
+| `check_rules` | 206.0 | 190.0 | -8% |
 | `check_summary` | 237.2 | 236.2 | -0% |
 | `diff_lines` | 184.6 | 182.2 | -1% |
 | `diff_summary` | 206.6 | 206.2 | -0% |
 | `edit_preview` | 183.0 | 182.6 | -0% |
-| `effects_table` | 221.0 | 205.8 | -7% |
-| `explain_chapters` | 221.6 | 181.0 | -18% |
+| `effects_table` | 221.0 | 207.4 | -6% |
+| `explain_chapters` | 221.6 | 183.4 | -17% |
 | `explain_rules` | 120.8 | 119.0 | -1% |
 | `fix_preview` | 152.0 | 142.8 | -6% |
 | `fmt_check` | 165.6 | 163.2 | -1% |
 | `test_coverage` | 109.6 | 105.0 | -4% |
 
 Sixteen programs changed: twelve round-5 tools and four round-4 examples. Their AIL
-total is 3,591.4 before and 3,489.0 after (−2.9%); the twelve round-5 tools account
-for −99.6 tokens. The largest saving is `explain_chapters`: 221.6 → 181.0, which
-moves it from a tie with Python to 18% below it. `check_rules` drops by 9%,
-`effects_table` by 7% and `fix_preview` by 6%.
+total is 3,591.4 before and 3,494.6 after (−2.7%); the twelve round-5 tools account
+for −94.0 tokens. The largest saving is `explain_chapters`: 221.6 → 183.4, which
+moves it from a tie with Python to 17% below it. `check_rules` drops by 8%,
+`effects_table` by 6% and `fix_preview` by 6%. The three counting programs were
+measured with `m[k] += 1` instead of `m.bump(k)`, which was dropped in review as a
+duplicate; it had saved about 2 tokens per program.
 The round-4 examples `poller` and `tasks` are a little larger: `j.text(k, default)`
 is about as long as `j.str(k) else default`, so those two gain nothing.
 
-Twenty programs, with the rewritten round-5 tools: AIL 3,390.0 against Python 5,340
-(−36.5%, was −34.7%). Both pay, the language card (now 7,128 tokens, was 7,044, under
-the 8,000 budget) counted once: AIL 10,518 against Python 12,153 (−13.5%, was −13.3%).
-The new card lines cost about 85 tokens; the twelve program changes save about 100.
+Twenty programs, with the rewritten round-5 tools: AIL 3,395.6 against Python 5,340
+(−36.4%, was −34.7%). Both pay, the language card (now about 7,130 tokens, was 7,044,
+under the 8,000 budget) counted once: AIL 10,525 against Python 12,153 (−13.4%, was
+−13.3%). The new card lines cost about 85 tokens; the twelve program changes save about 94.

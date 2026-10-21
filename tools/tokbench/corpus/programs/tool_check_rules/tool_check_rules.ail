@@ -12,7 +12,7 @@ fn main() !
             d := parse_json(line) else continue
             rule := d.text("rule", "")
             if rule.len() > 0
-                counts.bump(rule)
+                counts[rule] += 1
     for rule in counts.top(counts.len())
         print("{counts[rule]} {rule}")
     print("{counts.len()} distinct rules")

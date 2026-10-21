@@ -429,9 +429,9 @@ fn main() !
 
 ## Counting: `Map[K, int]`
 
-**std.count.1** — `m.bump(k)` adds one to the count at `k`, and starts the count
-at zero when `k` is absent. The receiver must be `mut`. It returns nothing and
-the map's values must be `int`. *(ADR 0732)*
+**std.count.1** — `m[k] += 1` adds one to the count at `k`, and starts the count
+at zero when `k` is absent. The receiver must be `mut`, and the map's values must
+be `int`. *(ADR 0732)*
 
 **std.count.2** — `m.top(n int) List[K]` is the `n` keys with the largest counts,
 largest first. Keys with equal counts keep their insertion order. A count of zero
@@ -441,7 +441,7 @@ or less gives `[]`. `m` is not changed. *(ADR 0732)*
 fn main()
     mut counts := Map[str, int]()
     for word in ["b", "a", "b", "c", "b", "a"]
-        counts.bump(word)
+        counts[word] += 1
     print(counts.top(2))                  # ["b", "a"]
     print(counts.top(0))                  # []
 ```

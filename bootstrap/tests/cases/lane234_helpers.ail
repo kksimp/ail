@@ -12,7 +12,7 @@ fn main() !
 
     mut counts := Map[str, int]()
     for word in ["b", "a", "b", "c", "b", "a"]
-        counts.bump(word)
+        counts[word] += 1
     print(counts.top(2))
     print(counts.top(0))
     print(counts.top(-1))

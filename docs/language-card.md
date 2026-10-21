@@ -406,7 +406,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m.bump(k)` counts up and `m.top(n)` gives the `n` keys with the largest counts, ties in insertion order. Keys can't be floats.
+Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up and `m.top(n)` gives the `n` keys with the largest counts, ties in insertion order. Keys can't be floats.
 
 ## Values and `mut`
 

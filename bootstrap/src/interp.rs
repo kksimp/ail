@@ -415,7 +415,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
                 || prog.traits[tr].methods.iter().any(|&m| prog.fns[m].name == name && prog.fns[m].body.is_some())
         });
     let mut mutating: crate::fasthash::FastSet<&str> =
-        ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add", "bump"].into_iter().collect();
+        ["push", "swap", "pop", "sort", "insert", "remove_at", "extend", "clear", "reverse", "remove", "add"].into_iter().collect();
     mutating.extend(prog.fns.iter().filter(|f| f.receiver.is_some_and(|r| r.mutable)).map(|f| f.name.as_str()));
     // A standard module's unique type (`proc.Child`) has no cleanup to run, so
     // it doesn't slow programs that don't declare one (std.proc.7).
