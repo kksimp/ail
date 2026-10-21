@@ -471,6 +471,14 @@ fn str_chars(s str) List[int]
     p := str_addr(s)
     n := load64(p)
     out := list_new(load64(p + 8))
+    if load64(p + 8) == n
+        # One byte per character: store the bytes in place.
+        lp := list_addr(out)
+        data := load64(lp + 16)
+        for k in 0..n
+            store64(data + 8 * k, load8(p + 16 + k))
+        store64(lp, n)
+        return out
     mut i := 0
     while i < n
         list_push(out, u8_get(p + 16 + i))
