@@ -144,6 +144,7 @@ tools/
   check-doc-links.py      checks that relative links in the Markdown docs resolve
   card-spec-audit.py      audits the std functions against the spec (ADR 0698)
   card-wording-audit.py   checks the language card's calls against the spec (ADR 0698)
+  check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows for duplicate rows
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
