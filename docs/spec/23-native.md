@@ -302,6 +302,24 @@ fn main()
         total += i + s
     print(total)
 ```
+
+**native.reuse.1** — A list made empty inside a loop may be one object that
+each iteration empties (length 0, capacity kept) instead of a new object per
+iteration, where no reference to the list can outlive the iteration: it is
+not stored, returned, passed to a function value, or passed to a function
+whose parameter can keep it, and it isn't carried to the next iteration. A
+list bound, assigned or stored from a variable is copied (own.val.1), so the
+copy, not the reused list, is what's kept. *(ADR 0824)*
+
+```ail rules=native.reuse.1
+fn main()
+    mut rows := List[List[int]]()
+    for i in 0..3
+        mut row := []
+        row.push(i)
+        rows.push(row)
+    print(rows)
+```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
 (by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the

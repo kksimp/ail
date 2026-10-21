@@ -244,6 +244,7 @@ pub struct mir.Module
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
+pub fn mir.reuse_lists(mir.Module) mir.Module
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
@@ -329,4 +330,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3638); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3656); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
