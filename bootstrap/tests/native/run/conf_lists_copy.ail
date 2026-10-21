@@ -1,0 +1,31 @@
+# Values are independent: a copy of a nested list does not share its inner
+# lists, and a `mut` parameter changes only the caller's list (mutable value
+# semantics, ADRs 0060-0063). Inner lists are printed one at a time.
+fn bump(mut xs List[int])
+    xs[0] = xs[0] + 100
+    xs.push(9)
+
+fn main()
+    a := [[1, 2], [3]]
+    mut b := a
+    b[0][0] = 9
+    print(a[0])
+    print(b[0])
+    mut inner := a[0]
+    inner.push(7)
+    print(a[0])
+    print(inner)
+    mut c := [5, 6]
+    bump(mut c)
+    print(c)
+    mut d := [1, 2, 3]
+    e := d
+    d[2] = 0
+    print(e)
+    print(d)
+    mut grid := [[0, 0], [0, 0]]
+    row := grid[1]
+    grid[1][1] = 4
+    print(row)
+    print(grid[1])
+    print(grid.len() + grid[0].len())

@@ -88,13 +88,13 @@ The language card is part of what a model reads before it writes AIL. The
 table reports program tokens only, and a separate line adds the card when the
 reference cards are in the tree:
 
-- AIL: `docs/language-card.md` (budget 8,000 tokens; 6,615 on the tokbench mean)
+- AIL: `docs/language-card.md` (budget 8,000 tokens; 6,845 on the tokbench mean)
   plus the AIL programs.
 - Python: a Python reference card of comparable scope plus the Python twins.
 
-The line covers only programs that have a Python twin. The reference card for
-Python lives in `tools/tokbench/reference/` on the branch that adds it; when it
-is absent the line is not printed.
+The line covers only programs that have a Python twin. The Python reference card
+is `tools/tokbench/reference/python-reference.md` (6,813 tokens, written to match
+the AIL card's scope); when it is absent the line is not printed.
 
 ## Attaching to a PR
 

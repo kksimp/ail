@@ -18,32 +18,36 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
-function is a free function or a method of a struct (no generics or
-contracts), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics or
-invariants, and lists of those and of lists, using
-locals, constants whose values are literals, other constants and operators
-on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
-value), `while`, `for` over a range or a list, `break`, `continue`,
-`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
-field names in a method), method calls, `print` of numbers, strings and
-lists of them or an interpolation of them (with
-`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
-`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, optionals
-of numbers, strings and lists (`none`, `x == none`, `if v := o`, `o else d`,
-`o?` in a function returning an optional), functions that can fail (`T ! E`,
-`! E`, `!`) whose errors are message-only `error struct`s without fields
-(`return E()`, `f()?`, `f() else ...`, `else err`, a failing `main`), the
-methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-`round`, and the bit operations of expr.bit.1. Also: format specifications on
+function is a free function or a method of a struct or enum (no generics or
+contracts), in the root module or a module it imports (mod.unit.1-5), over
+`int`, `float`, `bool`, `str`, structs and enums without generics or
+invariants, optionals of those (`T?`), and lists of those and of lists, using locals, module constants
+of any expression in the subset (computed once before `main` runs),
+arithmetic, comparisons (`==` on enums, structs and lists compares their
+values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
+range or a list, `break`, `continue`, `return`, calls, list comprehensions,
+slices `xs[a..b]`, struct construction, enum variants (bare or qualified),
+fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
+`match` as a statement or a value (variant patterns and bindings, `_`, `|`,
+guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
+strings and lists of them or an interpolation of them, `xs[i]`, `xs[i] = v`,
+`len`, `push`, `join`, `chars`, `env.args()`, `none`, `x == none`, `if v := o`,
+`o else d` and `o?` in a function returning an optional, functions that can
+fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
+without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
+`main`), the methods `abs`, `min`,
+`max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
+and the bit operations of expr.bit.1, in functions with at most eight
+`float` parameters (any number of others). Also: format specifications on
 numbers, `bool` and `str` in `print` (lex.str.7, type.str.11: width, fill,
-alignment, `.N`, `x`); `s.to_float()` (a `float?`, type.num.8); and the calls
-`fs.exists`, `fs.read_text`, `fs.write_text`, `fs.append_text`,
-`fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename` (they can fail with
-`fs.IoError`, std.err.1), `env.get`, `env.home` and `io.read_line` (a `str?`),
-`env.cwd`, `env.program`, `io.read_all`, `io.eprint`, `io.exit`,
-`time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). Any
-other construct is reported at its position under this rule, all of them at
-once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0574, 0575, 0576, 0580, 0582, 0591)*
+alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
+and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
+`fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
+(they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
+`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
+(std.fs, std.env, std.io, std.time). Any other construct is reported at its position under this rule, all of them
+at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
+0574-0576, 0580, 0582, 0591, 0602–0604)*
 
 ```ail
 fn steps(n int) int
@@ -83,3 +87,36 @@ $ ail build examples/hello.ail
 $ ./hello
 Hello, world!
 ```
+
+## Optimisation
+
+**native.bce.1** — An optimisation that removes a list bounds check
+(type.coll.4) from a loop keeps native.build.1: when the lengths the check
+would have tested are not known to be enough, the loop runs with the check,
+and traps on the same iteration with the same message. A list that a call in
+the loop receives, or a `push` in the loop grows, is never assumed to keep
+its length. *(ADR 0577)*
+
+**native.bce.2** — An access `xs[i]` has no bounds check when `i` was
+already used to index `xs` on every path to it, or is `xs.len()` taken
+before a `push` to `xs` that is on every path to it. This holds while no
+operation in the program shortens a list. *(ADR 0578)*
+
+**native.bce.3** — A list's capacity is not observable: a native executable
+may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*
+
+**native.bce.4** — An overflow check (expr.arith.1) may be removed from a
+loop only where the operands' values, tested before the loop, rule the
+overflow out; otherwise the loop with the check runs and traps as the
+interpreter does. A check on an operation that repeats an earlier identical
+one on every path may be removed. *(ADR 0611)*
+
+**native.bce.5** — The check on `r[j]`, with `r` a row of a list of lists
+`b`, may be removed where `j` is at most the length of the shortest row of
+`b`, taken before a loop in which the rows of `b` can't be replaced, and no
+operation in the program shortens a list. *(ADR 0611)*
+
+**native.bce.6** — A `push` in a counted loop may skip the test that the
+list is full where, before the loop, the list's spare room is at least the
+number of pushes the loop can make; otherwise the loop with the test runs.
+*(ADR 0611)*

@@ -1,0 +1,5 @@
+fn shift(dx int, dy int) int
+    dx + dy
+
+fn main()
+    print(shift(1, dx: 2))

@@ -15,6 +15,12 @@
 ./ail explain RULE           # a rule's text, its ADRs and an example
 ./ail effects FILE.ail       # what each function may do; run --deny fs,proc rejects
 ./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
+./ail edit FILE.ail --test <<E   # change code by declaration name, then fmt, check, test
+average                          # the declaration
+-total / xs.len()                # one -/+ pair: replaces a unique part of a line
++total / xs.len().max(1)         # more lines: whole lines; ` line` keeps one; `rename f g`
+E
+./ail diff OLD NEW               # changed declarations with their lines, diagnostics, tests
 ```
 
 `todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
@@ -559,4 +565,4 @@ fn main()
 
 A `Tensor[float]` (`tensor.from(xs)`, `zeros(shape)`) supports `+ - *` with tensors or scalars, `dot`,
 `matmul`, `sum`, `transpose`, on all cores. `Json`, `parse_json(text)?` and the
-`ToJson`/`FromJson` derives read and write JSON.
+`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.

@@ -263,7 +263,7 @@ fn live_openssl_key_update() {
 }
 
 pub(crate) mod openssl {
-    use std::net::{TcpListener, TcpStream};
+    use std::net::TcpStream;
     use std::path::PathBuf;
     use std::process::{Child, Command, Stdio};
     use std::time::{Duration, Instant};
@@ -302,18 +302,54 @@ pub(crate) mod openssl {
         }
 
         pub fn start(&self, args: &[&str]) -> Running {
-            let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-            let child = Command::new("openssl")
-                .args(["s_server", "-quiet", "-www", "-key", "key.pem", "-cert", "cert.pem"])
-                .args(["-accept", &port.to_string()])
+            self.spawn(&["-www"], args, false)
+        }
+
+        /// Starts `s_server` listening on port 0 and learns the port it got from the
+        /// `ACCEPT host:port` line it prints. The server chooses and holds the port, so
+        /// there is no window between picking a free port and binding it in which another
+        /// test, or another process, could take it.
+        fn spawn(&self, mode: &[&str], args: &[&str], echo: bool) -> Running {
+            let mut child = Command::new("openssl")
+                .args(["s_server", "-key", "key.pem", "-cert", "cert.pem"])
+                .args(["-accept", "127.0.0.1:0"])
+                .args(mode)
                 .args(args)
                 .current_dir(&self.dir)
                 .stdin(Stdio::piped())
-                .stdout(Stdio::null())
+                .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
                 .unwrap();
-            Running { child, port, output: None }
+            let mut out = child.stdout.take().unwrap();
+            let (port_tx, port_rx) = std::sync::mpsc::channel();
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let mut seen = String::new();
+                let mut sent_port = false;
+                let mut buf = [0u8; 4096];
+                // Always drain the pipe, so a chatty server never blocks on a full one.
+                while let Ok(n) = std::io::Read::read(&mut out, &mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    if !sent_port {
+                        seen.push_str(&String::from_utf8_lossy(&buf[..n]));
+                        if let Some(rest) = seen.split("ACCEPT 127.0.0.1:").nth(1) {
+                            if let Some(end) = rest.find('\n') {
+                                if let Ok(port) = rest[..end].trim().parse::<u16>() {
+                                    let _ = port_tx.send(port);
+                                    sent_port = true;
+                                }
+                            }
+                        }
+                    }
+                    if echo && tx.send(buf[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            });
+            Running { child, port: None, port_rx, output: echo.then_some(rx) }
         }
     }
 
@@ -332,28 +368,7 @@ pub(crate) mod openssl {
         /// `s_server` without `-www`: it echoes what it reads to its stdout
         /// and sends what is typed on its stdin.
         pub fn start_echo(&self, args: &[&str]) -> Running {
-            let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-            let mut child = Command::new("openssl")
-                .args(["s_server", "-key", "key.pem", "-cert", "cert.pem"])
-                .args(["-accept", &port.to_string()])
-                .args(args)
-                .current_dir(&self.dir)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()
-                .unwrap();
-            let mut out = child.stdout.take().unwrap();
-            let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                let mut buf = [0u8; 4096];
-                while let Ok(n) = std::io::Read::read(&mut out, &mut buf) {
-                    if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
-                        break;
-                    }
-                }
-            });
-            Running { child, port, output: Some(rx) }
+            self.spawn(&[], args, true)
         }
     }
 
@@ -365,26 +380,37 @@ pub(crate) mod openssl {
 
     pub struct Running {
         child: Child,
-        port: u16,
+        port: Option<u16>,
+        port_rx: std::sync::mpsc::Receiver<u16>,
         output: Option<std::sync::mpsc::Receiver<Vec<u8>>>,
     }
 
     impl Running {
-        /// Connects once the server listens (it can take a while to start
-        /// on a loaded machine).
+        /// Connects once the server reports the port it listens on (it can take a
+        /// while to start on a loaded machine). The port line is printed after
+        /// `listen`, so the connection is accepted into the backlog at worst.
         pub fn connect(&mut self) -> TcpStream {
             let start = Instant::now();
-            loop {
-                if let Ok(s) = TcpStream::connect(("127.0.0.1", self.port)) {
-                    s.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
-                    return s;
+            let port = loop {
+                if let Some(p) = self.port {
+                    break p;
                 }
-                if let Ok(Some(status)) = self.child.try_wait() {
-                    panic!("openssl s_server exited before listening ({status}) on port {}", self.port);
+                match self.port_rx.recv_timeout(Duration::from_millis(50)) {
+                    Ok(p) => {
+                        self.port = Some(p);
+                        break p;
+                    }
+                    Err(_) => {
+                        if let Ok(Some(status)) = self.child.try_wait() {
+                            panic!("openssl s_server exited before listening ({status})");
+                        }
+                        assert!(start.elapsed() < Duration::from_secs(30), "openssl s_server didn't start within 30 s");
+                    }
                 }
-                assert!(start.elapsed() < Duration::from_secs(30), "openssl s_server didn't start within 30 s");
-                std::thread::sleep(Duration::from_millis(20));
-            }
+            };
+            let s = TcpStream::connect(("127.0.0.1", port)).unwrap_or_else(|e| panic!("connecting to openssl s_server on port {port}: {e}"));
+            s.set_read_timeout(Some(Duration::from_secs(30))).unwrap();
+            s
         }
     }
 

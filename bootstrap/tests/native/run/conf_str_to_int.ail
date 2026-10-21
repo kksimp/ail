@@ -1,0 +1,21 @@
+# `s.to_int() else ...` as a binding's value (native.subset.1).
+fn parse(s str) int
+    n := s.to_int() else -1
+    n
+
+fn main()
+    print(parse("42"))
+    print(parse("-0"))
+    print(parse("+3"))
+    print(parse(" 7"))
+    print(parse(""))
+    print(parse("9223372036854775807"))
+    print(parse("9223372036854775808"))
+    print(parse("-9223372036854775808"))
+    print(parse("1_000"))
+    print(parse("0x1f"))
+    mut total := 0
+    for s in ["1", "x", "30"]
+        v := s.to_int() else 100
+        total += v
+    print(total)

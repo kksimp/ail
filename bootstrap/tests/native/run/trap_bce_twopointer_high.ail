@@ -1,0 +1,18 @@
+# The upper pointer starts past the end: the loop traps at `xs[j]`
+# (type.coll.4), on its first iteration.
+fn reverse(mut xs List[int], j0 int)
+    mut i := 0
+    mut j := j0
+    while i < j
+        t := xs[i]
+        xs[i] = xs[j]
+        xs[j] = t
+        i += 1
+        j -= 1
+
+fn main()
+    mut a := [1, 2, 3]
+    reverse(mut a, 2)
+    print(a)
+    reverse(mut a, 3)
+    print(a)

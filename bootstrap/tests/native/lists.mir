@@ -25,7 +25,7 @@ fn main() unit
     v0 int = const 0
     v1:xs List[int] = call rt.list_new(v0)
     v3 int = const 5
-    jump b1(v0)
+    jump b21()
   b1(v4:i int):
     v5 bool = lt v4:i, v3
     branch v5, b2(), b3()
@@ -121,3 +121,29 @@ fn main() unit
     call rt.out_nl()
     v50 bool = const 0
     branch v50, b13(), b12(v14)
+  b21:
+    v77 int = const -1073741824
+    v78 bool = ge v3, v77
+    branch v78, b22(), b1(v0)
+  b22:
+    v79 int = const 1073741824
+    v80 bool = le v3, v79
+    branch v80, b23(), b1(v0)
+  b23:
+    v81 int = len v1:xs
+    v82 int = cap v1:xs
+    v83 int = sub v82, v81
+    v84 bool = le v3, v83
+    branch v84, b24(), b1(v0)
+  b24:
+    jump b25(v0)
+  b25(v85:i int):
+    v86 bool = lt v85:i, v3
+    branch v86, b26(), b3()
+  b26:
+    v87 int = const 2
+    v88 int = mul v85:i, v87
+    call rt.list_push(v1:xs, v88)
+    v89 int = const 1
+    v90 int = add v85:i, v89
+    jump b25(v90)

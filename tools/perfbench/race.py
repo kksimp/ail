@@ -8,7 +8,7 @@ ratios to C and to Python (below 1 beats it).
 
 A program NAME.ail in tools/perfbench/programs/ (or the interpreter set in
 run.sh) has twins NAME.c and NAME.py beside it. The programs must print the
-same bytes: a column whose output differs from the AIL interpreter's is
+same bytes: a column whose output differs from NAME.out (or, without one, the AIL interpreter's) is
 reported as DIFF and left out of the ratios (drag.out.1).
 """
 import argparse, os, platform, shutil, statistics, subprocess, sys, tempfile, time
@@ -24,7 +24,9 @@ DEFAULT_SET = [
     "tools/perfbench/programs/parsum.ail", "tools/perfbench/programs/tensor.ail",
     "tools/perfbench/programs/tensor_loops.ail", "tools/perfbench/programs/tensor_ops.ail",
     "tools/perfbench/programs/tensor_ops_loops.ail", "tools/perfbench/programs/race_smoke.ail",
-]
+] + ["tools/perfbench/programs/%s.ail" % n for n in (
+    "collatz", "nbody", "spectralnorm", "mandelbrot", "fannkuch", "binarytrees",
+    "fasta", "wordfreq", "matmul", "sieve")]
 
 
 def run_once(cmd, timeout):
@@ -62,6 +64,17 @@ def twin(prog, ext):
     return None
 
 
+def size_args(prog):
+    """The size argument in NAME.args beside the program, passed to every language."""
+    f = os.path.splitext(prog)[0] + ".args"
+    return open(f).read().split() if os.path.isfile(f) else []
+
+
+def expected_out(prog):
+    f = os.path.splitext(prog)[0] + ".out"
+    return open(f, "rb").read() if os.path.isfile(f) else None
+
+
 def tool_version(cmd):
     try:
         return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -94,15 +107,6 @@ def build_native(prog, tmp, build_args):
     if p.returncode != 0 or not os.path.isfile(out):
         return None
     return out
-
-
-def size_args(prog):
-    """The words of NAME.args beside the program, passed to every column."""
-    path = os.path.splitext(prog)[0] + ".args"
-    if not os.path.isfile(path):
-        return []
-    with open(path) as f:
-        return f.read().split()
 
 
 def build_c(src, tmp, cc):
@@ -162,21 +166,23 @@ def main():
     try:
         for p in progs:
             name = os.path.splitext(os.path.basename(p))[0]
-            argv = size_args(p)
-            res = {"ail": measure([AIL, "run", p] + argv, runs, a.timeout)}
-            ref = res["ail"].get("out")
+            extra = size_args(p)
+            res = {"ail": measure([AIL, "run", p] + extra, runs, a.timeout)}
+            ref = expected_out(p)
+            if ref is None:
+                ref = res["ail"].get("out")
             if a.native and native_ok:
                 exe = build_native(p, tmp, a.build_args)
-                res["native"] = measure([exe] + argv, runs, a.timeout) if exe else {"err": "build"}
+                res["native"] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "build"}
             for cc in cols_c:
                 src = twin(p, ".c")
                 exe = build_c(src, tmp, cc) if src else None
-                res[cc] = measure([exe] + argv, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
+                res[cc] = measure([exe] + extra, runs, a.timeout) if exe else {"err": "no twin" if not src else "build"}
             if py:
                 src = twin(p, ".py")
-                res["python"] = measure([py, src] + argv, runs, a.timeout) if src else {"err": "no twin"}
+                res["python"] = measure([py, "-I", src] + extra, runs, a.timeout) if src else {"err": "no twin"}
             for c, r in res.items():
-                if "out" in r and ref is not None and r["out"] != ref:
+                if "out" in r and ref is not None and r["out"].replace(b"\r\n", b"\n") != ref.replace(b"\r\n", b"\n"):
                     res[c] = {"err": "DIFF"}  # drag.out.1
             rows.append((name, res))
             sys.stderr.write("  %s done\n" % name)
@@ -247,7 +253,11 @@ def write_md(path, table, cols, runs, cols_c, py):
               "|" + "|".join(["---"] + ["---:"] * (len(table[0]) - 1)) + "|"]
     for r in table[1:]:
         lines.append("| " + " | ".join(r) + " |")
-    lines.append("")
+    lines += ["", "## Notes", "",
+              "- Each program gets the size in its `NAME.args` in every language; C is built with `-std=c11 -O2 -ffp-contract=off -lm`.",
+              "- `native` is `ail build FILE -o OUT`; a program outside the native subset reads `build` (native.subset.1). The `-` in a ratio means one side has no number.",
+              "- `ail` is the bytecode tier (`ail run`); process start and the check pass are inside its time, as start-up is for `python3`.",
+              "- Programs without a C twin read `no twin`. The integrator runs macOS ARM64 with the same command.", ""]
     with open(path, "w") as f:
         f.write("\n".join(lines))
 

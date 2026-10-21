@@ -302,6 +302,17 @@ impl Edit {
         let Some(callee) = self.old.take() else { return false };
         let Some(line) = lines.get(self.pos.line.wrapping_sub(1)) else { return false };
         let start = self.pos.col.saturating_sub(1);
+        // A qualified constructor (`date.Date(...)`) is written with its module's
+        // alias: the callee is the dotted name at `pos` whose last part is `callee`.
+        let callee = match anchor {
+            Anchor::CallNamed => {
+                let rest = &line[start.min(line.len())..];
+                let len = rest.iter().take_while(|c| c.is_alphanumeric() || **c == '_' || **c == '.').count();
+                let written: String = rest[..len].iter().collect();
+                if written.rsplit('.').next() == Some(callee.as_str()) { written } else { callee }
+            }
+            _ => callee,
+        };
         let name: Vec<char> = callee.chars().collect();
         let open = if anchor == Anchor::Brackets { '[' } else { '(' };
         if !line[start.min(line.len())..].starts_with(&name) || line.get(start + name.len()) != Some(&open) {

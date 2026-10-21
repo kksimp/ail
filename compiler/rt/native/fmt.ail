@@ -637,7 +637,11 @@ fn str_to_float(s str) float
     if n == 3 and load8(d) == 110 and load8(d + 1) == 97 and load8(d + 2) == 110
         store64(global(PARSE_OK), 1)
         return bits_float(9221120237041090560)
-    if n == 4 and load8(d) == 45 and load8(d + 1) == 105 and load8(d + 2) == 110 and load8(d + 3) == 102
+    if n == 4
+        and load8(d) == 45
+        and load8(d + 1) == 105
+        and load8(d + 2) == 110
+        and load8(d + 3) == 102
         store64(global(PARSE_OK), 1)
         return bits_float(-4503599627370496)
     neg := n > 0 and load8(d) == 45
