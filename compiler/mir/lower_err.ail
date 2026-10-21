@@ -18,12 +18,12 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Char | Str | Bytes | List | Struct | Enum | Tuple => Ty.Opt(t)
+        Int | Float | Bool | Char | Sized(_) | Str | Bytes | List | Struct | Enum | Tuple => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
     match t
-        Int | Float | Bool | Char => true
+        Int | Float | Bool | Char | Sized(_) => true
         _ => false
 
 ## The zero of a type: the value a failing function returns, and `none`.
@@ -61,7 +61,7 @@ fn Lower.ok_type(mut self, t ast.TypeRef) Ty?
 fn Lower.some(mut self, v Val) Val
     t := opt_of(v.ty) else return v
     match v.ty
-        Int | Char => Val(id: call("rt.box", [v.id], t), ty: t)
+        Int | Char | Sized(_) => Val(id: call("rt.box", [v.id], t), ty: t)
         Float => Val(id: call("rt.boxf", [v.id], t), ty: t)
         Bool => Val(id: call("rt.box_bool", [v.id], t), ty: t)
         Enum(n) =>
@@ -75,7 +75,7 @@ fn Lower.some(mut self, v Val) Val
 fn Lower.unwrap(mut self, o Val) Val
     t := o.ty.opt_inner() else return o
     match t
-        Int | Char => Val(id: call("rt.unbox", [o.id], t), ty: t)
+        Int | Char | Sized(_) => Val(id: call("rt.unbox", [o.id], t), ty: t)
         Float => Val(id: call("rt.unboxf", [o.id], t), ty: t)
         Bool => Val(id: call("rt.unbox_bool", [o.id], t), ty: t)
         Enum(n) =>
@@ -719,7 +719,7 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, piece], Ty.Str)
         f := load(obj, k + skip, slots[k].ty)
         text := match slots[k].ty
-            Int => call("rt.fmt_int", [f], Ty.Str)
+            Int | Sized(_) => call("rt.fmt_int", [f], Ty.Str)
             Float => call("rt.fmt_float", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)

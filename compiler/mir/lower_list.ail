@@ -38,7 +38,7 @@ fn elem_bytes(e Ty) int
 ## the element type has no native equality yet.
 fn eq_kind(e Ty) int
     match e
-        Int | Bool | Char => 0
+        Int | Bool | Char | Sized(_) => 0
         Str => 1
         Float => 2
         _ => -1
@@ -122,7 +122,7 @@ fn Lower.lower_list_edit(
         )
     if (name == "sort" or name == "sorted") and vs.len() == 0
         k := match e
-            Int => 0
+            Int | Sized(_) => 0
             Str => 1
             Float => 2
             _ => -1
@@ -163,7 +163,7 @@ fn Lower.lower_list_edit(
         return opt_at(r, nonempty, last, e, false, npos)
     if (name == "min" or name == "max") and vs.len() == 0
         k := match e
-            Int => 0
+            Int | Sized(_) => 0
             Str => 1
             Float => 2
             _ => -1

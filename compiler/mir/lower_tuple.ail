@@ -226,7 +226,7 @@ fn orderable(t Ty) bool
                 return false
         return true
     match t
-        Int | Bool | Char | Str => true
+        Int | Bool | Char | Sized(_) | Str => true
         _ => false
 
 fn Lower.lt_fn(mut self, t Ty) str
@@ -284,7 +284,7 @@ fn Lower.tuple_text(mut self, v Val) int?
             acc = call("rt.str_cat", [acc, str_value(", ")], Ty.Str)
         e := load(v.id, k, xs[k])
         piece := match xs[k]
-            Int => call("rt.fmt_int", [e], Ty.Str)
+            Int | Sized(_) => call("rt.fmt_int", [e], Ty.Str)
             Float => call("rt.fmt_float", [e], Ty.Str)
             Bool => call("rt.fmt_bool", [e], Ty.Str)
             Str => call("rt.str_quoted", [e], Ty.Str)

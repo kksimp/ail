@@ -549,7 +549,7 @@ fn is_shared_opt(t Ty) bool
 
 fn is_number(t Ty) bool
     match t
-        Int | Float | Bool | Char => true
+        Int | Float | Bool | Char | Sized(_) => true
         _ => false
 
 # ---- building blocks and values ----
@@ -1601,7 +1601,7 @@ fn out_fn(t Ty) str
         Tensor(_) => "rt.out_tensor"
         List(e) =>
             match e
-                Int => "rt.out_list_int"
+                Int | Sized(_) => "rt.out_list_int"
                 Float => "rt.out_list_float"
                 Bool => "rt.out_list_bool"
                 # Lists of strings and of lists: `rt.out_list_deep`.
@@ -1620,7 +1620,7 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             depth += 1
             leaf = leaf.elem() else Ty.Unknown
         k := match leaf
-            Int => 0
+            Int | Sized(_) => 0
             Float => 1
             Bool => 2
             Str => 3
