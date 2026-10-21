@@ -1,0 +1,5 @@
+# std.tensor.4: dot needs equal shapes.
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0])
+    b := tensor.from([1.0, 2.0])
+    print(a.dot(b))

@@ -1,0 +1,24 @@
+# std.tensor.11: reductions along an axis add in std.tensor.5's order, for
+# contiguous axes, strided ones and more than sixteen elements along the axis.
+fn series(n int) List[float]
+    [((i * 5) % 11).to_float() * 0.1 + 1.0 / (i + 1).to_float() for i in 0..n]
+
+fn main()
+    a := tensor.from(series(24), [2, 3, 4])
+    for axis in 0..3
+        print(a.sum(axis))
+        print(a.max(axis))
+        print(a.mean(axis))
+    b := tensor.from(series(40 * 7), [40, 7])
+    print(b.sum(0))
+    print(b.sum(1))
+    print(b.max(0))
+    print(b.mean(0))
+    print(b.sum(1) == b.transpose().sum(0))
+    c := tensor.from(series(70), [2, 35])
+    print(c.sum(1))
+    print(c.sum(0).sum())
+    m := tensor.from([1.0, 0.0 / 0.0, 3.0, 2.0], [2, 2])
+    print(m.max(0))
+    print(m.max(1))
+    print(tensor.from([1.0, 2.0, 3.0]).sum(0))

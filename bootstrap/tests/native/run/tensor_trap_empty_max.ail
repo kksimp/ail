@@ -1,0 +1,4 @@
+# std.tensor.11: the maximum of no elements traps.
+fn main()
+    print(tensor.zeros([0]).sum())
+    print(tensor.zeros([0]).max())

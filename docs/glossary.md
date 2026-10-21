@@ -215,6 +215,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |
 | **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). A list or map of a unique type is unique too (ADR 0318). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
+| **Vector primitive** | A runtime primitive (`v4op`, `v16dot`, ...) that the native code generators expand into one SIMD instruction per register, AVX2 on x86-64 and NEON on ARM64, over memory (ADR 0632). |
 | **Walk** | `fs.walk(dir)`: every file below a directory at any depth, as paths, sorted (`std.fs.8`, ADR 0281). |
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |
 | **Watch** | `ail run --watch NAME`: each assignment to a `mut` variable `NAME`, with its new value and position; follows it into `mut` arguments and `mut self` calls, naming the frame that wrote (ADRs 0268, 0327). |

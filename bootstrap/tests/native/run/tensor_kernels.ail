@@ -1,0 +1,49 @@
+# std.tensor.5: the vector kernels add in the interpreter's order, so sums,
+# dots, elementwise results and matrix products are bit-identical for every
+# length (a 16-element block, a 4-element block, a scalar tail).
+fn series(n int, k int) List[float]
+    [((i * k) % 7).to_float() * 0.1 + 1.0 / (i + 1).to_float() for i in 0..n]
+
+fn show(t tensor.Tensor[float])
+    print(t.sum())
+    print(t.mean())
+    print(t.max())
+
+fn main()
+    for n in [1, 3, 4, 5, 15, 16, 17, 31, 32, 33, 100, 257]
+        a := tensor.from(series(n, 3))
+        b := tensor.from(series(n, 5))
+        print("n = {n}")
+        show(a)
+        print(a.dot(b))
+        show(a + b)
+        show(a - b)
+        show(a * b)
+        show(a / b)
+        show(a * 1.5)
+        show(0.25 - a)
+        show(3.0 / b)
+        show(-a)
+        show(a.relu() - b)
+    # matmul of ragged sizes
+    for m in [1, 2, 5]
+        for k in [1, 3, 7]
+            for n in [1, 4, 9, 17]
+                a := tensor.from(series(m * k, 3), [m, k])
+                b := tensor.from(series(k * n, 5), [k, n])
+                c := a.matmul(b)
+                print("{m}x{k} * {k}x{n}: {c.sum()} {c.max()} {c.transpose().sum()}")
+    big := tensor.from(series(70 * 70, 3), [70, 70])
+    prod := big.matmul(big)
+    print(prod.sum())
+    print(prod.max())
+    # broadcasting
+    t := tensor.from(series(24, 3), [2, 3, 4])
+    r := tensor.from(series(4, 5))
+    c := tensor.from(series(3, 5), [3, 1])
+    print((t + r).sum())
+    print((t * c).sum())
+    print((t - c).max())
+    print((c + r).shape())
+    print(tensor.from([1.0, 0.0 / 0.0, 3.0]).relu())
+    print(tensor.from([1.0, 0.0 / 0.0, 3.0]).max())

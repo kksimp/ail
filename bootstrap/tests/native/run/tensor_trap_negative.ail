@@ -1,0 +1,4 @@
+# std.tensor.2: sizes cannot be negative.
+fn main()
+    n := 2 - 5
+    print(tensor.zeros([2, n]))

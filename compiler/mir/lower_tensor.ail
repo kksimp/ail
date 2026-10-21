@@ -1,0 +1,202 @@
+## `std.tensor` in the native subset (native.tensor.1-2, ADRs 0633-0635): `float` tensors, as
+## the struct `tensor.Tensor` of two slots (shape, elements) that the runtime
+## (`compiler/rt/native/tensor.ail`) builds and reads. Each operation is a
+## call of the runtime; one that can fail is followed by a check of
+## `rt.tensor_failed` and a trap of kind 8 whose message the runtime prints
+## (native-abi.md §7). `int` tensors, `map`, axis reductions, indexing and
+## the rest of std.tensor.13-20 are reported (native.subset.1).
+use ast
+
+## The struct a tensor is, and its two slots.
+TENSOR := "tensor.Tensor"
+
+fn is_tensor(t Ty) bool
+    match t
+        Struct(n) => n == TENSOR
+        _ => false
+
+fn tensor_ty() Ty
+    Ty.Struct(TENSOR)
+
+## `tensor.Tensor[float]` as a written type; other element types are out of
+## the subset.
+fn Lower.tensor_type_of(self, args List[ast.TypeRef]) Ty?
+    if args.len() != 1
+        return none
+    e := type_of(args[0])?
+    if e == Ty.Float
+        return tensor_ty()
+    none
+
+## Record the struct (before any lowering, so signatures can name it).
+fn Lower.declare_tensor(mut self)
+    structs[TENSOR] = [
+        Slot(name: "shape", ty: Ty.List(Ty.Int)),
+        Slot(name: "data", ty: Ty.List(Ty.Float)),
+    ]
+
+## The call of a runtime function that can fail, then the check: when the
+## runtime says it failed, a trap of `rule` at `pos` (kind 8).
+fn Lower.tensor_call(mut self, rt str, args List[int], result Ty, rule str, pos ast.Pos) Val
+    v := call(rt, args, result)
+    failed := call("rt.tensor_failed", [], Ty.Bool)
+    fail := new_block()
+    check(op("not", [failed], Ty.Bool), fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    mut t := inst(-1, "trap", [konst(0, Ty.Int), konst(0, Ty.Int)])
+    t.imm = 8
+    t.site = site(rule, "tensor", "", pos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
+    Val(id: v, ty: result)
+
+## `tensor.zeros(shape)` and `tensor.from(xs)` or `tensor.from(xs, shape)`.
+fn Lower.lower_tensor_module(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    for a in args
+        if a.label != none or a.mutable
+            return unsupported(npos, "labelled arguments")
+    if name == "zeros" and args.len() == 1
+        shape := lower_value(args[0].value, Ty.List(Ty.Int))?
+        return tensor_call("rt.tensor_zeros", [shape.id], tensor_ty(), "std.tensor.2", npos)
+    if name == "from" and (args.len() == 1 or args.len() == 2)
+        xs := lower_value(args[0].value, none)?
+        if xs.ty != Ty.List(Ty.Float)
+            return unsupported(
+                npos,
+                "`tensor.from` of `{xs.ty.name()}` (only `float` tensors are native)",
+            )
+        if args.len() == 1
+            return tensor_call("rt.tensor_from1", [xs.id], tensor_ty(), "std.tensor.2", npos)
+        shape := lower_value(args[1].value, Ty.List(Ty.Int))?
+        return tensor_call("rt.tensor_from", [xs.id, shape.id], tensor_ty(), "std.tensor.2", npos)
+    unsupported(npos, "`tensor.{name}`")
+
+## The code `rt.tensor_zip` and `rt.tensor_scalar` take for an operator.
+fn tensor_op_code(o ast.BinOp) int
+    match o
+        Add => 0
+        Sub => 1
+        Mul => 2
+        Div => 3
+        _ => -1
+
+## `a OP b` where one side or both are tensors (std.tensor.4, std.tensor.10).
+fn Lower.tensor_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    code := tensor_op_code(o)
+    if code < 0
+        problem(pos, "`{op_symbol(o)}` on tensors isn't in the native subset")
+        return a
+    if is_tensor(a.ty) and is_tensor(b.ty)
+        return tensor_call(
+            "rt.tensor_zip",
+            [konst(code, Ty.Int), a.id, b.id],
+            tensor_ty(),
+            "std.tensor.4",
+            pos,
+        )
+    left := is_tensor(b.ty)
+    t := if left then b else a
+    s := if left then a else b
+    mut sid := s.id
+    match s.ty
+        Float => sid = s.id
+        Int => sid = op("itof", [s.id], Ty.Float)
+        _ =>
+            problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
+            return a
+    Val(
+        id: call(
+            "rt.tensor_scalar",
+            [konst(code, Ty.Int), t.id, sid, konst(if left then 1 else 0, Ty.Bool)],
+            tensor_ty(),
+        ),
+        ty: tensor_ty(),
+    )
+
+## `-t` on a tensor (std.tensor.14); anything else is reported.
+fn Lower.neg_other(mut self, a Val, pos ast.Pos) Val?
+    if is_tensor(a.ty)
+        return Val(id: call("rt.tensor_neg", [a.id], tensor_ty()), ty: tensor_ty())
+    unsupported(pos, "`-` on `{a.ty.name()}`")
+
+## A method of a tensor value (std.tensor.3).
+fn Lower.lower_tensor_method(mut self, t Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    for a in args
+        if a.label != none or a.mutable
+            return unsupported(npos, "labelled arguments")
+    ti := tensor_ty()
+    if args.len() == 0
+        match name
+            "shape" => return Val(
+                id: call("rt.tensor_shape", [t.id], Ty.List(Ty.Int)),
+                ty: Ty.List(Ty.Int),
+            )
+            "len" => return Val(id: call("rt.tensor_len", [t.id], Ty.Int), ty: Ty.Int)
+            "to_list" => return Val(
+                id: call("rt.tensor_to_list", [t.id], Ty.List(Ty.Float)),
+                ty: Ty.List(Ty.Float),
+            )
+            "sum" => return Val(id: call("rt.tensor_sum", [t.id], Ty.Float), ty: Ty.Float)
+            "mean" => return tensor_call("rt.tensor_mean", [t.id], Ty.Float, "std.tensor.11", npos)
+            "max" => return tensor_call("rt.tensor_max", [t.id], Ty.Float, "std.tensor.11", npos)
+            "relu" => return Val(id: call("rt.tensor_relu", [t.id], ti), ty: ti)
+            "transpose" => return tensor_call(
+                "rt.tensor_transpose",
+                [t.id],
+                ti,
+                "std.tensor.12",
+                npos,
+            )
+            _ => return unsupported(npos, "`.{name}()` on a tensor")
+    if args.len() == 1
+        if name == "reshape"
+            shape := lower_value(args[0].value, Ty.List(Ty.Int))?
+            return tensor_call("rt.tensor_reshape", [t.id, shape.id], ti, "std.tensor.2", npos)
+        if name == "sum" or name == "max" or name == "mean"
+            axis := lower_value(args[0].value, Ty.Int)?
+            kind := if name == "sum" then 0 else if name == "max" then 1 else 2
+            return tensor_call(
+                "rt.tensor_reduce",
+                [konst(kind, Ty.Int), t.id, axis.id],
+                ti,
+                "std.tensor.11",
+                npos,
+            )
+        other := lower_value(args[0].value, ti)?
+        if not is_tensor(other.ty)
+            return unsupported(npos, "`.{name}(...)` with a `{other.ty.name()}`")
+        match name
+            "add" => return tensor_call(
+                "rt.tensor_zip",
+                [konst(0, Ty.Int), t.id, other.id],
+                ti,
+                "std.tensor.4",
+                npos,
+            )
+            "mul" => return tensor_call(
+                "rt.tensor_zip",
+                [konst(2, Ty.Int), t.id, other.id],
+                ti,
+                "std.tensor.4",
+                npos,
+            )
+            "dot" =>
+                return tensor_call(
+                    "rt.tensor_dot",
+                    [t.id, other.id],
+                    Ty.Float,
+                    "std.tensor.4",
+                    npos,
+                )
+            "matmul" => return tensor_call(
+                "rt.tensor_matmul",
+                [t.id, other.id],
+                ti,
+                "std.tensor.7",
+                npos,
+            )
+            _ => return unsupported(npos, "`.{name}(...)` on a tensor")
+    unsupported(npos, "`.{name}(...)` on a tensor")

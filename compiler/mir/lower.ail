@@ -132,6 +132,12 @@ PRIMS := {
     "float_bits": "int",
     "bits_float": "float",
     "target": "int",
+    "v4op": "unit",
+    "v4ops": "unit",
+    "v4sop": "unit",
+    "v4axpy": "unit",
+    "v16acc": "unit",
+    "v16dot": "unit",
 }
 
 ## The `int` methods of two operands that are one instruction (expr.bit.1).
@@ -206,6 +212,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
         l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
+    l.declare_tensor()
     if r := rt
         l.declare_all(r, "rt.")
     l.problem_files = [0 for _ in l.problems]
@@ -409,6 +416,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                 "float" => Ty.Float
                 "bool" => Ty.Bool
                 "str" => Ty.Str
+                "tensor.Tensor" => tensor_type_of(args)
                 "List" =>
                     if args.len() != 1
                         return none
@@ -1220,7 +1228,7 @@ fn Lower.lower_unary(mut self, o ast.UnOp, operand ast.Expr, pos ast.Pos, want T
                     ty: Ty.Int,
                 )
                 Float => Val(id: op("fneg", [a.id], Ty.Float), ty: Ty.Float)
-                _ => unsupported(pos, "`-` on `{a.ty.name()}`")
+                _ => neg_other(a, pos)
         Not =>
             a := lower_value(operand, Ty.Bool)?
             Val(id: op("not", [a.id], Ty.Bool), ty: Ty.Bool)
@@ -1270,6 +1278,8 @@ fn is_comparison(o ast.BinOp) bool
 
 fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
+    if (is_tensor(a.ty) or is_tensor(b.ty)) and not (is_comparison(o) and same_ty(a.ty, b.ty))
+        return tensor_binary(o, a, b, pos)
     if not same_ty(a.ty, b.ty)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
         return a
@@ -1542,6 +1552,9 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
         if k >= 0 and (depth > 0 or k == 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
+    if is_tensor(v.ty)
+        call("rt.out_tensor", [v.id], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
         return unsupported(pos, "printing a `{v.ty.name()}`")
@@ -1556,6 +1569,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     om := os_module(recv)
     if om != ""
         return lower_os_method(om, name, npos, args)
+    if is_module(recv, "tensor")
+        return lower_tensor_module(name, npos, args)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1574,6 +1589,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if is_tensor(r.ty)
+        return lower_tensor_method(r, name, npos, args)
     if s := struct_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)

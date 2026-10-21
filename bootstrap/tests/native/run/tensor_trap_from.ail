@@ -1,0 +1,3 @@
+# std.tensor.2: the elements must fill the shape.
+fn main()
+    print(tensor.from([1.0, 2.0, 3.0], [2, 2]))

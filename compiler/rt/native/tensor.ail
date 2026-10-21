@@ -1,0 +1,706 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.tensor` on `float` tensors (ADRs 0632-0635, native.tensor.1-2,
+## native.simd.1, spec std.tensor.1-13).
+## A tensor is a struct object (native-abi.md §2) of two slots: the shape, a
+## `List[int]`, and the elements, a `List[float]` in row-major order. The
+## kernels use the vector primitives of `prim.ail` (AVX2 on x86-64, NEON on
+## ARM64) and compute what the interpreter's kernels (`bootstrap/src/
+## tensor.rs`) compute, operation for operation (std.tensor.5): `sum` and
+## `dot` keep sixteen partial sums, element `i` in sum `i % 16`, halved
+## down at the end, then add the tail in order; `matmul` adds each row's
+## products `a[i][p] * b[p]` in order of `p`, with the product rounded before
+## the sum. Results are bit-identical to the interpreter's.
+##
+## A failing operation returns a tensor of its own kind and sets the slot
+## `T_MSG`; the lowered code asks `tensor_failed` and traps with
+## `tensor_trap_text` (trap kind 8), whose text is the interpreter's.
+
+## The failure record: +0 code, +8 and +16 numbers, +24 one more, +32 and
+## +40 the shapes involved (lists), else 0. Slot 48.
+T_MSG := 48
+
+## The operations of `v4op`: 0 add, 1 subtract, 2 multiply, 3 divide.
+OP_ADD := 0
+OP_SUB := 1
+OP_MUL := 2
+OP_DIV := 3
+
+# ---- layout ----
+
+fn t_shape(t int) int
+    load64(t)
+
+fn t_data(t int) int
+    load64(t + 8)
+
+## The elements of a list object: its address.
+fn tl_items(p int) int
+    load64(p + 16)
+
+fn tl_len(p int) int
+    load64(p)
+
+## A list object of `n` elements of 8 bytes, zeroed (a fresh `alloc` is).
+fn tl_new(n int) int
+    xs := list_new(n)
+    p := list_addr(xs)
+    store64(p, n)
+    p
+
+## A copy of the list object `p`.
+fn tl_copy(p int) int
+    n := tl_len(p)
+    q := tl_new(n)
+    copy_bytes(tl_items(q), tl_items(p), 8 * n)
+    q
+
+fn t_make(shape int, data int) int
+    t := obj_new(16, 4)
+    store64(t, shape)
+    store64(t + 8, data)
+    t
+
+## The number of elements a shape holds.
+fn t_count(shape int) int
+    mut n := 1
+    mut k := 0
+    while k < tl_len(shape)
+        n *= load64(tl_items(shape) + 8 * k)
+        k += 1
+    n
+
+# ---- failures ----
+
+fn t_fail(code int, a int, b int, c int, sa int, sb int)
+    r := alloc(48)
+    store64(r, code)
+    store64(r + 8, a)
+    store64(r + 16, b)
+    store64(r + 24, c)
+    store64(r + 32, sa)
+    store64(r + 40, sb)
+    store64(global(T_MSG), r)
+
+fn tensor_failed() bool
+    load64(global(T_MSG)) != 0
+
+## `[2, 3]`, as `{shape:?}` prints a `Vec`.
+fn t_out_dims(shape int)
+    out_byte(91)
+    for k in 0..tl_len(shape)
+        out_sep(k)
+        out_int(load64(tl_items(shape) + 8 * k))
+    out_byte(93)
+
+fn t_op_name(op int)
+    if op == OP_ADD
+        out_str("add")
+    elif op == OP_SUB
+        out_byte(45)
+    elif op == OP_MUL
+        out_str("mul")
+    else
+        out_byte(47)
+
+fn t_reduce_name(kind int)
+    if kind == 0
+        out_str("sum")
+    elif kind == 1
+        out_str("max")
+    else
+        out_str("mean")
+
+## The text of the trap `tensor_failed` announced (trap kind 8): the
+## interpreter's message for the code.
+fn tensor_trap_text()
+    r := load64(global(T_MSG))
+    code := load64(r)
+    a := load64(r + 8)
+    b := load64(r + 16)
+    c := load64(r + 24)
+    sa := load64(r + 32)
+    sb := load64(r + 40)
+    if code == 1
+        out_str("a tensor's sizes can't be negative, and the shape is ")
+        t_out_dims(sa)
+    elif code == 2
+        out_str("the shape ")
+        t_out_dims(sa)
+        out_str(" has too many elements")
+    elif code == 3
+        out_int(a)
+        out_str(" elements don't fill the shape ")
+        t_out_dims(sa)
+        out_str(", which holds ")
+        out_int(b)
+    elif code == 4
+        out_byte(96)
+        out_str("dot")
+        out_str("` needs equal shapes, but they are ")
+        t_out_dims(sa)
+        out_str(" and ")
+        t_out_dims(sb)
+    elif code == 5
+        out_byte(96)
+        t_op_name(a)
+        out_str("` can't broadcast shapes ")
+        t_out_dims(sa)
+        out_str(" and ")
+        t_out_dims(sb)
+    elif code == 6
+        out_str("`matmul` needs two 2-D tensors, but the shapes are ")
+        t_out_dims(sa)
+        out_str(" and ")
+        t_out_dims(sb)
+    elif code == 7
+        out_str("`matmul` of ")
+        out_int(a)
+        out_byte(120)
+        out_int(b)
+        out_str(" and ")
+        out_int(c)
+        out_byte(120)
+        out_int(load64(tl_items(sb) + 8))
+        out_str(": the inner sizes ")
+        out_int(b)
+        out_str(" and ")
+        out_int(c)
+        out_str(" differ")
+    elif code == 8
+        out_str("`transpose` needs a 2-D tensor, but the shape is ")
+        t_out_dims(sa)
+    elif code == 9
+        out_byte(96)
+        t_reduce_name(a)
+        out_str("` of an empty axis of a tensor of shape ")
+        t_out_dims(sa)
+    elif code == 10
+        out_byte(96)
+        t_reduce_name(a)
+        out_byte(40)
+        out_int(b)
+        out_str(")` on a tensor of shape ")
+        t_out_dims(sa)
+        out_str(": the axis must be from 0 to ")
+        out_int(tl_len(sa) - 1)
+    else
+        out_str("an unknown tensor failure")
+
+# ---- construction (std.tensor.2) ----
+
+## Whether `shape` is a legal shape (non-negative, at most 2^40 elements);
+## on a failure it is recorded.
+fn t_shape_ok(shape int) bool
+    mut n := 1
+    for k in 0..tl_len(shape)
+        d := load64(tl_items(shape) + 8 * k)
+        if d < 0
+            t_fail(1, 0, 0, 0, shape, 0)
+            return false
+        if d > 0 and n > 1099511627776 / d
+            t_fail(2, 0, 0, 0, shape, 0)
+            return false
+        n *= d
+    true
+
+fn tensor_zeros(shape int) int
+    s := tl_copy(shape)
+    if not t_shape_ok(s)
+        return t_make(s, tl_new(0))
+    t_make(s, tl_new(t_count(s)))
+
+## `tensor.from(xs, shape)`: `xs` must fill the shape.
+fn tensor_from(p int, shape int) int
+    s := tl_copy(shape)
+    if not t_shape_ok(s)
+        return t_make(s, tl_new(0))
+    count := t_count(s)
+    if tl_len(p) != count
+        t_fail(3, tl_len(p), count, 0, s, 0)
+        return t_make(s, tl_new(0))
+    t_make(s, tl_copy(p))
+
+## `tensor.from(xs)`: one axis.
+fn tensor_from1(p int) int
+    s := tl_new(1)
+    store64(tl_items(s), tl_len(p))
+    t_make(s, tl_copy(p))
+
+fn tensor_shape(t int) int
+    tl_copy(t_shape(t))
+
+fn tensor_len(t int) int
+    tl_len(t_data(t))
+
+fn tensor_to_list(t int) int
+    tl_copy(t_data(t))
+
+## `t.reshape(shape)`: the same elements under another shape (std.tensor.3).
+fn tensor_reshape(t int, shape int) int
+    s := tl_copy(shape)
+    if not t_shape_ok(s)
+        return t_make(s, tl_new(0))
+    n := tl_len(t_data(t))
+    count := t_count(s)
+    if n != count
+        t_fail(3, n, count, 0, s, 0)
+        return t_make(s, tl_new(0))
+    t_make(s, tl_copy(t_data(t)))
+
+# ---- reductions (std.tensor.3, std.tensor.5) ----
+
+## The sixteen partial sums combine by halving: `acc[i] += acc[i + half]`.
+fn t_combine16(acc int) float
+    mut half := 8
+    while half > 0
+        for k in 0..half
+            storef(acc + 8 * k, loadf(acc + 8 * k) + loadf(acc + 8 * (k + half)))
+        half = half / 2
+    loadf(acc)
+
+fn t_sum_f64(p int, n int) float
+    acc := alloc(128)
+    body := n / 16 * 16
+    mut i := 0
+    while i < body
+        v16acc(acc, p + 8 * i)
+        i += 16
+    mut s := t_combine16(acc)
+    while i < n
+        s = s + loadf(p + 8 * i)
+        i += 1
+    s
+
+fn t_dot_f64(a int, b int, n int) float
+    acc := alloc(128)
+    body := n / 16 * 16
+    mut i := 0
+    while i < body
+        v16dot(acc, a + 8 * i, b + 8 * i)
+        i += 16
+    mut s := t_combine16(acc)
+    while i < n
+        s = s + loadf(a + 8 * i) * loadf(b + 8 * i)
+        i += 1
+    s
+
+fn tensor_sum(t int) float
+    d := t_data(t)
+    t_sum_f64(tl_items(d), tl_len(d))
+
+fn tensor_mean(t int) float
+    d := t_data(t)
+    if tl_len(d) == 0
+        t_fail(9, 2, 0, 0, t_shape(t), 0)
+        return 0.0
+    t_sum_f64(tl_items(d), tl_len(d)) / tl_len(d).to_float()
+
+## `t.max()`: the first element, replaced by each later one that is greater
+## (a NaN never replaces it), std.tensor.11. An empty tensor gives 0.0.
+fn tensor_max(t int) float
+    d := t_data(t)
+    n := tl_len(d)
+    if n == 0
+        t_fail(9, 1, 0, 0, t_shape(t), 0)
+        return 0.0
+    p := tl_items(d)
+    mut m := loadf(p)
+    for i in 1..n
+        x := loadf(p + 8 * i)
+        if x > m
+            m = x
+    m
+
+fn t_same_shape(a int, b int) bool
+    sa := t_shape(a)
+    sb := t_shape(b)
+    if tl_len(sa) != tl_len(sb)
+        return false
+    for k in 0..tl_len(sa)
+        if load64(tl_items(sa) + 8 * k) != load64(tl_items(sb) + 8 * k)
+            return false
+    true
+
+fn tensor_dot(a int, b int) float
+    if not t_same_shape(a, b)
+        t_fail(4, 0, 0, 0, t_shape(a), t_shape(b))
+        return 0.0
+    da := t_data(a)
+    t_dot_f64(tl_items(da), tl_items(t_data(b)), tl_len(da))
+
+# ---- elementwise (std.tensor.4, std.tensor.10) ----
+
+## `dst[i] = a[i] op b[i]` for `n` elements, 16 per round on the vector unit.
+fn t_zip_add(dst int, a int, b int, n int)
+    mut i := 0
+    while i + 16 <= n
+        o := 8 * i
+        v4op(0, dst + o, a + o, b + o)
+        v4op(0, dst + o + 32, a + o + 32, b + o + 32)
+        v4op(0, dst + o + 64, a + o + 64, b + o + 64)
+        v4op(0, dst + o + 96, a + o + 96, b + o + 96)
+        i += 16
+    while i + 4 <= n
+        v4op(0, dst + 8 * i, a + 8 * i, b + 8 * i)
+        i += 4
+    while i < n
+        storef(dst + 8 * i, loadf(a + 8 * i) + loadf(b + 8 * i))
+        i += 1
+
+fn t_zip_sub(dst int, a int, b int, n int)
+    mut i := 0
+    while i + 16 <= n
+        o := 8 * i
+        v4op(1, dst + o, a + o, b + o)
+        v4op(1, dst + o + 32, a + o + 32, b + o + 32)
+        v4op(1, dst + o + 64, a + o + 64, b + o + 64)
+        v4op(1, dst + o + 96, a + o + 96, b + o + 96)
+        i += 16
+    while i + 4 <= n
+        v4op(1, dst + 8 * i, a + 8 * i, b + 8 * i)
+        i += 4
+    while i < n
+        storef(dst + 8 * i, loadf(a + 8 * i) - loadf(b + 8 * i))
+        i += 1
+
+fn t_zip_mul(dst int, a int, b int, n int)
+    mut i := 0
+    while i + 16 <= n
+        o := 8 * i
+        v4op(2, dst + o, a + o, b + o)
+        v4op(2, dst + o + 32, a + o + 32, b + o + 32)
+        v4op(2, dst + o + 64, a + o + 64, b + o + 64)
+        v4op(2, dst + o + 96, a + o + 96, b + o + 96)
+        i += 16
+    while i + 4 <= n
+        v4op(2, dst + 8 * i, a + 8 * i, b + 8 * i)
+        i += 4
+    while i < n
+        storef(dst + 8 * i, loadf(a + 8 * i) * loadf(b + 8 * i))
+        i += 1
+
+fn t_zip_div(dst int, a int, b int, n int)
+    mut i := 0
+    while i + 16 <= n
+        o := 8 * i
+        v4op(3, dst + o, a + o, b + o)
+        v4op(3, dst + o + 32, a + o + 32, b + o + 32)
+        v4op(3, dst + o + 64, a + o + 64, b + o + 64)
+        v4op(3, dst + o + 96, a + o + 96, b + o + 96)
+        i += 16
+    while i + 4 <= n
+        v4op(3, dst + 8 * i, a + 8 * i, b + 8 * i)
+        i += 4
+    while i < n
+        storef(dst + 8 * i, loadf(a + 8 * i) / loadf(b + 8 * i))
+        i += 1
+
+fn t_zip(op int, dst int, a int, b int, n int)
+    if op == OP_ADD
+        t_zip_add(dst, a, b, n)
+    elif op == OP_SUB
+        t_zip_sub(dst, a, b, n)
+    elif op == OP_MUL
+        t_zip_mul(dst, a, b, n)
+    else
+        t_zip_div(dst, a, b, n)
+
+## The shape two shapes broadcast to (std.tensor.4): per axis from the
+## right, equal sizes, or one of them 1. 0 when they don't.
+fn t_broadcast(sa int, sb int) int
+    na := tl_len(sa)
+    nb := tl_len(sb)
+    rank := if na > nb then na else nb
+    out := tl_new(rank)
+    for k in 0..rank
+        da := if k + na >= rank then load64(tl_items(sa) + 8 * (k + na - rank)) else 1
+        db := if k + nb >= rank then load64(tl_items(sb) + 8 * (k + nb - rank)) else 1
+        mut d := da
+        if da == db
+            d = da
+        elif da == 1
+            d = db
+        elif db == 1
+            d = da
+        else
+            return 0
+        store64(tl_items(out) + 8 * k, d)
+    out
+
+## The elements of the tensor `t` stretched to `shape` (std.tensor.4), as
+## a new buffer: size-1 axes repeat (stride 0), a missing axis is size 1.
+fn t_expand(t int, shape int) int
+    src := t_shape(t)
+    rank := tl_len(shape)
+    ns := tl_len(src)
+    n := t_count(shape)
+    out := tl_new(n)
+    stride := tl_new(rank)
+    mut s := 1
+    mut k := rank - 1
+    while k >= 0
+        d := if k + ns >= rank then load64(tl_items(src) + 8 * (k + ns - rank)) else 1
+        store64(tl_items(stride) + 8 * k, if d == 1 then 0 else s)
+        s *= d
+        k -= 1
+    idx := tl_new(rank)
+    src_p := tl_items(t_data(t))
+    mut off := 0
+    for e in 0..n
+        storef(tl_items(out) + 8 * e, loadf(src_p + 8 * off))
+        mut j := rank - 1
+        while j >= 0
+            ij := load64(tl_items(idx) + 8 * j) + 1
+            store64(tl_items(idx) + 8 * j, ij)
+            off += load64(tl_items(stride) + 8 * j)
+            if ij < load64(tl_items(shape) + 8 * j)
+                break
+            off -= load64(tl_items(stride) + 8 * j) * ij
+            store64(tl_items(idx) + 8 * j, 0)
+            j -= 1
+    out
+
+## `a op b` elementwise, with broadcasting: `op` is 0 add, 1 subtract,
+## 2 multiply, 3 divide.
+fn tensor_zip(op int, a int, b int) int
+    if t_same_shape(a, b)
+        n := tl_len(t_data(a))
+        d := tl_new(n)
+        t_zip(op, tl_items(d), tl_items(t_data(a)), tl_items(t_data(b)), n)
+        return t_make(tl_copy(t_shape(a)), d)
+    shape := t_broadcast(t_shape(a), t_shape(b))
+    if shape == 0
+        t_fail(5, op, 0, 0, t_shape(a), t_shape(b))
+        return a
+    n := t_count(shape)
+    d := tl_new(n)
+    ea := t_expand(a, shape)
+    eb := t_expand(b, shape)
+    t_zip(op, tl_items(d), tl_items(ea), tl_items(eb), n)
+    t_make(shape, d)
+
+## `t op s` (`left` false) or `s op t`: the scalar with every element.
+fn tensor_scalar(op int, t int, s float, left bool) int
+    src := t_data(t)
+    n := tl_len(src)
+    d := tl_new(n)
+    a := tl_items(src)
+    o := tl_items(d)
+    mut i := 0
+    if op == OP_ADD
+        while i + 4 <= n
+            v4ops(0, o + 8 * i, a + 8 * i, s)
+            i += 4
+    elif op == OP_SUB and not left
+        while i + 4 <= n
+            v4ops(1, o + 8 * i, a + 8 * i, s)
+            i += 4
+    elif op == OP_SUB
+        while i + 4 <= n
+            v4sop(1, o + 8 * i, s, a + 8 * i)
+            i += 4
+    elif op == OP_MUL
+        while i + 4 <= n
+            v4ops(2, o + 8 * i, a + 8 * i, s)
+            i += 4
+    elif not left
+        while i + 4 <= n
+            v4ops(3, o + 8 * i, a + 8 * i, s)
+            i += 4
+    else
+        while i + 4 <= n
+            v4sop(3, o + 8 * i, s, a + 8 * i)
+            i += 4
+    while i < n
+        x := loadf(a + 8 * i)
+        mut r := 0.0
+        if op == OP_ADD
+            r = x + s
+        elif op == OP_SUB
+            r = if left then s - x else x - s
+        elif op == OP_MUL
+            r = x * s
+        else
+            r = if left then s / x else x / s
+        storef(o + 8 * i, r)
+        i += 1
+    t_make(tl_copy(t_shape(t)), d)
+
+## `-t` (std.tensor.14).
+fn tensor_neg(t int) int
+    src := t_data(t)
+    n := tl_len(src)
+    d := tl_new(n)
+    for i in 0..n
+        storef(tl_items(d) + 8 * i, -loadf(tl_items(src) + 8 * i))
+    t_make(tl_copy(t_shape(t)), d)
+
+## `t.relu()` (std.tensor.13): a positive element stays, a NaN stays, the
+## rest become 0.0.
+fn tensor_relu(t int) int
+    src := t_data(t)
+    n := tl_len(src)
+    d := tl_new(n)
+    for i in 0..n
+        x := loadf(tl_items(src) + 8 * i)
+        mut r := 0.0
+        if x != x or x > 0.0
+            r = x
+        storef(tl_items(d) + 8 * i, r)
+    t_make(tl_copy(t_shape(t)), d)
+
+# ---- reductions along an axis (std.tensor.11) ----
+
+## The sum of each `n` elements, `after` apart, in std.tensor.5's order:
+## contiguous runs go through `t_sum_f64`; otherwise sixteen partial rows of
+## `after` results are added a whole row at a time.
+fn t_sum_axis(v int, before int, n int, after int) int
+    out := tl_new(before * after)
+    if after == 1
+        for o in 0..before
+            storef(tl_items(out) + 8 * o, t_sum_f64(v + 8 * o * n, n))
+        return out
+    acc := alloc(128 * after)
+    body := n / 16 * 16
+    for o in 0..before
+        for e in 0..16 * after
+            storef(acc + 8 * e, 0.0)
+        for i in 0..body
+            row := v + 8 * ((o * n + i) * after)
+            slot := acc + 8 * (i % 16) * after
+            t_zip_add(slot, slot, row, after)
+        mut half := 8
+        while half > 0
+            for l in 0..half
+                slot := acc + 8 * l * after
+                t_zip_add(slot, slot, acc + 8 * (l + half) * after, after)
+            half = half / 2
+        for i in body..n
+            t_zip_add(acc, acc, v + 8 * ((o * n + i) * after), after)
+        copy_bytes(tl_items(out) + 8 * o * after, acc, 8 * after)
+    out
+
+## The maximum of each `n` elements, `after` apart: the first, replaced by
+## each later one that is greater (a NaN never replaces it).
+fn t_max_axis(v int, before int, n int, after int) int
+    out := tl_new(before * after)
+    for o in 0..before
+        m := tl_items(out) + 8 * o * after
+        copy_bytes(m, v + 8 * (o * n * after), 8 * after)
+        for i in 1..n
+            row := v + 8 * ((o * n + i) * after)
+            for j in 0..after
+                x := loadf(row + 8 * j)
+                if x > loadf(m + 8 * j)
+                    storef(m + 8 * j, x)
+    out
+
+## `t.sum(axis)` (`kind` 0), `t.max(axis)` (1) and `t.mean(axis)` (2).
+fn tensor_reduce(kind int, t int, axis int) int
+    s := t_shape(t)
+    rank := tl_len(s)
+    if axis < 0 or axis >= rank
+        t_fail(10, kind, axis, 0, s, 0)
+        return t
+    mut before := 1
+    mut after := 1
+    for k in 0..rank
+        if k < axis
+            before *= load64(tl_items(s) + 8 * k)
+        elif k > axis
+            after *= load64(tl_items(s) + 8 * k)
+    n := load64(tl_items(s) + 8 * axis)
+    if n == 0 and kind != 0 and before * after > 0
+        t_fail(9, kind, 0, 0, s, 0)
+        return t
+    v := tl_items(t_data(t))
+    mut data := 0
+    if kind == 1
+        data = t_max_axis(v, before, n, after)
+    else
+        data = t_sum_axis(v, before, n, after)
+        if kind == 2
+            for e in 0..before * after
+                storef(tl_items(data) + 8 * e, loadf(tl_items(data) + 8 * e) / n.to_float())
+    shape := tl_new(rank - 1)
+    mut w := 0
+    for k in 0..rank
+        if k != axis
+            store64(tl_items(shape) + 8 * w, load64(tl_items(s) + 8 * k))
+            w += 1
+    t_make(shape, data)
+
+# ---- matrices (std.tensor.7, std.tensor.12) ----
+
+## `a.matmul(b)` of `m x k` and `k x n`: each row of the result adds
+## `a[i][p] * b[p]` for `p` in order, from zero.
+fn tensor_matmul(a int, b int) int
+    sa := t_shape(a)
+    sb := t_shape(b)
+    if tl_len(sa) != 2 or tl_len(sb) != 2
+        t_fail(6, 0, 0, 0, sa, sb)
+        return a
+    m := load64(tl_items(sa))
+    k := load64(tl_items(sa) + 8)
+    k2 := load64(tl_items(sb))
+    n := load64(tl_items(sb) + 8)
+    if k != k2
+        t_fail(7, m, k, k2, sa, sb)
+        return a
+    out := tl_new(m * n)
+    ap := tl_items(t_data(a))
+    bp := tl_items(t_data(b))
+    cp := tl_items(out)
+    for i in 0..m
+        c := cp + 8 * i * n
+        for p in 0..k
+            x := loadf(ap + 8 * (i * k + p))
+            row := bp + 8 * p * n
+            mut j := 0
+            while j + 4 <= n
+                v4axpy(c + 8 * j, x, row + 8 * j)
+                j += 4
+            while j < n
+                storef(c + 8 * j, loadf(c + 8 * j) + x * loadf(row + 8 * j))
+                j += 1
+    shape := tl_new(2)
+    store64(tl_items(shape), m)
+    store64(tl_items(shape) + 8, n)
+    t_make(shape, out)
+
+fn tensor_transpose(t int) int
+    s := t_shape(t)
+    if tl_len(s) != 2
+        t_fail(8, 0, 0, 0, s, 0)
+        return t
+    m := load64(tl_items(s))
+    n := load64(tl_items(s) + 8)
+    out := tl_new(m * n)
+    src := tl_items(t_data(t))
+    dst := tl_items(out)
+    for i in 0..m
+        for j in 0..n
+            storef(dst + 8 * (j * m + i), loadf(src + 8 * (i * n + j)))
+    shape := tl_new(2)
+    store64(tl_items(shape), n)
+    store64(tl_items(shape) + 8, m)
+    t_make(shape, out)
+
+# ---- text (std.tensor.9) ----
+
+## `tensor.from([1.0, 2.0])`, with `, [2, 2]` after the list when the
+## tensor has other than one axis.
+fn out_tensor(t int)
+    out_str("tensor.from([")
+    d := t_data(t)
+    for i in 0..tl_len(d)
+        out_sep(i)
+        out_float(loadf(tl_items(d) + 8 * i))
+    out_byte(93)
+    s := t_shape(t)
+    if tl_len(s) != 1
+        out_str(", ")
+        t_out_dims(s)
+    out_byte(41)

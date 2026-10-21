@@ -1,0 +1,5 @@
+# std.tensor.11: an axis outside the shape traps.
+fn main()
+    a := tensor.zeros([2, 3])
+    print(a.sum(1))
+    print(a.max(2))

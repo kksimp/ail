@@ -501,3 +501,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
+| [0632](0632-native-vector-primitives.md) | Vector primitives for the native runtime: AVX2 and NEON, memory-resident accumulators, no fused multiply-add *(delegated)* | Accepted | 2026-10-21 |
+| [0633](0633-native-tensor-kernels.md) | Float tensors in native code: a two-slot struct, kernels in AIL, the interpreter's summation order *(delegated)* | Accepted | 2026-10-21 |
+| [0634](0634-native-tensor-traps.md) | Tensor failures in native code: a failure record and trap kind 8 *(delegated)* | Accepted | 2026-10-21 |
+| [0635](0635-native-tensor-subset.md) | What of `std.tensor` is in the native subset *(delegated)* | Accepted | 2026-10-21 |
+

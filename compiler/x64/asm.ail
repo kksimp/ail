@@ -475,3 +475,35 @@ pub fn Asm.vmovq_xr(mut self, dst int, src int)
 
 pub fn Asm.vmovq_rx(mut self, dst int, src int)
     vex_rr(1, 1, 1, 126, src, 0, dst)
+
+# ---- 256-bit vectors (AVX, x86-64-v3; ADR 0632) ----
+
+## A VEX instruction on ymm registers: the `L` bit, bit 2 of the prefix's
+## last byte, selects 256 bits.
+fn Asm.vex256_rr(mut self, pp int, map int, op int, reg int, vvvv int, rm int)
+    vex_prefix(pp, map, 0, reg, 0, rm, vvvv)
+    code[code.len() - 1] = code[code.len() - 1] + 4
+    byte(op)
+    modrm_reg(reg, rm)
+
+fn Asm.vex256_rm(mut self, pp int, map int, op int, reg int, vvvv int, m Mem)
+    vex_prefix(pp, map, 0, reg, index_of(m), base_of(m), vvvv)
+    code[code.len() - 1] = code[code.len() - 1] + 4
+    byte(op)
+    modrm_mem(reg, m, 0)
+
+## `vmovupd ymm, [m]` and `vmovupd [m], ymm`: four doubles, unaligned.
+pub fn Asm.vmovupd_rm(mut self, dst int, m Mem)
+    vex256_rm(1, 1, 16, dst, 0, m)
+
+pub fn Asm.vmovupd_mr(mut self, m Mem, src int)
+    vex256_rm(1, 1, 17, src, 0, m)
+
+## `vaddpd`, `vsubpd`, `vmulpd`, `vdivpd` on ymm: `dst = a op b`, with the
+## operation named as for `vsd_rrr` (`fadd`, `fsub`, `fmul`, `fdiv`).
+pub fn Asm.vpd256_rrr(mut self, op str, dst int, a int, b int)
+    vex256_rr(1, 1, sd_opcode(op), dst, a, b)
+
+## `vbroadcastsd ymm, xmm`: the low double to all four lanes (AVX2).
+pub fn Asm.vbroadcastsd(mut self, dst int, src int)
+    vex256_rr(1, 2, 25, dst, 0, src)

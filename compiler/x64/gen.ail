@@ -928,6 +928,7 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_xmm(i.dst, X0)
             a.vmovq_xr(d, gpr(i.args[0], S0))
             put_xmm(i.dst, d)
+        "v4op" | "v4ops" | "v4sop" | "v4axpy" | "v16acc" | "v16dot" => vec_prim(i)
         _ => unreachable("x64: unknown primitive {i.name}")
 
 ## `xs[i]`: the list in S0, the index in S1, the elements' address in rax.
@@ -1040,3 +1041,68 @@ fn Gen.gen_stubs(mut self)
             a.mov_rm(RDX, at(RDX, 0))
         a.call_sym("rt.trap")
         a.ud2()
+
+# ---- vector primitives (ADR 0632) ----
+
+## The four-operation names of `v4op`'s first argument.
+VEC_OPS := ["fadd", "fsub", "fmul", "fdiv"]
+
+fn Gen.vec_op(self, v int) str
+    k := imm(v) else 0
+    VEC_OPS[k]
+
+## `ymm x` from the four doubles at the address `v`, or to it.
+fn Gen.vload(mut self, x int, v int, off int)
+    a.vmovupd_rm(x, at(gpr(v, S0), off))
+
+fn Gen.vstore(mut self, v int, off int, x int)
+    a.vmovupd_mr(at(gpr(v, S0), off), x)
+
+## The vector primitives of native-abi.md §6 (native.simd.1, ADR 0632): four doubles at a
+## time, or sixteen against an accumulator block, with the operations of the
+## interpreter's kernels (std.tensor.5) and no fused multiply-add. They work
+## in ymm14 and ymm15, the scratch registers.
+fn Gen.vec_prim(mut self, i mir.Inst)
+    match i.name
+        "v4op" =>
+            # v4op(op, dst, a, b): dst = a op b
+            vload(X0, i.args[2], 0)
+            vload(X1, i.args[3], 0)
+            a.vpd256_rrr(vec_op(i.args[0]), X0, X0, X1)
+            vstore(i.args[1], 0, X0)
+        "v4ops" =>
+            # v4ops(op, dst, a, s): dst = a op s
+            a.vbroadcastsd(X1, xmm(i.args[3], X1))
+            vload(X0, i.args[2], 0)
+            a.vpd256_rrr(vec_op(i.args[0]), X0, X0, X1)
+            vstore(i.args[1], 0, X0)
+        "v4sop" =>
+            # v4sop(op, dst, s, a): dst = s op a
+            a.vbroadcastsd(X1, xmm(i.args[2], X1))
+            vload(X0, i.args[3], 0)
+            a.vpd256_rrr(vec_op(i.args[0]), X0, X1, X0)
+            vstore(i.args[1], 0, X0)
+        "v4axpy" =>
+            # v4axpy(c, x, b): c += x * b, the product rounded first
+            a.vbroadcastsd(X1, xmm(i.args[1], X1))
+            vload(X0, i.args[2], 0)
+            a.vpd256_rrr("fmul", X0, X1, X0)
+            vload(X1, i.args[0], 0)
+            a.vpd256_rrr("fadd", X0, X1, X0)
+            vstore(i.args[0], 0, X0)
+        "v16acc" =>
+            # v16acc(acc, p): acc[k] += p[k] for 16 doubles
+            for k in 0..4
+                vload(X0, i.args[0], 32 * k)
+                vload(X1, i.args[1], 32 * k)
+                a.vpd256_rrr("fadd", X0, X0, X1)
+                vstore(i.args[0], 32 * k, X0)
+        _ =>
+            # v16dot(acc, p, q): acc[k] += p[k] * q[k] for 16 doubles
+            for k in 0..4
+                vload(X0, i.args[1], 32 * k)
+                vload(X1, i.args[2], 32 * k)
+                a.vpd256_rrr("fmul", X0, X0, X1)
+                vload(X1, i.args[0], 32 * k)
+                a.vpd256_rrr("fadd", X0, X1, X0)
+                vstore(i.args[0], 32 * k, X0)

@@ -1,0 +1,36 @@
+# Tensors as values: parameters, results, struct fields, compound assignment,
+# comparison, and a tensor kept after the one it came from is changed.
+struct Layer
+    weights tensor.Tensor[float]
+    bias tensor.Tensor[float]
+
+fn Layer.apply(self, x tensor.Tensor[float]) tensor.Tensor[float]
+    (x.matmul(weights) + bias).relu()
+
+fn scaled(t tensor.Tensor[float], k float) tensor.Tensor[float]
+    t * k
+
+fn main()
+    layer := Layer(
+        weights: tensor.from([1.0, -1.0, 0.5, 2.0, 0.0, -3.0], [2, 3]),
+        bias: tensor.from([0.5, 0.5, 0.5]),
+    )
+    x := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    y := layer.apply(x)
+    print(y)
+    mut acc := tensor.zeros([2, 3])
+    for i in 0..3
+        acc += scaled(y, 0.5)
+    acc -= y
+    acc *= tensor.from([2.0, 2.0, 2.0])
+    print(acc)
+    keep := acc
+    acc += y
+    print(keep)
+    print(acc)
+    print(keep == acc)
+    print(keep != acc)
+    print(keep == keep)
+    print(scaled(y, 2.0).shape())
+    print(y * 3)
+    print(3 + y)

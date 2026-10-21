@@ -58,3 +58,30 @@ fn bits_float(n int) float
 ## The target: 0 Linux x86-64, 1 Linux ARM64, 2 macOS ARM64.
 fn target() int
     todo
+
+## Vector primitives (ADR 0632): doubles at addresses, four per call (`v4*`)
+## or sixteen against an accumulator block (`v16*`), one SIMD instruction
+## per register (AVX2 `ymm` on x86-64, NEON `q` pairs on ARM64) and never a
+## fused multiply-add, so results equal the interpreter's kernels
+## (std.tensor.5). `op` is a literal: 0 add, 1 subtract, 2 multiply, 3 divide.
+## `dst[0..4] = a[0..4] op b[0..4]`.
+fn v4op(op int, dst int, a int, b int)
+    todo
+
+## `dst[0..4] = a[0..4] op s`, and `dst[0..4] = s op a[0..4]`.
+fn v4ops(op int, dst int, a int, s float)
+    todo
+
+fn v4sop(op int, dst int, s float, a int)
+    todo
+
+## `c[0..4] += x * b[0..4]`, the product rounded before the sum.
+fn v4axpy(c int, x float, b int)
+    todo
+
+## `acc[0..16] += p[0..16]`, and `acc[0..16] += p[0..16] * q[0..16]`.
+fn v16acc(acc int, p int)
+    todo
+
+fn v16dot(acc int, p int, q int)
+    todo

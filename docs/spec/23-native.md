@@ -48,9 +48,10 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (std.fs, std.env, std.io, std.time). A call that can fail is in the subset
 only as the value of `else` with a fallback value, a statement that leaves,
 or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
+Also `tensor.Tensor[float]` and its calls (native.tensor.1).
 Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
-0574-0576, 0580, 0582, 0591, 0602–0604)*
+0574-0576, 0580, 0582, 0591, 0602–0604, 0633, 0635)*
 
 ```ail
 fn steps(n int) int
@@ -123,3 +124,37 @@ operation in the program shortens a list. *(ADR 0611)*
 list is full where, before the loop, the list's spare room is at least the
 number of pushes the loop can make; otherwise the loop with the test runs.
 *(ADR 0611)*
+
+## Tensors and vector instructions
+
+**native.simd.1** — The native runtime may use vector instructions
+(x86-64-v3 AVX2, ARMv8.2-A NEON, ADRs 0005 and 0006) on both targets, in
+lockstep (ADR 0008), to compute a result the interpreter computes with
+scalar or vector code. A vector kernel performs the same IEEE operations in
+the same order as std.tensor.5 describes, with no fused multiply-add, so its
+results are bit for bit the interpreter's. *(ADR 0632)*
+
+**native.tensor.1** — The native subset includes `tensor.Tensor[float]`
+(std.tensor.1-13): `tensor.zeros(shape)`, `tensor.from(xs)` and
+`tensor.from(xs, shape)` with `xs` a `List[float]`; the methods `shape`,
+`len`, `to_list`, `reshape`, `sum`, `mean`, `max`, `dot`, `add`, `mul`,
+`matmul`, `transpose`, `relu`, and `sum`, `max` and `mean` along an axis;
+the operators `+`, `-`, `*`, `/`, unary `-`, `==` and `!=` and the compound
+assignments, between tensors (broadcasting, std.tensor.4) or with a `float`
+or `int` literal; and `print` of a tensor. A native executable prints what
+`ail run` prints, to the bit, for every program in this subset. Other
+`std.tensor` constructs, including every `Tensor[int]`, are reported under
+native.subset.1. *(ADRs 0633, 0635)*
+
+**native.tensor.2** — A tensor operation that fails (std.tensor.2,
+std.tensor.4, std.tensor.7, std.tensor.11, std.tensor.12) ends the program as
+the interpreter does: the trap's rule, position, message and source excerpt
+are the same (native.build.1). *(ADR 0634)*
+
+```ail rules=native.tensor.1
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+    b := tensor.from([5.0, 6.0], [2])
+    print((a * 2.0 + b).matmul(a.transpose()).sum())
+```
+

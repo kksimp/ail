@@ -845,6 +845,7 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_fpr(i.dst, X0)
             a.fmov_dx(d, gpr(i.args[0], S0))
             put_fpr(i.dst, d)
+        "v4op" | "v4ops" | "v4sop" | "v4axpy" | "v16acc" | "v16dot" => vec_prim(i)
         _ => unreachable("a64: unknown primitive {i.name}")
 
 ## `xs[i]`: checks the index, then gives the elements' base in x8 and the
@@ -988,3 +989,76 @@ fn Gen.gen_stubs(mut self)
             a.ldr(2, 2, 0)
         a.bl("rt.trap")
         a.brk()
+
+# ---- vector primitives (ADR 0632) ----
+
+VEC_OPS := ["fadd", "fsub", "fmul", "fdiv"]
+
+fn Gen.vec_op(self, v int) str
+    k := imm(v) else 0
+    VEC_OPS[k]
+
+## The vector primitives of native-abi.md §6 (native.simd.1, ADR 0632), two doubles per
+## NEON register: the same operations, in the same order, as the x86-64 ones
+## and the interpreter's kernels (std.tensor.5), with no fused multiply-add.
+## They work in v30 and v31, the scratch registers.
+fn Gen.vec_prim(mut self, i mir.Inst)
+    match i.name
+        "v4op" =>
+            # v4op(op, dst, a, b): dst = a op b
+            rd := gpr(i.args[1], S0)
+            ra := gpr(i.args[2], S1)
+            rb := gpr(i.args[3], S2)
+            for h in 0..2
+                a.ldr_q(X0, ra, 16 * h)
+                a.ldr_q(X1, rb, 16 * h)
+                a.fop_2d(vec_op(i.args[0]), X0, X0, X1)
+                a.str_q(X0, rd, 16 * h)
+        "v4ops" | "v4sop" =>
+            # v4ops(op, dst, a, s): dst = a op s; v4sop(op, dst, s, a): s op a
+            left := i.name == "v4sop"
+            si := if left then 2 else 3
+            ai := if left then 3 else 2
+            s := fpr(i.args[si], X1)
+            a.dup_2d(X1, s)
+            rd := gpr(i.args[1], S0)
+            ra := gpr(i.args[ai], S1)
+            for h in 0..2
+                a.ldr_q(X0, ra, 16 * h)
+                if left
+                    a.fop_2d(vec_op(i.args[0]), X0, X1, X0)
+                else
+                    a.fop_2d(vec_op(i.args[0]), X0, X0, X1)
+                a.str_q(X0, rd, 16 * h)
+        "v4axpy" =>
+            # v4axpy(c, x, b): c += x * b, the product rounded first
+            rc := gpr(i.args[0], S0)
+            rb := gpr(i.args[2], S1)
+            for h in 0..2
+                xs := fpr(i.args[1], X1)
+                a.ldr_q(X0, rb, 16 * h)
+                a.fmul_2d_lane(X0, X0, xs)
+                a.ldr_q(X1, rc, 16 * h)
+                a.fop_2d("fadd", X1, X1, X0)
+                a.str_q(X1, rc, 16 * h)
+        "v16acc" =>
+            # v16acc(acc, p): acc[k] += p[k] for 16 doubles
+            rc := gpr(i.args[0], S0)
+            rp := gpr(i.args[1], S1)
+            for h in 0..8
+                a.ldr_q(X0, rc, 16 * h)
+                a.ldr_q(X1, rp, 16 * h)
+                a.fop_2d("fadd", X0, X0, X1)
+                a.str_q(X0, rc, 16 * h)
+        _ =>
+            # v16dot(acc, p, q): acc[k] += p[k] * q[k] for 16 doubles
+            rc := gpr(i.args[0], S0)
+            rp := gpr(i.args[1], S1)
+            rq := gpr(i.args[2], S2)
+            for h in 0..8
+                a.ldr_q(X0, rp, 16 * h)
+                a.ldr_q(X1, rq, 16 * h)
+                a.fop_2d("fmul", X0, X0, X1)
+                a.ldr_q(X1, rc, 16 * h)
+                a.fop_2d("fadd", X0, X1, X0)
+                a.str_q(X0, rc, 16 * h)
