@@ -100,3 +100,4 @@ says which program changed and why, with its five-tokenizer mean before and afte
   - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
   - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
   Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
+- **2026-10-21, `agent-r4/t05_args`** (lane 192, ADR 0777): the options are declared once as a struct with `impl FromArgs` and read with `args.read[Opts]`, instead of a spec list. Output checked equal for the same command lines. 95.4 → 87.4.
