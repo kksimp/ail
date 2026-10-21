@@ -457,6 +457,16 @@ arguments. *(ADR 0135)*
 "ab".pad_right(4, ' ')      # "ab  "
 ```
 
+**type.str.16** — `s.center(width, fill)` pads with copies of the `char` `fill`
+on both sides until `s` has `width` characters; when the padding is odd, the
+extra copy goes on the right. A string already that wide is returned
+unchanged. *(ADR 0629)*
+
+```ail rules=type.str.16
+fn main()
+    print("[{"ab".center(7, '*')}]")         # [**ab***]
+```
+
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
 `a` up to but excluding `b` (indexes count characters, as `len()` does:
 `type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never
@@ -751,6 +761,23 @@ function, `by: |x| key` (`expr.key.1`); `s.sorted(by: ...)` works on a set.
 **type.coll.15** — `xs.take(n)` returns a new list of the first `n`
 elements, or all of them when the list is shorter. A negative `n` traps.
 *(ADR 0250)*
+
+**type.coll.17** — `xs.chunks(n)` returns the list's elements as lists of `n`
+(the last may be shorter); `xs.windows(n)` returns every run of `n`
+neighbouring elements (none when the list is shorter than `n`). Both give a
+`List[List[T]]`, and trap when `n < 1`. *(ADR 0629)*
+
+**type.coll.18** — `xs.counts()` returns a `Map[T, int]` of how many times each
+element occurs, keys in order of first appearance. `T` must be hashable.
+*(ADR 0629)*
+
+```ail rules=type.coll.17,type.coll.18
+fn main()
+    xs := [1, 2, 3, 4, 5]
+    print(xs.chunks(2))                      # [[1, 2], [3, 4], [5]]
+    print(xs.windows(3))                     # [[1, 2, 3], [2, 3, 4], [3, 4, 5]]
+    print("a b a".split(" ").counts())       # {"a": 2, "b": 1}
+```
 
 **type.coll.12** — `xs.sum()` exists only for `List[int]`, returning an `int`,
 and `List[float]`, returning a `float`. It is a built-in special case that user
