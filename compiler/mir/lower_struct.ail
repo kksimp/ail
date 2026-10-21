@@ -226,7 +226,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
     check_requires(key, vs, pos)
-    Val(id: call(callee_key(key), vs, sig.ret), ty: sig.ret)
+    Val(id: call(key, vs, sig.ret), ty: sig.ret)
 
 ## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
 ## status is zero; the standard output followed by the standard error.
