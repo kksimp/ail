@@ -283,7 +283,7 @@ plus NumPy 2.5 (`python3 -I`, interpreter start and `import numpy`, about
 |---|---|---|---|---|---|---|---|
 | f32_chain | `(x*x + x)*0.5 - x` on 2^20 `f32`, 20 rounds | 0.50 | 0.36 | 1.38 | 165.6 | 118.4 | 1.40 |
 | f32_matmul | 256x256 `f32` product, 5 rounds | 0.065 | 0.121 | 0.54 | 187.4 | 145.8 | 1.29 |
-| softmax | 512x512 rows, `float` and `f32`, 20 rounds | 0.24 | 0.26 | 0.93 | 250.0 | 231.2 | 1.08 |
+| softmax | 512x512 rows, `float` and `f32`, 20 rounds | 0.23 | 0.24 | 0.93-1.03 | 251.2 | 231.2 | 1.09 |
 
 Reading it: the machine is noisy (repeat runs moved f32_chain between 0.39 and
 0.50 s), and NumPy's time includes about 0.13 s of import, so without it NumPy
