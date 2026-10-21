@@ -97,9 +97,9 @@ fn load_package(
             }
             let src = match first_src.take() {
                 Some(src) => src,
-                None => match crate::stdlib::ail_module_source(&p.display().to_string()) {
+                None => match crate::stdlib::ail_module_source(&crate::shown::shown(&p)) {
                     Some(src) => src.to_string(),
-                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", crate::shown::shown(&p)))?,
                 },
             };
             let base = files.len() * FILE_LINES;
@@ -134,7 +134,7 @@ fn load_package(
                 }
             }
             tokens.extend(toks);
-            files.push(SourceFile { path: p.display().to_string(), src, module: module.clone(), base });
+            files.push(SourceFile { path: crate::shown::shown(&p), src, module: module.clone(), base });
         }
     }
     let end = Pos { line: files.len() * FILE_LINES, col: 1 };

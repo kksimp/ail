@@ -24,7 +24,15 @@ STD_MODULES := [
 ## The standard modules written in AIL (std.ui.19), compiled like a user's
 ## own: their source is in `bootstrap/src/std`, and each is a module of the
 ## program under its dotted path (`std.csv`).
-STD_AIL := ["std.args", "std.csv", "std.log", "std.net.http", "std.net.jar", "std.time.date"]
+STD_AIL := [
+    "std.args",
+    "std.csv",
+    "std.log",
+    "std.net.http",
+    "std.net.jar",
+    "std.regex",
+    "std.time.date",
+]
 
 ## The imports of a file: the name each makes available, to the module's
 ## import path. The standard modules the runtime implements are left out.

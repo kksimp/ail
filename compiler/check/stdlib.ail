@@ -37,6 +37,7 @@ STD_FUNCTIONS := [
         "write_text",
     ],
     ["hash", "crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"],
+    ["hw", "at", "fence", "fence_io"],
     ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
     ["io", "eprint", "exit", "read_all", "read_bytes", "read_line"],
     [
@@ -131,6 +132,12 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         note_unsafe_op("`{head}.{n}`", at)
         if t := mem_generic(n, args, at, expect)
             return t
+    if module == "hw"
+        # unsafe.hw.1-2: hardware access is unsafe, and needs `unsafe driver`.
+        note_unsafe_op("`{head}.{n}`", at)
+        driver_opt_in("`{head}.{n}`", at)
+        if n == "at"
+            return hw_at(args, at, expect)
     if module == "tensor"
         return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
@@ -282,6 +289,9 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: u8_ptr)
     if key == "mem.from_cstr"
         return StdSig(params: [u8_ptr], ret: text)
+    # unsafe.hw.4: barriers take and return nothing.
+    if key == "hw.fence" or key == "hw.fence_io"
+        return StdSig(params: [], ret: Ty.Unit)
     if key == "mem.null"
         return StdSig(params: [], ret: u8_ptr)
     if key == "net.options"

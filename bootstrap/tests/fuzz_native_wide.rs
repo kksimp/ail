@@ -131,7 +131,7 @@ fn fuzz_native_wide() {
                     }
                     let seed = first + k;
                     let pure = seed % 3 == 0;
-                    let src = if (seed / 3) % 2 == 1 { bcprogs::wide_for(seed, pure, true) } else { bcprogs::program(seed, pure) };
+                    let src = if (seed / 3) % 2 == 1 { bcprogs::wide_for(seed, pure, false) } else { bcprogs::program(seed, pure) };
                     let p = dir.join("p.ail");
                     fs::write(&p, &src).unwrap();
                     // A program the checker rejects tests nothing.

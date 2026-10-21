@@ -1,0 +1,81 @@
+## Lowering the raw TCP calls of `std.net` (std.net.12): `net.listen`,
+## `net.connect`, and the methods of `net.Listener` and `net.Conn`. Each is a
+## call of the runtime in `compiler/rt/native/net.ail`. A call that can fail
+## is a fallible function (lower_err.ail): it returns its success value, or
+## sets the error slot to a `net.NetError` and returns zero. A `Listener` and
+## a `Conn` are structs of one `int` field, a handle the runtime made; the
+## runtime builds them, so a failed call returns 0 for the struct as for any
+## other value.
+use ast
+
+## A runtime function standing for a `std.net` function or method.
+struct NetFn
+    rt str
+    ## Parameters after the receiver.
+    params List[Ty]
+    ret Ty
+    fails bool
+
+fn net_fn(rt str, params List[Ty], ret Ty, fails bool) NetFn
+    NetFn(rt: rt, params: params, ret: ret, fails: fails)
+
+## `net.NAME` as a module function, if the native subset has it.
+fn net_module_lookup(name str) NetFn?
+    match name
+        "listen" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_LISTENER), true)
+        "connect" => net_fn("rt.net_connect", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)
+        _ => none
+
+## `T.NAME` for a method of `net.Conn` or `net.Listener`.
+fn net_method_lookup(key str) NetFn?
+    s := Ty.Str
+    match key
+        "net.Conn.read" => net_fn("rt.net_read", [Ty.Int], s, true)
+        "net.Conn.read_line" => net_fn("rt.net_read_line", [], Ty.Opt(s), true)
+        "net.Conn.write" => net_fn("rt.net_write", [s], Ty.Unit, true)
+        "net.Conn.set_timeout" => net_fn("rt.net_set_timeout", [Ty.Int], Ty.Unit, true)
+        "net.Conn.peer" => net_fn("rt.net_peer", [], s, false)
+        "net.Conn.close" => net_fn("rt.net_close", [], Ty.Unit, false)
+        "net.Listener.accept" => net_fn("rt.net_accept", [], Ty.Struct(NET_CONN), true)
+        "net.Listener.addr" => net_fn("rt.net_addr", [], s, false)
+        "net.Listener.close" => net_fn("rt.net_close", [], Ty.Unit, false)
+        _ => none
+
+## Whether the method `key` can fail with a `net.NetError`.
+fn net_method_fails(key str) bool
+    f := net_method_lookup(key) else return false
+    f.fails
+
+## Whether the module function `net.name` can fail.
+fn net_module_fails(name str) bool
+    f := net_module_lookup(name) else return false
+    f.fails
+
+## `net.NAME(...)`, from `lower_os_method`. `none` after a report.
+fn Lower.lower_net_module(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    f := net_module_lookup(name) else
+        return unsupported(npos, "`net.{name}`")
+    net_call(f, [], args, npos)
+
+## `x.NAME(...)` on a `net.Conn` or `net.Listener`, from `struct_call`.
+fn Lower.lower_net_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    f := net_method_lookup(key) else
+        return unsupported(pos, "calling `{key}`")
+    r := recv else return unsupported(pos, "calling `{key}`")
+    # The handle is the struct's one field.
+    net_call(f, [load(r.id, 0, Ty.Int)], args, pos)
+
+## Emit the call of `f` with the leading values `lead` and `args`.
+fn Lower.net_call(mut self, f NetFn, lead List[int], args List[ast.Arg], pos ast.Pos) Val?
+    if args.len() != f.params.len()
+        return unsupported(pos, "this call")
+    mut vs := lead
+    for i in 0..args.len()
+        a := args[i]
+        if a.label != none or a.mutable
+            return unsupported(pos, "labelled arguments")
+        v := lower_value(a.value, f.params[i])?
+        vs.push(convert(v, f.params[i], expr_pos(a.value)))
+    if f.fails
+        vs.push(trace_line(pos))
+    Val(id: call(f.rt, vs, f.ret), ty: f.ret)

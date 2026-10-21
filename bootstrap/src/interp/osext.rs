@@ -214,7 +214,7 @@ fn nearest_canonical(p: &Path) -> Option<std::path::PathBuf> {
 }
 
 fn copy_dir(from: &Path, to: &Path) -> Result<(), FsFail> {
-    let fail = |p: &Path, e: &std::io::Error| (p.display().to_string(), error_kind(e));
+    let fail = |p: &Path, e: &std::io::Error| (crate::shown::shown(&p), error_kind(e));
     std::fs::create_dir_all(to).map_err(|e| fail(to, &e))?;
     let mut entries: Vec<_> = std::fs::read_dir(from)
         .map_err(|e| fail(from, &e))?
@@ -227,11 +227,11 @@ fn copy_dir(from: &Path, to: &Path) -> Result<(), FsFail> {
         if kind.is_dir() {
             copy_dir(&src, &dst)?;
         } else if kind.is_symlink() && std::fs::metadata(&src).is_ok_and(|m| m.is_dir()) {
-            return Err((src.display().to_string(), "other"));
+            return Err((crate::shown::shown(&src), "other"));
         } else {
             std::fs::copy(&src, &dst).map_err(|e| {
                 let k = if dst.is_dir() { "is_dir" } else { error_kind(&e) };
-                (dst.display().to_string(), k)
+                (crate::shown::shown(&dst), k)
             })?;
         }
     }

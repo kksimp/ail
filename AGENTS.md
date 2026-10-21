@@ -149,7 +149,7 @@ tools/
   check-doc-snippets.py   runs `ail check` on every `ail` and `ail fragment` block in the docs, outside `docs/spec/`
   card-spec-audit.py      audits the std functions against the spec (ADR 0698)
   card-wording-audit.py   checks the language card's calls against the spec (ADR 0698)
-  check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows for duplicate rows
+  check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
