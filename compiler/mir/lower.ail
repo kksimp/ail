@@ -384,7 +384,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if f.contracts.len() > 0
         problem(f.pos, "`{f.name}`: contracts aren't in the native subset yet")
     for a in f.attrs
-        if a.name != "inline" and a.name != "pure"
+        if a.name != "inline" and a.name != "pure" and a.name != "allow"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params
