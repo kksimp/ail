@@ -67,6 +67,16 @@ fn os_lookup(mod str, name str) OsFn?
                 fails: true,
                 optional: 2,
             )
+        "proc.start" =>
+            OsFn(
+                rt: "rt.proc_start",
+                params: [s, Ty.List(s), Ty.Opt(Ty.Int)],
+                ret: Ty.Struct(PROC_CHILD),
+                fails: true,
+                optional: 1,
+            )
+        "proc.wait" => os_fn("rt.proc_wait_child", [Ty.Struct(PROC_CHILD)], Ty.Int, true)
+        "proc.kill" => os_fn("rt.proc_kill_child", [Ty.Struct(PROC_CHILD)], Ty.Int, false)
         "proc.which" => os_fn("rt.proc_which", [s], maybe, false)
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
