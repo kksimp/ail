@@ -637,10 +637,9 @@ impl Lexer {
                                     "write `.bit_not()`",
                                     vec![Edit::span(pos, end, format!("{word}.bit_not()"))],
                                 );
-                                i += 1 + word.chars().count();
-                            } else {
-                                i += 1;
                             }
+                            // The name after `~` is lexed as usual, so the token stream is unchanged.
+                            i += 1;
                             self.diags.push(d);
                         }
                         None => {
