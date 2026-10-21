@@ -1,0 +1,319 @@
+## std.app (spec std.app.1-12, ADR PENDING): an app is a struct that
+## implements `App`. `view` returns a tree of `Node`s, `update` receives an
+## `Event`. A host program draws the tree with native controls and sends events
+## back over standard input and output as JSON lines (std.app.8-10). Without a
+## host, `run` prints the tree as text and reads events from standard input,
+## which is how a test or an agent drives an app without a window.
+
+## One drawing step of a `Canvas`. Coordinates are in points, colors `0xRRGGBB`.
+pub enum Op
+    ## Text whose top-left corner is at `x`, `y`; `font` is `mono` or `sans`.
+    Str(
+        x float,
+        y float,
+        text str,
+        font str,
+        size float,
+        fg int,
+        bold bool,
+        italic bool,
+        underline bool,
+    )
+    ## A filled rectangle.
+    Fill(x float, y float, w float, h float, color int)
+    ## A line of the given width.
+    Stroke(x1 float, y1 float, x2 float, y2 float, color int, width float)
+    ## An image from a URL or file path, scaled to the rectangle.
+    Pic(x float, y float, w float, h float, src str)
+    ## Limits later steps to a rectangle, until the matching `Unclip`.
+    Clip(x float, y float, w float, h float)
+    Unclip
+
+## A piece of the screen.
+pub enum Node
+    ## Static text.
+    Label(text str)
+    ## A push button; its `id` comes back in a `press` event.
+    Button(id str, label str)
+    ## A one-line text field; changes come back as `edit` events.
+    Field(id str, value str, hint str)
+    ## A check box; a click comes back as a `toggle` event.
+    Toggle(id str, label str, on bool)
+    ## Children from top to bottom.
+    Column(kids List[Node])
+    ## Children from left to right.
+    Row(kids List[Node])
+    ## Flexible empty space.
+    Spacer
+    ## A drawing surface of a size in points; it also sends `click`, `scroll`
+    ## and `key` events with positions inside it.
+    Canvas(id str, w float, h float, ops List[Op])
+
+impl ToJson for Op
+impl ToJson for Node
+
+## What happened. `kind` is `start`, `press`, `edit`, `submit`, `toggle`,
+## `click`, `scroll`, `key`, `resize` or `close` (std.app.5); the other
+## fields are zero or empty when they don't apply.
+pub struct Event
+    pub kind str
+    ## The control's id (`press`, `edit`, `submit`, `toggle`, and the canvas
+    ## for `click`, `scroll` and `key`).
+    pub id str
+    ## The new text (`edit`), the key's name as std.ui names it (`key`), or
+    ## the button (`click`: `left`, `right` or `other`).
+    pub text str
+    pub x float
+    pub y float
+    ## Scroll distance for `scroll`; the canvas size for `resize`.
+    pub dx float
+    pub dy float
+    ## For `resize`: the canvas's monospace cell size in points.
+    pub cell_w float
+    pub cell_h float
+    pub ctrl bool
+    pub alt bool
+    pub shift bool
+    pub meta bool
+
+## Why an app couldn't run (std.app.9): `no_host`, `start`, `version` or
+## `host_exited`.
+pub error struct AppError
+    pub kind str
+    pub message str
+
+## Builders. A variant with two fields of one type can't be built by
+## position (type.struct.7); these can.
+
+## A push button.
+pub fn button(id str, label str) Node
+    Button(id: id, label: label)
+
+## A one-line text field.
+pub fn field(id str, value str, hint str) Node
+    Field(id: id, value: value, hint: hint)
+
+## A check box.
+pub fn toggle(id str, label str, on bool) Node
+    Toggle(id: id, label: label, on: on)
+
+## A drawing surface.
+pub fn canvas(id str, w float, h float, ops List[Op]) Node
+    Canvas(id: id, w: w, h: h, ops: ops)
+
+## Plain monospace text of size 13 on a canvas.
+pub fn draw_text(x float, y float, s str, fg int) Op
+    Str(
+        x: x,
+        y: y,
+        text: s,
+        font: "mono",
+        size: 13.0,
+        fg: fg,
+        bold: false,
+        italic: false,
+        underline: false,
+    )
+
+## A filled rectangle on a canvas.
+pub fn draw_rect(x float, y float, w float, h float, color int) Op
+    Fill(x: x, y: y, w: w, h: h, color: color)
+
+## An event of `kind` with every other field zero or empty.
+pub fn event(kind str) Event
+    Event(
+        kind: kind,
+        id: "",
+        text: "",
+        x: 0.0,
+        y: 0.0,
+        dx: 0.0,
+        dy: 0.0,
+        cell_w: 0.0,
+        cell_h: 0.0,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        meta: false,
+    )
+
+## A button press, for tests.
+pub fn press(id str) Event
+    mut e := event("press")
+    e.id = id
+    e
+
+## A field edit, for tests.
+pub fn edit(id str, value str) Event
+    mut e := event("edit")
+    e.id = id
+    e.text = value
+    e
+
+## A key, for tests.
+pub fn key(name str) Event
+    mut e := event("key")
+    e.text = name
+    e
+
+pub trait App
+    ## Changes the state for an event.
+    fn update(mut self, ev Event)
+    ## The screen for the current state.
+    fn view(self) Node
+    ## The window title.
+    fn title(self) str
+        "AIL"
+    ## The id of the control to give the keyboard focus; the host acts when
+    ## the value changes.
+    fn focus(self) str
+        ""
+
+fn indent(depth int) str
+    "  ".repeat(depth)
+
+## The tree as indented text: what the headless renderer prints.
+pub fn outline(n Node) str
+    lines := outline_lines(n, 0)
+    lines.join("\n")
+
+fn outline_lines(n Node, depth int) List[str]
+    pad := indent(depth)
+    match n
+        Label(s) => ["{pad}\"{s}\""]
+        Button(id, label) => ["{pad}[{label}] #{id}"]
+        Field(id, value, hint) => ["{pad}<{value}> #{id} ({hint})"]
+        Toggle(id, label, on) => ["{pad}{if on then "[x]" else "[ ]"} {label} #{id}"]
+        Spacer => ["{pad}~"]
+        Canvas(id, w, h, ops) =>
+            mut out := ["{pad}canvas #{id} {w}x{h} ops={ops.len()}"]
+            for op in ops
+                out.push("{pad}  {op_text(op)}")
+            out
+        Column(kids) => group("{pad}column", kids, depth)
+        Row(kids) => group("{pad}row", kids, depth)
+
+fn group(head str, kids List[Node], depth int) List[str]
+    mut out := [head]
+    for k in kids
+        out.extend(outline_lines(k, depth + 1))
+    out
+
+fn op_text(op Op) str
+    match op
+        Str(
+            x,
+            y,
+            s,
+            font,
+            size,
+            fg,
+            bold,
+            italic,
+            underline,
+        ) => "str {x},{y} \"{s}\" {font} {size} {fg.to_hex()}"
+        Fill(x, y, w, h, color) => "fill {x},{y} {w}x{h} {color.to_hex()}"
+        Stroke(x1, y1, x2, y2, color, width) => "stroke {x1},{y1} {x2},{y2} {width}"
+        Pic(x, y, w, h, src) => "pic {x},{y} {w}x{h} {src}"
+        Clip(x, y, w, h) => "clip {x},{y} {w}x{h}"
+        Unclip => "unclip"
+
+## Feeds `ev` to `app` and returns the new outline: one step of a test.
+pub fn step[T App](mut a T, ev Event) str
+    a.update(ev)
+    outline(a.view())
+
+## The event a JSON object describes (std.app.8): members that are missing
+## are zero or empty.
+pub fn event_from_json(j Json) Event
+    Event(
+        kind: j.text("kind", ""),
+        id: j.text("id", ""),
+        text: j.text("text", ""),
+        x: j.num("x") else 0.0,
+        y: j.num("y") else 0.0,
+        dx: j.num("dx") else 0.0,
+        dy: j.num("dy") else 0.0,
+        cell_w: j.num("cell_w") else 0.0,
+        cell_h: j.num("cell_h") else 0.0,
+        ctrl: j.flag("ctrl", false),
+        alt: j.flag("alt", false),
+        shift: j.flag("shift", false),
+        meta: j.flag("meta", false),
+    )
+
+## The message that shows `a` (std.app.7): its title, focus and view tree.
+pub fn frame[T App](a T) str
+    title := a.title().to_json().to_text()
+    focus := a.focus().to_json().to_text()
+    "\{\"v\":1,\"t\":\"view\",\"title\":{title},\"focus\":{focus},\"tree\":{a.view().to_json().to_text()}}"
+
+## Feeds each event to `a` in order, with no host (std.app.11), and returns
+## the outline after each one: a test of `update` and `view`.
+pub fn script[T App](mut a T, events List[Event]) List[str]
+    mut out := List[str]()
+    for ev in events
+        a.update(ev)
+        out.push(outline(a.view()))
+    out
+
+## The host program (std.app.10): `AIL_APP_HOST`, else the one built under
+## the toolchain's directory (`AIL_ROOT`).
+pub fn host_path() str ! AppError
+    if p := env.get("AIL_APP_HOST")
+        return p
+    root := env.get("AIL_ROOT") else return AppError(
+        kind: "no_host",
+        message: "set AIL_APP_HOST to the app host program",
+    )
+    p := "{root}/tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost"
+    if not fs.exists(p)
+        return AppError(
+            kind: "no_host",
+            message: "{p} is missing; build it with tools/app-host/macos/run.sh",
+        )
+    p
+
+## Runs `a` in a window (std.app.6-10): starts the host, sends the view
+## tree whenever it changes and passes each event to `update`, until the
+## window closes. Fails when there is no host or the host exits early.
+pub fn run[T App](mut a T) ! AppError
+    run_host(mut a, host_path()?, [])?
+
+## Runs `a` as `run` does with the host program `cmd` and its arguments
+## (std.app.10); a test passes a host written in AIL. The host's standard
+## error is copied to the program's when it exits.
+pub fn run_host[T App](mut a T, cmd str, args List[str]) ! AppError
+    mut c := proc.start(cmd, args) else err
+        return AppError(kind: "start", message: "{err}")
+    mut sent := frame(a)
+    c.stdin.send("{sent}\n")
+    hello := c.out.recv() else return gone(move c)
+    j := parse_json(hello) else return mismatch(move c, hello)
+    if (j.num("v") else 0.0) != 1.0
+        return mismatch(move c, hello)
+    mut ev := event_from_json(j)
+    while true
+        # std.app.8: a line that isn't an event is skipped.
+        if ev.kind != ""
+            a.update(ev)
+        if ev.kind == "close"
+            break
+        now := frame(a)
+        if now != sent
+            c.stdin.send("{now}\n")
+            sent = now
+        line := c.out.recv() else return gone(move c)
+        ev = event_from_json(parse_json(line) else Json.Null)
+    c.stdin.close()
+    for line in c.err
+        io.eprint(line)
+    proc.wait(move c) else 0
+
+fn gone(move c proc.Child) ! AppError
+    status := proc.kill(move c)
+    AppError(kind: "host_exited", message: "the app host exited with status {status}")
+
+fn mismatch(move c proc.Child, line str) ! AppError
+    proc.kill(move c)
+    AppError(kind: "version", message: "the app host spoke another protocol: {line}")
