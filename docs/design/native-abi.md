@@ -340,7 +340,9 @@ and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
 its value and, on failure, sets the error slot (global 8) to the display text
 of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
-`io_read_line` return a string or 0.
+`io_read_line` return a string or 0. Runtime code that needs a deadline calls
+`time_mono_ns()` or `time_mono_ms()` (`CLOCK_MONOTONIC`; on macOS the wall clock
+until the libSystem switch); `time_now_ms()` is the wall clock of `time.now_ms`.
 
 **Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
 adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
