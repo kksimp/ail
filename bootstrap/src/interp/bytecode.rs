@@ -456,6 +456,20 @@ enum Ins<'a> {
         dst: Opnd,
         exit: u32,
     },
+    /// `xs[i].name(args)` where `name` takes `mut self`: when `xs` is a list local, `i` is in range
+    /// and the element is a struct with such a method, the element moves into the call and back
+    /// (type.val.4); anything else is the walker's call (ADR 0620).
+    ElemCall {
+        slot: u32,
+        ix: Opnd,
+        name: &'a str,
+        args: u32,
+        n: u32,
+        e: &'a Expr,
+        dst: Opnd,
+        pos: Pos,
+        exit: u32,
+    },
     /// The walker's `hit` before a statement or a `while` turn, with run
     /// limits or coverage on (run.limit.1-3, test.cover.1).
     Hit(Pos),
@@ -1737,6 +1751,33 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             Expr::Name(n, p) if !r.moves.contains_key(p) => self.local(n),
             _ => None,
         };
+        // `xs[i].name(args)` with a `mut self` method: one instruction, the walker's call when it can't run.
+        if self.it.mutating.contains(name)
+            && path.is_empty()
+            && slot.is_none()
+            && self.it.tracing & trace::WATCH == 0
+            && let Expr::Index { recv: ir, index, .. } = recv
+            && let Expr::Name(ln, lp) = &**ir
+            && let Some(ls) = self.local(ln)
+            && !r.moves.contains_key(lp)
+            && !r.calls.contains_key(&pos)
+            && !r.assoc_calls.contains_key(&pos)
+            && !r.std_calls.contains_key(&pos)
+            && !r.type_args.contains_key(&pos)
+            && !writes_locals(index, &r.moves)
+            && args.iter().all(|a| a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved && !writes_locals(&a.value, &r.moves))
+        {
+            let ix = self.reg();
+            self.expr_to(index, ix);
+            let first = self.next_reg;
+            let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+            for (a, r) in args.iter().zip(regs) {
+                self.expr_to(&a.value, r);
+            }
+            let exit = self.exit();
+            self.emit(Ins::ElemCall { slot: ls, ix, name, args: first, n: args.len() as u32, e, dst, pos, exit });
+            return;
+        }
         // Any other receiver of a method that doesn't mutate it is evaluated
         // here, and the guard's fallback hands the walker its value.
         let mutating = self.it.mutating.contains(name);
@@ -2896,6 +2937,70 @@ match {
     }
 
     #[inline(never)]
+    fn op_elemcall(
+        &mut self,
+        code: &Code<'a>,
+        ins: &Ins<'a>,
+        env: &mut Env<'a>,
+        base: usize,
+        regs: &mut [Value],
+        pc: usize,
+    ) -> Flow<usize> {
+        let Ins::ElemCall { slot, ix, name, args, n, e, dst, pos, exit } = ins else { unreachable!("ElemCall") };
+        let at = base + *slot as usize;
+        let (first, n) = (*args as usize, *n as usize);
+        let found = match (&env[at].1, &regs[(*ix & !KIND) as usize]) {
+            (Value::List(items), Value::Int(i)) => match usize::try_from(*i).ok().and_then(|i| items.get(i).map(|v| (i, v))) {
+                Some((i, Value::Struct(s, _))) => self
+                    .methods
+                    .get(self.prog.structs[*s].name.as_str())
+                    .and_then(|m| m.get(*name))
+                    .copied()
+                    .filter(|f| {
+                        f.receiver.is_some_and(|r| r.mutable)
+                            && f.params.len() == n
+                            && f.params.iter().all(|p| !p.mutable)
+                    })
+                    .map(|f| (i, f)),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some((i, f)) = found else {
+            assign(&mut regs[(*ix & !KIND) as usize], Value::Unit);
+            for r in &mut regs[first..first + n] {
+                assign(r, Value::Unit);
+            }
+            self.stats.handoffs += 1;
+            if let Some(k) = &mut self.stats.kinds {
+                *k.entry(kind_of_expr(e)).or_default() += 1;
+            }
+            return match self.eval(e, env) {
+                Ok(v) => {
+                    put(*dst, v, env, base, regs);
+                    Ok(pc + 1)
+                }
+                Err(how) => self.leave(code, *exit, how, env, base),
+            };
+        };
+        let Value::List(items) = &mut env[at].1 else { unreachable!("checked above") };
+        let me = std::mem::replace(&mut Rc::make_mut(items)[i], Value::Unit);
+        let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+        callee.push(("self", me));
+        for (k, p) in f.params.iter().enumerate() {
+            callee.push((p.name.as_str(), std::mem::replace(&mut regs[first + k], Value::Unit)));
+        }
+        let result = self.run_body(f, &mut callee, *pos)?;
+        if let Value::List(items) = &mut env[at].1 {
+            Rc::make_mut(items)[i] = std::mem::replace(&mut callee[0].1, Value::Unit);
+        }
+        callee.clear();
+        self.env_pool.push(callee);
+        put(*dst, result, env, base, regs);
+        Ok(pc + 1)
+    }
+
+    #[inline(never)]
     #[allow(unused_variables, unused_mut, unused_macros)]
     fn op_expr(
         &mut self,
@@ -3476,6 +3581,9 @@ match {
                 }
                 Ins::MethodOn { .. } => {
                     pc = self.op_methodon(code, ins, env, base, regs, pc)?;
+                }
+                Ins::ElemCall { .. } => {
+                    pc = self.op_elemcall(code, ins, env, base, regs, pc)?;
                 }
                 Ins::Expr { .. } => {
                     pc = self.op_expr(code, ins, env, base, regs, pc)?;

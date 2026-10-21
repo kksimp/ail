@@ -402,3 +402,11 @@ left is the cost of reading a local: the walker's environment is a vector of
 (name, value) pairs behind a pointer, so every local read reloads its length
 and bounds-checks it. A frame with locals in the register file, or audited
 unchecked access (about 12% fewer instructions, measured), would remove that.
+
+## Lane 190 step 3 (ADR 0620)
+
+`ps[i].step(dt)` (a `mut self` method on a list element) is one instruction
+that moves the element into the call and back; field `op=` on `self` and an
+`else` nested in a receiver no longer hand off. The struct benchmark went from
+0.132 s to 0.096 s (CPython 0.075 s) with 0 hand-offs. Calls through deeper
+places (`a.b[i].m()`) and `ref` cells still run on the walker.
