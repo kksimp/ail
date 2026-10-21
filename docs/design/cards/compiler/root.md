@@ -13,8 +13,9 @@ fn runtime_with(dir str, ms str, mb str) !ast.Program [fail fs io]  ## The runti
     fails with fs.IoError
 fn executable_hex(m mir.Module, path str, target str) str [io]  ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 fn runtime_syntax(path str, text str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
-fn lower_file(path str, rt ast.Program?) !mir.Module [fail fs io]  ## Parse a program and the modules it imports, and lower them to MIR
+fn lower_file(path str, rt ast.Program?, std str) !mir.Module [fail fs io]  ## Parse a program and the modules it imports, and lower them to MIR
     fails with fs.IoError
+fn std_file(std str, imp str) str  ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
 fn parse_source(module str, path str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
     fails with fs.IoError
 ```

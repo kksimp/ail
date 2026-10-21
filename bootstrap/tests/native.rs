@@ -134,6 +134,7 @@ fn build_batch(files: &[String], target: Option<&str>) -> Option<Vec<Vec<u8>>> {
     let out = Command::new(env!("CARGO_BIN_EXE_ail"))
         .current_dir(root())
         .args(["run", "compiler", "build-many", "compiler/rt/native", target.unwrap_or(host_target()), "0", "0"])
+        .arg(root().join("bootstrap/src/std"))
         .args(files)
         .output()
         .unwrap();
