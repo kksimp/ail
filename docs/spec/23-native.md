@@ -149,7 +149,9 @@ dots, accents and combining marks). *(ADRs 0565, 0566, 0567)*
 
 **native.task.1** — Native code runs tasks and `par for` iterations in
 parallel on a pool of threads, at most 8 and no more than the cores the
-process may use (`conc.par.9`, `conc.par.7`). `spawn f(args)` takes a free
+process may use, unless the environment variable `AIL_THREADS` (a whole
+number, 1 to 64; anything else is ignored) sets the size (`conc.par.9`,
+`conc.par.7`). `spawn f(args)` takes a free
 function of the subset's types and copies a list argument (`conc.share.1`);
 `t.wait()?` is the task's result, and if the task trapped it ends the
 program as an uncaught `Trapped` does: `error: Trapped(rule: "R", message:
