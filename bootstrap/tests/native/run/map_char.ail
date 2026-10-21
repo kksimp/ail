@@ -1,0 +1,20 @@
+# type.map.*: maps and sets keyed by characters, and characters as values.
+fn main()
+    mut m := Map[char, char]()
+    m['a'] = 'b'
+    m['\n'] = 'x'
+    m['é'] = '\''
+    print(m)
+    print(m['a'])
+    print(m.get('z') else '?')
+    print(m.contains('é'))
+    mut counts := Map[char, int]()
+    for c in "hello world".chars()
+        counts[c] += 1
+    print(counts)
+    print(counts.top(2))
+    mut seen := Set[char]()
+    for c in "banana".chars()
+        seen.add(c)
+    print(seen)
+    print(seen.sorted())
