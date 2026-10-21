@@ -339,7 +339,4 @@ pub fn x64.is_kernel(str) bool
 pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
-trimmed to fit 4000 tokens (~3709); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
-trimmed to fit 4000 tokens (~3713); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
-trimmed to fit 4000 tokens (~3744); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
-trimmed to fit 4000 tokens (~3700); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3789); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
