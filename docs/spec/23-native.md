@@ -37,7 +37,8 @@ fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
 without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
-and the bit operations of expr.bit.1, in functions with at most eight
+the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
+`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), and the bit operations of expr.bit.1, in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool` and `str` in `print` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` and `s.to_float()` in the `else` forms;
@@ -50,7 +51,7 @@ only as the value of `else` with a fallback value, a statement that leaves,
 or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
 Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
-0574-0576, 0580, 0582, 0591, 0602–0604)*
+0574-0576, 0580, 0582, 0591, 0592, 0602–0604)*
 
 ```ail
 fn steps(n int) int
