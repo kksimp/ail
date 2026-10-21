@@ -263,3 +263,9 @@ fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
     k := int_arg(n, "from_code", npos)?
     t := Ty.Opt(Ty.Char)
     Val(id: call("rt.char_from_code", [k], t), ty: t)
+
+## A method of a `str`.
+fn Lower.str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "to_float" and vs.len() == 0
+        return lower_to_float(r)
+    return lower_str_method(r, name, npos, vs)
