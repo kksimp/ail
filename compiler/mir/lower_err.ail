@@ -723,11 +723,19 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
             Float => call("rt.fmt_float", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
+            Struct(nk) => nested_text(nk, f)
             _ => -1
         if text < 0
             return none
         acc = call("rt.str_cat", [acc, text], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
+
+## A plain struct field's `Name(field: value, ...)`, else -1.
+fn Lower.nested_text(mut self, key str, obj int) int
+    slots := structs.get(key) else return -1
+    if err_msgs.contains(key) or sigs.contains("{key}.to_str")
+        return -1
+    fields_text("{key}(", slots, obj, 0) else -1
 
 ## The default text of an enum value: a chain of tests on the variant index.
 fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?

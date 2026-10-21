@@ -1,0 +1,64 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The `int` methods `checked_*`, `wrapping_*` and `saturating_*`
+## (type.num.12). The runtime's own arithmetic wraps in two's complement, so
+## the overflow tests below read the wrapped result.
+
+INT_MIN := -9223372036854775807 - 1
+INT_MAX := 9223372036854775807
+
+## Whether `a + b` overflows.
+fn int_ovf_add(a int, b int) bool
+    s := a + b
+    a.bit_xor(s).bit_and(b.bit_xor(s)) < 0
+
+## Whether `a - b` overflows.
+fn int_ovf_sub(a int, b int) bool
+    s := a - b
+    a.bit_xor(b).bit_and(a.bit_xor(s)) < 0
+
+## Whether `a * b` overflows.
+fn int_ovf_mul(a int, b int) bool
+    if a == 0 or b == 0
+        return false
+    if (a == -1 and b == INT_MIN) or (b == -1 and a == INT_MIN)
+        return true
+    (a * b) / b != a
+
+## Whether `a / b` is a number: not a zero divisor, not `MIN / -1`.
+fn int_div_ok(a int, b int) bool
+    b != 0 and not (a == INT_MIN and b == -1)
+
+## `a % b` for a non-zero `b`: `MIN % -1` is `0` (expr.arith.5).
+fn int_rem_val(a int, b int) int
+    if b == -1
+        return 0
+    a % b
+
+fn int_wrapping_add(a int, b int) int
+    a + b
+
+fn int_wrapping_sub(a int, b int) int
+    a - b
+
+fn int_wrapping_mul(a int, b int) int
+    a * b
+
+fn int_wrapping_neg(a int) int
+    0 - a
+
+fn int_saturating_add(a int, b int) int
+    if int_ovf_add(a, b)
+        return if b > 0 then INT_MAX else INT_MIN
+    a + b
+
+fn int_saturating_sub(a int, b int) int
+    if int_ovf_sub(a, b)
+        return if b < 0 then INT_MAX else INT_MIN
+    a - b
+
+fn int_saturating_mul(a int, b int) int
+    if int_ovf_mul(a, b)
+        return if (a < 0) != (b < 0) then INT_MIN else INT_MAX
+    a * b
