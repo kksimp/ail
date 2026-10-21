@@ -25,7 +25,9 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 /// Every `.ail` file in the repository, sorted: the corpus each stage is
-/// compared on.
+/// compared on. Dot-files are skipped: `ail test --native` copies its source
+/// to `.ail-native-test-PID-NAME.ail` beside it while a parallel test runs
+/// (ADR 0814).
 fn corpus() -> Vec<PathBuf> {
     fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
         let Ok(entries) = fs::read_dir(dir) else { return };
@@ -36,7 +38,7 @@ fn corpus() -> Vec<PathBuf> {
                 if !matches!(name.as_str(), "target" | ".git" | ".toolchain" | ".verify") {
                     walk(&p, out);
                 }
-            } else if name.ends_with(".ail") {
+            } else if name.ends_with(".ail") && !name.starts_with(".") {
                 out.push(p);
             }
         }
