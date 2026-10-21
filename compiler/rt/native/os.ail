@@ -924,9 +924,9 @@ fn os_fd_mode(fd int) int
     r := syscall(os_pick(5, 80, 189), fd, buf, 0, 0, 0, 0)
     if r < 0
         return 438
-    if target() == 2
-        return (load8(buf + 4) + load8(buf + 5) * 256).bit_and(4095)
-    off := os_pick(24, 16, 0)
+    # macOS syscall 189 fills the legacy `struct stat`: st_dev is 4 bytes and
+    # st_ino 4 more, so st_mode sits at offset 8 (offset 4 is inode bits).
+    off := os_pick(24, 16, 8)
     (load8(buf + off) + load8(buf + off + 1) * 256).bit_and(4095)
 
 ## Copy the file `src` over `dst`, keeping its permissions. Fails with the
