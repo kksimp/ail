@@ -336,6 +336,9 @@ fn Gen.emit_move(mut self, mv Move)
         if is_slot(mv.dst)
             a.str_d(x, SP, slot(mv.dst))
         return
+    if is_slot(mv.dst) and is_reg(mv.src)
+        a.str(mv.src, SP, slot(mv.dst))
+        return
     r := if is_reg(mv.dst) then mv.dst else S0
     if mv.src < 0
         if mv.sym != ""
@@ -382,8 +385,16 @@ fn Gen.gen_block(mut self, b int)
         last := blk.insts[n - 1]
         if last.dst == blk.term.cond and uses[last.dst] == 1 and cond_of(last.op) >= 0
             fused = n - 1
+    # `x & m == 0` (or `!= 0`) as a branch condition is one `tst` (ADR 0623).
+    mut masked := -1
+    if fused > 0
+        cmp := blk.insts[fused]
+        mask := blk.insts[fused - 1]
+        if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.args[0] == mask.dst
+            if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0
+                masked = fused - 1
     for k in 0..n
-        if k != fused
+        if k != fused and k != masked
             gen_inst(blk.insts[k])
     t := blk.term
     match t.kind
@@ -395,14 +406,22 @@ fn Gen.gen_block(mut self, b int)
                 if rotates(to)
                     # The loop test again here, instead of a jump back to it.
                     h := f.blocks[to]
-                    branch_to(compare(h.insts[0]), h.term.targets[0], h.term.targets[1])
+                    branch_to(
+                        compare(h.insts[h.insts.len() - 1]),
+                        h.term.targets[0],
+                        h.term.targets[1],
+                    )
                 else
                     a.b(blabels[to])
         "branch" =>
             yes := t.targets[0]
             no := t.targets[1]
             mut cc := NE
-            if fused >= 0
+            if masked >= 0
+                bt := blk.insts[masked]
+                a.tst_rr(gpr(bt.args[0], S0), gpr(bt.args[1], S1))
+                cc = cond_of(blk.insts[fused].op)
+            elif fused >= 0
                 cc = compare(blk.insts[fused])
             else
                 a.cmp_ri(gpr(t.cond, S0), 0)
@@ -431,9 +450,14 @@ fn Gen.branch_to(mut self, cc int, yes int, no int)
 ## on the way round a loop (loop rotation, ADR 0611).
 fn Gen.rotates(self, to int) bool
     h := f.blocks[to]
-    if h.term.kind != "branch" or h.insts.len() != 1
+    n := h.insts.len()
+    if h.term.kind != "branch" or n == 0
         return false
-    last := h.insts[0]
+    # Constants rebuilt at each use cost nothing to repeat.
+    for k in 0..n - 1
+        if not codegen.is_remat(h.insts[k])
+            return false
+    last := h.insts[n - 1]
     last.dst == h.term.cond and uses[last.dst] == 1 and cond_of(last.op) >= 0
 
 ## The condition that means a comparison is true, or -1. After `fcmp`, these
@@ -917,9 +941,16 @@ fn Gen.list_set(mut self, i mir.Inst)
 ## the index's register, or -1 with a constant index's element number.
 fn Gen.indexed_at(mut self, i mir.Inst) int
     if k := imm(i.args[1])
-        if k >= 0 and k < 4095
-            return -1 - k
-    gpr(i.args[1], S1)
+        if k + i.elem_off() >= 0 and k + i.elem_off() < 4095
+            return -1 - k - i.elem_off()
+    x := gpr(i.args[1], S1)
+    if i.elem_off() > 0
+        a.alu_ri("add", S1, x, i.elem_off())
+        return S1
+    if i.elem_off() < 0
+        a.alu_ri("sub", S1, x, 0 - i.elem_off())
+        return S1
+    x
 
 fn Gen.indexed_load(mut self, i mir.Inst)
     base := gpr(i.args[0], S0)

@@ -4,7 +4,7 @@
 ## reads are removed.
 
 pub fn simplify(f Func) Func
-    remove_dead(drop_unreachable(remove_trivial_params(f)))
+    remove_dead(drop_unreachable(branch_on_inner(remove_trivial_params(f))))
 
 ## The argument each edge into `b` passes for parameter `k`.
 fn incoming(f Func, b int, k int) List[int]
@@ -61,6 +61,25 @@ fn remove_trivial_params(f Func) Func
         if t.value >= 0
             t.value = final[t.value]
         t.args = [[final[a] for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    g
+
+## A branch on `not c` branches on `c` with its two edges swapped (ADR 0623),
+## so `while not done` costs a test and a jump, not a flip and a test.
+fn branch_on_inner(f Func) Func
+    mut g := f
+    mut negated := Map[int, int]()
+    for blk in g.blocks
+        for i in blk.insts
+            if i.op == "not" and i.dst >= 0
+                negated[i.dst] = i.args[0]
+    for b in 0..g.blocks.len()
+        mut t := g.blocks[b].term
+        if t.kind != "branch" or not negated.contains(t.cond)
+            continue
+        t.cond = negated[t.cond]
+        t.targets = [t.targets[1], t.targets[0]]
+        t.args = [t.args[1], t.args[0]]
         g.blocks[b].term = t
     g
 
