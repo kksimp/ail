@@ -585,3 +585,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
 | [0807](0807-native-build-passes-derived-methods.md) | `ail build` passes derived methods to the native backend as `gen:impl` sources; `Self` in method signatures *(delegated)* | Accepted | 2026-10-21 |
+| [0808](0808-native-prelude-json-lowered-on-demand.md) | Native builds get the prelude's JSON and `Default` modules, lowered only where the program reaches them *(delegated)* | Accepted | 2026-10-21 |

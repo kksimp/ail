@@ -152,8 +152,12 @@ fn lower_file(path str, rt ast.Program?) !mir.Module
                 if name.ends_with(".ail")
                     srcs.push(parse_source(imp, "{dir}/{name}")?)
         k += 1
-    srcs.extend(derived_sources()?)
-    m := mir.lower_package(srcs, rt) else err
+    derived := derived_sources()?
+    srcs.extend(derived.sources)
+    lazy := srcs.len()
+    if text := derived.prelude
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text(text)))
+    m := mir.lower_package_with(srcs, rt, lazy) else err
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -177,11 +181,17 @@ fn lower_file(path str, rt ast.Program?) !mir.Module
 ## in the file named by `AIL_DERIVED` (ADR 0807): for each deriving `impl`,
 ## a line `@@derive MODULE TYPE.TRAIT` (`-` for the root module), then the
 ## generated text. Each text is a source `gen:impl:TYPE.TRAIT` of its
-## module whose functions are methods of `TYPE`.
-fn derived_sources() !List[mir.Source]
-    mut out := List[mir.Source]()
+## module whose functions are methods of `TYPE`. A last block `@@prelude`
+## is the prelude, for its JSON and `Default` modules (ADR 0808).
+fn derived_sources() !Derived
+    mut out := Derived(sources: [], prelude: none)
     path := env.get("AIL_DERIVED") else return out
-    mut lines := fs.read_text(path)?.lines()
+    mut text := fs.read_text(path)?
+    parts := text.split("@@prelude\n")
+    if parts.len() > 1
+        out.prelude = parts[1]
+        text = parts[0]
+    mut lines := text.lines()
     lines.push("@@derive")
     mut head := List[str]()
     mut body := List[str]()
@@ -190,10 +200,15 @@ fn derived_sources() !List[mir.Source]
             body.push(line)
             continue
         if head.len() == 3
-            out.push(derived_source(head[1], head[2], body))
+            out.sources.push(derived_source(head[1], head[2], body))
         head = line.split(" ")
         body = []
     out
+
+## What `ail build` passes besides the program's files.
+struct Derived
+    sources List[mir.Source]
+    prelude str?
 
 ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
 ## `module`, each `fn m` written `fn TYPE.m`, so lines stay where the

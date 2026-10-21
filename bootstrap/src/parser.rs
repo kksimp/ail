@@ -43,7 +43,7 @@ const COMPARISONS: &[(&str, BinOp)] =
     &[("==", BinOp::Eq), ("!=", BinOp::Ne), ("<", BinOp::Lt), ("<=", BinOp::Le), (">", BinOp::Gt), (">=", BinOp::Ge)];
 
 /// The standard traits and `Ordering` (ADR 0127), read before every program.
-const PRELUDE: &str = include_str!("prelude.ail");
+pub const PRELUDE: &str = include_str!("prelude.ail");
 
 /// Names of the optional `std.json` prelude module (json.prelude.1, ADR 0161).
 const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json", "parse_json_lines"];

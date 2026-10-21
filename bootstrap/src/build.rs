@@ -29,10 +29,14 @@ pub fn repo_root() -> PathBuf {
 /// The methods derive generators wrote for the program at `file`
 /// (ct.gen.1), in a file for the native backend (ADR 0807): for each
 /// deriving `impl`, `@@derive MODULE TYPE.TRAIT` (`-` for the root module)
-/// and the generated text. `None` when nothing is derived.
+/// and the generated text. When the program's text names JSON or
+/// `Default`, a last block `@@prelude` holds the prelude, whose `json`,
+/// `jsonderive` and `default` modules the backend lowers as the program
+/// reaches them (ADR 0808). `None` when there is neither.
 fn derived_file(file: &str) -> Option<PathBuf> {
     let (prog, _) = crate::modules::load(file).ok()?;
-    if prog.generated.is_empty() {
+    let prelude = prog.files.iter().any(|f| ["json", "Json", "Default"].iter().any(|w| f.src.contains(w)));
+    if prog.generated.is_empty() && !prelude {
         return None;
     }
     let mut text = String::new();
@@ -40,6 +44,10 @@ fn derived_file(file: &str) -> Option<PathBuf> {
         let f = &prog.files[g.file];
         let module = if f.module.is_empty() { "-" } else { &f.module };
         text.push_str(&format!("@@derive {module} {}\n{}\n", g.label, f.src.trim_end()));
+    }
+    if prelude {
+        text.push_str("@@prelude\n");
+        text.push_str(crate::parser::PRELUDE);
     }
     let path = std::env::temp_dir().join(format!("ail-derived-{}.txt", std::process::id()));
     std::fs::write(&path, text).ok()?;

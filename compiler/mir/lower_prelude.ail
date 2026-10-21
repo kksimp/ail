@@ -1,0 +1,109 @@
+## The prelude's modules written in AIL, in native code (ADR 0808): the
+## `json` module and the `impl`s of `jsonderive` and `default` are sources
+## of the root module after the program's, declared like the program's but
+## quietly (a declaration outside the subset is only reported where it is
+## used), and a function's body is lowered only when the program reaches
+## it, as the runtime's are (ADR 0393).
+
+use ast
+
+## The quiet sources: those from index `from` on, their functions not yet
+## lowered, and the problems of their functions' declarations, held until
+## reached code calls one.
+struct Lazy
+    from int
+    fns Map[str, GenFn]
+    held Map[str, Held]
+    ## Their top-level names, which every module sees (`Json`,
+    ## `parse_json`).
+    names Set[str]
+
+struct Held
+    problems List[Problem]
+    file int
+
+fn new_lazy(from int) Lazy
+    Lazy(from: from, fns: {}, held: {}, names: Set[str]())
+
+## Record the quiet sources' top-level names.
+fn Lower.note_lazy_names(mut self, srcs List[Source])
+    for k in lazy.from..srcs.len()
+        p := srcs[k].prog
+        for s in p.structs
+            lazy.names.add(s.name)
+        for e in p.enums
+            lazy.names.add(e.name)
+        for f in p.fns
+            if f.owner == none
+                lazy.names.add(f.name)
+
+## The key of a top-level name not found in this module: the prelude's,
+## when it has one (ADR 0808).
+fn Lower.prelude_key(self, name str) str?
+    if prefix != "" and lazy.names.contains(name) then name else none
+
+## Hold the problems declaring function `key` reported since `before`, when
+## its source is quiet.
+fn Lower.hold_lazy(mut self, key str, before int)
+    if file >= lazy.from and problems.len() > before
+        lazy.held[key] = Held(problems: problems[before..], file: file)
+        problems = problems[..before]
+
+## Report the held problems of function `key`, which reached code calls.
+fn Lower.release(mut self, key str)
+    h := lazy.held.get(key) else return
+    lazy.held.remove(key)
+    stamp_problems()
+    for p in h.problems
+        problems.push(p)
+        problem_files.push(h.file)
+
+## Drop the problems declaring source `k` reported since `before`, when it
+## is quiet.
+fn Lower.quiet_lazy(mut self, k int, before int)
+    if k >= lazy.from and problems.len() > before
+        problems = problems[..before]
+
+## Lower the quiet sources' functions the program reaches, and those they
+## reach, with the generic instances they ask for.
+fn Lower.lower_lazy(mut self, srcs List[Source])
+    if lazy.from >= srcs.len()
+        return
+    for k in lazy.from..srcs.len()
+        enter_file(k)
+        for f in program_fns(srcs[k].prog)
+            key := fn_key(f, prefix)
+            if sigs.contains(key)
+                lazy.fns[key] = GenFn(decl: f, file: k)
+    mut scanned := 0
+    while true
+        mut queue := List[str]()
+        while scanned < funcs.len()
+            for blk in funcs[scanned].blocks
+                for i in blk.insts
+                    if i.op == "call" and lazy.fns.contains(i.name)
+                        queue.push(i.name)
+            scanned += 1
+        if queue.len() == 0
+            break
+        for name in queue
+            lf := lazy.fns.get(name) else continue
+            lazy.fns.remove(name)
+            enter_file(lf.file)
+            path = src_paths[lf.file]
+            lower_fn(lf.decl)
+            stamp_problems()
+        gen_instances()
+        stamp_problems()
+    enter_file(0)
+
+## The prelude's text with only the lines of the modules native code uses
+## kept, so a line keeps its number in `prelude.ail` (ADR 0808).
+pub fn prelude_text(text str) str
+    mut keep := false
+    mut out := List[str]()
+    for line in text.lines()
+        if m := line.strip_prefix("## @module ")
+            keep = ["json", "jsonderive", "default"].contains(m.trim())
+        out.push(if keep then line else "")
+    "{out.join("\n")}\n"

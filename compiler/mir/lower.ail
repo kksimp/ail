@@ -123,6 +123,7 @@ struct Lower
     global_consts List[GlobalConst]
     ## Generic declarations and their instances (ADR 0536).
     gen Gen
+    lazy Lazy
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -170,6 +171,11 @@ pub struct Source
 ## the runtime. The first source is the root module's file holding `main`;
 ## problems name the file they are in (`Problems.files`).
 pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
+    lower_package_with(srcs, rt, srcs.len())
+
+## `lower_package` with the sources from `lazy` on the prelude's, lowered
+## as the program reaches them (ADR 0808).
+pub fn lower_package_with(srcs List[Source], rt ast.Program?, lazy int) Module ! Problems
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
@@ -223,36 +229,47 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         globals: {},
         global_consts: [],
         gen: new_gen(),
+        lazy: new_lazy(lazy),
     )
+    l.note_lazy_names(srcs)
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
         l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
     if r := rt
         l.declare_all(r, "rt.")
     l.problem_files = [0 for _ in l.problems]
-    for src in srcs
-        l.declare_errors(src.prog)
+    for k in 0..srcs.len()
+        before := l.problems.len()
+        l.declare_errors(srcs[k].prog)
+        l.quiet_lazy(k, before)
     for k in 0..srcs.len()
         l.enter_file(k)
+        before := l.problems.len()
         l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
+        l.quiet_lazy(k, before)
     for k in 0..srcs.len()
         l.enter_file(k)
+        before := l.problems.len()
         l.declare_struct_fields(srcs[k].prog)
         l.declare_enums(srcs[k].prog)
+        l.quiet_lazy(k, before)
     for k in 0..srcs.len()
         l.enter_file(k)
+        before := l.problems.len()
         l.declare_all(srcs[k].prog, l.prefix)
+        l.quiet_lazy(k, before)
     l.stamp_problems()
     l.gen_const_init()
-    for k in 0..srcs.len()
+    for k in 0..lazy.min(srcs.len())
         l.enter_file(k)
         l.path = srcs[k].path
         for f in program_fns(srcs[k].prog)
             l.lower_fn(f)
         l.stamp_problems()
     l.gen_instances()
+    l.lower_lazy(srcs)
     l.enter_file(0)
     l.gen_copies()
     l.gen_enum_eqs()
@@ -353,6 +370,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
         if problems.len() > before
             bad.add(fn_key(f, pre))
             sigs.remove(fn_key(f, pre))
+            hold_lazy(fn_key(f, pre), before)
     self_ty = ""
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
@@ -1532,10 +1550,14 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     pos,
                 )
             if self_ty != "" and bad.contains("{self_ty}.{name}")
+                release("{self_ty}.{name}")
                 fn_failed = true
                 return none
-            key := "{prefix}{name}"
+            mut key := "{prefix}{name}"
+            if not sigs.contains(key) and not bad.contains(key)
+                key = prelude_key(name) else key
             if bad.contains(key)
+                release(key)
                 fn_failed = true
                 return none
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")

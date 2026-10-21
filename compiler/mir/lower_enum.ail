@@ -58,7 +58,10 @@ fn Lower.enum_key(self, name str) str?
         key := "{m}.{parts[1..].join(".")}"
         return if enums.contains(key) then key else none
     key := "{prefix}{name}"
-    if enums.contains(key) then key else none
+    if enums.contains(key)
+        return key
+    k := prelude_key(name)?
+    if enums.contains(k) then k else none
 
 fn enum_name(t Ty) str?
     match t

@@ -14,8 +14,11 @@ fn runtime_with(dir str, ms str, mb str) !ast.Program [fail fs io]  ## The runti
 fn runtime_syntax(path str, text str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn lower_file(path str, rt ast.Program?) !mir.Module [env fail fs io]  ## Parse a program and the modules it imports, and lower them to MIR
     fails with fs.IoError
-fn derived_sources() !List[mir.Source] [env fail fs io]  ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
+fn derived_sources() !Derived [env fail fs io]  ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
     fails with fs.IoError
+struct Derived  ## What `ail build` passes besides the program's files.
+    sources List[mir.Source]
+    prelude str?
 fn derived_source(module str, label str, body List[str]) mir.Source [io]  ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
 fn parse_source(module str, path str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
     fails with fs.IoError
