@@ -8,13 +8,23 @@ fn is_word(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-/// The index just past the bracket that closes the one at `open`, if the
-/// bracketed text has no string in it.
+/// The index just past the bracket that closes the one at `open`. Strings in
+/// the brackets must be plain (no escapes), and there are no characters.
 fn skip_brackets(line: &[char], open: usize) -> Option<usize> {
     let mut depth = 0i32;
-    for (i, c) in line.iter().enumerate().skip(open) {
-        match c {
-            '"' | '\'' => return None,
+    let mut i = open;
+    while i < line.len() {
+        match line[i] {
+            '"' => {
+                i += 1;
+                while *line.get(i)? != '"' {
+                    if line[i] == '\\' {
+                        return None;
+                    }
+                    i += 1;
+                }
+            }
+            '\'' => return None,
             '(' | '[' => depth += 1,
             ')' | ']' => {
                 depth -= 1;
@@ -24,6 +34,7 @@ fn skip_brackets(line: &[char], open: usize) -> Option<usize> {
             }
             _ => {}
         }
+        i += 1;
     }
     None
 }
@@ -40,7 +51,13 @@ fn atom_before(line: &[char], end: usize) -> Option<usize> {
                 let mut depth = 0i32;
                 loop {
                     match line[j] {
-                        '"' | '\'' => return None,
+                        '"' => {
+                            j = line[..j].iter().rposition(|c| *c == '"')?;
+                            if line[j..i].contains(&'\\') {
+                                return None;
+                            }
+                        }
+                        '\'' => return None,
                         ')' | ']' => depth += 1,
                         '(' | '[' => {
                             depth -= 1;
@@ -139,14 +156,15 @@ fn piece(s: &str) -> Option<String> {
     if let Some(inner) = s.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
         return (!inner.contains(['"', '{', '}'])).then(|| inner.to_string());
     }
-    (!s.contains(['"', '{', '}'])).then(|| format!("{{{s}}}"))
+    (!s.contains(['{', '}', '\\'])).then(|| format!("{{{s}}}"))
 }
 
 impl Edit {
     /// Rewrite `l op r` around the operator `op` at `pos`; `text` is a
     /// template: `$l` `$r` are the operands as written, `$lp` `$rp` as pieces
     /// of one string, `$f` the left string with its one `%d` or `%s` replaced
-    /// by the right operand (fix.edit.6).
+    /// by the right operand (fix.edit.6). `"$lp$rp$c"` also takes in the `+` that
+    /// follow (`a + b + "z"`).
     pub fn operands(pos: Pos, op: &str, template: impl Into<String>) -> Self {
         Edit { pos, end: pos, old: Some(op.into()), anchor: Anchor::Operands, text: template.into() }
     }
@@ -179,9 +197,47 @@ impl Edit {
         while line.get(rs) == Some(&' ') {
             rs += 1;
         }
-        let Some(re) = atom_after(line, rs) else { return false };
+        let Some(mut re) = atom_after(line, rs) else { return false };
+        // `a + b + "z"` joins as one string: take in the whole chain of `+`.
+        let chain = op == "+" && self.text == "\"$lp$rp$c\"";
+        if chain {
+            loop {
+                let mut k = re;
+                while line.get(k) == Some(&' ') {
+                    k += 1;
+                }
+                if line.get(k) != Some(&'+') || line.get(k + 1) == Some(&'=') {
+                    break;
+                }
+                k += 1;
+                while line.get(k) == Some(&' ') {
+                    k += 1;
+                }
+                let Some(e) = atom_after(line, k) else { return false };
+                re = e;
+            }
+        }
         if !starts_expression(line, ls) || !ends_expression(line, re) {
             return false;
+        }
+        if chain {
+            let mut out = String::from("\"");
+            let mut k = ls;
+            while k < re {
+                let Some(e) = atom_after(line, k) else { return false };
+                let atom: String = line[k..e].iter().collect();
+                let Some(p) = piece(&atom) else { return false };
+                out.push_str(&p);
+                k = e;
+                while line.get(k) == Some(&' ') || line.get(k) == Some(&'+') {
+                    k += 1;
+                }
+            }
+            out.push('"');
+            self.pos.col = ls + 1;
+            self.end = Pos { line: self.pos.line, col: re + 1 };
+            self.text = out;
+            return true;
         }
         let l: String = line[ls..le].iter().collect();
         let r: String = line[rs..re].iter().collect();
