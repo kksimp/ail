@@ -516,3 +516,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0646](0646-mistakes-corpus-round-two.md) | Mistakes corpus, round two: 96 programs on the batch's new features; `ail fix` resolves 60% *(delegated)* | Accepted | 2026-10-21 |
 | [0647](0647-round-two-diagnostics-help-and-anchors.md) | Diagnostics for round-two mistakes: help texts, fix anchors, and rules for `<<`, tuples, `case` and open ranges *(delegated)* | Accepted | 2026-10-21 |
 | [0648](0648-round-two-fix-rules-and-the-corpus-target.md) | Fix rules for round-two mistakes (renames with unchanged arguments, `=` to `:`, `@` to `matmul`, `or` to `else`), and the 60% target *(delegated)* | Accepted | 2026-10-21 |
+| [0695](0695-fix-bitwise-not.md) | `ail fix` for `~name`: the bitwise-not method *(delegated)* | Accepted | 2026-10-21 |
