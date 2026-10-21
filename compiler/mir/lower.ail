@@ -1704,6 +1704,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         # type.str.3
         text := text_of(r, npos)?
         return Val(id: text, ty: Ty.Str)
+    if name == "cmp" and vs.len() == 1 and (r.ty == Ty.Str or r.ty == Ty.Char)
+        return lower_cmp(r, vs[0], npos)
     match r.ty
         Int =>
             if name == "to_float" and vs.len() == 0

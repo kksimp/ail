@@ -1,0 +1,13 @@
+## `a.cmp(b)` on `str` and `char` in the native subset (trait.std.4,
+## ADR 0832). `int` and `float` are `rt.int_cmp` and `rt.float_cmp` (in the
+## `int` and `float` arms of `lower_method`); `Lower.ordering` turns a
+## variant index into an `Ordering`.
+use ast
+
+fn Lower.lower_cmp(mut self, a Val, b Val, pos ast.Pos) Val?
+    if a.ty != b.ty or not enums.contains("Ordering")
+        return unsupported(pos, "`.cmp()` on `{a.ty.name()}`")
+    if a.ty == Ty.Str
+        c := call("rt.str_cmp", [a.id, b.id], Ty.Int)
+        return ordering(op("add", [c, konst(1, Ty.Int)], Ty.Int))
+    ordering(call("rt.int_cmp", [a.id, b.id], Ty.Int))
