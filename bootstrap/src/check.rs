@@ -302,6 +302,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         scope: Vec::new(),
         self_ty: None,
         in_requires: false,
+        requires_pos: None,
         deferred: Some(Vec::new()),
         locals: Vec::new(),
         pending: Vec::new(),
@@ -495,6 +496,8 @@ struct Checker<'p> {
     self_ty: Option<Ty>,
     /// Checking a `requires` condition, where `result` doesn't exist yet (contract.ens.1).
     in_requires: bool,
+    /// Where the `requires` keyword of that condition is.
+    requires_pos: Option<Pos>,
     /// Bounds to check once every declaration is known (gen.bound.3):
     /// the type, the trait, where, and what requires it.
     deferred: Option<Vec<(Ty, usize, Pos, String)>>,
@@ -5427,21 +5430,20 @@ impl<'p> Checker<'p> {
     /// An unknown name; `args` is the argument count when it was called.
     fn unknown_name(&mut self, name: &str, pos: Pos, args: Option<usize>) {
         if name == "old" && args.is_some() {
-            self.error_help(
-                "contract.ens.3",
-                pos,
-                "`old(...)` is only available in an `ensures` condition",
-                "name the value in the body before it changes, or move the condition to an `ensures` line",
-            );
+            let mut d = Diagnostic::new("contract.ens.3", pos, "`old(...)` is only available in an `ensures` condition")
+                .help("name the value in the body before it changes, or move the condition to an `ensures` line");
+            // On entry `old(e)` is `e`, so in a `requires` the call can go.
+            if self.in_requires {
+                d = d.fix("drop `old`: on entry it is the value itself", vec![Edit::call(pos, "old", "$p")]);
+            }
+            self.diags.push(d);
             return;
         }
         if name == "result" && args.is_none() && self.in_requires {
-            self.error_help(
-                "contract.ens.2",
-                pos,
-                "`result` is only available in an `ensures` condition",
-                "a `requires` condition can read only the parameters; move this check to an `ensures` line",
-            );
+            let d = Diagnostic::new("contract.ens.2", pos, "`result` is only available in an `ensures` condition")
+                .help("a `requires` condition can read only the parameters; move this check to an `ensures` line")
+                .fix("write `ensures`: the condition is about the result", vec![Edit::replace(self.requires_pos.unwrap_or(pos), "requires", "ensures")]);
+            self.diags.push(d);
             return;
         }
         let candidates: Vec<&str> = (self.locals.iter().map(|l| l.name.as_str()))
