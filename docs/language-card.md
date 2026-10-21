@@ -530,4 +530,4 @@ one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 A window is a grid of text cells: `ui.open(title, cols, rows)` gives `w`, then `w.put(col, row, text, fg, bg)`, `w.present()` and `w.next_event()` (`Key`, `Close`, `Resize`, ...); `ail api` lists the signatures.
 
 `Json`, `parse_json(text)?` and the
-`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.
+`ToJson`/`FromJson` derives read and write JSON; `List[U].from_json(j)?` reads an array. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.

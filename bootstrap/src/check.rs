@@ -4110,6 +4110,16 @@ impl<'p> Checker<'p> {
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }
+            // trait.assoc.4: `List[U].from_json(j)`, an associated function of a
+            // trait that a builtin generic type implements.
+            if tn == "List"
+                && let Some([elem]) = targs
+            {
+                let ty = Ty::List(Box::new(self.resolve_type(elem)));
+                if let Some(t) = self.builtin_assoc_call(ty, name, pos, args, expect) {
+                    return t;
+                }
+            }
             // type.bytes.13: `bytes.from_list(xs)` and the like.
             if tn == "bytes" && targs.is_none() {
                 let sig = match name {
