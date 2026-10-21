@@ -45,6 +45,8 @@ fn main() !
                 print(mir.module_text(lower_file(args[1], runtime(args[2])?)?))
             else
                 print(mir.module_text(lower_file(args[1], none)?))
+        "pe-sample" =>
+            print(obj.hex(obj.pe_sample()))
         "build" =>
             m := lower_file(args[1], runtime(args[2])?)?
             target := if args.len() > 3 then args[3] else "x86_64-linux"
@@ -82,9 +84,11 @@ fn check_dump(path str, many bool) !
 fn runtime(dir str) !ast.Program
     mut texts := List[str]()
     # Every `.ail` file of the directory, so lanes add runtime files
-    # without editing this list.
+    # without editing this list; `prim`, `core` and `math` come first.
+    for name in ["prim.ail", "core.ail", "math.ail"]
+        texts.push(fs.read_text("{dir}/{name}")?)
     for name in fs.list_dir(dir)?.sorted()
-        if name.ends_with(".ail")
+        if name.ends_with(".ail") and not ["prim.ail", "core.ail", "math.ail"].contains(name)
             texts.push(fs.read_text("{dir}/{name}")?)
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 

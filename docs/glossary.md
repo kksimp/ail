@@ -33,6 +33,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
 | **Budget (token budget)** | `--budget N` on any command: about N estimated tokens of its output, most severe records first, then a note counting the rest with a `--from K` handle to continue (ADR 0394). |
+| **Build cache** | `ail build` keeps each finished executable under a SHA-256 of its inputs and copies it when the same inputs come again; `--no-cache` skips it (native.build.5, ADR 0655). |
 | **Card (program card)** | `ail api --card`: one Markdown page of a program or package (entry, tests, manifest, examples, each module's signatures), trimmed to a token budget. The language card is the same idea for the language. See ADRs 0310 and 0311. |
 | **Channel** | A bounded queue between tasks, `Channel[T](capacity)`: `send` waits while it is full, `recv` waits while it is empty and gives `none` once it is closed and empty; `for v in ch` receives until then (ADR 0100, ADR 0188, ADR 0300). |
 | **Child** | A process started with `proc.start`: a unique value with a process id and three `Channel[str]` streams (`stdin`, `out`, `err`); `proc.wait(move c)` or `proc.kill(move c)` ends it (ADRs 0424–0428). |
@@ -73,6 +74,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Error set** | The closed union of error types a function can fail with. Inferred from the body for non-public functions (`!T`), explicit at package APIs (`T ! E`). See ADR 0046. |
 | **Error type** | A struct or enum declared with `error` (`error enum ParseError`). Only error types can be errors (ADR 0120). |
 | **Escape analysis** | Compiler analysis that determines whether a value can outlive or leave its creating scope. A value that does not escape can be stack-allocated. |
+| **Cookie jar** | `std.net.jar`: stores the `Set-Cookie` lines of responses and gives the `Cookie` header for a URL by RFC 6265 domain, path, expiry and `Secure` rules; `Jar.request` carries cookies through redirects (`std.net.20`, `std.net.21`, ADR 0638). |
+| **Body** | A `net.Body` from `net.open`: the response head is read and the body is left on the connection, read with `read_bytes(max)` until it gives no bytes (`std.net.25`, ADR 0716). |
 | **Exchange** | A request the `std.net` server has received, with the handle to answer it: `ex.request` and `ex.respond(response)` (`std.net.9`, `std.net.11`, ADR 0419). |
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
 | **Failure path** | A place in a function where it fails, passes a failure on or handles one: `?` on a result, `else` on a result, or a `return` of an error. `ail check --errors` lists them (`err.paths.1`, ADR 0286). |
@@ -120,6 +123,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **MIR** | Mid-level IR: per body instance, a control-flow graph in SSA form with explicit allocations, copies, traps, dispatch and effects; the unit of the query compiler; internal and unversioned (ADR 0222, ADR 0223). |
 | **Mistakes corpus** | `bootstrap/tests/mistakes/`: small programs that each hold one plausible AI mistake, with the expected rules and what `ail fix` makes of them (`gram.help.2`, ADR 0262, [diagnostics-audit.md](design/diagnostics-audit.md)). |
 | **Module** | A directory of `.ail` files sharing one namespace (ADR 0097). |
+| **Monomorphisation** | Compiling a generic function once per set of type arguments, so each instance runs with concrete types. The compiler chooses per instance between specialising and sharing code (ADR 0080). |
 | **Move** | Handing a value to a new owner; the old binding can't be used afterwards on any path. Unique values move on binding, assignment, return and into fields; any value moves as a `move` argument (ADRs 0068, 0190); a `move self` method moves its receiver (ADR 0317). |
 | **`move self`** | A method receiver that takes ownership: `fn Conn.close(move self)`; `c.close()` moves `c`, with no mark at the call (ADR 0317). |
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
@@ -160,6 +164,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Reduction** | Combining every iteration's value into one, like `total += x`. AIL parallelises `int` `+=` reductions and `xs.sum()` without changing the result (`conc.par.4`, ADR 0239). |
 | **`ref` cell** | A GC-managed shared mutable cell (`ref T`). The only way two names can observe each other's mutations (ADR 0063). |
 | **Reference (semantic API)** | A use of a declared name, listed by `ail api --symbols` as the declaration's symbol id and a position (ADR 0151). |
+| **Reference shape** | A character's OCR features (ink and outline-edge grids, size and position) measured from a font drawn by AIL's rasterizer; a scanned glyph is named by its nearest reference shape (ADR 0512). |
 | **Region inference** | Compiler inference of arenas (regions) for groups of allocations with a shared lifetime. See ADR 0012. |
 | **Rematerialisation** | Rebuilding a constant at each use instead of keeping it in a register; the native allocator gives constants no location (ADR 0386). |
 | **Root module** | The module that declares `main`: the `.ail` files directly in the package root for `ail run DIR`, or the single file for `ail run FILE` (ADR 0153). |
@@ -182,7 +187,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Standard traits** | `Eq` (`==`), `Ord` (`<`, via `cmp` returning `Ordering`) and `ToStr` (text form), declared by the language (ADR 0127). |
 | **String object** | The native layout of a `str`: a byte count, a character count and UTF-8 data, so `len()` is O(1) (ADR 0404). |
 | **Structured concurrency** | Tasks can't outlive the block that spawned them unless placed in an explicit `TaskGroup` (ADR 0096). |
-| **Structured edit** | An edit named by declaration id instead of by text: `ail edit` applies a JSON list of them (replace_body, replace, insert, delete, rename, import), then formats and checks (ADR 0397). |
+| **Structured edit** | An edit named by declaration id instead of by text: `ail edit` applies a JSON list of them (replace_body, replace, insert, delete, rename, import), then formats and checks (ADR 0397). The compact form is hunks under a declaration's name (ADR 0399). |
 | **Supertrait** | A trait another trait requires: `trait Ord Eq`. Implementing the subtrait needs the supertrait's `impl`, and a bound on the subtrait provides it (ADR 0348). |
 | **SVE / SVE2** | Scalable Vector Extension (ARM): vector instructions whose width is chosen by the hardware. Optional for AIL (ADR 0006). |
 | **Symbol id** | A declaration's stable name in the semantic API, `kind:path`, e.g. `method:Point.shift` or `field:Point.x`; it doesn't change when lines move (ADR 0151). |
@@ -214,6 +219,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |
 | **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). A list or map of a unique type is unique too (ADR 0318). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
+| **Vtable** | A table of function pointers for one type's implementation of a trait, used to call a method through `any Trait` at run time. Planned by ADR 0616 (lane 120, not yet landed). |
 | **Walk** | `fs.walk(dir)`: every file below a directory at any depth, as paths, sorted (`std.fs.8`, ADR 0281). |
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |
 | **Watch** | `ail run --watch NAME`: each assignment to a `mut` variable `NAME`, with its new value and position; follows it into `mut` arguments and `mut self` calls, naming the frame that wrote (ADRs 0268, 0327). |

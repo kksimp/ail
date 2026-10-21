@@ -1,0 +1,11 @@
+## type.str.17-18, type.coll.19: words, trim_start, trim_end, count, rfind, flatten.
+fn main()
+    print("  the  quick\tbrown\nfox ".words())
+    print("".words().len())
+    print("[{"  x ".trim_start()}] [{"  x ".trim_end()}]")
+    print("abababa".count("aba"))
+    print("abc".count("z"))
+    print("a/b/c".rfind("/"))
+    print("abc".rfind("z"))
+    print([[1, 2], [], [3]].flatten())
+    print([["a"], ["b", "c"]].flatten().join(""))

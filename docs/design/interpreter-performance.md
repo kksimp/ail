@@ -381,3 +381,24 @@ With `--watch total` (before = walker, the only option before this ADR):
 
 The gain under `--watch` is smaller than without it, because the watched
 assignments and mutating calls are the walker's own code.
+
+
+## Typed fast paths (lane 190)
+
+[ADR 0618](../decisions/0618-bytecode-typed-fast-paths.md): float operators,
+list element updates, `push`/`len`, `list[i] op= expr` and calls with `mut`
+arguments no longer take generic paths or hand off to the walker. Geometric
+mean over the eight compute programs: 1.85x of CPython before, 1.33x after
+(nbody 2.59x to 1.31x, mandelbrot 3.07x to 1.08x, binarytrees 3.80x to 2.70x,
+sieve 2.56x to 1.94x); the table is in the ADR. Agent programs are unchanged.
+
+[ADR 0619](../decisions/0619-bytecode-calls-loops-and-fusion.md) cuts the
+per-instruction and per-call overhead (lean calls, loop shapes, fused
+`push`/`len`, `a[i][k]`, `xs[i+k]`, op-assign and numeric methods, cold arms
+moved out of the dispatch loop): geometric mean 1.87x of CPython at the batch
+head, 0.95x now (nbody 0.97x, mandelbrot 0.92x, fannkuch 0.94x, spectralnorm
+0.74x, collatz 0.38x, sieve 1.13x, matmul 1.31x, binarytrees 1.92x). What is
+left is the cost of reading a local: the walker's environment is a vector of
+(name, value) pairs behind a pointer, so every local read reloads its length
+and bounds-checks it. A frame with locals in the register file, or audited
+unchecked access (about 12% fewer instructions, measured), would remove that.

@@ -1,4 +1,3 @@
-
 fn main() !
     file := "{path.dir(env.program())}/agent-data/status.json"
     dump := proc.run("od", ["-An", "-tx1", "-v", "-w16", file])?

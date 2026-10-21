@@ -1,0 +1,4 @@
+fn main()
+    mut xs := [1, 2, 3]
+    xs.pop_back()
+    print(xs.len())

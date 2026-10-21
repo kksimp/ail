@@ -4,7 +4,7 @@ Non-normative. The designer asked (2026-10-20 16:53 UTC) for one plan that
 finishes AIL the fastest, most efficient way: the most token-efficient
 language, beating C and Python where it matters, with AI-first features the
 AI itself wants. Phases: **build out, test, fix, test again, drag race**
-against C and Python. Lane budget: up to 2 Opus, 10 Sonnet and 15 Haiku
+against C and Python. Lane budget: up to 2 large, 10 medium and 15 small lanes
 lanes at once. The integrator is the Fable thread; this document is its
 plan, and the briefs are in the project files (`lanes/120-…`).
 
@@ -66,35 +66,35 @@ tests and fixes without waiting.
 
 Numbers continue the daytime lanes. ADR blocks are fixed per lane.
 
-| Lane | Model | Title | ADRs |
+| Lane | Size | Title | ADRs |
 |---|---|---|---|
-| 120 | Opus | Native backend in AIL: MIR, x86-64 and ARM64 encoders, ELF and Mach-O, `ail build` for the pure subset | 0384–0393 |
-| 121 | Opus | AI-first features: `ail diff`, `ail edit`, record and replay, snapshot updating, token budgets | 0394–0403 |
-| 122 | Sonnet | Native runtime and ABI: value layout, strings, lists, syscalls, entry point, with lane 120 | 0404–0411 |
-| 123 | Sonnet | Binary data: `bytes`, binary files, bodies and process pipes, base64 and hex | 0412–0417 |
-| 124 | Sonnet | Networking: HTTP server, headers and methods, raw TCP sockets, `net.serve` capability | 0418–0423 |
-| 125 | Sonnet | Processes and channels: streaming `proc.spawn`, kill, `select` | 0424–0429 |
-| 126 | Sonnet | FFI: `extern` C functions, `unsafe` blocks, raw pointers, dynamic loading in the interpreter | 0430–0437 |
-| 127 | Sonnet | Regex: a linear-time engine as `std.regex` | 0438–0441 |
-| 128 | Sonnet | Hashing and compression: `std.hash` (SHA-2, HMAC, CRC32) and `std.compress` (deflate, gzip, zip) | 0442–0446 |
-| 129 | Sonnet | Dates and time: calendar, ISO 8601, durations, zones | 0447–0451 |
-| 130 | Sonnet | Language gaps A: function values, named arguments, match guards and range patterns | 0452–0459 |
-| 132 | Sonnet | Test, fuzz and drag race: differential native vs interpreter, module fuzzers, `tools/perfbench` vs C | 0460–0464 |
-| 140 | Haiku | Bit operations and shifts | 0465–0467 |
-| 141 | Haiku | OQ-114 to OQ-117: typed `none` locals, `else none`, shadowing, `if` as operand | 0468–0470 |
-| 142 | Haiku | `--watch` on the bytecode tier | 0471–0473 |
-| 143 | Haiku | Drag-race programs: AIL, C and Python twins of the benchmark set | 0474–0476 |
-| 144 | Haiku | Agent corpus round 3: ten more agent programs | 0477–0479 |
-| 145 | Haiku | Examples, quick reference and cards for the new modules | 0480–0482 |
-| 146 | Haiku | Spec rule-id and `ail explain` audit for every new behaviour | 0483–0485 |
-| 147 | Haiku | `ail fix` rules for the new diagnostics | 0486–0488 |
-| 148 | Haiku | Editor: find and replace, go to definition, problems from the new checks | 0489–0491 |
-| 149 | Haiku | Bench automation: one script for tokbench and perfbench before/after tables | 0492–0494 |
-| 150 | Haiku | Property and vector tests for bytes, regex, hash, compress and dates | 0495–0497 |
-| 151 | Haiku | Conformance: every spec example runs; new chapters covered | 0498–0500 |
-| 152 | Haiku | Diagnostics quality pass over the corpus | 0501–0503 |
-| 153 | Haiku | Windows awareness of the new modules (paths, pipes, sockets) | 0504–0506 |
-| 154 | Haiku | `std.tensor` CPU gaps: `conv2d`, activations, `f32`, indexing, broadcasting | 0507–0509 |
+| 120 | large | Native backend in AIL: MIR, x86-64 and ARM64 encoders, ELF and Mach-O, `ail build` for the pure subset | 0384–0393 |
+| 121 | large | AI-first features: `ail diff`, `ail edit`, record and replay, snapshot updating, token budgets | 0394–0403 |
+| 122 | medium | Native runtime and ABI: value layout, strings, lists, syscalls, entry point, with lane 120 | 0404–0411 |
+| 123 | medium | Binary data: `bytes`, binary files, bodies and process pipes, base64 and hex | 0412–0417 |
+| 124 | medium | Networking: HTTP server, headers and methods, raw TCP sockets, `net.serve` capability | 0418–0423 |
+| 125 | medium | Processes and channels: streaming `proc.spawn`, kill, `select` | 0424–0429 |
+| 126 | medium | FFI: `extern` C functions, `unsafe` blocks, raw pointers, dynamic loading in the interpreter | 0430–0437 |
+| 127 | medium | Regex: a linear-time engine as `std.regex` | 0438–0441 |
+| 128 | medium | Hashing and compression: `std.hash` (SHA-2, HMAC, CRC32) and `std.compress` (deflate, gzip, zip) | 0442–0446 |
+| 129 | medium | Dates and time: calendar, ISO 8601, durations, zones | 0447–0451 |
+| 130 | medium | Language gaps A: function values, named arguments, match guards and range patterns | 0452–0459 |
+| 132 | medium | Test, fuzz and drag race: differential native vs interpreter, module fuzzers, `tools/perfbench` vs C | 0460–0464 |
+| 140 | small | Bit operations and shifts | 0465–0467 |
+| 141 | small | OQ-114 to OQ-117: typed `none` locals, `else none`, shadowing, `if` as operand | 0468–0470 |
+| 142 | small | `--watch` on the bytecode tier | 0471–0473 |
+| 143 | small | Drag-race programs: AIL, C and Python twins of the benchmark set | 0474–0476 |
+| 144 | small | Agent corpus round 3: ten more agent programs | 0477–0479 |
+| 145 | small | Examples, quick reference and cards for the new modules | 0480–0482 |
+| 146 | small | Spec rule-id and `ail explain` audit for every new behaviour | 0483–0485 |
+| 147 | small | `ail fix` rules for the new diagnostics | 0486–0488 |
+| 148 | small | Editor: find and replace, go to definition, problems from the new checks | 0489–0491 |
+| 149 | small | Bench automation: one script for tokbench and perfbench before/after tables | 0492–0494 |
+| 150 | small | Property and vector tests for bytes, regex, hash, compress and dates | 0495–0497 |
+| 151 | small | Conformance: every spec example runs; new chapters covered | 0498–0500 |
+| 152 | small | Diagnostics quality pass over the corpus | 0501–0503 |
+| 153 | small | Windows awareness of the new modules (paths, pipes, sockets) | 0504–0506 |
+| 154 | small | `std.tensor` CPU gaps: `conv2d`, activations, `f32`, indexing, broadcasting | 0507–0509 |
 
 Lane 114's PR #102 (the checker in AIL) merges to `main` first through the
 daytime gate and is then in the batch branch.

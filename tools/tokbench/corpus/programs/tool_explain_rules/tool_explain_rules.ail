@@ -1,0 +1,9 @@
+
+fn main() !
+    here := path.dir(env.program())
+    text := fs.read_text("{here}/../tools/tokbench/corpus/agent-r5/data/rules.txt")? "reading rules"
+    for rule in text.lines()
+        r := proc.run("{here}/../ail", ["explain", rule])? "explaining {rule}"
+        shown := if r.status == 0 then r.out else r.err
+        first := shown.lines().first() else ""
+        print("{rule} {r.status} {first}")

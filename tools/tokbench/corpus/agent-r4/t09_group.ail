@@ -1,0 +1,5 @@
+fn main()
+    mut g := Map[int, List[str]]()
+    for w in "the cat the dog".words()
+        g.push(w.len(), w)
+    print(g)

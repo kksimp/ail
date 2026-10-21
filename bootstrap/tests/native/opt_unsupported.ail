@@ -1,0 +1,18 @@
+error struct Empty "the list is empty"
+
+error struct Missing "nothing at {path}"
+    path str
+
+fn first(xs List[int]) int ! Empty
+    if xs.len() == 0
+        return Empty()
+    xs[0]
+
+fn labelled(xs List[int]) int ! Empty
+    first(xs)? "while reading"
+
+fn nested(n int) int??
+    n
+
+fn main()
+    print(labelled([1]) else 0)
