@@ -148,3 +148,53 @@ fn ail_front_end_reports_one_diagnostic_per_line_for_a_stray_ampersand() {
     let want = format!("{}:2:43: error[gram.foreign.1]: AIL has no `&`", f.display());
     assert_eq!(errors, [want.as_str()]);
 }
+
+/// The AIL front end prints each syntax diagnostic's text as the bootstrap
+/// does: the message, the source line and caret, the help and the fix. A file
+/// whose text still differs is listed in `tests/diag_text_known.txt`, which
+/// only shrinks; a new divergence, or a listed file that now matches, fails.
+#[test]
+fn ail_syntax_diagnostic_text_matches_the_bootstrap() {
+    let mut files: Vec<PathBuf> = fs::read_dir(root().join("bootstrap/tests/mistakes"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "ail"))
+        .collect();
+    files.sort();
+    let names: Vec<String> = files.iter().map(|f| f.display().to_string()).collect();
+    let all = run(ail().arg("run").arg(root().join("compiler")).arg("diagnose").args(&names));
+    // Each file's section starts with its `== path` line.
+    let mut sections: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut cur: Option<String> = None;
+    for line in all.lines() {
+        if let Some(p) = line.strip_prefix("== ") {
+            cur = Some(p.to_string());
+            sections.entry(p.to_string()).or_default();
+        } else if let Some(c) = &cur {
+            let s = sections.get_mut(c).unwrap();
+            s.push_str(line);
+            s.push('\n');
+        }
+    }
+    let mut diverging: Vec<String> = Vec::new();
+    for (f, name) in files.iter().zip(&names) {
+        let rust = String::from_utf8_lossy(&ail().arg("check").arg(f).output().unwrap().stderr).to_string();
+        let ail_text = sections.get(name).cloned().unwrap_or_default();
+        // A syntax error the bootstrap reports must be reported here too.
+        let rust_syntax = rust.contains("error[gram.") || rust.contains("error[lex.");
+        let matches = if ail_text.trim().is_empty() { !rust_syntax } else { ail_text.trim() == rust.trim() };
+        if !matches {
+            diverging.push(name.trim_start_matches(&format!("{}/", root().display())).to_string());
+        }
+    }
+    let known: Vec<String> = fs::read_to_string(root().join("bootstrap/tests/diag_text_known.txt"))
+        .unwrap()
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect();
+    let new: Vec<&String> = diverging.iter().filter(|d| !known.contains(d)).collect();
+    let fixed: Vec<&String> = known.iter().filter(|k| !diverging.contains(k)).collect();
+    assert!(new.is_empty(), "new divergence in syntax diagnostic text: {new:?}");
+    assert!(fixed.is_empty(), "now matching, remove from diag_text_known.txt: {fixed:?}");
+}

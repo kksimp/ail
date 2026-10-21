@@ -1,0 +1,21 @@
+# std.tensor.21, std.tensor.22: Tensor[f32] arithmetic, reductions, conversions and text.
+fn half() tensor.Tensor[f32]
+    tensor.from([1.0, -2.0, 3.0, 0.5], [2, 2])
+
+fn main()
+    a := half()
+    b := tensor.from([4.0, 8.0, -1.0, 2.0], [2, 2]).to_f32()
+    print(a * b + a)
+    print((a * 2.0 - b).relu())
+    print(a.sum())
+    print(a.to_list())
+    print(a.to_float())
+    print(-(a - b) / b)
+    print(a.dot(b))
+    print(a[0])
+    print(a.map(|x| x * x))
+    print(a.matmul(b))
+    print(a.transpose().sum(0))
+    print(a.clamp(0.0, 1.0))
+    print(a.round())
+    print(tensor.zeros([2]) + 0.5)
