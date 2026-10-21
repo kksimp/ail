@@ -1,0 +1,47 @@
+error struct Bad
+    at int
+    message str
+    fatal bool
+
+struct Reader
+    pos int
+
+fn Reader.fail(self, message str) Bad
+    Bad(pos, message, false)
+
+fn Reader.unexpected(self) Bad
+    if pos > 1
+        return fail("late")
+    fail("early")
+
+fn Reader.step(mut self, n int) int ! Bad
+    if n < 0
+        return unexpected()
+    pos += n
+    pos
+
+fn Reader.twice(mut self, n int) int ! Bad
+    a := step(n)?
+    b := step(n)?
+    a + b
+
+fn run(n int) int ! Bad
+    mut r := Reader(0)
+    x := r.step(n)?
+    y := r.twice(n) else err
+        print("recovered: {err.message} at {err.at}")
+        return Bad(err.at, "wrapped {err.message}", true)
+    x + y
+
+fn main() ! Bad
+    print(run(1) else 0)
+    v := run(-1) else err
+        print(err)
+        0
+    print(v)
+    w := run(2) else err
+        print(err.message)
+        -1
+    print(w)
+    print(Bad(7, "a \"q\"\n", true))
+    run(-5)?

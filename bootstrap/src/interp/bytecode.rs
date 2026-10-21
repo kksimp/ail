@@ -488,7 +488,7 @@ enum Ins<'a> {
     },
     /// `xs[i].name(args)` where `name` takes `mut self`: when `xs` is a list local, `i` is in range
     /// and the element is a struct with such a method, the element moves into the call and back
-    /// (type.val.4); anything else is the walker's call (ADR 0620).
+    /// (trait.method.3); anything else is the walker's call (ADR 0620).
     ElemCall {
         slot: u32,
         ix: Opnd,

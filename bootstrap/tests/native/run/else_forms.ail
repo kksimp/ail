@@ -1,0 +1,23 @@
+## `s.to_int() else ...` outside a binding (err.else.1-2): operands, arguments,
+## conditions and compound assignments.
+fn twice(n int) int
+    n * 2
+
+fn digits(s str) int
+    n := s.to_int() else return -1
+    n
+
+fn main()
+    f := ["ms=12", "ms=x", "7"]
+    mut total := 0
+    for item in f
+        total += (item.strip_prefix("ms=") else item).to_int() else 0
+    print("total {total}")
+    print("sum {("4".to_int() else 0) + ("5".to_int() else 0)}")
+    print("arg {twice("21".to_int() else 0)} {twice("no".to_int() else 9)}")
+    if ("3".to_int() else 0) > 2
+        print("big")
+    print("lead {digits("42")} {digits("zz")}")
+    mut n := 1
+    n = ("x".to_int() else n) + 10
+    print("n {n}")

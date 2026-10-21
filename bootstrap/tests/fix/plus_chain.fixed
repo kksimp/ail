@@ -1,0 +1,7 @@
+fn main()
+    name := "ann"
+    greeting := "hi "
+    n := 1 + 2
+    print("{greeting}{name}!")
+    print("{n}x")
+    print("a{name}{7}")
