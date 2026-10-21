@@ -156,6 +156,8 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     if bad.contains(key)
         fn_failed = true
         return none
+    if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
+        return proc_output_method(key, recv, args, pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
     if r := recv
@@ -169,6 +171,19 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
     Val(id: call(key, vs, sig.ret), ty: sig.ret)
+
+## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
+## status is zero; the standard output followed by the standard error.
+fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    r := recv else return unsupported(pos, "calling `{key}`")
+    if args.len() > 0
+        return unsupported(pos, "this call")
+    if key == "{PROC_OUTPUT}.ok"
+        status := load(r.id, 0, Ty.Int)
+        return Val(id: op("eq", [status, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    out := load(r.id, 1, Ty.Str)
+    err := load(r.id, 2, Ty.Str)
+    Val(id: call("rt.str_cat", [out, err], Ty.Str), ty: Ty.Str)
 
 ## Whether a value of type `t` read from a place must be copied to stay
 ## independent (own.val.1).
