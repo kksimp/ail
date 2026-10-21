@@ -78,7 +78,7 @@ had 8, 21 and 14 rules with no such example. Now they have none uncovered:
 | chapter | rules | uncovered before | uncovered now | notes |
 |---|---:|---:|---:|---|
 | 01-platforms.md | 8 | 8 | 0 | `norun` for target and layout rules; `plat.ptr.2` runs |
-| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is `skip=bootstrap`: the bootstrap reports `gram.syntax.1` |
+| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is checked: a keyword before `:=` reports it (lane 238) |
 | 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
 
 Chapters 07 (ownership, 35 uncovered before) and 08 (errors, 29 before) follow the same way:
@@ -90,7 +90,7 @@ Uncovered rules outside the batch chapters: 382 before lane 223, 275 after chapt
 (09-generics, 14 rules; `gen.anon.2` is `skip=context`, the formatter's canonical form). Chapters 11-16 and 19-21 remain.
 
 Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integrator decision):
-`own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `lex.kw.1`, `trait.auto.4`.
+`own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `trait.auto.4`.
 
 ## Spec rules no code cites (lane 207, 2026-10-21)
 
@@ -112,7 +112,7 @@ had 8, 21 and 14 rules with no such example. Now they have none uncovered:
 | chapter | rules | uncovered before | uncovered now | notes |
 |---|---:|---:|---:|---|
 | 01-platforms.md | 8 | 8 | 0 | `norun` for target and layout rules; `plat.ptr.2` runs |
-| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is `skip=bootstrap`: the bootstrap reports `gram.syntax.1` |
+| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is checked: a keyword before `:=` reports it (lane 238) |
 | 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
 The other chapters are unchanged: 382 uncovered rules before lane 223's first
 PR, 339 after chapters 01-03 (07-21, std and the rest still to do).

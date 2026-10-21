@@ -574,4 +574,3 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0731](0731-api-diff-output-and-budget.md) | Output of `ail api --diff` and its token budget *(delegated)* | Accepted | 2026-10-21 |
 | [0734](0734-native-integer-text.md) | Native integer text: digits written from the end, one division by 10 each *(delegated)* | Accepted | 2026-10-21 |
 | [0725](0725-test-cases-audit.md) | Test-case audit: one audit script, a duplicate removed, one-theme cases split *(delegated)* | Accepted | 2026-10-21 |
-| [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2` and `ct.const.4` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |
