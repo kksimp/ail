@@ -279,6 +279,13 @@ pub fn Asm.imul_rri(mut self, dst int, src int, v int)
 pub fn Asm.test_rr(mut self, a int, b int)
     op_rr(false, 133, b, a)
 
+## `test r, imm32` (the immediate is sign-extended).
+pub fn Asm.test_ri(mut self, r int, v int)
+    rex(1, 0, 0, r, false)
+    byte(247)
+    modrm_reg(0, r)
+    u32(v)
+
 pub fn Asm.neg(mut self, r int)
     rex(1, 0, 0, r, false)
     byte(247)

@@ -24,14 +24,21 @@
    up to 2^62 - 2^31) is now proven not to overflow. Sums of two spans still
    fit the compiler's own `int`.
 6. **x86-64 division by a power of two** computes into the result's register.
+7. **`x & m == 0` as a branch condition** is one `test` (x86-64, immediate or
+   register mask) or `tst` (AArch64, register mask); new encoders `test_ri`
+   and `tst_rr` with encoder tests against objdump and llvm-mc.
+8. **Loop rotation looks through rebuilt constants**: a loop header that is
+   constants and one comparison repeats the test at the jump back.
 
 ## Measurements
 
-collatz 100000: 173.2M to 140.9M instructions (2, 3 and 6); spectralnorm 200: 46.7M to 37.1M (5, 6). fannkuch 8:
+collatz 100000: 173.2M to 119.4M instructions (2, 3, 6 and 7); spectralnorm 200: 46.7M to 37.1M (5, 6). fannkuch 8:
 22.4M to 21.7M (1 and 4).
 
 ## Rejected alternatives
 
-- **`test r, mask` fused with a preceding `and`:** it needs an AArch64 `tst`
-  with a bitmask immediate (a new encoder path) for the same saving; left
-  until both targets can do it together (ADR 0008).
+- **Saving caller-saved registers around calls** so that values live across
+  a call stay in registers (tried, ~150 lines in the allocator and both
+  generators): no perfbench program got faster. fannkuch's outer-loop scalars
+  spill because the inner loops use every allocatable register, not because
+  of calls; the code was dropped.

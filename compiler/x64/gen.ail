@@ -364,8 +364,17 @@ fn Gen.gen_block(mut self, b int)
         last := blk.insts[n - 1]
         if last.dst == blk.term.cond and uses[last.dst] == 1 and cc_of(last.op) >= 0
             fused = n - 1
+    # `x & m == 0` (or `!= 0`) as a branch condition is one `test` (ADR 0623).
+    mut masked := -1
+    if fused > 0
+        cmp := blk.insts[fused]
+        mask := blk.insts[fused - 1]
+        if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.args[0] == mask.dst
+            if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0 and imm(mask.args[0]) == none
+                if imm32(mask.args[1]) != none or loc[mask.args[1]] >= 0
+                    masked = fused - 1
     for k in 0..n
-        if k == fused
+        if k == fused or k == masked
             continue
         gen_inst(blk.insts[k])
     t := blk.term
@@ -378,14 +387,25 @@ fn Gen.gen_block(mut self, b int)
                 if rotates(to)
                     # The loop test again here, instead of a jump back to it.
                     h := f.blocks[to]
-                    branch_to(compare(h.insts[0]), h.term.targets[0], h.term.targets[1])
+                    branch_to(
+                        compare(h.insts[h.insts.len() - 1]),
+                        h.term.targets[0],
+                        h.term.targets[1],
+                    )
                 else
                     a.jmp(blabels[to])
         "branch" =>
             yes := t.targets[0]
             no := t.targets[1]
             mut cc := CC_NE
-            if fused >= 0
+            if masked >= 0
+                bt := blk.insts[masked]
+                if k := imm32(bt.args[1])
+                    a.test_ri(gpr(bt.args[0], S0), k)
+                else
+                    a.test_rr(gpr(bt.args[0], S0), gpr(bt.args[1], S1))
+                cc = cc_of(blk.insts[fused].op)
+            elif fused >= 0
                 cc = compare(blk.insts[fused])
             else
                 r := gpr(t.cond, S0)
@@ -405,9 +425,14 @@ fn Gen.gen_block(mut self, b int)
 ## on the way round a loop (loop rotation, ADR 0611).
 fn Gen.rotates(self, to int) bool
     h := f.blocks[to]
-    if h.term.kind != "branch" or h.insts.len() != 1
+    n := h.insts.len()
+    if h.term.kind != "branch" or n == 0
         return false
-    last := h.insts[0]
+    # Constants rebuilt at each use cost nothing to repeat.
+    for k in 0..n - 1
+        if not codegen.is_remat(h.insts[k])
+            return false
+    last := h.insts[n - 1]
     last.dst == h.term.cond and uses[last.dst] == 1 and cc_of(last.op) >= 0
 
 ## Jump to `yes` when `cc` holds, else to `no`, falling through where the
