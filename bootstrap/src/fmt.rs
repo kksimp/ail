@@ -2,6 +2,10 @@
 //!
 //! The style is non-normative and is described, rule by rule, in
 //! `docs/design/formatting.md`; the `fmt.*` IDs cited here are that file's.
+//!
+//! The formatter keeps the spelling of a type as written: `int` and `i64`, and
+//! `float` and `f64`, are both canonical and are never rewritten into each other
+//! (type.num.4).
 //! The formatter works on the lexer's token stream, with the comment side
 //! table from `lexer::lex_with_comments`. It only changes whitespace, line
 //! breaks and trailing commas, and refuses to write output whose token stream

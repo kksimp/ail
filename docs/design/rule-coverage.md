@@ -105,6 +105,54 @@ Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integra
   - *Possible mis-citation:* `check.rs` reports the nested-optional error with `type.opt.7`; spec `type.opt.8` describes that rule. The owner should decide which ID the diagnostic carries.
 
 Check 1 (cited but not in the spec) has three pre-existing entries that lane 207 did not change: `expr.lit.3` (`compiler/mir/lower.ail`), `plat.win.1` (`compiler/rt/native/os.ail`) and `std.tz.4` (`bootstrap/src/interp/tz.rs`).
+## Check 2 after lane 244 (2026-10-21)
+
+Lane 207's "not implemented" entry for `native.bce.1`-`4` was stale: `compiler/mir/bce.ail`
+implements the bounds-check removal (ADR 0577, 0578, 0622). Lane 244 cites what each
+implementation covers, and checks the rest by running the tools:
+
+- **Cited now (9):** `native.bce.1`, `2`, `3`, `7`, `8`, `9` (the header of `bce.ail`);
+  `api.pkg.4` (`api.rs`, the single-file keys);
+  `type.opt.8` (`check.rs`; its help still names `type.opt.7`, which the owner should fix);
+  `type.num.4` (`fmt.rs`; `ail fmt` keeps `i64` as written, checked by running it).
+- **Confirmed not implemented (4):** `type.enum.4` and `gen.anon.2` (`ail fmt` keeps
+  `Shape.Circle` and `[T Ord]` as written, checked by running it); `err.type.4` (lane 223
+  marks its example `skip=bootstrap`); `err.type.3` (no check found).
+- **Still unlocated (6):** `conc.race.1`, `gram.help.2`, `native.bce.4` (overflow-check
+  removal), `own.borrow.1`, `type.num.3`, `unsafe.op.2`.
+- **Not cited, pending lane 238:** `ct.const.4`. The checker reports a `ref` in a constant as
+  `mod.const.2` (check.rs), so a citation there would name the wrong rule. Lane 238 is
+  changing that diagnostic; cite `ct.const.4` once it does.
+
+The audit counts a rule as cited only from code, so the not-implemented rules keep check 2
+failing until the designer decides how to record them: either the audit reads this file
+for exemptions, or the rules are implemented.
+
+## Check 2 exemptions
+
+The only rules `tools/rules-audit.sh` check 2 may leave uncited. Each row is a rule, its
+owner (a lane number, or `unowned` until the designer assigns one), and the reason. The
+audit fails on a row whose rule is now cited (remove the row) and on a row with no owner
+or reason.
+
+| rule | owner | reason |
+|---|---|---|
+| `ct.eval.3` | unowned | no step or memory limit on compile-time evaluation (checked again in lane 244) |
+| `ct.eval.4` | unowned | optional reuse of compile-time results is a MAY rule; not built |
+| `err.type.3` | unowned | no check that a public function states its error type; none found |
+| `err.type.4` | unowned | match exhaustiveness on an inferred error set; lane 223 marks its example `skip=bootstrap` |
+| `gen.anon.2` | unowned | `ail fmt` keeps `[T Ord]` as written; the anonymous canonical form is not built (checked by running fmt) |
+| `own.copy.1` | unowned | no report of deep-copy sites in a performance report |
+| `plat.isa.3` | unowned | no start-up check of the CPU feature level in the native runtime |
+| `type.enum.4` | unowned | `ail fmt` keeps `Shape.Circle` where the qualifier can be omitted (checked by running fmt) |
+| `conc.race.1` | unowned | a guarantee of the conc.share checks; no citation located |
+| `gram.help.2` | unowned | the fix loop's clean-result rule; the site is not located |
+| `native.bce.4` | unowned | overflow-check removal in loops; not located in `compiler/mir/bce.ail` |
+| `own.borrow.1` | unowned | a parameter's access lasts for the call; the site is not located |
+| `type.num.3` | unowned | literal default typing (`int`, `float`); the site is not located |
+| `unsafe.op.2` | unowned | creating a raw pointer is not unsafe; the site is not located |
+| `ct.const.4` | 238 | the checker reports a `ref` in a constant as `mod.const.2`; cite `ct.const.4` once lane 238 changes that diagnostic |
+
 ## Spec examples by chapter (lane 223, ADR 0498)
 `spec.rs` counts a rule as covered when a spec fence cites it (`rules=`,
 `error=`, or `skip=bootstrap rules=`). Before lane 223, chapters 01, 02 and 03
