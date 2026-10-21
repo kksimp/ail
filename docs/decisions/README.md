@@ -537,3 +537,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
 | [0629](0629-list-chunks-windows-counts-str-center.md) | List `chunks`, `windows`, `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`, `count`, `rfind` *(delegated)* | Accepted | 2026-10-21 |
+| [0724](0724-quick-reference-trim.md) | Quick reference trimmed by 15% (15,176 to 12,891 tokens) with every construct kept *(delegated)* | Accepted | 2026-10-21 |
