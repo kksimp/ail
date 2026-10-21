@@ -173,6 +173,56 @@ fn list_join(xs List[int], sep str) str
         at += load64(e)
     str_at(r)
 
+## UTF-8 bytes of the scalar value `c`.
+fn char_width(c int) int
+    if c < 128
+        return 1
+    if c < 2048
+        return 2
+    if c < 65536
+        return 3
+    4
+
+## Write the UTF-8 of `c` at `p`; the address after it.
+fn char_put(p int, c int) int
+    w := char_width(c)
+    if w == 1
+        store8(p, c)
+    elif w == 2
+        store8(p, 192 + c / 64)
+        store8(p + 1, 128 + c % 64)
+    elif w == 3
+        store8(p, 224 + c / 4096)
+        store8(p + 1, 128 + c / 64 % 64)
+        store8(p + 2, 128 + c % 64)
+    else
+        store8(p, 240 + c / 262144)
+        store8(p + 1, 128 + c / 4096 % 64)
+        store8(p + 2, 128 + c / 64 % 64)
+        store8(p + 3, 128 + c % 64)
+    p + w
+
+## `xs.join(sep)` for a list of characters (type.coll.9).
+fn list_join_chars(xs List[int], sep str) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sp := str_addr(sep)
+    mut n := 0
+    for i in 0..k
+        n += char_width(load64(items + 8 * i))
+    if k > 1
+        n += (k - 1) * load64(sp)
+    chars := if k > 1 then k + (k - 1) * load64(sp + 8) else k
+    r := str_new(n, chars)
+    mut at := r + 16
+    for i in 0..k
+        if i > 0
+            copy_bytes(at, sp + 16, load64(sp))
+            at += load64(sp)
+        at = char_put(at, load64(items + 8 * i))
+    str_at(r)
+
 fn out_nl()
     out_byte(10)
     if line_buffered()

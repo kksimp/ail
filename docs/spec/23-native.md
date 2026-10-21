@@ -38,7 +38,7 @@ without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
-`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and the list methods `extend`, `remove_at`,
+`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and `join` on lists of strings or characters, the list methods `extend`, `remove_at`,
 `insert`, `clear`, `reverse`, `pop` (as a statement or with `else`), `contains`,
 `sort` and `sorted` on lists of `int`, `float`, `bool` or `str` (not `by:`
 keys), in functions with at most eight

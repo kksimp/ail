@@ -1675,6 +1675,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             # type.coll.9
             if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
                 return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+            if name == "join" and vs.len() == 1 and e == Ty.Char and vs[0].ty == Ty.Str
+                return Val(id: call("rt.list_join_chars", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
             if is_list_edit(name)
                 return lower_list_edit(r, e, name, npos, args, vs)
             if name == "push" and vs.len() == 1
