@@ -1,0 +1,9 @@
+fn ms(f List[str]) int
+    (f[0].strip_prefix("ms=") else "0").to_int() else 0
+
+fn main()
+    print("{ms(["ms=12"])}")
+    print("{ms(["x"])}")
+    print("{ms(["ms=zz"])}")
+    n := (["a"][0].strip_prefix("a") else "7").to_int() else 1
+    print("{n}")
