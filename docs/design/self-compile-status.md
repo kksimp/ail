@@ -86,7 +86,7 @@ Minimal native cases for the blocked constructs live in
 `cargo test --test native`; a case that fails is a blocker, not a broken test.
 `tools/self-compile/selfc-cases.sh` builds each one and prints the pass count.
 
-Current: **20 of 29 pass** (rerun on 1c370770; was 16 on fcc7f33d). The nine still failing are maps (`for_over_map`, `map_get`, `map_param`, `map_field`), sets (`set_add`), `.contains()` and `.extend()` on lists, `unreachable`, and a sorted closure. The survey is stale in one large way: the
+Current: **25 of 29 pass** (rerun on bd982d24; was 20 on 1c370770, 16 on fcc7f33d). The four still failing are `.contains()` and `.extend()` on lists, `unreachable`, and a sorted closure. The survey is stale in one large way: the
 `parameter \`f\`: its type isn't in the native subset` count (43 of 169 on this
 head) comes from lowering one file alone. `Func` is declared in
 `compiler/mir/mir.ail`, not in `addr.ail`, so the survey reports it as unknown.
@@ -97,11 +97,11 @@ those rows, not a native lane.
 
 | construct | case | owner (queue order) | status |
 |---|---|---|---|
-| `==` on `str` (and `<`) | `str_eq`, `str_lt` | lane 172 (#184, then #204) | fail: `expected bool, found str` |
-| string interpolation outside `print` | `str_interp` | lane 172 (#184) | fail |
-| comprehension whose element type isn't known | `comprehension_str` | lane 172 (#184) | fail |
-| `Map` as a parameter, field or local | `map_param`, `map_field`, `map_get`, `for_over_map` | lane 173 (#180) | fail |
-| `Set` (`add`, `len`) | `set_add` | lane 173 (#180) | fail |
+| `==` on `str` (and `<`) | `str_eq`, `str_lt` | lane 172 (#184, then #204) | pass |
+| string interpolation outside `print` | `str_interp` | lane 172 (#184) | pass |
+| comprehension whose element type isn't known | `comprehension_str` | lane 172 (#184) | pass |
+| `Map` as a parameter, field or local | `map_param`, `map_field`, `map_get`, `for_over_map` | lane 173 (#180) | pass |
+| `Set` (`add`, `len`) | `set_add` | lane 173 (#180) | pass |
 | `.extend()` / `.contains()` on `List[int]` | `list_extend`, `list_contains` | lane 173 (#197) | fail |
 | `sorted(by: closure)` (method with a closure) | `sorted_closure` | lane 174 (#170, #207, #208, #224) | fail |
 | calling `unreachable(...)` | `unreachable_call` | lane 170 (#170) | fail |
@@ -113,4 +113,4 @@ those rows, not a native lane.
 Owners follow the native queue in `/mnt/project-files/lanes/170-native-rules.md`. A row changes
 status when its owner's PR lands on the batch head: rerun
 `tools/self-compile/selfc-cases.sh` and `tools/self-compile/run.sh`, then update
-the table. Last rerun: 20 of 29 pass on 1c370770.
+the table. Last rerun: 25 of 29 pass on bd982d24 (the five newly passing cases are the map and set rows, from #180, and `str_eq`, `str_lt`, `str_interp`, `comprehension_str`, which the table still listed as failing).
