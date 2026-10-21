@@ -35,6 +35,8 @@ struct ParSite
     atomic bool
     body List[ast.Stmt]
     pos ast.Pos
+    ## The function that holds the loop (a stack names it, not the chunk).
+    owner str
 
 pub struct TaskState
     ## Whether the task runtime is linked (so `print` takes the output lock).
@@ -46,10 +48,12 @@ pub struct TaskState
     ## While lowering a chunk function: no loop inside it goes parallel again,
     ## and `+=` on these names also tracks the running sum's extremes.
     in_chunk bool
+    ## While a chunk function is built, its `par for`'s enclosing function.
+    owner str
     accs Set[str]
 
 pub fn new_task_state() TaskState
-    TaskState(on: false, sites: [], pars: [], rets: {}, in_chunk: false, accs: Set[str]())
+    TaskState(on: false, sites: [], pars: [], rets: {}, in_chunk: false, owner: "", accs: Set[str]())
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
 ## task runtime is linked. A false positive only costs compile time.
@@ -455,7 +459,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     if by_list
         key := lookup(root_of(iter))?
         caps.push(Cap(name: "__plist", ty: var_ty[key]))
-    ParSite(var: var, by_list: by_list, caps: caps, accs: accs, atomic: atomic, body: body, pos: pos)
+    ParSite(var: var, by_list: by_list, caps: caps, accs: accs, atomic: atomic, body: body, pos: pos, owner: fname)
 
 fn root_of(e ast.Expr) str
     match e
@@ -572,6 +576,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     ps := synth_begin("task.{k}", [Ty.Int])
     rec := ps[0]
     tk.in_chunk = true
+    tk.owner = p.owner
     pos := p.pos
     env := rec_word(rec, 0)
     for i in 0..p.caps.len()
@@ -617,6 +622,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
             prim_op("store64", [at, read_var(key, cur)], Ty.Unit)
     finish(return_of(-1))
     tk.in_chunk = false
+    tk.owner = ""
     tk.accs = Set[str]()
     synth_end(ps)
 

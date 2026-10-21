@@ -755,7 +755,7 @@ fn Lower.site(mut self, rule str, kind str, op str, pos ast.Pos) int
         op: op,
         line: pos.line,
         col: pos.col,
-        func: fname,
+        func: if tk.owner != "" then tk.owner else fname,
         file: file,
         from: -1,
     ))
