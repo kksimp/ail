@@ -1,0 +1,24 @@
+fn lookup(ok bool) Map[str, int]?
+    if not ok
+        return none
+    mut m := Map[str, int]()
+    m["a"] = 1
+    m
+
+fn pick(ok bool) Set[int]?
+    if ok
+        s := Set[int]()
+        return s
+    none
+
+fn main()
+    if m := lookup(true)
+        print("map {m.len()}")
+    if m := lookup(false)
+        print("bad {m.len()}")
+    else
+        print("none")
+    if s := pick(true)
+        print("set {s.len()}")
+    if pick(false) == none
+        print("no set")
