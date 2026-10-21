@@ -1,0 +1,27 @@
+# Map[int, int]: insert, replace, read, remove, order (type.map.1, type.map.3, type.map.7).
+fn main()
+    mut m := Map[int, int]()
+    m[3] = 30
+    m[1] = 10
+    m[2] = 20
+    m[1] = 11
+    print(m.len())
+    print(m[1])
+    print(m.keys())
+    print(m.values())
+    m.remove(3)
+    m[3] = 33
+    print(m.keys())
+    print(m.contains(3))
+    print(m.contains(4))
+    m[9] += 5
+    m[9] += 5
+    m[2] -= 1
+    print(m.values())
+    print(m)
+    v := m.get(100) else -1
+    print(v)
+    w := m.get(2) else 0
+    print(w + (m.get(77) else 7))
+    for k in m.keys()
+        print("{k} -> {m[k]}")

@@ -1,0 +1,9 @@
+# std.csv.3: a row of one empty field writes as "", not as a blank line that parse skips.
+use std.csv
+
+fn main() !
+    rows := csv.parse("\"\"\n")?
+    out := csv.write(rows)
+    print(rows)
+    print(out.len())
+    print(csv.parse(out)? == rows)

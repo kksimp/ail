@@ -1,0 +1,39 @@
+## std.net.19: the client keeps connections alive and reuses them; the
+## server keeps them open for the next request.
+use std.net
+use std.net.http
+
+fn whoami(r net.Request) net.Response
+    net.Response(status: 200, headers: {}, body: "{r.method} {r.peer} {r.body.len()}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, whoami)
+    base := "http://{srv.addr()}"
+
+    # Three requests, one connection: the server sees one peer address.
+    a := net.get("{base}/a")?.body.split(" ")
+    b := net.get("{base}/b")?.body.split(" ")
+    c := net.get("{base}/c")?.body.split(" ")
+    print("reused: {a[1] == b[1] and b[1] == c[1]}")
+
+    # `Connection: close` opens a new connection each time and keeps none.
+    mut o := net.options()
+    o.headers["Connection"] = "close"
+    d := net.request("GET", "{base}/d", o)?.body.split(" ")
+    e := net.request("GET", "{base}/e", o)?.body.split(" ")
+    print("close differs: {d[1] != e[1]}")
+
+    # A body sent as chunks arrives whole.
+    mut ch := net.options()
+    ch.headers["Transfer-Encoding"] = "chunked"
+    ch.body = "x".repeat(20000)
+    r := net.request("POST", "{base}/up", ch)?.body.split(" ")
+    print("chunked: {r[0]} {r[2]}")
+
+    # HEAD gets the headers of a GET and no body.
+    h := net.request("HEAD", "{base}/h", net.options())?
+    print("head: {h.status} [{h.body}]")
+
+    srv.close()
+    t.wait()?

@@ -1,4 +1,3 @@
-
 LEVELS := ["INFO", "WARN", "ERROR"]
 
 struct Entry

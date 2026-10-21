@@ -24,8 +24,8 @@ fn run_step(s Step) bool
     r := proc.run(s.cmd, s.args, none, s.limit) else err
         print("{s.cmd}: {err.kind}")
         return false
-    print("{s.cmd}: {if r.status == 0 then r.out.trim() else "exit {r.status}"}")
-    r.status == 0
+    print("{s.cmd}: {if r.ok() then r.out.trim() else "exit {r.status}"}")
+    r.ok()
 
 fn main() !
     mut bad := 0

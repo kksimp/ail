@@ -1,0 +1,22 @@
+## Agent task: list each changed declaration from `ail diff`, its kind of change,
+## and how many source lines the change touches.
+##   ./ail run examples/tool_diff_lines.ail
+
+fn main() !
+    here := path.dir(env.program())
+    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    for name in ["scale.ail", "report.ail"]
+        r := proc.run("{here}/../ail", [
+            "diff",
+            "--json",
+            "{data}/v1/{name}",
+            "{data}/v2/{name}",
+        ])? "diffing {name}"
+        for line in r.out.lines()
+            d := parse_json(line) else continue
+            summary := d.flag("summary", false)
+            if not summary
+                op := d.text("op", "")
+                id := d.text("id", "")
+                touched := (d.arr("lines") else []).len()
+                print("{op} {id} lines {touched}")

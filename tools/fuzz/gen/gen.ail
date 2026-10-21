@@ -1,0 +1,541 @@
+## Random AIL programs for differential checking (ADR 0753): well-typed by
+## construction, and with `MISTAKES` chance in 4 of having one typed mistake
+## put in, so the diagnostics path is exercised as well as the happy path.
+##
+##   ail run tools/fuzz/gen/gen.ail N SEED OUTDIR
+##
+## writes OUTDIR/p0.ail .. p{N-1}.ail; program k comes from seed SEED + k, so a
+## seed alone reproduces a program.
+
+## Types of a generated variable: int, bool, str, ints (List[int]), map
+## (Map[str, int]), opt (int?), pt (Pt), shape (Shape).
+struct Var
+    name str
+    ty str
+    mutable bool
+
+struct Gen
+    lines List[str]
+    vars List[Var]
+    ind int
+    fresh int
+    loops int
+    ## The number of statements before the mistake goes in, and its kind (0: none).
+    mistake_at int
+    mistake int
+    stmts int
+    ## Whether the program has the module `geo` (a package, not a single file).
+    mods bool
+
+PRELUDE := [
+    "struct Pt",
+    "    a int",
+    "    b int",
+    "",
+    "fn Pt.sum(self) int",
+    "    a + b",
+    "",
+    "fn Pt.shift(mut self, d int)",
+    "    a += d",
+    "",
+    "enum Shape",
+    "    Circle(r int)",
+    "    Rect(w int, h int)",
+    "    Dot",
+    "",
+    "fn Shape.area(self) int",
+    "    match self",
+    "        Circle(r) => 3 * r * r",
+    "        Rect(w, h) => w * h",
+    "        Dot => 0",
+    "",
+    "fn mul(a int, b int) int",
+    "    a * b",
+    "",
+    "fn bump(mut n int)",
+    "    n += 1",
+    "",
+    "error enum Fail",
+    "    Neg(n int)",
+    "",
+    "fn check_pos(x int) int ! Fail",
+    "    if x < 0",
+    "        return Fail.Neg(n: x)",
+    "    x",
+    "",
+    "fn chain(x int) !int",
+    "    y := check_pos(x)? \"chain\"",
+    "    y + 1",
+    "",
+    "fn pick(xs List[int], i int) int?",
+    "    if i >= 0 and i < xs.len()",
+    "        return xs[i]",
+    "    none",
+    "",
+    "struct Stack[T]",
+    "    items List[T]",
+    "",
+    "fn Stack.push(mut self, x T)",
+    "    self.items.push(x)",
+    "",
+    "fn Stack.peek(self) T?",
+    "    n := self.items.len()",
+    "    if n == 0",
+    "        return none",
+    "    self.items[n - 1]",
+    "",
+    "fn Stack.len(self) int",
+    "    self.items.len()",
+    "",
+    "fn Stack[T Ord].max(self) T?",
+    "    if self.items.len() == 0",
+    "        return none",
+    "    mut best := self.items[0]",
+    "    for x in self.items",
+    "        if x > best",
+    "            best = x",
+    "    best",
+    "",
+    "struct Pair[A, B]",
+    "    first A",
+    "    second B",
+    "",
+    "fn Pair.swap(self) Pair[B, A]",
+    "    Pair(first: self.second, second: self.first)",
+    "",
+    "trait Area",
+    "    fn area(self) int",
+    "    fn label(self) str",
+    "        \"area \{self.area()}\"",
+    "",
+    "struct Sq",
+    "    side int",
+    "",
+    "impl Area for Sq",
+    "    fn area(self) int",
+    "        self.side * self.side",
+    "",
+    "impl Area for Pt",
+    "    fn area(self) int",
+    "        self.a * self.b",
+    "    fn label(self) str",
+    "        \"pt\"",
+    "",
+    "fn show(x any Area) str",
+    "    x.label()",
+    "",
+    "fn total[T Area](xs List[T]) int",
+    "    mut t := 0",
+    "    for x in xs",
+    "        t += x.area()",
+    "    t",
+    "",
+    "fn inc(x int) int",
+    "    x + 1",
+    "",
+    "fn twice(f fn(int) int, x int) int",
+    "    f(f(x))",
+    "",
+    "fn load(n int) int",
+    "    n * 2",
+    "",
+    "fn largest[T Ord](items List[T]) T",
+    "    mut best := items[0]",
+    "    for x in items",
+    "        if x > best",
+    "            best = x",
+    "    best",
+    "",
+]
+
+## Separates a package program's `main.ail` from its `geo/geo.ail`.
+MODULE_MARK := "#--- geo/geo.ail"
+
+GEO := [
+    "pub struct Vec2",
+    "    pub x int",
+    "    pub y int",
+    "",
+    "pub fn add(a int, b int) int",
+    "    a + b",
+    "",
+    "pub fn len2(v Vec2) int",
+    "    v.x * v.x + v.y * v.y",
+    "",
+    "fn hidden(a int) int",
+    "    a",
+]
+
+fn Gen.emit(mut self, s str)
+    lines.push("{" ".repeat(4 * ind)}{s}")
+
+fn Gen.with_type(self, ty str) List[Var]
+    [v for v in vars if v.ty == ty]
+
+fn pick_of(xs List[str]) str
+    xs[random.int(0, xs.len() - 1)]
+
+fn Gen.var_of(self, ty str) str?
+    vs := with_type(ty)
+    if vs.len() == 0
+        return none
+    vs[random.int(0, vs.len() - 1)].name
+
+## An expression of type `ty`; `depth` bounds its size.
+fn Gen.expr(self, ty str, depth int) str
+    deep := depth <= 0
+    match ty
+        "int" =>
+            if v := var_of("int")
+                if deep or random.int(0, 2) == 0
+                    return v
+            k := random.int(0, 9)
+            if deep or k < 2
+                return "{random.int(0, 20)}"
+            if k == 2
+                return "({expr("int", depth - 1)} + {expr("int", depth - 1)})"
+            if k == 3
+                return "({expr("int", depth - 1)} - {expr("int", depth - 1)})"
+            if k == 4
+                return "mul({expr("int", depth - 1)}, {random.int(1, 5)})"
+            if k == 5
+                return "({expr("int", depth - 1)} % {random.int(2, 9)})"
+            if k == 6
+                if p := var_of("pt")
+                    return "{p}.sum()"
+            if k == 7
+                if xs := var_of("ints")
+                    return "{xs}.len()"
+            if k == 8
+                if m := var_of("map")
+                    return "({m}.get({expr("str", 0)}) else 0)"
+            if k == 9
+                if o := var_of("opt")
+                    return "({o} else 0)"
+            "{random.int(0, 20)}"
+        "bool" =>
+            if v := var_of("bool")
+                if deep or random.int(0, 2) == 0
+                    return v
+            k := random.int(0, 4)
+            if deep or k == 0
+                return pick_of(["true", "false"])
+            if k == 1
+                return "{expr("int", depth - 1)} {pick_of(["<", "<=", ">", ">=", "==", "!="])} {expr("int", depth - 1)}"
+            if k == 2
+                return "not ({expr("bool", depth - 1)})"
+            if k == 3
+                return "({expr("bool", depth - 1)} and {expr("bool", depth - 1)})"
+            "({expr("bool", depth - 1)} or {expr("bool", depth - 1)})"
+        "str" =>
+            if v := var_of("str")
+                if deep or random.int(0, 2) == 0
+                    return v
+            k := random.int(0, 3)
+            if deep or k == 0
+                return pick_of(["\"a\"", "\"b\"", "\"ab\"", "\"\"", "\"Hi\""])
+            if k == 1
+                return "\"n=\{{expr("int", depth - 1)}}\""
+            if k == 2
+                return "{expr("str", depth - 1)}.to_upper()"
+            "{expr("str", depth - 1)}.trim()"
+        "ints" =>
+            if v := var_of("ints")
+                if deep or random.int(0, 2) == 0
+                    return v
+            "[{expr("int", 0)}, {expr("int", 0)}, {expr("int", 0)}]"
+        "opt" =>
+            if xs := var_of("ints")
+                if random.int(0, 1) == 0
+                    return "pick({xs}, {expr("int", 0)})"
+            "pick([1, 2, 3], {expr("int", 0)})"
+        "pt" =>
+            "Pt(a: {expr("int", 0)}, b: {expr("int", 0)})"
+        "shape" =>
+            pick_of([
+                "Shape.Dot",
+                "Shape.Circle(r: {random.int(1, 4)})",
+                "Shape.Rect(w: {random.int(1, 4)}, h: {random.int(1, 4)})",
+            ])
+        _ =>
+            "0"
+
+fn Gen.name(mut self) str
+    fresh += 1
+    "v{fresh}"
+
+fn Gen.declare(mut self, ty str, mutable bool) str
+    n := name()
+    vars.push(Var(name: n, ty: ty, mutable: mutable))
+    n
+
+fn Gen.block(mut self, count int)
+    saved := vars.len()
+    ind += 1
+    for _ in 0..count
+        stmt()
+    # a block must not be empty
+    emit("print({expr("int", 1)})")
+    ind -= 1
+    while vars.len() > saved
+        vars.pop()
+
+fn Gen.stmt(mut self)
+    stmts += 1
+    if mistake > 0 and stmts == mistake_at
+        wrong()
+        return
+    k := random.int(0, 28)
+    if k <= 2
+        ty := pick_of(["int", "bool", "str", "ints", "pt", "shape", "opt"])
+        e := expr(ty, 2)
+        mutable := ty != "opt" and random.int(0, 1) == 0
+        n := declare(ty, mutable)
+        emit("{if mutable then "mut " else ""}{n} := {e}")
+    elif k == 3
+        vs := [v for v in vars if v.mutable and v.ty == "int"]
+        if vs.len() > 0
+            v := vs[random.int(0, vs.len() - 1)]
+            emit("{v.name} {pick_of(["=", "+=", "-="])} {expr("int", 2)}")
+        else
+            emit("print({expr("str", 1)})")
+    elif k == 4
+        emit("print({expr(pick_of(["int", "bool", "str", "ints"]), 2)})")
+    elif k == 5
+        emit("if {expr("bool", 2)}")
+        block(random.int(1, 2))
+        if random.int(0, 1) == 0
+            emit("else")
+            block(1)
+    elif k == 6
+        emit("for {name()} in 0..{random.int(1, 4)}")
+        loops += 1
+        block(random.int(1, 2))
+        loops -= 1
+    elif k == 7
+        c := declare("int", true)
+        emit("mut {c} := 0")
+        emit("while {c} < {random.int(1, 3)}")
+        loops += 1
+        ind += 1
+        emit("{c} += 1")
+        ind -= 1
+        block(1)
+        loops -= 1
+    elif k == 8
+        if xs := var_of("ints")
+            emit("{pick_of(["mut ", ""])}{name()} := {xs}.sorted()")
+        else
+            emit("print(1)")
+    elif k == 9
+        if sh := var_of("shape")
+            emit("print({sh}.area())")
+        else
+            emit("print(2)")
+    elif k == 10
+        if sh := var_of("shape")
+            emit("match {sh}")
+            ind += 1
+            emit("Circle(r) => print(r)")
+            emit("Rect(w, h) => print(w + h)")
+            emit("Dot => print(0)")
+            ind -= 1
+        else
+            emit("print(3)")
+    elif k == 14
+        emit("print(largest({expr("ints", 1)}))")
+    elif k == 15
+        s := name()
+        emit("mut {s} := Stack(items: {expr("ints", 1)})")
+        emit("{s}.push({expr("int", 1)})")
+        emit("print({s}.peek() else 0)")
+        emit("print({s}.max() else {expr("int", 0)} + {s}.len())")
+    elif k == 16
+        p := name()
+        emit("{p} := Pair(first: {expr("int", 1)}, second: {expr("str", 1)})")
+        emit("print({p}.swap().first)")
+        emit("print({p}.swap().swap().second)")
+    elif k == 17
+        emit("print(show(Sq(side: {expr("int", 1)})))")
+        emit("print(show(Pt(a: 1, b: {expr("int", 1)})))")
+    elif k == 18
+        emit("print(total([Sq(side: 1), Sq(side: {expr("int", 1)})]))")
+    elif k == 19
+        emit("print(Sq(side: {expr("int", 0)}).area() + Pt(a: 2, b: 3).area())")
+    elif k == 20
+        emit("print(twice(inc, {expr("int", 1)}))")
+    elif k == 21
+        g := name()
+        emit("{g} := inc")
+        emit("print({g}({expr("int", 1)}) + twice({g}, 2))")
+    elif k == 22
+        t := name()
+        emit("{t} := spawn load({expr("int", 1)})")
+        emit("print({t}.wait() else 0)")
+    elif k == 23
+        a := name()
+        emit("{a} := Atomic(0)")
+        emit("{a}.add({expr("int", 1)})")
+        emit("print({a}.load())")
+    elif k == 24
+        m := name()
+        emit("{m} := Mutex(0)")
+        emit("with {m} as mut x")
+        ind += 1
+        emit("x += {random.int(1, 5)}")
+        ind -= 1
+    elif k == 25
+        o := name()
+        emit("mut {o} := [0, 0, 0]")
+        emit("par for i in 0..3")
+        ind += 1
+        emit("{o}[i] = i * {random.int(1, 4)}")
+        ind -= 1
+        emit("print({o})")
+    elif k == 26
+        c := name()
+        emit("{c} := Channel[int](4)")
+        emit("{c}.send({expr("int", 1)})")
+        emit("{c}.close()")
+        emit("for v in {c}")
+        ind += 1
+        emit("print(v)")
+        ind -= 1
+    elif k == 27 and mods
+        emit("print(geo.add({expr("int", 1)}, {expr("int", 1)}))")
+    elif k == 28 and mods
+        v := name()
+        emit("{v} := geo.Vec2(x: 1, y: {expr("int", 1)})")
+        emit("print(geo.len2({v}) + {v}.x)")
+    elif k == 11
+        emit("print(chain({expr("int", 1)}) else 0)")
+    elif k == 12
+        if loops > 0
+            emit("if {expr("bool", 1)}")
+            ind += 1
+            emit(pick_of(["break", "continue"]))
+            ind -= 1
+        else
+            emit("print(4)")
+    else
+        emit("print({expr("int", 2)} {pick_of(["+", "*"])} {expr("int", 1)})")
+
+## One typed mistake, of the kind `mistake`.
+fn Gen.wrong(mut self)
+    iv := var_of("int") else "7"
+    match mistake
+        1 => emit("{name()} := mul({iv})")
+        2 => emit("bump({iv})")
+        3 => emit("{pick_of(["x1", "x2"])} := 1")
+        4 => emit("{name()} := {name()}")
+        5 => emit("{name()} := {iv} + \"text\"")
+        6 => emit("{name()} := {iv}.nosuch()")
+        7 => emit("{name()} := check_pos({iv})")
+        8 => emit("{name()} := pick([1], 0) else \"x\"")
+        9 => emit("{name()} := pick([1], 0) + 1")
+        10 => emit("{name()} := [1, 2][0] + \"x\"")
+        11 => emit("return 1")
+        12 => emit("if {iv}")
+        13 => emit("break")
+        14 => emit("{name()} := Pt(a: 1, b: 2).zz")
+        15 => emit("{iv} = \"s\"")
+        16 => emit("{name()} := mul({iv}, {iv}, {iv})")
+        17 => emit("{name()} := Shape.Square")
+        18 => emit("print({name()}.len())")
+        19 => emit("{name()} := chain({iv})")
+        20 => emit("{name()} := largest([Pt(a: 1, b: 2)])")
+        21 => emit("{name()} := Stack(items: [{iv}]).push(\"x\")")
+        22 => emit("{name()} := Pair(first: {iv})")
+        23 => emit("{name()} := largest({iv})")
+        24 => emit("{name()} := Stack(items: [Pt(a: 1, b: 2)]).max()")
+        25 => emit("{name()} := show({iv})")
+        26 => emit("{name()} := total([{iv}])")
+        27 => emit("{name()} := Sq(side: 1).nosuch()")
+        28 => emit("{name()} := Sq(side: 1).area({iv})")
+        29 => emit("print(0)")
+        30 => emit("print(0)")
+        31 => emit("{name()} := total(Sq(side: 1))")
+        32 => emit("{name()} := twice(mul, {iv})")
+        33 => emit("{name()} := twice({iv}, {iv})")
+        34 => emit("{name()} := twice(inc)")
+        35 => emit("{name()} := twice(bump, {iv})")
+        36 => emit("print(twice(inc, 1)(2))")
+        37 => emit("{name()} := spawn load({iv})")
+        38 => emit("t := spawn load(1)\n{" ".repeat(4 * ind)}print(t.wait() else 0)\n{" ".repeat(4 * ind)}print(t.wait() else 0)")
+        39 => emit("mut o := [0, 0, 0]\n{" ".repeat(4 * ind)}par for i in 0..3\n{" ".repeat(4 * ind)}    o[0] = i")
+        40 => emit("mut tot := 0\n{" ".repeat(4 * ind)}par for i in 0..3\n{" ".repeat(4 * ind)}    tot += i")
+        41 => emit("{name()} := Atomic(0).add(\"x\")")
+        42 => emit("{name()} := Channel[int](4).send(\"x\")")
+        43 => emit("{name()} := spawn nosuch(1)")
+        44 => emit("{name()} := geo.hidden({iv})")
+        45 => emit("{name()} := geo.nosuch({iv})")
+        46 => emit("{name()} := geo.add(\"x\", {iv})")
+        47 => emit("{name()} := geo.Vec2(x: {iv})")
+        48 => emit("{name()} := add({iv}, 1)")
+        _ => emit("{name()} := nomod.add({iv}, 1)")
+
+fn program(seed int) str
+    random.seed(seed)
+    mut g := Gen(
+        lines: [],
+        vars: [],
+        ind: 1,
+        fresh: 0,
+        loops: 0,
+        mistake_at: 0,
+        mistake: 0,
+        stmts: 0,
+        mods: false,
+    )
+    g.mods = random.int(0, 4) == 0
+    if random.int(0, 3) == 0
+        g.mistake = random.int(1, if g.mods then 49 else 43)
+        g.mistake_at = random.int(1, 12)
+    # a few helper functions of two ints, then main
+    mut helpers := ""
+    for h in 0..random.int(0, 2)
+        mut hg := Gen(
+            lines: [],
+            vars: [],
+            ind: 1,
+            fresh: 100 * (h + 1),
+            loops: 0,
+            mistake_at: 0,
+            mistake: 0,
+            stmts: 0,
+            mods: false,
+        )
+        hg.vars.push(Var(name: "a", ty: "int", mutable: false))
+        hg.vars.push(Var(name: "b", ty: "int", mutable: false))
+        for _ in 0..random.int(1, 4)
+            hg.stmt()
+        helpers = "{helpers}fn f{h}(a int, b int) int\n{hg.lines.join("\n")}\n    {hg.expr("int", 2)}\n\n"
+    for _ in 0..random.int(4, 14)
+        g.stmt()
+    bad := match g.mistake
+        29 => "struct Bad\n    n int\n\nimpl Area for Bad\n    fn label(self) str\n        \"bad\"\n\n"
+        30 => "struct Bad\n    n int\n\nimpl Area for Bad\n    fn area(self) str\n        \"bad\"\n\n"
+        _ => ""
+    text := "{PRELUDE.join("\n")}\n{bad}{helpers}fn main()\n{g.lines.join("\n")}\n    print(0)\n"
+    if g.mods
+        return "use geo\n\n{text}{MODULE_MARK}\n{GEO.join("\n")}\n"
+    text
+
+fn main() !
+    args := env.args()
+    if args.len() < 3
+        io.eprint("usage: ail run tools/fuzz/gen/gen.ail N SEED OUTDIR")
+        io.exit(2)
+    n := args[0].to_int() else 0
+    seed := args[1].to_int() else 1
+    fs.make_dir(args[2])?
+    for k in 0..n
+        text := program(seed + k)
+        if text.contains(MODULE_MARK)
+            parts := text.split(MODULE_MARK)
+            fs.make_dir("{args[2]}/p{k}")?
+            fs.make_dir("{args[2]}/p{k}/geo")?
+            fs.write_text("{args[2]}/p{k}/main.ail", parts[0])?
+            fs.write_text("{args[2]}/p{k}/geo/geo.ail", parts[1].trim_start())?
+        else
+            fs.write_text("{args[2]}/p{k}.ail", text)?

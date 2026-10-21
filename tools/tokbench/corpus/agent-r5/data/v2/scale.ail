@@ -1,0 +1,9 @@
+## Scales a value by three.
+fn scale(x int) int
+    x * 3
+
+fn clamp(x int, hi int) int
+    if x > hi then hi else x
+
+fn negate(x int) int
+    0 - x

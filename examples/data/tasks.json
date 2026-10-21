@@ -1,8 +1,8 @@
 {"tasks": [
   {"id": "t1", "title": "rotate logs", "status": "todo", "hours": 1.5},
-  {"id": "t2", "title": "rebuild index", "status": "todo", "hours": 4.0},
+  {"id": "t2", "title": "rebuild index", "status": "todo", "hours": 4},
   {"id": "t3", "title": "email report", "status": "done", "hours": 0.5},
   {"id": "t4", "status": "todo", "hours": 2.5},
-  {"id": "t5", "title": "prune cache", "status": "todo", "hours": 3.0},
+  {"id": "t5", "title": "prune cache", "status": "todo", "hours": 3},
   {"id": "t6", "title": "check backups", "status": "todo", "hours": 2.5}
 ]}

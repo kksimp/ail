@@ -1,0 +1,21 @@
+# `xs[b * 7 + k]` with `b` below a constant needs the list to be longer than
+# the largest index, which the guard tests once (native.bce.8); a shorter list
+# runs the checked loop and traps on the same element.
+fn sum_fields(xs List[float]) float
+    mut e := 0.0
+    for b in 0..5
+        e += xs[b * 7] * xs[b * 7 + 6]
+    e
+
+fn bump(mut xs List[float])
+    for b in 0..5
+        xs[b * 7 + 3] += xs[b * 7 + 4]
+
+fn main()
+    mut xs := [0.5 * f.to_float() for f in 0..35]
+    print(sum_fields(xs))
+    bump(mut xs)
+    print(sum_fields(xs))
+    print(xs[31])
+    mut short := [0.25 * f.to_float() for f in 0..30]
+    print(sum_fields(short))

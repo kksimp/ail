@@ -24,3 +24,8 @@
    There are no `&&`, `||` or `!`-as-not.
 2. `x op= e` means `x = x op e` for `+ - * / %`. `x` must be a mutable place.
 3. A method call always has parentheses, even with no arguments: `xs.len()`.
+
+## Rejected alternatives
+
+- `&&`, `||` and `!` as logical operators: tokens tie with `and`, `or` and `not`. Rejected on AI understanding, because `!` already forms error types (`T ! E`, `!T`, ADR 0046), so using it for "not" would give one symbol two meanings.
+- Omitting `()` on zero-argument methods (`xs.len`): saves about one token per call, under 2% on representative code, so it ties. Rejected on AI understanding, since `()` tells computation from stored fields.

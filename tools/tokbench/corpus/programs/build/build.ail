@@ -1,4 +1,3 @@
-
 struct Finding
     severity str
     rule str

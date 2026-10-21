@@ -1,0 +1,20 @@
+# Character predicates and case mapping beyond Latin-1, read from the
+# generated tables (ADR 0567), and the `str` forms that change length.
+fn describe(s str)
+    for c in s.chars()
+        print("{c} {c.is_alpha()} {c.is_upper()} {c.is_lower()} {c.is_alnum()} {c.to_upper()} {c.to_lower()}")
+
+fn main()
+    describe("aAÀßÿŸǅǆǈΩωςЖжԱա𐐀𐐨ⅰⅠ’℃ªµİıʼn٣ऄ中あカ한")
+    print("Straße ﬁne ŉ ǅ İstanbul ǰ ΐ ﬓ".to_upper())
+    print("STRASSE FINE İSTANBUL ǅ Ǆ ΑΣ".to_lower())
+    print("ΑΣ ΑΣΑ Σ ΑΣ. ΑΣ Α ΣΑΣ 'Σ' ΑΣ’ Σ.Α".to_lower())
+    print("ΑΣ ΑΣΑ Σ".to_upper().to_lower())
+    print("ß".to_upper().len())
+    print("ﬃ".to_upper().len())
+    print("İ".to_lower().len())
+    print("ǅ".to_upper().to_lower())
+    print("Ünïcödé Ωmega Привет Ελληνικά".to_upper())
+    print("Ünïcödé Ωmega Привет Ελληνικά".to_lower())
+    print("\u{1c5}\u{1f88}\u{10400}\u{1e900}\u{e0041}".to_lower())
+    print("\u{1c5}\u{1f88}\u{10428}\u{1e922}\u{e0041}".to_upper())

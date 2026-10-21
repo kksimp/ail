@@ -1,0 +1,5 @@
+use std.time.date
+
+fn main() !
+    d := date.parse_iso("2026-10-21T05:00:00Z")?
+    print(d.add_ms(3 * date.DAY).iso())

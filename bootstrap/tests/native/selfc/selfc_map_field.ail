@@ -1,0 +1,6 @@
+struct Env
+    floors Map[str, int]
+
+fn main()
+    e := Env(floors: {"a": 3})
+    print(e.floors["a"])

@@ -1,0 +1,16 @@
+
+fn main() !
+    here := path.dir(env.program())
+    r := proc.run("{here}/../ail", ["explain", "--json"])? "listing rules"
+    doc := parse_json(r.out)? "reading the rule list"
+    rules := doc.arr("rules") else []
+    mut total := Map[str, int]()
+    mut fixable := Map[str, int]()
+    for rule in rules
+        chapter := rule.text("chapter", "?")
+        total[chapter] += 1
+        if rule.flag("fix", false)
+            fixable[chapter] += 1
+    for chapter in total.keys().sorted()
+        print("{chapter} {total[chapter]} {fixable.get(chapter) else 0}")
+    print("all {rules.len()} {doc.int("fixable") else 0}")

@@ -1,0 +1,42 @@
+# fuzz-input: text
+# fuzz-needs:
+# fuzz-native: yes
+# type.num.16 on special values (nan, infinities, signed zero, huge and tiny): results are classified
+# (nan, infinite, zero, sign), not printed, because the last bit of libm results differs across platforms.
+# The walker, the bytecode tier and `ail build` must agree on every class.
+
+fn class(r float) str
+    if r != r
+        return "nan"
+    if r == 1.0 / 0.0
+        return "+inf"
+    if r == -1.0 / 0.0
+        return "-inf"
+    if r == 0.0
+        if 1.0 / r < 0.0
+            return "-0"
+        return "+0"
+    if r < 0.0
+        return "neg"
+    "pos"
+
+fn pick(k int) float
+    inf := 1.0 / 0.0
+    nan := 0.0 / 0.0
+    cands := [0.0, -0.0, 1.0, -1.0, 0.5, 2.0, -2.0, inf, -inf, nan, 1e308, -1e308, 5e-324, -5e-324, 1e-300, 709.78, 710.0, -745.2, 3.141592653589793, 1e22, 0.1]
+    cands[k % cands.len()]
+
+fn main()
+    seed := {{INT}} % 1000
+    k := if seed < 0 then -seed else seed
+    x := pick(k)
+    y := pick(k / 21 + k % 7)
+    print("sin {class(x.sin())} cos {class(x.cos())} tan {class(x.tan())} atan {class(x.atan())}")
+    print("exp {class(x.exp())} ln {class(x.ln())} log10 {class(x.log10())} cbrt {class(x.cbrt())}")
+    print("atan2 {class(x.atan2(y))} pow {class(x.pow(y))} hypot {class(x.hypot(y))}")
+    if class(x.pow(0.0)) != "pos" or class(1.0.pow(y)) != "pos"
+        print("FAIL pow(x, 0) and pow(1, y) are 1")
+    if x.hypot(y) < 0.0
+        print("FAIL hypot is negative")
+    if class(x.hypot(1.0 / 0.0)) != "+inf"
+        print("FAIL hypot with an infinity is infinite")

@@ -1,0 +1,6 @@
+# type.map.3: a missing key traps with the key in the message.
+fn main()
+    m := {1: 10, 2: 20}
+    print(m[1])
+    k := 7
+    print(m[k])

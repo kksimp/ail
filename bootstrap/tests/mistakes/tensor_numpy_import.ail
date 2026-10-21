@@ -1,0 +1,5 @@
+import numpy as np
+
+fn main()
+    t := np.array([1.0, 2.0])
+    print(t.sum())

@@ -9,6 +9,7 @@ use super::{Env, Flow, Interp, Trap, Value, float_text};
 use crate::ast::{Arg, Expr};
 use crate::diag::Pos;
 use crate::ast::BinOp;
+use crate::fuse::{self, FOp, Input};
 use crate::tensor::{Activation, Data, Fault, Op, Reduce, Scalar, Sum, Tensor};
 
 fn trapped(f: Fault, pos: Pos) -> super::Exit {
@@ -102,7 +103,80 @@ impl<'a, W: Write> Interp<'a, W> {
         Ok(Value::Tensor(Rc::new(r.map_err(|e| trapped(e, pos))?)))
     }
 
+    /// std.tensor.20: a fused chain (`fuse::plan`) at `e`. The names are read
+    /// first, in order; when they are `float`s and `float` tensors of one
+    /// shape, one pass computes the result, otherwise each step runs as the
+    /// unfused operation would.
+    pub(super) fn fused(&mut self, e: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        let plan = fuse::plan(e).expect("checked: a fusable chain");
+        let mut vals = Vec::with_capacity(plan.names.len());
+        for name in &plan.names {
+            vals.push(self.eval(name, env)?);
+        }
+        self.fused_values(&plan.ops, &vals)
+    }
+
+    /// A fused chain on its names' values (see `fused`), in either tier.
+    pub(super) fn fused_values(&mut self, ops: &[FOp], vals: &[Value]) -> Flow<Value> {
+        let inputs: Option<Vec<Input>> = vals
+            .iter()
+            .map(|v| match v {
+                Value::Tensor(t) => Some(Input::T(t)),
+                Value::Float(x) => Some(Input::F(*x)),
+                _ => None,
+            })
+            .collect();
+        if let Some(inputs) = inputs
+            && let Some(t) = fuse::run_fast(ops, &inputs)
+        {
+            return Ok(Value::Tensor(Rc::new(t)));
+        }
+        self.fused_steps(ops, vals)
+    }
+
+    /// The unfused steps of a fused chain, one operation at a time.
+    pub(super) fn fused_steps(&mut self, ops: &[FOp], vals: &[Value]) -> Flow<Value> {
+        let mut stack: Vec<Value> = Vec::with_capacity(vals.len() + 1);
+        for step in ops {
+            match *step {
+                FOp::Name(k) => stack.push(vals[k].clone()),
+                FOp::Const(x) => stack.push(Value::Float(x)),
+                FOp::Bin(op, pos) => {
+                    let b = stack.pop().expect("postfix");
+                    let a = stack.pop().expect("postfix");
+                    stack.push(self.binop(op, a, b, pos)?);
+                }
+                FOp::Neg(pos) => {
+                    let a = stack.pop().expect("postfix");
+                    stack.push(match a {
+                        Value::Float(x) => Value::Float(-x),
+                        Value::Tensor(t) => Value::Tensor(Rc::new(t.neg().map_err(|f| trapped(f, pos))?)),
+                        other => unreachable!("checked: a tensor or float, found {other:?}"),
+                    });
+                }
+                FOp::Act(act, pos) => {
+                    let a = stack.pop().expect("postfix");
+                    let Value::Tensor(t) = a else { unreachable!("checked: a tensor") };
+                    stack.push(Value::Tensor(Rc::new(t.activate(act).map_err(|f| trapped(f, pos))?)));
+                }
+            }
+        }
+        Ok(stack.pop().expect("one result"))
+    }
+
     /// `t.m(args)` (std.tensor.3-8).
+    /// `o.text()` and `o.ok()` on a `proc.Output` (std.proc.10).
+    pub(super) fn output_method(&mut self, m: &str, recv: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        let Value::Struct(_, fields) = self.eval(recv, env)? else { unreachable!("checked: a proc.Output") };
+        let (Value::Int(status), Value::Str(out), Value::Str(err)) = (&fields[0], &fields[1], &fields[2]) else {
+            unreachable!("checked: a proc.Output has an int status and two strings")
+        };
+        Ok(match m {
+            "ok" => Value::Bool(*status == 0),
+            _ => Value::Str(Rc::from(format!("{out}{err}").as_str())),
+        })
+    }
+
     pub(super) fn tensor_method(
         &mut self,
         m: &str,

@@ -26,3 +26,8 @@ report.
 - Size, compile-time and speed effects are reported per generic instance.
 - Escalation note: this doesn't limit performance, because users can't
   observe the strategy and every instance can be specialised.
+
+## Rejected alternatives
+
+- Always specialise every generic instance (full monomorphisation): loses on code size and compile time for cold instances, which the decision lets the compiler share.
+- Always share generic code (type-erased, `void*`-style): loses on speed, since specialising hot generic code is how AIL beats C's `void*` callbacks.

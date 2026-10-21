@@ -5,16 +5,17 @@
 
 fn main() !
     file := "{path.dir(env.program())}/agent-data/status.json"
-    dump := proc.run("od", ["-An", "-tx1", "-v", "-w16", file])?
+    dump := proc.run("od", ["-An", "-tx1", "-v", file])?
     if dump.status != 0
         print("od failed: {dump.err.trim()}")
         return
     mut total := 0
     rows := dump.out.lines()
     for i in 0..rows.len()
-        hex := rows[i].trim()
-        if hex == ""
+        # BSD od (macOS) puts two spaces between bytes, GNU od one.
+        parts := [p for p in rows[i].split(" ") if p != ""]
+        if parts.len() == 0
             continue
-        total += hex.split(" ").len()
-        print("{i * 16:>6}  {hex}")
+        total += parts.len()
+        print("{i * 16:>6}  {parts.join(" ")}")
     print("{total} bytes")

@@ -1,0 +1,17 @@
+## std.args.6: the two error messages no other case pins: a value given to a
+## flag, and a word left over when the spec has no positional or rest.
+use std.args
+
+fn spec() List[args.Spec]
+    [args.flag("verbose", "v", "more output"), args.pos("input", "file to read")]
+
+fn show(words List[str])
+    a := args.parse("tool", "does things", spec(), words) else err
+        print("error: {err.why}")
+        return
+    print("{a.flag("verbose")} {a.get("input")} {a.rest}")
+
+fn main()
+    show(["--verbose=yes", "in.txt"])
+    show(["in.txt", "extra.txt"])
+    show(["-v", "in.txt"])

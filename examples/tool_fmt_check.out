@@ -1,0 +1,8 @@
+bad_name.ail: clean
+bad_type.ail: clean
+effects.ail: clean
+ok.ail: clean
+replay_fixture.ail: clean
+tests.ail: needs formatting
+unformatted.ail: needs formatting
+5 clean, 2 need formatting

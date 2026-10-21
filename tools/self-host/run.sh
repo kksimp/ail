@@ -64,17 +64,29 @@ say "# Self-host bootstrap ($(date -u +%Y-%m-%dT%H:%M:%SZ), $(git rev-parse --sh
 say ""
 
 # ---- stage 0: what the compiler's source needs from the library ----
+# `env.args` is native. With the native OS layer (lane 177, ADR 0580, file
+# compiler/mir/lower_os.ail) `fs.*`, `io.*` are native too, but only in `else`
+# forms; a call ending in `?` or `else err` waits for error values (lane 175).
 say "## Stage 0: library calls in compiler/ (outside rt)"
-native_ok=" env.args "
-needs=$(grep -rhoE '\b(fs|io|env)\.[a-z_]+\(' compiler --include=*.ail --exclude-dir=rt |
-    sed 's/($//' | sort | uniq -c | sort -rn)
+os_layer=0
+[ -f compiler/mir/lower_os.ail ] && os_layer=1
+srcs=$(find compiler -name '*.ail' ! -path 'compiler/rt/*')
+needs=$(grep -hoE '\b(fs|io|env)\.[a-z_]+\(' $srcs | sed 's/($//' | sort | uniq -c | sort -rn)
 missing=0
 while read -r n name; do
     [ -z "${name:-}" ] && continue
-    if [[ "$native_ok" == *" $name "* ]]; then
-        say "- $name ($n uses): supported natively"
+    if [ "$name" == "env.args" ]; then
+        say "- $name ($n uses): native"
+    elif [ "$os_layer" == 1 ]; then
+        q=$(grep -hE "\b${name//./\\.}\(" $srcs | grep -cE '\)\?|else err')
+        if [ "$q" -gt 0 ]; then
+            say "- $name ($n uses): native in else forms; $q use(s) with \`?\` or \`else err\` need error values (lane 175)"
+            missing=$((missing + 1))
+        else
+            say "- $name ($n uses): native"
+        fi
     else
-        say "- $name ($n uses): NOT supported natively"
+        say "- $name ($n uses): NOT native (no OS layer yet, lane 177)"
         missing=$((missing + 1))
     fi
 done <<< "$needs"
@@ -95,7 +107,7 @@ else
         grep 'error\[' "$out/stage1.log" | sed -E 's/^[^ ]+ error\[[^]]+\]: //; s/`[^`]*`/`X`/g' |
             sort | uniq -c | sort -rn | head -8 | sed 's/^/  /' | tee -a "$report"
         if [ "$missing" -gt 0 ]; then
-            say "Also: stage 0 lists $missing library calls the compiler needs to read its own source."
+            say "Also: stage 0 lists $missing library calls the compiler can't make natively yet."
         fi
         blocked "stage 1" "the Rust-hosted build of compiler/main.ail reports native.subset.1 problems"
     fi

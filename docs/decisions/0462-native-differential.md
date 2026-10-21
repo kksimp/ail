@@ -23,10 +23,29 @@ slow one, and the interpreter is the permanent oracle ([ADR 0032](0032-keep-rust
 
 ## Decision
 
-When `ail build` exists, the module fuzzers (`fuzz.mod.6`) build each program and
-require the same stdout and exit code as the walker. Lane 120 adds the same
-comparison for `bootstrap/tests/cases` and `examples` in `cases.rs` (programs it
-rejects as outside the pure subset are skipped, and the skip count is printed).
-Trap text is compared on stderr once the backend prints rule ids.
-The command shape `ail build FILE -o OUT` is the contract; `AIL_FUZZ_BUILD_ARGS`
-is not needed because `fuzz.mod.6` uses no flags.
+- **`fuzz.nat.1`** `fuzz_native_differential` in `bootstrap/tests/fuzz_modules.rs`
+  generates pure-subset programs (`fuzz/pure.rs`: integers, floats, lists of
+  integers, `if`, `for`, `while`, functions; arithmetic may overflow or divide
+  by zero on purpose). Each runs on the walker, on the bytecode tier and as
+  `ail build FILE -o OUT` output, and must print the same stdout, exit the same,
+  and trap with the same first stderr line (ADR 0405). With a `qemu-aarch64` emulator
+  installed (`apt install qemu-user`), the `--target aarch64-linux` build runs under
+  it and is compared too. Programs the backend
+  declines are counted, and the test fails if fewer than half build, so the
+  generator and the subset cannot drift apart silently.
+- **`fuzz.nat.2`** `fuzz_native_strings` does the same for programs over `str` and `char`
+  (`fuzz/pure.rs::strings`: slicing, case, padding, replace, split, interpolation with
+  width and fill, character predicates). Programs the backend declines are reported,
+  not failed, until the feature has merged on every branch. `fuzz_native_maps`, `fuzz_native_options`, `fuzz_native_enums` and `fuzz_native_funcs` cover maps and sets, enums and `match` (ADR 0602-0603), optionals
+  and results, and function values with key sorts.
+- **`fuzz.mod.6`** A module-fuzz template that carries `# fuzz-native: yes` is
+  built and compared too. None do yet: module code uses strings, maps and
+  optionals, which are outside the subset (ADR 0390).
+- The smoke run builds 6 programs (about 8 s); `AIL_FUZZ_N=N` builds N/5, and each
+  build costs about 1.3 s because the backend runs on the interpreter.
+- Lane 120 compares `bootstrap/tests/cases` and `examples` in `cases.rs`; this
+  test covers what no one wrote by hand. The pure generator grows with the subset.
+
+## Rejected alternatives
+
+- A separate native test suite (option B): rejected because it means two lists to keep in step, and programs the suite forgets go untested.

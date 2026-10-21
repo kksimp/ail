@@ -22,7 +22,10 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
-registers go on the stack, 8 bytes each, in order. Callee-saved registers are
+registers go on the stack, 8 bytes each, in order, the first lowest; the
+caller reserves a 16-byte-aligned area below its frame for them and frees it
+after the call, and the callee reads them above its frame record (ADR 0533).
+Float arguments beyond the eighth aren't supported yet. Callee-saved registers are
 the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
 an `extern` call treats them as clobbered). No variadics. Structs are passed
 by pointer.
@@ -48,9 +51,10 @@ shortens a list must be added to the optimiser's decision first.
 | `int` | `i64` |
 | `float` | `f64` (IEEE 754 binary64) |
 | `bool` | `i64`, 0 or 1 |
-| `char` | `i64`, a Unicode scalar value |
+| `char` | `i64`, a Unicode scalar value; `List[char]` has 8-byte slots (ADR 0566) |
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
+| `Map[K, V]`, `Set[T]` | pointer to a **table object** (kind 7, 8) |
 
 **String object** (immutable, 16-byte aligned):
 
@@ -74,6 +78,19 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 `data` is separate so `push` can grow without moving the header the caller
 holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
+
+**Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
+optional is the pointer itself. An `int`, `float` or `bool` optional points at
+an 8-byte box (the value, or its bits for a `float`); the heap lane gives the
+box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
+`rt.unbox`, `rt.unboxf`, `rt.unbox_bool`.
+
+**Results** (ADRs 0575, 0576). A function that can fail returns its success
+value (zero on failure); failure is the runtime's global slot 8 holding the
+error's display text (a string object), 0 otherwise. Global 9 holds the return
+trace, a list of string objects `  at PATH:LINE:COL`. `rt.failed`, `rt.err_set`,
+`rt.err_trace`, `rt.err_take`, `rt.err_clear`; `rt.exit` reports a failure
+that reached `main` first (`error: TEXT`, the trace, status 1).
 
 **Heap object header** (ADR 0392). Objects allocated with `rt.obj_new(size,
 kind)` have an 8-byte word just before the address the program holds, so a
@@ -105,6 +122,44 @@ order (a `float` as its bits, a `bool` as 0 or 1, a string, list or struct
 as a pointer). A struct is a value: reading one from a place to bind,
 store, push or return it copies it, deeply through the lists and structs
 it holds (a generated `copy.T` function); fields change in place.
+
+**Table object** (`Map` and `Set`, ADR 0568; `compiler/rt/native/map.ail`):
+
+```text
++0   u64  len     live entries
++8   u64  used    entry-array slots used, live or dead
++16  u64  ecap    entry-array capacity (a power of two)
++24  u64  mask    index size - 1
++32  u64  kind    key kind: 0 int, 1 str, 2 bool
++40  ptr  ents    ecap * 24 bytes: hash (-1 when dead), key, value
++48  ptr  index   (mask + 1) * 8 bytes: 0 empty, else entry number + 1
++56  u64  vmode   copy mode of values: 0 plain, 1 lists, 2 tables
++64  u64  vinfo   vmode 1: nesting depth * 256 + element bytes
++72  u64  lastkey the last key found or added
++80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
+```
+
+The entry array is in insertion order, which is iteration order
+(type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
+A set uses the same layout and ignores the value word.
+
+**Enum values** (ADR 0602, lane 179). An enum none of whose variants has
+fields is an `i64`, the variant's index in declaration order. Any other enum
+is a pointer to an **enum object** (heap kind 5, immutable, shared, never
+copied):
+
+```text
++0   i64  index   the variant, in declaration order
++8   ...  fields  one 8-byte slot per field of the variant, in order
+```
+
+A variant without fields of such an enum is one shared object per program,
+built by the generated `init.enums` into a program global before `main`
+runs; program globals (computed constants, ADR 0604) follow the runtime's
+first `RT_GLOBALS` (16) slots, and the image's global area is sized from the
+slots the MIR uses. `==` on an enum with fields compares the index when one
+side is a variant without fields, the index and that variant's fields when
+one side is built in place, else calls the generated `eq.E`.
 
 ## 3. Entry and exit
 
@@ -168,9 +223,9 @@ Linux clobbers `rcx` and `r11` on x86-64. The shim is four functions
 
 **macOS risk.** Apple documents `libSystem` as the stable interface and
 reserves the right to change raw syscall numbers. The raw route works on
-current macOS ARM64 and is what the first slice uses; the fallback is to import
-`_write`, `_exit` and `_mmap` from `libSystem` through the dyld stubs lane 126
-needs for `extern` anyway. Only the four shim functions change (ADR 0406).
+current macOS ARM64 and is what the first slice uses. ADR 0534 moves the macOS
+OS layer to libSystem calls (`_write`, `_exit`, `_mmap`, ...) through the dyld
+imports lane 178 adds; Linux keeps raw syscalls.
 
 ## 5. Allocator
 
@@ -184,7 +239,12 @@ the interim for the GC (ADR 0407).
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-63 free.
+flag), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
+constant `NAME := N` read as `global(NAME)`; two names may share a slot only
+if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
+`bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
+past `Image.globals`, an undeclared name, or a code generator constant of
+the same name with another value.
 
 **Flush points** (ADR 0581): the buffer fills; `rt.exit` (called by the entry
 after `main` and by `io.exit`); every trap; before reading standard input;
@@ -259,8 +319,22 @@ call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `fmt_int`, `fmt_hex`, `fmt_bool`, `fmt_float`, `fmt_float_fixed`, `fmt_pad`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
-its value (empty on failure) and sets `os_ok()`; the lowering follows it
-with the status call.
+its value and, on failure, sets the error slot (global 8) to the display text
+of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
+`io_read_line` return a string or 0.
+
+**Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
+adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
+`str_float`, `str_fixed`, `str_char`, `str_pad`, `str_pad_checked`,
+`str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
+(character index or -1), `str_find_opt`, `str_char_at`, `str_strip_prefix`, `str_strip_suffix`,
+`char_to_digit`, `char_from_code` (optional results), `str_replace`, `str_split`,
+`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
+`str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
+`out_char`, `out_list_char`, and `str_trap`. A function that
+can trap takes the constant head and excerpt as its last arguments (`str`
+values the lowering builds from the call's position). A character crosses the
+runtime as an `int`.
 
 The table below is the first draft:
 

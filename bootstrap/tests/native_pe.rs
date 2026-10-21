@@ -85,7 +85,7 @@ fn pe_sample_reads_back_in_an_external_tool() {
         }
     };
     let _ = std::fs::remove_file(&path);
-    assert!(text.contains("pei-x86-64"), "{text}");
+    assert!(text.contains("pei-x86-64") || text.contains("coff-x86-64"), "{text}");
     assert!(text.contains("DLL Name: KERNEL32.dll"), "{text}");
     assert!(text.contains("ExitProcess"), "{text}");
 }

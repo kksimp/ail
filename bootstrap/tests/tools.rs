@@ -54,6 +54,30 @@ fn garlic_checks_clean_and_renders_headless() {
     assert!(second.contains("# Second page"), "--follow 1:\n{second}");
     let viewport = run(&["--height", "4", "--viewport", "--do", "find:the end", "--json"]);
     assert!(viewport.contains("\"message\":\"found `the end`") && !viewport.contains("\"Second page\""), "--viewport:\n{viewport}");
+    // Scripts run (tools/garlic/jsdom): their changes and timers show, and
+    // a script's navigation is followed; `--no-js` shows the page as sent.
+    let page_of = |flags: &[&str], file: &str| {
+        let mut args = vec!["run".to_string(), path.clone()];
+        args.extend(flags.iter().map(|f| f.to_string()));
+        args.push(tool(file));
+        let out = ail().args(&args).output().unwrap();
+        assert!(out.status.success(), "{flags:?} {file}: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let scripted = page_of(&["--print"], "tools/garlic/testdata/script.html");
+    for want in ["# Made by script", "* onion bulb", "timer ran", "[filled by script"] {
+        assert!(scripted.contains(want), "script.html lacks {want:?}:\n{scripted}");
+    }
+    let redirected = page_of(&["--print"], "tools/garlic/testdata/redirect.html");
+    assert!(redirected.contains("# Second page"), "redirect.html:\n{redirected}");
+    let plain = page_of(&["--no-js", "--print"], "tools/garlic/testdata/redirect.html");
+    assert!(plain.contains("Please enable JavaScript."), "--no-js:\n{plain}");
+    // A refresh inside `<noscript>` is only for browsers without scripts;
+    // a cookie a script sets is readable at once.
+    let scripted = page_of(&["--print"], "tools/garlic/testdata/noscript.html");
+    assert!(scripted.contains("# Scripts ran, cookie seen=1"), "noscript.html:\n{scripted}");
+    let plain = page_of(&["--no-js", "--print"], "tools/garlic/testdata/noscript.html");
+    assert!(plain.contains("# Second page"), "noscript.html --no-js:\n{plain}");
 }
 
 /// Ctrl-Shift-H previews a replace across the directory's `.ail` files,
@@ -231,14 +255,14 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     let (code, _, _) = pdf(&["grep", "not in the file", &report]);
     assert_eq!(code, Some(1), "pdf grep with no hit exits 1");
     let (_, out, _) = pdf(&["json", &report, "--page", "1"]);
-    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0.0,\"page\":2.0}"), "pdf json:\n{out}");
+    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0,\"page\":2}"), "pdf json:\n{out}");
     let (_, out, _) = pdf(&["info", &tool("tools/pdf/testdata/scan.pdf")]);
     assert!(out.contains("image-only pages (scans, read by OCR when shown or searched): 1"), "pdf info on a scan:\n{out}");
     let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
     assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
     // ADR 0511: the viewer reads only the page it shows, and says what is on screen.
     let (_, out, _) = pdf(&["view", &report, "--json", "--page", "2"]);
-    assert!(out.contains("\"pages_read\":1.0") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
+    assert!(out.contains("\"pages_read\":1") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
     let (code, out, _) = pdf(&["grep", "--first", "the", &report]);
     assert!(code == Some(0) && !out.contains("2: "), "pdf grep --first stops after page 1:\n{out}");
     // ADR 0512: a Group 4 fax scan is read by OCR when asked for, and not with --no-ocr.
@@ -256,23 +280,50 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
 
 /// Garlic's JavaScript engine (`tools/garlic/js`, docs/design/garlic-js.md)
 /// checks clean, passes its `@test`s, its lexer prints the expected tokens,
-/// its parser matches every hand-written tree and error, and the packed
-/// test262 parser tests hold (their exceptions listed in `known.txt`).
+/// its parser matches every hand-written tree and error, the packed test262
+/// parser tests hold (their exceptions listed in `known.txt`), and its
+/// programs and pages print what Node and Chromium printed.
 #[test]
-fn garlic_js_parses_its_suites() {
+fn garlic_js_parses_and_runs_its_suites() {
     let dir = tool("tools/garlic/js");
     let check = ail().args(["check", &dir]).output().unwrap();
     let stderr = String::from_utf8_lossy(&check.stderr);
     assert!(check.status.success() && stderr.is_empty(), "ail check {dir}:\n{stderr}");
-    let test = ail().args(["test", &tool("tools/garlic/js/syntax/text.ail")]).output().unwrap();
-    let stdout = String::from_utf8_lossy(&test.stdout);
-    assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test text.ail:\n{stdout}");
+    for unit in ["tools/garlic/js/syntax/text.ail", "tools/garlic/js/vm/jsmath.ail"] {
+        let test = ail().args(["test", &tool(unit)]).output().unwrap();
+        let stdout = String::from_utf8_lossy(&test.stdout);
+        assert!(test.status.success() && stdout.contains(" 0 failed"), "ail test {unit}:\n{stdout}");
+    }
     let tokens = ail().args(["run", &dir, "--tokens", &tool("tools/garlic/js/testdata/tokens/sample.js")]).output().unwrap();
     let expected = std::fs::read_to_string(tool("tools/garlic/js/testdata/tokens/sample.tokens")).unwrap();
     assert_eq!(String::from_utf8_lossy(&tokens.stdout), expected, "--tokens sample.js");
-    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser")] {
+    for (flag, data) in [("--test", "tools/garlic/js/testdata/syntax"), ("--test262", "tools/garlic/js/testdata/test262-parser"), ("--test-run", "tools/garlic/js/testdata/run"), ("--test-page", "tools/garlic/js/testdata/page")] {
         let out = ail().args(["run", &dir, flag, &tool(data)]).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
     }
+}
+
+/// Garlic fetches pages from `http.serve_dir` (http.serve.2): the files of
+/// `tools/garlic/testdata` served by one AIL program, read by another.
+#[test]
+fn garlic_reads_a_page_from_serve_dir() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let mut server = ail().args(["run", "tools/garlic/testdata/serve_dir.ail", &free.to_string()]).current_dir(&root).spawn().unwrap();
+    let url = format!("http://{free}/index.html");
+    let garlic = tool("tools/garlic/garlic.ail");
+    // The server needs a moment to bind; Garlic reports a refused connection.
+    let mut text = String::new();
+    for _ in 0..50 {
+        let out = ail().args(["run", &garlic, "--width", "60", "--print", &url]).output().unwrap();
+        text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() && text.contains("# Garlic") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    server.kill().unwrap();
+    server.wait().unwrap();
+    assert!(text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n"), "garlic over serve_dir:\n{text}");
 }

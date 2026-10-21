@@ -1,0 +1,34 @@
+## std.net.26: the client asks for gzip or deflate and undoes it, unless the
+## program sets `Accept-Encoding` itself.
+use std.net
+use std.compress
+
+fn serve(srv net.Server) !
+    for _ in 0..4
+        ex := srv.accept()?
+        asked := ex.request.headers.get("accept-encoding") else "-"
+        text := "hello hello hello hello [{asked}]"
+        if ex.request.path == "/z"
+            ex.respond_bytes(200, {"content-encoding": "deflate"}, compress.zlib(text.to_bytes()))?
+        elif ex.request.path == "/bad"
+            ex.respond_bytes(200, {"content-encoding": "gzip"}, b"not gzip at all")?
+        else
+            ex.respond_bytes(200, {"content-encoding": "gzip"}, compress.gzip(text.to_bytes()))?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    base := "http://{srv.addr()}"
+    t := spawn serve(srv)
+    r := net.get("{base}/g")?
+    print(r.body)
+    print("{r.headers.get("content-encoding") else "none"} {r.headers.get("content-length") else "none"}")
+    print(net.get("{base}/z")?.body)
+    mut own := net.options()
+    own.headers["Accept-Encoding"] = "gzip"
+    raw := net.request_bytes("GET", "{base}/g", own)?
+    print("{raw.headers["content-encoding"]} {compress.gunzip(raw.data)?.text()}")
+    bad := net.get("{base}/bad") else err
+        print("bad body: {err.kind}")
+        net.Response(status: 0, headers: {}, body: "")
+    print(bad.status)
+    t.wait()?

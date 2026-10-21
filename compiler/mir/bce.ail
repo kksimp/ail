@@ -8,6 +8,10 @@
 ## trap names the same line, with the same message, as before. Loads of
 ## `xs[k]` that no store or call can change are hoisted into the guard.
 ##
+## Rules: native.bce.1-3 (the removed checks and the unobservable capacity),
+## native.bce.7-9 (computed starts and steps, and index arithmetic bounded by a
+## constant; ADR 0622). native.bce.5-6 are cited where they are tested below.
+##
 ## What may change a list's length or elements inside the loop is a call
 ## that gets the list (or one that holds it: a list of lists), a `push`, and
 ## a `set` on it. A value fetched from a list is treated as a part of that
@@ -33,9 +37,15 @@ pub struct Versioned
     pub f Func
     ## The header of the copy that runs without the checks.
     pub header int
+    ## The row-length floors by "list|block" (`rows`), with the new ones.
+    pub floors Map[str, int]
 
 ## Calls above this many `push`es of a list per iteration aren't sized for.
 MAX_PER := 8
+
+## Indexes that arithmetic bounds are only tested against a list's length up
+## to this value.
+MAX_REACH := 16777216
 
 pub fn bce(f Func, reserve bool, grow_only bool) Func
     mut g := f
@@ -44,6 +54,7 @@ pub fn bce(f Func, reserve bool, grow_only bool) Func
     if reserve
         g = reserve_lists(g)
     mut done := Set[int]()
+    mut floors := Map[str, int]()
     mut again := true
     while again
         again = false
@@ -54,8 +65,9 @@ pub fn bce(f Func, reserve bool, grow_only bool) Func
                 continue
             done.add(lp.header)
             c := counted(g, defs, lp) else continue
-            r := version(g, defs, lp, c) else continue
+            r := version(g, defs, lp, c, loops, reserve and grow_only, floors) else continue
             g = r.f
+            floors = r.floors
             done.add(r.header)
             again = true
             break
@@ -127,7 +139,10 @@ GROWS := [
     "rt.list_copy",
     "rt.list_copy_deep",
     "rt.list_join",
+    "rt.list_join_chars",
     "rt.list_reserve",
+    "rt.list_rows_min",
+    "rt.list_new_for",
     "rt.list_alloc",
     "rt.list_grow",
 ]
@@ -186,8 +201,12 @@ fn reserve_lists(f Func) Func
     defs := defs_of(f)
     dom := dominators(f)
     mut g := f
+    mut patches := List[Sized]()
+    mut sized := Set[int]()
     for lp in loops
         c := counted(f, defs, lp) else continue
+        if c.step >= 0
+            continue
         if c.q >= 0
             continue
         mut lists := List[int]()
@@ -223,11 +242,82 @@ fn reserve_lists(f Func) Func
             if per[k] > MAX_PER
                 continue
             p := lp.pre
+            if made_for(f, defs, dom, lp, c, lists[k], per[k], mut patches, mut sized)
+                continue
             n1 := konst_in(mut g, p, per[k])
             n2 := konst_in(mut g, p, size[k])
             g.blocks[p].insts.push(inst(-1, "call", [lists[k], c.lo, c.hi, n1, n2]))
             g.blocks[p].insts[g.blocks[p].insts.len() - 1].name = "rt.list_reserve"
+    # Largest position first, so the earlier ones keep theirs.
+    mut done := [false for _ in 0..patches.len()]
+    for _ in 0..patches.len()
+        mut best := -1
+        for k in 0..patches.len()
+            if done[k]
+                continue
+            if best < 0 or patches[k].b > patches[best].b
+                best = k
+            elif patches[k].b == patches[best].b and patches[k].at > patches[best].at
+                best = k
+        done[best] = true
+        pt := patches[best]
+        konst_in(mut g, pt.b, pt.lo)
+        konst_in(mut g, pt.b, pt.per)
+        mut made := g.blocks[pt.b].insts
+        c2 := made.pop() else break
+        c1 := made.pop() else break
+        mut call := made[pt.at]
+        call.name = "rt.list_new_for"
+        call.args = [c1.dst, pt.hi, c2.dst]
+        mut out := [made[k] for k in 0..pt.at]
+        out.push(c1)
+        out.push(c2)
+        out.push(call)
+        for k in pt.at + 1..made.len()
+            out.push(made[k])
+        g.blocks[pt.b].insts = out
     g
+
+## A list to be sized at creation (`list_new_for`) instead of reserved.
+struct Sized
+    b int
+    at int
+    lo int
+    hi int
+    per int
+
+## Whether the list `x`, made empty by `list_new(0)` before a counted loop
+## whose bound `hi` is known there, is sized where it is made. True when
+## the loop's `list_reserve` is then not needed: the list is made in the
+## loop's preheader and nothing there touches it after.
+fn made_for(
+    f Func,
+    defs List[Def],
+    dom List[List[bool]],
+    lp LoopInfo,
+    c Counted,
+    x int,
+    per int,
+    mut patches List[Sized],
+    mut sized Set[int],
+) bool
+    nw := inst_of(f, defs, x) else return false
+    if nw.op != "call" or nw.name != "rt.list_new" or const_of(f, defs, nw.args[0]) != 0
+        return false
+    start := const_of(f, defs, c.lo) else return false
+    d := defs[x]
+    h := defs[c.hi]
+    if not earlier(dom, At(b: h.block, k: h.at), At(b: d.block, k: d.at))
+        return false
+    if not sized.contains(x)
+        sized.add(x)
+        patches.push(Sized(b: d.block, at: d.at, lo: start, hi: c.hi, per: per))
+    if d.block != lp.pre
+        return false
+    for k in d.at + 1..f.blocks[d.block].insts.len()
+        if f.blocks[d.block].insts[k].args.contains(x)
+            return false
+    not f.blocks[d.block].term.uses().contains(x)
 
 fn konst_in(mut g Func, block int, n int) int
     g.vals.push(Ty.Int)
@@ -251,6 +341,7 @@ struct Guard
     slow_args List[int]
     lens Map[int, int]
     zero int
+    ranged Set[int]
 
 fn Guard.value(mut self, t Ty) int
     f.vals.push(t)
@@ -301,6 +392,14 @@ fn Guard.in_bounds(mut self, x int, idx int, k int?)
         check(emit("ge", [idx, zero], Ty.Bool))
         check(emit("lt", [idx, l], Ty.Bool))
 
+## `-LIMIT <= x <= LIMIT`.
+fn Guard.within(mut self, x int)
+    if ranged.contains(x)
+        return
+    ranged.add(x)
+    check(emit("ge", [x, konst(0 - LIMIT)], Ty.Bool))
+    check(emit("le", [x, konst(LIMIT)], Ty.Bool))
+
 fn Guard.emit_need(mut self, nd Need, x int, idx int, hi int, hi_is_len bool)
     match nd.kind
         "index" =>
@@ -318,7 +417,43 @@ fn Guard.emit_need(mut self, nd Need, x int, idx int, hi int, hi_is_len bool)
 fn cst(f Func, defs List[Def], v int) int?
     if v < defs.len() then const_of(f, defs, v) else none
 
-fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
+## The loop around `lp` where the rows of the list of lists `b` can't change
+## (nothing in it gets `b`, pushes to it or sets its elements) and `b` is
+## defined before it: its rows' shortest length, taken once before that
+## loop, bounds the rows' lengths for as long as lists only grow. The
+## outermost such loop, else -1 (native.bce.5).
+fn floor_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, b int) int
+    mut best := -1
+    for k in 0..loops.len()
+        o := loops[k]
+        if o.header == lp.header or not o.member[lp.header] or o.pre < 0
+            continue
+        if defs[b].block < 0 or o.member[defs[b].block]
+            continue
+        mut marks := [false for _ in 0..f.vals.len()]
+        for blk in o.blocks
+            for i in f.blocks[blk].insts
+                if i.op == "call" or i.op == "prim"
+                    for a in i.args
+                        if is_list(f.vals[a])
+                            taint(f, defs, a, mut marks)
+                elif i.op == "set" and holds_lists(f.vals[i.args[0]])
+                    taint(f, defs, i.args[0], mut marks)
+        if not clean(f, defs, b, marks)
+            continue
+        if best < 0 or o.member[loops[best].header]
+            best = k
+    best
+
+fn version(
+    f Func,
+    defs List[Def],
+    lp LoopInfo,
+    c Counted,
+    loops List[LoopInfo],
+    rows bool,
+    known Map[str, int],
+) Versioned?
     n := f.blocks.len()
     nv := f.vals.len()
     inl := lp.member
@@ -336,6 +471,57 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
                 taint(f, defs, i.args[0], mut et)
                 if holds_lists(f.vals[i.args[0]])
                     taint(f, defs, i.args[0], mut lt)
+    # Lists the loop pushes to once or more per iteration and does nothing
+    # else to: the guard checks their room for the whole loop, and the
+    # pushes lose the check that the list is full (native.bce.6).
+    mut roomy := List[int]()
+    mut per := List[int]()
+    mut roomy_keys := Set[str]()
+    if c.q < 0
+        dom := dominators(f)
+        mut nl := [false for _ in 0..nv]
+        mut bad := Set[int]()
+        for b in lp.blocks
+            for i in f.blocks[b].insts
+                if (i.op == "call" or i.op == "prim") and not is_push(i)
+                    for a in i.args
+                        if is_list(f.vals[a])
+                            taint(f, defs, a, mut nl)
+        mut counted_at := Map[int, int]()
+        for b in lp.blocks
+            mut every := b != lp.header
+            for l in lp.latches
+                if not dom[l][b]
+                    every = false
+            for i in f.blocks[b].insts
+                if not is_push(i) or inl[defs[i.args[0]].block]
+                    continue
+                x := i.args[0]
+                if not every
+                    bad.add(x)
+                    continue
+                if not counted_at.contains(x)
+                    counted_at[x] = roomy.len()
+                    roomy.push(x)
+                    per.push(0)
+                per[counted_at[x]] += 1
+        mut keep := List[int]()
+        for k in 0..roomy.len()
+            if bad.contains(roomy[k]) or not clean(f, defs, roomy[k], nl) or per[k] > MAX_PER
+                continue
+            keep.push(k)
+        mut r2 := List[int]()
+        mut p2 := List[int]()
+        for k in keep
+            r2.push(roomy[k])
+            p2.push(per[k])
+        roomy = r2
+        per = p2
+        for b in lp.blocks
+            for k in 0..f.blocks[b].insts.len()
+                i := f.blocks[b].insts[k]
+                if is_push(i) and roomy.contains(i.args[0]) and not bad.contains(i.args[0])
+                    roomy_keys.add(k_of(b, k))
     # Loads of an unchanging element, which the guard does once.
     mut hoists := List[Hoist]()
     mut hidx := Map[int, int]()
@@ -356,6 +542,13 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
                     hoists.push(Hoist(dst: i.dst, y: y, c: ci, fresh: -1))
                     hidx[i.dst] = hoists.len() - 1
                     grew = true
+    # Checked arithmetic that can't overflow if the fixed operands are small.
+    mut fx := [false for _ in 0..nv]
+    for v in 0..nv
+        fx[v] = defs[v].block >= 0 and fixed(defs, inl, hidx, v)
+    pr := prove(f, defs, lp, c, rpo(f), fx)
+    # The highest index that the loop's arithmetic bounds, per list.
+    mut reach := Map[int, int]()
     # The accesses that can lose their checks, and what that takes.
     mut needs := List[Need]()
     mut relax := Set[str]()
@@ -369,6 +562,14 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
             if i.op != "get" and i.op != "set" or hidx.contains(i.dst)
                 continue
             x := i.args[0]
+            if rows and i.site >= 0 and is_list(f.vals[x]) and not fixed(defs, inl, hidx, x)
+                # A row of a list of lists whose rows are all longer than the index.
+                pb := parent(f, defs, x)
+                still := fixed(defs, inl, hidx, i.args[1]) and clean(f, defs, x, lt)
+                if pb >= 0 and still and floor_loop(f, defs, loops, lp, pb) >= 0
+                    needs.push(Need(kind: "row", x: pb, arg: i.args[1]))
+                    relax.add("{b}:{k}")
+                continue
             if not (is_list(f.vals[x]) and fixed(defs, inl, hidx, x) and clean(f, defs, x, lt))
                 continue
             # Its elements' address is the same on every iteration.
@@ -393,6 +594,15 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
                 needs.push(Need(kind: "inv", x: x, arg: idx))
                 relax.add("{b}:{k}")
                 continue
+            if lw := pr.lows.get(idx)
+                hg := pr.highs[idx]
+                if lw >= 0 and hg <= MAX_REACH and inl[defs[idx].block]
+                    # `xs[b * 7 + k]` with `b` below a constant: the list
+                    # needs to be longer than the largest index (ADR 0622).
+                    if not reach.contains(x) or reach[x] < hg
+                        reach[x] = hg
+                    relax.add("{b}:{k}")
+                    continue
             a := inst_of(f, defs, idx) else continue
             if a.op != "add" or a.args[0] != c.p or not inl[defs[idx].block]
                 continue
@@ -401,7 +611,16 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
                 needs.push(Need(kind: "off", x: x, arg: off))
                 relax.add("{b}:{k}")
                 relax.add("{defs[idx].block}:{defs[idx].at}")
-    if needs.len() == 0 and hoists.len() == 0
+    for x in reach.keys()
+        needs.push(Need(kind: "const", x: x, arg: reach[x]))
+    # Worth the guard on the operands: two checks, or one in a loop that is
+    # versioned anyway.
+    versioned := needs.len() > 0 or hoists.len() > 0 or roomy.len() > 0
+    use_ranges := pr.sites.len() >= 2 or (pr.sites.len() == 1 and versioned) or reach.len() > 0
+    if use_ranges
+        for key in pr.sites
+            relax.add(key)
+    if not versioned and not use_ranges
         return none
     # Everything defined in the loop and used after it is defined in the
     # header (the loop has one exit, from the header), and gets a parameter
@@ -441,25 +660,83 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
         slow_args: pre_args,
         lens: Map[int, int](),
         zero: -1,
+        ranged: Set[int](),
     )
     hd := inst_of(f, defs, c.bound)
+    if cst(f, defs, c.lo) == none
+        # The start was computed before the loop: not negative, and small.
+        if gd.zero < 0
+            gd.zero = gd.konst(0)
+        gd.check(gd.emit("ge", [c.lo, gd.zero], Ty.Bool))
+        gd.within(c.lo)
+    if c.step >= 0
+        # A step computed before the loop: at least 1, and small.
+        gd.check(gd.emit("ge", [c.step, gd.konst(1)], Ty.Bool))
+        gd.within(c.step)
     for h in 0..hoists.len()
         y := fresh_of(hoists, hidx, hoists[h].y)
         ci := fresh_of(hoists, hidx, hoists[h].c)
         gd.in_bounds(y, ci, cst(f, defs, hoists[h].c))
         d := gd.emit("get", [y, ci], f.vals[hoists[h].dst])
         hoists[h].fresh = d
+    if use_ranges
+        if pr.limited.len() > 8
+            return none
+        for v in pr.limited
+            gd.within(fresh_of(hoists, hidx, v))
     mut seen := Set[str]()
+    mut floors := known
+    mut floor_pre := List[int]()
+    mut floor_call := List[Inst]()
+    # `hi <= len - off` is stronger than `hi <= len`.
+    mut shifted := Set[int]()
+    for nd in needs
+        if nd.kind == "off"
+            shifted.add(nd.x)
     for nd in needs
         key := "{nd.kind}|{nd.x}|{nd.arg}"
-        if seen.contains(key)
+        if seen.contains(key) or (nd.kind == "index" and shifted.contains(nd.x))
             continue
         seen.add(key)
+        if nd.kind == "row"
+            pre := loops[floor_loop(f, defs, loops, lp, nd.x)].pre
+            fkey := "{nd.x}|{pre}"
+            mut m := -1
+            if kn := floors.get(fkey)
+                m = kn
+            else
+                m = gd.value(Ty.Int)
+                mut fc := inst(m, "call", [nd.x])
+                fc.name = "rt.list_rows_min"
+                floor_pre.push(pre)
+                floor_call.push(fc)
+                floors[fkey] = m
+            ix := fresh_of(hoists, hidx, nd.arg)
+            if gd.zero < 0
+                gd.zero = gd.konst(0)
+            gd.check(gd.emit("ge", [ix, gd.zero], Ty.Bool))
+            gd.check(gd.emit("lt", [ix, m], Ty.Bool))
+            continue
         mut hi_is_len := false
         if d := hd
             hi_is_len = d.op == "len" and d.args[0] == nd.x
         idx := if nd.kind == "inv" then fresh_of(hoists, hidx, nd.arg) else nd.arg
         gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.bound, hi_is_len)
+    if roomy.len() > 0
+        # Room for every push of the loop: `(hi - lo) * per` more elements.
+        # `hi` is within +-2^30 and `per` at most 8, so nothing here wraps.
+        gd.within(fresh_of(hoists, hidx, c.bound))
+        for k in 0..roomy.len()
+            x := roomy[k]
+            held := gd.len_of(x)
+            cp := gd.emit("cap", [x], Ty.Int)
+            free := gd.emit("sub", [cp, held], Ty.Int)
+            mut want := c.bound
+            if cst(f, defs, c.lo) != 0
+                want = gd.emit("sub", [want, c.lo], Ty.Int)
+            if per[k] > 1
+                want = gd.emit("mul", [want, gd.konst(per[k])], Ty.Int)
+            gd.check(gd.emit("le", [want, free], Ty.Bool))
     # The address of each fixed list's elements, taken once.
     mut data := Map[int, int]()
     for key in via.keys()
@@ -490,6 +767,8 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
     for h in hoists
         vm[h.dst] = h.fresh
     mut blocks := f.blocks
+    for k in 0..floor_pre.len()
+        blocks[floor_pre[k]].insts.push(floor_call[k])
     # The exit block takes the values that are live after the loop.
     mut qmap := Map[int, int]()
     mut extra_orig := List[int]()
@@ -528,6 +807,8 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
             r.args = [vm[a] for a in i.args]
             if relax.contains("{b}:{k}")
                 r.site = -1
+            if roomy_keys.contains(k_of(b, k))
+                r.imm = 1
             if r.site < 0 and (i.op == "get" or i.op == "set") and via.contains(k_of(b, k))
                 base := data[fresh_of(hoists, hidx, via[k_of(b, k)])]
                 if i.op == "get"
@@ -558,6 +839,7 @@ fn version(f Func, defs List[Def], lp LoopInfo, c Counted) Versioned?
             names: names,
         ),
         header: cb[lp.header],
+        floors: floors,
     )
 
 ## Whether `v` has the same value on every iteration.

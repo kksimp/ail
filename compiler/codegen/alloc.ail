@@ -37,6 +37,11 @@ pub struct Alloc
     pub slots int
     ## The callee-saved registers used, which the prologue saves.
     pub saved List[int]
+    ## The block where the callee-saved registers are saved, or -1 for the
+    ## function's entry; and the blocks it dominates, whose returns restore
+    ## them (shrink-wrapping, ADR 0625).
+    pub wrap int
+    pub region List[bool]
 
 ## Whether an instruction's value is rebuilt at each use instead of held.
 pub fn is_remat(i mir.Inst) bool
@@ -152,10 +157,90 @@ pub fn allocate(f mir.Func, t Target) Alloc
         ranges: ranges,
         calls: calls,
         hints: hints,
+        weight: [],
+        weighed: false,
+        func: f,
     )
     for v in queue
         s.assign(v, f.vals[v].is_float(), t)
-    Alloc(loc: s.loc, order: order, slots: s.slots, saved: s.saved.sorted())
+    shrink := shrink_wrap(f, order, s, bstart, bend, t)
+    Alloc(
+        loc: s.loc,
+        order: order,
+        slots: s.slots,
+        saved: s.saved.sorted(),
+        wrap: shrink.wrap,
+        region: shrink.region,
+    )
+
+## The cost of keeping each value in memory: one per definition or use,
+## times 8 for each loop around it (at most 4).
+fn use_weights(f mir.Func) List[int]
+    n := f.blocks.len()
+    mut depth := [0 for _ in 0..n]
+    for lp in mir.find_loops(f)
+        for b in lp.blocks
+            depth[b] += 1
+    mut w := [0 for _ in 0..f.vals.len()]
+    for b in 0..n
+        mut unit := 1
+        for _ in 0..(if depth[b] > 4 then 4 else depth[b])
+            unit *= 8
+        blk := f.blocks[b]
+        for p in blk.params
+            w[p] += unit
+        for i in blk.insts
+            if i.dst >= 0
+                w[i.dst] += unit
+            for a in i.args
+                w[a] += unit
+        for a in blk.term.uses()
+            w[a] += unit
+        for e in blk.term.args
+            for a in e
+                w[a] += unit
+    w
+
+struct Wrap
+    wrap int
+    region List[bool]
+
+## Where the callee-saved registers can be saved instead of at the entry:
+## the deepest block that dominates every block a callee-saved register is
+## live in, when no edge leaves what it dominates and none comes back to it.
+## A path that returns without reaching it then saves and restores nothing.
+fn shrink_wrap(f mir.Func, order List[int], s Scan, bstart List[int], bend List[int], t Target) Wrap
+    nowrap := Wrap(wrap: -1, region: [])
+    if s.saved.len() == 0
+        return nowrap
+    n := f.blocks.len()
+    mut occupied := [false for _ in 0..n]
+    for v in 0..s.loc.len()
+        l := s.loc[v]
+        if l < 0 or l >= SLOT_BASE
+            continue
+        if not (t.int_callee.contains(l) or t.float_callee.contains(l))
+            continue
+        for b in order
+            mut k := 0
+            while k < s.ranges[v].len()
+                if s.ranges[v][k] <= bend[b] and s.ranges[v][k + 1] >= bstart[b]
+                    occupied[b] = true
+                k += 2
+    if occupied[0]
+        return nowrap
+    dom := mir.dominators(f)
+    mut where := List[int]()
+    for b in order
+        if occupied[b]
+            where.push(b)
+    best := wrap_block(f, order, dom, where)
+    if best < 0
+        return nowrap
+    mut region := [false for _ in 0..n]
+    for b in order
+        region[b] = dom[b][best]
+    Wrap(wrap: best, region: region)
 
 ## Append the range `from..=to`, joining it to the last one when they meet
 ## (consecutive blocks are 2 positions apart).
@@ -228,6 +313,13 @@ struct Scan
     ranges List[List[int]]
     calls List[int]
     hints List[List[int]]
+    ## How much a value costs to keep in memory: its definitions and uses,
+    ## each counted 8 times over for every loop it sits in.
+    weight List[int]
+    ## Whether `weight` has been computed: only a function that runs out of
+    ## registers needs it.
+    weighed bool
+    func mir.Func
 
 ## Whether `v` is live across a call, so it needs a callee-saved register.
 fn Scan.crosses(self, v int) bool
@@ -275,17 +367,23 @@ fn Scan.assign(mut self, v int, float bool, t Target)
             if free(r, v)
                 pick = r
                 break
+    if pick < 0 and not weighed
+        weight = use_weights(func)
+        weighed = true
     if pick < 0
-        # Spill whichever of `v` and the values in its way ends last, when
-        # that value alone holds its register over `v`'s ranges.
+        # Spill whichever of `v` and the values in its way is cheapest to
+        # keep in memory (loop-weighted uses, ADR 0622), the one that ends
+        # last among equals, when that value alone holds its register over
+        # `v`'s ranges.
         mut victim := -1
         for a in active
-            if pool.contains(loc[a]) and overlaps(
-                ranges[a],
-                ranges[v],
-            ) and (victim < 0 or end[a] > end[victim]) and sole(a, v)
+            if pool.contains(loc[a])
+                and overlaps(ranges[a], ranges[v])
+                and sole(a, v)
+                and (victim < 0 or weight[a] < weight[victim] or (weight[a] == weight[victim] and end[a] > end[victim]))
                 victim = a
-        if victim >= 0 and end[victim] > end[v]
+        if victim >= 0
+            and (weight[victim] < weight[v] or (weight[victim] == weight[v] and end[victim] > end[v]))
             pick = loc[victim]
             loc[victim] = new_slot()
             mut rest := List[int]()
