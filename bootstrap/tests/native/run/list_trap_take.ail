@@ -1,0 +1,6 @@
+# type.coll.15: take traps on a negative count.
+fn main()
+    xs := [1, 2, 3]
+    mut n := 2
+    n -= 4
+    print(xs.take(n))

@@ -1,0 +1,118 @@
+## Empty `[]` and `{}` typed by later use (type.coll.13). A local declared
+## from `{}` with no expected type is made as a table whose kinds are
+## placeholders (key kind -1); its first `m[k] = v`, `m[k] op= v`,
+## `m.add(x)` or `m = e` gives the type. The kinds of the `rt.map_new` that
+## made it are then patched and every value of its variable is retyped, as
+## `push` does for a `[]` (`Lower.retype`). Any other use first is reported.
+use ast
+
+## A `{}` with no expected type: `Map[?, ?]` until a use settles it.
+fn Lower.pending_table(mut self) Val
+    t := Ty.Map(key: Ty.Unknown, val: Ty.Unknown)
+    args := [konst(-1, Ty.Int), konst(0, Ty.Int), konst(0, Ty.Int)]
+    Val(id: call("rt.map_new", args, t), ty: t)
+
+fn is_pending_table(t Ty) bool
+    match t
+        Map(k, _) => k.is_unknown()
+        _ => false
+
+## A `[]` or `{}` whose type a later use still has to give.
+fn is_pending_coll(t Ty) bool
+    if e := t.elem()
+        return e.is_unknown()
+    is_pending_table(t)
+
+## The variable that has had the value `v`.
+fn Lower.var_of(self, v int) str?
+    for key in var_vals.keys()
+        if var_vals[key].contains(v)
+            return key
+    none
+
+## Give the pending value `v` (and every value of its variable) the type
+## `t`; a table made by `pending_table` gets the kinds of `t`.
+fn Lower.settle_pending(mut self, v int, t Ty)
+    key := var_of(v) else
+        vals[v] = t
+        return
+    for x in var_vals[key]
+        patch_table(x, t)
+    var_ty[key] = t
+    for x in var_vals[key]
+        vals[x] = t
+
+## Patch the kinds of the `rt.map_new` that made `v`, if `pending_table`
+## made it, to those `new_table` gives a table of type `t`.
+fn Lower.patch_table(mut self, v int, t Ty)
+    if v < 0
+        return
+    mut kinds := List[int]()
+    match t
+        Map(k, x) =>
+            m := value_mode(x)
+            kinds = [key_kind(k), m[0], m[1]]
+        Set(e) => kinds = [key_kind(e), 0, 0]
+        _ => return
+    for b in 0..blocks.len()
+        for i in 0..blocks[b].insts.len()
+            x := blocks[b].insts[i]
+            if x.dst == v and x.op == "call" and x.name == "rt.map_new"
+                if const_at(x.args[0]) != -1
+                    return
+                for a in 0..3
+                    set_const(x.args[a], kinds[a])
+                return
+
+## The value of the `const` that defines `v`, else -2.
+fn Lower.const_at(self, v int) int
+    for b in blocks
+        for x in b.insts
+            if x.dst == v and x.op == "const"
+                return x.imm
+    -2
+
+fn Lower.set_const(mut self, v int, n int)
+    for b in 0..blocks.len()
+        for i in 0..blocks[b].insts.len()
+            if blocks[b].insts[i].dst == v and blocks[b].insts[i].op == "const"
+                blocks[b].insts[i].imm = n
+                return
+
+## `m[k] = v` or `m[k] op= v` on a pending table: the key's and the
+## value's types give its type (type.coll.13). False after a problem.
+fn Lower.settle_map(mut self, m Val, kt Ty, vt Ty, pos ast.Pos) bool
+    if not is_key_ty(kt) or not is_value_ty(vt)
+        problem(pos, "not in the native subset yet: a map of `{kt.name()}` to `{vt.name()}`")
+        return false
+    settle_pending(m.id, Ty.Map(key: kt, val: vt))
+    true
+
+## `s.add(x)` on a pending table: it is a `Set` of `x`'s type.
+fn Lower.settle_set_add(mut self, s Val, args List[ast.Arg], npos ast.Pos) Val?
+    x := lower_value(args[0].value, none)?
+    if not is_key_ty(x.ty)
+        return unsupported(npos, "a set of `{x.ty.name()}`")
+    t := Ty.Set(x.ty)
+    settle_pending(s.id, t)
+    Val(id: call("rt.map_add", [s.id, convert(x, x.ty, npos)], Ty.Bool), ty: Ty.Bool)
+
+## `x = e` on a pending `[]` or `{}`: `e`'s type, when it gives one.
+fn Lower.settle_coll(mut self, target ast.Expr, ty Ty, r Val) Ty
+    if not is_pending_coll(ty) or is_pending_coll(r.ty) or not same_shape(ty, r.ty)
+        return ty
+    match target
+        Name(n, _) =>
+            key := lookup(n) else return ty
+            for x in var_vals[key]
+                patch_table(x, r.ty)
+            var_ty[key] = r.ty
+            for x in var_vals[key]
+                vals[x] = r.ty
+            r.ty
+        _ => ty
+
+fn same_shape(a Ty, b Ty) bool
+    if a.elem() != none
+        return b.elem() != none
+    b.is_coll()

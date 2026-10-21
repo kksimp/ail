@@ -1,0 +1,33 @@
+# `m.get(k)` as an optional (type.map.6): `if v := m.get(k)`, `else`,
+# `== none`, and values of every kind.
+struct P
+    x int
+
+fn find(m Map[str, int], k str) int?
+    m.get(k)
+
+fn main()
+    mut ages := {"ann": 31, "bob": 0}
+    if a := ages.get("ann")
+        print("ann {a}")
+    if ages.get("zed") == none
+        print("no zed")
+    print(find(ages, "bob") else -1)
+    print(find(ages, "cy") else -1)
+    names := {1: "one", 2: "two"}
+    if n := names.get(2)
+        print(n)
+    pts := {"a": P(x: 4)}
+    if p := pts.get("a")
+        mut q := p
+        q.x += 1
+        print(q.x)
+    print(pts["a"].x)
+    fs := {"pi": 3.5}
+    print(fs.get("pi") else 0.0)
+    bs := {"t": true}
+    print(bs.get("t") else false)
+    print(bs.get("f") else false)
+    ls := {"l": [1, 2]}
+    if l := ls.get("l")
+        print(l.len())

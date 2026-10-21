@@ -329,6 +329,7 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                 list(&mut fields.iter())?
             ),
             Value::List(xs) => list(&mut xs.iter())?,
+            Value::Tuple(xs) => format!("{{\"tuple\":{}}}", list(&mut xs.iter())?),
             Value::Map(t) => {
                 let parts: Option<Vec<String>> =
                     t.entries().map(|(k, v)| Some(format!("[{},{}]", self.encode(k)?, self.encode(v)?))).collect();
@@ -393,6 +394,8 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                         t.insert(k, Some(v));
                     }
                     Value::Map(Rc::new(t))
+                } else if let Some(xs) = j.get("tuple") {
+                    Value::Tuple(Rc::new(all(xs)?))
                 } else if let Some(xs) = j.get("set") {
                     let mut t = Table::default();
                     for k in all(xs)? {

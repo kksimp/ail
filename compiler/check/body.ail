@@ -299,6 +299,9 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
         Let(n, at, mutable, value, otherwise) =>
             let_stmt(n, at, mutable, value, otherwise)
             Ty.Unit
+        LetTuple(names, value, at) =>
+            let_tuple(names, value, at)
+            Ty.Unit
         Assign(target, op, value, at) =>
             assign(target, op, value, at)
             Ty.Unit
@@ -313,9 +316,13 @@ fn Checker.stmt(mut self, s ast.Stmt, expect Ty?, need bool) Ty
             handle(value, otherwise)
             Ty.Unit
         For(_, var, var_pos, mutable, iter, body, _) =>
-            elem := if mutable then mut_iterable(iter, var, body) else iterable(iter)
+            elem := if mutable then mut_iterable(iter, var, body) else iterable(
+                iter,
+                is_hidden(var),
+            )
             mark := locals.len()
-            if declare(var, var_pos)
+            # type.tuple.5: the hidden variable of `for a, b in xs` clashes only when the names do.
+            if is_hidden(var) or declare(var, var_pos)
                 locals.push(Local(
                     name: var,
                     ty: elem,
@@ -747,7 +754,7 @@ fn Checker.condition(mut self, cond ast.Expr)
         _ => "write a comparison that gives `bool`"
 
 ## The element type of a `for` loop's iterable (expr.loop.4).
-@allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr) Ty
+@allow("expr.match.3") fn Checker.iterable(mut self, iter ast.Expr, pairs bool) Ty
     if is_range(iter)
         return range_loop(iter)
     t := expr(iter, none, true)
@@ -767,12 +774,15 @@ fn Checker.condition(mut self, cond ast.Expr)
         Res =>
             reject_unhandled(t, at)
             Ty.Unknown
-        MapOf =>
+        MapOf(k, v) =>
+            # type.tuple.5: `for k, v in m` takes each entry apart.
+            if pairs
+                return Ty.Tuple([k, v])
             err_help(
                 "type.map.5",
                 at,
-                "`for` iterates a map's keys or values explicitly",
-                "write `for k in m.keys()`, or `m.values()`",
+                "`for` iterates a map's entries as `k, v`, or its keys or values",
+                "write `for k, v in m`, `for k in m.keys()`, or `m.values()`",
             )
             Ty.Unknown
         Str =>
@@ -1120,6 +1130,7 @@ fn Checker.overlap_in_stmt(self, target ast.Expr, s ast.Stmt) ast.Pos?
             overlap_in_else(target, otherwise),
         )
         Defer(st, _) => overlap_in_stmt(target, st)
+        LetTuple(_, value, _) => overlap_in_expr(target, value)
         Break => none
         Continue => none
 
@@ -1169,6 +1180,7 @@ fn Checker.overlap_in_opt(self, target ast.Expr, x ast.Expr?) ast.Pos?
             none
         ListLit(items, _) => overlap_in_list(target, items)
         SetLit(items, _) => overlap_in_list(target, items)
+        TupleLit(items, _) => overlap_in_list(target, items)
         Call(callee, args, _) => either(
             overlap_in_expr(target, callee),
             overlap_in_args(target, args),
@@ -1256,6 +1268,7 @@ fn stmt_breaks(s ast.Stmt) bool
         Assign(target, _, value, _) => breaks_in_expr(target) or breaks_in_expr(value)
         While(cond, _, _) => breaks_in_expr(cond)
         For(_, _, _, _, iter, _, _) => breaks_in_expr(iter)
+        LetTuple(_, value, _) => breaks_in_expr(value)
         Continue | Defer | With | Unsafe => false
 
 @allow("expr.match.3") fn breaks_in_else(o ast.Else) bool
@@ -1302,6 +1315,7 @@ fn args_break(args List[ast.Arg]) bool
         Index(recv, index, _) => breaks_in_expr(recv) or breaks_in_expr(index)
         ListLit(items, _) => any_breaks(items)
         SetLit(items, _) => any_breaks(items)
+        TupleLit(items, _) => any_breaks(items)
         MapLit(entries, _) =>
             for en in entries
                 if breaks_in_expr(en.key) or breaks_in_expr(en.value)

@@ -56,3 +56,28 @@ Token counts are cl100k on each file.
 AIL is slower than CPython on nine of ten and uses more tokens on all ten.
 These numbers are the baseline for the native backend (lane 120); lane 132
 runs the race in the harness.
+
+## Noise thresholds (day 3, 2026-10-21)
+
+Measured on the batch head 72849752 (Linux x86-64, 4 cores, shared VM). Source:
+`/mnt/project-files/reports/perfbench-noise-day3.md`, Part 1 (callgrind) and Part 2
+(wall clock).
+
+Instruction counts (callgrind, `instr.sh`, 5 runs each):
+
+- `ail` (`ail run` and native): deterministic within 97 instructions across runs
+  (nbody and wordfreq vary by 97 of 3.7 and 1.9 billion). Call a before/after
+  instruction change of **0.01%** or more real.
+- CPython `-I`: near-deterministic, 0.0007–0.06% on nine programs. `wordfreq`
+  varies 0.29% because its word dict is hash-seed sensitive. Call a change under
+  **0.5%** noise. Set `PYTHONHASHSEED=0` for a fixed Python baseline.
+- Instruction counts miss cache, branch and allocator effects. Confirm a small
+  change in wall time with a timed run.
+
+Wall time (medians of 10 runs, `race.py` helpers, not `run.sh`):
+
+- Spread is large on this VM: 14–167% for C and native runs of 5–80 ms, and
+  37–99% for `ail run`. Short runs cannot resolve small changes.
+- Adopted by the integrator (2026-10-21): treat a change under **10%** of the
+  median as noise, for runs of 0.3 s or more. Report the spread with any
+  wall-time claim, and back it with an instruction-count change where one exists.

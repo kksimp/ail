@@ -216,6 +216,21 @@ fn list_swap(xs List[int], i int, j int, size int)
 
 ## `xs.sum()` of integers (type.coll.12): left to right, trapping on overflow.
 ## `head` and `tail` are the trap's first line and excerpt.
+## `xs.take(n)` (type.coll.15): the first `n` elements, or all of them; a
+## negative `n` traps.
+fn list_take(xs List[int], n int, size int, head str, tail str) List[int]
+    if n < 0
+        flush()
+        out_str(head)
+        out_str("`take` needs a count of at least 0, not ")
+        out_int(n)
+        out_str("\n")
+        out_str(tail)
+        flush_to(2)
+        sys_exit(1)
+    len := load64(list_addr(xs))
+    list_slice(xs, 0, if n < len then n else len, size)
+
 fn list_sum_int(xs List[int], head str, tail str) int
     p := list_addr(xs)
     data := load64(p + 16)
