@@ -398,6 +398,46 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     Value::List(Rc::new(items[..(n as usize).min(items.len())].to_vec()))
                 }
+                // type.coll.17: `chunks(n)` pieces of `n` (the last may be shorter),
+                // `windows(n)` every run of `n` neighbours.
+                "chunks" | "windows" => {
+                    let n = a[0].int();
+                    if n < 1 {
+                        return trap("type.coll.17", pos, format!("`{name}` needs a size of at least 1, not {n}"));
+                    }
+                    let n = n as usize;
+                    let parts: Vec<Value> = if name == "chunks" {
+                        items.chunks(n).map(|c| Value::List(Rc::new(c.to_vec()))).collect()
+                    } else {
+                        items.windows(n).map(|c| Value::List(Rc::new(c.to_vec()))).collect()
+                    };
+                    Value::List(Rc::new(parts))
+                }
+                // type.coll.18: how many times each element occurs, in order of first appearance.
+                "counts" => {
+                    let mut out = Table::default();
+                    for x in items.iter() {
+                        match out.get(x) {
+                            Some(i) => {
+                                let n = out.val(i).int();
+                                *out.val_mut(i) = Value::Int(n + 1);
+                            }
+                            None => {
+                                out.insert(x.clone(), Some(Value::Int(1)));
+                            }
+                        }
+                    }
+                    Value::Map(Rc::new(out))
+                }
+                // type.coll.19: one list of all the elements of the inner lists, in order.
+                "flatten" => {
+                    let mut out = Vec::new();
+                    for inner in items.iter() {
+                        let Value::List(l) = inner else { unreachable!("checked: a list of lists") };
+                        out.extend(l.iter().cloned());
+                    }
+                    Value::List(Rc::new(out))
+                }
                 "union" | "intersect" | "difference" => set_op(name, items.iter(), &a[0]),
                 "contains" | "index_of" => {
                     let mut found = None;
@@ -532,6 +572,22 @@ impl<'a, W: Write> Interp<'a, W> {
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
+            "trim_start" => s(text.trim_start()),
+            "trim_end" => s(text.trim_end()),
+            // type.str.17: the pieces between runs of whitespace; none for blank text.
+            "words" => Value::List(Rc::new(text.split_whitespace().map(s).collect())),
+            // type.str.18: non-overlapping occurrences of `sub`.
+            "count" => {
+                let sub = arg_str(0);
+                if sub.is_empty() {
+                    return trap("type.str.18", pos, "`count` needs a non-empty text to find".into());
+                }
+                Value::Int(text.matches(&*sub).count() as i64)
+            }
+            "rfind" => {
+                let sub = arg_str(0);
+                opt(text.rfind(&*sub).map(|b| Value::Int(text[..b].chars().count() as i64)))
+            }
             "to_lower" => s(text.to_lowercase()),
             "to_upper" => s(text.to_uppercase()),
             // type.str.13: character positions; bounds are never clamped.
@@ -581,7 +637,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     );
                 }
             },
-            "pad_left" | "pad_right" => {
+            "pad_left" | "pad_right" | "center" => {
                 // type.str.9: up to `width` characters; never shorter.
                 let width = usize::try_from(a[0].int()).unwrap_or(0);
                 let fill_len = a[1].char().len_utf8().saturating_mul(width);
@@ -589,7 +645,17 @@ impl<'a, W: Write> Interp<'a, W> {
                     return trap("type.str.15", pos, format!("`{name}` would build a text over {MAX_TEXT_BYTES} bytes"));
                 }
                 let fill = a[1].char().to_string().repeat(width.saturating_sub(text.chars().count()));
-                if name == "pad_left" { s(format!("{fill}{text}")) } else { s(format!("{text}{fill}")) }
+                if name == "center" {
+                    // type.str.16: the extra fill goes on the right.
+                    let n = fill.chars().count();
+                    let left: String = fill.chars().take(n / 2).collect();
+                    let right: String = fill.chars().skip(n / 2).collect();
+                    s(format!("{left}{text}{right}"))
+                } else if name == "pad_left" {
+                    s(format!("{fill}{text}"))
+                } else {
+                    s(format!("{text}{fill}"))
+                }
             }
             _ => unreachable!("checked: str.{name}"),
         })

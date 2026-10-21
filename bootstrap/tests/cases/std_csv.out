@@ -1,0 +1,19 @@
+[["a", "b", "c"], ["1", "2", "3"]]
+[["a", "x, y", "he said \"hi\""], ["", "", ""]]
+[["one"], ["two"]]
+0
+[["a", "b"], ["1", "2"]]
+[["multi\nline", "z"]]
+2
+nut
+a,"b,c"
+"say ""x""",
+
+name,qty
+bolt,4
+nut,9
+
+error: unterminated quote (row 1)
+0
+error: 1 fields, the header has 2 (row 2)
+0

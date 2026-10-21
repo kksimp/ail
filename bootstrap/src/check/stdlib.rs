@@ -19,6 +19,7 @@ impl<'p> Checker<'p> {
         let mut seen: HashMap<(&str, &str), Pos> = HashMap::new();
         for u in &self.prog.uses {
             match u.path.as_slice() {
+                [(root, _), _] if root == "std" && stdlib::ail_module_path(&u.dotted()).is_some() => continue,
                 [(root, _), (module, mpos)] if root == "std" => {
                     if !stdlib::is_std_module(module) {
                         let names = stdlib::module_names();
