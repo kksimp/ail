@@ -30,3 +30,8 @@ Creating or copying a raw pointer value is **not** unsafe. Using it is.
 - The detailed semantics (aliasing rules for raw pointers, what is undefined
   behaviour inside `unsafe`) are to be specified before the backend relies
   on them.
+
+## Rejected alternatives
+
+- Marking the creation or copying of a raw pointer as unsafe as well as its use: rejected because creating a pointer value touches no memory, so the unsafe marker belongs on the use. (reconstructed 2026-10-21: the record states the rule without a debate.)
+- A longer spelling of the raw pointer type: `*T` was chosen for its one-token cost (token usage).

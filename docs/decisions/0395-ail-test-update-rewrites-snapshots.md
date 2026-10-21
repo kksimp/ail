@@ -76,3 +76,10 @@ Option B with the details above.
 - Doc examples' `# =>` lines and `.out` files are refreshed by the same flag.
 - Windows: file writes and the `ail run` child use the standard library,
   as on Linux and macOS.
+
+## Rejected alternatives
+
+- A new `snapshot("name", value)` builtin with files under `snapshots/` (option A): rejected because expected values move out of the test, so a reader must open two files to see what a test checks.
+- Printing the new values and letting the agent edit them (option C): rejected because it keeps the cost this feature exists to remove.
+- Last value wins when a literal is reached with two values: rejected as silently wrong. The assertion fails instead.
+- Keeping `"""` blocks for rewritten strings: rejected because it needs the dedent rules in reverse for a rare case.

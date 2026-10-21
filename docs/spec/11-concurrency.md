@@ -10,7 +10,7 @@ Chapter key: `conc`
 
 ## Memory model
 
-**conc.mm.1** — The AIL memory model is defined on an abstract,
+**conc.mm.1** — [definitional] The AIL memory model is defined on an abstract,
 weakly-ordered machine. It MUST NOT be defined in terms of, or guarantee, the
 memory-ordering behaviour of any particular hardware architecture. Programs
 MUST NOT rely on hardware ordering stronger than the model guarantees, even on
@@ -247,7 +247,7 @@ fn main() !
     g.wait_all()?
 ```
 
-**conc.task.9** — The order in which ready tasks run is unspecified. A
+**conc.task.9** — [definitional] The order in which ready tasks run is unspecified. A
 program's output MUST NOT depend on it except through `wait`, channels and
 mutexes. *(ADR 0186)*
 

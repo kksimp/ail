@@ -44,3 +44,8 @@ equals the walker for templates marked `# fuzz-native: yes` (`.6`, ADR 0462); a 
 and the template must check (`.0`). A failing input is shrunk, saved with its
 program, and `run.log` records seeds. `ail selftest --fuzz N [SEED]` runs this and
 the program fuzzer (`fuzz.run.2`); the default smoke is 40 inputs per template.
+
+## Rejected alternatives
+
+- One Rust generator per module (option B): rejected because every lane would edit Rust test code and cause merge conflicts, and the program shape matters least.
+- Extending the typed program generator with module calls (option C): rejected because the generator cannot know an API that does not exist yet, and random typed programs rarely reach a parser's corner cases.

@@ -8,7 +8,7 @@ Chapter key: `plat`
 
 ## Targets
 
-**plat.target.1** — A conforming implementation's Tier 1 targets are:
+**plat.target.1** — [definitional] A conforming implementation's Tier 1 targets are:
 
 | Target ID | OS | ISA | Object format |
 |---|---|---|---|
@@ -45,14 +45,14 @@ MUST NOT run into undefined behavior first. *(ADR 0005, ADR 0006)*
 
 ## Pointer width
 
-**plat.ptr.1** — Addresses and raw pointers are 64 bits wide on every target.
+**plat.ptr.1** — [definitional] Addresses and raw pointers are 64 bits wide on every target.
 *(ADR 0007; refined by ADR 0014 to apply to raw pointers only)*
 
-**plat.ptr.2** — The size and index integer type (name to be decided in the
+**plat.ptr.2** — [definitional] The size and index integer type (name to be decided in the
 Types chapter) is exactly 64 bits on every target. Its width is not
 target-dependent. *(ADR 0007)*
 
-**plat.ptr.3** — The in-memory representation of managed references
+**plat.ptr.3** — [definitional] The in-memory representation of managed references
 (references to objects whose storage is managed by the compiler or runtime)
 is implementation-defined, and MAY be narrower than 64 bits. Safe code MUST
 NOT be able to observe it. Converting a managed reference to a raw pointer
@@ -65,7 +65,7 @@ boundary. *(ADR 0014)*
 
 ## Byte order
 
-**plat.endian.1** — Every target is little-endian. The in-memory byte order
+**plat.endian.1** — [definitional] Every target is little-endian. The in-memory byte order
 of multi-byte scalar values is little-endian, and programs MAY rely on this.
 *(ADR 0007)*
 

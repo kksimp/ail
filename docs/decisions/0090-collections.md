@@ -31,3 +31,9 @@ list `[T Bound]`.
 - Fixed-size arrays and SIMD vectors need const generics, which are to be
   designed.
 - Iteration protocol and associated types are tied to OQ-037.
+
+## Rejected alternatives
+
+- `Map.of(...)` for map construction: 24.4 tokens, against 21.6 for the `{key: value}` literal (about 11% more). Rejected on token usage.
+- Bare `[T]` for lists: identical on modern tokenizers (41.4 against 43.0 for `List[T]`), so AI understanding decides. `List[T]` is not confused with a list literal `[x]` or a generic parameter list `[T Bound]`.
+- Typing an empty literal from an annotation only, with no use-site inference: later amended by [ADR 0143](0143-empty-literals-typed-by-use.md), which lets an empty literal that declares a local take its type from first use.

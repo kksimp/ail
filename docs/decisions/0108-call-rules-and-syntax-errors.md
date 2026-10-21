@@ -34,3 +34,8 @@ Token usage **ties**. **AI understanding** decides:
 
 - Implementation limits are reported with the code `bootstrap.unsupported`.
   That's not a spec rule; it names the spec rule of the unimplemented construct.
+
+## Rejected alternatives
+
+- Implicit conversions between argument and parameter types: rejected because a call must mean exactly what it says (ai-author-wishlist 1.2). The one exception is the optional wrapping of ADR 0093.
+- A syntax error with no spec rule ID: rejected because ADR 0002 requires every diagnostic to cite a rule. Finer-grained rules come later.

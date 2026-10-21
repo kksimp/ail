@@ -55,3 +55,9 @@ the sleep and changes no API.
 - `flush` from a task other than the main one no longer prints a blank
   line (a latent bug found here).
 - `time.sleep_ms` in a task still holds the turn; only network waits yield.
+
+## Rejected alternatives
+
+- Releasing the turn around every blocking call (option C): rejected because two tasks would then touch `Rc` values at once, and the scheduler's soundness argument depends on one runner.
+- Helper threads for network calls (option D): rejected because results must cross threads, which is the same `Rc` problem.
+- A readiness API (`epoll`, `kqueue`, `poll`) (option B): not chosen now. It needs a platform layer per OS and three implementations to test in lockstep (ADR 0008). It is the planned replacement for the sleep and changes no API.
