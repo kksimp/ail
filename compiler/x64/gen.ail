@@ -62,6 +62,9 @@ struct Gen
     frame int
     ## Caller-saved registers in use, which a `push`'s slow path saves.
     caller_used List[int]
+    ## Globals whose address only loads and stores use: the access is
+    ## `[rip + globals + 8k]` and the `lea` is skipped (ADR 0623).
+    globs Map[int, int]
 
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
@@ -101,6 +104,18 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    mut globs := Map[int, int]()
+    mut addr_uses := [0 for _ in 0..f.vals.len()]
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "prim"
+                and (i.name == "load64" or i.name == "load8" or i.name == "loadf" or i.name == "store64" or i.name == "store8" or i.name == "storef")
+                addr_uses[i.args[0]] += 1
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "prim" and i.name == "global" and remat[i.args[0]].op == "const"
+                if addr_uses[i.dst] == uses[i.dst] and uses[i.dst] > 0
+                    globs[i.dst] = remat[i.args[0]].imm
     mut g := Gen(
         a: new_asm(),
         img: img,
@@ -117,6 +132,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
         slot_base: 0,
         frame: 0,
         caller_used: codegen.caller_used(al, registers()),
+        globs: globs,
     )
     for r in al.saved
         if r >= codegen.FLOAT_BASE
@@ -931,35 +947,43 @@ fn Gen.call_out(mut self, i mir.Inst)
         else
             put_gpr(i.dst, RAX)
 
+## The memory a load or store prim addresses.
+fn Gen.address(mut self, v int) Mem
+    if globs.contains(v)
+        return at_sym("globals", 8 * globs[v])
+    at(gpr(v, S0), 0)
+
 fn Gen.prim(mut self, i mir.Inst)
     match i.name
         "load64" =>
-            r := gpr(i.args[0], S0)
+            mem := address(i.args[0])
             d := out_gpr(i.dst, S1)
-            a.mov_rm(d, at(r, 0))
+            a.mov_rm(d, mem)
             put_gpr(i.dst, d)
         "load8" =>
-            r := gpr(i.args[0], S0)
+            mem := address(i.args[0])
             d := out_gpr(i.dst, S1)
-            a.movzx8_rm(d, at(r, 0))
+            a.movzx8_rm(d, mem)
             put_gpr(i.dst, d)
         "loadf" =>
-            r := gpr(i.args[0], S0)
+            mem := address(i.args[0])
             d := out_xmm(i.dst, X0)
-            a.vmovsd_rm(d, at(r, 0))
+            a.vmovsd_rm(d, mem)
             put_xmm(i.dst, d)
         "store64" =>
-            a.mov_mr(at(gpr(i.args[0], S0), 0), gpr(i.args[1], S1))
+            a.mov_mr(address(i.args[0]), gpr(i.args[1], S1))
         "store8" =>
-            a.mov8_mr(at(gpr(i.args[0], S0), 0), gpr(i.args[1], S1))
+            a.mov8_mr(address(i.args[0]), gpr(i.args[1], S1))
         "storef" =>
-            a.vmovsd_mr(at(gpr(i.args[0], S0), 0), xmm(i.args[1], X0))
+            a.vmovsd_mr(address(i.args[0]), xmm(i.args[1], X0))
         "syscall" =>
             regs := [RAX, RDI, RSI, RDX, S0, R8, R9]
             parallel([move_of(regs[k], i.args[k]) for k in 0..i.args.len()])
             a.syscall()
             put_gpr(i.dst, RAX)
         "global" =>
+            if globs.contains(i.dst)
+                return
             d := out_gpr(i.dst, S1)
             k := imm(i.args[0]) else 0
             a.lea(d, at_sym("globals", 8 * k))
