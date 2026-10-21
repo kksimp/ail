@@ -36,8 +36,9 @@ guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
 `len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
 `o else d` and `o?` in a function returning an optional, functions that can
-fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
-without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
+fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s
+with fields and messages (`return E(...)`, `f()?`, `f() else ...`, `else err`,
+typed when the function names one error type, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
@@ -54,7 +55,7 @@ and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `d
 sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
 `float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
-alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
+alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
@@ -64,9 +65,12 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet, and on macOS the program traps at `proc.run`). Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its position under this rule, all of them
+readable yet, and on macOS the program traps at `proc.run`); and the standard
+modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
+`std.net.jar`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log`). Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
+0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806)*
 
 ```ail
 fn steps(n int) int

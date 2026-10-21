@@ -1,0 +1,80 @@
+## `tensor.Tensor[T]` in the native subset (ADR 0815, std.tensor.1-21). A
+## tensor is a pointer to an object the runtime builds (compiler/rt/native/
+## tensor.ail, layout in native-abi.md): the checks that trap (std.tensor.2)
+## are made by a runtime helper that returns the message, or 0, and the
+## lowering traps on a message with runtime message kind 15.
+use ast
+
+## `tensor.Tensor[T]` with `T` `int` or `float`.
+fn Lower.tensor_type_of(mut self, args List[ast.TypeRef]) Ty?
+    if args.len() != 1
+        return none
+    e := type_of(args[0])?
+    if e == Ty.Int or e == Ty.Float
+        return Ty.Tensor(e)
+    none
+
+## Trap at `pos` with the runtime-built message `msg` (a string object) unless
+## `msg` is 0.
+fn Lower.tensor_trap_if(mut self, msg int, rule str, pos ast.Pos)
+    fail := new_block()
+    check(op("eq", [msg, konst(0, Ty.Int)], Ty.Bool), fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    mut t := inst(-1, "trap", [msg, msg])
+    t.imm = 15
+    t.site = site(rule, "tensor", "", pos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
+
+## `tensor.from(xs)` and `tensor.from(xs, shape)` (std.tensor.2).
+fn Lower.lower_tensor_from(mut self, args List[ast.Arg], npos ast.Pos) Val?
+    if args.len() < 1 or args.len() > 2
+        return unsupported(npos, "`tensor.from` with this many arguments")
+    for a in args
+        if a.label != none or a.mutable
+            return unsupported(npos, "`tensor.from` with a labelled argument")
+    xs := lower_value(args[0].value, none)?
+    e := xs.ty.elem() else return unsupported(npos, "`tensor.from` of a `{xs.ty.name()}`")
+    if not (e == Ty.Int or e == Ty.Float)
+        return unsupported(npos, "`tensor.from` of a `{xs.ty.name()}`")
+    t := Ty.Tensor(e)
+    kind := konst(if e == Ty.Float then 1 else 0, Ty.Int)
+    if args.len() == 1
+        return Val(id: call("rt.tensor_from", [xs.id, kind], t), ty: t)
+    shape := lower_value(args[1].value, Ty.List(Ty.Int))?
+    if not same_ty(shape.ty, Ty.List(Ty.Int))
+        return unsupported(npos, "`tensor.from` with a shape of `{shape.ty.name()}`")
+    msg := call("rt.tensor_shape_fault", [xs.id, shape.id], Ty.Int)
+    tensor_trap_if(msg, "std.tensor.2", npos)
+    Val(id: call("rt.tensor_from_shape", [xs.id, kind, shape.id], t), ty: t)
+
+fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    for a in args
+        if a.label != none or a.mutable
+            return unsupported(npos, "this method call")
+    e := match r.ty
+        Tensor(x) => x
+        _ => Ty.Unknown
+    if args.len() == 0
+        if name == "len"
+            return Val(id: load(r.id, 2, Ty.Int), ty: Ty.Int)
+        if name == "shape"
+            l := Ty.List(Ty.Int)
+            return Val(id: call("rt.tensor_shape", [r.id], l), ty: l)
+        if name == "to_list"
+            l := Ty.List(e)
+            return Val(id: call("rt.tensor_to_list", [r.id], l), ty: l)
+    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+
+## `a == b` and `a != b` on tensors (std.tensor.9).
+fn Lower.tensor_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    eq := Val(id: call("rt.tensor_eq", [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+    match o
+        Eq => eq
+        Ne => Val(id: op("not", [eq.id], Ty.Bool), ty: Ty.Bool)
+        _ =>
+            problem(pos, "`{op_symbol(o)}` on a tensor isn't in the native subset yet")
+            eq

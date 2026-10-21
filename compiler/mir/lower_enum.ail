@@ -27,8 +27,6 @@ fn Lower.declare_enum_names(mut self, prog ast.Program)
     for e in prog.enums
         if e.generics.len() > 0
             declare_generic_enum(e)
-        elif e.is_error
-            problem(e.pos, "error enum `{e.name}` isn't in the native subset yet")
         else
             enums["{prefix}{e.name}"] = []
 
