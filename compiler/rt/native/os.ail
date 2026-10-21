@@ -816,6 +816,77 @@ fn os_put_quoted(s str)
         i += 1
     sb_byte(34)
 
+## Where `pat` last begins in the `n` bytes at `p`, or -1.
+fn os_rfind(p int, n int, pat str) int
+    q := str_addr(pat)
+    m := load64(q)
+    mut i := n - m
+    while i >= 0
+        mut j := 0
+        while j < m and load8(p + i + j) == load8(q + 16 + j)
+            j += 1
+        if j == m
+            return i
+        i -= 1
+    -1
+
+## The text of `e.kind` on a standard-library error caught by `else err`
+## (std.err.1): the display text `T(f: "V", kind: "K")` ends in `"K")`.
+fn err_field_kind(t str) str
+    p := str_addr(t) + 16
+    n := load64(str_addr(t))
+    at := os_rfind(p, n, "kind: \"")
+    if at < 0 or n < at + 9
+        return os_str_from(p, 0)
+    os_str_from(p + at + 7, n - at - 9)
+
+## The first field (`path` of `fs.IoError`, `cmd` of `proc.ProcError`),
+## with the escapes `os_put_quoted` wrote undone.
+fn err_field_first(t str) str
+    p := str_addr(t) + 16
+    n := load64(str_addr(t))
+    mut start := 0
+    while start + 2 < n and not (load8(p + start) == 58 and load8(p + start + 1) == 32 and load8(p + start + 2) == 34)
+        start += 1
+    start += 3
+    end := os_rfind(p, n, "\", kind: \"")
+    sb_reset()
+    mut i := start
+    while i < end
+        c := load8(p + i)
+        if c == 92 and i + 1 < end
+            i += 1
+            e := load8(p + i)
+            if e == 110
+                sb_byte(10)
+            elif e == 116
+                sb_byte(9)
+            elif e == 114
+                sb_byte(13)
+            elif e == 48
+                sb_byte(0)
+            elif e == 117 and i + 1 < end
+                mut v := 0
+                i += 2
+                while i < end and load8(p + i) != 125
+                    d := load8(p + i)
+                    mut dv := d - 48
+                    if d >= 97
+                        dv = d - 87
+                    elif d >= 65
+                        dv = d - 55
+                    v = v * 16 + dv
+                    i += 1
+                if v >= 128
+                    sb_byte(194)
+                sb_byte(v)
+            else
+                sb_byte(e)
+        else
+            sb_byte(c)
+        i += 1
+    sb_str()
+
 ## `\u{` of a Unicode escape.
 fn os_put_u()
     sb_byte(92)

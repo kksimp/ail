@@ -94,6 +94,8 @@ fn Lower.store(mut self, obj int, k int, v int)
 
 ## `x.f` on a struct.
 fn Lower.lower_member(mut self, recv ast.Expr, name str, pos ast.Pos) Val?
+    if f := lower_std_err_field(recv, name)
+        return f
     r := lower_value(recv, none)?
     n := struct_name(r.ty) else return unsupported(pos, "`.{name}` on `{r.ty.name()}`")
     k := slot_of(n, name)

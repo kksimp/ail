@@ -7,7 +7,7 @@ fn plain() str
 
 fn main()
     other := fs.read_text("y") else err
-        print(err.kind)
+        print(err.message)
         ""
     print(other)
     n := io.read_line()

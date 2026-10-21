@@ -418,6 +418,9 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
                     problem(n.pos, "an absent value has no error to bind")
                 elif m.err == Ty.Unknown
                     declare(n.name, Ty.Str, call("rt.err_take", [], Ty.Str))
+                    first := std_err_first(e)
+                    if first != ""
+                        std_errs[lookup(n.name)?] = first
                 else
                     raw := call("rt.err_take_value", [], Ty.Int)
                     declare(n.name, m.err, op("copy", [raw], m.err))
@@ -624,3 +627,27 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
     seal(join)
     cur = join
     result
+
+## The first field of the standard-library error `e` can fail with: `path`
+## for `fs.IoError`, `cmd` for `proc.ProcError`; "" for any other call.
+fn Lower.std_err_first(self, e ast.Expr) str
+    match e
+        Method(recv, name, _, _) =>
+            if not os_fails(recv, name)
+                return ""
+            if os_module(recv) == "proc" then "cmd" else "path"
+        _ => ""
+
+## `err.kind` and `err.path`/`err.cmd` of an `else err` binding on a
+## standard-library error (std.err.1, std.fs.1, std.proc.1), read from its text.
+fn Lower.lower_std_err_field(mut self, recv ast.Expr, name str) Val?
+    match recv
+        Name(n, _) =>
+            k := lookup(n) else return none
+            first := std_errs.get(k) else return none
+            if name != "kind" and name != first
+                return none
+            v := lower_value(recv, none)?
+            rt := if name == "kind" then "rt.err_field_kind" else "rt.err_field_first"
+            Val(id: call(rt, [v.id], Ty.Str), ty: Ty.Str)
+        _ => none
