@@ -812,15 +812,14 @@ fn default_of(type_text str) str
 
 ## @module argsderive
 ## What was wrong with the command line, with the usage text (std.args.6).
-error struct ArgsError "{why}\n{usage}"
+error struct ArgsFailure "{why}\n{usage}"
     why str
     usage str
 
 ## A struct read from the command line: `impl FromArgs for Opts` derives
-## it from the fields, and `args.read[Opts](name, about, words)` calls it
-## (std.args.7).
+## `Opts.parse(name, about, words)` from the fields (std.args.7).
 @derive(derive_from_args) trait FromArgs
-    fn from_args(name str, about str, words List[str]) Self ! ArgsError
+    fn parse(name str, about str, words List[str]) Self ! ArgsFailure
 
 ## A `bool` field is a switch, `T?` of `str`, `int` or `float` an option, a
 ## `List[str]` the rest, any other field a positional; the field's `##`
@@ -831,6 +830,7 @@ fn derive_from_args(t TypeInfo) str ! DeriveError
     mut reads := List[str]()
     mut used := Set[str]()
     used.add("h")
+    fail := " else e\n        return ArgsFailure(why: e.why, usage: e.usage)\n"
     for f in t.fields
         n := f.name
         help := f.doc.replace("\n", " ").replace("\\", "\\\\").replace("\"", "\\\"")
@@ -846,8 +846,9 @@ fn derive_from_args(t TypeInfo) str ! DeriveError
             specs.push("args.opt(\"{n}\", \"{short}\", \"{help}\", \"\")")
             kind := ty.slice(0, ty.len() - 1)
             call := if kind == "str" then "opt" else "opt_{kind}"
-            tail := if kind == "str" then "" else "?"
-            reads.push("    v_{n} := a.{call}(\"{n}\"){tail}\n")
+            if kind != "str"
+                reads.push("    if a.has(\"{n}\")\n        _ := a.{kind}(\"{n}\"){fail.replace("\n    ", "\n        ")}")
+            reads.push("    v_{n} := a.{call}(\"{n}\")\n")
         elif ty == "List[str]"
             specs.push("args.rest(\"{n}\", \"{help}\")")
             reads.push("    v_{n} := a.rest\n")
@@ -856,14 +857,15 @@ fn derive_from_args(t TypeInfo) str ! DeriveError
             reads.push("    v_{n} := a.get(\"{n}\")\n")
         elif ty == "int" or ty == "float"
             specs.push("args.pos(\"{n}\", \"{help}\")")
-            reads.push("    v_{n} := a.{ty}(\"{n}\")?\n")
+            reads.push("    v_{n} := a.{ty}(\"{n}\"){fail}")
         else
             return DeriveError("field `{n}` has the type `{ty}`; FromArgs reads `bool`, `str`, `int`, `float`, `str?`, `int?`, `float?` and `List[str]`")
     if t.kind != TypeKind.Struct
         return DeriveError("`FromArgs` needs a struct; `{t.name}` is an enum")
     ctor := ["{f.name}: v_{f.name}" for f in t.fields]
-    head := "fn from_args(name str, about str, words List[str]) Self ! ArgsError\n"
-    "{head}    a := args.parse(name, about, [{specs.join(", ")}], words)?\n{reads.join("")}    {t.name}({ctor.join(", ")})\n"
+    head := "fn parse(name str, about str, words List[str]) Self ! ArgsFailure\n"
+    call := "    a := args.parse(name, about, [{specs.join(", ")}], words){fail}"
+    "{head}{call}{reads.join("")}    {t.name}({ctor.join(", ")})\n"
 ## @module derive
 ## Derive generators (ct.derive.1-4, refl.info.1-3, ADRs 0227, 0229, 0306):
 ## the compiler passes a generator the `TypeInfo` of the deriving type.

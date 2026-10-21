@@ -5,6 +5,11 @@
 ##     a := args.parse("tool", "what it does", spec, env.args())?
 ##     a.flag("verbose"); a.get("out"); a.get("input"); a.rest
 
+## What was wrong with the command line, with the usage text (std.args.6).
+pub error struct ArgsError "{why}\n{usage}"
+    pub why str
+    pub usage str
+
 ## One accepted argument: made by `flag`, `opt`, `pos` or `rest`.
 pub struct Spec
     pub kind str
@@ -54,28 +59,30 @@ pub fn Args.opt(self, name str) str?
 ## `name` as an `int`; text that isn't one is an `ArgsError` (std.args.8).
 pub fn Args.int(self, name str) int ! ArgsError
     v := values.get(name) else ""
-    n := v.to_int() else
+    got := v.to_int()
+    n := got else
         return ArgsError(why: "{name} needs an integer, got `{v}`", usage: text)
     n
 
 ## `name` as a `float` (std.args.8).
 pub fn Args.float(self, name str) float ! ArgsError
     v := values.get(name) else ""
-    n := v.to_float() else
+    got := v.to_float()
+    n := got else
         return ArgsError(why: "{name} needs a number, got `{v}`", usage: text)
     n
 
-## `name` as an `int` when given, else `none` (std.args.8).
-pub fn Args.opt_int(self, name str) int? ! ArgsError
-    if not given.contains(name)
-        return none
-    self.int(name)?
+## `name` as an `int` when given and a number, else `none` (std.args.8).
+pub fn Args.opt_int(self, name str) int?
+    if given.contains(name)
+        return values.get(name)?.to_int()
+    none
 
-## `name` as a `float` when given, else `none` (std.args.8).
-pub fn Args.opt_float(self, name str) float? ! ArgsError
-    if not given.contains(name)
-        return none
-    self.float(name)?
+## `name` as a `float` when given and a number, else `none` (std.args.8).
+pub fn Args.opt_float(self, name str) float?
+    if given.contains(name)
+        return values.get(name)?.to_float()
+    none
 
 ## Whether switch `name` was given (std.args.4).
 pub fn Args.flag(self, name str) bool
@@ -182,7 +189,3 @@ pub fn parse(name str, about str, specs List[Spec], words List[str]) Args ! Args
     if left.len() > 0 and not has_rest
         return ArgsError(why: "unexpected argument {left[0]}", usage: text)
     Args(values: values, flags: flags, given: given, text: text, rest: left)
-
-## Reads `words` into a `T` (std.args.7).
-pub fn read[T FromArgs](name str, about str, words List[str]) T ! ArgsError
-    T.from_args(name, about, words)?

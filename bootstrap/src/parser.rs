@@ -54,7 +54,7 @@ const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson", "load_json", "print_j
 /// Names of the optional `derive` prelude module: what a derive generator
 /// receives (refl.info.1, ADR 0306).
 /// Its `argsderive` part: `FromArgs` and its generator (std.args.7, ADR 0777).
-const ARGS_DERIVE_NAMES: &[&str] = &["FromArgs", "ArgsError"];
+const ARGS_DERIVE_NAMES: &[&str] = &["FromArgs", "ArgsFailure"];
 
 const DERIVE_NAMES: &[&str] = &["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveError"];
 

@@ -11,5 +11,5 @@ struct Opts
 impl FromArgs for Opts
 
 fn main() !
-    a := args.read[Opts]("tool", "demo", env.args())?
+    a := Opts.parse("tool", "demo", env.args())?
     print("{a.verbose} {a.out else "a.txt"} {a.input}")

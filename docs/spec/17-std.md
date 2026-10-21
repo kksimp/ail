@@ -1581,20 +1581,22 @@ fn main()
 ```
 
 **std.args.7** — `impl FromArgs for Opts` on a struct derives
-`Opts.from_args(name, about, words) Opts ! ArgsError`, and
-`args.read[Opts](name, about, words)` calls it. A field is a switch (`bool`),
-an option (`str?`, `int?` or `float?`; `none` when absent), the rest
+`Opts.parse(name, about, words) Opts ! ArgsFailure`. A field is a switch
+(`bool`), an option (`str?`, `int?` or `float?`; `none` when absent), the rest
 (`List[str]`) or a required positional (`str`, `int` or `float`, in field
 order). The field's `##` comment (`ct.derive.5`) is its help. A switch or
 option has the short name of its first letter unless an earlier one has it or
-it is `h`. An `int` or `float` word that doesn't parse, and any other field
-type, are errors (`ArgsError`, or `DeriveError` at the `impl`). *(ADR 0777)*
+it is `h`. An `int` or `float` word that doesn't parse, and everything
+`args.parse` rejects, is an `ArgsFailure` (an error with `why str` and
+`usage str`, like `ArgsError`); any other field type is a `DeriveError` at the
+`impl`. *(ADR 0777)*
 
 **std.args.8** — `Args.has(name)` says whether an option or positional was
-given; `Args.opt(name) str?`, `Args.int(name) int ! ArgsError`,
-`Args.float(name) float ! ArgsError`, `Args.opt_int(name) int? ! ArgsError`
-and `Args.opt_float(name) float? ! ArgsError` read a value as that type, which
-is what the derive calls. *(ADR 0777)*
+given; `Args.opt(name) str?`, `Args.opt_int(name) int?` and
+`Args.opt_float(name) float?` give `none` when it was absent (or, for the
+numbers, isn't one); `Args.int(name) int ! ArgsError` and
+`Args.float(name) float ! ArgsError` fail on text that isn't a number. The
+derive calls them. *(ADR 0777)*
 
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
@@ -1631,7 +1633,7 @@ struct Opts
 impl FromArgs for Opts
 
 fn main()
-    o := args.read[Opts]("tool", "demo", ["-v", "-j", "4", "in.txt"]) else e
+    o := Opts.parse("tool", "demo", ["-v", "-j", "4", "in.txt"]) else e
         print(e.why)
         return
     print("{o.verbose} {o.jobs} {o.input}") # true 4 in.txt

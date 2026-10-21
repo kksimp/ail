@@ -1,4 +1,4 @@
-# 0777. `args.read[Opts]`: command-line options derived from a struct
+# 0777. `Opts.parse(...)`: command-line options derived from a struct
 
 - **Status:** Accepted
 - **Date:** 2026-10-21
@@ -15,33 +15,38 @@ every option twice, once as a spec and once as a read of `Args`.
 
 ## Decision
 
-`impl FromArgs for Opts` derives `Opts.from_args(name, about, words)` from the
-fields, and `args.read[Opts](name, about, words)` calls it. `bool` is a switch,
-`str?`/`int?`/`float?` an option (`none` when absent, so a default is
-`a.out else "a.txt"`), `List[str]` the rest, and `str`/`int`/`float` a
-required positional. The `##` comment is the help; a switch or option gets its
-first letter as the short name unless taken (std.args.7). `Args` gains `has`,
-`opt`, `int`, `float`, `opt_int` and `opt_float` for the derived code
-(std.args.8). `FromArgs` and `ArgsError` move to the prelude's `argsderive`
-part, read when a program names either, like `ToJson`; `args.ArgsError` is
-now plain `ArgsError`.
+`impl FromArgs for Opts` derives `Opts.parse(name, about, words)` from the
+fields. `bool` is a switch, `str?`/`int?`/`float?` an option (`none` when
+absent, so a default is `a.out else "a.txt"`), `List[str]` the rest, and
+`str`/`int`/`float` a required positional. The `##` comment is the help; a
+switch or option gets its first letter as the short name unless taken
+(std.args.7). `Args` gains `has`, `opt`, `int`, `float`, `opt_int` and
+`opt_float` for the derived code (std.args.8). `FromArgs` and its error type
+`ArgsFailure` (`why`, `usage`, like `ArgsError`) are in the prelude's
+`argsderive` part, read when a program names either, like `ToJson`.
 
 Generated code names `args.flag`, so generated files now see the `use` lines
 of their module's other files (ct.derive.6).
 
 ## Token measurement
 
-Twin t05, mean of five tokenizers: the spec-list form 95.4, derived 87.4
-(-8.0, -8.4%), Python 71.0. The `impl FromArgs for Opts` line and
+Twin t05, mean of five tokenizers: the spec-list form 95.4, derived 85.6
+(-9.8, -10.3%), Python 71.0. The `impl FromArgs for Opts` line and
 `str?` plus `else "a.txt"` cost what the sketch's 70.4 left out.
 
-Quick reference: +46 tokens (12,818.8 to 12,865.2 on this branch's base, before the trim in
-the card-trim lane); language card unchanged (6,949.2).
+Quick reference: the args line costs about +46 tokens, paid for in the same PR by trims
+elsewhere in the file (12,370.0 on the merged tree); language card unchanged.
 
 ## Rejected alternatives
 
-- **`args.parse[Opts]`:** AIL has no overloads, and `parse` is taken by the
-  spec form; renaming it would break every caller for one token.
+- **`args.read[Opts]` (a generic in `std.args`) and `ArgsError` in the
+  prelude:** the native backend builds `std.args` whole, and neither a generic
+  function nor a prelude error struct is in its subset yet (`examples/std_args.ail`
+  builds natively). `Opts.parse(...)` needs no generic and no `use` of a helper,
+  and `std.args` keeps its own `ArgsError`.
+
+- **`args.parse[Opts]`:** AIL has no overloads, and `args.parse` is taken by
+  the spec form; `Opts.parse` is the same word on the type.
 - **Defaults as field values or `@default`:** no field defaults exist; `T?`
   with `else` at the use costs about three tokens and needs no new syntax.
 - **No `impl` line (implicit derive):** rejected for `ToJson` in ADR 0774, for

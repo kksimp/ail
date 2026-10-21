@@ -15,7 +15,7 @@ struct Opts
 impl FromArgs for Opts
 
 fn show(words List[str])
-    o := args.read[Opts]("tool", "demo", words) else e
+    o := Opts.parse("tool", "demo", words) else e
         print("error: {e.why}")
         return
     print("{o.verbose} {o.out} {o.jobs} {o.input} {o.limit}")
@@ -26,3 +26,4 @@ fn main()
     show(["x"])
     show(["x", "many"])
     show(["--bogus", "x", "1"])
+    show(["-j", "many", "x", "5"])
