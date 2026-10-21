@@ -939,7 +939,7 @@ LIM_TICK_SLOT := 45
 ## turn calls the runtime, which reads the clock every 256 turns. It is
 ## emitted only when `ail build --timeout` baked a limit in.
 fn Lower.poll_limits(mut self)
-    # Only a build with a baked time limit pays for it (ADR 0729).
+    # Only a build with a baked time limit pays for it (ADR 0727).
     if not sigs.contains("rt.lim_loop_polls")
         return
     t := load(global_addr(LIM_TICK_SLOT), 0, Ty.Int)

@@ -215,7 +215,7 @@ fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
     ] {
         let src = format!("bootstrap/tests/native/limits/{name}.ail");
         let want = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", option, value, &src]).output().unwrap();
-        // A `while` loop is a safepoint only in a build that baked a time limit (ADR 0729).
+        // A `while` loop is a safepoint only in a build that baked a time limit (ADR 0727).
         for baked in [false, true] {
             if name == "loop" && !baked {
                 continue;

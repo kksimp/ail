@@ -3,7 +3,7 @@
 ##
 ## Run limits for native programs (run.limit.5, run.limit.6, ADR 0726): the
 ## memory cap is checked when the heap takes a new chunk, the time limit
-## when the allocator or a `while` loop has run 256 times (counting both) and when the heap takes a chunk. Loops check only in a build made with `--timeout` (ADR 0729).
+## when the allocator or a `while` loop has run 256 times (counting both) and when the heap takes a chunk. Loops check only in a build made with `--timeout` (ADR 0727).
 ## Both read their settings from the environment (`AIL_MAX_MEMORY_MB`,
 ## `AIL_TIMEOUT_MS`) at start, else from the defaults `ail build --timeout`
 ## and `--max-memory` baked in below. A `for` loop is not a safepoint, and
