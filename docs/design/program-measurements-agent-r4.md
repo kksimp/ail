@@ -257,3 +257,57 @@ against 990.8). Nineteen twins are unchanged.
 | t24_report | 65.8 | 79.0 | 79.0 | +20% |
 | t25_sleep_loop | 26.2 | 28.0 | 28.0 | +7% |
 | **total** | 990.8 | 1215.8 | 1135.2 | +14.6% |
+
+## Where the remaining 144 tokens go, and what would close them
+
+The 25 twins: AIL spends 1,135.2 tokens, Python 990.8, a net gap of 144.4. That
+is 189.6 lost on 17 twins less 45.2 won on 8. The table ranks the losers by
+tokens lost. "Saving" is measured on a sketch of the twin as it would be
+written if the feature existed (`tools/tokbench/corpus/agent-r4/sketches/`);
+the sketches do not run, so they are estimates of the program text only, not of
+the feature's own cost (card lines, tests, ceremony elsewhere).
+
+| # | twin | lost | root cause | candidate feature | sketch | saving |
+|---|---|---|---|---|---|---|
+| 1 | t12_sort_ties | 40.0 | no tuples: the data needs a `struct P` and two `sorted` passes | tuples with tuple sort keys (OQ-124) | `t12_tuple` 57.6 | **-33.8** |
+| | | | | multi-key `sorted(by:, then:)` only, still a struct | `t12_keys` 89.8 | -1.6 |
+| 2 | t19_kv_config | 32.6 | no split at the first `=` | `str.partition` (returns three parts, needs tuples) | `t19_tuple` 85.0 | -11.2 |
+| | | | | `split(sep, limit)` (no tuples) | `t19_split2` 89.6 | -6.6 |
+| 3 | t11_json_transform | 32.0 | typed JSON ceremony: `parse_json(read_text(..)?)?`, `from_json`, `to_json().to_text()` | `json.load[T](path)` and `json.print(v)` | `t11_load` 64.0 | -25.6 |
+| 4 | t05_args | 24.4 | the option table spelled out call by call | `args.parse[Opts]` derived from a struct with doc-comment help | `t05_struct` 70.4 | -25.0 |
+| 5 | t24_report | 13.2 | `keys().sorted()` then `sales[region]` for a pair | `items()`, needs tuples | `t24_items` 73.8 | -5.2 |
+| 6 | t08_whitespace | 7.8 | method names (`trim_end`, `words`) cost more than `rstrip`, `split` | none (a rename is a tie under ADR 0076) | | 0 |
+| 7 | t15_dates | 7.2 | `date.parse_iso(..)?` and `.add_ms(3 * date.DAY)` against `timedelta(days=3)` | none worth a feature | | 0 |
+| 8 | t14, t04, t20 | 6.6, 6.4, 5.6 | `to_int() else 0`, `?`, `regex.compile(..)?`: AIL spells out the failure Python raises | none; the cost is the language's error model | | 0 |
+| 9 | t03_table | 2.0 | rows are lists of strings, not `(str, int)` | tuples | `t03_tuple` 35.2 | -3.6 |
+| 10 | the other seven | 11.8 together | none above 4 tokens | | | 0 |
+
+### The tuple case in numbers (OQ-124)
+
+Tuples, with `partition` and `items()`, would save **53.8 tokens** on these
+twins: t12 -33.8, t19 -11.2, t24 -5.2, t03 -3.6. AIL would then spend 1,081.4
+against Python's 990.8, **+9.1%** instead of +14.6%. t12 alone is 63% of that.
+Without tuples, a multi-key `sorted` saves 1.6 tokens on t12, not 34: the loss
+there is the struct the data must be written as, not the second sort pass.
+
+Tuples are not the only way to the same place. Without them, `split(sep,
+limit)` (-6.6), `json.load[T]` with `json.print` (-25.6) and a struct-derived
+`args.parse` (-25.0) together save **57.2 tokens**, +8.8%. All of it together,
+tuples and the other three, would be 1,030.8, **+4.0%**. So on this set a tuple
+is worth about as much as the two ceremony features, not more, and the two
+ceremony features are not a language-core change.
+
+What the numbers do not say: the cost of tuples (card lines, a new type in the
+checker, destructuring rules, `Json` and `to_json` over them, a sort-key rule)
+and how often agents write tuple code outside these 25 tasks. Earlier evidence
+(multi-key sorts +78% tokens, t12) is the same twin counted here.
+
+### Order of value per feature, if all are wanted
+
+1. `json.load[T]` / `json.print` (-25.6, one function pair, no language change).
+2. `args.parse[Opts]` derived from a struct (-25.0, needs doc-comment access).
+3. Tuples (-53.8 with `partition` and `items()`; a core-model decision).
+4. `split(sep, limit)` (-6.6; cheaper than `partition`, and needs no tuples).
+
+Nothing here is built; each needs its own ADR and a measurement on the
+language-card cost before it lands.
