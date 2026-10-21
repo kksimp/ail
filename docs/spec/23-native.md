@@ -53,8 +53,9 @@ alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `flo
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
-`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
-(std.fs, std.env, std.io, std.time). Any other construct is reported at its position under this rule, all of them
+`io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
+`path.base`, `path.ext`, `path.stem` and `path.join`
+(std.fs, std.env, std.io, std.time, std.path). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
 
