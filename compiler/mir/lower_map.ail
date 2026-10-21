@@ -549,22 +549,19 @@ fn pair_binders(var str, stmt ast.Stmt) List[ast.Binder]
                 _ => []
         _ => []
 
-## `for k, v in m` over a map (type.tuple.5): the keys and values are taken
-## as two lists when the loop starts, so the body may change `m`, and the
-## loop runs over their indexes. `for a, b in xs` starts its body with a
-## `LetTuple` over the hidden loop variable `var`. True when the loop is
-## lowered here (or reported), false for any other `for`.
-fn Lower.for_pairs(mut self, var str, iter ast.Expr, body List[ast.Stmt]) bool
-    if body.len() == 0
-        return false
+## Whether `for var in <iter>` over the lowered `m` is `for k, v in m` over a
+## map (type.tuple.5): the body starts with the `LetTuple` over `var`.
+fn Lower.is_pair_loop(self, var str, m Val, body List[ast.Stmt]) bool
+    body.len() > 0 and is_map_ty(m.ty) and pair_binders(var, body[0]).len() > 0
+
+## `for k, v in m` over the map `m`: the keys and values are taken as two
+## lists when the loop starts, so the body may change `m`, and the loop runs
+## over their indexes. `for a, b in xs` starts its body with a `LetTuple`
+## over the hidden loop variable `var`. Any other `for a, b in xs` is a loop
+## over tuples and takes the general path.
+fn Lower.for_pairs(mut self, var str, iter ast.Expr, m Val, body List[ast.Stmt])
     pair := pair_binders(var, body[0])
-    if pair.len() == 0
-        return false
     pos := expr_pos(iter)
-    m := lower_value(iter, none) else return true
-    if not is_map_ty(m.ty)
-        problem(pos, "a `for` over a `{m.ty.name()}` with two names isn't in the native subset yet")
-        return true
     nvars += 1
     id := nvars
     me := "#fm{id}"
@@ -620,4 +617,3 @@ fn Lower.for_pairs(mut self, var str, iter ast.Expr, body List[ast.Stmt]) bool
         body: inner,
         pos: pos,
     ))
-    true
