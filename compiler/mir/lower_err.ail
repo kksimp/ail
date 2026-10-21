@@ -742,19 +742,19 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
             fn_errs.get(key) else Ty.Unknown
         _ => Ty.Unknown
 
-## The text of a struct or enum value that defines a message (`to_str`, the
-## display text of an error type, err.msg.1), as a `str` value.
+## The text of a struct or enum value (its `to_str`, the display text of an
+## error type, err.msg.1, or the default form), as a `str` value.
 fn Lower.display_call(mut self, v Val) int?
     key := match v.ty
         Struct(k) => k
         Enum(k) => k
         Tuple => return tuple_text(v)
+        Any(t) => return any_text(t, v)
         List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
-    if not err_msgs.contains(key)
-        return none
+    # No `to_str` and no message: the default text of trait.auto.2.
     default_error_text(key, v)
 
 ## The text of an error type with no message: its default form,

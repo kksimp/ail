@@ -39,6 +39,8 @@ pub enum Ty
     ## `(A, B, ...)` (ADR 0829): a struct object (kind 4) with one 8-byte slot
     ## per element, in order.
     Tuple(elems List[Ty])
+    ## `any T`: a box with a tag and a value (ADR 0616).
+    Any(trait_name str)
     Unknown
     Unit
     ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
@@ -109,6 +111,7 @@ pub fn Ty.name(self) str
         Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
         Enum(n) => n
+        Any(t) => "any {t}"
         Unknown => "?"
         Unit => "unit"
         Atomic(e) => "Atomic[{e.name()}]"

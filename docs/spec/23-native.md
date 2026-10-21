@@ -17,6 +17,15 @@ with its own encoders and object writers (ADR 0010).
 
 ## The native subset
 
+**native.subset.2** — `any Trait` is in the native subset for traits whose
+implementations are structs: a struct converts to `any Trait` where one is
+expected (trait.any.3), and a method call on an `any Trait` value runs the
+method of the value's type (trait.any.1). Impls for other types, generic
+impls in an `any` are reported under native.subset.1. A struct or enum
+with no `to_str`, and an `any Trait` value, print as the interpreter prints
+them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`.
+*(ADRs 0536, 0616)*
+
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators
@@ -46,7 +55,7 @@ fallback value, a statement that leaves, or a block without a binding
 reported at its position under this rule, all of them at once, and nothing
 is built. *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0580, 0582)*
 function is a free function, a method of a struct or enum, or a method of
-an `impl` block (no generic methods, `any Trait` values or contracts), in
+an `impl` block (no generic methods or contracts), in
 the root module or a module it imports (mod.unit.1-5), over `int`, `float`,
 `bool`, `char`, `str`, structs and enums without invariants, generic or not,
 optionals of those and of `char`s (`T?`), and lists of those and of lists,

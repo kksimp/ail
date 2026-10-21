@@ -658,6 +658,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0606](0606-win64-calls-to-system-dlls.md) | Win64 calls to system DLL functions: `libsys.NAME` through the PE import table *(delegated)* | Accepted | 2026-10-20 |
 | [0607](0607-windows-runtime-guard.md) | `ail build --target x86_64-windows` is refused until the Windows runtime lands *(delegated)* | Accepted | 2026-10-20 |
 | [0608](0608-windows-target-and-runtime.md) | The Windows x86-64 target: `target()` is 3, the entry runs the runtime, and output, exit and the heap use kernel32 *(delegated)* | Accepted | 2026-10-20 |
+| [0616](0616-native-any-trait-dispatch.md) | Native `any Trait`: a tagged box and a generated dispatcher per method *(delegated)* | Accepted | 2026-10-20 |
 | [0826](0826-native-reset-in-place.md) | Native: reset a list in place *(delegated)* | Accepted | 2026-10-21 |
 | [0641](0641-native-trap-stack-from-frame-pointers.md) | A native trap prints its stack by walking frame pointers over a call table in the code *(delegated)* | Accepted | 2026-10-21 |
 | [0642](0642-native-trap-stack-format.md) | The native stack lines name the function and the call position, and leave out values *(delegated)* | Accepted | 2026-10-21 |
