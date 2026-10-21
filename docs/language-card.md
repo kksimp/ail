@@ -78,9 +78,7 @@ update a `mut` variable in a loop, use `=`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
-Modules written in AIL (`use std.csv`, `use std.args`, `use std.log`): `csv.parse(text)?` (rows of `List[str]`), `csv.records(text)?` (`Map` rows keyed by the header), `csv.write(rows)`; `args.flag(n, short, help)`, `args.opt(n, short, help, default)`, `args.pos(n, help)`, `args.rest(n, help)` as specs, `args.parse(name, about, specs, env.args())?` then `a.flag(n)`, `a.get(n)`, `a.rest`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` to stderr, filtered by `LOG_LEVEL`.
-
-Float math methods: `x.sin()`, `cos`, `tan`, `atan`, `exp`, `ln`, `log10`, `cbrt`, and `x.atan2(y)`, `x.pow(y)`, `x.hypot(y)`.
+AIL-written modules: `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`); float math methods `x.sin()`, `x.pow(y)` and more (type.num.16).
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `regex.is_match(re, s)`, `find(re, s)` (`Match?`: `start`, `end`, `text`), `find_all`, `group_all(re, s, n)` (group `n` of each match, `""` if unset), `captures(re, s)` (`groups` `List[str?]`, `named`), `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`. Offsets count characters.
 
