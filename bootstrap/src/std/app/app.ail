@@ -1,4 +1,4 @@
-## std.app (spec std.app.1-12, ADR PENDING): an app is a struct that
+## std.app (spec std.app.1-12, ADR 0838): an app is a struct that
 ## implements `App`. `view` returns a tree of `Node`s, `update` receives an
 ## `Event`. A host program draws the tree with native controls and sends events
 ## back over standard input and output as JSON lines (std.app.8-10). Without a
@@ -34,11 +34,11 @@ pub enum Node
     ## Static text.
     Label(text str)
     ## A push button; its `id` comes back in a `press` event.
-    Button(id str, label str)
+    Button(id str, caption str)
     ## A one-line text field; changes come back as `edit` events.
     Field(id str, value str, hint str)
     ## A check box; a click comes back as a `toggle` event.
-    Toggle(id str, label str, on bool)
+    Toggle(id str, caption str, on bool)
     ## Children from top to bottom.
     Column(kids List[Node])
     ## Children from left to right.
@@ -85,17 +85,29 @@ pub error struct AppError
 ## Builders. A variant with two fields of one type can't be built by
 ## position (type.struct.7); these can.
 
+## Static text.
+pub fn label(s str) Node
+    Label(s)
+
+## Children from top to bottom.
+pub fn column(kids List[Node]) Node
+    Column(kids)
+
+## Children from left to right.
+pub fn row(kids List[Node]) Node
+    Row(kids)
+
 ## A push button.
-pub fn button(id str, label str) Node
-    Button(id: id, label: label)
+pub fn button(id str, caption str) Node
+    Button(id: id, caption: caption)
 
 ## A one-line text field.
 pub fn field(id str, value str, hint str) Node
     Field(id: id, value: value, hint: hint)
 
 ## A check box.
-pub fn toggle(id str, label str, on bool) Node
-    Toggle(id: id, label: label, on: on)
+pub fn toggle(id str, caption str, on bool) Node
+    Toggle(id: id, caption: caption, on: on)
 
 ## A drawing surface.
 pub fn canvas(id str, w float, h float, ops List[Op]) Node
@@ -181,9 +193,9 @@ fn outline_lines(n Node, depth int) List[str]
     pad := indent(depth)
     match n
         Label(s) => ["{pad}\"{s}\""]
-        Button(id, label) => ["{pad}[{label}] #{id}"]
+        Button(id, caption) => ["{pad}[{caption}] #{id}"]
         Field(id, value, hint) => ["{pad}<{value}> #{id} ({hint})"]
-        Toggle(id, label, on) => ["{pad}{if on then "[x]" else "[ ]"} {label} #{id}"]
+        Toggle(id, caption, on) => ["{pad}{if on then "[x]" else "[ ]"} {caption} #{id}"]
         Spacer => ["{pad}~"]
         Canvas(id, w, h, ops) =>
             mut out := ["{pad}canvas #{id} {w}x{h} ops={ops.len()}"]
