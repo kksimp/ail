@@ -38,10 +38,15 @@ without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
-`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and `join` on lists of strings or characters, the list methods `extend`, `remove_at`,
-`insert`, `clear`, `reverse`, `pop` (as a statement or with `else`), `contains`,
-`sort` and `sorted` on lists of `int`, `float`, `bool` or `str` (not `by:`
-keys), in functions with at most eight
+`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys (`Map[K, V]()`,
+`Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
+`contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants
+that are lists of constants, `join` on lists of strings or characters, and the
+list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
+statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
+`float`, `bool` or `str` (not `by:` keys), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
@@ -51,7 +56,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
 (std.fs, std.env, std.io, std.time). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
 
 ```ail
 fn steps(n int) int
@@ -221,13 +226,42 @@ treated as a counted loop where that start is tested, before the loop, to be
 at least 0 and at most 2^30; otherwise the loop with its checks runs.
 *(ADR 0622)*
 
+```ail rules=native.bce.7
+fn main()
+    xs := [1, 2, 3, 4]
+    mut total := 0
+    mut i := 1
+    while i < 3
+        total += xs[i]
+        i += 1
+    print(total)
+```
+
 **native.bce.8** — The check on `xs[e]` may be removed where the arithmetic of
 the loop bounds `e` between 0 and a constant `hi`, from a constant loop bound
 and operands tested before the loop, and `xs` is longer than `hi`. *(ADR 0622)*
 
+```ail rules=native.bce.8
+fn main()
+    xs := [1, 2, 3]
+    mut total := 0
+    for i in 0..xs.len()
+        total += xs[i] + xs[i]
+    print(total)
+```
+
 **native.bce.9** — A loop that adds an unchanging `s` to its induction value
 is treated as a counted loop where `s` is tested, before the loop, to be
 between 1 and 2^30. *(ADR 0622)*
+
+```ail rules=native.bce.9
+fn main()
+    mut total := 0
+    mut s := 2
+    for i in 0..4
+        total += i + s
+    print(total)
+```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
 (by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the
@@ -249,3 +283,18 @@ test; the report says so. A property test, which takes arguments, is skipped.
 or fail), `DIFF` (they disagree), `not-native` or `skipped`, and the command
 ends with the counts. The exit status is 1 if any test is `DIFF`, otherwise 0.
 `--json` writes one object per test and a final summary. *(ADR 0679)*
+
+```ail rules=native.bce.9
+fn main()
+    mut total := 0
+    mut s := 2
+    for i in 0..4
+        total += i + s
+    print(total)
+```
+**native.test.5** — A file inside a package (a directory under an `ail.pkg`) is
+built in a staging directory that holds the package's other module directories
+and the rewritten copy as the root module's only file, so its `use` lines
+resolve. A package that has a dependency (`dep NAME path DIR`) isn't staged
+yet: the dependency's own imports resolve against the wrong root, and its tests
+are reported as not in the native subset yet. *(ADR 0679)*

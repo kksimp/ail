@@ -255,14 +255,14 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     let (code, _, _) = pdf(&["grep", "not in the file", &report]);
     assert_eq!(code, Some(1), "pdf grep with no hit exits 1");
     let (_, out, _) = pdf(&["json", &report, "--page", "1"]);
-    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0.0,\"page\":2.0}"), "pdf json:\n{out}");
+    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0,\"page\":2}"), "pdf json:\n{out}");
     let (_, out, _) = pdf(&["info", &tool("tools/pdf/testdata/scan.pdf")]);
     assert!(out.contains("image-only pages (scans, read by OCR when shown or searched): 1"), "pdf info on a scan:\n{out}");
     let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
     assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
     // ADR 0511: the viewer reads only the page it shows, and says what is on screen.
     let (_, out, _) = pdf(&["view", &report, "--json", "--page", "2"]);
-    assert!(out.contains("\"pages_read\":1.0") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
+    assert!(out.contains("\"pages_read\":1") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
     let (code, out, _) = pdf(&["grep", "--first", "the", &report]);
     assert!(code == Some(0) && !out.contains("2: "), "pdf grep --first stops after page 1:\n{out}");
     // ADR 0512: a Group 4 fax scan is read by OCR when asked for, and not with --no-ocr.

@@ -50,6 +50,7 @@ impl<'a, W: Write> Interp<'a, W> {
             StdCall::Const(_) => unreachable!("interp::eval reads module constants"),
             StdCall::Tensor(_) => unreachable!("interp::method_call runs tensor methods"),
             StdCall::Ptr(..) => unreachable!("interp::method_call runs pointer methods"),
+            StdCall::Output(_) => unreachable!("interp::method_call runs `proc.Output` methods"),
         };
         if module == "tensor" {
             return self.tensor_call(f, args, pos, env);
@@ -191,6 +192,7 @@ impl<'a, W: Write> Interp<'a, W> {
             },
             ("path", "dir") => text(crate::stdlib::path_dir(&str_arg(0))),
             ("path", "base") => text(crate::stdlib::path_split(&str_arg(0)).1),
+            ("path", "stem") => text(crate::stdlib::path_stem(&str_arg(0))),
             ("path", "ext") => text(crate::stdlib::path_ext(&str_arg(0))),
             ("path", "join") => text(crate::stdlib::path_join(&str_arg(0), &str_arg(1))),
             ("env", "args") => {

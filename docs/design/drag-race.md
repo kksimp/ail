@@ -49,3 +49,20 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 - `native` is `ail build FILE -o OUT`; a program outside the native subset reads `build` (native.subset.1). The `-` in a ratio means one side has no number.
 - `ail` is the bytecode tier (`ail run`); process start and the check pass are inside its time, as start-up is for `python3`.
 - Programs without a C twin read `no twin`. The integrator runs macOS ARM64 with the same command.
+
+## Agent programs
+
+String, map, JSON and output programs (`tools/perfbench/agent/`, lane 201), run
+with `tools/perfbench/run.sh --native --c --python --programs FILE`. Only the
+programs that build natively have a native number; the rest wait on queued
+work (maps on #180, `.to_int()` on strings, native `Json`).
+
+| program | ail min | native min | gcc min | python min | native/gcc | native/python |
+|---|---|---|---|---|---|---|
+| print_many | 0.230 | 0.037 | 0.071 | 0.346 | 0.53 | 0.11 |
+| lines_split | | build | | | | |
+| json_roundtrip | | build | | | | |
+| map_ops | | build | | | | |
+
+`print_many` was 0.077 s native before ADR 0734 (integer text), 0.026 s after,
+measured alone; the table row is from the shared race harness run on a loaded machine.

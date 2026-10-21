@@ -70,6 +70,8 @@ commands:
                 the program's native-backend MIR (ADR 0384)
   api --card [--budget N] DIR|FILE
                 a program's card: modules, signatures, tests, manifest, examples
+  api --diff OLD NEW
+                public API changes by id, breaking ones marked; --rev REV PATH: against git (api.diff.1)
   diff OLD NEW  what changed between two versions of a file or package:
                 declarations (signature, pub, effects, errors, contracts, docs),
                 diagnostics, and test outcomes (--no-tests: skip them) (diff.out.1)
@@ -542,6 +544,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     named_args::reorder(&mut program, &resolved);
+    interp::install_native_json(&mut program);
 
     // std.ui: this thread hosts any window the program opens (ADR 0178).
     let result = ui::run_hosted(STACK_BYTES, move || {
@@ -620,6 +623,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         return ExitCode::from(2);
     }
     named_args::reorder(&mut program, &resolved);
+    interp::install_native_json(&mut program);
     let cover_map = line_map.clone();
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)

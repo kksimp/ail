@@ -4,7 +4,7 @@ entry: main in main.ail
 ## (root)
 ```
 fn main() ! [env fail fs io]
-fn check_dump(str, bool) ! [fail fs io]
+fn check_dump(str, bool) ! [env fail fs io]
 fn runtime(str) !ast.Program [fail fs io]
 fn lower_file(str, ast.Program?) !mir.Module [fail fs io]
 fn parse_source(str, str) !mir.Source [fail fs io]
@@ -90,6 +90,34 @@ pub enum ast.Literal
 
 ## check
 ```
+pub fn check.expr_pos(ast.Expr) ast.Pos
+pub fn check.stmt_pos(ast.Stmt) ast.Pos
+pub enum check.Step
+pub struct check.Place
+pub enum check.ArgKind
+pub struct check.Slot
+pub fn check.field_slots(List[ast.Field], List[ast.Arg]) List[check.Slot]
+pub fn check.op_symbol(ast.BinOp) str
+pub fn check.full_name(ast.FnDecl) str
+pub fn check.has_attr(ast.FnDecl, str) bool
+pub fn check.module_at(ast.Program, ast.Pos) str
+pub fn check.hidden(ast.Program, ast.Pos, ast.Pos) bool
+pub struct check.Report
+pub fn check.check_program(ast.Program) check.Report [env io]
+pub fn check.check_declarations(ast.Program) List[check.Diag] [env io]
+pub enum check.Need
+pub struct check.Builtin
+pub check.STR_METHODS := ...
+pub check.BYTES_METHODS := ...
+pub check.CHAR_METHODS := ...
+pub check.INT_METHODS := ...
+pub check.FLOAT_METHODS := ...
+pub check.SIZED_INT_METHODS := ...
+pub check.F32_METHODS := ...
+pub check.LIST_METHODS := ...
+pub check.MAP_METHODS := ...
+pub check.SET_METHODS := ...
+pub enum check.Cand
 pub struct check.TParam
 pub struct check.Scoped
 pub struct check.ImplInfo
@@ -97,14 +125,23 @@ pub struct check.SigParam
 pub struct check.Sig
 pub struct check.Deferred
 pub struct check.Checker
+pub enum check.LocalKind
+pub struct check.Local
+pub struct check.Pending
+pub struct check.Moved
 pub fn check.new_checker(ast.Program) check.Checker
-pub fn check.check_declarations(ast.Program) List[check.Diag]
 pub check.COVERED_RULES := ...
 pub struct check.Skip
-pub fn check.skipped(ast.Program) List[check.Skip]
+pub fn check.skipped(ast.Program, check.Report) List[check.Skip]
 pub struct check.Note
 pub struct check.Diag
 pub fn check.new_diag(str, ast.Pos, str) check.Diag
+pub struct check.VariantRef
+pub struct check.Agree
+pub struct check.Binding
+pub struct check.Coverage
+pub fn check.check_handles(ast.Program) List[check.Diag]
+pub fn check.check_moves(ast.Program, List[check.Moved]) List[check.Diag]
 pub check.PRELUDE_FNS := ...
 pub check.BUILTIN_TYPES := ...
 pub check.SPEC_TYPES_NOT_YET := ...
@@ -126,15 +163,8 @@ pub enum check.Ty
 pub enum check.Errs
 pub enum check.Def
 pub struct check.Bind
-pub fn check.same(check.Ty, check.Ty) bool
-pub fn check.has_unknown(check.Ty) bool
-pub fn check.ty_key(check.Ty) int
 pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
-pub fn check.subst(check.Ty, List[check.Bind]) check.Ty
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
-pub fn check.mentions(check.Ty, int) bool
-pub fn check.con_of(check.Ty) str?
-pub fn check.args_of(check.Ty) List[check.Ty]
 ```
 
 ## codegen
@@ -212,6 +242,7 @@ pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
 pub fn mir.simplify(mir.Func) mir.Func
+pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
 pub fn mir.func_text(mir.Func) str
 pub fn mir.verify(mir.Func) List[str]
@@ -293,4 +324,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3185); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3543); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

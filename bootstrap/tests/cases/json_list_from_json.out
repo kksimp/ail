@@ -1,0 +1,4 @@
+[U(name: "a", age: 3), U(name: "b", age: 40)]
+[1, 2]
+error: JsonError(at: -1, message: "missing [0].age")
+0

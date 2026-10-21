@@ -71,6 +71,15 @@ as written, every argument (`name = value`, values in their quoted text form,
 `` `divide` requires `b != 0`, but it was called with a = 7, b = 0 (contract at 3:5) ``.
 A failed `requires` is the caller's error. *(ADR 0211)*
 
+```ail tool=run,FILE status=1 expect=trap[contract.req.1] rules=contract.req.1
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(-4))
+```
+
 ## `ensures`
 
 **contract.ens.1** — When the function returns a value (not a failure of a
@@ -231,6 +240,15 @@ at every call, including calls through a trait (`trait.any.1`), direct
 recursion, and calls from tests (`test.run.1`). Invariants are checked at the
 points `contract.inv.2` and `contract.inv.3` name. *(ADR 0211, ADR 0305)*
 
+```ail rules=contract.run.1
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(4))
+```
+
 **contract.run.2** — Calls made while evaluating a condition don't check
 their own contracts, so a condition may call the function it describes:
 `ensures n == 0 or result == n * fact(n - 1)`. *(ADR 0211)*
@@ -241,12 +259,30 @@ are pure (`contract.decl.3`), the only difference a program can show is that a
 contract trap doesn't occur.
 Checks are on by default. *(ADR 0212)*
 
+```ail tool=run,--no-contracts,FILE expect=-2 rules=contract.run.3
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(-4))
+```
+
 ## Tools
 
 **contract.api.1** — `ail api` lists a function's conditions, as written,
 under the keys `requires` and `ensures` (arrays of strings, present only when
 non-empty), and `ail api --text` prints them under the signature.
 *(ADR 0213)*
+
+```ail tool=api,FILE expect="requires" rules=contract.api.1
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(4))
+```
 
 **contract.api.2** — For a method that implements a trait method with
 contracts, `ail api` adds `"inherits"` (the trait method's name) and the
@@ -255,3 +291,20 @@ trait's conditions as written under `"inherited_requires"` and
 prints them after the method's own, marked `(inherited)`. A struct's
 invariants are listed under `"invariants"`, and `--text` prints each as an
 `invariant` line under the struct. *(ADR 0303, ADR 0304, ADR 0305)*
+
+```ail tool=api,FILE expect=inherited_ensures rules=contract.api.2
+trait Shape
+    fn area(s Self) int
+        ensures result >= 0
+
+struct Sq
+    side int
+
+impl Shape for Sq
+    fn area(s Sq) int
+        ensures result >= 0
+        s.side * s.side
+
+fn main()
+    print(Sq.area(Sq(side: 2)))
+```

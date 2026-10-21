@@ -388,7 +388,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         t := type_of(p.ty) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
-        if p.mutable and not needs_copy(t) and not t.is_unknown()
+        if p.mutable and not needs_copy(t) and not t.is_unknown() and not t.is_coll()
             problem(
                 p.pos,
                 "`mut` parameter `{p.name}` of a number type isn't in the native subset yet",
@@ -434,6 +434,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                     if is_number(e) or e == Ty.Str or needs_copy(e) or is_enum(e)
                         return Ty.List(e)
                     none
+                "Map" | "Set" => coll_type_of(name, args)
                 _ =>
                     if args.len() == 0
                         if k := type_key(name)
@@ -457,9 +458,16 @@ fn is_literal(e ast.Expr) bool
 fn is_const_expr(e ast.Expr) bool
     match e
         Int | Float | Bool | Str | Name => true
+        ListLit(items, _) => all_const(items)
         Unary(_, x, _) => is_const_expr(x)
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
+
+fn all_const(items List[ast.Expr]) bool
+    for x in items
+        if not is_const_expr(x)
+            return false
+    true
 
 fn is_number(t Ty) bool
     match t
@@ -776,6 +784,12 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
             return
         declare(name, got.ty, got.id)
         return
+    if self.is_get_call(value)
+        got := lower_get_else(value, other, pos) else
+            declare(name, Ty.Unknown, -1)
+            return
+        declare(name, got.ty, got.id)
+        return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
         _ => none
@@ -859,6 +873,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
+    if v.ty.is_coll() and is_place(e)
+        return copy_coll(v)
     if not needs_copy(v.ty) or not is_place(e)
         return v.id
     copy_value(v)
@@ -916,6 +932,9 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
             write_var(key, cur, v)
         Index(recv, index, ipos) =>
             l := lower_value(recv, none) else return
+            if l.ty.is_coll()
+                lower_map_assign(l, index, op, value, pos, ipos)
+                return
             elem := l.ty.elem() else
                 problem(ipos, "indexing a `{l.ty.name()}` isn't in the native subset yet")
                 return
@@ -975,7 +994,8 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
             hi = y.id
             inclusive = incl
         _ =>
-            l := lower_value(iter, none) else return
+            l0 := lower_value(iter, none) else return
+            l := iter_coll(l0)
             e := l.ty.elem() else
                 problem(
                     expr_pos(iter),
@@ -984,7 +1004,7 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
                 return
             elem = e
             list = l.id
-            if mutates(body, iter)
+            if mutates(body, iter) and l.id == l0.id
                 list = copy_list(l)
             lo = konst(0, Ty.Int)
             hi = op("len", [list], Ty.Int)
@@ -1115,7 +1135,7 @@ fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
     v
 
 ## Lower an expression; `want` is the type the context expects, which lets
-## an `int` literal stand for a `float` (expr.lit.3), and is `unit` for an
+## an `int` literal stand for a `float` (type.num.10), and is `unit` for an
 ## expression statement. `none` after a problem.
 fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
     match e
@@ -1174,6 +1194,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
         Index(recv, index, pos) =>
             l := lower_value(recv, none)?
+            if l.ty.is_coll()
+                return lower_coll_index(l, index, pos)
             elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
             if is_range(index)
                 return match index
@@ -1199,14 +1221,16 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                 return unsupported(pos, "`{key}` as a value")
             lower_member(recv, name, pos)
         Range(_, _, _, pos) => unsupported(pos, "a range outside `for`")
-        MapLit(_, pos) => unsupported(pos, "maps")
-        SetLit(_, pos) => unsupported(pos, "sets")
+        MapLit(entries, pos) => lower_map_lit(entries, pos, want)
+        SetLit(items, pos) => lower_set_lit(items, pos, want)
         Match(scrutinee, arms, pos) => lower_match(scrutinee, arms, pos, want)
         Try(x, context, pos) => lower_try(x, context, pos)
         Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
         OrElse(x, other, pos) =>
             if is_pop_call(x)
                 return lower_pop_else(x, other, pos)
+            if self.is_get_call(x)
+                return lower_get_else(x, other, pos)
             lower_else(x, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
 
@@ -1501,6 +1525,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return new_struct(k, args, pos)
             unsupported(pos, "this call")
         TypeArgs(name, targs, tpos) =>
+            if (name == "Map" or name == "Set") and args.len() == 0
+                return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
                 t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
                     return unsupported(tpos, "this list type")
@@ -1565,6 +1591,8 @@ fn out_fn(t Ty) str
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if v.ty.is_coll()
+        return out_coll(v, pos)
     if e := v.ty.elem()
         mut depth := 0
         mut leaf := e
@@ -1615,6 +1643,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if r.ty.is_coll()
+        return lower_coll_method(r, name, npos, args)
     if s := struct_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)

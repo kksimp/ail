@@ -9,10 +9,10 @@ fn main() !
         r := proc.run("{here}/../ail", ["api", file])? "reading {path.base(file)}"
         doc := parse_json(r.out)? "parsing {path.base(file)}"
         for item in doc.arr("items") else []
-            kind := item.str("kind") else ""
+            kind := item.text("kind", "")
             if kind == "fn"
-                doc_text := item.str("doc") else ""
+                doc_text := item.text("doc", "")
                 documented := doc_text.len() > 0
-                fname := item.str("name") else ""
-                sig := item.str("signature") else ""
+                fname := item.text("name", "")
+                sig := item.text("signature", "")
                 print("{path.base(file)} {fname} doc={documented} {sig}")

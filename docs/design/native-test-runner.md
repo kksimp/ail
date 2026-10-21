@@ -1,24 +1,24 @@
 # Native test runner: tree counts
 
-Measured with `ail test --native` (ADR 0679, native.test.1-4) on 2026-10-21 at the
-batch head c8ca010 plus this change, Linux x86-64, four cores, 14 s for the whole tree.
+Measured with `ail test --native` (ADR 0679, native.test.1-5) on 2026-10-21 at the
+batch head fbf9a99, Linux x86-64, four cores, about 15 s for the whole tree.
 `tools/native-coverage` rewrites its own report, so these numbers live here.
 
 | source | tests | match | DIFFER | not in the native subset yet | skipped (property tests, files the interpreter rejects) |
 |---|---:|---:|---:|---:|---:|
 | examples | 16 | 0 | 0 | 14 | 2 |
-| bootstrap/tests/cases | 87 | 7 | 0 | 13 | 67 |
+| bootstrap/tests/cases | 87 | 9 | 0 | 11 | 67 |
 | tools | 152 | 3 | 0 | 124 | 25 |
-| all | 255 | 10 | 0 | 151 | 94 |
+| all | 255 | 12 | 0 | 149 | 94 |
 
 No test differs: every native build that gets as far as running agrees with the
-interpreter on pass or fail (two of the ten matches are expected failures).
+interpreter on pass or fail (one of the twelve matches is an expected failure).
 
 ## What blocks the 151
 
 | blocker | tests |
 |---|---:|
-| a module file of a package can't be built alone yet (tools/garlic/js, tools/pdf) | 48 |
+| `tools/garlic/garlic.ail` uses a dependency package whose own imports the backend can't resolve | 48 |
 | `==` on `str` (`assert_eq` of strings; ADR 0565 / PR #184) | 23 |
 | `==` on `List[str]` or `List[int]` | 17 |
 | a helper outside the tests uses maps | 9 |
@@ -29,5 +29,5 @@ interpreter on pass or fail (two of the ten matches are expected failures).
 | other (dates, hashes, nets, traits, sets, channels) | 30 |
 
 The two largest groups clear as the queued string and list PRs land; rerun
-`ail test --native` after each and add the new counts here. The package group needs
-`ail build DIR`, which the runner doesn't use yet.
+`ail test --native` after each and add the new counts here. Module files of a package (tools/garlic/js/vm) are built in a staging directory
+(native.test.5); the dependency group needs the backend to resolve a dependency's own imports.

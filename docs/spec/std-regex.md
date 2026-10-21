@@ -268,13 +268,6 @@ fn main()
 offset in the pattern), `kind` (the short names of `std.regex.11`–`22`),
 `rule` (the rule that explains the kind) and `message`. *(ADR 0440)*
 
-**std.regex.24** — `group_all(re, text, group int) List[str]` is the text of
-group `group` in each match of `find_all` (`std.regex.6`), in the same order,
-with `group` counted as in `std.regex.9` (`0` is the whole match). A group
-that took no part in a match gives the empty string. `group` must name a group
-the pattern has: a `group` below 0, or above the last group, traps. The
-pattern `code=(\d+)` gives the digits of each `code=NNN`, with no prefix to
-strip. *(ADR 0667)*
 ```ail rules=std.regex.23
 use std.regex
 
@@ -282,4 +275,21 @@ fn main()
     _ := regex.compile(r"(ab") else err
         print(err.rule)
         return
+```
+**std.regex.24** — `group_all(re, text, group int) List[str]` is the text of
+group `group` in each match of `find_all` (`std.regex.6`), in the same order,
+with `group` counted as in `std.regex.9` (`0` is the whole match). A group
+that took no part in a match gives the empty string. `group` must name a group
+the pattern has: a `group` below 0, or above the last group, traps. The
+pattern `code=(\d+)` gives the digits of each `code=NNN`, with no prefix to
+strip. *(ADR 0667)*
+
+```ail tool=run,FILE expect="b" rules=std.regex.24
+use std.regex
+
+fn main()
+    re := regex.compile(r"(\d)(\w)") else err
+        print(err.kind)
+        return
+    print(regex.group_all(re, "1a 2b", 2))
 ```

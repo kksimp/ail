@@ -24,6 +24,7 @@ mod builtins;
 mod bytecode;
 mod bytes;
 mod ffi;
+mod json;
 mod keyfn;
 pub mod limits;
 mod contracts;
@@ -45,6 +46,7 @@ mod trace;
 pub use bytecode::set_enabled as set_bytecode;
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
+pub use json::install as install_native_json;
 pub use stdlib::set_program;
 pub use tasks::{schedule_seed, set_schedule};
 mod prop;
@@ -458,6 +460,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         pure: None,
         hook: limits::active(),
         steps: 0,
+        ct_eval: None,
         cov_last: 0,
         tier: bytecode::usable(prog, has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
@@ -615,6 +618,9 @@ struct Interp<'a, W: Write> {
     /// A run limit or coverage is on (run.limit.1-3, test.cover.1); off costs one branch per statement.
     hook: bool,
     steps: u64,
+    /// Statements run so far by the constant being computed, and its name (ct.eval.3);
+    /// `None` outside constant evaluation.
+    ct_eval: Option<(&'a str, u64)>,
     cov_last: usize,
     /// The bytecode tier runs this program's functions (ADR 0361).
     tier: bool,
@@ -2327,7 +2333,19 @@ impl<'a, W: Write> Interp<'a, W> {
         let prog = self.prog;
         let c = prog.consts.iter().find(|c| c.name == name).expect("checked: a constant");
         let mut env = Vec::new();
-        let v = self.eval(&c.value, &mut env)?;
+        // ct.eval.3: count the statements a constant runs, outermost constant only.
+        let outer = self.ct_eval.is_none();
+        let hook = self.hook;
+        if outer {
+            self.ct_eval = Some((&c.name, 0));
+            self.hook = true;
+        }
+        let v = self.eval(&c.value, &mut env);
+        if outer {
+            self.ct_eval = None;
+            self.hook = hook;
+        }
+        let v = v?;
         let _ = pos;
         self.consts.insert(&c.name, v.clone());
         Ok(v)
@@ -2914,6 +2932,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
             return self.tensor_method(m, recv, args, pos, env);
         }
+        if let Some(crate::stdlib::StdCall::Output(m)) = site.std {
+            return self.output_method(m, recv, env);
+        }
         if let Some(crate::stdlib::StdCall::Ptr(m, elem)) = site.std {
             return self.ptr_method(m, elem, recv, args, pos, env);
         }
@@ -2931,7 +2952,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Output(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),

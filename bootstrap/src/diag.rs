@@ -59,6 +59,11 @@ pub enum Anchor {
     /// Insert `text` at the end of the code on `pos.line`; dropped when the
     /// line has a comment or doesn't end like a complete expression.
     LineEnd,
+    /// Insert `text` just after the expression that starts at `pos`, which
+    /// ends at the first top-level `,`, `)`, `]`, `}`, blank or comment, or the
+    /// end of the line (err.fix.1). Dropped when a bracket stays open at the
+    /// end of the line.
+    AfterExpr,
     /// Rewrite the call `old(args)` that starts at `pos` on one line; `text`
     /// is a template: `$1` `$2` are the arguments as written, `$r1` the first
     /// as a method receiver (parenthesised if it isn't a plain postfix
@@ -115,6 +120,11 @@ impl Edit {
     /// Insert `text` at the end of the code on `pos.line`.
     pub fn at_line_end(pos: Pos, text: impl Into<String>) -> Self {
         Edit { pos, end: pos, old: None, anchor: Anchor::LineEnd, text: text.into() }
+    }
+
+    /// Insert `text` just after the expression that starts at `pos`.
+    pub fn after_expr(pos: Pos, text: impl Into<String>) -> Self {
+        Edit { pos, end: pos, old: None, anchor: Anchor::AfterExpr, text: text.into() }
     }
 
     /// Delete the character at `pos` and the blanks before it.
@@ -225,6 +235,7 @@ impl Edit {
         match std::mem::replace(&mut self.anchor, Anchor::Exact) {
             Anchor::AfterBlock => return self.resolve_after_block(lines),
             Anchor::LineEnd => return self.resolve_line_end(lines),
+            Anchor::AfterExpr => return self.resolve_after_expr(lines),
             a @ (Anchor::Call | Anchor::CallNamed | Anchor::Brackets) => return self.resolve_call(lines, a),
             Anchor::Chain => return self.resolve_chain(lines),
             Anchor::TrimBefore => return self.resolve_trim(lines),
@@ -407,6 +418,43 @@ impl Edit {
         }
         self.text = format!("and {mid} ");
         self.pos = self.end;
+        true
+    }
+
+    fn resolve_after_expr(&mut self, lines: &[Vec<char>]) -> bool {
+        let Some(line) = lines.get(self.pos.line.wrapping_sub(1)) else { return false };
+        let (mut depth, mut quote) = (0usize, false);
+        let mut i = self.pos.col.saturating_sub(1);
+        // An operand starts with a name, a bracket or a quote, not an operator.
+        if !line.get(i).is_some_and(|c| c.is_alphanumeric() || matches!(c, '_' | '(' | '[' | '"')) {
+            return false;
+        }
+        while i < line.len() {
+            let c = line[i];
+            if quote {
+                match c {
+                    '\\' => i += 1,
+                    '"' => quote = false,
+                    _ => {}
+                }
+            } else {
+                match c {
+                    '"' => quote = true,
+                    '(' | '[' | '{' => depth += 1,
+                    ')' | ']' | '}' | ',' if depth == 0 => break,
+                    ')' | ']' | '}' => depth -= 1,
+                    '#' => break,
+                    c if c.is_whitespace() && depth == 0 => break,
+                    _ => {}
+                }
+            }
+            i += 1;
+        }
+        if depth != 0 || quote || i == 0 {
+            return false;
+        }
+        self.pos.col = i + 1;
+        self.end = self.pos;
         true
     }
 

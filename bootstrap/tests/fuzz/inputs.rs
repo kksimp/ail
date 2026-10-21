@@ -11,7 +11,7 @@ pub struct Input {
     pub int: i64,
 }
 
-pub const KINDS: [&str; 7] = ["text", "json", "bytes", "regex", "date", "http", "compress"];
+pub const KINDS: [&str; 9] = ["text", "json", "bytes", "regex", "date", "http", "compress", "csv", "args"];
 
 pub fn generate(kind: &str, seed: u64) -> Input {
     let mut r = Rng::new(seed ^ 0x5EED_F00D);
@@ -27,6 +27,8 @@ pub fn generate(kind: &str, seed: u64) -> Input {
         }
         "date" => (date_text(&mut r), date_text(&mut r)),
         "http" => (http_text(&mut r), http_text(&mut r)),
+        "csv" => (csv_text(&mut r), csv_text(&mut r)),
+        "args" => (args_text(&mut r), args_text(&mut r)),
         _ => (plain(&mut r), plain(&mut r)),
     };
     Input { text, text2, int }
@@ -256,6 +258,46 @@ fn date_text(r: &mut Rng) -> String {
         _ => format!("{day}/{month}/{year} {hour}:{min}"),
     };
     if r.chance(1, 4) { corrupt(r, &s, "0123456789-:TZ+ .") } else { s }
+}
+
+// ---- CSV and command lines (std.csv, std.args) ----
+
+/// CSV made of fields that are plain, quoted, doubled-quoted, empty or hold a
+/// line break, joined by commas and `\n`, `\r\n` or `\r`, sometimes cut short.
+fn csv_text(r: &mut Rng) -> String {
+    const FIELDS: [&str; 16] = [
+        "a", "b c", "", "1", "-2.5", "\"q\"", "\"a,b\"", "\"two\nlines\"", "\"he said \"\"hi\"\"\"", "\"\"", "\" x\"", "x\"y", "é", "日本", "\"unterminated", "\"cr\r\nlf\"",
+    ];
+    let mut s = String::new();
+    for _ in 0..r.below(6) {
+        for k in 0..r.below(5) {
+            if k > 0 {
+                s.push(',');
+            }
+            s.push_str(r.pick(&FIELDS));
+        }
+        s.push_str(r.pick(&["\n", "\r\n", "\r", "\n\n", ""]));
+    }
+    if r.chance(1, 6) {
+        let cut = r.below(s.chars().count() + 1);
+        s = s.chars().take(cut).collect();
+    }
+    if r.chance(1, 12) {
+        s = s.repeat(1 + r.below(200));
+    }
+    s
+}
+
+/// Command-line words, one per line: flags, options, `--`, `-`, `=` forms and junk.
+fn args_text(r: &mut Rng) -> String {
+    const WORDS: [&str; 22] = [
+        "-v", "--verbose", "--out", "--out=x", "--out=", "-o", "x", "--", "-", "---", "--bogus", "-vo", "-ov", "file", "", "--verbose=1", "-o=x", "-h-", "--=", "é", "-9", "a b",
+    ];
+    let mut words = Vec::new();
+    for _ in 0..r.below(8) {
+        words.push(*r.pick(&WORDS));
+    }
+    words.join("\n")
 }
 
 // ---- HTTP ----

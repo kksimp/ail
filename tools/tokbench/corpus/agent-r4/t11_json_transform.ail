@@ -1,0 +1,14 @@
+struct U
+    name str
+    age int
+
+impl ToJson for U
+
+fn main() !
+    data := parse_json(fs.read_text(env.args()[0])?)?
+    mut out := []
+    for u in data.as_arr() else []
+        age := u.int("age") else 0
+        if age > 18
+            out.push(U(name: u.str("name") else "", age: age + 1))
+    print(out.to_json().to_text())

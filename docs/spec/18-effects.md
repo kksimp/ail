@@ -102,10 +102,16 @@ naming a chain of calls from a function of the package (a public one if any
 reaches the capability), such as `geo.size -> clockwork.home -> env.cwd`.
 *(ADR 0232)*
 
+```ail pkg=caps_denied tool=check,DIR status=2 expect=eff.cap.4 rules=eff.cap.4
+```
+
 **eff.cap.5** — `caps LIST` on a `package` line limits that package's own
 functions the same way (`eff.cap.4`); for the root package it is an
 allow-list for the program. A `package` line without `caps` sets no limit.
 *(ADR 0232)*
+
+```ail pkg=caps_denied tool=check,DIR status=2 expect=eff.cap.5 rules=eff.cap.5
+```
 
 ## Deterministic execution
 

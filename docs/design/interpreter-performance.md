@@ -402,3 +402,28 @@ left is the cost of reading a local: the walker's environment is a vector of
 (name, value) pairs behind a pointer, so every local read reloads its length
 and bounds-checks it. A frame with locals in the register file, or audited
 unchecked access (about 12% fewer instructions, measured), would remove that.
+
+## examples/build: the day-1 regression did not reproduce (lane 240)
+
+The day-1 report had `examples/build` at 0.375 s on main d5ecde9 and 0.734 s on
+the batch head 7fb2a39. Measured on the shared box in this lane:
+
+| binary | wall (median of 5) | user CPU (median of 5) | bytecode counters |
+|---|---:|---:|---|
+| d5ecde9 | 0.39 s, then 1.13 s later in the session | 0.88–0.95 s | 3,743 instructions, 254 hand-offs, 93.2% native |
+| 00ecdbc7 | — | 0.89–0.92 s | not run |
+| 7fb2a39 (batch head) | 0.70 s, then 1.15 s later | 0.87–0.93 s | 3,743 instructions, 254 hand-offs, 93.2% native |
+
+- The wall-clock numbers moved by about 3x within one session with no code change,
+  so they reflect load on the shared machine. Real and user time were 2.3:1 early in
+  the session and about 1:1 later, which is load, not code.
+- User CPU time differs by about 2% between main and the head, inside the spread.
+- Bytecode counters are identical, so the example does the same work at both commits.
+- A bisect over the 89 first-parent merges gave no valid culprit: 8be8cee0 and
+  192f321a do not build (an unclosed brace in `parser.rs`, fixed at 00ecdbc7), so
+  the search had no buildable good/bad pair below index 2. That result is not used.
+
+To settle it, time `examples/build.ail` on a quiet machine (the designer's Mac gate,
+or `tools/bench/run.sh` with wall and user time both recorded), at main and at the
+batch head, and compare the counters. If the 2x returns on a quiet machine, bisect
+again with `git bisect` on buildable commits only.

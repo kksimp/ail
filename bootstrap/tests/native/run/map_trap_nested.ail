@@ -1,0 +1,7 @@
+# type.map.3: `m[a][b] = v` needs `m[a]` to exist.
+fn main()
+    mut g := Map[int, Map[int, str]]()
+    g[1] = Map[int, str]()
+    g[1][2] = "x"
+    print(g[1][2])
+    g[3][4] = "y"

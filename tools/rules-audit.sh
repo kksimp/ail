@@ -3,7 +3,7 @@
 #
 #   tools/rules-audit.sh
 #
-# Checks four things and exits 1 when any is not empty:
+# Checks six things and exits 1 when any is not empty:
 #   1. cited but not in the spec: a rule ID named in a comment or a string
 #      literal of bootstrap/src or compiler/ that docs/spec/ does not define;
 #   2. spec rules never cited: a rule in docs/spec/ that no comment or string
@@ -16,10 +16,10 @@
 #      `example` (checked through `ail explain RULE --json`);
 #   5. std functions with no spec mention: a function in the MODULES table of
 #      bootstrap/src/stdlib.rs that docs/spec/ never names (tools/card-spec-audit.py,
-#      ADR 0698).
-#   4. `ail explain` entries with no example: a rule whose explanation has
-#      neither an `example` nor a worked `rejected` example (checked through
-#      `ail explain RULE --json`; ADR 0670).
+#      ADR 0698);
+#   6. test cases: duplicate programs (same program modulo names, same
+#      companion files) and diagnostic cases with no `.rules` file
+#      (tools/cases-audit.py, ADR 0725).
 #
 # Ranges such as `eff.cap.4-5` count as citations of each ID in the range.
 # Self-setting-up (ADR 0071): the first `./ail explain` builds the bootstrap
@@ -108,10 +108,25 @@ report(
     "1. cited but not in docs/spec/",
     [f"{r}  ({', '.join(sorted(cited[r]))})" for r in sorted(set(cited) - set(spec))],
 )
+# Check 2 exemptions are the rows of the "## Check 2 exemptions" table in
+# docs/design/rule-coverage.md (lane 244): the one list the audit reads. A row
+# whose rule is now cited, or that has no owner or reason, is a finding.
+coverage = (root / "docs" / "design" / "rule-coverage.md").read_text()
+section = coverage.split("## Check 2 exemptions", 1)[1].split("\n## ", 1)[0] if "## Check 2 exemptions" in coverage else ""
+exempt, incomplete = {}, []
+for line in section.splitlines():
+    m = re.match(r"^\| `([a-z0-9.]+)` \| ([^|]*)\| ([^|]*)\|$", line)
+    if m:
+        rule, owner, reason = m.group(1), m.group(2).strip(), m.group(3).strip()
+        exempt[rule] = owner
+        if not owner or not reason:
+            incomplete.append(rule)
 report(
-    "2. spec rules never cited in bootstrap/src or compiler/",
-    [f"{r}  ({spec[r]})" for r in sorted(set(spec) - set(cited) - removed)],
+    "2. spec rules never cited in bootstrap/src or compiler/ (after exemptions)",
+    [f"{r}  ({spec[r]})" for r in sorted(set(spec) - set(cited) - removed) if r not in exempt],
 )
+report("2a. exemptions for rules that are now cited (remove the row)", sorted(r for r in exempt if r in cited))
+report("2b. exemptions with no owner or reason", incomplete)
 
 # 3 and 4 need `ail explain`, which reads the spec it was built from.
 listing = json.loads(subprocess.run([str(ail), "explain", "--json"], capture_output=True, text=True, check=True).stdout)
@@ -137,6 +152,10 @@ audit = subprocess.run(
     capture_output=True, text=True, check=False,
 )
 report("5. std functions with no spec mention", [l.removeprefix("no spec mention: ") for l in audit.stdout.splitlines() if l.startswith("no spec mention: ")])
+
+# 6. The test cases (ADR 0725): duplicates and missing .rules.
+cases = subprocess.run([sys.executable, "-I", str(root / "tools" / "cases-audit.py"), str(root)], capture_output=True, text=True, check=False)
+report("6. test cases: duplicates or missing .rules", [l.strip() for l in cases.stdout.splitlines()[1:]])
 
 print(f"rules in spec: {len(spec)}; explained: {len(explained)}; findings: {problems}")
 sys.exit(1 if problems else 0)

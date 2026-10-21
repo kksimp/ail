@@ -81,6 +81,19 @@ fn main()
 **unsafe.op.2** — Creating or copying a raw pointer value is not an unsafe
 operation. *(ADR 0106)*
 
+```ail rules=unsafe.op.2
+use std.mem
+
+fn null_ptr() *u8
+    unsafe
+        return mem.null()
+
+fn main()
+    q := null_ptr()
+    r := q
+    print(r.is_null())
+```
+
 ## Raw pointers and memory
 
 **unsafe.ptr.1** — `*T` is a raw pointer type: an address with no ownership

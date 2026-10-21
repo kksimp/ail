@@ -1,0 +1,56 @@
+# compiler: syntax
+
+## syntax
+```
+pub fn syntax.tokens_text(lexed syntax.Lexed) str  ## One line per token, then one per comment, then one per diagnostic.
+pub fn syntax.diag_lines(diags List[syntax.Diag], mut out List[str]) [mutates]
+pub fn syntax.quote(s str) str  ## A string in JSON, as the prelude's `json_quote` writes it.
+pub fn syntax.ast_text(lexed syntax.Lexed, parsed syntax.Parsed) str  ## The tree of `ail api --ast` (api.ast.1-2): the program as one line of
+pub enum syntax.Tok  ## A token's kind and value.
+    Ident(name str)
+    Kw(word str)
+    Sym(text str)
+    Str(value str)
+    Bytes(hex str)  ## `b"..."`, its bytes as lowercase hex (lex.bytes.1).
+    Interp(parts List[syntax.Part])  ## A string literal containing `{expression}` parts (lex.str.2).
+    Char(value char)  ## `'a'` (lex.str.4)
+    Int(value int)
+    IntMin  ## `9223372036854775808`, which fits only after a `-` (lex.num.3).
+    Float(value float)  ## `1.5`, `1e3` (lex.num.2)
+    Newline
+    Indent
+    Dedent
+    Eof
+pub enum syntax.Part  ## A piece of an interpolated string: literal text, or the tokens of one
+    Lit(text str)
+    Code(tokens List[syntax.Token])
+    Fmt(tokens List[syntax.Token], spec syntax.FormatSpec)
+pub struct syntax.Token
+    pub tok syntax.Tok
+    pub pos ast.Pos
+pub struct syntax.FormatSpec  ## `[[fill]align][width][.precision][x]` after the `:` in `{expression:spec}` (lex.str.7).
+    pub fill char?
+    pub align char?  ## `<`, `>` or `^`.
+    pub width int?
+    pub precision int?  ## Decimal places of a float (`.N`).
+    pub hex bool  ## `x`: lowercase hexadecimal for an int.
+pub struct syntax.Diag  ## A mistake: the rule it breaks and where. The parser keeps the message
+    pub rule str
+    pub pos ast.Pos
+    pub msg str
+    pub fixed bool
+pub struct syntax.Comment  ## A comment (lex.comment.1): `text` runs from the `#` to the end of the line.
+    pub pos ast.Pos
+    pub text str
+pub struct syntax.Lexed  ## The tokens of a file, its diagnostics in the order found, and its comments.
+    pub tokens List[syntax.Token]
+    pub diags List[syntax.Diag]
+    pub comments List[syntax.Comment]
+pub fn syntax.lex(src str) syntax.Lexed  ## Lex `src` (lex.*). A file that indents by 2 or 3 spaces is lexed again
+pub struct syntax.Parsed  ## The tree of a file and the diagnostics found making it, in order.
+    pub program ast.Program
+    pub diags List[syntax.Diag]
+pub fn syntax.parse(tokens List[syntax.Token]) syntax.Parsed  ## Parse a file's tokens (the lexer's, ending in `Eof`).
+```
+
+trimmed to fit 2000 tokens (~876); dropped: private items

@@ -388,6 +388,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Float(x) => float_method(x, name, a, pos)?,
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
+                "is_empty" => Value::Bool(items.is_empty()),
                 "last" => opt(items.last().cloned()),
                 "first" => opt(items.first().cloned()),
                 // type.coll.15: the first `n` elements, or all of them.
@@ -519,14 +520,27 @@ impl<'a, W: Write> Interp<'a, W> {
             },
             Value::Map(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                "is_empty" => Value::Bool(t.len() == 0),
                 "get" => opt(t.get(&a[0]).map(|i| t.val(i).clone())),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
+                // std.count.2: the `n` keys with the largest values, ties in insertion order.
+                "top" => {
+                    let Value::Int(count) = a[0] else { unreachable!("checked: an int count") };
+                    let mut pairs: Vec<(i64, Value)> = t
+                        .entries()
+                        .map(|(k, v)| (if let Value::Int(c) = v { *c } else { 0 }, k.clone()))
+                        .collect();
+                    pairs.sort_by(|x, y| y.0.cmp(&x.0));
+                    let keys = pairs.into_iter().take(count.max(0) as usize).map(|(_, k)| k).collect();
+                    Value::List(Rc::new(keys))
+                }
                 "keys" => Value::List(Rc::new(t.key_list())),
                 "values" => Value::List(Rc::new(t.val_list())),
                 _ => unreachable!("checked: Map.{name}"),
             },
             Value::Set(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                "is_empty" => Value::Bool(t.len() == 0),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
                 "sorted" => Value::List(Rc::new(self.sorted(t.key_list(), pos)?)),
                 "union" | "intersect" | "difference" => set_op(name, t.keys(), &a[0]),
@@ -569,6 +583,7 @@ impl<'a, W: Write> Interp<'a, W> {
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
             // type.str.12: `len` counts characters; `byte_len` counts bytes.
             "len" => Value::Int(text.chars().count() as i64),
+            "is_empty" => Value::Bool(text.is_empty()),
             "byte_len" => Value::Int(text.len() as i64),
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),

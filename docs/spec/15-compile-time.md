@@ -6,9 +6,9 @@ Chapter key: `ct`
 > functions, the rules of compile-time evaluation, derive generators and
 > generated code. The bootstrap implements `ct.const.1–3` (with `if`,
 > `match` and `?` in a constant left to a function, `bootstrap.unsupported`),
-> `ct.derive.1–4` and `ct.gen.1–4` (ADRs 0306–0309; a derive's step and
-> memory limits, `ct.eval.3`, aren't counted yet); `ct.eval.4` is not
-> implemented yet. Design
+> `ct.derive.1–4` and `ct.gen.1–4` (ADRs 0306–0309). `ct.eval.3`'s step limit is counted for
+> constants, in statements run (ADR 0742); its memory limit and a derive's
+> limits aren't counted yet. `ct.eval.4` is not implemented yet. Design
 > notes: [compile-time-execution.md](../design/compile-time-execution.md),
 > [metaprogramming.md](../design/metaprogramming.md).
 
@@ -83,11 +83,28 @@ fn main()
 **ct.const.4** — A constant's type MUST NOT contain `ref` or a `unique`
 type: a constant is an immutable value copied into the program. *(ADR 0225)*
 
+```ail error=ct.const.4 rules=ct.const.4
+unique struct Token
+    id int
+
+TOKEN := Token(id: 1)       # a `unique` value can't be copied into every use
+
+fn main()
+    print(1)
+```
+
 ## Evaluation
 
 **ct.eval.1** — Compile-time evaluation is deterministic: it depends only on
 the program's text. It reaches no capability (`ct.const.2`), and map and set
 iteration follow insertion order (`type.map.1`, `type.map.5`). *(ADR 0226)*
+
+```ail rules=ct.eval.1
+LIMIT := 2 * 3
+
+fn main()
+    print(LIMIT)
+```
 
 **ct.eval.2** — Compile-time evaluation has exactly the semantics of run
 time, including overflow traps and float arithmetic. Because every target is
@@ -98,11 +115,31 @@ stack. The bootstrap computes constants before `main` and reports such a
 trap at the constant before `main` starts (`mod.const.3`). *(ADR 0225,
 ADR 0226, ADR 0032)*
 
+```ail tool=run,FILE status=1 expect=expr.arith.3 rules=ct.eval.2
+Z := 1 / 0
+
+fn main()
+    print(Z)
+```
+
 **ct.eval.3** — Each constant and each derive (`ct.derive.2`) MAY take at
 most 100,000,000 evaluation steps (one per expression evaluated) and 1 GiB
 of live values, within the run-time call-depth limit. Exceeding a limit is a
 compile-time error that names the limit, the constant or `impl`, and the call
 stack where evaluation stopped. *(ADR 0226)*
+
+```ail norun rules=ct.eval.3
+fn spin(n int) int
+    mut i := 0
+    while i < n
+        i += 1
+    i
+
+BIG := spin(1000000000)     # over 100,000,000 steps: computing `BIG` stops with ct.eval.3
+
+fn main()
+    print(BIG)
+```
 
 **ct.eval.4** — An implementation MAY reuse a result computed by an earlier
 compilation only when the constant's or derive's code and every function the
@@ -229,3 +266,23 @@ under its `impl`'s `methods` with `origin` (`kind`, `impl`, `generator`,
 `at`) and `text`; the `impl` gets `derived_by`, the generator's id, or
 `built-in` for an empty `impl` of `Eq`, `Ord` or `ToStr` (OQ-096). Without
 `--expanded` the outline is unchanged. *(ADR 0309)*
+
+```ail tool=api,--expanded,FILE expect=origin rules=ct.gen.4
+@derive(derive_describe) trait Describe
+    fn describe(self) str
+
+fn derive_describe(t TypeInfo) str ! DeriveError
+    mut names := List[str]()
+    for f in t.fields
+        names.push(f.name)
+    "fn describe(self) str\n    \"{t.name} with {names.join(", ")}\"\n"
+
+struct Version
+    major int
+    minor int
+
+impl Describe for Version
+
+fn main()
+    print(Version(major: 1, minor: 2).describe())
+```

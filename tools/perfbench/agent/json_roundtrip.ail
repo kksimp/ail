@@ -1,0 +1,21 @@
+# JSON: build 20,000 records, write them as text, parse the text back, total a field.
+
+fn main() !
+    mut items := List[Json]()
+    for i in 0..20000
+        items.push(Json.Obj([
+            JsonMember(key: "id", value: Json.Num(i.to_float())),
+            JsonMember(key: "name", value: Json.Str("item-{i}")),
+            JsonMember(key: "tags", value: Json.Arr([Json.Str("a"), Json.Str("b{i % 7}")])),
+            JsonMember(key: "ok", value: Json.Bool(i % 3 == 0)),
+        ]))
+    text := Json.Arr(items).to_text()
+    doc := parse_json(text)?
+    mut total := 0.0
+    mut oks := 0
+    for item in doc.as_arr() else []
+        total += item.num("id") else 0.0
+        ok := item.bool("ok") else false
+        if ok
+            oks += 1
+    print("{text.len()} chars, id sum {total}, ok {oks}")

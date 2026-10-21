@@ -228,7 +228,12 @@ separator or `a` is empty; on Windows also when `b` starts with a drive and
 a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
 *(ADR 0253, ADR 0504)*
 
-```ail rules=std.path.1,std.path.2,std.path.3,std.path.4
+**std.path.5** — `stem(p str) str` is `base(p)` without its extension: the
+text before the last `.`, or all of `base(p)` when there is none or the only
+`.` is the first character (`stem("a/archive.tar.gz")` is `archive.tar`).
+*(ADR 0630)*
+
+```ail rules=std.path.1,std.path.2,std.path.3,std.path.4,std.path.5
 use std.path
 
 fn main()
@@ -236,6 +241,7 @@ fn main()
     print(path.base("examples/logscan.ail"))   # logscan.ail
     print(path.ext("archive.tar.gz"))          # gz
     print(path.join("examples", "data"))       # examples/data
+    print(path.stem("archive.tar.gz"))         # archive.tar
 ```
 
 ## Hashing: `std.hash`
@@ -491,6 +497,41 @@ use std.proc
 fn main() !
     r := proc.run_bytes("sort", [], b"b\na\n")?
     print("{r.status} {r.out.len()}")
+```
+
+**std.proc.9** — `Output` (the result of `proc.run`) has the methods `text()`
+and `ok()`, and no others. Each takes no arguments, and neither changes the
+value: a call with an argument, or an unknown name, is an error. *(ADR 0733)*
+
+**std.proc.10** — `o.text() str` is the standard output followed by the standard
+error, with nothing between them. `o.ok() bool` is `o.status == 0`. *(ADR 0733)*
+
+```ail rules=std.proc.9,std.proc.10
+use std.proc
+
+fn main() !
+    r := proc.run("echo", ["hello"])?
+    print(r.ok())                         # true
+    print(r.text().len() > 0)             # true
+```
+
+## Counting: `Map[K, int]`
+
+**std.count.1** — `m[k] += 1` adds one to the count at `k`, and starts the count
+at zero when `k` is absent. The receiver must be `mut`, and the map's values must
+be `int`. *(ADR 0732)*
+
+**std.count.2** — `m.top(n int) List[K]` is the `n` keys with the largest counts,
+largest first. Keys with equal counts keep their insertion order. A count of zero
+or less gives `[]`. `m` is not changed. *(ADR 0732)*
+
+```ail rules=std.count.1,std.count.2
+fn main()
+    mut counts := Map[str, int]()
+    for word in ["b", "a", "b", "c", "b", "a"]
+        counts[word] += 1
+    print(counts.top(2))                  # ["b", "a"]
+    print(counts.top(0))                  # []
 ```
 
 ## Memory for C: `std.mem`
@@ -1117,7 +1158,8 @@ field. A row whose field count differs from the header's is a `CsvError`.
 **std.csv.3** — `quote(field str) str` wraps a field in double quotes, and
 doubles the quotes inside it, when it holds a comma, a quote or a line break;
 otherwise it returns the field. `write(rows List[List[str]]) str` quotes each
-field and ends each row with `\n`. *(ADR 0626)*
+field and ends each row with `\n`; a row of one empty field is written as
+`""`, because a blank line is no row. *(ADR 0626)*
 
 **std.csv.4** — `write_records(header List[str], recs List[Map[str, str]])
 str` writes the header and then each map's values in header order; a key a map
