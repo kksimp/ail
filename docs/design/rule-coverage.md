@@ -86,8 +86,11 @@ Chapters 07 (ownership, 35 uncovered before) and 08 (errors, 29 before) follow t
 output and `skip=bootstrap` for `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`
 and `own.excl.3`, `own.ref.2`, `own.ref.7` (features the gate can't check yet).
 
-Uncovered rules outside the batch chapters: 382 before lane 223, 275 now (chapters 04-06 are
-the batch's and 09-16, 19-21 remain).
+Uncovered rules outside the batch chapters: 382 before lane 223, 275 after chapters 07-08, 262 after chapter 09, then 220 after chapter 10 (42 trait rules: `trait.auto.4` is a bootstrap bug, skip=bootstrap; `trait.impl.4` needs a two-package example, skip=context)
+(09-generics, 14 rules; `gen.anon.2` is `skip=context`, the formatter's canonical form). Chapters 11-16 and 19-21 remain.
+
+Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integrator decision):
+`own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `lex.kw.1`, `trait.auto.4`.
 
 ## Spec rules no code cites (lane 207, 2026-10-21)
 
