@@ -342,6 +342,21 @@ fn main()
         rows.push(row)
     print(rows)
 ```
+**native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
+and no reference to the old list survives, the old list may be emptied
+instead, under the conditions of native.reuse.1 and when the old list is
+the compiler's own: not a parameter of the function. *(ADR 0826)*
+
+```ail rules=native.reuse.2
+fn main()
+    mut line := []
+    for i in 0..7
+        line.push(i)
+        if line.len() == 3
+            print(line)
+            line = []
+    print(line)
+```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
 (by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the
