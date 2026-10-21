@@ -28,3 +28,12 @@
 
 - A Python generator in `tools/fuzz/gen/`: ADR 0070 limits Python to measurement, and the harness and its `Rng` are Rust.
 - Failing the test on `fuzz.bc.3`: a missed fast path is a speed finding, and a failing selftest would block unrelated lanes.
+
+## Wider grammar (2026-10-21)
+
+`bcprogs::wide` adds maps, strings, function values, enums with `match` and
+nested structs (about half the programs). 40,000 programs agreed with the
+walker once lane 190's element-order fix landed, and the generator no longer
+keeps a trapping argument apart from a bad index. Hand-offs seen by fuzz.bc.3
+(speed only): a call through a function value hands off twice, and a
+`mut self` method on a nested field (`o.inner.grow(i)`) hands off per call.

@@ -108,7 +108,7 @@ impl G<'_> {
         match self.r.below(5) {
             0 => {
                 let (i, e) = (self.index(), self.expr(1));
-                let e = if self.wild > 0 { "1".to_string() } else { e };
+                
                 Self::push(out, ind, &format!("{tgt} += xs[{i}].bump({e})"));
             }
             1 => {
@@ -157,7 +157,7 @@ impl G<'_> {
                 // Known (found/bytecode/elem_call_arg_before_bounds.ail): an argument that traps beside
                 // an index that traps is evaluated in the other order on the tier. Keep them apart.
                 let (i, e) = (self.index(), self.expr(1));
-                let e = if self.wild > 0 { "1".to_string() } else { e };
+                
                 Self::push(out, ind, &format!("xs[{i}].step({e})"));
             }
             4 => {
@@ -300,4 +300,75 @@ pub fn program(seed: u64, pure: bool) -> String {
     }
     out.push_str("    print(acc)\n    print(fl)\n    for x in xs\n        print(\"{x.a} {x.b} {x.f}\")\n");
     out
+}
+
+/// Wider grammar: maps, strings, function values, enums with `match`, and
+/// nested structs, inside the same kind of loops. Values stay small so most
+/// runs finish; `wild` sometimes leaves a list index or a map key unchecked.
+pub fn wide(seed: u64, pure: bool) -> String {
+    let mut r = Rng::new(seed ^ 0x5EED_1DE5);
+    let wild = if r.chance(1, 4) { 6 } else { 0 };
+    let mut out = String::from(
+        "struct In\n    n int\n    tag str\n\nstruct Out\n    inner In\n    xs List[int]\n\nenum Op\n    Add(k int)\n    Mul(k int)\n    Neg\n    Nop\n\n\
+fn In.grow(mut self, d int) int\n    self.n += d % 100\n    self.n\n\n\
+fn dbl(x int) int\n    x * 2 % 1000\n\nfn inc(x int) int\n    (x + 1) % 1000\n\nfn apply(f fn(int) int, x int) int\n    f(f(x))\n\n\
+fn run(op Op, v int) int\n    match op\n        Add(k) => (v + k) % 1000\n        Mul(k) => v * k % 1000\n        Neg => 0 - v\n        Nop => v\n\n",
+    );
+    out.push_str("fn main()\n    mut acc := 0\n    mut o := Out(inner: In(n: 1, tag: \"t\"), xs: [3, 1, 4])\n    mut f := dbl\n    ops := [Op.Add(k: 5), Op.Mul(k: 3), Op.Neg, Op.Nop]\n    mut m := Map[str, int]()\n    mut s := \"\"\n");
+    let mut body = String::new();
+    let loops = r.below(3) + 1;
+    let mut uid = 0;
+    for l in 0..loops {
+        let bound = r.below(8) + 1;
+        let ind = if l % 2 == 0 { 1 } else { 1 };
+        Wd::push(&mut body, ind, &format!("for i{l} in 0..{bound}"));
+        for _ in 0..r.below(5) + 2 {
+            let i = format!("i{l}");
+            let line: Vec<String> = match r.below(16) {
+                0 => vec![format!("acc += run(ops[{i} % 4], acc)")],
+                1 => vec![format!("acc += run(ops[{}], {i})", if wild > 0 && r.chance(1, 3) { "5".to_string() } else { format!("{i} % 4") })],
+                2 => vec![format!("acc += o.inner.grow({i} * 7)")],
+                3 => vec![format!("o.inner.n += acc % 10")],
+                4 => vec![format!("o.xs.push(acc % 100)"), format!("acc += o.xs.len()")],
+                5 => vec![format!("acc += o.xs[{}]", if wild > 0 && r.chance(1, 2) { format!("{i} + 3") } else { format!("{i} % o.xs.len()") })],
+                6 => vec![format!("o.xs[{i} % o.xs.len()] = acc % 50")],
+                7 => vec![format!("f = if {i} % 2 == 0 then dbl else inc")],
+                8 => vec![format!("acc = apply(f, acc % 1000)")],
+                9 => vec![format!("acc += f({i})")],
+                10 => {
+                    uid += 1;
+                    vec![format!("mut c{uid} := o"), format!("c{uid}.inner.grow({i})"), format!("acc += c{uid}.inner.n - o.inner.n")]
+                }
+                11 if !pure => vec![format!("m[\"k{{{i} % 3}}\"] = acc % 100"), format!("acc += m.len()")],
+                12 if !pure => vec![if wild > 0 && r.chance(1, 2) { format!("acc += m[\"k{{{i}}}\"]") } else { format!("acc += m.get(\"k{{{i} % 3}}\") else 7") }],
+                13 if !pure => vec![format!("s = \"{{s}}{{acc % 10}}\""), format!("acc += s.len()")],
+                14 if !pure => vec![format!("acc += s.slice(0, {}).len()", if wild > 0 && r.chance(1, 2) { "100".to_string() } else { "s.len() / 2".to_string() })],
+                15 if !pure => vec![format!("print(\"{{o.inner.tag}} {{acc}} {{o.inner.n}}\")")],
+                _ => vec![format!("acc += {i}")],
+            };
+            for l in line {
+                Wd::push(&mut body, ind + 1, &l);
+            }
+        }
+        if r.chance(1, 3) {
+            Wd::push(&mut body, ind + 1, "if acc > 5000");
+            Wd::push(&mut body, ind + 2, if r.chance(1, 2) { "break" } else { "continue" });
+        }
+    }
+    out.push_str(&body);
+    out.push_str("    print(acc)\n    print(o.inner.n)\n    print(o.xs.len())\n    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n    print(s)\n");
+    if pure {
+        out = out.replace("    for k in m.keys().sorted()\n        print(\"{k}={m[k]}\")\n    print(s)\n", "");
+        out = out.replace("    mut m := Map[str, int]()\n    mut s := \"\"\n", "");
+    }
+    out
+}
+
+struct Wd;
+impl Wd {
+    fn push(out: &mut String, ind: usize, line: &str) {
+        out.push_str(&"    ".repeat(ind));
+        out.push_str(line);
+        out.push('\n');
+    }
 }
