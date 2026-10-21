@@ -1964,8 +1964,9 @@ compile-time error. *(ADR 0523)*
 (`+ - * /`, unary `-`, and `relu()`, `sigmoid()`, `tanh()` with no arguments)
 over names and float literals may run as one pass over the elements. The
 result is the same as the unfused calls, element by element, including traps
-and NaN, and the tree walker and the bytecode tier agree. A chain whose
-inputs don't share one shape, or that has a non-`float` input, runs unfused.
+and NaN, and the tree walker and the bytecode tier agree. A chain over
+`f32` tensors runs the same operations at `f32` (std.tensor.21). A chain whose
+inputs don't share one shape, or that has an `int` input, runs unfused.
 Fusion is not visible in the program. *(ADR 0524)*
 
 ```ail rules=std.tensor.20
