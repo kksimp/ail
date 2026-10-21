@@ -33,6 +33,10 @@ pub enum Ty
     Unit
     ## A function value: the address of a declared function (ADR 0573).
     Fn(params List[Ty], ret Ty)
+    ## A sized integer `i8 i16 i32 u8 u16 u32` (ADR 0834): in a register like
+    ## an `int`, sign- or zero-extended from its width, so its value is
+    ## always inside the type's range. `kind` is the type's name.
+    Sized(kind str)
 
 pub fn Ty.is_float(self) bool
     match self
@@ -55,6 +59,12 @@ pub fn Ty.elem(self) Ty?
         List(e) => e
         _ => none
 
+## A sized integer (ADR 0834).
+pub fn Ty.is_sized(self) bool
+    match self
+        Sized(_) => true
+        _ => false
+
 pub fn Ty.is_tensor(self) bool
     match self
         Tensor(_) => true
@@ -73,6 +83,7 @@ pub fn Ty.name(self) str
         Bool => "bool"
         Str => "str"
         Char => "char"
+        Sized(k) => k
         List(e) => "List[{e.name()}]"
         Map(k, v) => "Map[{k.name()}, {v.name()}]"
         Set(e) => "Set[{e.name()}]"

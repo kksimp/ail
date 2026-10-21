@@ -36,6 +36,8 @@ fn Lower.lower_unary(mut self, o ast.UnOp, operand ast.Expr, pos ast.Pos, want T
                 if wants_float(want)
                     return Val(id: fconst(-9223372036854775807.0 - 1.0), ty: Ty.Float)
                 return Val(id: konst(-9223372036854775807 - 1, Ty.Int), ty: Ty.Int)
+            if lit := negative_sized_lit(operand, want)
+                return lit
             a := lower_value(operand, want)?
             match a.ty
                 Int => Val(
@@ -130,6 +132,7 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
             a
         Str => str_binary(o, a, b, pos) else a
         Char => char_binary(o, a, b, pos) else a
+        Sized(_) => sized_binary(o, a, b, pos) else a
 
         _ =>
             if eq := self.list_equal(o, a, b)
@@ -212,6 +215,10 @@ fn Lower.lower_binary_expr(
 
 ## A method of an `int`: `to_float`, `abs`, `min`, `max`, the bit operations.
 fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if conv := sized_conversion(r, name, npos, vs)
+        return conv
+    if r.ty != Ty.Int
+        return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "to_float" and vs.len() == 0
         return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
     if name == "abs" and vs.len() == 0
