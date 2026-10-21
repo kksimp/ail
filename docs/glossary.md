@@ -97,6 +97,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Garlic** | The web browser written in AIL (`tools/garlic`): text mode first, with a page model for agents. See [garlic-browser.md](design/garlic-browser.md). |
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
+| **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`. |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
 | **Module fuzzer** | A template program in `bootstrap/tests/fuzz/modules/` that `fuzz_modules.rs` fills with seeded adversarial inputs (text, JSON, hex bytes, regexes, dates, HTTP) and runs on both tiers and, once it exists, natively (ADR 0461). |
@@ -163,6 +164,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
+| **Renderer** | The part of a host that turns a view tree into controls on screen; one per platform (SwiftUI on macOS), so the same AIL app runs everywhere a host exists (ADR 0838). |
 | **SameSite** | The cookie attribute (`Strict`, `Lax` or `None`) that limits which cross-site requests carry the cookie; the cookie jar honours it ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
 | **Spill** | Storing a value in memory because no register is free for it; the allocator spills the value cheapest to keep in memory ([ADR 0624](decisions/0624-loop-weighted-spill-choice.md)). |
 | **`std.args`** | The standard module for flags, options and positional arguments, with generated help ([ADR 0627](decisions/0627-std-args.md)). |
@@ -244,6 +246,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |
 | **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). A list or map of a unique type is unique too (ADR 0318). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
+| **View tree** | The `app.Node` value an app's `view` returns: labels, buttons, fields, toggles, rows, columns and canvases, as plain data a host draws (`std.app.2`, ADR 0838). |
 | **Vtable** | A table of function pointers for one type's implementation of a trait, used to call a method through `any Trait` at run time. Planned by ADR 0616 (lane 120, not yet landed). |
 | **Walk** | `fs.walk(dir)`: every file below a directory at any depth, as paths, sorted (`std.fs.8`, ADR 0281). |
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |

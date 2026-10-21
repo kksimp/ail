@@ -1,0 +1,55 @@
+## A to-do list in a native window (std.app, ADR 0838). Needs the app host,
+## so it is not part of the selftest: on macOS run
+## `tools/app-host/macos/run.sh examples/app_todo.ail`. `ail test` runs the
+## test below with no window.
+use std.app
+
+struct Todo
+    items List[str]
+    done Set[str]
+    draft str
+
+impl app.App for Todo
+    fn update(mut self, ev app.Event)
+        match ev.kind
+            "edit" => draft = ev.text
+            "submit" | "press" if ev.id == "add" or ev.kind == "submit" =>
+                if draft.trim() != ""
+                    items.push(draft.trim())
+                draft = ""
+            "toggle" =>
+                if not done.add(ev.id)
+                    done.remove(ev.id)
+            _ => return
+
+    fn view(self) app.Node
+        mut kids := [app.row([
+            app.field("draft", draft, "What needs doing?"),
+            app.button("add", "Add"),
+        ])]
+        for item in items
+            kids.push(app.toggle(item, item, done.contains(item)))
+        kids.push(app.label("{items.len() - done.len()} left"))
+        app.column(kids)
+
+    fn title(self) str
+        "To do"
+
+fn main()
+    mut t := Todo(items: [], done: {}, draft: "")
+    app.run(mut t) else err
+        print("no window: {err.kind}: {err.message}")
+
+@test fn adds_and_ticks()
+    mut t := Todo(items: [], done: {}, draft: "")
+    screens := app.script(mut t, [
+        app.edit("draft", "milk"),
+        app.press("add"),
+        app.edit("draft", "eggs"),
+        app.event("submit"),
+    ])
+    assert(screens[3].contains("[ ] milk #milk"))
+    mut tick := app.event("toggle")
+    tick.id = "milk"
+    app.script(mut t, [tick])
+    assert_eq(app.outline(t.view()).lines().last(), "  \"1 left\"")

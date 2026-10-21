@@ -108,6 +108,12 @@ the constructs their source uses are in the subset (so far `std.log` and `std.re
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0830)*
+readable yet, and on macOS the program traps at `proc.run`); and the standard
+modules written in AIL (`std.app`, `std.args`, `std.csv`, `std.log`, `std.net.http`,
+`std.net.jar`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log`; `std.app`
+waits for native `proc.start`, std.app.10). Any other construct is reported at its position under this rule, all of them
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0838)*
 
 ```ail
 fn steps(n int) int

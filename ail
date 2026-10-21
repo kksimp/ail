@@ -11,6 +11,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# std.app.10: a program finds the app host built under the toolchain.
+export AIL_ROOT="$root"
 manifest="$root/bootstrap/Cargo.toml"
 binary="$root/bootstrap/target/release/ail"
 pin="$(sed -n 's/^channel *= *"\(.*\)"$/\1/p' "$root/bootstrap/rust-toolchain.toml")"

@@ -6,7 +6,7 @@ use ast
 ## Effects that order a loop's iterations (conc.par.2): output, `unsafe`,
 ## tasks, and every capability.
 fn orders_loop(e str) bool
-    ["io", "unsafe", "hw", "spawn", "fs", "env", "proc", "clock", "random", "net", "ui"].contains(e)
+    ["io", "unsafe", "hw", "spawn", "fs", "env", "proc", "clock", "random", "net", "ui", "app"].contains(e)
 
 ## Built-in methods that change their receiver (type.coll.5-11).
 MUTATING := ["push", "pop", "swap", "sort", "remove", "add"]

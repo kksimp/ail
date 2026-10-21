@@ -144,6 +144,7 @@ bootstrap/                Rust bootstrap: lexer, parser, checker, interpreter (A
 compiler/                 the front end, checker and native backend written in AIL (ADR 0022)
 examples/                 example programs; NAME.out holds the expected output
 tools/
+  app-host/macos/          the std.app host: SwiftUI, built by run.sh (ADR 0838)
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
   check-doc-snippets.py   runs `ail check` on every `ail` and `ail fragment` block in the docs, outside `docs/spec/`

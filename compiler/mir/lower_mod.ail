@@ -25,6 +25,7 @@ STD_MODULES := [
 ## own: their source is in `bootstrap/src/std`, and each is a module of the
 ## program under its dotted path (`std.csv`).
 STD_AIL := [
+    "std.app",
     "std.args",
     "std.csv",
     "std.log",

@@ -198,11 +198,20 @@ fn implementations(prog ast.Program, tr int, n str) List[int]
                     break
     out
 
+## std.app.12: `app.run_host` of the standard module `std.app` (and so
+## `app.run`) gives `app`; the module is AIL source, so the rest of its
+## effects are inferred like any other code.
+fn starts_host(f ast.FnDecl) bool
+    # Module items carry their qualified names.
+    f.name == "std.app.run_host" and f.owner == none
+
 fn infer_effects(prog ast.Program, fx Facts) Effects
     mut direct := List[Map[str, str]]()
     mut calls := List[List[int]]()
     for f in prog.fns
         mut w := Walked(direct: signature_effects(f), calls: [])
+        if starts_host(f)
+            w.direct["app"] = "app.run_host"
         if body := f.body
             w.block(prog, fx, body)
         direct.push(w.direct)
