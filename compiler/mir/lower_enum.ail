@@ -32,6 +32,13 @@ fn Lower.declare_enum_names(mut self, prog ast.Program)
         else
             enums["{prefix}{e.name}"] = []
 
+## The prelude's `enum Ordering` (trait.std.2), registered once per program
+## unless the program declares an `Ordering` of its own: the Rust front end
+## adds it to the program it runs, but the native compiler reads only source.
+fn Lower.declare_prelude_enums(mut self)
+    if not enums.contains("Ordering")
+        enums["Ordering"] = [Case(name: n, fields: []) for n in ["Less", "Equal", "Greater"]]
+
 ## Type the variants' fields of each enum `declare_enum_names` recorded.
 fn Lower.declare_enums(mut self, prog ast.Program)
     for e in prog.enums
@@ -58,7 +65,10 @@ fn Lower.enum_key(self, name str) str?
         key := "{m}.{parts[1..].join(".")}"
         return if enums.contains(key) then key else none
     key := "{prefix}{name}"
-    if enums.contains(key) then key else none
+    if enums.contains(key)
+        return key
+    # The prelude's `Ordering` is visible in every module.
+    if name == "Ordering" and enums.contains(name) then name else none
 
 fn enum_name(t Ty) str?
     match t

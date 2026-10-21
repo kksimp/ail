@@ -201,6 +201,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         l.enter_file(k)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
+    l.declare_prelude_enums()
     for k in 0..srcs.len()
         l.enter_file(k)
         l.declare_struct_fields(srcs[k].prog)
@@ -1554,6 +1555,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
             if name == "abs" and vs.len() == 0
                 return Val(id: int_abs(r.id, npos), ty: Ty.Int)
+            if name == "cmp" and vs.len() == 1 and vs[0].ty == Ty.Int and enums.contains("Ordering")
+                return ordering(call("rt.int_cmp", [r.id, vs[0].id], Ty.Int))
             if (name == "min" or name == "max") and vs.len() == 1
                 return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
             # expr.bit.1-2
@@ -1571,6 +1574,11 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if (name == "sqrt" or name == "abs" or name == "floor" or name == "ceil")
                 and vs.len() == 0
                 return Val(id: op(name, [r.id], Ty.Float), ty: Ty.Float)
+            if name == "cmp"
+                and vs.len() == 1
+                and vs[0].ty == Ty.Float
+                and enums.contains("Ordering")
+                return ordering(call("rt.float_cmp", [r.id, vs[0].id], Ty.Int))
             # type.num.9
             if name == "round" and vs.len() == 0
                 return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
@@ -1645,6 +1653,11 @@ fn Lower.int_abs(mut self, a int, pos ast.Pos) int
     seal(join)
     cur = join
     r
+
+## The `Ordering` value of index `k`, as `rt.int_cmp` returns it.
+fn Lower.ordering(mut self, k int) Val
+    t := Ty.Enum("Ordering")
+    Val(id: op("copy", [k], t), ty: t)
 
 fn Lower.int_minmax(mut self, name str, a int, b int) int
     pick_a := op(if name == "min" then "le" else "ge", [a, b], Ty.Bool)
