@@ -608,3 +608,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
 | [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives (constant hoisting tried and dropped) *(delegated)* | Accepted | 2026-10-21 |
 | [0830](0830-native-raw-tcp.md) | Native raw TCP: sockets by system calls, handles in a table, `net.NetError` *(delegated)* | Accepted | 2026-10-21 |
+| [0820](0820-driver-level-unsafe.md) | `unsafe driver` manifest level unlocks hardware access through `std.hw`; 64-bit targets only | Accepted | 2026-10-21 |
+| [0823](0823-lower-ail-feature-files.md) | `lower.ail` is a core plus feature files with one-line hooks: a native feature lives in its own `lower_*.ail` and adds at most one dispatch line and one state field *(delegated)* | Accepted | 2026-10-21 |
+| [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
+| [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
+| [0836](0836-native-tls.md) | Native TLS: the in-house client ported to AIL in slices, starting with native `std.hash` *(delegated)* | Accepted | 2026-10-21 |
