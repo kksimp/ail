@@ -501,5 +501,6 @@ place (four doubles at a time, then element by element; a multiply and an add,
 never a fused one, so every result is the scalar one bit for bit; a non-zero
 `r` rounds each result to `f32` through `vcvtpd2ps`/`vcvtps2pd`). They are
 leaf code using only rax, rcx-r11 and xmm0-xmm4, and `inline.ail` never inlines
-an `rt.vec_*` function. ARM64 still runs the scalar bodies until its NEON
-kernels land.
+an `rt.vec_*` function. On ARM64 `compiler/a64/kernels.ail` assembles NEON
+loops in the same place (two doubles at a time, `fcvtn`/`fcvtl` for the `f32`
+rounding, x0-x9 and v0-v5 only), with the same results bit for bit.

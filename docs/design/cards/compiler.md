@@ -44,6 +44,8 @@ pub fn a64.registers() codegen.Target
 pub a64.LINUX := 1
 pub a64.MACOS := 2
 pub fn a64.generate(mir.Module, int) codegen.Image
+pub fn a64.is_kernel(str) bool
+pub fn a64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
 ## ast
@@ -334,4 +336,4 @@ pub fn x64.is_kernel(str) bool
 pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
-trimmed to fit 4000 tokens (~3713); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3744); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
