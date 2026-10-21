@@ -218,7 +218,7 @@ the interim for the GC (ADR 0407).
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-63 free. Each slot is a
+flag), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
@@ -317,8 +317,9 @@ call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `fmt_int`, `fmt_hex`, `fmt_bool`, `fmt_float`, `fmt_float_fixed`, `fmt_pad`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
-its value (empty on failure) and sets `os_ok()`; the lowering follows it
-with the status call.
+its value and, on failure, sets the error slot (global 8) to the display text
+of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
+`io_read_line` return a string or 0.
 
 The table below is the first draft:
 
