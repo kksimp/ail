@@ -49,7 +49,7 @@ fn inlinable(f Func) bool
     for blk in f.blocks
         n += blk.insts.len()
         for i in blk.insts
-            if i.op == "call" or i.op == "icall" or i.op == "prim" and i.name == "syscall"
+            if i.op == "call" or i.op == "icall" or i.op == "prim" and (i.name == "syscall" or i.name == "clone")
                 return false
         for t in blk.term.targets
             if t == 0

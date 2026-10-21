@@ -26,6 +26,9 @@ pub fn link(img codegen.Image, code int, data int, bss int) List[int]
 fn address(img codegen.Image, sym str, code int, data int, bss int) int
     if sym == "globals"
         return bss
+    if sym.starts_with("imp:")
+        k := img.imports.index_of(sym.replace("imp:", "")) else unreachable("no import {sym}")
+        return bss + 8 * (img.globals + k)
     if sym.starts_with("d:")
         return data + (img.data_syms.get(sym) else unreachable("no data {sym}"))
     code + (img.funcs.get(sym) else unreachable("no function {sym}"))

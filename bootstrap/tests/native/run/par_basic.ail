@@ -1,0 +1,75 @@
+# conc.par.1-5, 8, 11: `par for` runs its iterations in chunks on the pool;
+# the result is the sequential one (ADR 0601).
+fn weight(i int) int
+    mut w := 0
+    for k in 0..(i % 7)
+        w += k * i
+    w
+
+fn square(x int) int
+    x * x
+
+fn main()
+    perm := [2, 0, 3, 1]
+    mut out := [0, 0, 0, 0]
+    par for i in 0..4
+        out[perm[i]] = i * 10
+    mut total := 0
+    par for x in out
+        total += x
+    print(out)
+    print(total)
+    n := 2000
+    mut squares := List[int]()
+    mut grid := List[List[int]]()
+    for i in 0..n
+        squares.push(0)
+        grid.push([0, 0])
+    mut sum := 0
+    par for i in 0..n
+        squares[i] = square(i)
+        grid[i][1] = weight(i)
+        sum += weight(i)
+    print(squares[1999])
+    print(grid[100])
+    print(sum)
+    mut perm2 := List[int]()
+    for x in 0..n
+        perm2.push(x * 7 % n)
+    mut placed := List[int]()
+    for _ in 0..n
+        placed.push(-1)
+    par for i in 0..n
+        placed[perm2[i]] = i
+    print(placed[1])
+    print(placed[2])
+    print(placed[3])
+    mut halves := [0.0, 0.0, 0.0]
+    par for i in 0..3
+        halves[i] = i.to_float() / 2.0
+    print(halves)
+    scale := 3
+    mut bits := List[int]()
+    for _ in 0..100
+        bits.push(0)
+    par for i in 0..100
+        if i % 2 == 0
+            bits[i] = i * scale
+        else
+            bits[i] = 0 - i
+    print(bits[2])
+    print(bits[3])
+    print(bits[98])
+    print(bits[99])
+    # A body with its own loops, locals and a list of strings per iteration.
+    mut rows := List[str]()
+    for _ in 0..64
+        rows.push("")
+    par for y in 0..64
+        mut cells := []
+        for x in 0..8
+            cells.push(if (x + y) % 3 == 0 then "#" else ".")
+        rows[y] = cells.join("")
+    print(rows[0])
+    print(rows[1])
+    print(rows[63])

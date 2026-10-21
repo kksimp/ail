@@ -1,0 +1,35 @@
+# ADR 0599: tasks that allocate heavily while the collector runs. Each task
+# keeps a list of strings alive across many collections and checks it at the
+# end; the main thread allocates at the same time.
+fn churn(seed int, rounds int) int
+    mut keep := List[str]()
+    for i in 0..50
+        keep.push("keep {seed}-{i}")
+    mut total := 0
+    for r in 0..rounds
+        mut xs := List[int]()
+        for i in 0..200
+            xs.push(i * seed + r)
+        mut parts := List[str]()
+        for i in 0..8
+            parts.push("p{i}-{r}")
+        total += xs[199] + parts.join(",").len()
+    for i in 0..50
+        if keep[i] != "keep {seed}-{i}"
+            return -1
+        total += keep[i].len()
+    total
+
+fn main() !
+    a := spawn churn(3, 30000)
+    b := spawn churn(5, 30000)
+    c := spawn churn(7, 30000)
+    mine := churn(11, 30000)
+    print(a.wait()?)
+    print(b.wait()?)
+    print(c.wait()?)
+    print(mine)
+    mut sums := [0 for _ in 0..16]
+    par for i in 0..16
+        sums[i] = churn(i + 1, 4000)
+    print(sums)

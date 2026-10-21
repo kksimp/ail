@@ -144,11 +144,16 @@ fn gc_sweep()
 
 ## Collect garbage. Called by `alloc` when enough has been allocated.
 fn gc_collect()
+    # With threads, every other one parks first (native-abi.md §10); the
+    # collector holds the allocation lock, so none can allocate meanwhile.
+    gc_stop_world()
     m := heap_state()
     sp := gc_regs(m + 8 * H_REGS)
     hset(H_MARKN, 0)
     gc_scan_range(m + 8 * H_REGS, m + 8 * (H_REGS + 10))
-    gc_scan_range(sp, load64(global(STACK_TOP)))
+    gc_scan_range(sp, stack_end_self())
+    gc_scan_threads()
     gc_scan_range(global(OUT_BUF), globals_end())
     gc_drain()
     gc_sweep()
+    gc_start_world()

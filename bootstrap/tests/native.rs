@@ -348,6 +348,27 @@ fn build_refuses_programs_outside_the_subset() {
     assert!(err.contains("error[native.subset.1]"), "{err}");
 }
 
+/// A task program builds for macOS: its threads come from libSystem, so the
+/// Mach-O file carries a bind table naming `pthread_create` (native.task.1,
+/// ADR 0599); a program with no threads imports nothing.
+#[test]
+fn tasks_build_for_macos_with_imports() {
+    let tmp = std::env::temp_dir().join(format!("ail-native-macos-{}", std::process::id()));
+    let build = |name: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["build", &format!("bootstrap/tests/native/run/{name}.ail"), "--target", "aarch64-macos", "-o"])
+            .arg(&tmp)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        fs::read(&tmp).unwrap()
+    };
+    let has = |bytes: &[u8], needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+    assert!(has(&build("task_basic"), b"_pthread_create\0"));
+    assert!(!has(&build("arith"), b"_pthread_create\0"));
+    let _ = fs::remove_file(&tmp);
+}
 /// `compiler/rt/native/unicode.ail` is what `tools/native/gen_unicode.ail`
 /// writes from the interpreter's tables (native.str.1, ADR 0567), so a
 /// toolchain with newer Unicode data fails here until the file is regenerated.

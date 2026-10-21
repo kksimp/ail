@@ -31,6 +31,8 @@ pub enum Ty
     Tensor(elem Ty)
     Unknown
     Unit
+    ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
+    Atomic(elem Ty)
     ## A function value: the address of a declared function (ADR 0573).
     Fn(params List[Ty], ret Ty)
 
@@ -82,6 +84,7 @@ pub fn Ty.name(self) str
         Enum(n) => n
         Unknown => "?"
         Unit => "unit"
+        Atomic(e) => "Atomic[{e.name()}]"
         Fn(ps, r) =>
             mut names := List[str]()
             for p in ps

@@ -97,12 +97,14 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet, and on macOS the program traps at `proc.run`); and the standard
+readable yet, and on macOS the program traps at `proc.run`); `t := spawn f(args)`
+and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
+`store`, `cas` and `add` (`native.task.1`); and the standard
 modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
 `std.net.jar`, `std.time.date`), which build like a module of the program when
 the constructs their source uses are in the subset (so far `std.log`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0599–0601, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
 
 ```ail
 fn steps(n int) int
@@ -136,6 +138,23 @@ on a `str`, are those of the interpreter on every scalar value, read from
 tables generated from it (a capital sigma becomes the final form by the
 Unicode rule, with its case-ignorable set approximated by the apostrophes,
 dots, accents and combining marks). *(ADRs 0565, 0566, 0567)*
+
+**native.task.1** — Native code runs tasks and `par for` iterations in
+parallel on a pool of threads, at most 8 and no more than the cores the
+process may use (`conc.par.9`, `conc.par.7`). `spawn f(args)` takes a free
+function of the subset's types and copies a list argument (`conc.share.1`);
+`t.wait()?` is the task's result, and if the task trapped it ends the
+program as an uncaught `Trapped` does: `error: Trapped(rule: "R", message:
+"L:C: M")` on standard error, exit status 1. A `par for` gives the
+sequential result (`conc.par.1`): a chunk that traps, or a sum that would
+leave `int` at any point, makes it run in order (`conc.par.4`,
+`conc.par.11`), except in a loop that updates an atomic, which reports the
+trap it met (`conc.atomic.6`). Atomic operations are sequentially consistent
+whatever `order:` says (`conc.atomic.2`). The program's output is the
+interpreter's wherever the interpreter defines it (`conc.task.9`); `print`
+holds a lock for one statement, so lines from different tasks don't mix.
+On macOS the threads are libSystem's pthreads, bound at load by dyld. *(ADRs
+0599–0601)*
 
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first

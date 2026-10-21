@@ -56,7 +56,7 @@ pub fn is_remat(i mir.Inst) bool
 pub fn is_call(i mir.Inst) bool
     if i.op == "call"
         return not is_push(i)
-    i.op == "icall" or i.op == "prim" and i.name == "syscall"
+    i.op == "icall" or i.op == "prim" and (i.name == "syscall" or i.name == "clone" or i.name == "restart")
 
 pub fn is_push(i mir.Inst) bool
     i.op == "call"

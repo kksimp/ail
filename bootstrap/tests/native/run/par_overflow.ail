@@ -1,0 +1,7 @@
+# conc.par.4: a sum overflows, and traps, exactly where the sequential sum
+# would, even when no chunk's own sum does (ADR 0601).
+fn main()
+    mut total := 0
+    par for i in 0..100
+        total += if i == 0 then 9223372036854775807 else if i == 50 then 1 else if i == 51 then -1 else 0
+    print(total)
