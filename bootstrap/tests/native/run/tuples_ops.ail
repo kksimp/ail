@@ -1,0 +1,36 @@
+fn main()
+    xs := [(3, "c"), (1, "b"), (1, "a"), (2, "z")]
+    print(xs)
+    print(xs.sorted())
+    mut ys := xs
+    ys.sort()
+    print(ys)
+    print(xs.contains((1, "b")))
+    print(xs.contains((9, "b")))
+    print(xs.index_of((2, "z")) else 99)
+    print(xs.index_of((7, "z")) else 99)
+    print(xs.min() else (0, ""))
+    print(xs.max() else (0, ""))
+    e := List[(int, str)]()
+    print(e.max() else (0, "none"))
+    print(e)
+    fs := [(1.5, 2), (0.5, 9), (1.5, 1)]
+    print(fs.sorted())
+    nan := 0.0 / 0.0
+    ns := [(nan, 1), (2.0, 3), (-1.0, 0)]
+    print(ns.sorted().len())
+    print((1.0, 2) < (nan, 0))
+    print((nan, 0) < (1.0, 2))
+    print((nan, 0) <= (nan, 0))
+    ps := [("bob", 31), ("ann", 27), ("cy", 31), ("dee", 27)]
+    top := ps.sorted(by: |p| (-p.1, p.0))
+    print(top)
+    print(ps.sorted(by: |p| p.1))
+    nested := [([1, 2], "a"), ([3], "b")]
+    print(nested)
+    ts := [((1, 2), 3), ((0, 5), 1)]
+    print(ts.sorted())
+    mut zs := xs.sorted()
+    zs[0].0 = 100
+    print(xs[2])
+    print(zs[0])

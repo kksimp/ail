@@ -45,12 +45,13 @@ fn is_sorting(name str, args List[ast.Arg]) bool
 ## `r.sorted()`, `r.sorted(by: |x| e)`, `r.sort()`, `r.sort(by: |x| e)`.
 fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
     e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
-    if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str)
+    if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str or structural(e))
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if args.len() > 1
         return unsupported(npos, "`.{name}()` with {args.len()} arguments")
     n := op("len", [r.id], Ty.Int)
     mut keys := r.id
+    mut kt := Ty.Int
     if args.len() == 0
         if e != Ty.Int
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
@@ -68,7 +69,8 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         scopes.pop()
         # A problem still closes the loop, so the half-built function stays well formed.
         if kv := k
-            if kv.ty == Ty.Int
+            if kv.ty == Ty.Int or orderable_record(kv.ty)
+                kt = kv.ty
                 call("rt.list_push", [keys, kv.id], Ty.Unit)
             else
                 problem(
@@ -76,11 +78,14 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
                     "not in the native subset yet: a key of type `{kv.ty.name()}`",
                 )
         count_close(c)
-    perm := call("rt.sort_perm", [keys], Ty.List(Ty.Int))
+    perm := if kt == Ty.Int then call("rt.sort_perm", [keys], Ty.List(Ty.Int)) else tuple_sort_perm(keys, kt)
     out := call("rt.list_new", [n], r.ty)
     c := count_open(n)
     idx := op("get", [perm, c.i], Ty.Int)
-    call(push_fn(e), [out, op("get", [r.id, idx], e)], Ty.Unit)
+    mut item := op("get", [r.id, idx], e)
+    if name == "sorted" and needs_copy(e)
+        item = copy_value(Val(id: item, ty: e))
+    call(push_fn(e), [out, item], Ty.Unit)
     count_close(c)
     if name == "sorted"
         return Val(id: out, ty: r.ty)

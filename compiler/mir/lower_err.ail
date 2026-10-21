@@ -694,6 +694,7 @@ fn Lower.display_call(mut self, v Val) int?
         Struct(k) => k
         Enum(k) => k
         Tuple => return tuple_text(v)
+        List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
