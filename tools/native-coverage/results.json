@@ -1,6 +1,6 @@
 {
  "date": "2026-10-21",
- "commit": "eb0088f6",
+ "commit": "2153c0aa",
  "programs": [
   {
    "file": "bootstrap/tests/cases/absent_try.ail",
@@ -216,7 +216,6 @@
     "not in the native subset yet: `fs.write_bytes`",
     "not in the native subset yet: `fs.append_bytes`",
     "not in the native subset yet: `fs.read_bytes`",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)",
     "not in the native subset yet: maps"
    ],
    "first": "not in the native subset yet: `bytes` literals",
@@ -342,7 +341,6 @@
    "status": "not-subset",
    "problems": [
     "error enum `BadNumber` isn't in the native subset yet",
-    "not in the native subset yet: a comprehension whose element type isn't known",
     "not in the native subset yet: `.to_int()` on `str`",
     "not in the native subset yet: set comprehensions",
     "not in the native subset yet: map comprehensions",
@@ -1793,9 +1791,6 @@
    "file": "bootstrap/tests/cases/float_int_literal_rule.ail",
    "status": "not-subset",
    "problems": [
-    "expected `float`, found `int`",
-    "expected `float`, found `int`",
-    "expected `float`, found `int`",
     "not in the native subset yet: printing a `P`",
     "not in the native subset yet: printing a `Stats`",
     "not in the native subset yet: printing a `Shape`",
@@ -1804,7 +1799,7 @@
     "`<=` on `int` and `float`",
     "not in the native subset yet: printing a `P`"
    ],
-   "first": "expected `float`, found `int`",
+   "first": "not in the native subset yet: printing a `P`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -1867,9 +1862,9 @@
    "file": "bootstrap/tests/cases/float_parse_grammar.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.to_float()` on `str`"
+    "not in the native subset yet: printing a `float?`"
    ],
-   "first": "not in the native subset yet: `.to_float()` on `str`",
+   "first": "not in the native subset yet: printing a `float?`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -1892,15 +1887,15 @@
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: string interpolation outside `print`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`"
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`"
    ],
    "first": "not in the native subset yet: `.repeat()` on `str`",
    "detail": "",
@@ -1915,15 +1910,12 @@
     "this `else` must leave: `return`, `break` or `continue`",
     "not in the native subset yet: calling `Bad`",
     "not in the native subset yet: `?` with a context message",
-    "not in the native subset yet: `.to_float()` on `str`",
     "expected `float`, found `int`",
     "expected `float`, found `int`",
     "not in the native subset yet: printing a `float?`",
     "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
+    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `float?`",
     "not in the native subset yet: `.to_int()` on `str`",
     "not in the native subset yet: `.to_int()` on `str`",
     "not in the native subset yet: `.to_int()` on `str`"
@@ -1939,7 +1931,7 @@
    "problems": [
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: string interpolation outside `print`",
-    "not in the native subset yet: `.to_float()` on `str`",
+    "not in the native subset yet: printing a `float?`",
     "not in the native subset yet: string interpolation outside `print`"
    ],
    "first": "not in the native subset yet: string interpolation outside `print`",
@@ -2620,7 +2612,6 @@
    "file": "bootstrap/tests/cases/key_functions.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: a comprehension whose element type isn't known",
     "not in the native subset yet: this method call",
     "not in the native subset yet: a comprehension whose element type isn't known",
     "not in the native subset yet: this method call",
@@ -2634,7 +2625,7 @@
     "not in the native subset yet: `.take()` on `List[int]`",
     "not in the native subset yet: `.take()` on `List[int]`"
    ],
-   "first": "not in the native subset yet: a comprehension whose element type isn't known",
+   "first": "not in the native subset yet: this method call",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3685,14 +3676,11 @@
    "status": "not-subset",
    "problems": [
     "not in the native subset yet: `.split()` on `str`",
-    "expected `int`, found `??`",
     "not in the native subset yet: printing a `str?`",
     "not in the native subset yet: printing a `int?`",
     "not in the native subset yet: printing a `int?`",
-    "expected `??`, found `int`",
-    "not in the native subset yet: printing a `??`",
-    "expected `??`, found `int`",
-    "not in the native subset yet: printing a `??`"
+    "not in the native subset yet: printing a `int?`",
+    "not in the native subset yet: printing a `int?`"
    ],
    "first": "not in the native subset yet: `.split()` on `str`",
    "detail": "",
@@ -4318,26 +4306,25 @@
    "file": "bootstrap/tests/cases/std_compress_files.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
     "not in the native subset yet: `fs.walk`",
     "not in the native subset yet: string interpolation outside `print`",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
     "not in the native subset yet: `fs.walk`",
-    "not in the native subset yet: string interpolation outside `print`",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)"
+    "not in the native subset yet: string interpolation outside `print`"
    ],
-   "first": "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
+   "first": "not in the native subset yet: string interpolation outside `print`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4414,13 +4401,13 @@
    "file": "bootstrap/tests/cases/std_env.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `env.get` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: printing a `str?`",
     "`!=` on `str` isn't in the native subset yet",
     "`!=` on `str` isn't in the native subset yet",
     "not in the native subset yet: `.ends_with()` on `str`",
     "`!=` on `str` isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: `env.get` outside `else` (error values come with lane 175)",
+   "first": "not in the native subset yet: printing a `str?`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4429,21 +4416,13 @@
    "file": "bootstrap/tests/cases/std_fs.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
     "not in the native subset yet: string interpolation outside `print`",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.append_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.list_dir` outside `else` (error values come with lane 175)",
-    "`else err` isn't in the native subset yet: error values come with lane 175",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: `.kind` on `str`",
+    "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: string interpolation outside `print`"
    ],
-   "first": "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
+   "first": "not in the native subset yet: string interpolation outside `print`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4463,13 +4442,13 @@
    "file": "bootstrap/tests/cases/std_fs_walk.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: `fs.walk`",
     "not in the native subset yet: `fs.glob`",
     "not in the native subset yet: `fs.glob`",
@@ -4479,18 +4458,18 @@
     "not in the native subset yet: `fs.metadata`",
     "not in the native subset yet: `fs.metadata`",
     "not in the native subset yet: `fs.copy`",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
-    "not in the native subset yet: `fs.rename` outside `else` (error values come with lane 175)",
     "not in the native subset yet: string interpolation outside `print`",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
+    "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: `fs.copy`",
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: `fs.metadata`",
     "not in the native subset yet: `fs.walk`",
     "not in the native subset yet: `fs.walk`",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)"
+    "not in the native subset yet: string interpolation outside `print`"
    ],
-   "first": "not in the native subset yet: `fs.make_dir` outside `else` (error values come with lane 175)",
+   "first": "not in the native subset yet: string interpolation outside `print`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4535,13 +4514,12 @@
    "file": "bootstrap/tests/cases/std_implicit.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
     "`path` isn't in the native subset yet (only locals, parameters and constants)",
     "`path` isn't in the native subset yet (only locals, parameters and constants)",
     "this `else` block needs a value",
     "not in the native subset yet: `.kind` on `str`"
    ],
-   "first": "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
+   "first": "`path` isn't in the native subset yet (only locals, parameters and constants)",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4559,10 +4537,10 @@
    "file": "bootstrap/tests/cases/std_io.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `io.read_line` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: printing a `str?`",
     "`==` on `str` isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: `io.read_line` outside `else` (error values come with lane 175)",
+   "first": "not in the native subset yet: printing a `str?`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5626,11 +5604,11 @@
     "not in the native subset yet: `.to_int()` on `str`",
     "not in the native subset yet: `.to_int()` on `str`",
     "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`",
-    "not in the native subset yet: `.to_float()` on `str`"
+    "not in the native subset yet: a list of `float?`",
+    "not in the native subset yet: a list of `float?`",
+    "not in the native subset yet: a list of `float?`",
+    "not in the native subset yet: a list of `float?`",
+    "not in the native subset yet: a list of `float?`"
    ],
    "first": "not in the native subset yet: `.to_int()` on `str`",
    "detail": "",
@@ -6534,8 +6512,7 @@
     "not in the native subset yet: string interpolation outside `print`",
     "`path` isn't in the native subset yet (only locals, parameters and constants)",
     "not in the native subset yet: `?` with a context message",
-    "`proc` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)"
+    "`proc` isn't in the native subset yet (only locals, parameters and constants)"
    ],
    "first": "not in the native subset yet: string interpolation outside `print`",
    "detail": "",
@@ -6558,7 +6535,6 @@
    "status": "not-subset",
    "problems": [
     "parameter `doc`: its type isn't in the native subset yet",
-    "not in the native subset yet: a comprehension whose element type isn't known",
     "not in the native subset yet: `.lines()` on `str`",
     "`==` on `str` isn't in the native subset yet",
     "`path` isn't in the native subset yet (only locals, parameters and constants)",
@@ -6578,6 +6554,19 @@
     "`main`: its result type isn't in the native subset yet"
    ],
    "first": "`main`: its result type isn't in the native subset yet",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
+   "file": "examples/chan_pipe.ail",
+   "status": "not-subset",
+   "problems": [
+    "parameter `ch`: its type isn't in the native subset yet",
+    "not in the native subset yet: `Channel[...]`",
+    "not in the native subset yet: `spawn`"
+   ],
+   "first": "parameter `ch`: its type isn't in the native subset yet",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -6627,8 +6616,7 @@
    "status": "not-subset",
    "problems": [
     "field `env`: its type isn't in the native subset yet",
-    "field `health`: its type isn't in the native subset yet",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: calling `Service.from_json`",
     "not in the native subset yet: calling `parse_json`",
     "not in the native subset yet: calling `Service.from_json`",
@@ -6657,7 +6645,7 @@
    "status": "not-subset",
    "problems": [
     "not in the native subset yet: `.split()` on `str`",
-    "not in the native subset yet: `fs.read_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: maps",
     "not in the native subset yet: maps",
     "not in the native subset yet: maps",
@@ -6672,7 +6660,7 @@
    "file": "examples/dashboard.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.list_dir` outside `else` (error values come with lane 175)",
+    "`path` isn't in the native subset yet (only locals, parameters and constants)",
     "field `list`: its type isn't in the native subset yet",
     "field `preview`: its type isn't in the native subset yet",
     "field `refresh`: its type isn't in the native subset yet",
@@ -6695,7 +6683,19 @@
     "not in the native subset yet: `.contains()` on `List[str]`",
     "`widgets` isn't in the native subset yet (only locals, parameters and constants)"
    ],
-   "first": "not in the native subset yet: `fs.list_dir` outside `else` (error values come with lane 175)",
+   "first": "`path` isn't in the native subset yet (only locals, parameters and constants)",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
+   "file": "examples/days_left.ail",
+   "status": "not-subset",
+   "problems": [
+    "`date` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `?` with a context message"
+   ],
+   "first": "`date` isn't in the native subset yet (only locals, parameters and constants)",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -6710,6 +6710,17 @@
     "attribute `@test` isn't in the native subset yet"
    ],
    "first": "`net` isn't in the native subset yet (only locals, parameters and constants)",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
+   "file": "examples/digest_lines.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `?` with a context message"
+   ],
+   "first": "not in the native subset yet: `?` with a context message",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -6754,6 +6765,17 @@
    "negative": false
   },
   {
+   "file": "examples/frames.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `bytes` literals"
+   ],
+   "first": "not in the native subset yet: `bytes` literals",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
    "file": "examples/gradebook.ail",
    "status": "built-match",
    "problems": [],
@@ -6763,10 +6785,36 @@
    "negative": false
   },
   {
+   "file": "examples/gz_check.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `?` with a context message",
+    "not in the native subset yet: string interpolation outside `print`",
+    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
+    "`compress` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "not in the native subset yet: `?` with a context message",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
    "file": "examples/hello.ail",
    "status": "built-match",
    "problems": [],
    "first": "",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
+   "file": "examples/hex_base64.ail",
+   "status": "not-subset",
+   "problems": [
+    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
+    "`bytes` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -6801,7 +6849,6 @@
     "not in the native subset yet: calling `MiniError`",
     "not in the native subset yet: `.join()` on `List[?]`",
     "not in the native subset yet: `?` on a `Token`",
-    "field `value`: its type isn't in the native subset yet",
     "not in the native subset yet: `.contains()` on `List[str]`",
     "`expected`: its result type isn't in the native subset yet",
     "not in the native subset yet: `?` on a `Stmt`",
@@ -6815,7 +6862,6 @@
     "not in the native subset yet: `?` on a `str`",
     "not in the native subset yet: `?` on a `str`",
     "not in the native subset yet: `?` on a `Token`",
-    "not in the native subset yet: `none` where no optional is expected",
     "not in the native subset yet: `?` on a `Expr`",
     "`==` on `str` isn't in the native subset yet",
     "not in the native subset yet: `?` on a `Expr`",
@@ -6839,18 +6885,16 @@
     "`!=` on `str` isn't in the native subset yet",
     "not in the native subset yet: `?` on a `Expr`",
     "not in the native subset yet: `?` on a `Token`",
-    "not in the native subset yet: `none` where no optional is expected",
-    "not in the native subset yet: `none` where no optional is expected",
-    "not in the native subset yet: `none` where no optional is expected",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "field `scopes`: its type isn't in the native subset yet",
     "not in the native subset yet: `.len()` on `?`",
     "not in the native subset yet: indexing a `?`",
-    "`get`: its result type isn't in the native subset yet",
+    "not in the native subset yet: indexing a `?`",
     "field `functions`: its type isn't in the native subset yet",
     "not in the native subset yet: maps",
     "`undefined_variable`: its result type isn't in the native subset yet",
-    "not in the native subset yet: calling `Int`",
+    "this `else` must leave: `return`, `break` or `continue`",
+    "not in the native subset yet: calling `MiniError`",
     "not in the native subset yet: `?` on a `Flow`",
     "not in the native subset yet: `?` on a `Flow`",
     "not in the native subset yet: maps",
@@ -6864,9 +6908,8 @@
     "indexing a `?` isn't in the native subset yet",
     "not in the native subset yet: `?` on a `Value`",
     "not in the native subset yet: `?` on a `Value`",
+    "not in the native subset yet: `?` on a `Value`",
     "expected `Value`, found `str`",
-    "not in the native subset yet: calling `Int`",
-    "not in the native subset yet: calling `Str`",
     "this `else` must leave: `return`, `break` or `continue`",
     "not in the native subset yet: `?` on a `Value`",
     "`==` on `str` isn't in the native subset yet",
@@ -6893,7 +6936,6 @@
     "not in the native subset yet: `.checked_sub()` on `int`",
     "not in the native subset yet: `.checked_mul()` on `int`",
     "not in the native subset yet: `.checked_div()` on `int`",
-    "not in the native subset yet: calling `Int`",
     "not in the native subset yet: calling `unreachable`",
     "`wrong_arguments`: its result type isn't in the native subset yet",
     "`==` on `str` isn't in the native subset yet",
@@ -6954,9 +6996,7 @@
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: `.split()` on `str`",
-    "`get`: its result type isn't in the native subset yet",
-    "`at`: its result type isn't in the native subset yet",
-    "`query`: its result type isn't in the native subset yet",
+    "`==` on `str` isn't in the native subset yet",
     "field `counts`: its type isn't in the native subset yet",
     "indexing a `?` isn't in the native subset yet",
     "not in the native subset yet: map comprehensions",
@@ -7138,12 +7178,36 @@
    "negative": false
   },
   {
+   "file": "examples/redact_mail.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `?` with a context message",
+    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "not in the native subset yet: `?` with a context message",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
    "file": "examples/regex.ail",
    "status": "not-subset",
    "problems": [
     "`main`: its result type isn't in the native subset yet"
    ],
    "first": "`main`: its result type isn't in the native subset yet",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
+   "file": "examples/regex_codes.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `?` with a context message",
+    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "not in the native subset yet: `?` with a context message",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7246,7 +7310,6 @@
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: `.index_of()` on `List[str]`",
     "not in the native subset yet: `.to_int()` on `str`",
-    "`parse`: its result type isn't in the native subset yet",
     "field `cmp`: its type isn't in the native subset yet",
     "field `c`: its type isn't in the native subset yet",
     "not in the native subset yet: string interpolation outside `print`",
@@ -7265,6 +7328,8 @@
     "not in the native subset yet: `?` on a `Expr`",
     "not in the native subset yet: `?` on a `Expr`",
     "not in the native subset yet: calling `Unexpected`",
+    "not in the native subset yet: `?` on a `Pos`",
+    "not in the native subset yet: `?` on a `Pos`",
     "`!=` on `str` isn't in the native subset yet",
     "not in the native subset yet: calling `UnknownFunc`",
     "not in the native subset yet: `?` on a `Expr`",
@@ -7280,14 +7345,17 @@
     "`DivZero` isn't in the native subset yet (only locals, parameters and constants)",
     "error enum `LoadError` isn't in the native subset yet",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
-    "`parse_content`: its result type isn't in the native subset yet",
-    "field `content`: its type isn't in the native subset yet",
+    "`==` on `str` isn't in the native subset yet",
+    "not in the native subset yet: `.strip_prefix()` on `str`",
+    "not in the native subset yet: `.strip_prefix()` on `str`",
+    "not in the native subset yet: `.to_int()` on `str`",
     "not in the native subset yet: `.split()` on `str`",
     "field `cells`: its type isn't in the native subset yet",
     "field `memo`: its type isn't in the native subset yet",
     "field `active`: its type isn't in the native subset yet",
     "not in the native subset yet: maps",
-    "not in the native subset yet: `if content := e` on a `?`",
+    "indexing a `?` isn't in the native subset yet",
+    "not in the native subset yet: `.remove()` on `?`",
     "not in the native subset yet: maps",
     "not in the native subset yet: `.get()` on `?`",
     "not in the native subset yet: `.get()` on `?`",
@@ -7325,6 +7393,17 @@
     "not in the native subset yet: `.lines()` on `str`"
    ],
    "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
+   "file": "examples/shift_dates.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `?` with a context message"
+   ],
+   "first": "not in the native subset yet: `?` with a context message",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7374,15 +7453,29 @@
    "negative": false
   },
   {
+   "file": "examples/task_sum.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `spawn`",
+    "not in the native subset yet: `spawn`",
+    "not in the native subset yet: `spawn`",
+    "not in the native subset yet: `spawn`"
+   ],
+   "first": "not in the native subset yet: `spawn`",
+   "detail": "",
+   "source": "examples",
+   "negative": false
+  },
+  {
    "file": "examples/tasks.ail",
    "status": "not-subset",
    "problems": [
     "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: `?` with a context message",
     "`Json` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
     "not in the native subset yet: calling `parse_json`",
-    "not in the native subset yet: `fs.remove` outside `else` (error values come with lane 175)",
+    "not in the native subset yet: string interpolation outside `print`",
     "attribute `@test` isn't in the native subset yet",
     "attribute `@test` isn't in the native subset yet"
    ],
