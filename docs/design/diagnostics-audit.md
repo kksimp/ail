@@ -236,3 +236,36 @@ Still open: a silent `t[0][1]` on a one-dimensional tensor (OQ-122); the
 program is left out of the corpus. A `(a, b)` tuple has no fix (needs the
 closing parenthesis extent). `regex.sub` has no fix (argument order differs
 from Python).
+## Token audit of the mistakes corpus (lane 220, 2026-10-21)
+Non-normative. The corpus has 154 programs (not 250), and they give 156
+diagnostics. Each diagnostic is measured as the text `ail check FILE` prints for
+it: the header, the source line and caret, `help`, `note`, `fix` lines
+(`mistral-spm-v1` column of tokbench). Each program is run from its own
+directory, so the path is the bare file name an agent would see. Run from the
+repository root, the path `bootstrap/tests/mistakes/` adds about 1,480 tokens
+(83.4 mean against 73.9); that is a corpus artifact, not a diagnostic cost.
+| Measure | Before | After |
+|---|---|---|
+| diagnostics | 156 | 156 |
+| total tokens | 11,534 | 11,456 |
+| mean tokens per diagnostic | 73.9 | 73.4 |
+Where the tokens are (before, all 156): headers 6,406 with the repository path
+(about 4,900 with bare names), help lines 3,470, source and caret lines 1,322,
+`fix` lines 877, `note` lines 275. The 30 longest are 88–177 tokens each (with
+the repository path); most are one help sentence and one note.
+What changed: the text form no longer repeats a `fix:` line whose title equals
+the `help:` line (11 cases). JSON output (ADR 0145) keeps every fix title. Net
+saving: 78 tokens, 0.7%.
+What was not changed, and why:
+- Help sentences: each one is the fix hint an agent acts on (`mut xs := ...`,
+  the list of allowed field types, the `0..n` / `1..=n` forms). Shortening them
+  removes the hint or its examples, which the lane's rule forbids.
+- The `note:` location for derived code (`at gen:impl:...`): it is the only
+  handle to the generated code, so it stays.
+- Source and caret lines: they give the location; the caret needs them.
+- The `bit_and` help (about 100 tokens, two diagnostics): its last clause is the
+  reason `&` is absent. A shorter wording was considered and rejected because it
+  drops that reason.
+Conclusion: the diagnostics are already close to the floor for their content.
+The realistic cut is about 1%. The larger cost is the file path in the header,
+which an agent pays only when it runs the compiler from the repository root.
