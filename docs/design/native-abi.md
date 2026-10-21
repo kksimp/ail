@@ -479,5 +479,5 @@ std.tensor.5's 16 partial sums.
 Step 3 (matmul, activations): `rt.tensor_matmul_fault` and `rt.tensor_matmul`
 (the plain triple loop of std.tensor.7, each product and sum rounded, no fused
 multiply-add; 0 on `int` overflow, as above), and `rt.tensor_activate` (`kind`
-0 `relu`, 1 `sigmoid` through `rt.float_exp`). `tanh` waits for a native
-`expm1`.
+0 `relu`, 1 `sigmoid` through `rt.float_exp`, 2 `tanh` through `rt.float_tanh`,
+fdlibm's, which uses `rt.float_expm1`).
