@@ -1,0 +1,4 @@
+{"test":"tuple_order_matches_elements","status":"pass","line":4,"col":10,"message":"","cases":100,"seed":16226063521220895472}
+{"test":"take_apart_and_rebuild","status":"pass","line":8,"col":10,"message":"","cases":100,"seed":796239676247169597}
+{"test":"enumerate_pairs_index","status":"pass","line":12,"col":10,"message":"","cases":100,"seed":7213616274917196532}
+{"summary":true,"passed":3,"failed":0}

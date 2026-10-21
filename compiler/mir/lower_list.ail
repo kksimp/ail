@@ -1,6 +1,6 @@
 ## List methods that edit, search or order a list (type.coll.9, 11, 14;
 ## ADR 0605): `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop`,
-## `contains`, `sort` and `sorted`. Each is a runtime call
+## `contains`, `sort`, `sorted` and `take` (type.coll.15). Each is a runtime call
 ## (`compiler/rt/native/list.ail`); the index checks are MIR checks, so a
 ## trap names the interpreter's rule and position.
 ##
@@ -21,6 +21,7 @@ fn is_list_edit(name str) bool
         or name == "sort"
         or name == "sorted"
         or name == "swap"
+        or name == "take"
         or name == "sum"
         or name == "min"
         or name == "max"
@@ -142,6 +143,10 @@ fn Lower.lower_list_edit(
         checked("get", [r.id, vs[1].id], bounds_site(npos), e)
         call("rt.list_swap", [r.id, vs[0].id, vs[1].id, size], Ty.Unit)
         return unit
+    if name == "take" and vs.len() == 1
+        n := convert(vs[0], Ty.Int, npos)
+        texts := trap_texts("type.coll.15", npos)
+        return Val(id: call("rt.list_take", [r.id, n, size, texts[0], texts[1]], r.ty), ty: r.ty)
     if name == "sum" and vs.len() == 0
         if e == Ty.Float
             return Val(id: call("rt.list_sum_float", [r.id], Ty.Float), ty: Ty.Float)
@@ -232,9 +237,7 @@ fn Lower.lower_pop_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     seal(missing)
     cur = missing
     match other
-        Fallback(x) =>
-            f := lower_value(x, e)?
-            jump(join, [convert(f, e, pos)])
+        Fallback(x) => fallback_jump(x, e, join, pos)
         Leave(st) =>
             lower_stmt(st)
             if not done()
@@ -264,3 +267,47 @@ fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
     if op_name(o) == "ne"
         return Val(id: op("not", [same], Ty.Bool), ty: Ty.Bool)
     Val(id: same, ty: Ty.Bool)
+
+## `xs[i]`, `xs[a..b]`, and `m[k]` on a map.
+fn Lower.lower_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
+    l := lower_value(recv, none)?
+    if l.ty.is_coll()
+        return lower_coll_index(l, index, pos)
+    elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
+    if is_range(index)
+        return match index
+            Range(lo, hi, incl, rpos) => lower_slice(l, lo, hi, incl, rpos)
+            _ => none
+    i := lower_value(index, Ty.Int)?
+    Val(id: checked("get", [l.id, i.id], bounds_site(pos), elem), ty: elem)
+
+## A method of a list: `len`, `join`, `push` and the edits.
+fn Lower.list_method(
+    mut self,
+    e Ty,
+    r Val,
+    name str,
+    npos ast.Pos,
+    vs List[Val],
+    args List[ast.Arg],
+    recv ast.Expr,
+) Val?
+    if name == "len" and vs.len() == 0
+        return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
+    # type.coll.9
+    if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
+        return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+    if name == "join" and vs.len() == 1 and e == Ty.Char and vs[0].ty == Ty.Str
+        return Val(id: call("rt.list_join_chars", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
+    if is_list_edit(name)
+        return lower_list_edit(r, e, name, npos, args, vs)
+    if name == "push" and vs.len() == 1
+        mut el := e
+        if e.is_unknown()
+            el = vs[0].ty
+            retype(recv, Ty.List(el))
+        # A list pushed from a place is copied: lists are values (ADR 0060).
+        item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
+        call(push_fn(el), [r.id, convert(item, el, npos)], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
+    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")

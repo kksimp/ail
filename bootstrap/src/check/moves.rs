@@ -117,6 +117,12 @@ impl<'p> Walker<'p> {
                 }
                 self.declare(name);
             }
+            Stmt::LetTuple { names, value, .. } => {
+                self.expr(value);
+                for b in names {
+                    self.declare(&b.name);
+                }
+            }
             Stmt::Assign { target, op, value, .. } => {
                 self.expr(value);
                 match target {
@@ -292,7 +298,7 @@ impl<'p> Walker<'p> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => self.exprs(items),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => self.exprs(items),
             Expr::Map(pairs, _) => {
                 for (k, v) in pairs {
                     self.expr(k);
@@ -406,6 +412,7 @@ impl<'p> Walker<'p> {
                 entry = self.state.clone();
             }
             self.declare(&c.var);
+            c.unpack.iter().for_each(|b| self.declare(&b.name));
             if let Some(cond) = &c.cond {
                 self.expr(cond);
             }
@@ -417,6 +424,7 @@ impl<'p> Walker<'p> {
         self.scope.truncate(mark);
         if let Some(st) = &mut self.state {
             clauses.iter().for_each(|c| _ = st.remove(&c.var));
+            clauses.iter().flat_map(|c| &c.unpack).for_each(|b| _ = st.remove(&b.name));
         }
         let (Some(entry), Some(now)) = (entry, &self.state) else { return };
         let mut again: Vec<(&String, &Moved)> = now.iter().filter(|(n, _)| !entry.contains_key(*n)).collect();
@@ -436,7 +444,8 @@ impl<'p> Walker<'p> {
                     self.declare(n);
                 }
             }
-            Pattern::Or(alts, _) => alts.iter().for_each(|a| self.pattern(a)),
+            Pattern::Or(alts, _) | Pattern::Tuple(alts, _) => alts.iter().for_each(|a| self.pattern(a)),
+            Pattern::Bind(n, _) => self.declare(n),
             Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }

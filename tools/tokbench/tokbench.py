@@ -30,8 +30,8 @@ DEFAULT_CLAUDE_MODEL = os.environ.get("TOKBENCH_CLAUDE_MODEL", "")  # set to the
 
 # Token budgets for the agent-facing pages, checked by --check-budgets on the
 # offline five-tokenizer mean (the mean column). Change budgets here only.
-# The language card: ADR 0276 (8,000). The quick reference: 12,518 (no ADR in
-# this tree states it; see tools/tokbench/README.md).
+# The language card: ADR 0276 (8,000). The quick reference: 12,518. Both are
+# the five-tokenizer mean, recorded in ADR 0817.
 BUDGETS = {
     "docs/language-card.md": 8000,
     "docs/quick-reference.md": 12518,
