@@ -74,10 +74,10 @@ Instruction counts (callgrind, `instr.sh`, 5 runs each):
 - Instruction counts miss cache, branch and allocator effects. Confirm a small
   change in wall time with a timed run.
 
-Wall time (`run.sh` medians, 10 runs each):
+Wall time (medians of 10 runs, `race.py` helpers, not `run.sh`):
 
-- Spread is large on this VM: 20–170% for native and C runs of 5–80 ms, and
-  30–100% for `ail run`. Short runs cannot resolve small changes.
+- Spread is large on this VM: 14–167% for C and native runs of 5–80 ms, and
+  37–99% for `ail run`. Short runs cannot resolve small changes.
 - Proposed, not yet adopted by the integrator: treat a change under **10%** of
   the median as noise, for runs of 0.3 s or more. Report the spread with any
   wall-time claim, and back it with an instruction-count change where one exists.
