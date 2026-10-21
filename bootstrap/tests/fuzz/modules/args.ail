@@ -14,6 +14,29 @@ fn main()
         args.pos("input", "file to read"),
         args.rest("more", "other files"),
     ]
+    # Known answers: an option's value in each form, a flag in either spelling, and `--`.
+    t := {{TEXT2}}
+    v := "v{t}"
+    a1 := args.parse("tool", "about", spec, ["--out={v}", "in1"]) else e1
+        print("FAIL --out=V was refused: {e1.why}")
+        return
+    if a1.get("out") != v or a1.get("input") != "in1"
+        print("FAIL --out=V gave {a1.get("out")}")
+    a2 := args.parse("tool", "about", spec, ["-o", v, "-v", "in2", "r1", "r2"]) else e2
+        print("FAIL -o V was refused: {e2.why}")
+        return
+    if a2.get("out") != v or not a2.flag("verbose") or a2.get("input") != "in2" or a2.rest != ["r1", "r2"]
+        print("FAIL -o V -v in2 r1 r2 parsed wrongly")
+    a3 := args.parse("tool", "about", spec, ["--", "--verbose", v]) else e3
+        print("FAIL words after -- were refused: {e3.why}")
+        return
+    if a3.flag("verbose") or a3.get("input") != "--verbose" or a3.rest != [v]
+        print("FAIL words after -- are not positionals")
+    a4 := args.parse("tool", "about", spec, ["--verbose", "--out", "x", "in4"]) else e4
+        print("FAIL long flag was refused: {e4.why}")
+        return
+    if not a4.flag("verbose") or a4.get("out") != "x"
+        print("FAIL long flag and option")
     a := args.parse("tool", "what it does", spec, words) else err
         if not err.usage.starts_with("usage: tool")
             print("FAIL the error lacks the usage text")
