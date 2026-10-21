@@ -570,3 +570,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0742](0742-compile-time-step-limit.md) | A statement-count limit on computing constants (ct.eval.3) *(delegated)* | Accepted | 2026-10-21 |
 | [0746](0746-native-subset-constructs-table.md) | One table of native-subset constructs, with owners *(delegated)* | Accepted | 2026-10-21 |
 | [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2` and `ct.const.4` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |
+| [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
