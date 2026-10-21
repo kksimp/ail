@@ -1,16 +1,16 @@
-# 0803. Native `Map.top` and set algebra
+# 0803. Native `Map.top`, set algebra and map and set comprehensions
 
 - **Status:** Accepted
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — Compiler architecture
-- **Spec rules:** std.count.2, type.coll.16
+- **Spec rules:** std.count.2, type.coll.16, expr.comp.1
 - **Builds on:** [ADR 0568](0568-native-map-and-set-layout.md) (tables), [ADR 0802](0802-native-list-queries.md) (list queries)
 
 ## Context
 
-`examples/map_top.ail` and `examples/snapdiff.ail` stopped at `m.top(n)` and
-`m.keys().union(...)` in the Haiku native-blockers report (day 3).
+`examples/map_top.ail` and `examples/snapdiff.ail` stopped at `m.top(n)`,
+`m.keys().union(...)` and map comprehensions in the Haiku native-blockers report (day 3).
 
 ## Decision
 
@@ -25,6 +25,12 @@ Runtime calls in `compiler/rt/native/map.ail`, lowered in
   argument a set) and on a `List[int]` or `List[str]` (the argument a list or
   a set). A list operand becomes a set first; the result is a new set in
   `a`'s order, then, for `union`, the new elements of `b` in order.
+
+- Set and map comprehensions (`{x for ...}`, `{k: v for ...}`) lower as the
+  loops they mean, as list comprehensions do (ADR 0532): `add` or `m[k] = v`
+  on a new table. They need the expected type (a function result, argument or
+  field); a local binding with no type reports "a set comprehension whose type
+  isn't known" rather than guessing from the first element.
 
 Reported under native.subset.1: `top` on other key or count types, set algebra
 on `bool` or other element types.
