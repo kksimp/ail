@@ -1649,6 +1649,23 @@ fn main()
     print(a.map(|x| x * x).sum())  # 30.0
 ```
 
+**std.tensor.23** — `t.top2(axis)` on a `float` or `f32` tensor gives three
+tensors of the shape without `axis`: the index of each row's best element, the
+index of its second-best, and the margin (best minus second) in `t`'s element
+type. The best is the first largest element, and a tie with it is the second,
+so its margin is `0`; a NaN never replaces either. A NaN best, or a row without
+a second value, traps. An `int` tensor is a compile-time error, and an `axis`
+with fewer than two elements traps. *(ADR 0813)*
+
+```ail rules=std.tensor.23
+fn main()
+    s := tensor.from([0.1, 0.9, 0.4, 0.7, 0.7, 0.3], [2, 3])
+    best, second, margin := s.top2(1)
+    print(best)      # tensor.from([1, 0])
+    print(second)    # tensor.from([2, 1])
+    print(margin)    # the margins 0.5 and 0.0, up to rounding
+```
+
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])

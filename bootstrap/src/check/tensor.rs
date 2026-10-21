@@ -156,6 +156,16 @@ impl<'p> Checker<'p> {
             );
             return Some(Ty::Err);
         }
+        if m == "top2" && elem == Ty::Int {
+            self.args_only(args);
+            self.error_help(
+                "std.tensor.23",
+                pos,
+                "`top2` is on `float` tensors, and this one holds `int`",
+                "use `argmax` for the best index of an `int` tensor",
+            );
+            return Some(Ty::Err);
+        }
         if matches!(m, "relu" | "sigmoid" | "tanh") && elem == Ty::Int {
             self.args_only(args);
             let msg = format!("`{m}` is on `float` tensors, and this one holds `int`");
@@ -174,6 +184,8 @@ impl<'p> Checker<'p> {
             "sum" | "max" | "mean" if args.is_empty() => (vec![], elem),
             "sum" | "max" | "mean" => (vec![Ty::Int], t),
             "transpose" => (vec![], t),
+            // std.tensor.23: (best index, second index, margin) along an axis.
+            "top2" => (vec![Ty::Int], Ty::Tuple(vec![self.tensor_ty(Ty::Int), self.tensor_ty(Ty::Int), t.clone()])),
             "round" => (vec![], self.tensor_ty(Ty::Int)),
             "argmax" | "argmin" if args.is_empty() => (vec![], Ty::Int),
             "argmax" | "argmin" => (vec![Ty::Int], self.tensor_ty(Ty::Int)),

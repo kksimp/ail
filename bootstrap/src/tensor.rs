@@ -391,6 +391,33 @@ impl Tensor {
         Ok(Tensor { shape: vec![n, m], data })
     }
 
+    /// std.tensor.23: along `axis`, the best index, the second-best index and
+    /// the margin (best minus second) of each row. The best is the first
+    /// largest element, and a tie with it is the second; a NaN never replaces
+    /// either. A NaN best, or a row with no second value, traps.
+    pub fn top2(&self, axis: i64) -> Result<(Tensor, Tensor, Tensor), Fault> {
+        let (before, n, after, shape) = self.split(Some(axis), "top2")?;
+        if n < 2 {
+            return fault("std.tensor.23", format!("`top2({axis})` needs two elements along the axis, but the shape is {:?}", self.shape));
+        }
+        let (best, second, margin) = match &self.data {
+            Data::F(v) => {
+                let (b, s, m) = top2_axis(v, before, n, after)?;
+                (b, s, Data::F(m))
+            }
+            Data::F32(v) => {
+                let (b, s, m) = top2_axis(v, before, n, after)?;
+                (b, s, Data::F32(m))
+            }
+            Data::I(_) => return fault("std.tensor.23", "`top2` is on `float` and `f32` tensors".into()),
+        };
+        Ok((
+            Tensor { shape: shape.clone(), data: Data::I(best) },
+            Tensor { shape: shape.clone(), data: Data::I(second) },
+            Tensor { shape, data: margin },
+        ))
+    }
+
     /// The sizes around `axis`: (before, along, after), and the shape
     /// without it (std.tensor.11).
     fn split(&self, axis: Option<i64>, what: &str) -> Result<(usize, usize, usize, Vec<usize>), Fault> {
@@ -652,6 +679,37 @@ fn conv_t<T: Float>(img: &[T], k: &[T], (w, kh, kw): (usize, usize, usize), (oh,
     out
 }
 
+/// std.tensor.23 along an axis of `n` elements, `after` apart, for each of
+/// the `before * after` rows: the best index, second index and margin.
+fn top2_axis<T: Float>(v: &[T], before: usize, n: usize, after: usize) -> Result<(Vec<i64>, Vec<i64>, Vec<T>), Fault> {
+    let mut best_i = Vec::with_capacity(before * after);
+    let mut second_i = Vec::with_capacity(before * after);
+    let mut margin = Vec::with_capacity(before * after);
+    for o in 0..before {
+        for j in 0..after {
+            let at = |k: usize| v[(o * n + k) * after + j];
+            let mut best = 0;
+            let mut second: Option<usize> = None;
+            for k in 1..n {
+                let x = at(k);
+                if x > at(best) {
+                    second = Some(best);
+                    best = k;
+                } else if second.map_or(!x.is_nan(), |s| x > at(s)) {
+                    second = Some(k);
+                }
+            }
+            let Some(s) = second.filter(|_| !at(best).is_nan()) else {
+                return fault("std.tensor.23", "`top2` of a row with no second value, or with a NaN best".into());
+            };
+            best_i.push(best as i64);
+            second_i.push(s as i64);
+            margin.push(at(best) - at(s));
+        }
+    }
+    Ok((best_i, second_i, margin))
+}
+
 fn overflow() -> Fault {
     Fault { rule: "std.tensor.6", message: "integer overflow in a tensor operation".into() }
 }
@@ -683,9 +741,18 @@ fn combine<T: Float>(mut acc: [T; LANES]) -> T {
 /// either type, in the same order; the vector paths are lockstep twins
 /// (ADR 0008). The `f32` kernels are in `tensor32.rs`.
 pub trait Float:
-    Copy + Default + PartialOrd + Send + Sync + std::ops::Add<Output = Self> + std::ops::AddAssign + std::ops::Mul<Output = Self>
+    Copy
+    + Default
+    + PartialOrd
+    + Send
+    + Sync
+    + std::ops::Add<Output = Self>
+    + std::ops::Sub<Output = Self>
+    + std::ops::AddAssign
+    + std::ops::Mul<Output = Self>
 {
     fn zero() -> Self;
+    fn is_nan(self) -> bool;
     /// `n` as an element, for `mean`.
     fn from_count(n: usize) -> Self;
     fn div(self, y: Self) -> Self;
@@ -697,6 +764,9 @@ pub trait Float:
 impl Float for f64 {
     fn zero() -> f64 {
         0.0
+    }
+    fn is_nan(self) -> bool {
+        f64::is_nan(self)
     }
     fn from_count(n: usize) -> f64 {
         n as f64
@@ -718,6 +788,9 @@ impl Float for f64 {
 impl Float for f32 {
     fn zero() -> f32 {
         0.0
+    }
+    fn is_nan(self) -> bool {
+        f32::is_nan(self)
     }
     fn from_count(n: usize) -> f32 {
         n as f32
