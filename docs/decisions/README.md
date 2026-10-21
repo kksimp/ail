@@ -582,7 +582,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0802](0802-native-list-queries.md) | Native `sum`, `min`, `max`, `first`, `last`, `index_of`, `swap` on lists and `Set.sorted` *(delegated)* | Accepted | 2026-10-21 |
 | [0803](0803-native-map-top-and-set-algebra.md) | Native `Map.top`, set algebra (`union`, `intersect`, `difference`) and set and map comprehensions *(delegated)* | Accepted | 2026-10-21 |
 | [0818](0818-native-struct-and-enum-map-values.md) | Native maps with struct and enum values; copies of tables of structs are independent *(delegated)* | Accepted | 2026-10-21 |
-| [0803](0803-native-map-top-and-set-algebra.md) | Native `Map.top` and set algebra (`union`, `intersect`, `difference`) *(delegated)* | Accepted | 2026-10-21 |
 | [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
 | [0772](0772-native-std-modules-in-ail.md) | Standard modules written in AIL compile natively as modules of the program, read from `bootstrap/src/std`; `std.log` builds *(delegated)* | Accepted | 2026-10-21 |
@@ -615,4 +614,3 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
 | [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives (constant hoisting tried and dropped) *(delegated)* | Accepted | 2026-10-21 |
 | [0820](0820-driver-level-unsafe.md) | `unsafe driver` manifest level unlocks hardware access through `std.hw`; 64-bit targets only | Accepted | 2026-10-21 |
-| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
