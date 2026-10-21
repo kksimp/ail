@@ -114,6 +114,14 @@ tools/tokbench/.venv/bin/python tools/tokbench/attribute.py [--json]
 
 `corpus/programs/csv2json` prints the same JSON in both twins except for number text. AIL prints a whole float without a fraction (`12`, json.print.1 under ADR 0631), and Python's `json` prints `12.0`. The difference is inherent to the two languages' printing rules, so the twin is kept as it is, and the difference is not a bug. Its output is therefore not byte-identical to AIL's, and the token rows for this pair are unchanged by it.
 ## Corpus change log
+
+- **2026-10-21, data argument, `ail` lookup and repository depth** (21 AIL programs, 19 tools-path programs, and their twins; output checked against the Python twin):
+  - `programs/days_left`, `digest_lines`, `gz_check`, `redact_mail`, `regex_codes`, `shift_dates`: the data directory is an optional first argument, defaulting to `agent-data` beside the program. Both twins read it the same way. No copies of `agent-data` in the program folders.
+  - All 21 programs that run `ail` find it with `proc.which("ail")`, falling back to the repository root (`{here}/../../../../../ail`). The twins use `shutil.which("ail")`.
+  - 19 programs read `{here}/../tools/...` data; they now use `{here}/../../../../../tools/...`, so they resolve from the repository layout as well as from the fixture.
+  - Measured on the same 72 pairs (144 files) in `corpus/programs`: AIL 28,845.4 → 29,251.2 (+1.41%); Python 32,262.0 → 32,643.0 (+1.18%); AIL/Python 0.8941 → 0.8961 (+0.2%, inside the 2% tie band). The AIL rise is the `ail` lookup and data-argument lines, one per program.
+
+- **2026-10-21, twin output check** (no corpus file changed; no token count changed): `twin_outputs.py` runs every `corpus/programs/NAME` pair and diffs the AIL program's output against its Python twin's. Each pair runs in a mirror tree laid out like the repository (`ail` wrapper, `tools/` links, `examples/` and `agent-data/` links), because the programs find their tools and data by path. `tools/bench/bench.py` prints the result. Result: 70 of 72 pairs match exactly, `csv2json` matches apart from the documented whole-float difference, and `fetch` is skipped (it needs network access). `scan` agreed once the mirror linked `examples/`.
 Day-over-day totals move when a corpus program changes, not only when the language does. Each entry
 says which program changed and why, with its five-tokenizer mean before and after.
 - **2026-10-21, idiomatic rewrites** (four programs; output checked byte-identical to the Python twin):
@@ -122,3 +130,7 @@ says which program changed and why, with its five-tokenizer mean before and afte
   - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
   - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
   Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
+- **2026-10-21, day 3** (output checked byte-identical to the Python twin where one runs):
+  - `agent-r4/t11_json_transform`: `load_json[List[U]](p)?` and `print_json(v)` replace the `from_json`/`parse_json`/`to_text` chain (ADR 0774). 89.6 → 76.4.
+  - `programs/hexdump`: `data[a..b].hex(" ")` replaces the row comprehension and join (ADR 0775). 124.2 → 104.2.
+  - Removed the superseded duplicates `agent-r4/t11b_json_typed`, `t20b_grep_methods` and `t23b_copy_tree_std`; t11, t20 and t23 are those forms.
