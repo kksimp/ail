@@ -49,6 +49,8 @@ struct Lower
     fn_errs Map[str, Ty]
     ## The type the next block's final expression should have (consumed by `lower_block`).
     tail_want Ty?
+    ## Where the function's last expression begins: the trace line of an error it ends in.
+    tail_pos ast.Pos
     ## The function being lowered can fail.
     fails bool
     sigs Map[str, Sig]
@@ -177,6 +179,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         err_msgs: {"fs.IoError": "", "IoError": ""},
         fn_errs: {},
         tail_want: none,
+        tail_pos: ast.Pos(line: 1, col: 1),
         fails: false,
         sigs: {},
         bad: Set[str](),
@@ -671,6 +674,9 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
     want := not ret.is_unit()
     if want
         tail_want = ret
+        if body.len() > 0
+            if e := final_expr(body[body.len() - 1])
+                tail_pos = expr_pos(e)
     result := lower_block(body, want)
     if not done()
         if want
@@ -770,6 +776,8 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
             dead_block()
         if want and i == body.len() - 1
             if e := final_expr(s)
+                if tail_error(e)
+                    continue
                 result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
                 continue
         lower_stmt(s)
@@ -811,6 +819,17 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         return
     declare(name, got.ty, got.id)
 
+## An `else` fallback value, jumped to `join`; a fallback that leaves, such as
+## `unreachable(...)` (err.model.2), ends the block and has no value to join.
+fn Lower.fallback_jump(mut self, x ast.Expr, t Ty, join int, pos ast.Pos)
+    v := lower_expr(x, t) else return
+    if done()
+        return
+    if v.id < 0
+        problem(expr_pos(x), "this expression has no value")
+        return
+    jump(join, [convert(v, t, pos)])
+
 ## The receiver of `s.to_int()` when `e` is that call.
 fn str_to_int_recv(e ast.Expr) ast.Expr?
     match e
@@ -834,9 +853,7 @@ fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.
     seal(fail)
     cur = fail
     match other
-        Fallback(x) =>
-            f := lower_value(x, Ty.Int)?
-            jump(join, [convert(f, Ty.Int, pos)])
+        Fallback(x) => fallback_jump(x, Ty.Int, join, pos)
         Leave(st) =>
             lower_stmt(st)
             if not done()
@@ -980,10 +997,16 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
     head := new_block()
     jump(head, [])
     cur = head
-    c := lower_value(cond, Ty.Bool) else return
+    forever := match cond
+        Bool(v, _) => v
+        _ => false
     inner := new_block()
     exit := new_block()
-    branch(c.id, inner, [], exit, [])
+    if forever
+        jump(inner, [])
+    else
+        c := lower_value(cond, Ty.Bool) else return
+        branch(c.id, inner, [], exit, [])
     seal(inner)
     cur = inner
     loops.push(Loop(cont: head, exit: exit))
@@ -993,6 +1016,9 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
     seal(head)
     seal(exit)
     cur = exit
+    # `while true` with no `break` never falls out (expr.loop.1).
+    if forever and preds[exit].len() == 0
+        finish(unreachable_term())
 
 ## `for x in a..b`, `a..=b` or a list (expr.loop.2-3). The index is a hidden
 ## variable; `continue` goes to the latch, which steps it.
@@ -1724,6 +1750,9 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
             if name == "abs" and vs.len() == 0
                 return Val(id: int_abs(r.id, npos), ty: Ty.Int)
+            # type.str.8
+            if name == "to_hex" and vs.len() == 0
+                return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)
             if (name == "min" or name == "max") and vs.len() == 1
                 return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
             # expr.bit.1-2
