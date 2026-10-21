@@ -20,6 +20,13 @@ fn is_list_edit(name str) bool
         or name == "contains"
         or name == "sort"
         or name == "sorted"
+        or name == "swap"
+        or name == "sum"
+        or name == "min"
+        or name == "max"
+        or name == "first"
+        or name == "last"
+        or name == "index_of"
 
 ## Bytes of one element of a list of `e`.
 fn elem_bytes(e Ty) int
@@ -126,7 +133,70 @@ fn Lower.lower_list_edit(
         if name == "sorted"
             return Val(id: target, ty: r.ty)
         return unit
+    if name == "swap" and vs.len() == 2
+        # Both reads check their index (type.coll.7); the call then swaps.
+        checked("get", [r.id, vs[0].id], bounds_site(npos), e)
+        checked("get", [r.id, vs[1].id], bounds_site(npos), e)
+        call("rt.list_swap", [r.id, vs[0].id, vs[1].id, size], Ty.Unit)
+        return unit
+    if name == "sum" and vs.len() == 0
+        if e == Ty.Float
+            return Val(id: call("rt.list_sum_float", [r.id], Ty.Float), ty: Ty.Float)
+        if e != Ty.Int
+            return unsupported(npos, "`.sum()` on `{r.ty.name()}`")
+        texts := trap_texts("expr.arith.1", npos)
+        return Val(id: call("rt.list_sum_int", [r.id, texts[0], texts[1]], Ty.Int), ty: Ty.Int)
+    n := op("len", [r.id], Ty.Int)
+    nonempty := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
+    if name == "first" and vs.len() == 0
+        return opt_at(r, nonempty, konst(0, Ty.Int), e, false, npos)
+    if name == "last" and vs.len() == 0
+        last := op("sub", [n, konst(1, Ty.Int)], Ty.Int)
+        return opt_at(r, nonempty, last, e, false, npos)
+    if (name == "min" or name == "max") and vs.len() == 0
+        k := match e
+            Int => 0
+            Str => 1
+            Float => 2
+            _ => -1
+        if k < 0
+            return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+        greatest := konst(if name == "max" then 1 else 0, Ty.Int)
+        idx := call("rt.list_extreme", [r.id, konst(k, Ty.Int), greatest], Ty.Int)
+        found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+        return opt_at(r, found, idx, e, false, npos)
+    if name == "index_of" and vs.len() == 1
+        k := eq_kind(e)
+        if k < 0
+            return unsupported(npos, "`.index_of()` on `{r.ty.name()}`")
+        mut w := convert(vs[0], e, npos)
+        if e.is_float()
+            w = list_prim("float_bits", [w], Ty.Int)
+        idx := call("rt.list_index_of", [r.id, w, konst(k, Ty.Int), size], Ty.Int)
+        found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+        return opt_at(r, found, idx, Ty.Int, true, npos)
     unsupported(npos, "`.{name}()` with these arguments")
+
+## `T?` for a list read: the element at `idx` (or `idx` itself when `index` is
+## set) when `has`, else `none`.
+fn Lower.opt_at(mut self, xs Val, has int, idx int, e Ty, index bool, pos ast.Pos) Val?
+    t := opt_of(e) else return unsupported(pos, "an optional `{e.name()}`")
+    join := new_block()
+    r := new_value(t, "")
+    blocks[join].params.push(r)
+    yes := new_block()
+    no := new_block()
+    branch(has, yes, [], no, [])
+    seal(yes)
+    cur = yes
+    v := if index then idx else op("get", [xs.id, idx], e)
+    jump(join, [some(Val(id: v, ty: e)).id])
+    seal(no)
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: t)
 
 ## A runtime primitive used by the lowering itself.
 fn Lower.list_prim(mut self, name str, args List[int], ty Ty) int
