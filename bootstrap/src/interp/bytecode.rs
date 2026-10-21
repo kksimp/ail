@@ -466,13 +466,20 @@ enum Ins<'a> {
     ElemCall {
         slot: u32,
         ix: Opnd,
-        name: &'a str,
         args: u32,
-        n: u32,
-        e: &'a Expr,
         dst: Opnd,
         pos: Pos,
-        exit: u32,
+        check: u32,
+    },
+    /// Before the arguments of an `ElemCall`: the walker evaluates the receiver first, so the
+    /// index is checked here. Jumps to `t` (the walker's call) unless the call can run on the tier.
+    ElemGuard {
+        slot: u32,
+        ix: Opnd,
+        name: &'a str,
+        n: u32,
+        t: u32,
+        cache: Cell<Option<(usize, &'a FnDecl)>>,
     },
     /// The walker's `hit` before a statement or a `while` turn, with run
     /// limits or coverage on (run.limit.1-3, test.cover.1).
@@ -837,6 +844,17 @@ enum Built {
 /// Whether an expression has a `?`: inside `e else ...` one that finds
 /// `none` makes the whole value `none` (err.prop.4), which the walker's
 /// `else_value` handles.
+/// An index expression that may be evaluated twice: names, literals, arithmetic on them and `xs.len()`.
+fn pure_index(e: &Expr, _scope: &[&str]) -> bool {
+    match e {
+        Expr::Int(..) | Expr::Name(..) => true,
+        Expr::Binary { lhs, rhs, .. } => pure_index(lhs, _scope) && pure_index(rhs, _scope),
+        Expr::Unary { operand, .. } => pure_index(operand, _scope),
+        Expr::Method { recv, name, args, .. } => name == "len" && args.is_empty() && matches!(**recv, Expr::Name(..)),
+        _ => false,
+    }
+}
+
 fn has_try(e: &Expr) -> bool {
     match e {
         Expr::Try { .. } => true,
@@ -951,6 +969,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             | Ins::ListFast { done: x, .. }
             | Ins::NumFast { done: x, .. }
             | Ins::MethodGuard { t: x, .. }
+            | Ins::ElemGuard { t: x, .. }
             | Ins::TraitGuard { t: x, .. }
             | Ins::ElseTest { t: x, .. }
             | Ins::IfNotStruct { t: x, .. }
@@ -1768,18 +1787,24 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             && !r.assoc_calls.contains_key(&pos)
             && !r.std_calls.contains_key(&pos)
             && !r.type_args.contains_key(&pos)
-            && !writes_locals(index, &r.moves)
+            && pure_index(index, &self.scope)
             && args.iter().all(|a| a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved && !writes_locals(&a.value, &r.moves))
         {
             let ix = self.reg();
             self.expr_to(index, ix);
+            let guard = self.emit(Ins::ElemGuard { slot: ls, ix, name, n: args.len() as u32, t: 0, cache: Cell::new(None) });
             let first = self.next_reg;
             let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
             for (a, r) in args.iter().zip(regs) {
                 self.expr_to(&a.value, r);
             }
-            let exit = self.exit();
-            self.emit(Ins::ElemCall { slot: ls, ix, name, args: first, n: args.len() as u32, e, dst, pos, exit });
+            self.emit(Ins::ElemCall { slot: ls, ix, args: first, dst, pos, check: guard });
+            let j = self.emit(Ins::Jump(0));
+            let general = self.here();
+            self.patch(guard, general);
+            self.delegate(e, dst);
+            let end = self.here();
+            self.patch(j, end);
             return;
         }
         // Any other receiver of a method that doesn't mutate it is evaluated
@@ -2955,44 +2980,13 @@ match {
         regs: &mut [Value],
         pc: usize,
     ) -> Flow<usize> {
-        let Ins::ElemCall { slot, ix, name, args, n, e, dst, pos, exit } = ins else { unreachable!("ElemCall") };
+        let Ins::ElemCall { slot, ix, args, dst, pos, check } = ins else { unreachable!("ElemCall") };
+        let Ins::ElemGuard { cache, .. } = &code.ins[*check as usize] else { unreachable!("a guard") };
+        let Some((i, f)) = cache.get() else { unreachable!("set by the guard") };
         let at = base + *slot as usize;
-        let (first, n) = (*args as usize, *n as usize);
-        let found = match (&env[at].1, &regs[(*ix & !KIND) as usize]) {
-            (Value::List(items), Value::Int(i)) => match usize::try_from(*i).ok().and_then(|i| items.get(i).map(|v| (i, v))) {
-                Some((i, Value::Struct(s, _))) => self
-                    .methods
-                    .get(self.prog.structs[*s].name.as_str())
-                    .and_then(|m| m.get(*name))
-                    .copied()
-                    .filter(|f| {
-                        f.receiver.is_some_and(|r| r.mutable)
-                            && f.params.len() == n
-                            && f.params.iter().all(|p| !p.mutable)
-                    })
-                    .map(|f| (i, f)),
-                _ => None,
-            },
-            _ => None,
-        };
-        let Some((i, f)) = found else {
-            assign(&mut regs[(*ix & !KIND) as usize], Value::Unit);
-            for r in &mut regs[first..first + n] {
-                assign(r, Value::Unit);
-            }
-            self.stats.handoffs += 1;
-            if let Some(k) = &mut self.stats.kinds {
-                *k.entry(kind_of_expr(e)).or_default() += 1;
-            }
-            return match self.eval(e, env) {
-                Ok(v) => {
-                    put(*dst, v, env, base, regs);
-                    Ok(pc + 1)
-                }
-                Err(how) => self.leave(code, *exit, how, env, base),
-            };
-        };
-        let Value::List(items) = &mut env[at].1 else { unreachable!("checked above") };
+        let first = *args as usize;
+        assign(&mut regs[(*ix & !KIND) as usize], Value::Unit);
+        let Value::List(items) = &mut env[at].1 else { unreachable!("checked by the guard") };
         let me = std::mem::replace(&mut Rc::make_mut(items)[i], Value::Unit);
         let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
         callee.push(("self", me));
@@ -3007,6 +3001,34 @@ match {
         self.env_pool.push(callee);
         put(*dst, result, env, base, regs);
         Ok(pc + 1)
+    }
+
+    #[inline(never)]
+    fn op_elemguard(&mut self, ins: &Ins<'a>, env: &Env<'a>, base: usize, regs: &mut [Value], pc: usize) -> usize {
+        let Ins::ElemGuard { slot, ix, name, n, t, cache } = ins else { unreachable!("ElemGuard") };
+        let found = match (&env[base + *slot as usize].1, &regs[(*ix & !KIND) as usize]) {
+            (Value::List(items), Value::Int(i)) => match usize::try_from(*i).ok().and_then(|i| items.get(i).map(|v| (i, v))) {
+                Some((i, Value::Struct(s, _))) => self
+                    .methods
+                    .get(self.prog.structs[*s].name.as_str())
+                    .and_then(|m| m.get(*name))
+                    .copied()
+                    .filter(|f| {
+                        f.receiver.is_some_and(|r| r.mutable)
+                            && f.params.len() == *n as usize
+                            && f.params.iter().all(|p| !p.mutable)
+                    })
+                    .map(|f| (i, f)),
+                _ => None,
+            },
+            _ => None,
+        };
+        cache.set(found);
+        if found.is_some() {
+            pc + 1
+        } else {
+            *t as usize
+        }
     }
 
     #[inline(never)]
@@ -3590,6 +3612,9 @@ match {
                 }
                 Ins::MethodOn { .. } => {
                     pc = self.op_methodon(code, ins, env, base, regs, pc)?;
+                }
+                Ins::ElemGuard { .. } => {
+                    pc = self.op_elemguard(ins, env, base, regs, pc);
                 }
                 Ins::ElemCall { .. } => {
                     pc = self.op_elemcall(code, ins, env, base, regs, pc)?;
