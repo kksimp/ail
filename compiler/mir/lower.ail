@@ -366,10 +366,11 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if declare_generic_fn(f, pre)
         return
     mut params := List[Ty]()
-    self_ty = if o := f.owner then "{pre}{o.name}" else ""
+    self_ty = if o := f.owner then owner_key(o.name, pre) else ""
     if o := f.owner
-        owner := "{pre}{o.name}"
-        if o.params != none or not (structs.contains(owner) or enums.contains(owner))
+        owner := owner_key(o.name, pre)
+        prim := ["int", "float", "bool", "str"].contains(owner)
+        if o.params != none or not (structs.contains(owner) or enums.contains(owner) or prim)
             problem(
                 f.pos,
                 "`{o.name}.{f.name}`: methods of `{o.name}` aren't in the native subset yet",
@@ -418,7 +419,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
 ## A function's name in MIR: `T.m` for a method of `T`.
 fn fn_key(f ast.FnDecl, pre str) str
     if o := f.owner
-        return "{pre}{o.name}.{f.name}"
+        return "{owner_key(o.name, pre)}.{f.name}"
     "{pre}{f.name}"
 
 ## The MIR type of a written type, if it is in the subset.
@@ -658,7 +659,7 @@ fn Lower.str_lit(mut self, s str) int
 # ---- functions ----
 
 fn Lower.lower_fn(mut self, f ast.FnDecl)
-    owner := if o := f.owner then "{prefix}{o.name}" else ""
+    owner := if o := f.owner then owner_key(o.name, prefix) else ""
     lower_fn_as(f, fn_key(f, prefix), owner)
 
 ## Lower `f` as function `key`, a method of type `owner` (ADR 0536: an
@@ -1666,6 +1667,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
         return struct_call("{en}.{name}", none, args, npos)
+    if a := assoc_owner(recv)
+        return struct_call("{a}.{name}", none, args, npos)
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, npos)
     if m := module_name(recv)
@@ -1673,6 +1676,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if k := builtin_method(r.ty, name)
+        return struct_call(k, r, args, npos)
     if r.ty.is_coll()
         return lower_coll_method(r, name, npos, args)
     if s := struct_name(r.ty)

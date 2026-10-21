@@ -43,9 +43,11 @@ struct Gen
     queue List[Instance]
     ## The type parameters' types while lowering an instance.
     tsubst Map[str, Ty]
+    ## The types of `List[...]` owners of `impl` instances (`List[int]`).
+    owner_tys Map[str, Ty]
 
 fn new_gen() Gen
-    Gen(fns: {}, types: {}, bases: {}, targs: {}, queue: [], tsubst: {})
+    Gen(fns: {}, types: {}, bases: {}, targs: {}, queue: [], tsubst: {}, owner_tys: {})
 
 fn generic_names(ps List[ast.GenericParam]) List[str]
     [p.name for p in ps]
@@ -82,6 +84,10 @@ fn Lower.declare_generic_fn(mut self, f ast.FnDecl, pre str) bool
             return true
         if f.generics.len() > 0
             problem(f.pos, "`{o.name}.{f.name}`: generic methods aren't in the native subset yet")
+            return true
+        if o.name == "List" and o.params != none
+            # `impl Trait for List[T]`: an instance per element type.
+            gen.fns["List.{f.name}"] = GenFn(decl: f, file: file)
             return true
         return false
     if f.generics.len() == 0
@@ -538,3 +544,49 @@ fn program_fns(prog ast.Program) List[ast.FnDecl]
                     f.owner = im.target
                     out.push(f)
     out
+
+## The built-in types an `impl` may be for (trait.impl.1): their methods
+## are keyed `int.m`, `List.m`, without a module prefix.
+BUILTIN_OWNERS := ["int", "float", "bool", "str", "List"]
+
+## The key of type `name`'s methods, declared in a module with prefix `pre`.
+fn owner_key(name str, pre str) str
+    if BUILTIN_OWNERS.contains(name) then name else "{pre}{name}"
+
+## The key of method `name` of a built-in type `t` from an `impl`, if it
+## has one; a `List[T]` method's instance is declared on first use.
+fn Lower.builtin_method(mut self, t Ty, name str) str?
+    match t
+        Int | Float | Bool | Str =>
+            key := "{t.name()}.{name}"
+            if sigs.contains(key) or bad.contains(key)
+                return key
+            none
+        List(e) =>
+            key := "{t.name()}.{name}"
+            if sigs.contains(key) or bad.contains(key)
+                return key
+            gf := gen.fns.get("List.{name}")?
+            o := gf.decl.owner?
+            ps := o.params?
+            if ps.len() != 1
+                return none
+            gen.owner_tys[t.name()] = t
+            instance(key, gf.decl, {ps[0].name: e}, t.name(), gf.file)?
+            key
+        _ => none
+
+## The type an associated call `T.f(...)` names when `T` is a type
+## parameter of the instance being lowered (trait.assoc.1-2).
+fn Lower.assoc_owner(self, e ast.Expr) str?
+    match e
+        Name(n, _) =>
+            if lookup(n) != none
+                return none
+            t := gen.tsubst.get(n)?
+            match t
+                Struct(k) => k
+                Enum(k) => k
+                Int | Float | Bool | Str => t.name()
+                _ => none
+        _ => none

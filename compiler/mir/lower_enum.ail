@@ -84,7 +84,15 @@ fn Lower.case_index(self, n str, name str) int
 
 ## The type a method's `self` has: a struct or an enum.
 fn Lower.owner_ty(self, n str) Ty
-    if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
+    match n
+        "int" => Ty.Int
+        "float" => Ty.Float
+        "bool" => Ty.Bool
+        "str" => Ty.Str
+        _ =>
+            if t := gen.owner_tys.get(n)
+                return t
+            if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
 
 ## The enum `e` names, when it names one and no local: `E` or `m.E`, as
 ## in `E.V` or `m.E.V(...)`.

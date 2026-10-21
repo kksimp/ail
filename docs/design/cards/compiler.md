@@ -8,8 +8,11 @@ fn check_dump(str, bool) ! [env fail fs io]
 fn runtime(str) !ast.Program [fail fs io]
 fn runtime_with(str, str, str) !ast.Program [fail fs io]
 fn runtime_syntax(str, str) [io]
-fn lower_file(str, ast.Program?) !mir.Module [fail fs io]
+fn lower_file(str, ast.Program?) !mir.Module [env fail fs io]
+fn derived_sources() !List[mir.Source] [env fail fs io]
+fn derived_source(str, str, List[str]) mir.Source [io]
 fn parse_source(str, str) !mir.Source [fail fs io]
+fn parse_text(str, str, str) mir.Source [io]
 ```
 
 ## a64
@@ -328,4 +331,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3621); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3683); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
