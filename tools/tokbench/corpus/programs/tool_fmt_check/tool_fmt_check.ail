@@ -1,6 +1,7 @@
 
 fn main() !
     here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
     data := "{here}/../tools/tokbench/corpus/agent-r5/data"
     names := fs.list_dir(data)? "listing fixtures"
     mut clean := 0
@@ -8,7 +9,7 @@ fn main() !
     for name in names.sorted()
         if not name.ends_with(".ail")
             continue
-        r := proc.run("{here}/../ail", ["fmt", "--check", "{data}/{name}"])? "checking {name}"
+        r := proc.run(ail, ["fmt", "--check", "{data}/{name}"])? "checking {name}"
         if r.ok()
             clean += 1
             print("{name}: clean")

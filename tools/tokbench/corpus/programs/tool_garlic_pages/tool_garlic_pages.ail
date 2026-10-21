@@ -1,12 +1,13 @@
 
 fn main() !
     here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
     pages := "{here}/../tools/tokbench/corpus/agent-r5/data/pages"
     garlic := "{here}/../tools/garlic/garlic.ail"
     names := fs.list_dir(pages)? "listing pages"
     mut all_words := 0
     for name in names.sorted()
-        r := proc.run("{here}/../ail", [
+        r := proc.run(ail, [
             "run",
             garlic,
             "--print",

@@ -1,10 +1,11 @@
 
 fn main() !
     here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
     data := "{here}/../tools/tokbench/corpus/agent-r5/data"
     edits := fs.read_text("{data}/edit.txt")? "reading the edit"
     r := proc.run(
-        "{here}/../ail",
+        ail,
         ["edit", "{data}/ok.ail", "--dry-run", "--json"],
         edits,
     )? "editing"

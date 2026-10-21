@@ -1,9 +1,10 @@
 
 fn main() !
     here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
     data := "{here}/../tools/tokbench/corpus/agent-r5/data"
     for name in ["scale.ail", "report.ail"]
-        r := proc.run("{here}/../ail", [
+        r := proc.run(ail, [
             "diff",
             "--json",
             "{data}/v1/{name}",

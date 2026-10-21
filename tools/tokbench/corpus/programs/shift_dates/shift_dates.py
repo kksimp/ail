@@ -1,9 +1,12 @@
 import datetime
+import sys
 from pathlib import Path
+
+DATA = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "agent-data"
 
 
 def main():
-    text = (Path(__file__).resolve().parents[5] / "examples/agent-data/dates.txt").read_text()
+    text = (DATA / "dates.txt").read_text()
     for line in text.splitlines():
         d = datetime.date.fromisoformat(line)
         later = d + datetime.timedelta(days=7)

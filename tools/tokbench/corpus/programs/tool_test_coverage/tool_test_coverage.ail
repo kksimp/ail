@@ -1,8 +1,9 @@
 
 fn main() !
     here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
     file := "{here}/../tools/tokbench/corpus/agent-r5/data/tests.ail"
-    r := proc.run("{here}/../ail", ["test", "--coverage", file])? "measuring coverage"
+    r := proc.run(ail, ["test", "--coverage", file])? "measuring coverage"
     for line in r.text().lines()
         if line.starts_with("coverage ")
             print(line.split(": ").last() else "")

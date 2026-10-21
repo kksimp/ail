@@ -1,10 +1,11 @@
 
 fn main() !
     here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
     pdfs := "{here}/../tools/tokbench/corpus/agent-r5/data/pdf"
     reader := "{here}/../tools/pdf/pdf.ail"
     for name in fs.list_dir(pdfs)?.sorted()
-        r := proc.run("{here}/../ail", [
+        r := proc.run(ail, [
             "run",
             reader,
             "grep",
