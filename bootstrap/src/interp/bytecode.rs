@@ -816,6 +816,7 @@ fn assign(slot: &mut Value, v: Value) {
 enum Got {
     Int(i64),
     Float(f64),
+    Bool(bool),
     Other(Value),
 }
 
@@ -824,6 +825,7 @@ fn got(v: &Value) -> Got {
     match v {
         Value::Int(x) => Got::Int(*x),
         Value::Float(x) => Got::Float(*x),
+        Value::Bool(x) => Got::Bool(*x),
         other => Got::Other(other.clone()),
     }
 }
@@ -833,6 +835,7 @@ fn put_got(o: Opnd, g: Got, env: &mut Env<'_>, base: usize, regs: &mut [Value]) 
     match g {
         Got::Int(x) => put_int(o, x, env, base, regs),
         Got::Float(x) => put_float(o, x, env, base, regs),
+        Got::Bool(x) => put_bool(o, x, env, base, regs),
         Got::Other(v) => put(o, v, env, base, regs),
     }
 }
@@ -850,6 +853,22 @@ fn put_int(o: Opnd, r: i64, env: &mut Env<'_>, base: usize, regs: &mut [Value]) 
         *x = r;
     } else {
         assign(slot, Value::Int(r));
+    }
+}
+
+/// `put` of a bool, overwriting a bool in place.
+#[inline(always)]
+fn put_bool(o: Opnd, r: bool, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
+    let i = (o & !KIND) as usize;
+    let slot = match o & KIND {
+        LOCAL => &mut env[base + i].1,
+        REG => &mut regs[i],
+        _ => return,
+    };
+    if let Value::Bool(x) = slot {
+        *x = r;
+    } else {
+        assign(slot, Value::Bool(r));
     }
 }
 
