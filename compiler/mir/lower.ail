@@ -353,6 +353,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
         if problems.len() > before
             bad.add(fn_key(f, pre))
             sigs.remove(fn_key(f, pre))
+    self_ty = ""
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if f.ext != none
@@ -365,6 +366,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if declare_generic_fn(f, pre)
         return
     mut params := List[Ty]()
+    self_ty = if o := f.owner then "{pre}{o.name}" else ""
     if o := f.owner
         owner := "{pre}{o.name}"
         if o.params != none or not (structs.contains(owner) or enums.contains(owner))
@@ -439,6 +441,10 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                     none
                 "Map" | "Set" => coll_type_of(name, args)
                 _ =>
+                    if name == "Self" and self_ty != ""
+                        # A method's own type (trait.self.1), as derived
+                        # methods write it (ADR 0807).
+                        return owner_ty(self_ty)
                     if g := generic_type(name, args)
                         return g
                     if args.len() == 0
