@@ -1,0 +1,15 @@
+fn rows(n int) tensor.Tensor[float]
+    tensor.from([(i % 5).to_float() * 0.5 for i in 0..n * 2], [n, 2])
+
+fn main()
+    # Constructor arguments and method receivers that are comprehensions or calls.
+    print(tensor.from([(i * i).to_float() for i in 0..5]).sum())
+    print(tensor.zeros([2, 3]).len())
+    print(rows(3).transpose())
+    print(tensor.from([i for i in 1..5]).dot(tensor.from([i for i in 1..5])))
+    print(tensor.from([(i % 3).to_float() for i in 0..6], [2, 3]).sum(1))
+    print(rows(4).map(|x| x * 2.0).sum())
+    total := tensor.from([1.0, 2.0, 3.0]).softmax().sum()
+    print(total > 0.99)
+    xs := [tensor.from([i.to_float(), 1.0]).sum() for i in 0..3]
+    print(xs)

@@ -653,6 +653,16 @@ enum Ins<'a> {
         pos: Pos,
         guard: u32,
     },
+    /// `tensor.from(xs)`, `tensor.from(xs, shape)` and `tensor.zeros(shape)` with
+    /// the arguments already evaluated into `n` registers from `args`
+    /// (std.tensor.2).
+    TensorFn {
+        f: &'static str,
+        args: u32,
+        n: u32,
+        dst: Opnd,
+        pos: Pos,
+    },
     /// `MethodGuard`'s fallback for a receiver already evaluated into
     /// `recv`: the walker's method call from there on (ADR 0363).
     MethodOn {
@@ -2183,6 +2193,33 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         // trace.watch.3: a mutating method may change the watched value through `self`; the walker's `invoke` shows it.
         if self.it.tracing & trace::WATCH != 0 && self.it.mutating.contains(name) {
             return self.delegate(e, dst);
+        }
+        // `tensor.from(xs)`: the arguments run here, so a comprehension in them
+        // compiles, and the walker only builds the tensor.
+        if let Some(&crate::stdlib::StdCall::Fn("tensor", f)) = self.it.resolved.std_calls.get(&pos)
+            && self.it.tracing == 0
+            && !self.it.hook
+            && args.iter().all(|a| a.label.is_none() && a.param.is_none() && !a.mutable && !a.moved)
+        {
+            let first = self.next_reg;
+            let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
+            for (a, r) in args.iter().zip(regs) {
+                self.expr_to(&a.value, r);
+            }
+            self.emit(Ins::TensorFn { f, args: first, n: args.len() as u32, dst, pos });
+            return;
+        }
+        // A tensor method: the receiver runs here, so a comprehension or a call
+        // inside it compiles, and the walker only does the method (std.tensor.3).
+        if let Some(crate::stdlib::StdCall::Tensor(_)) = self.it.resolved.std_calls.get(&pos)
+            && self.it.tracing == 0
+            && !self.it.hook
+        {
+            let t = self.reg();
+            self.expr_to(recv, t);
+            let exit = self.exit();
+            self.emit(Ins::MethodOn { recv: t, e, dst, exit });
+            return;
         }
         let r = &self.it.resolved;
         let mut path = Vec::new();
@@ -4347,6 +4384,13 @@ match {
                 }
                 Ins::MethodOn { .. } => {
                     pc = self.op_methodon(code, ins, env, base, regs, pc)?;
+                }
+                Ins::TensorFn { f, args, n, dst, pos } => {
+                    pc += 1;
+                    let first = *args as usize;
+                    let vals: Vec<Value> = (first..first + *n as usize).map(|k| std::mem::replace(&mut regs[k], Value::Unit)).collect();
+                    let v = self.tensor_call_on(f, &vals, *pos)?;
+                    put(*dst, v, env, base, regs);
                 }
                 Ins::ElemGuard { .. } => {
                     pc = self.op_elemguard(ins, env, base, regs, pc);

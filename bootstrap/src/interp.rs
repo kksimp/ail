@@ -3091,6 +3091,9 @@ impl<'a, W: Write> Interp<'a, W> {
         env: &mut Env<'a>,
     ) -> Flow<Value> {
         let (key, site) = self.method_site(recv, name, pos);
+        if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
+            return self.tensor_method_on(m, value, args, pos, env);
+        }
         self.method_on(key, site, Operand::Value(value), name, args, pos, env)
     }
 

@@ -71,6 +71,12 @@ impl<'a, W: Write> Interp<'a, W> {
         for a in args {
             values.push(self.eval(&a.value, env)?);
         }
+        self.tensor_call_on(f, &values, pos)
+    }
+
+    /// `tensor_call` with its arguments evaluated; the bytecode tier enters
+    /// here with the ones it computed itself.
+    pub(super) fn tensor_call_on(&mut self, f: &str, values: &[Value], pos: Pos) -> Flow<Value> {
         let int = self.int_tensor_at(pos);
         let f32 = self.resolved.f32_tensors.contains(&pos);
         let t = match f {
@@ -210,7 +216,21 @@ impl<'a, W: Write> Interp<'a, W> {
         pos: Pos,
         env: &mut Env<'a>,
     ) -> Flow<Value> {
-        let Value::Tensor(t) = self.eval(recv, env)? else { unreachable!("checked: a tensor") };
+        let recv = self.eval(recv, env)?;
+        self.tensor_method_on(m, recv, args, pos, env)
+    }
+
+    /// `t.m(args)` with the receiver already evaluated; the bytecode tier
+    /// enters here with a receiver it computed itself.
+    pub(super) fn tensor_method_on(
+        &mut self,
+        m: &str,
+        recv: Value,
+        args: &'a [Arg],
+        pos: Pos,
+        env: &mut Env<'a>,
+    ) -> Flow<Value> {
+        let Value::Tensor(t) = recv else { unreachable!("checked: a tensor") };
         let f32 = t.is_f32();
         if m == "map" {
             return self.tensor_map(&t, &args[0], env);
