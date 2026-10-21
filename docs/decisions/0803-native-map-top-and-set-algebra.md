@@ -79,3 +79,15 @@ interpreter. Cost: two lists per loop. `_` binds nothing. Any other
 two-name `for` (`zip`, `enumerate`) stays unsupported until tuples are native.
 Rejected: building a tuple per entry (no native tuples); walking the table's
 entry array in place (the body could grow and move it).
+
+## Addendum: `is_empty`, `remove(k) else`, `is_subset`
+
+From the Haiku std sweep (native-std-coverage.md, section 3):
+
+- `is_empty` on `str`, lists, maps and sets: the length compared with 0.
+- `m.remove(k) else d` on a local map gives the removed value, else `d` or a
+  statement that leaves (err.else.1-2). It shares `lower_get_else` with
+  `get`, which now removes the entry after reading it. The call is picked up
+  for locals only, so `fs.remove(p) else ...` and other modules keep their
+  own lowering.
+- `a.is_subset(b)` on sets is `a.difference(b)` being empty.

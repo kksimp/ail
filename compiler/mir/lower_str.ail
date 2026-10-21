@@ -126,6 +126,9 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
         match name
             "len" => return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
             "byte_len" => return Val(id: call("rt.str_byte_len", [r.id], Ty.Int), ty: Ty.Int)
+            "is_empty" =>
+                n0 := call("rt.str_byte_len", [r.id], Ty.Int)
+                return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             "to_str" => return r
             "to_int" => return str_to_int_opt(r)
             "chars" =>
