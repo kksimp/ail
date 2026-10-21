@@ -51,8 +51,8 @@ url ─► fetch (std.net) ─► bytes ─► decode ─► HTML tokenizer ─�
 | Decode | `str` | gzip and deflate undone; charset from `Content-Type`, then a `<meta charset>` in the first 1024 bytes, then UTF-8 when valid and windows-1252 when not; UTF-8 and windows-1252 (with its aliases `iso-8859-1`, `us-ascii`) decoded | other legacy charsets |
 | Tokenize | `html` | WHATWG tokenizer: data, tags, attributes (quoted, unquoted, bare), comments, doctype, raw text (`script`, `style`), escapable raw text (`title`, `textarea`), character references (numeric and a named subset) | the full named-reference table, every parse-error state |
 | Tree | `html` | simplified tree construction: implied `html`/`head`/`body`, void elements, implied end tags (`p`, `li`, `dt`, `dd`, `option`, `tr`, `td`, `th`), end tags close up to the matching open element | adoption agency, foster parenting, templates, foreign content (SVG, MathML) |
-| Style | `css` | a fixed user-agent model (block vs inline elements, headings, `pre`, hidden elements) plus author CSS from `<style>`, linked sheets (8 at most, `screen`/`all` media) and `style=`: type, `#id`, `.class`, `[attr]`, `[attr=v]`, descendant and child selectors, specificity, order, `!important`; `display` (`none`, block or inline), `visibility: hidden`, `font-weight`, `font-style`, `text-transform: uppercase`, `white-space: pre` | pseudo-classes, `+` and `~`, `@media` queries (skipped today), colors and margins on cells, then the box model in pixels |
-| Layout | `page` | text cells: block flow, inline runs, whitespace collapsing, word wrap to the window's width, lists, block quotes, `pre`, simple tables | CSS box model on the cell grid, then pixels (needs a pixel layer) |
+| Style | `css` | a fixed user-agent model (block vs inline elements, headings, `pre`, hidden elements) plus author CSS from `<style>`, linked sheets (8 at most) and `style=`; `@media` and `media=` by the window's width at 8 CSS pixels per cell (`min-width`, `max-width`, ranges, `px`/`em`/`rem`; a light screen without hover): type, `#id`, `.class`, `[attr]`, `[attr=v]`, descendant and child selectors, specificity, order, `!important`; `display` (`none`, block or inline), `visibility: hidden`, `font-weight`, `font-style`, `text-transform: uppercase`, `white-space: pre` | pseudo-classes, `+` and `~`, `@supports`, colors and margins on cells, then the box model in pixels |
+| Layout | `page` | text cells: block flow, inline runs, whitespace collapsing, word wrap to the window's width, lists, block quotes, `pre`; data tables (one line of text and links per cell, no `colspan`, fits the width) as aligned columns, others as cells joined by ` | ` | CSS box model on the cell grid, then pixels (needs a pixel layer) |
 | Paint | `std.ui` | the text-cell window (`put_styled`), colors per run, link highlighting | pixels, images, fonts (see Dependencies) |
 | Script | none | no JavaScript (decision pending with the designer) | see below |
 
@@ -217,9 +217,9 @@ the page show up in the page model so an agent can see what a script did.
 2. **Forms and agent actions** (done): inputs, buttons, check boxes,
    selects, GET and POST forms; `--do` and the session mode. Cookies next.
 3. **CSS on cells** (started): parser, selectors, cascade, `display`,
-   visibility, bold, italic, uppercase, `white-space`. Next: `@media`
-   queries for the window width, colors with a contrast floor, margins, and
-   real tables.
+   visibility, bold, italic, uppercase, `white-space`, `@media` by window
+   width, aligned data tables. Next: colors with a contrast floor,
+   margins, and tables with `colspan` and multi-line cells.
 4. **Pixels**: a pixel surface in `std.ui`, a bitmap font, then images (PNG
    after lane 128) and a box-model layout in pixels.
 5. **Scripts**: the JS engine's DOM bindings and event loop.
@@ -236,3 +236,10 @@ the page show up in the page model so an agent can see what a script did.
   model carry over.
 - **Exposing the raw DOM to agents**: far more tokens than the perceivable
   page (scripts, styles, wrappers), and no positions.
+- **A fixed desktop width for `@media`** (always match as 1280 px): a
+  narrow window would then get a desktop layout squeezed into too few
+  cells. At 8 px per cell, small windows get sites' small-screen layouts,
+  which are simpler to read.
+- **Measuring table cells by laying them out twice**: exact, but it doubles
+  the cost of every table. The estimate (text plus 4 cells per link)
+  is right for text cells, and a wrong guess only shifts one row.

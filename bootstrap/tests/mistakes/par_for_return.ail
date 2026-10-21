@@ -1,0 +1,8 @@
+fn first_big(xs List[int]) int?
+    par for x in xs
+        if x > 2
+            return x
+    none
+
+fn main()
+    print("ok")

@@ -1,0 +1,46 @@
+## std.net.19: a response that trickles in stops at `total_ms` even though
+## each read is within `timeout_ms`; a server that sends chunks is read whole.
+use std.net
+use std.time
+
+fn slow(l net.Listener) !
+    c := l.accept()?
+    while true
+        line := c.read_line()? else break
+        if line == "" or line == "\r"
+            break
+    c.write("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n12345")?
+    # Hold the connection open, silent, until the client gives up.
+    c.set_timeout(1500)
+    _ := c.read_line() else err
+        none
+    c.close()
+
+fn chunky(l net.Listener) !
+    c := l.accept()?
+    while true
+        line := c.read_line()? else break
+        if line == "" or line == "\r"
+            break
+    c.write("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n")?
+    c.write("4;ext=1\r\ndefg\r\n0\r\nTrailer: x\r\n\r\n")?
+    c.close()
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    t := spawn slow(l)
+    mut o := net.options()
+    o.timeout_ms = 5000
+    o.total_ms = 250
+    start := time.now_ms()
+    r := net.request("GET", "http://{l.addr()}/", o) else err
+        print("kind: {err.kind}")
+        net.Response(status: 0, headers: {}, body: "")
+    print("stopped early: {time.now_ms() - start < 650}")
+    t.wait()?
+
+    l2 := net.listen("127.0.0.1:0")?
+    t2 := spawn chunky(l2)
+    g := net.get("http://{l2.addr()}/")?
+    print("{g.status} {g.body}")
+    t2.wait()?

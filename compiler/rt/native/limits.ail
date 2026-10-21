@@ -1,0 +1,116 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Run limits for native programs (run.limit.5, run.limit.6, ADR 0726): the
+## memory cap is checked when the heap takes a new chunk, the time limit
+## when the allocator has run 256 times and when the heap takes a chunk.
+## Both read their settings from the environment (`AIL_MAX_MEMORY_MB`,
+## `AIL_TIMEOUT_MS`) at start, else from the defaults `ail build --timeout`
+## and `--max-memory` baked in below. A program that never allocates is not
+## stopped by the timeout (it has no safepoint to check at).
+##
+## Global slots 45-47, 50 and 55 are this file's.
+
+LIM_TS := 46
+LIM_MS := 47
+LIM_CAP := 50
+LIM_DEADLINE := 55
+LIM_TICK := 45
+
+## `ail build --timeout MS` and `--max-memory MB` replace the two zeros.
+fn lim_baked_ms() int
+    0 # BAKED_TIMEOUT_MS
+
+fn lim_baked_mb() int
+    0 # BAKED_MEMORY_MB
+
+## A limit from the environment (a positive whole number), else `fallback`.
+fn lim_env(name str, unit str, fallback int) int
+    s := os_env_get(name)
+    if not os_ok()
+        return fallback
+    p := str_addr(s)
+    n := load64(p)
+    mut v := 0
+    mut i := 0
+    while i < n
+        c := load8(p + 16 + i)
+        if c < 48 or c > 57 or v > 100000000000
+            lim_bad(name, unit)
+        v = v * 10 + c - 48
+        i += 1
+    if n == 0 or v == 0
+        lim_bad(name, unit)
+    v
+
+fn lim_bad(name str, unit str)
+    out_str("error: `")
+    out_str(name)
+    out_str("` needs a positive number of ")
+    out_str(unit)
+    out_str(" (run.limit.4)\n")
+    flush_to(2)
+    sys_exit(2)
+
+## Read the settings. Called by `init`, after the heap is ready.
+fn limits_init()
+    ms := lim_env("AIL_TIMEOUT_MS", "milliseconds", lim_baked_ms())
+    mb := lim_env("AIL_MAX_MEMORY_MB", "megabytes", lim_baked_mb())
+    if mb > 0
+        store64(global(LIM_CAP), mb * 1048576)
+    if ms > 0
+        store64(global(LIM_TS), alloc(16, KIND_BYTES))
+        store64(global(LIM_MS), ms)
+        store64(global(LIM_DEADLINE), lim_now() + ms * 1000000)
+        store64(global(LIM_TICK), 256)
+
+## Nanoseconds on a clock that doesn't go back.
+fn lim_now() int
+    t := target()
+    p := load64(global(LIM_TS))
+    if t == 2
+        # gettimeofday on macOS: seconds, then microseconds in 32 bits.
+        syscall(116, p, 0, 0, 0, 0, 0)
+        return load64(p) * 1000000000 + load64(p + 8).bit_and(4294967295) * 1000
+    syscall(if t == 0 then 228 else 113, 1, p, 0, 0, 0, 0)
+    load64(p) * 1000000000 + load64(p + 8)
+
+## Called by `alloc` while a time limit is on, with the countdown.
+fn limits_tick(tick int)
+    if tick > 1
+        store64(global(LIM_TICK), tick - 1)
+        return
+    store64(global(LIM_TICK), 256)
+    limits_check()
+
+fn limits_check()
+    d := load64(global(LIM_DEADLINE))
+    if d != 0 and lim_now() >= d
+        flush()
+        out_str("trap[run.limit.1]: run took longer than --timeout ")
+        out_int(load64(global(LIM_MS)))
+        out_str(" ms (raise it, or find the loop)\n")
+        flush_to(2)
+        sys_exit(1)
+
+## Called by the heap before it takes pages that would bring it to `bytes`
+## (pages in use, free ones included) against the cap. Returns whether the
+## cap is exceeded; the heap collects and asks again before giving up.
+fn limits_over(bytes int) bool
+    cap := load64(global(LIM_CAP))
+    cap > 0 and bytes > cap
+
+## The trap for a cap that a collection didn't bring the heap under.
+fn limits_trap()
+    cap := load64(global(LIM_CAP))
+    flush()
+    out_str("trap[run.limit.2]: run used more than --max-memory ")
+    out_int(cap / 1048576)
+    out_str(" MB (raise it, or find what grows)\n")
+    flush_to(2)
+    sys_exit(1)
+
+## Called when the heap takes pages: the time limit is checked too.
+fn limits_pages()
+    if load64(global(LIM_DEADLINE)) != 0
+        limits_check()

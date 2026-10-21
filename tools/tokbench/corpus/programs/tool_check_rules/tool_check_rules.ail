@@ -1,0 +1,18 @@
+
+fn main() !
+    here := path.dir(env.program())
+    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    names := fs.list_dir(data)? "listing fixtures"
+    mut counts := Map[str, int]()
+    for name in names.sorted()
+        if not name.ends_with(".ail")
+            continue
+        r := proc.run("{here}/../ail", ["check", "--json", "{data}/{name}"])? "checking {name}"
+        for line in r.err.lines()
+            d := parse_json(line) else continue
+            rule := d.text("rule", "")
+            if rule.len() > 0
+                counts[rule] += 1
+    for rule in counts.top(counts.len())
+        print("{counts[rule]} {rule}")
+    print("{counts.len()} distinct rules")

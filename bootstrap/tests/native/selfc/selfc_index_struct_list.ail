@@ -1,0 +1,7 @@
+struct Point
+    x int
+    y int
+
+fn main()
+    xs := [Point(x: 1, y: 2), Point(x: 5, y: 6)]
+    print(xs[1].x)

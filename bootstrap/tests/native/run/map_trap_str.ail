@@ -1,0 +1,6 @@
+# type.map.3: a missing string key is quoted in the message.
+fn main()
+    mut m := Map[str, int]()
+    m["a\"b"] = 1
+    print(m["a\"b"])
+    print(m["missing"])

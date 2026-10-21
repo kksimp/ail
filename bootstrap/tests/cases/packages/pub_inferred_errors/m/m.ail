@@ -1,0 +1,12 @@
+error struct Bad
+    why str
+
+fn inner() !
+    helper()?
+
+pub fn api(n int) !int
+    helper()?
+    n
+
+fn helper() ! Bad
+    return Bad(why: "x")

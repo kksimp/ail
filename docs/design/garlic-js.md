@@ -27,8 +27,12 @@ did.
    storage, `URL` and `URLSearchParams`. Every change a script makes is
    logged in order, and Garlic replays the log into its own tree
    (`tools/garlic/jsdom`).
-4. **Later**: generators, async functions and promises, modules, BigInt, and
-   a bytecode compiler.
+4. **Generators, async functions and promises** (in progress): symbols,
+   iterators, `Promise` with a microtask queue, generators (`yield`,
+   `yield*`, `return`, `throw`), `async` functions and arrows, `await`,
+   async generators, `for await`, and `for-of` that steps its iterator and
+   closes it on `break`. Still to come: a bytecode compiler for speed.
+5. **Later**: modules and BigInt.
 
 ## Layout
 
@@ -69,6 +73,17 @@ tools/garlic/js/
 
 `tools/garlic/js` is the package `garlicjs` (`ail.pkg`): Garlic declares it as a
 dependency and imports `garlicjs.vm` from `tools/garlic/jsdom`.
+
+In Garlic (`tools/garlic/jsdom`, `load_doc` in `garlic.ail`), a page's
+scripts run after it is parsed, with external scripts fetched first, a
+budget of 1 s of virtual time and 5,000,000 steps, and the real time as the
+clock. Their changes are replayed into Garlic's tree. A navigation a
+script asks for, or else a `<meta http-equiv=refresh>` outside `<noscript>`,
+is followed, up to 5 hops. `std.net.jar` (ADR 0638) is the cookie jar: cookies
+from `Set-Cookie` and `document.cookie` are sent back by domain, path and
+`Secure` (`SameSite` is in the jar; Garlic does not pass the initiating page
+yet). `--no-js` skips scripts, and then a
+refresh inside `<noscript>` is followed too.
 
 ```sh
 ./ail run tools/garlic/js --ast page.js          # ESTree JSON, one line
@@ -208,19 +223,71 @@ regex engine is written.
   them as the `value` and `checked` attributes, as its own form input does.
 - Layout isn't known to scripts: sizes and rectangles are 0, and
   `getComputedStyle` reads only the `style` attribute.
+- **Chrome's surface** (`vm/browser.ail`). Pages check that built-ins are
+  real by calling them on the wrong object, reading their source, or
+  comparing a frame's built-ins with the page's. So the window, document,
+  each element tag and the host objects have Chrome's interface objects and
+  `Symbol.toStringTag` (`[object HTMLDivElement]`), `new Navigator()` fails
+  as in Chrome, navigator's values are enumerable getters on its prototype
+  that throw "Illegal invocation" for any other receiver, and
+  `navigator.permissions`, `canPlayType` and `window.chrome` exist. An
+  attached iframe's `contentWindow` has its own copies of the built-ins,
+  running the same natives, so `frame.String !== String` as with a separate
+  realm; the DOM is shared. Rejected: a full second realm (a second
+  `Vm` setup per frame), which no page we test needs yet.
+- `Function.prototype.toString` returns a function's source text
+  (§20.2.3.5): the parser keeps each function's and class's text, so code
+  that rebuilds functions from their source with `eval` works.
+
+## Generators and async functions
+
+The tree-walker keeps its place on AIL's own stack, so it can't stop in the
+middle of a function and go on later. A generator's or async function's
+body is compiled instead (`vm/gen.ail`) to a list of instructions whose
+place is kept in a `Frame`: a program counter, an operand stack, the
+current scope and the scopes outside it, the `try` handlers, and the
+completions of the `finally` blocks being run.
+
+Only the parts that can stop are compiled. A statement or expression with
+no `yield` or `await` in it (most of them) is one instruction that hands it
+to the tree-walker; `break` and `continue` out of such a statement find
+their target in a table made at compile time. A `try` pushes a handler
+that records the scope and stack depth to unwind to, and `return`, `break`
+and `continue` leave through the `finally` blocks in the way, as completion
+records (§6.2.4). Each function object compiles once.
+
+An async generator keeps a queue of `next`, `return` and `throw` requests,
+each answered by a promise in order (§27.6.3); it runs while the front
+request waits, and stops at each `yield` (after awaiting its value) or
+`await`. `for await` over a sync iterable wraps it so each value is awaited
+(§27.1.4).
+
+A generator is an object of class `Generator` that holds its frame's id;
+`next`, `return` and `throw` resume the frame. An async function returns a
+promise at once and runs until its first `await`; each `await` resumes it
+from a promise reaction, in the microtask queue. Frames that stop forever
+stay in `Vm.frames`, as an unreachable generator would in an engine without
+a collector of its own.
+
+Rejected: a CPS rewrite of the tree (every expression would carry a
+continuation, so the common code that never stops gets slower), and
+running the whole interpreter on a compiled bytecode now (a larger change;
+it comes later for speed, and these frames will move onto it).
 
 ## Not yet
 
-- Generators, `async` functions and `await`, `for await`: a clear
-  "not supported yet" SyntaxError (slice 4). Symbols and iterators come
-  with them; until then `for-of` and spread work on arrays, strings,
-  `arguments`, `Map`, `Set` and array-likes, and `keys()`, `values()` and
-  `entries()` return arrays.
+- `yield*` in an async generator: a clear "not supported yet"
+  SyntaxError. Leaving a `for-of` by `return` or a throw doesn't close
+  its iterator yet (`break` does). Inside a generator or async function, `yield` and `await`
+  can't yet appear in a destructuring target, a `class` body, a `with`
+  statement, tagged templates, optional chains, `delete`, `++`/`--`
+  operands, logical assignment, or a compound assignment to a computed
+  member; each of these is a clear SyntaxError.
 - Holes in arrays are `undefined`; property attributes on array elements
   only as a whole (`Object.freeze`).
 - Recursion is limited to 350 JavaScript calls: each one takes about 25
-  frames of the bootstrap interpreter, whose limit is 10,000. The bytecode
-  compiler (slice 4) removes this.
+  frames of the bootstrap interpreter, whose limit is 10,000. A bytecode
+  compiler for the whole interpreter will remove this.
 - Modules (`import`, `export`): scripts only, as in a classic `<script>`.
 - BigInt literals (`10n`).
 - Regular expression pattern syntax (§22.2.1): the literal's body and flags
@@ -230,10 +297,11 @@ regex engine is written.
 
 ## Testing
 
-- `testdata/syntax`: 16 hand-written scripts, one per area (literals,
+- `testdata/syntax`: 18 hand-written scripts, one per area (literals,
   templates, operators, ASI, declarations, functions, arrows, classes,
   objects, patterns, control flow, optional chaining, `new`, Annex B,
-  Unicode identifiers, regex context), each with its ESTree tree, and 56
+  Unicode identifiers, regex context, generators, `for await`), each with
+  its ESTree tree, and 57
   invalid scripts with their exact SyntaxError.
 - `testdata/test262-parser`: the tc39 [test262-parser-tests](https://github.com/tc39/test262-parser-tests)
   (commit `0e808c7`, 2021-05-27), scripts only, packed one test per line.
@@ -244,18 +312,31 @@ regex engine is written.
   exception and why: an unsupported feature, a twin that is not the same
   script, a test made stale by a later edition, or a gap. A listed test that
   starts to behave is reported, so the list only shrinks.
-- `testdata/run`: 12 programs (operators, functions, classes, control flow,
-  built-ins, numbers, JSON, collections, errors, strings, console layout),
+- `testdata/run`: 21 programs (operators, functions, classes, control flow,
+  built-ins, numbers, JSON, collections, errors, strings, console layout,
+  promises, symbols, generators, async functions, `await` positions,
+  `eval`, `Date` setters, assignment order, async generators, direct
+  `eval`, function source text),
   each with `NAME.out`, the output Node 22 gave (an uncaught error is the
   last line, as `Uncaught NAME: message`). `--test-run DIR` compares them.
-- `testdata/page`: 7 pages (tree, events, timers, forms, URL, a
-  Google-style script redirect), each with `NAME.out`: the console, the
+- `testdata/page`: 9 pages (tree, events, timers, forms, URL, a
+  script redirect, binary strings and beacons, Chrome's
+  interface objects), each with `NAME.out`: the console, the
   body's `innerHTML` at the end, and the navigations asked for, as Chromium
   (Playwright's build 1194) gave them with the page at
   `https://example.test/dir/page.html`. `--test-page DIR` compares them.
 - `vm/jsmath.ail` has `@test`s for the math functions.
 - `bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
   all of these in `./ail selftest`.
+
+Real pages lean on indirect and direct `eval`, function source text,
+`Date` setters, `Image`, `navigator.sendBeacon`, `btoa` on binary strings,
+an assignment's target evaluated before its value, and Chrome's surface
+above, so the engine has them. The engine follows general web standards
+and is not tuned to any one site. The designer dropped Google search as a
+target on 2026-10-21: its search page gates results behind bot detection.
+`--page --url URL FILE` loads a page at `URL` and lists every request and
+cookie, to compare with Chromium.
 
 As a larger check, acorn 8.14 (6,300 lines of JavaScript) runs in the
 interpreter, and its JSON tree with locations for a 240-character script
@@ -267,10 +348,10 @@ acorn 8.14 (ECMAScript 2022, script goal), outside the repository. Results on
 
 | Corpus | Result |
 |---|---|
-| test262 `pass` (1,907 scripts) | 1,822 identical trees; 85 use generators or async |
+| test262 `pass` (1,907 scripts) | 1,822 identical trees; 85 use generators or async (all 1,907 identical once the parser took them, 2026-10-20) |
 | test262 `fail` (682) | 623 rejected; 54 use unsupported features; 4 regex patterns accepted; `new super()` rejected where acorn accepts and the suite agrees with us |
 | test262 `early` (605) | 513 rejected; 88 unsupported; 1 regex pattern; 3 rejected where acorn accepts and the suite agrees with us |
-| npm's own modules (1,210 files) | 935 identical trees; 255 use async; 19 rejected by acorn too |
+| npm's own modules (1,210 files) | 935 identical trees; 255 use async; 19 rejected by acorn too. With async: 1,178 identical, 5 use dynamic `import()` |
 
 ## Speed
 
@@ -286,6 +367,27 @@ call, and a JavaScript loop step takes about 30 of them: a
 without declarations have fast paths. Running pages at speed needs the
 bytecode compiler (slice 4) and AIL's native backend.
 
+A profile (2026-10-21, `--trace=calls` counts and `AIL_BYTECODE_STATS=2`)
+shows no single hot spot. An expression statement such as `a;` makes six
+`eval` calls, three `lookup` calls, two `exec`/`exec_in`/`tick` calls and
+about ten others, and each costs about the same. Measured per loop step, a
+local read adds 8 µs, a call 22 µs, a method call 32 µs, and `push` 28 µs.
+The step counter is under 1 µs, so is the per-iteration scope copy, and
+so are the walker hand-offs (`.get` on a field reached through a `ref`
+hands off, at about 70 ns each). Two engine changes would cut the AIL calls
+per operation:
+
+- Resolve each name to a scope depth and slot at parse time, so that
+  `lookup` doesn't search maps up the chain.
+- Compile function bodies to a flat instruction list, so that `exec` and
+  `eval` don't recurse for each node.
+
+The larger step is native code. On 2026-10-21, `ail build tools/garlic/js`
+reports 1,324 constructs outside the native subset: `?` 342, `==` on `str`
+174, string interpolation 107, optionals as parameters and indexes, and
+string methods. These are the same groups the native lanes are closing for
+self-compilation.
+
 ## Notes on writing it in AIL
 
 What a 12,700-line AIL program ran into, for the language's designers:
@@ -299,7 +401,7 @@ What a 12,700-line AIL program ran into, for the language's designers:
   it.
 - `x := f() else err`, where `f` gives `T? ! E` and succeeds with `none`,
   panics in the bootstrap interpreter (issue #163). `json.ail` returns a
-  sentinel string instead.
+  sentinel string instead, and `gen.ail` a `Stop` whose kind is empty.
 - `if a then b elif c then d else e` isn't an expression; nest it in
   parentheses or use `match`.
 - A `match` arm can't do nothing (`{}` has no type), so "do nothing for these

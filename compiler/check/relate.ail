@@ -1,0 +1,295 @@
+## How types relate (ADR 0377): `accepts`, `mismatch`, error sets, type
+## parameter inference (`bind`, `subst_unknown`), as `bootstrap/src/check.rs`
+## and `check/traits.rs` define them.
+use ast
+
+## Admit the errors `got` into the set `want`: an inferred set grows, and a
+## written set must already contain them. Returns the missing ones.
+fn Checker.add_errors(mut self, want Errs, got List[Ty]) List[Ty]
+    match want
+        Inferred(j) =>
+            for g in got
+                if not inferred[j].contains(g)
+                    inferred[j].push(g)
+                    inferred[j] = sort_errors(inferred[j])
+            []
+        ErrSet(v) => [g for g in got if not v.contains(g)]
+
+## Whether a value of type `got` is accepted where `want` is expected
+## (type.opt.5, trait.any.3, err.decl.3, expr.block.3). An inferred error set
+## grows to admit the errors of `got` (err.type.2).
+@allow("expr.match.3") fn Checker.accepts(mut self, want Ty, got Ty) bool
+    if got == Ty.Never or got == Ty.Unknown or want == Ty.Unknown
+        return true
+    match want
+        Opt(w) =>
+            match got
+                Opt(g) => same(w, g)
+                _ => accepts(w, got)
+        Res(w, we) =>
+            match got
+                Res(g, ge) =>
+                    gerrs := errs_of(ge)
+                    same(w, g) and add_errors(we, gerrs).len() == 0
+                Union(m) => add_errors(we, m).len() == 0
+                _ =>
+                    if is_error_type(got)
+                        return add_errors(we, [got]).len() == 0
+                    accepts(w, got)
+        Union(w) =>
+            match got
+                Union(g) =>
+                    for t in g
+                        if not w.contains(t)
+                            return false
+                    true
+                _ => w.contains(got)
+        AnyOf(a) =>
+            match got
+                AnyOf(b) => a == b
+                Unit => false
+                Res => false
+                _ => implements(got, a)
+        _ => same(want, got)
+
+## Report a value of type `got` where `want` was expected, under `rule`. An
+## unhandled failure is reported as such (err.use.1).
+@allow("expr.match.3") fn Checker.mismatch(mut self, rule str, at ast.Pos, want Ty, got Ty)
+    if not is_res(want) and reject_unhandled(got, at)
+        return
+    text := "expected {show(want)}, found {show(got)}"
+    match want
+        Res(_, we) => mismatch_errors(rule, at, text, we, got)
+        _ =>
+            if h := mismatch_help(want, got)
+                err_help(rule, at, text, h)
+            else
+                err(rule, at, text)
+
+@allow("expr.match.3")
+fn Checker.mismatch_errors(mut self, rule str, at ast.Pos, text str, we Errs, got Ty)
+    mut got_errs := List[Ty]()
+    match got
+        Res(_, ge) => got_errs = errs_of(ge)
+        Union(m) => got_errs = m
+        _ => got_errs = if is_error_type(got) then [got] else []
+    mut missing := List[Ty]()
+    match we
+        ErrSet(v) => missing = [g for g in got_errs if not v.contains(g)]
+        Inferred => missing = []
+    if missing.len() == 0
+        err(rule, at, text)
+    else
+        names := [ty_name(t) for t in missing]
+        err_help(
+            rule,
+            at,
+            "{text}: the error type doesn't include {list_names(names)}",
+            "add them to the return type, e.g. `T ! A | B`, or use `!T` to infer the errors",
+        )
+
+## Help for a mismatch between two types (type.opt.7, expr.name.2).
+fn mismatch_help(want Ty, got Ty) str?
+    if is_opt(want) and is_opt(got) and is_opt(opt_inner(want))
+        return "an optional doesn't convert to a nested optional, since its `none` would be ambiguous (type.opt.7)"
+    if is_opt(got) and same(want, opt_inner(got))
+        return "this value may be absent; supply a fallback with `x := value else fallback`"
+    if want == Ty.Int and got == Ty.Float
+        return "no implicit conversion: `x.to_int()` truncates toward zero; `x.round().to_int()` rounds"
+    if want == Ty.Float and got == Ty.Int
+        return "no implicit conversion: write `n.to_float()`"
+    if k := num_name(want)
+        if got == Ty.Int or got == Ty.Float
+            return "no implicit conversion: write `x.to_{k}()`"
+    if (want == Ty.Int or want == Ty.Float) and num_name(got) != none
+        fname := if want == Ty.Int then "to_int" else "to_float"
+        return "no implicit conversion: write `x.{fname}()`"
+    if want == Ty.Str and got == Ty.Char
+        return "make a one-character string with \"\{c}\""
+    if want == Ty.Char and got == Ty.Str
+        return "a character is written in single quotes: 'a'"
+    none
+
+## The inner type of an optional (or the type itself).
+@allow("expr.match.3") fn opt_inner(t Ty) Ty
+    match t
+        Opt(x) => x
+        _ => t
+
+## The name of a sized numeric type.
+@allow("expr.match.3") fn num_name(t Ty) str?
+    match t
+        Num(k) => k
+        _ => none
+
+## Report a failure that isn't handled (err.use.1); true if `t` is one.
+fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
+    if not is_res(t)
+        return false
+    hint := if is_res(fn_ret) then "pass the error on with `?`, or handle it with `x := ... else ...`" else "handle it with `x := ... else d`, or declare this function's return type with `! E` and pass the error on with `?`"
+    err_help("err.use.1", at, "this can fail, and the failure isn't handled", hint)
+    true
+
+## Sorted, distinct display names of error types.
+fn Checker.error_names(self, errors List[Ty]) List[str]
+    mut names := [ty_name(t) for t in errors]
+    names.sort()
+    mut out := List[str]()
+    for n in names
+        if out.last() != n
+            out.push(n)
+    out
+
+## The return type that would let this function fail with `extra` too, as
+## the source writes it; `none` for an optional return type.
+@allow("expr.match.3") fn Checker.failing_ret(self, extra List[Ty]) str?
+    mut names := List[str]()
+    match fn_ret
+        Res(_, errs) => names = error_names(errs_of(errs))
+        Opt => return none
+        _ => names = []
+    for n in error_names(extra)
+        names.push(n)
+    names.sort()
+    mut uniq := List[str]()
+    for n in names
+        if uniq.last() != n
+            uniq.push(n)
+    ok := ok_type(fn_ret)
+    ok_text := if ok == Ty.Unit then "" else ty_name(ok)
+    "{ok_text} ! {uniq.join(" | ")}".trim()
+
+## Infer the parameters among `vars` that `pattern` mentions from the type
+## `actual` of a value given for it (gen.infer.1). The first binding wins.
+@allow("expr.match.3") fn bind(pattern Ty, actual Ty, vars List[int], mut binds List[Bind])
+    if actual == Ty.Unknown or actual == Ty.Never or actual == Ty.Unit
+        return
+    match pattern
+        Param(p) =>
+            if vars.contains(p)
+                for b in binds
+                    if b.param == p
+                        return
+                if not has_unknown(actual)
+                    binds.push(Bind(param: p, ty: actual))
+        ListOf(x) =>
+            match actual
+                ListOf(y) => bind(x, y, vars, mut binds)
+                _ => return
+        SetOf(x) =>
+            match actual
+                SetOf(y) => bind(x, y, vars, mut binds)
+                _ => return
+        Opt(x) =>
+            match actual
+                Opt(y) => bind(x, y, vars, mut binds)
+                _ => bind(x, actual, vars, mut binds)
+        Conc(a, x) =>
+            match actual
+                Conc(b, y) =>
+                    if a == b
+                        bind(x, y, vars, mut binds)
+                _ => return
+        MapOf(k, v) =>
+            match actual
+                MapOf(l, w) =>
+                    bind(k, l, vars, mut binds)
+                    bind(v, w, vars, mut binds)
+                _ => return
+        FnTy(xs, r) =>
+            match actual
+                FnTy(ys, s) =>
+                    if xs.len() == ys.len()
+                        for k in 0..xs.len()
+                            bind(xs[k], ys[k], vars, mut binds)
+                        bind(r, s, vars, mut binds)
+                _ => return
+        Struct(s, xs) =>
+            match actual
+                Struct(t, ys) =>
+                    if s == t
+                        bind_all(xs, ys, vars, mut binds)
+                _ => return
+        Enum(s, xs) =>
+            match actual
+                Enum(t, ys) =>
+                    if s == t
+                        bind_all(xs, ys, vars, mut binds)
+                _ => return
+        Res(x, _) =>
+            match actual
+                Res(y, _) => bind(x, y, vars, mut binds)
+                _ => bind(x, actual, vars, mut binds)
+        _ => return
+
+fn bind_all(xs List[Ty], ys List[Ty], vars List[int], mut binds List[Bind])
+    for k in 0..xs.len().min(ys.len())
+        bind(xs[k], ys[k], vars, mut binds)
+
+## The type bound to `p`, or unknown.
+fn bound(binds List[Bind], p int) Ty
+    for b in binds
+        if b.param == p
+            return b.ty
+    Ty.Unknown
+
+fn is_bound(binds List[Bind], p int) bool
+    for b in binds
+        if b.param == p
+            return true
+    false
+
+## Replace the bound type parameters, and make the other `vars` unknown.
+@allow("expr.match.3") fn subst_unknown(t Ty, binds List[Bind], vars List[int]) Ty
+    match t
+        Param(p) =>
+            for b in binds
+                if b.param == p
+                    return b.ty
+            if vars.contains(p) then Ty.Unknown else t
+        Struct(s, args) => Ty.Struct(s, [subst_unknown(a, binds, vars) for a in args])
+        Enum(e, args) => Ty.Enum(e, [subst_unknown(a, binds, vars) for a in args])
+        ListOf(x) => Ty.ListOf(subst_unknown(x, binds, vars))
+        SetOf(x) => Ty.SetOf(subst_unknown(x, binds, vars))
+        MapOf(k, v) => Ty.MapOf(
+            key: subst_unknown(k, binds, vars),
+            value: subst_unknown(v, binds, vars),
+        )
+        Opt(x) => Ty.Opt(subst_unknown(x, binds, vars))
+        Conc(k, x) => Ty.Conc(k, subst_unknown(x, binds, vars))
+        Res(x, errs) =>
+            match errs
+                ErrSet(set) => Ty.Res(
+                    subst_unknown(x, binds, vars),
+                    Errs.ErrSet([subst_unknown(e, binds, vars) for e in set]),
+                )
+                Inferred => Ty.Res(subst_unknown(x, binds, vars), errs)
+        Union(m) => Ty.Union([subst_unknown(x, binds, vars) for x in m])
+        FnTy(ps, r) => Ty.FnTy(
+            [subst_unknown(x, binds, vars) for x in ps],
+            subst_unknown(r, binds, vars),
+        )
+        _ => t
+
+## Whether two declared field types could be the same type (type.struct.7).
+fn may_be_same(a Ty, b Ty) bool
+    a == b or (has_param(a) and has_param(b))
+
+@allow("expr.match.3") fn has_param(t Ty) bool
+    match t
+        Param => true
+        ListOf(e) => has_param(e)
+        Opt(e) => has_param(e)
+        SetOf(e) => has_param(e)
+        Conc(_, e) => has_param(e)
+        MapOf(k, v) => has_param(k) or has_param(v)
+        Struct(_, args) => any_param(args)
+        Enum(_, args) => any_param(args)
+        FnTy(ps, r) => any_param(ps) or has_param(r)
+        _ => false
+
+fn any_param(ts List[Ty]) bool
+    for t in ts
+        if has_param(t)
+            return true
+    false

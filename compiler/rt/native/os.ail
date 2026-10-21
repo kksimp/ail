@@ -1,16 +1,17 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## The operating-system layer of the native runtime (ADRs 0580, 0581):
+## The operating-system layer of the native runtime (ADRs 0580-0582):
 ## `std.fs`, `std.env`, `std.io` and `std.time` by direct system calls, with
-## no libc (native-abi.md §4). One function per operation. A fallible one
-## returns a value and records its outcome: `os_ok()` is whether it
-## succeeded and `os_kind()` the `fs.IoError.kind` when it did not
-## (std.err.1), the same on every platform. The lowering turns that into an
-## `else` (lower_os.ail); lane 175's error values replace the status.
+## no libc (native-abi.md §4). Each operation is `os_NAME`, which records its
+## outcome in `os_ok()` and `os_kind()` (the `fs.IoError.kind` of std.err.1,
+## the same on every platform), and a wrapper `NAME` the lowering calls: a
+## failing `fs_*` sets the error slot to the display text of an
+## `fs.IoError` (err.text.1) and returns zero; `env_get`, `env_home` and
+## `io_read_line` return the string, or 0 for `none`.
 ##
 ## Linux x86-64, Linux ARM64 and macOS ARM64 (`target()` 0, 1, 2). Windows
-## (`plat.win.1`) has no native target yet: its calls are not built.
+## (`plat.target.1`, Tier 1) has no native target yet: its calls are not built.
 
 # Global slots 32-47 are this file's (native-abi.md §2 lists the ranges).
 OS_OK := 32
@@ -164,7 +165,7 @@ fn os_fail_errno(r int)
 fn os_scratch(off int) int
     mut a := load64(global(OS_AREA))
     if a == 0
-        a = alloc(OS_AREA_SIZE)
+        a = alloc(OS_AREA_SIZE, KIND_BYTES)
         store64(global(OS_AREA), a)
     a + off
 
@@ -252,10 +253,10 @@ fn os_str_cmp(a int, b int) int
         x := load8(a + 16 + i)
         y := load8(b + 16 + i)
         if x != y
-            return if x < y then - 1 else 1
+            return if x < y then -1 else 1
     if na == nb
         return 0
-    if na < nb then - 1 else 1
+    if na < nb then -1 else 1
 
 # ---- std.fs ----
 
@@ -272,8 +273,10 @@ fn os_read_fd(fd int) int
     mut cap := 65536
     size := os_lseek(fd, 0, 2)
     # A directory reports a huge size; trust only a plausible one.
-    if size > 0 and size < 1073741824 and os_lseek(fd, 0, 0) == 0
-        cap = size + 1
+    if size >= 0
+        os_lseek(fd, 0, 0)
+        if size > 0 and size < 1073741824
+            cap = size + 1
     mut s := str_new(cap, 0)
     mut n := 0
     while true
@@ -295,7 +298,7 @@ fn os_read_fd(fd int) int
 
 ## `fs.read_text(path)` (std.fs.1): the file, or "" with `os_ok()` false and
 ## the kind `not_found`, `is_dir`, `invalid_utf8`...
-fn fs_read_text(path str) str
+fn os_fs_read_text(path str) str
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -347,10 +350,10 @@ fn os_write_file(path str, text str, mode int)
         return
     os_succeed()
 
-fn fs_write_text(path str, text str)
+fn os_fs_write_text(path str, text str)
     os_write_file(path, text, 1)
 
-fn fs_append_text(path str, text str)
+fn os_fs_append_text(path str, text str)
     os_write_file(path, text, 2)
 
 ## Shell sort of the string pointers in `data[0..n]` by bytes.
@@ -367,13 +370,15 @@ fn os_sort_names(data int, n int)
         gap = gap / 2
 
 ## `fs.list_dir(path)` (std.fs.5): the entry names, sorted by their bytes.
-fn fs_list_dir(path str) List[int]
+fn os_fs_list_dir(path str) List[int]
     mut out := List[int]()
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
         return out
-    fd := os_open(p, 0, 0)
+    # O_DIRECTORY, so a regular file fails here with ENOTDIR on every
+    # platform (XNU's getdirentries64 would say EINVAL, which is `other`).
+    fd := os_open(p, os_pick(65536, 65536, 1048576), 0)
     if fd < 0
         os_fail_errno(fd)
         return out
@@ -412,7 +417,7 @@ fn os_name_is_dots(name int, len int) bool
     len == 2 and load8(name) == 46 and load8(name + 1) == 46
 
 ## `fs.remove(path)` (std.fs.6): a file, or an empty directory.
-fn fs_remove(path str)
+fn os_fs_remove(path str)
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -437,7 +442,7 @@ fn os_is_dir_at(p int) bool
 
 ## `fs.make_dir(path)` (std.fs.7): the directory and any missing parents; an
 ## existing directory is not a failure.
-fn fs_make_dir(path str)
+fn os_fs_make_dir(path str)
     p := os_cstr(OS_PATH_A, path)
     if p == 0
         os_fail_kind(K_NOT_FOUND)
@@ -459,7 +464,7 @@ fn fs_make_dir(path str)
 
 ## `fs.rename(from, to)` (std.fs.11). A failure's kind is `from`'s when
 ## `from` is missing; the path to report is the caller's (`rename_failed_on_from`).
-fn fs_rename(from str, to str)
+fn os_fs_rename(from str, to str)
     a := os_cstr(OS_PATH_A, from)
     b := os_cstr(OS_PATH_B, to)
     if a == 0 or b == 0
@@ -478,7 +483,7 @@ fn os_envp() int
     load64(global(ARGV)) + 8 * (load64(global(ARGC)) + 1)
 
 ## `env.get(name)` (std.env.2): "" with `os_ok()` false when unset or not UTF-8.
-fn env_get(name str) str
+fn os_env_get(name str) str
     q := str_addr(name)
     n := load64(q)
     mut e := os_envp()
@@ -501,11 +506,11 @@ fn env_get(name str) str
     ""
 
 ## `env.home()` (std.env.6): `HOME`, else `USERPROFILE`, when not empty.
-fn env_home() str
-    h := env_get("HOME")
+fn os_env_home() str
+    h := os_env_get("HOME")
     if os_ok() and h.len() > 0
         return h
-    u := env_get("USERPROFILE")
+    u := os_env_get("USERPROFILE")
     if os_ok() and u.len() > 0
         return u
     os_fail_kind(K_NOT_FOUND)
@@ -632,7 +637,7 @@ fn os_in_fill() bool
     flush()
     mut b := load64(global(IN_BUF))
     if b == 0
-        b = alloc(OS_IN_SIZE)
+        b = alloc(OS_IN_SIZE, KIND_BYTES)
         store64(global(IN_BUF), b)
     while true
         r := os_read(0, b, OS_IN_SIZE)
@@ -741,7 +746,7 @@ fn os_lossy(s int) str
 
 ## `io.read_line()` (std.io.1): the next line without `\n` or `\r\n`;
 ## `os_ok()` is false at the end of input.
-fn io_read_line() str
+fn os_io_read_line() str
     s := os_read_until_newline()
     if not os_ok()
         return ""
@@ -774,3 +779,119 @@ fn io_read_all() str
     store64(s, n)
     os_succeed()
     os_lossy(s)
+
+# ---- the lowering's entry points (lower_os.ail) ----
+
+## `s` as the interpreter quotes it inside a value: `"`, `\`, `\n`, `\t`,
+## `\r`, `\0` escaped, other control characters as `\u{X}`.
+fn os_put_quoted(s str)
+    p := str_addr(s)
+    n := load64(p)
+    sb_byte(34)
+    mut i := 0
+    while i < n
+        c := load8(p + 16 + i)
+        if c == 34 or c == 92
+            sb_byte(92)
+            sb_byte(c)
+        elif c == 10
+            sb_text("\\n")
+        elif c == 9
+            sb_text("\\t")
+        elif c == 13
+            sb_text("\\r")
+        elif c == 0
+            sb_text("\\0")
+        elif c < 32 or c == 127
+            os_put_u()
+            put_hex(c)
+            sb_byte(125)
+        elif c == 194 and i + 1 < n and load8(p + 17 + i) >= 128 and load8(p + 17 + i) < 160
+            os_put_u()
+            put_hex(load8(p + 17 + i))
+            sb_byte(125)
+            i += 1
+        else
+            sb_byte(c)
+        i += 1
+    sb_byte(34)
+
+## `\u{` of a Unicode escape.
+fn os_put_u()
+    sb_byte(92)
+    sb_byte(117)
+    sb_byte(123)
+
+## Fail with `fs.IoError(path: "P", kind: "K")`; `at` is the call's trace line.
+fn os_error(path str, kind int, at str)
+    sb_reset()
+    sb_text("fs.IoError(path: ")
+    os_put_quoted(path)
+    sb_text(", kind: ")
+    os_put_quoted(kind_name(kind))
+    sb_byte(41)
+    err_set(sb_str(), at)
+
+fn fs_read_text(path str, at str) str
+    s := os_fs_read_text(path)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+    s
+
+fn fs_write_text(path str, text str, at str)
+    os_fs_write_text(path, text)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+
+fn fs_append_text(path str, text str, at str)
+    os_fs_append_text(path, text)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+
+fn fs_list_dir(path str, at str) List[int]
+    xs := os_fs_list_dir(path)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+    xs
+
+fn fs_remove(path str, at str)
+    os_fs_remove(path)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+
+fn fs_make_dir(path str, at str)
+    os_fs_make_dir(path)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+
+## A failure's path is `from` when `from` is missing, else `to` (std.fs.12).
+fn fs_rename(from str, to str, at str)
+    os_fs_rename(from, to)
+    if not os_ok()
+        k := os_kind()
+        os_error(if k == K_NOT_FOUND then from else to, k, at)
+
+fn env_get(name str) str
+    s := os_env_get(name)
+    if os_ok()
+        return s
+    str_at(0)
+
+fn env_home() str
+    s := os_env_home()
+    if os_ok()
+        return s
+    str_at(0)
+
+fn io_read_line() str
+    s := os_io_read_line()
+    if os_ok()
+        return s
+    str_at(0)
+
+## `s.to_float()` as a `float?` (type.num.8): the number boxed, or 0.
+fn str_float_opt(s str) int
+    x := str_to_float(s)
+    if parse_ok()
+        return boxf(x)
+    0

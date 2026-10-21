@@ -1,0 +1,5 @@
+fn first(a str, b str) bool
+    a < b
+
+fn main()
+    print(first("a", "b"))

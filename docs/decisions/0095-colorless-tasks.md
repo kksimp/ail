@@ -34,3 +34,8 @@
   underneath (io_uring, IOCP or kqueue, per performance-beyond-c.md §3.5).
 - FFI calls that block in C must be marked so the runtime can hand off the
   OS thread. That's an FFI-topic detail.
+
+## Rejected alternatives
+
+- `async`/`await` with coloured functions: 78.0 tokens against 76.8 for colorless tasks in the background measurement. It also has two kinds of function and a common class of forgotten-`await` bugs, so it loses on AI understanding.
+- OS threads only: the simplest runtime, but too heavy for servers, so it fails the concurrency goal.

@@ -1,4 +1,4 @@
-{"shapes":["Dot",{"kind":"Circle","r":2.0,"label":"a"},{"kind":"Poly","points":[{"x":1.0,"y":2.0}]}]}
+{"shapes":["Dot",{"kind":"Circle","r":2,"label":"a"},{"kind":"Poly","points":[{"x":1,"y":2}]}]}
 true
 Shape.Dot
 missing shapes[1].r

@@ -29,7 +29,7 @@ and `return` leaves the function. The body of an `unsafe fn` is not an
 `unsafe` block. A function with an `unsafe` block has the effect `unsafe`
 (`eff.infer.4`, `eff.pure.1`). *(ADR 0430)*
 
-```ail
+```ail rules=unsafe.block.5
 unsafe fn twice(x int) int
     x * 2
 
@@ -61,8 +61,38 @@ fn main()
 
 *(ADR 0106)*
 
+```ail error=unsafe.op.1
+use std.mem
+
+fn main()
+    xs := mem.alloc(4, 0)
+    print("ok")
+```
+
+```ail rules=unsafe.block.1,unsafe.op.2
+use std.mem
+
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0)
+        print("ok")
+```
+
 **unsafe.op.2** — Creating or copying a raw pointer value is not an unsafe
 operation. *(ADR 0106)*
+
+```ail rules=unsafe.op.2
+use std.mem
+
+fn null_ptr() *u8
+    unsafe
+        return mem.null()
+
+fn main()
+    q := null_ptr()
+    r := q
+    print(r.is_null())
+```
 
 ## Raw pointers and memory
 
@@ -109,7 +139,7 @@ size that overflows, is a run-time trap. `mem.cast(p, example)` is the same
 address as a pointer to the example's type (reinterpretation, `unsafe.op.1`),
 `mem.null()` is the null `*u8`, and `mem.free(p)` accepts any pointer. *(ADR 0435)*
 
-```ail
+```ail rules=unsafe.mem.1,unsafe.mem.3,unsafe.ptr.1,unsafe.ptr.2
 use std.mem
 
 fn main()
@@ -119,4 +149,99 @@ fn main()
             xs.offset(i).write(i * 10)
         print(xs.offset(2).read())
         mem.free(xs)
+```
+
+## Runnable examples for the rules above
+
+```ail error=unsafe.ptr.3
+fn f(p *int) int
+    p.len()
+
+fn main()
+    print(1)
+```
+
+```ail tool=api,--ast,FILE expect="unsafe_fn":true rules=unsafe.block.4
+unsafe fn twice(x int) int
+    x * 2
+
+fn main()
+    unsafe
+        print(twice(3))
+```
+
+```ail rules=unsafe.op.2
+use std.mem
+fn make() *int
+    unsafe
+        mem.alloc(1, 7)
+
+fn pass(p *int) *int
+    p
+
+fn main()
+    q := pass(make())
+    unsafe
+        print(q.read())
+        mem.free(q)
+```
+
+```ail rules=unsafe.ptr.1,unsafe.ptr.2
+use std.mem
+fn same(a *int, b *int) bool
+    a == b
+
+fn main()
+    unsafe
+        xs := mem.alloc(2, 1)
+        print(same(xs, xs.offset(1)))
+        print(xs.offset(1).read())
+        mem.free(xs)
+```
+
+```ail norun rules=unsafe.ptr.4
+use std.mem
+fn main()
+    unsafe
+        print(mem.null().read())
+```
+
+```ail norun rules=unsafe.ptr.5
+use std.mem
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0)
+        print(xs.offset(4).read())
+```
+
+```ail norun rules=unsafe.ptr.6
+use std.mem
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0)
+        mem.free(xs)
+        print(xs.read())
+```
+
+```ail norun rules=unsafe.mem.2
+use std.mem
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0)
+        mem.free(xs)
+        mem.free(xs)
+```
+
+```ail norun rules=unsafe.mem.3
+use std.mem
+fn main()
+    unsafe
+        xs := mem.alloc(-1, 0)
+        print(1)
+```
+
+```ail skip=context rules=unsafe.block.3
+# A package's manifest opts in: `package app unsafe allow` (or `dep NAME ... unsafe allow`).
+# Without it, an `unsafe` block in the package is an error at the block. The package
+# cases under bootstrap/tests/cases/packages/ cover the manifest rules (mod.pkg.2).
 ```

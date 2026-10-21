@@ -24,6 +24,7 @@ mod builtins;
 mod bytecode;
 mod bytes;
 mod ffi;
+mod json;
 mod keyfn;
 pub mod limits;
 mod contracts;
@@ -45,6 +46,7 @@ mod trace;
 pub use bytecode::set_enabled as set_bytecode;
 pub use contracts::set_enabled as set_contracts;
 pub use random::seed as set_seed;
+pub use json::install as install_native_json;
 pub use stdlib::set_program;
 pub use tasks::{schedule_seed, set_schedule};
 mod prop;
@@ -429,6 +431,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         structs,
         enums,
         out: BufWriter::new(out),
+        errs: None,
         depth: 0,
         closed: false,
         consts: HashMap::default(),
@@ -457,6 +460,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         pure: None,
         hook: limits::active(),
         steps: 0,
+        ct_eval: None,
         cov_last: 0,
         tier: bytecode::usable(prog, has_unique, has_defer),
         codes: prog.fns.iter().map(|_| bytecode::Slot::Untried).collect(),
@@ -464,6 +468,7 @@ fn build<'a, W: Write>(prog: &'a Program, resolved: &'a Resolved, out: W) -> Int
         stats: bytecode::Stats {
             on: std::env::var_os("AIL_BYTECODE_STATS").is_some(),
             kinds: (std::env::var_os("AIL_BYTECODE_STATS").is_some_and(|v| v == "2")).then(HashMap::default),
+            by_fn: (std::env::var_os("AIL_BYTECODE_STATS").is_some_and(|v| v == "3")).then(HashMap::default),
             ..Default::default()
         },
     }
@@ -557,6 +562,8 @@ struct Interp<'a, W: Write> {
     structs: HashMap<&'a str, usize>,
     enums: HashMap<&'a str, usize>,
     out: BufWriter<W>,
+    /// `Some` while `ail test` runs: what `io.eprint` wrote, captured instead of shown (test.run.2).
+    errs: Option<Vec<u8>>,
     depth: usize,
     /// Standard output was closed by the reader (e.g. `| head`); stop writing quietly.
     closed: bool,
@@ -611,6 +618,9 @@ struct Interp<'a, W: Write> {
     /// A run limit or coverage is on (run.limit.1-3, test.cover.1); off costs one branch per statement.
     hook: bool,
     steps: u64,
+    /// Statements run so far by the constant being computed, and its name (ct.eval.3);
+    /// `None` outside constant evaluation.
+    ct_eval: Option<(&'a str, u64)>,
     cov_last: usize,
     /// The bytecode tier runs this program's functions (ADR 0361).
     tier: bool,
@@ -1203,7 +1213,18 @@ impl<'a, W: Write> Interp<'a, W> {
         let mut outcome = match self.compiled(f) {
             Some(code) => {
                 self.stats.calls[1] += 1;
-                self.run_code(&code, env)
+                if self.stats.by_fn.is_some() {
+                    let (start, child) = (self.stats.ins, self.stats.child_ins);
+                    let out = self.run_code(&code, env);
+                    let total = self.stats.ins - start;
+                    let own = total - (self.stats.child_ins - child);
+                    self.stats.child_ins = child + total;
+                    let e = self.stats.by_fn.as_mut().expect("checked").entry(f.full_name()).or_default();
+                    (e.0, e.1) = (e.0 + 1, e.1 + own);
+                    out
+                } else {
+                    self.run_code(&code, env)
+                }
             }
             None => {
                 self.stats.calls[0] += 1;
@@ -1291,7 +1312,7 @@ impl<'a, W: Write> Interp<'a, W> {
         result
     }
 
-    /// A block whose exit releases unique values (own.uniq.3-4) and runs
+    /// A block whose exit releases unique values (own.uniq.3-4, own.uniq.7) and runs
     /// deferred statements (own.defer.1-2): in reverse order of their
     /// declarations and `defer`s, by any exit, including a trap.
     #[inline(never)]
@@ -2312,7 +2333,19 @@ impl<'a, W: Write> Interp<'a, W> {
         let prog = self.prog;
         let c = prog.consts.iter().find(|c| c.name == name).expect("checked: a constant");
         let mut env = Vec::new();
-        let v = self.eval(&c.value, &mut env)?;
+        // ct.eval.3: count the statements a constant runs, outermost constant only.
+        let outer = self.ct_eval.is_none();
+        let hook = self.hook;
+        if outer {
+            self.ct_eval = Some((&c.name, 0));
+            self.hook = true;
+        }
+        let v = self.eval(&c.value, &mut env);
+        if outer {
+            self.ct_eval = None;
+            self.hook = hook;
+        }
+        let v = v?;
         let _ = pos;
         self.consts.insert(&c.name, v.clone());
         Ok(v)
@@ -2899,6 +2932,9 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(crate::stdlib::StdCall::Tensor(m)) = site.std {
             return self.tensor_method(m, recv, args, pos, env);
         }
+        if let Some(crate::stdlib::StdCall::Output(m)) = site.std {
+            return self.output_method(m, recv, env);
+        }
         if let Some(crate::stdlib::StdCall::Ptr(m, elem)) = site.std {
             return self.ptr_method(m, elem, recv, args, pos, env);
         }
@@ -2916,7 +2952,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 let site = MethodSite {
                     call: self.resolved.calls.get(&pos).copied(),
                     std: match self.resolved.std_calls.get(&pos) {
-                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
+                        Some(&c @ (crate::stdlib::StdCall::Method(_) | crate::stdlib::StdCall::Tensor(_) | crate::stdlib::StdCall::Output(_) | crate::stdlib::StdCall::Ptr(..))) => Some(c),
                         _ => None,
                     },
                     mutating: self.mutating.contains(name),

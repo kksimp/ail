@@ -1,0 +1,4 @@
+fn main()
+    found := [1, 2, 3].index_of(4)
+    if found.is_none()
+        print("missing")

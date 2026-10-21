@@ -62,6 +62,30 @@ fn mir_matches_the_expected_dumps() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
+/// ADR 0722: each `native.subset.1` problem of `subset_help.ail` is followed by
+/// its `help:` line, exactly as in `subset_help.help`.
+#[test]
+fn subset_problems_print_their_help_lines() {
+    let case = root().join("bootstrap/tests/native/subset_help.ail");
+    let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
+    let (_, _, err) = compiler(&["mir", &rel]);
+    let want = fs::read_to_string(case.with_extension("help")).unwrap();
+    let mut lines = Vec::new();
+    let mut prev_is_problem = false;
+    for l in err.lines() {
+        if l.starts_with(&rel) {
+            lines.push(l);
+            prev_is_problem = true;
+        } else if prev_is_problem && l.starts_with("help:") {
+            lines.push(l);
+            prev_is_problem = false;
+        } else {
+            prev_is_problem = false;
+        }
+    }
+    assert_eq!(lines.join("\n") + "\n", want, "help lines differ");
+}
+
 /// `ail build` on each `tests/native/run/NAME.ail`, then the executable's
 /// output against `ail run`'s: stdout, the exit code, and a trap's message
 /// and excerpt (the interpreter's snapshot lines aside, trace.snap.1).
@@ -174,3 +198,127 @@ fn build_refuses_programs_outside_the_subset() {
     assert!(!out.status.success() && !tmp.exists(), "built a program outside the subset");
     assert!(err.contains("error[native.subset.1]"), "{err}");
 }
+
+/// `compiler/rt/native/unicode.ail` is what `tools/native/gen_unicode.ail`
+/// writes from the interpreter's tables (native.str.1, ADR 0567), so a
+/// toolchain with newer Unicode data fails here until the file is regenerated.
+#[test]
+fn unicode_tables_are_current() {
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "tools/native/gen_unicode.ail"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let have = fs::read_to_string(root().join("compiler/rt/native/unicode.ail")).unwrap();
+    assert!(
+        String::from_utf8(out.stdout).unwrap() == have,
+        "compiler/rt/native/unicode.ail is stale: run `./ail run tools/native/gen_unicode.ail > compiler/rt/native/unicode.ail`"
+    );
+}
+
+/// run.limit.5, run.limit.6: a native program stops at the limits of
+/// `AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB` and the defaults `ail build` bakes,
+/// with the trap line `ail run` prints (less its position), after its output
+/// so far, and exit status 1. `runner` runs the executable (an emulator).
+fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
+    let tmp = std::env::temp_dir().join(format!("ail-limits-{}-{}", target.unwrap_or("host"), std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    // The trap line without its `FILE:LINE:COL: ` prefix.
+    let message = |stderr: &[u8]| {
+        let text = String::from_utf8_lossy(stderr).into_owned();
+        let line = text.lines().find(|l| l.contains("trap[")).unwrap_or("").to_string();
+        line.find("trap[").map(|i| line[i..].to_string()).unwrap_or_default()
+    };
+    // (program, `ail run` option, value, environment variable, bake flag)
+    for (name, option, value, var, flag) in [
+        ("grow", "--max-memory", "16", "AIL_MAX_MEMORY_MB", "--max-memory"),
+        ("spin", "--timeout", "300", "AIL_TIMEOUT_MS", "--timeout"),
+    ] {
+        let src = format!("bootstrap/tests/native/limits/{name}.ail");
+        let want = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", option, value, &src]).output().unwrap();
+        for baked in [false, true] {
+            let exe = tmp.join(format!("{name}{}", if baked { "-baked" } else { "" }));
+            let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
+            build.current_dir(root()).args(["build", &src, "-o"]).arg(&exe);
+            if let Some(t) = target {
+                build.args(["--target", t]);
+            }
+            if baked {
+                build.args([flag, value]);
+            }
+            let built = build.output().unwrap();
+            assert!(built.status.success(), "{src}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr));
+            let mut run = match runner {
+                Some(r) => {
+                    let mut c = Command::new(r);
+                    c.arg(&exe);
+                    c
+                }
+                None => Command::new(&exe),
+            };
+            if !baked {
+                run.env(var, value);
+            }
+            let got = run.output().unwrap();
+            let label = format!("{src} ({}{})", var, if baked { ", baked" } else { "" });
+            assert_eq!(got.status.code(), Some(1), "{label}: exit status");
+            assert_eq!(got.stdout, want.stdout, "{label}: stdout");
+            assert_eq!(message(&got.stderr), message(&want.stderr), "{label}: trap line");
+        }
+    }
+    // run.limit.4: an invalid value in the environment ends the program with status 2.
+    let exe = tmp.join("spin");
+    let mut run = match runner {
+        Some(r) => {
+            let mut c = Command::new(r);
+            c.arg(&exe);
+            c
+        }
+        None => Command::new(&exe),
+    };
+    let bad = run.env("AIL_TIMEOUT_MS", "soon").output().unwrap();
+    assert_eq!(bad.status.code(), Some(2), "a bad AIL_TIMEOUT_MS");
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+// run.limit.5, run.limit.6
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn run_limits_stop_native_programs() {
+    limits_stop_native_programs(None, None);
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn run_limits_stop_arm64_programs_under_qemu() {
+    let runner = ["qemu-aarch64-static", "qemu-aarch64"]
+        .into_iter()
+        .find(|q| Command::new(q).arg("--version").output().is_ok_and(|o| o.status.success()));
+    match runner {
+        Some(q) => limits_stop_native_programs(Some("aarch64-linux"), Some(q)),
+        None => eprintln!("skipped: no qemu-aarch64 emulator"),
+    }
+}
+
+/// Every runtime source parses as AIL (gram.*): the self-hosted pipeline
+/// compiles `compiler/rt/native` on its own, and `ail fmt --check DIR` skips
+/// files with syntax errors, so a foreign token there (`&` for `bit_and`)
+/// used to vanish silently and drop the rest of its statement from the
+/// native code. Naming each file makes `fmt --check` report it (fmt.safe).
+#[test]
+fn runtime_sources_parse() {
+    let dir = root().join("compiler/rt/native");
+    let mut bad = Vec::new();
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        if p.extension().is_some_and(|x| x == "ail") {
+            let out = Command::new(env!("CARGO_BIN_EXE_ail")).args(["fmt", "--check"]).arg(&p).output().unwrap();
+            if out.status.code() == Some(2) {
+                bad.push(format!("{}: {}", p.display(), String::from_utf8_lossy(&out.stderr)));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "runtime sources with syntax errors:\n{}", bad.join("\n"));
+}
+

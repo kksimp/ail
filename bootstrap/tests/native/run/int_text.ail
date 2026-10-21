@@ -1,0 +1,33 @@
+# Integers print and interpolate as decimal (type.str.1) at every width,
+# both signs and the extremes, with the output buffer crossing its limit.
+fn main()
+    mn := -9223372036854775807 - 1
+    for v in [
+        0,
+        1,
+        -1,
+        9,
+        10,
+        -10,
+        99,
+        100,
+        12345,
+        -98765,
+        1000000007,
+        9223372036854775807,
+        -9223372036854775807,
+        mn,
+    ]
+        print(v)
+        print("[{v}] {v + 0}")
+    mut s := ""
+    mut x := 1
+    for _ in 0..18
+        s = "{s}{x},{0 - x};"
+        x = x * 10 + 7
+    print(s)
+    mut total := 0
+    for i in 0..20000
+        print("row {i}: {i * 7 % 1000} {0 - i}")
+        total += i
+    print(total)

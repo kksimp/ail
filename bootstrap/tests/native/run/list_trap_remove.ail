@@ -1,0 +1,6 @@
+# type.coll.4: remove_at past the end.
+fn main()
+    mut xs := [1, 2, 3]
+    xs.remove_at(1)
+    print(xs)
+    xs.remove_at(2)

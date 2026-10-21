@@ -1,4 +1,4 @@
-//! Time zones from the platform's tz database (std.tz.1-4, ADR 0448): a
+//! Time zones from the platform's tz database (std.tz.1-3, ADR 0448): a
 //! TZif reader with the POSIX rule of its footer for instants after the
 //! last transition. No crate reads the files: the format is small (RFC 9636).
 

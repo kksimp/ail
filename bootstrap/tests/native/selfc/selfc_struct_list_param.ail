@@ -1,0 +1,12 @@
+struct Point
+    x int
+    y int
+
+fn total(xs List[Point]) int
+    mut t := 0
+    for p in xs
+        t += p.x
+    t
+
+fn main()
+    print(total([Point(x: 1, y: 2), Point(x: 3, y: 4)]))

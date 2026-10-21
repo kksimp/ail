@@ -1,0 +1,46 @@
+# Growth, compaction after many removals, negative and large keys, and order across rebuilds.
+fn main()
+    mut m := Map[int, int]()
+    for i in 0..5000
+        m[i * 1000003 - 2500000] = i
+    print(m.len())
+    mut ok := 0
+    for i in 0..5000
+        if m[i * 1000003 - 2500000] == i
+            ok += 1
+    print(ok)
+    for i in 0..5000
+        if i % 3 != 0
+            m.remove(i * 1000003 - 2500000)
+    print(m.len())
+    for round in 0..40
+        for j in 0..100
+            k := round * 100 + j
+            m[k] = k
+            m.remove(k)
+    print(m.len())
+    m[-9223372036854775807] = 1
+    m[9223372036854775807] = 2
+    print(m[-9223372036854775807] + m[9223372036854775807])
+    ks := m.keys()
+    print(ks[0])
+    print(ks[1])
+    print(ks[ks.len() - 1])
+    mut sum := 0
+    for v in m.values()
+        sum += v
+    print(sum)
+    mut s := Set[int]()
+    for i in 0..3000
+        s.add(i)
+    for i in 0..3000
+        if i % 2 == 0
+            s.remove(i)
+    for i in 0..10
+        s.add(i)
+    print(s.len())
+    mut n := 0
+    for x in s
+        n += 1
+        if n <= 3
+            print(x)

@@ -1,0 +1,26 @@
+# fuzz-input: bytes
+# fuzz-needs:
+# fuzz-native: yes
+# bytes literals in the native subset (type.bytes.1-4, ADR 0702): `ail build` and `ail run` agree on
+# length, indexing, slices, equality, hex and lossy text, including the traps at the edges.
+
+fn main()
+    a := {{BLIT}}
+    b := {{BLIT2}}
+    print(a.len())
+    print(b.len())
+    print(a == b)
+    print(a != b)
+    print(a.hex())
+    print(a.text().len())
+    n := {{INT}} % (a.len() + 2)
+    if n >= 0
+        print(a[0..n].hex())
+        print(a[n..].hex())
+        print(a[..=n].len())
+    if a.len() > 0
+        print(a[0].to_int())
+        print(a[a.len() - 1].to_int())
+    print(b.text().len())
+    k := a.len() * 0 + {{INT}}
+    print(a[k].to_int())

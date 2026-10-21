@@ -775,6 +775,7 @@ fn restore(saved: Saved) {
 }
 
 pub fn command(args: &[&str], json: bool) -> ExitCode {
+    // edit.out.3: `--dry-run` writes nothing and prints the diff; `--diff` prints it and writes.
     let (mut dry, mut show_diff, mut if_clean, mut test) = (false, false, false, false);
     let mut paths = Vec::new();
     for a in args {

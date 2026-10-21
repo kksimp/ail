@@ -54,3 +54,8 @@ zones are effects; everything else is pure.
   (`eff.cap.1` names the chain `main -> std.time.date.now -> time.now_ms`);
   programs that need a fixed "now" pass an instant in.
 - Millisecond resolution; nanoseconds are not kept.
+
+## Rejected alternatives
+
+- Natives in Rust under `std.time` (option B): rejected because each struct type and method would need hard-coded entries in the checker, the interpreter and the effects table, and again in `compiler/check/`. That is a large edit in files 27 lanes also touch.
+- Separate `Instant`, `Duration` and `Zone` types (option C): rejected because it adds names and tokens to every call. An `int` of milliseconds is already what `time.now_ms()` returns, and a zone as `str` is checked at the one place it enters.

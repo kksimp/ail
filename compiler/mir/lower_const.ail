@@ -22,7 +22,7 @@ struct GlobalConst
     file int
 
 ## The runtime's global slots (native-abi.md §5); the program's start after.
-pub RT_GLOBALS := 16
+pub RT_GLOBALS := 64
 
 ## Give `key` the next global slot.
 fn Lower.new_global(mut self, key str, t Ty) int
@@ -55,7 +55,7 @@ fn Lower.gen_const_init(mut self)
     mut state := [0 for _ in global_consts]
     for k in 0..global_consts.len()
         const_order(k, mut order, mut state)
-    sigs["init.consts"] = Sig(params: [], ret: Ty.Unit)
+    sigs["init.consts"] = Sig(params: [], ret: Ty.Unit, fails: false)
     begin_fn("init.consts", Ty.Unit, [])
     for k in order
         c := global_consts[k]
