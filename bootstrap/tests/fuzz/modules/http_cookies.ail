@@ -23,3 +23,26 @@ fn main()
         print("FAIL a script set an HttpOnly cookie")
     j.clear()
     print(j.len())
+    # Known answers (RFC 6265, std.net.20-23).
+    mut k := jar.new()
+    if not k.set_cookie("http://example.com/a/b", "n=v; Path=/a")
+        print("FAIL a plain cookie was refused")
+    if k.header("http://example.com/a/c") != "n=v"
+        print("FAIL Path=/a cookie missing under /a/c: {k.header("http://example.com/a/c")}")
+    if k.header("http://example.com/z") != ""
+        print("FAIL Path=/a cookie sent to /z")
+    if k.header("http://other.org/a") != ""
+        print("FAIL a host-only cookie went to another host")
+    k.set_cookie("http://example.com/a/b", "n=v; Path=/a; Max-Age=0")
+    if k.header("http://example.com/a/c") != ""
+        print("FAIL Max-Age=0 did not remove the cookie")
+    if k.set_cookie("http://example.com/", "d=1; Domain=other.org")
+        print("FAIL a cookie for a foreign domain was stored")
+    k.set_cookie("http://example.com/", "s=1; Secure")
+    if k.header("http://example.com/").contains("s=1")
+        print("FAIL a Secure cookie was sent over http")
+    k.set_cookie("http://example.com/", "h=1; HttpOnly")
+    if k.for_script("http://example.com/").contains("h")
+        print("FAIL a script sees an HttpOnly cookie")
+    if not k.header("http://example.com/").contains("h=1")
+        print("FAIL an HttpOnly cookie is not sent")
