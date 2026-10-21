@@ -6,6 +6,7 @@
 mod api;
 mod ast;
 mod build;
+mod build_cache;
 mod budget;
 mod bump;
 mod check;

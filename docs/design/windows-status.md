@@ -28,3 +28,4 @@ selftest is the merge gate, so this list is for the designer's check on Windows.
 - Not yet on the batch branch, so not reviewed here: bytes, FFI loading, dates and zones, compression, regex, and server sockets (lanes 123–129). Each adds a step here when it lands.
 - Math (`std.math` float methods, ADR 0592): the interpreter calls the platform libm through Rust's `f64` methods, so on Windows the last bit can differ from glibc, within the bound of `type.num.16`. The native code is AIL (fdlibm-derived), so it does not depend on the platform libm. Step 8 checks this.
 - Native PE writer (ADRs 0597–0598): not runnable on Windows yet. `ail build --target x86_64-windows` is not wired, so there is no step for the designer here.
+- Build cache (ADR 0655): `ail build` has no Windows host target yet, so the cache is not reached; its directory falls back to `%LOCALAPPDATA%\ail\build` when `XDG_CACHE_HOME` is unset.

@@ -4,6 +4,7 @@
 //! prints as hexadecimal (native.build.3); bytes go through text until the
 //! standard library writes them.
 
+use crate::build_cache;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
@@ -79,22 +80,23 @@ fn host_target() -> Option<&'static str> {
 /// for the host and named after FILE in the current directory
 /// (native.build.3).
 pub fn command(args: &[&str]) -> ExitCode {
-    let (mut file, mut out, mut target) = (None, None, None);
+    let (mut file, mut out, mut target, mut no_cache) = (None, None, None, std::env::var_os("AIL_NO_CACHE").is_some());
     let mut i = 0;
     while i < args.len() {
         match (args[i], args.get(i + 1)) {
             ("-o", Some(o)) => (out, i) = (Some(*o), i + 1),
             ("--target", Some(t)) => (target, i) = (Some(*t), i + 1),
+            ("--no-cache", _) => no_cache = true,
             (f, _) if file.is_none() && !f.starts_with('-') => file = Some(f),
             _ => {
-                eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos]");
+                eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache]");
                 return ExitCode::from(2);
             }
         }
         i += 1;
     }
     let Some(file) = file else {
-        eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos]");
+        eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache]");
         return ExitCode::from(2);
     };
     let Some(dir) = compiler_dir() else {
@@ -111,6 +113,21 @@ pub fn command(args: &[&str]) -> ExitCode {
     // The program's subset problems are reported on every host; a host
     // without a target of its own gets the default target's.
     let target: Option<&str> = target.or_else(|| host_target());
+    let out = match out {
+        Some(o) => PathBuf::from(o),
+        None => PathBuf::from(Path::new(file).file_stem().unwrap_or_default()),
+    };
+    // native.build.5: an unchanged program is copied from the cache.
+    let key = if no_cache || target.is_none() { None } else { build_cache::key(file, &dir, target.unwrap_or_default()) };
+    if let Some(bytes) = key.as_deref().and_then(build_cache::load) {
+        return match write_executable(&out, &bytes) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("error[native.build.3]: can't write {}: {e}", out.display());
+                ExitCode::from(2)
+            }
+        };
+    }
     let hex = match run_compiler(&["build", file, &rt.to_string_lossy(), target.unwrap_or("x86_64-linux")]) {
         Ok(text) => text,
         Err(code) => return code,
@@ -123,10 +140,9 @@ pub fn command(args: &[&str]) -> ExitCode {
         eprintln!("error[native.build.3]: the native backend printed something other than hexadecimal");
         return ExitCode::from(2);
     };
-    let out = match out {
-        Some(o) => PathBuf::from(o),
-        None => PathBuf::from(Path::new(file).file_stem().unwrap_or_default()),
-    };
+    if let Some(key) = &key {
+        build_cache::store(key, &bytes);
+    }
     if let Err(e) = write_executable(&out, &bytes) {
         eprintln!("error[native.build.3]: can't write {}: {e}", out.display());
         return ExitCode::from(2);

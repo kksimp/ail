@@ -103,6 +103,18 @@ write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
 
 **native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
 
+**native.build.5** — `ail build` keeps the executables it makes, under a
+SHA-256 key of everything that decides their bytes: the path as given, the
+target, the `.ail` sources of the backend and of the program's directory tree
+(a tree over 4,000 files or 32 MB is not cached), and the build of `ail`
+itself. Building again with the same key writes the stored bytes to OUT and
+runs nothing else; the check of native.build.3 still runs first. A build
+with problems is never stored. `--no-cache` or `AIL_NO_CACHE` reads and
+writes nothing. The cache is in `$AIL_CACHE_DIR`, else
+`$XDG_CACHE_HOME/ail/build`, else `%LOCALAPPDATA%\ail\build` or `~/.cache/ail/build`, and keeps the 64 most
+recently used entries. A cached and an uncached build are the same bytes.
+*(ADR 0655)*
+
 ```text
 $ ail build examples/hello.ail
 $ ./hello
