@@ -183,7 +183,7 @@ fn fixed_offset(zone str) int?
     first := zone.char_at(0) else return none
     if first != '+' and first != '-'
         return none
-    sign := if first == '-' then - 1 else 1
+    sign := if first == '-' then -1 else 1
     rest := zone.slice(1, zone.len()).replace(":", "")
     h := digits(rest, 0, 2)?
     mut m := 0
@@ -200,7 +200,7 @@ fn fixed_name(offset int) str
     if offset == 0
         return "UTC"
     sign := if offset < 0 then "-" else "+"
-    a := if offset < 0 then - offset else offset
+    a := if offset < 0 then -offset else offset
     "{sign}{pad2(a / 3600)}:{pad2(a % 3600 / 60)}"
 
 ## The offset of `zone` at the instant `secs`, or `none` for an unknown zone.
@@ -248,6 +248,7 @@ fn build(ms int, zone str) DateTime
 
 fn known(zone str) DateError?
     if zone_offset(zone, 0) == none
+        # std.date.20: a zone name the zone data doesn't know.
         return DateError(text: zone, why: "unknown zone")
     none
 
@@ -385,7 +386,7 @@ pub fn DateTime.format(self, pattern str) str
             if t == ':'
                 i += 1
             sign := if offset < 0 then "-" else "+"
-            a := if offset < 0 then - offset else offset
+            a := if offset < 0 then -offset else offset
             sep := if t == ':' then ":" else ""
             out.push("{sign}{pad2(a / 3600)}{sep}{pad2(a % 3600 / 60)}")
         elif t == 'Z'
@@ -416,6 +417,7 @@ fn digits(text str, p int, n int) int?
             return none
     seg.to_int()
 
+# The causes are std.date.17 (the date), 18 (the time), 19 (the offset) and 20 (the zone).
 fn bad(text str, why str) DateError
     DateError(text: text, why: why)
 
@@ -426,6 +428,7 @@ pub fn parse_date(text str) Date ! DateError
         return bad(text, "expected YYYY-MM-DD")
     m := digits(text, 5, 2) else return bad(text, "expected a 2-digit month")
     d := digits(text, 8, 2) else return bad(text, "expected a 2-digit day")
+    # std.date.16: the text has the right shape but names no day.
     day := Date.new(y, m, d) else return bad(text, "no such day")
     day
 
@@ -451,6 +454,7 @@ fn parse_with(text str, zone str) DateTime ! DateError
     sep := part(text, 10, 11)
     if sep != "T" and sep != " "
         return bad(text, "expected `T` between the date and the time")
+    # std.date.18: the time part, after the date.
     hh := digits(text, 11, 2) else return bad(text, "expected a 2-digit hour")
     mm := digits(text, 14, 2) else return bad(text, "expected a 2-digit minute")
     if part(text, 13, 14) != ":" or hh > 23 or mm > 59
@@ -483,5 +487,6 @@ fn parse_with(text str, zone str) DateTime ! DateError
             return bad(text, "no offset (write Z or +HH:MM, or use parse_in)")
         secs := resolve(local, zone) else return bad(text, "unknown zone")
         return build(secs * 1000 + frac, zone)
+    # std.date.19: the offset.
     off := fixed_offset(rest) else return bad(text, "expected Z, +HH:MM or -HH:MM after the time")
     build((local - off) * 1000 + frac, if off == 0 then "UTC" else fixed_name(off))

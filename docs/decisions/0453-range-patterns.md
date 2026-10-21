@@ -43,3 +43,8 @@ Ranges may be alternatives of an or-pattern. Diagnostics cite
 
 - Open-ended ranges (`10..`) and non-literal ends (constants) aren't designed.
 - Overlap between ranges isn't reported; the first matching arm wins.
+
+## Rejected alternatives
+
+- Inclusive-only `lo..hi` (option B): rejected because it disagrees with `for`, where `lo..hi` excludes `hi`.
+- `lo...hi` or `lo to hi` (option C): rejected as a third spelling for the same idea.

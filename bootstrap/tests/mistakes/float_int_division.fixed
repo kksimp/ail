@@ -1,0 +1,4 @@
+fn main()
+    total := 10
+    avg := total.to_float() / 4.0
+    print(avg)

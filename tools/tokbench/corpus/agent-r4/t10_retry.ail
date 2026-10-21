@@ -1,0 +1,12 @@
+fn fetch(url str) str ! net.NetError
+    mut delay := 100
+    for _ in 0..3
+        r := net.get(url) else err
+            time.sleep_ms(delay)
+            delay *= 2
+            continue
+        return r.body
+    net.get(url)?.body
+
+fn main() !
+    print(fetch("http://localhost:1/")?)

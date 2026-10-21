@@ -1,0 +1,10 @@
+## std.proc.9-10 natively: `ok()` and `text()` of a `proc.Output`.
+use std.proc
+
+fn main() !
+    a := proc.run("echo", ["hello"])?
+    print(a.ok())
+    print(a.text().trim())
+    b := proc.run("sh", ["-c", "echo out; echo err >&2; exit 2"])?
+    print(b.ok())
+    print(b.text())

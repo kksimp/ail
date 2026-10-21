@@ -14,7 +14,7 @@ a function.
 
 ## Decision
 
-- **`unsafe` block:** lowered as a plain block with its own scope. The
+- **`unsafe` block:** the plain-block arm is one line in `lower.ail`, landed with the scoped-unsafe lane (ADR 0835) rather than here, to keep one owner for that line. The
   unsafe operations it allows (`unsafe.op.1`) are not native yet and are
   reported where they occur. The manifest rule (`unsafe.block.3`) and the
   operation check (`unsafe.block.1`) are the front end's, before lowering.

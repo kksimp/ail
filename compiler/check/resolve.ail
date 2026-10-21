@@ -3,7 +3,7 @@
 use ast
 
 ## A function's return type, which may be fallible (err.type.1-2, err.decl.2-3).
-fn Checker.resolve_ret(mut self, t ast.TypeRef, fn_index int) Ty
+@allow("expr.match.3") fn Checker.resolve_ret(mut self, t ast.TypeRef, fn_index int) Ty
     match t.shape
         Fallible(ok, errors) =>
             mut ok_ty := Ty.Unit
@@ -65,6 +65,11 @@ fn Checker.resolve_type(mut self, t ast.TypeRef) Ty
             if rt := ret
                 r = resolve_type(rt)
             return Ty.FnTy(ps, r)
+        TupleType(elems) =>
+            ts := [resolve_type(e) for e in elems]
+            for k in 0..ts.len()
+                no_unique(ts[k], elems[k].pos, "an element of a tuple")
+            return Ty.Tuple(ts)
         Named(n, args) => return resolve_named(n, args, t.pos)
 
 fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
@@ -207,7 +212,7 @@ fn Checker.check_deferred_bounds(mut self)
         require(d.ty, d.tr, d.pos, d.what)
 
 ## Whether a type was declared with `error` (err.decl.1).
-fn Checker.is_error_type(self, t Ty) bool
+@allow("expr.match.3") fn Checker.is_error_type(self, t Ty) bool
     match t
         Struct(i, _) => prog.structs[i].is_error
         Enum(i, _) => prog.enums[i].is_error
@@ -261,18 +266,19 @@ fn Checker.ty_name(self, t Ty) str
         FnTy(ps, r) =>
             args := [ty_name(p) for p in ps].join(", ")
             if r == Ty.Unit then "fn({args})" else "fn({args}) {ty_name(r)}"
+        Tuple(xs) => "({[ty_name(x) for x in xs].join(", ")})"
 
 fn Checker.with_args(self, n str, args List[Ty]) str
     if args.len() == 0 then n else "{n}[{[ty_name(a) for a in args].join(", ")}]"
 
 ## A type for messages: "`int`", or "no value".
-fn Checker.show(self, t Ty) str
+@allow("expr.match.3") fn Checker.show(self, t Ty) str
     match t
         Unit => "no value"
         Never => "no value"
         _ => "`{ty_name(t)}`"
 
-fn Checker.type_name_of(self, t Ty) str?
+@allow("expr.match.3") fn Checker.type_name_of(self, t Ty) str?
     match t
         Struct(i, _) => prog.structs[i].name
         Enum(i, _) => prog.enums[i].name

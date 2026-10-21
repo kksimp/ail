@@ -1,0 +1,7 @@
+fn name(n int) str
+    match n
+        1 => "one"
+        _ => "many"
+
+fn main()
+    print("ok")

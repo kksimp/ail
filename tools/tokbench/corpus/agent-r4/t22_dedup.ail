@@ -1,0 +1,2 @@
+fn main()
+    print("b a b c a".words().counts().keys().sorted())

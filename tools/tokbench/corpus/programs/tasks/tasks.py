@@ -17,7 +17,7 @@ def load_task(j):
         if not isinstance(j.get(field), str):
             raise TaskError(j.get("id", "?") if field != "id" else "?", field)
     hours = j.get("hours")
-    return {**j, "hours": hours if isinstance(hours, float) else 0.0}
+    return {**j, "hours": float(hours) if hours is not None else 0.0}
 
 
 def with_status(j, status):

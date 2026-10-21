@@ -80,6 +80,7 @@ impl<'p> Checker<'p> {
                 self.locals.push(Local { name, ty, mutable: false, kind: Kind::Binding, decl: None });
             }
             self.in_requires = !c.ensures;
+            self.requires_pos = Some(c.pos);
             let got = self.expr(&c.cond, Some(&Ty::Bool), true);
             self.in_requires = false;
             if !self.accepts(&Ty::Bool, &got) {

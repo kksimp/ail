@@ -4,8 +4,11 @@ use super::{Checker, Ty};
 use crate::ast::{Arg, BinOp, FnDecl, TypeKind};
 use crate::diag::Pos;
 
+/// The warnings `@allow` can name (gram.attr.5).
+const ALLOWABLE: &[&str] = &["expr.match.3"];
+
 /// The attributes the bootstrap knows (test.attr.1).
-pub(super) const KNOWN_ATTRS: &[&str] = &["test", "pure", "inline", "deprecated"];
+pub(super) const KNOWN_ATTRS: &[&str] = &["test", "pure", "inline", "deprecated", "allow"];
 
 impl FnDecl {
     /// `@test fn name()` (test.attr.2).
@@ -26,6 +29,15 @@ impl<'p> Checker<'p> {
                         a.pos,
                         format!("unknown attribute `@{}`", a.name),
                         format!("the known attributes are {known}"),
+                    );
+                }
+                // gram.attr.5: `@allow("rule")` names a warning that can be allowed.
+                if a.name == "allow" && !a.arg.as_deref().is_some_and(|r| ALLOWABLE.contains(&r)) {
+                    self.error_help(
+                        "gram.attr.5",
+                        a.pos,
+                        "`@allow` names a warning that a function may allow",
+                        format!("write `@allow(\"{}\")`", ALLOWABLE.join("\")` or `@allow(\"")),
                     );
                 }
                 // gram.attr.4: `@deprecated` carries the reason as a string.
@@ -95,6 +107,7 @@ impl<'p> Checker<'p> {
             TypeKind::Ref(_) => Some("ref".to_string()),
             TypeKind::Ptr(_) => Some("a raw pointer".to_string()),
             TypeKind::Fn { .. } => Some("fn".to_string()),
+            TypeKind::Tuple(elems) => elems.iter().find_map(|e| self.ungeneratable(e, seen)),
             TypeKind::Named { name, args } => match name.as_str() {
                 "int" | "i64" | "float" | "f64" | "str" | "bytes" | "char" | "bool" if args.is_empty() => None,
                 "List" | "Set" | "Map" => args.iter().find_map(|a| self.ungeneratable(a, seen)),

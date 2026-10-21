@@ -34,3 +34,9 @@ Option A (speed, then readability). The output is pinned by tests; changing it n
 
 - Values are `int` (the 64 bits reinterpreted as signed), so they can be negative.
 - No code was copied from another project, so no licence attribution applies. Test vectors come from the standards (FIPS 180-4, RFC 4231, RFC 1952's CRC).
+
+## Rejected alternatives
+
+- xxHash64 or XXH3 (option B): rejected because XXH3 is large, and porting copies a BSD-2 project that needs attribution and a licence review for the Runtime Exception.
+- FNV-1a, already used internally (option C): rejected because it runs at about one byte per cycle and mixes weakly.
+- SipHash (option D): rejected because it is slower, and its point is attack resistance, which `sha256` serves.

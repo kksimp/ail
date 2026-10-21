@@ -1,0 +1,67 @@
+# List methods: extend, remove_at, insert, clear, reverse, pop, contains (type.coll.9, type.coll.14).
+fn last_or(xs List[int], d int) int
+    mut ys := xs
+    v := ys.pop() else return d
+    v
+
+fn main()
+    mut xs := [1, 2, 3]
+    xs.extend([4, 5])
+    ys := [9, 8]
+    xs.extend(ys)
+    xs.extend(xs)
+    print(xs)
+    n := xs.remove_at(0)
+    print(n)
+    xs.insert(2, 77)
+    xs.insert(xs.len(), 5)
+    xs.insert(0, -1)
+    print(xs)
+    xs.reverse()
+    print(xs)
+    print(xs.contains(77))
+    print(xs.contains(1000))
+    xs.pop()
+    xs.pop()
+    print(xs.len())
+    print(last_or(xs, -5))
+    print(last_or([], -5))
+    mut e := List[int]()
+    e.extend(xs)
+    e.clear()
+    print(e)
+    print(e.pop() else 42)
+    e.extend([6])
+    top := e.pop() else 0
+    print(top)
+    mut names := ["b", "c"]
+    names.insert(0, "a")
+    names.extend(["d", "e"])
+    print(names)
+    print(names.contains("d"))
+    print(names.contains("zz"))
+    print(names.remove_at(1))
+    print(names)
+    mut fs := [1.5, 2.5]
+    fs.insert(1, 0.5)
+    print(fs)
+    print(fs.contains(2.5))
+    print(fs.remove_at(2))
+    mut flags := [true, false]
+    flags.insert(1, true)
+    flags.reverse()
+    print(flags)
+    print(flags.contains(false))
+    mut grid := [[1], [2]]
+    grid.extend([[3, 3]])
+    mut copy := grid
+    copy[0].push(7)
+    print(grid)
+    print(copy)
+    print([1, 2, 3] == [1, 2, 3])
+    print([1, 2, 3] != [1, 2])
+    print(["a", "b"] == ["a", "b"])
+    print(["a", "b"] != ["a", "c"])
+    print([1.5, 0.0 / 0.0] == [1.5, 0.0 / 0.0])
+    print([true, false] == [true, false])
+    print(List[int]() == [])

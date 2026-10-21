@@ -31,7 +31,18 @@ fn main()
     # The encoder picks movz, movn or movk per 16-bit part, so the intent is
     # the constant, and the harness checks the instructions compute it.
     for d in [0, 9, 27]
-        for v in [0, 1, 4095, 65536, 1234, -1, -2, 4294967296, 1311768467463790320, 81985529216486895]
+        for v in [
+            0,
+            1,
+            4095,
+            65536,
+            1234,
+            -1,
+            -2,
+            4294967296,
+            1311768467463790320,
+            81985529216486895,
+        ]
             mut a := asm.new_asm()
             a.mov_ri(d, v)
             emit("const x{d}={v}", a)
@@ -43,6 +54,9 @@ fn main()
         mut b := asm.new_asm()
         b.alu_rr(op, 20, 10, 30)
         emit("{op} x20, x10, x30", b)
+    mut ta := asm.new_asm()
+    ta.tst_rr(3, 4)
+    emit("tst x3, x4", ta)
     mut ca := asm.new_asm()
     ca.cmp_rr(3, 4)
     emit("cmp x3, x4", ca)

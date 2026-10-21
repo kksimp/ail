@@ -155,6 +155,8 @@ impl J {
         match self {
             J::Null => out.push_str("null"),
             J::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+            // json.print.1: whole numbers below 1e15 print without a fraction, as `Json.to_text` does.
+            J::Num(n) if n.is_finite() && n.abs() < 1e15 && n.fract() == 0.0 => out.push_str(&format!("{}", *n as i64)),
             J::Num(n) => out.push_str(&crate::interp::float_text(*n)),
             J::Str(s) => quote(s, out),
             J::Arr(items) => {
@@ -302,6 +304,8 @@ fn program(p: &Program) -> J {
                 ("own", J::Bool(g.own)),
             ])
         })),
+        ("unsafe_allowed", opt(&p.unsafe_allowed, |l| arr(l, |p| s(p)))),
+        ("driver_allowed", arr(&p.driver_list(), |p| s(p))),
         ("generated", arr(&p.generated, |g| {
             J::Obj(vec![
                 ("file", n(g.file)),
@@ -441,6 +445,7 @@ fn ty(t: &TypeRef) -> J {
         TypeKind::Fn { params, ret } => {
             variant("FnType", vec![("params", arr(params, ty)), ("ret", opt(ret, |r| ty(r)))])
         }
+        TypeKind::Tuple(elems) => variant("TupleType", vec![("elems", arr(elems, ty))]),
     };
     J::Obj(vec![("shape", shape), ("pos", pos(t.pos))])
 }
@@ -480,6 +485,10 @@ fn stmt(st: &Stmt) -> J {
                 ("otherwise", opt(otherwise, otherwise_part)),
             ],
         ),
+        Stmt::LetTuple { names, value, pos: p } => variant(
+            "LetTuple",
+            vec![("names", arr(names, binder)), ("value", expr(value)), ("pos", pos(*p))],
+        ),
         Stmt::Assign { target, op, value, pos: p } => variant(
             "Assign",
             vec![("target", expr(target)), ("op", opt(op, |o| bin_op(*o))), ("value", expr(value)), ("pos", pos(*p))],
@@ -507,6 +516,7 @@ fn stmt(st: &Stmt) -> J {
             variant("Handle", vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise))])
         }
         Stmt::Defer(inner, p) => variant("Defer", vec![("stmt", stmt(inner)), ("pos", pos(*p))]),
+        // unsafe.block.4: `ail api --ast` lists every `unsafe` block (here) and `unsafe fn` (`unsafe_fn`).
         Stmt::Unsafe { body, pos: p } => variant("Unsafe", vec![("body", block(body)), ("pos", pos(*p))]),
         Stmt::With { mutex, var, var_pos, body, pos: p } => variant(
             "With",
@@ -519,6 +529,10 @@ fn stmt(st: &Stmt) -> J {
             ],
         ),
     }
+}
+
+fn binder(b: &Binder) -> J {
+    J::Obj(vec![("name", s(&b.name)), ("pos", pos(b.pos)), ("mutable", J::Bool(b.mutable))])
 }
 
 fn otherwise_part(e: &Else) -> J {
@@ -614,6 +628,7 @@ fn expr(e: &Expr) -> J {
             ],
         ),
         Expr::Set(items, p) => variant("SetLit", vec![("items", arr(items, expr)), ("pos", pos(*p))]),
+        Expr::Tuple(items, p) => variant("TupleLit", vec![("items", arr(items, expr)), ("pos", pos(*p))]),
         Expr::If { branches, els, else_err, pos: p } => variant(
             "If",
             vec![
@@ -652,6 +667,7 @@ fn expr(e: &Expr) -> J {
                         ("var_pos", pos(c.var_pos)),
                         ("iter", expr(&c.iter)),
                         ("cond", opt(&c.cond, expr)),
+                        ("unpack", arr(&c.unpack, binder)),
                     ])
                 })),
                 ("pos", pos(*p)),
@@ -684,6 +700,8 @@ fn pattern(p: &Pattern) -> J {
             vec![("lo", literal(lo)), ("hi", literal(hi)), ("inclusive", J::Bool(*inclusive)), ("pos", pos(*at))],
         ),
         Pattern::Or(alts, at) => variant("Alt", vec![("alts", arr(alts, pattern)), ("pos", pos(*at))]),
+        Pattern::Tuple(elems, at) => variant("TuplePat", vec![("elems", arr(elems, pattern)), ("pos", pos(*at))]),
+        Pattern::Bind(name, at) => variant("BindName", vec![("name", s(name)), ("pos", pos(*at))]),
         Pattern::Variant { qualifier, name, bindings, pos: at } => variant(
             "Variant",
             vec![

@@ -1,0 +1,21 @@
+# Log analysis: 200,000 generated lines, split into fields, counted by level and user.
+
+fn main()
+    mut seed := 11
+    mut parts := List[str]()
+    levels := ["info", "warn", "error", "debug"]
+    for i in 0..200000
+        seed = (seed * 3877 + 29573) % 139968
+        parts.push("2026-10-21T07:{i % 60:0>2} {levels[seed % 4]} user={seed % 97} ms={seed % 1000} GET /api/v{seed % 5}/items")
+    text := parts.join("\n")
+    mut by_level := Map[str, int]()
+    mut by_user := Map[str, int]()
+    mut total := 0
+    for line in text.lines()
+        f := line.split(" ")
+        by_level[f[1]] += 1
+        by_user[f[2]] += 1
+        total += (f[3].strip_prefix("ms=") else "0").to_int() else 0
+    for l in by_level.keys().sorted()
+        print("{l} {by_level[l]}")
+    print("users {by_user.len()} total_ms {total}")

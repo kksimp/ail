@@ -7,49 +7,26 @@
 ## Running programs
 
 ```sh
-./ail run FILE.ail           # check, then run
-./ail run DIR                # a package: DIR's files are the root module
-./ail run FILE.ail a b       # words after FILE are the program's: env.args()
-./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail build FILE.ail [-o OUT] # native executable (see Native builds below)
-./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
-./ail test --update [--dry-run] FILE.ail # after a reviewed change: rewrite stale `assert_eq` literals, `# =>` lines, FILE.out; prints the diff
-./ail run --record r.json FILE.ail      # write every effect's result; `--replay r.json` repeats the run exactly (`ail test --record` keeps failed tests)
-./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges
-./ail run --timeout MS --max-memory MB --max-steps N FILE.ail # a runaway run traps (run.limit.*) with a snapshot
-./ail effects [--json] FILE.ail       # each function's inferred effects
-./ail effects --parallel FILE.ail     # which loops may run on many cores, and what blocks the rest
-./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output; loops on one thread
-./ail run --parallel FILE.ail      # also pool loops proven independent; AIL_THREADS=N sets the pool size
-./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
-./ail run --no-bytecode FILE.ail     # every function on the tree walker (the oracle), not the bytecode tier
-./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
-./ail explain RULE           # what a rule ID means, with its ADRs and an example
-./ail explain                # all rules, with chapter and whether `ail fix` repairs them
-./ail api --text FILE.ail    # declarations and ## docs, no bodies; `fails_with` lists a function's error types (JSON without --text)
-./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
-./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)
-./ail api --type FILE.ail L C   # type at a position (also --locals, --refs; `ail api DIR` and `--refs DIR FILE L C` cover a whole package)
-./ail api --expanded --text FILE.ail # also the code derives generated (ToJson, FromJson, @derive traits)
-./ail api --tokens FILE.ail  # the lexer's tokens, one per line; --ast: the parse as JSON (--program: with prelude and imports)
-./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
-./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
-./ail check --budget 500 DIR  # any command: ~500 tokens, errors first, then `[budget ...; continue with --from K]`
-./ail diff OLD NEW            # what changed by meaning: declarations, diagnostics, tests (--rev HEAD FILE: against git)
-./ail edit FILE.ail < E.json  # edits by id: [{"op":"rename","id":"fn:f","to":"g"}], replace_body, replace, insert, delete, import; then fmt + check
-./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
-./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N; `ail test --trace` keeps a failing test's)
-./ail run --watch n FILE.ail # each assignment to `mut` variable n (and `push`, `pop`, `xs[i] = e`...), with value and position
-./ail run --verbose FILE.ail # a trap shows every frame's values (default: 10 lines; --json: one object)
+./ail run [ARGS...] FILE.ail        # DIR runs a package; words after FILE are env.args()
+./ail check [--json] [--budget N [--from K]] FILE|DIR
+./ail build FILE.ail [-o OUT]       # native executable
+./ail test [--json] FILE.ail        # @test functions; exit 0 if all pass
+./ail effects [--json] FILE.ail
+./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
+./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
+./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
+./ail diff OLD NEW                  # what changed by meaning
+./ail edit FILE.ail [--test] < EDITS
+./ail fmt [--check] FILE.ail
 ```
 
-With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
-span and, where the fix is obvious, `fixes` to apply by line and column
-([semantic-api.md](design/semantic-api.md)).
+Options for each command are in [semantic-api.md](design/semantic-api.md) and the spec chapter for it (`ail explain` names it).
 
-Write `todo` for code you haven't written yet. It has whatever type is
-expected; `ail check` warns (`expr.hole.1`) with that type and the names in
-scope, and running it traps (`expr.hole.2`).
+With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
+span and, where the fix is obvious, `fixes` to apply by line and column.
+
+`todo` marks code not yet written: it has the expected type; `ail check` warns
+(`expr.hole.1`) and running it traps (`expr.hole.2`).
 
 ```ail
 fn area(w int, h int) int
@@ -71,20 +48,15 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
   `ail build` names the first one it meets (`error[native.subset.1]`).
 - A trap prints the same first line as `ail run` and exits 1.
 - Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
+- An unchanged program rebuilds from `~/.cache/ail/build`; `--no-cache` skips it (native.build.5).
 - Guide: [design/native-guide.md](design/native-guide.md).
 
 ## Layout
 
-- Blocks are indented by exactly 4 spaces. No tabs, braces or `;`.
-- A statement ends at the end of its line, unless the line ends inside
-  `(`, `[` or `{`, or after a binary operator or a comma.
-- `#` starts a comment. `##` starts a doc comment.
-- A line starting with `.name` continues the previous statement (chained calls); attributes may sit on their own lines above a `fn`.
-- Write the layout `ail fmt` writes ([formatting.md](design/formatting.md)):
-  one space around binary operators and after `,` and `:`; none inside
-  brackets, around `.` and `..`, or before a call's `(`; lines up to 100
-  characters, with a longer list split one element per line plus a trailing
-  comma; one blank line between multi-line top-level declarations.
+- A statement ends at its line's end, unless the line ends inside `(`, `[`
+  or `{`, or after a binary operator or comma. `#` comments, `##` doc comments.
+- A line starting with `.name` continues the previous statement.
+- Layout is what `ail fmt` writes ([formatting.md](design/formatting.md)).
 
 ## Functions
 
@@ -107,27 +79,22 @@ n = 5            # `=` changes an existing `mut` name
 n += 1           # also -= *= /= %=
 ```
 
-A name can't be declared twice in one function, even in an inner block
-(sibling blocks may reuse a name). This includes parameters and loop
-variables. Locals can't reuse a function or type name. To update a `mut`
-variable inside a loop, use `=`, not `:=`.
-
 ## Types
 
-`int` (64-bit), `float` (64-bit IEEE), `bool` (`true`, `false`), `str`,
-`bytes`, `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
-`T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
+`int`, `float`, `bool`, `str`, `bytes`, `char`, `List[T]`, `Map[K, V]`, `Set[T]`, tuples `(int, str)`, structs, enums, `T?`, `T ! E`, generics, `any Trait`.
 
-Constants are top-level `NAME := value`, computed at compile time. The
-value may call functions that do no I/O and use no capability
-(`ct.const.2`); a value that can fail needs `else`. Put `if`, `match` and
-`?` in a function and call it:
+A tuple `t := (1, "a")` is an `(int, str)`: read `t.0`, take it apart with
+`n, s := t` (`_` skips; `a, mut b := t`), match arms like `(0, _) =>` and
+`(k, w) =>`. `==`, `<`, map keys and JSON (arrays) work elementwise.
+
+Constants are top-level `NAME := value`, computed at compile time by calls
+with no I/O or capability (`ct.const.2`); one that can fail needs `else`, and
+`if`, `match` and `?` go in a called function:
 
 ```ail
 MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}     # a Set[str]
-WORDS := "fn if else".split(" ")
-SQUARES := squares(8)                   # squares must be free of I/O
+SQUARES := squares(8)
 
 fn squares(n int) List[int]
     mut out := List[int]()
@@ -170,19 +137,13 @@ fn main()
     p.x = 10                      # fields of a `mut` variable can be assigned
 ```
 
-Arguments can also be positional when no two of the fields they fill have one
-type (`Problem(7, "bad")` for `line int, msg str`), or a local named like the
-field (`Point(x, y)`). `Point(1, 2)` is an error: `x` and `y` are both `int`.
-In a method, a local can't take a field's name.
+Positional arguments work when no two fields they fill share a type
+(`Problem(7, "bad")`); `Point(1, 2)` is an error when `x` and `y` are both `int`.
 
-A bare variant is allowed wherever the type is known: arguments, return
-values, struct fields, `match` arms, assignments to an existing variable, list
-elements after the first, and the right side of a comparison (`c == Red`).
+A bare variant works wherever the type is known (arguments, returns, fields,
+arms, `c == Red`). Every value compares with `==` and prints: `Point(x: 1, y: 2)`.
 
-Every value can be compared with `==` (structs and lists field by field) and
-printed: `print(p)` shows `Point(x: 1, y: 2)`, and `"{c}"` gives `Color.Red`.
-
-Variants can carry fields. Build them like structs; match them by position:
+Variants can carry fields, matched by position:
 
 ```ail
 enum Shape
@@ -238,35 +199,23 @@ fn main() !                                 # main can fail; the error is report
         print("error: {err}")
 ```
 
-- A result that can fail must be handled: with `?`, with `else`, or by
-  returning it. Calling `parse(s)` on its own line is an error.
-- `x := ... else ...` must give a fallback value or leave (`return`,
-  `continue`, `break`). To handle success and failure and then carry on, use
-  `if x := ...` with `else err`.
-- `if x := e` also works on optionals (`else` without a name), and in `elif`.
-  On a result that can fail, it needs an `else`.
-- `else` also works inside an expression: `Min => nums.min() else 0`,
-  `(m.get(k) else 0) + 1`, `f(s.to_int() else return none)`, and in a `for`
-  header: `for x in j.arr("items") else []`.
-- `?` on an optional works in a function that returns an optional, or before
-  an `else`, which then catches the `none`: `j.get("u")?.str("name") else "?"`.
-- In a function whose errors are inferred (`!T`, `!`) and in a test, `?` on
-  `none` fails with the prelude error `Absent` ("a value is absent"), with
-  context if given: `n := text.to_int()? "port {text}"`. A function that
-  states its errors (`T ! E`) needs `else` instead.
-- `error struct NotFound "nothing at {path}"` gives a struct a message; it
-  may then have no fields. Without messages, write `impl ToStr`.
-- `print` of a `T?` shows the value, or `none`. A value is returned as a
-  `T?` without wrapping: `return i`.
-- `mut best := none` has no type until its first assignment: `best = 3`
-  makes it an `int?`. `x := if c then 4 else none` is an `int?`.
-- A local may have the name of a function (it shadows it); calling that name
-  inside the local's block is an error.
-- Several error types: `fn load() Config ! IoError | ParseError`.
-- No success value: `fn save() ! IoError` (or `fn save() !` to infer it).
-  As a statement, `save() else err` + block handles the failure and goes on;
-  `save() else return` leaves.
-- `unreachable("why")` stops the program; it fits any type, like `return`.
+- A failing result must be handled: `?`, `else`, or returned. `parse(s)` alone
+  on a line is an error.
+- `x := ... else ...` gives a fallback or leaves (`return`, `continue`, `break`).
+  To handle both outcomes and go on: `if x := ...` with `else err`; `if x := e`
+  also works on optionals and in `elif`.
+- `else` works in expressions: `Min => nums.min() else 0`, `(m.get(k) else 0) + 1`,
+  `for x in j.arr("items") else []`.
+- - `?` on an optional works in a function returning an optional, or before an
+  `else` that catches the `none`: `j.get("u")?.str("name") else "?"`.
+- Inferred-error functions and tests: `?` on `none` fails with the prelude error
+  `Absent`, with context: `text.to_int()? "port {text}"`. `T ! E` needs `else`.
+- `error struct NotFound "nothing at {path}"` gives a struct a message.
+- `print` of a `T?` shows the value or `none`; `return i` needs no wrapping.
+- `mut best := none` gets its type at the first assignment (`best = 3`);
+  `x := if c then 4 else none` is an `int?`.
+- A local may shadow a function's name; calling that name inside its block is an error.
+- `unreachable("why")` stops the program; it fits any type.
 
 ## Traits and generics
 
@@ -351,15 +300,11 @@ fn main()
     print(Shape.area(c))             # the qualified form of `c.area()`
 ```
 
-- `<`, `<=`, `>`, `>=` work on `int`, `str`, lists, and types with
-  `impl Ord for T`, which compares the fields in order, or uses your
-  `fn cmp(self, other Self) Ordering` (returning `Less`, `Equal` or
-  `Greater`).
-- To customise: `impl ToStr for Color` with `fn to_str(self) str`, or
-  `impl Eq for T` with `fn eq(self, other Self) bool`.
-- To constrain one method of a generic type: `fn Stack[T Ord].max(self) T?`.
-- On an `any Shape` value, you can call only the methods whose parameters
-  don't use `Self`.
+- `< <= > >=` work on `int`, `str`, lists, and types with `impl Ord for T`
+  (fields in order, or your `fn cmp(self, other Self) Ordering`).
+- Customise: `impl ToStr` (`fn to_str(self) str`), `impl Eq` (`fn eq`).
+- Constrain one method of a generic type: `fn Stack[T Ord].max(self) T?`.
+- On an `any Shape`, only methods whose parameters don't use `Self` are callable.
 
 ## Control flow
 
@@ -419,7 +364,7 @@ no `break` can end a function too.
   chained: write `a < b and b < c`.
 - `and`, `or`, `not` (not `&&`, `||`, `!`). Conditions must be `bool`: write
   `if n != 0`, not `if n`.
-- `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). No mixing
+- `float`: `+ - * /` (no `%`), never traps (`1.0 / 0.0` is `inf`). Math methods (`std.math`, type.num.16): `x.sin()`, `cos`, `tan`, `atan`, `exp`, `ln`, `log10`, `cbrt`; `x.atan2(y)`, `x.pow(y)`, `x.hypot(y)` (`x` first). No mixing
   with `int`: `n.to_float()`, `x.to_int()` (truncates; traps on NaN). An int
   literal works where a float is expected: `x * 2`, `total: 0`. `round()`
   rounds halves away from zero and gives a float: `2.5.round()` is `3.0`.
@@ -452,29 +397,25 @@ c := 'x'                   # a char; '\n', '\'', '\u{e9}'
 print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, hex
 ```
 
-- Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
-  align (numbers default right, others left); `.N` needs a float, `x` an int.
-
-- `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
+- Format specs: `[[fill]align][width][.decimals][x]` only; `.N` needs a float, `x` an int.
+- `"a,b".split(",")` gives `["a", "b"]`, `"k=v=w".split("=", 2)` gives `["k", "v=w"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
 - `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
-- Join any list: `xs.join(", ")`; chars back into a string: `cs.join("")`.
-- `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
-  `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
-- There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
+  `str?`), `s.repeat(n)`, `s.pad_left(width, ' ')`, `s.pad_right(width, '0')`, `s.center(width, ' ')`, `s.words()` (split on whitespace), `s.trim_start()`, `s.trim_end()`, `s.count(sub)`, `s.rfind(sub)`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+- `xs.join(", ")` joins any list. `char`: `is_digit()`, `is_alpha()`,
+  `is_space()`, `to_upper()`, `to_digit(16)` (`int?`), `code()`, `char.from_code(n)`.
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"` (ASCII, escapes `\xHH`),
   `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`, `for x in b`,
   `b.to_str()` (`str?`, strict UTF-8), `b.text()` (lossy `str`), `b.to_list()`,
-  `b.find(x)` (`int?`), `contains`, `starts_with`, `ends_with`, `b.hex()`,
+  `b.find(x)` (`int?`), `contains`, `starts_with`, `ends_with`, `b.hex()` (`b.hex(sep)` between pairs),
   `b.base64()`, `bytes.from_list(xs)`, `bytes.from_hex(s)` and
   `bytes.from_base64(s)` (`bytes?`), `bytes.zeros(n)`. No `b[i] = x`.
 
 ## Lists
 
-```ail skip=context
+```ail
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
@@ -483,33 +424,31 @@ xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
+out.push("a")
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
-Also: `xs.insert(i, x)`, `xs.remove_at(i)`, `xs.extend(ys)`, `xs.clear()`, `xs.reverse()`; `xs.pop()`, `xs.first()` and `xs.last()` (give `T?`), `xs.contains(x)`,
-`xs.index_of(x)` (gives `int?`: `none`, not -1, when absent), `xs.sorted()`
-(a copy) and `xs.sort()` (in place), `xs.min()` and `xs.max()` (give `T?`),
-`xs.sum()` (ints or floats), `xs.take(n)` (the first `n`, or fewer). Slices
-don't clamp, and negative indexes are errors: write `xs[xs.len() - 1]` or
-`xs.last()`.
+Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
+`pop()`/`first()`/`last()`/`min()`/`max()` (`T?`), `contains(x)`, `index_of(x)`
+(`int?`, `none` when absent), `sorted()` (copy) and `sort()` (in place), `sum()`
+(ints or floats), `take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
+`flatten()`, `enumerate()` (`for i, x in xs.enumerate()`), `zip(xs, ys)` (pairs, to the shorter);
+`is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
 
-Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
-`max`; stable, so sort by name first, then by count):
+Sort or pick by a key with `by: |x| key` (on `sorted`, `sort`, `min`, `max`;
+stable); a tuple key sorts by several:
 
 ```ail fragment
 counts := {"b": 2, "a": 2, "c": 5}
-top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]
+top := counts.keys().sorted(by: |k| (-counts[k], k)).take(2)   # ["c", "a"]
 ```
-
-`for x in xs` gives a copy of each element, and changing `xs` inside the loop
-doesn't affect it. To change the elements themselves, use `for mut`:
 
 ```ail skip=context
 for mut item in items      # `items` must be `mut`
     item.qty += 1          # changes the element
 ```
 
-Inside a `for mut` loop, the body can't use the list itself (`items`).
+Inside a `for mut` loop the body can't use the list itself.
 
 A comprehension builds a list, set or map in one expression:
 
@@ -517,55 +456,40 @@ A comprehension builds a list, set or map in one expression:
 xs := [3, 1, 4]
 squares := [x * x for x in xs]             # [9, 1, 16]
 big := [x for x in xs if x > 2]            # [3, 4]
-pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # clauses nest, outermost first
+pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # nested, outermost first
 seen := {x % 2 for x in xs}                # a Set[int]
 sizes := {w: w.chars().len() for w in ["a", "bc"]}  # a Map[str, int]
 nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 ```
 
-The loop variables are new names that end with the comprehension. `?` and
-`return` leave the function; `break` ends the comprehension.
+Loop variables end with it; `?` and `return` leave the function, `break` ends it.
 
-Loops use every core automatically when their iterations are independent:
-no output or capability, no `break`/`return`/`?`, and writes only to the
-iteration's own locals, to `out[i]` in a `for i in a..b` loop, or to an
-`int` total with `+=`. Results are always the same as running in order, so
-float totals use `xs.sum()` (a fixed tree) rather than `+=`. When you know
-the iterations are independent but the checker can't see it (writes to
-`out[perm[i]]`), write `par for`; a `par for` the checker can prove unsafe
-(it prints, or breaks out) is an error. A parallel map is a comprehension
-with `par for`: `lens := [steps(x) par for x in xs]` (one clause, a list;
-the element must not print, use a handle or write outside itself):
-
-```ail
-fn main()
-    perm := [1, 0]
-    mut out := [0, 0]
-    par for i in 0..2
-        out[perm[i]] = i * 10    # par asserts perm has no repeats
-    print(out)
-```
+Independent loops use every core automatically (no output, no
+`break`/`return`/`?`; writes only to locals, `out[i]` or an `int` total with
+`+=`; float totals use `xs.sum()`). `par for` forces one the checker can't
+prove; a parallel map is `[f(x) par for x in xs]`.
 
 ## Maps and sets
 
-```ail skip=context
+```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["ann"] += 1                       # `op=` on a missing key starts from 0
 mut counts := {}                       # typed by first use: counts[w] += 1
+counts["x"] += 1
 a := ages["bob"]                       # traps if missing...
 b := ages.get("dan") else 0            # ...`get` gives an optional
-for name in ages.keys()                # `for k in m` is an error; also values()
-    print("{name}: {ages[name]}")
+for name, age in ages                  # each entry as a pair; also keys(), values()
+    print("{name}: {age}")
 mut seen := Set[str]()                 # or a literal: {"a", "b"}
 if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `m.contains(k)`, `m.remove(k)` (gives `V?`), `m.len()`, `s.remove(x)`,
-`s.contains(x)`, `s.sorted()`, `s.union(t)`, `s.intersect(t)`, `s.difference(t)` (also on two `keys()` lists; give a set), and `m.push(k, x)` for a `Map[K, List[T]]` (starts an empty list when `k` is missing; types an untyped `{}`). Keys and set elements can be any type whose
-`==` is automatic (ints, strings, chars, structs and enums of them), but not
-floats.
+Also `m.contains(k)`, `m.remove(k)` (`V?`), `m.len()`, `s.remove(x)`, `s.contains(x)`,
+`s.sorted()`, `s.union(t)`, `s.intersect(t)`, `s.difference(t)` (also on two `keys()`
+lists), and `m.push(k, x)` for `Map[K, List[T]]`. Keys and elements: any type with
+automatic `==` (ints, strings, chars, structs and enums of them), not floats.
 
 ## JSON
 
@@ -578,13 +502,14 @@ doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/a
 doc.str("id")                                  # str?: also num, bool, arr (a member of that kind)
 doc.set("id", Json.Str("x"))                   # replace or add a member (mut doc)
 doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
+doc.text("id", "none")                         # str: the text member, or the default
+doc.flag("ok", false)                          # bool: likewise
+parse_json_lines("1\nbad\n\"x\"\n")          # List[Json]: every line that parses
+load_json[List[U]](path)?                      # a file decoded as T (FromJson); print_json(v) prints v as JSON (json.load.1-2)
 ```
 
 Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
-`Obj(members)` (`JsonMember` has `key`, `value`). Write `Json.Num(1.0)` when
-the type isn't known. A program that declares its own `Json` keeps it.
-
-Derive the conversions of your own types (`json.derive.1-2`):
+`Obj(members)`; a program's own `Json` wins. Derive conversions of your own types (`json.derive.1-2`):
 
 ```ail skip=context
 struct Todo
@@ -602,15 +527,14 @@ t := Todo.from_json(doc)?   # err.message names the path: "missing tags[2]", "id
 doc.need("id")?.need_str()?  # the same checks by hand: need, need_str/num/int/bool/arr/obj
 ```
 
-Enums: a variant without fields is its name (`"Red"`), one with fields
-`{"kind": "Circle", "r": 2.0}`. Generic types derive both with bounds
+Enums: a bare variant is its name (`"Red"`), one with fields
+`{"kind": "Circle", "r": 2.0}`. Generic types need bounds
 (`impl FromJson for Pair[A FromJson, B FromJson]`).
-`ail api --expanded FILE` prints the code a derive generated.
 
 ## Values and `mut`
 
-Assigning or passing a value copies it (cheaply): changing `b` after
-`b := a` never changes `a`.
+Assigning or passing copies a value (cheaply): changing `b` after `b := a`
+never changes `a`.
 
 ```ail skip=context
 fn bump(mut p Point)   # the caller sees the change
@@ -619,20 +543,17 @@ fn bump(mut p Point)   # the caller sees the change
 bump(mut q)            # `mut` again at the call; q must be a `mut` variable
 ```
 
-Two `mut` arguments of one call can't refer to the same value.
+Two `mut` arguments of one call can't be the same value.
 
-Any argument of your own functions and methods can be named, `show(tag, scale: 3, n: 4)`:
-positional ones first, then the named ones in any order, every parameter once.
-Arguments run in parameter order. Built-ins take no names.
+Your functions' arguments can be named (`show(tag, scale: 3, n: 4)`): positional
+first, then named in any order. Built-ins take no names.
 
-A declared function is a value of type `fn(A, B) R`: `f := double`,
-`apply(double, 4)` for `fn apply(f fn(int) int, x int) int`, `f(21)`. Not
-generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
+A declared function is a value of type `fn(A, B) R` (`f := double`, `f(21)`).
+Not generic functions, methods, or ones with `mut` parameters or errors; no lambdas.
 
 ## Shared cells, resources and `move`
 
-`ref T` is the one way to share a value: copies of a reference see each
-other's changes, and fields and methods reach the contents directly.
+`ref T` is the one way to share: copies see each other's changes.
 
 ```ail skip=context
 root := ref Node(value: 1, children: [])
@@ -642,9 +563,9 @@ print(root == alias)   # true: same cell (`==` on refs is identity)
 ```
 
 A `unique` type can't be copied: binding, assigning, returning or storing it
-moves it, and using the old name afterwards (on any path) is an error. Its
-`impl Drop` runs once, when its last owner's block ends, even on a trap.
-`defer S` runs `S` when the block ends; cleanups and defers run last first.
+moves it, and using the old name afterwards is an error. Its `impl Drop` runs
+once, when its last owner's block ends, even on a trap. `defer S` runs `S` at
+block end, last first.
 
 ```ail
 unique struct File
@@ -657,8 +578,9 @@ impl Drop for File
 fn close(move f File)  # takes ownership; the caller writes `move` too
     print("bye {f.fd}")
 
-f := File(fd: 3)
-close(move f)          # f can't be used after this
+fn main()
+    f := File(fd: 3)
+    close(move f)          # f can't be used after this
 ```
 
 A `move self` method consumes its receiver; the call has no mark, and the
@@ -671,19 +593,16 @@ fn File.finish(move self) int
 n := f.finish()        # f is moved
 ```
 
-Lists and maps of a unique type are unique too (own.uniq.8-10).
-`xs.push(move x)`, `insert(i, move x)` and `extend(move ys)` move in;
-`pop()`, `remove_at(i)` and `m.remove(k)` move out; `xs[i]`, `m[k]` and
-`for x in xs` borrow in place. `first`, `last`, `min`, `max`, `sorted`,
-`take`, `get` and `values` would copy, so they are errors. A unique value
-still can't be a map key, set element, `ref` contents or type argument;
-task handles go in a `TaskGroup`, not a list.
+Lists and maps of a unique type are unique too (own.uniq.8-10): `push(move x)`,
+`insert(i, move x)`, `extend(move ys)` move in; `pop()`, `remove_at(i)`,
+`m.remove(k)` move out; `xs[i]`, `m[k]`, `for x in xs` borrow. `first`, `last`,
+`min`, `max`, `sorted`, `take`, `get`, `values` would copy, so they are errors.
+A unique value can't be a map key, set element, `ref` contents or type argument.
 
 ## Modules
 
-A module is a directory of `.ail` files sharing one namespace. `use a.b`
-imports `ROOT/a/b`, where ROOT is the directory run (`ail run DIR`) or the
-file's directory (`ail run FILE`, whose siblings are not included).
+A module is a directory of `.ail` files sharing one namespace. `use a.b` imports
+`ROOT/a/b`, ROOT being the run directory (`ail run DIR`) or the file's directory.
 
 ```ail skip=context
 use geo                  # imports at the top of each file
@@ -703,14 +622,12 @@ pub struct Point         # `pub` exports; everything else is private
     y int                # module can build a `Point`
 ```
 
-There are no item or wildcard imports, no `pub use`, and no import cycles.
-`fn T.m` must be in `T`'s module. Text forms show the module path:
-`geo.Point(x: 1, y: 2)`.
+No item or wildcard imports, no `pub use`, no import cycles. `fn T.m` must be in
+`T`'s module. Text forms show the path: `geo.Point(x: 1, y: 2)`.
 
-A package root may hold `ail.pkg` (spec `mod.pkg.*`). Each `dep` is imported
-by its name (`use geo`, `use geo.shapes`) and may reach only the
-capabilities in its `caps` (none if omitted); `caps` on the `package` line
-limits the package itself. Violations are compile errors at the line.
+A package root may hold `ail.pkg` (spec `mod.pkg.*`). Each `dep` is imported by
+name (`use geo`, `use geo.shapes`) and reaches only its `caps` (none if omitted);
+the `package` line's `caps` limits the package. Violations are compile errors.
 
 ```
 package notes caps fs
@@ -719,74 +636,35 @@ dep textkit path vendor/textkit
 dep json git "https://example.com/json.git" tag v1.2 caps fs
 ```
 
-A `git` dep needs `rev COMMIT` or `tag TAG`; `ail run`/`test` fetch it into
-`~/.ail/deps` (or `$AIL_HOME/deps`) and pin its commit in `ail.lock` (commit
-it). `ail pkg update [NAME]` re-pins; `--deterministic` rejects a stale lock,
-`--deny net` fetches nothing (`mod.pkg.6–9`).
+A `git` dep needs `rev COMMIT` or `tag TAG`; it is fetched into `~/.ail/deps`
+(or `$AIL_HOME/deps`) and pinned in `ail.lock` (commit it). `ail pkg update [NAME]`
+re-pins; `--deterministic` rejects a stale lock (`mod.pkg.6–9`).
 
 ## Files, processes and the system
 
-The standard modules are in scope without `use`: call them by name,
-`fs.read_text(p)` (spec 17-std, ADR 0277). A local, or the program's own item,
-with a module's name hides it; `use std.fs as files` still works.
-Failures are values: `fs.IoError(path, kind)` and
-`proc.ProcError(cmd, kind)`, `kind` one of `not_found`, `permission`,
-`exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`;
-`net.NetError(url, kind, message)`.
-
-```ail norun
-fn main() !
-    text := fs.read_text("in.txt")?          # str ! fs.IoError
-    fs.write_text("out.txt", text)?           # also append_text
-    names := fs.list_dir(".")?                # sorted names
-    srcs := fs.glob("src/**/*.ail")            # also fs.walk(dir)?: every file, sorted
-    r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
-    print("{r.status} {r.out} {r.err}")      # proc.Output
-    s := proc.run("sort", [], text, 5000)?     # input, then a time limit (kind timed_out)
-    c := proc.start("make", [])?              # returns at once; c.stdin, c.out, c.err are Channel[str]
-    i := task.select([c.out, c.err])          # index of a channel with a value; none when all closed
-    for line in c.out                         # lines as they arrive; ends when the stream does
-        print(line)
-    print(proc.wait(move c)?)                 # status; `kill(move c)` ends it (a unique value)
-```
+Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or item with the module's name hides it. Failures are values: `fs.IoError(path, kind)`, `proc.ProcError(cmd, kind)` (`kind`: `not_found`, `permission`, `exists`, `is_dir`, `not_dir`, `not_empty`, `invalid_utf8`, `timed_out`, `other`), `net.NetError(url, kind, message)`.
 
 | Module | Functions |
 |---|---|
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
-| `std.compress` | `gzip(s) List[int]`, `deflate(s)`, `zlib(s)`: bytes as ints 0-255; `gunzip(b)`, `inflate(b)`, `unzlib(b)`: `str ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)`: `! CompressError`, effects `fs`, `io`; others no effects |
-| `std.hash` | `sha256(s)`, `sha384(s)`, `sha512(s)` (hex `str`), `hmac_sha256(key, s)` (hex), `crc32(s) int`, `hash64(s) int` (fast, not secure); no effects |
-| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)` (file or empty dir), `make_dir(p)` (with parents), `walk(dir) List[str]` (files, any depth), `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)`; all but `exists` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) never fails |
+| `std.compress` | `gzip(data) bytes`, `deflate(data)`, `zlib(data)`; `gunzip(b)`, `inflate(b)`, `unzlib(b)` `bytes ! compress.CompressError { kind, message }`; `gzip_file(src, dst)`, `gunzip_file`, `zip_dir(dir, zipfile)`, `unzip(zipfile, dir)` `! CompressError`, effects `fs`, `io` |
+| `std.hash` | `sha256(data)`, `sha384(data)`, `sha512(data)` (hex `str`), `hmac_sha256(key, data)`, `crc32(data) int`, `hash64(data) int` (`bytes` or `str`; not secure) |
+| `std.fs` | `read_text(p) str`, `write_text(p, s)`, `append_text(p, s)`, `read_bytes(p) bytes`, `write_bytes(p, b)`, `append_bytes(p, b)`, `exists(p) bool`, `list_dir(p) List[str]`, `remove(p)`, `make_dir(p)`, `walk(dir) List[str]`, `metadata(p) fs.Metadata` (`size`, `modified_ms`, `is_dir`), `rename(a, b)`, `copy(a, b)` (directories copy their tree); all but `exists` and `glob` are `! fs.IoError`; `glob(pat) List[str]` (`*`, `?`, `**`) |
 | `std.env` | `args() List[str]`, `get(name) str?`, `vars() Map[str, str]`, `cwd() str`, `program() str`, `home() str?` |
-| `std.path` | `dir(p)` (`.` if none), `base(p)`, `ext(p)` (no dot), `join(a, b)`; text only, no effects |
+| `std.path` | `dir(p)`, `base(p)`, `ext(p)`, `stem(p)`, `join(a, b)`; text only, no effects |
 | `std.io` | `read_line() str?`, `read_all() str`, `eprint(value)`, `exit(code)` |
+| `std.args` | `use std.args`; specs `args.flag("verbose", "v", help)`, `args.opt("out", "o", help, default)`, `args.pos("input", help)`, `args.rest("more", help)`; `a := args.parse("tool", "about", specs, env.args())?` (`ArgsError { why, usage }`); `a.flag("verbose")`, `a.get("out")`, `a.rest`; `--help` prints usage and exits 0; `--out=V`, `-o V`, `--` |
+| `std.log` | `use std.log`; `log.debug(m)`, `log.info(m)`, `log.warn(m)`, `log.err(m)` write `LEVEL m` to stderr; env `LOG_LEVEL` (`debug`, `info`, `warn`, `error`, `off`; default `info`) |
 | `std.proc` | `run(cmd, args, input?, timeout_ms?) proc.Output ! proc.ProcError`; `Output { status int, out str, err str }`; `run_bytes(cmd, args, input bytes?, timeout_ms?) proc.RawOutput ! proc.ProcError` (`RawOutput { status int, out bytes, err bytes }`); `which(name) str?`; `start(cmd, args, timeout_ms?) proc.Child ! proc.ProcError`, `wait(move c) int ! proc.ProcError` (`timed_out`), `kill(move c) int`; `Child { pid int, stdin, out, err Channel[str] }` (`stdin.send(text)`, `stdin.close()`) |
-| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://` and `https://` (TLS 1.3, certificates checked against the system roots or `SSL_CERT_FILE`; failures have kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data` (bytes, sent when not empty), `o.timeout_ms`, `o.max_redirects`); server: `srv := net.serve(addr)?` (`addr()`, `close()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?` (`ex.request.data` is the body as bytes); run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (each repeated header's values, e.g. `set-cookie`; optional when you build a `Response`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response` |
+| `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
-| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t`; methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
-| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b` (elementwise, or with a scalar on either side: `t * 2.0`); methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
-| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), linear time, no backreferences or lookaround; offsets in characters; write patterns as `r"..."` |
-| `std.tensor` | `from(xs)` (1-D), `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only; elementwise, or with a scalar on either side: `t * 2.0`), `-t`; methods `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)` for a tensor without that axis), `t[i]` (rows; `[]` for 1-D, read with `item()`), `t[lo..hi]` (rows); `relu()`, `sigmoid()`, `tanh()` (float); `transpose()` (2-D), `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
+| `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; the same as methods: `re.is_match(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), no backreferences or lookaround; offsets in characters; patterns as `r"..."` |
+| `std.tensor` | `from(xs)`, `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only), `-t`, scalars on either side (`t * 2.0`; a chain of elementwise operators runs in one pass); `Tensor[f32]` (`from`/`zeros` in an `f32` context; mixing with `float` is an error; `to_f32()`, `to_float()`); `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `item()` for 1-D), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()`, `softmax()` (float; softmax along the last axis); `transpose()`, `matmul(b)` (2-D), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
-| `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)` (offset required) and `date.parse_in(text, zone)` `: DateTime ! DateError`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); a zone is `"UTC"`, `"+05:30"` or `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)` (months clamp the day), `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format("%Y-%m-%d %H:%M:%S %z")` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
-| `std.tz` | `offset(zone, secs) int?` (none for an unknown zone), `system() str`; effects `fs`, `env` |
-| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size() ui.Size`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(col, row, text, fg, bg, ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar|Block|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers() ui.Modifiers` (of the last event), `set_font_size(px)` (10 to 40; a `Resize` follows), `font_size() int`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.BLACK`, `BLUE`, `CYAN`, `GRAY`, `GREEN`, `MAGENTA`, `ORANGE`, `RED`, `WHITE`, `YELLOW` |
+| `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)`, `date.parse_in(text, zone)`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); zones `"UTC"`, `"+05:30"`, `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)`, `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format(p)` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
+| `std.tz` | `offset(zone, secs) int?`, `system() str`; effects `fs`, `env` |
+| `std.net` | `get(url)`, `post(url, body, content_type)`: `net.Response ! net.NetError`; `Response { status int, headers Map[str, str], body str }`; any status succeeds; `http://`, `https://` (TLS 1.3, system roots or `SSL_CERT_FILE`; kind `tls`); `get_bytes(url)`, `post_bytes(url, data, content_type)`, `request_bytes(method, url, opts)` give `net.RawResponse { status, headers, data bytes }`; `request(method, url, opts)` with `mut o := net.options()` (`o.headers`, `o.query`, `o.body`, `o.data`, `o.timeout_ms`, `o.max_redirects`, `o.connect_ms`, `o.total_ms`; `o.headers["Connection"] = "close"` opens a fresh connection; `"Transfer-Encoding": "chunked"` sends chunks; connections are kept alive); cookies: `use std.net.jar`, `mut j := jar.new()`, `j.get(url)?`, `j.request(method, url, o)?`, `j.header(url)`, `j.header_from(url, from_page, navigation)`, `j.set_cookie(url, line)`, `j.store(url, r)`, `j.value(url, name)`; gzip and deflate are decoded unless you set `Accept-Encoding`; `b := net.open(method, url, o)?` (`net.Body`: `b.status`, `b.headers`, `b.read_bytes(max)?`, `b.close()`); server: `srv := net.serve(addr)?` (`srv.addr()`, `srv.close()`, `srv.shutdown()`), `ex := srv.accept()?` (`ex.request`: `method`, `path`, `query`, `headers`, `body`, `peer`; `ex.request.data` is the body as bytes), `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`, `ex.respond_bytes(200, {}, data)?`; run workers with `spawn`; raw TCP: `net.listen(addr)?`, `net.connect(host, port)?`, `net.connect_tls(host, port)?`, `Conn`: `read(max)`, `read_bytes(max)`, `read_line()`, `write(text)`, `write_bytes(data)`, `set_timeout(ms)`, `close()`; kinds also `bad_request`, `closed`, `bind`; `Response.all_headers Map[str, List[str]]` (repeated headers, e.g. `set-cookie`); handler form: `use std.net.http`, `http.serve(addr, handler)` or `http.run(srv, handler)` with `fn handler(r net.Request) net.Response`; `r.stop()` ends the server after its answer; `http.serve_dir(addr, dir)` / `http.run_dir(srv, dir)` serve files |
+| `std.ui` | `open(title, cols, rows) ui.Window ! ui.UiError`; `Window`: `size()`, `clear(bg)`, `put(col, row, text, fg, bg)`, `put_styled(..., ui.Style(bold, italic, underline))`, `cursor(col, row)`, `set_cursor(col, row, Bar\|Block\|Underline)`, `present()`, `next_event() ui.Event`, `poll_event() ui.Event?`, `modifiers()`, `set_font_size(px)` (10 to 40), `font_size()`, `set_title(t)`, `close()`; `Event`: `Key(key, ctrl, alt, shift)`, `Resize(cols, rows)`, `Close`, `Mouse(col, row, button, kind)`, `Scroll(lines)`; `clipboard_get() str?`, `clipboard_set(text)`; colors `0xRRGGBB` or `ui.RED` and nine others |
 | `std.ui.widgets` | `TextField`, `ListView` (fuzzy `filter`), `Button`, `Dialog`, `Pane`, `Tree`: `render(rect, theme) List[widgets.Run]`, `draw(mut w, rect, theme)`, `on_event(ev[, rect]) widgets.Action` (`Ignored`, `Changed`, `Submit`, `Cancel`); `widgets.Rect(col, row, cols, rows)`; `text_rows(runs, cols, rows)` prints a screen headless |
-
-A window is a grid of text cells; draw with `put`, then `present`:
-
-```ail
-fn main()
-    mut w := ui.open("Demo", 40, 10) else return   # fails headless: kind "no_display"
-    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)
-    w.present()
-    while true
-        match w.next_event()
-            Key(key, ctrl, _, _) =>                # "a", "enter", "f1"; Ctrl-S is ("s", true)
-                if key == "escape"
-                    break
-            Close => break
-            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
-```
 
 ## Tests and assertions
 
@@ -796,21 +674,14 @@ fn main()
     assert(double(1) == 2)   # traps if false
 ```
 
-A test returns nothing or `!`, can't be called, and is ignored by `ail run`.
-It can always fail, so `?` works in it: `assert_eq(parse("7")?, 7)` fails the
-test if `parse` fails or gives `none`.
-`assert` and `assert_eq` also work in ordinary code (a failure traps).
+A test returns nothing or `!`, can't be called, and `ail run` ignores it. `?`
+works in it: `assert_eq(parse("7")?, 7)`. `assert` and `assert_eq` also work
+in ordinary code (a failure traps).
 
-A test with parameters is a **property**: `ail test` runs it on generated
-inputs (`--cases N`, default 100; `--seed S` replays), and shrinks a failure
-to the smallest input, printed as AIL literals. Parameters may be `int`,
-`float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, and structs
-and enums made of those.
-
-```ail fragment
-@test fn add_commutes(a int, b int)
-    assert_eq(a + b, b + a)
-```
+A test with parameters is a **property**: `ail test` runs generated inputs
+(`--cases N`, default 100; `--seed S` replays) and shrinks a failure to the
+smallest input. Parameters: `int`, `float`, `bool`, `char`, `str`, `List`, `Map`,
+`Set`, optionals, and structs and enums of those.
 
 A block fenced `ail` in a `##` doc comment runs as the test `doc:NAME`;
 `# => text` after a `print` asserts its output:
@@ -851,16 +722,13 @@ task.check()?                 # fails with Cancelled once cancelled
 n.add(1, order: Relaxed)      # weaker ordering: Relaxed Acquire Release AcqRel
 ```
 
-A cancel reaches every task the cancelled task started. A cancelled task's
-`recv` gives `none` (and `for v in ch` ends), a `send` on a full channel
-drops its value, `time.sleep_ms` returns at once and `proc.run` fails; the
-scope still waits for it. `ail test --schedule=random:SEED` runs tasks in an order picked from
-`SEED` and prints the seed when a test fails, so the interleaving replays.
+A cancel reaches every task the cancelled task started. Cancelled, `recv` gives
+`none`, a full-channel `send` drops its value, `sleep_ms` returns at once, and
+`proc.run` fails; the scope still waits. `ail test --schedule=random:SEED` replays an interleaving.
 
-Each task handle must be waited or added to a group exactly once, on every
-path. A handle can't be stored or passed; channels and mutexes can, and
-copies are the same channel or mutex. If every task is blocked, the program
-traps (deadlock).
+Each task handle is waited or added to a group exactly once, on every path. A
+handle can't be stored or passed; channels and mutexes can, and copies share one.
+If every task is blocked, the program traps (deadlock).
 
 ## Effects
 
@@ -874,16 +742,19 @@ implementation.
     w * h
 ```
 
+`@inline` is accepted and ignored. `@deprecated("use area")` warns at each call.
+Unknown attributes are errors.
 `@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
 area")` before a function warns at each call, with the reason (required).
-Unknown attributes are errors.
+`@allow("expr.match.3")` silences the warning for `_` arms that cover enum
+variants in that function. Unknown attributes are errors.
 
 ## Unsafe
 
-`unsafe` and a block allow unsafe operations; `unsafe fn` can be called only
-there. The block yields its last expression and may `return`. A package
-needs `unsafe allow` on its `package` or `dep` line in `ail.pkg`; a program
-without `ail.pkg` needs nothing. A function with an `unsafe` block is not `@pure`.
+`unsafe` blocks allow unsafe operations; `unsafe fn` is callable only there. A package needs `unsafe allow` on its `package`
+or `dep` line in `ail.pkg`; a program without `ail.pkg` needs nothing. Hardware
+(`hw.at(addr, 0)`, `p.read_volatile()`, `p.write_volatile(v)`, `hw.fence()`)
+needs `unsafe driver` there, or `--unsafe driver`.
 
 ```ail
 unsafe fn twice(x int) int
@@ -897,11 +768,10 @@ fn safe_twice(x int) int
 C functions are declared, not imported. Types: `int`, `float`, `bool`,
 `i8`...`u64`, `f32`, and `*T` pointers; at most 6 integer-like and 8 float
 arguments; no `mut`. `std.mem`: `cstr(s) *u8`, `from_cstr(p) str`, `free(p)`.
-A narrow C `int` result is declared `i32`. Wrap each call in a safe function.
-Pointers: `p.read()`, `p.write(v)`, `p.offset(n)` (elements), `p.is_null()`;
+A narrow C `int` result is declared `i32`.
+Pointers: `p.read()`, `p.write(v)`, `p.offset(n)`, `p.is_null()`;
 `mem.alloc(n, 0)` allocates `n` ints set to the example (`0.0` gives `*float`),
-`mem.null()`, `mem.cast(p, example)`, `mem.free(p)`. Null, past-the-end and
-freed accesses trap (`unsafe.ptr.4–6`).
+`mem.null()`, `mem.cast(p, example)`, `mem.free(p)`; bad accesses trap.
 
 ```ail
 use std.mem
@@ -919,15 +789,10 @@ fn c_length(text str) int
 
 ## Contracts
 
-Lines directly under the signature; conditions are pure `bool`s. `result` is
-the returned value in `ensures`. A failed `requires` traps at the call
-(`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`), both
-with the arguments' values. `ail run --no-contracts` skips the checks.
-`old(e)` in `ensures` is `e` on entry. A trait method's contracts bind its
-implementations (their own `requires` weaken, their own `ensures` add). A
-struct's `invariant COND` lines hold after construction and after every
-`mut self` method (`contract.inv.2`, `contract.inv.3`).
-
+Lines under the signature pure `bool`s. `result` is the returned value in
+`ensures`; `old(e)` is `e` on entry. A failed `requires` traps at the call
+(`contract.req.1`), a failed `ensures` at its line (`contract.ens.1`). Trait
+contracts bind implementations (their `requires` weaken, their `ensures` add).
 ```ail
 fn divide(a int, b int) int
     requires b != 0

@@ -46,6 +46,7 @@ struct FieldInfo
     name str
     type_text str               # as written in the declaration: "List[int]"
     public bool
+    doc str                     # the field's `##` comment, "" if none
 
 struct VariantInfo
     name str

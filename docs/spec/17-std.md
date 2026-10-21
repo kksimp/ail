@@ -118,10 +118,14 @@ are followed. *(ADR 0281)*
 directory, replacing a file at `to`. *(ADR 0281)*
 
 **std.fs.12** — `copy(from str, to str) ! IoError` copies the file `from`
-to `to`, replacing a file there. A directory `from` fails with `is_dir`;
-nothing copies a tree. For `rename` and `copy`, a failure's `path` is
-`from` when `from` is missing (or, for `copy`, a directory), else `to`.
-*(ADR 0281)*
+to `to`, replacing a file there. When `from` is a directory, `copy` copies
+the tree: `to` and its parents are made when missing, files already there are
+replaced, other files there are kept, and entries are copied in name order.
+A symbolic link is copied as the file it points to; a link to a directory
+fails with `other` at that path, and so does copying a directory into itself.
+For `rename` and `copy`, a failure's
+`path` is `from` when `from` is missing, else the path that failed.
+*(ADR 0281, ADR 0751)*
 
 **std.fs.13** — `read_bytes(path str) bytes ! IoError` reads the whole file
 as `bytes`, whatever it holds. It fails as `read_text` does, and never because
@@ -132,6 +136,120 @@ to the file, creating it or replacing its contents; `append_bytes(path str,
 data bytes) ! IoError` adds `data` at the end, creating the file if needed.
 They fail as `write_text` and `append_text` do. *(ADR 0415)*
 
+**std.fs.15** — A path that doesn't exist fails with kind `not_found`.
+This is so for `read_text`, `list_dir` and `remove`, and for every other call
+on a missing path. *(ADR 0158)*
+
+**std.fs.16** — Reading a directory as a file, such as `read_text(".")`, fails
+with kind `is_dir`. *(ADR 0158)*
+
+**std.fs.17** — `list_dir` of a file, not a directory, fails with kind
+`not_dir`. *(ADR 0158)*
+
+**std.fs.18** — `remove` of a directory that still holds entries fails with
+kind `not_empty`; remove the entries first. *(ADR 0158)*
+
+**std.fs.19** — `read_text` of a file whose bytes aren't UTF-8 fails with kind
+`invalid_utf8`; `read_bytes` reads the same file as it is. *(ADR 0158)*
+
+**std.fs.20** — `exists` is the kind when a path names an existing file where
+the call needs a new directory: `make_dir` of a path that is a file fails with
+`exists`. (`make_dir` of an existing directory succeeds.) *(ADR 0783)*
+
+**std.fs.21** — `permission` is the kind when the OS refuses the access: a read,
+write or remove the process has no right to. It is the same on every platform.
+*(ADR 0783)*
+
+**std.fs.22** — `other` is the kind for an OS failure that has none of the kinds
+above. A program that reads `other` gets the path and the kind, not the OS text.
+*(ADR 0783)*
+
+```ail rules=std.fs.20
+use std.fs
+
+fn main() !
+    fs.write_text("fs_exists.txt", "x")?
+    fs.make_dir("fs_exists.txt") else err
+        print("{err.kind}")                  # exists
+    fs.remove("fs_exists.txt")?
+```
+
+```ail norun rules=std.fs.21
+use std.fs
+
+fn main() !
+    text := fs.read_text("/root/no-access.txt") else err
+        print("{err.kind}")                  # permission, for a user without access
+        ""
+    print(text.len())
+```
+
+```ail norun rules=std.fs.22
+use std.fs
+
+fn main() !
+    text := fs.read_text("fs_other.txt") else err
+        print("{err.kind}")                  # other, for an OS failure outside the list
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.15
+use std.fs
+
+fn main() !
+    text := fs.read_text("fs_no_such_file.txt") else err
+        print("{err.kind}")                  # not_found
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.16
+use std.fs
+
+fn main() !
+    text := fs.read_text(".") else err
+        print("{err.kind}")                  # is_dir
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.17
+use std.fs
+
+fn main() !
+    fs.write_text("fs_plain.txt", "x")?
+    names := fs.list_dir("fs_plain.txt") else err
+        print("{err.kind}")                  # not_dir
+        []
+    print(names.len())
+    fs.remove("fs_plain.txt")?
+```
+
+```ail rules=std.fs.18
+use std.fs
+
+fn main() !
+    fs.make_dir("fs_full")?
+    fs.write_text("fs_full/a.txt", "a")?
+    fs.remove("fs_full") else err
+        print("{err.kind}")                  # not_empty
+    fs.remove("fs_full/a.txt")?
+    fs.remove("fs_full")?
+```
+
+```ail rules=std.fs.19
+use std.fs
+
+fn main() !
+    fs.write_bytes("fs_bytes.bin", b"\xff\xfe")?
+    text := fs.read_text("fs_bytes.bin") else err
+        print("{err.kind}")                  # invalid_utf8
+        ""
+    print(text.len())
+    print(fs.read_bytes("fs_bytes.bin")?)
+    fs.remove("fs_bytes.bin")?
+```
 ```ail norun rules=std.fs.9
 use std.fs
 
@@ -147,22 +265,66 @@ fn main() !
 words after the program's file, so `ail run tool.ail a b` gives
 `["a", "b"]`. *(ADR 0159)*
 
+```ail rules=std.env.1
+use std.env
+
+fn main()
+    print(env.args().len())
+```
+
 **std.env.2** — `get(name str) str?` returns an environment variable, or
 `none` when it isn't set or isn't UTF-8. *(ADR 0157)*
+
+```ail rules=std.env.2
+use std.env
+
+fn main()
+    home := env.get("AIL_NO_SUCH_VAR_X") else "unset"
+    print(home)
+```
 
 **std.env.3** — `cwd() str` returns the working directory. If it can't be
 read, the program traps. *(ADR 0157)*
 
+```ail rules=std.env.3
+use std.env
+
+fn main()
+    print(env.cwd().len() > 0)
+```
+
 **std.env.4** — `program() str` returns the program's file path as it was
 given to `ail run`. *(ADR 0159)*
+
+```ail rules=std.env.4
+use std.env
+
+fn main()
+    print(env.program().len() > 0)
+```
 
 **std.env.5** — `vars() Map[str, str]` returns the environment variables
 whose names and values are UTF-8, in order of their names' bytes.
 *(ADR 0282)*
 
+```ail rules=std.env.5
+use std.env
+
+fn main()
+    print(env.vars().len() > 0)
+```
+
 **std.env.6** — `home() str?` returns the user's home directory: `HOME`,
 else `USERPROFILE` (Windows), or `none` when neither is set or one is
 empty. *(ADR 0296)*
+
+```ail rules=std.env.6
+use std.env
+
+fn main()
+    h := env.home() else "none"
+    print(h.len() > 0)
+```
 
 ## Paths: `std.path`
 
@@ -184,7 +346,12 @@ separator or `a` is empty; on Windows also when `b` starts with a drive and
 a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
 *(ADR 0253, ADR 0504)*
 
-```ail rules=std.path.1,std.path.2,std.path.3,std.path.4
+**std.path.5** — `stem(p str) str` is `base(p)` without its extension: the
+text before the last `.`, or all of `base(p)` when there is none or the only
+`.` is the first character (`stem("a/archive.tar.gz")` is `archive.tar`).
+*(ADR 0630)*
+
+```ail rules=std.path.1,std.path.2,std.path.3,std.path.4,std.path.5
 use std.path
 
 fn main()
@@ -192,13 +359,14 @@ fn main()
     print(path.base("examples/logscan.ail"))   # logscan.ail
     print(path.ext("archive.tar.gz"))          # gz
     print(path.join("examples", "data"))       # examples/data
+    print(path.stem("archive.tar.gz"))         # archive.tar
 ```
 
 ## Hashing: `std.hash`
 
 **std.hash.1** — `std.hash` works on values only, so its functions have no
-effects (`eff.infer.4`). Each takes `str` and hashes its UTF-8 bytes; when
-the `bytes` type lands the same functions take `bytes` too (ADR 0442).
+effects (`eff.infer.4`). Each data argument is `bytes` or `str`; a `str` is
+hashed as its UTF-8 bytes (`type.bytes.10`). *(ADR 0442)*
 
 **std.hash.2** — `sha256(s str) str`, `sha384(s str) str` and
 `sha512(s str) str` return the digest of FIPS 180-4 as lower-case hex.
@@ -222,19 +390,18 @@ fn main()
 
 ## Compression: `std.compress`
 
-**std.compress.1** — Binary data is a `List[int]` of values 0 to 255 until
-the `bytes` type lands (ADR 0443). `deflate(s str) List[int]` and
-`gzip(s str) List[int]` compress the UTF-8 bytes of `s` at a fixed level (6)
-into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952). They
-never fail, and the same input gives the same output on every platform.
+**std.compress.1** — `deflate(data bytes) bytes` and `gzip(data bytes) bytes`
+compress `data` (a `str` is also accepted, as its UTF-8 bytes) at a fixed
+level (6) into a raw DEFLATE stream (RFC 1951) and a gzip stream (RFC 1952).
+They never fail, and the same input gives the same output on every platform.
 They have no effects.
 
-**std.compress.2** — `inflate(data List[int]) str ! compress.CompressError`
-and `gunzip(data List[int]) str ! compress.CompressError` reverse them.
+**std.compress.2** — `inflate(data bytes) bytes ! compress.CompressError`
+and `gunzip(data bytes) bytes ! compress.CompressError` reverse them; use
+`.to_str()` (`type.bytes.8`) when the result is text.
 `CompressError { kind str, message str }`; `kind` is `corrupt` (malformed
 data, including trailing bytes after a DEFLATE stream), `checksum` (gzip
-CRC-32 or size mismatch), `too_big` (std.compress.4), `invalid_utf8` (the
-result is not text), `unsafe_path`, `unsupported`, or an I/O kind of
+CRC-32 or size mismatch), `too_big` (std.compress.4), `unsafe_path`, `unsupported`, or an I/O kind of
 `std.err.1` for file functions. *(ADR 0443)*
 
 **std.compress.3** — `gunzip` accepts the optional header fields of
@@ -258,11 +425,83 @@ with `too_big`. `unzip` creates `dir`, checks every CRC-32, and fails with
 entries and methods other than store and deflate fail with `unsupported`.
 *(ADR 0446)*
 
-**std.compress.7** — `zlib(s str) List[int]` and
-`unzlib(data List[int]) str ! compress.CompressError` use the zlib wrapper of
+**std.compress.7** — `zlib(data bytes) bytes` and
+`unzlib(data bytes) bytes ! compress.CompressError` use the zlib wrapper of
 RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
 streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
 and `unsupported` for a preset dictionary. *(ADR 0443)*
+
+**std.compress.8** — `gunzip` of bytes without the gzip magic `1f 8b` fails
+with kind `corrupt` and message `not gzip data`; other malformed input fails
+with `corrupt` and a message that names the defect. *(ADR 0443)*
+
+```ail rules=std.compress.8
+use std.compress
+
+fn main()
+    data := compress.gunzip(b"not gzip at all") else err
+        print("{err.kind}: {err.message}")   # corrupt: not gzip data
+        b""
+    print(data.len())
+```
+**std.compress.9** — DEFLATE failures: `inflate` (and the DEFLATE part of
+`gunzip`, `unzlib` and `unzip`) fails with kind `corrupt` and exactly one of
+these messages: `unexpected end of compressed data`, `invalid block type`,
+`stored block length check failed`, `too many length or distance codes`,
+`over-subscribed Huffman code`, `invalid Huffman code`, `repeat with no
+previous length`, `code length repeat overruns the table`, `block has no
+end-of-block code`, `invalid length symbol`, `invalid distance symbol`,
+`distance reaches before the start of the output`, or `extra bytes after the
+end of the compressed data`. *(ADR 0784)*
+
+```ail rules=std.compress.9
+use std.compress
+
+fn main()
+    a := compress.inflate(b"\x07") else err
+        print("{err.kind}: {err.message}")   # corrupt: invalid block type
+        b""
+    b := compress.inflate(b"\x01") else err
+        print("{err.kind}: {err.message}")   # corrupt: unexpected end of compressed data
+        b""
+    print(a.len() + b.len())
+```
+
+**std.compress.10** — Wrapper failures: besides `std.compress.8`, `gunzip`
+fails with `corrupt` and `unknown gzip compression method`, `reserved gzip
+flags set`, `truncated gzip header` or `truncated gzip trailer`, and with
+`checksum` and `gzip CRC-32 mismatch` or `gzip size mismatch`. `unzlib`
+fails with `corrupt` and `not zlib data` or `truncated zlib trailer`, with
+`checksum` and `zlib Adler-32 mismatch`, and with `unsupported` and `zlib
+preset dictionaries are not supported`. *(ADR 0784)*
+
+```ail rules=std.compress.10
+use std.compress
+
+fn main()
+    z := compress.unzlib(b"x\x9c\x03\x00\x00\x00\x00\x02") else err
+        print("{err.kind}: {err.message}")   # checksum: zlib Adler-32 mismatch
+        b""
+    print(z.len())
+```
+
+**std.compress.11** — Zip failures: `unzip` fails with `corrupt` and `not a
+zip archive`, `truncated zip data`, `bad zip central directory`, `bad zip
+local header` or `zip name is not UTF-8`; with `unsafe_path` and `unsafe
+name in archive: NAME` (`std.compress.5`); with `unsupported` and
+`encrypted zip entries are not supported` or `zip method N is not
+supported`; with `checksum` and `zip CRC-32 or size mismatch in NAME`; and
+with `too_big` and `output exceeds the size limit`, `archive expands past
+the size limit`, `more than 65535 files; zip64 is not supported` or `over 4
+GiB; zip64 is not supported` (`std.compress.4`). *(ADR 0784)*
+
+```ail norun rules=std.compress.11
+use std.compress
+
+fn main()
+    compress.unzip("notes.txt", "out") else err
+        print("{err.kind}: {err.message}")   # corrupt: not a zip archive
+```
 
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
@@ -273,7 +512,7 @@ use std.compress
 
 fn main() !
     z := compress.gzip("abc abc abc abc")
-    print(compress.gunzip(z)?)
+    print(compress.gunzip(z)?.to_str() else "binary")
 ```
 
 ## Standard input and output: `std.io`
@@ -282,24 +521,63 @@ fn main() !
 without its line ending (`\n` or `\r\n`), or returns `none` at the end of
 input. Bytes that aren't UTF-8 become U+FFFD. *(ADR 0157)*
 
+```ail rules=std.io.1
+use std.io
+
+fn main()
+    line := io.read_line() else "eof"
+    print(line)
+```
+
 **std.io.2** — `read_all() str` reads the rest of standard input.
 *(ADR 0157)*
+
+```ail rules=std.io.2
+use std.io
+
+fn main()
+    print(io.read_all().len())
+```
 
 **std.io.3** — `eprint(value)` writes the value's text form and a newline to
 standard error, as `print` does to standard output (`mod.main.3`). Output
 already printed reaches standard output first. *(ADR 0157)*
+
+```ail rules=std.io.3
+use std.io
+
+fn main()
+    io.eprint("note")
+    print("done")
+```
 
 **std.io.4** — `exit(code int)` ends the program with exit status `code`,
 after writing any pending standard output. It never returns, so the code
 after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
 *(ADR 0157)*
 
+```ail norun rules=std.io.4
+use std.io
+
+fn main()
+    print("bye")
+    io.exit(3)
+```
+
 **std.io.5** — `read_bytes() bytes` reads the rest of standard input as
 `bytes`, without decoding it. *(ADR 0415)*
 
+```ail rules=std.io.5
+use std.io
+
+fn main()
+    print(io.read_bytes().len())
+```
+
 ## Processes: `std.proc`
 
-**std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
+**std.proc.1** — `run(cmd str, args List[str], input str?, timeout_ms int?) Output ! ProcError`
+runs the
 program `cmd` with the arguments `args`, directly and without a shell, and
 waits for it. `cmd` is found on `PATH` unless it contains a path separator.
 On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
@@ -412,6 +690,41 @@ fn main() !
     print("{r.status} {r.out.len()}")
 ```
 
+**std.proc.9** — `Output` (the result of `proc.run`) has the methods `text()`
+and `ok()`, and no others. Each takes no arguments, and neither changes the
+value: a call with an argument, or an unknown name, is an error. *(ADR 0733)*
+
+**std.proc.10** — `o.text() str` is the standard output followed by the standard
+error, with nothing between them. `o.ok() bool` is `o.status == 0`. *(ADR 0733)*
+
+```ail rules=std.proc.9,std.proc.10
+use std.proc
+
+fn main() !
+    r := proc.run("echo", ["hello"])?
+    print(r.ok())                         # true
+    print(r.text().len() > 0)             # true
+```
+
+## Counting: `Map[K, int]`
+
+**std.count.1** — `m[k] += 1` adds one to the count at `k`, and starts the count
+at zero when `k` is absent. The receiver must be `mut`, and the map's values must
+be `int`. *(ADR 0732)*
+
+**std.count.2** — `m.top(n int) List[K]` is the `n` keys with the largest counts,
+largest first. Keys with equal counts keep their insertion order. A count of zero
+or less gives `[]`. `m` is not changed. *(ADR 0732)*
+
+```ail rules=std.count.1,std.count.2
+fn main()
+    mut counts := Map[str, int]()
+    for word in ["b", "a", "b", "c", "b", "a"]
+        counts[word] += 1
+    print(counts.top(2))                  # ["b", "a"]
+    print(counts.top(0))                  # []
+```
+
 ## Memory for C: `std.mem`
 
 **std.mem.1** — `std.mem` has `cstr(s str) *u8`, which returns a new
@@ -489,19 +802,21 @@ fn main() !
 
 **std.net.6** — `request(method str, url str, opts Options) Response ! NetError`
 sends any method with options, where `struct Options { headers Map[str, str],
-query Map[str, str], body str, timeout_ms int, max_redirects int }`.
+query Map[str, str], body str, timeout_ms int, max_redirects int, data bytes,
+connect_ms int, total_ms int }`.
 `options()` returns the defaults: no headers, no query, an empty body, a
 30000 ms timeout and 5 redirects; write `mut o := net.options()` and set
 fields. The method is made uppercase and must be an HTTP token. `headers`
 are sent after the defaults `Host`, `User-Agent: ail` and `Accept: */*`, and
-replace a default of the same name (case-insensitively); `Connection`,
-`Content-Length` and `Transfer-Encoding` are the client's own and are
-ignored. A header name must be an HTTP token and a value must not contain
+replace a default of the same name (case-insensitively); `Content-Length`
+is the client's own and is ignored, and `Connection: close` and
+`Transfer-Encoding: chunked` are honoured (`std.net.19`). A header name must be an HTTP token and a value must not contain
 CR, LF or NUL: otherwise the request fails with kind `bad_request` before
 anything is sent. `query` is appended to the URL, percent-encoded, after any
 query the URL has. `body` is sent with a `Content-Length` (always for `POST`,
 `PUT` and `PATCH`). `timeout_ms` bounds connecting and each read and write,
-and must be at least 1; `max_redirects` must be at least 0 (otherwise the
+and must be at least 1; `connect_ms` and `total_ms` (default 0, no separate
+limit) bound connecting alone and the whole request (`std.net.19`); `max_redirects` must be at least 0 (otherwise the
 program traps). `get(url)` and `post(url, body, content_type)` are
 `request` with the defaults. *(ADR 0418)*
 
@@ -555,8 +870,9 @@ body as text, bytes that aren't UTF-8 as U+FFFD; `peer` is the client's
 address. *(ADR 0419)*
 
 **std.net.11** — `ex.respond(r Response) ! NetError` sends the response and
-closes the connection: the server sends `Connection: close` and does not
-keep connections alive. The status must be 100 to 599; header names must be
+answers it. The server keeps the connection open for the next request when
+the client allows it (`std.net.22`), and otherwise sends `Connection: close`
+and closes it. The status must be 100 to 599; header names must be
 tokens and values must not contain CR, LF or NUL; otherwise `respond` fails
 with kind `bad_request` and the exchange stays open to be answered again.
 `Content-Length`, `Connection` and `Transfer-Encoding` in `r.headers` are
@@ -609,8 +925,9 @@ library's (Winsock); the code uses nothing else, and it is untested there
   stays a `str`, the same bytes with each invalid UTF-8 sequence as U+FFFD.
 - `Options` has a last field `data bytes`, empty from `options()`. A request
   sends `data` as its body when it isn't empty, and `body` otherwise.
-- `Request` has a last field `data bytes`: the body the server received, as
-  it arrived (`body` is its lossy text).
+- `Request` has a field `data bytes`: the body the server received, as
+  it arrived (`body` is its lossy text), and a last field `server int`, the
+  handle `req.stop()` uses (`http.serve.1`).
 - `ex.respond_bytes(status int, headers Map[str, str], data bytes) !
   NetError` answers an `Exchange` with `data` as the body; it checks the
   status and headers as `respond` does.
@@ -635,6 +952,263 @@ program holds and returns when `srv.close()` has stopped it. Four tasks
 answer requests at once, each one at a time; a handler is a declared
 function (`conc.task.*`, function values), and a client that goes away
 before its answer is not a failure. *(ADR 0419)*
+
+**std.net.19** — Persistent connections and limits. The client keeps a
+connection that a response left open (HTTP/1.1, a body framed by length or
+chunks, no `Connection: close`, nothing buffered beyond the response) in a
+pool, up to 4 idle per scheme, host and port and 32 in all, for at most 30
+seconds (less if the server's `Keep-Alive: timeout=` says so). The next
+request to the same origin, redirects included, uses it; a pooled connection
+the server has closed is dropped when found, and a request that fails on one
+before any response byte arrived is sent again on a new connection if its
+method is `GET`, `HEAD`, `PUT`, `DELETE` or `OPTIONS`. The header
+`Connection: close` in `opts.headers` sends that header and keeps nothing.
+The header `Transfer-Encoding: chunked` sends the body of `POST`, `PUT` and
+`PATCH` as chunks of at most 8 KiB, with no `Content-Length`. Interim `1xx`
+responses (except `101`) are skipped. `connect_ms` (0: use `timeout_ms`)
+bounds the connection attempt and `total_ms` (0: no limit) bounds the whole
+request across redirects: past it a read or write fails with kind
+`timed_out`, and `timeout_ms` still bounds each wait. `connect_ms` or
+`total_ms` below 0 traps. *(ADR 0637)*
+
+**std.net.20** — `use std.net.jar` gives a cookie jar, `jar.new() Jar`
+(RFC 6265 basics). `j.set_cookie(url, line) bool` stores one `Set-Cookie`
+line received from `url`: the `Domain` must be the host or a parent of it
+(else the line is dropped and the result is `false`; there is no public
+suffix list), no `Domain` makes the cookie host-only, `Path` defaults to the
+request path's directory, `Max-Age` wins over `Expires`, a cookie whose time
+has passed (or `Max-Age` 0 or less) removes any cookie of the same name,
+domain and path, and a cookie of the same name, domain and path replaces the
+earlier one. `j.store(url, r)` stores every `set-cookie` value of a
+`Response`. `j.header(url) str` is the `Cookie` header for a request to
+`url`: cookies whose domain and path match, `Secure` ones only for `https`,
+unexpired, the longest path first and then the oldest; `j.matching(url)`
+gives them as `Cookie` values and `j.value(url, name) str?` one value.
+`j.for_script(url)` gives the ones a script may read (not `HttpOnly`) by
+name, and `j.set_from_script(url, line)` is `set_cookie` refusing `HttpOnly`.
+`j.len()`, `j.clear()` and `j.drop_expired()`. *(ADR 0638)*
+
+**std.net.21** — `j.request(method, url, opts) Response ! NetError` is
+`net.request` with the jar's cookies in the `Cookie` header (added to one the
+program set) and every response's cookies stored, following the redirects of
+`GET` and `HEAD` itself, up to `opts.max_redirects`, so each hop carries and
+stores its own cookies; a redirect leaving the origin takes the program's own
+`Cookie` header along only if the jar has none for it. `j.get(url)` is
+`j.request("GET", url, net.options())`. *(ADR 0638)*
+
+**std.net.22** — Server keep-alive. After answering a request that is
+HTTP/1.1 without `Connection: close`, with nothing sent beyond it, and a
+final (not `1xx`) response whose headers don't ask to close, the server
+sends `Connection: keep-alive` and waits for the next request on the same
+connection, up to 15 seconds; a connection that stays quiet is closed
+without a word. Each request on it is an `Exchange` as before, the 10 second
+limit of `std.net.10` applies per request, and `srv.close()` drops idle
+connections. Any other request is answered with `Connection: close`.
+*(ADR 0639)*
+
+**std.net.23** — SameSite. A cookie has `same_site`: `lax` (the default, and
+any unknown value), `strict` or `none`; `none` without `Secure` drops the
+line (`set_cookie` gives `false`). `j.header_from(url, from, navigation)` and
+`j.matching_from(...)` give the cookies for a request to `url` made from the
+page `from` (`""` for one the user typed) with `navigation` true for a
+top-level `GET`: within one site every cookie goes; across sites `none` ones
+go, `lax` ones only on a navigation, `strict` ones never. A site is a host's
+last two labels, since there is no public suffix list. `header` and
+`matching` are the same-site case. *(ADR 0640)*
+
+**std.net.24** — `srv.shutdown()` stops a `Server` listening and closes its
+idle connections. A request that has already started to arrive is still
+accepted and answered, with `Connection: close`; when none is left `accept`
+fails with kind `closed`, as after `close`. *(ADR 0640)*
+
+**std.net.25** — Streaming bodies. `net.open(method, url, opts) Body !
+NetError` sends the request like `net.request` (redirects of `GET` and `HEAD`
+included, their bodies read out) and returns after the response head, as
+`struct Body { status int, headers Map[str, str], all_headers Map[str,
+List[str]], handle int }`. `b.read_bytes(max) bytes ! NetError` gives the
+next 1 to `max` bytes of the body, and no bytes once it has all been read;
+whatever the framing (length, chunks, or up to the end of the connection).
+`b.close()` ends it early and closes the connection; a body read to its end
+returns its connection to the pool (`std.net.19`). Reading after `close`
+fails with kind `closed`. `timeout_ms` bounds each wait for the next piece
+and `total_ms` the whole request including the reading. *(ADR 0716)*
+
+**std.net.26** — Content encodings. `get`, `post` and `request` (and the
+`_bytes` forms) send `Accept-Encoding: gzip, deflate` unless the program sets
+an `Accept-Encoding` header, and undo a `Content-Encoding` of `gzip`,
+`x-gzip` or `deflate` (zlib or raw) on the final response, up to 256 MiB,
+dropping `Content-Encoding` and `Content-Length` from its headers. A body
+that does not decode fails with kind `protocol`. A program that sets
+`Accept-Encoding` gets the body as sent, with its headers, and decodes it
+itself with `std.compress`. `net.open` sends no `Accept-Encoding` of its own
+and decodes nothing. *(ADR 0717)*
+
+**std.net.27** — connection, DNS and timeout failures: A host that doesn't resolve, or an address with no address, fails with kind `not_found`; a refused or reset connection fails with `refused` or `closed`; a request past `connect_ms` or `total_ms` fails with `timed_out`. A `timeout_ms` or `max_redirects` out of range traps. *(ADR 0637)*
+
+**std.net.28** — HTTP shape failures: more than `max_redirects` redirects fails with kind `protocol`, and a body that does not decode under its `Content-Encoding` fails with kind `protocol` (std.net.26). *(ADR 0717)*
+
+**std.net.29** — Request input failures: a URL that is not `http://` or `https://HOST[:PORT][/PATH]` fails with kind `bad_url`; a method that is not an HTTP token, or a header name or value that `std.net.6` forbids, fails with kind `bad_request`. Both fail before any connection is opened. *(ADR 0784)*
+
+```ail rules=std.net.29
+use std.net
+
+fn main()
+    a := net.get("ftp://example.com") else err
+        print(err.kind)   # bad_url
+        net.Response(status: 0, body: "", headers: {})
+    mut o := net.options()
+    o.headers["a b"] = "x"
+    b := net.request("GET", "http://localhost:1/", o) else err
+        print(err.kind)   # bad_request
+        net.Response(status: 0, body: "", headers: {})
+    print(a.status + b.status)
+```
+
+**std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
+
+**std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*
+
+**std.tls.3** — protocol and root-store failures: A protocol error that is not a record error, and a root-store error passed through, fail with kind `tls` as a `TlsError` of kind `Protocol`. *(ADR 0360)*
+
+**std.tls.4** — crypto primitive failures: a primitive's failure surfaces only as a TLS failure of kind `tls`, never as a separate error of its own. *(ADR 0360)*
+
+```ail norun rules=std.net.27
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.net.28
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.1
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.2
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.3
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.4
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail rules=std.net.26
+use std.net
+use std.compress
+
+fn once(srv net.Server) !
+    ex := srv.accept()?
+    ex.respond_bytes(200, {"content-encoding": "gzip"}, compress.gzip("zipped".to_bytes()))?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn once(srv)
+    print(net.get("http://{srv.addr()}/")?.body)
+    t.wait()?
+```
+
+```ail rules=std.net.23,std.net.24,std.net.25
+use std.net
+use std.net.http
+use std.net.jar
+
+fn hi(r net.Request) net.Response
+    net.Response(status: 200, headers: {}, body: "hi")
+
+fn main() !
+    mut j := jar.new()
+    j.set_cookie("https://shop.test/", "l=1; SameSite=Lax")
+    j.set_cookie("https://shop.test/", "s=2; SameSite=Strict")
+    print(j.header_from("https://shop.test/", "https://other.test/", true))
+    print(j.header_from("https://shop.test/", "https://other.test/", false) == "")
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, hi)
+    print(net.get("http://{srv.addr()}/")?.body)
+    b := net.open("GET", "http://{srv.addr()}/", net.options())?
+    print(b.read_bytes(100)?.len())
+    b.close()
+    srv.shutdown()
+    t.wait()?
+```
+
+```ail rules=std.net.19,std.net.20,std.net.21,std.net.22
+use std.net
+use std.net.http
+use std.net.jar
+
+fn site(r net.Request) net.Response
+    if r.path == "/login"
+        return net.Response(status: 302, headers: {"location": "/home"}, body: "", all_headers: {"set-cookie": ["sid=abc; Path=/"]})
+    net.Response(status: 200, headers: {}, body: "{r.peer} {r.headers.get("cookie") else "-"}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, site)
+    base := "http://{srv.addr()}"
+    mut j := jar.new()
+    a := j.get("{base}/login")?.body.split(" ")
+    b := j.get("{base}/again")?.body.split(" ")
+    print("{a[1]} {a[0] == b[0]}")
+    mut o := net.options()
+    o.total_ms = 5000
+    o.headers["Transfer-Encoding"] = "chunked"
+    o.body = "data"
+    print(net.request("POST", "{base}/x", o)?.status)
+    srv.close()
+    t.wait()?
+```
 
 ```ail rules=std.net.17,std.net.18
 use std.net
@@ -689,8 +1263,23 @@ fn main() !
 **std.time.1** — `now_ms() int` returns the time in milliseconds since
 1970-01-01T00:00:00Z. *(ADR 0157)*
 
+```ail rules=std.time.1
+use std.time
+
+fn main()
+    print(time.now_ms() > 0)
+```
+
 **std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
 milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+```ail rules=std.time.2
+use std.time
+
+fn main()
+    time.sleep_ms(1)
+    print("woke")
+```
 
 ## Calendar: `std.time.date`
 
@@ -771,6 +1360,89 @@ go to 59: leap seconds are not supported. *(ADR 0450)*
 **std.date.15** — Refused text, zones and dates fail with `DateError(text,
 why)`, which displays as `why: \`text\``.
 
+**std.date.16** — `date.parse_date(text)` and `date.parse_iso(text)` fail
+with `DateError` whose `why` is `no such day` when the text has the right shape
+but names no day, such as `2026-02-30`. *(ADR 0449)*
+
+```ail rules=std.date.16
+use std.time.date
+
+fn main()
+    d := date.parse_date("2026-02-30") else err
+        print("{err}")                       # no such day: `2026-02-30`
+        date.Date(year: 2000, month: 1, day: 1)
+    print(d.days())
+```
+
+**std.date.17** — The shape of the date fails with `DateError` and why
+`expected YYYY-MM-DD`, `expected a 4-digit year`, `expected a 2-digit month` or
+`expected a 2-digit day`, for `parse_date` and for the date part of `parse_iso`.
+*(ADR 0783)*
+
+**std.date.18** — The time part of `parse_iso` fails with why `expected \`T\`
+between the date and the time`, `expected a time after the date`, `expected a
+2-digit hour`, `expected a 2-digit minute`, `expected HH:MM`, `expected a 2-digit
+second`, `expected digits after \`.\``, or `seconds go to 59 (leap seconds
+aren't supported)`. *(ADR 0783)*
+
+**std.date.19** — The offset fails with why `no offset (write Z or +HH:MM, or use
+parse_in)` when a `parse_iso` text has none, and `expected Z, +HH:MM or -HH:MM
+after the time` when it is malformed. *(ADR 0783)*
+
+**std.date.20** — A zone name the zone data doesn't know fails with why `unknown
+zone` and the name as the text, for `date.at` and for a `parse_in` zone.
+*(ADR 0783)*
+
+```ail rules=std.date.17
+use std.time.date
+
+fn date_why(text str) str
+    d := date.parse_date(text) else err
+        return err.why
+    return "ok {d.iso()}"
+
+fn main()
+    print(date_why("2026-2-3"))    # expected YYYY-MM-DD
+    print(date_why("2026-02-30"))  # no such day
+```
+
+```ail rules=std.date.18
+use std.time.date
+
+fn iso_why(text str) str
+    t := date.parse_iso(text) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(iso_why("2026-01-02 1:00"))   # expected a time after the date
+    print(iso_why("2026-01-02T10:61Z")) # expected HH:MM
+```
+
+```ail rules=std.date.19
+use std.time.date
+
+fn iso_why(text str) str
+    t := date.parse_iso(text) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(iso_why("2026-01-02T10:00"))    # no offset (write Z or +HH:MM, or use parse_in)
+    print(iso_why("2026-01-02T10:00+5"))  # expected Z, +HH:MM or -HH:MM after the time
+```
+
+```ail rules=std.date.20
+use std.time.date
+
+fn zone_why(zone str) str
+    t := date.at(0, zone) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(zone_why("Mars/Base"))  # unknown zone
+```
 ## Zones: `std.tz`
 
 **std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
@@ -781,12 +1453,35 @@ from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
 POSIX rule for instants after its last transition. It has the effects `fs` and
 `env`. *(ADR 0448)*
 
+```ail rules=std.tz.1
+use std.tz
+
+fn main()
+    off := tz.offset("Europe/Paris", 0) else 0
+    print(off)
+```
+
 **std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
 else the zone `/etc/localtime` links to, else `"UTC"`.
+
+```ail rules=std.tz.2
+use std.tz
+
+fn main()
+    print(tz.system().len() > 0)
+```
 
 **std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
 every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
 lands; UTC and fixed offsets work everywhere.
+
+```ail rules=std.tz.3
+use std.tz
+
+fn main()
+    off := tz.offset("UTC", 0) else 0
+    print(off)
+```
 
 ## Randomness: `std.random`
 
@@ -821,6 +1516,185 @@ fn main()
     random.shuffle(mut deck)
     print(deck.len())
     print(random.int(1, 6) <= 6)
+```
+
+## Tables of text: `std.csv`
+
+**std.csv.1** — `use std.csv` provides `parse(text str)` and
+`parse_sep(text str, sep char)`, each giving `List[List[str]] ! CsvError`:
+one list of fields per row. Rows end at `\n` or `\r\n`; a blank line adds no
+row; a final newline adds no empty row. A field in double quotes may hold the
+separator, line breaks, and `""` for one quote. *(ADR 0626)*
+
+**std.csv.2** — `records(text str) List[Map[str, str]] ! CsvError` reads the
+first row as the header and gives each later row as a map from header name to
+field. A row whose field count differs from the header's is a `CsvError`.
+*(ADR 0626)*
+
+**std.csv.3** — `quote(field str) str` wraps a field in double quotes, and
+doubles the quotes inside it, when it holds a comma, a quote or a line break;
+otherwise it returns the field. `write(rows List[List[str]]) str` quotes each
+field and ends each row with `\n`; a row of one empty field is written as
+`""`, because a blank line is no row. *(ADR 0626)*
+
+**std.csv.4** — `write_records(header List[str], recs List[Map[str, str]])
+str` writes the header and then each map's values in header order; a key a map
+lacks writes as an empty field. *(ADR 0626)*
+
+**std.csv.5** — `CsvError` is an error with `why str` and `row int` (1-based).
+An unterminated quote and a record of the wrong width are its causes.
+*(ADR 0626)*
+
+**std.csv.6** — A quoted field with no closing quote before the end of the text
+fails with `CsvError` and why `unterminated quote`, at the row where it starts.
+*(ADR 0783)*
+
+**std.csv.7** — A record whose field count differs from the header's fails with
+`CsvError` and why `N fields, the header has M`, where `row` is that record's row.
+*(ADR 0783)*
+
+```ail rules=std.csv.6
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\n\"ann,3\n") else err
+        print("{err.why} (row {err.row})")   # unterminated quote (row 2)
+        []
+    print(recs.len())
+```
+
+```ail rules=std.csv.7
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\nann,3,x\n") else err
+        print("{err.why} (row {err.row})")   # 3 fields, the header has 2 (row 2)
+        []
+    print(recs.len())
+```
+
+```ail rules=std.csv.2,std.csv.5
+use std.csv
+
+fn main()
+    rows := csv.parse("a,\"b") else err
+        print("{err.why} (row {err.row})")   # unterminated quote (row 1)
+        []
+    print(rows.len())
+    recs := csv.records("name,age\nann,3,x\n") else err
+        print("{err.why} (row {err.row})")   # 3 fields, the header has 2 (row 2)
+        []
+    print(recs.len())
+```
+```ail rules=std.csv.1,std.csv.2,std.csv.3,std.csv.4
+use std.csv
+
+fn main() !
+    rows := csv.parse("a,b\n1,\"x, y\"\n")?
+    print(rows[1][1])
+    recs := csv.records("name,qty\nbolt,4\n")?
+    print(recs[0]["qty"])
+    print(csv.write(rows))
+```
+
+```ail rules=std.csv.5
+use std.csv
+
+fn main()
+    rows := csv.parse("a,\"b\n") else err
+        print("{err.why}, row {err.row}")
+        []
+    print(rows.len())
+```
+
+## Command-line arguments: `std.args`
+
+**std.args.1** — `use std.args` provides the spec makers `flag(name, short,
+help)` for a switch and `opt(name, short, help, default)` for an option that
+takes a value. `short` is one letter or `""`. *(ADR 0627)*
+
+**std.args.2** — `pos(name, help)` is a required positional word; the
+positionals are taken in the order the specs list them. `rest(name, help)`
+allows any number of further positionals, which `Args.rest` returns. Without a
+`rest` spec, an extra word is an error. *(ADR 0627)*
+
+**std.args.3** — `parse(name str, about str, specs List[Spec], words
+List[str]) Args ! ArgsError` reads `words` (usually `env.args()`). `--NAME` and
+`-S` set a switch; `--NAME V`, `--NAME=V` and `-S V` set an option; a bare `--`
+makes every later word a positional; a lone `-` is a positional. *(ADR 0627)*
+
+**std.args.4** — `Args.flag(name) bool` says whether the switch was given;
+`Args.get(name) str` gives an option's value (its default when absent) or a
+positional's word; `Args.rest` is the list of words past the named positionals.
+*(ADR 0627)*
+
+**std.args.5** — `--help` and `-h` print the usage text and exit with status 0.
+`usage(name, about, specs) str` returns that text: a `usage:` line, the
+`about` line, and one line per argument with its help and default. *(ADR 0627)*
+
+**std.args.6** — `ArgsError` is an error with `why str` and `usage str`; its
+display text is both. Causes: an unknown option, an option without its value,
+a value given to a switch, a missing positional, an extra positional.
+*(ADR 0627)*
+
+```ail rules=std.args.6
+use std.args
+
+fn why(words List[str]) str
+    spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "output", "a.txt"), args.pos("input", "file")]
+    a := args.parse("tool", "demo", spec, words) else err
+        return err.why
+    print(a.get("input"))
+    return "ok"
+
+fn main()
+    print(why(["--nope", "in.txt"]))       # unknown option --nope
+    print(why(["--verbose=yes", "in.txt"]))  # --verbose takes no value
+    print(why(["in.txt", "--out"]))        # --out needs a value
+    print(why(["in.txt", "extra"]))        # unexpected argument extra
+    print(why([]))                         # missing INPUT
+    print(why(["in.txt"]))                 # in.txt, then ok
+```
+
+```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
+use std.args
+
+fn main() !
+    spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "output", "a.txt"), args.pos("input", "file")]
+    a := args.parse("tool", "demo", spec, ["-v", "in.txt"])?
+    print("{a.flag("verbose")} {a.get("out")} {a.get("input")}")
+```
+
+```ail rules=std.args.5,std.args.6
+use std.args
+
+fn main()
+    spec := [args.opt("out", "o", "output", "a.txt"), args.pos("input", "file")]
+    print(args.usage("tool", "demo", spec))
+    a := args.parse("tool", "demo", spec, ["--out"]) else err
+        print(err.why)
+        return
+    print(a.get("input"))
+```
+
+## Logging: `std.log`
+
+**std.log.1** — The environment variable `LOG_LEVEL` (`debug`, `info`, `warn`,
+`error` or `off`, case-insensitive; default `info`) says which messages show.
+An unknown value shows nothing. *(ADR 0628)*
+
+**std.log.2** — `use std.log` provides `debug`, `info`, `warn` and `err`, each
+taking a `str`. A message at or above the level is written to standard error as
+`LEVEL message` and a line break; the others are dropped. `err` is not named
+`error` because that is a keyword. *(ADR 0628)*
+
+```ail rules=std.log.1,std.log.2
+use std.log
+
+fn main()
+    log.debug("hidden at the default level")
+    log.info("shown on standard error")
+    print("done")
 ```
 
 ## Windows: `std.ui`
@@ -1162,6 +2036,84 @@ away from zero to an `int`, giving a `Tensor[int]` of the same shape. A NaN,
 an infinity or a value outside `int` traps. On a `Tensor[int]` it is a
 compile-time error. *(ADR 0523)*
 
+**std.tensor.20** — A chain of two or more elementwise operations on tensors
+(`+ - * /`, unary `-`, and `relu()`, `sigmoid()`, `tanh()` with no arguments)
+over names and float literals may run as one pass over the elements. The
+result is the same as the unfused calls, element by element, including traps
+and NaN, and the tree walker and the bytecode tier agree. A chain over
+`f32` tensors runs the same operations at `f32` (std.tensor.21). A chain whose
+inputs don't share one shape, or that has an `int` input, runs unfused.
+Fusion is not visible in the program. *(ADR 0524)*
+
+```ail rules=std.tensor.20
+fn main()
+    a := tensor.from([1.0, -2.0, 3.0, 0.5], [2, 2])
+    b := tensor.from([4.0, 8.0, -1.0, 2.0], [2, 2])
+    print((a * b + a).relu())     # tensor.from([5.0, 0.0, 0.0, 1.5], [2, 2])
+    print(-(a - b) / b)           # tensor.from([0.75, 1.25, 4.0, 0.75], [2, 2])
+    print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
+```
+
+**std.tensor.24** — `t.softmax()` on a `float` or `f32` tensor of at least one
+axis gives a tensor of the same shape in which each row along the last axis is
+`exp(x - m)` divided by the sum of the row's `exp(x - m)`, where `m` is the
+row's largest element. The sum runs in element order. A row that holds a NaN
+or an infinity gives NaN for that row. An empty last axis traps. An `f32`
+tensor is computed in `float` and rounded once, as std.tensor.21 does for the
+other activations. On a `Tensor[int]` it is a compile-time error. Fusion
+(std.tensor.20) does not cover it. *(ADR TBD, requested from the integrator)*
+
+```ail rules=std.tensor.24
+fn main()
+    print(tensor.from([0.0, 0.0]).softmax())    # tensor.from([0.5, 0.5])
+    a := tensor.from([1.0, 3.0, 2.0, 2.0, 2.0, 2.0], [2, 3])
+    print(a.softmax().map(|x| x * 100.0).round())   # per row: 9 67 24, then 33 33 33
+```
+
+**std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has
+the methods and operators of `Tensor[float]`, and each result is rounded to
+`f32` once: the operations are single-precision IEEE operations, and `sum`,
+`dot`, `max`, `mean` and `matmul` accumulate in `f32` in the order of
+std.tensor.5, on every path. A `float` scalar in an expression is rounded to
+`f32` at the boundary. `tensor.from(xs, shape)` and `tensor.zeros(shape)` build
+a `Tensor[f32]` when the expected type is one; `xs` is a `List[float]`, rounded
+element by element. A `Tensor[f32]` and a `Tensor[float]` in one expression are
+a compile-time error. `to_list()` gives a `List[float]`. *(ADR 0796, ADR 0797)*
+
+**std.tensor.22** — `t.to_f32()` rounds each element of a `Tensor[float]` to
+`f32`, and `t.to_float()` widens each element of a `Tensor[f32]` exactly to
+`float`. Either on the other element type, or on an `int` tensor, is a
+compile-time error. *(ADR 0798)*
+
+```ail rules=std.tensor.21,std.tensor.22
+fn half() tensor.Tensor[f32]
+    tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+
+fn main()
+    a := half()
+    print(a * 2.0 + a)             # tensor.from([3.0, 6.0, 9.0, 12.0], [2, 2]).to_f32()
+    print(a.to_list())             # [1.0, 2.0, 3.0, 4.0]
+    print(a.to_float().sum())      # 10.0
+    print(a.map(|x| x * x).sum())  # 30.0
+```
+
+**std.tensor.23** — `t.top2(axis)` on a `float` or `f32` tensor gives three
+tensors of the shape without `axis`: the index of each row's best element, the
+index of its second-best, and the margin (best minus second) in `t`'s element
+type. The best is the first largest element, and a tie with it is the second,
+so its margin is `0`; a NaN never replaces either. A NaN best, or a row without
+a second value, traps. An `int` tensor is a compile-time error, and an `axis`
+with fewer than two elements traps. *(ADR 0813)*
+
+```ail rules=std.tensor.23
+fn main()
+    s := tensor.from([0.1, 0.9, 0.4, 0.7, 0.7, 0.3], [2, 3])
+    best, second, margin := s.top2(1)
+    print(best)      # tensor.from([1, 0])
+    print(second)    # tensor.from([2, 1])
+    print(margin)    # the margins 0.5 and 0.0, up to rounding
+```
+
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
@@ -1484,21 +2436,21 @@ use std.compress
 fn main() !
     packed := compress.gzip("hello hello hello")
     print(packed.len() > 0)
-    print(compress.gunzip(packed)?)                    # hello hello hello
+    print(compress.gunzip(packed)?.to_str() else "")        # hello hello hello
     raw := compress.deflate("abc")
-    print(compress.inflate(raw)?)                      # abc
+    print(compress.inflate(raw)?)                      # b"abc"
     z := compress.zlib("abc")
     print(z[0])                                        # 120: the zlib header 78 9c
-    print(compress.unzlib(z)?)                         # abc
+    print(compress.unzlib(z)?)                         # b"abc"
 ```
 
 ```ail rules=std.compress.2
 use std.compress
 
 fn main()
-    text := compress.inflate([1, 2, 3]) else err
+    text := compress.inflate(b"\x01\x02\x03") else err
         print(err.kind)               # corrupt: malformed data
-        ""
+        b""
     print(text.len())
 ```
 

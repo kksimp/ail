@@ -1,0 +1,853 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Strings and characters for native programs (native.str.1, ADRs 0565-0567,
+## spec type.str.* and type.char.*). A string is the object of native-abi.md §2:
+## +0 bytes, +8 chars, +16 UTF-8. A `char` is its scalar value in a register,
+## so these functions take and give `int` for it. Strings are immutable and
+## shared; every function that builds text allocates a new object.
+## Written in the native subset over the primitives of `prim.ail`.
+
+# ---- UTF-8 ----
+
+## The bytes of the sequence whose lead byte is `b`.
+fn u8_width(b int) int
+    if b < 192
+        return 1
+    if b < 224
+        return 2
+    if b < 240
+        return 3
+    4
+
+## The bytes a scalar value takes.
+fn u8_size(c int) int
+    if c < 128
+        return 1
+    if c < 2048
+        return 2
+    if c < 65536
+        return 3
+    4
+
+## The scalar value of the sequence at address `p`.
+fn u8_get(p int) int
+    b := load8(p)
+    if b < 128
+        return b
+    if b < 224
+        return (b - 192) * 64 + load8(p + 1) - 128
+    if b < 240
+        return (b - 224) * 4096 + (load8(p + 1) - 128) * 64 + load8(p + 2) - 128
+    (b - 240) * 262144
+        + (load8(p + 1) - 128) * 4096
+        + (load8(p + 2) - 128) * 64
+        + load8(p + 3) -
+        128
+
+## Write the scalar value `c` at address `p`; gives its size.
+fn u8_put(p int, c int) int
+    if c < 128
+        store8(p, c)
+        return 1
+    if c < 2048
+        store8(p, 192 + c / 64)
+        store8(p + 1, 128 + c % 64)
+        return 2
+    if c < 65536
+        store8(p, 224 + c / 4096)
+        store8(p + 1, 128 + c / 64 % 64)
+        store8(p + 2, 128 + c % 64)
+        return 3
+    store8(p, 240 + c / 262144)
+    store8(p + 1, 128 + c / 4096 % 64)
+    store8(p + 2, 128 + c / 64 % 64)
+    store8(p + 3, 128 + c % 64)
+    4
+
+## The byte offset reached by skipping `k` characters from byte offset `at`
+## of the string object at `p`.
+fn u8_skip(p int, at int, k int) int
+    mut i := at
+    mut left := k
+    while left > 0
+        i += u8_width(load8(p + 16 + i))
+        left -= 1
+    i
+
+## The continuation bytes (`10xxxxxx`) in the eight bytes of `w`: bit 7 set
+## and bit 6 clear, one bit per byte, added up by a multiply.
+fn u8_cont8(w int) int
+    c := w
+        .bit_and(w.shl(1).bit_xor(-1))
+        .bit_and(-9187201950435737472)
+        .shr(7)
+        .bit_and(72340172838076673)
+    (c * 72340172838076673).shr(56).bit_and(255)
+
+## The characters in bytes `from` up to `to` of the string object at `p`, eight
+## bytes at a time (ADR 0768): each word has 8 minus its continuation bytes, the
+## last partial word is masked to its bytes. Reading the whole last word is
+## safe, as in `map_hash_str` (ADR 0766).
+fn u8_count(p int, from int, to int) int
+    mut n := 0
+    mut i := from
+    while i + 8 <= to
+        w := load64(p + 16 + i)
+        if w.bit_and(-9187201950435737472) == 0
+            n += 8
+        else
+            n += 8 - u8_cont8(w)
+        i += 8
+    if i < to
+        r := to - i
+        w := load64(p + 16 + i).bit_and(1.shl(8 * r) - 1)
+        if w.bit_and(-9187201950435737472) == 0
+            n += r
+        else
+            n += r - u8_cont8(w)
+    n
+
+## The string object holding bytes `from` up to `to` of the one at `p`.
+fn str_sub(p int, from int, to int) str
+    r := str_new(to - from, u8_count(p, from, to))
+    copy_bytes(r + 16, p + 16 + from, to - from)
+    str_at(r)
+
+# ---- traps (type.str.4, type.str.10, type.str.13-15) ----
+
+## Print a string trap and exit 1. `head` and `tail` are the compiler's
+## constants for the call's source position, as for `trap`; `kind` picks
+## the message: 0 slice (`a`, `b` bounds, `n` length), 1 empty separator,
+## 2 empty text to replace, 3 negative repeat count `a`, 5 bad radix `a`,
+## 4 text over 2^30
+## bytes (`a` names the method: 0 repeat, 1 pad_left, 2 pad_right).
+fn str_trap(kind int, a int, b int, n int, head str, tail str)
+    flush()
+    out_str(head)
+    if kind == 0
+        out_str("slice(")
+        out_int(a)
+        out_str(", ")
+        out_int(b)
+        out_str(") is out of bounds for a str of length ")
+        out_int(n)
+    elif kind == 1
+        out_str("`split` needs a non-empty separator")
+    elif kind == 2
+        out_str("`replace` needs a non-empty text to find")
+    elif kind == 3
+        out_str("`repeat` needs a count of 0 or more, not ")
+        out_int(a)
+    elif kind == 5
+        out_str("`to_digit` needs a radix from 2 to 36, not ")
+        out_int(a)
+    else
+        out_byte(96)
+        if a == 0
+            out_str("repeat")
+        elif a == 1
+            out_str("pad_left")
+        else
+            out_str("pad_right")
+        out_str("` would build a text over 1073741824 bytes")
+    out_byte(10)
+    out_str(tail)
+    flush_to(2)
+    sys_exit(1)
+
+# ---- building and comparing (type.str.3) ----
+
+## `"{a}{b}"`: the two joined.
+fn str_cat(a str, b str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    pn := load64(p)
+    r := str_new(pn + load64(q), load64(p + 8) + load64(q + 8))
+    copy_bytes(r + 16, p + 16, pn)
+    copy_bytes(r + 16 + pn, q + 16, load64(q))
+    str_at(r)
+
+## The bytes of the string object at `p` written at `dst`; the end.
+fn str_put(dst int, p int) int
+    n := load64(p)
+    copy_bytes(dst, p + 16, n)
+    dst + n
+
+## `"{a}{b}{c}"` and longer interpolations: the pieces joined in one
+## allocation (ADR 0768).
+fn str_cat3(a str, b str, c str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    r := str_new(load64(p) + load64(q) + load64(t), load64(p + 8) + load64(q + 8) + load64(t + 8))
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    str_put(d, t)
+    str_at(r)
+
+fn str_cat4(a str, b str, c str, e str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u),
+        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    str_put(d, u)
+    str_at(r)
+
+fn str_cat5(a str, b str, c str, e str, f str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    v := str_addr(f)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u) + load64(v),
+        load64(p + 8) + load64(q + 8) + load64(t + 8) + load64(u + 8) + load64(v + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    d = str_put(d, u)
+    str_put(d, v)
+    str_at(r)
+
+fn str_cat6(a str, b str, c str, e str, f str, g str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    t := str_addr(c)
+    u := str_addr(e)
+    v := str_addr(f)
+    w := str_addr(g)
+    r := str_new(
+        load64(p) + load64(q) + load64(t) + load64(u) + load64(v) + load64(w),
+        load64(p + 8)
+            + load64(q + 8)
+            + load64(t + 8)
+            + load64(u + 8)
+            + load64(v + 8)
+            + load64(w + 8),
+    )
+    mut d := str_put(r + 16, p)
+    d = str_put(d, q)
+    d = str_put(d, t)
+    d = str_put(d, u)
+    d = str_put(d, v)
+    str_put(d, w)
+    str_at(r)
+
+## `a == b`: the same UTF-8 bytes.
+fn str_eq(a str, b str) bool
+    p := str_addr(a)
+    q := str_addr(b)
+    n := load64(p)
+    if n != load64(q)
+        return false
+    mut i := 0
+    while i + 8 <= n
+        if load64(p + 16 + i) != load64(q + 16 + i)
+            return false
+        i += 8
+    while i < n
+        if load8(p + 16 + i) != load8(q + 16 + i)
+            return false
+        i += 1
+    true
+
+## -1, 0 or 1 as `a` is before, equal to or after `b` by bytes, which is by
+## scalar value (trait.std.4).
+fn str_cmp(a str, b str) int
+    p := str_addr(a)
+    q := str_addr(b)
+    pn := load64(p)
+    qn := load64(q)
+    n := if pn < qn then pn else qn
+    mut i := 0
+    while i < n
+        x := load8(p + 16 + i)
+        y := load8(q + 16 + i)
+        if x != y
+            if x < y
+                return -1
+            return 1
+        i += 1
+    if pn == qn
+        return 0
+    if pn < qn
+        return -1
+    1
+
+## `s.byte_len()`.
+fn str_byte_len(s str) int
+    load64(str_addr(s))
+
+## A character as a string of its own.
+fn str_char(c int) str
+    r := str_new(u8_size(c), 1)
+    u8_put(r + 16, c)
+    str_at(r)
+
+## `s.pad_left(width, fill)` (align 1) and `s.pad_right` (align 0)
+## (type.str.9, type.str.15).
+fn str_pad_checked(s str, width int, fill int, align int, head str, tail str) str
+    if width <= 0
+        return s
+    if width > 1073741824 or width * u8_size(fill) > 1073741824
+        str_trap(4, if align == 1 then 1 else 2, 0, 0, head, tail)
+    fmt_pad(s, width, str_char(fill), align)
+
+# ---- slicing and searching (type.str.13-14) ----
+
+## `s.slice(a, b)`: characters `a` up to `b`.
+fn str_slice(s str, a int, b int, head str, tail str) str
+    p := str_addr(s)
+    n := load64(p + 8)
+    if a < 0 or a > b or b > n
+        str_trap(0, a, b, n, head, tail)
+    if load64(p) == n
+        return str_sub(p, a, b)
+    from := u8_skip(p, 0, a)
+    str_sub(p, from, u8_skip(p, from, b - a))
+
+## Whether the bytes of `q` after its first match those of `p` at `i`.
+fn bytes_tail_eq(p int, q int, i int, m int) bool
+    mut k := 1
+    while k < m and load8(p + 16 + i + k) == load8(q + 16 + k)
+        k += 1
+    k == m
+
+## The byte offset of the first `sub` in `s` at or after byte `from`, or -1.
+## Eight bytes at a time look for the first byte of `sub`: a word xored with
+## it has a zero byte where it occurs, found by the usual subtract-and-mask
+## test, whose lowest flagged byte is exact (ADR 0768).
+fn bytes_find(p int, q int, from int) int
+    n := load64(p)
+    m := load64(q)
+    if m == 0
+        return if from <= n then from else -1
+    c := load8(q + 16)
+    pat := c * 72340172838076673
+    last := n - m
+    mut i := from
+    while i <= last
+        if i + 8 <= n
+            x := load64(p + 16 + i).bit_xor(pat)
+            mut z := (x - 72340172838076673).bit_and(x.bit_xor(-1)).bit_and(-9187201950435737472)
+            if z == 0
+                i += 8
+                continue
+            mut k := 0
+            while z.bit_and(128) == 0
+                z = z.shr(8)
+                k += 1
+            i += k
+            if i > last
+                return -1
+        elif load8(p + 16 + i) != c
+            i += 1
+            continue
+        if bytes_tail_eq(p, q, i, m)
+            return i
+        i += 1
+    -1
+
+fn str_contains(s str, sub str) bool
+    bytes_find(str_addr(s), str_addr(sub), 0) >= 0
+
+fn str_starts_with(s str, pre str) bool
+    p := str_addr(s)
+    q := str_addr(pre)
+    m := load64(q)
+    if m > load64(p)
+        return false
+    mut k := 0
+    while k < m
+        if load8(p + 16 + k) != load8(q + 16 + k)
+            return false
+        k += 1
+    true
+
+fn str_ends_with(s str, suf str) bool
+    p := str_addr(s)
+    q := str_addr(suf)
+    m := load64(q)
+    at := load64(p) - m
+    if at < 0
+        return false
+    mut k := 0
+    while k < m
+        if load8(p + 16 + at + k) != load8(q + 16 + k)
+            return false
+        k += 1
+    true
+
+## `s.find(sub)`: the character index of the first `sub`, or -1.
+fn str_find(s str, sub str) int
+    p := str_addr(s)
+    at := bytes_find(p, str_addr(sub), 0)
+    if at < 0
+        return -1
+    u8_count(p, 0, at)
+
+## `s.replace(from, to)`: every non-overlapping `from`, left to right.
+fn str_replace(s str, from str, to str, head str, tail str) str
+    p := str_addr(s)
+    q := str_addr(from)
+    t := str_addr(to)
+    m := load64(q)
+    if m == 0
+        str_trap(2, 0, 0, 0, head, tail)
+    mut hits := 0
+    mut at := bytes_find(p, q, 0)
+    while at >= 0
+        hits += 1
+        at = bytes_find(p, q, at + m)
+    if hits == 0
+        return s
+    n := load64(p) + hits * (load64(t) - m)
+    chars := load64(p + 8) + hits * (load64(t + 8) - load64(q + 8))
+    r := str_new(n, chars)
+    mut out := r + 16
+    mut last := 0
+    at = bytes_find(p, q, 0)
+    while at >= 0
+        copy_bytes(out, p + 16 + last, at - last)
+        out += at - last
+        copy_bytes(out, t + 16, load64(t))
+        out += load64(t)
+        last = at + m
+        at = bytes_find(p, q, last)
+    copy_bytes(out, p + 16 + last, load64(p) - last)
+    str_at(r)
+
+## `s.split(sep)`: the pieces between occurrences, empty ones kept.
+fn str_split(s str, sep str, head str, tail str) List[int]
+    p := str_addr(s)
+    q := str_addr(sep)
+    m := load64(q)
+    if m == 0
+        str_trap(1, 0, 0, 0, head, tail)
+    out := list_new(4)
+    mut last := 0
+    mut at := bytes_find(p, q, 0)
+    while at >= 0
+        list_push(out, str_to_obj(str_sub(p, last, at)))
+        last = at + m
+        at = bytes_find(p, q, last)
+    list_push(out, str_to_obj(str_sub(p, last, load64(p))))
+    out
+
+fn str_to_obj(s str) int
+    str_addr(s)
+
+## `s.lines()`: split on `\n`, one trailing empty piece dropped, a `\r`
+## before each `\n` removed (type.str.7).
+fn str_lines(s str) List[int]
+    p := str_addr(s)
+    n := load64(p)
+    out := list_new(4)
+    mut last := 0
+    mut i := 0
+    while i < n
+        if load8(p + 16 + i) == 10
+            mut end := i
+            if end > last and load8(p + 16 + end - 1) == 13
+                end -= 1
+            list_push(out, str_to_obj(str_sub(p, last, end)))
+            last = i + 1
+        i += 1
+    if last < n
+        list_push(out, str_to_obj(str_sub(p, last, n)))
+    out
+
+## `s.chars()`: the scalar values (type.str.7).
+fn str_chars(s str) List[int]
+    p := str_addr(s)
+    n := load64(p)
+    out := list_new(load64(p + 8))
+    mut i := 0
+    while i < n
+        list_push(out, u8_get(p + 16 + i))
+        i += u8_width(load8(p + 16 + i))
+    out
+
+## `s.repeat(n)` (type.str.10, type.str.15). `head3` and `head4` are the
+## trap heads for rules type.str.10 and type.str.15.
+fn str_repeat(s str, k int, head3 str, head4 str, tail str) str
+    p := str_addr(s)
+    n := load64(p)
+    if k < 0
+        str_trap(3, k, 0, 0, head3, tail)
+    if n > 0 and k > 1073741824 / n
+        str_trap(4, 0, 0, 0, head4, tail)
+    r := str_new(n * k, load64(p + 8) * k)
+    mut at := r + 16
+    for i in 0..k
+        copy_bytes(at, p + 16, n)
+        at += n
+    str_at(r)
+
+# ---- characters (type.char.*) ----
+
+## `is_space()`: Unicode White_Space.
+fn char_is_space(c int) bool
+    if c < 128
+        return c == 32 or c >= 9 and c <= 13
+    if c == 133 or c == 160 or c == 5760 or c == 8232 or c == 8233
+        return true
+    c >= 8192 and c <= 8202 or c == 8239 or c == 8287 or c == 12288
+
+fn char_is_digit(c int) bool
+    c >= 48 and c <= 57
+
+# ---- Unicode tables (ADR 0567, unicode.ail) ----
+
+## The index of a table character: printable ASCII but `"`, `\`, `{` and `}`.
+fn uni_digit(b int) int
+    mut d := b - 32
+    if b > 34
+        d -= 1
+    if b > 92
+        d -= 1
+    if b > 123
+        d -= 1
+    if b > 125
+        d -= 1
+    d
+
+## The `k`-th three-character number of the table at data address `p`.
+fn uni_num(p int, k int) int
+    q := p + 3 * k
+    uni_digit(load8(q)) * 8281 + uni_digit(load8(q + 1)) * 91 + uni_digit(load8(q + 2))
+
+## Whether `c` is in a sorted table of (first, last) pairs.
+fn uni_has(t str, c int) bool
+    p := str_addr(t)
+    d := p + 16
+    mut lo := 0
+    mut hi := load64(p) / 6
+    while lo < hi
+        mid := (lo + hi) / 2
+        if c < uni_num(d, mid * 2)
+            hi = mid
+        elif c <= uni_num(d, mid * 2 + 1)
+            return true
+        else
+            lo = mid + 1
+    false
+
+## `c` mapped by a sorted table of runs (first, count, stride, zigzag delta).
+fn uni_map(t str, c int) int
+    p := str_addr(t)
+    d := p + 16
+    mut lo := 0
+    mut hi := load64(p) / 12
+    while lo < hi
+        mid := (lo + hi) / 2
+        if uni_num(d, mid * 4) <= c
+            lo = mid + 1
+        else
+            hi = mid
+    if lo == 0
+        return c
+    r := (lo - 1) * 4
+    off := c - uni_num(d, r)
+    stride := uni_num(d, r + 2)
+    if off >= uni_num(d, r + 1) * stride or off % stride != 0
+        return c
+    z := uni_num(d, r + 3)
+    if z % 2 == 0
+        return c + z / 2
+    c - (z + 1) / 2
+
+## The record of `c` in a table of 13-character records (scalar value, length,
+## three scalar values), as its address, or 0.
+fn uni_special(t str, c int) int
+    p := str_addr(t)
+    d := p + 16
+    mut lo := 0
+    mut hi := load64(p) / 13
+    while lo < hi
+        mid := (lo + hi) / 2
+        at := d + mid * 13
+        v := uni_num(at, 0)
+        if c < v
+            hi = mid
+        elif c > v
+            lo = mid + 1
+        else
+            return at
+    0
+
+# ---- characters (type.char.2) ----
+
+fn char_is_alpha(c int) bool
+    if c < 128
+        return c >= 65 and c <= 90 or c >= 97 and c <= 122
+    uni_has(UNI_ALPHA, c)
+
+fn char_is_upper(c int) bool
+    if c < 128
+        return c >= 65 and c <= 90
+    uni_has(UNI_UPPER, c)
+
+fn char_is_lower(c int) bool
+    if c < 128
+        return c >= 97 and c <= 122
+    uni_has(UNI_LOWER, c)
+
+## `to_lower()`: the single-character mapping; unchanged when it has several.
+fn char_lower(c int) int
+    if c < 128
+        return if c >= 65 and c <= 90 then c + 32 else c
+    uni_map(UNI_TO_LOWER, c)
+
+fn char_upper(c int) int
+    if c < 128
+        return if c >= 97 and c <= 122 then c - 32 else c
+    uni_map(UNI_TO_UPPER, c)
+
+fn char_is_alnum(c int) bool
+    char_is_digit(c) or char_is_alpha(c)
+
+## A cased letter, for the final-sigma rule.
+fn char_is_cased(c int) bool
+    char_is_upper(c) or char_is_lower(c)
+
+## A character the final-sigma rule skips: an apostrophe, a full stop or
+## colon, a dot or accent, and the combining marks.
+fn char_is_ignorable(c int) bool
+    if c == 39 or c == 46 or c == 58 or c == 94 or c == 96 or c == 168 or c == 173
+        return true
+    if c == 175 or c == 180 or c == 183 or c == 184 or c == 8216 or c == 8217
+        return true
+    c == 8228 or c == 8231 or c >= 768 and c <= 879
+
+## The lower case of the capital sigma at byte `i` of the string object at `p`:
+## the final form when a cased letter comes before it and none after it.
+fn sigma_lower(p int, i int) int
+    mut before := false
+    mut j := i
+    while j > 0
+        j -= 1
+        while j > 0 and load8(p + 16 + j).bit_and(192) == 128
+            j -= 1
+        c := u8_get(p + 16 + j)
+        if char_is_ignorable(c)
+            continue
+        before = char_is_cased(c)
+        break
+    if not before
+        return 963
+    mut k := i + 2
+    while k < load64(p)
+        c := u8_get(p + 16 + k)
+        k += u8_width(load8(p + 16 + k))
+        if char_is_ignorable(c)
+            continue
+        if char_is_cased(c)
+            return 963
+        break
+    962
+
+## The case mapping of the character at byte `i` of the string object at `p`,
+## written at `at` unless that is 0. Gives `chars * 16 + bytes`: how many
+## characters it makes and how many bytes they take.
+fn case_put(p int, i int, upper bool, at int) int
+    c := u8_get(p + 16 + i)
+    if c >= 128
+        r := uni_special(if upper then UNI_UP_SPECIAL else UNI_LO_SPECIAL, c)
+        if r != 0
+            return case_many(r, at)
+    mut m := if upper then char_upper(c) else char_lower(c)
+    if not upper and c == 931
+        m = sigma_lower(p, i)
+    if at != 0
+        u8_put(at, m)
+    16 + u8_size(m)
+
+## A special mapping of up to three characters, from the record at `r`.
+fn case_many(r int, at int) int
+    n := uni_digit(load8(r + 3))
+    mut bytes := 0
+    mut k := 0
+    while k < n
+        m := uni_num(r + 4, k)
+        if at != 0
+            u8_put(at + bytes, m)
+        bytes += u8_size(m)
+        k += 1
+    n * 16 + bytes
+
+## `s.to_upper()` and `s.to_lower()` (type.str.14), character by character.
+fn str_map_case(s str, upper bool) str
+    p := str_addr(s)
+    n := load64(p)
+    mut i := 0
+    # A mapping can change the length (`"ß"` is `"SS"`), so measure first.
+    mut size := 0
+    mut chars := 0
+    while i < n
+        v := case_put(p, i, upper, 0)
+        size += v % 16
+        chars += v / 16
+        i += u8_width(load8(p + 16 + i))
+    r := str_new(size, chars)
+    mut at := r + 16
+    i = 0
+    while i < n
+        at += case_put(p, i, upper, at) % 16
+        i += u8_width(load8(p + 16 + i))
+    str_at(r)
+
+fn str_to_upper(s str) str
+    str_map_case(s, true)
+
+fn str_to_lower(s str) str
+    str_map_case(s, false)
+
+## `s.trim()`: without the White_Space characters at both ends.
+fn str_trim(s str) str
+    p := str_addr(s)
+    mut a := 0
+    mut b := load64(p)
+    while a < b and char_is_space(u8_get(p + 16 + a))
+        a += u8_width(load8(p + 16 + a))
+    while b > a
+        mut j := b - 1
+        while load8(p + 16 + j).bit_and(192) == 128
+            j -= 1
+        if not char_is_space(u8_get(p + 16 + j))
+            break
+        b = j
+    if a == 0 and b == load64(p)
+        return s
+    str_sub(p, a, b)
+
+# ---- printing (type.char.1, trait.auto.2) ----
+
+## A character's UTF-8 into the output buffer.
+fn out_char(c int)
+    if c < 128
+        out_byte(c)
+        return
+    if c < 2048
+        out_byte(192 + c / 64)
+        out_byte(128 + c % 64)
+        return
+    if c < 65536
+        out_byte(224 + c / 4096)
+        out_byte(128 + c / 64 % 64)
+        out_byte(128 + c % 64)
+        return
+    out_byte(240 + c / 262144)
+    out_byte(128 + c / 4096 % 64)
+    out_byte(128 + c / 64 % 64)
+    out_byte(128 + c % 64)
+
+fn out_hex(n int)
+    if n >= 16
+        out_hex(n / 16)
+    d := n % 16
+    out_byte(if d < 10 then 48 + d else 87 + d)
+
+## A character inside another value: escaped as in `trait.auto.2`.
+fn out_escaped(c int, quote int)
+    if c == 92
+        out_byte(92)
+        out_byte(92)
+    elif c == 10
+        out_byte(92)
+        out_byte(110)
+    elif c == 9
+        out_byte(92)
+        out_byte(116)
+    elif c == 13
+        out_byte(92)
+        out_byte(114)
+    elif c == 0
+        out_byte(92)
+        out_byte(48)
+    elif c == quote
+        out_byte(92)
+        out_byte(c)
+    elif c < 32 or c >= 127 and c < 160
+        out_byte(92)
+        out_byte(117)
+        out_byte(123)
+        out_hex(c)
+        out_byte(125)
+    else
+        out_char(c)
+
+fn out_list_char(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_byte(39)
+        out_escaped(load64(data + 8 * i), 39)
+        out_byte(39)
+    out_byte(93)
+
+# ---- methods with an optional result (type.opt.*, ADR 0574) ----
+# A present number is boxed (`box`), a present string is its own pointer, and
+# `none` is 0; the lowering types the result `T?`.
+
+## `s.find(sub)`: the boxed character index, or 0.
+fn str_find_opt(s str, sub str) int
+    i := str_find(s, sub)
+    if i < 0
+        return 0
+    box(i)
+
+## `s.char_at(i)`: the boxed character, or 0.
+fn str_char_at(s str, i int) int
+    p := str_addr(s)
+    if i < 0 or i >= load64(p + 8)
+        return 0
+    box(u8_get(p + 16 + u8_skip(p, 0, i)))
+
+## `s.strip_prefix(pre)`: the rest of `s`, or 0.
+fn str_strip_prefix(s str, pre str) int
+    if not str_starts_with(s, pre)
+        return 0
+    p := str_addr(s)
+    str_addr(str_sub(p, load64(str_addr(pre)), load64(p)))
+
+## `s.strip_suffix(suf)`: the start of `s`, or 0.
+fn str_strip_suffix(s str, suf str) int
+    if not str_ends_with(s, suf)
+        return 0
+    p := str_addr(s)
+    str_addr(str_sub(p, 0, load64(p) - load64(str_addr(suf))))
+
+## `c.to_digit(radix)`: the boxed value, or 0 (type.char.3).
+fn char_to_digit(c int, radix int, head str, tail str) int
+    if radix < 2 or radix > 36
+        str_trap(5, radix, 0, 0, head, tail)
+    mut d := 99
+    if c >= 48 and c <= 57
+        d = c - 48
+    elif c >= 97 and c <= 122
+        d = c - 87
+    elif c >= 65 and c <= 90
+        d = c - 55
+    if d >= radix
+        return 0
+    box(d)
+
+## `char.from_code(n)`: the boxed character, or 0 for a surrogate or a value
+## outside the scalar range (type.char.4).
+fn char_from_code(n int) int
+    if n < 0 or n > 1114111 or n >= 55296 and n <= 57343
+        return 0
+    box(n)

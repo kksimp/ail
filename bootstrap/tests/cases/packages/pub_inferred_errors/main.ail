@@ -1,0 +1,4 @@
+use m
+
+fn main() !
+    m.api(1)?

@@ -15,17 +15,48 @@ module. Every top-level name declared in any of its files is visible in all of
 them without import. Duplicate top-level names within a module are a
 compile-time error. *(ADR 0097)*
 
+```ail pkg=dupes tool=check,DIR status=2 expect=mod.unit.1 rules=mod.unit.1
+```
+
 **mod.unit.2** — A module's import path is its directory path relative to the
 package root, with segments separated by `.`. *(ADR 0097)*
+
+```ail pkg=dir_path tool=run,DIR expect=9 rules=mod.unit.2
+```
 
 **mod.unit.3** — A single `.ail` file given directly to `ail run` forms a
 complete program by itself: it is the root module, and its sibling files are
 not part of it. It may import modules from subdirectories of its own
 directory (`mod.unit.5`). *(ADR 0101, ADR 0153)*
 
+```ail pkg=dir_path tool=run,FILE expect=9 rules=mod.unit.3
+```
+
 **mod.unit.4** — A method or associated function `fn T.name` is declared in
 the module that declares `T`. Writing `fn m.T.name` is a compile-time error.
 *(ADR 0155)*
+
+```ail error=mod.unit.4
+struct Point
+    x int
+
+fn m.Point.get(t Point) int
+    t.x
+
+fn main()
+    print(1)
+```
+
+```ail
+struct Point
+    x int
+
+fn Point.get(t Point) int
+    t.x
+
+fn main()
+    print(Point.get(Point(x: 1)))
+```
 
 **mod.unit.5** — `ail run DIR` runs the package rooted at `DIR`: the `.ail`
 files directly in `DIR` form the root module, which declares `main`.
@@ -33,7 +64,10 @@ files directly in `DIR` form the root module, which declares `main`.
 package root. The import path `a.b` names the directory `ROOT/a/b`. Only
 imported modules are loaded. *(ADR 0153)*
 
+```ail pkg=module_local_names tool=run,DIR expect=6 rules=mod.unit.5
 ```
+
+```ail skip=context rules=mod.unit.2,mod.unit.5
 geometry/          ail run geometry
     main.ail       use geo         (the root module: main.ail and extra.ail)
     extra.ail
@@ -57,7 +91,7 @@ literal only inside its own module. Reading or assigning a private field, or
 calling a private method or associated function, outside its module is a
 compile-time error (`mod.vis.1`). *(ADR 0155)*
 
-```ail fragment
+```ail skip=context rules=mod.vis.3
 pub struct Account
     pub owner str
     balance int          # private: other modules call Account.open()
@@ -148,16 +182,23 @@ each path dependency, before any source file. Only the root's own directory
 is searched, not its parents. Without a manifest a package has no
 dependencies and no capability limit. *(ADR 0230)*
 
+```ail pkg=deps_path tool=run,DIR expect=12 rules=mod.pkg.1
+```
+
 **mod.pkg.2** — A manifest is lines of words separated by spaces; `#` starts
 a comment and `"..."` quotes a word. Its first line is `package NAME`,
-optionally followed by `caps LIST` (`eff.cap.5`) and `unsafe allow`
-(`unsafe.block.3`), and appears once. Every other line is `dep NAME` followed
+optionally followed by `caps LIST` (`eff.cap.5`) and `unsafe allow` or
+`unsafe driver` (`unsafe.block.3`, `unsafe.hw.1`), and appears once. Every other line is `dep NAME` followed
 by key-value pairs: `path`, `git`, `rev`, `tag`, `caps` (`eff.cap.4`) and
-`unsafe` (`unsafe allow`, `unsafe.block.3`). A `NAME` is lowercase letters, digits and `_`.
+`unsafe` (`unsafe allow` or `unsafe driver`, `unsafe.block.3`, `unsafe.hw.1`). A `NAME` is lowercase letters, digits and `_`.
 An unknown line or key, a repeated key, or a key without a value is a
 compile-time error at its position in the manifest. *(ADR 0230)*
 
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.2 rules=mod.pkg.2
 ```
+
+```
+```ail skip=context rules=mod.pkg.1,mod.pkg.2,mod.pkg.3
 package notes caps fs
 dep geo path ../geo caps fs
 dep textkit path vendor/textkit
@@ -171,14 +212,23 @@ resolves against that package's root and its own manifest: importing a
 package that the importing package doesn't declare is a compile-time error.
 *(ADR 0231)*
 
+```ail pkg=undeclared_dep tool=check,DIR status=2 expect=mod.pkg.3 rules=mod.pkg.3
+```
+
 **mod.pkg.4** — Package names are unique in a program: two packages with
 one name must be the same directory, and a dependency with its own manifest
 must be declared by its `package` name. A manifest can't declare a name
 twice or declare `std`, and the root package can't have a module directory
 with a package's name. *(ADR 0231)*
 
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.4 rules=mod.pkg.4
+```
+
 **mod.pkg.5** — Package dependencies must not form a cycle; the error names
 the cycle at the `dep` line that closes it. *(ADR 0231)*
+
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.5 rules=mod.pkg.5
+```
 
 **mod.pkg.6** — `dep NAME git URL` names a repository and needs exactly one of
 `rev COMMIT` and `tag TAG`; `rev` and `tag` are errors on a `path`
@@ -186,7 +236,11 @@ dependency. A git dependency is a package like a path one: `use NAME`
 imports it, it resolves its own imports and manifest (`mod.pkg.3`), and its
 `caps` grant applies to it unchanged (`eff.cap.4`). *(ADR 0231, ADR 0355)*
 
+```ail pkg=manifest_errors tool=check,DIR status=2 expect=mod.pkg.6 rules=mod.pkg.6
 ```
+
+```
+```ail skip=context rules=mod.pkg.6
 package notes
 dep geo git "https://example.com/geo.git" tag v1.2 caps fs
 ```
@@ -235,7 +289,128 @@ completes normally, the exit status is 0. Traps follow `err.trap.3`.
 **mod.main.3** — `print(value)` is available without import. It writes the
 value's text form followed by a newline to standard output. *(ADR 0088)*
 
-```ail
+```ail rules=mod.main.1,mod.main.3,mod.unit.3
 fn main()
     print("Hello, world!")
+```
+
+## Runnable examples for the rules above
+
+The checks below are single files, so each one runs or fails on its own. Rules
+that need a directory tree, a manifest or a git cache are cited by `skip=context`
+blocks that show the layout; their checks are the package cases in
+`bootstrap/tests/cases/packages/` (each folder's `expected.rules` names the rule
+IDs it reports) and `bootstrap/tests/git_deps.rs`.
+
+```ail error=mod.unit.1
+fn f() int
+    1
+
+fn f() int
+    2
+
+fn main()
+    print(f())
+```
+
+```ail rules=mod.const.1,mod.const.2
+pub MAX_DEPTH := 64
+KEYWORDS := {"if", "else", "while"}
+LIMIT := MAX_DEPTH * 2
+EMPTY := Map[str, int]()
+
+fn main()
+    print("{MAX_DEPTH} {LIMIT} {KEYWORDS.len()} {EMPTY.len()}")
+```
+
+```ail norun rules=mod.const.3
+# norun: the overflow is reported at the constant before `main` runs, so the
+# block checks clean and is not run.
+BIG := 9223372036854775807 + 1
+
+fn main()
+    print(BIG)
+```
+
+```ail error=mod.const.1
+mut X := 1
+
+fn main()
+    print(X)
+```
+
+```ail error=mod.use.3
+fn main()
+    print(1)
+
+use std.csv
+```
+
+```ail rules=mod.use.1,mod.use.2 norun
+use std.csv
+fn main() !
+    print(csv.parse("a,b\n1,2\n")?.len())
+```
+
+```ail error=mod.use.6
+use std.csv as m
+use std.fs as m
+
+fn main()
+    print(1)
+```
+
+```ail error=mod.use.4
+use geometry.shapes
+
+fn main()
+    print(1)
+```
+
+```ail error=mod.unit.4
+struct Point
+    x int
+
+fn m.Point.area() int
+    1
+
+fn main()
+    print(1)
+```
+
+```ail error=mod.vis.2
+pub enum Color
+    pub Red
+
+fn main()
+    print(1)
+```
+
+```ail rules=mod.vis.1
+struct Account
+    pub owner str
+    balance int
+
+fn main()
+    a := Account("x", 0)
+    print(a.owner)
+```
+
+```ail norun rules=mod.main.2
+error enum Bad
+    Oops "oops"
+
+fn main() ! Bad
+    return Oops
+```
+
+```ail skip=context rules=mod.use.5
+# Import cycle: geometry/a.ail does `use geometry.b` and geometry/b.ail does
+# `use geometry.a`. The error names the cycle (cases/packages/cycle).
+```
+
+```ail skip=context rules=mod.pkg.4,mod.pkg.5,mod.pkg.7,mod.pkg.8,mod.pkg.9
+# Package graph rules: duplicate package names (cases/packages/dupes), dependency
+# cycles (cases/packages/cycle), the git cache and lock (tests/git_deps.rs), and
+# `ail pkg update` (tests/git_deps.rs). Shown as prose, not checked here.
 ```

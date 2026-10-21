@@ -1,0 +1,36 @@
+## std.proc.1-3 natively: status, captured output, input, a time limit, a
+## missing program and `which`.
+use std.proc
+
+fn main() !
+    a := proc.run("echo", ["hello", "$HOME"])?
+    print(a.status)
+    print(a.out.trim())
+    print(a.err == "")
+    b := proc.run("sh", ["-c", "echo oops >&2; exit 3"])?
+    print(b.status)
+    print(b.err.trim())
+    c := proc.run("sort", [], "pear\napple\nfig\n")?
+    print(c.out)
+    d := proc.run("sh", ["-c", "echo done"], none, 10000)?
+    print(d.out.trim())
+    e := proc.run("sh", ["-c", "kill -9 $$"])?
+    print(e.status)
+    print(status_of("sleep", ["5"], 50))
+    print(status_of("ail-no-such-program", [], 50))
+    print(proc.which("sh") != none)
+    print(proc.which("ail-no-such-program") == none)
+    h := proc.run("sh", ["-c", "cat; echo bye >&2"], "x".repeat(300000))?
+    print(h.out.len())
+    print(h.err.trim())
+    i := proc.run("sh", ["-c", "head -c 200000 /dev/zero | tr '\\\\0' y"])?
+    print(i.out.len())
+    j := proc.run("echo", ["labelled"])? "running echo"
+    print(j.out.trim())
+
+## The status of a run, or -1 after printing the failure.
+fn status_of(cmd str, args List[str], ms int) int
+    r := proc.run(cmd, args, none, ms) else err
+        print(err)
+        return -1
+    r.status

@@ -1,0 +1,13 @@
+true
+Version(major: 1, minor: 10)
+zoo
+9
+true
+[1, 3]
+Money(cents: 1)
+Ordering.Less
+Ordering.Greater
+equal
+true
+true
+Ordering.Less

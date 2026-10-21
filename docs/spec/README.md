@@ -32,6 +32,9 @@ Rules for rule IDs:
 
 1. Once published, a rule ID is **never reused or renumbered**.
 2. A removed rule stays in place with the marker `[removed in <ADR>]`.
+   A rule that only describes the language, with no behaviour for code to
+   implement, carries the marker `[definitional]` and no citation is expected
+   (`tools/rules-audit.sh` check 2 skips it).
 3. A changed rule keeps its ID. The change is recorded in the ADR that
    justifies it.
 4. Every rule cites the ADR(s) that justify it.
@@ -56,6 +59,7 @@ line says what to expect:
 | ```` ```ail error=RULE ```` | Must report `RULE` among its errors. Handled as `fragment` when it has no `fn main`. |
 | ```` ```ail skip=bootstrap ```` | Uses a feature the bootstrap doesn't implement yet. Counted, not run. Remove the tag when the feature lands. |
 | ```` ```ail skip=context ```` | An illustration that uses declarations the chapter doesn't show. Counted, not run. Prefer making the example self-contained. |
+| ```` ```ail excerpt ```` | Outside `docs/spec/`: an incomplete snippet whose point is one line or one step. Not checked by `tools/check-doc-snippets.py`. Every other `ail` or `ail fragment` block in the docs must check. |
 | ```` ```ail skip=bootstrap rules=ID ```` | Counted for the rules it cites, not checked or run (ADR 0498): the feature is specified but not yet built. |
 | ```` ```ail norun ```` | Checked but not run: it traps on purpose, or needs a window, network or input the harness doesn't have. |
 | ```` ```ail rules=ID,ID ```` | Demonstrates the listed rules (ADR 0498). Every rule of the types, expressions, std, effects and tools chapters must be demonstrated; `AIL_LIST_UNCOVERED=1 ./ail selftest --test spec -- --nocapture` lists the rest. |
@@ -100,6 +104,7 @@ aren't run.
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
+| std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

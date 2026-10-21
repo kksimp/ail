@@ -1,0 +1,10 @@
+fn main() !
+    dir := env.args().first() else "{path.dir(env.program())}/agent-data"
+    text := fs.read_text("{dir}/app.log")? "reading the app log"
+    codes := regex.compile(r"code=(\d+)")?
+    mut count := 0
+    mut total := 0
+    for digits in regex.group_all(codes, text, 1)
+        count += 1
+        total += digits.to_int() else 0
+    print("{count} codes, sum {total}")

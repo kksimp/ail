@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use super::{Checker, Def, Errs, Sig, Ty, list_names, suggest};
 use crate::ast::{Arg, Expr, TypeRef};
 use crate::diag::{Diagnostic, Edit, Pos};
-use crate::stdlib::{self, StdCall};
+use crate::stdlib::{self, OUTPUT_METHODS, StdCall};
 
 impl<'p> Checker<'p> {
     /// std.use.1, std.use.3: each `use std.NAME` names a standard module, and
@@ -19,6 +19,7 @@ impl<'p> Checker<'p> {
         let mut seen: HashMap<(&str, &str), Pos> = HashMap::new();
         for u in &self.prog.uses {
             match u.path.as_slice() {
+                [(root, _), _] if root == "std" && stdlib::ail_module_path(&u.dotted()).is_some() => continue,
                 [(root, _), (module, mpos)] if root == "std" => {
                     if !stdlib::is_std_module(module) {
                         let names = stdlib::module_names();
@@ -143,6 +144,19 @@ impl<'p> Checker<'p> {
             self.args_only(args);
             let fns = stdlib::functions(module);
             let mut d = Diagnostic::new("std.use.2", pos, format!("module `{head}` has no function `{name}`"));
+            // Another library's name for the same function, with the same arguments.
+            let renamed = match (module, name) {
+                ("regex", "matches") => Some("is_match"),
+                ("regex", "findall") => Some("find_all"),
+                ("random", "randint") => Some("int"),
+                ("random", "random") => Some("float"),
+                _ => None,
+            };
+            if let Some(new) = renamed {
+                d = d.help(format!("write `{head}.{new}`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
+                self.diags.push(d);
+                return Some(Ty::Err);
+            }
             d = match suggest(name, fns) {
                 Some(s) => d.help(format!("did you mean `{head}.{s}`?")),
                 None => d.help(format!("`std.{module}` provides {}", list_names(fns))),
@@ -158,11 +172,22 @@ impl<'p> Checker<'p> {
                 return Some(t);
             }
         }
+        if module == "hw" {
+            // unsafe.hw.1-2: hardware access is unsafe, and needs `unsafe driver`.
+            self.note_unsafe_op(&format!("`{what}`"), pos);
+            self.driver_opt_in(&format!("`{what}`"), pos);
+            if f == "at" {
+                return Some(self.hw_at(args, pos, expect));
+            }
+        }
         if module == "tensor" {
             return Some(self.tensor_call(f, args, pos, expect));
         }
         if (module, f) == ("io", "eprint") {
             return Some(self.eprint_call(args, pos));
+        }
+        if module == "hash" || (module == "compress" && matches!(f, "deflate" | "gzip" | "zlib")) {
+            return Some(self.bytes_like_call(module, f, args, pos));
         }
         if (module, f) == ("random", "shuffle") {
             return Some(self.shuffle_call(args, pos));
@@ -217,13 +242,15 @@ impl<'p> Checker<'p> {
             ("env", "home") => (vec![], opt(Str)),
             ("env", "cwd" | "program") => (vec![], Str),
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
-            ("hash", "sha256" | "sha384" | "sha512") => (vec![Str], Str),
-            ("hash", "hmac_sha256") => (vec![Str, Str], Str),
-            ("hash", "crc32" | "hash64") => (vec![Str], Int),
-            ("compress", "deflate" | "gzip" | "zlib") => (vec![Str], list(Int)),
-            ("compress", "inflate" | "gunzip" | "unzlib") => (vec![list(Int)], compress(Str)),
+            ("compress", "inflate" | "gunzip" | "unzlib") => (vec![Ty::Bytes], compress(Ty::Bytes)),
             ("compress", "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => (vec![Str, Str], compress(Unit)),
-            ("path", "dir" | "base" | "ext") => (vec![Str], Str),
+            // std.tensor.1-2 (ADR 0507): `from(xs)` or `from(xs, shape)`, where
+            // `xs` is a `List[int]` or `List[float]` and the element type comes
+            // from the context. `tensor_call` checks the calls, so the table
+            // gives the shape of the call and `Err` marks the element type.
+            ("tensor", "from") => (vec![list(Ty::Err), list(Int)], self.tensor_ty(Ty::Err)),
+            ("tensor", "zeros") => (vec![list(Int)], self.tensor_ty(Ty::Err)),
+            ("path", "dir" | "base" | "ext" | "stem") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),
@@ -265,8 +292,14 @@ impl<'p> Checker<'p> {
             // unsafe.mem.1: C strings in memory the program frees itself.
             ("mem", "cstr") => (vec![Str], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
             ("mem", "from_cstr") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Str),
+            // unsafe.hw.4: barriers take and return nothing.
+            ("hw", "fence" | "fence_io") => (vec![], Unit),
             ("mem", "null") => (vec![], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
             ("net", "options") => (vec![], std_ty("net.Options")),
+            ("net", "open") => (
+                vec![Str, Str, std_ty("net.Options")],
+                Ty::Res(Box::new(std_ty("net.Body")), Errs::Set(vec![std_ty("net.NetError")])),
+            ),
             ("net", "serve" | "listen" | "connect" | "connect_tls") => {
                 let (params, ok) = match f {
                     "serve" => (vec![Str], "net.Server"),
@@ -282,6 +315,7 @@ impl<'p> Checker<'p> {
             ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
             ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
             ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
+            ("regex", "group_all") => (vec![std_ty("regex.Regex"), Str, Int], list(Str)),
             ("regex", "captures") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Captures"))),
             ("regex", "replace" | "replace_first") => (vec![std_ty("regex.Regex"), Str, Str], Str),
             ("regex", "split") => (vec![std_ty("regex.Regex"), Str], list(Str)),
@@ -304,6 +338,41 @@ impl<'p> Checker<'p> {
                 Ty::Res(Box::new(std_ty("ui.Window")), Errs::Set(vec![std_ty("ui.UiError")])),
             ),
             _ => unreachable!("stdlib::MODULES lists `{module}.{f}`"),
+        }
+    }
+
+    /// std.hash.1, std.compress.1: the data arguments of `std.hash` and of
+    /// `deflate`, `gzip` and `zlib` are `bytes` or `str` (its UTF-8 bytes).
+    fn bytes_like_call(&mut self, module: &str, f: &str, args: &'p [Arg], pos: Pos) -> Ty {
+        let rule = if module == "hash" { "std.hash.1" } else { "std.compress.1" };
+        let want = if f == "hmac_sha256" { 2 } else { 1 };
+        if args.len() != want {
+            self.args_only(args);
+            self.error(
+                rule,
+                pos,
+                format!("`{module}.{f}` takes {want} argument(s), but {} given", super::was_were(args.len())),
+            );
+        } else {
+            for a in args {
+                if a.mutable {
+                    self.error_help("own.param.2", a.value.pos(), "this parameter isn't `mut`", "remove the `mut`");
+                }
+                let t = self.expr(&a.value, None, true);
+                if !matches!(t, Ty::Str | Ty::Bytes | Ty::Err) {
+                    self.error_help(
+                        rule,
+                        a.value.pos(),
+                        format!("`{module}.{f}` needs `bytes` or `str`, not {}", self.ty_name(&t)),
+                        "convert a list of ints with `bytes.from_list(xs)`",
+                    );
+                }
+            }
+        }
+        match f {
+            "crc32" | "hash64" => Ty::Int,
+            "deflate" | "gzip" | "zlib" => Ty::Bytes,
+            _ => Ty::Str,
         }
     }
 
@@ -485,5 +554,29 @@ impl<'p> Checker<'p> {
             format!("call one of its functions, e.g. `{n}.{example}(...)`"),
         );
         true
+    }
+
+    /// `o.m()` on a `proc.Output` (std.proc.9): `text` and `ok`, no arguments.
+    pub(super) fn output_method(&mut self, rt: &Ty, name: &str, pos: Pos, args: &'p [Arg]) -> Option<Ty> {
+        if !matches!(rt, Ty::Struct(s, _) if self.prog.structs[*s].name == "proc.Output") {
+            return None;
+        }
+        let Some(&m) = OUTPUT_METHODS.iter().find(|m| **m == name) else {
+            self.args_only(args);
+            let mut d = Diagnostic::new("std.proc.9", pos, format!("`proc.Output` has no method `{name}`"));
+            d = match suggest(name, OUTPUT_METHODS) {
+                Some(s) => d.help(format!("did you mean `{s}`?")),
+                None => d.help(format!("a process result's methods are {}", list_names(OUTPUT_METHODS))),
+            };
+            self.diags.push(d);
+            return Some(Ty::Err);
+        };
+        if !args.is_empty() {
+            self.args_only(args);
+            self.diags.push(Diagnostic::new("std.proc.9", pos, format!("`{m}` takes no arguments")));
+            return Some(Ty::Err);
+        }
+        self.resolved.std_calls.insert(pos, StdCall::Output(m));
+        Some(if m == "ok" { Ty::Bool } else { Ty::Str })
     }
 }

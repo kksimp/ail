@@ -50,7 +50,10 @@ writes for an `ast.Program`, so `Program.from_json` reads it back
 
 **api.ast.3** — `ail api --ast --program FILE|DIR` prints the program the
 checker sees: the prelude (lines from 2^30), every imported module (lines
-from each file's `base`), the derive output and the standard declarations.
+from each file's `base`), the derive output and the standard declarations. Its
+`unsafe_allowed` lists the packages whose manifest allows `unsafe` (none
+when the program has no manifest), so a checker reading the dump can report
+unsafe.block.3 ([ADR 0740](../decisions/0740-self-hosted-checker-parity-gate.md)).
 
 **api.out.1** — The output is one JSON object with the keys `api` (the
 shape's version, `1`), `file` (the path as given) and `items`, then
@@ -137,6 +140,18 @@ path or a bad option is exit code 2.
 `tools/edit` and `bootstrap/src/std`; `cargo test --test api_card` fails
 when either differs from the command's output. Regenerate with
 `./ail api --card tools/edit > docs/design/cards/edit.md`.
+
+**api.card.6** — `--module NAME` prints the card of one module of the
+package, with the same levels and budget as api.card.3. NAME is a module
+name as the index lists it, or `(root)` for the package's own module. The
+entry, manifest and examples appear only on the root module's card, and
+the tests only those of that module. An unknown module, or `--module` with
+`--index`, is exit code 2.
+
+**api.card.7** — `--index` prints one line per module, `NAME  N items`, under
+a `# PACKAGE` line; `--index --json` prints `api`, `card` and `modules` (each
+`module` and `count`). An agent reads the index, then one module card. The
+index is not trimmed.
 
 **api.query.1** — A position with nothing to answer (`--type` or `--refs` off
 a name, or a name with no recorded type or symbol) exits 1 and prints on
@@ -381,6 +396,15 @@ a summary line. With `--json` each is a JSON line, a test that now fails
 carries `"status":"fail"`, and the last line is
 `{"summary":true,...}`. The exit status is 0 when nothing changed, 1 when
 something did, 2 for an error.
+**diff.out.7** — Under each changed function or method whose body changed,
+the text form shows the body's removed (`-`) and added (`+`) lines,
+without the body's own indentation and in the order of a longest common
+subsequence, at most 12 lines and then `... N more changed lines`. With
+`--json` they are the object's `"lines"`
+([ADR 0399](../decisions/0399-compact-edits-and-diff-hunks.md)).
+
+```ail pkg=diff_pair tool=diff,old/a.ail,new/a.ail status=1 expect=-assert_eq rules=diff.out.7
+```
 
 ```ail pkg=diff_pair tool=diff,old/a.ail,new/a.ail status=1 expect=adds: rules=diff.out.1,diff.out.2,diff.out.3,diff.out.4,diff.out.6
 ```
@@ -389,6 +413,60 @@ something did, 2 for an error.
 ```
 
 ```ail pkg=diff_pair tool=diff,--rev,nosuch,main.ail status=2 expect=diff.out.5 rules=diff.out.5
+```
+
+**api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
+API between two versions of a file or package directory. `ail api --diff
+--rev REV PATH` compares `PATH` as git has it at `REV` against `PATH` now,
+as `diff.out.5` does. An unknown revision or path, a missing argument or an
+unknown option is exit code 2
+([ADR 0729](../decisions/0729-api-diff-command.md)).
+
+**api.diff.2** — Only public declarations are compared, matched by id
+(`api.id.1`): those written `pub`, the variants of a public enum with their
+fields, the methods of a public trait, and the `impl` blocks of a public
+type. A declaration is changed when its signature, effects, error types,
+`requires`, `ensures` or trait-method default differs. A body, a doc comment
+or a private declaration is not part of the API and never shows.
+
+**api.diff.3** — A change is marked `breaking:` with the reasons when a
+caller or implementer can stop compiling or lose a guarantee: a removed
+declaration; a changed signature; an effect or error type that is new; a
+`requires` that is new or changed; an `ensures` that went away; a trait
+method that lost its default; and an added enum variant or required trait
+method (a trait method with no default). Other additions are not breaking
+([ADR 0730](../decisions/0730-api-diff-breaking-rules.md)).
+
+**api.diff.4** — Each side is checked as `ail check` would, except that a
+single file needs no `main`. When either side has errors, nothing is
+compared: the error is exit code 2.
+
+**api.diff.5** — The text form has one line per added (`+ ID SIGNATURE`) or
+removed (`- ID SIGNATURE`) declaration, a `~ ID` line per changed one with an
+indented `KEY: OLD -> NEW` line for each changed key, `  breaking: WHY` at
+the end of a breaking line, and a last line
+`N added, N removed, N changed; N breaking`. With `--json` each is a JSON
+line with `"change":"api"` and the last is `{"summary":true,...}`. The exit
+status is 0 when the API is the same, 1 when it changed, 2 for an error. A
+`--budget` bounds the output as for the other tools, keeping the `breaking`
+lines first ([ADR 0731](../decisions/0731-api-diff-output-and-budget.md)).
+
+```ail pkg=api_diff_pair tool=api,--diff,old/a.ail,new/a.ail status=1 expect=breaking: rules=api.diff.2,api.diff.3,api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,old/a.ail,old/a.ail status=0 expect=added, rules=api.diff.2,api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,--json,old/a.ail,new/a.ail status=1 expect="summary":true rules=api.diff.3,api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,--rev,nosuch,old/a.ail status=2 expect=api.diff.1 rules=api.diff.1
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,--budget,60,old/a.ail,new/a.ail status=1 expect=breaking: rules=api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,bad/a.ail,new/a.ail status=2 expect=api.diff.4 rules=api.diff.4
 ```
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
@@ -568,6 +646,18 @@ fn main()
 fn main()
     print(1)
 ```
+```ail tool=api,--card,--module,(root),FILE expect=add rules=api.card.6
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--card,--index,FILE expect=(root) rules=api.card.7
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
 ```ail tool=api,--card,--budget,30,FILE expect=entry rules=api.card.3
 fn add(a int, b int) int
     a + b
@@ -668,6 +758,13 @@ package directory `PATH`. Each edit has an `"op"`: `replace_body`,
 `replace`, `insert`, `delete`, `rename` or `import`, with the keys of
 `edit.op.1–6`. Input that isn't such JSON is an error (exit 2)
 ([ADR 0397](../decisions/0397-ail-edit-structured-edits-by-id.md)).
+**edit.in.3** — Input that doesn't start with `[` or `{` is the compact
+form: hunks (`edit.op.7`), each under a line holding an id, and
+`rename OLD NEW` lines (`edit.op.5`). A hunk's lines start with `-` (a line
+to remove), `+` (a line to add) or a space (a line to keep); empty lines are
+ignored, and a lone `+` adds an empty line. Lines before any id line form a
+hunk on the whole file
+([ADR 0399](../decisions/0399-compact-edits-and-diff-hunks.md)).
 **edit.in.2** — Edits apply all or nothing: when one cannot be applied, the
 command names it (`edit K of N`), writes nothing and exits 2.
 **edit.id.1** — An edit names a declaration by its id (`api.id.1`):
@@ -675,6 +772,10 @@ command names it (`edit K of N`), writes nothing and exits 2.
 and for `rename` also `field:TYPE.NAME` and `variant:TYPE.NAME`. Only
 declarations that start at column 0 are found. A declaration runs from its
 doc comment and attributes to its last indented line.
+**edit.id.3** — A bare name (`average`, `Point.norm`) stands for the one
+declaration whose id is that name after its kind (`fn:average`,
+`method:Point.norm`); a name that two kinds share is an error, as in
+`edit.id.2`.
 **edit.id.2** — In a package, an id may carry the module of its file
 (`fn:geo.origin`, `api.pkg.1`). An id that names declarations in two files
 is an error that asks for the module.
@@ -696,24 +797,40 @@ in every file of the program. The program as edited so far must check
 without errors; otherwise the rename fails.
 **edit.op.6** — `{"op":"import","module":M}` adds `use M` after the last
 `use` line (or at the top) unless it is there.
+**edit.op.7** — A hunk (`{"op":"hunk","id":ID,"lines":[...]}` in JSON, `ID`
+optional) finds its `-` and context lines, compared without leading and
+trailing spaces, at exactly one place in the declaration (or the file), and
+replaces them with its context and `+` lines in order. `+` lines are
+indented by the difference between the found line's indentation and the
+hunk's first `-` or context line's, so lines written at column 0 land at
+the found line's depth. A hunk of one `-` line and one `+` line whose `-`
+text is no whole line replaces that text where it occurs exactly once in
+the declaration. A hunk that matches nowhere, or in more than one place, is
+an error.
 **edit.out.1** — Every changed file is rewritten in canonical layout
 (`ail fmt`) when it parses.
 **edit.out.2** — The program is then checked and its diagnostics are
 reported as `ail check` reports them, followed by one summary line,
-`edited N files with K edits; E errors, W warnings` (with `--json`,
+`edited N files; E errors` with `, W warnings` added when there are any
+(with `--json`,
 `{"summary":true,"edits","written","files","errors","warnings"}`). The exit
 status is 2 when there are errors, 0 otherwise. The files are written even
 when there are errors, unless `--if-clean` is given.
 **edit.out.3** — `--dry-run` writes nothing and prints a unified diff of
 each file that would change; `--diff` prints the diff and writes.
+**edit.out.4** — `--test` runs `ail test PATH` after an edit that was
+written without errors, and its report and exit status follow the summary.
 
-```ail pkg=edit_ops tool=edit,--dry-run,main.ail stdin=edits.json expect=edits; rules=edit.in.1,edit.id.1,edit.op.1,edit.op.2,edit.op.3,edit.op.4,edit.op.5,edit.op.6,edit.out.1,edit.out.2,edit.out.3
+```ail pkg=edit_ops tool=edit,--dry-run,main.ail stdin=edits.json expect=file; rules=edit.in.1,edit.id.1,edit.op.1,edit.op.2,edit.op.3,edit.op.4,edit.op.5,edit.op.6,edit.out.1,edit.out.2,edit.out.3
 ```
 
 ```ail pkg=edit_ops tool=edit,main.ail stdin=bad.json status=2 expect=written rules=edit.in.2,edit.id.1,edit.id.2
 ```
 
-```ail pkg=edit_ops tool=edit,main.ail stdin=text.txt status=2 expect=edit.in.1 rules=edit.in.1
+```ail pkg=edit_ops tool=edit,main.ail stdin=text.txt status=2 expect=edit.in.3 rules=edit.in.3
+```
+
+```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
 ```
 
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5

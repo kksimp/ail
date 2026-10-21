@@ -1,0 +1,43 @@
+# Lists of lists of lists, floats, bools and strings kept across
+# collections: the collector reaches them through their parents (ADR 0562).
+
+fn grid(n int, v int) List[List[int]]
+    mut g := List[List[int]]()
+    for i in 0..n
+        mut row := List[int]()
+        for j in 0..n
+            row.push(v + i * n + j)
+        g.push(row)
+    g
+
+fn main()
+    mut cube := List[List[List[int]]]()
+    mut floats := List[float]()
+    mut flags := List[bool]()
+    mut names := List[str]()
+    for round in 0..3000
+        g := grid(20, round)
+        if round % 100 == 0
+            cube.push(g)
+            floats.push(round.to_float() * 0.5)
+            flags.push(round % 200 == 0)
+            names.push(["round", "x"].join("-"))
+        mut junk := List[float]()
+        for i in 0..200
+            junk.push(i.to_float() * 1.5)
+        mut bits := List[bool]()
+        for i in 0..500
+            bits.push(i % 3 == 0)
+    mut total := 0
+    for g in cube
+        for row in g
+            for x in row
+                total += x
+    print(total)
+    print(cube.len())
+    print(floats[29])
+    print(flags[28])
+    print(flags[29])
+    print(names[0])
+    print(names[29])
+    print(names.len())

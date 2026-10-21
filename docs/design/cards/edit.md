@@ -180,4 +180,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~3491); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~3491); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

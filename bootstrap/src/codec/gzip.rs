@@ -16,6 +16,7 @@ pub fn gzip(data: &[u8], level: u32) -> Vec<u8> {
     out
 }
 
+// std.compress.10: the gzip corrupt and checksum messages.
 fn bad(msg: &str) -> CodecError {
     CodecError::new("corrupt", msg)
 }
@@ -25,6 +26,7 @@ pub fn gunzip(data: &[u8], limit: usize) -> Result<Vec<u8>, CodecError> {
     let mut at = 0;
     loop {
         let d = &data[at..];
+        // std.compress.8: no gzip magic `1f 8b` (or too short for a header) is corrupt.
         if d.len() < 18 || d[0] != 0x1f || d[1] != 0x8b {
             return Err(bad("not gzip data"));
         }

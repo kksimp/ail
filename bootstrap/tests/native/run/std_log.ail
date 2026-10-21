@@ -1,0 +1,8 @@
+## std.log natively (ADR 0772): a standard module written in AIL, compiled as a module of the program.
+use std.log
+
+fn main()
+    log.info("starting")
+    log.debug("hidden")
+    log.warn("careful")
+    print("done")

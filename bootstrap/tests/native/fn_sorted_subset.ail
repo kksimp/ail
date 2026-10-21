@@ -1,5 +1,5 @@
 fn main()
     xs := [2.5, 1.5]
-    print(xs.sorted())
+    print(xs.sorted(by: |x| x))
     ws := ["b", "a"]
     print(ws.sorted(by: |w| w).len())

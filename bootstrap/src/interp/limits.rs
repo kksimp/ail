@@ -23,6 +23,14 @@ static STOP: AtomicU8 = AtomicU8::new(0);
 /// The lines of statements that ran, across every interpreter thread.
 static HITS: Mutex<BTreeSet<usize>> = Mutex::new(BTreeSet::new());
 
+/// ct.eval.3: the most statements a constant may run (`AIL_CT_MAX_STEPS` lowers it, for tests).
+fn ct_max_steps() -> u64 {
+    static MAX: OnceLock<u64> = OnceLock::new();
+    *MAX.get_or_init(|| {
+        std::env::var("AIL_CT_MAX_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000_000)
+    })
+}
+
 pub fn configure(c: Config) {
     let _ = CONFIG.set(c);
 }
@@ -116,6 +124,19 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             .into());
+        }
+        // ct.eval.3: a constant may run at most `CT_MAX_STEPS` statements.
+        if let Some((name, n)) = self.ct_eval.as_mut() {
+            *n += 1;
+            let max = ct_max_steps();
+            if *n > max {
+                return Err(Trap {
+                    rule: "ct.eval.3",
+                    pos,
+                    message: format!("computing the constant `{name}` took more than {max} evaluation steps (a step is one statement run); simplify it or compute it at run time"),
+                }
+                .into());
+            }
         }
         if let Some(max) = c.steps {
             self.steps += 1;

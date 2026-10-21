@@ -50,6 +50,7 @@ impl<'a, W: Write> Interp<'a, W> {
             StdCall::Const(_) => unreachable!("interp::eval reads module constants"),
             StdCall::Tensor(_) => unreachable!("interp::method_call runs tensor methods"),
             StdCall::Ptr(..) => unreachable!("interp::method_call runs pointer methods"),
+            StdCall::Output(_) => unreachable!("interp::method_call runs `proc.Output` methods"),
         };
         if module == "tensor" {
             return self.tensor_call(f, args, pos, env);
@@ -191,6 +192,7 @@ impl<'a, W: Write> Interp<'a, W> {
             },
             ("path", "dir") => text(crate::stdlib::path_dir(&str_arg(0))),
             ("path", "base") => text(crate::stdlib::path_split(&str_arg(0)).1),
+            ("path", "stem") => text(crate::stdlib::path_stem(&str_arg(0))),
             ("path", "ext") => text(crate::stdlib::path_ext(&str_arg(0))),
             ("path", "join") => text(crate::stdlib::path_join(&str_arg(0), &str_arg(1))),
             ("env", "args") => {
@@ -253,8 +255,17 @@ impl<'a, W: Write> Interp<'a, W> {
                 let line = self.text(&values[0], pos)?;
                 // Keep standard output and standard error in the order written.
                 self.flush(pos)?;
-                let mut err = std::io::stderr().lock();
-                let _ = writeln!(err, "{line}");
+                match self.errs.as_mut() {
+                    // test.run.2: a test's standard error is captured like its standard output.
+                    Some(buf) => {
+                        buf.extend_from_slice(line.as_bytes());
+                        buf.push(b'\n');
+                    }
+                    None => {
+                        let mut err = std::io::stderr().lock();
+                        let _ = writeln!(err, "{line}");
+                    }
+                }
                 Value::Unit
             }
             ("io", "exit") => {
@@ -413,14 +424,16 @@ impl<'a, W: Write> Interp<'a, W> {
                     Value::Int(super::net::TIMEOUT.as_millis() as i64),
                     Value::Int(super::net::MAX_REDIRECTS as i64),
                     super::bytes::bytes_value(Vec::new()),
+                    Value::Int(0),
+                    Value::Int(0),
                 ];
                 Value::Struct(s, Rc::new(fields))
             }
-            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes") => {
+            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes" | "open") => {
                 // std.net.16: the `_bytes` forms give the body undecoded.
                 let raw = f.ends_with("_bytes");
                 let method = f.trim_end_matches("_bytes");
-                let url = str_arg(if method == "request" { 1 } else { 0 });
+                let url = str_arg(if method == "request" || method == "open" { 1 } else { 0 });
                 super::netsock::set_yielder(self.yielder());
                 let result = match method {
                     "get" => super::net::get(&url),
@@ -444,6 +457,14 @@ impl<'a, W: Write> Interp<'a, W> {
                                 format!("`timeout_ms` is at least 1 and `max_redirects` at least 0, not {timeout_ms} and {redirects}"),
                             );
                         }
+                        let (connect_ms, total_ms) = (o[6].int(), o[7].int());
+                        if connect_ms < 0 || total_ms < 0 {
+                            return stop(
+                                "std.net.19",
+                                pos,
+                                format!("`connect_ms` and `total_ms` are at least 0 (0 means no separate limit), not {connect_ms} and {total_ms}"),
+                            );
+                        }
                         let opts = super::net::Opts {
                             headers: super::netsock::options_pairs(&o[0]),
                             query: super::netsock::options_pairs(&o[1]),
@@ -452,7 +473,19 @@ impl<'a, W: Write> Interp<'a, W> {
                             content_type: None,
                             timeout: std::time::Duration::from_millis(timeout_ms as u64),
                             max_redirects: redirects as usize,
+                            connect: (connect_ms > 0).then(|| std::time::Duration::from_millis(connect_ms as u64)),
+                            total: (total_ms > 0).then(|| std::time::Duration::from_millis(total_ms as u64)),
                         };
+                        if method == "open" {
+                            // std.net.25: the body stays on the connection, read through a `net.Body`.
+                            return Ok(match super::net::open(&str_arg(0), &url, &opts) {
+                                Ok((r, st)) => self.net_body(r, st),
+                                Err(e) => {
+                                    let s = self.structs["net.NetError"];
+                                    fail(Value::Struct(s, Rc::new(vec![text(e.url), text(e.kind), text(e.message)])), pos)
+                                }
+                            });
+                        }
                         super::net::request(&str_arg(0), &url, &opts)
                     }
                 };
@@ -485,6 +518,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             ("mem", _) => return self.mem_call(f, &values, pos),
+            ("hw", _) => return self.hw_call(f, &values, pos),
             ("regex", _) => return self.regex_call(f, &values, pos),
             ("random", "int") => {
                 let (lo, hi) = (values[0].int(), values[1].int());

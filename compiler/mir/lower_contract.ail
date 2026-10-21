@@ -48,6 +48,7 @@ fn stmt_start(s ast.Stmt) ast.Pos
         Defer(_, p) => p
         With(_, _, _, _, p) => p
         Unsafe(_, p) => p
+        LetTuple(_, _, p) => p
 
 ## Where a function falling off its end returns: its last statement.
 fn tail_pos(f ast.FnDecl, body List[ast.Stmt]) ast.Pos
@@ -59,7 +60,7 @@ fn tail_pos(f ast.FnDecl, body List[ast.Stmt]) ast.Pos
 
 ## The function a call in the current code goes to: itself, or its `.nc`
 ## copy inside a condition (contract.run.2).
-fn Lower.callee_key(mut self, key str) str
+fn Lower.contract_key(mut self, key str) str
     if not unchecked or key.starts_with("rt.") or key.starts_with("copy.")
         return key
     if not fn_decl.contains(key)

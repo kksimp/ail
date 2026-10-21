@@ -30,7 +30,7 @@ behaviour:
    optional `-` followed by one or more decimal digits and fits in `int`.
    Otherwise it returns `none`.
 
-```ail
+```ail excerpt
 qty := words[2].to_int() else return BadQuantity(text: words[2])
 ```
 

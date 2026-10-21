@@ -78,3 +78,9 @@ read before assignment keep `absent[T]()`.
   ([self-hosting status](../design/self-hosting-status.md)).
 - Tests: `bootstrap/tests/cases/optional_none.ail` (positive) and
   `optional_none_errors.ail` (`type.opt.9`, `type.opt.4`).
+
+## Rejected alternatives
+
+- OQ-114, option B: a typed literal `none[T]`. Rejected because it is a new form for one case.
+- OQ-114, option C: keep `absent[T]()`. Rejected because it costs a helper and a type in each use.
+- OQ-115, option B: keep `type.opt.4`. Rejected because the helper or the `if` statement per use is what the chosen rule removes.

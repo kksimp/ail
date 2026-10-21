@@ -1,0 +1,5 @@
+fn main()
+    line := "  the  quick\tbrown fox "
+    print(line.words())
+    print(line.trim_end())
+    print(line.count("o"))

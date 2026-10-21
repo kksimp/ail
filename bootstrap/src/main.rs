@@ -6,6 +6,7 @@
 mod api;
 mod ast;
 mod build;
+mod build_cache;
 mod budget;
 mod bump;
 mod check;
@@ -13,6 +14,8 @@ mod derive;
 mod diag;
 mod explain;
 mod fasthash;
+mod fuse;
+mod tensor32;
 mod doctest;
 mod edit;
 mod docs;
@@ -24,12 +27,14 @@ mod named_args;
 mod interp;
 mod lexer;
 mod modules;
+mod native_test;
 mod codec;
 mod net;
 mod num;
 mod packages;
 mod parser;
 mod regex;
+mod shown;
 mod snapshot;
 mod stdlib;
 mod tensor;
@@ -54,6 +59,9 @@ commands:
                 --cases N (default 100) and --seed S set a property's inputs;
                 --update [--dry-run]: rewrite failing `assert_eq(x, LITERAL)`
                 literals, `# =>` lines and FILE's `.out`, showing the diff (snap.update.1)
+  test --native [PATH...]
+                build each `@test` function natively, run it, and compare with
+                the interpreter; PATH is a file or directory (native.test.1)
   effects FILE  print each function's inferred effects (eff.infer.6);
                 --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
@@ -64,6 +72,8 @@ commands:
                 the program's native-backend MIR (ADR 0384)
   api --card [--budget N] DIR|FILE
                 a program's card: modules, signatures, tests, manifest, examples
+  api --diff OLD NEW
+                public API changes by id, breaking ones marked; --rev REV PATH: against git (api.diff.1)
   diff OLD NEW  what changed between two versions of a file or package:
                 declarations (signature, pub, effects, errors, contracts, docs),
                 diagnostics, and test outcomes (--no-tests: skip them) (diff.out.1)
@@ -122,8 +132,10 @@ options:
 #[global_allocator]
 static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
 
-/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
-const STACK_BYTES: usize = 256 * 1024 * 1024;
+/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first. A
+/// debug build spends about 50 KB of Rust stack per AIL call, so MAX_DEPTH
+/// calls need over 500 MB there. The pages are only mapped as they are used.
+const STACK_BYTES: usize = 1024 * 1024 * 1024;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -136,7 +148,7 @@ fn main() -> ExitCode {
             "--json" | "--deterministic" | "--no-contracts" | "--no-bytecode" | "--parallel" => {}
             a if a == "--coverage" || a.starts_with("--coverage=") => {}
             a if a.starts_with("--schedule") => {}
-            "--deny" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => i += 1,
+            "--deny" | "--unsafe" | "--seed" | "--timeout" | "--max-memory" | "--max-steps" | "--from" | "--record" | "--replay" => i += 1,
             // budget.out.5: `--budget` may stand alone (the command's default).
             "--budget" if args.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())) => i += 1,
             "--budget" => {}
@@ -173,6 +185,11 @@ fn main() -> ExitCode {
         .map(String::as_str)
         .filter(|a| *a != "--json" && *a != "--no-contracts" && *a != "--no-bytecode")
         .collect();
+    // native.test.1: `ail test --native [PATH...]` compares native builds with the interpreter.
+    if rest.first() == Some(&"test") && rest.contains(&"--native") {
+        let paths: Vec<&str> = rest[1..].iter().copied().filter(|a| *a != "--native").collect();
+        return native_test::command(&paths, json);
+    }
     // `ail test` owns `--cases` and `--seed` (test.prop.3); `ail run` owns
     // `--seed` and `--deterministic` (std.random.3, eff.det.1).
     let mut flags: Vec<&str> = Vec::new();
@@ -225,6 +242,10 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     }
+    if let Err(msg) = take_unsafe_driver(&mut rest) {
+        eprintln!("error: {msg}");
+        return ExitCode::from(2);
+    }
     let deny = match take_deny(&mut rest).and_then(|d| take_run_options(&mut rest, d)) {
         Ok(d) => d,
         Err(msg) => {
@@ -245,6 +266,11 @@ fn main() -> ExitCode {
     // `AIL_SYSTEM_ALLOC=1` keeps the system allocator, to compare the two.
     if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
         ALLOC.enable();
+    }
+    // ADR 0737: `run` and `test` use the runtime mode, per-thread free lists for
+    // small blocks. `AIL_SYSTEM_ALLOC=1` keeps the system allocator.
+    if matches!(rest.first(), Some(&"run" | &"test")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
+        ALLOC.enable_runtime();
     }
     match rest.as_slice() {
         ["run", file] => {
@@ -305,6 +331,8 @@ fn take_limit_options(rest: &mut Vec<&str>) -> Result<Option<bool>, String> {
                 .ok_or_else(|| format!("`{name}` needs a positive number of {unit}, e.g. `{name} 100` (run.limit.4)"))
         };
         match name {
+            // run.limit.5: `ail build` bakes the first two into the executable.
+            "--timeout" | "--max-memory" if cmd == "build" => i += 2,
             "--timeout" | "--max-memory" | "--max-steps" => {
                 if cmd != "run" && cmd != "test" {
                     return Err(format!("`{name}` works with `ail run` and `ail test` (run.limit.4)"));
@@ -381,6 +409,18 @@ fn take_test_options(flags: &mut Vec<&str>) -> Result<(u64, Option<u64>), String
         }
     }
     Ok((cases, seed))
+}
+
+/// Remove `--unsafe driver`: a program without an `ail.pkg` may use `std.hw`
+/// (unsafe.hw.1).
+fn take_unsafe_driver(args: &mut Vec<&str>) -> Result<(), String> {
+    let Some(at) = args.iter().position(|a| *a == "--unsafe") else { return Ok(()) };
+    if args.get(at + 1).copied() != Some("driver") {
+        return Err("`--unsafe` takes `driver`: `--unsafe driver` lets a program without `ail.pkg` use `std.hw` (unsafe.hw.1)".into());
+    }
+    args.drain(at..at + 2);
+    ast::UNSAFE_DRIVER.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
 }
 
 /// Remove `--deny LIST` from the arguments and return the denied
@@ -529,6 +569,7 @@ fn run_file(path: &str, json: bool, execute: bool, deny: &[&str]) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     named_args::reorder(&mut program, &resolved);
+    interp::install_native_json(&mut program);
 
     // std.ui: this thread hosts any window the program opens (ADR 0178).
     let result = ui::run_hosted(STACK_BYTES, move || {
@@ -607,13 +648,14 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         return ExitCode::from(2);
     }
     named_args::reorder(&mut program, &resolved);
+    interp::install_native_json(&mut program);
     let cover_map = line_map.clone();
     let outcomes = std::thread::Builder::new()
         .stack_size(STACK_BYTES)
         .spawn(move || {
             let outcomes = interp::run_tests(&program, &resolved, cases, seed)
                 .into_iter()
-                .map(|o| (o.name, o.pos, o.failure, o.output, o.prop, o.snapshot, o.trace))
+                .map(|o| (o.name, o.pos, o.failure, o.output, o.errput, o.prop, o.snapshot, o.trace))
                 .collect::<Vec<_>>();
             // test.cover.1: what the tests ran, read once they are all done.
             let cover = coverage.map(|_| interp::limits::report(&program, &cover_map));
@@ -639,8 +681,8 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
         let Some(t) = doc_tests.iter().find(|t| t.fn_name == o.0) else { continue };
         // test.doc.2-3: report under the example's name, at its own line.
         o.0 = t.name.clone();
-        o.5 = None; // the example is generated code; its frame would name `doc_example_N`
-        o.6.clear();
+        o.6 = None; // the example is generated code; its frame would name `doc_example_N`
+        o.7.clear();
         if o.2.is_none() {
             o.2 = doctest::check_output(t, &o.3);
             o.1 = diag::Pos { line: t.line(), col: 1 };
@@ -658,7 +700,7 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
     }
     let failed = outcomes.iter().filter(|o| o.2.is_some()).count();
     let passed = outcomes.len() - failed;
-    for (name, pos, failure, output, prop, snapshot, trace) in &outcomes {
+    for (name, pos, failure, output, errput, prop, snapshot, trace) in &outcomes {
         if json {
             let (status, message) = match failure {
                 Some(m) => ("fail", m.as_str()),
@@ -707,6 +749,10 @@ fn run_tests(path: &str, json: bool, cases: u64, seed: Option<u64>, coverage: Op
                     }
                     for line in output.lines() {
                         println!("  | {line}");
+                    }
+                    // test.run.2: standard error is shown after standard output, marked `!`.
+                    for line in errput.lines() {
+                        println!("  ! {line}");
                     }
                 }
             }

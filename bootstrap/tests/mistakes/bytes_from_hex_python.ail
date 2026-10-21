@@ -1,0 +1,3 @@
+fn main()
+    raw := bytes.fromhex("616263") else return
+    print(raw.len())

@@ -1,0 +1,7 @@
+# std.tensor.11: `max` and `mean` of zero elements trap; `sum` of none is 0.
+fn main()
+    none_f := [0.5][0..0]
+    e := tensor.from(none_f, [0])
+    print(e.sum())
+    print(e.len())
+    print(e.max())

@@ -1,0 +1,16 @@
+## `err.kind` and `err.path`/`err.cmd` on `else err` bindings of standard-library
+## errors (std.err.1, std.fs.1, std.proc.1).
+fn describe(path str) str
+    text := fs.read_text(path) else err
+        return "{err.kind} {err.path}"
+    "read {text.len()} bytes"
+
+fn main()
+    print(describe("docs/no-such-file.md"))
+    print(describe("docs"))
+    print(describe("a \"quoted\" path\\x"))
+    print(describe("docs/vision.md").starts_with("read"))
+    r := proc.run("no-such-command-ail", []) else err
+        print("{err.kind} {err.cmd}")
+        return
+    print(r.status)

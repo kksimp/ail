@@ -247,7 +247,7 @@ impl<'p> Checker<'p> {
             (true, "pop" | "remove_at" | "len" | "swap" | "clear" | "reverse" | "sort" | "contains" | "index_of") => {
                 return vec![false; nparams];
             }
-            (false, "remove" | "len" | "contains" | "keys") => return vec![false; nparams],
+            (false, "remove" | "len" | "contains" | "keys" | "top") => return vec![false; nparams],
             (false, "push") => return vec![false, true],
             (true, "first" | "last") => "borrow it with `xs[0]` or `xs[xs.len() - 1]`, or take it out with `xs.pop()`",
             (true, "min" | "max") => "find its index and borrow it with `xs[i]`",
@@ -302,7 +302,7 @@ impl<'p> Checker<'p> {
             Stmt::Return(..) => Some("`return`"),
             Stmt::Break(_) => Some("`break`"),
             Stmt::Continue(_) => Some("`continue`"),
-            Stmt::Let { .. } => Some("a binding"),
+            Stmt::Let { .. } | Stmt::LetTuple { .. } => Some("a binding"),
             Stmt::Defer(..) => Some("another `defer`"),
             Stmt::While { .. } | Stmt::For { .. } => Some("a loop"),
             Stmt::With { .. } => Some("a `with` block"),
