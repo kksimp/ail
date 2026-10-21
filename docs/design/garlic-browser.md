@@ -198,9 +198,32 @@ a display list.
   `pg.rows[scroll..]`; the `std.ui` window shares its colors.
 - **Events**: click, scroll (points, accumulated into lines), keys with the
   `std.ui` names, field edit and submit, and resize with the cell size.
-- **Next**: proportional fonts with host-side text measuring, then images
-  by URL and a box model in points.
-- **Entry**: `--app` starts it; the `std.ui` window stays the default.
+- **Entry**: `--app` starts it (cell mode, verified on macOS 2026-10-21:
+  address bar, links, back, reload, wheel and key scrolling). `--app
+  --pixels` uses the pixel layout below. The `std.ui` window stays the
+  default.
+
+### Pixel layout (`gfx`, first cut, behind `--pixels`)
+
+Kaleb chose a full pixel layout with sans fonts (2026-10-21). The `gfx`
+module lays the document out in CSS pixels, with no cells:
+
+- **Box model**: margins (adjoining ones collapse), borders, padding,
+  `width`, `max-width` with `auto` margins, backgrounds, canvas color from
+  `body`/`html`.
+- **Text**: proportional, sized by `font-size`, `line-height`, `text-align`,
+  weight, style, color, underline; every word is drawn at its own x from a
+  Helvetica advance-width table, because the host cannot measure text yet
+  (so drift between fonts never accumulates).
+- **Blocks**: lists with markers, tables (column widths from content),
+  flexbox rows (`gap`, `flex-grow`, `justify-content`, `flex-wrap`), grid
+  tracks (`repeat`, `fr`, `minmax`), images with `width`/`height`
+  attributes, buttons and fields drawn as boxes (not yet interactive).
+- **Output**: `draw.Op.Str`/`Pic`/`Rect` in page pixels plus a rectangle for
+  each link (`Scene.link_at`); the window scrolls by points.
+- **Not yet**: floats, positioning, images without sizes, web fonts,
+  interactive form controls in pixel mode, page-model boxes with pixel
+  rectangles, a host text-measuring call. Unverified on a real window.
 
 The contract with the host is in the SwiftUI thread's spec (`std.app`).
 
@@ -247,8 +270,9 @@ the page show up in the page model so an agent can see what a script did.
    visibility, bold, italic, uppercase, `white-space`, `@media` by window
    width, aligned data tables. Next: colors with a contrast floor,
    margins, and tables with `colspan` and multi-line cells.
-4. **Pixels**: a pixel surface in `std.ui`, a bitmap font, then images (PNG
-   after lane 128) and a box-model layout in pixels.
+4. **Pixels** (started): the `std.app` window draws a box-model layout in
+   pixels (`gfx`, `--pixels`); next: verify on macOS, images without sizes,
+   interactive controls, pixel rectangles in the page model.
 5. **Scripts**: the JS engine's DOM bindings and event loop.
 
 ## Rejected alternatives
