@@ -91,6 +91,16 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    323.8M, fannkuch 244.6M to 235.3M, fasta 70.2M to 66.9M, sieve and matmul
    unchanged.
 
+6. **Constant indexes are checked against the pushes before them.**
+   `dominated` (bce.ail) now also drops the check on `xs[c]` for a constant
+   `c`, or for a block parameter that every edge passes a constant to
+   (`base := 3`, then `base = 0` under `if`), when more than `c` pushes to
+   `xs` are on every path to the access: the list has at least that many
+   elements and, where no operation shortens a list, never fewer. fasta's
+   `counts[base] += 1` and `letters[base]` lose their checks, as do the
+   constant-index reads of a list literal after a loop. fasta 66.9M to
+   65.9M instructions.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register
