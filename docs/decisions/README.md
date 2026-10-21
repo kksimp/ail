@@ -582,6 +582,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0803](0803-native-map-top-and-set-algebra.md) | Native `Map.top` and set algebra (`union`, `intersect`, `difference`) *(delegated)* | Accepted | 2026-10-21 |
 | [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
+| [0772](0772-native-std-modules-in-ail.md) | Standard modules written in AIL compile natively as modules of the program, read from `bootstrap/src/std`; `std.log` builds *(delegated)* | Accepted | 2026-10-21 |
 | [0766](0766-native-string-hash-by-words.md) | Native string map keys are hashed eight bytes at a time: `map_hash` 64 to 44 instructions per word *(delegated)* | Accepted | 2026-10-21 |
 | [0767](0767-map-first-probe.md) | The native map lookup tries one probe without saved registers, then falls back to the full probe *(delegated)* | Accepted | 2026-10-21 |
 | [0770](0770-native-proc-run.md) | Native `proc.run` and `proc.which` on Linux: `clone`, `execve`, pipes and `ppoll`, optional trailing parameters, the `proc.Output` struct *(delegated)* | Accepted | 2026-10-21 |
