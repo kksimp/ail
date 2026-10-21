@@ -16,7 +16,7 @@ fn Lower.lower_char(mut self, text str) Val
 ## a number, `char` or `bool` hole, every hole is evaluated first (a hole may
 ## itself interpolate), then the pieces are written into the runtime's
 ## builder and the result is allocated once, with no string made for the
-## number (ADR 0768 addendum).
+## number (ADR 0837).
 fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) Val?
     mut pieces := List[int]()
     # How each piece is written: 0 a string, 1 an `int`, 2 a `char`, 3 a `bool`.
