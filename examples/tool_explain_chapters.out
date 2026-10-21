@@ -14,7 +14,7 @@ fix 9 0
 gen 14 0
 gram 16 2
 http 3 0
-json 17 0
+json 19 0
 lex 24 6
 mod 29 2
 native 21 0
@@ -32,10 +32,11 @@ std 212 1
 test 23 0
 trace 17 0
 trait 43 3
-type 107 10
+type 108 10
 unsafe 16 0
 all 895 50
 all 899 48
 all 905 48
 all 908 48
 all 912 48
+all 895 48

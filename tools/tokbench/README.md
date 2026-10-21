@@ -121,3 +121,7 @@ says which program changed and why, with its five-tokenizer mean before and afte
   - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
   - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
   Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
+- **2026-10-21, day 3** (output checked byte-identical to the Python twin where one runs):
+  - `agent-r4/t11_json_transform`: `load_json[List[U]](p)?` and `print_json(v)` replace the `from_json`/`parse_json`/`to_text` chain (ADR 0774). 89.6 → 76.4.
+  - `programs/hexdump`: `data[a..b].hex(" ")` replaces the row comprehension and join (ADR 0775). 124.2 → 104.2.
+  - Removed the superseded duplicates `agent-r4/t11b_json_typed`, `t20b_grep_methods` and `t23b_copy_tree_std`; t11, t20 and t23 are those forms.
