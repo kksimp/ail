@@ -93,8 +93,8 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
 readable yet, and on macOS the program traps at `proc.run`); and the standard
 modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log`). Any other construct is reported at its position under this rule, all of them
+`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log` and `std.regex`; `regex.captures` is not built yet). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806)*
 

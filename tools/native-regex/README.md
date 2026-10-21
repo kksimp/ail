@@ -2,8 +2,7 @@
 
 Differential tests that hold whatever approach native `std.regex` takes
 ([note](/mnt/project-files/notes/232-native-regex.md)). They compare a native
-build with `ail run` on the same input: stdout and exit code. Until native
-`std.regex` builds, each mode prints the build's own problems and exits 3.
+build with `ail run` on the same input: stdout and exit code. Each mode prints the build's own problems and exits 3 if the native build fails.
 
 | Mode | What it runs |
 |---|---|
@@ -11,8 +10,8 @@ build with `ail run` on the same input: stdout and exit code. Until native
 | `tools/native-regex/run.sh cases` | each `bootstrap/tests/cases/*regex*.ail`, built and run both ways |
 | `tools/native-regex/run.sh fuzz [N [SEED]]` | `gen.py` writes N random vectors (RE2-subset patterns, flags, classes, malformed patterns); the same `vectors.ail` runs them |
 
-`vectors.ail` prints one line per vector: the span and the group texts of a
-search, the spans of `find_all`, the replaced or split text, or the full
+`vectors.ail` prints one line per vector: the span and text of a
+search (capture groups are compared through `REPLACE` templates until `regex.captures` builds natively), the spans of `find_all`, the replaced or split text, or the full
 `RegexError` (`kind`, `at`, `rule`, `message`) of a pattern that does not
 compile. It makes no claim about what is right: the Rust engine is checked
 against the vector file's expectations by `cargo test` (`regex::vectors`), and

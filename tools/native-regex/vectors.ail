@@ -34,20 +34,15 @@ fn unescape(s str) str
             out = "{out}{e}"
     out
 
-## One line of the output for the search form `PATTERN TEXT RESULT`.
-fn search(pat str, text str) str
-    re := regex.compile(pat) else err
-        return "compile: {err}"
-    found := regex.captures(re, text) else
+## One line of the output for the search form `PATTERN TEXT RESULT`: the span and
+## its text. Capture groups are compared through `REPLACE` templates until
+## `regex.captures` builds natively (`List[str?]` fields).
+fn search(re regex.Regex, text str) str
+    found := regex.find(re, text) else
         return "-"
-    mut parts := ["{found.start}-{found.end}"]
-    for g in found.groups
-        parts.push(g else "_")
-    parts.join("|")
+    "{found.start}-{found.end}|{found.text}"
 
-fn replace_line(first bool, pat str, text str, rep str) str
-    re := regex.compile(pat) else err
-        return "compile: {err}"
+fn replace_line(first bool, re regex.Regex, text str, rep str) str
     if first
         return regex.replace_first(re, text, rep)
     regex.replace(re, text, rep)
@@ -59,25 +54,24 @@ fn main() !
             continue
         f := line.split("\t")
         kind := f[0]
+        pat := if kind == "ALL"
+            or kind == "REPLACE"
+            or kind == "REPLACE_FIRST"
+            or kind == "SPLIT"
+            or kind == "ERR" then f[1] else f[0]
+        re := regex.compile(pat) else err
+            print("{kind} {pat} -> compile: {err.kind} {err.at} {err.rule} {err.message}")
+            continue
         if kind == "ERR"
-            r := regex.compile(f[1]) else err
-                print("ERR {f[1]} -> {err}")
-                continue
-            print("ERR {f[1]} -> compiled")
+            print("ERR {pat} -> compiled")
         elif kind == "ALL"
             text := unescape(f[2])
-            re := regex.compile(f[1]) else err
-                print("ALL {f[1]} -> compile: {err}")
-                continue
             spans := [m.start for m in regex.find_all(re, text)]
             ends := [m.end for m in regex.find_all(re, text)]
             print("ALL {f[1]} {f[2]} -> {spans} {ends}")
         elif kind == "REPLACE" or kind == "REPLACE_FIRST"
-            print("{kind} {f[1]} {f[2]} -> {replace_line(kind == "REPLACE_FIRST", f[1], unescape(f[2]), f[3])}")
+            print("{kind} {f[1]} {f[2]} -> {replace_line(kind == "REPLACE_FIRST", re, unescape(f[2]), f[3])}")
         elif kind == "SPLIT"
-            re := regex.compile(f[1]) else err
-                print("SPLIT {f[1]} -> compile: {err}")
-                continue
             print("SPLIT {f[1]} {f[2]} -> {regex.split(re, unescape(f[2]))}")
         else
-            print("{f[0]} {f[1]} -> {search(f[0], unescape(f[1]))}")
+            print("{f[0]} {f[1]} -> {search(re, unescape(f[1]))}")

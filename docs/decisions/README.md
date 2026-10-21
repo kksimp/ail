@@ -603,3 +603,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |
 | [0815](0815-native-tensors.md) | Native tensors: a runtime object and kernels written in AIL *(delegated)* | Accepted | 2026-10-21 |
 | [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
+| [0819](0819-native-std-regex-in-ail.md) | Native `std.regex` is an AIL module compiled with the program *(delegated)* | Accepted | 2026-10-21 |

@@ -264,6 +264,9 @@ fn Lower.method_returns_error(self, recv ast.Expr, name str) bool
     returns_error(s)
 
 fn Lower.method_fails(self, recv ast.Expr, name str) bool
+    if m := module_name(recv)
+        s := sigs.get("{m}.{name}") else return false
+        return s.fails
     key := method_key(recv, name) else return false
     s := sigs.get(key) else return false
     s.fails
@@ -556,6 +559,8 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                 Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
+            if m := module_name(recv)
+                return fn_errs.get("{m}.{name}") else Ty.Unknown
             key := method_key(recv, name) else return Ty.Unknown
             fn_errs.get(key) else Ty.Unknown
         _ => Ty.Unknown

@@ -14,10 +14,14 @@ fn size(default int) int
     n := args[0].to_int() else return default
     n
 
-fn line(mut seed int) str
+fn step(seed int) int
+    (seed * 3877 + 29573) % 139968
+
+fn line(start int) str
     mut parts := List[str]()
+    mut seed := start
     for _ in 0..6
-        seed = (seed * 3877 + 29573) % 139968
+        seed = step(seed)
         t := seed / 16 % 8
         if t == 0
             parts.push("user{seed % 97}@host{seed % 13}.com")
@@ -43,7 +47,9 @@ fn main() !
     mut pairs := 0
     mut replaced := 0
     for _ in 0..n
-        text := line(mut seed)
+        text := line(seed)
+        for k in 0..6
+            seed = step(seed)
         for m in regex.find_all(digits, text)
             runs += 1
             digit_chars += m.end - m.start
