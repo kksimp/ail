@@ -42,9 +42,72 @@ memory in small programs and thrashes in large ones.
 The pause is proportional to the heap in pages plus live objects; programs with
 very large live data see long pauses until a generational design (a later ADR).
 
-## Follow-ups (lane 191's measurements)
+## Allocator speed-up (amendment, 2026-10-21)
 
-`alloc` costs about 25 instructions per call, three callee-saved push/pop pairs
-included. Ideas for a later PR: a frameless fast path (free-list pop or bump
-within the class's page, falling to the current code on a miss), and a
-`list_new_for` that allocates a header and its first block in one call.
+Lane 191 measured `binarytrees` at 7.8x gcc and suspected the allocator's
+call cost. A profile (callgrind, `binarytrees 14`) showed `rt.alloc` at 3% of
+instructions and the page search in `heap_pages` at 25%: the arena lists of
+`binarytrees` grow to many pages, and each growth scanned the page table from
+the start and zeroed pages that `list_grow` then overwrote. Changes:
+
+- `heap_pages` steps over whole large spans by their page count, keeps the
+  hint at the lowest free page, and remembers the smallest run length known
+  not to fit until the next sweep.
+- `alloc_raw(n, kind)` skips zeroing for blocks the caller fills before
+  reading (list element blocks, string objects, the string builder, the sort
+  buffer). The collector scans a list's element block only up to the list's
+  length, so stale words past it keep nothing alive.
+- `alloc` keeps a straight-line fast path for small objects (free-list pop or
+  bump), calling `alloc_slow` otherwise. It is cheap but was not the
+  bottleneck.
+
+Results (Linux x86-64, min of 5): `binarytrees 17` 0.357 to 0.320 s with 16%
+fewer instructions at depth 14; `binarytrees 20` 7.0 to 3.8 s and 85 to 61 MiB;
+the 10 GB test 9.8 to 3.3 s; `fannkuch`, `sieve`, `mandelbrot` 3-10% faster;
+others unchanged. A bump-pointer fast path in the generated code itself, and a
+`list_new_for` that allocates header and first block together, are left until
+the code generator folds constant offsets into addressing: today the fast path
+spends most of its instructions on `add` and `imul` for addresses.
+
+## Cheaper collections for string-heavy programs (amendment, 2026-10-21)
+
+Lane 235's `lines_split` (200,000 log lines split into fields) spent about a
+quarter of its instructions in allocation and collection. Changes:
+
+- A small page's table entry holds the block size and the reciprocal
+  `ceil(2^32 / size)`, so the collector finds a block start with a multiply
+  instead of a division and a call.
+- The sweep makes one pass per page (clear marks, chain free blocks, count
+  live) instead of two.
+- The trigger is `max(16 MiB, 2 x live bytes)`: the heap grows to about three
+  times the live data before a collection, in exchange for fewer of them.
+- A small page is no longer zeroed when taken; a page that was used before is
+  marked dirty and zeroed block by block, only when a zeroed block is asked
+  for. Pages taken from the top of the heap are clean.
+- The fast path indexes its per-class slots with one shift.
+
+Measured with callgrind on a native `lines_split` (strings, `lines`, `split`;
+no map): 2.91 G to 2.23 G instructions (-23%), 0.265 s to 0.20 s. The
+collector went from about 600 M to 235 M instructions. The rest is the string
+functions and the address arithmetic in the generated code of `alloc` (about
+100 instructions per call), which lane 235's displacement folding should
+shrink. Resident size grows by the larger trigger: the 10 GB test runs in
+16 MiB (was 10), `binarytrees 20` in 80 MiB (was 61).
+
+### Baseline for tuning the trigger (2026-10-21)
+
+Trigger: a collection when bytes allocated since the last exceed
+`max(16 MiB, 2 x live bytes after the last)`, so the heap peaks near 3x live
+data. Resident size (Linux x86-64, `ru_maxrss`) with the earlier trigger
+`max(8 MiB, 1 x live)` against this one:
+
+| program | earlier | now |
+|---|---:|---:|
+| `binarytrees 20` | 61 MiB | 80 MiB |
+| 10 GB short-lived lists (`heavy/gc_10gb.ail`) | 10 MiB | 16 MiB |
+| native `lines`/`split` (200,000 lines) | 65 MiB | 60 MiB |
+
+Instructions on the `lines`/`split` program, cumulative: 2.91 G before this
+amendment; 2.56 G with the block-size lookup; 2.49 G with the 16 MiB minimum;
+2.37 G with 2x live; 2.23 G with the one-pass sweep, lazy page zeroing and
+the shift-indexed fast path.

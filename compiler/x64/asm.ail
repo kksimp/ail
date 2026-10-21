@@ -364,6 +364,11 @@ pub fn Asm.call_sym(mut self, sym str)
     fixups.push(Fixup(at: code.len(), label: -1, sym: sym, tail: 0))
     u32(0)
 
+pub fn Asm.call_reg(mut self, r int)
+    rex(0, 0, 0, r, false)
+    byte(255)
+    byte(208 + low(r))
+
 pub fn Asm.ret(mut self)
     byte(195)
 

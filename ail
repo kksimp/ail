@@ -52,6 +52,12 @@ install_private_rust() {
     echo "ail: Rust $pin installed" >&2
 }
 
+# A test run pins the binary it is testing (AIL_BINARY), so a program that starts `ail` itself isn't
+# rebuilt under it when the sources change mid-run.
+if [ "${1:-}" != selftest ] && [ -n "${AIL_BINARY:-}" ] && [ -x "$AIL_BINARY" ]; then
+    exec "$AIL_BINARY" "$@"
+fi
+
 # Fast path: when nothing the bootstrap builds from is newer than its binary, run it without
 # looking for a toolchain. Cargo's freshness check and the Rust version probe cost about 0.1 s per run.
 if [ "${1:-}" != selftest ] && [ -x "$binary" ] &&

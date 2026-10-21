@@ -1,0 +1,5 @@
+fn f[1](x int) int
+    1
+
+fn main()
+    print(f(1))
