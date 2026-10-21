@@ -4472,6 +4472,11 @@ match {
                 }
                 Ins::Ret { src, pos, exit } => {
                     let v = take!(*src);
+                    // A plain body has no contract or error wrapping to place the return, and with no tasks
+                    // `leave` only truncates blocks that `run_code` truncates anyway: return the value.
+                    if code.plain && self.conc.is_none() {
+                        return Ok(v);
+                    }
                     self.returned = Some((v, *pos));
                     self.leave(code, *exit, Exit::Return, env, base)?;
                 }
