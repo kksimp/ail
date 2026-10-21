@@ -244,6 +244,27 @@ fn Checker.collect_supers(mut self)
 fn Checker.provides(self, b int, tr int) bool
     b == tr or (b < supers.len() and supers[b].contains(tr))
 
+## Traits other languages use to define operators AIL has none of (trait.op.2).
+OTHER_OPERATOR_TRAITS := [
+    "Pow",
+    "Not",
+    "BitAnd",
+    "BitOr",
+    "BitXor",
+    "Shl",
+    "Shr",
+    "AddAssign",
+    "SubAssign",
+    "MulAssign",
+    "DivAssign",
+    "RemAssign",
+    "Deref",
+    "DerefMut",
+    "Call",
+    "Assign",
+    "Concat",
+]
+
 ## The trait called `n`, reporting when there's none.
 fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
     if j := traits.get(n)
@@ -254,6 +275,14 @@ fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
             at,
             "`{n}` is a type, not a trait",
             "a constraint or `impl` names a trait, e.g. `Ord`",
+        )
+        return none
+    if OTHER_OPERATOR_TRAITS.contains(n)
+        err_help(
+            "trait.op.2",
+            at,
+            "`{n}` would define an operator, and no operator beyond those of `trait.op.1` can be defined",
+            "write a named method instead, e.g. `fn pow(self, other Self) Self`, and call it as `a.pow(b)`",
         )
         return none
     mut d := new_diag("expr.name.1", at, "unknown trait `{n}`")

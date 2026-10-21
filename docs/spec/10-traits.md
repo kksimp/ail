@@ -202,6 +202,18 @@ corresponding standard-library trait: `Eq` for `==` and `!=`, `Ord` for
 
 **trait.op.2** — No other operator can be defined or implemented. *(ADR 0077)*
 
+```ail error=trait.op.2 rules=trait.op.2
+struct Vec2
+    x int
+
+impl Pow for Vec2           # there is no `**`, so there is no trait to implement for it
+    fn pow(self, other Vec2) Vec2
+        self
+
+fn main()
+    print(1)
+```
+
 **trait.op.3** — Operator calls dispatch statically and perform no implicit
 conversion of their operands. *(ADR 0077)*
 
