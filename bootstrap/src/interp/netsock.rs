@@ -256,7 +256,8 @@ struct Pending {
 /// An HTTP server (std.net.9): the listener and the connections still
 /// sending their requests.
 struct Server {
-    listener: TcpListener,
+    /// `None` once `shutdown` has stopped it listening (std.net.24).
+    listener: Option<TcpListener>,
     addr: String,
     pending: Vec<Pending>,
 }
@@ -637,10 +638,9 @@ enum Poll {
 }
 
 impl Server {
-    /// Takes new connections, reads what the pending ones have sent, and
-    /// returns the first whole request (std.net.9). Never waits.
-    fn poll(&mut self) -> Poll {
-        while let Ok((stream, peer)) = self.listener.accept() {
+    /// Takes the connections waiting at the listener.
+    fn take_new(&mut self) {
+        while let Some(Ok((stream, peer))) = self.listener.as_ref().map(TcpListener::accept) {
             if stream.set_nonblocking(true).is_ok() {
                 let _ = stream.set_nodelay(true);
                 self.pending.push(Pending {
@@ -654,6 +654,12 @@ impl Server {
                 });
             }
         }
+    }
+
+    /// Takes new connections, reads what the pending ones have sent, and
+    /// returns the first whole request (std.net.9). Never waits.
+    fn poll(&mut self) -> Poll {
+        self.take_new();
         let mut i = 0;
         while i < self.pending.len() {
             let p = &mut self.pending[i];
@@ -727,6 +733,10 @@ impl Server {
                     refuse(p.stream, status, message);
                 }
             }
+        }
+        // A server that has stopped listening is done once nothing is pending.
+        if self.listener.is_none() && self.pending.is_empty() {
+            return Poll::Closed;
         }
         Poll::Pending
     }
@@ -802,7 +812,7 @@ impl<'a, W: Write> Interp<'a, W> {
     pub(super) fn net_serve(&mut self, addr: &str, pos: Pos) -> Value {
         match bind(addr) {
             Ok((listener, shown)) => {
-                let id = add(Slot::Server(Server { listener, addr: shown, pending: Vec::new() }));
+                let id = add(Slot::Server(Server { listener: Some(listener), addr: shown, pending: Vec::new() }));
                 self.handle_struct("net.Server", id)
             }
             Err((kind, message)) => self.net_error(addr, kind, message, pos),
@@ -902,6 +912,16 @@ impl<'a, W: Write> Interp<'a, W> {
                 close(id);
                 Value::Unit
             }
+            "Server.shutdown" => {
+                // std.net.24: stop listening and drop idle connections; requests
+                // already arriving are still answered.
+                if let Some(Slot::Server(s)) = sockets().get_mut(id as usize) {
+                    s.take_new();
+                    s.listener = None;
+                    s.pending.retain(|p| !p.idle);
+                }
+                Value::Unit
+            }
             "Server.accept" => {
                 self.flush(pos)?;
                 let mut idle = 0;
@@ -988,7 +1008,8 @@ impl<'a, W: Write> Interp<'a, W> {
                     (r[0].int(), h, body.as_bytes().to_vec())
                 };
                 // std.net.19: a final response to a request that asked for it keeps the connection.
-                let keep = ex.keep && status >= 200 && ex.server >= 0 && !headers_close(&headers);
+                let draining = matches!(sockets().get(ex.server as usize), Some(Slot::Server(s)) if s.listener.is_none());
+                let keep = ex.keep && status >= 200 && ex.server >= 0 && !draining && !headers_close(&headers);
                 let sent = response_bytes(status, &headers, &body, ex.method == "HEAD", keep);
                 let result = match sent {
                     Err(message) => {

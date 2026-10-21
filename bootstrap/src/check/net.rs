@@ -48,7 +48,7 @@ impl<'p> Checker<'p> {
             ("Server", "accept") => (vec![], net(ty("net.Exchange"))),
             ("Listener", "accept") => (vec![], net(ty("net.Conn"))),
             ("Server" | "Listener", "addr") | ("Conn", "peer") => (vec![], Str),
-            ("Server" | "Listener" | "Conn", "close") => (vec![], Unit),
+            ("Server" | "Listener" | "Conn", "close") | ("Server", "shutdown") => (vec![], Unit),
             ("Exchange", "respond") => (vec![ty("net.Response")], net(Unit)),
             ("Exchange", "respond_bytes") => (vec![Int, Ty::Map(Box::new(Str), Box::new(Str)), Ty::Bytes], net(Unit)),
             ("Conn", "read") => (vec![Int], net(Str)),
