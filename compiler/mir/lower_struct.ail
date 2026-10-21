@@ -13,9 +13,14 @@ struct Slot
     name str
     ty Ty
 
+## The result of `proc.run` (std.proc.1), a struct of the standard library
+## that no source declares; its key can't clash with a program's own name.
+PROC_OUTPUT := "proc.Output"
+
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
+    structs[PROC_OUTPUT] = []
     for s in prog.structs
         if s.generics.len() > 0
             problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
@@ -31,6 +36,11 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
             structs["{prefix}{s.name}"] = []
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
+    structs[PROC_OUTPUT] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "out", ty: Ty.Str),
+        Slot(name: "err", ty: Ty.Str),
+    ]
     for s in prog.structs
         key := "{prefix}{s.name}"
         if not structs.contains(key)
