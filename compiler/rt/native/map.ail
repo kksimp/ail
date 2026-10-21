@@ -10,7 +10,7 @@
 ## Object (a Set uses the same layout and ignores the value word):
 ##   +0 len     live entries        +8 used     array slots used, live or dead
 ##   +16 ecap   array capacity      +24 mask    index size - 1 (a power of two)
-##   +32 kind   0 int, 1 str, 2 bool keys
+##   +32 kind   0 int, 1 str, 2 bool, 4 char keys
 ##   +40 ents   ecap * 24 bytes: hash (-1 when dead), key, value
 ##   +48 index  (mask + 1) * 8 bytes: 0 empty, else entry number + 1
 ##   +56 vmode  0 plain values, 1 lists (copied on copy), 2 maps and sets
@@ -51,8 +51,8 @@ fn map_hash_str(s int) int
         i += 8
     if i < n
         h = h.bit_xor(load64(s + 16 + i).bit_and(1.shl(8 * (n - i)) - 1)) * -7046029254386353131
-    h = h.bit_xor(h.shr(32))
-    h.bit_and(4611686018427387903)
+    h = h.bit_xor(h.shr(32)) * -7046029254386353131
+    h.bit_xor(h.shr(29)).bit_and(4611686018427387903)
 
 fn map_hash(kind int, k int) int
     if kind == 1
@@ -331,10 +331,15 @@ fn map_out_quoted(s int)
             out_byte(c)
     out_byte(34)
 
-## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float.
+## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float,
+## 4 char.
 fn out_scalar(kind int, v int)
     if kind == 1
         map_out_quoted(v)
+    elif kind == 4
+        out_byte(39)
+        out_escaped(v, 39)
+        out_byte(39)
     elif kind == 2
         out_bool(v != 0)
     elif kind == 3
@@ -480,3 +485,16 @@ fn set_filter(a int, b int, keep int) int
             if map_has(b, load64(e + 8)) == (keep != 0)
                 map_add(r, load64(e + 8))
     r
+
+# ---- copies of tables of structs ----
+
+## The slots in use, live or dead.
+fn map_used(m int) int
+    load64(m + 8)
+
+## The address of entry `i` when it is live, else 0.
+fn map_live(m int, i int) int
+    e := load64(m + 40) + 24 * i
+    if load64(e) >= 0
+        return e
+    0

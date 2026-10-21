@@ -848,10 +848,18 @@ fn main()
     print(x)
 ```
 
-```ail skip=bootstrap rules=err.ctx.3
-fn main()
-    # An error report shows the error, every attached context message and the return trace.
-    print("report")
+```ail tool=run,FILE status=1 expect=context: rules=err.ctx.3
+error struct E
+    why str
+
+fn read(n int) int ! E
+    if n == 0
+        return E(why: "empty")
+    n
+
+fn main() ! E
+    x := read(0)? "reading the count"
+    print(x)
 ```
 
 ```ail rules=err.text.1
