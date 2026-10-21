@@ -1,4 +1,4 @@
-# `std.time.date` in a native build (ADR 0772): the same results as
+# `std.time.date` in a native build (ADRs 0772, 0840): the same results as
 # the interpreter, including zones from `std.tz`.
 use std.time.date
 

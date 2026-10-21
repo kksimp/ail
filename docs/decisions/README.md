@@ -624,3 +624,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
 | [0807](0807-native-build-passes-derived-methods.md) | `ail build` passes derived methods to the native backend as `gen:impl` sources; `Self` in method signatures *(delegated)* | Accepted | 2026-10-21 |
 | [0808](0808-native-prelude-json-lowered-on-demand.md) | Native builds get the prelude's JSON and `Default` modules, lowered only where the program reaches them *(delegated)* | Accepted | 2026-10-21 |
+| [0840](0840-native-std-tz-in-the-runtime.md) | Native `std.tz`: a TZif reader and POSIX rules in the runtime, so `std.time.date` builds natively *(delegated)* | Accepted | 2026-10-21 |

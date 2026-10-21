@@ -168,9 +168,11 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
         root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
         srcs.push(parse_source("", path)?)
     else
+        mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
             if name.ends_with(".ail")
-                srcs.push(parse_source("", "{path}/{name}")?)
+                files.push("{path}/{name}")
+        srcs.extend(parse_module("", files)?)
     mut loaded := Set[str]()
     mut k := 0
     while k < srcs.len()
@@ -184,9 +186,11 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
                     srcs.push(parse_source(imp, std_file(std, imp))?)
                 continue
             dir := "{root}/{imp.replace(".", "/")}"
+            mut files := List[str]()
             for name in fs.list_dir(dir)?.sorted()
                 if name.ends_with(".ail")
-                    srcs.push(parse_source(imp, "{dir}/{name}")?)
+                    files.push("{dir}/{name}")
+            srcs.extend(parse_module(imp, files)?)
         k += 1
     derived := derived_sources()?
     srcs.extend(derived.sources)
@@ -270,10 +274,25 @@ fn derived_source(module str, label str, body List[str]) mir.Source
 fn parse_source(module str, path str) !mir.Source
     parse_text(module, path, fs.read_text(path)?)
 
+## The files of one module, parsed together: a generic name declared in one
+## file starts type arguments in the others (gen.infer.2).
+fn parse_module(module str, paths List[str]) !List[mir.Source]
+    mut texts := List[str]()
+    mut names := Set[str]()
+    for path in paths
+        text := fs.read_text(path)?
+        texts.push(text)
+        for n in syntax.generic_names(syntax.lex(text).tokens).sorted()
+            names.add(n)
+    [parse_with(module, paths[k], texts[k], names) for k in 0..paths.len()]
+
 ## Text from `path`, parsed; syntax errors are printed and the run fails.
 fn parse_text(module str, path str, text str) mir.Source
+    parse_with(module, path, text, Set[str]())
+
+fn parse_with(module str, path str, text str, names Set[str]) mir.Source
     lexed := syntax.lex(text)
-    parsed := syntax.parse(lexed.tokens)
+    parsed := syntax.parse_with(lexed.tokens, names)
     mut diags := lexed.diags
     diags.extend(parsed.diags)
     report := syntax.report_text(path, text, diags)

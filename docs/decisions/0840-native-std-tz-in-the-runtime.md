@@ -1,4 +1,4 @@
-# XXXX. `std.tz` in native builds: a TZif reader in the runtime
+# 0840. `std.tz` in native builds: a TZif reader in the runtime
 
 - **Status:** Accepted
 - **Date:** 2026-10-21

@@ -15,7 +15,9 @@ fn derived_sources() !Derived [env fail fs io]
 struct Derived
 fn derived_source(str, str, List[str]) mir.Source [io]
 fn parse_source(str, str) !mir.Source [fail fs io]
+fn parse_module(str, List[str]) !List[mir.Source] [fail fs io]
 fn parse_text(str, str, str) mir.Source [io]
+fn parse_with(str, str, str, Set[str]) mir.Source [io]
 ```
 
 ## a64
@@ -295,7 +297,9 @@ pub struct syntax.Comment
 pub struct syntax.Lexed
 pub fn syntax.lex(str) syntax.Lexed
 pub struct syntax.Parsed
+pub fn syntax.generic_names(List[syntax.Token]) Set[str]
 pub fn syntax.parse(List[syntax.Token]) syntax.Parsed
+pub fn syntax.parse_with(List[syntax.Token], Set[str]) syntax.Parsed
 ```
 
 ## x64
@@ -339,4 +343,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3812); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3910); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

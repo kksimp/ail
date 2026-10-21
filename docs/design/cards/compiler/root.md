@@ -24,5 +24,8 @@ struct Derived  ## What `ail build` passes besides the program's files.
 fn derived_source(module str, label str, body List[str]) mir.Source [io]  ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
 fn parse_source(module str, path str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
     fails with fs.IoError
+fn parse_module(module str, paths List[str]) !List[mir.Source] [fail fs io]  ## The files of one module, parsed together: a generic name declared in one
+    fails with fs.IoError
 fn parse_text(module str, path str, text str) mir.Source [io]  ## Text from `path`, parsed; syntax errors are printed and the run fails.
+fn parse_with(module str, path str, text str, names Set[str]) mir.Source [io]
 ```

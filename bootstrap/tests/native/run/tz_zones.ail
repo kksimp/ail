@@ -1,4 +1,4 @@
-# `std.tz` in a native build (std.tz.1-3): offsets from the
+# `std.tz` in a native build (std.tz.1-3, ADR 0840): offsets from the
 # platform's TZif files agree with the interpreter's, before and after the
 # last transition (the POSIX rule of the footer).
 use std.tz

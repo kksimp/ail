@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `std.tz` (std.tz.1-3, ADR 0448): the UTC offset of an IANA zone
+## `std.tz` (std.tz.1-3, ADRs 0448, 0840): the UTC offset of an IANA zone
 ## from the platform's TZif files (RFC 9636), with the POSIX rule of the
 ## file's footer for instants after its last transition, and the system zone.
 ## It follows `bootstrap/src/interp/tz.rs` step by step, so both agree. No
