@@ -1,0 +1,57 @@
+error enum LoadError
+    MissingEquals "missing '='"
+    BadName(text str) "bad cell name '{text}'"
+
+error struct NotFound "nothing at {path}"
+    path str
+
+error struct Empty "the list is empty"
+
+fn load(line str) int ! LoadError
+    if line.len() == 0
+        return LoadError.MissingEquals
+    if line.len() > 3
+        return LoadError.BadName(text: line)
+    line.len()
+
+fn find(path str) str ! NotFound
+    if path == "/etc"
+        return "etc"
+    return NotFound(path: path)
+
+fn first(xs List[int]) int ! Empty
+    if xs.len() == 0
+        return Empty()
+    xs[0]
+
+fn chain(path str) int ! LoadError | NotFound
+    p := find(path)?
+    load(p)?
+
+fn main() !
+    print(load("ab") else 0)
+    n := load("") else err
+        match err
+            MissingEquals => print("no equals")
+            BadName(t) => print("bad {t}")
+        -1
+    print(n)
+    m := load("abcdef") else err
+        match err
+            MissingEquals => print("no equals")
+            BadName(t) => print("bad {t}")
+        -2
+    print(m)
+    f := find("/tmp") else err
+        print("{err.path} -> {err}")
+        "none"
+    print(f)
+    k := first([]) else err
+        print(err)
+        7
+    print(k)
+    print(chain("/etc") else 0)
+    print(chain("/nope") else 0)
+    print(chain("/etc")?)
+    print(chain("/nope")?)
+    print("unreachable")
