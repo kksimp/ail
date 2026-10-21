@@ -603,3 +603,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |
 | [0815](0815-native-tensors.md) | Native tensors: a runtime object and kernels written in AIL *(delegated)* | Accepted | 2026-10-21 |
 | [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives, held constants *(delegated)* | Accepted | 2026-10-21 |
+| [0783](0783-std-error-families.md) | Std error families: a closed kind list per module, as spec rules | Accepted | 2026-10-21 |
+| [0774](0774-load-json-and-print-json.md) | `load_json[T](path)` and `print_json(v)` *(delegated)* | Accepted | 2026-10-21 |
+| [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
