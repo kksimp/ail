@@ -23,10 +23,6 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
             problem(s.pos, "struct `{s.name}`: invariants aren't in the native subset yet")
         elif s.is_unique
             problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
-        elif err_msgs.contains(s.name)
-            continue
-        elif s.is_error
-            problem(s.pos, "error struct `{s.name}` isn't in the native subset yet")
         else
             structs["{prefix}{s.name}"] = []
 

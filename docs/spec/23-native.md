@@ -33,7 +33,7 @@ guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
 `len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
 `o else d` and `o?` in a function returning an optional, functions that can
-fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
+fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s (with fields and messages, `return E(...)`, `else err` typed by the one error type)
 without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
@@ -57,7 +57,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
 (std.fs, std.env, std.io, std.time, std.path). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
+0568-0569, 0574-0576, 0804-0806, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
 
 ```ail
 fn steps(n int) int

@@ -580,3 +580,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
+| [0804](0804-native-error-values-are-structs-and-enums.md) | Native error values are ordinary structs and enums *(delegated)* | Accepted | 2026-10-21 |
+| [0805](0805-native-error-message-method.md) | The message of an error type is a method *(delegated)* | Accepted | 2026-10-21 |
+| [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |

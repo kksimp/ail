@@ -45,7 +45,8 @@ struct Lower
     file_paths List[str]
     ## Zero-field `error struct`s to their messages (lower_err.ail).
     err_msgs Map[str, str]
-    err_fns Set[str]
+    ## The error type of each function that can fail, when it names one.
+    fn_errs Map[str, Ty]
     ## The type the next block's final expression should have (consumed by `lower_block`).
     tail_want Ty?
     ## The function being lowered can fail.
@@ -167,12 +168,13 @@ pub struct Source
 ## Lower the files of a package (mod.unit.1-5, ADR 0393) and, when given,
 ## the runtime. The first source is the root module's file holding `main`;
 ## problems name the file they are in (`Problems.files`).
-pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
+pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
+    srcs := with_error_owners(input)
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
         err_msgs: {"fs.IoError": "", "IoError": ""},
-        err_fns: Set[str](),
+        fn_errs: {},
         tail_want: none,
         fails: false,
         sigs: {},
@@ -344,8 +346,6 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
     for f in prog.fns
-        if is_error_message(f)
-            continue
         before := problems.len()
         declare_fn(f, pre)
         if problems.len() > before
@@ -411,6 +411,9 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             Ty.Unknown
         rty = t
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
+    if can_fail
+        if r := f.ret
+            fn_errs[fn_key(f, pre)] = error_ty_of(r)
 
 ## A function's name in MIR: `T.m` for a method of `T`.
 fn fn_key(f ast.FnDecl, pre str) str
@@ -1606,6 +1609,9 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
         if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
+    if s := display_call(v)
+        call("rt.out_str", [s], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
         return unsupported(pos, "printing a `{v.ty.name()}`")
