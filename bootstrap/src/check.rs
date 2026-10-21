@@ -1037,7 +1037,6 @@ impl<'p> Checker<'p> {
             }),
             Expr::Unary { operand, .. } => self.constant_expr(operand),
             // A constant is shared by the whole program, so it can't hold a cell.
-            // ct.const.4: a constant's value can't contain a `ref` cell (the ref part of the rule).
             Expr::Ref { pos, .. } => self.error_help(
                 "mod.const.2",
                 *pos,
