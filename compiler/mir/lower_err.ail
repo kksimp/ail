@@ -187,7 +187,10 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
         call("rt.err_set", [str_value("a value is absent"), trace_line(pos)], Ty.Unit)
         finish(return_of(zero_of(ret)))
     else
-        problem(pos, "`?` on an optional in a function that returns neither an optional nor an error")
+        problem(
+            pos,
+            "`?` on an optional in a function that returns neither an optional nor an error",
+        )
     cur = good
     unwrap(o)
 
