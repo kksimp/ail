@@ -142,6 +142,7 @@ examples/                 example programs; NAME.out holds the expected output
 tools/
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
+  check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows for duplicate rows
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
