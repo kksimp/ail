@@ -501,3 +501,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
+| [0641](0641-native-trap-stack-from-frame-pointers.md) | A native trap prints its stack by walking frame pointers over a call table in the code *(delegated)* | Accepted | 2026-10-21 |
+| [0642](0642-native-trap-stack-format.md) | The native stack lines name the function and the call position, and leave out values *(delegated)* | Accepted | 2026-10-21 |
+| [0643](0643-inlined-callees-keep-their-frame.md) | A check inlined from a callee keeps the callee's frame and the call that was inlined *(delegated)* | Accepted | 2026-10-21 |
+| [0644](0644-native-trap-stack-always-on.md) | The trap stack is always built, with no flag: cost measured *(delegated)* | Accepted | 2026-10-21 |

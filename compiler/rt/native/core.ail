@@ -567,6 +567,7 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_int(load64(global(TRAP_LEN)))
     out_byte(10)
     out_str(tail)
+    trace_frames(tail)
     flush_to(2)
     sys_exit(1)
 

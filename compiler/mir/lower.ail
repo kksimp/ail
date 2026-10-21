@@ -132,6 +132,8 @@ PRIMS := {
     "float_bits": "int",
     "bits_float": "float",
     "target": "int",
+    "code_tab": "int",
+    "frame_ptr": "int",
 }
 
 ## The `int` methods of two operands that are one instruction (expr.bit.1).
@@ -602,6 +604,7 @@ fn Lower.site(mut self, rule str, kind str, op str, pos ast.Pos) int
         col: pos.col,
         func: fname,
         file: file,
+        from: -1,
     ))
     sites.len() - 1
 
@@ -1458,7 +1461,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     return unsupported(pos, "labelled arguments")
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
-            Val(id: call(key, vs, sig.ret), ty: sig.ret)
+            Val(id: call_at(key, vs, sig.ret, npos), ty: sig.ret)
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
@@ -1566,13 +1569,13 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
-        return struct_call("{en}.{name}", none, args, npos)
+        return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
-        return struct_call("{n}.{name}", none, args, npos)
+        return struct_call("{n}.{name}", none, args, expr_pos(recv))
     if m := module_name(recv)
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
-        return struct_call("{m}.{name}", none, args, npos)
+        return struct_call("{m}.{name}", none, args, expr_pos(recv))
     r := lower_value(recv, none)?
     if s := struct_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)

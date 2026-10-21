@@ -157,7 +157,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         t := sig.params[vs.len()]
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
-    Val(id: call(key, vs, sig.ret), ty: sig.ret)
+    Val(id: call_at(key, vs, sig.ret, pos), ty: sig.ret)
 
 ## Whether a value of type `t` read from a place must be copied to stay
 ## independent (own.val.1).

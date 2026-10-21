@@ -207,6 +207,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Trap record** | A per-site constant the native compiler emits for a runtime check: file, line, column, rule ID and message, which `rt_trap` prints (ADR 0405). |
 | **Trap site** | A MIR record of one check that can trap: its rule, kind, operator and position; the code jumps to a stub that prints the interpreter's trap line (ADR 0384). |
 | **Trap snapshot** | The source line and the stack, each frame with its arguments and locals, reported with a trap that ends `ail run` (ADR 0267). |
+| **Call table** | The rows `trace.tab` holds in a native executable's code, one per user call: return address, call position and function. A trap's stack is printed by walking frame pointers and looking each return address up in it (trace.frame.1, ADR 0641). |
 | **Trap stub** | Code at the end of a native function that a failed check branches to; it calls `rt.trap` with the check's kind, operands and constant source text (ADR 0385). |
 | **Trapped** | The prelude error `Trapped { rule, message }` that `Task.wait()` fails with when the task trapped (ADR 0187). |
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |

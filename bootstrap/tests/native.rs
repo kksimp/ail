@@ -67,6 +67,28 @@ fn mir_matches_the_expected_dumps() {
 /// and excerpt (the interpreter's snapshot lines aside, trace.snap.1).
 /// `target` is passed to `--target`; `runner` runs the executable (an
 /// emulator), or it runs directly.
+/// The interpreter's report line as the native one prints it (trace.frame.1,
+/// ADR 0641): a frame's values and locals are left out, `f(a = 1)` being
+/// `f(..)`, and the elision line has no `--verbose` hint. The interpreter's
+/// `note:` and `help:` lines have no native counterpart.
+fn interp_line(l: &str) -> Option<String> {
+    if l.starts_with("note:") || l.starts_with("help:") {
+        return None;
+    }
+    if l.starts_with("  at ") {
+        if let Some(i) = l.find(" in ") {
+            let name = &l[i + 4..];
+            let open = name.find('(')?;
+            let args = if name[open..].starts_with("()") { "()" } else { "(..)" };
+            return Some(format!("{}{}{}", &l[..i + 4], &name[..open], args));
+        }
+    }
+    if l.starts_with("  \u{2026} ") {
+        return Some(l.split(" (--verbose").next().unwrap().to_string());
+    }
+    Some(l.to_string())
+}
+
 fn executables_match(target: Option<&str>, runner: Option<&str>) {
     let dir = root().join("bootstrap/tests/native/run");
     let mut cases: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
@@ -118,11 +140,8 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
             }
             None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
         };
-        let snapshot = |l: &&str| {
-            !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"))
-        };
-        let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
-        let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();
+        let want_err: Vec<String> = std::str::from_utf8(&want.stderr).unwrap().lines().filter_map(interp_line).collect();
+        let got_err: Vec<String> = std::str::from_utf8(&got.stderr).unwrap().lines().map(str::to_string).collect();
         if want.stdout != got.stdout || want.status.code() != got.status.code() || want_err != got_err {
             failures.push(format!(
                 "{rel}: differs from `ail run`\n--- ail run (exit {:?}):\n{}{}\n--- native (exit {:?}):\n{}{}",

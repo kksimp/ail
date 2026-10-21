@@ -113,6 +113,7 @@ pub fn generate(m mir.Module, os int) codegen.Image
     add_code(mut img, a, "")
     for f in m.funcs
         gen_func(mut img, m, f, os)
+    codegen.add_call_table(mut img, m)
     img
 
 fn add_code(mut img codegen.Image, a Asm, name str)
@@ -136,6 +137,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    first := img.calls.len()
     mut g := Gen(
         a: new_asm(),
         img: img,
@@ -165,6 +167,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
     g.gen_stubs()
     g.a.resolve_labels()
     img = g.img
+    for k in first..img.calls.len()
+        img.calls[k].off += img.code.len()
     add_code(mut img, g.a, f.name)
 
 # ---- frame ----
@@ -780,6 +784,9 @@ fn Gen.call_out(mut self, i mir.Inst)
             a.str(gpr(extra[k], S0), SP, 8 * k)
     parallel(moves)
     a.bl(i.name)
+    if i.imm != 0
+        # The return address, for a trap's stack (trace.frame.1).
+        img.calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: f.name))
     if room > 0
         adjust_sp("add", room)
         sp_shift = 0
@@ -832,6 +839,14 @@ fn Gen.prim(mut self, i mir.Inst)
         "target" =>
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, os)
+            put_gpr(i.dst, d)
+        "code_tab" =>
+            d := out_gpr(i.dst, S1)
+            a.adr_sym(d, "trace.tab")
+            put_gpr(i.dst, d)
+        "frame_ptr" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, FP)
             put_gpr(i.dst, d)
         "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(
             loc[i.dst],

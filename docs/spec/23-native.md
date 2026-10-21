@@ -68,8 +68,8 @@ fn main()
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:
-trap[RULE]: MESSAGE`, err.trap.*); the interpreter's frame lines after it
-may be absent. *(ADRs 0384, 0385)*
+trap[RULE]: MESSAGE`, err.trap.*), then its source excerpt and the stack
+without the frames' values (trace.frame.1). *(ADRs 0384, 0385, 0641)*
 
 **native.build.2** — An error inside the backend itself (MIR that fails the
 verifier, ir-architecture.md §4) is reported under this rule as an internal
