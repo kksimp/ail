@@ -244,6 +244,7 @@ pub struct mir.Block
 pub struct mir.Func
 pub struct mir.Site
 pub struct mir.Module
+pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
@@ -333,3 +334,4 @@ pub fn x64.generate(mir.Module) codegen.Image
 ```
 
 trimmed to fit 4000 tokens (~3682); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3671); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
