@@ -11,6 +11,9 @@
 #                                         in directory RT, for x86_64-linux (the default) or
 #                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
 #                                         `ail build`)
+#   ail run compiler build-many RT TARGET MS MB STD FILE...
+#                                         the same for several programs in one run (ADR 0814,
+#                                         used by the selftest), each under a line `== PATH`
 # With several files, each output starts with a line `== PATH`.
 use a64
 use ast
@@ -65,15 +68,17 @@ fn main() !
             std := if args.len() > 6 then args[6] else ""
             m := lower_file(args[1], runtime_with(args[2], args[1], ms, mb)?, std)?
             target := if args.len() > 3 then args[3] else "x86_64-linux"
-            match target
-                "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
-                "aarch64-linux" => print(obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)))
-                "aarch64-macos" =>
-                    name := args[1].split("/").last() else args[1]
-                    print(obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))))
-                _ =>
-                    io.eprint("error[native.build.3]: unknown target `{target}`")
-                    io.exit(2)
+            print(executable_hex(m, args[1], target))
+        "build-many" =>
+            # ADR 0814: `build-many RT TARGET MS MB STD FILE...` builds several programs in
+            # one run, so the compiler loads and checks once. Each executable is printed
+            # as `== PATH` and its hex, as `build` prints it; the first problem ends the
+            # run, and the caller then builds each file on its own to report per file.
+            # The runtime is read once, so the limits (run.limit.5) are the same for all.
+            rt := runtime_with(args[1], args[3], args[4])?
+            for path in args[6..]
+                print("== {path}")
+                print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
         _ =>
             io.eprint("unknown command {args[0]}")
             io.exit(2)
@@ -137,6 +142,20 @@ fn source_text(path str) !str
         if name.ends_with(".ail")
             texts.push(fs.read_text("{path}/{name}")?)
     texts.join("\n")
+
+## The executable of lowered program `m` for `target` as hex text (native.build.3).
+## `path` names the program: the macOS target takes its name from it.
+fn executable_hex(m mir.Module, path str, target str) str
+    match target
+        "x86_64-linux" => obj.hex(obj.elf(x64.generate(m), obj.X86_64))
+        "aarch64-linux" => obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64))
+        "aarch64-macos" =>
+            name := path.split("/").last() else path
+            obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", "")))
+        _ =>
+            io.eprint("error[native.build.3]: unknown target `{target}`")
+            io.exit(2)
+            ""
 
 ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn runtime_syntax(path str, text str)

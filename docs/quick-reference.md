@@ -81,18 +81,20 @@ n += 1           # also -= *= /= %=
 
 ## Types
 
-`int`, `float`, `bool`, `str`, `bytes`, `char`, `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, `T?`, `T ! E`, generics, `any Trait`.
+`int`, `float`, `bool`, `str`, `bytes`, `char`, `List[T]`, `Map[K, V]`, `Set[T]`, tuples `(int, str)`, structs, enums, `T?`, `T ! E`, generics, `any Trait`.
 
-Constants are top-level `NAME := value`, computed at compile time. The
-value may call functions that do no I/O and use no capability
-(`ct.const.2`); a value that can fail needs `else`. Put `if`, `match` and
-`?` in a function and call it:
+A tuple `t := (1, "a")` is an `(int, str)`: read `t.0`, take it apart with
+`n, s := t` (`_` skips; `a, mut b := t`), match arms like `(0, _) =>` and
+`(k, w) =>`. `==`, `<`, map keys and JSON (arrays) work elementwise.
+
+Constants are top-level `NAME := value`, computed at compile time by calls
+with no I/O or capability (`ct.const.2`); one that can fail needs `else`, and
+`if`, `match` and `?` go in a called function:
 
 ```ail
 MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}     # a Set[str]
-WORDS := "fn if else".split(" ")
-SQUARES := squares(8)                   # squares must be free of I/O
+SQUARES := squares(8)
 
 fn squares(n int) List[int]
     mut out := List[int]()
@@ -407,7 +409,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"` (ASCII, escapes `\xHH`),
   `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`, `for x in b`,
   `b.to_str()` (`str?`, strict UTF-8), `b.text()` (lossy `str`), `b.to_list()`,
-  `b.find(x)` (`int?`), `contains`, `starts_with`, `ends_with`, `b.hex()`,
+  `b.find(x)` (`int?`), `contains`, `starts_with`, `ends_with`, `b.hex()` (`b.hex(sep)` between pairs),
   `b.base64()`, `bytes.from_list(xs)`, `bytes.from_hex(s)` and
   `bytes.from_base64(s)` (`bytes?`), `bytes.zeros(n)`. No `b[i] = x`.
 
@@ -430,14 +432,15 @@ Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
 `pop()`/`first()`/`last()`/`min()`/`max()` (`T?`), `contains(x)`, `index_of(x)`
 (`int?`, `none` when absent), `sorted()` (copy) and `sort()` (in place), `sum()`
 (ints or floats), `take(n)`, `chunks(n)`/`windows(n)`, `counts()` (`Map[T, int]`),
-`flatten()`; `is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
+`flatten()`, `enumerate()` (`for i, x in xs.enumerate()`), `zip(xs, ys)` (pairs, to the shorter);
+`is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
 
-Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
-`max`; stable, so sort by name first, then by count):
+Sort or pick by a key with `by: |x| key` (on `sorted`, `sort`, `min`, `max`;
+stable); a tuple key sorts by several:
 
 ```ail fragment
 counts := {"b": 2, "a": 2, "c": 5}
-top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]
+top := counts.keys().sorted(by: |k| (-counts[k], k)).take(2)   # ["c", "a"]
 ```
 
 ```ail skip=context
@@ -453,21 +456,18 @@ A comprehension builds a list, set or map in one expression:
 xs := [3, 1, 4]
 squares := [x * x for x in xs]             # [9, 1, 16]
 big := [x for x in xs if x > 2]            # [3, 4]
-pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # clauses nest, outermost first
+pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # nested, outermost first
 seen := {x % 2 for x in xs}                # a Set[int]
 sizes := {w: w.chars().len() for w in ["a", "bc"]}  # a Map[str, int]
 nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 ```
 
-Loop variables end with the comprehension. `?` and `return` leave the function;
-`break` ends the comprehension.
+Loop variables end with it; `?` and `return` leave the function, `break` ends it.
 
-Loops use every core automatically when their iterations are independent (no
-output, no `break`/`return`/`?`, writes only to their own locals, to `out[i]`,
-or to an `int` total with `+=`). Float totals use `xs.sum()`. `par for` forces
-a loop the checker can't prove (writes to `out[perm[i]]`); a parallel map is
-`[steps(x) par for x in xs]`, and `[sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()`
-splits work into parts.
+Independent loops use every core automatically (no output, no
+`break`/`return`/`?`; writes only to locals, `out[i]` or an `int` total with
+`+=`; float totals use `xs.sum()`). `par for` forces one the checker can't
+prove; a parallel map is `[f(x) par for x in xs]`.
 
 ## Maps and sets
 
@@ -479,8 +479,8 @@ mut counts := {}                       # typed by first use: counts[w] += 1
 counts["x"] += 1
 a := ages["bob"]                       # traps if missing...
 b := ages.get("dan") else 0            # ...`get` gives an optional
-for name in ages.keys()                # `for k in m` is an error; also values()
-    print("{name}: {ages[name]}")
+for name, age in ages                  # each entry as a pair; also keys(), values()
+    print("{name}: {age}")
 mut seen := Set[str]()                 # or a literal: {"a", "b"}
 if seen.add("x")                       # true if it wasn't there
     print("new")
@@ -502,14 +502,14 @@ doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/a
 doc.str("id")                                  # str?: also num, bool, arr (a member of that kind)
 doc.set("id", Json.Str("x"))                   # replace or add a member (mut doc)
 doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
-doc.text("id", "none")                         # str: the text member, or the default (json.query.5)
-doc.flag("ok", false)                          # bool: the bool member, or the default (json.query.6)
-parse_json_lines("1\nbad\n\"x\"\n")          # List[Json]: every line that parses (json.lines.1)
+doc.text("id", "none")                         # str: the text member, or the default
+doc.flag("ok", false)                          # bool: likewise
+parse_json_lines("1\nbad\n\"x\"\n")          # List[Json]: every line that parses
+load_json[List[U]](path)?                      # a file decoded as T (FromJson); print_json(v) prints v as JSON (json.load.1-2)
 ```
 
 Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
-`Obj(members)`. A program that declares its own
-`Json` keeps it. Derive conversions of your own types (`json.derive.1-2`):
+`Obj(members)`; a program's own `Json` wins. Derive conversions of your own types (`json.derive.1-2`):
 
 ```ail skip=context
 struct Todo
@@ -658,7 +658,7 @@ Standard modules are in scope without `use` (spec 17-std, ADR 0277); a local or 
 | `std.csv` | `use std.csv`; `parse(text) List[List[str]] ! csv.CsvError { why, row }`, `parse_sep(text, ';')`, `records(text) List[Map[str, str]]`, `write(rows) str`, `write_records(header, recs)`, `quote(f)` |
 | `std.random` | `int(lo, hi)` (both inclusive), `float()` in [0, 1), `seed(n)`, `shuffle(mut xs)` |
 | `std.regex` | `compile(pat) regex.Regex ! regex.RegexError` (`kind`, `at`, `rule`, `message`); `is_match(re, s)`, `find(re, s) Match?`, `find_all(re, s)`, `group_all(re, s, n)`, `captures(re, s) Captures?`, `replace(re, s, rep)` / `replace_first` (`$1`, `${name}`, `$0`, `$$`; unknown group traps), `split(re, s)`, `escape(s)`; the same as methods: `re.is_match(s)`; RE2 syntax (`\d \w \s \b`, `\p{L}`, `(?i)`, lazy `*?`, `(?P<n>..)`), no backreferences or lookaround; offsets in characters; patterns as `r"..."` |
-| `std.tensor` | `from(xs)`, `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only), `-t`, scalars on either side (`t * 2.0`; a chain of elementwise operators runs in one pass); `Tensor[f32]` (`from`/`zeros` in an `f32` context; mixing with `float` is an error; `to_f32()`, `to_float()`); `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `item()` for 1-D), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()` (float); `transpose()`, `matmul(b)` (2-D; pooled at 64³), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap; vector kernels (AVX2, NEON) |
+| `std.tensor` | `from(xs)`, `from(xs, shape)`, `zeros(shape)`: `tensor.Tensor[int]` or `[float]`; `a + b`, `a - b`, `a * b`, `a / b` (float only), `-t`, scalars on either side (`t * 2.0`; a chain of elementwise operators runs in one pass); `Tensor[f32]` (`from`/`zeros` in an `f32` context; mixing with `float` is an error; `to_f32()`, `to_float()`); `add(b)`, `mul(b)`, `dot(b)`, `sum()`/`max()`/`mean()` (or `(axis)`), `t[i]` (rows; `item()` for 1-D), `t[lo..hi]`; `relu()`, `sigmoid()`, `tanh()`, `softmax()` (float; softmax along the last axis); `transpose()`, `matmul(b)` (2-D), `map(\|x\| e)`, `reshape(shape)`, `shape()`, `len()`, `to_list()`; shape mismatch and `int` overflow trap |
 | `std.time` | `now_ms() int`, `sleep_ms(ms)` |
 | `std.time.date` | `date.utc(ms)`, `date.at(ms, zone) ! DateError`, `date.now()`, `date.now_local()`, `date.parse_iso(text)`, `date.parse_in(text, zone)`, `date.parse_date(text) Date`, `date.Date.new(y, m, d) Date?`, `is_leap(y)`, `days_in_month(y, m)`; durations are `int` ms (`date.HOUR`); zones `"UTC"`, `"+05:30"`, `"America/New_York"`. `Date`: `days()`, `weekday()` (1 = Monday), `yday()`, `add_days/months/years(n)`, `since(d)`, `iso()`, `format(p)`, `<`. `DateTime` (`date`, `hour`, `minute`, `second`, `ms`, `offset`, `zone`): `unix_ms()`, `add_ms(n)` (elapsed), `add_days/months/years(n)` (wall clock), `in_zone(z)`, `before(o)`, `since(o)`, `iso()`, `format(p)` (strftime: `%Y %y %m %d %e %j %H %I %p %M %S %f %a %A %b %B %z %:z %Z %s %%`) |
 | `std.tz` | `offset(zone, secs) int?`, `system() str`; effects `fs`, `env` |

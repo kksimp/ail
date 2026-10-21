@@ -93,6 +93,8 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         return Ty.Never
     if n == "assert" or n == "assert_eq"
         return assert_call(n, args, npos)
+    if n == "zip" and not has_targs and not fns.contains("zip")
+        return zip_call(args, npos)
     if CONC_TYPES.contains(n)
         return conc_constructor(n, targs, has_targs, args, npos, expect)
     if has_targs and (n == "List" or n == "Set" or n == "Map")
@@ -1235,6 +1237,8 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             "read it with a method: {list_names(TENSOR_METHODS)}",
         )
         return Ty.Unknown
+    if t := tuple_field(rt, n, at)
+        return t
     match rt
         Struct(s, args) =>
             decl := prog.structs[s]
@@ -1501,8 +1505,19 @@ fn Checker.comprehension(
     # expr.comp.4: `continue` skips an element and `break` ends the comprehension.
     loop_depth += 1
     for c in clauses
-        t := iterable(c.iter)
-        if declare(c.var, c.var_pos)
+        unpack := c.unpack.len() > 0
+        t := iterable(c.iter, unpack)
+        if unpack
+            # type.tuple.5: `for a, b in xs` binds the parts.
+            locals.push(Local(
+                name: c.var,
+                ty: t,
+                mutable: false,
+                how: LocalKind.LoopVar,
+                decl: none,
+            ))
+            unpack_clause(c.unpack, t, c.var_pos)
+        elif declare(c.var, c.var_pos)
             locals.push(Local(
                 name: c.var,
                 ty: t,

@@ -35,6 +35,10 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - A change to the Rust checker (`bootstrap/src/check*`) ports to
   `compiler/check/` in the same branch: the selftest `self_hosted_check`
   requires the two to agree ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md)).
+- **Native lowering ([ADR 0823](docs/decisions/0823-lower-ail-feature-files.md)):**
+  a native feature lives in its own `compiler/mir/lower_*.ail` file. It may
+  add at most one dispatch line and one state field to `lower.ail`. Only a
+  PR that breaks this needs a slot in the lower.ail merge queue.
 - Keep open branches to the minimum (one per change in flight). Track every
   branch you create and report it until it's merged and deleted.
 - The AI's environment can push branches but can't delete them on GitHub.

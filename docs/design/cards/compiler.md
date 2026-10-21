@@ -5,9 +5,9 @@ entry: main in main.ail
 ```
 fn main() ! [env fail fs io]
 fn check_dump(str, bool) ! [env fail fs io]
-fn runtime(str, str) !ast.Program [fail fs io]
-fn runtime_with(str, str, str, str) !ast.Program [fail fs io]
-fn source_text(str) !str [fail fs io]
+fn runtime(str) !ast.Program [fail fs io]
+fn runtime_with(str, str, str) !ast.Program [fail fs io]
+fn executable_hex(mir.Module, str, str) str [io]
 fn runtime_syntax(str, str) [io]
 fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
 fn std_file(str, str) str
@@ -75,6 +75,7 @@ pub struct ast.Param
 pub struct ast.TypeRef
 pub enum ast.TypeShape
 pub enum ast.Stmt
+pub struct ast.Binder
 pub enum ast.Else
 pub enum ast.BinOp
 pub enum ast.UnOp
@@ -189,7 +190,6 @@ pub struct codegen.Image
 pub fn codegen.new_image() codegen.Image
 pub fn codegen.add_str(mut codegen.Image, str, str) [mutates]
 pub fn codegen.add_f64(mut codegen.Image, float) str [mutates]
-pub fn codegen.import_slot(mut codegen.Image, str) int [mutates]
 pub fn codegen.align(mut List[int], int) [mutates]
 pub fn codegen.push64(mut List[int], int) [mutates]
 pub fn codegen.utf8(str) List[int]
@@ -205,6 +205,7 @@ pub fn codegen.div_magic(int) List[int]
 ## mir
 ```
 pub fn mir.fold_addresses(mir.Func) mir.Func
+pub fn mir.fold_prim_addresses(mir.Func) mir.Func
 pub struct mir.Versioned
 pub fn mir.bce(mir.Func, bool, bool) mir.Func
 pub fn mir.lists_only_grow(mir.Module) bool
@@ -231,10 +232,6 @@ pub fn mir.expr_pos(ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
-pub struct mir.TaskState
-pub fn mir.new_task_state() mir.TaskState
-pub fn mir.uses_tasks(str) bool
-pub fn mir.is_wait_call(ast.Expr) bool
 pub enum mir.Ty
 pub struct mir.Inst
 pub fn mir.inst(int, str, List[int]) mir.Inst
@@ -335,4 +332,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3727); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3682); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

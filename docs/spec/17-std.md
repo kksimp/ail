@@ -123,7 +123,7 @@ the tree: `to` and its parents are made when missing, files already there are
 replaced, other files there are kept, and entries are copied in name order.
 A symbolic link is copied as the file it points to; a link to a directory
 fails with `other` at that path, and so does copying a directory into itself.
-A file at `to` fails with `exists`. For `rename` and `copy`, a failure's
+For `rename` and `copy`, a failure's
 `path` is `from` when `from` is missing, else the path that failed.
 *(ADR 0281, ADR 0751)*
 
@@ -136,6 +136,120 @@ to the file, creating it or replacing its contents; `append_bytes(path str,
 data bytes) ! IoError` adds `data` at the end, creating the file if needed.
 They fail as `write_text` and `append_text` do. *(ADR 0415)*
 
+**std.fs.15** — A path that doesn't exist fails with kind `not_found`.
+This is so for `read_text`, `list_dir` and `remove`, and for every other call
+on a missing path. *(ADR 0158)*
+
+**std.fs.16** — Reading a directory as a file, such as `read_text(".")`, fails
+with kind `is_dir`. *(ADR 0158)*
+
+**std.fs.17** — `list_dir` of a file, not a directory, fails with kind
+`not_dir`. *(ADR 0158)*
+
+**std.fs.18** — `remove` of a directory that still holds entries fails with
+kind `not_empty`; remove the entries first. *(ADR 0158)*
+
+**std.fs.19** — `read_text` of a file whose bytes aren't UTF-8 fails with kind
+`invalid_utf8`; `read_bytes` reads the same file as it is. *(ADR 0158)*
+
+**std.fs.20** — `exists` is the kind when a path names an existing file where
+the call needs a new directory: `make_dir` of a path that is a file fails with
+`exists`. (`make_dir` of an existing directory succeeds.) *(ADR 0783)*
+
+**std.fs.21** — `permission` is the kind when the OS refuses the access: a read,
+write or remove the process has no right to. It is the same on every platform.
+*(ADR 0783)*
+
+**std.fs.22** — `other` is the kind for an OS failure that has none of the kinds
+above. A program that reads `other` gets the path and the kind, not the OS text.
+*(ADR 0783)*
+
+```ail rules=std.fs.20
+use std.fs
+
+fn main() !
+    fs.write_text("fs_exists.txt", "x")?
+    fs.make_dir("fs_exists.txt") else err
+        print("{err.kind}")                  # exists
+    fs.remove("fs_exists.txt")?
+```
+
+```ail norun rules=std.fs.21
+use std.fs
+
+fn main() !
+    text := fs.read_text("/root/no-access.txt") else err
+        print("{err.kind}")                  # permission, for a user without access
+        ""
+    print(text.len())
+```
+
+```ail norun rules=std.fs.22
+use std.fs
+
+fn main() !
+    text := fs.read_text("fs_other.txt") else err
+        print("{err.kind}")                  # other, for an OS failure outside the list
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.15
+use std.fs
+
+fn main() !
+    text := fs.read_text("fs_no_such_file.txt") else err
+        print("{err.kind}")                  # not_found
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.16
+use std.fs
+
+fn main() !
+    text := fs.read_text(".") else err
+        print("{err.kind}")                  # is_dir
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.17
+use std.fs
+
+fn main() !
+    fs.write_text("fs_plain.txt", "x")?
+    names := fs.list_dir("fs_plain.txt") else err
+        print("{err.kind}")                  # not_dir
+        []
+    print(names.len())
+    fs.remove("fs_plain.txt")?
+```
+
+```ail rules=std.fs.18
+use std.fs
+
+fn main() !
+    fs.make_dir("fs_full")?
+    fs.write_text("fs_full/a.txt", "a")?
+    fs.remove("fs_full") else err
+        print("{err.kind}")                  # not_empty
+    fs.remove("fs_full/a.txt")?
+    fs.remove("fs_full")?
+```
+
+```ail rules=std.fs.19
+use std.fs
+
+fn main() !
+    fs.write_bytes("fs_bytes.bin", b"\xff\xfe")?
+    text := fs.read_text("fs_bytes.bin") else err
+        print("{err.kind}")                  # invalid_utf8
+        ""
+    print(text.len())
+    print(fs.read_bytes("fs_bytes.bin")?)
+    fs.remove("fs_bytes.bin")?
+```
 ```ail norun rules=std.fs.9
 use std.fs
 
@@ -317,6 +431,19 @@ RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
 streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
 and `unsupported` for a preset dictionary. *(ADR 0443)*
 
+**std.compress.8** — `gunzip` of bytes without the gzip magic `1f 8b` fails
+with kind `corrupt` and message `not gzip data`; other malformed input fails
+with `corrupt` and a message that names the defect. *(ADR 0443)*
+
+```ail rules=std.compress.8
+use std.compress
+
+fn main()
+    data := compress.gunzip(b"not gzip at all") else err
+        print("{err.kind}: {err.message}")   # corrupt: not gzip data
+        b""
+    print(data.len())
+```
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*
@@ -390,7 +517,8 @@ fn main()
 
 ## Processes: `std.proc`
 
-**std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
+**std.proc.1** — `run(cmd str, args List[str], input str?, timeout_ms int?) Output ! ProcError`
+runs the
 program `cmd` with the arguments `args`, directly and without a shell, and
 waits for it. `cmd` is found on `PATH` unless it contains a path separator.
 On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
@@ -856,6 +984,90 @@ that does not decode fails with kind `protocol`. A program that sets
 itself with `std.compress`. `net.open` sends no `Accept-Encoding` of its own
 and decodes nothing. *(ADR 0717)*
 
+**std.net.27** — connection, DNS and timeout failures: A host that doesn't resolve, or an address with no address, fails with kind `not_found`; a refused or reset connection fails with `refused` or `closed`; a request past `connect_ms` or `total_ms` fails with `timed_out`. A `timeout_ms` or `max_redirects` out of range traps. *(ADR 0637)*
+
+**std.net.28** — HTTP shape failures: more than `max_redirects` redirects fails with kind `protocol`, and a body that does not decode under its `Content-Encoding` fails with kind `protocol` (std.net.26). *(ADR 0717)*
+
+**std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
+
+**std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*
+
+**std.tls.3** — protocol and root-store failures: A protocol error that is not a record error, and a root-store error passed through, fail with kind `tls` as a `TlsError` of kind `Protocol`. *(ADR 0360)*
+
+**std.tls.4** — crypto primitive failures: a primitive's failure surfaces only as a TLS failure of kind `tls`, never as a separate error of its own. *(ADR 0360)*
+
+```ail norun rules=std.net.27
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.net.28
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.1
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.2
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.3
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.4
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
 ```ail rules=std.net.26
 use std.net
 use std.compress
@@ -1072,6 +1284,89 @@ go to 59: leap seconds are not supported. *(ADR 0450)*
 **std.date.15** — Refused text, zones and dates fail with `DateError(text,
 why)`, which displays as `why: \`text\``.
 
+**std.date.16** — `date.parse_date(text)` and `date.parse_iso(text)` fail
+with `DateError` whose `why` is `no such day` when the text has the right shape
+but names no day, such as `2026-02-30`. *(ADR 0449)*
+
+```ail rules=std.date.16
+use std.time.date
+
+fn main()
+    d := date.parse_date("2026-02-30") else err
+        print("{err}")                       # no such day: `2026-02-30`
+        date.Date(year: 2000, month: 1, day: 1)
+    print(d.days())
+```
+
+**std.date.17** — The shape of the date fails with `DateError` and why
+`expected YYYY-MM-DD`, `expected a 4-digit year`, `expected a 2-digit month` or
+`expected a 2-digit day`, for `parse_date` and for the date part of `parse_iso`.
+*(ADR 0783)*
+
+**std.date.18** — The time part of `parse_iso` fails with why `expected \`T\`
+between the date and the time`, `expected a time after the date`, `expected a
+2-digit hour`, `expected a 2-digit minute`, `expected HH:MM`, `expected a 2-digit
+second`, `expected digits after \`.\``, or `seconds go to 59 (leap seconds
+aren't supported)`. *(ADR 0783)*
+
+**std.date.19** — The offset fails with why `no offset (write Z or +HH:MM, or use
+parse_in)` when a `parse_iso` text has none, and `expected Z, +HH:MM or -HH:MM
+after the time` when it is malformed. *(ADR 0783)*
+
+**std.date.20** — A zone name the zone data doesn't know fails with why `unknown
+zone` and the name as the text, for `date.at` and for a `parse_in` zone.
+*(ADR 0783)*
+
+```ail rules=std.date.17
+use std.time.date
+
+fn date_why(text str) str
+    d := date.parse_date(text) else err
+        return err.why
+    return "ok {d.iso()}"
+
+fn main()
+    print(date_why("2026-2-3"))    # expected YYYY-MM-DD
+    print(date_why("2026-02-30"))  # no such day
+```
+
+```ail rules=std.date.18
+use std.time.date
+
+fn iso_why(text str) str
+    t := date.parse_iso(text) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(iso_why("2026-01-02 1:00"))   # expected a time after the date
+    print(iso_why("2026-01-02T10:61Z")) # expected HH:MM
+```
+
+```ail rules=std.date.19
+use std.time.date
+
+fn iso_why(text str) str
+    t := date.parse_iso(text) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(iso_why("2026-01-02T10:00"))    # no offset (write Z or +HH:MM, or use parse_in)
+    print(iso_why("2026-01-02T10:00+5"))  # expected Z, +HH:MM or -HH:MM after the time
+```
+
+```ail rules=std.date.20
+use std.time.date
+
+fn zone_why(zone str) str
+    t := date.at(0, zone) else err
+        return err.why
+    return "ok"
+
+fn main()
+    print(zone_why("Mars/Base"))  # unknown zone
+```
 ## Zones: `std.tz`
 
 **std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
@@ -1174,6 +1469,47 @@ lacks writes as an empty field. *(ADR 0626)*
 An unterminated quote and a record of the wrong width are its causes.
 *(ADR 0626)*
 
+**std.csv.6** — A quoted field with no closing quote before the end of the text
+fails with `CsvError` and why `unterminated quote`, at the row where it starts.
+*(ADR 0783)*
+
+**std.csv.7** — A record whose field count differs from the header's fails with
+`CsvError` and why `N fields, the header has M`, where `row` is that record's row.
+*(ADR 0783)*
+
+```ail rules=std.csv.6
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\n\"ann,3\n") else err
+        print("{err.why} (row {err.row})")   # unterminated quote (row 2)
+        []
+    print(recs.len())
+```
+
+```ail rules=std.csv.7
+use std.csv
+
+fn main()
+    recs := csv.records("name,age\nann,3,x\n") else err
+        print("{err.why} (row {err.row})")   # 3 fields, the header has 2 (row 2)
+        []
+    print(recs.len())
+```
+
+```ail rules=std.csv.2,std.csv.5
+use std.csv
+
+fn main()
+    rows := csv.parse("a,\"b") else err
+        print("{err.why} (row {err.row})")   # unterminated quote (row 1)
+        []
+    print(rows.len())
+    recs := csv.records("name,age\nann,3,x\n") else err
+        print("{err.why} (row {err.row})")   # 3 fields, the header has 2 (row 2)
+        []
+    print(recs.len())
+```
 ```ail rules=std.csv.1,std.csv.2,std.csv.3,std.csv.4
 use std.csv
 
@@ -1224,6 +1560,25 @@ positional's word; `Args.rest` is the list of words past the named positionals.
 display text is both. Causes: an unknown option, an option without its value,
 a value given to a switch, a missing positional, an extra positional.
 *(ADR 0627)*
+
+```ail rules=std.args.6
+use std.args
+
+fn why(words List[str]) str
+    spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "output", "a.txt"), args.pos("input", "file")]
+    a := args.parse("tool", "demo", spec, words) else err
+        return err.why
+    print(a.get("input"))
+    return "ok"
+
+fn main()
+    print(why(["--nope", "in.txt"]))       # unknown option --nope
+    print(why(["--verbose=yes", "in.txt"]))  # --verbose takes no value
+    print(why(["in.txt", "--out"]))        # --out needs a value
+    print(why(["in.txt", "extra"]))        # unexpected argument extra
+    print(why([]))                         # missing INPUT
+    print(why(["in.txt"]))                 # in.txt, then ok
+```
 
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
@@ -1622,6 +1977,22 @@ fn main()
     print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
 ```
 
+**std.tensor.24** — `t.softmax()` on a `float` or `f32` tensor of at least one
+axis gives a tensor of the same shape in which each row along the last axis is
+`exp(x - m)` divided by the sum of the row's `exp(x - m)`, where `m` is the
+row's largest element. The sum runs in element order. A row that holds a NaN
+or an infinity gives NaN for that row. An empty last axis traps. An `f32`
+tensor is computed in `float` and rounded once, as std.tensor.21 does for the
+other activations. On a `Tensor[int]` it is a compile-time error. Fusion
+(std.tensor.20) does not cover it. *(ADR TBD, requested from the integrator)*
+
+```ail rules=std.tensor.24
+fn main()
+    print(tensor.from([0.0, 0.0]).softmax())    # tensor.from([0.5, 0.5])
+    a := tensor.from([1.0, 3.0, 2.0, 2.0, 2.0, 2.0], [2, 3])
+    print(a.softmax().map(|x| x * 100.0).round())   # per row: 9 67 24, then 33 33 33
+```
+
 **std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has
 the methods and operators of `Tensor[float]`, and each result is rounded to
 `f32` once: the operations are single-precision IEEE operations, and `sum`,
@@ -1647,6 +2018,23 @@ fn main()
     print(a.to_list())             # [1.0, 2.0, 3.0, 4.0]
     print(a.to_float().sum())      # 10.0
     print(a.map(|x| x * x).sum())  # 30.0
+```
+
+**std.tensor.23** — `t.top2(axis)` on a `float` or `f32` tensor gives three
+tensors of the shape without `axis`: the index of each row's best element, the
+index of its second-best, and the margin (best minus second) in `t`'s element
+type. The best is the first largest element, and a tie with it is the second,
+so its margin is `0`; a NaN never replaces either. A NaN best, or a row without
+a second value, traps. An `int` tensor is a compile-time error, and an `axis`
+with fewer than two elements traps. *(ADR 0813)*
+
+```ail rules=std.tensor.23
+fn main()
+    s := tensor.from([0.1, 0.9, 0.4, 0.7, 0.7, 0.3], [2, 3])
+    best, second, margin := s.top2(1)
+    print(best)      # tensor.from([1, 0])
+    print(second)    # tensor.from([2, 1])
+    print(margin)    # the margins 0.5 and 0.0, up to rounding
 ```
 
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14

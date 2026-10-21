@@ -521,14 +521,16 @@ fn list_new(cap int) List[int]
     list_alloc(cap, 8)
 
 ## A list made with room for a loop's pushes (`list_reserve` would regrow
-## it): `(hi - lo) * per` elements, at most 2^20 iterations' worth.
-fn list_new_for(lo int, hi int, per int) List[int]
+## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
+## iterations' worth (2^20 words, 2^23 bytes).
+fn list_new_for(lo int, hi int, per int, size int) List[int]
     mut want := hi - lo
-    if want > 1048576
-        want = 1048576
+    most := if size == 1 then 8388608 else 1048576
+    if want > most
+        want = most
     if want < 0
         want = 0
-    list_alloc(want * per, 8)
+    list_alloc(want * per, size)
 
 fn list_grow(p int, size int)
     cap := load64(p + 8) * 2
@@ -538,15 +540,16 @@ fn list_grow(p int, size int)
     store64(p + 16, data)
 
 ## Room for `(hi - lo) * per` more elements of `size` bytes, at most
-## 2^20 of them, called before a loop that pushes that many (ADR 0578).
+## 8 MiB worth of them, called before a loop that pushes that many (ADR 0578).
 ## Only the capacity changes.
 fn list_reserve(xs List[int], lo int, hi int, per int, size int)
     if hi <= lo
         return
     p := list_addr(xs)
     mut want := hi - lo
-    if want > 1048576
-        want = 1048576
+    most := if size == 1 then 8388608 else 1048576
+    if want > most
+        want = most
     need := load64(p) + want * per
     if need <= load64(p + 8)
         return
