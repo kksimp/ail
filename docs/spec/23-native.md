@@ -92,10 +92,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
 readable yet, and on macOS the program traps at `proc.run`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770)*
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0802)*
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0802, 0803)*
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
 
 ```ail
 fn steps(n int) int
