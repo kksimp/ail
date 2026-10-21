@@ -1,0 +1,15 @@
+LIMIT := 3
+
+fn small(n int) bool
+    n < LIMIT
+
+pub struct Doc
+    pub items List[int]
+
+pub fn Doc.append(mut self, n int)
+    requires small(n) and n >= 0
+    self.items.push(n)
+
+pub fn scale(x int, by int) int
+    requires by != 0
+    x / by
