@@ -38,11 +38,11 @@ pub fn inline_module(m Module) Module
                     break
         if budget < INLINE_BUDGET
             f = simplify(fold(simplify(f)))
-        out.funcs[k] = if f.name.starts_with("rt.") then merge_blocks(f) else bce(
+        out.funcs[k] = if f.name.starts_with("rt.") then merge_blocks(f) else fold_addresses(bce(
             merge_blocks(f),
             reserve,
             grow_only,
-        )
+        ))
     out
 
 ## Small, calls nothing, and nothing jumps back to its entry.

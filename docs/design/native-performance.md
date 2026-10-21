@@ -211,7 +211,7 @@ use. Instructions retired (`valgrind --tool=lackey`, reduced sizes):
 
 | program | before | after |
 |---|---:|---:|
-| nbody 100000 | 163.0M | 120.2M |
+| nbody 100000 | 163.0M | 104.7M |
 | sieve 3000000 | 117.8M | 91.3M |
 | collatz 100000 | 173.2M | 119.4M |
 | spectralnorm 200 | 46.7M | 37.1M |

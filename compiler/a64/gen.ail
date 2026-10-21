@@ -941,9 +941,16 @@ fn Gen.list_set(mut self, i mir.Inst)
 ## the index's register, or -1 with a constant index's element number.
 fn Gen.indexed_at(mut self, i mir.Inst) int
     if k := imm(i.args[1])
-        if k >= 0 and k < 4095
-            return -1 - k
-    gpr(i.args[1], S1)
+        if k + i.elem_off() >= 0 and k + i.elem_off() < 4095
+            return -1 - k - i.elem_off()
+    x := gpr(i.args[1], S1)
+    if i.elem_off() > 0
+        a.alu_ri("add", S1, x, i.elem_off())
+        return S1
+    if i.elem_off() < 0
+        a.alu_ri("sub", S1, x, 0 - i.elem_off())
+        return S1
+    x
 
 fn Gen.indexed_load(mut self, i mir.Inst)
     base := gpr(i.args[0], S0)

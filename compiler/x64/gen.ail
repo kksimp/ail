@@ -1033,8 +1033,8 @@ fn Gen.list_set(mut self, i mir.Inst)
 fn Gen.indexed_mem(mut self, i mir.Inst) Mem
     b := gpr(i.args[0], S0)
     if k := imm32(i.args[1])
-        return at(b, i.imm * k)
-    at_index(b, gpr(i.args[1], S1), i.imm, 0)
+        return at(b, i.imm * (k + i.elem_off()))
+    at_index(b, gpr(i.args[1], S1), i.imm, i.imm * i.elem_off())
 
 fn Gen.indexed_load(mut self, i mir.Inst)
     mem := indexed_mem(i)

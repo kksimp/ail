@@ -1,0 +1,34 @@
+## Address folding (ADR 0625): an unchecked `ldx`/`stx` whose index is `y + k`
+## for a small constant `k`, from an `add` that carries no overflow check
+## (the loop's range guards removed it), reads or writes `base[y + k]` as the
+## address `base + 8 * y + 8 * k`. The `add` stays for other users and dies
+## if there are none. The sum wraps the same way the address does.
+
+## The largest offset folded, in elements.
+MAX_OFF := 4095
+
+pub fn fold_addresses(f Func) Func
+    defs := defs_of(f)
+    mut g := f
+    for b in 0..g.blocks.len()
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.op != "ldx" and i.op != "stx"
+                continue
+            d := inst_of(f, defs, i.args[1]) else continue
+            if (d.op != "add" and d.op != "sub") or d.site >= 0
+                continue
+            mut y := d.args[0]
+            mut c := const_of(f, defs, d.args[1])
+            if c == none and d.op == "add"
+                y = d.args[1]
+                c = const_of(f, defs, d.args[0])
+            mut n := c else continue
+            if d.op == "sub"
+                n = 0 - n
+            total := i.elem_off() + n
+            if total < 0 - MAX_OFF or total > MAX_OFF
+                continue
+            g.blocks[b].insts[k].args[1] = y
+            g.blocks[b].insts[k].fimm = total.to_float()
+    simplify(g)
