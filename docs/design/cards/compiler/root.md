@@ -16,6 +16,7 @@ fn runtime_syntax(path str, text str) [io]  ## The lexer's and the parser's diag
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [fail fs io]  ## Parse a program and the modules it imports, and lower them to MIR
     fails with fs.IoError
 fn std_file(std str, imp str) str  ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
+fn uses_regex(prog ast.Program) bool  ## Whether the program has a `use` that ends in `regex` (`use std.regex`, `use app.regex`).
 fn parse_source(module str, path str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
     fails with fs.IoError
 ```

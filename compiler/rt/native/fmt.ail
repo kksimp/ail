@@ -45,26 +45,66 @@ fn sb_byte(b int)
     store8(load64(global(SB_PTR)) + n, b)
     store64(global(SB_LEN), n + 1)
 
+## Room for `n` more bytes.
+fn sb_room(n int)
+    while load64(global(SB_LEN)) + n > load64(global(SB_CAP))
+        sb_grow()
+
 fn sb_bytes(p int, n int)
-    for i in 0..n
-        sb_byte(load8(p + i))
+    sb_room(n)
+    len := load64(global(SB_LEN))
+    copy_bytes(load64(global(SB_PTR)) + len, p, n)
+    store64(global(SB_LEN), len + n)
 
 fn sb_text(s str)
     p := str_addr(s)
     sb_bytes(p + 16, load64(p))
 
+## The characters of `n` bytes of UTF-8 at `p`: the bytes that are not
+## continuation bytes (10xxxxxx), eight at a time. A word is a continuation
+## byte where its bit 7 is set and its bit 6 is clear.
+fn utf8_chars(p int, n int) int
+    mut chars := 0
+    mut i := 0
+    while i + 8 <= n
+        w := load64(p + i)
+        if w.bit_and(-9187201950435737472) == 0
+            chars += 8
+        else
+            cont := w
+                .bit_and(w.shl(1).bit_xor(-1))
+                .bit_and(-9187201950435737472)
+                .shr(7)
+                .bit_and(72340172838076673)
+            chars += 8 - (cont * 72340172838076673).shr(56).bit_and(255)
+        i += 8
+    while i < n
+        if load8(p + i).bit_and(192) != 128
+            chars += 1
+        i += 1
+    chars
+
 ## The builder's text as a string object (its characters counted).
 fn sb_str() str
     n := load64(global(SB_LEN))
     p := load64(global(SB_PTR))
-    mut chars := 0
-    for i in 0..n
-        if load8(p + i).bit_and(192) != 128
-            chars += 1
-    s := str_new(n, chars)
+    s := str_new(n, utf8_chars(p, n))
     if n > 0
         copy_bytes(s + 16, p, n)
     str_at(s)
+
+# The interpolation `"a{x}b"` with a number, `char` or `bool` hole builds in
+# the builder and allocates once (lowering: lower_str.ail). The holes are all
+# evaluated before `sb_begin`, so no hole's own text can use the builder
+# in between.
+
+fn sb_begin()
+    store64(global(SB_LEN), 0)
+
+fn sb_add_char(c int)
+    sb_room(4)
+    len := load64(global(SB_LEN))
+    store64(global(SB_LEN), len + u8_put(load64(global(SB_PTR)) + len, c))
 
 ## The builder's text to standard output.
 fn sb_out()
@@ -106,6 +146,20 @@ fn put_bool(b bool)
 fn fmt_int(n int) str
     sb_reset()
     put_int(n)
+    sb_str()
+
+## The text of a `List[int]`: `[1, -2, 3]` (type.str.3).
+fn fmt_int_list(xs List[int]) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sb_reset()
+    sb_byte(91)
+    for i in 0..k
+        if i > 0
+            sb_text(", ")
+        put_int(load64(items + 8 * i))
+    sb_byte(93)
     sb_str()
 
 fn fmt_hex(n int) str

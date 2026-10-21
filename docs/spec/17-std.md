@@ -444,6 +444,65 @@ fn main()
         b""
     print(data.len())
 ```
+**std.compress.9** — DEFLATE failures: `inflate` (and the DEFLATE part of
+`gunzip`, `unzlib` and `unzip`) fails with kind `corrupt` and exactly one of
+these messages: `unexpected end of compressed data`, `invalid block type`,
+`stored block length check failed`, `too many length or distance codes`,
+`over-subscribed Huffman code`, `invalid Huffman code`, `repeat with no
+previous length`, `code length repeat overruns the table`, `block has no
+end-of-block code`, `invalid length symbol`, `invalid distance symbol`,
+`distance reaches before the start of the output`, or `extra bytes after the
+end of the compressed data`. *(ADR 0784)*
+
+```ail rules=std.compress.9
+use std.compress
+
+fn main()
+    a := compress.inflate(b"\x07") else err
+        print("{err.kind}: {err.message}")   # corrupt: invalid block type
+        b""
+    b := compress.inflate(b"\x01") else err
+        print("{err.kind}: {err.message}")   # corrupt: unexpected end of compressed data
+        b""
+    print(a.len() + b.len())
+```
+
+**std.compress.10** — Wrapper failures: besides `std.compress.8`, `gunzip`
+fails with `corrupt` and `unknown gzip compression method`, `reserved gzip
+flags set`, `truncated gzip header` or `truncated gzip trailer`, and with
+`checksum` and `gzip CRC-32 mismatch` or `gzip size mismatch`. `unzlib`
+fails with `corrupt` and `not zlib data` or `truncated zlib trailer`, with
+`checksum` and `zlib Adler-32 mismatch`, and with `unsupported` and `zlib
+preset dictionaries are not supported`. *(ADR 0784)*
+
+```ail rules=std.compress.10
+use std.compress
+
+fn main()
+    z := compress.unzlib(b"x\x9c\x03\x00\x00\x00\x00\x02") else err
+        print("{err.kind}: {err.message}")   # checksum: zlib Adler-32 mismatch
+        b""
+    print(z.len())
+```
+
+**std.compress.11** — Zip failures: `unzip` fails with `corrupt` and `not a
+zip archive`, `truncated zip data`, `bad zip central directory`, `bad zip
+local header` or `zip name is not UTF-8`; with `unsafe_path` and `unsafe
+name in archive: NAME` (`std.compress.5`); with `unsupported` and
+`encrypted zip entries are not supported` or `zip method N is not
+supported`; with `checksum` and `zip CRC-32 or size mismatch in NAME`; and
+with `too_big` and `output exceeds the size limit`, `archive expands past
+the size limit`, `more than 65535 files; zip64 is not supported` or `over 4
+GiB; zip64 is not supported` (`std.compress.4`). *(ADR 0784)*
+
+```ail norun rules=std.compress.11
+use std.compress
+
+fn main()
+    compress.unzip("notes.txt", "out") else err
+        print("{err.kind}: {err.message}")   # corrupt: not a zip archive
+```
+
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*
@@ -987,6 +1046,23 @@ and decodes nothing. *(ADR 0717)*
 **std.net.27** — connection, DNS and timeout failures: A host that doesn't resolve, or an address with no address, fails with kind `not_found`; a refused or reset connection fails with `refused` or `closed`; a request past `connect_ms` or `total_ms` fails with `timed_out`. A `timeout_ms` or `max_redirects` out of range traps. *(ADR 0637)*
 
 **std.net.28** — HTTP shape failures: more than `max_redirects` redirects fails with kind `protocol`, and a body that does not decode under its `Content-Encoding` fails with kind `protocol` (std.net.26). *(ADR 0717)*
+
+**std.net.29** — Request input failures: a URL that is not `http://` or `https://HOST[:PORT][/PATH]` fails with kind `bad_url`; a method that is not an HTTP token, or a header name or value that `std.net.6` forbids, fails with kind `bad_request`. Both fail before any connection is opened. *(ADR 0784)*
+
+```ail rules=std.net.29
+use std.net
+
+fn main()
+    a := net.get("ftp://example.com") else err
+        print(err.kind)   # bad_url
+        net.Response(status: 0, body: "", headers: {})
+    mut o := net.options()
+    o.headers["a b"] = "x"
+    b := net.request("GET", "http://localhost:1/", o) else err
+        print(err.kind)   # bad_request
+        net.Response(status: 0, body: "", headers: {})
+    print(a.status + b.status)
+```
 
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
@@ -1580,6 +1656,24 @@ fn main()
     print(why(["in.txt"]))                 # in.txt, then ok
 ```
 
+**std.args.7** — `impl FromArgs for Opts` on a struct derives
+`Opts.parse(name, about, words) Opts ! ArgsFailure`. A field is a switch
+(`bool`), an option (`str?`, `int?` or `float?`; `none` when absent), the rest
+(`List[str]`) or a required positional (`str`, `int` or `float`, in field
+order). The field's `##` comment (`ct.derive.5`) is its help. A switch or
+option has the short name of its first letter unless an earlier one has it or
+it is `h`. An `int` or `float` word that doesn't parse, and everything
+`args.parse` rejects, is an `ArgsFailure` (an error with `why str` and
+`usage str`, like `ArgsError`); any other field type is a `DeriveError` at the
+`impl`. *(ADR 0777)*
+
+**std.args.8** — `Args.has(name)` says whether an option or positional was
+given; `Args.opt(name) str?`, `Args.opt_int(name) int?` and
+`Args.opt_float(name) float?` give `none` when it was absent (or, for the
+numbers, isn't one); `Args.int(name) int ! ArgsError` and
+`Args.float(name) float ! ArgsError` fail on text that isn't a number. The
+derive calls them. *(ADR 0777)*
+
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
 
@@ -1599,6 +1693,26 @@ fn main()
         print(err.why)
         return
     print(a.get("input"))
+```
+
+```ail rules=std.args.7,std.args.8,ct.derive.6
+use std.args
+
+struct Opts
+    ## more output
+    verbose bool
+    ## worker count
+    jobs int?
+    ## file to read
+    input str
+
+impl FromArgs for Opts
+
+fn main()
+    o := Opts.parse("tool", "demo", ["-v", "-j", "4", "in.txt"]) else e
+        print(e.why)
+        return
+    print("{o.verbose} {o.jobs} {o.input}") # true 4 in.txt
 ```
 
 ## Logging: `std.log`
@@ -1964,8 +2078,9 @@ compile-time error. *(ADR 0523)*
 (`+ - * /`, unary `-`, and `relu()`, `sigmoid()`, `tanh()` with no arguments)
 over names and float literals may run as one pass over the elements. The
 result is the same as the unfused calls, element by element, including traps
-and NaN, and the tree walker and the bytecode tier agree. A chain whose
-inputs don't share one shape, or that has a non-`float` input, runs unfused.
+and NaN, and the tree walker and the bytecode tier agree. A chain over
+`f32` tensors runs the same operations at `f32` (std.tensor.21). A chain whose
+inputs don't share one shape, or that has an `int` input, runs unfused.
 Fusion is not visible in the program. *(ADR 0524)*
 
 ```ail rules=std.tensor.20
@@ -1984,13 +2099,28 @@ row's largest element. The sum runs in element order. A row that holds a NaN
 or an infinity gives NaN for that row. An empty last axis traps. An `f32`
 tensor is computed in `float` and rounded once, as std.tensor.21 does for the
 other activations. On a `Tensor[int]` it is a compile-time error. Fusion
-(std.tensor.20) does not cover it. *(ADR TBD, requested from the integrator)*
+(std.tensor.20) does not cover it. *(ADR 0827)*
 
 ```ail rules=std.tensor.24
 fn main()
     print(tensor.from([0.0, 0.0]).softmax())    # tensor.from([0.5, 0.5])
     a := tensor.from([1.0, 3.0, 2.0, 2.0, 2.0, 2.0], [2, 3])
     print(a.softmax().map(|x| x * 100.0).round())   # per row: 9 67 24, then 33 33 33
+```
+
+**std.tensor.25** — `tensor.from_fn(shape, |i| e)` builds a tensor whose element
+at flat (row-major) index `i` is `e`, computed in index order. `shape` is an
+`int` (a 1-D tensor of that length) or a `List[int]` as in `tensor.zeros`; a
+negative size or too many elements traps with std.tensor.2. The function takes
+the `int` index and gives an `int`, a `float` or an `f32`, and that is the
+element type. A call with another argument count, a function that is not
+written `|i| e`, a shape of another type, or a function that gives another type
+is a compile-time error. *(ADR 0831)*
+
+```ail rules=std.tensor.25
+fn main()
+    print(tensor.from_fn(4, |i| i.to_float() * 0.5))   # tensor.from([0.0, 0.5, 1.0, 1.5])
+    print(tensor.from_fn([2, 3], |i| i * i))           # tensor.from([0, 1, 4, 9, 16, 25], [2, 3])
 ```
 
 **std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has

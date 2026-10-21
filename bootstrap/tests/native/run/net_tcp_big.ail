@@ -1,0 +1,30 @@
+# std.net.12: data larger than the read buffer, and a line longer than it.
+use std.net
+
+fn port_of(addr str) int
+    parts := addr.split(":")
+    n := parts[1].to_int() else 0
+    n
+
+fn main() ! net.NetError
+    l := net.listen("127.0.0.1:0")?
+    c := net.connect("127.0.0.1", port_of(l.addr()))?
+    s := l.accept()?
+    line := "x".repeat(40000)
+    c.write("{line}\r\n")?
+    c.write("a".repeat(100000))?
+    c.close()
+    got := s.read_line()? else "none"
+    print(got.len())
+    mut total := 0
+    mut reads := 0
+    while true
+        piece := s.read(7000)?
+        if piece.len() == 0
+            break
+        total += piece.len()
+        reads += 1
+    print(total)
+    print(reads >= 15)
+    s.close()
+    l.close()

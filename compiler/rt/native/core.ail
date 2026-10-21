@@ -55,6 +55,27 @@ fn init(argc int, argv int)
     heap_init(argv)
     limits_init()
 
+## `copy_bytes` for blocks of 256 bytes or more (list growth and extension):
+## 64 bytes per round with two moving pointers, then the short rest. It is
+## not inlined, so `copy_bytes` stays small enough to be inlined at the many
+## string sites that copy a few bytes (ADR 0391).
+fn copy_big(dst int, src int, n int)
+    mut d := dst
+    mut s := src
+    end := src + n - 63
+    while s < end
+        store64(d, load64(s))
+        store64(d + 8, load64(s + 8))
+        store64(d + 16, load64(s + 16))
+        store64(d + 24, load64(s + 24))
+        store64(d + 32, load64(s + 32))
+        store64(d + 40, load64(s + 40))
+        store64(d + 48, load64(s + 48))
+        store64(d + 56, load64(s + 56))
+        d += 64
+        s += 64
+    copy_bytes(d, s, src + n - s)
+
 fn copy_bytes(dst int, src int, n int)
     mut i := 0
     while i + 32 <= n
@@ -190,14 +211,25 @@ fn list_join_chars(xs List[int], sep str) str
     k := load64(q)
     items := load64(q + 16)
     sp := str_addr(sep)
-    mut n := 0
+    # One pass for the bits of every character: below 128 means all ASCII,
+    # one byte each, so the width pass and `char_put` are skipped.
+    mut bits := 0
     for i in 0..k
-        n += char_width(load64(items + 8 * i))
+        bits = bits.bit_or(load64(items + 8 * i))
+    mut n := k
+    if bits >= 128
+        n = 0
+        for i in 0..k
+            n += char_width(load64(items + 8 * i))
     if k > 1
         n += (k - 1) * load64(sp)
     chars := if k > 1 then k + (k - 1) * load64(sp + 8) else k
     r := str_new(n, chars)
     mut at := r + 16
+    if bits < 128 and load64(sp) == 0
+        for i in 0..k
+            store8(at + i, load64(items + 8 * i))
+        return str_at(r)
     for i in 0..k
         if i > 0
             copy_bytes(at, sp + 16, load64(sp))
@@ -417,10 +449,16 @@ fn list_new_for(lo int, hi int, per int, size int) List[int]
         want = 0
     list_alloc(want * per, size)
 
+fn copy_list(dst int, src int, n int)
+    if n >= 256
+        copy_big(dst, src, n)
+    else
+        copy_bytes(dst, src, n)
+
 fn list_grow(p int, size int)
-    cap := load64(p + 8) * 2
+    cap := if load64(p + 8) < 8 then 16 else load64(p + 8) * 2
     data := alloc_raw(size * cap, data_kind(size))
-    copy_bytes(data, load64(p + 16), size * load64(p))
+    copy_list(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
     store64(p + 16, data)
 
@@ -439,7 +477,7 @@ fn list_reserve(xs List[int], lo int, hi int, per int, size int)
     if need <= load64(p + 8)
         return
     data := alloc_raw(size * need, data_kind(size))
-    copy_bytes(data, load64(p + 16), size * load64(p))
+    copy_list(data, load64(p + 16), size * load64(p))
     store64(p + 8, need)
     store64(p + 16, data)
 
@@ -620,10 +658,37 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("can't sleep for ")
         out_int(a)
         out_str(" milliseconds")
+    elif kind == 12
+        # `b[a]` of `bytes` (type.bytes.3); `b` is the length.
+        out_str("index ")
+        out_int(a)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(b)
+    elif kind == 13
+        out_str("slice ")
+        out_int(a)
+        out_str(op)
+        out_int(b)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(load64(global(TRAP_LEN)))
     elif kind == 14
         # `unreachable(message)` (err.model.2): `a` is the message
         out_str("unreachable: ")
         out_str(str_at(a))
+    out_byte(10)
+    out_str(tail)
+    trace_frames(tail)
+    flush_to(2)
+    sys_exit(1)
+
+## A contract trap is written in pieces (ADR 0612): `trap_begin` flushes
+## the output and writes the head, the message follows with the `out_*`
+## functions, and `trap_end` writes the excerpt and exits.
+fn trap_begin(head str)
+    flush()
+    out_str(head)
+
+fn trap_end(tail str)
     out_byte(10)
     out_str(tail)
     trace_frames(tail)

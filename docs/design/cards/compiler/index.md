@@ -1,10 +1,10 @@
 # compiler
-(root)  9 items
-a64  46 items
+(root)  10 items
+a64  57 items
 ast  129 items
-check  303 items
-codegen  41 items
-mir  212 items
+check  304 items
+codegen  44 items
+mir  275 items
 obj  53 items
 syntax  99 items
-x64  58 items
+x64  69 items

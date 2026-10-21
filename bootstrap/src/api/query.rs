@@ -138,7 +138,7 @@ pub fn run_pkg(q: Query, pkg: Option<&str>, path: &str, src: &str, line: usize, 
     let head = |extra: Vec<(&'static str, Json)>| {
         let mut kvs = vec![
             ("api", Json::Int(API_VERSION)),
-            ("file", Json::Str(path.to_string())),
+            ("file", Json::Str(if cfg!(windows) { path.replace('\\', "/") } else { path.to_string() })),
             ("line", Json::Int(line as i64)),
             ("col", Json::Int(col as i64)),
         ];

@@ -1,0 +1,4 @@
+# std.tensor.7: the inner sizes of Tensor[f32] must be equal.
+fn main()
+    a := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]).to_f32()
+    print(a.matmul(a).to_float().len())

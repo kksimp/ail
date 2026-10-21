@@ -1,0 +1,37 @@
+## std.app.6-10: `run_host` speaks the protocol to a host written in AIL.
+use std.app
+
+struct Todo
+    items List[str]
+    draft str
+    log List[str]
+
+impl app.App for Todo
+    fn update(mut self, ev app.Event)
+        log.push(ev.kind)
+        if ev.kind == "edit"
+            draft = ev.text
+        if (ev.kind == "press" and ev.id == "add") or ev.kind == "submit"
+            items.push(draft)
+            draft = ""
+        if ev.kind == "resize"
+            log.push("{ev.dx}x{ev.dy} cell {ev.cell_w}x{ev.cell_h}")
+        if ev.kind == "click"
+            log.push("{ev.text} {ev.x},{ev.y} on {ev.id}")
+
+    fn view(self) app.Node
+        mut kids := [app.field("draft", draft, "new item"), app.button("add", "Add")]
+        for item in items
+            kids.push(Label(item))
+        Column(kids)
+
+    fn title(self) str
+        "Todo ({items.len()})"
+
+fn main() !
+    mut t := Todo(items: [], draft: "", log: [])
+    host := path.join(path.dir(env.program()), "../app/fake_host.ail")
+    ail := env.get("AIL_BINARY") else "ail"
+    app.run_host(mut t, ail, ["run", host])?
+    print(t.log.join("\n"))
+    print(app.outline(t.view()))

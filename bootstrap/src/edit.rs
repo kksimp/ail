@@ -596,7 +596,7 @@ fn apply(work: &mut Work, op: &J, path: &str) -> Result<(), String> {
                 None => {
                     let f = work.target(op)?;
                     let n = work.files[&f].split('\n').count();
-                    let place = f.display().to_string();
+                    let place = crate::shown::shown(&f);
                     (f, 0, n, place)
                 }
             };
@@ -700,7 +700,7 @@ fn rename(work: &mut Work, id: &str, to: &str, path: &str) -> Result<(), String>
             });
             match at {
                 Some(i) if l[i..].starts_with(&old) => l.replace_range(i..i + old.len(), to),
-                _ => return Err(format!("{}:{line}:{col} doesn't hold `{old}`; nothing was renamed (edit.op.5)", f.display())),
+                _ => return Err(format!("{}:{line}:{col} doesn't hold `{old}`; nothing was renamed (edit.op.5)", crate::shown::shown(&f))),
             }
         }
         work.files.insert(f, lines.join("\n"));
@@ -754,7 +754,7 @@ fn save(work: &Work) -> Result<Saved, String> {
     for (f, src) in &work.files {
         let before = std::fs::read_to_string(f).ok();
         if before.as_deref() != Some(src.as_str()) {
-            std::fs::write(f, src).map_err(|e| format!("can't write {}: {e}", f.display()))?;
+            std::fs::write(f, src).map_err(|e| format!("can't write {}: {e}", crate::shown::shown(&f)))?;
             saved.push((f.clone(), before));
         }
     }
@@ -834,7 +834,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
                 files.insert(f, s);
             }
             Err(e) => {
-                eprintln!("error: can't read {}: {e}", f.display());
+                eprintln!("error: can't read {}: {e}", crate::shown::shown(&f));
                 return ExitCode::from(2);
             }
         }
@@ -902,7 +902,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
     let mut out = String::new();
     if show_diff || dry {
         for f in &changed {
-            let name = f.display().to_string();
+            let name = crate::shown::shown(&f);
             out.push_str(&crate::fmt::diff(&name, &original[f], &work.files[f]).replacen(" (formatted)\n", " (edited)\n", 1));
         }
     }
@@ -911,7 +911,7 @@ pub fn command(args: &[&str], json: bool) -> ExitCode {
         crate::modules::report(&prog.files, diags, json);
     }
     let verb = if kept { "edited" } else if dry { "would edit" } else { "not written (--if-clean)" };
-    let names: Vec<String> = changed.iter().map(|f| f.display().to_string()).collect();
+    let names: Vec<String> = changed.iter().map(|f| crate::shown::shown(&f)).collect();
     if json {
         let files: Vec<String> = names.iter().map(|n| json_str(n)).collect();
         println!(

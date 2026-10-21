@@ -1,0 +1,280 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## ChaCha20, Poly1305 and the ChaCha20-Poly1305 AEAD (RFC 8439 sections 2.3 to
+## 2.8) for the native TLS client (ADR 0836). Every function takes raw
+## addresses: keys, nonces, messages and outputs are bytes in memory. Add,
+## rotate and xor only, and Poly1305 in 26-bit limbs, so no branch or index
+## depends on a key or on message bytes; the tag is compared in constant
+## time. The same algorithms and test vectors as bootstrap/src/net/crypto
+## (ADR 0366).
+
+TLS_M32 := 4294967295
+
+fn tls_get(p int, i int) int
+    load64(p + 8 * i)
+
+fn tls_set(p int, i int, v int)
+    store64(p + 8 * i, v)
+
+fn tls_le32(p int) int
+    load8(p).bit_or(load8(p + 1).shl(8)).bit_or(load8(p + 2).shl(16)).bit_or(load8(p + 3).shl(24))
+
+fn tls_put_le32(p int, v int)
+    store8(p, v.bit_and(255))
+    store8(p + 1, v.shr(8).bit_and(255))
+    store8(p + 2, v.shr(16).bit_and(255))
+    store8(p + 3, v.shr(24).bit_and(255))
+
+fn tls_put_le64(p int, v int)
+    tls_put_le32(p, v.bit_and(TLS_M32))
+    tls_put_le32(p + 4, v.shr(32).bit_and(TLS_M32))
+
+fn tls_rotl32(v int, n int) int
+    v.shl(n).bit_or(v.shr(32 - n)).bit_and(TLS_M32)
+
+## One ChaCha20 quarter round on words `a b c d` of the state `x`.
+fn chacha_quarter(x int, a int, b int, c int, d int)
+    mut va := tls_get(x, a)
+    mut vb := tls_get(x, b)
+    mut vc := tls_get(x, c)
+    mut vd := tls_get(x, d)
+    va = (va + vb).bit_and(TLS_M32)
+    vd = tls_rotl32(vd.bit_xor(va), 16)
+    vc = (vc + vd).bit_and(TLS_M32)
+    vb = tls_rotl32(vb.bit_xor(vc), 12)
+    va = (va + vb).bit_and(TLS_M32)
+    vd = tls_rotl32(vd.bit_xor(va), 8)
+    vc = (vc + vd).bit_and(TLS_M32)
+    vb = tls_rotl32(vb.bit_xor(vc), 7)
+    tls_set(x, a, va)
+    tls_set(x, b, vb)
+    tls_set(x, c, vc)
+    tls_set(x, d, vd)
+
+## The block function (RFC 8439 2.3): 64 bytes of key stream at `out` for the
+## 32-byte `key`, block `counter` and 12-byte `nonce`. `st` and `x` are 128
+## bytes of scratch each.
+fn chacha_block(key int, counter int, nonce int, out int, st int, x int)
+    tls_set(st, 0, 1634760805)
+    tls_set(st, 1, 857760878)
+    tls_set(st, 2, 2036477234)
+    tls_set(st, 3, 1797285236)
+    for i in 0..8
+        tls_set(st, 4 + i, tls_le32(key + 4 * i))
+    tls_set(st, 12, counter.bit_and(TLS_M32))
+    for i in 0..3
+        tls_set(st, 13 + i, tls_le32(nonce + 4 * i))
+    for i in 0..16
+        tls_set(x, i, tls_get(st, i))
+    for _ in 0..10
+        chacha_quarter(x, 0, 4, 8, 12)
+        chacha_quarter(x, 1, 5, 9, 13)
+        chacha_quarter(x, 2, 6, 10, 14)
+        chacha_quarter(x, 3, 7, 11, 15)
+        chacha_quarter(x, 0, 5, 10, 15)
+        chacha_quarter(x, 1, 6, 11, 12)
+        chacha_quarter(x, 2, 7, 8, 13)
+        chacha_quarter(x, 3, 4, 9, 14)
+    for i in 0..16
+        tls_put_le32(out + 4 * i, (tls_get(x, i) + tls_get(st, i)).bit_and(TLS_M32))
+
+## Xor the key stream from block `counter` into the `n` bytes at `src`,
+## writing the result to `dst` (they may be the same).
+fn chacha_xor(key int, counter int, nonce int, src int, n int, dst int)
+    st := alloc_raw(128, KIND_BYTES)
+    x := alloc_raw(128, KIND_BYTES)
+    ks := alloc_raw(64, KIND_BYTES)
+    mut at := 0
+    mut blk := counter
+    while at < n
+        chacha_block(key, blk, nonce, ks, st, x)
+        k := if n - at > 64 then 64 else n - at
+        for i in 0..k
+            store8(dst + at + i, load8(src + at + i).bit_xor(load8(ks + i)))
+        at += k
+        blk += 1
+
+# ---- Poly1305 ----
+
+## Add the 16-byte block at `m` (with `hibit` 16777216 for a full block, 0 for
+## the padded last one) into the accumulator `h` (5 words) under `r` (5
+## words) and `s` (r1..r4 times 5, in 4 words).
+fn poly_block(h int, r int, s int, m int, hibit int)
+    mut h0 := tls_get(h, 0) + tls_le32(m).bit_and(67108863)
+    mut h1 := tls_get(h, 1) + tls_le32(m + 3).shr(2).bit_and(67108863)
+    mut h2 := tls_get(h, 2) + tls_le32(m + 6).shr(4).bit_and(67108863)
+    mut h3 := tls_get(h, 3) + tls_le32(m + 9).shr(6).bit_and(67108863)
+    mut h4 := tls_get(h, 4) + tls_le32(m + 12).shr(8).bit_or(hibit)
+    r0 := tls_get(r, 0)
+    r1 := tls_get(r, 1)
+    r2 := tls_get(r, 2)
+    r3 := tls_get(r, 3)
+    r4 := tls_get(r, 4)
+    s1 := tls_get(s, 0)
+    s2 := tls_get(s, 1)
+    s3 := tls_get(s, 2)
+    s4 := tls_get(s, 3)
+    d0 := h0 * r0 + h1 * s4 + h2 * s3 + h3 * s2 + h4 * s1
+    mut d1 := h0 * r1 + h1 * r0 + h2 * s4 + h3 * s3 + h4 * s2
+    mut d2 := h0 * r2 + h1 * r1 + h2 * r0 + h3 * s4 + h4 * s3
+    mut d3 := h0 * r3 + h1 * r2 + h2 * r1 + h3 * r0 + h4 * s4
+    mut d4 := h0 * r4 + h1 * r3 + h2 * r2 + h3 * r1 + h4 * r0
+    mut c := d0.shr(26)
+    h0 = d0.bit_and(67108863)
+    d1 += c
+    c = d1.shr(26)
+    h1 = d1.bit_and(67108863)
+    d2 += c
+    c = d2.shr(26)
+    h2 = d2.bit_and(67108863)
+    d3 += c
+    c = d3.shr(26)
+    h3 = d3.bit_and(67108863)
+    d4 += c
+    c = d4.shr(26)
+    h4 = d4.bit_and(67108863)
+    h0 += c * 5
+    c = h0.shr(26)
+    h0 = h0.bit_and(67108863)
+    h1 += c
+    tls_set(h, 0, h0)
+    tls_set(h, 1, h1)
+    tls_set(h, 2, h2)
+    tls_set(h, 3, h3)
+    tls_set(h, 4, h4)
+
+## Poly1305 of the `n` bytes at `msg` under the 32-byte one-time `key`: the
+## 16-byte tag at `out`.
+fn poly1305_raw(key int, msg int, n int, out int)
+    h := alloc_raw(40, KIND_BYTES)
+    r := alloc_raw(40, KIND_BYTES)
+    s := alloc_raw(32, KIND_BYTES)
+    last := alloc_raw(16, KIND_BYTES)
+    for i in 0..5
+        tls_set(h, i, 0)
+    # Clamping (RFC 8439 2.5.1) folded into the limb split.
+    tls_set(r, 0, tls_le32(key).bit_and(67108863))
+    tls_set(r, 1, tls_le32(key + 3).shr(2).bit_and(67108611))
+    tls_set(r, 2, tls_le32(key + 6).shr(4).bit_and(67092735))
+    tls_set(r, 3, tls_le32(key + 9).shr(6).bit_and(66076671))
+    tls_set(r, 4, tls_le32(key + 12).shr(8).bit_and(1048575))
+    for i in 0..4
+        tls_set(s, i, tls_get(r, i + 1) * 5)
+    mut at := 0
+    while at + 16 <= n
+        poly_block(h, r, s, msg + at, 16777216)
+        at += 16
+    if at < n
+        for i in 0..16
+            store8(last + i, 0)
+        for i in 0..n - at
+            store8(last + i, load8(msg + at + i))
+        store8(last + n - at, 1)
+        poly_block(h, r, s, last, 0)
+    mut h0 := tls_get(h, 0)
+    mut h1 := tls_get(h, 1)
+    mut h2 := tls_get(h, 2)
+    mut h3 := tls_get(h, 3)
+    mut h4 := tls_get(h, 4)
+    # Carry fully.
+    mut c := h1.shr(26)
+    h1 = h1.bit_and(67108863)
+    h2 += c
+    c = h2.shr(26)
+    h2 = h2.bit_and(67108863)
+    h3 += c
+    c = h3.shr(26)
+    h3 = h3.bit_and(67108863)
+    h4 += c
+    c = h4.shr(26)
+    h4 = h4.bit_and(67108863)
+    h0 += c * 5
+    c = h0.shr(26)
+    h0 = h0.bit_and(67108863)
+    h1 += c
+    # g = h + 5 - 2^130; keep g when it does not go negative.
+    mut g0 := h0 + 5
+    c = g0.shr(26)
+    g0 = g0.bit_and(67108863)
+    mut g1 := h1 + c
+    c = g1.shr(26)
+    g1 = g1.bit_and(67108863)
+    mut g2 := h2 + c
+    c = g2.shr(26)
+    g2 = g2.bit_and(67108863)
+    mut g3 := h3 + c
+    c = g3.shr(26)
+    g3 = g3.bit_and(67108863)
+    g4 := h4 + c - 67108864
+    keep := 0 - (g4.shr(63) + 1)
+    drop := keep.bit_xor(-1)
+    h0 = h0.bit_and(drop).bit_or(g0.bit_and(keep))
+    h1 = h1.bit_and(drop).bit_or(g1.bit_and(keep))
+    h2 = h2.bit_and(drop).bit_or(g2.bit_and(keep))
+    h3 = h3.bit_and(drop).bit_or(g3.bit_and(keep))
+    h4 = h4.bit_and(drop).bit_or(g4.bit_and(keep))
+    # h mod 2^128, then plus the pad.
+    w0 := h0.bit_or(h1.shl(26)).bit_and(TLS_M32)
+    w1 := h1.shr(6).bit_or(h2.shl(20)).bit_and(TLS_M32)
+    w2 := h2.shr(12).bit_or(h3.shl(14)).bit_and(TLS_M32)
+    w3 := h3.shr(18).bit_or(h4.shl(8)).bit_and(TLS_M32)
+    mut f := w0 + tls_le32(key + 16)
+    tls_put_le32(out, f.bit_and(TLS_M32))
+    f = w1 + tls_le32(key + 20) + f.shr(32)
+    tls_put_le32(out + 4, f.bit_and(TLS_M32))
+    f = w2 + tls_le32(key + 24) + f.shr(32)
+    tls_put_le32(out + 8, f.bit_and(TLS_M32))
+    f = w3 + tls_le32(key + 28) + f.shr(32)
+    tls_put_le32(out + 12, f.bit_and(TLS_M32))
+
+## Whether the `n` bytes at `a` and `b` are equal, looking at every byte
+## whatever the result.
+fn tls_ct_eq(a int, b int, n int) bool
+    mut d := 0
+    for i in 0..n
+        d = d.bit_or(load8(a + i).bit_xor(load8(b + i)))
+    d == 0
+
+# ---- the AEAD (RFC 8439 2.8) ----
+
+## The tag over `aad` (`an` bytes) and the ciphertext `ct` (`cn` bytes) at `out`.
+fn chacha_tag(key int, nonce int, aad int, an int, ct int, cn int, out int)
+    st := alloc_raw(128, KIND_BYTES)
+    x := alloc_raw(128, KIND_BYTES)
+    block0 := alloc_raw(64, KIND_BYTES)
+    chacha_block(key, 0, nonce, block0, st, x)
+    apad := (16 - an % 16) % 16
+    cpad := (16 - cn % 16) % 16
+    total := an + apad + cn + cpad + 16
+    msg := alloc_raw(total, KIND_BYTES)
+    for i in 0..an
+        store8(msg + i, load8(aad + i))
+    for i in 0..apad
+        store8(msg + an + i, 0)
+    for i in 0..cn
+        store8(msg + an + apad + i, load8(ct + i))
+    for i in 0..cpad
+        store8(msg + an + apad + cn + i, 0)
+    tls_put_le64(msg + total - 16, an)
+    tls_put_le64(msg + total - 8, cn)
+    poly1305_raw(block0, msg, total, out)
+
+## Encrypt the `n` bytes at `pt` to `out` (`n + 16` bytes: ciphertext, tag).
+fn chacha_seal(key int, nonce int, aad int, an int, pt int, n int, out int)
+    chacha_xor(key, 1, nonce, pt, n, out)
+    chacha_tag(key, nonce, aad, an, out, n, out + n)
+
+## Decrypt the `n` sealed bytes at `sealed` (ciphertext then the 16-byte tag)
+## to `out` (`n - 16` bytes). The tag is checked before anything is decrypted:
+## 0 when it is good, -1 when not (or when `n` is under 16).
+fn chacha_open(key int, nonce int, aad int, an int, sealed int, n int, out int) int
+    if n < 16
+        return -1
+    cn := n - 16
+    want := alloc_raw(16, KIND_BYTES)
+    chacha_tag(key, nonce, aad, an, sealed, cn, want)
+    if not tls_ct_eq(want, sealed + cn, 16)
+        return -1
+    chacha_xor(key, 1, nonce, sealed, cn, out)
+    0

@@ -25,33 +25,6 @@ pub fn codegen.is_call(i mir.Inst) bool  ## Whether an instruction clobbers the 
 pub fn codegen.is_push(i mir.Inst) bool
 pub fn codegen.caller_used(al codegen.Alloc, t codegen.Target) List[int]  ## The caller-saved registers that hold some value of the function.
 pub fn codegen.allocate(f mir.Func, t codegen.Target) codegen.Alloc
-fn codegen.use_weights(f mir.Func) List[int]  ## The cost of keeping each value in memory: one per definition or use,
-struct codegen.Wrap
-    wrap int
-    region List[bool]
-fn codegen.shrink_wrap(f mir.Func, order List[int], s codegen.Scan, bstart List[int], bend List[int], t codegen.Target) codegen.Wrap  ## Where the callee-saved registers can be saved instead of at the entry:
-fn codegen.add_range(mut r List[int], from int, to int) [mutates]  ## Append the range `from..=to`, joining it to the last one when they meet
-fn codegen.overlaps(a List[int], b List[int]) bool  ## Whether two values' ranges overlap.
-fn codegen.liveness(f mir.Func, order List[int]) List[List[bool]]  ## Which values are live on entry to each block (the block's parameters
-struct codegen.Scan
-    loc List[int]
-    active List[int]  ## Values holding a register now.
-    slots int
-    saved List[int]
-    start List[int]
-    end List[int]
-    ranges List[List[int]]
-    calls List[int]
-    hints List[List[int]]
-    arrive List[int]  ## The register a parameter arrived in, else -1.
-    weight List[int]  ## How much a value costs to keep in memory: its definitions and uses,
-    weighed bool  ## Whether `weight` has been computed: only a function that runs out of
-    func mir.Func
-    fn codegen.Scan.crosses(self, v int) bool  ## Whether `v` is live across a call, so it needs a callee-saved register.
-    fn codegen.Scan.free(self, r int, v int) bool  ## Whether register `r` is free for all of `v`'s ranges.
-    fn codegen.Scan.assign(mut self, v int, float bool, t codegen.Target) [mutates]
-    fn codegen.Scan.sole(self, a int, v int) bool  ## Whether `a` is the only active value whose use of its register meets `v`.
-    fn codegen.Scan.new_slot(mut self) int [mutates]
 pub struct codegen.Reloc  ## A field of the code to patch once addresses are known: `kind` is "rel32"
     pub at int
     pub kind str
@@ -78,16 +51,12 @@ pub fn codegen.push64(mut bytes List[int], v int) [mutates]
 pub fn codegen.utf8(s str) List[int]  ## The UTF-8 bytes of a string.
 pub fn codegen.add_trap_texts(mut img codegen.Image, m mir.Module, k int, op str) [mutates]  ## The constant texts a trap stub passes to `rt.trap` (native-abi.md §7):
 pub fn codegen.add_call_table(mut img codegen.Image, m mir.Module) [mutates]  ## Append the call table the runtime reads to print a trap's stack
-fn codegen.add_text(mut out List[int], s str) [mutates]  ## A string object (native-abi.md §2) appended to `out`, padded to 8 bytes.
-fn codegen.frame_line(m mir.Module, site mir.Site) str  ## `  at [FILE:]LINE:COL in NAME(..)`: a frame at `site`.
-fn codegen.params_of(m mir.Module, name str) bool  ## Whether function `name` takes parameters (its frame prints `(..)`).
 pub fn codegen.split_edges(f mir.Func) mir.Func  ## Split each branch edge that passes arguments: the new block jumps to the
-fn codegen.thread_jumps(f mir.Func) mir.Func  ## Retarget each edge into an empty block that jumps on without arguments.
-fn codegen.is_forwarder(blk mir.Block) bool
 pub fn codegen.block_order(f mir.Func) List[int]  ## The blocks in reverse postorder from the entry.
 pub fn codegen.f64_bits(x float) int  ## Float constants in a 64-bit pattern, computed with exact float scaling
 pub fn codegen.split_for_calls(f mir.Func) mir.Func  ## Values that cross calls are copied where the calls begin (ADR 0625). The
-fn codegen.renamed(m Map[int, int], v int) int
 pub fn codegen.wrap_block(f mir.Func, order List[int], dom List[List[bool]], blocks List[int]) int  ## The deepest block, other than the entry, that dominates every block in
 pub fn codegen.div_magic(d int) List[int]  ## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
 ```
+
+trimmed to fit 2000 tokens (~1181); dropped: private items

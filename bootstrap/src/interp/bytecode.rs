@@ -16,6 +16,7 @@ use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 use super::*;
+use super::list::List;
 
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
@@ -288,6 +289,10 @@ fn op_assign_k<'a>(op: BinOp, slot: u32, k: i64, pos: Pos) -> Ins<'a> {
 }
 
 enum Ins<'a> {
+    /// `for a, b in xs`: the parts of the element just bound, as new bindings after it (type.tuple.5).
+    Unpack {
+        names: &'a [crate::ast::Binder],
+    },
     /// `name := src`: a new binding at the end of the environment.
     Push {
         name: &'a str,
@@ -842,6 +847,58 @@ fn got(v: &Value) -> Got {
     }
 }
 
+/// `list[u] = g` or `list[u] op= g` on a packed list when `g` is of its kind and the arithmetic does not
+/// trap; false leaves the list unchanged for the general path. Out of line so `exec` stays small.
+#[inline(never)]
+fn store_packed(list: &mut List, u: usize, op: Option<BinOp>, g: Sc) -> bool {
+    match (list, op, g) {
+        (List::Float(v), None, Sc::Float(y)) => v[u] = y,
+        (List::Float(v), Some(op), Sc::Float(y)) => match float_arith(op, v[u], y) {
+            Some(r) => v[u] = r,
+            None => return false,
+        },
+        (List::Int(v), None, Sc::Int(y)) => v[u] = y,
+        (List::Int(v), Some(op), Sc::Int(y)) => match int_arith(op, v[u], y) {
+            Some(r) => v[u] = r,
+            None => return false,
+        },
+        (List::Bool(v), None, Sc::Bool(b)) => v[u] = b as u8,
+        _ => return false,
+    }
+    true
+}
+
+/// An `int`, `float` or `bool` copied out of a `Value`, small enough to stay in registers (a `Got` carries
+/// a whole `Value`, whose stack copy stalls; ADR 0759).
+#[derive(Clone, Copy)]
+enum Sc {
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    No,
+}
+
+#[inline(always)]
+fn scalar(v: &Value) -> Sc {
+    match v {
+        Value::Int(x) => Sc::Int(*x),
+        Value::Float(x) => Sc::Float(*x),
+        Value::Bool(x) => Sc::Bool(*x),
+        _ => Sc::No,
+    }
+}
+
+impl Sc {
+    fn value(self) -> Value {
+        match self {
+            Sc::Int(x) => Value::Int(x),
+            Sc::Float(x) => Value::Float(x),
+            Sc::Bool(x) => Value::Bool(x),
+            Sc::No => unreachable!("a scalar"),
+        }
+    }
+}
+
 #[inline(always)]
 fn put_got(o: Opnd, g: Got, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
     match g {
@@ -935,10 +992,27 @@ fn elem(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
     }
 }
 
+/// The element of a list at `i`, read straight from its storage: a packed list never builds a `Value`
+/// (ADR 0760; type.coll.4).
+#[inline(always)]
+fn elem_got(items: &List, i: i64, pos: Pos) -> Result<Got, Trap> {
+    let u = i as usize;
+    let found = match items {
+        List::Int(v) => v.get(u).map(|x| Got::Int(*x)),
+        List::Float(v) => v.get(u).map(|x| Got::Float(*x)),
+        List::Bool(v) => v.get(u).map(|b| Got::Bool(*b != 0)),
+        List::Boxed(v) => v.get(u).map(got),
+    };
+    match found {
+        Some(g) => Ok(g),
+        None => Err(list_element(items, i, pos).expect_err("in range")),
+    }
+}
+
 /// `recv[idx]` on a list, map, `bytes` or tensor (type.coll.4, type.map.3, std.tensor.15).
 fn index_value(recv: &Value, idx: &Value, pos: Pos) -> Result<Value, Trap> {
     Ok(match recv {
-        Value::List(items) => element(items, idx.int(), pos)?.clone(),
+        Value::List(items) => list_element(items, idx.int(), pos)?,
         Value::Map(t) => map_value(t, idx, || key_text(idx), pos)?.clone(),
         Value::Bytes(b) => bytes::at(b, idx.int(), pos)?,
         Value::Tensor(t) => match t.row(idx.int()) {
@@ -1897,7 +1971,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     }
 
     /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it,
-    /// no `for a, b in xs` clause (type.tuple.5) (the walker runs those), and no hook or trace that
+    /// and no hook or trace that
     /// expects the walker's steps.
     fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
         let plain = comp_part_plain;
@@ -1905,7 +1979,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             && self.it.tracing == 0
             && plain(elem)
             && value.is_none_or(plain)
-            && clauses.iter().all(|c| !c.par && c.unpack.is_empty() && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
+            && clauses.iter().all(|c| !c.par && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
     }
 
     /// The loops of a comprehension's clauses around its element, collected into `acc`.
@@ -1948,6 +2022,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             self.emit(Ins::IterStart { it, idx });
             let top = self.emit(Ins::IterNext { name: &c.var, it, idx, end: 0, pos: c.iter.pos() });
             self.scope.push(&c.var);
+            if !c.unpack.is_empty() {
+                self.emit(Ins::Unpack { names: &c.unpack });
+                self.scope.extend(c.unpack.iter().map(|b| b.name.as_str()));
+            }
             let skip = c.cond.as_ref().map(|cond| self.cond_jump(cond, false));
             self.comp_clauses(kind, rest, elem, value, acc);
             self.scope.truncate(depth as usize);
@@ -3254,7 +3332,7 @@ match take!(*src) {
                 .iter_mut()
                 .map(|r| std::mem::replace(r, Value::Unit))
                 .collect();
-            put(*dst, Value::List(Rc::new(items)), env, base, regs);
+            put(*dst, Value::packed(items), env, base, regs);
         
         Ok(pc)
     }
@@ -3440,7 +3518,7 @@ match {
         let first = *args as usize;
         assign(&mut regs[(*ix & !KIND) as usize], Value::Unit);
         let Value::List(items) = &mut env[at].1 else { unreachable!("checked by the guard") };
-        let me = std::mem::replace(&mut Rc::make_mut(items)[i], Value::Unit);
+        let me = std::mem::replace(&mut Rc::make_mut(items).boxed_mut()[i], Value::Unit);
         let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
         callee.push(("self", me));
         for (k, p) in f.params.iter().enumerate() {
@@ -3448,7 +3526,7 @@ match {
         }
         let result = self.run_body(f, &mut callee, *pos)?;
         if let Value::List(items) = &mut env[at].1 {
-            Rc::make_mut(items)[i] = std::mem::replace(&mut callee[0].1, Value::Unit);
+            Rc::make_mut(items).boxed_mut()[i] = std::mem::replace(&mut callee[0].1, Value::Unit);
         }
         callee.clear();
         self.env_pool.push(callee);
@@ -3460,7 +3538,10 @@ match {
     fn op_elemguard(&mut self, ins: &Ins<'a>, env: &Env<'a>, base: usize, regs: &mut [Value], pc: usize) -> usize {
         let Ins::ElemGuard { slot, ix, name, n, t, cache } = ins else { unreachable!("ElemGuard") };
         let found = match (&env[base + *slot as usize].1, &regs[(*ix & !KIND) as usize]) {
-            (Value::List(items), Value::Int(i)) => match usize::try_from(*i).ok().and_then(|i| items.get(i).map(|v| (i, v))) {
+            (Value::List(items), Value::Int(i)) => match usize::try_from(*i).ok().and_then(|i| match &**items {
+                List::Boxed(b) => b.get(i).map(|v| (i, v)),
+                _ => None,
+            }) {
                 Some((i, Value::Struct(s, _))) => self
                     .methods
                     .get(self.prog.structs[*s].name.as_str())
@@ -3939,8 +4020,9 @@ match {
                             let x = *x;
                             put_float(*dst, x, env, base, regs);
                         }
-                        _ => {
-                            let v = take!(*src);
+                        other => {
+                            // Not a scalar: the operand's kind is already known to be a read of a value.
+                            let v = if *src & KIND == REG { std::mem::replace(&mut regs[(*src & !KIND) as usize], Value::Unit) } else { other.clone() };
                             put(*dst, v, env, base, regs);
                         }
                     }
@@ -3957,8 +4039,8 @@ match {
                             let f = *f;
                             env.push((name, Value::Float(f)));
                         }
-                        _ => {
-                            let v = take!(*src);
+                        other => {
+                            let v = if *src & KIND == REG { std::mem::replace(&mut regs[(*src & !KIND) as usize], Value::Unit) } else { other.clone() };
                             env.push((name, v));
                         }
                     }
@@ -4048,67 +4130,118 @@ match {
                 }
                 Ins::Index { dst, recv, idx, pos } => {
                     pc += 1;
-                    let v = match get!(*recv) {
-                        Value::List(items) => {
-                            let i = get!(*idx).int();
-                            got(elem(items, i, *pos)?)
+                    // A list element is looked up once. A scalar reaches its slot from registers (ADR 0759); any
+                    // other element is cloned straight into it, as before: no intermediate enum for it to pay for.
+                    if let Value::List(items) = get!(*recv) {
+                        let i = get!(*idx).int();
+                        match &**items {
+                            List::Boxed(b) => match elem(b, i, *pos)? {
+                                Value::Int(x) => {
+                                    let x = *x;
+                                    done(*recv, regs);
+                                    done(*idx, regs);
+                                    put_int(*dst, x, env, base, regs);
+                                }
+                                Value::Float(x) => {
+                                    let x = *x;
+                                    done(*recv, regs);
+                                    done(*idx, regs);
+                                    put_float(*dst, x, env, base, regs);
+                                }
+                                Value::Bool(x) => {
+                                    let x = *x;
+                                    done(*recv, regs);
+                                    done(*idx, regs);
+                                    put_bool(*dst, x, env, base, regs);
+                                }
+                                other => {
+                                    let v = other.clone();
+                                    done(*recv, regs);
+                                    done(*idx, regs);
+                                    put(*dst, v, env, base, regs);
+                                }
+                            },
+                            packed => {
+                                let g = elem_got(packed, i, *pos)?;
+                                done(*recv, regs);
+                                done(*idx, regs);
+                                put_got(*dst, g, env, base, regs);
+                            }
                         }
+                        continue;
+                    }
+                    let v = match get!(*recv) {
                         Value::Map(t) => {
                             let k = get!(*idx);
-                            Got::Other(map_value(t, k, || key_text(k), *pos)?.clone())
+                            map_value(t, k, || key_text(k), *pos)?.clone()
                         }
                         Value::Bytes(b) => {
                             let i = get!(*idx).int();
-                            Got::Other(bytes::at(b, i, *pos)?)
+                            bytes::at(b, i, *pos)?
                         }
                         // std.tensor.15: `t[i]` drops axis 0.
-                        Value::Tensor(t) => Got::Other(match t.row(get!(*idx).int()) {
+                        Value::Tensor(t) => match t.row(get!(*idx).int()) {
                             Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
                             Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
-                        }),
+                        },
                         other => unreachable!("checked: list, map, bytes or tensor, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);
-                    put_got(*dst, v, env, base, regs);
+                    put(*dst, v, env, base, regs);
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
-                    // `len` of text, a map, a set or bytes: the walker's count, without its call.
-                    let other_len = if *push {
-                        None
-                    } else {
-                        match &env[at].1 {
-                            Value::Str(t) => Some(t.chars().count()),
-                            Value::Map(t) | Value::Set(t) => Some(t.len()),
-                            Value::Bytes(b) => Some(b.len()),
-                            _ => None,
-                        }
-                    };
-                    if let Some(n) = other_len {
-                        put_int(*dst, n as i64, env, base, regs);
-                        pc = *done as usize;
-                    } else if matches!(env[at].1, Value::List(_)) {
+                    if let Value::List(items) = &mut env[at].1 {
                         if *push {
-                            let v = take!(*val);
-                            let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
-                            Rc::make_mut(items).push(v);
+                            // A scalar goes straight into a packed list (ADR 0760).
+                            let g = scalar(get!(*val));
+                            if !matches!(g, Sc::No) {
+                                self::done(*val, regs);
+                                let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
+                                match (Rc::make_mut(items), g) {
+                                    (List::Int(v), Sc::Int(x)) => v.push(x),
+                                    (List::Float(v), Sc::Float(x)) => v.push(x),
+                                    (List::Bool(v), Sc::Bool(b)) => v.push(b as u8),
+                                    (l, g) => l.push(g.value()),
+                                }
+                            } else {
+                                let v = take!(*val);
+                                let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
+                                Rc::make_mut(items).push(v);
+                            }
                             put(*dst, Value::Unit, env, base, regs);
                         } else {
-                            let Value::List(items) = &env[at].1 else { unreachable!("a list") };
                             let len = items.len() as i64;
                             put_int(*dst, len, env, base, regs);
                         }
                         pc = *done as usize;
                     } else {
-                        pc += 1;
+                        // `len` of text, a map, a set or bytes: the walker's count, without its call.
+                        let n = if *push {
+                            None
+                        } else {
+                            match &env[at].1 {
+                                Value::Str(t) => Some(t.chars().count()),
+                                Value::Map(t) | Value::Set(t) => Some(t.len()),
+                                Value::Bytes(b) => Some(b.len()),
+                                _ => None,
+                            }
+                        };
+                        match n {
+                            Some(n) => {
+                                put_int(*dst, n as i64, env, base, regs);
+                                pc = *done as usize;
+                            }
+                            None => pc += 1,
+                        }
                     }
                 }
                 Ins::IndexOff { dst, recv, i, op, k, pos, opos } => {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i)) {
                         (Value::List(items), Value::Int(x)) => match int_arith(*op, *x, *k) {
-                            Some(j) => Some(got(elem(items, j, *pos)?)),
+                            Some(j) => Some(elem_got(items, j, *pos)?),
                             None => None,
                         },
                         _ => None,
@@ -4145,8 +4278,12 @@ match {
                 Ins::Index2 { dst, recv, i, k, pos1, pos2 } => {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i), get!(*k)) {
-                        (Value::List(rows), Value::Int(i), Value::Int(k)) => match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
-                            Some(Value::List(row)) => Some(got(elem(row, *k, *pos2)?)),
+                        (Value::List(rows), Value::Int(i), Value::Int(k)) => match &**rows {
+                            // Rows are lists, so the outer list is always boxed.
+                            List::Boxed(rows) => match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
+                                Some(Value::List(row)) => Some(elem_got(row, *k, *pos2)?),
+                                _ => None,
+                            },
                             _ => None,
                         },
                         _ => None,
@@ -4194,7 +4331,7 @@ match {
                 Ins::CheckIndex { slot, idx, at } => {
                     pc += 1;
                     let Value::List(items) = &env[base + *slot as usize].1 else { unreachable!("a list") };
-                    element(items, get!(*idx).int(), *at)?;
+                    list_element(items, get!(*idx).int(), *at)?;
                 }
                 Ins::IfNotListMap { slot, t, list_only } => {
                     pc = if match &env[base + *slot as usize].1 {
@@ -4215,13 +4352,29 @@ match {
                         (Value::List(items), Value::Int(i)) if (*i as u64) < items.len() as u64 => Some(*i as usize),
                         _ => None,
                     };
+                    if let Some(u) = fast
+                        && let Value::List(items) = &env[slot].1
+                        && !matches!(**items, List::Boxed(_))
+                    {
+                        let g = scalar(get!(*val));
+                        // A scalar into a packed list, in place: the element is never built as a `Value`.
+                        let done_here = {
+                            let Value::List(items) = &mut env[slot].1 else { unreachable!("a list") };
+                            store_packed(Rc::make_mut(items), u, *op, g)
+                        };
+                        if done_here {
+                            done(*idx, regs);
+                            done(*val, regs);
+                            continue;
+                        }
+                    }
                     if let Some(u) = fast {
                         done(*idx, regs);
                         let v = match op {
                             None => take!(*val),
                             Some(op) => {
                                 let Value::List(items) = &env[slot].1 else { unreachable!("a list") };
-                                let old = items[u].clone();
+                                let old = items.at(u);
                                 let rhs = take!(*val);
                                 match (&old, &rhs) {
                                     (Value::Int(x), Value::Int(y)) if let Some(r) = int_arith(*op, *x, *y) => {
@@ -4235,7 +4388,10 @@ match {
                             }
                         };
                         let Value::List(items) = &mut env[slot].1 else { unreachable!("a list") };
-                        assign(&mut Rc::make_mut(items)[u], v);
+                        match Rc::make_mut(items) {
+                            List::Boxed(b) => assign(&mut b[u], v),
+                            packed => packed.set(u, v),
+                        }
                         continue;
                     }
                     // type.map.3, type.map.7: `m[k] = v` and `m[k] op= v` on a map, one lookup for the key.
@@ -4272,12 +4428,12 @@ match {
                             self.binop(*op, zero_like(&rhs), rhs, *pos)?
                         }
                         Some(op) => {
-                            let old = peek_at(env, slot, &steps)?.clone();
+                            let old = peek_at(env, slot, &steps)?.into_owned();
                             let rhs = take!(*val);
                             self.binop(*op, old, rhs, *pos)?
                         }
                     };
-                    *slot_mut_at(env, slot, &steps, op.is_none() || missing)? = v;
+                    with_in(&mut env[slot].1, &steps, op.is_none() || missing, |s| *s = v)?;
                 }
                 Ins::Try { .. } => {
                     pc = self.op_try(code, ins, env, base, regs, pc)?;
@@ -4402,7 +4558,7 @@ match {
                 Ins::NewAcc { dst, kind } => {
                     pc += 1;
                     let v = match kind {
-                        CompKind::List => Value::List(Rc::new(Vec::new())),
+                        CompKind::List => Value::list(Vec::new()),
                         CompKind::Set => Value::Set(Rc::new(Table::default())),
                         CompKind::Map => Value::Map(Rc::new(Table::default())),
                     };
@@ -4431,11 +4587,11 @@ match {
                     pc += 1;
                     let r = (*it & !KIND) as usize;
                     if let Value::Set(t) = &regs[r] {
-                        regs[r] = Value::List(Rc::new(t.key_list()));
+                        regs[r] = Value::list(t.key_list());
                     } else if let Value::Bytes(b) = &regs[r] {
-                        regs[r] = Value::List(Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()));
+                        regs[r] = Value::list(b.iter().map(|x| bytes::byte(*x)).collect());
                     } else if let Value::Map(t) = &regs[r] {
-                        regs[r] = Value::List(Rc::new(entry_pairs(t)));
+                        regs[r] = Value::list(entry_pairs(t));
                     }
                     regs[(*idx & !KIND) as usize] = Value::Int(0);
                 }
@@ -4444,7 +4600,7 @@ match {
                     let item = match &regs[r] {
                         Value::List(items) => {
                             let Value::Int(k) = regs[n] else { unreachable!("an index") };
-                            let item = items.get(k as usize).cloned();
+                            let item = items.get(k as usize);
                             regs[n] = Value::Int(k + 1);
                             item
                         }
@@ -4459,6 +4615,14 @@ match {
                         }
                         None => pc = *end as usize,
                     }
+                }
+                Ins::Unpack { names } => {
+                    let Some((_, Value::Tuple(parts))) = env.last() else { unreachable!("checked: a tuple") };
+                    let parts = Rc::clone(parts);
+                    for (b, x) in names.iter().zip(parts.iter()) {
+                        env.push((b.name.as_str(), x.clone()));
+                    }
+                    pc += 1;
                 }
                 Ins::Bind { name, src, t } => match take!(*src) {
                     Value::None | Value::Fail(_) => pc = *t as usize,

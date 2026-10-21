@@ -1,0 +1,137 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `bytes` (type.bytes.*, ADR 0702). A bytes object has a string object's
+## layout, +0 length in bytes, +8 the same length, +16 the data, so `len`,
+## the allocator and the collector treat it like a string. A `bytes` literal
+## is built from its hex digits at the point of use.
+
+fn hex_val(c int) int
+    if c >= 97
+        return c - 87
+    if c >= 65
+        return c - 55
+    c - 48
+
+## The `bytes` of a literal's hex digits (lex.bytes.1).
+fn bytes_from_hex(h str) str
+    q := str_addr(h)
+    n := load64(q) / 2
+    p := str_new(n, n)
+    mut i := 0
+    while i < n
+        store8(p + 16 + i, hex_val(load8(q + 16 + 2 * i)) * 16 + hex_val(load8(q + 17 + 2 * i)))
+        i += 1
+    str_at(p)
+
+## `b[i]`, after the caller checked the bounds (type.bytes.3).
+fn bytes_at(b str, i int) int
+    load8(str_addr(b) + 16 + i)
+
+## `b[lo..hi]`, after the caller checked the bounds (type.bytes.4).
+fn bytes_slice(b str, lo int, hi int) str
+    n := hi - lo
+    p := str_new(n, n)
+    copy_bytes(p + 16, str_addr(b) + 16 + lo, n)
+    str_at(p)
+
+## `a == b`, and `a != b` (type.bytes.2).
+fn bytes_eq(a str, b str) bool
+    p := str_addr(a)
+    q := str_addr(b)
+    n := load64(p)
+    if n != load64(q)
+        return false
+    mut i := 0
+    while i < n
+        if load8(p + 16 + i) != load8(q + 16 + i)
+            return false
+        i += 1
+    true
+
+## `b.hex()` (type.bytes.11): lowercase, two digits a byte.
+fn bytes_hex(b str) str
+    p := str_addr(b)
+    n := load64(p)
+    s := str_new(2 * n, 2 * n)
+    mut i := 0
+    while i < n
+        c := load8(p + 16 + i)
+        store8(s + 16 + 2 * i, hex_digit(c / 16))
+        store8(s + 17 + 2 * i, hex_digit(c % 16))
+        i += 1
+    str_at(s)
+
+## Whether byte `c` is a continuation byte between `lo` and `hi`.
+fn utf8_in(c int, lo int, hi int) bool
+    c >= lo and c <= hi
+
+## The scalar starting at `i`: its length in bytes, or minus the length of
+## the invalid prefix that `text` replaces with one U+FFFD (as Rust does).
+fn utf8_step(p int, i int, n int) int
+    c := load8(p + 16 + i)
+    if c < 128
+        return 1
+    mut need := 0
+    mut lo := 128
+    mut hi := 191
+    if c >= 194 and c <= 223
+        need = 1
+    elif c >= 224 and c <= 239
+        need = 2
+        if c == 224
+            lo = 160
+        if c == 237
+            hi = 159
+    elif c >= 240 and c <= 244
+        need = 3
+        if c == 240
+            lo = 144
+        if c == 244
+            hi = 143
+    else
+        return -1
+    mut k := 1
+    while k <= need
+        if i + k >= n
+            return -k
+        d := load8(p + 16 + i + k)
+        if not utf8_in(d, lo, hi)
+            return -k
+        lo = 128
+        hi = 191
+        k += 1
+    need + 1
+
+## `b.text()` (type.bytes.8): UTF-8, each invalid sequence as U+FFFD.
+fn bytes_text(b str) str
+    p := str_addr(b)
+    n := load64(p)
+    mut out := 0
+    mut chars := 0
+    mut i := 0
+    while i < n
+        k := utf8_step(p, i, n)
+        if k > 0
+            out += k
+            i += k
+        else
+            out += 3
+            i -= k
+        chars += 1
+    s := str_new(out, chars)
+    mut o := s + 16
+    i = 0
+    while i < n
+        k := utf8_step(p, i, n)
+        if k > 0
+            copy_bytes(o, p + 16 + i, k)
+            o += k
+            i += k
+        else
+            store8(o, 239)
+            store8(o + 1, 191)
+            store8(o + 2, 189)
+            o += 3
+            i -= k
+    str_at(s)

@@ -31,6 +31,9 @@ pub struct Program
     ## The packages whose manifests allow `unsafe` code; `none` when no
     ## manifest is involved, so any code may (unsafe.block.3).
     pub unsafe_allowed List[str]?
+    ## The packages whose manifests say `unsafe driver`, or `[""]` for a
+    ## program without one run with `--unsafe driver` (unsafe.hw.1).
+    pub driver_allowed List[str]
     pub generated List[Generated]
 
 ## One source file of a package: its lines are numbered from `base + 1`.

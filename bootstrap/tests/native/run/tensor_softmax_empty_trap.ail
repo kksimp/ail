@@ -1,0 +1,7 @@
+# std.tensor.24: an empty last axis traps.
+fn main()
+    e := tensor.from([1.0, 2.0], [2, 1]).matmul(tensor.from([1.0], [1, 1])).softmax()
+    print(e.shape())
+    z := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2]).sum(1)
+    print(z.softmax().shape())
+    print(tensor.from(List[float](), [1, 0]).softmax().shape())

@@ -20,6 +20,7 @@ pub(super) const LEN_EXTRA_T: [u8; 29] = LEN_EXTRA;
 pub(super) const DIST_BASE_T: [u16; 30] = DIST_BASE;
 pub(super) const DIST_EXTRA_T: [u8; 30] = DIST_EXTRA;
 
+// std.compress.9: the closed list of corrupt messages.
 fn bad(msg: &str) -> CodecError {
     CodecError::new("corrupt", msg)
 }
