@@ -71,14 +71,14 @@ A block that cannot run because it uses names outside its own snippet keeps
 
 ## Spec rules no code cites (lane 207, 2026-10-21)
 
-`tools/rules-audit.sh` check 2 found 87 rules at the batch head. Each one is now in one of three groups:
+`tools/rules-audit.sh` check 2 found 87 rules at the batch head. Three rounds have sorted them:
 
-- **Definitional, 10.** Marked `[definitional]` in the spec (spec README, rule 2) and skipped by the audit: `conc.mm.1`, `conc.task.9`, `plat.ptr.1`, `plat.ptr.2`, `plat.ptr.3`, `plat.endian.1`, `plat.target.1`, `refl.run.1`, `type.opt.1`, `own.borrow.2`.
-- **Cited, 46.** 28 were implemented in AIL std sources (`bootstrap/src/std/**/*.ail`, `bootstrap/src/prelude.ail`), which the audit did not scan; it now does. 18 more got a citation at the code that implements them: `json.type.1`, `json.parse.2`, `json.print.2`, `json.prelude.1`, `err.trap.2`, `conc.atomic.2`, `type.num.12`, `type.str.12`, `own.uniq.7`, `std.mem.1`, `std.regex.23`, `test.run.6`, `edit.out.3`, `native.build.4`, `plat.isa.1`, `plat.isa.2`, `ffi.link.1`, `unsafe.block.4`.
-- **Still uncited, 31.** Each needs one of: a conformance case, a test, or an implementation that the owning lane must build. Routed, not fixed here:
-  - *Not implemented:* `native.bce.1`-`4` (no bounds-check or overflow-check removal in `compiler/mir`); `ct.eval.3` (no step or memory limit for compile-time evaluation); `ct.eval.4` (optional reuse of compile-time results, a MAY rule); `plat.isa.3` (no start-up check of the CPU feature level); `own.copy.1` (copy-site report not located).
-  - *Enforced by a test, not the code:* `explain.cover.1`-`3` (`bootstrap/tests/explain_coverage.rs`; the audit scans implementation only); `native.build.1` (needs the `ail test --native` differential runner, lane 209).
-  - *Implementation not located:* `err.type.3`, `err.type.4`, `mod.vis.3`, `own.borrow.1`, `unsafe.op.2`, `trait.op.2`, `type.enum.4`, `gen.anon.2`, `type.num.3`, `type.num.4`, `type.opt.8`, `conc.race.1`, `ct.const.4`, `eff.det.2`, `eff.det.3`, `fix.edit.6`, `gram.help.2`, `api.pkg.4`.
+- **Definitional, 10.** Marked `[definitional]` in the spec (spec README, rule 2; ADR 0673) and skipped by the audit: `conc.mm.1`, `conc.task.9`, `plat.ptr.1`, `plat.ptr.2`, `plat.ptr.3`, `plat.endian.1`, `plat.target.1`, `refl.run.1`, `type.opt.1`, `own.borrow.2`.
+- **Cited, 55.** 28 were implemented in AIL std sources (`bootstrap/src/std/**/*.ail`, `bootstrap/src/prelude.ail`), which the audit did not scan; it now does. 18 more were cited at the code that implements them (PR #244): `json.type.1`, `json.parse.2`, `json.print.2`, `json.prelude.1`, `err.trap.2`, `conc.atomic.2`, `type.num.12`, `type.str.12`, `own.uniq.7`, `std.mem.1`, `std.regex.23`, `test.run.6`, `edit.out.3`, `native.build.4`, `plat.isa.1`, `plat.isa.2`, `ffi.link.1`, `unsafe.block.4`. The follow-up adds nine: `mod.vis.3`, `eff.det.2`, `eff.det.3`, `fix.edit.6`, `ct.eval.1`, `trait.op.2`, and `explain.cover.1`-`3` (the audit now reads comments in `bootstrap/tests/explain_coverage.rs`, which enforce them).
+- **Still uncited, 22.**
+  - *Not implemented, 8:* `native.bce.1`-`4` (no bounds-check or overflow-check removal in `compiler/mir`); `ct.eval.3` (no step or memory limit on compile-time evaluation); `ct.eval.4` (optional reuse of compile-time results, a MAY rule); `plat.isa.3` (no start-up check of the CPU feature level); `own.copy.1` (no report of deep-copy sites found).
+  - *Enforced by a test that does not exist yet, 1:* `native.build.1` (needs the `ail test --native` differential runner, lane 209).
+  - *Implementation not located, 13:* `api.pkg.4`, `conc.race.1`, `ct.const.4`, `err.type.3`, `err.type.4`, `gen.anon.2`, `gram.help.2`, `own.borrow.1`, `type.enum.4`, `type.num.3`, `type.num.4`, `type.opt.8`, `unsafe.op.2`. Each needs a search of the owning code by someone who knows it, and the searches here were not exhaustive.
   - *Possible mis-citation:* `check.rs` reports the nested-optional error with `type.opt.7`; spec `type.opt.8` describes that rule. The owner should decide which ID the diagnostic carries.
 
-Check 1 (cited but not in the spec) has three pre-existing entries that this lane did not change: `expr.lit.3` (`compiler/mir/lower.ail`), `plat.win.1` (`compiler/rt/native/os.ail`) and `std.tz.4` (`bootstrap/src/interp/tz.rs`).
+Check 1 (cited but not in the spec) has three pre-existing entries that lane 207 did not change: `expr.lit.3` (`compiler/mir/lower.ail`), `plat.win.1` (`compiler/rt/native/os.ail`) and `std.tz.4` (`bootstrap/src/interp/tz.rs`).

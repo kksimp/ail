@@ -18,7 +18,7 @@ const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
 /// `std.net` gives `net` (std.net.1).
 pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui"];
 
-/// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
+/// What `ail run --deterministic` denies (std.random.5, eff.det.2, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
 pub const DETERMINISTIC_DENY: [&str; 4] = ["clock", "net", "proc", "random"];
 
@@ -331,7 +331,7 @@ pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     diags
 }
 
-/// ct.const.2 (ADR 0225): a constant is computed at compile time, so
+/// ct.const.2 (ADR 0225) and ct.eval.1 (ADR 0226): a constant is computed at compile time, so
 /// everything its value may call must be compile-time-safe: no `io`,
 /// `unsafe`, `spawn` or capability. One diagnostic per constant, naming each
 /// chain of calls.
