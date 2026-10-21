@@ -31,6 +31,15 @@ Measured on Linux x86-64, `json_roundtrip` (build + `to_text` + parse):
 | whole program | 1.99 s | 0.27 s |
 | CPython twin | 0.09 s | |
 
+`tools/bench/run.sh --before <batch head> --runs 3` over all programs: every
+group's geometric mean is unchanged (agent 1.00, examples 1.02), because no
+other program parses large JSON; the gain is on JSON-heavy work like the
+round trip above.
+
+The native printer writes a `Num` as the AIL `Json.to_text` does, so a change
+to how numbers print (ADR 0631) must edit the `NUM` arm of `print` in
+`interp/json.rs` together with the prelude.
+
 `./ail selftest` passes, including the `json_*` and `derive_json_*` cases.
 
 ## Rejected alternatives

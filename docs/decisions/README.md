@@ -539,6 +539,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0648](0648-round-two-fix-rules-and-the-corpus-target.md) | Fix rules for round-two mistakes (renames with unchanged arguments, `=` to `:`, `@` to `matmul`, `or` to `else`), and the 60% target *(delegated)* | Accepted | 2026-10-21 |
 | [0655](0655-build-cache.md) | A content-addressed cache of finished `ail build` executables, and derive expansion with one effect inference *(delegated)* | Accepted | 2026-10-21 |
 | [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |
+| [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
 | [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
 | [0673](0673-definitional-rule-marker.md) | Spec rules that only describe the language carry a `[definitional]` marker and need no citation *(delegated)* | Accepted | 2026-10-21 |
 | [0675](0675-round-4-syntax-candidates.md) | Round-4 syntax candidates: no `for i, x`, no inferred `main !`; `par` over chunks already works *(delegated)* | Accepted | 2026-10-21 |
