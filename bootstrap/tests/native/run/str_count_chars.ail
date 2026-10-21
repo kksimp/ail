@@ -1,0 +1,29 @@
+# Character counts of slices and pieces (`str.split`, `lines`, `chars`) over mixed-width text, eight bytes at a time (ADR 0768).
+fn main()
+    mut seed := 3
+    mut total := 0
+    letters := ["a", "bb", "é", "日", "😀", "z", "Q"]
+    for n in 0..300
+        mut parts := List[str]()
+        for _ in 0..(n % 40)
+            seed = (seed * 3877 + 29573) % 139968
+            parts.push(letters[seed % letters.len()])
+        text := parts.join("")
+        z := text.find("z") else 0
+        total += text.len() * 7 + z + text.chars().len()
+        for piece in text.split("z")
+            total += piece.len() * 5 + piece.chars().len()
+        for piece in "{text}\n{text}z\r\n{text}".lines()
+            total += piece.len() + piece.chars().len() * 2
+        cs := text.chars()
+        for k in 0..cs.len()
+            piece := cs[k..].join("")
+            total += piece.len() + piece.chars().len() * 3
+            more := "{piece}tail"
+            total += more.len()
+    print(total)
+    s := "aé日😀 hello wörld, ünïcode text"
+    print(s.len())
+    sc := s.chars()
+    for from in 0..sc.len()
+        print(sc[from..].join("").len())
