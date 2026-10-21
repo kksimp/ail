@@ -394,9 +394,9 @@ sieve 2.56x to 1.94x); the table is in the ADR. Agent programs are unchanged.
 
 [ADR 0619](../decisions/0619-bytecode-calls-loops-and-fusion.md) cuts the
 per-instruction and per-call overhead (lean calls, loop shapes, fused
-`push`/`len` and `a[i][k]`): geometric mean 1.97x of CPython at the batch head,
-1.12x now; fannkuch 0.91x, mandelbrot 1.00x, matmul 1.14x, sieve 1.26x,
-nbody 1.28x, spectralnorm 1.33x, binarytrees 2.30x (calls and `mut`
+`push`/`len` and `a[i][k]`): geometric mean 1.88x of CPython at the batch head,
+1.08x now; fannkuch 0.91x, nbody 1.06x, mandelbrot 1.07x, matmul 1.15x, sieve 1.24x,
+spectralnorm 1.33x, binarytrees 2.15x (calls and `mut`
 arguments). What is left is the cost of reading a local: the walker's
 environment is a vector of (name, value) pairs behind a pointer, so every
 local read reloads its length and bounds-checks it. A frame with locals in the

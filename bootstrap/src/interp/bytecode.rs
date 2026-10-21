@@ -333,6 +333,17 @@ enum Ins<'a> {
         push: bool,
         done: u32,
     },
+    /// `recv[i + k]` or `recv[i - k]` with an int literal `k`: the sum is
+    /// checked as the operator would (expr.arith.1), then indexed.
+    IndexOff {
+        dst: Opnd,
+        recv: Opnd,
+        i: Opnd,
+        op: BinOp,
+        k: i64,
+        pos: Pos,
+        opos: Pos,
+    },
     /// `recv[i][k]`: two index steps with no copy of the row between them.
     Index2 {
         dst: Opnd,
@@ -512,12 +523,20 @@ fn put(o: Opnd, v: Value, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
     }
 }
 
-/// `*slot = v`, with no call to drop the old value when it owns nothing.
+/// Drop `v`, calling the drop function only if it owns something.
 #[inline(always)]
-fn assign(slot: &mut Value, v: Value) {
-    let old = std::mem::replace(slot, v);
-    if matches!(
-        old,
+fn assign_drop(old: Value) {
+    if is_heap(&old) {
+        drop(old);
+    } else {
+        std::mem::forget(old);
+    }
+}
+
+#[inline(always)]
+fn is_heap(v: &Value) -> bool {
+    matches!(
+        v,
         Value::Str(_)
             | Value::Bytes(_)
             | Value::Struct(..)
@@ -529,11 +548,13 @@ fn assign(slot: &mut Value, v: Value) {
             | Value::Ref(_)
             | Value::Tensor(_)
             | Value::Atomic(_)
-    ) {
-        drop(old);
-    } else {
-        std::mem::forget(old);
-    }
+    )
+}
+
+/// `*slot = v`, with no call to drop the old value when it owns nothing.
+#[inline(always)]
+fn assign(slot: &mut Value, v: Value) {
+    assign_drop(std::mem::replace(slot, v));
 }
 
 /// `put` of an int, overwriting an int in place.
@@ -565,6 +586,18 @@ fn put_float(o: Opnd, r: f64, env: &mut Env<'_>, base: usize, regs: &mut [Value]
         *x = r;
     } else {
         assign(slot, Value::Float(r));
+    }
+}
+
+/// type.num.6: `+ - * /` on floats.
+#[inline(always)]
+fn float_arith(op: BinOp, a: f64, b: f64) -> Option<f64> {
+    match op {
+        BinOp::Add => Some(a + b),
+        BinOp::Sub => Some(a - b),
+        BinOp::Mul => Some(a * b),
+        BinOp::Div => Some(a / b),
+        _ => None,
     }
 }
 
@@ -1106,6 +1139,14 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             {
                 let [recv, i, k] = self.operands([&**inner, &**first, &**index]);
                 self.emit(Ins::Index2 { dst, recv, i, k, pos1: *pos1, pos2: *pos });
+            }
+            Expr::Index { recv, index, pos }
+                if let Expr::Binary { op: op @ (BinOp::Add | BinOp::Sub), lhs, rhs, pos: opos } = &**index
+                    && let Some(k) = self.int_literal(rhs)
+                    && matches!(**lhs, Expr::Name(..)) =>
+            {
+                let [recv, i] = self.operands([&**recv, &**lhs]);
+                self.emit(Ins::IndexOff { dst, recv, i, op: *op, k, pos: *pos, opos: *opos });
             }
             Expr::Index { recv, index, pos } if !matches!(**index, Expr::Range { .. }) => {
                 let [recv, idx] = self.operands([&**recv, &**index]);
@@ -2249,6 +2290,27 @@ impl<'a, W: Write> Interp<'a, W> {
                         pc += 1;
                     }
                 }
+                Ins::IndexOff { dst, recv, i, op, k, pos, opos } => {
+                    pc += 1;
+                    let fast = match (get!(*recv), get!(*i)) {
+                        (Value::List(items), Value::Int(x)) => match int_arith(*op, *x, *k) {
+                            Some(j) => Some(element(items, j, *pos)?.clone()),
+                            None => None,
+                        },
+                        _ => None,
+                    };
+                    let v = match fast {
+                        Some(v) => v,
+                        None => {
+                            let x = take!(*i);
+                            let j = self.binop(*op, x, Value::Int(*k), *opos)?;
+                            index_value(get!(*recv), &j, *pos)?
+                        }
+                    };
+                    done(*recv, regs);
+                    done(*i, regs);
+                    put(*dst, v, env, base, regs);
+                }
                 Ins::Index2 { dst, recv, i, k, pos1, pos2 } => {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i), get!(*k)) {
@@ -2328,6 +2390,9 @@ impl<'a, W: Write> Interp<'a, W> {
                                 match (&old, &rhs) {
                                     (Value::Int(x), Value::Int(y)) if let Some(r) = int_arith(*op, *x, *y) => {
                                         Value::Int(r)
+                                    }
+                                    (Value::Float(x), Value::Float(y)) if let Some(r) = float_arith(*op, *x, *y) => {
+                                        Value::Float(r)
                                     }
                                     _ => self.binop(*op, old, rhs, *pos)?,
                                 }
