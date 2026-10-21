@@ -246,7 +246,7 @@ safe rewrite, so each is left unfixed on purpose. The grouping:
 
 | Rule | Count | Why no fix |
 |---|---|---|
-| `expr.name.1` | 12 | Each needs a judgement: `int("5")`, `input()`, `null`, `e.message()` (`to_str` exists, but the target is the caller's intent), undefined names, `thread.start`, `m.push` on a non-list map |
+| `expr.name.1` | 13 | Each needs a judgement: `int("5")`, `input()`, `null`, `e.message()` (`to_str` exists, but the target is the caller's intent), undefined names, `thread.start`, `m.push` on a non-list map |
 | `gram.foreign.1` | 9 | Structural rewrites: ternary, `switch`, `throw`/`try`, lambdas, `match (a, b)`, tuple shapes, Python imports |
 | `expr.call.1` | 6 | Arity or positional arguments: the right arguments are the caller's choice |
 | `conc.task.5` | 5 | `t.wait()?` needs an `!` return type the mistake may not intend |
@@ -254,8 +254,8 @@ safe rewrite, so each is left unfixed on purpose. The grouping:
 | `expr.block.2` | 4 | Return type or value: which one the author meant |
 | `err.use.1` | 4 | `else` or `?` needs a fallback value or a `!` return type |
 | `conc.par.5` | 4 | Restructuring a `par` loop changes the program |
-| `expr.call.2`, `expr.call.3` | 6 | Conversions or a choice of which duplicate to drop |
-| `type.struct.6/7`, `type.opt.4`, `std.use.2`, `mod.use.2/4`, `type.bytes.2`, `type.fn.2`, `gen.*`, `contract.*`, `own.*`, `eff.pure.1`, `lex.*`, `expr.if/loop/match.*`, `json.derive.1`, `err.prop.2`, `conc.atomic/share.*`, `gram.fn.2`, `expr.key.1`, `std.use.4`, `mod.main.*`, `trait.impl.1`, `type.struct.2`, `type.bytes.2`, `set` | 37 | Each is one or two files; each has a choice a rewrite would guess (for example `missing_main`'s template, `method_in_struct`'s placement, `for_enumerate`'s loop shape, `unclosed_string`'s closing line) |
+| `expr.call.2`, `expr.call.3` | 5 | Conversions or a choice of which duplicate to drop |
+| `type.struct.6/7`, `type.opt.4`, `std.use.2`, `mod.use.2/4`, `type.bytes.2`, `type.fn.2`, `gen.*`, `contract.*`, `own.*`, `eff.pure.1`, `lex.*`, `expr.if/loop/match.*`, `json.derive.1`, `err.prop.2`, `conc.atomic/share.*`, `gram.fn.2`, `expr.key.1`, `std.use.4`, `mod.main.*`, `trait.impl.1`, `type.struct.2`, `type.bytes.2`, `set` | 44 | Each is one or two files; each has a choice a rewrite would guess (for example `missing_main`'s template, `method_in_struct`'s placement, `for_enumerate`'s loop shape, `unclosed_string`'s closing line) |
 
 The obvious next candidates, if the designer accepts them as rewrites: a
 `for i, x in xs` to indexed loop (`expr.loop.1`), positional-to-named struct
