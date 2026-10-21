@@ -594,3 +594,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0726](0726-native-memory-limit.md) | A memory cap for native programs, checked when the heap takes a chunk *(delegated)* | Accepted | 2026-10-21 |
 | [0727](0727-native-timeout.md) | A time limit for native programs, polled at the allocator *(delegated)* | Accepted | 2026-10-21 |
 | [0728](0728-native-limit-settings.md) | Where a native program gets its limits *(delegated)* | Accepted | 2026-10-21 |
+| [0738](0738-map-lookup-without-key-conversion.md) | Text and integer map keys are looked up without building a `Key` *(delegated)* | Accepted | 2026-10-21 |
