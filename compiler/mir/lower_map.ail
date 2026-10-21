@@ -15,7 +15,7 @@ fn is_key_ty(t Ty) bool
     t == Ty.Int or t == Ty.Bool or t == Ty.Str
 
 fn is_value_ty(t Ty) bool
-    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll()
+    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t)
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
 fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
@@ -84,6 +84,27 @@ fn Lower.entry_value(mut self, e int, t Ty) int
         word := rawop("load64", [addr], Ty.Int)
         return rawop("bits_float", [word], Ty.Float)
     rawop("load64", [addr], t)
+
+## `m.get(k)` as a `V?` (type.map.6): the entry's value, or `none`.
+fn Lower.map_get(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
+    t := opt_of(vt) else return unsupported(pos, "`.get(k)` on a map of `{vt.name()}`")
+    e := call("rt.map_find", [m.id, k], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    join := new_block()
+    r := new_value(t, "")
+    blocks[join].params.push(r)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(found)
+    cur = found
+    jump(join, [some(Val(id: entry_value(e, vt), ty: vt)).id])
+    seal(missing)
+    cur = missing
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: r, ty: t)
 
 ## A call that returns a stored word, as a value of type `t`.
 fn Lower.word_call(mut self, name str, args List[int], t Ty) int
@@ -335,7 +356,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 f := if vt == Ty.Bool then "rt.map_values_bool" else "rt.map_values"
                 return Val(id: call(f, [r.id], Ty.List(vt)), ty: Ty.List(vt))
             if name == "get" and vs.len() == 1
-                return unsupported(npos, "`.get(k)` without `else` (an optional)")
+                return map_get(r, convert(vs[0], kt, npos), vt, npos)
         Set(et) =>
             if is_set_op(name) and args.len() == 1
                 b := lower_value(args[0].value, none)?
