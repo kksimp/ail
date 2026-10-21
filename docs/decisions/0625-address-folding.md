@@ -1,4 +1,4 @@
-# 0625. Address folding: `base[y + k]` as one addressing mode
+# 0625. Address folding, and saving callee-saved registers where the calls start
 
 - **Status:** Accepted
 - **Date:** 2026-10-21
@@ -26,6 +26,30 @@ fields and queued PRs that build one still compile.
 - AArch64: no displacement on the indexed form, so one `add`/`sub` into the
   scratch register replaces the one removed (neutral); constant indexes fold
   completely.
+
+## Shrink-wrapping
+
+A function such as `check` (`if left[node] < 0: return 1`, else recurse)
+pushed and popped all five callee-saved registers on its leaf path, which is
+half of its calls. Now:
+
+- `codegen.split_for_calls` finds the deepest block that dominates every
+  block with a call, has no parameters, and whose dominated blocks form a
+  region that nothing leaves and no edge re-enters at the block itself (a
+  loop header fails; the block before it works). At its start, each value
+  defined before it and used in it is copied, and the uses there read the
+  copy; the allocator gives the copy a callee-saved register and the
+  original, which never crosses a call, a caller-saved one.
+- The allocator finds the deepest such block that dominates every block a
+  callee-saved register lives in (`Alloc.wrap`, `Alloc.region`). If it is not
+  the entry, the registers are saved there (`mov [rbp - 8k]` on x86-64, the
+  same frame slots a push would use; `str` on AArch64) and restored only by
+  returns in its region. Returns outside it save and restore nothing.
+- Cost: `ail build` hello is about 5% slower (a dominator pass per function
+  with calls).
+
+binarytrees 14: 340M to 335M instructions; the leaf path of `check` loses
+eight memory operations. The rest of binarytrees is list growth.
 
 ## Measurements
 

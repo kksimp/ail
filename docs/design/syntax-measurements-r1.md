@@ -14,7 +14,7 @@
 
 | Name | Source | Notes |
 |---|---|---|
-| `cl100k` | OpenAI `cl100k_base` (tiktoken file bundled in the `litellm` 1.104.0 wheel) | GPT-4-era |
+| `cl100k` | OpenAI `cl100k_base` (tiktoken file bundled in the `litellm` 1.104.0 wheel) | OpenAI, 2023 |
 | `o200k` | OpenAI `o200k_base` (same source) | GPT-4o-era |
 | `anthropic-legacy` | `anthropic_tokenizer.json` (same source) | An older Claude tokenizer. **Current Claude tokenizers are not public**, so real counts may differ. |
 | `mistral-tekken` | `tekken_240911.json` (`mistral-common` 1.12.0) | Recent Mistral |

@@ -1,0 +1,67 @@
+# A function that returns early before any call keeps the callee-saved
+# registers untouched on that path and saves them where the calls start
+# (ADR 0625); both paths, floats across calls, and a loop in the called part
+# must give the interpreter's results.
+fn depth(xs List[int], i int) int
+    if xs[i] < 0
+        return 1
+    1 + depth(xs, xs[i])
+
+fn weigh(xs List[int], w List[float], i int) float
+    if xs[i] < 0
+        return w[i]
+    mut total := w[i]
+    mut k := 0
+    while k < 3
+        total += weigh(xs, w, xs[i]) * 0.5
+        k += 1
+    total
+
+fn count(n int) int
+    if n <= 1
+        return n
+    count(n - 1) + count(n - 2)
+
+fn classify(a int, b int, c int) int
+    if a == 0
+        return 100
+    x := count(a)
+    y := count(b)
+    if x > y
+        return x - y + c
+    y - x + c * 2
+
+fn main()
+    xs := [1, 2, 3, 4, -1]
+    print(depth(xs, 0))
+    print(depth(xs, 4))
+    w := [1.5, 2.5, 3.5, 4.5, 5.5]
+    print(weigh(xs, w, 0))
+    print(weigh(xs, w, 4))
+    print(count(15))
+    print(classify(0, 5, 1))
+    print(classify(9, 5, 1))
+    print(classify(4, 8, 3))
+    more()
+
+fn scale(x float, flag bool, n int) float
+    if n <= 0
+        return x
+    if flag
+        return scale(x * 2.0, not flag, n - 1) + x
+    scale(x + 1.0, not flag, n - 1) - x
+
+fn first_neg(xs List[int], at int, tag str) int
+    if at >= xs.len()
+        return -1
+    if xs[at] < 0
+        return at
+    print("skip {tag} {at}")
+    first_neg(xs, at + 1, tag)
+
+fn more()
+    print(scale(1.5, true, 0))
+    print(scale(1.5, true, 5))
+    print(scale(0.25, false, 4))
+    print(first_neg([3, 4, -1, 5], 0, "a"))
+    print(first_neg([3, 4], 0, "b"))

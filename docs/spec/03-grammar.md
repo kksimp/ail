@@ -45,10 +45,22 @@ one edit away, and applying the fix would change the program's meaning.
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
 write. A rule without a specific help has a default one. *(ADR 0262)*
 
+```ail tool=check,FILE status=2 expect=help: rules=gram.help.1
+fn main()
+    x := 1
+    x = 2
+```
+
 **gram.help.2** — `ail fix` resolves a mistake only when the result checks
 without errors; a fix that leaves other errors is still a fix, but the
 mistakes corpus records which files `ail fix` leaves clean. *(ADR 0262,
 [audit](../design/diagnostics-audit.md))*
+
+```ail tool=fix,--dry-run,FILE expect=mut rules=gram.help.2
+fn main()
+    x := 1
+    x = 2
+```
 
 ## Function declarations
 
@@ -73,6 +85,15 @@ fn add(a i32, b i32) i32
 **gram.list.1** — In argument lists, parameter lists, list literals and struct
 literals, a comma MAY follow the last element. The canonical form has one only
 when the list spans several lines. *(ADR 0118)*
+
+```ail rules=gram.list.1
+fn main()
+    xs := [
+        1,
+        2,
+    ]
+    print(xs.len())
+```
 
 ## Generic arguments
 

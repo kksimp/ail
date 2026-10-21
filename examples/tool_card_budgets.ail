@@ -1,0 +1,16 @@
+## Agent task: measure how big a package's card is at four budgets, so an agent
+## picks the largest budget its context can spare.
+##   ./ail run examples/tool_card_budgets.ail
+
+fn main() !
+    here := path.dir(env.program())
+    pkg := "{here}/../tools/tokbench/corpus/agent-r5/data/pkg"
+    for budget in [60, 120, 240, 480]
+        r := proc.run("{here}/../ail", [
+            "api",
+            "--card",
+            "--budget",
+            "{budget}",
+            pkg,
+        ])? "carding at {budget}"
+        print("budget {budget}: {r.out.lines().len()} lines, {r.out.len()} chars")
