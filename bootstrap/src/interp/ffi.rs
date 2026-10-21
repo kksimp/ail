@@ -483,6 +483,7 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                     }
                     Ok(Value::Int(p as i64))
                 }
+                // std.mem.1: `cstr` returns a new NUL-terminated copy of its string.
                 "cstr" => {
                     let Value::Str(s) = &values[0] else { unreachable!("checked: a str") };
                     let bytes = s.as_bytes();

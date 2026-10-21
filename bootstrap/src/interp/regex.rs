@@ -52,6 +52,7 @@ impl<W: Write> Interp<'_, W> {
             return Ok(match regex::compile(&pat) {
                 Ok(_) => Value::Struct(self.structs["regex.Regex"], Rc::new(vec![Value::Str(pat)])),
                 Err(e) => {
+                    // std.regex.23: a `RegexError` has pattern, at, kind, rule and message.
                     let s = self.structs["regex.RegexError"];
                     fail(
                         Value::Struct(s, Rc::new(vec![

@@ -1291,7 +1291,7 @@ impl<'a, W: Write> Interp<'a, W> {
         result
     }
 
-    /// A block whose exit releases unique values (own.uniq.3-4) and runs
+    /// A block whose exit releases unique values (own.uniq.3-4, own.uniq.7) and runs
     /// deferred statements (own.defer.1-2): in reverse order of their
     /// declarations and `defer`s, by any exit, including a trap.
     #[inline(never)]
