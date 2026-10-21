@@ -45,6 +45,30 @@ DIAG = re.compile(r"(error|warning)\[[^\]]+\]")
 STATUSES = ["built-match", "built-differs", "not-subset", "check-rejected",
             "backend-error", "build-error"]
 
+# Which queued lane or PR owns a blocker (from the lane briefs). Checked in order; the
+# first match names the owner. `blocker_owner` returns "unowned" when nothing matches.
+OWNERS = [
+    (r"mut. parameter", "lane 120, PR #205 (mut parameters)"),
+    (r"attribute `@|contracts|`(hash|path|random)`|`unsafe` block", "lane 174, PRs #207, #208"),
+    (r"string|\.split|\.lines|\.contains|\.join|interpolation|to_str|`==` on `str`", "lane 172, PRs #184, #204"),
+    (r"\bmaps?\b|\bsets?\b|Map\[", "lane 173, PRs #180, #197"),
+    (r"optional|if x :=|else. on a binding", "lane 175, PRs #177, #203"),
+    (r"enum|match|comprehension", "lane 179, enums and match"),
+    (r"constant ", "lane 179, non-literal constants"),
+    (r"trait|methods and generic|impl. blocks", "lane 179 (generics, PR #219), lane 120 (traits, PR #222)"),
+    (r"tensor", "lane 193, native tensors"),
+    (r"struct |fields|calling `|field `", "lane 120, structs"),
+]
+FOLLOWS = re.compile(r"result type|its type|must end with its result|only locals, parameters and constants")
+
+
+def blocker_owner(msg):
+    for pattern, owner in OWNERS:
+        if re.search(pattern, msg):
+            return owner
+    return "unowned" if not FOLLOWS.search(msg) else None
+
+
 
 def rel(path):
     return os.path.relpath(path, ROOT)
@@ -267,6 +291,30 @@ def render(results, previous):
             examples.setdefault(construct(p), p)
     for key, n in problems.most_common(25):
         out.append(f"| {key} | {n} | {blocking.get(key, 0)} | {examples[key]} |")
+    out.append("")
+
+    out.append("## What blocks each example")
+    out.append("")
+    out.append("The first reported problem whose owner is known from the lane briefs. "
+               "`follows` means the problem is a type or a use of a construct another blocker "
+               "already names, so it clears with that blocker.")
+    out.append("")
+    out.append("| example | blocker | owner |")
+    out.append("|---|---|---|")
+    for r in results:
+        if r["source"] != "examples" or r["status"] != "not-subset":
+            continue
+        pick = None
+        for p in r["problems"]:
+            owner = blocker_owner(p)
+            if owner and owner != "unowned":
+                pick = (p, owner)
+                break
+        if pick is None:
+            pick = (r["first"], blocker_owner(r["first"]) or "follows")
+            if pick[1] is None:
+                pick = (r["first"], "follows")
+        out.append(f"| {os.path.basename(r['file'])} | {clip(pick[0], 90)} | {pick[1]} |")
     out.append("")
 
     out.append("## Built but differs")
