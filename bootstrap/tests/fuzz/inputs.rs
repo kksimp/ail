@@ -287,7 +287,24 @@ fn csv_text(r: &mut Rng) -> String {
     }
     if r.chance(1, 12) {
         s = s.repeat(1 + r.below(200));
+    }
+    s
+}
+
+/// Command-line words, one per line: flags, options, `--`, `-`, `=` forms and junk.
+fn args_text(r: &mut Rng) -> String {
+    const WORDS: [&str; 22] = [
+        "-v", "--verbose", "--out", "--out=x", "--out=", "-o", "x", "--", "-", "---", "--bogus", "-vo", "-ov", "file", "", "--verbose=1", "-o=x", "-h-", "--=", "é", "-9", "a b",
+    ];
+    let mut words = Vec::new();
+    for _ in 0..r.below(8) {
+        words.push(*r.pick(&WORDS));
+    }
+    words.join("\n")
+}
+
 // ---- cookies and responses (std.net.jar, the HTTP/1.1 client) ----
+
 /// A `Set-Cookie` line: name, value, and attributes in good and bad forms.
 fn cookie_text(r: &mut Rng) -> String {
     let mut s = String::from(*r.pick(&["a=b", "sid=1", "=x", "x", "", "a=b=c", "a = b", "__Host-id=1", "é=ü", "a=\"q\"", "a=;", "n=v\r\nX: y"]));
@@ -303,16 +320,6 @@ fn cookie_text(r: &mut Rng) -> String {
     s
 }
 
-/// Command-line words, one per line: flags, options, `--`, `-`, `=` forms and junk.
-fn args_text(r: &mut Rng) -> String {
-    const WORDS: [&str; 22] = [
-        "-v", "--verbose", "--out", "--out=x", "--out=", "-o", "x", "--", "-", "---", "--bogus", "-vo", "-ov", "file", "", "--verbose=1", "-o=x", "-h-", "--=", "é", "-9", "a b",
-    ];
-    let mut words = Vec::new();
-    for _ in 0..r.below(8) {
-        words.push(*r.pick(&WORDS));
-    }
-    words.join("\n")
 /// A raw HTTP/1.1 response a hostile server might send.
 fn response_text(r: &mut Rng) -> String {
     let status = *r.pick(&["HTTP/1.1 200 OK", "HTTP/1.1 404 Not Found", "HTTP/1.0 200 OK", "HTTP/1.1 204 No Content", "HTTP/1.1 301 Moved", "HTTP/1.1 100 Continue", "HTTP/1.1 999 X", "HTTP/1.1 20 OK", "HTTP/2 200", "HTTP/1.1", "200 OK", "", "HTTP/1.1 200", "HTTP/1.1 abc OK"]);
@@ -326,8 +333,10 @@ fn response_text(r: &mut Rng) -> String {
             "no-colon", " folded: x", "X: a\u{0}b", "Host:", "Trailer: x",
         ]));
         s.push_str(if r.chance(1, 10) { "\n" } else { "\r\n" });
+    }
     if chunked {
         s.push_str("Transfer-Encoding: chunked\r\n");
+    }
     s.push_str(if r.chance(1, 12) { "" } else { "\r\n" });
     if chunked {
         for _ in 0..r.below(4) {
@@ -338,6 +347,7 @@ fn response_text(r: &mut Rng) -> String {
         }
     } else {
         s.push_str(r.pick(&["hello", "", "hello world, longer than five", "\u{1f600}", "\r\n\r\n", "\u{1f}\u{8b}\u{8}garbage"]));
+    }
     s
 }
 
