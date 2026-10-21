@@ -369,6 +369,15 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
         return none
     Maybe(val: o, present: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), opt: true, err: Ty.Unknown)
 
+## Bind `name` to the error being handled: its typed value when the call names
+## one, else its display text.
+fn Lower.bind_taken_error(mut self, name str, ty Ty)
+    if ty == Ty.Unknown
+        declare(name, Ty.Str, call("rt.err_take", [], Ty.Str))
+    else
+        raw := call("rt.err_take_value", [], Ty.Int)
+        declare(name, ty, op("copy", [raw], ty))
+
 ## `e else ...` (err.else.1-6): the success value, or the `else` part.
 ## A value of type `Unit` when `e` has no success value.
 fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?

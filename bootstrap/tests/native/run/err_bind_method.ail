@@ -32,3 +32,9 @@ fn main()
             print("last {i}")
         else
             print("no {i}")
+    for i in 0..4
+        if v := f(i)
+            print("v {v}")
+        else err
+            print(err)
+            print(err.k)
