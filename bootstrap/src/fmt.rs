@@ -161,8 +161,12 @@ impl FTok {
     fn closes(&self) -> bool {
         matches!(self.kind, Kind::Sym(")" | "]" | "}"))
     }
-    /// Ends an operand, so a following `(` or `[` is a call or an index.
+    /// Ends an operand, so a following `(` or `[` is a call or an index. `then` is a
+    /// contextual keyword lexed as a word (expr.if.*): `then (a + b)` stays spaced.
     fn ends_operand(&self) -> bool {
+        if self.kind == Kind::Word && self.text == "then" {
+            return false;
+        }
         matches!(self.kind, Kind::Word | Kind::Lit | Kind::Kw("self") | Kind::Sym(")" | "]" | "}" | "?"))
     }
     fn comma() -> FTok {
@@ -1097,6 +1101,12 @@ mod tests {
             }
         }
         assert!(formatted > 50, "only {formatted} files formatted");
+    }
+
+    #[test]
+    fn then_before_a_parenthesis_stays_spaced() {
+        let src = "fn f(x float) float\n    if x > 0.0 then (x + 0.5).floor() else (x - 0.5).ceil()\n";
+        assert_eq!(fmt(src), src);
     }
 
     #[test]

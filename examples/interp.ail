@@ -279,7 +279,7 @@ fn Parser.if_statement(mut self) Stmt ! MiniError
     mut else_body := []
     if at("else")
         advance()
-        else_body = if at("if") then[if_statement()?] else block()?
+        else_body = if at("if") then [if_statement()?] else block()?
     If(pos, cond, then_body, else_body)
 
 fn Parser.expression(mut self, level int) Expr ! MiniError
