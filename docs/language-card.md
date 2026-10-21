@@ -2,20 +2,20 @@
 
 > v1, 2026-10-20. Non-normative: the [spec](spec/) is authoritative and the
 > [quick reference](quick-reference.md) has the long form. Budget 8,000 tokens
-> on every tokenizer (`tools/tokbench/run.sh docs/language-card.md`).
+> (five-tokenizer mean, `tools/tokbench/run.sh docs/language-card.md`).
 
 ## Running programs
 
 ```sh
 ./ail run FILE.ail           # check, then run
 ./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
-./ail test FILE.ail          # run the `@test` functions (--coverage, --trace)
+./ail test FILE.ail          # run the `@test` functions
 ./ail fmt FILE.ail           # canonical layout; `ail fix FILE.ail` applies diagnostics' fixes
-./ail api --text FILE.ail    # declarations and `##` docs without bodies; --card, --symbols
+./ail api --text FILE.ail    # declarations and `##` docs without bodies
 ./ail explain RULE           # a rule's text, its ADRs and an example
-./ail effects FILE.ail       # what each function may do; run --deny fs,proc rejects
+./ail effects FILE.ail       # what each function may do
 ./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
-./ail run --record R.json FILE.ail     # effect results to R.json; `--replay R.json` repeats the run
+./ail run --record R.json FILE.ail     # `--replay R.json` repeats the run
 ./ail CMD --budget N             # any command: about N tokens, errors first; `--from K` continues
 ./ail edit FILE.ail --test <<E   # change code by declaration name, then fmt, check, test
 average                          # the declaration
@@ -27,9 +27,8 @@ E
 
 `todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
 
-Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
-standard modules (`compress`, `env`, `fs`, `hash`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time`, `ui`)
-need no `use`: `fs.read_text(p)`. A local of the same name hides one.
+Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. Standard
+modules need no `use` (`fs.read_text(p)`); a local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
 
@@ -77,19 +76,18 @@ update a `mut` variable in a loop, use `=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
-`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
+`random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`); float math `x.sin()`, `x.pow(y)` (type.num.16).
 
-AIL-written modules: `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`); float math methods `x.sin()`, `x.pow(y)` and more (type.num.16).
+Regex (RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `is_match(re, s)`, `find(re, s)` (`Match?`), `find_all`, `group_all(re, s, n)`, `captures(re, s)`, `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`.
 
 Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `re.is_match(s)`, `re.find(s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(s)` (`groups` `List[str?]`, `named`), `replace(s, "$2-$1")`, `replace_first`, `split(s)` (each is also `regex.NAME(re, s)`), `regex.group_all(re, s, n)` (group `n` of each match, `""` if unset), `regex.escape(s)`. Offsets count characters.
+`t := tensor.from(xs, shape)` (or `tensor.zeros(shape)`): `t.matmul(u)`, `t + u`, `t * 2.0`, `t.dot(u)`, `t.sum(axis?)`, `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 
-`t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])` (or `tensor.zeros(shape)`): `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
+`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?`, `fs.glob("src/**/*.ail")`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()`, `.text()`.
+`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`http://`, `https://`; `get_bytes`, `post_bytes`, `request_bytes` give `.data`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?`.
 
-`fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
-`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()` (status 0) and `.text()` (out then err).
-`net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`get_bytes`/`post_bytes`/`request_bytes` give `.data` as `bytes`; `proc.run_bytes`) (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
-
-Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
+Constants: top-level `NAME := value`, computed at compile time.
 
 ## Structs, enums and methods
 
@@ -367,8 +365,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` on strings and no `{{` escape: use interpolation and `\{`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
-  `for x in b`, `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()`, `b.base64()`,
-  `bytes.from_list(xs)`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
+  `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()`, `b.base64()`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
 ## Lists
 
@@ -519,18 +516,16 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 ## Packages, effects and the system
 
-`ail.pkg` in a package root lists the package and its `dep`s; each `dep` may reach only the capabilities in its `caps` (spec `mod.pkg.*`).
+`ail.pkg` lists the package and its `dep`s; each `dep` reaches only its `caps` (spec `mod.pkg.*`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
-`unsafe` allows C calls (`extern c "libm" fn hypot(a float, b float) float`) and `std.mem` pointers (`mem.alloc(n, 0) *int`, `p.read()`, `p.write(v)`); `ail.pkg` needs `unsafe allow`; see `docs/spec/14-ffi.md`.
+`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`; see `docs/spec/14-ffi.md`.
 
-A window is a grid of text cells: `ui.open(title, cols, rows)` gives `w`, then `w.put(col, row, text, fg, bg)`, `w.present()` and `w.next_event()` (`Key`, `Close`, `Resize`, ...); `ail api` lists the signatures.
+A window is a grid of text cells, drawn with `w.put(col, row, text, fg, bg)` and `w.present()`:
 
-`Json`, `parse_json(text)?` and the
-`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.
 ```ail
 fn main()
     mut w := ui.open("Demo", 40, 10) else return   # fails headless
@@ -545,7 +540,4 @@ fn main()
             Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
 ```
 
-A `Tensor[float]` (`tensor.from(xs)`, `zeros(shape)`) supports `+ - *` with tensors or scalars, `dot`,
-`matmul`, `sum`, `transpose`, on all cores. `Json`, `parse_json(text)?` and the
-`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses.
-`ToJson`/`FromJson` derives read and write JSON; `List[U].from_json(j)?` reads an array. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.
+`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses.
