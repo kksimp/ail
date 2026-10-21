@@ -22,8 +22,10 @@ result length is the count, with no width pass. With an empty separator it
 then stores each character as one byte and returns. Otherwise the old
 path runs, unchanged. Output is the same bytes either way (type.coll.9).
 
-Instructions executed, before → after: fasta 70M → 49M (−30%),
-mandelbrot 39M → 34M (−13%); the other eight perfbench programs are unchanged.
+Instructions executed, before → after, on the batch head after chain J:
+fasta 63.1M → 44.3M (−30%), mandelbrot 38.4M → 34.1M (−11%); the other eight
+perfbench programs are unchanged. `join_chars_ascii.ail` covers 1-, 2-, 3- and
+4-byte characters, so non-ASCII input is shown to take the old path.
 
 ## Consequences
 
