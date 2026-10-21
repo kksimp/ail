@@ -236,7 +236,7 @@ impl<'p> Checker<'p> {
             ("env", "vars") => (vec![], Ty::Map(Box::new(Str), Box::new(Str))),
             ("compress", "inflate" | "gunzip" | "unzlib") => (vec![Ty::Bytes], compress(Ty::Bytes)),
             ("compress", "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => (vec![Str, Str], compress(Unit)),
-            ("path", "dir" | "base" | "ext") => (vec![Str], Str),
+            ("path", "dir" | "base" | "ext" | "stem") => (vec![Str], Str),
             ("path", "join") => (vec![Str, Str], Str),
             ("io", "read_line") => (vec![], opt(Str)),
             ("io", "read_all") => (vec![], Str),

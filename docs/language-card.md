@@ -361,7 +361,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.

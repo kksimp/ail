@@ -80,7 +80,7 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             (&["get", "post", "request", "get_bytes", "post_bytes", "request_bytes", "options", "connect", "connect_tls"], &["net", "io"])
         }
         // std.path.1: text only, so no effects.
-        "path" => (&["base", "dir", "ext", "join"], &[]),
+        "path" => (&["base", "dir", "ext", "join", "stem"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         // std.regex.1: text in, text out, so no effects.
         "regex" => (

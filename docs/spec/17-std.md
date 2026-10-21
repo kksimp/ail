@@ -228,7 +228,12 @@ separator or `a` is empty; on Windows also when `b` starts with a drive and
 a separator (`C:\`). Otherwise `a` and `b` with one `/` between.
 *(ADR 0253, ADR 0504)*
 
-```ail rules=std.path.1,std.path.2,std.path.3,std.path.4
+**std.path.5** — `stem(p str) str` is `base(p)` without its extension: the
+text before the last `.`, or all of `base(p)` when there is none or the only
+`.` is the first character (`stem("a/archive.tar.gz")` is `archive.tar`).
+*(ADR 0630)*
+
+```ail rules=std.path.1,std.path.2,std.path.3,std.path.4,std.path.5
 use std.path
 
 fn main()
@@ -236,6 +241,7 @@ fn main()
     print(path.base("examples/logscan.ail"))   # logscan.ail
     print(path.ext("archive.tar.gz"))          # gz
     print(path.join("examples", "data"))       # examples/data
+    print(path.stem("archive.tar.gz"))         # archive.tar
 ```
 
 ## Hashing: `std.hash`

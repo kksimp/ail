@@ -548,3 +548,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
 | [0719](0719-per-module-cards.md) | `ail api --card --module NAME` prints one module's card (api.card.6) *(delegated)* | Accepted | 2026-10-21 |
 | [0720](0720-package-index-card.md) | `ail api --card --index` lists a package's modules (api.card.7) *(delegated)* | Accepted | 2026-10-21 |
+| [0630](0630-is-empty-and-path-stem.md) | `is_empty` on strings and collections, and `path.stem` *(delegated)* | Accepted | 2026-10-21 |
