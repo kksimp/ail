@@ -83,27 +83,18 @@ n += 1           # also -= *= /= %=
 
 `int`, `float`, `bool`, `str`, `bytes`, `char`, `List[T]`, `Map[K, V]`, `Set[T]`, tuples `(int, str)`, structs, enums, `T?`, `T ! E`, generics, `any Trait`.
 
-```ail fragment
-t := (1, "a")                  # an (int, str); prints (1, "a")
-n, s := t                      # `_` skips; `a, mut b := t`
-print(t.0)                     # t.0, t.1, ...
-match t
-    (0, _) => print("zero")
-    (k, w) => print("{k} {w}")
-```
+A tuple `t := (1, "a")` is an `(int, str)`: read `t.0`, take it apart with
+`n, s := t` (`_` skips; `a, mut b := t`), match arms like `(0, _) =>` and
+`(k, w) =>`. `==`, `<`, map keys and JSON (arrays) work elementwise.
 
-`==`, `<`, map keys and JSON (arrays) work elementwise.
-
-Constants are top-level `NAME := value`, computed at compile time. The
-value may call functions that do no I/O and use no capability
-(`ct.const.2`); a value that can fail needs `else`. Put `if`, `match` and
-`?` in a function and call it:
+Constants are top-level `NAME := value`, computed at compile time by calls
+with no I/O or capability (`ct.const.2`); one that can fail needs `else`, and
+`if`, `match` and `?` go in a called function:
 
 ```ail
 MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}     # a Set[str]
-WORDS := "fn if else".split(" ")
-SQUARES := squares(8)                   # squares must be free of I/O
+SQUARES := squares(8)
 
 fn squares(n int) List[int]
     mut out := List[int]()
@@ -456,12 +447,12 @@ Also: `insert(i, x)`, `remove_at(i)`, `extend(ys)`, `clear()`, `reverse()`,
 `flatten()`, `enumerate()` (`for i, x in xs.enumerate()`), `zip(xs, ys)` (pairs, to the shorter);
 `is_empty()` on strings, lists, maps and sets. Slices don't clamp; negative indexes are errors: use `xs.last()`.
 
-Sort or pick by a key with `by: |x| key` (only on `sorted`, `sort`, `min`,
-`max`; stable, so sort by name first, then by count):
+Sort or pick by a key with `by: |x| key` (on `sorted`, `sort`, `min`, `max`;
+stable); a tuple key sorts by several:
 
 ```ail fragment
 counts := {"b": 2, "a": 2, "c": 5}
-top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]
+top := counts.keys().sorted(by: |k| (-counts[k], k)).take(2)   # ["c", "a"]
 ```
 
 ```ail skip=context
@@ -477,21 +468,18 @@ A comprehension builds a list, set or map in one expression:
 xs := [3, 1, 4]
 squares := [x * x for x in xs]             # [9, 1, 16]
 big := [x for x in xs if x > 2]            # [3, 4]
-pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # clauses nest, outermost first
+pairs := [r * 10 + c for r in 0..2 for c in 0..2]   # nested, outermost first
 seen := {x % 2 for x in xs}                # a Set[int]
 sizes := {w: w.chars().len() for w in ["a", "bc"]}  # a Map[str, int]
 nums := [t.to_int() else continue for t in ["1", "x"]]  # continue skips: [1]
 ```
 
-Loop variables end with the comprehension. `?` and `return` leave the function;
-`break` ends the comprehension.
+Loop variables end with it; `?` and `return` leave the function, `break` ends it.
 
-Loops use every core automatically when their iterations are independent (no
-output, no `break`/`return`/`?`, writes only to their own locals, to `out[i]`,
-or to an `int` total with `+=`). Float totals use `xs.sum()`. `par for` forces
-a loop the checker can't prove (writes to `out[perm[i]]`); a parallel map is
-`[steps(x) par for x in xs]`, and `[sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()`
-splits work into parts.
+Independent loops use every core automatically (no output, no
+`break`/`return`/`?`; writes only to locals, `out[i]` or an `int` total with
+`+=`; float totals use `xs.sum()`). `par for` forces one the checker can't
+prove; a parallel map is `[f(x) par for x in xs]`.
 
 ## Maps and sets
 
@@ -526,14 +514,13 @@ doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/a
 doc.str("id")                                  # str?: also num, bool, arr (a member of that kind)
 doc.set("id", Json.Str("x"))                   # replace or add a member (mut doc)
 doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
-doc.text("id", "none")                         # str: the text member, or the default (json.query.5)
-doc.flag("ok", false)                          # bool: the bool member, or the default (json.query.6)
-parse_json_lines("1\nbad\n\"x\"\n")          # List[Json]: every line that parses (json.lines.1)
+doc.text("id", "none")                         # str: the text member, or the default
+doc.flag("ok", false)                          # bool: likewise
+parse_json_lines("1\nbad\n\"x\"\n")          # List[Json]: every line that parses
 ```
 
 Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
-`Obj(members)`. A program that declares its own
-`Json` keeps it. Derive conversions of your own types (`json.derive.1-2`):
+`Obj(members)`; a program's own `Json` wins. Derive conversions of your own types (`json.derive.1-2`):
 
 ```ail skip=context
 struct Todo
