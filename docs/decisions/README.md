@@ -663,3 +663,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0642](0642-native-trap-stack-format.md) | The native stack lines name the function and the call position, and leave out values *(delegated)* | Accepted | 2026-10-21 |
 | [0643](0643-inlined-callees-keep-their-frame.md) | A check inlined from a callee keeps the callee's frame and the call that was inlined *(delegated)* | Accepted | 2026-10-21 |
 | [0644](0644-native-trap-stack-always-on.md) | The trap stack is always built, with no flag: cost measured *(delegated)* | Accepted | 2026-10-21 |
+| [0846](0846-native-proc-start-and-macos-proc.md) | Native `proc.start` with streams fed by a poll through the channels' `source` word; `std.proc` on macOS by libSystem `fork` *(delegated)* | Accepted | 2026-10-21 |

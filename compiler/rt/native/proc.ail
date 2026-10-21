@@ -514,9 +514,13 @@ fn ps_round(ps int, want_in bool, ms int)
     store64(pf, ifd.bit_and(4294967295).bit_or(17179869184))
     store64(pf + 8, load64(ps + PS_OUT).bit_and(4294967295).bit_or(4294967296))
     store64(pf + 16, load64(ps + PS_ERR).bit_and(4294967295).bit_or(4294967296))
-    s := blocked_enter()
+    multi := load64(global(MULTI)) != 0
+    mut parked := 0
+    if multi
+        parked = blocked_enter()
     r := proc_poll(pf, ms, pf + 24)
-    blocked_leave(s)
+    if multi
+        blocked_leave(parked)
     if r <= 0
         return
     ro := load64(pf + 8).shr(48)
@@ -579,9 +583,9 @@ fn chan_pump(ch int)
 ## `c.stdin.send(text)` (std.proc.5): write it all, polling the output
 ## meanwhile so a child that writes as it reads is never stuck. A child that
 ## has gone is not an error.
-fn chan_source_send(ch int, s str)
+fn chan_source_send(ch int, s int)
     ps := load64(ch + CH_SOURCE)
-    p := str_addr(s)
+    p := s
     n := load64(p)
     lock(ps + PS_INLOCK)
     mut off := 0
