@@ -278,6 +278,8 @@ enum Slot {
     Listener(TcpListener, String),
     Conn(Conn),
     Exchange(Exchange),
+    /// A response body being read (std.net.25), with the URL for errors.
+    Body(super::net::Streaming, String),
     /// Taken out by an operation that is waiting; `close` while busy
     /// leaves `Gone` so the operation drops it when it ends.
     Busy,
@@ -809,6 +811,23 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     /// `net.serve(addr)` (std.net.9): a `Server` listening on `addr`.
+    /// The `net.Body` for a response whose body is left on its connection.
+    pub(super) fn net_body(&self, r: super::net::Response, st: super::net::Streaming) -> Value {
+        let mut headers = Table::default();
+        for (k, v) in r.headers {
+            headers.insert(text(k), Some(text(v)));
+        }
+        let mut all = Table::default();
+        for (k, vs) in r.all {
+            all.insert(text(k), Some(Value::List(Rc::new(vs.into_iter().map(text).collect()))));
+        }
+        let id = add(Slot::Body(st, String::new()));
+        Value::Struct(
+            self.structs["net.Body"],
+            Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), Value::Map(Rc::new(all)), Value::Int(id)]),
+        )
+    }
+
     pub(super) fn net_serve(&mut self, addr: &str, pos: Pos) -> Value {
         match bind(addr) {
             Ok((listener, shown)) => {
@@ -908,7 +927,30 @@ impl<'a, W: Write> Interp<'a, W> {
                 Some(Slot::Listener(_, a)) => text(a.clone()),
                 _ => text(""),
             },
-            "Server.close" | "Listener.close" | "Conn.close" => {
+            "Body.read_bytes" => {
+                self.flush(pos)?;
+                let max = values[0].int();
+                if max <= 0 {
+                    return Ok(self.net_error("", "other", format!("`read_bytes` needs a size of at least 1, not {max}"), pos));
+                }
+                let taken = {
+                    let mut t = sockets();
+                    match t.get_mut(id as usize) {
+                        Some(s) if matches!(s, Slot::Body(..)) => Some(std::mem::replace(s, Slot::Busy)),
+                        _ => None,
+                    }
+                };
+                let Some(Slot::Body(mut st, url)) = taken else {
+                    return Ok(closed(self, "body"));
+                };
+                let got = st.read_some(max as usize);
+                put_back(id, Slot::Body(st, url));
+                match got {
+                    Ok(data) => super::bytes::bytes_value(data),
+                    Err((kind, message)) => self.net_error("", kind, message, pos),
+                }
+            }
+            "Server.close" | "Listener.close" | "Conn.close" | "Body.close" => {
                 close(id);
                 Value::Unit
             }

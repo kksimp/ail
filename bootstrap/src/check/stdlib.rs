@@ -266,6 +266,10 @@ impl<'p> Checker<'p> {
             ("mem", "from_cstr") => (vec![Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))], Str),
             ("mem", "null") => (vec![], Ty::Ptr(Box::new(Ty::Num(crate::num::Num::U8)))),
             ("net", "options") => (vec![], std_ty("net.Options")),
+            ("net", "open") => (
+                vec![Str, Str, std_ty("net.Options")],
+                Ty::Res(Box::new(std_ty("net.Body")), Errs::Set(vec![std_ty("net.NetError")])),
+            ),
             ("net", "serve" | "listen" | "connect" | "connect_tls") => {
                 let (params, ok) = match f {
                     "serve" => (vec![Str], "net.Server"),

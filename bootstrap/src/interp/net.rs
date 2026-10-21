@@ -87,6 +87,23 @@ pub fn post(url: &str, body: &[u8], content_type: &str) -> Result<Response, NetF
 /// credentials in `authorization` and `cookie` go only to the host they were
 /// set for. Any other method gets its redirect back as the response.
 pub fn request(method: &str, url: &str, opts: &Opts) -> Result<Response, NetFail> {
+    request_impl(method, url, opts, false).map(|r| r.resp)
+}
+
+/// What a request gave: the response, and with `stream` the body not yet read.
+pub struct Reply {
+    pub resp: Response,
+    pub open: Option<Streaming>,
+}
+
+/// std.net.25: like `request`, but the body is left to be read in pieces
+/// from the returned `Streaming`.
+pub fn open(method: &str, url: &str, opts: &Opts) -> Result<(Response, Streaming), NetFail> {
+    let r = request_impl(method, url, opts, true)?;
+    Ok((r.resp, r.open.expect("a streamed reply has its body")))
+}
+
+fn request_impl(method: &str, url: &str, opts: &Opts, stream: bool) -> Result<Reply, NetFail> {
     let method = method.to_ascii_uppercase();
     if method.is_empty() || !method.bytes().all(is_token_byte) {
         return Err(fail(url, "bad_request", format!("`{method}` is not an HTTP method")));
@@ -99,17 +116,22 @@ pub fn request(method: &str, url: &str, opts: &Opts) -> Result<Response, NetFail
     let follows = method == "GET" || method == "HEAD";
     let deadline = opts.total.map(|t| Instant::now() + t);
     for _ in 0..=opts.max_redirects {
-        let r = exchange_once(&method, &url, &opts, deadline)?;
+        let mut reply = exchange_once(&method, &url, &opts, deadline, stream)?;
+        let r = &reply.resp;
         let location = r.headers.iter().find(|(k, _)| k == "location").map(|(_, v)| v.clone());
         match (r.status, location) {
             (301 | 302 | 303 | 307 | 308, Some(to)) if follows && opts.max_redirects > 0 => {
+                // The redirect's own body is read out so its connection can be reused.
+                if let Some(mut st) = reply.open.take() {
+                    st.read_all().map_err(|(kind, message)| fail(&url, kind, message))?;
+                }
                 let next = resolve(&url, &to);
                 if origin(&next) != origin(&url) {
                     opts.headers.retain(|(k, _)| !k.eq_ignore_ascii_case("authorization") && !k.eq_ignore_ascii_case("cookie"));
                 }
                 url = next;
             }
-            _ => return Ok(r),
+            _ => return Ok(reply),
         }
     }
     Err(fail(&url, "protocol", format!("more than {} redirects", opts.max_redirects)))
@@ -306,7 +328,7 @@ fn give_back(idle: Idle) {
     pool.push(idle);
 }
 
-fn exchange_once(method: &str, url: &str, opts: &Opts, deadline: Option<Instant>) -> Result<Response, NetFail> {
+fn exchange_once(method: &str, url: &str, opts: &Opts, deadline: Option<Instant>, stream: bool) -> Result<Reply, NetFail> {
     let t = parse_url(url)?;
     let key = (t.tls, t.host.to_ascii_lowercase(), t.port);
     let given = |name: &str| opts.headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(name));
@@ -367,7 +389,7 @@ fn exchange_once(method: &str, url: &str, opts: &Opts, deadline: Option<Instant>
         && let Some(idle) = take_idle(&key)
     {
         idle.limits.set(opts.timeout, deadline);
-        match run(idle, &bytes, method, url, &key, !closes) {
+        match run(idle, &bytes, method, url, &key, !closes, stream) {
             Ok(r) => {
                 REUSED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return Ok(r);
@@ -377,7 +399,7 @@ fn exchange_once(method: &str, url: &str, opts: &Opts, deadline: Option<Instant>
         }
     }
     let idle = connect(url, &t, key.clone(), opts, deadline)?;
-    run(idle, &bytes, method, url, &key, !closes).map_err(|(e, _)| e)
+    run(idle, &bytes, method, url, &key, !closes, stream).map_err(|(e, _)| e)
 }
 
 /// Opens a connection to `t` (std.net.5, std.net.19).
@@ -432,31 +454,42 @@ fn connect(url: &str, t: &Target, key: (bool, String, u16), opts: &Opts, deadlin
     Ok(Idle { key, stream, limits, probe, since: Instant::now(), keep: POOL_IDLE })
 }
 
-/// Sends the request on `idle` and reads the response; a connection the
-/// server leaves open goes back to the pool when `pool` allows. The error's
-/// flag says the connection failed before any response byte arrived.
-fn run(mut idle: Idle, request: &[u8], method: &str, url: &str, key: &(bool, String, u16), pool: bool) -> Result<Response, (NetFail, bool)> {
+/// Sends the request on `idle` and reads the response head; the body is
+/// read here, or with `stream` left in the returned `Streaming`. A connection
+/// the server leaves open goes back to the pool when `pool` allows. The
+/// error's flag says the connection failed before any response byte arrived.
+fn run(mut idle: Idle, request: &[u8], method: &str, url: &str, key: &(bool, String, u16), pool: bool, stream: bool) -> Result<Reply, (NetFail, bool)> {
     if let Err(e) = idle.stream.write_all(request).and_then(|()| idle.stream.flush()) {
         return Err((fail(url, connect_kind(&e), e.to_string()), true));
     }
     let mut r = BufReader::new(idle.stream);
     let mut seen = false;
-    let read = read_response_ex(&mut r, method, &mut seen);
-    match read {
-        Err((kind, message)) => Err((fail(url, kind, message), !seen)),
-        Ok((resp, reusable)) => {
-            if reusable && pool && r.buffer().is_empty() {
-                let keep = resp
-                    .headers
-                    .iter()
-                    .find(|(k, _)| k == "keep-alive")
-                    .and_then(|(_, v)| v.split(',').find_map(|p| p.trim().strip_prefix("timeout=")?.parse::<u64>().ok()))
-                    .map_or(POOL_IDLE, |s| Duration::from_secs(s.min(30)));
-                give_back(Idle { key: key.clone(), stream: r.into_inner(), limits: idle.limits, probe: idle.probe, since: Instant::now(), keep });
-            }
-            Ok(resp)
+    let head = match read_head(&mut r, method, &mut seen) {
+        Ok(h) => h,
+        Err((kind, message)) => return Err((fail(url, kind, message), !seen)),
+    };
+    let keep = head
+        .headers
+        .iter()
+        .find(|(k, _)| k == "keep-alive")
+        .and_then(|(_, v)| v.split(',').find_map(|p| p.trim().strip_prefix("timeout=")?.parse::<u64>().ok()))
+        .map_or(POOL_IDLE, |s| Duration::from_secs(s.min(30)));
+    let mut st = Streaming {
+        r: Some(r),
+        frame: head.frame,
+        reusable: head.reusable && pool,
+        idle: Some((key.clone(), idle.limits, idle.probe, keep)),
+    };
+    let mut resp = Response { status: head.status, headers: head.headers, all: head.all, body: Vec::new() };
+    if stream {
+        // A body of no length is finished already: give the connection back now.
+        if matches!(st.frame, Frame::None) {
+            st.finish();
         }
+        return Ok(Reply { resp, open: Some(st) });
     }
+    resp.body = st.read_all().map_err(|(kind, message)| (fail(url, kind, message), false))?;
+    Ok(Reply { resp, open: None })
 }
 
 /// std.net.4: a TLS failure is kind `tls` with its cause; a transport
@@ -496,15 +529,41 @@ fn read_line(r: &mut impl BufRead) -> Result<String, Bad> {
 
 /// Read a response to `method` (RFC 9112 message framing).
 #[cfg(test)]
-fn read_response(mut r: impl BufRead, method: &str) -> Result<Response, Bad> {
-    read_response_ex(&mut r, method, &mut false).map(|(r, _)| r)
+fn read_response(r: impl BufRead, method: &str) -> Result<Response, Bad> {
+    let mut r = BufReader::new(r);
+    let head = read_head(&mut r, method, &mut false)?;
+    let mut st = Streaming { r: Some(BufReader::new(Box::new(std::io::empty()) as Stream)), frame: Frame::None, reusable: false, idle: None };
+    // Feed the body from the same reader.
+    let body = read_frame_all(&mut r, head.frame)?;
+    st.finish();
+    Ok(Response { status: head.status, headers: head.headers, all: head.all, body })
 }
 
-/// Like `read_response`, also telling whether the connection can carry the
-/// next request: HTTP/1.1, no `Connection: close`, and a body framed by
-/// length or chunks. `seen` turns true when the first byte arrives. Interim
-/// `1xx` responses (except 101) are skipped (std.net.19).
-fn read_response_ex(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Result<(Response, bool), Bad> {
+/// How a response body is delimited (RFC 9112 6.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Frame {
+    /// No body (`HEAD`, `1xx`, `204`, `304`, or a length of 0 once read).
+    None,
+    /// This many bytes are left.
+    Length(usize),
+    /// Chunked; `left` bytes remain in the current chunk, `0` between chunks.
+    Chunked { left: usize },
+    /// Up to the end of the connection.
+    ToEof,
+}
+
+struct Head {
+    status: i64,
+    headers: Vec<(String, String)>,
+    all: Vec<(String, Vec<String>)>,
+    frame: Frame,
+    /// HTTP/1.1, no `Connection: close`, and a delimited body.
+    reusable: bool,
+}
+
+/// Reads the status line and headers, skipping interim `1xx` responses
+/// (except 101) (std.net.19). `seen` turns true when the first byte arrives.
+fn read_head(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Result<Head, Bad> {
     let mut status_line = read_line(r)?;
     *seen = !status_line.is_empty();
     loop {
@@ -515,7 +574,6 @@ fn read_response_ex(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Resu
         while !read_line(r)?.is_empty() {}
         status_line = read_line(r)?;
     }
-    let mut r = &mut *r;
     let mut parts = status_line.splitn(3, ' ');
     let version = parts.next().unwrap_or("");
     if !version.starts_with("HTTP/1.") {
@@ -528,7 +586,7 @@ fn read_response_ex(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Resu
     let mut headers: Vec<(String, String)> = Vec::new();
     let mut all: Vec<(String, Vec<String>)> = Vec::new();
     loop {
-        let line = read_line(&mut r)?;
+        let line = read_line(r)?;
         if line.is_empty() {
             break;
         }
@@ -549,38 +607,143 @@ fn read_response_ex(r: &mut impl BufRead, method: &str, seen: &mut bool) -> Resu
         }
     }
     let header = |n: &str| headers.iter().find(|(k, _)| k == n).map(|(_, v)| v.as_str());
-    let mut body = Vec::new();
-    let mut framed = true;
     let no_body = method == "HEAD" || status / 100 == 1 || status == 204 || status == 304;
-    if no_body {
-        // Framed by the status alone.
+    let frame = if no_body {
+        Frame::None
     } else if header("transfer-encoding").is_some_and(|v| v.to_ascii_lowercase().contains("chunked")) {
-        loop {
-            let size_line = read_line(&mut r)?;
-            let size_text = size_line.split(';').next().unwrap_or("").trim();
-            let size = usize::from_str_radix(size_text, 16)
+        Frame::Chunked { left: 0 }
+    } else if let Some(len) = header("content-length") {
+        let len: usize = len.parse().map_err(|_| protocol(format!("bad Content-Length `{len}`")))?;
+        if len == 0 { Frame::None } else { Frame::Length(len) }
+    } else {
+        Frame::ToEof
+    };
+    let closes = header("connection").is_some_and(|v| v.to_ascii_lowercase().contains("close"));
+    let reusable = frame != Frame::ToEof && !closes && version == "HTTP/1.1";
+    Ok(Head { status, headers, all, frame, reusable })
+}
+
+/// The parts of a pooled connection that travel with a body being read.
+type IdleParts = ((bool, String, u16), Limits, TcpStream, Duration);
+
+/// A response body being read in pieces (std.net.25). When it has been read
+/// to its end on a connection that can carry another request, the connection
+/// goes back to the pool; dropped earlier, the connection is closed.
+pub struct Streaming {
+    r: Option<BufReader<Stream>>,
+    frame: Frame,
+    reusable: bool,
+    idle: Option<IdleParts>,
+}
+
+impl Streaming {
+    /// Up to `max` bytes of the body; none at its end.
+    pub fn read_some(&mut self, max: usize) -> Result<Vec<u8>, Bad> {
+        let Some(r) = self.r.as_mut() else { return Ok(Vec::new()) };
+        let io = |e: std::io::Error| (connect_kind(&e), e.to_string());
+        let mut out = Vec::new();
+        match self.frame {
+            Frame::None => {}
+            Frame::Length(left) => {
+                out.resize(max.min(left), 0);
+                let n = r.read(&mut out).map_err(io)?;
+                if n == 0 {
+                    return Err(("closed", "the connection ended before the whole body arrived".to_string()));
+                }
+                out.truncate(n);
+                self.frame = if n == left { Frame::None } else { Frame::Length(left - n) };
+            }
+            Frame::Chunked { mut left } => {
+                if left == 0 {
+                    let size_line = read_line(r)?;
+                    let size_text = size_line.split(';').next().unwrap_or("").trim();
+                    left = usize::from_str_radix(size_text, 16).map_err(|_| protocol(format!("bad chunk size `{size_line}`")))?;
+                    if left == 0 {
+                        // Trailers, up to the blank line.
+                        while !read_line(r)?.is_empty() {}
+                        self.frame = Frame::None;
+                        self.finish();
+                        return Ok(out);
+                    }
+                }
+                out.resize(max.min(left), 0);
+                let n = r.read(&mut out).map_err(io)?;
+                if n == 0 {
+                    return Err(("closed", "the connection ended inside a chunk".to_string()));
+                }
+                out.truncate(n);
+                left -= n;
+                if left == 0 {
+                    read_line(r)?;
+                }
+                self.frame = Frame::Chunked { left };
+            }
+            Frame::ToEof => {
+                out.resize(max, 0);
+                let n = r.read(&mut out).map_err(io)?;
+                out.truncate(n);
+                if n == 0 {
+                    self.frame = Frame::None;
+                }
+            }
+        }
+        if self.frame == Frame::None && self.r.is_some() {
+            self.finish();
+        }
+        Ok(out)
+    }
+
+    /// The rest of the body.
+    pub fn read_all(&mut self) -> Result<Vec<u8>, Bad> {
+        let mut body = Vec::new();
+        while self.r.is_some() {
+            let more = self.read_some(64 * 1024)?;
+            body.extend_from_slice(&more);
+        }
+        Ok(body)
+    }
+
+    /// The body is over: the connection returns to the pool if it can.
+    fn finish(&mut self) {
+        let Some(r) = self.r.take() else { return };
+        if let Some((key, limits, probe, keep)) = self.idle.take()
+            && self.reusable
+            && r.buffer().is_empty()
+        {
+            give_back(Idle { key, stream: r.into_inner(), limits, probe, since: Instant::now(), keep });
+        }
+    }
+}
+
+/// The body of a response whose head `read_head` has read, from `r` itself.
+#[cfg(test)]
+fn read_frame_all(r: &mut impl BufRead, frame: Frame) -> Result<Vec<u8>, Bad> {
+    let mut body = Vec::new();
+    let io = |e: std::io::Error| (connect_kind(&e), e.to_string());
+    match frame {
+        Frame::None => {}
+        Frame::Length(n) => {
+            body.resize(n, 0);
+            r.read_exact(&mut body).map_err(io)?;
+        }
+        Frame::Chunked { .. } => loop {
+            let size_line = read_line(r)?;
+            let size = usize::from_str_radix(size_line.split(';').next().unwrap_or("").trim(), 16)
                 .map_err(|_| protocol(format!("bad chunk size `{size_line}`")))?;
             if size == 0 {
-                // Trailers, up to the blank line.
-                while !read_line(&mut r)?.is_empty() {}
+                while !read_line(r)?.is_empty() {}
                 break;
             }
             let start = body.len();
             body.resize(start + size, 0);
-            r.read_exact(&mut body[start..]).map_err(|e| (connect_kind(&e), e.to_string()))?;
-            read_line(&mut r)?;
+            r.read_exact(&mut body[start..]).map_err(io)?;
+            read_line(r)?;
+        },
+        Frame::ToEof => {
+            r.read_to_end(&mut body).map_err(io)?;
         }
-    } else if let Some(len) = header("content-length") {
-        let len: usize = len.parse().map_err(|_| protocol(format!("bad Content-Length `{len}`")))?;
-        body.resize(len, 0);
-        r.read_exact(&mut body).map_err(|e| (connect_kind(&e), e.to_string()))?;
-    } else {
-        framed = false;
-        r.read_to_end(&mut body).map_err(|e| (connect_kind(&e), e.to_string()))?;
     }
-    let closes = header("connection").is_some_and(|v| v.to_ascii_lowercase().contains("close"));
-    let reusable = framed && !closes && version == "HTTP/1.1";
-    Ok((Response { status, headers, all, body }, reusable))
+    Ok(body)
 }
 
 #[cfg(test)]

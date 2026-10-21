@@ -533,3 +533,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0638](0638-cookie-jar.md) | A cookie jar in the standard library, `std.net.jar`: RFC 6265 domain, path, expiry, `Secure`, `HttpOnly`; the one jar for Garlic *(delegated)* | Accepted | 2026-10-21 |
 | [0639](0639-http-server-keep-alive.md) | HTTP server keeps connections alive between requests *(delegated)* | Accepted | 2026-10-21 |
 | [0640](0640-samesite-and-graceful-shutdown.md) | SameSite in the cookie jar; `srv.shutdown()` stops a server without dropping requests under way *(delegated)* | Accepted | 2026-10-21 |
+| [0716](0716-streaming-response-bodies.md) | Streaming response bodies: `net.open` returns a `net.Body` read with `read_bytes`, and a body read to its end returns its connection to the pool *(delegated)* | Accepted | 2026-10-21 |

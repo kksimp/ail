@@ -59,6 +59,11 @@ struct Request  ## std.net.9-11: a request the server received, and the server.
     body str
     peer str
     data bytes
+struct Body  ## std.net.25: a response whose body is read in pieces.
+    status int
+    headers Map[str, str]
+    all_headers Map[str, List[str]]
+    handle int
 struct Server
     handle int
 struct Exchange

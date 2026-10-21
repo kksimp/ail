@@ -418,11 +418,11 @@ impl<'a, W: Write> Interp<'a, W> {
                 ];
                 Value::Struct(s, Rc::new(fields))
             }
-            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes") => {
+            ("net", "get" | "post" | "request" | "get_bytes" | "post_bytes" | "request_bytes" | "open") => {
                 // std.net.16: the `_bytes` forms give the body undecoded.
                 let raw = f.ends_with("_bytes");
                 let method = f.trim_end_matches("_bytes");
-                let url = str_arg(if method == "request" { 1 } else { 0 });
+                let url = str_arg(if method == "request" || method == "open" { 1 } else { 0 });
                 super::netsock::set_yielder(self.yielder());
                 let result = match method {
                     "get" => super::net::get(&url),
@@ -465,6 +465,16 @@ impl<'a, W: Write> Interp<'a, W> {
                             connect: (connect_ms > 0).then(|| std::time::Duration::from_millis(connect_ms as u64)),
                             total: (total_ms > 0).then(|| std::time::Duration::from_millis(total_ms as u64)),
                         };
+                        if method == "open" {
+                            // std.net.25: the body stays on the connection, read through a `net.Body`.
+                            return Ok(match super::net::open(&str_arg(0), &url, &opts) {
+                                Ok((r, st)) => self.net_body(r, st),
+                                Err(e) => {
+                                    let s = self.structs["net.NetError"];
+                                    fail(Value::Struct(s, Rc::new(vec![text(e.url), text(e.kind), text(e.message)])), pos)
+                                }
+                            });
+                        }
                         super::net::request(&str_arg(0), &url, &opts)
                     }
                 };
