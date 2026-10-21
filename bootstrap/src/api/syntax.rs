@@ -507,6 +507,7 @@ fn stmt(st: &Stmt) -> J {
             variant("Handle", vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise))])
         }
         Stmt::Defer(inner, p) => variant("Defer", vec![("stmt", stmt(inner)), ("pos", pos(*p))]),
+        // unsafe.block.4: `ail api --ast` lists every `unsafe` block (here) and `unsafe fn` (`unsafe_fn`).
         Stmt::Unsafe { body, pos: p } => variant("Unsafe", vec![("body", block(body)), ("pos", pos(*p))]),
         Stmt::With { mutex, var, var_pos, body, pos: p } => variant(
             "With",

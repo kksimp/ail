@@ -339,7 +339,7 @@ fn main()
 
 ## Optional types
 
-**type.opt.1** — AIL has no null value. *(ADR 0048)*
+**type.opt.1** — [definitional] AIL has no null value. *(ADR 0048)*
 
 **type.opt.2** — `T?` denotes an optional value of type `T`. It is exactly
 equivalent to `Option[T]`. *(ADR 0048)*

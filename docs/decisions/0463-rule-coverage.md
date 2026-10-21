@@ -28,3 +28,7 @@ binary. The question the designer asked is whether each *rule* is tested.
 example or Rust test names (ranges such as `err.prop.1-4` count each id).
 `docs/design/rule-coverage.md` is its output; the integrator files each chapter's
 list to the owning lane. Line coverage of AIL programs stays `ail test --coverage`.
+
+## Rejected alternatives
+
+- Line coverage of the interpreter and checker with llvm-cov (option B): rejected because it needs a nightly or instrumented toolchain, and it says nothing about AIL-level rules.

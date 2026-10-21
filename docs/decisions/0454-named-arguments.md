@@ -46,3 +46,8 @@ drops the labels. Built-ins have no parameter names and reject labels
 - A call through a trait uses the trait declaration's parameter names.
 - Function values (ADR 0456) are called positionally.
 - Surprise: `f(b: g(), a: h())` runs `h` before `g`.
+
+## Rejected alternatives
+
+- All-or-nothing named calls (option B): rejected because it forbids the common `f(p, dx: 2, dy: 5)`.
+- Default parameter values with named arguments (option C): a separate design, kept apart so this could ship now. There are no defaults yet.
