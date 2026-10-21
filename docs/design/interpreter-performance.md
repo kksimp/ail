@@ -427,3 +427,4 @@ To settle it, time `examples/build.ail` on a quiet machine (the designer's Mac g
 or `tools/bench/run.sh` with wall and user time both recorded), at main and at the
 batch head, and compare the counters. If the 2x returns on a quiet machine, bisect
 again with `git bisect` on buildable commits only.
+See also the [flat enum and struct value proposal](flat-enum-struct-value.md) (measured ceiling about 11% on json_roundtrip, none on binarytrees).
