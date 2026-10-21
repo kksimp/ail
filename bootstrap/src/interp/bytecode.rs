@@ -757,7 +757,14 @@ fn take(o: Opnd, env: &Env<'_>, base: usize, regs: &mut [Value], consts: &[Value
     if o & KIND == REG {
         return std::mem::replace(&mut regs[(o & !KIND) as usize], Value::Unit);
     }
-    get(o, env, base, regs, consts).clone()
+    match get(o, env, base, regs, consts) {
+        // Scalars are built in registers: the generic `clone` merges them into one copy of the
+        // value's bytes through the stack, and the loads after it stall.
+        Value::Int(i) => Value::Int(*i),
+        Value::Float(f) => Value::Float(*f),
+        Value::Bool(b) => Value::Bool(*b),
+        other => other.clone(),
+    }
 }
 
 #[inline(always)]
@@ -2377,7 +2384,9 @@ impl<'a, W: Write> Interp<'a, W> {
     /// parameters, as `block` runs the body: on return `env` holds just those.
     pub(super) fn run_code(&mut self, code: &Code<'a>, env: &mut Env<'a>) -> Flow<Value> {
         let entry = env.len();
-        let base = entry - code.params;
+        // A call builds its own `env` (`invoke_inner`, `run_call`): the frame starts at 0.
+        assert_eq!(entry, code.params, "a frame's env starts with its parameters");
+        let base = 0;
         // A pooled register vector holds only `Unit`s, at least `nregs` of them.
         let mut regs = self.reg_pool.pop().unwrap_or_default();
         if regs.len() < code.nregs {
@@ -3401,6 +3410,8 @@ match {
         base: usize,
         regs: &mut [Value],
     ) -> Flow<Value> {
+        debug_assert_eq!(base, 0);
+        let base = 0usize;
         let consts = &code.consts[..];
         let mut pc = 0usize;
         macro_rules! get {
@@ -3495,7 +3506,12 @@ match {
                         self.binop($op, x, y, pos)?.bool()
                     }
                 };
-                pc = if c == when { t as usize } else { pc + 1 };
+                // A branch the CPU can predict, not a select its result must wait for.
+                if c == when {
+                    pc = std::hint::black_box(t as usize);
+                } else {
+                    pc += 1;
+                }
             }};
         }
         macro_rules! branch_k {
@@ -3508,7 +3524,12 @@ match {
                         self.binop($op, x, Value::Int(k), pos)?.bool()
                     }
                 };
-                pc = if c == when { t as usize } else { pc + 1 };
+                // A branch the CPU can predict, not a select its result must wait for.
+                if c == when {
+                    pc = std::hint::black_box(t as usize);
+                } else {
+                    pc += 1;
+                }
             }};
         }
         macro_rules! inc_br {
@@ -3524,7 +3545,7 @@ match {
                         if let Value::Int(x) = &mut env[at].1 {
                             *x = r;
                         }
-                        pc = if r $c y { top } else { out } as usize;
+                        pc = if r $c y { std::hint::black_box(top) } else { out } as usize;
                     }
                     None => pc = slow as usize,
                 }
@@ -3754,8 +3775,21 @@ match {
                 }
                 Ins::Push { name, src } => {
                     pc += 1;
-                    let v = take!(*src);
-                    env.push((name, v));
+                    // Scalars are built in place; moving a whole `Value` through the stack stalls.
+                    match get!(*src) {
+                        Value::Int(i) => {
+                            let i = *i;
+                            env.push((name, Value::Int(i)));
+                        }
+                        Value::Float(f) => {
+                            let f = *f;
+                            env.push((name, Value::Float(f)));
+                        }
+                        _ => {
+                            let v = take!(*src);
+                            env.push((name, v));
+                        }
+                    }
                 }
                 Ins::MoveOut { dst, slot } => {
                     pc += 1;
