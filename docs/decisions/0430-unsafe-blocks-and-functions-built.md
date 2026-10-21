@@ -81,3 +81,9 @@ Reuse `caps LIST` for the opt-in.
 - Measurement (`tools/tokbench`): `unsafe` is one reserved word and no
   punctuation; there is no competing spelling to compare, so there is no
   before and after table.
+
+## Rejected alternatives
+
+- `unsafe` as the effect `caps unsafe` (option B): rejected because `caps` means "may reach" and effects propagate through callers, so every caller of a safe wrapper would need the grant, which defeats the purpose of a safe wrapper (ADR 0104).
+- A value-less `unsafe` statement only (option C): rejected because wrappers would need `return` in every one, and the spec's own example yields a value from the block.
+- `unsafe` blocks as expressions anywhere (`x := unsafe f()`) (option D): not chosen. It would be a new expression form in the parser, the checker and both front ends for little gain over `return` or the tail position, and it can be added later without breaking this form.
