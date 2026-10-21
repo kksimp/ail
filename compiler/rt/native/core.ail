@@ -507,6 +507,16 @@ fn out_list_float(xs List[int])
         out_float(loadf(data + 8 * i))
     out_byte(93)
 
+fn out_list_f32(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_f32(loadf(data + 8 * i))
+    out_byte(93)
+
 ## A string inside a printed value, in quotes, with `\\`, `"` and control
 ## characters escaped (trait.auto.2).
 fn out_quoted(s str)
@@ -557,7 +567,7 @@ fn hex_digit(d int) int
     if d < 10 then 48 + d else 87 + d
 
 ## A list of lists or strings: `depth` levels of lists around elements of
-## kind `leaf` (0 int, 1 float, 2 bool, 3 str, 4 char).
+## kind `leaf` (0 int, 1 float, 2 bool, 3 str, 4 char, 5 f32).
 fn out_list_deep(xs List[int], depth int, leaf int)
     if depth == 0
         if leaf == 0
@@ -568,6 +578,8 @@ fn out_list_deep(xs List[int], depth int, leaf int)
             out_list_bool(xs)
         elif leaf == 4
             out_list_char(xs)
+        elif leaf == 5
+            out_list_f32(xs)
         else
             p := list_addr(xs)
             data := load64(p + 16)

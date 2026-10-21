@@ -1,0 +1,49 @@
+# f32 in lists, optionals, tuples, maps and struct fields (ADR 0834 part 4).
+struct P
+    x f32
+    ys List[f32]
+
+fn f(v f32) f32
+    v * 1.1.to_f32()
+
+fn main()
+    a := 0.1.to_f32()
+    b := 16777217.to_f32()
+    xs := [a, b, 3.5.to_f32(), 0.3.to_f32()]
+    print(xs)
+    print(xs.sorted())
+    if v := xs.min()
+        print(v)
+    if v := xs.max()
+        print(v)
+    print(xs.contains(a))
+    print(xs.len())
+    print(xs[1] + xs[0])
+    print(xs == [a, b])
+    mut ys := xs
+    ys[0] = f(ys[0])
+    ys.push(f(a))
+    print(ys)
+    print(xs)
+    nested := [xs, ys]
+    print(nested)
+    p := P(x: a, ys: xs)
+    print(p.x)
+    print(p.ys[2])
+    t := (a, 5, "s")
+    print(t)
+    print(t.0 + t.0)
+    mut m := Map[str, f32]()
+    m["a"] = a
+    m["b"] = f(a)
+    print(m["b"])
+    for k, v in m
+        print("{k} {v}")
+    print(m.get("z") == none)
+    print("{a} {xs}")
+    mut zs := List[f32]()
+    for i in 0..5
+        zs.push(i.to_f32() / 3.0.to_f32())
+    print(zs)
+    print(zs)
+    print(zs.sum())

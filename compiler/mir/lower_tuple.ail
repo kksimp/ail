@@ -19,7 +19,7 @@ fn tuple_elems(t Ty) List[Ty]?
 ## table or a function value is not (its copy would share state).
 fn tuple_elem_ok(t Ty) bool
     match t
-        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | F32 | Unit | Unknown => false
+        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | Unit | Unknown => false
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.
@@ -335,7 +335,7 @@ fn text_ok(t Ty) bool
     if e := t.elem()
         return text_ok(e)
     match t
-        Int | Sized(_) | Float | Bool | Str => true
+        Int | Sized(_) | Float | F32 | Bool | Str => true
         _ => false
 
 ## Whether a list type holds a tuple somewhere, so that its text is made here
@@ -353,6 +353,7 @@ fn Lower.value_text(mut self, t Ty, x int) int
     match t
         Int | Sized(_) => call("rt.fmt_int", [x], Ty.Str)
         Float => call("rt.fmt_float", [x], Ty.Str)
+        F32 => call("rt.fmt_f32", [x], Ty.Str)
         Bool => call("rt.fmt_bool", [x], Ty.Str)
         Str => call("rt.str_quoted", [x], Ty.Str)
         Tuple(xs) => tuple_text_of(xs, x)

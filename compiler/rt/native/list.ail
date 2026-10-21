@@ -273,6 +273,15 @@ fn list_sum_tree(data int, lo int, hi int) float
     m := 32 * ((n + 63) / 64)
     list_sum_tree(data, lo, lo + m) + list_sum_tree(data, lo + m, hi)
 
+## Sum of a `List[f32]`: one `f32` addition after another, as the interpreter.
+fn list_sum_f32(xs List[int]) float
+    p := list_addr(xs)
+    data := load64(p + 16)
+    mut t := 0.0.to_f32()
+    for i in 0..load64(p)
+        t = t + loadf(data + 8 * i).to_f32()
+    t.to_float()
+
 fn list_sum_float(xs List[int]) float
     p := list_addr(xs)
     list_sum_tree(load64(p + 16), 0, load64(p))

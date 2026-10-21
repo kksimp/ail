@@ -70,5 +70,12 @@ the `f32_round` primitive, `to_f32` rounds once (an `int` through
 `rt.int_to_f32`, which folds the bits below a `float`'s 53 into a sticky bit so
 no value rounds twice), and the text is the shortest digits that read back as an
 `f32` (`digits_of_f32` in `rt/native/fmt.ail`), in the interpreter's shape.
-`f32` in lists, maps, `Opt` and tuples, `min`, `max`, `cmp` and the
-transcendental methods are `native.subset.1` until part 4.
+`cmp` and the transcendental methods on `f32` stay `native.subset.1`.
+
+Part 4a puts `f32` in lists, `Opt`, tuples, struct fields and map values. The
+element is the rounded `float` in its 8-byte slot, so storage, equality,
+`sorted`, `min`, `max` and `contains` reuse the `float` paths (`F32` joins
+`Float` in their arms). Text goes through `rt.fmt_f32` (leaf kind 5 of
+`rt.out_list_deep` for lists). `List[f32].sum()` adds in `f32` one element
+after another (`rt.list_sum_f32`), as the interpreter does. Sized lists, `Opt`
+and map keys (4b) follow.
