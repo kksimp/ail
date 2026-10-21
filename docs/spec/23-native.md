@@ -122,13 +122,13 @@ type.str.3-14 and type.char.1-4 say, with the interpreter's results and
 traps. The subset has: interpolation as a value, with `{x:.N}`, `{x:x}`,
 width, fill and alignment (type.str.11); `==`, `!=`, `<`, `<=`, `>`, `>=` on
 `str` and on `char`; on `str`, `len`, `byte_len`, `chars` (a `List[char]`),
-`lines`, `trim`, `to_upper`, `to_lower`, `to_str`, `contains`,
+`lines`, `trim`, `trim_start`, `trim_end`, `words`, `to_upper`, `to_lower`, `to_str`, `contains`,
 `starts_with`, `ends_with` and `split` (each taking a `str` or a `char`),
-`slice`, `replace`, `repeat`, `pad_left`, `pad_right`; on `char`, `code`,
+`slice`, `replace`, `repeat`, `pad_left`, `pad_right`, `center`, `count`; on `char`, `code`,
 `to_str`, `is_digit`, `is_alpha`, `is_alnum`, `is_space`, `is_upper`,
 `is_lower`, `to_upper`, `to_lower`; `to_str` on `int`, `float` and `bool`;
 `print` of a `char`, a `List[char]` and a `List[str]`. The methods with an
-optional result are `find`, `char_at`, `strip_prefix`, `strip_suffix`,
+optional result are `find`, `rfind`, `char_at`, `strip_prefix`, `strip_suffix`,
 `to_digit` and `char.from_code`, used with the optional forms of
 native.subset.1.
 The character predicates and case mappings, and `to_upper` and `to_lower`

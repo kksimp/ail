@@ -139,8 +139,8 @@ fn Lower.str_to_int_opt(mut self, r Val) Val
     cur = join
     Val(id: res, ty: t)
 
-## The methods whose result is an optional that the subset lacks: `to_float`
-## has its own `else` form (lane 177), and `to_bytes` waits for `bytes`.
+## The methods the subset lacks: `to_float` has its own `else` form (lane
+## 177), and `to_bytes` waits for `bytes`.
 fn Lower.str_unsupported(mut self, name str, npos ast.Pos) Val?
     if name == "to_float" or name == "to_bytes"
         return unsupported(npos, "`.{name}()` on `str` (its result is an optional)")
@@ -161,7 +161,11 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
             "lines" =>
                 t := Ty.List(Ty.Str)
                 return Val(id: call("rt.str_lines", [r.id], t), ty: t)
-            "trim" => return Val(id: call("rt.str_trim", [r.id], Ty.Str), ty: Ty.Str)
+            "trim" | "trim_start" | "trim_end" =>
+                return Val(id: call("rt.str_{name}", [r.id], Ty.Str), ty: Ty.Str)
+            "words" =>
+                t := Ty.List(Ty.Str)
+                return Val(id: call("rt.str_words", [r.id], t), ty: t)
             "to_upper" => return Val(id: call("rt.str_to_upper", [r.id], Ty.Str), ty: Ty.Str)
             "to_lower" => return Val(id: call("rt.str_to_lower", [r.id], Ty.Str), ty: Ty.Str)
             _ => return str_unsupported(name, npos)
@@ -189,6 +193,21 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     return none
                 t := Ty.Opt(Ty.Int)
                 return Val(id: call("rt.str_find_opt", [r.id, vs[0].id], t), ty: t)
+            "rfind" =>
+                if not (vs[0].ty == Ty.Str)
+                    problem(npos, "`.rfind()` needs a `str`, found `{vs[0].ty.name()}`")
+                    return none
+                t := Ty.Opt(Ty.Int)
+                return Val(id: call("rt.str_rfind_opt", [r.id, vs[0].id], t), ty: t)
+            "count" =>
+                if not (vs[0].ty == Ty.Str)
+                    problem(npos, "`.count()` needs a `str`, found `{vs[0].ty.name()}`")
+                    return none
+                h := trap_head("type.str.18", npos)
+                return Val(
+                    id: call("rt.str_count", [r.id, vs[0].id, h, trap_tail(npos)], Ty.Int),
+                    ty: Ty.Int,
+                )
             "char_at" =>
                 i := int_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Char)
@@ -223,12 +242,12 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     ),
                     ty: Ty.Str,
                 )
-            "pad_left" | "pad_right" =>
+            "pad_left" | "pad_right" | "center" =>
                 w := int_arg(vs[0], name, npos)?
                 if not (vs[1].ty == Ty.Char)
                     problem(npos, "`.{name}()` needs a `char` fill, found `{vs[1].ty.name()}`")
                     return none
-                align := if name == "pad_left" then 1 else 0
+                align := if name == "pad_left" then 1 else if name == "center" then 2 else 0
                 h := trap_head("type.str.15", npos)
                 return Val(
                     id: call(

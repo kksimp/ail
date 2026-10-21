@@ -349,7 +349,8 @@ adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
 `str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
 (character index or -1), `str_find_opt`, `str_char_at`, `str_strip_prefix`, `str_strip_suffix`,
 `char_to_digit`, `char_from_code` (optional results), `str_replace`, `str_split`,
-`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
+`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`, `str_trim_start`,
+`str_trim_end`, `str_words`, `str_count`, `str_rfind_opt`,
 `str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
 `out_char`, `out_list_char`, and `str_trap`. A function that
 can trap takes the constant head and excerpt as its last arguments (`str`
