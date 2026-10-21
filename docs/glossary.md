@@ -72,7 +72,6 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
 | **Doc comment** | A run of `##` lines directly above a declaration, with no blank line between; it documents that declaration (lex.comment.2, ADR 0152). |
 | **Doc example** | A block fenced `ail` in a `##` doc comment, run by `ail test` as the test `doc:NAME` (ADR 0200). |
-| **Drag race** | A head-to-head benchmark: the same small program in AIL, idiomatic C and tuned C, built and run automatically with identical outputs checked (ADR 0030, ADR 0036). |
 | **`Drop`** | The prelude trait whose `fn drop(mut self)` is a unique type's cleanup; it runs once when the value's last owner goes out of scope and is never called directly (ADR 0191). |
 | **Effect set** | What a function may do to the world outside its arguments: `io`, `fail`, `mutates`, `unsafe`, `spawn`, plus capabilities. Inferred over the call graph, never written; shown by `ail effects` (ADR 0163). |
 | **Error message** | A string written after an error struct's name or an error variant (`BadName(text str) "bad name {text}"`); it is the type's display text and defines its `impl ToStr` (ADR 0278, `err.msg.1`). |
@@ -99,7 +98,6 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
-| **Mistakes corpus** | The set of programs an agent gets wrong, used to measure how many of them `ail fix` resolves ([ADR 0646](decisions/0646-mistakes-corpus-round-two.md), [ADR 0648](decisions/0648-round-two-fix-rules-and-the-corpus-target.md)). |
 | **Module fuzzer** | A template program in `bootstrap/tests/fuzz/modules/` that `fuzz_modules.rs` fills with seeded adversarial inputs (text, JSON, hex bytes, regexes, dates, HTTP) and runs on both tiers and, once it exists, natively (ADR 0461). |
 | **Drag race** | `tools/perfbench/run.sh --all`: min and median wall time of AIL, native AIL, `clang -O2`, `gcc -O2` and Python on twin programs, with ratios (ADR 0460). |
 | **Generated code** | The text a derive generator returned, checked as if written in its `impl`; addressed `gen:impl:TYPE.TRAIT:LINE:COL` and shown by `ail api --expanded` (`ct.gen.*`, ADRs 0228, 0309). |
@@ -132,7 +130,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Managed reference** | A reference to an object whose storage is managed by the compiler or runtime, as opposed to a raw pointer. See spec `plat.ptr.3`. |
 | **Manifest** | A package's `ail.pkg` file: its `package` line and one `dep` line per dependency (ADR 0230). |
 | **MIR** | Mid-level IR: per body instance, a control-flow graph in SSA form with explicit allocations, copies, traps, dispatch and effects; the unit of the query compiler; internal and unversioned (ADR 0222, ADR 0223). |
-| **Mistakes corpus** | `bootstrap/tests/mistakes/`: small programs that each hold one plausible AI mistake, with the expected rules and what `ail fix` makes of them (`gram.help.2`, [ADR 0262](decisions/0262-report-foreign-syntax-once-with-help.md), [diagnostics-audit.md](design/diagnostics-audit.md)). |
+| **Mistakes corpus** | `bootstrap/tests/mistakes/`: small programs that each hold one plausible AI mistake, with the expected rules and what `ail fix` makes of them (`gram.help.2`, [ADR 0262](decisions/0262-report-foreign-syntax-once-with-help.md), [diagnostics-audit.md](design/diagnostics-audit.md), [ADR 0646](decisions/0646-mistakes-corpus-round-two.md), [ADR 0648](decisions/0648-round-two-fix-rules-and-the-corpus-target.md)). |
 | **Module** | A directory of `.ail` files sharing one namespace (ADR 0097). |
 | **Monomorphisation** | Compiling a generic function once per set of type arguments, so each instance runs with concrete types. The compiler chooses per instance between specialising and sharing code (ADR 0080). |
 | **Move** | Handing a value to a new owner; the old binding can't be used afterwards on any path. Unique values move on binding, assignment, return and into fields; any value moves as a `move` argument (ADRs 0068, 0190); a `move self` method moves its receiver (ADR 0317). |
