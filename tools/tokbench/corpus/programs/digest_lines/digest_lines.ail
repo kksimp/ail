@@ -1,5 +1,6 @@
 
 fn main() !
-    text := fs.read_text("{path.dir(env.program())}/agent-data/records.txt")? "reading records"
+    dir := env.args().first() else "{path.dir(env.program())}/agent-data"
+    text := fs.read_text("{dir}/records.txt")? "reading records"
     for line in text.lines()
         print("{hash.sha256(line)} {hash.crc32(line)} {line}")
