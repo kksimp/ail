@@ -93,3 +93,19 @@ functions and the address arithmetic in the generated code of `alloc` (about
 100 instructions per call), which lane 235's displacement folding should
 shrink. Resident size grows by the larger trigger: the 10 GB test runs in
 16 MiB (was 10), `binarytrees 20` in 80 MiB (was 61).
+
+### Baseline for tuning the trigger (2026-10-21)
+
+Trigger: a collection when bytes allocated since the last exceed
+`max(16 MiB, 2 x live bytes after the last)`, so the heap peaks near 3x live
+data. Resident size (Linux x86-64, `ru_maxrss`) with the earlier trigger
+`max(8 MiB, 1 x live)` against this one:
+
+| program | earlier | now |
+|---|---:|---:|
+| `binarytrees 20` | 61 MiB | 80 MiB |
+| 10 GB short-lived lists (`heavy/gc_10gb.ail`) | 10 MiB | 16 MiB |
+| native `lines`/`split` (200,000 lines) | 65 MiB | 60 MiB |
+
+Instructions on the `lines`/`split` program: 2.91 G (first trigger), 2.37 G
+(16 MiB minimum, 1x live), 2.31 G (2x live).
