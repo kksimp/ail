@@ -523,7 +523,15 @@ fn json_field_problem(g: &Generated, d: &mut Diagnostic) {
         "derive_from_json" => ("FromJson", "from_json"),
         _ => return,
     };
-    let Some(ty) = d.message.strip_suffix(&format!(" has no method `{method}`")).map(str::to_string) else { return };
+    // `to_json` is a method, `from_json` an associated function (trait.assoc.1).
+    let Some(ty) = d
+        .message
+        .strip_suffix(&format!(" has no method `{method}`"))
+        .or_else(|| d.message.strip_suffix(&format!(" has no associated function `{method}`")))
+        .map(str::to_string)
+    else {
+        return;
+    };
     if d.rule != "expr.name.1" {
         return;
     }
