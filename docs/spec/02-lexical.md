@@ -352,13 +352,9 @@ Each rule ID has a checked example (ADR 0498). Blocks marked `error=` must
 report their rule; blocks marked `rules=` must check and run with the printed
 output shown in the comments.
 
-`lex.kw.1` is shown as a skipped example: the bootstrap reports `gram.syntax.1`
-for `while := 1`, not `lex.kw.1` (see the PR that added this section).
-
-```ail skip=bootstrap rules=lex.kw.1
+```ail error=lex.kw.1
 fn main()
     while := 1      # reserved: `while` can't be a name
-    print(while)
 ```
 
 ```ail rules=lex.kw.2

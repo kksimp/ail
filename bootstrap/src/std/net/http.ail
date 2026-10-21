@@ -88,13 +88,13 @@ pub fn serve_dir(addr str, root str) !
     run_dir(srv, root)?
 
 ## Answers every request on `srv` with `handler` until `srv.close()`.
-pub fn run(srv net.Server, handler fn(net.Request) net.Response) !
+pub fn run(srv net.Server, handler fn(net.Request) net.Response) ! Trapped
     g := TaskGroup()
     for _ in 0..WORKERS
         g.add(spawn worker(srv, handler))
     g.wait_all()?
 
 ## Listens on `addr` and answers every request with `handler`.
-pub fn serve(addr str, handler fn(net.Request) net.Response) !
+pub fn serve(addr str, handler fn(net.Request) net.Response) ! net.NetError | Trapped
     srv := net.serve(addr)?
     run(srv, handler)?

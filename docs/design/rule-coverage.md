@@ -37,7 +37,7 @@ A rule is tested when its id appears in a case, example or Rust test; spec examp
 - **04-types.md** (26): `type.char.1` `type.coll.1` `type.coll.11` `type.coll.14` `type.coll.15` `type.coll.5` `type.coll.6` `type.coll.7` `type.coll.8` `type.coll.9` `type.enum.4` `type.map.1` `type.map.4` `type.map.6` `type.num.12` `type.num.2` `type.num.3` `type.num.4` `type.num.5` `type.opt.1` `type.opt.5` `type.opt.7` `type.opt.8` `type.str.1` `type.str.12` `type.str.3`
 - **05-expressions.md** (8): `expr.arith.2` `expr.arith.4` `expr.arith.5` `expr.block.1` `expr.cmp.3` `expr.loop.7` `expr.name.2` `expr.op.2`
 - **07-ownership.md** (9): `own.borrow.1` `own.borrow.2` `own.copy.1` `own.excl.1` `own.move.5` `own.place.1` `own.uniq.7` `own.val.1` `own.val.2`
-- **08-errors.md** (10): `err.ctx.1` `err.ctx.3` `err.fix.1` `err.model.1` `err.text.1` `err.trap.2` `err.trap.3` `err.type.3` `err.type.4` `err.type.6`
+- **08-errors.md** (10): `err.ctx.1` `err.ctx.3` `err.fix.1` `err.model.1` `err.text.1` `err.trap.2` `err.trap.3` `err.type.4` `err.type.6`
 - **09-generics.md** (3): `gen.anon.2` `gen.bound.4` `gen.impl.1`
 - **10-traits.md** (4): `trait.method.2` `trait.method.4` `trait.res.2`
 - **11-concurrency.md** (10): `conc.atomic.1` `conc.atomic.2` `conc.atomic.6` `conc.mm.1` `conc.par.6` `conc.par.7` `conc.race.1` `conc.task.2` `conc.task.3` `conc.task.9`
@@ -78,7 +78,7 @@ had 8, 21 and 14 rules with no such example. Now they have none uncovered:
 | chapter | rules | uncovered before | uncovered now | notes |
 |---|---:|---:|---:|---|
 | 01-platforms.md | 8 | 8 | 0 | `norun` for target and layout rules; `plat.ptr.2` runs |
-| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is `skip=bootstrap`: the bootstrap reports `gram.syntax.1` |
+| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is checked: a keyword before `:=` reports it (lane 238) |
 | 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
 
 Chapters 07 (ownership, 35 uncovered before) and 08 (errors, 29 before) follow the same way:
@@ -107,7 +107,7 @@ Chapter 14 (FFI, 12 rules, lane 223): all cited. `ffi.decl.1` (`use c "header.h"
 Chapter 15 is taken by the Haiku lane; 16 onward too.
 
 Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integrator decision):
-`own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `lex.kw.1`, `trait.auto.4`.
+`own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `trait.auto.4`.
 
 ## Spec rules no code cites (lane 207, 2026-10-21)
 
@@ -177,7 +177,7 @@ had 8, 21 and 14 rules with no such example. Now they have none uncovered:
 | chapter | rules | uncovered before | uncovered now | notes |
 |---|---:|---:|---:|---|
 | 01-platforms.md | 8 | 8 | 0 | `norun` for target and layout rules; `plat.ptr.2` runs |
-| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is `skip=bootstrap`: the bootstrap reports `gram.syntax.1` |
+| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is checked: a keyword before `:=` reports it (lane 238) |
 | 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
 The other chapters are unchanged: 382 uncovered rules before lane 223's first
 PR, 339 after chapters 01-03 (07-21, std and the rest still to do).

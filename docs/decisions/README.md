@@ -533,7 +533,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
 | [0673](0673-definitional-rule-marker.md) | Spec rules that only describe the language carry a `[definitional]` marker and need no citation *(delegated)* | Accepted | 2026-10-21 |
 | [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
-<<<<<<< HEAD
 | [0679](0679-native-test-runner.md) | `ail test --native`: build each `@test` function natively and compare it with the interpreter *(delegated)* | Accepted | 2026-10-21 |
 | [0675](0675-round-4-syntax-candidates.md) | Round-4 syntax candidates: no `for i, x`, no inferred `main !`; `par` over chunks already works *(delegated)* | Accepted | 2026-10-21 |
 | [0629](0629-list-chunks-windows-counts-str-center.md) | `chunks`, `windows`, `counts` on lists and `center` on strings *(delegated)* | Accepted | 2026-10-21 |
@@ -577,11 +576,13 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0691](0691-fuzz-group-all-native-bytes.md) | Fuzzers for `regex.group_all` and native `bytes` literals *(delegated)* | Accepted | 2026-10-21 |
 | [0722](0722-native-subset-help-lines.md) | `native.subset.1` problems print a `help:` line, keyed in the printer (no lower.ail edit) *(delegated)* | Accepted | 2026-10-21 |
 | [0741](0741-ref-arguments-to-spawn.md) | A `ref` is not passed to a spawned task (own.ref.2) *(delegated)* | Accepted | 2026-10-21 |
+| [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2`, `ct.const.4` and `err.type.3` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |
 | [0729](0729-api-diff-command.md) | `ail api --diff`: the public API change between two versions *(delegated)* | Accepted | 2026-10-21 |
 | [0730](0730-api-diff-breaking-rules.md) | What `ail api --diff` marks as breaking *(delegated)* | Accepted | 2026-10-21 |
 | [0731](0731-api-diff-output-and-budget.md) | Output of `ail api --diff` and its token budget *(delegated)* | Accepted | 2026-10-21 |
 | [0734](0734-native-integer-text.md) | Native integer text: digits written from the end, one division by 10 each *(delegated)* | Accepted | 2026-10-21 |
 | [0725](0725-test-cases-audit.md) | Test-case audit: one audit script, a duplicate removed, one-theme cases split *(delegated)* | Accepted | 2026-10-21 |
+<<<<<<< HEAD
 | [0748](0748-list-from-json-as-an-associated-call.md) | `List[T].from_json(j)`: associated calls on builtin generic types *(delegated)* | Accepted | 2026-10-21 |
 | [0742](0742-compile-time-step-limit.md) | A statement-count limit on computing constants (ct.eval.3) *(delegated)* | Accepted | 2026-10-21 |
 | [0746](0746-native-subset-constructs-table.md) | One table of native-subset constructs, with owners *(delegated)* | Accepted | 2026-10-21 |
@@ -601,6 +602,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0739](0739-json-parse-builds-text-once.md) | The native JSON parser builds each text value once *(delegated)* | Accepted | 2026-10-21 |
 | [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
 | [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Accepted | 2026-10-21 |
-=======
 | [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |
->>>>>>> origin/pr336
+=======
+>>>>>>> origin/pr335

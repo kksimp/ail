@@ -150,3 +150,4 @@ pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
 trimmed to fit 2000 tokens (~1437); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1403); dropped: private items, doc comments
