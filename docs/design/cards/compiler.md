@@ -11,6 +11,7 @@ fn executable_hex(mir.Module, str, str) str [io]
 fn runtime_syntax(str, str) [io]
 fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
 fn std_file(str, str) str
+fn uses_regex(ast.Program) bool
 fn parse_source(str, str) !mir.Source [fail fs io]
 ```
 
@@ -336,3 +337,4 @@ pub fn x64.generate(mir.Module) codegen.Image
 trimmed to fit 4000 tokens (~3682); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
 trimmed to fit 4000 tokens (~3671); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
 trimmed to fit 4000 tokens (~3698); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3693); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

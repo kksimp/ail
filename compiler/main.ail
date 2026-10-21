@@ -215,6 +215,13 @@ fn std_file(std str, imp str) str
         return "{std}/{parts[0]}/{parts[0]}.ail"
     "{std}/{parts.join("/")}.ail"
 
+## Whether the program has a `use` that ends in `regex` (`use std.regex`, `use app.regex`).
+fn uses_regex(prog ast.Program) bool
+    for u in prog.uses
+        if u.path.len() > 0 and u.path[u.path.len() - 1].name == "regex"
+            return true
+    false
+
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
     text := fs.read_text(path)?
@@ -226,4 +233,14 @@ fn parse_source(module str, path str) !mir.Source
     if report.len() > 0
         io.eprint(report)
         io.exit(1)
-    mir.Source(module: module, path: path, text: text, prog: parsed.program)
+    mut prog := parsed.program
+    # `regex` needs no `use` (std.use.1); the module written in AIL is imported
+    # by the mention (ADR 0819).
+    if text.contains("regex.") and not uses_regex(prog)
+        pos := ast.Pos(line: 1, col: 1)
+        prog.uses.push(ast.Use(
+            path: [ast.Ident(name: "std", pos: pos), ast.Ident(name: "regex", pos: pos)],
+            alias: none,
+            pos: pos,
+        ))
+    mir.Source(module: module, path: path, text: text, prog: prog)
