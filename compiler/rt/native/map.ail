@@ -67,6 +67,8 @@ fn map_hash(kind int, k int) int
         return map_hash_str(k)
     map_hash_int(k)
 
+## The last partial word is compared whole and masked to its bytes, as in
+## `map_hash_str` (ADR 0766).
 fn map_key_eq(kind int, a int, b int) bool
     if a == b
         return true
@@ -80,10 +82,8 @@ fn map_key_eq(kind int, a int, b int) bool
         if load64(a + 16 + i) != load64(b + 16 + i)
             return false
         i += 8
-    while i < n
-        if load8(a + 16 + i) != load8(b + 16 + i)
-            return false
-        i += 1
+    if i < n
+        return load64(a + 16 + i).bit_xor(load64(b + 16 + i)).bit_and(1.shl(8 * (n - i)) - 1) == 0
     true
 
 # ---- tables ----
