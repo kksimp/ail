@@ -6,10 +6,6 @@ bootstrap/tests/mistakes/bang_not.ail
 bootstrap/tests/mistakes/bit_and_precedence.ail
 bootstrap/tests/mistakes/bit_not.ail
 bootstrap/tests/mistakes/bit_or.ail
-bootstrap/tests/mistakes/bit_shift_left_operator.ail
-bootstrap/tests/mistakes/bit_shift_right_operator.ail
-bootstrap/tests/mistakes/bit_xor.ail
-bootstrap/tests/mistakes/bit_xor_caret.ail
 bootstrap/tests/mistakes/brace_escape.ail
 bootstrap/tests/mistakes/braces.ail
 bootstrap/tests/mistakes/bytes_python_slice.ail
@@ -17,7 +13,6 @@ bootstrap/tests/mistakes/bytes_unicode_escape.ail
 bootstrap/tests/mistakes/chained_cmp.ail
 bootstrap/tests/mistakes/class_keyword.ail
 bootstrap/tests/mistakes/colon_return.ail
-bootstrap/tests/mistakes/comment_slashes.ail
 bootstrap/tests/mistakes/const_keyword.ail
 bootstrap/tests/mistakes/date_timedelta_python.ail
 bootstrap/tests/mistakes/def_keyword.ail
@@ -50,7 +45,6 @@ bootstrap/tests/mistakes/method_in_struct.ail
 bootstrap/tests/mistakes/multichar_single_quotes.ail
 bootstrap/tests/mistakes/named_python_equals.ail
 bootstrap/tests/mistakes/new_keyword.ail
-bootstrap/tests/mistakes/new_line_continuation_backslash.ail
 bootstrap/tests/mistakes/none_is_keyword.ail
 bootstrap/tests/mistakes/not_equal_diamond.ail
 bootstrap/tests/mistakes/or_or.ail

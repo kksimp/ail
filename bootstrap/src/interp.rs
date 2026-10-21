@@ -1640,6 +1640,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 },
                 None => self.comp(rest, elem, value, set, env, acc),
             };
+            // trace.snap.2: a trap keeps the comprehension's variables among the locals in scope.
+            if matches!(r, Err(Exit::Trap(_))) && self.snap.is_some() {
+                self.snap_block(env);
+            }
             env.pop();
             match r {
                 Ok(true) | Err(Exit::Continue) => {}
@@ -1674,6 +1678,10 @@ impl<'a, W: Write> Interp<'a, W> {
                 },
                 None => self.comp(rest, elem, value, set, env, acc),
             };
+            // trace.snap.2: a trap keeps the comprehension's variables among the locals in scope.
+            if matches!(r, Err(Exit::Trap(_))) && self.snap.is_some() {
+                self.snap_block(env);
+            }
             env.pop();
             match r {
                 Ok(true) | Err(Exit::Continue) => {}

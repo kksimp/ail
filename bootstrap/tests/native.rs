@@ -87,6 +87,100 @@ fn subset_problems_print_their_help_lines() {
     assert_eq!(lines.join("\n") + "\n", want, "help lines differ");
 }
 
+/// `path` relative to the repository root, with `/` separators.
+fn rel_path(path: &Path) -> String {
+    path.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/")
+}
+
+/// The target `ail build` picks when none is given.
+fn host_target() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "aarch64-macos"
+    } else {
+        "x86_64-linux"
+    }
+}
+
+fn write_exe(path: &Path, bytes: &[u8]) {
+    fs::write(path, bytes).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+/// Hexadecimal text as bytes; whitespace is skipped.
+fn unhex(text: &str) -> Option<Vec<u8>> {
+    let digits: Vec<u8> = text.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    if digits.len() % 2 != 0 {
+        return None;
+    }
+    digits.chunks(2).map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()).collect()
+}
+
+/// ADR 0814: the executables of `files` (relative to the root, in order),
+/// built in one `ail run compiler build-many` so the compiler loads once. Each
+/// file is checked first, as `ail build` does. `None` when any file fails; the
+/// caller then builds each file on its own, which reports the failure per file.
+fn build_batch(files: &[String], target: Option<&str>) -> Option<Vec<Vec<u8>>> {
+    for rel in files {
+        let checked =
+            Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["check", rel]).output().unwrap();
+        if !checked.status.success() {
+            return None;
+        }
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "compiler", "build-many", "compiler/rt/native", target.unwrap_or(host_target()), "0", "0"])
+        .arg(root().join("bootstrap/src/std"))
+        .args(files)
+        .output()
+        .unwrap();
+    if !out.status.success() {
+        return None;
+    }
+    // Each program's output starts with `== PATH`, then its hex (native.build.3).
+    let text = String::from_utf8(out.stdout).ok()?;
+    let exes: Vec<Vec<u8>> = text
+        .split("== ")
+        .skip(1)
+        .map(|s| unhex(s.split_once('\n').map_or("", |(_, hex)| hex)))
+        .collect::<Option<_>>()?;
+    (exes.len() == files.len()).then_some(exes)
+}
+
+/// ADR 0814: a batch build gives the same bytes as one `ail build` per program.
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn batch_builds_match_separate_builds() {
+    let dir = root().join("bootstrap/tests/native/run");
+    let mut all: Vec<PathBuf> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "ail"))
+        .collect();
+    all.sort();
+    // Five programs spread over the directory.
+    let sample: Vec<String> = all.iter().step_by(all.len() / 5).map(|p| rel_path(p)).collect();
+    let batch = build_batch(&sample, None).expect("the batch build failed");
+    let tmp = std::env::temp_dir().join(format!("ail-batch-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    for (i, rel) in sample.iter().enumerate() {
+        let exe = tmp.join(format!("{i}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["build", rel, "-o"])
+            .arg(&exe)
+            .output()
+            .unwrap();
+        assert!(built.status.success(), "{rel}: `ail build` failed");
+        assert!(fs::read(&exe).unwrap() == batch[i], "{rel}: the batch build differs from `ail build`");
+    }
+    let _ = fs::remove_dir_all(&tmp);
+}
+
 /// `ail build` on each `tests/native/run/NAME.ail`, then the executable's
 /// output against `ail run`'s: stdout, the exit code, and a trap's message
 /// and excerpt (the interpreter's snapshot lines aside, trace.snap.1).
@@ -102,6 +196,22 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
     // Four workers take programs in turn. Each failure is kept with its index,
     // so the report reads in the same sorted order as a serial run.
     let next = AtomicUsize::new(0);
+    // ADR 0814 step 3: each quarter of the programs is built in one
+    // `build-many` run, so the compiler loads four times, not once per program.
+    // A quarter whose batch fails is built per program in the workers below.
+    let rels: Vec<String> = cases.iter().map(|p| rel_path(p)).collect();
+    let quarter = rels.len().div_ceil(4);
+    let prebuilt: Vec<Option<Vec<u8>>> = std::thread::scope(|s| {
+        let batches: Vec<_> = rels.chunks(quarter).map(|chunk| s.spawn(move || build_batch(chunk, target))).collect();
+        let mut out = Vec::new();
+        for (chunk, batch) in rels.chunks(quarter).zip(batches) {
+            match batch.join().unwrap() {
+                Some(exes) => out.extend(exes.into_iter().map(Some)),
+                None => out.extend(std::iter::repeat_with(|| None).take(chunk.len())),
+            }
+        }
+        out
+    });
     let mut failures: Vec<(usize, String)> = std::thread::scope(|s| {
         let workers: Vec<_> = (0..4)
             .map(|_| {
@@ -110,7 +220,7 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
                     loop {
                         let i = next.fetch_add(1, Ordering::Relaxed);
                         let Some(case) = cases.get(i) else { break };
-                        if let Some(failure) = executable_matches(case, &tmp, target, runner) {
+                        if let Some(failure) = executable_matches(case, &tmp, target, runner, prebuilt[i].as_deref()) {
                             found.push((i, failure));
                         }
                     }
@@ -129,7 +239,13 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
 /// Builds one `tests/native/run` program and compares its executable with
 /// `ail run`. Returns the failure report, or `None` when they agree. Every
 /// path it writes is named after the program, so programs can run at once.
-fn executable_matches(case: &Path, tmp: &Path, target: Option<&str>, runner: Option<&str>) -> Option<String> {
+fn executable_matches(
+    case: &Path,
+    tmp: &Path,
+    target: Option<&str>,
+    runner: Option<&str>,
+    prebuilt: Option<&[u8]>,
+) -> Option<String> {
     let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
     let stem = case.file_stem().unwrap();
     let exe = tmp.join(stem);
@@ -146,14 +262,19 @@ fn executable_matches(case: &Path, tmp: &Path, target: Option<&str>, runner: Opt
         ("AIL_TEST_DEEP", scratch.join("d1/d2/d3")),
         ("AIL_TEST_IN", scratch.join("d1/f.txt")),
     ];
-    let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
-    build.current_dir(root()).args(["build", &rel, "-o"]).arg(&exe);
-    if let Some(t) = target {
-        build.args(["--target", t]);
-    }
-    let built = build.output().unwrap();
-    if !built.status.success() {
-        return Some(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
+    match prebuilt {
+        Some(bytes) => write_exe(&exe, bytes),
+        None => {
+            let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
+            build.current_dir(root()).args(["build", &rel, "-o"]).arg(&exe);
+            if let Some(t) = target {
+                build.args(["--target", t]);
+            }
+            let built = build.output().unwrap();
+            if !built.status.success() {
+                return Some(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
+            }
+        }
     }
     // Standard input is `NAME.in` when there is one, else empty.
     let input = || match fs::File::open(case.with_extension("in")) {
@@ -330,7 +451,11 @@ fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
         ("spin", "--timeout", "300", "AIL_TIMEOUT_MS", "--timeout"),
     ] {
         let src = format!("bootstrap/tests/native/limits/{name}.ail");
-        let want = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", option, value, &src]).output().unwrap();
+        let want = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["run", option, value, &src])
+            .output()
+            .unwrap();
         for baked in [false, true] {
             let exe = tmp.join(format!("{name}{}", if baked { "-baked" } else { "" }));
             let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
@@ -415,4 +540,3 @@ fn runtime_sources_parse() {
     }
     assert!(bad.is_empty(), "runtime sources with syntax errors:\n{}", bad.join("\n"));
 }
-

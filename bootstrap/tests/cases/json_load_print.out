@@ -1,0 +1,9 @@
+[{"name":"al","age":31}]
+2
+"done"
+bad file: unexpected end of input
+0
+bad shape: missing age
+{"name":"none","age":0}
+missing: json_load_print_case.tmp: not_found
+{"name":"","age":0}
