@@ -426,6 +426,7 @@ pub fn parse_date(text str) Date ! DateError
         return bad(text, "expected YYYY-MM-DD")
     m := digits(text, 5, 2) else return bad(text, "expected a 2-digit month")
     d := digits(text, 8, 2) else return bad(text, "expected a 2-digit day")
+    # std.date.16: the text has the right shape but names no day.
     day := Date.new(y, m, d) else return bad(text, "no such day")
     day
 

@@ -136,6 +136,78 @@ to the file, creating it or replacing its contents; `append_bytes(path str,
 data bytes) ! IoError` adds `data` at the end, creating the file if needed.
 They fail as `write_text` and `append_text` do. *(ADR 0415)*
 
+**std.fs.15** — A path that doesn't exist fails with kind `not_found`.
+This is so for `read_text`, `list_dir` and `remove`, and for every other call
+on a missing path. *(ADR 0158)*
+
+**std.fs.16** — Reading a directory as a file, such as `read_text(".")`, fails
+with kind `is_dir`. *(ADR 0158)*
+
+**std.fs.17** — `list_dir` of a file, not a directory, fails with kind
+`not_dir`. *(ADR 0158)*
+
+**std.fs.18** — `remove` of a directory that still holds entries fails with
+kind `not_empty`; remove the entries first. *(ADR 0158)*
+
+**std.fs.19** — `read_text` of a file whose bytes aren't UTF-8 fails with kind
+`invalid_utf8`; `read_bytes` reads the same file as it is. *(ADR 0158)*
+
+```ail rules=std.fs.15
+use std.fs
+
+fn main() !
+    text := fs.read_text("fs_no_such_file.txt") else err
+        print("{err.kind}")                  # not_found
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.16
+use std.fs
+
+fn main() !
+    text := fs.read_text(".") else err
+        print("{err.kind}")                  # is_dir
+        ""
+    print(text.len())
+```
+
+```ail rules=std.fs.17
+use std.fs
+
+fn main() !
+    fs.write_text("fs_plain.txt", "x")?
+    names := fs.list_dir("fs_plain.txt") else err
+        print("{err.kind}")                  # not_dir
+        []
+    print(names.len())
+    fs.remove("fs_plain.txt")?
+```
+
+```ail rules=std.fs.18
+use std.fs
+
+fn main() !
+    fs.make_dir("fs_full")?
+    fs.write_text("fs_full/a.txt", "a")?
+    fs.remove("fs_full") else err
+        print("{err.kind}")                  # not_empty
+    fs.remove("fs_full/a.txt")?
+    fs.remove("fs_full")?
+```
+
+```ail rules=std.fs.19
+use std.fs
+
+fn main() !
+    fs.write_bytes("fs_bytes.bin", b"\xff\xfe")?
+    text := fs.read_text("fs_bytes.bin") else err
+        print("{err.kind}")                  # invalid_utf8
+        ""
+    print(text.len())
+    print(fs.read_bytes("fs_bytes.bin")?)
+    fs.remove("fs_bytes.bin")?
+```
 ```ail norun rules=std.fs.9
 use std.fs
 
@@ -317,6 +389,19 @@ RFC 1950 (header `78 9c`, DEFLATE, big-endian Adler-32), as PDF Flate
 streams and PNG do. `unzlib` fails with `checksum` on an Adler-32 mismatch
 and `unsupported` for a preset dictionary. *(ADR 0443)*
 
+**std.compress.8** — `gunzip` of bytes without the gzip magic `1f 8b` fails
+with kind `corrupt` and message `not gzip data`; other malformed input fails
+with `corrupt` and a message that names the defect. *(ADR 0443)*
+
+```ail rules=std.compress.8
+use std.compress
+
+fn main()
+    data := compress.gunzip(b"not gzip at all") else err
+        print("{err.kind}: {err.message}")   # corrupt: not gzip data
+        b""
+    print(data.len())
+```
 **std.compress.6** — Output is read by the system `gzip` and `unzip` and
 their output is read back; the project's tests check this when the tools
 exist and say so when they don't. *(ADR 0445)*
@@ -1072,6 +1157,19 @@ go to 59: leap seconds are not supported. *(ADR 0450)*
 **std.date.15** — Refused text, zones and dates fail with `DateError(text,
 why)`, which displays as `why: \`text\``.
 
+**std.date.16** — `date.parse_date(text)` and `date.parse_iso(text)` fail
+with `DateError` whose `why` is `no such day` when the text has the right shape
+but names no day, such as `2026-02-30`. *(ADR 0449)*
+
+```ail rules=std.date.16
+use std.time.date
+
+fn main()
+    d := date.parse_date("2026-02-30") else err
+        print("{err}")                       # no such day: `2026-02-30`
+        date.Date(year: 2000, month: 1, day: 1)
+    print(d.days())
+```
 ## Zones: `std.tz`
 
 **std.tz.1** — `tz.offset(zone, secs)` is the UTC offset in seconds of IANA
@@ -1174,6 +1272,19 @@ lacks writes as an empty field. *(ADR 0626)*
 An unterminated quote and a record of the wrong width are its causes.
 *(ADR 0626)*
 
+```ail rules=std.csv.2,std.csv.5
+use std.csv
+
+fn main()
+    rows := csv.parse("a,\"b") else err
+        print("{err.why} (row {err.row})")   # unterminated quote (row 1)
+        []
+    print(rows.len())
+    recs := csv.records("name,age\nann,3,x\n") else err
+        print("{err.why} (row {err.row})")   # 3 fields, the header has 2 (row 2)
+        []
+    print(recs.len())
+```
 ```ail rules=std.csv.1,std.csv.2,std.csv.3,std.csv.4
 use std.csv
 
