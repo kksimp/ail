@@ -1,4 +1,4 @@
-# 0693. A fuzzer for `std.math` special values, and the fuzz budget
+# 0757. A fuzzer for `std.math` special values, and the fuzz budget
 
 - **Status:** Accepted
 - **Date:** 2026-10-21
