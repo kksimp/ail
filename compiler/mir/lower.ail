@@ -1502,8 +1502,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_prim(name, args)
             if name == "unreachable" and not is_rt and lookup(name) == none
                 return lower_unreachable(args, pos)
+            # A local that isn't a function value doesn't shadow a function or method.
             if k := lookup(name)
-                return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, pos)
+                if var_ty[k].is_fn()
+                    return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, pos)
             if lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
@@ -1722,10 +1724,10 @@ fn Lower.module_name(self, e ast.Expr) str?
         Name(n, _) => module_of(n)
         _ => none
 
-## Whether `e` names module `m` (not a local of that name).
+## Whether `e` names module `m` (not a local or a field of that name).
 fn Lower.is_module(self, e ast.Expr, m str) bool
     match e
-        Name(n, _) => n == m and lookup(n) == none
+        Name(n, _) => n == m and lookup(n) == none and self_slot(n) < 0
         _ => false
 
 ## An empty list typed by its first `push` (type.coll.6): the variable takes
