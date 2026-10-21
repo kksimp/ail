@@ -174,8 +174,8 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
             l := Ty.List(e)
             return Val(id: call("rt.tensor_to_list", [r.id], l), ty: l)
         # std.tensor.13: the checker rejects these on `int` tensors.
-        if (name == "relu" or name == "sigmoid") and e == Ty.Float
-            kind := konst(if name == "relu" then 0 else 1, Ty.Int)
+        if (name == "relu" or name == "sigmoid" or name == "tanh") and e == Ty.Float
+            kind := konst(if name == "relu" then 0 else if name == "sigmoid" then 1 else 2, Ty.Int)
             return Val(id: call("rt.tensor_activate", [r.id, kind], r.ty), ty: r.ty)
         if name == "transpose"
             msg := call("rt.tensor_transpose_fault", [r.id], Ty.Int)

@@ -529,10 +529,10 @@ fn tensor_matmul(a int, b int) int
                     return 0
     t
 
-# Activations (std.tensor.13): kind 0 `relu`, 1 `sigmoid`.
+# Activations (std.tensor.13): kind 0 `relu`, 1 `sigmoid`, 2 `tanh`.
 
 ## `relu` keeps a positive element and makes the rest `0.0`, but a NaN stays
-## NaN; `sigmoid` is `1 / (1 + exp(-x))`.
+## NaN; `sigmoid` is `1 / (1 + exp(-x))`; `tanh` is fdlibm's.
 fn tensor_activate(a int, kind int) int
     n := load64(a + 16)
     rank := load64(a + 8)
@@ -548,8 +548,10 @@ fn tensor_activate(a int, kind int) int
                 y = x
             elif x > 0.0
                 y = x
-        else
+        elif kind == 1
             y = 1.0 / (1.0 + float_exp(0.0 - x))
+        else
+            y = float_tanh(x)
         storef(out + 8 * i, y)
     t
 
