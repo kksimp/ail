@@ -605,6 +605,7 @@ fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_o
     if !has_type && !body.is_empty() && !no_body {
         out.push_str("Content-Type: text/plain; charset=utf-8\r\n");
     }
+    // http.serve.3: a response is framed by Content-Length, never chunked (std.net.11).
     if !(status / 100 == 1 || status == 204) {
         out.push_str(&format!("Content-Length: {}\r\n", if no_body { 0 } else { body.len() }));
     }
@@ -801,6 +802,7 @@ fn resolve_addr(addr: &str) -> Result<SocketAddr, (&'static str, String)> {
 }
 
 impl<'a, W: Write> Interp<'a, W> {
+    // std.net.27 and std.net.28: the causes this error carries; TLS causes come through as std.tls.1-4.
     fn net_error(&self, url: &str, kind: &str, message: impl Into<String>, pos: Pos) -> Value {
         let s = self.structs["net.NetError"];
         fail(Value::Struct(s, Rc::new(vec![text(url), text(kind), text(message.into())])), pos)

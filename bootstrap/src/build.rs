@@ -133,7 +133,7 @@ pub fn command(args: &[&str]) -> ExitCode {
             }
         };
     }
-    let hex = match run_compiler(&["build", file, &rt.to_string_lossy(), target.unwrap_or("x86_64-linux"), &timeout, &memory]) {
+    let hex = match run_compiler(&["build", file, &rt.to_string_lossy(), target.unwrap_or("x86_64-linux"), &timeout, &memory, &dir.join("../bootstrap/src/std").to_string_lossy()]) {
         Ok(text) => text,
         Err(code) => return code,
     };

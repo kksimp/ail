@@ -15,6 +15,7 @@ mod diag;
 mod explain;
 mod fasthash;
 mod fuse;
+mod tensor32;
 mod doctest;
 mod edit;
 mod docs;

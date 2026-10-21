@@ -1,6 +1,6 @@
 # 0605. Native list methods: editing, searching and sorting
 
-- **Status:** Accepted
+- **Status:** Accepted (`first`, `last`, `index_of`, `min`, `max`, `sum` and `swap` followed in [ADR 0802](0802-native-list-queries.md))
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — Compiler architecture

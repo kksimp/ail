@@ -210,6 +210,18 @@ enum Ins<'a> {
         prog: std::rc::Rc<[crate::fuse::FOp]>,
     },
     Jump(u32),
+    /// A comprehension's empty result, built in `dst` (expr.comp.1).
+    NewAcc {
+        dst: Opnd,
+        kind: CompKind,
+    },
+    /// One element of a comprehension: `k` into the list, set or map in `acc`, with `v` for a map.
+    Collect {
+        acc: Opnd,
+        kind: CompKind,
+        k: Opnd,
+        v: Opnd,
+    },
     /// Jump to `t` when the `bool` in `src` is `when`.
     JumpIf {
         src: Opnd,
@@ -476,7 +488,7 @@ enum Ins<'a> {
     },
     /// `xs[i].name(args)` where `name` takes `mut self`: when `xs` is a list local, `i` is in range
     /// and the element is a struct with such a method, the element moves into the call and back
-    /// (type.val.4); anything else is the walker's call (ADR 0620).
+    /// (trait.method.3); anything else is the walker's call (ADR 0620).
     ElemCall {
         slot: u32,
         ix: Opnd,
@@ -879,6 +891,13 @@ fn has_try(e: &Expr) -> bool {
         Expr::Call { args, .. } => args.iter().any(|a| has_try(&a.value)),
         Expr::Method { recv, args, .. } => has_try(recv) || args.iter().any(|a| has_try(&a.value)),
         Expr::List(items, _) | Expr::Set(items, _) => items.iter().any(has_try),
+        Expr::Comp { elem, value, clauses, .. } => {
+            let part = |e: &Expr| match e {
+                Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(has_try) || hi.as_deref().is_none_or(has_try),
+                e => has_try(e),
+            };
+            part(elem) || value.as_deref().is_some_and(part) || clauses.iter().any(|c| part(&c.iter) || c.cond.as_ref().is_some_and(part))
+        }
         Expr::Interp(parts, _) => parts.iter().any(|p| match p {
             InterpPart::Lit(_) => false,
             InterpPart::Expr(x) | InterpPart::Fmt(x, _) => has_try(x),
@@ -899,6 +918,32 @@ fn has_try(e: &Expr) -> bool {
         | Expr::None(_)
         | Expr::Name(..) => false,
         _ => true,
+    }
+}
+
+/// Whether a part of a comprehension can't leave it early: no `?`, `break`, `continue`, `return` or
+/// leaving `else`, looking through `if` and `match` whose arms only compute values.
+fn comp_part_plain(e: &Expr) -> bool {
+    fn block(b: &Block) -> bool {
+        b.iter().all(|s| match s {
+            Stmt::Expr(e) => comp_part_plain(e),
+            Stmt::Let { value, otherwise: None, .. } => comp_part_plain(value),
+            _ => false,
+        })
+    }
+    match e {
+        Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(comp_part_plain) && hi.as_deref().is_none_or(comp_part_plain),
+        Expr::If { branches, els, .. } => {
+            branches.iter().all(|(c, b)| {
+                (match c {
+                    Cond::Expr(e) | Cond::Bind { value: e, .. } => comp_part_plain(e),
+                }) && block(b)
+            }) && els.as_ref().is_none_or(block)
+        }
+        Expr::Match { scrutinee, arms, .. } => {
+            comp_part_plain(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(comp_part_plain) && block(&a.body))
+        }
+        e => !has_try(e),
     }
 }
 
@@ -1217,6 +1262,13 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     self.emit(Ins::Text { r, spec, pos: x.pos() });
                 }
                 self.emit(Ins::Interp { dst, parts, args: first });
+            }
+            // expr.comp.1: loops over the clauses, as `for` compiles, when nothing in them can leave early.
+            Expr::Comp { kind, elem, value, clauses, .. } if self.comp_plain(elem, value.as_deref(), clauses) => {
+                let acc = self.reg();
+                self.emit(Ins::NewAcc { dst: acc, kind: *kind });
+                self.comp_clauses(*kind, clauses, elem, value.as_deref(), acc);
+                self.emit(Ins::Move { dst, src: acc });
             }
             Expr::List(items, _) => {
                 let first = self.next_reg;
@@ -1565,6 +1617,72 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 Some(pos) => self.emit(Ins::EndBlock { mark, pos }),
                 None => self.emit(Ins::Truncate(mark)),
             };
+        }
+    }
+
+    /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it
+    /// (the walker runs those), and no hook or trace that expects the walker's steps.
+    fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
+        let plain = comp_part_plain;
+        !self.it.hook
+            && self.it.tracing == 0
+            && plain(elem)
+            && value.is_none_or(plain)
+            && clauses.iter().all(|c| !c.par && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
+    }
+
+    /// The loops of a comprehension's clauses around its element, collected into `acc`.
+    fn comp_clauses(&mut self, kind: CompKind, clauses: &'a [CompFor], elem: &'a Expr, value: Option<&'a Expr>, acc: Opnd) {
+        let Some((c, rest)) = clauses.split_first() else {
+            match value {
+                Some(v) => {
+                    let [k, x] = self.operands([elem, v]);
+                    self.emit(Ins::Collect { acc, kind, k, v: x });
+                }
+                None => {
+                    let k = self.operand(elem);
+                    self.emit(Ins::Collect { acc, kind, k, v: NONE });
+                }
+            }
+            return;
+        };
+        let depth = self.depth();
+        if let Expr::Range { lo: Some(lo), hi: Some(hi), inclusive, .. } = &c.iter {
+            let (i, h) = (self.reg(), self.reg());
+            self.expr_to(lo, i);
+            self.expr_to(hi, h);
+            let top = self.emit(Ins::RangeTest { name: &c.var, i, hi: h, inclusive: *inclusive, end: 0 });
+            self.scope.push(&c.var);
+            let skip = c.cond.as_ref().map(|cond| self.cond_jump(cond, false));
+            self.comp_clauses(kind, rest, elem, value, acc);
+            self.scope.truncate(depth as usize);
+            let next = self.emit(Ins::RangeNext { i, hi: h, inclusive: *inclusive, var: depth, end: 0, top: top + 1 });
+            for x in skip.into_iter().flatten() {
+                self.patch(x, next);
+            }
+            let end = self.here();
+            self.patch(top, end);
+            if let Ins::RangeNext { end: e, .. } = &mut self.ins[next as usize] {
+                *e = end;
+            }
+        } else {
+            let (it, idx) = (self.reg(), self.reg());
+            self.expr_to(&c.iter, it);
+            self.emit(Ins::IterStart { it, idx });
+            let top = self.emit(Ins::IterNext { name: &c.var, it, idx, end: 0, pos: c.iter.pos() });
+            self.scope.push(&c.var);
+            let skip = c.cond.as_ref().map(|cond| self.cond_jump(cond, false));
+            self.comp_clauses(kind, rest, elem, value, acc);
+            self.scope.truncate(depth as usize);
+            let back = self.emit(Ins::Truncate(depth));
+            for x in skip.into_iter().flatten() {
+                self.patch(x, back);
+            }
+            self.emit(Ins::Jump(top));
+            let end = self.here();
+            self.patch(top, end);
+            let unit = self.konst(Value::Unit);
+            self.emit(Ins::Move { dst: it, src: unit });
         }
     }
 
@@ -3435,7 +3553,21 @@ match {
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
-                    if matches!(env[at].1, Value::List(_)) {
+                    // `len` of text, a map, a set or bytes: the walker's count, without its call.
+                    let other_len = if *push {
+                        None
+                    } else {
+                        match &env[at].1 {
+                            Value::Str(t) => Some(t.chars().count()),
+                            Value::Map(t) | Value::Set(t) => Some(t.len()),
+                            Value::Bytes(b) => Some(b.len()),
+                            _ => None,
+                        }
+                    };
+                    if let Some(n) = other_len {
+                        put_int(*dst, n as i64, env, base, regs);
+                        pc = *done as usize;
+                    } else if matches!(env[at].1, Value::List(_)) {
                         if *push {
                             let v = take!(*val);
                             let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
@@ -3739,6 +3871,34 @@ match {
                             env.truncate(base + *var as usize);
                             pc = *end as usize;
                         }
+                    }
+                }
+                Ins::NewAcc { dst, kind } => {
+                    pc += 1;
+                    let v = match kind {
+                        CompKind::List => Value::List(Rc::new(Vec::new())),
+                        CompKind::Set => Value::Set(Rc::new(Table::default())),
+                        CompKind::Map => Value::Map(Rc::new(Table::default())),
+                    };
+                    put(*dst, v, env, base, regs);
+                }
+                Ins::Collect { acc, kind, k, v } => {
+                    pc += 1;
+                    let key = take!(*k);
+                    let val = if *v == NONE { None } else { Some(take!(*v)) };
+                    let slot = match *acc & KIND {
+                        REG => &mut regs[(*acc & !KIND) as usize],
+                        _ => unreachable!("a comprehension's accumulator is a register"),
+                    };
+                    match (kind, slot) {
+                        (CompKind::List, Value::List(items)) => Rc::make_mut(items).push(key),
+                        (CompKind::Set, Value::Set(t)) => {
+                            Rc::make_mut(t).insert(key, None);
+                        }
+                        (CompKind::Map, Value::Map(t)) => {
+                            Rc::make_mut(t).insert(key, val);
+                        }
+                        _ => unreachable!("the accumulator of its kind"),
                     }
                 }
                 Ins::IterStart { it, idx } => {

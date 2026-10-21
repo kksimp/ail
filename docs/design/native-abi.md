@@ -89,7 +89,7 @@ box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
 value (zero on failure); failure is the runtime's global slot 8 holding the
 error's display text (a string object), 0 otherwise. Global 9 holds the return
 trace, a list of string objects `  at PATH:LINE:COL`. `rt.failed`, `rt.err_set`,
-`rt.err_trace`, `rt.err_take`, `rt.err_clear`; `rt.exit` reports a failure
+`rt.err_trace`, `rt.err_take`, `rt.err_clear`, and for error structs and enums global 12 holds the error value (`rt.err_value`, `rt.err_take_value`, ADR 0804); `rt.exit` reports a failure
 that reached `main` first (`error: TEXT`, the trace, status 1).
 
 **Heap object header** (ADR 0562). Every heap object has an 8-byte word at
@@ -234,9 +234,10 @@ imports lane 178 adds; Linux keeps raw syscalls.
 ## 5. Allocator and collector
 
 **As built (lane 171, ADRs 0562-0564).** `rt.alloc(n, kind)` returns `n`
-zeroed payload bytes with the header word before them. `rt.init` reserves up
+zeroed payload bytes with the header word before them; `rt.alloc_raw(n, kind)`
+skips the zeroing for blocks the caller fills before reading. `rt.init` reserves up
 to 16 GiB of address space (`mmap`, no-reserve; the size halves until it is
-accepted), cut into 16 KiB pages with a page table (free, small page of class
+accepted), cut into 16,448-byte pages with a page table (free, small page of class
 c, first or later page of a large span). Blocks up to 8192 bytes, header
 included, come from 36 size classes (16 to 256 in steps of 16, then four per
 doubling) with free lists; larger objects take whole pages. Failure to get
@@ -244,7 +245,7 @@ memory traps `run.limit.2`.
 
 The collector (`compiler/rt/native/gc.ail`) is stop-the-world mark and sweep,
 run from `alloc` when the bytes allocated since the last collection exceed
-`max(8 MiB, live bytes)`. Roots: the stack from the stack pointer to the
+`max(16 MiB, 2 x live bytes)`. Roots: the stack from the stack pointer to the
 `argv` address saved by `rt.init`, the callee-saved registers (primitive
 `gc_regs`), and the global slots, all read as possible pointers, interior
 pointers included. Objects are scanned by kind (list headers: the data
@@ -281,7 +282,7 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 end of its function, which calls
 `rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
 1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
-count), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+count; 15 prints a runtime-built message string, `a`), `a` and `b` are the operands (for 4, the float's bits), `head` is the
 constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
 constant source excerpt (`  L | line` and the caret line). The output is the
 interpreter's first line and excerpt, byte for byte; the snapshot lines
@@ -452,3 +453,14 @@ is Runtime Code. Every file there starts with the header
 Nothing in `compiler/rt/` is ported from another project; the float text
 algorithm is written from the textbook description (ADR 0409), so there is no
 third-party notice to carry.
+
+## Tensors (ADR 0815)
+
+`tensor.Tensor[T]` is a pointer to an object of heap kind 4: `+0` element kind
+(0 `int`, 1 `float`), `+8` rank, `+16` element count, `+24` pointer to the
+elements (8 bytes each, heap kind 11), `+32` the axis sizes, one word each. A
+tensor is never changed in place, so a copy shares the object. Calls: `rt.tensor_from`,
+`rt.tensor_shape_fault` and `rt.tensor_from_shape` (the fault helper returns a
+message string object or 0, and a message traps with runtime trap kind 15),
+`rt.tensor_to_list`, `rt.tensor_shape`, `rt.tensor_eq`, `rt.tensor_text` and
+`rt.out_tensor`.

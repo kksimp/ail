@@ -1,0 +1,8 @@
+error enum E
+    A
+
+fn f() int ! E |
+    1
+
+fn main()
+    print(f() else 0)
