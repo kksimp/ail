@@ -324,7 +324,9 @@ impl<'p> Checker<'p> {
         }
         let b = builtin(rt, name).expect("a built-in method");
         // type.str.6: these take a `str` or a `char`.
-        if *rt == Ty::Str && matches!(name, "contains" | "starts_with" | "ends_with" | "split") && args.len() == 1 {
+        if *rt == Ty::Str && matches!(name, "contains" | "starts_with" | "ends_with" | "split")
+            && (args.len() == 1 || (name == "split" && args.len() == 2))
+        {
             let a = &args[0];
             let t = self.expr(&a.value, None, true);
             if a.mutable {
@@ -333,6 +335,14 @@ impl<'p> Checker<'p> {
             if !matches!(t, Ty::Str | Ty::Char | Ty::Err | Ty::Never) && !self.reject_unhandled(&t, a.value.pos()) {
                 let msg = format!("`{name}` takes a `str` or a `char`, not {}", self.show(&t));
                 self.error("expr.call.2", a.value.pos(), msg);
+            }
+            // type.str.4: `split(sep, limit)` takes an `int` limit.
+            if let Some(l) = args.get(1) {
+                let t = self.expr(&l.value, None, true);
+                if !matches!(t, Ty::Int | Ty::Err | Ty::Never) && !self.reject_unhandled(&t, l.value.pos()) {
+                    let msg = format!("the limit of `split` is an `int`, not {}", self.show(&t));
+                    self.error("expr.call.2", l.value.pos(), msg);
+                }
             }
             return b.ret;
         }

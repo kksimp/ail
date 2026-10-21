@@ -354,7 +354,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 
 - Format specs are `[[fill]align][width][.decimals][x]` and nothing else: `<` `>` `^`
   align (numbers default right, others left); `.N` needs a float, `x` an int.
-- `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
+- `"a,b".split(",")` gives `["a", "b"]` (`split(sep, n)`: at most `n` pieces); `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
@@ -363,7 +363,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
-- There's no `+` on strings and no `{{` escape: a literal brace is `\{`.
+- There's no `+` on strings and no `{{`; write `\{`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
   `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()`, `b.base64()`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 

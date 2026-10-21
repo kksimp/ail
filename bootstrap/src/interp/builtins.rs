@@ -624,6 +624,14 @@ impl<'a, W: Write> Interp<'a, W> {
                     _ => text.split(sep).map(s).collect(),
                 };
                 Value::List(Rc::new(parts))
+                // type.str.4: with a limit, at most that many pieces; the last keeps the rest.
+                if a.len() == 2 {
+                    let limit = a[1].int();
+                    if limit < 1 {
+                        return trap("type.str.4", pos, format!("the limit of `split` must be at least 1, not {limit}"));
+                    return Ok(Value::List(Rc::new(text.splitn(limit as usize, &*sep).map(s).collect())));
+                }
+                Value::List(Rc::new(text.split(&*sep).map(s).collect()))
             }
             "to_int" => {
                 let digits = text.strip_prefix('-').unwrap_or(text);

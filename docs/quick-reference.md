@@ -408,7 +408,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 ```
 
 - Format specs: `[[fill]align][width][.decimals][x]` only; `.N` needs a float, `x` an int.
-- `"a,b".split(",")` gives `["a", "b"]`; `"12".to_int()` gives an `int?`,
+- `"a,b".split(",")` gives `["a", "b"]`, `"k=v=w".split("=", 2)` gives `["k", "v=w"]`; `"12".to_int()` gives an `int?`,
   `"2.5".to_float()` a `float?`.
 - `s.chars()` (a `List[char]`; strings have no indexing, `len()` or `for`),
   `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
