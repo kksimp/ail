@@ -134,6 +134,9 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
         # shown, instead of compiling whatever the parser recovered to
         # (a `&` once dropped the rest of its statement silently).
         runtime_syntax("{dir}/{name}", text)
+    # A baked time limit also makes `while` loops check it (run.limit.6).
+    if ms != "0"
+        texts.push("fn lim_loop_polls() bool\n    true\n")
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 
 ## The text of a program: a file, or all the files of a package directory.

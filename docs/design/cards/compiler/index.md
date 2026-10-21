@@ -11,5 +11,8 @@ a64  57 items
 codegen  40 items
 mir  295 items
 obj  55 items
+codegen  39 items
+mir  272 items
+obj  53 items
 syntax  99 items
 x64  74 items

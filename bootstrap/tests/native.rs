@@ -499,6 +499,8 @@ fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
     for (name, option, value, var, flag) in [
         ("grow", "--max-memory", "16", "AIL_MAX_MEMORY_MB", "--max-memory"),
         ("spin", "--timeout", "300", "AIL_TIMEOUT_MS", "--timeout"),
+        // run.limit.6: a `while` loop that never allocates is a safepoint in a build with `--timeout`.
+        ("loop", "--timeout", "300", "AIL_TIMEOUT_MS", "--timeout"),
     ] {
         let src = format!("bootstrap/tests/native/limits/{name}.ail");
         let want = Command::new(env!("CARGO_BIN_EXE_ail"))
@@ -506,7 +508,11 @@ fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
             .args(["run", option, value, &src])
             .output()
             .unwrap();
+        // A `while` loop is a safepoint only in a build that baked a time limit (ADR 0727).
         for baked in [false, true] {
+            if name == "loop" && !baked {
+                continue;
+            }
             let exe = tmp.join(format!("{name}{}", if baked { "-baked" } else { "" }));
             let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
             build.current_dir(root()).args(["build", &src, "-o"]).arg(&exe);

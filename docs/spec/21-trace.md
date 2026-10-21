@@ -380,7 +380,8 @@ message as `ail run`, and exits with status 1. The line has no `FILE:LINE:COL`
 prefix and no snapshot, because the native program has no statement to point at.
 The memory limit is checked when the heap takes a new chunk and counts the
 heap bytes in use. The time limit is checked every 256 allocations and when
-the heap takes a chunk, so a loop that never allocates is not stopped, and the
+the heap takes a chunk. A `while` loop also checks it, but only in an executable
+built with `--timeout` (ADR 0727); so without that, a loop that never allocates is not stopped. The
 limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
 `gettimeofday`. *(ADR 0726, ADR 0727)*
 
