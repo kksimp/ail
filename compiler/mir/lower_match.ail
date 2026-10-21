@@ -24,8 +24,7 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
     if value
         result = new_value(Ty.Unknown, "")
         blocks[join].params.push(result)
-        if w := want
-            rty = w
+        rty = arms_start(want, [arm.body for arm in arms], none)
     for arm in arms
         if done()
             # An earlier `_` took every value: the rest can't match.
