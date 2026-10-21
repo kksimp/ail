@@ -201,6 +201,13 @@ pub fn Asm.mov_mi(mut self, m Mem, v int)
     modrm_mem(0, m, 4)
     u32(v)
 
+## `mov byte [m], imm8`.
+pub fn Asm.mov8_mi(mut self, m Mem, v int)
+    rex(0, 0, index_of(m), base_of(m), false)
+    byte(198)
+    modrm_mem(0, m, 1)
+    byte(v)
+
 pub fn Asm.movzx8_rm(mut self, dst int, m Mem)
     rex(0, dst, index_of(m), base_of(m), false)
     byte(15)
