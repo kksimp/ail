@@ -18,6 +18,13 @@ fn compiler_dir() -> Option<PathBuf> {
     dir.join("main.ail").exists().then_some(dir)
 }
 
+/// The repository root, beside `compiler/` (or the current directory).
+pub fn repo_root() -> PathBuf {
+    compiler_dir()
+        .and_then(|d| d.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 /// Run `ail run compiler ARGS`; stdout on success. The compiler's own
 /// warnings are dropped; its errors are about the user's program.
 fn run_compiler(args: &[&str]) -> Result<String, ExitCode> {

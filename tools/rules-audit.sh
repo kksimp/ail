@@ -7,8 +7,9 @@
 #   1. cited but not in the spec: a rule ID named in a comment or a string
 #      literal of bootstrap/src or compiler/ that docs/spec/ does not define;
 #   2. spec rules never cited: a rule in docs/spec/ that no comment or string
-#      literal in bootstrap/src or compiler/ names (`[removed in ...]` rules
-#      are skipped; they stay in place by the spec README, rule 2);
+#      literal in bootstrap/src or compiler/ names (`[removed in ...]`
+#      rules are skipped; they stay in place by the spec README, rule 2;
+#      `[definitional]` rules describe the language and need no code);
 #   3. diagnostics with no `ail explain` entry: a rule ID emitted as a string
 #      literal (a diagnostic's rule) that `ail explain` cannot explain;
 #   4. `ail explain` entries with no example: a rule whose explanation has no
@@ -60,11 +61,15 @@ for path in sorted((root / "docs" / "spec").glob("*.md")):
             spec.setdefault(m.group(1), path.name)
             if "[removed in" in line:
                 removed.add(m.group(1))
+            # `[definitional]`: a rule that describes the language, not a behaviour the code has to implement.
+            if "[definitional]" in line:
+                removed.add(m.group(1))
 
 # 2. Citations in code: comments name rules, string literals emit them.
 cited = {}  # rule -> set of files that cite it (comments or literals)
 emitted = {}  # rule -> set of files that emit it as a literal
-sources = list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "bootstrap" / "src").rglob("*.ail")) + list((root / "compiler").rglob("*.ail"))
+sources = (list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "bootstrap" / "src").rglob("*.ail"))
+           + [root / "bootstrap" / "tests" / "explain_coverage.rs"] + list((root / "compiler").rglob("*.ail")))
 for path in sources:
     rel = str(path.relative_to(root))
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -76,6 +81,8 @@ for path in sources:
             for m in RULE.finditer(comment):
                 for rule in expand(m):
                     cited.setdefault(rule, set()).add(rel)
+        if path.name == "explain_coverage.rs":
+            continue  # a test whose string literals are deliberately bad rule IDs; its comments are read above
         for m in QUOTED.finditer(line):
             cited.setdefault(m.group(1), set()).add(rel)
             emitted.setdefault(m.group(1), set()).add(rel)

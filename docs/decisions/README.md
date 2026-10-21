@@ -364,6 +364,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0373](0373-self-hosted-diagnostics-are-rule-and-position.md) | The self-hosted front end reports a rule and a position, and runs the corpus in one process *(delegated)* | Accepted | 2026-10-20 |
 | [0376](0376-syntax-tree-in-ail-and-its-json.md) | The syntax tree in AIL, `compiler/ast/`, and its JSON is the derived shape *(delegated)* | Accepted | 2026-10-20 |
 | [0377](0377-checker-in-ail-ported-pass-for-pass.md) | The checker in AIL is ported pass for pass, and says what it covers *(delegated)* | Accepted | 2026-10-20 |
+| [0380](0380-self-hosted-checker-gate.md) | Checker changes are ported to the AIL checker in the same branch | Accepted | 2026-10-20 |
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
@@ -539,3 +540,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0711](0711-tool-driving-agent-programs.md) | Agent programs that drive AIL's own tools: the twin calls the same tool, output is byte-identical, fixtures are committed (round 5) *(delegated)* | Accepted | 2026-10-21 |
 | [0732](0732-counts-and-json-reads-with-defaults.md) | `m.bump(k)`, `m.top(n)`, `j.text(key, default)`, `j.flag(key, default)` and `parse_json_lines(text)` *(delegated)* | Accepted | 2026-10-21 |
 | [0733](0733-process-result-methods.md) | `proc.Output` has `text()` (stdout then stderr) and `ok()` *(delegated)* | Accepted | 2026-10-21 |
+| [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
+| [0673](0673-definitional-rule-marker.md) | Spec rules that only describe the language carry a `[definitional]` marker and need no citation *(delegated)* | Accepted | 2026-10-21 |
+| [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
+| [0679](0679-native-test-runner.md) | `ail test --native`: build each `@test` function natively and compare it with the interpreter *(delegated)* | Accepted | 2026-10-21 |

@@ -52,3 +52,9 @@ more arguments than registers, and callbacks.
 - Windows needs its own trampoline (a stub today, `ffi.load.3`).
 - Callbacks and structs by value will need real per-signature code; the native
   backend (lane 120) generates that natively (`native-abi.md`).
+
+## Rejected alternatives
+
+- The `libffi` crate or C library (option B): rejected because it is an external dependency, and a C build, for a task that two function types cover (ADR 0009).
+- Generated assembly per signature (option C): rejected because it needs an assembler in the toolchain for no gain over option A at the interpreter's call rate.
+- Windows x64 register assignment: not handled by this trick (`ffi.load.3`). Windows reports not-supported rather than guessing.

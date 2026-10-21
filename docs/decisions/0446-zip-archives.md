@@ -30,3 +30,8 @@ Option A. Writer: names sorted, fixed 1980-01-01 timestamp, UTF-8 flag, Unix mod
 
 - Permissions and timestamps of files are not preserved (a deliberate loss for reproducibility).
 - `zip_dir` reads every file into memory before writing; large trees wait for `bytes` and streaming.
+
+## Rejected alternatives
+
+- Zip64 now (option B): rejected because it is rarely needed for the targets and adds format surface to test. It can be added later.
+- `tar.gz` instead (option C): rejected because it is not what the brief or most users exchange. It may follow.

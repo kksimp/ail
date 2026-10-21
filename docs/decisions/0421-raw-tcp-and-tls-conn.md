@@ -41,3 +41,8 @@ second; a `close` during a wait ends the connection when the wait does.
 
 - `NetError.kind` gains `closed` and `bind`.
 - Follow-ups: `read_bytes`, `write_bytes` (lane 123), UDP, half-close.
+
+## Rejected alternatives
+
+- Waiting for `bytes` before designing sockets (option B): rejected because it would block this lane, and TLS and the server do not depend on it.
+- Streams as `Channel[str]` (option C): rejected because it loses timeouts, close semantics and backpressure.

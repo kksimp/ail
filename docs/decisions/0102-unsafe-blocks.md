@@ -31,3 +31,7 @@
 - Manifest syntax for the opt-in comes with the build-system design.
 - An `unsafe` block should document its safety reasoning. A
   `## Safety:` doc-comment convention is to be considered with documentation tooling.
+
+## Rejected alternatives
+
+- `unsafe` modules instead of `unsafe` blocks: no markers inside a module, but coarse, since everything in the module looks equally risky. Rejected because the exact unsafe lines are marked and queryable, giving the smallest unsafe surface.

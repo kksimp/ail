@@ -47,3 +47,8 @@ bytecode tiers implement it.
   names the scrutinee's own variable, as in `_ if n > 0`. A binding pattern
   is a later ADR if the agent corpus shows the need.
 - `ail fix` suggestions for a missing arm are unchanged.
+
+## Rejected alternatives
+
+- A nested `if` in the arm body, the status quo (option B): rejected because fall-through arms must be repeated or restructured, and the reader cannot see at the arm head which cases are partial.
+- `when` or `where` as the guard keyword (option C): rejected because it is a new keyword for what `if` already says.

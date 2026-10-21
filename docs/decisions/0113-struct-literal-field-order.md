@@ -20,3 +20,8 @@ order.
 A struct literal lists each field of the struct exactly once, in any order.
 Missing, unknown or repeated fields are compile-time errors. Field defaults
 and shorthand are still open.
+
+## Rejected alternatives
+
+- Fixed field order in struct literals: rejected because order is free, so edits never fail on ordering, and the formatter writes declaration order.
+- Missing fields filled with silent defaults: rejected because a missing field is a compile-time error rather than a silent default. Defaults may come later as an explicit feature.

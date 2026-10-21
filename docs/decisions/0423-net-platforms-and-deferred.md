@@ -34,3 +34,7 @@ HTTP/2, server TLS, UDP, a readiness API, `net.serve(addr, handler)`.
 
 - Lane 153 checks the Windows notes; nothing here is a stub that
   returns an error.
+
+## Rejected alternatives
+
+- A hand-written Winsock layer (option B): rejected because it is a layer to write and test for no gain now. Rust's standard sockets already use Winsock on Windows.

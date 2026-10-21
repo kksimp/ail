@@ -63,3 +63,9 @@ force a redesign of the ELF and Mach-O writers.
 - Lane 120 adds the dynamic section/fixups when it is ready; lane 122 keeps
   `rt_exit` in one place so the flush is a three-line change.
 - Tokens: no syntax change, so no tokbench table.
+
+## Rejected alternatives
+
+- Static linking of a libc (option B): rejected because there is no libc to link (ADRs 0010 and 0017), and static linking of `libSystem` is unsupported on macOS.
+- Raw system calls for everything (option C): rejected because they cannot call arbitrary C libraries such as `libm` or SQLite, and macOS does not promise syscall numbers.
+- Entering through `__libc_start_main` (option D): not chosen, because it ties the entry sequence and stack setup to glibc and musl internals per target. Revisit if the stdio risk of option A shows up in the test.

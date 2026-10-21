@@ -78,7 +78,7 @@ update a `mut` variable in a loop, use `=`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
-Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `regex.is_match(re, s)`, `find(re, s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(re, s)` (`groups` `List[str?]`, `named`), `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`. Offsets count characters.
+Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `regex.is_match(re, s)`, `find(re, s)` (`Match?`: `start`, `end`, `text`), `find_all`, `group_all(re, s, n)` (group `n` of each match, `""` if unset), `captures(re, s)` (`groups` `List[str?]`, `named`), `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`. Offsets count characters.
 
 `t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])`: `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 

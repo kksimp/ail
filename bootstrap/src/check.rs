@@ -4809,7 +4809,7 @@ impl<'p> Checker<'p> {
     }
 
     /// Which types support which operators (type.num.5, type.str.3,
-    /// trait.op.1, trait.op.3, expr.cmp.1, trait.std.1-2).
+    /// trait.op.1, trait.op.2, trait.op.3, expr.cmp.1, trait.std.1-2).
     fn operator(&mut self, op: BinOp, lt: &Ty, rt: &Ty, pos: Pos) -> Ty {
         let sym = op.symbol();
         let fail = if op.is_arithmetic() { Ty::Err } else { Ty::Bool };
