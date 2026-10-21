@@ -20,6 +20,8 @@ with `./ail fmt`.
 | `build.ail` | Agent-style build script: check every example, summarise diagnostics. |
 | `commands.ail` | A stock keeper: parses commands and reports bad input as errors. |
 | `cookie_jar.ail` | An agent's session with one site: a cookie jar builds the `Cookie` header for each request (`std.net.jar`, offline). |
+| `json_lines.ail` | An event log in JSON lines: `parse_json_lines` skips bad lines, `Json.text` and `Json.flag` read fields with defaults. |
+| `map_top.ail` | Error codes counted in a `Map`, the most frequent with `Map.top`. |
 | `csvreport.ail` | Agent-style CSV report: revenue per region. |
 | `digest.ail` | Agent-style fetch and summarise: CSV over HTTP, local fallback. Takes a URL argument. |
 | `fetch.ail` | Fetch a URL and summarise the response (`std.net`). Needs network. |

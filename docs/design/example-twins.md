@@ -33,3 +33,20 @@ counts are cl100k and the mean of the tokenizers tokbench uses.
 
 - `parse_json_lines`, `Json.text`/`Json.flag` and `Map.top` (lane 247's list)
   are not on the batch head yet, so no example uses them.
+2026-10-21). A twin prints the same output as its example. Counts are cl100k.
+The twins are in `tools/tokbench/corpus/examples-twins/`.
+| Example | Twin | AIL | Python | AIL / Python |
+| `examples/json_lines.ail` | `json_lines.py` | 214 | 190 | 1.13 |
+| `examples/map_top.ail` | `map_top.py` | 146 | 153 | 0.95 |
+- `json_lines` is 13% over Python, under the 20% threshold. Most of the gap is
+  the escaped JSON in the example's string literals: each brace inside a string
+  needs `\{`, and each quote needs `\"`. Python's `json.loads` takes the same
+  text with no escapes, so the cost is in the literal, not in `parse_json_lines`
+  or `Json.text`/`Json.flag`.
+- `map_top` is about even. `Map.top` does the sorting that the Python twin
+  writes by hand.
+- Both twins match their `.out` files byte for byte.
+- This PR is stacked on `claude/trial-head`, which carries `parse_json_lines`,
+  `Json.text`, `Json.flag` and `Map.top`. The `cookie_jar`, `std_args`,
+  `std_csv` and `std_log` rows live on PR #311 (`lane/247-std-module-examples`).
+  Both PRs add rows to this file; keep both sets of rows when merging.
