@@ -22,6 +22,12 @@ $onWindows = -not ($IsLinux -or $IsMacOS)
 $exe = if ($onWindows) { '.exe' } else { '' }
 $binary = Join-Path (Join-Path (Join-Path $bootstrap 'target') 'release') "ail$exe"
 
+# A test run pins the binary it is testing (AIL_BINARY): a program that starts `ail` itself isn't rebuilt under it.
+if ($args.Count -gt 0 -and $args[0] -ne 'selftest' -and $env:AIL_BINARY -and (Test-Path $env:AIL_BINARY)) {
+    & $env:AIL_BINARY @args
+    exit $LASTEXITCODE
+}
+
 function Fail([string]$message) {
     [Console]::Error.WriteLine("ail: $message")
     exit 2
