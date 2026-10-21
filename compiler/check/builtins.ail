@@ -46,6 +46,7 @@ pub STR_METHODS := [
     "rfind",
     "lines",
     "len",
+    "is_empty",
     "byte_len",
     "to_bytes",
 ]
@@ -190,12 +191,14 @@ pub LIST_METHODS := [
     "windows",
     "counts",
     "flatten",
+    "is_empty",
 ]
 
-pub MAP_METHODS := ["len", "get", "contains", "remove", "keys", "values"]
+pub MAP_METHODS := ["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"]
 
 pub SET_METHODS := [
     "len",
+    "is_empty",
     "add",
     "remove",
     "contains",
@@ -261,6 +264,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([Ty.Int, Ty.Char], Ty.Str)
             if n == "lines"
                 return read([], Ty.ListOf(Ty.Str))
+            if n == "is_empty"
+                return read([], Ty.Bool)
             if n == "len" or n == "byte_len"
                 return read([], Ty.Int)
             if n == "to_bytes"
@@ -392,6 +397,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return none
             read([], Ty.Num(c))
         ListOf(e) =>
+            if n == "is_empty"
+                return read([], Ty.Bool)
             if n == "len"
                 return read([], Ty.Int)
             if n == "push"
@@ -438,6 +445,8 @@ fn read(params List[Ty], result Ty) Builtin?
                 return make(true, [], Ty.Unit, Need.NeedOrd)
             none
         MapOf(k, v) =>
+            if n == "is_empty"
+                return read([], Ty.Bool)
             if n == "len"
                 return read([], Ty.Int)
             if n == "get"
@@ -450,6 +459,11 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.ListOf(k))
             if n == "values"
                 return read([], Ty.ListOf(v))
+            # std.count.2: the keys with the largest int values.
+            if n == "top"
+                match v
+                    Int => return read([Ty.Int], Ty.ListOf(k))
+                    _ => return none
             # type.map.8: `m.push(k, x)` for a list-valued map.
             if n == "push"
                 match v
@@ -457,6 +471,8 @@ fn read(params List[Ty], result Ty) Builtin?
                     _ => return none
             none
         SetOf(e) =>
+            if n == "is_empty"
+                return read([], Ty.Bool)
             if n == "len"
                 return read([], Ty.Int)
             if n == "add" or n == "remove"

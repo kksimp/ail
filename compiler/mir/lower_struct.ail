@@ -175,6 +175,8 @@ fn holds_struct(t Ty) bool
 
 ## A copy of `v`, deep through lists and structs.
 fn Lower.copy_value(mut self, v Val) int
+    if v.ty.is_coll()
+        return copy_coll(v)
     if not holds_struct(v.ty)
         return copy_list(v)
     name := "copy.{v.ty.name()}"

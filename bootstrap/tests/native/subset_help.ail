@@ -1,4 +1,6 @@
-## One construct per `native.subset.1` help form (ADR 0722). The `.err` file
+## One construct per `native.subset.1` help form (ADR 0722); forms whose construct
+## became native since (`.lines()`, `==` on `str`, interpolation, `Map`) no longer
+## report. The `.err` file
 ## is the problems; each error line is followed by its `help:` line.
 struct Job
     name str

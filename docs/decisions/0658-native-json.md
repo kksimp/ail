@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 13 — Standard library
 - **Spec rules:** json.parse.1, json.parse.2, json.print.1, json.print.2, json.err.1 (no rule changes)
-- **Builds on:** [ADR 0359](0359-bytecode-tier.md) (the tier these calls leave)
+- **Builds on:** [ADR 0359](0359-bytecode-tier-in-the-bootstrap.md) (the tier these calls leave)
 
 ## Context
 

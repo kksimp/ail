@@ -108,10 +108,25 @@ report(
     "1. cited but not in docs/spec/",
     [f"{r}  ({', '.join(sorted(cited[r]))})" for r in sorted(set(cited) - set(spec))],
 )
+# Check 2 exemptions are the rows of the "## Check 2 exemptions" table in
+# docs/design/rule-coverage.md (lane 244): the one list the audit reads. A row
+# whose rule is now cited, or that has no owner or reason, is a finding.
+coverage = (root / "docs" / "design" / "rule-coverage.md").read_text()
+section = coverage.split("## Check 2 exemptions", 1)[1].split("\n## ", 1)[0] if "## Check 2 exemptions" in coverage else ""
+exempt, incomplete = {}, []
+for line in section.splitlines():
+    m = re.match(r"^\| `([a-z0-9.]+)` \| ([^|]*)\| ([^|]*)\|$", line)
+    if m:
+        rule, owner, reason = m.group(1), m.group(2).strip(), m.group(3).strip()
+        exempt[rule] = owner
+        if not owner or not reason:
+            incomplete.append(rule)
 report(
-    "2. spec rules never cited in bootstrap/src or compiler/",
-    [f"{r}  ({spec[r]})" for r in sorted(set(spec) - set(cited) - removed)],
+    "2. spec rules never cited in bootstrap/src or compiler/ (after exemptions)",
+    [f"{r}  ({spec[r]})" for r in sorted(set(spec) - set(cited) - removed) if r not in exempt],
 )
+report("2a. exemptions for rules that are now cited (remove the row)", sorted(r for r in exempt if r in cited))
+report("2b. exemptions with no owner or reason", incomplete)
 
 # 3 and 4 need `ail explain`, which reads the spec it was built from.
 listing = json.loads(subprocess.run([str(ail), "explain", "--json"], capture_output=True, text=True, check=True).stdout)

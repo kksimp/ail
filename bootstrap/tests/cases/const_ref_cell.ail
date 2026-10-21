@@ -1,0 +1,16 @@
+# ct.const.4: a constant's type holds no `ref` and no `unique` type.
+struct Node
+    value int
+
+unique struct Token
+    id int
+
+fn make() ref Node
+    ref Node(value: 1)
+
+CELL := make()
+TOKEN := Token(id: 1)
+CELLS := [make(), make()]
+
+fn main()
+    print(CELL.value)
