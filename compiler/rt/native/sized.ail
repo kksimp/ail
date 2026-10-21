@@ -1,0 +1,28 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Sized integers (ADR 0834, type.num.15): the message of a conversion that
+## doesn't fit. The compiler checks the range inline and calls this only on
+## the failing path; the trap prints the string object it returns.
+
+## `300` doesn't fit in `u8`: `v` is the value, `k` the target's code in
+## `SIZED_KINDS` (compiler/mir/lower_sized.ail).
+fn sized_msg(v int, k int) int
+    sb_reset()
+    sb_text("`")
+    put_int(v)
+    sb_text("` doesn't fit in `")
+    if k == 0
+        sb_text("i8")
+    elif k == 1
+        sb_text("i16")
+    elif k == 2
+        sb_text("i32")
+    elif k == 3
+        sb_text("u8")
+    elif k == 4
+        sb_text("u16")
+    else
+        sb_text("u32")
+    sb_text("`")
+    str_addr(sb_str())

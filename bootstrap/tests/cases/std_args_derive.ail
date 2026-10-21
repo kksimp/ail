@@ -1,0 +1,29 @@
+use std.args
+
+struct Opts
+    ## more output
+    verbose bool
+    ## output file
+    out str?
+    ## worker count
+    jobs int?
+    ## file to read
+    input str
+    ## limit
+    limit int
+
+impl FromArgs for Opts
+
+fn show(words List[str])
+    o := Opts.parse("tool", "demo", words) else e
+        print("error: {e.why}")
+        return
+    print("{o.verbose} {o.out} {o.jobs} {o.input} {o.limit}")
+
+fn main()
+    show(["-v", "in.txt", "3"])
+    show(["--out=a", "-j", "4", "x", "5"])
+    show(["x"])
+    show(["x", "many"])
+    show(["--bogus", "x", "1"])
+    show(["-j", "many", "x", "5"])

@@ -9,10 +9,21 @@ use ast
 fn Lower.tensor_type_of(self, args List[ast.TypeRef]) Ty?
     if args.len() != 1
         return none
+    n := match args[0].shape
+        Named(name, _) => name
+        _ => ""
+    if n == "f32"
+        return Ty.Tensor(Ty.F32)
     e := type_of(args[0])?
     if e == Ty.Int or e == Ty.Float
         return Ty.Tensor(e)
     none
+
+## Is `t` a `Tensor[f32]`?
+fn tensor_f32(t Ty) bool
+    match t
+        Tensor(e) => e == Ty.F32
+        _ => false
 
 ## Trap at `pos` with the message string `msg` unless `ok` holds.
 fn Lower.tensor_trap_unless(mut self, ok int, msg int, rule str, pos ast.Pos)
@@ -60,6 +71,22 @@ fn Lower.lower_tensor_from(mut self, args List[ast.Arg], npos ast.Pos) Val?
     tensor_trap_if(msg, "std.tensor.2", npos)
     Val(id: call("rt.tensor_from_shape", [xs.id, kind, shape.id], t), ty: t)
 
+## The methods of a `Tensor[f32]` the native subset has.
+F32_METHODS := [
+    "len",
+    "shape",
+    "to_list",
+    "to_float",
+    "transpose",
+    "add",
+    "mul",
+    "matmul",
+    "relu",
+    "sigmoid",
+    "tanh",
+    "softmax",
+]
+
 fn tensor_elem(t Ty) Ty
     match t
         Tensor(e) => e
@@ -90,11 +117,15 @@ fn Lower.tensor_scalar(mut self, k int, t Val, s Val, left bool, pos ast.Pos) Va
     mut sv := s
     if s.ty == Ty.Int and e == Ty.Float
         sv = Val(id: op("itof", [s.id], Ty.Float), ty: Ty.Float)
-    if not same_ty(sv.ty, e)
+    # A `float` beside a `Tensor[f32]` is rounded to `f32` at the boundary
+    # (std.tensor.21), by the runtime.
+    if e == Ty.F32 and s.ty == Ty.Float
+        sv = s
+    elif not same_ty(sv.ty, e)
         problem(pos, "a `{s.ty.name()}` beside a `{t.ty.name()}` isn't in the native subset yet")
         return t
     lf := konst(if left then 1 else 0, Ty.Bool)
-    if e == Ty.Float
+    if e == Ty.Float or e == Ty.F32
         return Val(
             id: call("rt.tensor_scalar_f", [t.id, sv.id, konst(k, Ty.Int), lf], t.ty),
             ty: t.ty,
@@ -162,21 +193,35 @@ fn Lower.tensor_reduce(mut self, r Val, kind int, axis_arg ast.Arg?, npos ast.Po
 fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable
-            return unsupported(npos, "this method call")
+            return unsupported(npos, "`.{name}()` on a tensor with a labelled or `mut` argument")
     e := tensor_elem(r.ty)
+    # ADR 0815: a `Tensor[f32]` holds rounded `float`s; what returns an `f32`
+    # scalar, and the reductions, wait for the scalar type.
+    if e == Ty.F32 and not F32_METHODS.contains(name)
+        return unsupported(npos, "`.{name}()` on `Tensor[f32]`")
     if args.len() == 0
+        if name == "to_f32" and e == Ty.Float
+            t := Ty.Tensor(Ty.F32)
+            return Val(id: call("rt.tensor_to_f32", [r.id], t), ty: t)
+        if name == "to_float" and e == Ty.F32
+            t := Ty.Tensor(Ty.Float)
+            return Val(id: call("rt.tensor_to_float", [r.id], t), ty: t)
         if name == "len"
             return Val(id: load(r.id, 2, Ty.Int), ty: Ty.Int)
         if name == "shape"
             l := Ty.List(Ty.Int)
             return Val(id: call("rt.tensor_shape", [r.id], l), ty: l)
         if name == "to_list"
-            l := Ty.List(e)
+            l := Ty.List(if e == Ty.F32 then Ty.Float else e)
             return Val(id: call("rt.tensor_to_list", [r.id], l), ty: l)
         # std.tensor.13: the checker rejects these on `int` tensors.
-        if (name == "relu" or name == "sigmoid" or name == "tanh") and e == Ty.Float
+        if (name == "relu" or name == "sigmoid" or name == "tanh") and e != Ty.Int
             kind := konst(if name == "relu" then 0 else if name == "sigmoid" then 1 else 2, Ty.Int)
             return Val(id: call("rt.tensor_activate", [r.id, kind], r.ty), ty: r.ty)
+        if name == "softmax" and e != Ty.Int
+            msg := call("rt.tensor_softmax_fault", [r.id], Ty.Int)
+            tensor_trap_if(msg, "std.tensor.24", npos)
+            return Val(id: call("rt.tensor_softmax", [r.id], r.ty), ty: r.ty)
         if name == "transpose"
             msg := call("rt.tensor_transpose_fault", [r.id], Ty.Int)
             tensor_trap_if(msg, "std.tensor.12", npos)

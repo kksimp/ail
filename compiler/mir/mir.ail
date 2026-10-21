@@ -11,6 +11,10 @@ pub enum Ty
     Float
     Bool
     Str
+    ## `bytes` (ADR 0702): a string object's layout; `Byte` is a `u8` taken
+    ## from one, which only `to_int()` accepts.
+    Bytes
+    Byte
     ## A Unicode scalar value, in a register like an `int` (type.char.1).
     Char
     ## A list of numbers; `elem` is `Unknown` until the first use types it.
@@ -26,15 +30,25 @@ pub enum Ty
     ## pointer to a kind-5 object.
     Enum(name str)
     ## `tensor.Tensor[T]` (ADR 0815): a pointer to a tensor object, `T` being
-    ## `int` or `float`. A tensor is never changed in place, so a copy of the
+    ## `int`, `float` or `F32`. A tensor is never changed in place, so a copy of the
     ## value shares the object.
     Tensor(elem Ty)
+    ## The element type of a `Tensor[f32]` (ADR 0815); there is no scalar `f32`
+    ## value in the native subset yet.
+    F32
+    ## `(A, B, ...)` (ADR 0829): a struct object (kind 4) with one 8-byte slot
+    ## per element, in order.
+    Tuple(elems List[Ty])
     Unknown
     Unit
     ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
     Atomic(elem Ty)
     ## A function value: the address of a declared function (ADR 0573).
     Fn(params List[Ty], ret Ty)
+    ## A sized integer `i8 i16 i32 u8 u16 u32` (ADR 0834): in a register like
+    ## an `int`, sign- or zero-extended from its width, so its value is
+    ## always inside the type's range. `kind` is the type's name.
+    Sized(kind str)
 
 pub fn Ty.is_float(self) bool
     match self
@@ -57,6 +71,12 @@ pub fn Ty.elem(self) Ty?
         List(e) => e
         _ => none
 
+## A sized integer (ADR 0834).
+pub fn Ty.is_sized(self) bool
+    match self
+        Sized(_) => true
+        _ => false
+
 pub fn Ty.is_tensor(self) bool
     match self
         Tensor(_) => true
@@ -74,12 +94,17 @@ pub fn Ty.name(self) str
         Float => "float"
         Bool => "bool"
         Str => "str"
+        Bytes => "bytes"
+        Byte => "u8"
         Char => "char"
+        Sized(k) => k
         List(e) => "List[{e.name()}]"
         Map(k, v) => "Map[{k.name()}, {v.name()}]"
         Set(e) => "Set[{e.name()}]"
         Opt(t) => "{t.name()}?"
         Tensor(e) => "Tensor[{e.name()}]"
+        F32 => "f32"
+        Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
         Enum(n) => n
         Unknown => "?"
@@ -204,6 +229,16 @@ pub struct Site
     pub func str
     ## The source file, an index into `Module.files` (ADR 0393).
     pub file int
+
+## The source excerpt under a trap: the line with its number, and a caret
+## under column `col` (native-abi.md §7).
+pub fn excerpt(line str, n int, col int) str
+    gutter := "{n}"
+    mut pad := List[str]()
+    chars := line.chars()
+    for c in 0..col - 1
+        pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
+    "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n"
 
 pub struct Module
     pub path str

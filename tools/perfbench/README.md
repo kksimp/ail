@@ -81,3 +81,8 @@ Wall time (medians of 10 runs, `race.py` helpers, not `run.sh`):
 - Adopted by the integrator (2026-10-21): treat a change under **10%** of the
   median as noise, for runs of 0.3 s or more. Report the spread with any
   wall-time claim, and back it with an instruction-count change where one exists.
+## NumPy twins
+`numpy/` holds three `std.tensor` programs with NumPy twins (`f32_chain`,
+`f32_matmul`, `softmax`). `numpy/run.sh [RUNS]` checks that the outputs match
+and prints wall time, tokens and whether `ail build` accepts the program. The
+results are in `docs/design/automatic-parallelism.md` section 6.4.

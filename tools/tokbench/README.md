@@ -138,3 +138,4 @@ says which program changed and why, with its five-tokenizer mean before and afte
   - `agent-r4/t11_json_transform`: `load_json[List[U]](p)?` and `print_json(v)` replace the `from_json`/`parse_json`/`to_text` chain (ADR 0774). 89.6 → 76.4.
   - `programs/hexdump`: `data[a..b].hex(" ")` replaces the row comprehension and join (ADR 0775). 124.2 → 104.2.
   - Removed the superseded duplicates `agent-r4/t11b_json_typed`, `t20b_grep_methods` and `t23b_copy_tree_std`; t11, t20 and t23 are those forms.
+- **2026-10-21, `agent-r4/t05_args`** (lane 192, ADR 0777): the options are declared once as a struct with `impl FromArgs` and read with `Opts.parse`, instead of a spec list. Output checked equal for the same command lines. 95.4 → 85.6.

@@ -1,0 +1,71 @@
+# bytes: +, concat, to_str, find, contains, starts_with, ends_with, base64,
+# bytes.from_hex, bytes.from_base64, str.to_bytes (type.bytes.6-13).
+fn show(b bytes)
+    print("{b.len()} {b.hex()}")
+
+fn main()
+    a := b"hello\x00\n"
+    show(a + b"!!")
+    show(a.concat(b""))
+    show(b"" + b"")
+    print(a.base64())
+    print(b"".base64())
+    print(b"f".base64())
+    print(b"fo".base64())
+    print(b"foo".base64())
+    print(b"foob".base64())
+    print(b"\xff\xfe\xfd\xfc".base64())
+    print(a.to_str() else "bad")
+    print(b"\xff".to_str() else "bad")
+    print(b"caf\xc3\xa9 \xe2\x82\xac".to_str() else "bad")
+    print(b"\xc3".to_str() else "bad")
+    print(b"".to_str() else "bad")
+    print(a.find(b"ll") else -1)
+    print(a.find(b"") else -1)
+    print(a.find(b"zz") else -1)
+    print(a.find(a) else -1)
+    print(a.find(a + b"x") else -1)
+    print(a.contains(b"lo"))
+    print(a.contains(b"ol"))
+    print(a.starts_with(b"he"))
+    print(a.starts_with(b"hex"))
+    print(a.starts_with(a + b"x"))
+    print(a.ends_with(b"\n"))
+    print(a.ends_with(b"o\x00\n"))
+    print(a.ends_with(b"x"))
+    print("é€".to_bytes().len())
+    print("é€".to_bytes().hex())
+    for h in ["", "00ff", "00FF", "abc", "0g", "ABCDEFabcdef", "zz11"]
+        match_hex(h)
+    for s in [
+        "",
+        "Zg==",
+        "Zm8=",
+        "Zm9v",
+        "Zm9vYg==",
+        "Zg=",
+        "Zg",
+        "=Zg=",
+        "Zg==Zg==",
+        "Z===",
+        "====",
+        "Zm9v!A==",
+        "AAAA",
+        "//++",
+        "Zh==",
+        "Zm9vYmE=",
+        "Zm9vYmFy",
+    ]
+        match_b64(s)
+
+fn match_hex(h str)
+    b := bytes.from_hex(h) else
+        print("hex {h}: none")
+        return
+    print("hex {h}: {b.hex()}")
+
+fn match_b64(s str)
+    b := bytes.from_base64(s) else
+        print("b64 {s}: none")
+        return
+    print("b64 {s}: {b.hex()} {b.base64()}")

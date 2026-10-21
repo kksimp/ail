@@ -1,6 +1,6 @@
 # 0768. Native string scans work a word at a time, and interpolation joins in one allocation
 
-- **Status:** Accepted
+- **Status:** Accepted; the rejection of a builder for interpolation is superseded in part by [ADR 0837](0837-interpolation-with-number-holes-uses-the-builder.md)
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture; performance

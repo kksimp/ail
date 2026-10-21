@@ -5,9 +5,8 @@ entry: main in main.ail
 ```
 fn main() ! [env fail fs io]
 fn check_dump(str, bool) ! [env fail fs io]
-fn runtime(str, str) !ast.Program [fail fs io]
-fn runtime_with(str, str, str, str) !ast.Program [fail fs io]
-fn source_text(str) !str [fail fs io]
+fn runtime(str) !ast.Program [fail fs io]
+fn runtime_with(str, str, str) !ast.Program [fail fs io]
 fn executable_hex(mir.Module, str, str) str [io]
 fn runtime_syntax(str, str) [io]
 fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
@@ -46,6 +45,8 @@ pub fn a64.registers() codegen.Target
 pub a64.LINUX := 1
 pub a64.MACOS := 2
 pub fn a64.generate(mir.Module, int) codegen.Image
+pub fn a64.is_kernel(str) bool
+pub fn a64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
 ## ast
@@ -192,7 +193,6 @@ pub struct codegen.Image
 pub fn codegen.new_image() codegen.Image
 pub fn codegen.add_str(mut codegen.Image, str, str) [mutates]
 pub fn codegen.add_f64(mut codegen.Image, float) str [mutates]
-pub fn codegen.import_slot(mut codegen.Image, str) int [mutates]
 pub fn codegen.align(mut List[int], int) [mutates]
 pub fn codegen.push64(mut List[int], int) [mutates]
 pub fn codegen.utf8(str) List[int]
@@ -213,6 +213,8 @@ pub struct mir.Versioned
 pub fn mir.bce(mir.Func, bool, bool) mir.Func
 pub fn mir.lists_only_grow(mir.Module) bool
 pub fn mir.fold(mir.Func) mir.Func
+pub fn mir.rpo(mir.Func) List[int]
+pub fn mir.forward_loads(mir.Func) mir.Func
 pub fn mir.inline_module(mir.Module) mir.Module
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub struct mir.Def
@@ -235,10 +237,6 @@ pub fn mir.expr_pos(ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
-pub struct mir.TaskState
-pub fn mir.new_task_state() mir.TaskState
-pub fn mir.uses_tasks(str) bool
-pub fn mir.is_wait_call(ast.Expr) bool
 pub enum mir.Ty
 pub struct mir.Inst
 pub fn mir.inst(int, str, List[int]) mir.Inst
@@ -250,11 +248,13 @@ pub fn mir.unreachable_term() mir.Term
 pub struct mir.Block
 pub struct mir.Func
 pub struct mir.Site
+pub fn mir.excerpt(str, int, int) str
 pub struct mir.Module
 pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
+pub fn mir.reuse_lists(mir.Module) mir.Module
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
@@ -338,6 +338,8 @@ pub fn x64.alu_digit(str) int
 pub fn x64.sd_opcode(str) int
 pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
+pub fn x64.is_kernel(str) bool
+pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
-trimmed to fit 4000 tokens (~3798); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3835); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

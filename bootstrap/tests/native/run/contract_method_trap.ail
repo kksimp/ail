@@ -1,0 +1,27 @@
+# contract.req.1 on a method, and calls inside a condition that check nothing
+# (contract.run.2).
+struct Account
+    balance int
+
+fn Account.withdraw(mut self, amount int) int
+    requires amount > 0 and amount <= balance
+    ensures balance == old(balance) - amount
+    ensures result == balance
+    balance -= amount
+    balance
+
+fn positive(n int) bool
+    requires n != 7
+    n > 0
+
+fn sq(n int) int
+    requires positive(n)
+    ensures result >= 0 and positive(result + 1)
+    n * n
+
+fn main()
+    mut a := Account(balance: 10)
+    print(a.withdraw(4))
+    print(sq(5))
+    print(sq(7))
+    print(a.withdraw(60))

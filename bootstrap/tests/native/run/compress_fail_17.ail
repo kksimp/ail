@@ -1,0 +1,6 @@
+# `compress.gunzip` fails with: compress.CompressError(kind: "corrupt", message: "unexpected end of compressed data")
+use std.compress
+
+fn main() !
+    d := compress.gunzip(b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xcb\x48\xcd\xc9\xc9\x57\x28\xcf\x2f\xca\x49\x51\xc8\x18\x65\x8f")?
+    print(d.len())

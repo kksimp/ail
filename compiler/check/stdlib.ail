@@ -71,7 +71,7 @@ STD_FUNCTIONS := [
         "replace_first",
         "split",
     ],
-    ["tensor", "from", "zeros"],
+    ["tensor", "from", "from_fn", "zeros"],
     ["task", "cancelled", "check", "select"],
     ["time", "now_ms", "sleep_ms"],
     ["tz", "offset", "system"],
@@ -192,6 +192,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
             params: [Ty.ListOf(Ty.Unknown), Ty.ListOf(Ty.Int)],
             ret: self.tensor_ty(Ty.Unknown),
         )
+    if key == "tensor.from_fn"
+        return StdSig(params: [Ty.ListOf(Ty.Int), Ty.Unknown], ret: self.tensor_ty(Ty.Unknown))
     if key == "tensor.zeros"
         return StdSig(params: [Ty.ListOf(Ty.Int)], ret: self.tensor_ty(Ty.Unknown))
     if key == "fs.read_text"

@@ -118,6 +118,27 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    (x86-64): wordfreq 209.1M to 204.8M, binarytrees 323.8M to 318.8M,
    fasta 65.9M to 64.9M, nbody unchanged.
 
+8. **Loads are forwarded, and constants are stored as immediates.** The
+   dominator CSE of `fold.ail` leaves loads alone (a `push` changes `len`),
+   so `xs[i]` read twice, a field read after a write to it, or a `len` read
+   again each cost a load. `mir/forward.ail` (`forward_loads`, run after
+   `bce` and the push-loop length pass, on user code and the runtime) keeps,
+   along a block and the blocks below it that have one predecessor each,
+   the values of the list headers (`len`, `cap`, `data`), the elements
+   (`get`, `ldx`), the struct slots (`load`) and raw memory (`prim load64`,
+   `load8`, `loadf`) it has read or written, and reuses them for an identical
+   load. An element store forgets elements and raw memory; a slot store
+   forgets slots, raw memory and headers (all of them when the object is a
+   list); a raw store, a call, and a primitive with effects forget
+   everything. A store remembers its value for the load that reads it back.
+   A block with two predecessors, such as a loop header, starts empty, so
+   nothing crosses a back edge. On x86-64 a store of a constant that fits
+   32 bits (`stx`, `set`, `store`, `store64`, `store8`) is `mov [m], imm`
+   (`mov8_mi` is new) in place of a load into `rdx` and a store. ARM64 has no
+   store immediate; its stores are unchanged. Instructions (x86-64): sieve
+   70.4M to 60.8M, fannkuch 234.0M to 231.1M, binarytrees 318.8M to 315.6M,
+   wordfreq 204.8M to 203.8M, the other six unchanged.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register
@@ -155,3 +176,12 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   `smulh` takes it in a register; that needs the multiplier as an extra
   argument of `div`/`rem` and a Mac measurement, so it is left until
   there is a way to measure ARM64 instruction counts.
+- **Forwarding loads across loop back edges and joins.** It needs the
+  memory state at a merge (every predecessor's), or a loop-invariance proof
+  for the loop's stores and calls; the straight-line version already takes
+  the repeated `len` and field reads of the programs measured, and the loop
+  cases are hoisting, which `native.bce` row loads do for the common one.
+- **Forwarding by alias analysis** (a store to a struct slot keeps the slots
+  of another type). Every store here forgets a whole class instead; the loads
+  that survive in the measured programs are in loops, where nothing carries
+  over anyway.

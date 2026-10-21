@@ -1,0 +1,6 @@
+# `compress.unzlib` fails with: compress.CompressError(kind: "unsupported", message: "zlib preset dictionaries are not supported")
+use std.compress
+
+fn main() !
+    d := compress.unzlib(b"\x78\x20\x00\x00\x00\x00\x00")?
+    print(d.len())

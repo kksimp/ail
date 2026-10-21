@@ -326,14 +326,25 @@ fn list_join_chars(xs List[int], sep str) str
     k := load64(q)
     items := load64(q + 16)
     sp := str_addr(sep)
-    mut n := 0
+    # One pass for the bits of every character: below 128 means all ASCII,
+    # one byte each, so the width pass and `char_put` are skipped.
+    mut bits := 0
     for i in 0..k
-        n += char_width(load64(items + 8 * i))
+        bits = bits.bit_or(load64(items + 8 * i))
+    mut n := k
+    if bits >= 128
+        n = 0
+        for i in 0..k
+            n += char_width(load64(items + 8 * i))
     if k > 1
         n += (k - 1) * load64(sp)
     chars := if k > 1 then k + (k - 1) * load64(sp + 8) else k
     r := str_new(n, chars)
     mut at := r + 16
+    if bits < 128 and load64(sp) == 0
+        for i in 0..k
+            store8(at + i, load64(items + 8 * i))
+        return str_at(r)
     for i in 0..k
         if i > 0
             copy_bytes(at, sp + 16, load64(sp))
@@ -772,6 +783,19 @@ fn trap_body(kind int, a int, b int, op str)
         out_str("can't sleep for ")
         out_int(a)
         out_str(" milliseconds")
+    elif kind == 12
+        # `b[a]` of `bytes` (type.bytes.3); `b` is the length.
+        out_str("index ")
+        out_int(a)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(b)
+    elif kind == 13
+        out_str("slice ")
+        out_int(a)
+        out_str(op)
+        out_int(b)
+        out_str(" is out of bounds for bytes of length ")
+        out_int(load64(global(TRAP_LEN)))
     elif kind == 14
         # `unreachable(message)` (err.model.2): `a` is the message
         out_str("unreachable: ")
@@ -783,6 +807,19 @@ fn trap_body(kind int, a int, b int, op str)
         out_str(" + ")
         out_int(b)
         out_str(" is outside int")
+
+## A contract trap is written in pieces (ADR 0612): `trap_begin` flushes
+## the output and writes the head, the message follows with the `out_*`
+## functions, and `trap_end` writes the excerpt and exits.
+fn trap_begin(head str)
+    flush()
+    out_str(head)
+
+fn trap_end(tail str)
+    out_byte(10)
+    out_str(tail)
+    flush_to(2)
+    sys_exit(1)
 
 ## A failure of the runtime itself: out of memory (run.limit.2).
 fn fail(kind int, a int, b int)
