@@ -97,3 +97,19 @@ each needs an option list and a measurement before it becomes an open question.
 - Run time is not measured here. Only output equality with the twins was checked.
 - Token counts are tokbench means. They are not per model, and the
   `claude-legacy` column is an older tokenizer.
+
+## Round 4 after (lane 204, ADR 0667)
+
+Library fixes only. `regex.group_all` replaces the `find_all` + `strip_prefix`
+pattern in `regex_codes`; `gz_check` uses the existing `str.byte_len()`.
+Tokbench mean, five tokenizers, ten programs:
+
+| Program | Before | After | Change |
+|---|---|---|---|
+| `regex_codes.ail` | 127.0 | 115.2 | -11.8 |
+| `gz_check.ail` | 110.6 | 108.6 | -2.0 |
+| other eight `.ail` and all ten `.py` | as above | unchanged | 0 |
+
+`regex_codes` against its Python twin (94.2): +35% before, +22% after. The
+`task_sum` gap is a syntax question and stays open. The `frames` gap is
+mostly `wire[at].to_int()` and is not changed here.

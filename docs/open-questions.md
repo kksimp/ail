@@ -405,3 +405,16 @@ functions plus explicit state) or add closures as a later language feature
 with their own ADR. Recommendation: keep the rule until a program shows the
 need; the AI-first measurement (ADR 0076) is tokens per handler, and the
 named form costs few.
+
+## OQ-122 — Compare `bytes` with `str` directly?
+
+Round 4 ([measurements](design/program-measurements-agent-r4.md)) found
+`gz_check` and `frames` comparing a file's bytes with its text through
+`to_bytes()`, `text()` and `len()`. Options: (a) keep `==` between `bytes`
+and `str` a type error, and write `b.text() == s` (status quo, an extra call
+per comparison); (b) allow `bytes == str` as the UTF-8 comparison, with
+`bytes == bytes` unchanged. Pros of (b): about 3 tokens per comparison on the
+round-4 programs. Cons: two kinds of equality, and a mixed `==` that a reader
+could take for a conversion. Recommendation: (a) until a larger corpus shows
+the cost; the saving is small and the rule is simpler. Decided by the
+integrator with a measurement, not by this lane.

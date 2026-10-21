@@ -281,6 +281,7 @@ impl<'p> Checker<'p> {
             ("regex", "is_match") => (vec![std_ty("regex.Regex"), Str], Bool),
             ("regex", "find") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Match"))),
             ("regex", "find_all") => (vec![std_ty("regex.Regex"), Str], list(std_ty("regex.Match"))),
+            ("regex", "group_all") => (vec![std_ty("regex.Regex"), Str, Int], list(Str)),
             ("regex", "captures") => (vec![std_ty("regex.Regex"), Str], opt(std_ty("regex.Captures"))),
             ("regex", "replace" | "replace_first") => (vec![std_ty("regex.Regex"), Str, Str], Str),
             ("regex", "split") => (vec![std_ty("regex.Regex"), Str], list(Str)),
