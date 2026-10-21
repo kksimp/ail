@@ -421,7 +421,11 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         return
     for a in f.attrs
         # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5).
-        if a.name != "inline" and a.name != "pure" and a.name != "allow" and a.name != "deprecated" and a.name != "test"
+        if a.name != "inline"
+            and a.name != "pure"
+            and a.name != "allow"
+            and a.name != "deprecated"
+            and a.name != "test"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params
@@ -489,7 +493,11 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                     if args.len() != 1
                         return none
                     e := type_of(args[0])?
-                    if is_number(e) or e == Ty.Str or needs_copy(e) or is_enum(e) or is_shared_opt(e)
+                    if is_number(e)
+                        or e == Ty.Str
+                        or needs_copy(e)
+                        or is_enum(e)
+                        or is_shared_opt(e)
                         return Ty.List(e)
                     none
                 "Map" | "Set" => coll_type_of(name, args)
@@ -1462,7 +1470,12 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         if elem.is_unknown() or is_pending_opt(elem)
             # A `none` among the items makes the element type optional.
             elem = if has_none and v.ty.opt_inner() == none then (opt_of(v.ty) else v.ty) else v.ty
-        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem) and not is_enum(elem) and not is_shared_opt(elem) and not is_pending_opt(elem)
+        if not is_number(elem)
+            and elem != Ty.Str
+            and not needs_copy(elem)
+            and not is_enum(elem)
+            and not is_shared_opt(elem)
+            and not is_pending_opt(elem)
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
