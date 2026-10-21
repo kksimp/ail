@@ -363,3 +363,17 @@ heap bytes in use. The time limit is checked every 256 allocations and when
 the heap takes a chunk, so a loop that never allocates is not stopped, and the
 limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
 `gettimeofday`. *(ADR 0726, ADR 0727)*
+
+```ail norun rules=run.limit.5
+# norun: the limits are read from the environment when the native program starts, and the gate
+# runs `ail` only. bootstrap/tests/native.rs (run_limits_stop_native_programs) checks run.limit.5.
+fn main()
+    print("ok")
+```
+
+```ail norun rules=run.limit.6
+# norun: a native program past a limit prints a trap, which the gate does not run.
+# bootstrap/tests/native.rs (run_limits_stop_native_programs) checks run.limit.6.
+fn main()
+    print("ok")
+```
