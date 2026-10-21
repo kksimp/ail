@@ -21,9 +21,9 @@
 MAP_BYTES := 88
 
 ## Heap kinds (native-abi.md): 7 table, 3 entries (scanned word by word),
-## 11 index (no pointers). With the collector (#174) this is `alloc(n, kind)`.
+## 11 index (no pointers). `alloc(n, kind)`.
 fn map_alloc(n int, kind int) int
-    alloc(n)
+    alloc(n, kind)
 
 fn map_zero(p int, words int)
     for i in 0..words

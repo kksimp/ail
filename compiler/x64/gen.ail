@@ -1044,6 +1044,17 @@ fn Gen.prim(mut self, i mir.Inst)
             k := imm(i.args[0]) else 0
             a.lea(d, at_sym("globals", 8 * k))
             put_gpr(i.dst, d)
+        "globals_end" =>
+            d := out_gpr(i.dst, S1)
+            a.lea(d, at_sym("globals", 8 * m.globals_used()))
+            put_gpr(i.dst, d)
+        "gc_regs" =>
+            b := gpr(i.args[0], S0)
+            for k in 0..5
+                a.mov_mr(at(b, 8 * k), [RBX, 12, 13, 14, 15][k])
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, RSP)
+            put_gpr(i.dst, d)
         "target" =>
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, 0)

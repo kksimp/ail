@@ -80,6 +80,10 @@ All verified on Linux x86-64 and macOS ARM64.
 
 `compiler/rt/rt.ail`: the native runtime in AIL, tested under the interpreter on a byte-addressed machine model: integer and float text byte-identical to the interpreter (checked on 2,400 random floats and the edge cases), string and list objects, bump allocator, buffered `print`, trap records (ADRs 0404–0409; ABI in [design/native-abi.md](design/native-abi.md)). Not yet: real syscalls and entry point (need lane 120's encoders and lane 126's raw pointers), the collector, frame metadata for trace parity.
 
+### Native heap and collector (lane 171)
+
+`compiler/rt/native/heap.ail`, `gc.ail`: `rt.alloc(n, kind)` with a header word, a 16 KiB-page heap with size-class free lists, and a stop-the-world conservative mark-sweep collector triggered by allocated bytes (ADRs 0562–0564). `binarytrees 17` runs in 11 MiB instead of 896 MiB; `binarytrees 20` in 85 MiB; 10 GB of short-lived lists in 10 MiB. Tests: `bootstrap/tests/native/run/gc_*.ail` (x86-64 and ARM64 under qemu, also with a collection every 4 KiB), `bootstrap/tests/native/heavy/`. Not yet: precise stack maps, a generational collector.
+
 ### Tooling
 
 - **Semantic API:** diagnostics schema v1 (ADR 0145), `ail explain` covering every emitted rule (ADRs 0146, 0335), typed holes `todo` (ADR 0147), `ail api` with ids, references, doc comments, contracts and effects (ADRs 0150–0152, 0213), `ail api --locals|--type|--refs`, `--card` and package directories (ADRs 0258–0261, 0310–0311, 0325–0327), `ail check --errors` (ADR 0286), `ail effects`, and `ail fix` with anchored fixes for 150 of 250 corpus programs (ADRs 0202–0205, 0264, 0285, 0335). Foreign syntax is reported once with a help (ADR 0262). See [semantic-api.md](design/semantic-api.md).
