@@ -202,6 +202,18 @@ struct OAK {
     pos: Pos,
 }
 
+/// `slot += step` (or `-=`), then jump to `top` while the compare against `b` holds, else to `out`:
+/// the end of a `while` turn. Anything but ints goes to `slow`, which runs the plain pair.
+#[derive(Clone, Copy)]
+struct IncBr {
+    slot: u32,
+    step: Opnd,
+    b: Opnd,
+    top: u32,
+    out: u32,
+    slow: u32,
+}
+
 fn bin<'a>(op: BinOp, dst: Opnd, a: Opnd, b: Opnd, pos: Pos) -> Ins<'a> {
     let v = B3 { dst, a, b, pos };
     match op {
@@ -348,6 +360,10 @@ enum Ins<'a> {
     BrEqK(BrK),
     BrNeK(BrK),
     AddA(OA),
+    IncBrLt(IncBr),
+    IncBrLe(IncBr),
+    DecBrGt(IncBr),
+    DecBrGe(IncBr),
     SubA(OA),
     MulA(OA),
     AddAK(OAK),
@@ -1078,6 +1094,9 @@ struct Compiler<'c, 'a, W: Write> {
     exit_cache: Option<u32>,
     /// Instructions that aren't a hand-off to the walker.
     native: usize,
+    /// The plain `op=` of each `IncBr`, which `compile` appends after the end: the instruction
+    /// it replaced, and the test that follows it.
+    stubs: Vec<(u32, Ins<'a>, u32)>,
 }
 
 impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
@@ -1132,6 +1151,38 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     }
 
     /// Point the jump at `at` to `t`.
+    /// A turn of a `while` that ends in `slot += step` and tests `slot < b` (or `<=`; `-=` with `>` and
+    /// `>=`) becomes one instruction; the plain pair stays for the first test and for `continue`.
+    fn fuse_inc(&mut self, add: u32, test: u32, top: u32) {
+        let (slot, step, sub) = match self.ins[add as usize] {
+            Ins::AddA(OA { slot, b, .. }) => (slot, b, false),
+            Ins::SubA(OA { slot, b, .. }) => (slot, b, true),
+            Ins::AddAK(OAK { slot, k, .. }) => (slot, self.konst(Value::Int(k)), false),
+            Ins::SubAK(OAK { slot, k, .. }) => (slot, self.konst(Value::Int(k)), true),
+            _ => return,
+        };
+        let (cmp, b) = match self.ins[test as usize] {
+            Ins::BrLt(Br { a, b, when: true, .. }) if a == LOCAL | slot && !sub => (0, b),
+            Ins::BrLe(Br { a, b, when: true, .. }) if a == LOCAL | slot && !sub => (1, b),
+            Ins::BrGt(Br { a, b, when: true, .. }) if a == LOCAL | slot && sub => (2, b),
+            Ins::BrGe(Br { a, b, when: true, .. }) if a == LOCAL | slot && sub => (3, b),
+            Ins::BrLtK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && !sub => (0, self.konst(Value::Int(k))),
+            Ins::BrLeK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && !sub => (1, self.konst(Value::Int(k))),
+            Ins::BrGtK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && sub => (2, self.konst(Value::Int(k))),
+            Ins::BrGeK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && sub => (3, self.konst(Value::Int(k))),
+            _ => return,
+        };
+        let v = IncBr { slot, step, b, top, out: test + 1, slow: 0 };
+        let fused = match cmp {
+            0 => Ins::IncBrLt(v),
+            1 => Ins::IncBrLe(v),
+            2 => Ins::DecBrGt(v),
+            _ => Ins::DecBrGe(v),
+        };
+        let orig = std::mem::replace(&mut self.ins[add as usize], fused);
+        self.stubs.push((add, orig, test));
+    }
+
     fn patch(&mut self, at: u32, t: u32) {
         match &mut self.ins[at as usize] {
             Ins::Jump(x)
@@ -1870,8 +1921,11 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 self.patch(enter, test);
                 self.loops[l as usize].cont = test;
                 let back = self.cond_jump(cond, true);
-                for x in back {
+                for &x in &back {
                     self.patch(x, top);
+                }
+                if back.len() == 1 && test > top {
+                    self.fuse_inc(test - 1, test, top);
                 }
                 self.loop_end();
                 let end = self.here();
@@ -2224,10 +2278,20 @@ impl<'a, W: Write> Interp<'a, W> {
             exits: Vec::new(),
             exit_cache: None,
             native: 0,
+            stubs: Vec::new(),
         };
         let result = c.reg();
         c.block(body, result);
         c.emit(Ins::End { src: result });
+        for (at, orig, test) in std::mem::take(&mut c.stubs) {
+            let slow = c.here();
+            c.ins.push(orig);
+            c.ins.push(Ins::Jump(test));
+            let (Ins::IncBrLt(v) | Ins::IncBrLe(v) | Ins::DecBrGt(v) | Ins::DecBrGe(v)) = &mut c.ins[at as usize] else {
+                unreachable!("an IncBr")
+            };
+            v.slow = slow;
+        }
         if c.native == 0 {
             return Slot::Walker;
         }
@@ -3447,6 +3511,25 @@ match {
                 pc = if c == when { t as usize } else { pc + 1 };
             }};
         }
+        macro_rules! inc_br {
+            ($v:expr, $chk:ident, $c:tt) => {{
+                let IncBr { slot, step, b, top, out, slow } = *$v;
+                let at = base + slot as usize;
+                let fast = match (&env[at].1, get!(step), get!(b)) {
+                    (Value::Int(x), Value::Int(s), Value::Int(y)) => x.$chk(*s).map(|r| (r, *y)),
+                    _ => None,
+                };
+                match fast {
+                    Some((r, y)) => {
+                        if let Value::Int(x) = &mut env[at].1 {
+                            *x = r;
+                        }
+                        pc = if r $c y { top } else { out } as usize;
+                    }
+                    None => pc = slow as usize,
+                }
+            }};
+        }
         macro_rules! assign_op {
             ($v:expr, $op:expr, $chk:ident, $f:tt) => {{
                 let OA { slot, b, pos } = *$v;
@@ -3524,6 +3607,10 @@ match {
                 Ins::BrGeK(v) => branch_k!(v, BinOp::Ge, >=),
                 Ins::BrEqK(v) => branch_k!(v, BinOp::Eq, ==),
                 Ins::BrNeK(v) => branch_k!(v, BinOp::Ne, !=),
+                Ins::IncBrLt(v) => inc_br!(v, checked_add, <),
+                Ins::IncBrLe(v) => inc_br!(v, checked_add, <=),
+                Ins::DecBrGt(v) => inc_br!(v, checked_sub, >),
+                Ins::DecBrGe(v) => inc_br!(v, checked_sub, >=),
                 Ins::AddA(v) => assign_op!(v, BinOp::Add, checked_add, +),
                 Ins::SubA(v) => assign_op!(v, BinOp::Sub, checked_sub, -),
                 Ins::MulA(v) => assign_op!(v, BinOp::Mul, checked_mul, *),
