@@ -330,6 +330,12 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     absent := op("eq", [o.id, konst(0, Ty.Int)], Ty.Bool)
     leave := new_block()
     good := new_block()
+    if opt_exit >= 0
+        # Inside the value of an `else`, an absent value goes to that `else` (err.prop.4).
+        branch(absent, opt_exit, [], good, [])
+        seal(good)
+        cur = good
+        return unwrap(o)
     branch(absent, leave, [], good, [])
     seal(leave)
     seal(good)
@@ -368,11 +374,35 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
             opt: false,
             err: error_type_of_call(e),
         )
-    o := lower_value(e, none)?
+    exit := new_block()
+    saved := opt_exit
+    opt_exit = exit
+    r := lower_value(e, none)
+    opt_exit = saved
+    o := r?
+    if preds[exit].len() > 0
+        return chain_maybe(o, exit)
     if o.ty.opt_inner() == none
         problem(expr_pos(e), "`else` on a `{o.ty.name()}`, which is neither optional nor can fail")
         return none
     Maybe(val: o, present: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), opt: true, err: Ty.Unknown)
+
+## The value of an `else` whose `e` holds a `?` on an optional (err.prop.4):
+## `o` when it ran to the end, or absent when `exit` was reached.
+fn Lower.chain_maybe(mut self, o Val, exit int) Maybe
+    join := new_block()
+    t := o.ty
+    v := new_value(t, "")
+    p := new_value(Ty.Bool, "")
+    blocks[join].params.push(v)
+    blocks[join].params.push(p)
+    jump(join, [o.id, konst(1, Ty.Bool)])
+    seal(exit)
+    cur = exit
+    jump(join, [zero_of(t), konst(0, Ty.Bool)])
+    seal(join)
+    cur = join
+    Maybe(val: Val(id: v, ty: t), present: p, opt: false, err: Ty.Unknown)
 
 ## `e else ...` (err.else.1-6): the success value, or the `else` part.
 ## A value of type `Unit` when `e` has no success value.

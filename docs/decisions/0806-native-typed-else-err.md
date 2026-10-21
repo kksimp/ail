@@ -27,3 +27,11 @@ native.subset.1.
 
 - **Carry the type with the value.** Costs a word per error and an any-box
   for the one case OQ-029 has not specified.
+
+## Lists of optionals and `?` inside an `else` value
+
+A list, field or parameter may hold optionals of numbers, strings and enums
+(`List[str?]`, `List[Expr?]`): an element is one word, 0 for none. A literal
+with a `none` among its items is a list of optionals. A `?` on an optional
+inside the value of an `else` goes to that `else` (err.prop.4) instead of
+leaving the function: `f.owner?.name else ""`.
