@@ -488,6 +488,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
 | [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
 | [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
+| [0797](0797-tensor-f32-rounding-and-text.md) | `Tensor[f32]` rounding, scalars and text form (AI, delegated) | Accepted | 2026-10-21 |
+| [0798](0798-tensor-f32-conversions.md) | `to_f32()` and `to_float()`; mixing and traces (AI, delegated) | Accepted | 2026-10-21 |
 | [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
 | [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
 | [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
@@ -581,5 +583,10 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0772](0772-native-std-modules-in-ail.md) | Standard modules written in AIL compile natively as modules of the program, read from `bootstrap/src/std`; `std.log` builds *(delegated)* | Accepted | 2026-10-21 |
 | [0766](0766-native-string-hash-by-words.md) | Native string map keys are hashed eight bytes at a time: `map_hash` 64 to 44 instructions per word *(delegated)* | Accepted | 2026-10-21 |
 | [0767](0767-map-first-probe.md) | The native map lookup tries one probe without saved registers, then falls back to the full probe *(delegated)* | Accepted | 2026-10-21 |
+| [0770](0770-native-proc-run.md) | Native `proc.run` and `proc.which` on Linux: `clone`, `execve`, pipes and `ppoll`, optional trailing parameters, the `proc.Output` struct *(delegated)* | Accepted | 2026-10-21 |
+| [0763](0763-comprehensions-compile-to-loops.md) | Comprehensions compile to loops in the bytecode tier: tensor_ops_loops 0.380 s to 0.214 s *(delegated)* | Accepted | 2026-10-21 |
+| [0786](0786-syntax-diagnostic-text-and-fmt-check.md) | The self-hosted front end prints diagnostic help and fixes; `fmt --check` fails on broken sources *(delegated)* | Accepted | 2026-10-21 |
 | [0791](0791-tuples.md) | Tuples: anonymous pairs and triples as values (designer, resolves OQ-124) | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
+| [0780](0780-fix-failure-in-operand-and-json-num-hint.md) | `ail fix` for a failure inside an operand; `expr.block.2` hint for `Json.num` in an `int` function *(delegated)* | Accepted | 2026-10-21 |
+| [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |

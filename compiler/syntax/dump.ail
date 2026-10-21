@@ -87,3 +87,20 @@ pub fn ast_text(lexed Lexed, parsed Parsed) str
     diag_lines(lexed.diags, mut out)
     diag_lines(parsed.diags, mut out)
     out.join("\n")
+
+## The syntax diagnostics of one file as `ail check` prints them (the text
+## form of bootstrap/src/diag.rs `to_text`), or "" when there are none.
+pub fn report_text(path str, text str, diags List[Diag]) str
+    lines := text.split("\n")
+    mut out := List[str]()
+    for d in one_per_line(diags)
+        out.push("{path}:{d.pos.line}:{d.pos.col}: error[{d.rule}]: {d.msg}")
+        if d.pos.line >= 1 and d.pos.line <= lines.len()
+            out.push("    {lines[d.pos.line - 1]}")
+            out.push("    {" ".repeat(d.pos.col - 1)}^")
+        if d.help.len() > 0
+            out.push("help: {d.help}")
+        # A fix whose title is the help line is not repeated.
+        if d.fix.len() > 0 and d.fix != d.help
+            out.push("fix: {d.fix}")
+    out.join("\n")

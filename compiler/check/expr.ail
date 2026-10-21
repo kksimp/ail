@@ -702,6 +702,10 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
             "this compares an optional with a negative number, so it's never equal: absence is `none`",
             "write `== none`, or bind it: `if i := ...`",
         )
+    # err.use.1: the failure sits in an operand, so the fix goes after it.
+    if lt != Ty.Unknown and lt != Ty.Never and rt != Ty.Unknown and rt != Ty.Never
+        if reject_unhandled(lt, expr_pos(lhs)) or reject_unhandled(rt, expr_pos(rhs))
+            return Ty.Unknown
     operator(op, lt, rt, at)
 
 ## A `std.tensor` value.

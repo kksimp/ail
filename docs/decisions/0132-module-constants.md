@@ -70,7 +70,7 @@ decides:
    reported at the constant before the program runs. The bootstrap reports it
    as a trap at the constant, before `main` starts.
 
-```ail
+```ail fragment
 MAX_DEPTH := 200
 KEYWORDS := {"let", "if", "else", "while", "fn", "return"}
 ESCAPES := {'n': '\n', '"': '"', '\\': '\\'}
