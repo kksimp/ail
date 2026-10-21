@@ -86,6 +86,11 @@ enum Value {
     /// An enum and variant, by index, and the variant's fields.
     Enum(usize, usize, Rc<Vec<Value>>),
     List(Rc<Vec<Value>>),
+    /// A tuple's elements (type.tuple.2): copies share them until one is
+    /// changed, as a struct's fields do. It sits next to `List`: last in the
+    /// enum it made `drop_glue::<Value>` 40% longer (+1.5% instructions on
+    /// binarytrees).
+    Tuple(Rc<Vec<Value>>),
     /// `Map[K, V]` and `Set[T]`, in insertion order (type.map.1).
     Map(Rc<Table>),
     Set(Rc<Table>),
@@ -108,9 +113,6 @@ enum Value {
     Atomic(std::sync::Arc<atomic::Cell>),
     /// A declared function used as a value (type.fn.2), by index in the program.
     Fn(usize),
-    /// A tuple's elements (type.tuple.2): copies share them until one is
-    /// changed, as a struct's fields do.
-    Tuple(Rc<Vec<Value>>),
 }
 
 impl Clone for Value {
