@@ -292,4 +292,14 @@ fn main()
         print(err.kind)
         return
     print(regex.group_all(re, "1a 2b", 2))
+**std.regex.25** — The functions that take a regex first are also methods of
+`regex.Regex`: `re.is_match(text)`, `re.find(text)`, `re.find_all(text)`,
+`re.captures(text)`, `re.replace(text, with)`, `re.replace_first(text, with)`
+and `re.split(text)` mean `regex.NAME(re, ...)` and give the same result.
+Another method name is an error. *(ADR 0749)*
+```ail rules=std.regex.25
+fn main() !
+    re := regex.compile(r"(\d+)-(\d+)")?
+    print(re.is_match("call 12-34"))        # true
+    print(re.replace("1-2", "$2-$1"))       # 2-1
 ```
