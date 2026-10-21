@@ -1584,12 +1584,12 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if name == "join"
                 arg_want = Ty.Str
         vs.push(lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
-    if name == "to_str" and vs.len() == 0
+    if name == "to_str" and vs.len() == 0 and r.ty != Ty.Bytes
         # type.str.3
         text := text_of(r, npos)?
         return Val(id: text, ty: Ty.Str)
     match r.ty
-        Bytes | Byte => return bytes_method(r, name, vs.len(), npos)
+        Bytes | Byte => return bytes_method(r, name, vs, npos)
         Int | Sized(_) => return int_method(r, name, npos, vs)
         Float => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
