@@ -15,8 +15,7 @@ fn main() !
         if inner.len() > 0
             names = inner.split(", ")
         for effect in names
-            seen := users.get(effect) else 0
-            users[effect] = seen + 1
+            users.bump(effect)
         label := if names.len() == 0 then "pure" else names.join(", ")
         print("{name}: {label}")
     for effect in users.keys().sorted()

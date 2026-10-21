@@ -411,6 +411,41 @@ fn main() !
     print("{r.status} {r.out.len()}")
 ```
 
+**std.proc.9** — `Output` (the result of `proc.run`) has the methods `text()`
+and `ok()`, and no others. Each takes no arguments, and neither changes the
+value: a call with an argument, or an unknown name, is an error. *(ADR 0733)*
+
+**std.proc.10** — `o.text() str` is the standard output followed by the standard
+error, with nothing between them. `o.ok() bool` is `o.status == 0`. *(ADR 0733)*
+
+```ail rules=std.proc.9,std.proc.10
+use std.proc
+
+fn main() !
+    r := proc.run("echo", ["hello"])?
+    print(r.ok())                         # true
+    print(r.text().len() > 0)             # true
+```
+
+## Counting: `Map[K, int]`
+
+**std.count.1** — `m.bump(k)` adds one to the count at `k`, and starts the count
+at zero when `k` is absent. The receiver must be `mut`. It returns nothing and
+the map's values must be `int`. *(ADR 0732)*
+
+**std.count.2** — `m.top(n int) List[K]` is the `n` keys with the largest counts,
+largest first. Keys with equal counts keep their insertion order. A count of zero
+or less gives `[]`. `m` is not changed. *(ADR 0732)*
+
+```ail rules=std.count.1,std.count.2
+fn main()
+    mut counts := Map[str, int]()
+    for word in ["b", "a", "b", "c", "b", "a"]
+        counts.bump(word)
+    print(counts.top(2))                  # ["b", "a"]
+    print(counts.top(0))                  # []
+```
+
 ## Memory for C: `std.mem`
 
 **std.mem.1** — `std.mem` has `cstr(s str) *u8`, which returns a new

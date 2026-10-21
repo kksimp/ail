@@ -279,6 +279,15 @@ fn JsonParser.number(mut self) !Json
         return fail_at(start, "number out of range")
     Num(n)
 
+## Every line of `text` that is one JSON document, in order; other lines are
+## skipped (json.lines.1).
+fn parse_json_lines(text str) List[Json]
+    mut docs := []
+    for line in text.lines()
+        doc := parse_json(line) else continue
+        docs.push(doc)
+    docs
+
 ## Parse one JSON document (json.parse.1).
 fn parse_json(text str) Json ! JsonError
     mut p := JsonParser(text.chars(), 0)
@@ -377,6 +386,16 @@ fn Json.bool(self, key str) bool?
 
 fn Json.arr(self, key str) List[Json]?
     get(key)?.as_arr()
+
+## The text member `key`, or `default` when it is missing or not text (json.query.5).
+fn Json.text(self, key str, default str) str
+    v := get(key) else return default
+    v.as_str() else default
+
+## The bool member `key`, or `default` when it is missing or not a bool (json.query.6).
+fn Json.flag(self, key str, default bool) bool
+    v := get(key) else return default
+    v.as_bool() else default
 
 ## Replaces the first member named `key`, or adds one at the end; traps unless
 ## this is an object (json.query.3).

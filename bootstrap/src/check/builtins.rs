@@ -112,7 +112,7 @@ pub(super) const LIST_METHODS: &[&str] =
         "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference", "chunks",
         "windows", "counts", "flatten",
     ];
-pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values"];
+pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values", "bump", "top"];
 pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
 
 /// `to_i8` ... `to_f32`: the sized type a conversion method names (type.num.15).
@@ -262,6 +262,12 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
                 "remove" => make(true, vec![k], opt(v), Need::Nothing),
                 "keys" => read(vec![], list(k)),
                 "values" => read(vec![], list(v)),
+                // std.count.1, std.count.2: count up, and the largest counts.
+                "bump" => match v {
+                    Ty::Int => make(true, vec![k], Unit, Need::Nothing),
+                    _ => None,
+                },
+                "top" => read(vec![Int], list(k)),
                 // type.map.8: `m.push(k, x)` for a list-valued map.
                 "push" => match v {
                     Ty::List(e) => make(true, vec![k, *e], Unit, Need::Nothing),

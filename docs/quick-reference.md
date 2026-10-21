@@ -581,6 +581,9 @@ doc.get("a")?.at(1)?.as_str()                  # str?  (get, at, as_str/as_num/a
 doc.str("id")                                  # str?: also num, bool, arr (a member of that kind)
 doc.set("id", Json.Str("x"))                   # replace or add a member (mut doc)
 doc.to_text()                                  # {"a":[1.0,"x"]}, compact, members in document order
+doc.text("id", "none")                         # str: the text member, or the default (json.query.5)
+doc.flag("ok", false)                          # bool: the bool member, or the default (json.query.6)
+parse_json_lines("1\nbad\n\"x\"\n")          # List[Json]: every line that parses (json.lines.1)
 ```
 
 Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,
@@ -745,6 +748,7 @@ fn main() !
     srcs := fs.glob("src/**/*.ail")            # also fs.walk(dir)?: every file, sorted
     r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
     print("{r.status} {r.out} {r.err}")      # proc.Output
+    print("{r.ok()} {r.text()}")             # status is 0; out then err (std.proc.10)
     s := proc.run("sort", [], text, 5000)?     # input, then a time limit (kind timed_out)
     c := proc.start("make", [])?              # returns at once; c.stdin, c.out, c.err are Channel[str]
     i := task.select([c.out, c.err])          # index of a channel with a value; none when all closed

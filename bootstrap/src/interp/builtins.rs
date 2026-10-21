@@ -255,7 +255,7 @@ impl<'a, W: Write> Interp<'a, W> {
     ) -> Flow<Value> {
         let mutating = |v: &Value| match v {
             Value::List(_) => matches!(name, "push" | "swap" | "pop" | "sort" | "insert" | "remove_at" | "extend" | "clear" | "reverse"),
-            Value::Map(_) => matches!(name, "remove" | "push"),
+            Value::Map(_) => matches!(name, "remove" | "push" | "bump"),
             Value::Set(_) => matches!(name, "add" | "remove"),
             _ => false,
         };
@@ -359,6 +359,17 @@ impl<'a, W: Write> Interp<'a, W> {
                 Value::Unit
             }
             (Value::Map(t), "remove") => opt(Rc::make_mut(t).remove(&a[0]).flatten()),
+            // std.count.1: add one to the count at `k`, starting at zero.
+            (Value::Map(t), "bump") => {
+                let table = Rc::make_mut(t);
+                let i = match table.get(&a[0]) {
+                    Some(i) => i,
+                    None => table.insert(a[0].clone(), Some(Value::Int(0))),
+                };
+                let Value::Int(n) = table.val_mut(i) else { unreachable!("checked: an int value") };
+                *n += 1;
+                Value::Unit
+            }
             (Value::Set(t), "add") => {
                 let x = a.pop().expect("checked: one argument");
                 let new = t.get(&x).is_none();
@@ -521,6 +532,17 @@ impl<'a, W: Write> Interp<'a, W> {
                 "len" => Value::Int(t.len() as i64),
                 "get" => opt(t.get(&a[0]).map(|i| t.val(i).clone())),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
+                // std.count.2: the `n` keys with the largest values, ties in insertion order.
+                "top" => {
+                    let Value::Int(count) = a[0] else { unreachable!("checked: an int count") };
+                    let mut pairs: Vec<(i64, Value)> = t
+                        .entries()
+                        .map(|(k, v)| (if let Value::Int(c) = v { *c } else { 0 }, k.clone()))
+                        .collect();
+                    pairs.sort_by(|x, y| y.0.cmp(&x.0));
+                    let keys = pairs.into_iter().take(count.max(0) as usize).map(|(_, k)| k).collect();
+                    Value::List(Rc::new(keys))
+                }
                 "keys" => Value::List(Rc::new(t.key_list())),
                 "values" => Value::List(Rc::new(t.val_list())),
                 _ => unreachable!("checked: Map.{name}"),

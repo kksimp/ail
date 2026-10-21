@@ -1,0 +1,25 @@
+## std.count.1-2, std.proc.9-10, json.query.5-6, json.lines.1: counts, process
+## results and JSON reads with defaults.
+use std.proc
+
+fn main() !
+    docs := parse_json_lines("\{\"n\": 1, \"ok\": true}\nnot json\n\{\"name\": \"x\"}\n")
+    print(docs.len())
+    print(docs[0].text("name", "none"))
+    print(docs[0].flag("ok", false))
+    print(docs[1].text("name", "none"))
+    print(docs[1].flag("ok", false))
+
+    mut counts := Map[str, int]()
+    for word in ["b", "a", "b", "c", "b", "a"]
+        counts.bump(word)
+    print(counts.top(2))
+    print(counts.top(0))
+    print(counts.top(-1))
+    print(counts.top(9))
+    print(counts["b"])
+
+    r := proc.run("sh", ["-c", "echo out; echo err 1>&2"])?
+    print(r.text().len())
+    print(r.ok())
+    print(proc.run("sh", ["-c", "exit 3"])?.ok())

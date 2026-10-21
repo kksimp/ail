@@ -73,6 +73,9 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
     ("Conn", "write_bytes", "net.Conn.write_bytes"),
 ];
 
+/// The methods of `proc.Output` (std.proc.9), sorted. Neither changes its receiver.
+pub const OUTPUT_METHODS: &[&str] = &["ok", "text"];
+
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
 pub const TENSOR_METHODS: &[&str] =
@@ -93,6 +96,8 @@ pub enum StdCall {
     Method(&'static str),
     /// `t.m(...)` on a `tensor.Tensor` (std.tensor.3-8): the method's name.
     Tensor(&'static str),
+    /// `o.m()` on a `proc.Output` (std.proc.9-10): the method's name.
+    Output(&'static str),
     /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
     Const(i64),
     /// `p.m(...)` on a raw pointer (unsafe.ptr.3-5): the method's name and

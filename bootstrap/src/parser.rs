@@ -46,7 +46,7 @@ const COMPARISONS: &[(&str, BinOp)] =
 const PRELUDE: &str = include_str!("prelude.ail");
 
 /// Names of the optional `std.json` prelude module (ADR 0161).
-const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
+const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json", "parse_json_lines"];
 
 /// Names of its derivable traits, read with it only when named (ADR 0308).
 const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson"];

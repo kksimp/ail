@@ -244,10 +244,10 @@ impl<'p> Checker<'p> {
         let help = match (list, name) {
             (true, "push" | "extend") => return vec![true],
             (true, "insert") => return vec![false, true],
-            (true, "pop" | "remove_at" | "len" | "swap" | "clear" | "reverse" | "sort" | "contains" | "index_of") => {
+            (true, "pop" | "remove_at" | "len" | "swap" | "clear" | "reverse" | "sort" | "contains" | "index_of" | "bump") => {
                 return vec![false; nparams];
             }
-            (false, "remove" | "len" | "contains" | "keys") => return vec![false; nparams],
+            (false, "remove" | "len" | "contains" | "keys" | "top") => return vec![false; nparams],
             (false, "push") => return vec![false, true],
             (true, "first" | "last") => "borrow it with `xs[0]` or `xs[xs.len() - 1]`, or take it out with `xs.pop()`",
             (true, "min" | "max") => "find its index and borrow it with `xs[i]`",

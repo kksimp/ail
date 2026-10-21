@@ -13,9 +13,9 @@ fn main() !
         r := proc.run("{here}/../ail", ["check", "--json", "{data}/{name}"])? "checking {name}"
         for line in r.err.lines()
             d := parse_json(line) else continue
-            rule := d.str("rule") else continue
-            seen := counts.get(rule) else 0
-            counts[rule] = seen + 1
-    for rule in counts.keys().sorted().sorted(by: |m| -counts[m])
+            rule := d.text("rule", "")
+            if rule.len() > 0
+                counts.bump(rule)
+    for rule in counts.top(counts.len())
         print("{counts[rule]} {rule}")
     print("{counts.len()} distinct rules")

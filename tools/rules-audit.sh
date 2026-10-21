@@ -64,7 +64,7 @@ for path in sorted((root / "docs" / "spec").glob("*.md")):
 # 2. Citations in code: comments name rules, string literals emit them.
 cited = {}  # rule -> set of files that cite it (comments or literals)
 emitted = {}  # rule -> set of files that emit it as a literal
-sources = list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "compiler").rglob("*.ail"))
+sources = list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "bootstrap" / "src").rglob("*.ail")) + list((root / "compiler").rglob("*.ail"))
 for path in sources:
     rel = str(path.relative_to(root))
     for line in path.read_text(encoding="utf-8").splitlines():
