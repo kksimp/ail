@@ -56,3 +56,14 @@ No `lower.ail` change.
 - **Set algebra by copying and removing.** `intersect` and `difference` would
   need a remove-heavy pass that leaves dead entries; building the result
   from `a` is simpler and compact.
+
+## Addendum: comprehensions without an expected type
+
+A set or map comprehension no longer needs an expected type. Without one, the
+elements (and values) are collected in lists, whose element types the loop
+finds, and the table is built from them (`set_from_list` for sets, a fill loop
+for maps). Keys must be `int`, `char` or `str`, as everywhere else; `bool`
+keys still need the expected type. The cost is one extra list, only on this
+path. Rejected: inferring the type before the loop (needs a side-effect-free
+type pass that doesn't exist); a table with a deferred key kind (the hash
+depends on it).
