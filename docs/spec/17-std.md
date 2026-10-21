@@ -1123,7 +1123,8 @@ field. A row whose field count differs from the header's is a `CsvError`.
 **std.csv.3** — `quote(field str) str` wraps a field in double quotes, and
 doubles the quotes inside it, when it holds a comma, a quote or a line break;
 otherwise it returns the field. `write(rows List[List[str]]) str` quotes each
-field and ends each row with `\n`. *(ADR 0626)*
+field and ends each row with `\n`; a row of one empty field is written as
+`""`, because a blank line is no row. *(ADR 0626)*
 
 **std.csv.4** — `write_records(header List[str], recs List[Map[str, str]])
 str` writes the header and then each map's values in header order; a key a map

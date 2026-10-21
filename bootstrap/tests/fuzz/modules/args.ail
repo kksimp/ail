@@ -1,0 +1,27 @@
+# fuzz-input: args
+# fuzz-needs: std.args
+# std.args on hostile command lines (std.args.1-6): a bad line is an ArgsError that carries
+# the usage text, never a crash; `-h` and `--help` are left out because they exit.
+use std.args
+
+fn main()
+    words := {{TEXT}}.split("\n")
+    if words.contains("-h") or words.contains("--help")
+        return
+    spec := [
+        args.flag("verbose", "v", "more output"),
+        args.opt("out", "o", "where to write", "a.txt"),
+        args.pos("input", "file to read"),
+        args.rest("more", "other files"),
+    ]
+    a := args.parse("tool", "what it does", spec, words) else err
+        if not err.usage.starts_with("usage: tool")
+            print("FAIL the error lacks the usage text")
+        print("rejected")
+        return
+    print(a.flag("verbose"))
+    print(a.get("out").len() >= 0)
+    print(a.get("input").len() >= 0)
+    print(a.rest.len() >= 0)
+    if a.get("out") == ""
+        print("empty out")
