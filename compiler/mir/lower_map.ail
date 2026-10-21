@@ -194,6 +194,9 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
             Map(k, v) =>
                 kt = k
                 vt = v
+            Set(_) =>
+                if entries.len() == 0
+                    return Val(id: new_table(w), ty: w)
             _ => kt = kt
     if entries.len() == 0 and kt.is_unknown()
         return pending_table()
