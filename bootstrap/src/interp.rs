@@ -653,7 +653,7 @@ pub(crate) fn float_text(x: f64) -> String {
 }
 
 /// An `f32`'s text form: the same shape, from the shortest digits that read back as an `f32`.
-fn float_text32(x: f32) -> String {
+pub(crate) fn float_text32(x: f32) -> String {
     float_shape(x.is_nan(), x.is_infinite(), x.is_sign_negative(), format!("{:e}", x.abs()))
 }
 

@@ -92,7 +92,7 @@ understanding: their meaning is the same everywhere AIs have seen them.
 4. **No free `min` or `max`.** The unknown-name helps are `min(a, b)` →
    `a.min(b)` and `min(xs)` → `xs.min()` (same for `max`).
 
-```ail
+```ail excerpt
 fn clamp[T Ord](x T, lo T, hi T) T
     x.max(lo).min(hi)
 

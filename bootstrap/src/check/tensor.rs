@@ -7,6 +7,7 @@
 use super::{Checker, Def, Kind, Local, Sig, Ty, list_names, suggest};
 use crate::ast::{Arg, Expr};
 use crate::diag::{Diagnostic, Pos};
+use crate::num::Num;
 use crate::stdlib::{StdCall, TENSOR_METHODS};
 
 impl<'p> Checker<'p> {
@@ -30,13 +31,11 @@ impl<'p> Checker<'p> {
     /// `tensor.f(args)` (std.tensor.2).
     pub(super) fn tensor_call(&mut self, f: &str, args: &'p [Arg], pos: Pos, expect: Option<&Ty>) -> Ty {
         let shape = Ty::List(Box::new(Ty::Int));
-        let wanted = expect.and_then(|t| self.tensor_elem(t)).filter(|e| matches!(e, Ty::Int | Ty::Float));
+        let wanted = expect.and_then(|t| self.tensor_elem(t)).filter(|e| matches!(e, Ty::Int | Ty::Float | Ty::Num(Num::F32)));
         match f {
             "zeros" => {
                 let elem = wanted.unwrap_or(Ty::Float);
-                if elem == Ty::Int {
-                    self.resolved.int_tensors.insert(pos);
-                }
+                self.note_elem(&elem, pos);
                 let sig = Sig::plain(None, vec![(false, shape)], self.tensor_ty(elem.clone()));
                 self.check_call("tensor.zeros", &sig, Vec::new(), args, None, pos, expect)
             }
@@ -62,16 +61,29 @@ impl<'p> Checker<'p> {
                     },
                     (None, None) => Ty::Float,
                 };
-                if elem == Ty::Int {
-                    self.resolved.int_tensors.insert(pos);
-                }
-                let mut params = vec![(false, Ty::List(Box::new(elem.clone())))];
+                self.note_elem(&elem, pos);
+                // `from` takes a `List[float]` even for `Tensor[f32]` (std.tensor.21).
+                let list = if elem == Ty::Num(Num::F32) { Ty::Float } else { elem.clone() };
+                let mut params = vec![(false, Ty::List(Box::new(list)))];
                 if args.len() != 1 {
                     params.push((false, shape));
                 }
                 let sig = Sig::plain(None, params, self.tensor_ty(elem));
                 self.check_call("tensor.from", &sig, Vec::new(), args, None, pos, expect)
             }
+        }
+    }
+
+    /// Records the element type of a tensor built at `pos` (std.tensor.21).
+    fn note_elem(&mut self, elem: &Ty, pos: Pos) {
+        match elem {
+            Ty::Int => {
+                self.resolved.int_tensors.insert(pos);
+            }
+            Ty::Num(Num::F32) => {
+                self.resolved.f32_tensors.insert(pos);
+            }
+            _ => {}
         }
     }
 
@@ -100,6 +112,9 @@ impl<'p> Checker<'p> {
         self.resolved.std_calls.insert(pos, StdCall::Tensor(m));
         if m == "map" {
             return Some(self.tensor_map(rt, &elem, args, pos));
+        }
+        if matches!(m, "to_f32" | "to_float") {
+            return Some(self.tensor_convert(m, &elem, args, pos));
         }
         if m == "mean" && elem == Ty::Int {
             self.args_only(args);
@@ -148,10 +163,12 @@ impl<'p> Checker<'p> {
             return Some(Ty::Err);
         }
         let t = rt.clone();
+        // std.tensor.21: an `f32` tensor's bounds and list are `float`.
+        let (bound, list) = if elem == Ty::Num(Num::F32) { (Ty::Float, Ty::Float) } else { (elem.clone(), elem.clone()) };
         let (params, ret) = match m {
             "shape" => (vec![], Ty::List(Box::new(Ty::Int))),
             "len" => (vec![], Ty::Int),
-            "to_list" => (vec![], Ty::List(Box::new(elem))),
+            "to_list" => (vec![], Ty::List(Box::new(list))),
             "item" => (vec![], elem),
             // std.tensor.11: over every element, or over one axis.
             "sum" | "max" | "mean" if args.is_empty() => (vec![], elem),
@@ -160,7 +177,7 @@ impl<'p> Checker<'p> {
             "round" => (vec![], self.tensor_ty(Ty::Int)),
             "argmax" | "argmin" if args.is_empty() => (vec![], Ty::Int),
             "argmax" | "argmin" => (vec![Ty::Int], self.tensor_ty(Ty::Int)),
-            "clamp" => (vec![elem.clone(), elem.clone()], t),
+            "clamp" => (vec![bound.clone(), bound], t),
             "dot" => (vec![t], elem),
             "add" | "mul" | "matmul" | "conv2d" => (vec![t.clone()], t),
             "relu" | "sigmoid" | "tanh" => (vec![], t),
@@ -171,8 +188,21 @@ impl<'p> Checker<'p> {
         Some(self.check_call(&format!("tensor.Tensor.{m}"), &sig, Vec::new(), args, Some(recv), pos, expect))
     }
 
+    /// std.tensor.22: `t.to_f32()` on a `float` tensor and `t.to_float()` on
+    /// an `f32` one; every other conversion is an error.
+    fn tensor_convert(&mut self, m: &str, elem: &Ty, args: &'p [Arg], pos: Pos) -> Ty {
+        self.args_only(args);
+        let (from, to) = if m == "to_f32" { (Ty::Float, Ty::Num(Num::F32)) } else { (Ty::Num(Num::F32), Ty::Float) };
+        if *elem != from {
+            let msg = format!("`{m}` converts a {} tensor, but this one holds {}", self.show(&from), self.show(elem));
+            self.error_help("std.tensor.22", pos, msg, "`to_f32()` takes `float` tensors and `to_float()` takes `f32` ones");
+            return Ty::Err;
+        }
+        self.tensor_ty(to)
+    }
+
     /// std.tensor.8: `t.map(|x| e)`: `x` is each element, and `e` is an
-    /// `int` or `float`, the new tensor's element type.
+    /// `int`, `float` or `f32`, the new tensor's element type.
     fn tensor_map(&mut self, rt: &Ty, elem: &Ty, args: &'p [Arg], pos: Pos) -> Ty {
         let [a] = args else {
             self.args_only(args);
@@ -196,7 +226,7 @@ impl<'p> Checker<'p> {
         let out = self.expr(&a.value, Some(elem), true);
         self.end_scope(mark);
         match out {
-            Ty::Int | Ty::Float => self.tensor_ty(out),
+            Ty::Int | Ty::Float | Ty::Num(Num::F32) => self.tensor_ty(out),
             Ty::Err => Ty::Err,
             other => {
                 let msg = format!("`map`'s function gives {}, but a tensor holds `int` or `float`", self.show(&other));
@@ -232,10 +262,22 @@ impl<'p> Checker<'p> {
             }
             return None;
         }
+        // std.tensor.21: `f32` and `float` tensors don't mix.
+        if let (Some(a), Some(b)) = (&le, &re)
+            && (*a == Ty::Num(Num::F32)) != (*b == Ty::Num(Num::F32))
+            && matches!(a, Ty::Float | Ty::Num(Num::F32))
+            && matches!(b, Ty::Float | Ty::Num(Num::F32))
+        {
+            let msg = format!("`{sym}` needs tensors of one element type, but found {} and {}", self.show(lt), self.show(rt));
+            self.error_help("std.tensor.21", pos, msg, "convert one with `t.to_f32()` or `t.to_float()`");
+            return Some(Ty::Err);
+        }
+        // A `float` scalar takes an `f32` tensor's element type (std.tensor.21).
+        let scalar_is = |elem: &Ty, s: &Ty| elem == s || (*elem == Ty::Num(Num::F32) && *s == Ty::Float);
         let ok = match (&le, &re) {
             (Some(a), Some(b)) => a == b,
-            (Some(e), None) => e == rt,
-            (None, Some(e)) => e == lt,
+            (Some(e), None) => scalar_is(e, rt),
+            (None, Some(e)) => scalar_is(e, lt),
             (None, None) => false,
         };
         if ok && sym == "/" && le.as_ref().or(re.as_ref()) == Some(&Ty::Int) {

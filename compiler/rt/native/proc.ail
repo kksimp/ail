@@ -1,0 +1,348 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.proc.run` and `std.proc.which` on Linux x86-64 and ARM64 by direct
+## system calls (std.proc.1-3, ADR 0770): the program is found on `PATH`, run
+## by `clone` and `execve` with its three standard streams on pipes, and fed
+## and drained with `ppoll` so a full pipe can't deadlock. A close-on-exec
+## pipe tells the parent that the `execve` failed (only that case is a
+## `ProcError`, std.proc.1). No global slots: the state is locals and one
+## scratch block. macOS needs the libSystem switch (ADR 0534) and traps with
+## `native.subset.1` until then.
+
+# Kinds of the heap objects used here: a struct's words are scanned.
+PROC_STRUCT := 4
+PROC_CHUNK := 65536
+
+# ---- finding the program (std.proc.3) ----
+
+## `s` as NUL-terminated bytes in a new object, or 0 when it holds a NUL.
+fn proc_cstr(s str) int
+    p := str_addr(s)
+    n := load64(p)
+    d := alloc(n + 1, KIND_BYTES)
+    copy_bytes(d, p + 16, n)
+    store8(d + n, 0)
+    for i in 0..n
+        if load8(d + i) == 0
+            return 0
+    d
+
+## Whether the C string `p` is an executable file.
+fn proc_exec_ok(p int) bool
+    r := syscall(os_pick(269, 48, 0), -100, p, 1, 0, 0, 0)
+    r == 0 and not os_is_dir_at(p)
+
+## `DIR/NAME` as a C string: `n` bytes of `dir` at `d`, a `/` unless `dir`
+## ends with one, then `name`. An empty `dir` gives `name` alone.
+fn proc_join(d int, dn int, name str) int
+    np := str_addr(name)
+    n := load64(np)
+    c := alloc(dn + n + 2, KIND_BYTES)
+    mut at := 0
+    if dn > 0
+        copy_bytes(c, d, dn)
+        at = dn
+        if load8(d + dn - 1) != 47
+            store8(c + at, 47)
+            at += 1
+    copy_bytes(c + at, np + 16, n)
+    store8(c + at + n, 0)
+    c
+
+## The C string of the file `run(name, ...)` would start: `name` itself when
+## it has a `/`, else the first `DIR/name` on `PATH` that is executable.
+## 0 when there is none, -1 when only a file that isn't executable exists.
+fn proc_find(name str) int
+    np := str_addr(name)
+    n := load64(np)
+    if n == 0 or os_has_nul(name)
+        return 0
+    mut perm := false
+    mut slash := false
+    for i in 0..n
+        if load8(np + 16 + i) == 47
+            slash = true
+    if slash
+        c := proc_cstr(name)
+        if c == 0
+            return 0
+        if proc_exec_ok(c)
+            return c
+        return if os_access(c) == 0 then -1 else 0
+    mut path := os_env_get("PATH")
+    if not os_ok()
+        path = "/usr/local/bin:/usr/bin:/bin"
+    pp := str_addr(path)
+    pn := load64(pp)
+    mut start := 0
+    while start <= pn
+        mut end := start
+        while end < pn and load8(pp + 16 + end) != 58
+            end += 1
+        c := proc_join(pp + 16 + start, end - start, name)
+        if proc_exec_ok(c)
+            return c
+        if os_access(c) == 0
+            perm = true
+        start = end + 1
+    return if perm then -1 else 0
+
+## Whether `s` holds a NUL byte, which no program or argument may.
+fn os_has_nul(s str) bool
+    p := str_addr(s)
+    for i in 0..load64(p)
+        if load8(p + 16 + i) == 0
+            return true
+    false
+
+## `which(name)` (std.proc.3): the path as a string, or 0 for `none`.
+fn proc_which(name str) int
+    c := proc_find(name)
+    if c <= 0
+        return 0
+    str_addr(os_str_from(c, os_c_len(c)))
+
+# ---- running it (std.proc.1-2) ----
+
+## Fail with `proc.ProcError(cmd: "C", kind: "K")` (err.text.1); 0.
+fn proc_fail(cmd str, kind str, at str) int
+    sb_reset()
+    sb_text("proc.ProcError(cmd: ")
+    os_put_quoted(cmd)
+    sb_text(", kind: ")
+    os_put_quoted(kind)
+    sb_byte(41)
+    err_set(sb_str(), at)
+    0
+
+fn proc_pipe(at int) int
+    syscall(os_pick(293, 59, 0), at, 524288, 0, 0, 0, 0)
+
+fn proc_close(fd int)
+    if fd >= 0
+        os_close(fd)
+
+## The buffer `s` (a string object holding `n` bytes) in a new one twice as big.
+fn proc_widen(s int, n int, cap int) int
+    t := str_new(cap * 2, 0)
+    copy_bytes(t + 16, s + 16, n)
+    t
+
+## Reap `pid`; its wait status. With `deadline` (milliseconds on the
+## `time.now_ms` clock) it polls and gives -1 when the time is up first.
+fn proc_wait(pid int, st int, deadline int) int
+    store64(st, 0)
+    if deadline < 0
+        while true
+            r := syscall(os_pick(61, 260, 0), pid, st, 0, 0, 0, 0)
+            if r != -4
+                break
+        return load64(st)
+    mut nap := 1
+    while true
+        r := syscall(os_pick(61, 260, 0), pid, st, 1, 0, 0, 0)
+        if r == pid or r < -4 or r == -10
+            return load64(st)
+        if r == 0 and time_now_ms() >= deadline
+            return -1
+        if r == 0
+            time_sleep_ms(nap)
+            if nap < 10
+                nap += 1
+    0
+
+## `run(cmd, args, input, timeout_ms)` (std.proc.1-2): the `Output` object,
+## or 0 with the error slot set. `input` is a string or 0, `timeout` a boxed
+## integer or 0.
+fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
+    if target() == 2
+        os_usage_trap("native.subset.1", "`proc.run` isn't built for macOS yet")
+    mut limit := -1
+    if timeout != 0
+        limit = unbox(timeout)
+        if limit < 0
+            os_usage_trap("std.proc.2", str_cat(
+                str_cat("can't time out after ", fmt_int(limit)),
+                " milliseconds",
+            ))
+    exe := proc_find(cmd)
+    if exe <= 0
+        return proc_fail(cmd, if exe < 0 then "permission" else "not_found", at)
+    # The argument vector, in an object whose words are scanned.
+    al := list_addr(args)
+    nargs := load64(al)
+    data := load64(al + 16)
+    argv := alloc(8 * (nargs + 2), PROC_STRUCT)
+    c0 := proc_cstr(cmd)
+    if c0 == 0
+        return proc_fail(cmd, "other", at)
+    store64(argv, c0)
+    for i in 0..nargs
+        c := proc_cstr(str_at(load64(data + 8 * i)))
+        if c == 0
+            return proc_fail(cmd, "other", at)
+        store64(argv + 8 * (i + 1), c)
+    store64(argv + 8 * (nargs + 1), 0)
+    # st: pipes at 0 (stdin), 8 (stdout), 16 (stderr), 24 (exec status); the
+    # rest is scratch for the loop.
+    st := alloc(256, KIND_BYTES)
+    for k in 0..4
+        if proc_pipe(st + 8 * k) < 0
+            for j in 0..k
+                w := load64(st + 8 * j)
+                os_close(w.bit_and(4294967295))
+                os_close(w.shr(32))
+            return proc_fail(cmd, "other", at)
+    in_w := load64(st).shr(32)
+    in_r := load64(st).bit_and(4294967295)
+    out_r := load64(st + 8).bit_and(4294967295)
+    out_w := load64(st + 8).shr(32)
+    err_r := load64(st + 16).bit_and(4294967295)
+    err_w := load64(st + 16).shr(32)
+    sta_r := load64(st + 24).bit_and(4294967295)
+    sta_w := load64(st + 24).shr(32)
+    flush()
+    pid := syscall(os_pick(56, 220, 0), 17, 0, 0, 0, 0, 0)
+    if pid == 0
+        syscall(os_pick(292, 24, 0), in_r, 0, 0, 0, 0, 0)
+        syscall(os_pick(292, 24, 0), out_w, 1, 0, 0, 0)
+        syscall(os_pick(292, 24, 0), err_w, 2, 0, 0, 0)
+        r := syscall(os_pick(59, 221, 0), exe, argv, os_envp(), 0, 0, 0)
+        store64(st + 64, 0 - r)
+        syscall(os_pick(1, 64, 0), sta_w, st + 64, 8, 0, 0, 0)
+        syscall(os_pick(231, 94, 0), 127, 0, 0, 0, 0, 0)
+    os_close(in_r)
+    os_close(out_w)
+    os_close(err_w)
+    os_close(sta_w)
+    if pid < 0
+        os_close(in_w)
+        os_close(out_r)
+        os_close(err_r)
+        os_close(sta_r)
+        return proc_fail(cmd, kind_name(os_errno_kind(0 - pid)), at)
+    # An `execve` that failed writes its `errno`; one that worked closes the pipe.
+    store64(st + 72, 0)
+    mut got := 0
+    while true
+        got = os_read(sta_r, st + 72, 8)
+        if got != -4
+            break
+    os_close(sta_r)
+    if got == 8
+        proc_wait(pid, st + 200, -1)
+        os_close(in_w)
+        os_close(out_r)
+        os_close(err_r)
+        return proc_fail(cmd, kind_name(os_errno_kind(load64(st + 72))), at)
+    # Writing to a pipe whose reader is gone must be an error, not SIGPIPE;
+    # the old action comes back at the end.
+    store64(st + 96, 1)
+    store64(st + 104, 0)
+    store64(st + 112, 0)
+    store64(st + 120, 0)
+    syscall(os_pick(13, 134, 0), 13, st + 96, st + 128, 8, 0, 0)
+    mut ifd := in_w
+    mut ofd := out_r
+    mut efd := err_r
+    mut inpos := 0
+    mut ilen := 0
+    if input != 0
+        ilen = load64(input)
+    if ilen == 0
+        os_close(ifd)
+        ifd = -1
+    else
+        # F_SETFL, O_NONBLOCK
+        syscall(os_pick(72, 25, 0), ifd, 4, 2048, 0, 0, 0)
+    mut ob := str_new(PROC_CHUNK, 0)
+    mut oc := PROC_CHUNK
+    mut on := 0
+    mut eb := str_new(PROC_CHUNK, 0)
+    mut ec := PROC_CHUNK
+    mut en := 0
+    mut deadline := -1
+    if limit >= 0
+        deadline = time_now_ms() + limit
+    mut timed_out := false
+    pfd := st + 160
+    ts := st + 184
+    while ifd >= 0 or ofd >= 0 or efd >= 0
+        store64(pfd, ifd.bit_and(4294967295).bit_or(17179869184))
+        store64(pfd + 8, ofd.bit_and(4294967295).bit_or(4294967296))
+        store64(pfd + 16, efd.bit_and(4294967295).bit_or(4294967296))
+        mut tp := 0
+        if deadline >= 0
+            left := deadline - time_now_ms()
+            if left <= 0
+                timed_out = true
+                break
+            store64(ts, left / 1000)
+            store64(ts + 8, left % 1000 * 1000000)
+            tp = ts
+        r := syscall(os_pick(271, 73, 0), pfd, 3, tp, 0, 8, 0)
+        if r == -4 or r == 0
+            continue
+        if r < 0
+            break
+        wi := load64(pfd).shr(48).bit_and(65535)
+        if ifd >= 0 and wi != 0
+            if wi.bit_and(24) != 0
+                os_close(ifd)
+                ifd = -1
+            else
+                mut want := ilen - inpos
+                if want > PROC_CHUNK
+                    want = PROC_CHUNK
+                w := syscall(os_pick(1, 64, 0), ifd, input + 16 + inpos, want, 0, 0, 0)
+                if w > 0
+                    inpos += w
+                if inpos >= ilen or (w < 0 and w != -4 and w != -11)
+                    os_close(ifd)
+                    ifd = -1
+        ro := load64(pfd + 8).shr(48).bit_and(65535)
+        if ofd >= 0 and ro != 0
+            if on == oc
+                ob = proc_widen(ob, on, oc)
+                oc = oc * 2
+            n := os_read(ofd, ob + 16 + on, oc - on)
+            if n == 0 or (n < 0 and n != -4 and n != -11)
+                os_close(ofd)
+                ofd = -1
+            elif n > 0
+                on += n
+        re := load64(pfd + 16).shr(48).bit_and(65535)
+        if efd >= 0 and re != 0
+            if en == ec
+                eb = proc_widen(eb, en, ec)
+                ec = ec * 2
+            n := os_read(efd, eb + 16 + en, ec - en)
+            if n == 0 or (n < 0 and n != -4 and n != -11)
+                os_close(efd)
+                efd = -1
+            elif n > 0
+                en += n
+    proc_close(ifd)
+    proc_close(ofd)
+    proc_close(efd)
+    syscall(os_pick(13, 134, 0), 13, st + 128, 0, 8, 0, 0)
+    mut status := 0
+    if not timed_out
+        status = proc_wait(pid, st + 200, deadline)
+    if timed_out or status < 0
+        syscall(os_pick(62, 129, 0), pid, 9, 0, 0, 0, 0)
+        proc_wait(pid, st + 200, -1)
+        return proc_fail(cmd, "timed_out", at)
+    mut code := 128 + status.bit_and(127)
+    if status.bit_and(127) == 0
+        code = status.shr(8).bit_and(255)
+    store64(ob, on)
+    store64(eb, en)
+    out := os_lossy(ob)
+    err := os_lossy(eb)
+    r := obj_new(24, PROC_STRUCT)
+    store64(r, code)
+    store64(r + 8, str_addr(out))
+    store64(r + 16, str_addr(err))
+    r
