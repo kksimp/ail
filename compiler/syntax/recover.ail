@@ -486,6 +486,8 @@ fn Parser.header_tail(mut self, after str) Header
             pos: pos,
             msg: "AIL has no `in` operator for membership",
             fixed: true,
+            help: "",
+            fix: "",
         ))
         return Header.Reported
     if s == "\{" and (tag_at(1) == "nl" or line_ends_at(k0))
