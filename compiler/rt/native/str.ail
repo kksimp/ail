@@ -247,6 +247,8 @@ fn str_eq(a str, b str) bool
     p := str_addr(a)
     q := str_addr(b)
     n := load64(p)
+    if p == q
+        return true
     if n != load64(q)
         return false
     mut i := 0
@@ -254,10 +256,9 @@ fn str_eq(a str, b str) bool
         if load64(p + 16 + i) != load64(q + 16 + i)
             return false
         i += 8
-    while i < n
-        if load8(p + 16 + i) != load8(q + 16 + i)
-            return false
-        i += 1
+    if i < n
+        # The last partial word, read whole and masked to its bytes (ADR 0766).
+        return load64(p + 16 + i).bit_xor(load64(q + 16 + i)).bit_and(1.shl(8 * (n - i)) - 1) == 0
     true
 
 ## -1, 0 or 1 as `a` is before, equal to or after `b` by bytes, which is by
@@ -269,6 +270,10 @@ fn str_cmp(a str, b str) int
     qn := load64(q)
     n := if pn < qn then pn else qn
     mut i := 0
+    # Equal words are skipped eight bytes at a time; the first word that
+    # differs is settled byte by byte.
+    while i + 8 <= n and load64(p + 16 + i) == load64(q + 16 + i)
+        i += 8
     while i < n
         x := load8(p + 16 + i)
         y := load8(q + 16 + i)
