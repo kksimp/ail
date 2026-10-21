@@ -261,6 +261,11 @@ fn main() -> ExitCode {
     if matches!(rest.first(), Some(&"check" | &"api" | &"effects")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
         ALLOC.enable();
     }
+    // ADR 0737: `run` and `test` use the runtime mode, per-thread free lists for
+    // small blocks. `AIL_SYSTEM_ALLOC=1` keeps the system allocator.
+    if matches!(rest.first(), Some(&"run" | &"test")) && std::env::var_os("AIL_SYSTEM_ALLOC").is_none() {
+        ALLOC.enable_runtime();
+    }
     match rest.as_slice() {
         ["run", file] => {
             interp::set_program(file, replay_args.unwrap_or(program_args));

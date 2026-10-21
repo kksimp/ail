@@ -481,11 +481,20 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 "join" => {
                     let Value::Str(sep) = &a[0] else { unreachable!("checked: str") };
-                    let mut parts = Vec::with_capacity(items.len());
-                    for x in items.iter() {
-                        parts.push(self.text(x, pos)?);
+                    // One buffer: strings and chars are appended as they are,
+                    // others through their text form.
+                    let mut out = String::new();
+                    for (i, x) in items.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(sep);
+                        }
+                        match x {
+                            Value::Str(t) => out.push_str(t),
+                            Value::Char(c) => out.push(*c),
+                            other => out.push_str(&self.text(other, pos)?),
+                        }
                     }
-                    s(parts.join(sep))
+                    s(out)
                 }
                 "sum" => match items.first() {
                     Some(Value::Num(k, _)) if k.is_float() => {
@@ -590,11 +599,31 @@ impl<'a, W: Write> Interp<'a, W> {
         };
         Ok(match name {
             "split" => {
-                let sep = arg_str(0);
+                // The separator is borrowed, and a one-character one is searched
+                // for as a character (no substring searcher).
+                let mut one = [0u8; 4];
+                let sep: &str = match &a[0] {
+                    Value::Str(t) => t,
+                    Value::Char(c) => c.encode_utf8(&mut one),
+                    other => unreachable!("checked: str, found {other:?}"),
+                };
                 if sep.is_empty() {
                     return trap("type.str.4", pos, "`split` needs a non-empty separator".into());
                 }
-                Value::List(Rc::new(text.split(&*sep).map(s).collect()))
+                let mut chars = sep.chars();
+                let parts: Vec<Value> = match (chars.next(), chars.next()) {
+                    // Counting an ASCII separator is a vectorised byte scan, and
+                    // sizes the list once instead of growing it.
+                    (Some(c), None) if c.is_ascii() => {
+                        let n = text.bytes().filter(|&b| b == c as u8).count() + 1;
+                        let mut parts = Vec::with_capacity(n);
+                        parts.extend(text.split(c).map(s));
+                        parts
+                    }
+                    (Some(c), None) => text.split(c).map(s).collect(),
+                    _ => text.split(sep).map(s).collect(),
+                };
+                Value::List(Rc::new(parts))
             }
             "to_int" => {
                 let digits = text.strip_prefix('-').unwrap_or(text);
@@ -611,7 +640,11 @@ impl<'a, W: Write> Interp<'a, W> {
             "is_empty" => Value::Bool(text.is_empty()),
             "byte_len" => Value::Int(text.len() as i64),
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
-            "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
+            "lines" => {
+                let mut parts = Vec::with_capacity(text.bytes().filter(|&b| b == b'\n').count() + 1);
+                parts.extend(text.lines().map(s));
+                Value::List(Rc::new(parts))
+            }
             "trim" => s(text.trim()),
             "trim_start" => s(text.trim_start()),
             "trim_end" => s(text.trim_end()),
