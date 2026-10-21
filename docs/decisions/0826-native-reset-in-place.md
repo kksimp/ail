@@ -30,7 +30,7 @@ carried. The new list reuses an old member of its group when:
 The maker becomes a store of 0 to the old list's length and a `copy` of it.
 Capacity is kept, so a buffer that reached its working size never regrows.
 
-fasta, instructions before → after: 70.2M → 59.3M (−15%); the other nine
+fasta, instructions before → after: 44.3M → 36.1M (−19%) on the batch head after chain K (70.2M → 59.3M earlier); the other nine
 perfbench programs are unchanged.
 
 ## Why the old list is dead and nothing else holds either list
