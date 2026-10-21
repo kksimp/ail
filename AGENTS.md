@@ -139,12 +139,15 @@ examples/                 example programs; NAME.out holds the expected output
 tools/
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
+  card-spec-audit.py      audits the std functions against the spec (ADR 0698)
+  card-wording-audit.py   checks the language card's calls against the spec (ADR 0698)
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
   native-coverage/        which native subset constructs block the examples
+  native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
   pdf/                    PDF reader, searcher and viewer written in AIL (ADR 0520)
   perfbench/              drag-race programs: AIL, C and Python twins
   self-compile/           survey of the native subset over the compiler's own source

@@ -150,6 +150,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
+| **Replay** | Running a program again with the same inputs and thread schedule so a failure reproduces exactly. Property tests print the seed that replays a failing case (ADR 0199); random schedule testing reproduces from its seed on every target (ADR 0322). |
+| **Stack trace** | The chain of calls from the point of a trap outward. A trap's diagnostic includes it (ADR 0047). |
 | **`unsafe` block** | `unsafe` and an indented block: the only place an unsafe operation (`unsafe fn` call, later C calls and raw pointers) is allowed. A package may contain one only if its `ail.pkg` says `unsafe allow` (`unsafe.block.1–5`, ADR 0430). |
 | **`extern c fn`** | A C function declared with a signature and no body, optionally with its library: `extern c "libm" fn hypot(a float, b float) float`. Calling it is unsafe; the interpreter loads the library on first call (`ffi.decl.2`, `ffi.load.1–3`, ADR 0431). |
 | **Raw pointer** | `*T`: an address with no ownership, for C interop. Copying one is safe, using one (`read`, `write`, `offset`) is `unsafe` (`unsafe.ptr.1–6`, ADRs 0433, 0435). |
