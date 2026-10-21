@@ -467,13 +467,16 @@ fn main()
     two(mut x, mut x)   # statically certain overlap: a compile-time error
 ```
 
-```ail skip=bootstrap rules=own.excl.3
-fn two(mut a List[int], mut b List[int])
-    a.push(1)
+```ail norun rules=own.excl.3
+fn two(mut a int, mut b int)
+    a = 1
+    b = 2
 
 fn main()
-    mut x := [0]
-    two(mut x, mut x)   # overlap known only at run time: the call should trap
+    mut x := [0, 0]
+    i := 1
+    j := 1
+    two(mut x[i], mut x[j])   # the indexes are equal only at run time: the call traps
 ```
 
 ```ail rules=own.excl.4
@@ -560,11 +563,18 @@ fn main()
     print(a.len())      # 2
 ```
 
-```ail skip=bootstrap rules=own.ref.2
+```ail error=own.ref.2 rules=own.ref.2
+struct C
+    n int
+
+fn bump(c ref C) int
+    c.n += 1
+    c.n
+
 fn main()
-    # A ref value must not be used from two tasks at once unless it is wrapped in a
-    # synchronised type; the check belongs to the task checker (conc.share.*).
-    print("tasks")
+    c := ref C(n: 0)
+    t := spawn bump(c)      # a `ref` can't go to another task
+    t.wait() else 0
 ```
 
 ```ail rules=own.ref.3
@@ -596,11 +606,18 @@ fn main()
     print(a == b)       # true: the same cell
 ```
 
-```ail skip=bootstrap rules=own.ref.7
+```ail norun rules=own.ref.7
+struct C
+    n int
+
+fn C.take(mut self, other ref C)
+    other.n = 5             # another copy of the cell, used during the `mut` access: traps
+    self.n = 1
+
 fn main()
-    # A mut access to a ref's contents in progress excludes other access; the check is
-    # made by the same overlap rule as own.excl.* for ref cells.
-    print("cells")
+    a := ref C(n: 0)
+    b := a
+    a.take(b)
 ```
 
 ```ail rules=own.uniq.1

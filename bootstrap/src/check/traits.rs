@@ -448,7 +448,7 @@ impl<'p> Checker<'p> {
 
     /// The types of every field of a struct, or of every variant of an enum,
     /// with its type arguments filled in.
-    fn field_types_of(&self, t: &Ty, args: &[Ty]) -> Vec<Ty> {
+    pub(super) fn field_types_of(&self, t: &Ty, args: &[Ty]) -> Vec<Ty> {
         let (params, fields): (&[usize], Vec<&Ty>) = match t {
             Ty::Struct(s, _) => {
                 (&self.struct_params[*s], self.field_types.get(*s).map(|f| f.iter().collect()).unwrap_or_default())

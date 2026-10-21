@@ -83,8 +83,8 @@ had 8, 21 and 14 rules with no such example. Now they have none uncovered:
 
 Chapters 07 (ownership, 35 uncovered before) and 08 (errors, 29 before) follow the same way:
 `own.*` and `err.*` rules are cited by checked blocks, with `norun` for trapping and tool
-output and `skip=bootstrap` for `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`
-and `own.excl.3`, `own.ref.2`, `own.ref.7` (features the gate can't check yet).
+output and `skip=bootstrap` for `err.type.4` and `err.ctx.3`. `err.decl.2`, `err.trap.2`, `err.fix.1`,
+`own.excl.3`, `own.ref.2` and `own.ref.7` are implemented and have real examples (lane 238, ADR 0741).
 
 Uncovered rules outside the batch chapters: 382 before lane 223, 275 after chapters 07-08, 262 after chapter 09, then 220 after chapter 10 (42 trait rules: `trait.auto.4` is a bootstrap bug, skip=bootstrap; `trait.impl.4` needs a two-package example, skip=context)
 (09-generics, 14 rules; `gen.anon.2` is `skip=context`, the formatter's canonical form). Chapters 11-16 and 19-21 remain.
