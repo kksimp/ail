@@ -187,7 +187,7 @@ fn int_op(op int, x int, y int, box int) bool
     true
 
 ## `x` as an element of a tensor of `kind`: rounded to `f32` for kind 2.
-fn float_round(kind int, x float) float
+fn elem_round(kind int, x float) float
     if kind == 2
         return f32_round(x)
     x
@@ -331,7 +331,7 @@ fn tensor_zip(a int, b int, op int) int
     out := tensor_data(t)
     if kind >= 1
         for i in 0..n
-            storef(out + 8 * i, float_round(kind, float_op(op, loadf(da + 8 * i), loadf(db + 8 * i))))
+            storef(out + 8 * i, elem_round(kind, float_op(op, loadf(da + 8 * i), loadf(db + 8 * i))))
         return t
     for i in 0..n
         if not int_op(op, load64(da + 8 * i), load64(db + 8 * i), out + 8 * i)
@@ -347,11 +347,11 @@ fn tensor_scalar_f(a int, s float, op int, left bool) int
     tensor_copy_words(t + 32, a + 32, rank)
     da := tensor_data(a)
     out := tensor_data(t)
-    c := float_round(kind, s)
+    c := elem_round(kind, s)
     for i in 0..n
         x := loadf(da + 8 * i)
         r := if left then float_op(op, c, x) else float_op(op, x, c)
-        storef(out + 8 * i, float_round(kind, r))
+        storef(out + 8 * i, elem_round(kind, r))
     t
 
 ## The same for an `int` scalar; 0 on overflow.
@@ -525,8 +525,8 @@ fn tensor_matmul(a int, b int) int
                 x := loadf(da + 8 * (i * k + p))
                 for j in 0..n
                     c := out + 8 * (i * n + j)
-                    q := float_round(kind, x * loadf(db + 8 * (p * n + j)))
-                    storef(c, float_round(kind, loadf(c) + q))
+                    q := elem_round(kind, x * loadf(db + 8 * (p * n + j)))
+                    storef(c, elem_round(kind, loadf(c) + q))
         return t
     box := alloc(8, KIND_ATOMIC)
     for i in 0..m
@@ -564,7 +564,7 @@ fn tensor_activate(a int, kind int) int
             y = 1.0 / (1.0 + float_exp(0.0 - x))
         else
             y = float_tanh(x)
-        storef(out + 8 * i, float_round(ek, y))
+        storef(out + 8 * i, elem_round(ek, y))
     t
 
 ## `t.to_f32()` (std.tensor.22): each element rounded to `f32`.
