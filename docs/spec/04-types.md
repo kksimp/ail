@@ -489,9 +489,9 @@ fn main()
     mut p := (1, "a")
     p.0 = 10
     print(p.0)                                    # 10
-    _, mut s := p
-    s += "b"
-    print(s)                                      # ab
+    mut n, _ := p
+    n += 1
+    print(n)                                      # 11
 ```
 
 ```ail rules=type.tuple.5,type.tuple.9
