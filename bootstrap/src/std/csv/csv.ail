@@ -53,6 +53,7 @@ pub fn parse_sep(text str, sep char) List[List[str]] ! CsvError
             field = "{field}{c}"
             started = true
     if quoted
+        # std.csv.6: a quote that is never closed.
         return CsvError(why: "unterminated quote", row: rows.len() + 1)
     if started or field != ""
         row.push(field)
@@ -70,6 +71,7 @@ pub fn records(text str) List[Map[str, str]] ! CsvError
     header := rows[0]
     for r in 1..rows.len()
         if rows[r].len() != header.len()
+            # std.csv.7: a record of the wrong width.
             return CsvError(
                 why: "{rows[r].len()} fields, the header has {header.len()}",
                 row: r + 1,

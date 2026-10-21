@@ -52,7 +52,10 @@ fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
         Float => call("rt.fmt_float", [v.id], Ty.Str)
         Bool => call("rt.fmt_bool", [v.id], Ty.Str)
         Char => call("rt.str_char", [v.id], Ty.Str)
+        Tensor(_) => call("rt.tensor_text", [v.id], Ty.Str)
         _ =>
+            if s := display_call(v)
+                return s
             problem(pos, "not in the native subset yet: the text of a `{v.ty.name()}`")
             none
 
@@ -87,6 +90,28 @@ fn Lower.int_arg(mut self, v Val, name str, pos ast.Pos) int?
     problem(pos, "`.{name}()` needs an `int`, found `{v.ty.name()}`")
     none
 
+## `s.to_int()` as a value (type.str.5): an `int?`, absent when `s` isn't a
+## whole number that fits.
+fn Lower.str_to_int_opt(mut self, r Val) Val
+    t := Ty.Opt(Ty.Int)
+    n := call("rt.str_to_int", [r.id], Ty.Int)
+    ok := call("rt.parse_ok", [], Ty.Bool)
+    join := new_block()
+    res := new_value(t, "")
+    blocks[join].params.push(res)
+    yes := new_block()
+    no := new_block()
+    branch(ok, yes, [], no, [])
+    seal(yes)
+    seal(no)
+    cur = yes
+    jump(join, [some(Val(id: n, ty: Ty.Int)).id])
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: res, ty: t)
+
 ## The methods whose result is an optional that the subset lacks: `to_float`
 ## has its own `else` form (lane 177), and `to_bytes` waits for `bytes`.
 fn Lower.str_unsupported(mut self, name str, npos ast.Pos) Val?
@@ -102,6 +127,7 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
             "len" => return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
             "byte_len" => return Val(id: call("rt.str_byte_len", [r.id], Ty.Int), ty: Ty.Int)
             "to_str" => return r
+            "to_int" => return str_to_int_opt(r)
             "chars" =>
                 t := Ty.List(Ty.Char)
                 return Val(id: call("rt.str_chars", [r.id], t), ty: t)
@@ -233,3 +259,9 @@ fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
     k := int_arg(n, "from_code", npos)?
     t := Ty.Opt(Ty.Char)
     Val(id: call("rt.char_from_code", [k], t), ty: t)
+
+## A method of a `str`.
+fn Lower.str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "to_float" and vs.len() == 0
+        return lower_to_float(r)
+    return lower_str_method(r, name, npos, vs)

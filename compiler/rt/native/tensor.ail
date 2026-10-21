@@ -1,0 +1,570 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `tensor.Tensor[T]` (ADR 0815, std.tensor.1-21). A tensor is an object of
+## kind 4 (every word is scanned) with the layout
+##
+##   +0 element kind (0 int, 1 float)  +8 rank  +16 element count
+##   +24 pointer to the elements (8 bytes each, kind 11: no pointers)
+##   +32 the sizes of the axes, one word each
+##
+## Tensors are never changed after they are built, so copying one shares it.
+## The elements are in row-major order, as in the interpreter.
+
+TENSOR_OBJ := 4
+
+## A tensor of `rank` axes and `n` elements, zeroed; the sizes are the
+## caller's to store.
+fn tensor_new(kind int, rank int, n int) int
+    t := alloc(32 + 8 * rank, TENSOR_OBJ)
+    store64(t, kind)
+    store64(t + 8, rank)
+    store64(t + 16, n)
+    store64(t + 24, alloc(8 * n + 8, KIND_ATOMIC))
+    t
+
+fn tensor_data(t int) int
+    load64(t + 24)
+
+## `[a, b, c]` of the words at `p`, as `Debug` prints a list of sizes.
+fn put_sizes(p int, n int)
+    sb_byte(91)
+    for i in 0..n
+        if i > 0
+            sb_text(", ")
+        put_int(load64(p + 8 * i))
+    sb_byte(93)
+
+fn tensor_copy_words(dst int, src int, n int)
+    for i in 0..n
+        store64(dst + 8 * i, load64(src + 8 * i))
+
+## `tensor.from(xs)`: a 1-D tensor of the elements of `xs` (std.tensor.2).
+fn tensor_from(xs List[int], kind int) int
+    q := list_addr(xs)
+    n := load64(q)
+    t := tensor_new(kind, 1, n)
+    store64(t + 32, n)
+    tensor_copy_words(tensor_data(t), load64(q + 16), n)
+    t
+
+## The message of `tensor.from(xs, shape)` failing (std.tensor.2), a string
+## object, or 0 when `shape` is fine for `xs`.
+fn tensor_shape_fault(xs List[int], shape List[int]) int
+    n := load64(list_addr(xs))
+    sp := list_addr(shape)
+    rank := load64(sp)
+    d := load64(sp + 16)
+    mut count := 1
+    for i in 0..rank
+        s := load64(d + 8 * i)
+        if s < 0
+            sb_reset()
+            sb_text("a tensor's sizes can't be negative, and the shape is ")
+            put_sizes(d, rank)
+            return str_addr(sb_str())
+        if s != 0 and count > 1099511627776 / s
+            sb_reset()
+            sb_text("the shape ")
+            put_sizes(d, rank)
+            sb_text(" has too many elements")
+            return str_addr(sb_str())
+        count = count * s
+    if n != count
+        sb_reset()
+        put_int(n)
+        sb_text(" elements don't fill the shape ")
+        put_sizes(d, rank)
+        sb_text(", which holds ")
+        put_int(count)
+        return str_addr(sb_str())
+    0
+
+## `tensor.from(xs, shape)` once `tensor_shape_fault` found nothing wrong.
+fn tensor_from_shape(xs List[int], kind int, shape List[int]) int
+    q := list_addr(xs)
+    sp := list_addr(shape)
+    rank := load64(sp)
+    n := load64(q)
+    t := tensor_new(kind, rank, n)
+    tensor_copy_words(t + 32, load64(sp + 16), rank)
+    tensor_copy_words(tensor_data(t), load64(q + 16), n)
+    t
+
+## `t.to_list()`: the elements as a list (the words are the same for `int`
+## and `float`).
+fn tensor_to_list(t int) List[int]
+    n := load64(t + 16)
+    xs := list_alloc(n, 8)
+    q := list_addr(xs)
+    store64(q, n)
+    tensor_copy_words(load64(q + 16), tensor_data(t), n)
+    xs
+
+## `t.shape()`: the sizes of the axes.
+fn tensor_shape(t int) List[int]
+    rank := load64(t + 8)
+    xs := list_alloc(rank, 8)
+    q := list_addr(xs)
+    store64(q, rank)
+    tensor_copy_words(load64(q + 16), t + 32, rank)
+    xs
+
+## `a == b` (std.tensor.9): the same shape and equal elements, `float`
+## elements compared as `==` does (NaN is unequal to itself).
+fn tensor_eq(a int, b int) bool
+    rank := load64(a + 8)
+    n := load64(a + 16)
+    if load64(b + 8) != rank or load64(b + 16) != n or load64(b) != load64(a)
+        return false
+    for i in 0..rank
+        if load64(a + 32 + 8 * i) != load64(b + 32 + 8 * i)
+            return false
+    da := tensor_data(a)
+    db := tensor_data(b)
+    if load64(a) == 1
+        for i in 0..n
+            if loadf(da + 8 * i) != loadf(db + 8 * i)
+                return false
+        return true
+    for i in 0..n
+        if load64(da + 8 * i) != load64(db + 8 * i)
+            return false
+    true
+
+## The text of `t` (std.tensor.9): the call that rebuilds it.
+fn tensor_text(t int) str
+    n := load64(t + 16)
+    rank := load64(t + 8)
+    sb_reset()
+    sb_text("tensor.from([")
+    d := tensor_data(t)
+    for i in 0..n
+        if i > 0
+            sb_text(", ")
+        if load64(t) == 1
+            put_float(loadf(d + 8 * i))
+        else
+            put_int(load64(d + 8 * i))
+    sb_byte(93)
+    if rank != 1
+        sb_text(", ")
+        put_sizes(t + 32, rank)
+    sb_byte(41)
+    sb_str()
+
+fn out_tensor(t int)
+    out_str(tensor_text(t))
+
+# ---- step 2: elementwise operators, reductions, transpose ----
+
+# Operators (std.tensor.4): 0 `+` (add), 1 `-`, 2 `*` (mul), 3 `/`.
+
+fn int_min() int
+    1.shl(63)
+
+## `x op y` on `int` without overflow, into `box` (one word); false on overflow.
+fn int_op(op int, x int, y int, box int) bool
+    r := 0
+    if op == 0
+        r = x + y
+        if x.bit_xor(r).bit_and(y.bit_xor(r)) < 0
+            return false
+    elif op == 1
+        r = x - y
+        if x.bit_xor(y).bit_and(x.bit_xor(r)) < 0
+            return false
+    else
+        r = x * y
+        if x == -1
+            if y == int_min()
+                return false
+        elif x != 0
+            if r / x != y
+                return false
+    store64(box, r)
+    true
+
+fn float_op(op int, x float, y float) float
+    if op == 0
+        return x + y
+    if op == 1
+        return x - y
+    if op == 2
+        return x * y
+    x / y
+
+## The name an operator has in a fault message (the interpreter's `Op::name`).
+fn op_name(op int) str
+    if op == 0
+        return "add"
+    if op == 1
+        return "-"
+    if op == 2
+        return "mul"
+    "/"
+
+fn same_shape(a int, b int) bool
+    rank := load64(a + 8)
+    if load64(b + 8) != rank
+        return false
+    for i in 0..rank
+        if load64(a + 32 + 8 * i) != load64(b + 32 + 8 * i)
+            return false
+    true
+
+## The size of axis `k` of the broadcast of `a` and `b` of `rank` axes, lined up
+## from the right, or -1 when they don't fit.
+fn bsize(t int, k int, rank int) int
+    r := load64(t + 8)
+    if k + r >= rank
+        return load64(t + 32 + 8 * (k + r - rank))
+    1
+
+fn bdim(a int, b int, k int, rank int) int
+    x := bsize(a, k, rank)
+    y := bsize(b, k, rank)
+    if x == y or y == 1
+        return x
+    if x == 1
+        return y
+    -1
+
+fn bmax_rank(a int, b int) int
+    ra := load64(a + 8)
+    rb := load64(b + 8)
+    if ra > rb then ra else rb
+
+## The message for `a op b` whose shapes don't broadcast (std.tensor.4), or 0.
+## `what` is the operator's name, or "dot" (which needs equal shapes).
+fn tensor_zip_fault(a int, b int, op int) int
+    if same_shape(a, b)
+        return 0
+    rank := bmax_rank(a, b)
+    mut ok := true
+    for k in 0..rank
+        if bdim(a, b, k, rank) < 0
+            ok = false
+    if ok
+        return 0
+    sb_reset()
+    sb_byte(96)
+    sb_text(op_name(op))
+    sb_text("` can't broadcast shapes ")
+    put_sizes(a + 32, load64(a + 8))
+    sb_text(" and ")
+    put_sizes(b + 32, load64(b + 8))
+    str_addr(sb_str())
+
+## `a.dot(b)` needs equal shapes: the message, or 0.
+fn tensor_dot_fault(a int, b int) int
+    if same_shape(a, b)
+        return 0
+    sb_reset()
+    sb_text("`dot` needs equal shapes, but they are ")
+    put_sizes(a + 32, load64(a + 8))
+    sb_text(" and ")
+    put_sizes(b + 32, load64(b + 8))
+    str_addr(sb_str())
+
+## The elements of `t` stretched to the shape `dims` of `rank` axes and `n`
+## elements (std.tensor.4), as a new block of words.
+fn tensor_expand(t int, dims int, rank int, n int) int
+    out := alloc(8 * n + 8, KIND_ATOMIC)
+    stride := alloc(8 * rank + 8, KIND_ATOMIC)
+    idx := alloc(8 * rank + 8, KIND_ATOMIC)
+    src := tensor_data(t)
+    mut s := 1
+    mut k := rank - 1
+    while k >= 0
+        d := bsize(t, k, rank)
+        store64(stride + 8 * k, if d == 1 then 0 else s)
+        s = s * d
+        k -= 1
+    mut off := 0
+    for i in 0..n
+        store64(out + 8 * i, load64(src + 8 * off))
+        mut j := rank - 1
+        while j >= 0
+            c := load64(idx + 8 * j) + 1
+            store64(idx + 8 * j, c)
+            off += load64(stride + 8 * j)
+            if c < load64(dims + 8 * j)
+                break
+            off -= load64(stride + 8 * j) * c
+            store64(idx + 8 * j, 0)
+            j -= 1
+    out
+
+fn tensor_count(dims int, rank int) int
+    mut n := 1
+    for i in 0..rank
+        n = n * load64(dims + 8 * i)
+    n
+
+## `a op b` elementwise with broadcasting (std.tensor.4, std.tensor.10); 0 when
+## an `int` result overflows (std.tensor.6). The shapes were checked.
+fn tensor_zip(a int, b int, op int) int
+    kind := load64(a)
+    mut da := tensor_data(a)
+    mut db := tensor_data(b)
+    mut rank := load64(a + 8)
+    mut n := load64(a + 16)
+    mut dims := a + 32
+    if not same_shape(a, b)
+        rank = bmax_rank(a, b)
+        dims = alloc(8 * rank + 8, KIND_ATOMIC)
+        for k in 0..rank
+            store64(dims + 8 * k, bdim(a, b, k, rank))
+        n = tensor_count(dims, rank)
+        da = tensor_expand(a, dims, rank, n)
+        db = tensor_expand(b, dims, rank, n)
+    t := tensor_new(kind, rank, n)
+    tensor_copy_words(t + 32, dims, rank)
+    out := tensor_data(t)
+    if kind == 1
+        for i in 0..n
+            storef(out + 8 * i, float_op(op, loadf(da + 8 * i), loadf(db + 8 * i)))
+        return t
+    for i in 0..n
+        if not int_op(op, load64(da + 8 * i), load64(db + 8 * i), out + 8 * i)
+            return 0
+    t
+
+## `t op s`, or `s op t` when `left` (std.tensor.10), for a `float` scalar.
+fn tensor_scalar_f(a int, s float, op int, left bool) int
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(1, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for i in 0..n
+        x := loadf(da + 8 * i)
+        storef(out + 8 * i, if left then float_op(op, s, x) else float_op(op, x, s))
+    t
+
+## The same for an `int` scalar; 0 on overflow.
+fn tensor_scalar_i(a int, s int, op int, left bool) int
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(0, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for i in 0..n
+        x := load64(da + 8 * i)
+        ok := if left then int_op(op, s, x, out + 8 * i) else int_op(op, x, s, out + 8 * i)
+        if not ok
+            return 0
+    t
+
+## `-t` (std.tensor.14); 0 when an `int` element is the smallest `int`.
+fn tensor_neg(a int) int
+    kind := load64(a)
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(kind, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for i in 0..n
+        if kind == 1
+            storef(out + 8 * i, -loadf(da + 8 * i))
+        else
+            x := load64(da + 8 * i)
+            if x == int_min()
+                return 0
+            store64(out + 8 * i, 0 - x)
+    t
+
+## The sum of the products or elements `p`, `stride` words apart, `n` of them,
+## in std.tensor.5's order: element `i` goes to partial sum `i % 16` for the
+## first `16 * (n / 16)`, the partial sums halve, and the tail goes to `s[0]`.
+## With `q` non-zero the elements are the products of `p` and `q`.
+fn sum16(p int, q int, n int, stride int, s int) float
+    for l in 0..16
+        storef(s + 8 * l, 0.0)
+    body := n / 16 * 16
+    for i in 0..body
+        x := loadf(p + 8 * stride * i)
+        if q != 0
+            x = x * loadf(q + 8 * stride * i)
+        l := i % 16
+        storef(s + 8 * l, loadf(s + 8 * l) + x)
+    mut h := 8
+    while h > 0
+        for l in 0..h
+            storef(s + 8 * l, loadf(s + 8 * l) + loadf(s + 8 * (l + h)))
+        h = h / 2
+    mut acc := loadf(s)
+    for i in body..n
+        x := loadf(p + 8 * stride * i)
+        if q != 0
+            x = x * loadf(q + 8 * stride * i)
+        acc = acc + x
+    acc
+
+## `t.sum()` of a `float` tensor (std.tensor.5).
+fn tensor_sum_f(a int) float
+    sum16(tensor_data(a), 0, load64(a + 16), 1, alloc(128, KIND_ATOMIC))
+
+## `a.dot(b)` of `float` tensors of one shape (std.tensor.5).
+fn tensor_dot_f(a int, b int) float
+    sum16(tensor_data(a), tensor_data(b), load64(a + 16), 1, alloc(128, KIND_ATOMIC))
+
+## A 1-element `int` tensor holding `v`, as `sum` and `dot` of `int` tensors
+## return it; 0 stands for an overflow.
+fn tensor_one_i(v int) int
+    t := tensor_new(0, 0, 1)
+    store64(tensor_data(t), v)
+    t
+
+fn tensor_sum_i(a int) int
+    n := load64(a + 16)
+    d := tensor_data(a)
+    s := alloc(8, KIND_ATOMIC)
+    store64(s, 0)
+    for i in 0..n
+        if not int_op(0, load64(s), load64(d + 8 * i), s)
+            return 0
+    tensor_one_i(load64(s))
+
+fn tensor_dot_i(a int, b int) int
+    n := load64(a + 16)
+    da := tensor_data(a)
+    db := tensor_data(b)
+    s := alloc(16, KIND_ATOMIC)
+    store64(s, 0)
+    for i in 0..n
+        if not int_op(2, load64(da + 8 * i), load64(db + 8 * i), s + 8)
+            return 0
+        if not int_op(0, load64(s), load64(s + 8), s)
+            return 0
+    tensor_one_i(load64(s))
+
+## `t.transpose()` of a 2-D tensor (std.tensor.12): the message, or 0.
+fn tensor_transpose_fault(a int) int
+    if load64(a + 8) == 2
+        return 0
+    sb_reset()
+    sb_text("`transpose` needs a 2-D tensor, but the shape is ")
+    put_sizes(a + 32, load64(a + 8))
+    str_addr(sb_str())
+
+fn tensor_transpose(a int) int
+    m := load64(a + 32)
+    n := load64(a + 40)
+    t := tensor_new(load64(a), 2, m * n)
+    store64(t + 32, n)
+    store64(t + 40, m)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for i in 0..m
+        for j in 0..n
+            store64(out + 8 * (j * m + i), load64(da + 8 * (i * n + j)))
+    t
+
+# Reductions (std.tensor.11): kind 0 `sum`, 1 `max`, 2 `mean`.
+
+fn reduce_name(kind int) str
+    if kind == 0
+        return "sum"
+    if kind == 1
+        return "max"
+    "mean"
+
+## The faults of `t.sum(axis)`, `max` and `mean` (std.tensor.11): an axis out
+## of range, or `max` and `mean` of an empty axis; `has` is 0 for no axis.
+fn tensor_reduce_fault(a int, kind int, axis int, has int) int
+    rank := load64(a + 8)
+    mut before := 1
+    mut n := load64(a + 16)
+    mut after := 1
+    if has != 0
+        if axis < 0 or axis >= rank
+            sb_reset()
+            sb_byte(96)
+            sb_text(reduce_name(kind))
+            sb_byte(40)
+            put_int(axis)
+            sb_text(")` on a tensor of shape ")
+            put_sizes(a + 32, rank)
+            sb_text(": the axis must be from 0 to ")
+            put_int(rank - 1)
+            return str_addr(sb_str())
+        n = load64(a + 32 + 8 * axis)
+        for i in 0..axis
+            before = before * load64(a + 32 + 8 * i)
+        for i in axis + 1..rank
+            after = after * load64(a + 32 + 8 * i)
+    if n == 0 and kind != 0 and before * after > 0
+        sb_reset()
+        sb_byte(96)
+        sb_text(reduce_name(kind))
+        sb_text("` of an empty axis of a tensor of shape ")
+        put_sizes(a + 32, rank)
+        return str_addr(sb_str())
+    0
+
+## `t.sum(axis)`, `t.max(axis)` or `t.mean(axis)`, or over every element with no
+## axis (a tensor of shape `[]`); 0 when an `int` sum overflows. Faults were checked.
+fn tensor_reduce(a int, kind int, axis int, has int) int
+    rank := load64(a + 8)
+    ek := load64(a)
+    mut before := 1
+    mut n := load64(a + 16)
+    mut after := 1
+    mut out_rank := 0
+    if has != 0
+        n = load64(a + 32 + 8 * axis)
+        for i in 0..axis
+            before = before * load64(a + 32 + 8 * i)
+        for i in axis + 1..rank
+            after = after * load64(a + 32 + 8 * i)
+        out_rank = rank - 1
+    t := tensor_new(ek, out_rank, before * after)
+    if has != 0
+        mut at := 0
+        for i in 0..rank
+            if i != axis
+                store64(t + 32 + 8 * at, load64(a + 32 + 8 * i))
+                at += 1
+    da := tensor_data(a)
+    out := tensor_data(t)
+    s := alloc(128, KIND_ATOMIC)
+    for b in 0..before
+        for c in 0..after
+            base := da + 8 * (b * n * after + c)
+            r := out + 8 * (b * after + c)
+            if ek == 1
+                if kind == 1
+                    mut best := loadf(base)
+                    for k in 1..n
+                        x := loadf(base + 8 * k * after)
+                        if x > best
+                            best = x
+                    storef(r, best)
+                else
+                    v := sum16(base, 0, n, after, s)
+                    storef(r, if kind == 2 then v / n.to_float() else v)
+            elif kind == 1
+                mut best := load64(base)
+                for k in 1..n
+                    x := load64(base + 8 * k * after)
+                    if x > best
+                        best = x
+                store64(r, best)
+            else
+                store64(r, 0)
+                for k in 0..n
+                    if not int_op(0, load64(r), load64(base + 8 * k * after), r)
+                        return 0
+    t
+
+## The first element of a 1-element tensor, as `int` and as `float`.
+fn tensor_first_i(t int) int
+    load64(tensor_data(t))
+
+fn tensor_first_f(t int) float
+    loadf(tensor_data(t))

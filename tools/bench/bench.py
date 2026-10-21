@@ -369,6 +369,20 @@ def main():
         for r in noted:
             print(f"  {r['program']}: " + "; ".join(r["notes"]))
 
+    # Twin outputs: each corpus pair (tools/tokbench/corpus/programs) must print what its
+    # Python twin prints. The sweep runs in a mirror tree with this checkout's ail (ADR 0029).
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/tokbench"))
+    import twin_outputs
+    twins = twin_outputs.sweep()
+    skipped = [r for r in twins if r["status"] == "skipped"]
+    known = [r for r in twins if r["status"] == "known difference"]
+    bad_twins = [r for r in twins if r["status"] not in ("match", "skipped", "known difference")]
+    print()
+    print(f"Twin outputs: {len(twins) - len(bad_twins) - len(skipped) - len(known)} of {len(twins)} corpus pairs print what the Python twin prints"
+          f" ({len(known)} documented difference, {len(skipped)} skipped)")
+    for r in bad_twins:
+        detail = f" ({r['detail']})" if r.get("detail") else ""
+        print(f"  {r['name']}: {r['status']}{detail}")
 
 if __name__ == "__main__":
     main()

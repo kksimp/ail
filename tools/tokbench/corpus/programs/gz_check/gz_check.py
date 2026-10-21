@@ -1,9 +1,12 @@
 import gzip
+import sys
 from pathlib import Path
+
+DATA = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent / "agent-data"
 
 
 def main():
-    text = (Path(__file__).resolve().parents[5] / "examples/agent-data/records.txt").read_text()
+    text = (DATA / "records.txt").read_text()
     big = (text * 50).encode()
     packed = gzip.compress(big)
     print(f"gzip is smaller: {str(len(packed) < len(big)).lower()}")

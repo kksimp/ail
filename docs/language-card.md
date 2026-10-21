@@ -76,6 +76,9 @@ update a `mut` variable in a loop, use `=`.
 `char` (`'a'`), `List[T]`, `Map[K, V]`, `Set[T]`, structs, enums, optionals
 `T?`, results that can fail, `T ! E`, generic types, and `any Trait`.
 
+Tuples: `t := (1, "a")` is an `(int, str)`: `t.0`, `a, b := t`, arms like
+`(0, s) =>`; `==`, `<` and map keys work elementwise.
+
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`. Also `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`), `use std.time.date` (`date.utc(ms).format("%Y-%m-%d")`); float math `x.sin()`, `x.pow(y)` (type.num.16).
 
 Regex (RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `is_match(re, s)`, `find(re, s)` (`Match?`), `find_all`, `group_all(re, s, n)`, `captures(re, s)`, `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`.
@@ -365,7 +368,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
 - There's no `+` on strings and no `{{`; write `\{`.
 - `bytes` (immutable): `b"GET /\r\n\x00"`, `s.to_bytes()`, `b.len()`, `b[i]` (`u8`), `b[a..b]`, `a + b`,
-  `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()`, `b.base64()`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
+  `b.to_str()` (`str?`), `b.text()` (lossy), `b.find(x)`, `b.hex()` (`b.hex(" ")` spaces the pairs), `b.base64()`, `bytes.from_hex(s)` (`bytes?`), `fs.read_bytes(p)?`, `fs.write_bytes(p, b)?`.
 
 ## Lists
 
@@ -386,7 +389,7 @@ don't clamp and negative indexes are errors. Order by a key (stable):
 `xs.sorted(by: |p| -p.age)`, also `sort`, `min`, `max`.
 
 Comprehensions: `[x * x for x in xs if x > 0]`, sets `{x for ...}`, maps
-`{k: v for ...}`.
+`{k: v for ...}`. Pairs: `for i, x in xs.enumerate()`, `for a, b in zip(xs, ys)`.
 
 `for x in xs` gives a copy of each element. To change the elements
 themselves: `for mut item in items` (`items` must be `mut`), then `item.qty += 1`.
@@ -399,8 +402,8 @@ ages["cy"] = 40                        # inserts or replaces
 ages["dan"] += 1                       # `op=` on a missing key starts at 0
 mut counts := {}                       # typed by first use: counts[w] += 1
 b := ages.get("dan") else 0            # `ages["dan"]` traps if missing
-for name in ages.keys()                # `for k in m` is an error; also values()
-    print("{name}: {ages[name]}")
+for name, age in ages                  # each entry; also keys(), values()
+    print("{name}: {age}")
 mut seen := Set[str]()                 # or a literal: {"a", "b"}
 if seen.add("x")                       # true if it wasn't there
     print("new")
@@ -540,4 +543,4 @@ fn main()
             Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()
 ```
 
-`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses.
+`Json`, `parse_json(text)?` and the `ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses; `load_json[T](path)?`, `print_json(v)`.

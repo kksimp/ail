@@ -149,6 +149,144 @@ struct LoopInfo {
     cdepth: u32,
 }
 
+/// The operands of an operator-specific `Bin`.
+#[derive(Clone, Copy)]
+struct B3 {
+    dst: Opnd,
+    a: Opnd,
+    b: Opnd,
+    pos: Pos,
+}
+
+/// `Bin` with an int literal on the right.
+#[derive(Clone, Copy)]
+struct BK {
+    dst: Opnd,
+    a: Opnd,
+    k: i64,
+    pos: Pos,
+}
+
+/// Compare and jump to `t` when the result is `when`.
+#[derive(Clone, Copy)]
+struct Br {
+    a: Opnd,
+    b: Opnd,
+    when: bool,
+    t: u32,
+    pos: Pos,
+}
+
+#[derive(Clone, Copy)]
+struct BrK {
+    a: Opnd,
+    k: i64,
+    when: bool,
+    t: u32,
+    pos: Pos,
+}
+
+/// `local op= b`.
+#[derive(Clone, Copy)]
+struct OA {
+    slot: u32,
+    b: Opnd,
+    pos: Pos,
+}
+
+/// `local op= k` with an int literal.
+#[derive(Clone, Copy)]
+struct OAK {
+    slot: u32,
+    k: i64,
+    pos: Pos,
+}
+
+/// `slot += step` (or `-=`), then jump to `top` while the compare against `b` holds, else to `out`:
+/// the end of a `while` turn. Anything but ints goes to `slow`, which runs the plain pair.
+#[derive(Clone, Copy)]
+struct IncBr {
+    slot: u32,
+    step: Opnd,
+    b: Opnd,
+    top: u32,
+    out: u32,
+    slow: u32,
+}
+
+fn bin<'a>(op: BinOp, dst: Opnd, a: Opnd, b: Opnd, pos: Pos) -> Ins<'a> {
+    let v = B3 { dst, a, b, pos };
+    match op {
+        BinOp::Add => Ins::Add(v),
+        BinOp::Sub => Ins::Sub(v),
+        BinOp::Mul => Ins::Mul(v),
+        BinOp::Lt => Ins::Lt(v),
+        BinOp::Le => Ins::Le(v),
+        BinOp::Gt => Ins::Gt(v),
+        BinOp::Ge => Ins::Ge(v),
+        BinOp::Eq => Ins::Eq(v),
+        BinOp::Ne => Ins::Ne(v),
+        _ => Ins::Bin { op, dst, a, b, pos },
+    }
+}
+
+fn bin_k<'a>(op: BinOp, dst: Opnd, a: Opnd, k: i64, pos: Pos) -> Ins<'a> {
+    let v = BK { dst, a, k, pos };
+    match op {
+        BinOp::Add => Ins::AddK(v),
+        BinOp::Sub => Ins::SubK(v),
+        BinOp::Mul => Ins::MulK(v),
+        BinOp::Rem => Ins::RemK(v),
+        _ => Ins::BinK { op, dst, a, k, pos },
+    }
+}
+
+fn br_cmp<'a>(op: BinOp, a: Opnd, b: Opnd, when: bool, pos: Pos) -> Ins<'a> {
+    let v = Br { a, b, when, t: 0, pos };
+    match op {
+        BinOp::Lt => Ins::BrLt(v),
+        BinOp::Le => Ins::BrLe(v),
+        BinOp::Gt => Ins::BrGt(v),
+        BinOp::Ge => Ins::BrGe(v),
+        BinOp::Eq => Ins::BrEq(v),
+        BinOp::Ne => Ins::BrNe(v),
+        _ => Ins::BrCmp { op, a, b, when, t: 0, pos },
+    }
+}
+
+fn br_cmp_k<'a>(op: BinOp, a: Opnd, k: i64, when: bool, pos: Pos) -> Ins<'a> {
+    let v = BrK { a, k, when, t: 0, pos };
+    match op {
+        BinOp::Lt => Ins::BrLtK(v),
+        BinOp::Le => Ins::BrLeK(v),
+        BinOp::Gt => Ins::BrGtK(v),
+        BinOp::Ge => Ins::BrGeK(v),
+        BinOp::Eq => Ins::BrEqK(v),
+        BinOp::Ne => Ins::BrNeK(v),
+        _ => Ins::BrCmpK { op, a, k, when, t: 0, pos },
+    }
+}
+
+fn op_assign<'a>(op: BinOp, slot: u32, b: Opnd, pos: Pos) -> Ins<'a> {
+    let v = OA { slot, b, pos };
+    match op {
+        BinOp::Add => Ins::AddA(v),
+        BinOp::Sub => Ins::SubA(v),
+        BinOp::Mul => Ins::MulA(v),
+        _ => Ins::OpAssign { op, slot, b, pos },
+    }
+}
+
+fn op_assign_k<'a>(op: BinOp, slot: u32, k: i64, pos: Pos) -> Ins<'a> {
+    let v = OAK { slot, k, pos };
+    match op {
+        BinOp::Add => Ins::AddAK(v),
+        BinOp::Sub => Ins::SubAK(v),
+        BinOp::Mul => Ins::MulAK(v),
+        _ => Ins::OpAssignK { op, slot, k, pos },
+    }
+}
+
 enum Ins<'a> {
     /// `name := src`: a new binding at the end of the environment.
     Push {
@@ -194,6 +332,43 @@ enum Ins<'a> {
         b: Opnd,
         pos: Pos,
     },
+    /// Operator-specific forms of `Bin`, `BinK`, `BrCmp`, `BrCmpK`, `OpAssign` and `OpAssignK`:
+    /// the operator is the instruction, so the hot loop doesn't switch on it again.
+    Add(B3),
+    Sub(B3),
+    Mul(B3),
+    Lt(B3),
+    Le(B3),
+    Gt(B3),
+    Ge(B3),
+    Eq(B3),
+    Ne(B3),
+    AddK(BK),
+    SubK(BK),
+    MulK(BK),
+    RemK(BK),
+    BrLt(Br),
+    BrLe(Br),
+    BrGt(Br),
+    BrGe(Br),
+    BrEq(Br),
+    BrNe(Br),
+    BrLtK(BrK),
+    BrLeK(BrK),
+    BrGtK(BrK),
+    BrGeK(BrK),
+    BrEqK(BrK),
+    BrNeK(BrK),
+    AddA(OA),
+    IncBrLt(IncBr),
+    IncBrLe(IncBr),
+    DecBrGt(IncBr),
+    DecBrGe(IncBr),
+    SubA(OA),
+    MulA(OA),
+    AddAK(OAK),
+    SubAK(OAK),
+    MulAK(OAK),
     Not {
         dst: Opnd,
         src: Opnd,
@@ -594,7 +769,14 @@ fn take(o: Opnd, env: &Env<'_>, base: usize, regs: &mut [Value], consts: &[Value
     if o & KIND == REG {
         return std::mem::replace(&mut regs[(o & !KIND) as usize], Value::Unit);
     }
-    get(o, env, base, regs, consts).clone()
+    match get(o, env, base, regs, consts) {
+        // Scalars are built in registers: the generic `clone` merges them into one copy of the
+        // value's bytes through the stack, and the loads after it stall.
+        Value::Int(i) => Value::Int(*i),
+        Value::Float(f) => Value::Float(*f),
+        Value::Bool(b) => Value::Bool(*b),
+        other => other.clone(),
+    }
 }
 
 #[inline(always)]
@@ -641,6 +823,35 @@ fn assign(slot: &mut Value, v: Value) {
     assign_drop(std::mem::replace(slot, v));
 }
 
+/// A value read out of a container: scalars as themselves, so they reach their slot from registers,
+/// not by way of a whole `Value` on the stack (whose copy stalls the loads after it).
+enum Got {
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Other(Value),
+}
+
+#[inline(always)]
+fn got(v: &Value) -> Got {
+    match v {
+        Value::Int(x) => Got::Int(*x),
+        Value::Float(x) => Got::Float(*x),
+        Value::Bool(x) => Got::Bool(*x),
+        other => Got::Other(other.clone()),
+    }
+}
+
+#[inline(always)]
+fn put_got(o: Opnd, g: Got, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
+    match g {
+        Got::Int(x) => put_int(o, x, env, base, regs),
+        Got::Float(x) => put_float(o, x, env, base, regs),
+        Got::Bool(x) => put_bool(o, x, env, base, regs),
+        Got::Other(v) => put(o, v, env, base, regs),
+    }
+}
+
 /// `put` of an int, overwriting an int in place.
 #[inline(always)]
 fn put_int(o: Opnd, r: i64, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
@@ -654,6 +865,22 @@ fn put_int(o: Opnd, r: i64, env: &mut Env<'_>, base: usize, regs: &mut [Value]) 
         *x = r;
     } else {
         assign(slot, Value::Int(r));
+    }
+}
+
+/// `put` of a bool, overwriting a bool in place.
+#[inline(always)]
+fn put_bool(o: Opnd, r: bool, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
+    let i = (o & !KIND) as usize;
+    let slot = match o & KIND {
+        LOCAL => &mut env[base + i].1,
+        REG => &mut regs[i],
+        _ => return,
+    };
+    if let Value::Bool(x) = slot {
+        *x = r;
+    } else {
+        assign(slot, Value::Bool(r));
     }
 }
 
@@ -846,6 +1073,7 @@ fn compilable(b: &Block) -> bool {
             Stmt::With { .. } | Stmt::Defer(..) | Stmt::Unsafe { .. } => false,
             Stmt::For { par: true, .. } => false,
             Stmt::Let { value, otherwise, .. } => expr(value) && otherwise.as_ref().is_none_or(other),
+            Stmt::LetTuple { value, .. } => expr(value),
             Stmt::Assign { target, value, .. } => expr(target) && expr(value),
             Stmt::While { cond, body, .. } => expr(cond) && compilable(body),
             Stmt::For { iter, body, .. } => expr(iter) && compilable(body),
@@ -921,6 +1149,32 @@ fn has_try(e: &Expr) -> bool {
     }
 }
 
+/// Whether a part of a comprehension can't leave it early: no `?`, `break`, `continue`, `return` or
+/// leaving `else`, looking through `if` and `match` whose arms only compute values.
+fn comp_part_plain(e: &Expr) -> bool {
+    fn block(b: &Block) -> bool {
+        b.iter().all(|s| match s {
+            Stmt::Expr(e) => comp_part_plain(e),
+            Stmt::Let { value, otherwise: None, .. } => comp_part_plain(value),
+            _ => false,
+        })
+    }
+    match e {
+        Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(comp_part_plain) && hi.as_deref().is_none_or(comp_part_plain),
+        Expr::If { branches, els, .. } => {
+            branches.iter().all(|(c, b)| {
+                (match c {
+                    Cond::Expr(e) | Cond::Bind { value: e, .. } => comp_part_plain(e),
+                }) && block(b)
+            }) && els.as_ref().is_none_or(block)
+        }
+        Expr::Match { scrutinee, arms, .. } => {
+            comp_part_plain(scrutinee) && arms.iter().all(|a| a.guard.as_ref().is_none_or(comp_part_plain) && block(&a.body))
+        }
+        e => !has_try(e),
+    }
+}
+
 struct Compiler<'c, 'a, W: Write> {
     it: &'c mut Interp<'a, W>,
     ins: Vec<Ins<'a>>,
@@ -938,6 +1192,9 @@ struct Compiler<'c, 'a, W: Write> {
     exit_cache: Option<u32>,
     /// Instructions that aren't a hand-off to the walker.
     native: usize,
+    /// The plain `op=` of each `IncBr`, which `compile` appends after the end: the instruction
+    /// it replaced, and the test that follows it.
+    stubs: Vec<(u32, Ins<'a>, u32)>,
 }
 
 impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
@@ -992,12 +1249,56 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     }
 
     /// Point the jump at `at` to `t`.
+    /// A turn of a `while` that ends in `slot += step` and tests `slot < b` (or `<=`; `-=` with `>` and
+    /// `>=`) becomes one instruction; the plain pair stays for the first test and for `continue`.
+    fn fuse_inc(&mut self, add: u32, test: u32, top: u32) {
+        let (slot, step, sub) = match self.ins[add as usize] {
+            Ins::AddA(OA { slot, b, .. }) => (slot, b, false),
+            Ins::SubA(OA { slot, b, .. }) => (slot, b, true),
+            Ins::AddAK(OAK { slot, k, .. }) => (slot, self.konst(Value::Int(k)), false),
+            Ins::SubAK(OAK { slot, k, .. }) => (slot, self.konst(Value::Int(k)), true),
+            _ => return,
+        };
+        let (cmp, b) = match self.ins[test as usize] {
+            Ins::BrLt(Br { a, b, when: true, .. }) if a == LOCAL | slot && !sub => (0, b),
+            Ins::BrLe(Br { a, b, when: true, .. }) if a == LOCAL | slot && !sub => (1, b),
+            Ins::BrGt(Br { a, b, when: true, .. }) if a == LOCAL | slot && sub => (2, b),
+            Ins::BrGe(Br { a, b, when: true, .. }) if a == LOCAL | slot && sub => (3, b),
+            Ins::BrLtK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && !sub => (0, self.konst(Value::Int(k))),
+            Ins::BrLeK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && !sub => (1, self.konst(Value::Int(k))),
+            Ins::BrGtK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && sub => (2, self.konst(Value::Int(k))),
+            Ins::BrGeK(BrK { a, k, when: true, .. }) if a == LOCAL | slot && sub => (3, self.konst(Value::Int(k))),
+            _ => return,
+        };
+        let v = IncBr { slot, step, b, top, out: test + 1, slow: 0 };
+        let fused = match cmp {
+            0 => Ins::IncBrLt(v),
+            1 => Ins::IncBrLe(v),
+            2 => Ins::DecBrGt(v),
+            _ => Ins::DecBrGe(v),
+        };
+        let orig = std::mem::replace(&mut self.ins[add as usize], fused);
+        self.stubs.push((add, orig, test));
+    }
+
     fn patch(&mut self, at: u32, t: u32) {
         match &mut self.ins[at as usize] {
             Ins::Jump(x)
             | Ins::JumpIf { t: x, .. }
             | Ins::BrCmp { t: x, .. }
             | Ins::BrCmpK { t: x, .. }
+            | Ins::BrLt(Br { t: x, .. })
+            | Ins::BrLe(Br { t: x, .. })
+            | Ins::BrGt(Br { t: x, .. })
+            | Ins::BrGe(Br { t: x, .. })
+            | Ins::BrEq(Br { t: x, .. })
+            | Ins::BrNe(Br { t: x, .. })
+            | Ins::BrLtK(BrK { t: x, .. })
+            | Ins::BrLeK(BrK { t: x, .. })
+            | Ins::BrGtK(BrK { t: x, .. })
+            | Ins::BrGeK(BrK { t: x, .. })
+            | Ins::BrEqK(BrK { t: x, .. })
+            | Ins::BrNeK(BrK { t: x, .. })
             | Ins::IfNotListMap { t: x, .. }
             | Ins::ListFast { done: x, .. }
             | Ins::NumFast { done: x, .. }
@@ -1082,6 +1383,9 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         if let Stmt::Let { name, .. } = s {
             self.scope.push(name);
         }
+        if let Stmt::LetTuple { names, .. } = s {
+            self.scope.extend(names.iter().map(|b| b.name.as_str()));
+        }
     }
 
     /// Code that leaves the value of `e` in `dst`.
@@ -1140,10 +1444,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             Expr::Binary { op, lhs, rhs, pos } => {
                 if let Some(k) = self.int_literal(rhs) {
                     let a = self.operand(lhs);
-                    self.emit(Ins::BinK { op: *op, dst, a, k, pos: *pos });
+                    self.emit(bin_k(*op, dst, a, k, *pos));
                 } else {
                     let [a, b] = self.operands([&**lhs, &**rhs]);
-                    self.emit(Ins::Bin { op: *op, dst, a, b, pos: *pos });
+                    self.emit(bin(*op, dst, a, b, *pos));
                 }
             }
             Expr::Unary { op: UnOp::Not, operand, .. } => {
@@ -1181,9 +1485,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     let test = self.emit(Ins::Arm { src, pat: &arm.pat, t: 0 });
                     let mark = self.depth();
                     // expr.match.6: fields bind by position; `_` skips one.
-                    if let Pattern::Variant { bindings: Some(names), .. } = &arm.pat {
-                        self.scope.extend(names.iter().filter(|(n, _)| n != "_").map(|(n, _)| n.as_str()));
-                    }
+                    bound_names(&arm.pat, &mut self.scope);
                     // expr.match.11: a false guard drops the bindings and tries the next arm.
                     let fails = arm.guard.as_ref().map(|g| self.cond_jump(g, false));
                     self.block(&arm.body, t);
@@ -1480,10 +1782,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             } => {
                 if let Some(k) = self.int_literal(rhs) {
                     let a = self.operand(lhs);
-                    vec![self.emit(Ins::BrCmpK { op: *op, a, k, when, t: 0, pos: *pos })]
+                    vec![self.emit(br_cmp_k(*op, a, k, when, *pos))]
                 } else {
                     let [a, b] = self.operands([&**lhs, &**rhs]);
-                    vec![self.emit(Ins::BrCmp { op: *op, a, b, when, t: 0, pos: *pos })]
+                    vec![self.emit(br_cmp(*op, a, b, when, *pos))]
                 }
             }
             // `a and b` is false when either is; true when both are.
@@ -1594,18 +1896,16 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
         }
     }
 
-    /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it
-    /// (the walker runs those), and no hook or trace that expects the walker's steps.
+    /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it,
+    /// no `for a, b in xs` clause (type.tuple.5) (the walker runs those), and no hook or trace that
+    /// expects the walker's steps.
     fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
-        let plain = |e: &Expr| match e {
-            Expr::Range { lo, hi, .. } => lo.as_deref().is_none_or(|x| !has_try(x)) && hi.as_deref().is_none_or(|x| !has_try(x)),
-            e => !has_try(e),
-        };
+        let plain = comp_part_plain;
         !self.it.hook
             && self.it.tracing == 0
             && plain(elem)
             && value.is_none_or(plain)
-            && clauses.iter().all(|c| !c.par && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
+            && clauses.iter().all(|c| !c.par && c.unpack.is_empty() && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
     }
 
     /// The loops of a comprehension's clauses around its element, collected into `acc`.
@@ -1733,15 +2033,15 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                         };
                         match self.int_literal(value) {
                             Some(k) if old == slot => {
-                                self.emit(Ins::OpAssignK { op: *op, slot: slot & !KIND, k, pos: *pos })
+                                self.emit(op_assign_k(*op, slot & !KIND, k, *pos))
                             }
-                            Some(k) => self.emit(Ins::BinK { op: *op, dst: slot, a: old, k, pos: *pos }),
+                            Some(k) => self.emit(bin_k(*op, slot, old, k, *pos)),
                             None => {
                                 let b = self.operand(value);
                                 if old == slot {
-                                    self.emit(Ins::OpAssign { op: *op, slot: slot & !KIND, b, pos: *pos })
+                                    self.emit(op_assign(*op, slot & !KIND, b, *pos))
                                 } else {
-                                    self.emit(Ins::Bin { op: *op, dst: slot, a: old, b, pos: *pos })
+                                    self.emit(bin(*op, slot, old, b, *pos))
                                 }
                             }
                         };
@@ -1794,8 +2094,11 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 self.patch(enter, test);
                 self.loops[l as usize].cont = test;
                 let back = self.cond_jump(cond, true);
-                for x in back {
+                for &x in &back {
                     self.patch(x, top);
+                }
+                if back.len() == 1 && test > top {
+                    self.fuse_inc(test - 1, test, top);
                 }
                 self.loop_end();
                 let end = self.here();
@@ -2148,10 +2451,20 @@ impl<'a, W: Write> Interp<'a, W> {
             exits: Vec::new(),
             exit_cache: None,
             native: 0,
+            stubs: Vec::new(),
         };
         let result = c.reg();
         c.block(body, result);
         c.emit(Ins::End { src: result });
+        for (at, orig, test) in std::mem::take(&mut c.stubs) {
+            let slow = c.here();
+            c.ins.push(orig);
+            c.ins.push(Ins::Jump(test));
+            let (Ins::IncBrLt(v) | Ins::IncBrLe(v) | Ins::DecBrGt(v) | Ins::DecBrGe(v)) = &mut c.ins[at as usize] else {
+                unreachable!("an IncBr")
+            };
+            v.slow = slow;
+        }
         if c.native == 0 {
             return Slot::Walker;
         }
@@ -2237,7 +2550,9 @@ impl<'a, W: Write> Interp<'a, W> {
     /// parameters, as `block` runs the body: on return `env` holds just those.
     pub(super) fn run_code(&mut self, code: &Code<'a>, env: &mut Env<'a>) -> Flow<Value> {
         let entry = env.len();
-        let base = entry - code.params;
+        // A call builds its own `env` (`invoke_inner`, `run_call`): the frame starts at 0.
+        assert_eq!(entry, code.params, "a frame's env starts with its parameters");
+        let base = 0;
         // A pooled register vector holds only `Unit`s, at least `nregs` of them.
         let mut regs = self.reg_pool.pop().unwrap_or_default();
         if regs.len() < code.nregs {
@@ -2741,13 +3056,7 @@ match take!(*src) {
                 pc = *t as usize;
             } else {
                 pc += 1;
-                if let (Pattern::Variant { bindings: Some(names), .. }, Value::Enum(_, _, fields)) = (pat, v) {
-                    for ((n, _), value) in names.iter().zip(fields.iter()) {
-                        if n != "_" {
-                            env.push((n.as_str(), value.clone()));
-                        }
-                    }
-                }
+                bind_pattern(pat, v, env);
             }
         
         Ok(pc)
@@ -3261,6 +3570,8 @@ match {
         base: usize,
         regs: &mut [Value],
     ) -> Flow<Value> {
+        debug_assert_eq!(base, 0);
+        let base = 0usize;
         let consts = &code.consts[..];
         let mut pc = 0usize;
         macro_rules! get {
@@ -3273,12 +3584,220 @@ match {
                 take($o, env, base, regs, consts)
             };
         }
+        // The operator-specific instructions (Add, Lt, BrLt, AddA, AddAK, ...): the
+        // same fast paths as `Bin`, `BrCmp` and `OpAssign`, with no switch on the operator.
+        macro_rules! arith {
+            ($v:expr, $op:expr, $chk:ident, $f:tt) => {{
+                let B3 { dst, a, b, pos } = *$v;
+                pc += 1;
+                if let (Value::Int(x), Value::Int(y)) = (get!(a), get!(b))
+                    && let Some(r) = x.$chk(*y)
+                {
+                    put_int(dst, r, env, base, regs);
+                    continue;
+                }
+                if let (Value::Float(x), Value::Float(y)) = (get!(a), get!(b)) {
+                    let r = *x $f *y;
+                    put_float(dst, r, env, base, regs);
+                    continue;
+                }
+                let x = take!(a);
+                let y = take!(b);
+                let v = self.binop($op, x, y, pos)?;
+                put(dst, v, env, base, regs);
+            }};
+        }
+        macro_rules! compare {
+            ($v:expr, $op:expr, $c:tt) => {{
+                let B3 { dst, a, b, pos } = *$v;
+                pc += 1;
+                if let (Value::Int(x), Value::Int(y)) = (get!(a), get!(b)) {
+                    let t = *x $c *y;
+                    put(dst, Value::Bool(t), env, base, regs);
+                    continue;
+                }
+                if let (Value::Float(x), Value::Float(y)) = (get!(a), get!(b)) {
+                    let t = *x $c *y;
+                    put(dst, Value::Bool(t), env, base, regs);
+                    continue;
+                }
+                if matches!($op, BinOp::Eq | BinOp::Ne)
+                    && code.str_eq
+                    && let (Value::Str(x), Value::Str(y)) = (get!(a), get!(b))
+                {
+                    let t = (x == y) == matches!($op, BinOp::Eq);
+                    put(dst, Value::Bool(t), env, base, regs);
+                    continue;
+                }
+                let x = take!(a);
+                let y = take!(b);
+                let v = self.binop($op, x, y, pos)?;
+                put(dst, v, env, base, regs);
+            }};
+        }
+        macro_rules! arith_k {
+            ($v:expr, $op:expr, $int:expr) => {{
+                let BK { dst, a, k, pos } = *$v;
+                pc += 1;
+                if let Value::Int(x) = get!(a)
+                    && let Some(r) = $int(*x, k)
+                {
+                    put_int(dst, r, env, base, regs);
+                    continue;
+                }
+                let x = take!(a);
+                let v = self.binop($op, x, Value::Int(k), pos)?;
+                put(dst, v, env, base, regs);
+            }};
+        }
+        macro_rules! branch {
+            ($v:expr, $op:expr, $c:tt) => {{
+                let Br { a, b, when, t, pos } = *$v;
+                let c = match (get!(a), get!(b)) {
+                    (Value::Int(x), Value::Int(y)) => *x $c *y,
+                    (Value::Float(x), Value::Float(y)) => *x $c *y,
+                    // expr.cmp.1: strings are equal when their bytes are.
+                    (Value::Str(x), Value::Str(y)) if code.str_eq && matches!($op, BinOp::Eq | BinOp::Ne) => {
+                        (x == y) == matches!($op, BinOp::Eq)
+                    }
+                    _ => {
+                        let x = take!(a);
+                        let y = take!(b);
+                        self.binop($op, x, y, pos)?.bool()
+                    }
+                };
+                // A branch the CPU can predict, not a select its result must wait for.
+                if c == when {
+                    pc = std::hint::black_box(t as usize);
+                } else {
+                    pc += 1;
+                }
+            }};
+        }
+        macro_rules! branch_k {
+            ($v:expr, $op:expr, $c:tt) => {{
+                let BrK { a, k, when, t, pos } = *$v;
+                let c = match get!(a) {
+                    Value::Int(x) => *x $c k,
+                    _ => {
+                        let x = take!(a);
+                        self.binop($op, x, Value::Int(k), pos)?.bool()
+                    }
+                };
+                // A branch the CPU can predict, not a select its result must wait for.
+                if c == when {
+                    pc = std::hint::black_box(t as usize);
+                } else {
+                    pc += 1;
+                }
+            }};
+        }
+        macro_rules! inc_br {
+            ($v:expr, $chk:ident, $c:tt) => {{
+                let IncBr { slot, step, b, top, out, slow } = *$v;
+                let at = base + slot as usize;
+                let fast = match (&env[at].1, get!(step), get!(b)) {
+                    (Value::Int(x), Value::Int(s), Value::Int(y)) => x.$chk(*s).map(|r| (r, *y)),
+                    _ => None,
+                };
+                match fast {
+                    Some((r, y)) => {
+                        if let Value::Int(x) = &mut env[at].1 {
+                            *x = r;
+                        }
+                        pc = if r $c y { std::hint::black_box(top) } else { out } as usize;
+                    }
+                    None => pc = slow as usize,
+                }
+            }};
+        }
+        macro_rules! assign_op {
+            ($v:expr, $op:expr, $chk:ident, $f:tt) => {{
+                let OA { slot, b, pos } = *$v;
+                pc += 1;
+                let at = base + slot as usize;
+                match get!(b) {
+                    Value::Int(y) => {
+                        let y = *y;
+                        if let Value::Int(x) = &mut env[at].1
+                            && let Some(r) = x.$chk(y)
+                        {
+                            *x = r;
+                            continue;
+                        }
+                    }
+                    Value::Float(y) => {
+                        let y = *y;
+                        if let Value::Float(x) = &mut env[at].1 {
+                            *x = *x $f y;
+                            continue;
+                        }
+                    }
+                    _ => {}
+                }
+                let x = env[at].1.clone();
+                let y = take!(b);
+                let v = self.binop($op, x, y, pos)?;
+                put(LOCAL | slot, v, env, base, regs);
+            }};
+        }
+        macro_rules! assign_op_k {
+            ($v:expr, $op:expr, $chk:ident) => {{
+                let OAK { slot, k, pos } = *$v;
+                pc += 1;
+                let at = base + slot as usize;
+                if let Value::Int(x) = &mut env[at].1
+                    && let Some(r) = x.$chk(k)
+                {
+                    *x = r;
+                    continue;
+                }
+                let x = env[at].1.clone();
+                let v = self.binop($op, x, Value::Int(k), pos)?;
+                put(LOCAL | slot, v, env, base, regs);
+            }};
+        }
         loop {
             if COUNT {
                 self.stats.ins += 1;
             }
             let ins = &code.ins[pc];
             match ins {
+                Ins::Add(v) => arith!(v, BinOp::Add, checked_add, +),
+                Ins::Sub(v) => arith!(v, BinOp::Sub, checked_sub, -),
+                Ins::Mul(v) => arith!(v, BinOp::Mul, checked_mul, *),
+                Ins::Lt(v) => compare!(v, BinOp::Lt, <),
+                Ins::Le(v) => compare!(v, BinOp::Le, <=),
+                Ins::Gt(v) => compare!(v, BinOp::Gt, >),
+                Ins::Ge(v) => compare!(v, BinOp::Ge, >=),
+                Ins::Eq(v) => compare!(v, BinOp::Eq, ==),
+                Ins::Ne(v) => compare!(v, BinOp::Ne, !=),
+                Ins::AddK(v) => arith_k!(v, BinOp::Add, i64::checked_add),
+                Ins::SubK(v) => arith_k!(v, BinOp::Sub, i64::checked_sub),
+                Ins::MulK(v) => arith_k!(v, BinOp::Mul, i64::checked_mul),
+                Ins::RemK(v) => arith_k!(v, BinOp::Rem, |x: i64, k: i64| (k != 0).then(|| x.wrapping_rem(k))),
+                Ins::BrLt(v) => branch!(v, BinOp::Lt, <),
+                Ins::BrLe(v) => branch!(v, BinOp::Le, <=),
+                Ins::BrGt(v) => branch!(v, BinOp::Gt, >),
+                Ins::BrGe(v) => branch!(v, BinOp::Ge, >=),
+                Ins::BrEq(v) => branch!(v, BinOp::Eq, ==),
+                Ins::BrNe(v) => branch!(v, BinOp::Ne, !=),
+                Ins::BrLtK(v) => branch_k!(v, BinOp::Lt, <),
+                Ins::BrLeK(v) => branch_k!(v, BinOp::Le, <=),
+                Ins::BrGtK(v) => branch_k!(v, BinOp::Gt, >),
+                Ins::BrGeK(v) => branch_k!(v, BinOp::Ge, >=),
+                Ins::BrEqK(v) => branch_k!(v, BinOp::Eq, ==),
+                Ins::BrNeK(v) => branch_k!(v, BinOp::Ne, !=),
+                Ins::IncBrLt(v) => inc_br!(v, checked_add, <),
+                Ins::IncBrLe(v) => inc_br!(v, checked_add, <=),
+                Ins::DecBrGt(v) => inc_br!(v, checked_sub, >),
+                Ins::DecBrGe(v) => inc_br!(v, checked_sub, >=),
+                Ins::AddA(v) => assign_op!(v, BinOp::Add, checked_add, +),
+                Ins::SubA(v) => assign_op!(v, BinOp::Sub, checked_sub, -),
+                Ins::MulA(v) => assign_op!(v, BinOp::Mul, checked_mul, *),
+                Ins::AddAK(v) => assign_op_k!(v, BinOp::Add, checked_add),
+                Ins::SubAK(v) => assign_op_k!(v, BinOp::Sub, checked_sub),
+                Ins::MulAK(v) => assign_op_k!(v, BinOp::Mul, checked_mul),
                 Ins::BinK { op, dst, a, k, pos } => {
                     pc += 1;
                     if let Value::Int(x) = get!(*a)
@@ -3411,13 +3930,38 @@ match {
                 Ins::Jump(t) => pc = *t as usize,
                 Ins::Move { dst, src } => {
                     pc += 1;
-                    let v = take!(*src);
-                    put(*dst, v, env, base, regs);
+                    match get!(*src) {
+                        Value::Int(x) => {
+                            let x = *x;
+                            put_int(*dst, x, env, base, regs);
+                        }
+                        Value::Float(x) => {
+                            let x = *x;
+                            put_float(*dst, x, env, base, regs);
+                        }
+                        _ => {
+                            let v = take!(*src);
+                            put(*dst, v, env, base, regs);
+                        }
+                    }
                 }
                 Ins::Push { name, src } => {
                     pc += 1;
-                    let v = take!(*src);
-                    env.push((name, v));
+                    // Scalars are built in place; moving a whole `Value` through the stack stalls.
+                    match get!(*src) {
+                        Value::Int(i) => {
+                            let i = *i;
+                            env.push((name, Value::Int(i)));
+                        }
+                        Value::Float(f) => {
+                            let f = *f;
+                            env.push((name, Value::Float(f)));
+                        }
+                        _ => {
+                            let v = take!(*src);
+                            env.push((name, v));
+                        }
+                    }
                 }
                 Ins::MoveOut { dst, slot } => {
                     pc += 1;
@@ -3507,30 +4051,44 @@ match {
                     let v = match get!(*recv) {
                         Value::List(items) => {
                             let i = get!(*idx).int();
-                            elem(items, i, *pos)?.clone()
+                            got(elem(items, i, *pos)?)
                         }
                         Value::Map(t) => {
                             let k = get!(*idx);
-                            map_value(t, k, || key_text(k), *pos)?.clone()
+                            Got::Other(map_value(t, k, || key_text(k), *pos)?.clone())
                         }
                         Value::Bytes(b) => {
                             let i = get!(*idx).int();
-                            bytes::at(b, i, *pos)?
+                            Got::Other(bytes::at(b, i, *pos)?)
                         }
                         // std.tensor.15: `t[i]` drops axis 0.
-                        Value::Tensor(t) => match t.row(get!(*idx).int()) {
+                        Value::Tensor(t) => Got::Other(match t.row(get!(*idx).int()) {
                             Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
                             Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
-                        },
+                        }),
                         other => unreachable!("checked: list, map, bytes or tensor, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);
-                    put(*dst, v, env, base, regs);
+                    put_got(*dst, v, env, base, regs);
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
-                    if matches!(env[at].1, Value::List(_)) {
+                    // `len` of text, a map, a set or bytes: the walker's count, without its call.
+                    let other_len = if *push {
+                        None
+                    } else {
+                        match &env[at].1 {
+                            Value::Str(t) => Some(t.chars().count()),
+                            Value::Map(t) | Value::Set(t) => Some(t.len()),
+                            Value::Bytes(b) => Some(b.len()),
+                            _ => None,
+                        }
+                    };
+                    if let Some(n) = other_len {
+                        put_int(*dst, n as i64, env, base, regs);
+                        pc = *done as usize;
+                    } else if matches!(env[at].1, Value::List(_)) {
                         if *push {
                             let v = take!(*val);
                             let Value::List(items) = &mut env[at].1 else { unreachable!("a list") };
@@ -3550,7 +4108,7 @@ match {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i)) {
                         (Value::List(items), Value::Int(x)) => match int_arith(*op, *x, *k) {
-                            Some(j) => Some(elem(items, j, *pos)?.clone()),
+                            Some(j) => Some(got(elem(items, j, *pos)?)),
                             None => None,
                         },
                         _ => None,
@@ -3560,12 +4118,12 @@ match {
                         None => {
                             let x = take!(*i);
                             let j = self.binop(*op, x, Value::Int(*k), *opos)?;
-                            index_value(get!(*recv), &j, *pos)?
+                            Got::Other(index_value(get!(*recv), &j, *pos)?)
                         }
                     };
                     done(*recv, regs);
                     done(*i, regs);
-                    put(*dst, v, env, base, regs);
+                    put_got(*dst, v, env, base, regs);
                 }
                 Ins::NumFast { recv, dst, what, done: done_at } => {
                     let v = match (what, get!(*recv)) {
@@ -3588,7 +4146,7 @@ match {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i), get!(*k)) {
                         (Value::List(rows), Value::Int(i), Value::Int(k)) => match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
-                            Some(Value::List(row)) => Some(elem(row, *k, *pos2)?.clone()),
+                            Some(Value::List(row)) => Some(got(elem(row, *k, *pos2)?)),
                             _ => None,
                         },
                         _ => None,
@@ -3597,13 +4155,13 @@ match {
                         Some(v) => v,
                         None => {
                             let mid = index_value(get!(*recv), get!(*i), *pos1)?;
-                            index_value(&mid, get!(*k), *pos2)?
+                            Got::Other(index_value(&mid, get!(*k), *pos2)?)
                         }
                     };
                     done(*recv, regs);
                     done(*i, regs);
                     done(*k, regs);
-                    put(*dst, v, env, base, regs);
+                    put_got(*dst, v, env, base, regs);
                 }
                 Ins::Field { dst, recv, name, cache, pos } => {
                     pc += 1;
@@ -3619,10 +4177,15 @@ match {
                             };
                             fields[i].clone()
                         }
+                        // type.tuple.3: `t.0`.
+                        Value::Tuple(xs) => xs[element_index(name)].clone(),
                         _ => {
                             let v = take!(*recv);
-                            let Value::Struct(s, fields) = deref(v, *pos)? else { unreachable!("checked: struct") };
-                            fields[self.field_index(s, name)].clone()
+                            match deref(v, *pos)? {
+                                Value::Struct(s, fields) => fields[self.field_index(s, name)].clone(),
+                                Value::Tuple(xs) => xs[element_index(name)].clone(),
+                                other => unreachable!("checked: struct, found {other:?}"),
+                            }
                         }
                     };
                     done(*recv, regs);
@@ -3871,6 +4434,8 @@ match {
                         regs[r] = Value::List(Rc::new(t.key_list()));
                     } else if let Value::Bytes(b) = &regs[r] {
                         regs[r] = Value::List(Rc::new(b.iter().map(|x| bytes::byte(*x)).collect()));
+                    } else if let Value::Map(t) = &regs[r] {
+                        regs[r] = Value::List(Rc::new(entry_pairs(t)));
                     }
                     regs[(*idx & !KIND) as usize] = Value::Int(0);
                 }
@@ -3907,6 +4472,11 @@ match {
                 }
                 Ins::Ret { src, pos, exit } => {
                     let v = take!(*src);
+                    // A plain body has no contract or error wrapping to place the return, and with no tasks
+                    // `leave` only truncates blocks that `run_code` truncates anyway: return the value.
+                    if code.plain && self.conc.is_none() {
+                        return Ok(v);
+                    }
                     self.returned = Some((v, *pos));
                     self.leave(code, *exit, Exit::Return, env, base)?;
                 }

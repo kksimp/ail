@@ -46,6 +46,8 @@ pub fn registers() codegen.Target
             FB + 7,
         ],
         float_callee: [FB + 8, FB + 9, FB + 10, FB + 11, FB + 12, FB + 13, FB + 14, FB + 15],
+        int_args: [0, 1, 2, 3, 4, 5, 6, 7],
+        float_args: [FB, FB + 1, FB + 2, FB + 3, FB + 4, FB + 5, FB + 6, FB + 7],
     )
 
 ## Operating systems: the `target()` primitive's values (native-abi.md §4).
@@ -533,6 +535,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
     match i.op
         "add" | "sub" => add_sub(i)
         "mul" =>
+            if i.site < 0 and mul_by_power(i)
+                return
             ra := gpr(i.args[0], S0)
             rb := gpr(i.args[1], S1)
             d := out_checked(i.dst, i)
@@ -744,6 +748,24 @@ fn Gen.magic_divide(mut self, i mir.Inst, k int)
     put_gpr(i.dst, d)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
+## An unchecked `n * 2^k` (either order) as one shift; false for anything else.
+fn Gen.mul_by_power(mut self, i mir.Inst) bool
+    mut k := imm(i.args[1])
+    mut other := i.args[0]
+    if k == none
+        k = imm(i.args[0])
+        other = i.args[1]
+    n := k else return false
+    if n < 2 or n.bit_and(n - 1) != 0
+        return false
+    mut s := 0
+    while 1.shl(s) < n
+        s += 1
+    d := out_gpr(i.dst, S1)
+    a.shift_ri("lsl", d, gpr(other, S0), s)
+    put_gpr(i.dst, d)
+    true
+
 fn Gen.shift(mut self, i mir.Inst)
     left := i.op == "shl"
     if k := imm(i.args[1])
@@ -864,23 +886,73 @@ fn Gen.call_out(mut self, i mir.Inst)
         else
             put_gpr(i.dst, 0)
 
+## Where a load or store primitive reads or writes: a base register and
+## either an offset or an index register (scaled by 8 for words, as the
+## instruction does). The `imm` holds the offset, or offset * 16 +
+## log2(scale) when the primitive has an index (see `fold_prim_addresses`).
+struct Place
+    base int
+    index int
+    off int
+
+fn Gen.address(mut self, i mir.Inst) Place
+    store := i.name.starts_with("store")
+    mut b := gpr(i.args[0], S0)
+    if i.args.len() == (if store then 3 else 2)
+        off := i.imm / 16
+        if off != 0
+            a.alu_ri("add", S0, b, off)
+            b = S0
+        return Place(base: b, index: gpr(i.args[1], S2), off: 0)
+    Place(base: b, index: -1, off: i.imm)
+
 fn Gen.prim(mut self, i mir.Inst)
     match i.name
         "load64" =>
+            pl := address(i)
             d := out_gpr(i.dst, S1)
-            a.ldr(d, gpr(i.args[0], S0), 0)
+            if pl.index >= 0
+                a.ldr_idx(d, pl.base, pl.index)
+            else
+                a.ldr(d, pl.base, pl.off)
             put_gpr(i.dst, d)
         "load8" =>
+            pl := address(i)
             d := out_gpr(i.dst, S1)
-            a.ldrb(d, gpr(i.args[0], S0))
+            if pl.index >= 0
+                a.ldrb_idx(d, pl.base, pl.index)
+            else
+                a.ldrb_off(d, pl.base, pl.off)
             put_gpr(i.dst, d)
         "loadf" =>
+            pl := address(i)
             d := out_fpr(i.dst, X0)
-            a.ldr_d(d, gpr(i.args[0], S0), 0)
+            if pl.index >= 0
+                a.ldr_d_idx(d, pl.base, pl.index)
+            else
+                a.ldr_d(d, pl.base, pl.off)
             put_fpr(i.dst, d)
-        "store64" => a.str(gpr(i.args[1], S1), gpr(i.args[0], S0), 0)
-        "store8" => a.strb(gpr(i.args[1], S1), gpr(i.args[0], S0))
-        "storef" => a.str_d(fpr(i.args[1], X0), gpr(i.args[0], S0), 0)
+        "store64" =>
+            pl := address(i)
+            v := gpr(i.args[i.args.len() - 1], S1)
+            if pl.index >= 0
+                a.str_idx(v, pl.base, pl.index)
+            else
+                a.str(v, pl.base, pl.off)
+        "store8" =>
+            pl := address(i)
+            v := gpr(i.args[i.args.len() - 1], S1)
+            if pl.index >= 0
+                a.strb_idx(v, pl.base, pl.index)
+            else
+                a.strb_off(v, pl.base, pl.off)
+        "storef" =>
+            pl := address(i)
+            v := fpr(i.args[i.args.len() - 1], X0)
+            if pl.index >= 0
+                a.str_d_idx(v, pl.base, pl.index)
+            else
+                a.str_d(v, pl.base, pl.off)
         "syscall" =>
             # Linux: the number in x8, `svc #0`, `-errno` on failure. macOS:
             # the number in x16, `svc #0x80`, carry set and `errno` on

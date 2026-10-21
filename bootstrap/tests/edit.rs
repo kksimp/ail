@@ -142,3 +142,21 @@ fn compact_rename_and_errors() {
     assert_eq!(out.status.code(), Some(2));
     assert!(text(&out.stderr).contains("line 1: expected an id"), "{}", text(&out.stderr));
 }
+
+/// edit.out.3: a preview or a refused edit of one file never writes it, even for a moment, so a
+/// program checking the same file at that time can't read the edited text.
+#[test]
+fn single_file_checks_run_from_memory() {
+    let d = dir("memory");
+    let f = d.join("p.ail");
+    fs::write(&f, SRC).unwrap();
+    let before = fs::metadata(&f).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let bad = r#"[{"op":"replace_body","id":"fn:old","body":"nope"}]"#;
+    let out = edit(&f, &["--dry-run"], bad);
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stdout));
+    let out = edit(&f, &["--if-clean"], bad);
+    assert_eq!(out.status.code(), Some(2), "{}", text(&out.stdout));
+    assert_eq!(fs::metadata(&f).unwrap().modified().unwrap(), before, "the file was rewritten");
+    assert_eq!(fs::read_to_string(&f).unwrap(), SRC);
+}

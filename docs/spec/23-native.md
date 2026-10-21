@@ -62,25 +62,32 @@ guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
 `len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
 `o else d` and `o?` in a function returning an optional, functions that can
-fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
-without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
+fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s
+with fields and messages (`return E(...)`, `f()?`, `f() else ...`, `else err`,
+typed when the function names one error type, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
-`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys (`Map[K, V]()`,
+`Map[K, V]` and `Set[T]` over `int`, `bool`, `char` and `str` keys (`Map[K, V]()`,
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values that
+include structs and enums (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values of
+any type in the subset, enums included (`Map[K, V]()`,
+`Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k)` (a `V?`, type.map.6) and `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
-`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table; a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
-`float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
+`float`, `bool` or `str` (not `by:` keys), `swap`, `take` (type.coll.15), `sum`, `min`, `max`, `first`, `last`
 and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
-sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
+sets and lists of `int` or `str`, `top` on a `Map[K, int]` (`int` or `str` keys), and set and map comprehensions
+whose type is expected (a function result, argument or field), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
-alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
+alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
@@ -90,9 +97,12 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet, and on macOS the program traps at `proc.run`). Any other construct is reported at its position under this rule, all of them
+readable yet, and on macOS the program traps at `proc.run`); and the standard
+modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
+`std.net.jar`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
 
 ```ail
 fn steps(n int) int
@@ -208,7 +218,9 @@ fn main()
 ```
 
 **native.bce.3** — A list's capacity is not observable: a native executable
-may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*
+may allocate room for a list ahead of the pushes that fill it, at most 8 MiB
+of elements (2^20 elements of 8 bytes, 2^23 for a `List[bool]`) per list.
+*(ADR 0579, ADR 0816)*
 
 ```ail rules=native.bce.3
 fn main()
