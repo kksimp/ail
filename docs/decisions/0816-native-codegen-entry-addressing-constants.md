@@ -63,3 +63,21 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   loop edge or at a call; the arrival move happens once per call.
 - **Fixing the pool order** (putting `rdi` before `rsi`). It would work for
   two parameters and swap again for three.
+- **Hoisting loop-invariant wide constants into the preheader (tried,
+  dropped).** A MIR pass moved every `const` that needs a 64-bit immediate
+  out of call-free loops and kept it in a register (`name = "held"`, not
+  rebuilt by the code generators). On x86-64 it removed nothing in the
+  perfbench programs: the `movabs` instructions inside loops are the
+  division-by-constant multipliers (`0xcccccccccccccccd`), which
+  `magic_divide` emits itself, and `imul r/m` needs the multiplier in `rax`,
+  so holding it in another register only changes `movabs rax, K` into
+  `mov rax, r`. The remaining case is the hash multiplier in `rt.map_hash`
+  and `rt.map_hash_str`; there the held constant took one of the few
+  caller-saved registers, the leaf function then saved and restored two
+  callee-saved registers, and wordfreq got worse (214.4M to 217.4M
+  instructions) because the loops run about once per word. Without trip
+  counts the pass cannot tell these cases apart. The case that would pay is
+  ARM64, where a division multiplier costs `movz` plus three `movk` and
+  `smulh` takes it in a register; that needs the multiplier as an extra
+  argument of `div`/`rem` and a Mac measurement, so it is left until
+  there is a way to measure ARM64 instruction counts.
