@@ -6,6 +6,22 @@ Non-normative survey of why programs do not build with `ail build` (x86-64) on t
 
 `ail build` reports the first problem it meets in each function, so a program can hide further blockers behind the first one. The counts below are therefore the problems visible at bd982d2, and the "Alone" and "Newly buildable" columns are upper bounds. Check: with native `std.path` added (PR #361), none of the nine "path only" programs builds yet; their next errors are `hash`, `date`, `proc` (two programs) and `List[str].sorted()` (five programs), and the native build count stays 25 of 101. Rerun the survey after each landing.
 
+## Measured: #197, #359 and #361 together
+
+On bd982d2 merged locally with #197 (7546f5a8), #359 and #361 (native `std.path`), 27 of the 101 programs build natively and every one prints the same stdout and exit status as `ail run` (25 built before). The first error of the 74 that still fail:
+
+| First error | Programs |
+|---|---|
+| `std.proc` | 24 |
+| composite parameter and result types (lane 179) | 13 |
+| list and string methods still missing | 4 |
+| `std.tensor` | 4 |
+| `std.regex` | 3 |
+| `std.hash`, `std.net`, `std.date`, `extern c`, traits and `impl`, error types | 2 each |
+| `std.args`, `csv`, `log`, `compress`, `bytes`, `fs.glob`, `bytes` literals, `char` maps, map comprehensions, untyped `{}`, `parse_json`, `from_json`, others | 1 each |
+
+So `std.proc` is now the first error of a third of the failing programs, and the real gain from the three PRs was 2 programs, not the 13 the upper bounds suggested.
+
 ## Features, most programs first
 
 "Alone" counts programs this feature is the only blocker of, "first" counts programs whose first error it is.
