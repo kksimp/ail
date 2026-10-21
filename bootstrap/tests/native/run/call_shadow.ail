@@ -1,0 +1,12 @@
+struct Lx
+    n int
+
+fn Lx.pos(self) int
+    n * 2
+
+fn Lx.show(self, pos int) int
+    pos + pos() + 1
+
+fn main()
+    l := Lx(n: 5)
+    print(l.show(100))
