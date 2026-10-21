@@ -1,6 +1,6 @@
 //! Diagnostics that the case harness cannot check (it rejects exit status 2 and
 //! gives a program a readable stdin and a working directory): `eff.cap.3`,
-//! `std.env.3`, `std.io.1` and `std.io.2`, each by running the binary as a
+//! `std.env.3`, `std.io.1`, `std.io.2` and `ffi.native.1`, each by running the binary as a
 //! process. Every test uses its own temporary directory and passes `AIL_BINARY`
 //! (ADR 0814), so the tests can run in parallel.
 
@@ -87,4 +87,18 @@ fn read_line_fails() {
 #[test]
 fn read_all_fails() {
     stdin_fails("read_all", "print(io.read_all().len())", "std.io.2");
+}
+
+/// ffi.native.1: `ail build` can't link a C library, so an `extern c fn` is
+/// reported by the native backend (`ail run` runs it).
+#[test]
+fn build_extern_c_fn() {
+    let dir = scratch("build_extern");
+    let main = program(&dir, "extern c fn abs(n int) int\n\nfn main()\n    unsafe\n        print(abs(-3))\n");
+    let exe = dir.join("main.out");
+    let out = ail().arg("build").arg(&main).arg("-o").arg(&exe).arg("--no-cache").output().unwrap();
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    assert!(stderr(&out).contains("error[ffi.native.1]"), "{}", stderr(&out));
+    assert!(!exe.exists(), "a rejected build writes no executable");
+    let _ = fs::remove_dir_all(&dir);
 }
