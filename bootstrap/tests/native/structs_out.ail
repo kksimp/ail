@@ -2,9 +2,8 @@
 struct Box[T]
     item T
 
-struct Checked
+unique struct Checked
     n int
-    invariant n >= 0
 
 struct Point
     x int

@@ -669,6 +669,19 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
     flush_to(2)
     sys_exit(1)
 
+## A contract trap is written in pieces (ADR 0612): `trap_begin` flushes
+## the output and writes the head, the message follows with the `out_*`
+## functions, and `trap_end` writes the excerpt and exits.
+fn trap_begin(head str)
+    flush()
+    out_str(head)
+
+fn trap_end(tail str)
+    out_byte(10)
+    out_str(tail)
+    flush_to(2)
+    sys_exit(1)
+
 ## A failure of the runtime itself: out of memory (run.limit.2).
 fn fail(kind int, a int, b int)
     flush()

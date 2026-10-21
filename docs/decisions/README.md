@@ -507,6 +507,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
+| [0612](0612-native-contracts.md) | Contracts in native code: `requires` at the call, `ensures` at each return, unchecked `.nc` copies for conditions *(delegated)* | Accepted | 2026-10-20 |
+| [0613](0613-native-unsafe-and-attributes.md) | `unsafe` blocks, `@test` and `@deprecated` in native code *(delegated)* | Accepted | 2026-10-20 |
+| [0614](0614-native-std-in-the-runtime.md) | `std.path`, `std.hash` and `std.random` as native runtime functions *(delegated)* | Accepted | 2026-10-20 |
 | [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
 | [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
 | [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |

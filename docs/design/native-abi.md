@@ -279,6 +279,8 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
+flag), 40-47 `fmt.ail` (the byte builder), 48-61 free, 62-63 `random.ail`
+(the generator's state and whether it is seeded).
 flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).

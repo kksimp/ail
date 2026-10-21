@@ -223,6 +223,16 @@ pub struct Site
     ## The source file, an index into `Module.files` (ADR 0393).
     pub file int
 
+## The source excerpt under a trap: the line with its number, and a caret
+## under column `col` (native-abi.md §7).
+pub fn excerpt(line str, n int, col int) str
+    gutter := "{n}"
+    mut pad := List[str]()
+    chars := line.chars()
+    for c in 0..col - 1
+        pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
+    "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n"
+
 pub struct Module
     pub path str
     pub funcs List[Func]

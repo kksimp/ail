@@ -115,6 +115,26 @@ struct Lower
     const_home Map[str, int]
     ## The file of each problem, filled in by `stamp_problems`.
     problem_files List[int]
+    ## The functions with contracts, by key, and the file of every function.
+    contracted Map[str, ast.FnDecl]
+    ## The structs with `invariant` lines, and the file of each.
+    invariants Map[str, List[ast.Contract]]
+    inv_file Map[str, int]
+    ## The struct whose invariants the current `mut self` method must keep.
+    inv_key str
+    fn_decl Map[str, ast.FnDecl]
+    fn_file Map[str, int]
+    ## Lowering code that checks no contracts: a condition, or the `.nc`
+    ## copy of a function a condition calls (contract.run.2, ADR 0612).
+    unchecked bool
+    unchecked_list List[str]
+    unchecked_seen Set[str]
+    ## The `ensures` of the function being lowered, its label, and the keys
+    ## of its receiver, parameters and `old(e)` values.
+    ens List[ast.Contract]
+    ens_label str
+    ens_vars List[NameKey]
+    ens_nargs int
     ## The enums' variants (ADR 0602), the `eq.E` functions asked for, and
     ## the variants without fields that have a shared object.
     enums Map[str, List[Case]]
@@ -216,6 +236,19 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         file_prefix: [],
         const_home: {},
         problem_files: [],
+        contracted: {},
+        invariants: {},
+        inv_file: {},
+        inv_key: "",
+        fn_decl: {},
+        fn_file: {},
+        unchecked: false,
+        unchecked_list: [],
+        unchecked_seen: Set[str](),
+        ens: [],
+        ens_label: "",
+        ens_vars: [],
+        ens_nargs: 0,
         enums: {},
         eq_tys: {},
         singletons: [],
@@ -250,8 +283,11 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         l.enter_file(k)
         l.path = srcs[k].path
         for f in srcs[k].prog.fns
-            l.lower_fn(f)
+            if not is_test(f)
+                l.lower_fn(f)
         l.stamp_problems()
+    l.enter_file(0)
+    l.gen_unchecked()
     l.enter_file(0)
     l.gen_copies()
     l.gen_enum_eqs()
@@ -347,6 +383,8 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
     for f in prog.fns
+        if is_test(f)
+            continue
         before := problems.len()
         declare_fn(f, pre)
         if problems.len() > before
@@ -381,11 +419,9 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             "`{f.name}`: methods of traits and `impl` blocks aren't in the native subset yet",
         )
         return
-    if f.contracts.len() > 0
-        problem(f.pos, "`{f.name}`: contracts aren't in the native subset yet")
     for a in f.attrs
         # `@allow` and `@deprecated` only steer diagnostics (gram.attr.5).
-        if a.name != "inline" and a.name != "pure" and a.name != "allow" and a.name != "deprecated"
+        if a.name != "inline" and a.name != "pure" and a.name != "allow" and a.name != "deprecated" and a.name != "test":
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
     mut floats := 0
     for p in f.params
@@ -416,6 +452,19 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if can_fail
         if r := f.ret
             fn_errs[fn_key(f, pre)] = error_ty_of(r)
+    if pre != "rt."
+        fn_decl[fn_key(f, pre)] = f
+        fn_file[fn_key(f, pre)] = file
+        if f.contracts.len() > 0
+            contracted[fn_key(f, pre)] = f
+
+## Whether `f` is a `@test` function (test.attr.2): `ail build` leaves it out,
+## so it may use what the native subset lacks (ADR 0613).
+fn is_test(f ast.FnDecl) bool
+    for a in f.attrs
+        if a.name == "test"
+            return true
+    false
 
 ## A function's name in MIR: `T.m` for a method of `T`.
 fn fn_key(f ast.FnDecl, pre str) str
@@ -654,9 +703,13 @@ fn Lower.str_lit(mut self, s str) int
 # ---- functions ----
 
 fn Lower.lower_fn(mut self, f ast.FnDecl)
-    key := fn_key(f, prefix)
+    lower_fn_as(f, fn_key(f, prefix), fn_key(f, prefix))
+
+## `f` under the MIR name `name`, with the signature of `key`: the function
+## itself, or its `.nc` copy, which checks no contracts (contract.run.2).
+fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str)
     sig := sigs.get(key) else return
-    params := begin_fn(key, sig.ret, sig.params)
+    params := begin_fn(name, sig.ret, sig.params)
     fails = sig.fails
     self_ty = ""
     mut k := 0
@@ -671,6 +724,8 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
         declare(p.name, sig.params[k + i], params[k + i])
         borrowed.add(lookup(p.name) else "")
     body := f.body else return
+    if not unchecked
+        enter_contracts(f, key)
     want := not ret.is_unit()
     if want
         tail_want = ret
@@ -683,12 +738,15 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
             if r := result
                 v := Val(id: convert(r, ret, f.pos), ty: r.ty)
                 e := final_expr(body[body.len() - 1]) else ast.Expr.NoneLit(f.pos)
-                finish(return_of(copy_if_borrowed(e, v)))
+                rv := copy_if_borrowed(e, v)
+                check_ensures(rv, tail_pos(f, body))
+                finish(return_of(rv))
             elif not failing()
                 problem(f.pos, "`{f.name}` must end with its result")
         else
+            check_ensures(-1, tail_pos(f, body))
             finish(return_of(-1))
-    end_fn(key, f.pos)
+    end_fn(name, f.pos)
 
 ## Start a function: fresh state, and an entry block whose parameters are
 ## the function's.
@@ -710,6 +768,8 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
     var_vals = {}
     nvars = 0
     loops = []
+    ens = []
+    inv_key = ""
     borrowed = Set[str]()
     cur = new_block()
     sealed[cur] = true
@@ -780,11 +840,20 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     continue
                 result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
                 continue
+            # An `unsafe` block gives its last expression's value.
+            if inner := unsafe_body(s)
+                result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
+                continue
         lower_stmt(s)
     scopes.pop()
     if result.id == -2
         return none
     result
+
+fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
+    match s
+        Unsafe(body, _) => body
+        _ => none
 
 fn final_expr(s ast.Stmt) ast.Expr?
     match s
@@ -896,15 +965,18 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 return
             if e := value
                 v := lower_value(e, ret) else return
-                finish(return_of(copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))))
+                rv := copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))
+                check_ensures(rv, pos)
+                finish(return_of(rv))
             else
+                check_ensures(-1, pos)
                 finish(return_of(-1))
         Eval(e) =>
             lower_expr(e, Ty.Unit)
         Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
-        Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
+        Unsafe(body, _) => lower_block(body, false)
         LetTuple(_, _, pos) => problem(pos, "tuples aren't in the native subset yet")
 
 ## A list read from a variable or an element is copied when it is bound
@@ -1232,7 +1304,7 @@ fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
         if k >= 0
             t := structs[self_ty][k].ty
             return Val(id: load(self_value(), k, t), ty: t)
-        if v := fn_value(name)
+        if v := fn_value(name, pos)
             return v
         if globals.contains("{prefix}{name}")
             return global_const("{prefix}{name}")
@@ -1411,7 +1483,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     "{self_ty}.{name}",
                     Val(id: self_value(), ty: owner_ty(self_ty)),
                     args,
-                    pos,
+                    npos,
                 )
             if self_ty != "" and bad.contains("{self_ty}.{name}")
                 fn_failed = true
@@ -1430,7 +1502,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     return unsupported(pos, "labelled arguments")
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
-            Val(id: call(key, vs, sig.ret), ty: sig.ret)
+            check_requires(key, vs, npos)
+            Val(id: call(contract_key(key), vs, sig.ret), ty: sig.ret)
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
@@ -1542,6 +1615,9 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     om := os_module(recv)
     if om != ""
         return lower_os_method(om, name, npos, args)
+    sm := std_module(recv)
+    if sm != ""
+        return lower_std_call(sm, name, npos, args)
     if name == "from_code" and is_module(recv, "char")
         return lower_char_from_code(args, npos)
     if name == "from" and is_module(recv, "tensor")

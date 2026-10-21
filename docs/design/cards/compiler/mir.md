@@ -134,6 +134,7 @@ pub struct mir.Site
     pub col int
     pub func str
     pub file int
+pub fn mir.excerpt(line str, n int, col int) str
 pub struct mir.Module
     pub path str
     pub funcs List[mir.Func]
@@ -162,3 +163,4 @@ pub fn mir.dominators(f mir.Func) List[List[bool]]
 
 trimmed to fit 2000 tokens (~1551); dropped: private items, doc comments
 trimmed to fit 2000 tokens (~1515); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1529); dropped: private items, doc comments
