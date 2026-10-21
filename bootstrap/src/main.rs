@@ -25,6 +25,7 @@ mod named_args;
 mod interp;
 mod lexer;
 mod modules;
+mod native_test;
 mod codec;
 mod net;
 mod num;
@@ -55,6 +56,9 @@ commands:
                 --cases N (default 100) and --seed S set a property's inputs;
                 --update [--dry-run]: rewrite failing `assert_eq(x, LITERAL)`
                 literals, `# =>` lines and FILE's `.out`, showing the diff (snap.update.1)
+  test --native [PATH...]
+                build each `@test` function natively, run it, and compare with
+                the interpreter; PATH is a file or directory (native.test.1)
   effects FILE  print each function's inferred effects (eff.infer.6);
                 --parallel: each `for` loop's parallel verdict instead (conc.par.6)
   explain RULE  print a spec rule, its ADRs and an example
@@ -176,6 +180,11 @@ fn main() -> ExitCode {
         .map(String::as_str)
         .filter(|a| *a != "--json" && *a != "--no-contracts" && *a != "--no-bytecode")
         .collect();
+    // native.test.1: `ail test --native [PATH...]` compares native builds with the interpreter.
+    if rest.first() == Some(&"test") && rest.contains(&"--native") {
+        let paths: Vec<&str> = rest[1..].iter().copied().filter(|a| *a != "--native").collect();
+        return native_test::command(&paths, json);
+    }
     // `ail test` owns `--cases` and `--seed` (test.prop.3); `ail run` owns
     // `--seed` and `--deterministic` (std.random.3, eff.det.1).
     let mut flags: Vec<&str> = Vec::new();
