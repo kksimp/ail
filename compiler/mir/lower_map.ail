@@ -183,7 +183,7 @@ fn Lower.entry_or(mut self, e int, t Ty, zero int) int
 ## `Map[K, V]()` and `Set[T]()` (type.coll.8).
 fn Lower.coll_ctor(mut self, name str, targs List[ast.TypeRef], pos ast.Pos) Val?
     t := self.coll_type_of(name, targs) else
-        return unsupported(pos, "this `{name}` type")
+        return unsupported(pos, "`{name}` with these type arguments")
     Val(id: new_table(t), ty: t)
 
 fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want Ty?) Val?
@@ -350,7 +350,7 @@ fn Lower.is_get_call(self, e ast.Expr) bool
 fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable
-            return unsupported(npos, "this method call")
+            return unsupported(npos, "`.{name}()` with a labelled or `mut` argument")
     if is_pending_table(r.ty)
         if name == "add" and args.len() == 1
             return settle_set_add(r, args, npos)
