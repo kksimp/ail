@@ -1,0 +1,157 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## X25519 (RFC 7748) for the native TLS client (ADR 0836): the Montgomery
+## ladder over GF(2^255 - 19), with field elements as sixteen 16-bit limbs
+## held in 64-bit words (the layout of TweetNaCl, written from RFC 7748 and
+## the public-domain reference). The ladder runs a fixed 255 steps and swaps
+## by masks, so no branch or index depends on the secret scalar. Elements are
+## 16 words (128 bytes) of scratch; every function takes their addresses.
+
+## o = o carried: each limb back to 16 bits, the top carry folded in as 38.
+fn fe_car(o int)
+    for i in 0..16
+        v := tls_get(o, i) + 65536
+        c := v.shr(16)
+        tls_set(o, i, v - c.shl(16))
+        if i < 15
+            tls_set(o, i + 1, tls_get(o, i + 1) + c - 1)
+        else
+            tls_set(o, 0, tls_get(o, 0) + 38 * (c - 1))
+
+## Swap `p` and `q` when `b` is 1, by masks.
+fn fe_sel(p int, q int, b int)
+    c := 0 - b
+    for i in 0..16
+        t := c.bit_and(tls_get(p, i).bit_xor(tls_get(q, i)))
+        tls_set(p, i, tls_get(p, i).bit_xor(t))
+        tls_set(q, i, tls_get(q, i).bit_xor(t))
+
+fn fe_copy(o int, a int)
+    for i in 0..16
+        tls_set(o, i, tls_get(a, i))
+
+fn fe_add(o int, a int, b int)
+    for i in 0..16
+        tls_set(o, i, tls_get(a, i) + tls_get(b, i))
+
+fn fe_sub(o int, a int, b int)
+    for i in 0..16
+        tls_set(o, i, tls_get(a, i) - tls_get(b, i))
+
+## o = a * b. `t` is 32 words of scratch.
+fn fe_mul(o int, a int, b int, t int)
+    for i in 0..32
+        tls_set(t, i, 0)
+    for i in 0..16
+        ai := tls_get(a, i)
+        for j in 0..16
+            tls_set(t, i + j, tls_get(t, i + j) + ai * tls_get(b, j))
+    for i in 0..15
+        tls_set(t, i, tls_get(t, i) + 38 * tls_get(t, i + 16))
+    for i in 0..16
+        tls_set(o, i, tls_get(t, i))
+    fe_car(o)
+    fe_car(o)
+
+## The fully reduced 32 bytes of `a` at `out`. `t` and `m` are 16 words each.
+fn fe_pack(out int, a int, t int, m int)
+    fe_copy(t, a)
+    fe_car(t)
+    fe_car(t)
+    fe_car(t)
+    for _ in 0..2
+        tls_set(m, 0, tls_get(t, 0) - 65517)
+        for i in 1..15
+            tls_set(m, i, tls_get(t, i) - 65535 - tls_get(m, i - 1).shr(16).bit_and(1))
+            tls_set(m, i - 1, tls_get(m, i - 1).bit_and(65535))
+        tls_set(m, 15, tls_get(t, 15) - 32767 - tls_get(m, 14).shr(16).bit_and(1))
+        b := tls_get(m, 15).shr(16).bit_and(1)
+        tls_set(m, 14, tls_get(m, 14).bit_and(65535))
+        fe_sel(t, m, 1 - b)
+    for i in 0..16
+        store8(out + 2 * i, tls_get(t, i).bit_and(255))
+        store8(out + 2 * i + 1, tls_get(t, i).shr(8).bit_and(255))
+
+## The element of the 32 bytes at `n` (the top bit ignored) at `o`.
+fn fe_unpack(o int, n int)
+    for i in 0..16
+        tls_set(o, i, load8(n + 2 * i) + load8(n + 2 * i + 1).shl(8))
+    tls_set(o, 15, tls_get(o, 15).bit_and(32767))
+
+## o = 1 / i by Fermat's little theorem (a public exponent).
+fn fe_inv(o int, i int, t int)
+    c := alloc_raw(128, KIND_BYTES)
+    fe_copy(c, i)
+    for k in 0..254
+        a := 253 - k
+        fe_mul(c, c, c, t)
+        if a != 2 and a != 4
+            fe_mul(c, c, i, t)
+    fe_copy(o, c)
+
+## The 32-byte result of the scalar `n` times the point `p` at `q`.
+fn x25519_raw(q int, n int, p int)
+    z := alloc_raw(32, KIND_BYTES)
+    for i in 0..32
+        store8(z + i, load8(n + i))
+    store8(z + 31, load8(z + 31).bit_and(127).bit_or(64))
+    store8(z, load8(z).bit_and(248))
+    t := alloc_raw(256, KIND_BYTES)
+    ptm := alloc_raw(128, KIND_BYTES)
+    ptm2 := alloc_raw(128, KIND_BYTES)
+    x := alloc_raw(128, KIND_BYTES)
+    a := alloc_raw(128, KIND_BYTES)
+    b := alloc_raw(128, KIND_BYTES)
+    c := alloc_raw(128, KIND_BYTES)
+    d := alloc_raw(128, KIND_BYTES)
+    e := alloc_raw(128, KIND_BYTES)
+    f := alloc_raw(128, KIND_BYTES)
+    k := alloc_raw(128, KIND_BYTES)
+    fe_unpack(x, p)
+    fe_copy(b, x)
+    for i in 0..16
+        tls_set(a, i, 0)
+        tls_set(c, i, 0)
+        tls_set(d, i, 0)
+        tls_set(k, i, 0)
+    tls_set(a, 0, 1)
+    tls_set(d, 0, 1)
+    tls_set(k, 0, 56129)
+    tls_set(k, 1, 1)
+    for step in 0..255
+        i := 254 - step
+        r := load8(z + i.shr(3)).shr(i.bit_and(7)).bit_and(1)
+        fe_sel(a, b, r)
+        fe_sel(c, d, r)
+        fe_add(e, a, c)
+        fe_sub(a, a, c)
+        fe_add(c, b, d)
+        fe_sub(b, b, d)
+        fe_mul(d, e, e, t)
+        fe_mul(f, a, a, t)
+        fe_mul(a, c, a, t)
+        fe_mul(c, b, e, t)
+        fe_add(e, a, c)
+        fe_sub(a, a, c)
+        fe_mul(b, a, a, t)
+        fe_sub(c, d, f)
+        fe_mul(a, c, k, t)
+        fe_add(a, a, d)
+        fe_mul(c, c, a, t)
+        fe_mul(a, d, f, t)
+        fe_mul(d, b, x, t)
+        fe_mul(b, e, e, t)
+        fe_sel(a, b, r)
+        fe_sel(c, d, r)
+    fe_inv(c, c, t)
+    fe_mul(a, a, c, t)
+    fe_pack(q, a, ptm, ptm2)
+
+## `x25519(scalar, 9)` (the base point): the public key of `n` at `q`.
+fn x25519_base(q int, n int)
+    nine := alloc_raw(32, KIND_BYTES)
+    for i in 0..32
+        store8(nine + i, 0)
+    store8(nine, 9)
+    x25519_raw(q, n, nine)

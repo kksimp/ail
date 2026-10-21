@@ -19,7 +19,7 @@ fn trapped(f: Fault, pos: Pos) -> super::Exit {
 
 fn ints(v: &Value) -> Vec<i64> {
     match v {
-        Value::List(xs) => xs.iter().map(Value::int).collect(),
+        Value::List(xs) => xs.iter().map(|x| x.int()).collect(),
         other => unreachable!("checked: List[int], found {other:?}"),
     }
 }
@@ -29,9 +29,9 @@ fn ints(v: &Value) -> Vec<i64> {
 fn elements(v: &Value, int: bool, f32: bool) -> Data {
     let Value::List(xs) = v else { unreachable!("checked: a list, found {v:?}") };
     match xs.first() {
-        Some(Value::Int(_)) => Data::I(xs.iter().map(Value::int).collect()),
+        Some(Value::Int(_)) => Data::I(xs.iter().map(|x| x.int()).collect()),
         Some(_) if f32 => Data::F32(xs.iter().map(|x| x.float() as f32).collect()),
-        Some(_) => Data::F(xs.iter().map(Value::float).collect()),
+        Some(_) => Data::F(xs.iter().map(|x| x.float()).collect()),
         None if int => Data::I(Vec::new()),
         None if f32 => Data::F32(Vec::new()),
         None => Data::F(Vec::new()),
@@ -51,7 +51,7 @@ fn f32_of(v: &Value) -> f32 {
 }
 
 fn list_of(xs: impl Iterator<Item = Value>) -> Value {
-    Value::List(Rc::new(xs.collect()))
+    Value::list(xs.collect())
 }
 
 /// A reduction's value; an `f32` tensor's is an `f32` (exact in `f64`).
@@ -67,6 +67,9 @@ impl<'a, W: Write> Interp<'a, W> {
     /// `tensor.from(xs)`, `tensor.from(xs, shape)` and `tensor.zeros(shape)`
     /// (std.tensor.2).
     pub(super) fn tensor_call(&mut self, f: &str, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        if f == "from_fn" {
+            return self.tensor_from_fn(args, pos, env);
+        }
         let mut values = Vec::with_capacity(args.len());
         for a in args {
             values.push(self.eval(&a.value, env)?);
@@ -101,6 +104,34 @@ impl<'a, W: Write> Interp<'a, W> {
             }
         };
         Ok(Value::Tensor(Rc::new(t)))
+    }
+
+    /// `tensor.from_fn(shape, |i| e)` (std.tensor.25): the shape first, then
+    /// the function at each flat index in order.
+    fn tensor_from_fn(&mut self, args: &'a [Arg], pos: Pos, env: &mut Env<'a>) -> Flow<Value> {
+        let shape = match self.eval(&args[0].value, env)? {
+            Value::Int(n) => vec![n],
+            other => ints(&other),
+        };
+        let shape = Tensor::shape_of(&shape, None).map_err(|e| trapped(e, pos))?;
+        let n: usize = shape.iter().product();
+        let (var, _) = args[1].param.as_ref().expect("checked: a function");
+        let mut out = Vec::with_capacity(n);
+        for i in 0..n {
+            env.push((var.as_str(), Value::Int(i as i64)));
+            let r = self.eval(&args[1].value, env);
+            env.pop();
+            out.push(r?);
+        }
+        let data = match out.first() {
+            Some(Value::Int(_)) => Data::I(out.iter().map(Value::int).collect()),
+            Some(Value::Num(Num::F32, _)) => Data::F32(out.iter().map(f32_of).collect()),
+            Some(_) => Data::F(out.iter().map(Value::float).collect()),
+            None if self.int_tensor_at(pos) => Data::I(Vec::new()),
+            None if self.resolved.f32_tensors.contains(&pos) => Data::F32(Vec::new()),
+            None => Data::F(Vec::new()),
+        };
+        Ok(Value::Tensor(Rc::new(Tensor { shape, data })))
     }
 
     /// Whether the checker typed the tensor built at `pos` as

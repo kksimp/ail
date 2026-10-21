@@ -1,0 +1,111 @@
+# Lists made in a loop that nothing keeps past the iteration are reused
+# (native.reuse.1); every list that is kept stays its own object, so each
+# line prints what the interpreter prints.
+
+struct Box
+    items List[int]
+
+fn fill(mut xs List[int], n int)
+    for i in 0..n
+        xs.push(i)
+
+fn total(xs List[int]) int
+    mut s := 0
+    for x in xs
+        s += x
+    s
+
+fn keep(xs List[int]) List[int]
+    xs
+
+fn grow(mut left List[int], depth int) int
+    node := left.len()
+    left.push(depth)
+    if depth > 0
+        grow(mut left, depth - 1)
+        grow(mut left, depth - 1)
+    node
+
+fn main()
+    # Reused: filled, read and dropped every iteration.
+    mut sum := 0
+    for i in 0..5
+        mut xs := []
+        for j in 0..i + 3
+            xs.push(i * j)
+        sum += xs.len() + xs[xs.len() - 1]
+    print(sum)
+    # Reused through `mut` arguments and recursion.
+    mut nodes := 0
+    for d in 0..4
+        mut left := List[int]()
+        grow(mut left, d)
+        nodes += left.len() + total(left)
+    print(nodes)
+    # Kept in a list of lists: each row stays itself.
+    mut rows := List[List[int]]()
+    for i in 0..4
+        mut row := []
+        fill(mut row, i)
+        rows.push(row)
+    print(rows)
+    # Kept in a struct.
+    mut boxes := List[Box]()
+    for i in 0..3
+        mut items := []
+        items.push(i)
+        items.push(i * 10)
+        boxes.push(Box(items: items))
+    for b in boxes
+        print(b.items)
+    # Kept by a function that returns it.
+    mut kept := List[List[int]]()
+    for i in 0..3
+        mut xs := []
+        xs.push(i + 100)
+        kept.push(keep(xs))
+    print(kept)
+    # Carried to the next iteration: the old list is still read.
+    mut prev := [0]
+    for i in 1..4
+        mut cur := []
+        cur.push(prev[0] + i)
+        cur.push(prev.len())
+        prev = cur
+    print(prev)
+    # Made in an inner loop and read after it.
+    mut last := List[int]()
+    for i in 0..3
+        for j in 0..2
+            mut tmp := []
+            tmp.push(i * 10 + j)
+            if j == 1
+                last = tmp
+    print(last)
+    # A loop that stops early and one that never runs.
+    for i in 0..10
+        mut xs := []
+        xs.push(i)
+        if i == 2
+            print(xs)
+            break
+    for i in 0..0
+        mut xs := []
+        xs.push(i)
+        print(xs)
+    # Lists of bools and floats.
+    mut flags := 0
+    mut fsum := 0.0
+    for i in 0..4
+        mut bs := []
+        mut fs := []
+        for j in 0..i + 1
+            bs.push(j % 2 == 0)
+            fs.push(j.to_float() / 2.0)
+        for b in bs
+            if b
+                flags += 1
+        for f in fs
+            fsum += f
+    print(flags)
+    print(fsum)

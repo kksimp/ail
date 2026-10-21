@@ -105,6 +105,7 @@ aren't run.
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
 | std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |
+| std | [Standard library: native windows](std-app.md) | `std` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

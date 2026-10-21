@@ -11,6 +11,7 @@ fn executable_hex(mir.Module, str, str) str [io]
 fn runtime_syntax(str, str) [io]
 fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
 fn std_file(str, str) str
+fn uses_regex(ast.Program) bool
 fn parse_source(str, str) !mir.Source [fail fs io]
 ```
 
@@ -44,6 +45,8 @@ pub fn a64.registers() codegen.Target
 pub a64.LINUX := 1
 pub a64.MACOS := 2
 pub fn a64.generate(mir.Module, int) codegen.Image
+pub fn a64.is_kernel(str) bool
+pub fn a64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
 ## ast
@@ -212,6 +215,8 @@ pub struct mir.Versioned
 pub fn mir.bce(mir.Func, bool, bool) mir.Func
 pub fn mir.lists_only_grow(mir.Module) bool
 pub fn mir.fold(mir.Func) mir.Func
+pub fn mir.rpo(mir.Func) List[int]
+pub fn mir.forward_loads(mir.Func) mir.Func
 pub fn mir.inline_module(mir.Module) mir.Module
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub struct mir.Def
@@ -245,14 +250,17 @@ pub fn mir.unreachable_term() mir.Term
 pub struct mir.Block
 pub struct mir.Func
 pub struct mir.Site
+pub fn mir.excerpt(str, int, int) str
 pub struct mir.Module
 pub fn mir.call_pos(int, int, int) int
 pub fn mir.call_file(int) int
 pub fn mir.call_line(int) int
 pub fn mir.call_col(int) int
+pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
+pub fn mir.reuse_lists(mir.Module) mir.Module
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
@@ -336,6 +344,8 @@ pub fn x64.alu_digit(str) int
 pub fn x64.sd_opcode(str) int
 pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
+pub fn x64.is_kernel(str) bool
+pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
-trimmed to fit 4000 tokens (~3764); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3917); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

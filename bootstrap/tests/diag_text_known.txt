@@ -13,7 +13,6 @@ bootstrap/tests/mistakes/bytes_unicode_escape.ail
 bootstrap/tests/mistakes/chained_cmp.ail
 bootstrap/tests/mistakes/class_keyword.ail
 bootstrap/tests/mistakes/colon_return.ail
-bootstrap/tests/mistakes/const_keyword.ail
 bootstrap/tests/mistakes/date_timedelta_python.ail
 bootstrap/tests/mistakes/def_keyword.ail
 bootstrap/tests/mistakes/else_colon.ail
@@ -23,7 +22,6 @@ bootstrap/tests/mistakes/enum_double_colon.ail
 bootstrap/tests/mistakes/field_colon.ail
 bootstrap/tests/mistakes/fn_value_arrow_type.ail
 bootstrap/tests/mistakes/fn_value_python_lambda.ail
-bootstrap/tests/mistakes/for_c_style.ail
 bootstrap/tests/mistakes/from_import.ail
 bootstrap/tests/mistakes/fstring.ail
 bootstrap/tests/mistakes/generic_angle.ail
@@ -33,7 +31,6 @@ bootstrap/tests/mistakes/import_keyword.ail
 bootstrap/tests/mistakes/in_operator.ail
 bootstrap/tests/mistakes/is_none.ail
 bootstrap/tests/mistakes/lambda_arrow.ail
-bootstrap/tests/mistakes/let_binding.ail
 bootstrap/tests/mistakes/list_typed_decl.ail
 bootstrap/tests/mistakes/match_case_keyword.ail
 bootstrap/tests/mistakes/match_colon_arm.ail
@@ -69,7 +66,6 @@ bootstrap/tests/mistakes/unclosed_paren.ail
 bootstrap/tests/mistakes/unclosed_string.ail
 bootstrap/tests/mistakes/unreachable_dedent.ail
 bootstrap/tests/mistakes/use_rust_path.ail
-bootstrap/tests/mistakes/var_binding.ail
 bootstrap/tests/mistakes/while_paren_colon.ail
 bootstrap/tests/mistakes/while_true_python.ail
 bootstrap/tests/mistakes/with_missing_mut.ail

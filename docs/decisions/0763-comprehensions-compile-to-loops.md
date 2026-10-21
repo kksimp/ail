@@ -51,6 +51,16 @@ clauses, filters, ranges, sets, maps, structs, bytes, shadowing and
 self-reference, and agrees with `--no-bytecode`. The bytecode fuzz generator
 (ADR 0756) now writes comprehensions: 26,000 programs, no disagreement.
 
+## Amendment 2026-10-21: `for a, b in xs` clauses (type.tuple.5)
+
+Lane 255's fix sent these clauses to the walker, because the loops bound only
+the clause's hidden variable. They now compile too: after `IterNext` binds the
+element, `Ins::Unpack` pushes each part as the walker's `push_clause` does, so
+the names, their order and the trap snapshot's locals are the same. A range
+clause never unpacks (its items are integers). `comp_unpack_tier` stays as the
+pin test, and `bcprogs.rs` generates unpack clauses alone, after a range
+clause and in a map comprehension.
+
 ## Rejected alternatives
 
 - **Faster walker `comp`.** It would still clone each item and build a vector for

@@ -1,0 +1,34 @@
+# std.tensor.13: tanh over every range of fdlibm's expm1 (tiny, small, one
+# reduction step, several, large) and the special values, compared with the
+# platform's tanh through the interpreter.
+fn main()
+    mut xs := List[float]()
+    xs.push(0.0)
+    xs.push(-0.0)
+    xs.push(1.0e-300)
+    xs.push(-3.0e-17)
+    xs.push(5.0e-17)
+    xs.push(0.0 / 0.0)
+    xs.push(1.0 / 0.0)
+    xs.push(-1.0 / 0.0)
+    xs.push(21.9)
+    xs.push(22.0)
+    xs.push(-40.5)
+    xs.push(1.0e6)
+    mut s := 12345
+    for i in 0..3000
+        s = (s * 1103515245 + 12345).bit_and(2147483647)
+        u := s.to_float() / 2147483648.0
+        scale := [1.0e-18, 1.0e-6, 0.3, 0.9, 1.7, 5.0, 12.0, 24.0][i % 8]
+        xs.push((u - 0.5) * 2.0 * scale)
+    t := tensor.from(xs).tanh()
+    ys := t.to_list()
+    mut total := 0.0
+    mut weighted := 0.0
+    for k in 0..ys.len()
+        total += ys[k]
+        weighted += ys[k] * (k + 1).to_float() * 0.001
+        if k < 40 or k % 97 == 0
+            print(ys[k])
+    print(total)
+    print(weighted)

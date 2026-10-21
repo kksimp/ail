@@ -1,0 +1,36 @@
+# type.coll.*, own.val.1: lists whose elements are maps and sets, as
+# parameters, results and fields; copies stay independent.
+struct Table
+    rows List[Map[str, str]]
+    tags List[Set[int]]
+
+fn make(n int) List[Map[str, str]]
+    mut out := List[Map[str, str]]()
+    for i in 0..n
+        mut m := Map[str, str]()
+        m["k"] = "v{i}"
+        out.push(m)
+    out
+
+fn total(recs List[Map[str, str]]) int
+    mut t := 0
+    for r in recs
+        t += r.len()
+    t
+
+fn main()
+    recs := make(3)
+    print(total(recs))
+    print(recs[1]["k"])
+    mut copy := recs
+    copy[0]["k"] = "changed"
+    print(recs[0]["k"])
+    print(copy[0]["k"])
+    mut t := Table(rows: make(2), tags: [{1, 2}, {3}])
+    mut u := t
+    u.rows[1]["k"] = "other"
+    u.tags[0].add(9)
+    print(t.rows[1]["k"])
+    print(u.rows[1]["k"])
+    print(t.tags[0])
+    print(u.tags[0])

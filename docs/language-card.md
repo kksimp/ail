@@ -525,7 +525,7 @@ Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
-`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`; see `docs/spec/14-ffi.md`.
+`unsafe` allows C calls and `std.mem` pointers; `ail.pkg` needs `unsafe allow`, or `unsafe driver` for `std.hw`; see `docs/spec/14-ffi.md`.
 
 A window is a grid of text cells, drawn with `w.put(col, row, text, fg, bg)` and `w.present()`:
 

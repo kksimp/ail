@@ -1,0 +1,40 @@
+error struct Miss "missing {k}"
+    k int
+
+struct Box
+    items List[int]
+
+fn Box.get(self, k int) int ! Miss
+    if k < 0 or k >= items.len()
+        return Miss(k)
+    items[k]
+
+fn f(i int) int ! Miss
+    if i > 2
+        return Miss(i)
+    i * 10
+
+fn main()
+    b := Box([1, 2, 3])
+    x := b.get(5) else e
+        print(e.k)
+        -1
+    print(x)
+    y := b.get(1) else 0
+    print(y)
+    scores := {"a": 1}
+    print(scores.get("a") else 0)
+    print(scores.get("z") else 0)
+    for i in 0..5
+        if v := f(i)
+            print("ok {v}")
+        elif i == 4
+            print("last {i}")
+        else
+            print("no {i}")
+    for i in 0..4
+        if v := f(i)
+            print("v {v}")
+        else err
+            print(err)
+            print(err.k)

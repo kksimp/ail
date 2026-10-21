@@ -88,7 +88,7 @@ fn same_each_time(i Inst) bool
         _ => false
 
 ## The blocks in reverse postorder, so each comes after its dominators.
-fn rpo(f Func) List[int]
+pub fn rpo(f Func) List[int]
     n := f.blocks.len()
     mut seen := [false for _ in 0..n]
     mut post := List[int]()

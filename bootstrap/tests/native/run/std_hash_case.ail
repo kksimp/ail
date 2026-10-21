@@ -1,0 +1,24 @@
+## std.hash.1-4: digests, HMAC, CRC-32 and the fast hash, against the
+## vectors of FIPS 180-4, RFC 4231 and the CRC-32 check value.
+use std.hash
+
+fn main()
+    print(hash.sha256("abc"))
+    print(hash.sha256(""))
+    print(hash.sha384("abc"))
+    print(hash.sha512("abc"))
+    print(hash.hmac_sha256("Jefe", "what do ya want for nothing?"))
+    print(hash.crc32("123456789"))
+    print(hash.crc32(""))
+    print(hash.hash64("hello") == hash.hash64("hello"))
+    print(hash.hash64("hello") != hash.hash64("hellp"))
+
+@test fn sha256_is_64_hex_digits(s str)
+    assert_eq(hash.sha256(s).len(), 64)
+
+@test fn crc32_fits_32_bits(s str)
+    c := hash.crc32(s)
+    assert(c >= 0 and c < 4294967296)
+
+@test fn hash64_is_deterministic(s str)
+    assert_eq(hash.hash64(s), hash.hash64(s))

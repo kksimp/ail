@@ -25,7 +25,7 @@ fn list_extend(xs List[int], ys List[int], size int)
     k := load64(q)
     while n + k > load64(p + 8)
         list_grow(p, size)
-    copy_bytes(load64(p + 16) + size * n, load64(q + 16), size * k)
+    copy_list(load64(p + 16) + size * n, load64(q + 16), size * k)
     store64(p, n + k)
 
 ## `xs.remove_at(i)`, the index already checked.
@@ -226,6 +226,7 @@ fn list_take(xs List[int], n int, size int, head str, tail str) List[int]
         out_int(n)
         out_str("\n")
         out_str(tail)
+        trace_frames(tail)
         flush_to(2)
         sys_exit(1)
     len := load64(list_addr(xs))

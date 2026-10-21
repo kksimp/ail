@@ -13,6 +13,8 @@
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
+# std.app.10: a program finds the app host built under the toolchain.
+$env:AIL_ROOT = $root
 $bootstrap = Join-Path $root 'bootstrap'
 $manifest = Join-Path $bootstrap 'Cargo.toml'
 $pin = (Select-String -Path (Join-Path $bootstrap 'rust-toolchain.toml') -Pattern '^channel\s*=\s*"(.*)"').Matches[0].Groups[1].Value

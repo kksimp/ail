@@ -964,7 +964,7 @@ fn collect(dir: &std::path::Path, files: &mut Vec<(String, bool)>) {
                 collect(&p, files);
             }
         } else if p.extension().is_some_and(|x| x == "ail") {
-            files.push((p.display().to_string(), false));
+            files.push((crate::shown::shown(&p), false));
         }
     }
 }
@@ -1044,7 +1044,7 @@ mod tests {
             let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
             files.sort();
             for f in files.into_iter().filter(|p| p.extension().is_some_and(|x| x == "ail")) {
-                out.push((f.display().to_string(), std::fs::read_to_string(&f).unwrap()));
+                out.push((crate::shown::shown(&f), std::fs::read_to_string(&f).unwrap()));
             }
         }
         out
