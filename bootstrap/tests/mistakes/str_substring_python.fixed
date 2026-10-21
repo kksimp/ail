@@ -1,0 +1,3 @@
+fn main()
+    word := "hello"
+    print(word.slice(0, 2))

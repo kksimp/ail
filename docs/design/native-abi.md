@@ -51,7 +51,7 @@ shortens a list must be added to the optimiser's decision first.
 | `int` | `i64` |
 | `float` | `f64` (IEEE 754 binary64) |
 | `bool` | `i64`, 0 or 1 |
-| `char` | `i64`, a Unicode scalar value |
+| `char` | `i64`, a Unicode scalar value; `List[char]` has 8-byte slots (ADR 0566) |
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
 
@@ -218,7 +218,7 @@ the interim for the GC (ADR 0407).
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40-47 `fmt.ail` (the byte builder), 48-63 free. Each slot is a
+flag), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
@@ -298,8 +298,22 @@ call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `fmt_int`, `fmt_hex`, `fmt_bool`, `fmt_float`, `fmt_float_fixed`, `fmt_pad`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
-its value (empty on failure) and sets `os_ok()`; the lowering follows it
-with the status call.
+its value and, on failure, sets the error slot (global 8) to the display text
+of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
+`io_read_line` return a string or 0.
+
+**Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
+adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
+`str_float`, `str_fixed`, `str_char`, `str_pad`, `str_pad_checked`,
+`str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
+(character index or -1), `str_find_opt`, `str_char_at`, `str_strip_prefix`, `str_strip_suffix`,
+`char_to_digit`, `char_from_code` (optional results), `str_replace`, `str_split`,
+`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
+`str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
+`out_char`, `out_list_char`, and `str_trap`. A function that
+can trap takes the constant head and excerpt as its last arguments (`str`
+values the lowering builds from the call's position). A character crosses the
+runtime as an `int`.
 
 The table below is the first draft:
 

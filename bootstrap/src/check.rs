@@ -3805,6 +3805,13 @@ impl<'p> Checker<'p> {
                         let mut d = Diagnostic::new("expr.call.3", *lpos, format!("`{what}` has no parameter `{n}`"));
                         if let Some(s) = suggest(n, &names) {
                             d = d.did_you_mean(n, s);
+                        } else {
+                            let list: Vec<String> = names.iter().map(|s| format!("`{s}`")).collect();
+                            d = d.help(if list.is_empty() {
+                                format!("`{what}` has no parameters, so it takes no named arguments")
+                            } else {
+                                format!("its parameters are {}; name one of them", list.join(", "))
+                            });
                         }
                         self.diags.push(d);
                         ok = false;
@@ -4113,12 +4120,19 @@ impl<'p> Checker<'p> {
                     "zeros" => Sig::plain(None, vec![(false, Ty::Int)], Ty::Bytes),
                     _ => {
                         self.args_only(args);
-                        self.error_help(
+                        let known = ["from_list", "from_hex", "from_base64", "zeros"];
+                        let spelt = name.replace('_', "");
+                        let mut d = Diagnostic::new(
                             "type.bytes.13",
                             pos,
                             format!("`bytes` has no associated function `{name}`"),
-                            "they are `from_list`, `from_hex`, `from_base64` and `zeros`",
-                        );
+                        )
+                        .help("they are `from_list`, `from_hex`, `from_base64` and `zeros`");
+                        // `bytes.fromhex` is `bytes.from_hex`: the same letters, spelt with `_`.
+                        if let Some(k) = known.iter().find(|k| k.replace('_', "") == spelt) {
+                            d = d.fix(format!("write `{k}`"), vec![Edit::replace(pos, name, *k)]);
+                        }
+                        self.diags.push(d);
                         return Ty::Err;
                     }
                 };
@@ -4414,7 +4428,18 @@ impl<'p> Checker<'p> {
             return;
         }
         let mut d = Diagnostic::new("expr.name.1", pos, format!("{shown} has no method `{name}`"));
-        if let Some(new) = builtins::method_rename(rt, name) {
+        // `x.is_some()` on an optional is a comparison with `none` (type.opt.5).
+        let absent = match name {
+            "is_some" => Some(" != none"),
+            "is_none" => Some(" == none"),
+            _ => None,
+        };
+        if let (Some(text), Ty::Opt(_)) = (absent, rt) {
+            let dot = Pos { col: pos.col.saturating_sub(1), ..pos };
+            d = d
+                .help("compare the value with `none`, e.g. `x != none`")
+                .fix("compare with `none`", vec![Edit::replace(dot, format!(".{name}()"), text)]);
+        } else if let Some(new) = builtins::method_rename(rt, name) {
             d = d.help(format!("write `.{new}()`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
         } else if let Some(h) = builtins::method_help(rt, name) {
             d = d.help(h);
@@ -4511,7 +4536,18 @@ impl<'p> Checker<'p> {
                 }
                 let names: Vec<&str> = decl.fields.iter().map(|f| f.name.as_str()).collect();
                 let mut d = Diagnostic::new("type.struct.6", pos, format!("`{}` has no field `{name}`", decl.name));
-                if let Some(s) = suggest(name, &names) {
+                // Another library's field for the same thing (a `requests` response).
+                let other = match (decl.name.as_str(), name) {
+                    ("net.Response", "status_code") => Some("status"),
+                    ("net.Response", "text") => Some("body"),
+                    _ => None,
+                };
+                if let Some(new) = other {
+                    d = d.help(format!("`{}` has the field `{new}`", decl.name)).fix(
+                        format!("write `{new}`"),
+                        vec![Edit::replace(pos, name, new)],
+                    );
+                } else if let Some(s) = suggest(name, &names) {
                     d = d.did_you_mean(name, s);
                 } else if names.is_empty() {
                     d = d.help(format!("`{}` has no fields", decl.name));
@@ -4714,7 +4750,23 @@ impl<'p> Checker<'p> {
                 }
                 if !self.accepts(&Ty::Bool, &t) {
                     let msg = format!("`{}` needs `bool` operands, found {}", op.symbol(), self.show(&t));
-                    self.error("type.bool.1", side.pos(), msg);
+                    if matches!(t, Ty::Opt(_)) && op == BinOp::Or {
+                        // `x or d` on an optional is `x else d` (type.opt.4).
+                        self.diags.push(
+                            Diagnostic::new("type.bool.1", side.pos(), msg)
+                                .help("a default for a value that may be `none` is `x else d`")
+                                .fix("write `else`", vec![Edit::operands(pos, "or", "$l else $r")]),
+                        );
+                    } else if matches!(t, Ty::Opt(_)) {
+                        self.error_help(
+                            "type.bool.1",
+                            side.pos(),
+                            msg,
+                            format!("`{}` takes `bool`; a default for a value that may be `none` is `x else d`", op.symbol()),
+                        );
+                    } else {
+                        self.error("type.bool.1", side.pos(), msg);
+                    }
                 }
             }
             return Ty::Bool;
@@ -4754,7 +4806,7 @@ impl<'p> Checker<'p> {
     }
 
     /// Which types support which operators (type.num.5, type.str.3,
-    /// trait.op.1, trait.op.3, expr.cmp.1, trait.std.1-2).
+    /// trait.op.1, trait.op.2, trait.op.3, expr.cmp.1, trait.std.1-2).
     fn operator(&mut self, op: BinOp, lt: &Ty, rt: &Ty, pos: Pos) -> Ty {
         let sym = op.symbol();
         let fail = if op.is_arithmetic() { Ty::Err } else { Ty::Bool };
@@ -4775,7 +4827,15 @@ impl<'p> Checker<'p> {
         // argument would (`opt == 1`, type.opt.5).
         if !same(lt, rt) && (op.is_arithmetic() || !self.accepts(lt, rt)) {
             let msg = format!("`{sym}` needs operands of one type, found {} and {}", self.show(lt), self.show(rt));
-            if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
+            // `n / 4.0` with an `int` variable `n`: convert it, as `n.to_float()` (type.num.10).
+            if op.is_arithmetic() && matches!((lt, rt), (Ty::Int, Ty::Float) | (Ty::Float, Ty::Int)) {
+                let template = if *lt == Ty::Int { format!("$l.to_float() {sym} $r") } else { format!("$l {sym} $r.to_float()") };
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("`int` and `float` don't mix: convert the integer with `n.to_float()`")
+                        .fix("convert with `.to_float()`", vec![Edit::operands(pos, sym, template)]),
+                );
+            } else if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
                 self.diags.push(
                     Diagnostic::new("trait.op.3", pos, msg)
                         .help("build text with interpolation: \"{a}{b}\"")
@@ -5144,7 +5204,12 @@ impl<'p> Checker<'p> {
             }
             Pattern::Variant { pos, name, .. } => {
                 let msg = format!("`{name}` is a variant pattern, but the value matched is {}", self.show(t));
-                self.error("expr.match.4", *pos, msg);
+                self.error_help(
+                    "expr.match.4",
+                    *pos,
+                    msg,
+                    "a name in a pattern is a variant, not a variable: test the matched value with a guard, e.g. `_ if n > 0 =>`",
+                );
             }
             // expr.match.12: a range covers some values, never all, so it
             // marks nothing as seen.

@@ -5,7 +5,7 @@
 ## `int` and `float` to text, `{x:.N}`, `{x:x}`, width, fill and alignment
 ## (lex.str.7, type.str.11), and text to `float` (type.num.8), byte for byte
 ## as the interpreter. Text is built in a growable byte buffer (the
-## builder, global slots 40-42), so printing a number allocates nothing and
+## builder, global slots 52-54), so printing a number allocates nothing and
 ## `rt.fmt_*` return a string object for lane 172's `to_str` and
 ## interpolation.
 ##
@@ -16,10 +16,10 @@
 ## `d.ddde+XX` otherwise. Big numbers are little-endian base 10^9 limbs.
 ## Nothing is ported from another project.
 
-# Global slots 40-42 are this file's.
-SB_PTR := 40
-SB_LEN := 41
-SB_CAP := 42
+# Global slots 52-54 are this file's.
+SB_PTR := 52
+SB_LEN := 53
+SB_CAP := 54
 
 BASE := 1000000000
 
@@ -389,11 +389,11 @@ fn big_sub(a List[int], b List[int]) List[int]
 ## -1, 0 or 1.
 fn big_cmp(a List[int], b List[int]) int
     if a.len() != b.len()
-        return if a.len() < b.len() then - 1 else 1
+        return if a.len() < b.len() then -1 else 1
     mut i := a.len() - 1
     while i >= 0
         if a[i] != b[i]
-            return if a[i] < b[i] then - 1 else 1
+            return if a[i] < b[i] then -1 else 1
         i -= 1
     0
 

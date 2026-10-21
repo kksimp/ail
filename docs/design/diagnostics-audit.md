@@ -217,3 +217,79 @@ the call anchor reads the dotted callee as written (`date.Date`).
 Qualified constructors (lane 147): `type.struct.7` on `date.Date(2026, 10, 20)` now
 has the named-field fix; the call anchor reads the dotted callee as written. Corpus:
 154 programs, 96 fixed (62%).
+
+## Round two (ADRs 0646-0648, lane 197)
+
+Corpus: 250 programs (154 + 96 new), `ail fix` resolves 150 (60.0%; the
+96 new ones: 54, 56%). Rules with a fix: 48 (was 41). Fix rules and the
+decisions behind them are in [ADR 0648](../decisions/0648-round-two-fix-rules-and-the-corpus-target.md).
+
+Diagnostic output on the 96 new programs, batch head vs this change
+(`ail check --json`, error lines only): 33,997 bytes before, 36,143 after
+(+6%, about 500 tokens at 4 bytes a token). Help lines: 257 before, 264 after.
+The growth is the help texts that were empty or generic before (ADR 0647),
+plus the new fix edits. Rule changes: `<<`/`>>` and tuples from `gram.syntax.1`
+to `gram.foreign.1`; `case` arms and open or three-dot ranges moved to
+`expr.match.1` and `expr.match.12`; `@` in a call to `gram.foreign.1`.
+
+Still open: a silent `t[0][1]` on a one-dimensional tensor (OQ-122); the
+program is left out of the corpus. A `(a, b)` tuple has no fix (needs the
+closing parenthesis extent). `regex.sub` has no fix (argument order differs
+from Python).
+## Token audit of the mistakes corpus (lane 220, 2026-10-21)
+Non-normative. The corpus has 154 programs (not 250), and they give 156
+diagnostics. Each diagnostic is measured as the text `ail check FILE` prints for
+it: the header, the source line and caret, `help`, `note`, `fix` lines
+(`mistral-spm-v1` column of tokbench). Each program is run from its own
+directory, so the path is the bare file name an agent would see. Run from the
+repository root, the path `bootstrap/tests/mistakes/` adds about 1,480 tokens
+(83.4 mean against 73.9); that is a corpus artifact, not a diagnostic cost.
+| Measure | Before | After |
+|---|---|---|
+| diagnostics | 156 | 156 |
+| total tokens | 11,534 | 11,456 |
+| mean tokens per diagnostic | 73.9 | 73.4 |
+Where the tokens are (before, all 156): headers 6,406 with the repository path
+(about 4,900 with bare names), help lines 3,470, source and caret lines 1,322,
+`fix` lines 877, `note` lines 275. The 30 longest are 88–177 tokens each (with
+the repository path); most are one help sentence and one note.
+What changed: the text form no longer repeats a `fix:` line whose title equals
+the `help:` line (11 cases). JSON output (ADR 0145) keeps every fix title. Net
+saving: 78 tokens, 0.7%.
+What was not changed, and why:
+- Help sentences: each one is the fix hint an agent acts on (`mut xs := ...`,
+  the list of allowed field types, the `0..n` / `1..=n` forms). Shortening them
+  removes the hint or its examples, which the lane's rule forbids.
+- The `note:` location for derived code (`at gen:impl:...`): it is the only
+  handle to the generated code, so it stays.
+- Source and caret lines: they give the location; the caret needs them.
+- The `bit_and` help (about 100 tokens, two diagnostics): its last clause is the
+  reason `&` is absent. A shorter wording was considered and rejected because it
+  drops that reason.
+Conclusion: the diagnostics are already close to the floor for their content.
+The realistic cut is about 1%. The larger cost is the file path in the header,
+which an agent pays only when it runs the compiler from the repository root.
+
+## Round two fixes (lane 216, ADR 0695)
+
+`ail fix` resolves 151 of the 250 round-two mistakes (60.4%), up from 150.
+Added: `gram.foreign.1` for `~name`, rewritten as `name.bit_not()` (ADR 0695).
+The 70% target needs 175; the 99 unresolved mistakes have no mechanical,
+safe rewrite, so each is left unfixed on purpose. The grouping:
+
+| Rule | Count | Why no fix |
+| `expr.name.1` | 13 | Each needs a judgement: `int("5")`, `input()`, `null`, `e.message()` (`to_str` exists, but the target is the caller's intent), undefined names, `thread.start`, `m.push` on a non-list map |
+| `gram.foreign.1` | 9 | Structural rewrites: ternary, `switch`, `throw`/`try`, lambdas, `match (a, b)`, tuple shapes, Python imports |
+| `expr.call.1` | 6 | Arity or positional arguments: the right arguments are the caller's choice |
+| `conc.task.5` | 5 | `t.wait()?` needs an `!` return type the mistake may not intend |
+| `trait.op.3`, `trait.op.1` | 5 | Interpolation or conversion changes the result type |
+| `expr.block.2` | 4 | Return type or value: which one the author meant |
+| `err.use.1` | 4 | `else` or `?` needs a fallback value or a `!` return type |
+| `conc.par.5` | 4 | Restructuring a `par` loop changes the program |
+| `expr.call.2`, `expr.call.3` | 5 | Conversions or a choice of which duplicate to drop |
+| `type.struct.6/7`, `type.opt.4`, `std.use.2`, `mod.use.2/4`, `type.bytes.2`, `type.fn.2`, `gen.*`, `contract.*`, `own.*`, `eff.pure.1`, `lex.*`, `expr.if/loop/match.*`, `json.derive.1`, `err.prop.2`, `conc.atomic/share.*`, `gram.fn.2`, `expr.key.1`, `std.use.4`, `mod.main.*`, `trait.impl.1`, `type.struct.2`, `type.bytes.2`, `set` | 44 | Each is one or two files; each has a choice a rewrite would guess (for example `missing_main`'s template, `method_in_struct`'s placement, `for_enumerate`'s loop shape, `unclosed_string`'s closing line) |
+
+The obvious next candidates, if the designer accepts them as rewrites: a
+`for i, x in xs` to indexed loop (`expr.loop.1`), positional-to-named struct
+arguments (`type.struct.7`, the field names are in the declaration), and
+`(a, b)` to `[a, b]` in `tensor` shape arguments (`gram.foreign.1`).

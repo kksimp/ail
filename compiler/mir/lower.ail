@@ -40,10 +40,14 @@ struct Val
     ty Ty
 
 struct Lower
+    ## The source file being lowered (for error traces) and every file's.
     path str
+    file_paths List[str]
     ## Zero-field `error struct`s to their messages (lower_err.ail).
     err_msgs Map[str, str]
     err_fns Set[str]
+    ## The type the next block's final expression should have (consumed by `lower_block`).
+    tail_want Ty?
     ## The function being lowered can fail.
     fails bool
     sigs Map[str, Sig]
@@ -55,6 +59,9 @@ struct Lower
     consts Map[str, ast.Expr]
     strs List[str]
     str_index Map[str, int]
+    ## The source path and lines, for the trap texts of `lower_str.ail`.
+    src_paths List[str]
+    src_lines List[List[str]]
     sites List[Site]
     problems List[Problem]
     funcs List[Func]
@@ -137,6 +144,11 @@ PRIMS := {
 ## The `int` methods of two operands that are one instruction (expr.bit.1).
 BIT_OPS := {"bit_and": "band", "bit_or": "bor", "bit_xor": "bxor", "shl": "shl", "shr": "shr"}
 
+## std.math's float methods that are runtime functions (type.num.16): one
+## argument (`x.sin()`), or the receiver and one more (`x.pow(y)`).
+MATH1 := ["sin", "cos", "tan", "atan", "exp", "ln", "log10", "cbrt"]
+MATH2 := ["atan2", "pow", "hypot"]
+
 ## Lower a program and, when given, the runtime; `Problems` lists what is
 ## outside the subset.
 pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Module ! Problems
@@ -156,14 +168,18 @@ pub struct Source
 pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     mut l := Lower(
         path: srcs[0].path,
-        err_msgs: {},
+        file_paths: [src.path for src in srcs],
+        err_msgs: {"fs.IoError": "", "IoError": ""},
         err_fns: Set[str](),
+        tail_want: none,
         fails: false,
         sigs: {},
         bad: Set[str](),
         consts: {},
         strs: [],
         str_index: {},
+        src_paths: [src.path for src in srcs],
+        src_lines: [src.text.lines() for src in srcs],
         sites: [],
         problems: [],
         funcs: [],
@@ -213,6 +229,7 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         l.declare_errors(src.prog)
     for k in 0..srcs.len()
         l.enter_file(k)
+        l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
     for k in 0..srcs.len()
@@ -409,6 +426,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                 "float" => Ty.Float
                 "bool" => Ty.Bool
                 "str" => Ty.Str
+                "char" => Ty.Char
                 "List" =>
                     if args.len() != 1
                         return none
@@ -445,7 +463,7 @@ fn is_const_expr(e ast.Expr) bool
 
 fn is_number(t Ty) bool
     match t
-        Int | Float | Bool => true
+        Int | Float | Bool | Char => true
         _ => false
 
 # ---- building blocks and values ----
@@ -633,6 +651,8 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
         borrowed.add(lookup(p.name) else "")
     body := f.body else return
     want := not ret.is_unit()
+    if want
+        tail_want = ret
     result := lower_block(body, want)
     if not done()
         if want
@@ -722,6 +742,8 @@ fn same_ty(a Ty, b Ty) bool
 ## Lower statements in a new scope. With `want`, a final expression
 ## statement is the block's value.
 fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
+    tail := tail_want
+    tail_want = none
     scopes.push(Map[str, str]())
     mut result := Val(id: -2, ty: Ty.Unit)
     for i in 0..body.len()
@@ -730,7 +752,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
             dead_block()
         if want and i == body.len() - 1
             if e := final_expr(s)
-                result = lower_expr(e, none) else Val(id: -2, ty: Ty.Unit)
+                result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
                 continue
         lower_stmt(s)
     scopes.pop()
@@ -752,8 +774,6 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
         _ => none
     if recv == none
-        if lower_os_let_else(name, pos, value, other)
-            return
         lower_bind_else(name, pos, value, other)
         return
     s := lower_value(recv?, Ty.Str) else
@@ -825,7 +845,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             lower_expr(e, Ty.Unit)
-        Handle(value, other) => lower_os_handle(value, other)
+        Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
         Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
@@ -885,7 +905,8 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
                 v = binary(o, old, r, pos).id
             else
                 r := lower_value(value, ty) else return
-                v = copy_if_place(value, Val(id: convert(r, ty, pos), ty: ty))
+                ty2 := settle_var(target, ty, r)
+                v = copy_if_place(value, Val(id: convert(r, ty2, pos), ty: ty2))
             write_var(key, cur, v)
         Index(recv, index, ipos) =>
             l := lower_value(recv, none) else return
@@ -1156,8 +1177,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             Val(id: checked("get", [l.id, i.id], bounds_site(pos), elem), ty: elem)
         ListLit(items, pos) => lower_list(items, pos, want)
         If(branches, els, _, pos) => lower_if(branches, els, pos, want)
-        Interp(_, pos) => unsupported(pos, "string interpolation outside `print`")
-        Char(_, pos) => unsupported(pos, "`char`")
+        Interp(parts, pos) => lower_interp_value(parts, pos)
+        Char(text, _) => lower_char(text)
         NoneLit(pos) => lower_none(want, pos)
         Hole(pos) => unsupported(pos, "`todo`")
         TypeArgs(_, _, pos) => unsupported(pos, "this expression")
@@ -1177,7 +1198,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Match(scrutinee, arms, pos) => lower_match(scrutinee, arms, pos, want)
         Try(x, context, pos) => lower_try(x, context, pos)
         Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
-        OrElse(value, other, pos) => lower_os_or_else(value, other, pos)
+        OrElse(x, other, pos) => lower_else(x, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
@@ -1299,6 +1320,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
                 return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
             problem(pos, "`{op_symbol(o)}` on `bool` isn't in the native subset yet")
             a
+        Str => str_binary(o, a, b, pos) else a
+        Char => char_binary(o, a, b, pos) else a
         _ =>
             problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
             a
@@ -1339,6 +1362,7 @@ fn Lower.lower_if(
     if value
         result = new_value(Ty.Unknown, "")
         blocks[join].params.push(result)
+        rty = arms_start(want, [br.body for br in branches], els)
     for br in branches
         mut bound := ""
         mut bval := Val(id: -1, ty: Ty.Unit)
@@ -1361,11 +1385,13 @@ fn Lower.lower_if(
         if bound != ""
             u := unwrap(bval)
             declare(bound, u.ty, u.id)
+        tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(br.body, value)
         scopes.pop()
         rty = arm_end(join, value, v, pos, rty)
         cur = no
     if body := els
+        tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(body, value)
         rty = arm_end(join, value, v, pos, rty)
     else
@@ -1395,8 +1421,8 @@ fn Lower.arm_end(mut self, join int, value bool, v Val?, pos ast.Pos, rty Ty) Ty
         jump(join, [])
         return rty
     mut t := rty
-    if t.is_unknown()
-        t = x.ty
+    if t.is_unknown() or is_pending_opt(t)
+        t = settle_arm_ty(t, x.ty)
     jump(join, [convert(x, t, pos)])
     t
 
@@ -1517,6 +1543,7 @@ fn out_fn(t Ty) str
         Float => "rt.out_float"
         Bool => "rt.out_bool"
         Str => "rt.out_str"
+        Char => "rt.out_char"
         List(e) =>
             match e
                 Int => "rt.out_list_int"
@@ -1538,8 +1565,9 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             Float => 1
             Bool => 2
             Str => 3
+            Char => 4
             _ => -1
-        if k >= 0 and (depth > 0 or k == 3)
+        if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
@@ -1556,6 +1584,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     om := os_module(recv)
     if om != ""
         return lower_os_method(om, name, npos, args)
+    if name == "from_code" and is_module(recv, "char")
+        return lower_char_from_code(args, npos)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1588,6 +1618,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if name == "join"
                 arg_want = Ty.Str
         vs.push(lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
+    if name == "to_str" and vs.len() == 0
+        # type.str.3
+        text := text_of(r, npos)?
+        return Val(id: text, ty: Ty.Str)
     match r.ty
         Int =>
             if name == "to_float" and vs.len() == 0
@@ -1614,13 +1648,16 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             # type.num.9
             if name == "round" and vs.len() == 0
                 return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
+            # type.num.16: std.math's float functions, in rt/native/math.ail
+            if MATH1.contains(name) and vs.len() == 0
+                return Val(id: call("rt.float_{name}", [r.id], Ty.Float), ty: Ty.Float)
+            if MATH2.contains(name) and vs.len() == 1
+                return Val(id: call("rt.float_{name}", [r.id, vs[0].id], Ty.Float), ty: Ty.Float)
         Str =>
-            # type.str.3, type.str.5
-            if name == "chars" and vs.len() == 0
-                t := Ty.List(Ty.Str)
-                return Val(id: call("rt.str_chars", [r.id], t), ty: t)
-            if name == "len" and vs.len() == 0
-                return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
+            if name == "to_float" and vs.len() == 0
+                return lower_to_float(r)
+            return lower_str_method(r, name, npos, vs)
+        Char => return lower_char_method(r, name, npos, vs)
         List(e) =>
             if name == "len" and vs.len() == 0
                 return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)

@@ -40,3 +40,7 @@ else
 
 The same holds for `match` arms (one level deeper than the line containing
 `match`) and for any other construct that opens a block from inside a statement.
+
+## Rejected alternatives
+
+- The earlier layout, with the first branch indented two levels and `elif`/`else` one level: rejected because it violates `lex.block.3`, which says a block is indented by exactly one level.

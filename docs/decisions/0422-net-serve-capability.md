@@ -39,3 +39,8 @@ a function handed a `Server` is using what its caller was allowed.
 
 - `CAPABILITIES` gains `net.serve`; `all` includes it.
 - `ail effects` prints it for serving functions only.
+
+## Rejected alternatives
+
+- Splitting `net` into `net.connect` and `net.serve` (option B): rejected because it changes the meaning of every existing `net` grant and `--deny net` use (ADRs 0165, 0232), and it breaks lockfiles' `caps`.
+- No new capability (option C): rejected because a dependency granted `net` could open a listening port.

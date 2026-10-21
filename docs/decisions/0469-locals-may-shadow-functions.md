@@ -59,3 +59,8 @@ for locals. `ail check compiler` passes after it, with the parser's own
   in `bootstrap/src/check.rs`.
 - The checker's rule is in Rust only; the AIL checker's body pass is slice 2
   ([self-hosting status](../design/self-hosting-status.md)).
+
+## Rejected alternatives
+
+- Limiting the rule to items declared in the same file (option B): rejected because moving a function between files would change which locals are legal.
+- Keeping the rule (option C): rejected because renaming costs something in the parser's own names.

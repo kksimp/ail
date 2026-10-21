@@ -1,0 +1,3 @@
+fn main()
+    roll := random.int(1, 6)
+    print(roll)

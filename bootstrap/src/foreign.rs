@@ -40,7 +40,11 @@ pub fn decl_word(word: &str) -> Option<Word> {
         "interface" | "protocol" => {
             w("AIL has no `interface`", "a set of methods a type provides is a `trait`", Fix::Replace("trait"))
         }
-        "import" => w("AIL imports with `use`", "write `use std.fs`", Fix::Replace("use")),
+        "import" => w(
+            "AIL imports with `use`",
+            "write `use` and a module name; the standard modules need no `use` (std.use.4)",
+            Fix::Replace("use"),
+        ),
         "async" => w(
             "AIL has no `async`",
             "tasks are colorless: start any function with `spawn f(x)` and wait with `t.wait()`",
@@ -120,6 +124,7 @@ pub fn call_hint(name: &str, args: usize) -> Option<CallHint> {
     let h = |template, example, help| Some(CallHint { template, example, help });
     match (name, args) {
         ("len" | "length" | "size", 1) => h("$r1.len()", "xs.len()", "`len` is a method: write `xs.len()`"),
+        ("bytes", 1) => h("bytes.zeros($1)", "bytes.zeros(n)", "`n` zero bytes are `bytes.zeros(n)`"),
         ("str" | "string" | "toString", 1) => {
             h("\"{$1}\"", "\"{n}\"", "interpolate to get text: `\"{n}\"`, or write `n.to_str()`")
         }
@@ -129,6 +134,17 @@ pub fn call_hint(name: &str, args: usize) -> Option<CallHint> {
             "build the text with interpolation, `print(\"n is {n}\")`; a width or precision goes after a colon: `{n:>6}`, `{x:.2}`",
         ),
         ("sqrt", 1) => h("$r1.sqrt()", "x.sqrt()", "`sqrt` is a method: write `x.sqrt()`"),
+        ("sin", 1) => h("$r1.sin()", "x.sin()", "`sin` is a method: write `x.sin()`"),
+        ("cos", 1) => h("$r1.cos()", "x.cos()", "`cos` is a method: write `x.cos()`"),
+        ("tan", 1) => h("$r1.tan()", "x.tan()", "`tan` is a method: write `x.tan()`"),
+        ("atan", 1) => h("$r1.atan()", "x.atan()", "`atan` is a method: write `x.atan()`"),
+        ("exp", 1) => h("$r1.exp()", "x.exp()", "`exp` is a method: write `x.exp()`"),
+        ("ln", 1) => h("$r1.ln()", "x.ln()", "`ln` is a method: write `x.ln()`"),
+        ("log10", 1) => h("$r1.log10()", "x.log10()", "`log10` is a method: write `x.log10()`"),
+        ("cbrt", 1) => h("$r1.cbrt()", "x.cbrt()", "`cbrt` is a method: write `x.cbrt()`"),
+        ("atan2", 2) => h("$r1.atan2($2)", "x.atan2(y)", "`atan2` is a method: write `x.atan2(y)`"),
+        ("pow", 2) => h("$r1.pow($2)", "x.pow(y)", "`pow` is a method: write `x.pow(y)`"),
+        ("hypot", 2) => h("$r1.hypot($2)", "x.hypot(y)", "`hypot` is a method: write `x.hypot(y)`"),
         ("floor", 1) => h("$r1.floor()", "x.floor()", "`floor` is a method: write `x.floor()`"),
         ("ceil", 1) => h("$r1.ceil()", "x.ceil()", "`ceil` is a method: write `x.ceil()`"),
         ("round", 1) => h("$r1.round()", "x.round()", "`round` is a method: write `x.round()`"),

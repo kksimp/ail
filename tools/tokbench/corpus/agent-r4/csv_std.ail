@@ -1,0 +1,8 @@
+## Sum the qty column of a CSV with quoted fields, with std.csv.
+use std.csv
+
+fn main() !
+    mut total := 0
+    for r in csv.records(fs.read_text("sales.csv")?)?
+        total += r["qty"].to_int() else 0
+    print(total)

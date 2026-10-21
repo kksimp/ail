@@ -45,7 +45,7 @@ const COMPARISONS: &[(&str, BinOp)] =
 /// The standard traits and `Ordering` (ADR 0127), read before every program.
 const PRELUDE: &str = include_str!("prelude.ail");
 
-/// Names of the optional `std.json` prelude module (ADR 0161).
+/// Names of the optional `std.json` prelude module (json.prelude.1, ADR 0161).
 const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json"];
 
 /// Names of its derivable traits, read with it only when named (ADR 0308).
@@ -1819,6 +1819,25 @@ impl Parser {
                 );
                 return None;
             }
+            // `a @ b` is a matrix product (ADR 0382); `name=value` is `name: value`.
+            if self.at_sym("@") {
+                let at = self.pos();
+                self.diags.push(
+                    Diagnostic::new("gram.foreign.1", at, "AIL has no `@` operator")
+                        .help("the matrix product is a method: `a.matmul(b)` (std.tensor.10)")
+                        .fix("write `.matmul`", vec![crate::fix::bit::operator(at, "@", "matmul")]),
+                );
+                return None;
+            }
+            if self.at_sym("=") {
+                let at = self.pos();
+                self.diags.push(
+                    Diagnostic::new("expr.call.1", at, "a named argument is written `name: value`, not `name=value`")
+                        .help("write `f(dx: 1, dy: 2)`")
+                        .fix("write `:`", vec![Edit::span(at, Pos { col: at.col + 1, ..at }, ": ")]),
+                );
+                return None;
+            }
             args.push(Arg { label, mutable, moved, value, param });
             if !self.eat_sym(",") {
                 break;
@@ -1889,6 +1908,16 @@ impl Parser {
                 // expr.if.8: a parenthesised one-line `if` is an operand.
                 let inner = if self.at_kw("if") { self.if_expr()? } else { self.range()? };
                 let inner = self.else_expr(inner)?;
+                if self.at_sym(",") {
+                    let at = self.pos();
+                    self.error_help(
+                        "gram.foreign.1",
+                        at,
+                        "AIL has no tuples",
+                        "write a list `[a, b]`, or a struct with named fields",
+                    );
+                    return None;
+                }
                 self.expect_sym(")", "`)`", "gram.syntax.1")?;
                 Some(inner)
             }
@@ -2150,7 +2179,18 @@ impl Parser {
                 );
                 self.i += 1; // go on as if it were `=>`
             } else {
-                self.unexpected("`=>` after the pattern", "expr.match.1");
+                if let Pattern::Variant { qualifier: None, name, pos: cpos, .. } = &pat
+                    && name == "case"
+                {
+                    let (cpos, at) = (*cpos, self.pos());
+                    self.diags.push(
+                        Diagnostic::new("expr.match.1", cpos, "AIL has no `case`: an arm is `pattern => result`")
+                            .help("drop `case`, e.g. `1 => \"one\"`")
+                            .fix("drop `case`", vec![Edit::delete(cpos, at)]),
+                    );
+                } else {
+                    self.unexpected("`=>` after the pattern", "expr.match.1");
+                }
                 return None;
             }
         }
@@ -2205,6 +2245,16 @@ impl Parser {
         };
         self.i += 1;
         let hpos = self.pos();
+        if self.at_sym("=>") || self.at_sym(".") || self.at_kw("if") {
+            let mut d = Diagnostic::new("expr.match.12", hpos, "a range needs both ends, written with two dots")
+                .help("write `lo..=hi` for both ends, e.g. `0..=9`; `_` covers the rest");
+            // `0...9`: the third dot is the inclusive `=`.
+            if self.at_sym(".") {
+                d = d.fix("write `..=`", vec![Edit::span(hpos, Pos { col: hpos.col + 1, ..hpos }, "=")]);
+            }
+            self.diags.push(d);
+            return None;
+        }
         match self.plain_pattern()? {
             Pattern::Literal(hi @ (Literal::Int(_) | Literal::Char(_)), _) => {
                 Some(Pattern::Range { lo, hi, inclusive, pos })

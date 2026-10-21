@@ -1,0 +1,9 @@
+struct Point
+    x int
+    y int
+
+fn norm1(p Point) int
+    p.x + p.y
+
+fn main()
+    print(norm1(Point(x: 3, y: 4)))

@@ -1,0 +1,3 @@
+## The entry point: prints the sum of two scaled numbers.
+fn main()
+    print(combine(2, 3))

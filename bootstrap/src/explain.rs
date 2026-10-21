@@ -64,7 +64,7 @@ fn shorten(text: &str) -> String {
 }
 
 /// Longest example printed in the text form (explain.cover.4); `--json` has it whole.
-const EXAMPLE_LINES: usize = 6;
+const EXAMPLE_LINES: usize = 4;
 
 pub struct Explanation {
     pub rule: String,
@@ -147,7 +147,7 @@ pub fn explain(rule: &str) -> Option<Explanation> {
         }
         let (rejected, fixed) = worked_example(rule).unzip();
         // A worked example replaces the nearest example, which may belong to another rule.
-        let example = if rejected.is_some() { None } else { example };
+        let example = if rejected.is_some() { None } else { example.filter(|x| !x.trim().is_empty()).or_else(|| tagged_example(rule)) };
         return Some(Explanation {
             rule: rule.into(),
             file: format!("docs/spec/{name}"),
@@ -188,6 +188,49 @@ fn worked_example(rule: &str) -> Option<(String, Option<String>)> {
             .filter(|&k| matches!(lines[k].trim_end(), "```ail" | "```ail fragment"))
             .map(block);
         return Some((rejected, fixed));
+    }
+    None
+}
+
+/// The first block of the specification whose `rules=` tag names `rule`, when
+/// the rule's own section has no example (ADR 0670). The block is checked
+/// by the spec harness like any other. A `tool=` block shows its command first,
+/// so the explanation says how to run the example.
+fn tagged_example(rule: &str) -> Option<String> {
+    for (_, src) in SPEC {
+        let lines: Vec<&str> = src.lines().collect();
+        for (i, l) in lines.iter().enumerate() {
+            let Some(tags) = l.strip_prefix("```ail ") else { continue };
+            let words: Vec<&str> = tags.split_whitespace().collect();
+            let named = words.iter().any(|w| w.strip_prefix("rules=").is_some_and(|ids| ids.split(',').any(|id| id == rule)));
+            if !named {
+                continue;
+            }
+            let body: Vec<&str> = lines[i + 1..].iter().take_while(|l| !l.starts_with("```")).copied().collect();
+            let tool = words.iter().find_map(|w| w.strip_prefix("tool="));
+            let blank = body.iter().all(|l| l.trim().is_empty());
+            // A block with no code (`pkg=` or `fixture=`) shows its command alone.
+            if blank && tool.is_none() {
+                continue;
+            }
+            let mut out = String::new();
+            if let Some(pkg) = words.iter().find_map(|w| w.strip_prefix("pkg=")) {
+                let _ = writeln!(out, "# package {pkg}");
+            }
+            if let Some(cmd) = tool {
+                let stdin = words.iter().find_map(|w| w.strip_prefix("stdin="));
+                let _ = write!(out, "$ ail {}", cmd.replace(',', " "));
+                if let Some(name) = stdin {
+                    let _ = write!(out, " < {name}");
+                }
+                out.push('\n');
+            }
+            if !blank {
+                // Three lines at most: a tagged block is often a whole program (ail explain stays short, ADR 0670).
+                out.push_str(&body.iter().take(3).copied().collect::<Vec<_>>().join("\n"));
+            }
+            return Some(out.trim_end().to_string());
+        }
     }
     None
 }
@@ -360,6 +403,15 @@ mod tests {
         assert!(e.text.starts_with("Declaring a local name"), "{}", e.text);
         assert!(e.adrs.iter().any(|(n, t)| n == "0039" && !t.is_empty()));
         assert!(e.example.unwrap().contains("mut sum := 0"));
+    }
+
+    #[test]
+    fn a_rule_without_an_example_in_its_section_gets_its_tagged_block() {
+        let e = explain("api.refs.1").unwrap();
+        let example = e.example.unwrap();
+        assert!(example.starts_with("$ ail api --refs"), "{example}");
+        let diff = explain("diff.out.1").unwrap().example.unwrap();
+        assert!(diff.starts_with("# package diff_pair\n$ ail diff old/a.ail new/a.ail"), "{diff}");
     }
 
     #[test]

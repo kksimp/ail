@@ -11,6 +11,8 @@ pub enum Ty
     Float
     Bool
     Str
+    ## A Unicode scalar value, in a register like an `int` (type.char.1).
+    Char
     ## A list of numbers; `elem` is `Unknown` until the first use types it.
     List(elem Ty)
     ## `T?`: a pointer, or 0 for `none`; a number is boxed (ADR 0574).
@@ -50,6 +52,7 @@ pub fn Ty.name(self) str
         Float => "float"
         Bool => "bool"
         Str => "str"
+        Char => "char"
         List(e) => "List[{e.name()}]"
         Opt(t) => "{t.name()}?"
         Struct(n) => n
@@ -80,8 +83,8 @@ pub fn Ty.name(self) str
 ## | `cap` | list | how many elements `xs` has room for before `push` regrows it |
 ## | `copy` | a | the same value |
 ## | `data` | list | the address of `xs`'s elements (the word at +16); `push` can move them |
-## | `ldx` | base, index | the element `index` of the elements at `base`, `imm` bytes each (8, or 1 for a `List[bool]`); not checked |
-## | `stx` | base, index, value | writes that element; not checked |
+## | `ldx` | base, index | the element `index + fimm` of the elements at `base`, `imm` bytes each (8, or 1 for a `List[bool]`); not checked; `fimm` is a whole number of elements, 0 unless address folding set it |
+## | `stx` | base, index, value | writes that element (`index + fimm`); not checked |
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
@@ -93,6 +96,11 @@ pub struct Inst
     pub fimm float
     pub name str
     pub site int
+
+## The elements `ldx`/`stx` add to their index (carried in `fimm`, which no
+## integer instruction uses, so that `Inst` keeps its fields; ADR 0625).
+pub fn Inst.elem_off(self) int
+    fimm.to_int()
 
 pub fn inst(dst int, op str, args List[int]) Inst
     Inst(dst: dst, op: op, args: args, imm: 0, fimm: 0.0, name: "", site: -1)

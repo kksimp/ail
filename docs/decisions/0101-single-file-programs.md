@@ -21,3 +21,7 @@ decided with the build system).
 ## Consequences
 
 - Hello World needs only `examples/hello.ail` (ADR 0086).
+
+## Rejected alternatives
+
+- A package manifest for every program: rejected because a manifest is pure overhead for scripts and examples (deciding criterion, token usage).

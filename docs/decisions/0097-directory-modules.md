@@ -25,3 +25,7 @@
 
 - Duplicate top-level names across files of one module are a compile-time error.
 - Subdirectories are separate modules.
+
+## Rejected alternatives
+
+- One module per file: self-contained files, but moving code between files changes imports elsewhere. Rejected because splitting or merging files then never changes code, and imports stay fewer.

@@ -1,0 +1,8 @@
+bad_name.ail: 1 errors, 0 warnings
+bad_type.ail: 1 errors, 0 warnings
+effects.ail: 0 errors, 0 warnings
+ok.ail: 0 errors, 0 warnings
+replay_fixture.ail: 0 errors, 0 warnings
+tests.ail: 1 errors, 0 warnings
+unformatted.ail: 0 errors, 0 warnings
+total: 3 errors, 0 warnings

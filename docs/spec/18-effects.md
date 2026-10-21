@@ -117,14 +117,38 @@ order (`type.map.1`), and hash values are never visible, so neither can vary
 a run. Programs with tasks are outside this rule until task scheduling is
 specified. *(ADR 0207)*
 
+```ail rules=eff.det.1
+fn main()
+    mut counts := Map[str, int]()
+    for w in ["b", "a", "b"]
+        counts[w] += 1
+    for k in counts.keys()           # insertion order: no clock, random, proc or net
+        print("{k}: {counts[k]}")
+```
+
 **eff.det.2** — `ail run --deterministic FILE` and `ail check
 --deterministic FILE` are `--deny clock,net,proc,random` (`eff.cap.1`), and
 combine with `--deny`. `fs`, `env` and standard input are inputs, not
 sources of nondeterminism, so they stay allowed. *(ADR 0207)*
 
+```ail error=eff.cap.1 flags=--deterministic rules=eff.det.2
+use std.time
+
+fn main()
+    print(time.now_ms() > 0)         # error: the clock is denied in deterministic mode
+```
+
 **eff.det.3** — `ail run --seed S FILE` seeds `std.random` (`std.random.3`).
 A program that uses `random` and runs with a seed repeats without being
 denied the capability. *(ADR 0207)*
+
+```ail tool=run,--seed,42,FILE expect=true rules=eff.det.3
+use std.random
+
+fn main()
+    random.seed(1)
+    print(random.int(1, 6) <= 6)
+```
 
 ## Examples
 
@@ -225,28 +249,4 @@ fn main()
 ```
 
 ```ail fixture=packages/caps_denied rules=eff.cap.4,eff.cap.5
-```
-
-```ail rules=eff.det.1
-fn main()
-    mut counts := Map[str, int]()
-    for w in ["b", "a", "b"]
-        counts[w] += 1
-    for k in counts.keys()           # insertion order: no clock, random, proc or net
-        print("{k}: {counts[k]}")
-```
-
-```ail error=eff.cap.1 flags=--deterministic rules=eff.det.2
-use std.time
-
-fn main()
-    print(time.now_ms() > 0)         # error: the clock is denied in deterministic mode
-```
-
-```ail tool=run,--seed,42,FILE expect=true rules=eff.det.3
-use std.random
-
-fn main()
-    random.seed(1)
-    print(random.int(1, 6) <= 6)
 ```
