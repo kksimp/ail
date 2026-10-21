@@ -68,7 +68,8 @@ without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 `log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, and
-`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys (`Map[K, V]()`,
+`Map[K, V]` and `Set[T]` over `int`, `bool` and `str` keys, with values that
+include structs and enums (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
 `Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table), and constants
@@ -92,7 +93,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
 readable yet, and on macOS the program traps at `proc.run`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803, 0818)*
 
 ```ail
 fn steps(n int) int
