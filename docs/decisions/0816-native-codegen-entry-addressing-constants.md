@@ -185,3 +185,9 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   of another type). Every store here forgets a whole class instead; the loads
   that survive in the measured programs are in loops, where nothing carries
   over anyway.
+14. **An unchecked `mul` works in place.** `d = x * y` with `d` in `x`'s
+    register and no overflow check (proved away, or a constant) emitted a
+    copy to a scratch register, the `imul`, and a copy back. It is now one
+    `imul d, y` (or `imul d, d, k`); a checked `mul` still needs the stub's
+    recovery and is unchanged. spectralnorm 52.9M to 47.9M instructions
+    (-9.5%; C 36.6M).
