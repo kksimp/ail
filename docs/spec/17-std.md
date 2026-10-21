@@ -1336,6 +1336,25 @@ display text is both. Causes: an unknown option, an option without its value,
 a value given to a switch, a missing positional, an extra positional.
 *(ADR 0627)*
 
+```ail rules=std.args.6
+use std.args
+
+fn why(words List[str]) str
+    spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "output", "a.txt"), args.pos("input", "file")]
+    a := args.parse("tool", "demo", spec, words) else err
+        return err.why
+    print(a.get("input"))
+    return "ok"
+
+fn main()
+    print(why(["--nope", "in.txt"]))       # unknown option --nope
+    print(why(["--verbose=yes", "in.txt"]))  # --verbose takes no value
+    print(why(["in.txt", "--out"]))        # --out needs a value
+    print(why(["in.txt", "extra"]))        # unexpected argument extra
+    print(why([]))                         # missing INPUT
+    print(why(["in.txt"]))                 # in.txt, then ok
+```
+
 ```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
 use std.args
 
