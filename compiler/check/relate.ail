@@ -72,7 +72,7 @@ fn Checker.mismatch_errors(mut self, rule str, at ast.Pos, text str, we Errs, go
     match got
         Res(_, ge) => got_errs = errs_of(ge)
         Union(m) => got_errs = m
-        _ => got_errs = if is_error_type(got) then[got] else []
+        _ => got_errs = if is_error_type(got) then [got] else []
     mut missing := List[Ty]()
     match we
         ErrSet(v) => missing = [g for g in got_errs if not v.contains(g)]

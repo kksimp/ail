@@ -528,7 +528,7 @@ fn Checker.sized_literal(mut self, v str, neg bool, at ast.Pos, k str)
     if k == "f32"
         return
     n := v.to_int() else return
-    value := if neg then - n else n
+    value := if neg then -n else n
     mut lo := 0
     mut hi := 0
     if k == "i8"
