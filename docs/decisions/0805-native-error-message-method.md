@@ -24,8 +24,13 @@ Printing and interpolating a struct or enum value that has a `to_str` method
 call it (`display_call`), so `print(err)` and `"{err}"` give the display text
 (type.str.3). An error struct with no message prints in its default form,
 `Name(field: value, ...)` (trait.auto.2), for fields of `int`, `float`, `bool`
-and `str`; strings are quoted by `rt.str_quoted`. Other structs still cannot be
+and `str`; strings are quoted by `rt.str_quoted`. An error enum with no message prints
+`Enum.Variant` or `Enum.Variant(field: value)`. Other structs still cannot be
 printed.
+
+An error value held in a local (`return e`) or in an optional
+(`fn known(z str) BadZone?`, `if e := known(z)  return e`) can be returned as
+the error.
 
 A function whose result is an error type (`fn fail(self, m str) JsonError`)
 is an error constructor: `return fail(...)` in a function that can fail
