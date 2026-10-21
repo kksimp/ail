@@ -109,7 +109,7 @@ still governs; the new form applies only where there is no `T`.
    "add a message"; `panic`, `assert`, `fatalError` and `loop` get helps
    ([ADR 0140](0140-diagnostics-for-other-languages.md)).
 
-```ail
+```ail excerpt
 fn run_script(source str) !
     tokens := tokenize(source)?
     mut interp := Interp.new()
