@@ -118,7 +118,22 @@ def classify(path, workdir):
         else:
             rec.update(status="build-error", detail=first_line(err))
         return rec
-    rc_n, out_n, err_n = run([exe], RUN_TIMEOUT, cwd=workdir)
+    # `env.program()` is the executable's path, and programs find their repo by it
+    # (`path.dir(env.program())/../ail`), so run a copy next to the source, as
+    # `ail run` sees the source path; the tests directory doesn't change the result.
+    beside = os.path.join(os.path.dirname(os.path.abspath(path)), ".nc-" + os.path.basename(workdir))
+    try:
+        shutil.copy2(exe, beside)
+    except OSError:
+        beside = exe
+    try:
+        rc_n, out_n, err_n = run([beside], RUN_TIMEOUT, cwd=workdir)
+    finally:
+        if beside != exe:
+            try:
+                os.remove(beside)
+            except OSError:
+                pass
     rc_i, out_i, err_i = run([AIL, "run", path], RUN_TIMEOUT)
     if rc_i is None:
         rec.update(status="built-match", detail="interpreter timed out; not compared")

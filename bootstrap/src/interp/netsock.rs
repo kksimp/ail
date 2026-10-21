@@ -821,7 +821,7 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let mut all = Table::default();
         for (k, vs) in r.all {
-            all.insert(text(k), Some(Value::List(Rc::new(vs.into_iter().map(text).collect()))));
+            all.insert(text(k), Some(Value::list(vs.into_iter().map(text).collect())));
         }
         let id = add(Slot::Body(st, String::new()));
         Value::Struct(

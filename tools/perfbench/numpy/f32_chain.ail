@@ -1,0 +1,11 @@
+# An f32 elementwise chain on 2^20 elements, 20 rounds. Every value is a
+# multiple of 1/32 well inside f32, so each step is exact and the float sum
+# is the same in every summation order. `f32_chain.py` is the NumPy twin.
+fn main()
+    n := 1048576
+    x := tensor.from([(i % 17).to_float() * 0.25 for i in 0..n]).to_f32()
+    mut total := 0.0
+    for r in 0..20
+        y := (x * x + x) * 0.5 - x
+        total += y.to_float().sum()
+    print(total)

@@ -1,0 +1,152 @@
+## Push loops keep the length in a register (ADR 0816). In a versioned loop
+## the pushes have room guaranteed (`imm` 1, native.bce.6): each one only
+## stores the element and bumps the length, but the length and the element
+## pointer lived in the list and were loaded and stored at every push. When
+## nothing else in the loop touches the list and nothing in it can allocate,
+## the loop instead carries the length as a block parameter, writes the
+## element at `data[length]` through a pointer read once before the loop,
+## and stores the length back where the loop exits.
+
+struct Push
+    block int
+    at int
+
+pub fn keep_lengths(f Func) Func
+    loops := find_loops(f)
+    defs := defs_of(f)
+    dom := dominators(f)
+    mut g := f
+    for lp in loops
+        if lp.pre < 0 or lp.latches.len() != 1 or lp.exits != 1
+            continue
+        if g.blocks[lp.pre].term.kind != "jump"
+            continue
+        ht := g.blocks[lp.header].term
+        if ht.kind != "branch" or not lp.member[ht.targets[0]] or lp.member[ht.targets[1]]
+            continue
+        latch := lp.latches[0]
+        if not calls_nothing_else(g, lp)
+            continue
+        mut lists := List[int]()
+        for b in lp.blocks
+            for i in g.blocks[b].insts
+                if is_room_push(i)
+                    and not lp.member[defs[i.args[0]].block]
+                    and not lists.contains(i.args[0])
+                    lists.push(i.args[0])
+        for x in lists
+            g = keep_length(g, defs, dom, loops, lp, latch, x)
+    simplify(g)
+
+fn is_room_push(i Inst) bool
+    i.op == "call"
+        and i.imm == 1
+        and (i.name == "rt.list_push" or i.name == "rt.list_pushf" or i.name == "rt.list_pushb")
+
+## Whether the loop calls nothing but room-guaranteed pushes (which allocate
+## nothing).
+fn calls_nothing_else(f Func, lp LoopInfo) bool
+    for b in lp.blocks
+        for i in f.blocks[b].insts
+            if i.op == "icall" or i.op == "utrap" or i.op == "prim" and i.name == "syscall"
+                return false
+            if i.op == "call" and not is_room_push(i)
+                return false
+    true
+
+fn keep_length(
+    g0 Func,
+    defs List[Def],
+    dom List[List[bool]],
+    loops List[LoopInfo],
+    lp LoopInfo,
+    latch int,
+    x int,
+) Func
+    mut g := g0
+    mut pushes := List[Push]()
+    for b in lp.blocks
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.args.contains(x)
+                if not is_room_push(i) or i.args[0] != x or i.args[1] == x
+                    return g0
+                if b == lp.header or not dom[latch][b]
+                    return g0
+                for o in loops
+                    if o.header != lp.header and lp.member[o.header] and o.member[b]
+                        return g0
+                pushes.push(Push(block: b, at: k))
+        if g.blocks[b].term.uses().contains(x)
+            return g0
+    if pushes.len() == 0
+        return g0
+    # In the order they run: blocks that dominate the latch form a chain, so
+    # more dominators means later.
+    mut depth := Map[int, int]()
+    for p in pushes
+        mut d := 0
+        for c in 0..dom.len()
+            if dom[p.block][c]
+                d += 1
+        depth[p.block] = d
+    pushes = pushes.sorted(by: |p| depth[p.block] * 1000000 + p.at)
+    pre := lp.pre
+    h := lp.header
+    mut ek := -1
+    for e in 0..g.blocks[latch].term.targets.len()
+        if g.blocks[latch].term.targets[e] == h
+            ek = e
+    if ek < 0 or g.blocks[pre].term.targets[0] != h
+        return g0
+    size := if g.blocks[pushes[0].block].insts[pushes[0].at].name == "rt.list_pushb" then 1 else 8
+    one := konst_in(mut g, pre, 1)
+    g.vals.push(Ty.Int)
+    g.names.push("")
+    d := g.vals.len() - 1
+    g.blocks[pre].insts.push(inst(d, "data", [x]))
+    g.vals.push(Ty.Int)
+    g.names.push("")
+    l0 := g.vals.len() - 1
+    g.blocks[pre].insts.push(inst(l0, "len", [x]))
+    g.vals.push(Ty.Int)
+    g.names.push("")
+    lp0 := g.vals.len() - 1
+    g.blocks[h].params.push(lp0)
+    g.blocks[pre].term.args[0].push(l0)
+    mut cur := lp0
+    # Back to front within a block, so earlier positions stay valid.
+    mut lens := List[int]()
+    for p in pushes
+        lens.push(0)
+    for k in 0..pushes.len()
+        lens[k] = cur
+        g.vals.push(Ty.Int)
+        g.names.push("")
+        cur = g.vals.len() - 1
+    # `lens[k]` is the length before push k; `lens[k + 1]` (or `cur`) after.
+    mut k := pushes.len() - 1
+    while k >= 0
+        p := pushes[k]
+        old := g.blocks[p.block].insts[p.at]
+        mut st := inst(-1, "stx", [d, lens[k], old.args[1]])
+        st.imm = size
+        nxt := if k + 1 < pushes.len() then lens[k + 1] else cur
+        bump := inst(nxt, "add", [lens[k], one])
+        mut out := [g.blocks[p.block].insts[j] for j in 0..p.at]
+        out.push(st)
+        out.push(bump)
+        for j in p.at + 1..g.blocks[p.block].insts.len()
+            out.push(g.blocks[p.block].insts[j])
+        g.blocks[p.block].insts = out
+        k -= 1
+    g.blocks[latch].term.args[ek].push(cur)
+    # The length goes back to the list where the loop leaves.
+    ht := g.blocks[h].term
+    exit := ht.targets[1]
+    mut wb := inst(-1, "store", [x, lp0])
+    wb.imm = 0
+    g.blocks.push(Block(params: [], insts: [wb], term: jump_to(exit, ht.args[1])))
+    g.blocks[h].term.targets[1] = g.blocks.len() - 1
+    g.blocks[h].term.args[1] = []
+    g

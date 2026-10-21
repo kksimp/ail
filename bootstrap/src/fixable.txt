@@ -14,6 +14,7 @@ expr.call.3
 expr.if.1
 expr.if.2
 expr.loop.1
+expr.loop.4
 expr.loop.6
 expr.match.1
 expr.match.12
@@ -26,6 +27,7 @@ gram.fn.2
 gram.foreign.1
 lex.block.2
 lex.block.4
+lex.bytes.1
 lex.stmt.2
 lex.stmt.3
 lex.str.2

@@ -1,0 +1,9 @@
+# contract.ens.1: a failed `ensures` traps at its line.
+fn divide(a int, b int) int
+    requires b != 0
+    ensures result * b == a
+    a / b
+
+fn main()
+    print(divide(8, 2))
+    print(divide(7, 2))

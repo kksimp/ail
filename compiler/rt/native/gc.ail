@@ -59,10 +59,17 @@ fn gc_mark_list_data(w int, len int)
             if kind == KIND_LDATA
                 gc_scan_range(bs + 8, bs + 8 + 8 * len)
 
+## Most words are not heap addresses (integers, characters, small values), so
+## the range test is done here once per word, with the heap bounds read once,
+## and only a word inside the heap is looked up.
 fn gc_scan_range(from int, to int)
+    base := hs(H_BASE)
+    top := hs(H_TOP)
     mut p := from
     while p < to
-        gc_mark(load64(p))
+        w := load64(p)
+        if w >= base and w < top
+            gc_mark(w)
         p += 8
 
 ## Scan the queued objects until none is left.

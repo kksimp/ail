@@ -1,0 +1,300 @@
+## Contracts (contract.req.1, contract.ens.1-3, contract.run.1-2, ADR 0612).
+## A `requires` is checked in the caller, just before the call, so a failure
+## traps at the call; the condition is lowered there with the parameters
+## bound to the arguments. An `ensures` is checked in the function, at each
+## return, with `result` and the `old(e)` values taken on entry. A failed
+## check writes the interpreter's message piece by piece with the `out_*`
+## functions between `rt.trap_begin` and `rt.trap_end`.
+##
+## A condition calls functions without checking their contracts
+## (contract.run.2): it calls their `.nc` copies, which are lowered with no
+## checks and call `.nc` copies in turn (`gen_unchecked`).
+use ast
+
+## A name and the variable key it stands for.
+struct NameKey
+    name str
+    key str
+
+# ---- positions ----
+
+## Where `e` starts, as the interpreter reports it.
+fn start_pos(e ast.Expr) ast.Pos
+    match e
+        Call(c, _, _) => start_pos(c)
+        Method(r, _, _, _) => start_pos(r)
+        Member(r, _, _) => start_pos(r)
+        Index(r, _, _) => start_pos(r)
+        Binary(_, l, _, _) => start_pos(l)
+        Try(x, _, _) => start_pos(x)
+        OrElse(x, _, _) => start_pos(x)
+        Range(lo, _, _, p) =>
+            if x := lo
+                return start_pos(x)
+            p
+        _ => expr_pos(e)
+
+fn stmt_start(s ast.Stmt) ast.Pos
+    match s
+        Let(_, p, _, _, _) => p
+        Assign(t, _, _, _) => start_pos(t)
+        While(_, _, p) => p
+        For(_, _, _, _, _, _, p) => p
+        Break(p) => p
+        Continue(p) => p
+        Return(_, p) => p
+        Eval(e) => start_pos(e)
+        Handle(v, _) => start_pos(v)
+        Defer(_, p) => p
+        With(_, _, _, _, p) => p
+        Unsafe(_, p) => p
+        LetTuple(_, _, p) => p
+
+## Where a function falling off its end returns: its last statement.
+fn tail_pos(f ast.FnDecl, body List[ast.Stmt]) ast.Pos
+    if body.len() == 0
+        return f.pos
+    stmt_start(body[body.len() - 1])
+
+# ---- unchecked copies ----
+
+## The function a call in the current code goes to: itself, or its `.nc`
+## copy inside a condition (contract.run.2).
+fn Lower.contract_key(mut self, key str) str
+    if not unchecked or key.starts_with("rt.") or key.starts_with("copy.")
+        return key
+    if not fn_decl.contains(key)
+        return key
+    if not unchecked_seen.contains(key)
+        unchecked_seen.add(key)
+        unchecked_list.push(key)
+        sigs["{key}.nc"] = sigs[key]
+    "{key}.nc"
+
+## Lower the `.nc` copies asked for, and those they ask for. Their problems
+## are the originals', already reported.
+fn Lower.gen_unchecked(mut self)
+    mut i := 0
+    while i < unchecked_list.len()
+        key := unchecked_list[i]
+        i += 1
+        f := fn_decl.get(key) else continue
+        enter_file(fn_file[key])
+        before := problems.len()
+        unchecked = true
+        lower_fn_as(f, "{key}.nc", key, fn_owner(f))
+        unchecked = false
+        stamp_problems()
+        while problems.len() > before
+            problems.pop()
+            problem_files.pop()
+
+# ---- messages ----
+
+fn Lower.say(mut self, s str)
+    call("rt.out_str", [str_value(s)], Ty.Unit)
+
+## The text form of `v` in a message: what `describe` shows.
+fn Lower.describe(mut self, v Val, pos ast.Pos)
+    match v.ty
+        Str => call("rt.out_quoted", [v.id], Ty.Unit)
+        Struct(n) =>
+            slots := structs[n]
+            parts := n.split(".")
+            say("{parts[parts.len() - 1]}(")
+            for k in 0..slots.len()
+                if k > 0
+                    say(", ")
+                say("{slots[k].name}: ")
+                describe(Val(id: load(v.id, k, slots[k].ty), ty: slots[k].ty), pos)
+            say(")")
+        _ => out(v, pos)
+
+## `a = 7, b = 0`: the receiver and parameters with their values.
+fn Lower.describe_args(mut self, args List[NameKey], pos ast.Pos)
+    if args.len() == 0
+        say("no arguments")
+        return
+    for k in 0..args.len()
+        if k > 0
+            say(", ")
+        say("{args[k].name} = ")
+        describe(Val(id: read_var(args[k].key, cur), ty: var_ty[args[k].key]), pos)
+
+## Start a contract trap: the head line is written, the message follows.
+fn Lower.trap_open(mut self, rule str, pos ast.Pos)
+    head := "{src_paths[file]}:{pos.line}:{pos.col}: trap[{rule}]: "
+    call("rt.trap_begin", [str_value(head)], Ty.Unit)
+
+## Finish it: the source excerpt, then exit.
+fn Lower.trap_close(mut self, pos ast.Pos)
+    src := src_lines[file]
+    line := if pos.line >= 1 and pos.line <= src.len() then src[pos.line - 1] else ""
+    call("rt.trap_end", [str_value(excerpt(line, pos.line, pos.col))], Ty.Unit)
+    finish(unreachable_term())
+
+## Branch on `cond`: the current block continues when it holds; the
+## returned block is the failure, which the caller fills and ends.
+fn Lower.check_branch(mut self, cond int) int
+    ok := new_block()
+    fail := new_block()
+    branch(cond, ok, [], fail, [])
+    seal(ok)
+    seal(fail)
+    cur = fail
+    ok
+
+# ---- requires ----
+
+## contract.req.1: before a call of `key` with the arguments `args_v`, each
+## `requires` holds, or the program traps at the call, `pos`.
+fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
+    if unchecked
+        return
+    f := contracted.get(key) else return
+    mut reqs := List[ast.Contract]()
+    for c in f.contracts
+        if not c.is_ensures
+            reqs.push(c)
+    if reqs.len() == 0
+        return
+    if fn_file[key] != file
+        problem(
+            pos,
+            "`{key}`: contracts of a function in another module aren't in the native subset yet",
+        )
+        return
+    sig := sigs[key]
+    saved := scopes
+    saved_self := self_ty
+    scopes = [Map[str, str]()]
+    self_ty = ""
+    mut args := List[NameKey]()
+    mut k := 0
+    if f.owner != none and f.receiver != none
+        self_ty = struct_name(sig.params[0]) else ""
+        declare("self", sig.params[0], args_v[0])
+        args.push(NameKey(name: "self", key: lookup("self") else ""))
+        k = 1
+    for i in 0..f.params.len()
+        declare(f.params[i].name, sig.params[k + i], args_v[k + i])
+        args.push(NameKey(name: f.params[i].name, key: lookup(f.params[i].name) else ""))
+    unchecked = true
+    for c in reqs
+        v := lower_value(c.cond, Ty.Bool) else break
+        ok := check_branch(v.id)
+        trap_open("contract.req.1", pos)
+        say("`{key}` requires `{c.text}`, but it was called with ")
+        describe_args(args, pos)
+        say(" (contract at {c.pos.line}:{c.pos.col})")
+        trap_close(pos)
+        cur = ok
+    unchecked = false
+    scopes = saved
+    self_ty = saved_self
+
+# ---- ensures ----
+
+## On entry to `f`: take the `old(e)` values of its `ensures` lines
+## (contract.ens.3) and remember what the checks at each return need.
+fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
+    if r := f.receiver
+        if r.mutable and self_ty != "" and invariants.contains(self_ty)
+            inv_key = self_ty
+            ens_label = key
+            ens_vars = []
+    mut list := List[ast.Contract]()
+    for c in f.contracts
+        if c.is_ensures
+            list.push(c)
+    if list.len() == 0
+        return
+    ens = list
+    ens_label = key
+    ens_vars = []
+    if f.owner != none and f.receiver != none
+        ens_vars.push(NameKey(name: "self", key: lookup("self") else ""))
+    for p in f.params
+        ens_vars.push(NameKey(name: p.name, key: lookup(p.name) else ""))
+    ens_nargs = ens_vars.len()
+    unchecked = true
+    for c in list
+        for o in c.olds
+            v := lower_value(o.value, none) else continue
+            declare(o.name, v.ty, copy_if_place(o.value, v))
+            ens_vars.push(NameKey(name: o.name, key: lookup(o.name) else ""))
+    unchecked = false
+
+## contract.ens.1: at a return of `rv` (-1 for none) at `at`, each
+## `ensures` holds, or the program traps at its line.
+fn Lower.check_ensures(mut self, rv int, at ast.Pos)
+    if (ens.len() == 0 and inv_key == "") or unchecked
+        return
+    saved := scopes
+    scopes = [Map[str, str]()]
+    for b in ens_vars
+        scopes[0][b.name] = b.key
+    unit := ret.is_unit()
+    if not unit
+        declare("result", ret, rv)
+    unchecked = true
+    for c in ens
+        v := lower_value(c.cond, Ty.Bool) else break
+        ok := check_branch(v.id)
+        trap_open("contract.ens.1", c.pos)
+        say("`{ens_label}` ensures `{c.text}`, but it returned")
+        if not unit
+            say(" ")
+            describe(Val(id: rv, ty: ret), c.pos)
+        say(" at {at.line}:{at.col} with ")
+        describe_args([ens_vars[k] for k in 0..ens_nargs], c.pos)
+        trap_close(c.pos)
+        cur = ok
+    unchecked = false
+    scopes = saved
+    if inv_key != ""
+        me := lookup("self") else return
+        check_invariants(inv_key, read_var(me, cur), at, ens_label, at)
+
+# ---- invariants ----
+
+## contract.inv.2-3: the struct `key` value `obj` keeps its `invariant`
+## lines. `by` is "" for a value just built at `pos`, else the method that
+## returned at `at` and changed it.
+fn Lower.check_invariants(mut self, key str, obj int, pos ast.Pos, by str, at ast.Pos)
+    if unchecked
+        return
+    list := invariants.get(key) else return
+    if inv_file[key] != file
+        problem(
+            pos,
+            "`{key}`: invariants of a struct in another module aren't in the native subset yet",
+        )
+        return
+    saved := scopes
+    saved_self := self_ty
+    scopes = [Map[str, str]()]
+    self_ty = key
+    t := Ty.Struct(key)
+    declare("self", t, obj)
+    parts := key.split(".")
+    name := parts[parts.len() - 1]
+    unchecked = true
+    for c in list
+        v := lower_value(c.cond, Ty.Bool) else break
+        ok := check_branch(v.id)
+        if by == ""
+            trap_open("contract.inv.2", c.pos)
+            say("`{name}` invariant `{c.text}` doesn't hold for ")
+            describe(Val(id: obj, ty: t), c.pos)
+            say(", built at {pos.line}:{pos.col} (invariant at {c.pos.line}:{c.pos.col})")
+        else
+            trap_open("contract.inv.3", c.pos)
+            say("`{name}` invariant `{c.text}` was broken by `{by}`, which returned at {at.line}:{at.col} with self = ")
+            describe(Val(id: obj, ty: t), c.pos)
+            say(" (invariant at {c.pos.line}:{c.pos.col})")
+        trap_close(c.pos)
+        cur = ok
+    unchecked = false
+    scopes = saved
+    self_ty = saved_self

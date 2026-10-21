@@ -1,0 +1,49 @@
+## std.regex natively (ADR 0819): searches the DFAs answer, and those the VM takes over
+## (a state explosion, assertions, characters outside ASCII).
+use std.regex
+
+fn text(n int) str
+    mut parts := List[str]()
+    mut seed := 11
+    for _ in 0..n
+        seed = (seed * 1103 + 12345) % 65536
+        parts.push(["a", "b", "ab", "12", " ", "x=7", "é", "foo"][seed / 16 % 8])
+    parts.join("")
+
+fn show(pat str, s str)
+    re := regex.compile(pat) else err
+        print("{pat}: {err.kind}")
+        return
+    ms := regex.find_all(re, s)
+    mut sum := 0
+    for m in ms
+        sum += m.start * 7 + m.end
+    print("{pat}: {regex.is_match(re, s)} {ms.len()} {sum}")
+
+fn main() !
+    t := text(400)
+    show("[0-9]+", t)
+    show(r"(a|b)*a(a|b){12}", t)
+    show("a.*?b", t)
+    show("(?:ab|a)(?:b|bc)?", t)
+    show("x=[0-9]", t)
+    show(r"\bfoo\b", t)
+    show("^a", t)
+    show("é+", t)
+    show("", t)
+    show("a*", t)
+    show("(a*)*b", t)
+    show("[^a]+", t)
+    show("b|ab|aab", t)
+    show("(?i)FOO", t)
+    show(r"[a-c]{3,5}?", t)
+    ascii := t.replace("é", "e")
+    show("[0-9]+", ascii)
+    show(r"(a|b)*a(a|b){12}", ascii)
+    show("a.*?b", ascii)
+    show("x=[0-9]", ascii)
+    print(regex.replace(regex.compile("a(b)?")?, "xab ac", "<$1>"))
+    abs := "abbaab".repeat(20)
+    show(r"(a|b)*a(a|b){12}", abs)
+    show(r"a(a|b){12}b", abs)
+    show(r"b(a|b){3}", abs)

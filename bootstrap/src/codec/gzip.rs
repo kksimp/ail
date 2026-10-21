@@ -16,6 +16,7 @@ pub fn gzip(data: &[u8], level: u32) -> Vec<u8> {
     out
 }
 
+// std.compress.10: the gzip corrupt and checksum messages.
 fn bad(msg: &str) -> CodecError {
     CodecError::new("corrupt", msg)
 }

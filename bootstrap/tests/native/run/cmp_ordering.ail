@@ -1,0 +1,22 @@
+fn describe(o Ordering) str
+    match o
+        Less => "less"
+        Equal => "equal"
+        Greater => "greater"
+
+fn main()
+    print(describe(3.cmp(5)))
+    print(describe(5.cmp(5)))
+    print(describe(7.cmp(-2)))
+    print(describe("apple".cmp("pear")))
+    print(describe("pear".cmp("pear")))
+    print(describe("pear".cmp("fig")))
+    print(describe("ab".cmp("abc")))
+    print(describe('a'.cmp('b')))
+    o := 2.cmp(1)
+    print(o == Greater)
+    print(o == Ordering.Less)
+    chars := "abcde".chars()
+    print(chars.index_of('d') else -1)
+    print(chars.index_of('z') else -1)
+    print(chars.contains('e'))

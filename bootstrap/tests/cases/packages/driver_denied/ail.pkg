@@ -1,0 +1,3 @@
+# unsafe.hw.1: `unsafe allow` is not enough for hardware access; the app has `unsafe driver`.
+package app unsafe driver
+dep dev path vendor/dev unsafe allow

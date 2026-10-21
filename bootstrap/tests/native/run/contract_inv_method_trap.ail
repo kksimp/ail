@@ -1,0 +1,14 @@
+# contract.inv.3: a `mut self` method that leaves an invariant broken traps.
+struct Account
+    balance int
+    invariant balance >= 0
+
+fn Account.withdraw(mut self, n int)
+    balance -= n
+
+fn main()
+    mut a := Account(balance: 5)
+    a.withdraw(3)
+    print(a.balance)
+    a.withdraw(9)
+    print("unreachable")

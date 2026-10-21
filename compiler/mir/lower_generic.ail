@@ -507,7 +507,7 @@ fn Lower.gen_instances(mut self)
         job := gen.queue.pop() else break
         enter_file(job.file)
         gen.tsubst = job.binds
-        lower_fn_as(job.decl, job.key, job.owner)
+        lower_fn_as(job.decl, job.key, job.key, job.owner)
         gen.tsubst = {}
     enter_file(0)
 

@@ -1,0 +1,4 @@
+pub fn peek() int
+    unsafe
+        p := hw.at(4096, 0)
+        p.read_volatile()
