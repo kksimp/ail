@@ -33,7 +33,7 @@ files directly in `DIR` form the root module, which declares `main`.
 package root. The import path `a.b` names the directory `ROOT/a/b`. Only
 imported modules are loaded. *(ADR 0153)*
 
-```
+```ail skip=context rules=mod.unit.2,mod.unit.5
 geometry/          ail run geometry
     main.ail       use geo         (the root module: main.ail and extra.ail)
     extra.ail
@@ -57,7 +57,7 @@ literal only inside its own module. Reading or assigning a private field, or
 calling a private method or associated function, outside its module is a
 compile-time error (`mod.vis.1`). *(ADR 0155)*
 
-```ail fragment
+```ail skip=context rules=mod.vis.3
 pub struct Account
     pub owner str
     balance int          # private: other modules call Account.open()
@@ -157,7 +157,7 @@ by key-value pairs: `path`, `git`, `rev`, `tag`, `caps` (`eff.cap.4`) and
 An unknown line or key, a repeated key, or a key without a value is a
 compile-time error at its position in the manifest. *(ADR 0230)*
 
-```
+```ail skip=context rules=mod.pkg.1,mod.pkg.2,mod.pkg.3
 package notes caps fs
 dep geo path ../geo caps fs
 dep textkit path vendor/textkit
@@ -186,7 +186,7 @@ dependency. A git dependency is a package like a path one: `use NAME`
 imports it, it resolves its own imports and manifest (`mod.pkg.3`), and its
 `caps` grant applies to it unchanged (`eff.cap.4`). *(ADR 0231, ADR 0355)*
 
-```
+```ail skip=context rules=mod.pkg.6
 package notes
 dep geo git "https://example.com/geo.git" tag v1.2 caps fs
 ```
@@ -235,7 +235,128 @@ completes normally, the exit status is 0. Traps follow `err.trap.3`.
 **mod.main.3** — `print(value)` is available without import. It writes the
 value's text form followed by a newline to standard output. *(ADR 0088)*
 
-```ail
+```ail rules=mod.main.1,mod.main.3,mod.unit.3
 fn main()
     print("Hello, world!")
+```
+
+## Runnable examples for the rules above
+
+The checks below are single files, so each one runs or fails on its own. Rules
+that need a directory tree, a manifest or a git cache are cited by `skip=context`
+blocks that show the layout; their checks are the package cases in
+`bootstrap/tests/cases/packages/` (each folder's `expected.rules` names the rule
+IDs it reports) and `bootstrap/tests/git_deps.rs`.
+
+```ail error=mod.unit.1
+fn f() int
+    1
+
+fn f() int
+    2
+
+fn main()
+    print(f())
+```
+
+```ail rules=mod.const.1,mod.const.2
+pub MAX_DEPTH := 64
+KEYWORDS := {"if", "else", "while"}
+LIMIT := MAX_DEPTH * 2
+EMPTY := Map[str, int]()
+
+fn main()
+    print("{MAX_DEPTH} {LIMIT} {KEYWORDS.len()} {EMPTY.len()}")
+```
+
+```ail norun rules=mod.const.3
+# norun: the overflow is reported at the constant before `main` runs, so the
+# block checks clean and is not run.
+BIG := 9223372036854775807 + 1
+
+fn main()
+    print(BIG)
+```
+
+```ail error=mod.const.1
+mut X := 1
+
+fn main()
+    print(X)
+```
+
+```ail error=mod.use.3
+fn main()
+    print(1)
+
+use std.csv
+```
+
+```ail rules=mod.use.1,mod.use.2 norun
+use std.csv
+fn main() !
+    print(csv.parse("a,b\n1,2\n")?.len())
+```
+
+```ail error=mod.use.6
+use std.csv as m
+use std.fs as m
+
+fn main()
+    print(1)
+```
+
+```ail error=mod.use.4
+use geometry.shapes
+
+fn main()
+    print(1)
+```
+
+```ail error=mod.unit.4
+struct Point
+    x int
+
+fn m.Point.area() int
+    1
+
+fn main()
+    print(1)
+```
+
+```ail error=mod.vis.2
+pub enum Color
+    pub Red
+
+fn main()
+    print(1)
+```
+
+```ail rules=mod.vis.1
+struct Account
+    pub owner str
+    balance int
+
+fn main()
+    a := Account("x", 0)
+    print(a.owner)
+```
+
+```ail norun rules=mod.main.2
+error enum Bad
+    Oops "oops"
+
+fn main() ! Bad
+    return Oops
+```
+
+```ail skip=context rules=mod.use.5
+# Import cycle: geometry/a.ail does `use geometry.b` and geometry/b.ail does
+# `use geometry.a`. The error names the cycle (cases/packages/cycle).
+```
+
+```ail skip=context rules=mod.pkg.4,mod.pkg.5,mod.pkg.7,mod.pkg.8,mod.pkg.9
+# Package graph rules: duplicate package names (cases/packages/dupes), dependency
+# cycles (cases/packages/cycle), the git cache and lock (tests/git_deps.rs), and
+# `ail pkg update` (tests/git_deps.rs). Shown as prose, not checked here.
 ```

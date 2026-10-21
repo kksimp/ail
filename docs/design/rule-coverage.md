@@ -86,13 +86,21 @@ Chapters 07 (ownership, 35 uncovered before) and 08 (errors, 29 before) follow t
 output and `skip=bootstrap` for `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`
 and `own.excl.3`, `own.ref.2`, `own.ref.7` (features the gate can't check yet).
 
-Uncovered rules outside the batch chapters: 382 before lane 223, 275 after chapters 07-08, 262 after chapter 09, 220 after chapter 10, then 180 after chapter 11 (42 trait rules: `trait.auto.4` is a bootstrap bug, skip=bootstrap; `trait.impl.4` needs a two-package example, skip=context)
+Uncovered rules outside the batch chapters: 382 before lane 223, 275 after chapters 07-08, 262 after chapter 09, 220 after chapter 10, 180 after chapter 11, then about 151 after chapter 12 (42 trait rules: `trait.auto.4` is a bootstrap bug, skip=bootstrap; `trait.impl.4` needs a two-package example, skip=context)
 (09-generics, 14 rules; `gen.anon.2` is `skip=context`, the formatter's canonical form). Chapter 11 (concurrency, 40 rules, lane 223): all covered now. Tasks, cancellation,
 channels, mutexes and the parallel rules run on the bootstrap, and `conc.sched.1`,
 `conc.sched.2` and `conc.mm.1` are `norun` blocks that show the mechanism without a
 test run, as the spec says. `conc.par.7` and `conc.par.9` are cited on runnable
 examples that exercise them only indirectly. After chapter 11, 180 rules remain
-uncovered in the counted set. Chapters 12-16 and 19-21 remain.
+uncovered in the counted set.
+
+Chapter 12 (modules, 29 rules, lane 223): all cited. Single-file rules run or fail in
+their own blocks (`mod.unit.1`, `mod.const.*`, `mod.use.3`, `mod.use.4`, `mod.use.6`,
+`mod.unit.4`, `mod.vis.2`, `mod.main.2`). The rules that need a directory tree, a manifest
+or a git cache (`mod.unit.2`, `mod.unit.5`, `mod.use.5`, `mod.pkg.*`, `mod.vis.3`) are cited
+by `skip=context` blocks that show the layout. Their checks are the package cases in
+`bootstrap/tests/cases/packages/` and `bootstrap/tests/git_deps.rs`, not the spec gate.
+Chapters 13-16 and 19-21 remain.
 
 Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integrator decision):
 `own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `lex.kw.1`, `trait.auto.4`.
