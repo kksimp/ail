@@ -122,6 +122,57 @@ fn Lower.lower_none_cmp(mut self, o ast.BinOp, lhs ast.Expr, rhs ast.Expr, pos a
         return unsupported(pos, "comparing a `{a.ty.name()}` with `none`")
     Val(id: op(name, [a.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
 
+## Whether `a == b` is the comparison of an optional with an optional or with
+## a plain value of its type (`x == 'h'`, `a == b` on two `str?`).
+fn opt_comparable(a Ty, b Ty) bool
+    x := a.opt_inner() else a
+    y := b.opt_inner() else b
+    same_ty(x, y)
+
+## `a == b` (`negate` false) or `a != b` where one side or both are optionals:
+## a `none` equals only a `none`, and two present values compare as plain ones.
+fn Lower.opt_compare(mut self, negate bool, a Val, b Val, pos ast.Pos) Val
+    r := new_value(Ty.Bool, "")
+    join := new_block()
+    blocks[join].params.push(r)
+    no := konst(0, Ty.Bool)
+    if a.ty.opt_inner() == none or b.ty.opt_inner() == none
+        # One side is plain: a `none` on the other is not equal to it.
+        o := if a.ty.opt_inner() == none then b else a
+        other := if a.ty.opt_inner() == none then a else b
+        present := new_block()
+        branch(op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), present, [], join, [no])
+        seal(present)
+        cur = present
+        v := unwrap(o)
+        e := if a.ty.opt_inner() == none then binary(
+            Eq,
+            other,
+            v,
+            pos,
+        ) else binary(Eq, v, other, pos)
+        jump(join, [e.id])
+    else
+        a_none := new_block()
+        a_some := new_block()
+        branch(op("eq", [a.id, konst(0, Ty.Int)], Ty.Bool), a_none, [], a_some, [])
+        seal(a_none)
+        cur = a_none
+        jump(join, [op("eq", [b.id, konst(0, Ty.Int)], Ty.Bool)])
+        seal(a_some)
+        cur = a_some
+        both := new_block()
+        branch(op("ne", [b.id, konst(0, Ty.Int)], Ty.Bool), both, [], join, [no])
+        seal(both)
+        cur = both
+        e := binary(Eq, unwrap(a), unwrap(b), pos)
+        jump(join, [e.id])
+    seal(join)
+    cur = join
+    if negate
+        return Val(id: op("not", [r], Ty.Bool), ty: Ty.Bool)
+    Val(id: r, ty: Ty.Bool)
+
 # ---- results ----
 
 fn Lower.trace_line(mut self, pos ast.Pos) int
