@@ -244,7 +244,7 @@ fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
                     return false
         return true
     match t
-        Int | Bool | Char | Str | Float => true
+        Int | Bool | Char | Sized(_) | Str | Float => true
         _ => false
 
 fn Lower.can_order(self, t Ty) bool
@@ -351,7 +351,7 @@ fn has_tuple(t Ty) bool
 ## list: strings in quotes, `(1, "a")`, `[(1, "a")]`.
 fn Lower.value_text(mut self, t Ty, x int) int
     match t
-        Int => call("rt.fmt_int", [x], Ty.Str)
+        Int | Sized(_) => call("rt.fmt_int", [x], Ty.Str)
         Float => call("rt.fmt_float", [x], Ty.Str)
         Bool => call("rt.fmt_bool", [x], Ty.Str)
         Str => call("rt.str_quoted", [x], Ty.Str)

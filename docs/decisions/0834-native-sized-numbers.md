@@ -54,3 +54,13 @@ Programs that use sized numbers start to build natively. Part 2 adds checked
 interpreter's trap texts; `checked_*` waits for `Opt` of a sized integer
 (part 4). Tests `sized_basics` and `sized_trap`
 in `bootstrap/tests/native/run/` check the executable against `ail run`.
+
+Part 4 lets the sized integers (not `f32` yet) be list elements, `Opt`
+payloads, tuple elements, map keys and values, set elements and `match`
+subjects. They are stored as 8-byte integer slots like an `int`, so sorting,
+`contains`, `min`, `max`, equality and printing use the `int` paths of the
+runtime, and the runtime needs no change. `sum` on a list of a sized integer
+and `op=` on a map entry of one stay `native.subset.1`, because both need the
+type's overflow check. `f32` in these places follows once scalar `f32` has
+merged.
+
