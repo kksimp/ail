@@ -39,11 +39,22 @@ taken.
 ## Testing the primitives
 
 The runtime functions have no public `std` face, so a slice needs a way to run
-its vectors natively. Each slice adds a test-only module (`tlsprim`, lowered
-only for programs under `bootstrap/tests/`) that exposes its raw functions on
-`str` arguments in hex; the native test runs the same vectors as the Rust
-tests and the interpreter has no twin, so the expected output is the vector
-files of ADR 0366 and ADR 0368 themselves.
+its vectors natively. The hook is test-only and is **not public API**:
+
+- A `tlsprim` lowering module exposes the raw functions on hex `str`
+  arguments. It is enabled only by a hidden compiler flag
+  (`--internal-modules`) that the test harness passes, never by where a file
+  lives, so behaviour does not depend on paths. It never appears in `ail api`,
+  the cards, the quick reference or `ail explain`.
+- Slice 2a (ChaCha20-Poly1305, X25519) needs no product change at all:
+  `tools/native-tls/prim-check.sh` builds in a temporary copy of `compiler/`
+  with a test-only runtime file and the 48 vectors of ADR 0366's
+  `crosscheck.txt`. The flagged module replaces that overlay when a slice
+  needs more than it can do.
+- A public crypto API (a `std.crypto`) would be a separate design decision.
+
+Test inputs are the vector files of ADR 0366 and ADR 0368 themselves; the
+Rust client is the oracle.
 
 ## Rejected alternatives
 
@@ -53,3 +64,8 @@ files of ADR 0366 and ADR 0368 themselves.
   fetch path off the native backend.
 - **One large pull request.** Cryptography is easiest to trust in pieces that
   each have vectors; a single change would gate for days.
+
+## Clock caveat
+
+The native clock of lane 177 (`time_mono_ms`) reads the wall clock on macOS
+until a follow-up, so network timeouts must not assume it is monotonic there.
