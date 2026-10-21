@@ -5,6 +5,6 @@ fn main() !
     for i in 0..50
         big = "{big}{text}"
     packed := compress.gzip(big)
-    print("gzip is smaller: {packed.len() < big.to_bytes().len()}")
+    print("gzip is smaller: {packed.len() < big.byte_len()}")
     back := compress.gunzip(packed)?
     print("round trip equal: {back.text() == big}")

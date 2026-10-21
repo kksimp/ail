@@ -39,3 +39,8 @@ Option A: `std.date.5`, `std.date.7` and `std.date.12`.
   `add_years(k)` is `add_months(12 * k)`, the clamped day never grows.
 - Vectors cover New York (2026-03-08 and 2026-11-01), Sydney, Berlin and
   Kolkata.
+
+## Rejected alternatives
+
+- Overflow into the next month (option B): rejected because January 31 plus one month gives March 2 or 3, a surprise that causes billing and scheduling bugs.
+- Failing on a missing day or a skipped time (option C): rejected because every call would need an `else` for rare cases, and the clamp is what almost every caller wants.

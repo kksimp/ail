@@ -1,4 +1,4 @@
-## An ARMv8.2-A (A64) encoder: every instruction the code generator emits,
+## An ARMv8.2-A (plat.isa.2) (A64) encoder: every instruction the code generator emits,
 ## as 32-bit little-endian words (ADR 0388). Registers are numbered 0-31;
 ## 31 is `sp` or `xzr` as the instruction defines. Vector registers `d0`-`d31`
 ## are numbered 0-31 too: an instruction's operand kinds are fixed.

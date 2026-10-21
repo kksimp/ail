@@ -54,3 +54,8 @@ for the effect set, which keeps `@pure` and `ail effects` sound.
 - Generic functions are not values; `apply[T]` taking a `fn(T) T` is allowed,
   since its parameter is a type, not a value of a generic function.
 - `ail fmt` writes `fn(int) int` with no space after `fn`.
+
+## Rejected alternatives
+
+- Closures such as `fn(x) x + n` (option B): a separate decision for later. Captures need a model under mutable value semantics (ADRs 0060-0063), and `fn(m) key` was already rejected for key functions (ADR 0250) because it weakens `fn` as a declaration anchor.
+- `Fn[A, B, R]` as a generic type (option C): rejected because it is a `fn` that is not the declaration keyword, and it is longer.

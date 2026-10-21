@@ -1,0 +1,66 @@
+# Loop and call shapes of the bytecode tier (ADR 0619): the counted `for` keeps its
+# variable in place, `while` tests after the body, `a[i][k]` reads without
+# copying the row, and `push`/`len` on a user type still reach its methods.
+
+struct Bag
+    items List[int]
+
+fn Bag.push(mut self, x int)
+    self.items.push(x * 10)
+
+fn Bag.len(self) int
+    self.items.len() + 100
+
+fn fill(mut xs List[int], n int)
+    for i in 0..n
+        xs.push(i)
+
+fn main()
+    # for: empty, one turn, inclusive, continue, break, nested
+    mut seen := []
+    for i in 3..3
+        seen.push(i)
+    for i in 3..4
+        seen.push(i)
+    for i in 1..=3
+        seen.push(i)
+    for i in 0..10
+        if i % 2 == 0
+            continue
+        if i > 6
+            break
+        seen.push(i * 100)
+    for i in 0..2
+        for j in 0..2
+            seen.push(i * 10 + j)
+    print("{seen}")
+    # while: continue, break, a condition that is false at the start
+    mut k := 0
+    mut total := 0
+    while k < 10
+        k += 1
+        if k == 3
+            continue
+        if k == 8
+            break
+        total += k
+    while k < 0
+        total = -1
+    print("{k} {total}")
+    # a[i][k] on lists of lists, maps of lists, and out of range
+    grid := [[1, 2, 3], [4, 5, 6]]
+    r := 1
+    c := 2
+    print("{grid[r][c]} {grid[0][0]}")
+    by_name := {"a": [7, 8], "b": [9]}
+    key := "a"
+    idx := 1
+    print("{by_name[key][idx]}")
+    # push and len reach a user type's methods
+    mut bag := Bag(items: [])
+    bag.push(4)
+    bag.push(5)
+    print("{bag.items} {bag.len()}")
+    mut xs := []
+    fill(mut xs, 4)
+    print("{xs} {xs.len()}")
