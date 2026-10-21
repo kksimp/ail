@@ -187,10 +187,10 @@ dependencies and no capability limit. *(ADR 0230)*
 
 **mod.pkg.2** — A manifest is lines of words separated by spaces; `#` starts
 a comment and `"..."` quotes a word. Its first line is `package NAME`,
-optionally followed by `caps LIST` (`eff.cap.5`) and `unsafe allow`
-(`unsafe.block.3`), and appears once. Every other line is `dep NAME` followed
+optionally followed by `caps LIST` (`eff.cap.5`) and `unsafe allow` or
+`unsafe driver` (`unsafe.block.3`, `unsafe.hw.1`), and appears once. Every other line is `dep NAME` followed
 by key-value pairs: `path`, `git`, `rev`, `tag`, `caps` (`eff.cap.4`) and
-`unsafe` (`unsafe allow`, `unsafe.block.3`). A `NAME` is lowercase letters, digits and `_`.
+`unsafe` (`unsafe allow` or `unsafe driver`, `unsafe.block.3`, `unsafe.hw.1`). A `NAME` is lowercase letters, digits and `_`.
 An unknown line or key, a repeated key, or a key without a value is a
 compile-time error at its position in the manifest. *(ADR 0230)*
 

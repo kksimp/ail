@@ -391,6 +391,47 @@ unsafe fn store(addr: usize, e: PtrElem, v: &Value) {
     }
 }
 
+/// Read what `e` describes at `addr` with one volatile load of its width.
+///
+/// # Safety
+/// `addr` must be readable for `size_of(e)` bytes and a multiple of that size.
+#[cfg(unix)]
+unsafe fn load_volatile(addr: usize, e: PtrElem) -> Value {
+    // SAFETY: the caller promises readability and alignment.
+    let bits = unsafe {
+        match size_of(e) {
+            1 => i64::from(std::ptr::read_volatile(addr as *const u8)),
+            2 => i64::from(std::ptr::read_volatile(addr as *const u16)),
+            4 => i64::from(std::ptr::read_volatile(addr as *const u32)),
+            _ => std::ptr::read_volatile(addr as *const i64),
+        }
+    };
+    let bytes = bits.to_le_bytes();
+    // SAFETY: `bytes` holds the value just read, at least `size_of(e)` bytes.
+    unsafe { load(bytes.as_ptr() as usize, e) }
+}
+
+/// Write `v` as `e` at `addr` with one volatile store of its width.
+///
+/// # Safety
+/// `addr` must be writable for `size_of(e)` bytes and a multiple of that size.
+#[cfg(unix)]
+unsafe fn store_volatile(addr: usize, e: PtrElem, v: &Value) {
+    let mut bytes = [0u8; 8];
+    // SAFETY: `bytes` is 8 writable bytes, enough for any element.
+    unsafe { store(bytes.as_mut_ptr() as usize, e, v) };
+    let bits = i64::from_le_bytes(bytes);
+    // SAFETY: the caller promises writability and alignment.
+    unsafe {
+        match size_of(e) {
+            1 => std::ptr::write_volatile(addr as *mut u8, bits as u8),
+            2 => std::ptr::write_volatile(addr as *mut u16, bits as u16),
+            4 => std::ptr::write_volatile(addr as *mut u32, bits as u32),
+            _ => std::ptr::write_volatile(addr as *mut i64, bits),
+        }
+    }
+}
+
 #[cfg(unix)]
 mod libc {
     use std::ffi::c_void;
@@ -425,6 +466,30 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
         match m {
             "is_null" => Ok(Value::Bool(addr == 0)),
             "offset" => Ok(Value::Int((addr as i64).wrapping_add(values[0].int().wrapping_mul(size as i64)))),
+            "read_volatile" | "write_volatile" => {
+                #[cfg(not(unix))]
+                {
+                    return stop("ffi.load.3", pos, "raw pointers are not supported on Windows yet (ffi.load.3)".into());
+                }
+                #[cfg(unix)]
+                {
+                    // unsafe.hw.3: a device register is read and written whole, so the
+                    // address must be a multiple of the access size.
+                    if addr % size != 0 {
+                        return stop("unsafe.hw.3", pos, format!("`{m}` of {size} bytes at an address that is not a multiple of {size}"));
+                    }
+                    if let Err((rule, msg)) = check_access(addr, size) {
+                        return stop(rule, pos, msg);
+                    }
+                    // SAFETY: as for `read` and `write` below; the address is aligned.
+                    if m == "read_volatile" {
+                        Ok(unsafe { load_volatile(addr, elem) })
+                    } else {
+                        unsafe { store_volatile(addr, elem, &values[0]) };
+                        Ok(Value::Unit)
+                    }
+                }
+            }
             "read" | "write" => {
                 #[cfg(not(unix))]
                 {
@@ -546,3 +611,24 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
         }
     }
 }
+
+impl<'a, W: std::io::Write> Interp<'a, W> {
+    /// `std.hw` (unsafe.hw.2-4): a pointer at a fixed address, and barriers.
+    pub(super) fn hw_call(&mut self, f: &str, values: &[Value], pos: Pos) -> Flow<Value> {
+        match f {
+            "at" => {
+                let addr = values[0].int();
+                if addr < 0 {
+                    return stop("unsafe.hw.2", pos, format!("`hw.at` of the negative address {addr}"));
+                }
+                Ok(Value::Int(addr))
+            }
+            "fence" | "fence_io" => {
+                std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+                Ok(Value::Unit)
+            }
+            _ => unreachable!("stdlib::MODULES lists `hw.{f}`"),
+        }
+    }
+}
+

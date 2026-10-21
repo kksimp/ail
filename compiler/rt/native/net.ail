@@ -1,0 +1,738 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Raw TCP for the native subset (std.net.12): `net.listen`, `net.connect`,
+## and the methods of `net.Listener` and `net.Conn`. IPv4 only: an address is
+## `A.B.C.D:PORT`, `localhost:PORT` (127.0.0.1) or a name in `/etc/hosts`; any
+## other name fails with kind `not_found` (no DNS client yet). Every socket is
+## non-blocking, and a wait is `poll` with the connection's timeout
+## (`set_timeout`, default 30000 ms); a wait does not yet let other tasks run
+## (std.net.8).
+##
+## A `net.Conn` or `net.Listener` is a struct with one `int` field, a handle:
+## the index of its socket object in a table that a global slot keeps alive.
+## A failure sets the error slot to the display text of a `net.NetError` and
+## the error value (ADR 0804), like `fs.IoError`.
+##
+## Linux x86-64, Linux ARM64 and macOS ARM64 (`target()` 0, 1, 2). The system
+## calls are behind the `net_sys_*` functions.
+
+# Global slot 40: the table of socket objects (a list of pointers).
+NET_TAB := 40
+
+# A socket object: eleven words.
+NET_FD := 0
+NET_TIMEOUT := 8
+NET_BUF := 16
+NET_POS := 24
+NET_LEN := 32
+NET_FLAGS := 40
+NET_PEER := 48
+NET_KIND := 56
+NET_ADDR := 64
+NET_CAP := 72
+NET_BYTES := 80
+
+# `NET_FLAGS` bits.
+NET_EOF := 1
+NET_SHUT := 2
+
+# `NET_KIND`: 0 a connection, 1 a listener.
+NET_CONN := 0
+NET_LISTENER := 1
+
+NET_BUF_SIZE := 16384
+NET_DEFAULT_MS := 30000
+
+# ---- system calls: one name per operation, three numbers (native-abi.md §4) ----
+
+## The system-call result for a negative `errno`, as a kind of `net.NetError`.
+fn net_errno_kind(e int) str
+    # Linux and macOS number these differently.
+    mac := target() == 2
+    if e == (if mac then 61 else 111)
+        return "refused"
+    if e == (if mac then 60 else 110)
+        return "timed_out"
+    if e == 32
+        or e == (if mac then 54 else 104)
+        or e == (if mac then 53 else 103)
+        or e == (if mac then 57 else 107)
+        return "closed"
+    if e == (if mac then 48 else 98) or e == (if mac then 49 else 99) or e == 13
+        return "bind"
+    "other"
+
+fn net_sys_socket() int
+    fd := syscall(os_pick(41, 198, 97), 2, 1, 0, 0, 0, 0)
+    if fd < 0
+        return fd
+    # Non-blocking: F_SETFL (4) with O_NONBLOCK (Linux 0o4000, macOS 4).
+    syscall(os_pick(72, 25, 92), fd, 4, if target() == 2 then 4 else 2048, 0, 0, 0)
+    if target() == 2
+        # No SIGPIPE on a write to a closed peer: SO_NOSIGPIPE.
+        p := alloc_raw(8, KIND_BYTES)
+        store64(p, 1)
+        syscall(105, fd, 65535, 4130, p, 4, 0)
+    fd
+
+fn net_sys_connect(fd int, sa int) int
+    syscall(os_pick(42, 203, 98), fd, sa, 16, 0, 0, 0)
+
+fn net_sys_bind(fd int, sa int) int
+    syscall(os_pick(49, 200, 104), fd, sa, 16, 0, 0, 0)
+
+fn net_sys_listen(fd int) int
+    syscall(os_pick(50, 201, 106), fd, 128, 0, 0, 0, 0)
+
+fn net_sys_accept(fd int, sa int, lenp int) int
+    if target() == 2
+        return syscall(30, fd, sa, lenp, 0, 0, 0)
+    syscall(os_pick(288, 242, 0), fd, sa, lenp, 0, 0, 0)
+
+fn net_sys_sockname(fd int, sa int, lenp int, peer bool) int
+    if peer
+        return syscall(os_pick(52, 205, 31), fd, sa, lenp, 0, 0, 0)
+    syscall(os_pick(51, 204, 32), fd, sa, lenp, 0, 0, 0)
+
+fn net_sys_reuse(fd int)
+    p := alloc_raw(8, KIND_BYTES)
+    store64(p, 1)
+    # SO_REUSEADDR (Linux level 1 option 2, macOS 0xffff and 4).
+    syscall(
+        os_pick(54, 208, 105),
+        fd,
+        if target() == 2 then 65535 else 1,
+        if target() == 2 then 4 else 2,
+        p,
+        4,
+        0,
+    )
+
+## Send up to `n` bytes; the count, or a negative `errno`.
+fn net_sys_send(fd int, p int, n int) int
+    syscall(os_pick(44, 206, 133), fd, p, n, if target() == 2 then 0 else 16384, 0, 0)
+
+## Wait for `events` (1 readable, 4 writable) on `fd` for `ms` milliseconds
+## (negative: forever): 1 ready, 0 timed out, or a negative `errno`.
+fn net_wait(fd int, events int, ms int) int
+    pf := alloc_raw(16, KIND_BYTES)
+    ts := alloc_raw(16, KIND_BYTES)
+    while true
+        store64(pf, fd.bit_and(4294967295).bit_or(events.shl(32)))
+        mut r := 0
+        if target() == 1
+            if ms < 0
+                r = syscall(73, pf, 1, 0, 0, 0, 0)
+            else
+                store64(ts, ms / 1000)
+                store64(ts + 8, ms % 1000 * 1000000)
+                r = syscall(73, pf, 1, ts, 0, 0, 0)
+        else
+            r = syscall(if target() == 2 then 230 else 7, pf, 1, ms, 0, 0, 0)
+        if r == -4
+            continue
+        if r <= 0
+            return r
+        return 1
+    0
+
+# ---- the table of sockets ----
+
+## A new socket object for `fd`; its handle.
+fn net_add(fd int, kind int, peer str, addr str) int
+    o := obj_new(NET_BYTES, 4)
+    store64(o + NET_FD, fd)
+    store64(o + NET_TIMEOUT, NET_DEFAULT_MS)
+    store64(o + NET_BUF, 0)
+    store64(o + NET_POS, 0)
+    store64(o + NET_LEN, 0)
+    store64(o + NET_FLAGS, 0)
+    store64(o + NET_PEER, str_addr(peer))
+    store64(o + NET_KIND, kind)
+    store64(o + NET_ADDR, str_addr(addr))
+    store64(o + NET_CAP, 0)
+    mut t := load64(global(NET_TAB))
+    if t == 0
+        xs := list_new(8)
+        store64(global(NET_TAB), list_addr(xs))
+        list_push(xs, 0)
+        t = list_addr(xs)
+    list_push(list_at(t), o)
+    load64(t) - 1
+
+## The socket object of a handle, or 0 when it is closed or not a handle.
+fn net_obj(h int) int
+    t := load64(global(NET_TAB))
+    if t == 0 or h < 1 or h >= load64(t)
+        return 0
+    o := load64(load64(t + 16) + 8 * h)
+    if o == 0 or load64(o + NET_FD) < 0
+        return 0
+    o
+
+## The `Conn` or `Listener` struct (one field, the handle) for a handle.
+fn net_wrap(h int) int
+    o := obj_new(8, 4)
+    store64(o, h)
+    o
+
+# ---- errors ----
+
+## Fail with `net.NetError(url, kind, message)`; `at` is the call's trace line.
+fn net_fail(url str, kind str, message str, at str) int
+    sb_reset()
+    sb_text("net.NetError(url: ")
+    os_put_quoted(url)
+    sb_text(", kind: ")
+    os_put_quoted(kind)
+    sb_text(", message: ")
+    os_put_quoted(message)
+    sb_byte(41)
+    err_set(sb_str(), at)
+    e := obj_new(24, 4)
+    store64(e, str_addr(url))
+    store64(e + 8, str_addr(kind))
+    store64(e + 16, str_addr(message))
+    err_value(e)
+    0
+
+fn net_closed(what str, at str) int
+    net_fail("", "closed", "this {what} is closed", at)
+
+# ---- addresses ----
+
+## `"a.b.c.d"` as one 32-bit number (first part in the low byte, the order
+## of the bytes on the wire), or -1.
+fn net_ipv4(host str) int
+    p := str_addr(host)
+    n := load64(p)
+    mut ip := 0
+    mut part := 0
+    mut digits := 0
+    mut parts := 0
+    for i in 0..n
+        c := load8(p + 16 + i)
+        if c >= 48 and c <= 57
+            part = part * 10 + c - 48
+            digits += 1
+            if part > 255 or digits > 3
+                return -1
+        elif c == 46 and digits > 0
+            ip = ip.bit_or(part.shl(8 * parts))
+            parts += 1
+            part = 0
+            digits = 0
+            if parts > 3
+                return -1
+        else
+            return -1
+    if parts != 3 or digits == 0
+        return -1
+    ip.bit_or(part.shl(24))
+
+## A name in `/etc/hosts`: its IPv4 address, or -1.
+fn net_hosts(host str) int
+    path := alloc_raw(16, KIND_BYTES)
+    store64(path, 8317981589517919535)
+    store8(path + 8, 111)
+    store8(path + 9, 115)
+    store8(path + 10, 116)
+    store8(path + 11, 115)
+    store8(path + 12, 0)
+    fd := os_open(path, 0, 0)
+    if fd < 0
+        return -1
+    buf := alloc_raw(65536, KIND_BYTES)
+    mut n := 0
+    while n < 65536
+        r := os_read(fd, buf + n, 65536 - n)
+        if r <= 0
+            break
+        n += r
+    os_close(fd)
+    h := str_addr(host)
+    hn := load64(h)
+    mut i := 0
+    while i < n
+        # One line: fields split on spaces, tabs and `#` ends it.
+        mut j := i
+        while j < n and load8(buf + j) != 10
+            j += 1
+        mut k := i
+        mut ip := -1
+        mut field := 0
+        while k < j
+            c := load8(buf + k)
+            if c == 35
+                break
+            if c == 32 or c == 9 or c == 13
+                k += 1
+                continue
+            mut e := k
+            while e < j
+                and load8(buf + e) != 32
+                and load8(buf + e) != 9
+                and load8(buf + e) != 13
+                and load8(buf + e) != 35
+                e += 1
+            if field == 0
+                ip = net_ipv4(os_str_from(buf + k, e - k))
+                if ip < 0
+                    break
+            elif e - k == hn
+                mut same := true
+                for m in 0..hn
+                    if load8(buf + k + m) != load8(h + 16 + m)
+                        same = false
+                if same
+                    return ip
+            field += 1
+            k = e
+        i = j + 1
+    -1
+
+## The IPv4 address of `host`, or -1 (a name that isn't `localhost` or in
+## `/etc/hosts` is not found: there is no DNS client).
+fn net_resolve(host str) int
+    ip := net_ipv4(host)
+    if ip >= 0
+        return ip
+    if host == "localhost"
+        return 16777343
+    net_hosts(host)
+
+## A `sockaddr_in` for `ip` and `port` (16 bytes; macOS has a length byte).
+fn net_sockaddr(ip int, port int) int
+    sa := alloc_raw(32, KIND_BYTES)
+    store64(sa, 0)
+    store64(sa + 8, 0)
+    if target() == 2
+        store8(sa, 16)
+        store8(sa + 1, 2)
+    else
+        store8(sa, 2)
+        store8(sa + 1, 0)
+    store8(sa + 2, port.shr(8).bit_and(255))
+    store8(sa + 3, port.bit_and(255))
+    store8(sa + 4, ip.bit_and(255))
+    store8(sa + 5, ip.shr(8).bit_and(255))
+    store8(sa + 6, ip.shr(16).bit_and(255))
+    store8(sa + 7, ip.shr(24).bit_and(255))
+    sa
+
+## `"a.b.c.d:port"` for a `sockaddr_in`.
+fn net_addr_text(sa int) str
+    sb_reset()
+    for i in 0..4
+        if i > 0
+            sb_byte(46)
+        put_int(load8(sa + 4 + i))
+    sb_byte(58)
+    put_int(load8(sa + 2) * 256 + load8(sa + 3))
+    sb_str()
+
+## The text of an `ip:port` the socket `fd` has.
+fn net_name(fd int, peer bool) str
+    sa := alloc_raw(32, KIND_BYTES)
+    lenp := alloc_raw(8, KIND_BYTES)
+    store64(sa, 0)
+    store64(sa + 8, 0)
+    store64(lenp, 16)
+    net_sys_sockname(fd, sa, lenp, peer)
+    net_addr_text(sa)
+
+## `"host:port"` split at its last colon: the port, or -1; the host's length
+## goes to `out`.
+fn net_split(addr str, out int) int
+    p := str_addr(addr)
+    n := load64(p)
+    mut i := n - 1
+    while i >= 0 and load8(p + 16 + i) != 58
+        i -= 1
+    if i <= 0 or i == n - 1
+        return -1
+    mut port := 0
+    for k in i + 1..n
+        c := load8(p + 16 + k)
+        if c < 48 or c > 57
+            return -1
+        port = port * 10 + c - 48
+        if port > 65535
+            return -1
+    store64(out, i)
+    port
+
+# ---- listen and connect ----
+
+## `net.listen(addr)` (std.net.12): the handle of a `Listener`, or 0 after a
+## failure.
+fn net_listen(addr str, at str) int
+    out := alloc_raw(8, KIND_BYTES)
+    port := net_split(addr, out)
+    if port < 0
+        return net_fail(addr, "bad_url", "`{addr}` is not an address (HOST:PORT)", at)
+    host := os_str_from(str_addr(addr) + 16, load64(out))
+    ip := net_resolve(host)
+    if ip < 0
+        return net_fail(addr, "not_found", "`{addr}` has no address", at)
+    fd := net_sys_socket()
+    if fd < 0
+        return net_fail(addr, net_errno_kind(-fd), "can't listen on {addr}", at)
+    net_sys_reuse(fd)
+    r := net_sys_bind(fd, net_sockaddr(ip, port))
+    if r < 0
+        os_close(fd)
+        return net_fail(addr, net_errno_kind(-r), "can't listen on {addr}", at)
+    r2 := net_sys_listen(fd)
+    if r2 < 0
+        os_close(fd)
+        return net_fail(addr, net_errno_kind(-r2), "can't listen on {addr}", at)
+    net_wrap(net_add(fd, NET_LISTENER, "", net_name(fd, false)))
+
+## Connect to `host:port`: the handle of a connection, or 0 after a failure
+## whose `net.NetError` names `url`.
+fn net_dial(host str, port int, url str, at str) int
+    net_dial_ms(host, port, url, NET_DEFAULT_MS, at)
+
+## `net_dial` waiting `ms` milliseconds for the connection to open.
+fn net_dial_ms(host str, port int, url str, ms int, at str) int
+    if port < 0 or port > 65535
+        return net_fail(url, "bad_url", "{port} is not a port; use 0 to 65535", at)
+    ip := net_resolve(host)
+    if ip < 0
+        return net_fail(url, "not_found", "can't find host `{host}`", at)
+    fd := net_sys_socket()
+    if fd < 0
+        return net_fail(url, net_errno_kind(-fd), "can't connect to {url}", at)
+    r := net_sys_connect(fd, net_sockaddr(ip, port))
+    if r < 0
+        # In progress (Linux 115, macOS 36): wait to become writable.
+        if r != -115 and r != -36
+            os_close(fd)
+            return net_fail(url, net_errno_kind(-r), "can't connect to {url}", at)
+        w := net_wait(fd, 4, ms)
+        if w == 0
+            os_close(fd)
+            return net_fail(url, "timed_out", "can't connect to {url}: timed out", at)
+        if w < 0
+            os_close(fd)
+            return net_fail(url, net_errno_kind(-w), "can't connect to {url}", at)
+        # The outcome of the connect: SO_ERROR.
+        eb := alloc_raw(16, KIND_BYTES)
+        store64(eb, 0)
+        store64(eb + 8, 4)
+        syscall(
+            os_pick(55, 209, 118),
+            fd,
+            if target() == 2 then 65535 else 1,
+            if target() == 2 then 4103 else 4,
+            eb,
+            eb + 8,
+            0,
+        )
+        se := load64(eb).bit_and(4294967295)
+        if se != 0
+            os_close(fd)
+            return net_fail(url, net_errno_kind(se), "can't connect to {url}", at)
+    net_add(fd, NET_CONN, net_name(fd, true), "")
+
+## `net.connect(host, port)` (std.net.12): the `Conn`, or 0.
+fn net_connect(host str, port int, at str) int
+    h := net_dial(host, port, "{host}:{port}", at)
+    if h == 0
+        return 0
+    net_wrap(h)
+
+## `l.accept()` (std.net.12): the handle of the next `Conn`, or 0.
+fn net_accept(h int, at str) int
+    o := net_obj(h)
+    if o == 0 or load64(o + NET_KIND) != NET_LISTENER
+        return net_closed("listener", at)
+    fd := load64(o + NET_FD)
+    sa := alloc_raw(32, KIND_BYTES)
+    lenp := alloc_raw(8, KIND_BYTES)
+    while true
+        store64(lenp, 16)
+        r := net_sys_accept(fd, sa, lenp)
+        if r >= 0
+            # Non-blocking, like every socket here.
+            syscall(os_pick(72, 25, 92), r, 4, if target() == 2 then 4 else 2048, 0, 0, 0)
+            if target() == 2
+                p := alloc_raw(8, KIND_BYTES)
+                store64(p, 1)
+                syscall(105, r, 65535, 4130, p, 4, 0)
+            return net_wrap(net_add(r, NET_CONN, net_addr_text(sa), ""))
+        if r == -4
+            continue
+        if r != -11 and r != -35
+            return net_fail("", net_errno_kind(-r), "can't accept a connection", at)
+        w := net_wait(fd, 1, -1)
+        if w < 0
+            return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
+    0
+
+fn net_addr(h int) str
+    o := net_obj(h)
+    if o == 0
+        return ""
+    str_at(load64(o + NET_ADDR))
+
+fn net_peer(h int) str
+    o := net_obj(h)
+    if o == 0
+        return ""
+    str_at(load64(o + NET_PEER))
+
+fn net_close(h int)
+    o := net_obj(h)
+    if o != 0
+        os_close(load64(o + NET_FD))
+        store64(o + NET_FD, -1)
+
+## `c.set_timeout(ms)`; a failure unless `ms` is at least 1.
+fn net_set_timeout(h int, ms int, at str)
+    if ms <= 0
+        net_fail("", "other", "a timeout is at least 1 millisecond, not {ms}", at)
+        return
+    o := net_obj(h)
+    if o != 0
+        store64(o + NET_TIMEOUT, ms)
+
+# ---- reading ----
+
+## Make room to read: compact the buffer, or double it.
+fn net_room(o int)
+    cap := load64(o + NET_CAP)
+    pos := load64(o + NET_POS)
+    len := load64(o + NET_LEN)
+    if cap == 0
+        store64(o + NET_BUF, alloc_raw(NET_BUF_SIZE, KIND_BYTES))
+        store64(o + NET_CAP, NET_BUF_SIZE)
+        return
+    if pos == len
+        store64(o + NET_POS, 0)
+        store64(o + NET_LEN, 0)
+        return
+    if pos > 0
+        buf := load64(o + NET_BUF)
+        copy_bytes(buf, buf + pos, len - pos)
+        store64(o + NET_POS, 0)
+        store64(o + NET_LEN, len - pos)
+        return
+    nbuf := alloc_raw(cap * 2, KIND_BYTES)
+    copy_bytes(nbuf, load64(o + NET_BUF), len)
+    store64(o + NET_BUF, nbuf)
+    store64(o + NET_CAP, cap * 2)
+
+## Read once into the buffer: at least a byte, or the end of the stream
+## (the `NET_EOF` flag). 0, or a negative `errno` (-110 for a timeout).
+fn net_fill(o int) int
+    net_room(o)
+    fd := load64(o + NET_FD)
+    while true
+        len := load64(o + NET_LEN)
+        r := os_read(fd, load64(o + NET_BUF) + len, load64(o + NET_CAP) - len)
+        if r > 0
+            store64(o + NET_LEN, len + r)
+            return 0
+        if r == 0
+            store64(o + NET_FLAGS, load64(o + NET_FLAGS).bit_or(NET_EOF))
+            return 0
+        if r == -4
+            continue
+        if r != -11 and r != -35
+            return r
+        w := net_wait(fd, 1, load64(o + NET_TIMEOUT))
+        if w == 0
+            return -110
+        if w < 0
+            return w
+    0
+
+## A `net.NetError` for a failed read or write on `o`.
+fn net_io_fail(o int, e int, at str) int
+    peer := str_at(load64(o + NET_PEER))
+    if e == -110
+        return net_fail(
+            peer,
+            "timed_out",
+            "the connection made no progress for {load64(o + NET_TIMEOUT)} ms",
+            at,
+        )
+    net_fail(peer, net_errno_kind(-e), "the connection failed", at)
+
+## One step of UTF-8 decoding at `p + i` of `n` bytes: the bytes the step
+## takes, times 4, plus 1 for a character, 0 for bytes that aren't one (one
+## U+FFFD stands for them), or 2 for the start of a character that the end
+## of the data cuts off.
+fn net_utf8_step(p int, i int, n int) int
+    b := load8(p + i)
+    if b < 128
+        return 5
+    mut need := 0
+    mut lo := 128
+    mut hi := 191
+    if b >= 194 and b <= 223
+        need = 1
+    elif b >= 224 and b <= 239
+        need = 2
+        if b == 224
+            lo = 160
+        if b == 237
+            hi = 159
+    elif b >= 240 and b <= 244
+        need = 3
+        if b == 240
+            lo = 144
+        if b == 244
+            hi = 143
+    else
+        return 4
+    mut k := 1
+    while k <= need
+        if i + k >= n
+            return k * 4 + 2
+        c := load8(p + i + k)
+        if c < lo or c > hi
+            return k * 4
+        lo = 128
+        hi = 191
+        k += 1
+    (need + 1) * 4 + 1
+
+## The text of `n` bytes at `p`; bytes that aren't UTF-8 become U+FFFD.
+fn net_text(p int, n int) str
+    mut i := 0
+    mut clean := true
+    while i < n
+        s := net_utf8_step(p, i, n)
+        if s.bit_and(3) != 1
+            clean = false
+            break
+        i += s / 4
+    if clean
+        return os_str_from(p, n)
+    sb_reset()
+    i = 0
+    while i < n
+        s := net_utf8_step(p, i, n)
+        if s.bit_and(3) == 1
+            sb_bytes(p + i, s / 4)
+        else
+            sb_byte(239)
+            sb_byte(191)
+            sb_byte(189)
+        i += s / 4
+    sb_str()
+
+## `c.read(max)` (std.net.12): up to `max` bytes as text, a character never
+## split across two reads; `""` at the end of the stream.
+fn net_read(h int, max int, at str) str
+    o := net_obj(h)
+    if o == 0
+        net_closed("connection", at)
+        return str_at(0)
+    if max <= 0
+        net_fail(
+            str_at(load64(o + NET_PEER)),
+            "other",
+            "`read` needs a size of at least 1, not {max}",
+            at,
+        )
+        return str_at(0)
+    if load64(o + NET_POS) == load64(o + NET_LEN) and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+        e := net_fill(o)
+        if e < 0
+            net_io_fail(o, e, at)
+            return str_at(0)
+    while true
+        pos := load64(o + NET_POS)
+        len := load64(o + NET_LEN)
+        avail := len - pos
+        buf := load64(o + NET_BUF) + pos
+        mut n := if max < avail then max else avail
+        while n < avail and load8(buf + n).bit_and(192) == 128
+            n += 1
+        # A character the data cuts off: wait for the rest.
+        mut cut := false
+        mut i := 0
+        while i < n
+            s := net_utf8_step(buf, i, n)
+            if s.bit_and(3) == 2 and n == avail and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+                cut = true
+            i += s / 4
+        if cut
+            e := net_fill(o)
+            if e < 0
+                net_io_fail(o, e, at)
+                return str_at(0)
+            continue
+        t := net_text(buf, n)
+        store64(o + NET_POS, pos + n)
+        return t
+    str_at(0)
+
+## `c.read_line()`: a line without its `\n` or `\r\n` as a `str?`: the string,
+## or 0 at the end of the stream.
+fn net_read_line(h int, at str) str
+    o := net_obj(h)
+    if o == 0
+        net_closed("connection", at)
+        return str_at(0)
+    mut from := 0
+    while true
+        pos := load64(o + NET_POS)
+        len := load64(o + NET_LEN)
+        buf := load64(o + NET_BUF)
+        mut j := pos + from
+        while j < len and load8(buf + j) != 10
+            j += 1
+        if j < len
+            mut end := j
+            if end > pos and load8(buf + end - 1) == 13
+                end -= 1
+            t := net_text(buf + pos, end - pos)
+            store64(o + NET_POS, j + 1)
+            return t
+        # Search again only past what was searched; a fill may move the data.
+        from = len - pos
+        if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
+            if len == pos
+                return str_at(0)
+            t := net_text(buf + pos, len - pos)
+            store64(o + NET_POS, len)
+            return t
+        e := net_fill(o)
+        if e < 0
+            net_io_fail(o, e, at)
+            return str_at(0)
+    str_at(0)
+
+## `c.write(text)` (std.net.12).
+fn net_write(h int, text str, at str)
+    o := net_obj(h)
+    if o == 0
+        net_closed("connection", at)
+        return
+    t := str_addr(text)
+    n := load64(t)
+    fd := load64(o + NET_FD)
+    mut done := 0
+    while done < n
+        r := net_sys_send(fd, t + 16 + done, n - done)
+        if r > 0
+            done += r
+            continue
+        if r == -4
+            continue
+        if r != -11 and r != -35 and r != 0
+            net_io_fail(o, r, at)
+            return
+        w := net_wait(fd, 4, load64(o + NET_TIMEOUT))
+        if w == 0
+            net_io_fail(o, -110, at)
+            return
+        if w < 0
+            net_io_fail(o, w, at)
+            return

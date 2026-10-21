@@ -79,6 +79,16 @@ pub fn key(file: &str, compiler: &Path, target: &str) -> Option<String> {
         add(&mut h, tag, rel.as_bytes());
         add(&mut h, "text", &std::fs::read(p).ok()?);
     }
+    // The standard modules written in AIL that only `ail build` reads (ADR 0819)
+    // aren't in the executable, so their text is part of the key.
+    let std_dir = compiler.join("../bootstrap/src/std");
+    let (mut std_paths, mut std_bytes) = (Vec::new(), 0);
+    if sources(&std_dir, &mut std_paths, &mut std_bytes).is_some() {
+        for p in &std_paths {
+            add(&mut h, "std", p.strip_prefix(&std_dir).unwrap_or(p).to_string_lossy().as_bytes());
+            add(&mut h, "text", &std::fs::read(p).ok()?);
+        }
+    }
     // The program file itself, in case the walk above skipped it (a hidden directory).
     add(&mut h, "root", &std::fs::read(file).ok()?);
     Some(h.finish().iter().map(|b| format!("{b:02x}")).collect())

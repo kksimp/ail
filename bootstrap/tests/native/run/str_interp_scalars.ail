@@ -1,0 +1,29 @@
+# native.str.1: interpolations with number, char and bool holes (written into
+# the builder, one allocation) match `ail run`, including nested holes, wide
+# characters, format specs and long texts that grow the builder.
+fn name(n int) str
+    "n{n}"
+
+fn main()
+    c := 'é'
+    b := true
+    x := -42
+    s := "ß"
+    f := 2.5
+    print("a{x}b{c}c{b}d{s}e{f}f{name(x)}g{"{x}{b}"}h")
+    t := "{x}"
+    u := "{c}{c}{s}{x:5}|{x:x}"
+    print(t.len())
+    print(u)
+    print(u.len())
+    print("{x}{name(7)}{x + 1}".len())
+    mut total := 0
+    for i in 0..3000
+        w := "k{i}{c}{i % 2 == 0}"
+        total += w.len()
+    print(total)
+    mut long := ""
+    for i in 0..400
+        long = "{long}{i},"
+    print(long.len())
+    print("{0}{'x'}{false}")

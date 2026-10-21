@@ -1,0 +1,25 @@
+# Runs the primitive vectors of bootstrap/src/net/crypto/testdata/crosscheck.txt
+# through the native runtime: see tools/native-tls/prim-check.sh. In this build
+# `hash.hmac_sha256(op, args)` is the test hook (a temporary compiler directory
+# maps it to `tlsprim_call`); the vectors file is the first argument.
+use std.hash
+
+fn main()
+    text := fs.read_text(env.args()[0]) else ""
+    mut ok := 0
+    mut bad := 0
+    for line in text.lines()
+        if line.starts_with("#") or line == ""
+            continue
+        f := line.split(" ")
+        op := f[0]
+        if op != "chacha20poly1305" and op != "poly1305" and op != "x25519"
+            continue
+        want := f[f.len() - 1]
+        got := hash.hmac_sha256(op, f[1..f.len() - 1].join(" "))
+        if got == want
+            ok += 1
+        else
+            bad += 1
+            print("FAIL {op}: want {want} got {got}")
+    print("{ok} ok, {bad} failed")

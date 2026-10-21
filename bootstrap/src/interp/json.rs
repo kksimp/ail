@@ -148,7 +148,7 @@ impl Parser<'_> {
         if self.peek_is(b'}') {
             self.pos += 1;
             self.open -= 1;
-            return Ok(mk.node(OBJ, vec![Value::List(Rc::new(Vec::new()))]));
+            return Ok(mk.node(OBJ, vec![Value::list(Vec::new())]));
         }
         let mut members = Vec::new();
         loop {
@@ -169,7 +169,7 @@ impl Parser<'_> {
             members.push(Value::Struct(mk.member, Rc::new(vec![Value::Str(key), value])));
             if self.container_end(b'}')? {
                 self.open -= 1;
-                return Ok(mk.node(OBJ, vec![Value::List(Rc::new(members))]));
+                return Ok(mk.node(OBJ, vec![Value::list(members)]));
             }
         }
     }
@@ -181,14 +181,14 @@ impl Parser<'_> {
         if self.peek_is(b']') {
             self.pos += 1;
             self.open -= 1;
-            return Ok(mk.node(ARR, vec![Value::List(Rc::new(Vec::new()))]));
+            return Ok(mk.node(ARR, vec![Value::list(Vec::new())]));
         }
         let mut items = Vec::new();
         loop {
             items.push(self.value(mk)?);
             if self.container_end(b']')? {
                 self.open -= 1;
-                return Ok(mk.node(ARR, vec![Value::List(Rc::new(items))]));
+                return Ok(mk.node(ARR, vec![Value::list(items)]));
             }
         }
     }
@@ -395,7 +395,7 @@ fn print(v: &Value, out: &mut String, room: usize) -> bool {
                 if i > 0 {
                     out.push(',');
                 }
-                if !print(item, out, room - 1) {
+                if !print(&item, out, room - 1) {
                     return false;
                 }
             }

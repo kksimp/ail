@@ -18,6 +18,27 @@ fn Checker.unsafe_opt_in(mut self, at ast.Pos)
         "add `unsafe allow` to the `package` line (or the `dep` line) of `ail.pkg`, or remove the `unsafe` code",
     )
 
+## unsafe.hw.1: `what` reaches hardware, which only a package whose
+## manifest says `unsafe driver` may do. A package without `unsafe allow`
+## already has its error at the `unsafe` block.
+fn Checker.driver_opt_in(mut self, what str, at ast.Pos)
+    if is_prelude_line(at.line)
+        return
+    pkg := package_at(at)
+    mut help := "run or build it with `--unsafe driver`, or give it an `ail.pkg` that says `unsafe driver`"
+    mut who := "this program"
+    if allowed := prog.unsafe_allowed
+        if not allowed.contains(pkg)
+            return
+        help = "write `unsafe driver` on the `package` line of `ail.pkg`"
+        who = "this package"
+        if pkg != ""
+            help = "write `unsafe driver` on the `dep` line that grants it"
+            who = "dependency `{pkg}`"
+    if prog.driver_allowed.contains(pkg)
+        return
+    err_help("unsafe.hw.1", at, "{what} reaches hardware, which {who} isn't allowed to do", help)
+
 ## The dependency the code at `at` belongs to; "" for the root package.
 fn Checker.package_at(self, at ast.Pos) str
     head := module_at(prog, at).split(".")[0]
@@ -109,7 +130,7 @@ fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
         )
 
 ## The methods of a raw pointer `*T` (unsafe.ptr.2-3), sorted.
-PTR_METHODS := ["is_null", "offset", "read", "write"]
+PTR_METHODS := ["is_null", "offset", "read", "read_volatile", "write", "write_volatile"]
 
 ## `p.read()`, `p.write(v)`, `p.offset(n)` and `p.is_null()` on a raw
 ## pointer `rt` to `target` (unsafe.ptr.2-3).
@@ -137,11 +158,14 @@ fn Checker.ptr_method(
     std_any.add(pos_key(at))
     if n != "is_null"
         note_unsafe_op("`{n}` on a raw pointer", at)
+    if n.ends_with("_volatile")
+        # unsafe.hw.3: a volatile access is hardware access.
+        driver_opt_in("`{n}` on a raw pointer", at)
     mut params := List[Ty]()
     mut ret := Ty.Bool
-    if n == "read"
+    if n == "read" or n == "read_volatile"
         ret = target
-    elif n == "write"
+    elif n == "write" or n == "write_volatile"
         params = [target]
         ret = Ty.Unit
     elif n == "offset"
@@ -193,3 +217,22 @@ fn Checker.mem_generic(mut self, f str, args List[ast.Arg], at ast.Pos, expect T
         params.push(example)
         ret = if example == Ty.Unknown then Ty.Unknown else Ty.PtrOf(example)
     check_call("mem.{f}", plain_sig(none, params, ret), [], args, none, at, expect)
+
+## `hw.at(addr, example)`: a pointer to the example's type at a fixed
+## address, the only way from a number to a pointer (unsafe.hw.2).
+fn Checker.hw_at(mut self, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
+    tys := [quiet_type(a.value) for a in args]
+    if args.len() != 2
+        return check_call(
+            "hw.at",
+            plain_sig(none, [Ty.Unknown, Ty.Unknown], Ty.Unknown),
+            [],
+            args,
+            none,
+            at,
+            expect,
+        )
+    example := tys[1]
+    ptr_target(example, expr_pos(args[1].value))
+    ret := if example == Ty.Unknown then Ty.Unknown else Ty.PtrOf(example)
+    check_call("hw.at", plain_sig(none, [Ty.Int, example], ret), [], args, none, at, expect)

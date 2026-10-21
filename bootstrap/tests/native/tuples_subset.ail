@@ -1,0 +1,15 @@
+## What a native tuple can't do yet (ADR 0829): each is a not-in-the-subset
+## report, never a wrong program. Map keys and set elements need tuple keys
+## in the tables (ADR 0568); sorting, searching and counting need `lt.T` and
+## `eq.T` in the list runtime; a float element has no native order (NaN).
+fn main()
+    m := Map[(int, int), int]()
+    print(m.len())
+    s := Set[(int, int)]()
+    print(s.len())
+    xs := [(2, "b"), (1, "a")]
+    print(xs.sorted().len())
+    print(xs.contains((1, "a")))
+    print((1, 2.5) < (1, 3.0))
+    print(xs)
+    print((1, [2]))

@@ -1,0 +1,34 @@
+## A host for std.app written in AIL (std.app.7-10): it checks the protocol
+## and sends a fixed list of events, so the selftest needs no window.
+
+fn send(line str)
+    print(line)
+
+fn main()
+    io.eprint("fake host: {converse()}")
+
+## Plays the session and says how it went.
+fn converse() str
+    first := io.read_line() else return "no first line"
+    j := parse_json(first) else return "first line is not JSON"
+    if (j.num("v") else 0.0) != 1.0 or j.text("t", "") != "view"
+        return "first line lacks v 1 and t view"
+    send("\{\"v\":1,\"kind\":\"start\"}")
+    send("\{\"kind\":\"resize\",\"dx\":640,\"dy\":400,\"cell_w\":8,\"cell_h\":16}")
+    send("\{\"kind\":\"edit\",\"id\":\"draft\",\"text\":\"milk\"}")
+    send("\{\"kind\":\"press\",\"id\":\"add\"}")
+    send("\{\"kind\":\"edit\",\"id\":\"draft\",\"text\":\"eggs\"}")
+    send("\{\"kind\":\"submit\",\"id\":\"draft\"}")
+    send("\{\"kind\":\"click\",\"id\":\"pad\",\"x\":12.5,\"y\":3,\"text\":\"left\"}")
+    send("not json")
+    send("\{\"kind\":\"close\"}")
+    mut views := 1
+    mut title := j.text("title", "")
+    while true
+        line := io.read_line() else break
+        v := parse_json(line) else return "a line is not JSON: {line}"
+        if v.text("t", "") != "view" or v.get("tree") == none
+            return "not a view: {line}"
+        views += 1
+        title = v.text("title", "")
+    "{views} views, last title {title}"

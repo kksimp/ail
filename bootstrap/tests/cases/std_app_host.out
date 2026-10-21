@@ -1,0 +1,15 @@
+start
+resize
+640.0x400.0 cell 8.0x16.0
+edit
+press
+edit
+submit
+click
+left 12.5,3.0 on pad
+close
+column
+  <> #draft (new item)
+  [Add] #add
+  "milk"
+  "eggs"

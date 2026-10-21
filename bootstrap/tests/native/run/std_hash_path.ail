@@ -1,0 +1,53 @@
+# std.hash.3-4 and std.path.1-4 in native code.
+fn main()
+    for p in ["a/b/c.txt", "c.txt", "/c", "a/.bashrc", "a/b.tar.gz", "a/", ""]
+        print("{p}: {path.dir(p)} {path.base(p)} [{path.ext(p)}]")
+    print(path.join("a", "b"))
+    print(path.join("a/", "b"))
+    print(path.join("a", "/b"))
+    print(path.join("", "b"))
+    print(hash.crc32("123456789"))
+    print(hash.crc32(""))
+    print(hash.hash64(""))
+    print(hash.hash64("a"))
+    print(hash.hash64("hello, world"))
+    print(hash.hash64("0123456789abcdef0123456789abcdef-tail"))
+    print(hash.hash64("héllo wörld, ünïcode"))
+    for w in [
+        "h",
+        "op",
+        "vwx",
+        "cdef",
+        "jklmn",
+        "qrstuv",
+        "xyzabcd",
+        "efghijkl",
+        "lmnopqrst",
+        "stuvwxyzab",
+        "zabcdefghij",
+        "ghijklmnopqr",
+        "nopqrstuvwxyz",
+        "uvwxyzabcdefgh",
+        "bcdefghijklmnop",
+        "ijklmnopqrstuvwx",
+        "pqrstuvwxyzabcdef",
+        "wxyzabcdefghijklmn",
+        "defghijklmnopqrstuv",
+        "klmnopqrstuvwxyzabcd",
+        "rstuvwxyzabcdefghijkl",
+        "yzabcdefghijklmnopqrst",
+        "fghijklmnopqrstuvwxyzab",
+        "mnopqrstuvwxyzabcdefghij",
+        "tuvwxyzabcdefghijklmnopqr",
+        "abcdefghijklmnopqrstuvwxyz",
+        "hijklmnopqrstuvwxyzabcdefgh",
+        "opqrstuvwxyzabcdefghijklmnop",
+        "vwxyzabcdefghijklmnopqrstuvwx",
+        "cdefghijklmnopqrstuvwxyzabcdef",
+        "jklmnopqrstuvwxyzabcdefghijklmn",
+        "qrstuvwxyzabcdefghijklmnopqrstuv",
+        "xyzabcdefghijklmnopqrstuvwxyzabcd",
+        "efghijklmnopqrstuvwxyzabcdefghijkl",
+        "lmnopqrstuvwxyzabcdefghijklmnopqrst",
+    ]
+        print(hash.hash64(w))

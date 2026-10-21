@@ -4,6 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+mod common;
+
 fn ail(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_ail")).args(args).output().unwrap()
 }
@@ -29,7 +31,7 @@ fn pair(name: &str) -> (String, String) {
     fs::create_dir_all(d.join("new")).unwrap();
     fs::write(d.join("old/p.ail"), OLD).unwrap();
     fs::write(d.join("new/p.ail"), NEW).unwrap();
-    (d.join("old/p.ail").display().to_string(), d.join("new/p.ail").display().to_string())
+    (common::shown(&d.join("old/p.ail")), common::shown(&d.join("new/p.ail")))
 }
 
 /// diff.out.2-4, diff.out.6-7: declarations, diagnostics and tests, as text.
@@ -79,6 +81,12 @@ fn json_lines() {
 /// diff.out.5: `--rev REV PATH` compares against git's copy.
 #[test]
 fn against_a_git_revision() {
+    // Skipped when `git` is missing (under Wine it is not installed): the test
+    // builds its own git repository to compare against.
+    if Command::new("git").arg("--version").output().is_err() {
+        eprintln!("skipped: no `git`");
+        return;
+    }
     let d = dir("rev");
     let git = |args: &[&str]| {
         let ok = Command::new("git")

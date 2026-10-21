@@ -86,14 +86,5 @@ pub fn add_trap_texts(mut img Image, m mir.Module, k int, op str)
     lines := if site.file < m.file_lines.len() then m.file_lines[site.file] else m.lines
     add_str(mut img, "d:h{k}", "{path}:{site.line}:{site.col}: trap[{site.rule}]: ")
     line := if site.line >= 1 and site.line <= lines.len() then lines[site.line - 1] else ""
-    gutter := "{site.line}"
-    mut pad := List[str]()
-    chars := line.chars()
-    for c in 0..site.col - 1
-        pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
-    add_str(
-        mut img,
-        "d:t{k}",
-        "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n",
-    )
+    add_str(mut img, "d:t{k}", mir.excerpt(line, site.line, site.col))
     add_str(mut img, "d:o{op}", op)

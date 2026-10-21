@@ -56,3 +56,38 @@ No `lower.ail` change.
 - **Set algebra by copying and removing.** `intersect` and `difference` would
   need a remove-heavy pass that leaves dead entries; building the result
   from `a` is simpler and compact.
+
+## Addendum: comprehensions without an expected type
+
+A set or map comprehension no longer needs an expected type. Without one, the
+elements (and values) are collected in lists, whose element types the loop
+finds, and the table is built from them (`set_from_list` for sets, a fill loop
+for maps). Keys must be `int`, `char` or `str`, as everywhere else; `bool`
+keys still need the expected type. The cost is one extra list, only on this
+path. Rejected: inferring the type before the loop (needs a side-effect-free
+type pass that doesn't exist); a table with a deferred key kind (the hash
+depends on it).
+
+## Addendum: `for k, v in m`
+
+`for k, v in m` over a map is native (type.tuple.5, ADR 0791). The parser
+starts the body with a `LetTuple` over a hidden loop variable. Natively there
+are no tuples, so `for_pairs` (lower_map.ail) takes the keys and values as two
+lists when the loop starts and loops over their indexes, binding `k` and `v`
+to the elements. The snapshot means the body may change `m`, as in the
+interpreter. Cost: two lists per loop. `_` binds nothing. Any other
+two-name `for` (`zip`, `enumerate`) stays unsupported until tuples are native.
+Rejected: building a tuple per entry (no native tuples); walking the table's
+entry array in place (the body could grow and move it).
+
+## Addendum: `is_empty`, `remove(k) else`, `is_subset`
+
+From the Haiku std sweep (native-std-coverage.md, section 3):
+
+- `is_empty` on `str`, lists, maps and sets: the length compared with 0.
+- `m.remove(k) else d` on a local map gives the removed value, else `d` or a
+  statement that leaves (err.else.1-2). It shares `lower_get_else` with
+  `get`, which now removes the entry after reading it. The call is picked up
+  for locals only, so `fs.remove(p) else ...` and other modules keep their
+  own lowering.
+- `a.is_subset(b)` on sets is `a.difference(b)` being empty.

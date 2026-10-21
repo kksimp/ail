@@ -97,9 +97,9 @@ fn load_package(
             }
             let src = match first_src.take() {
                 Some(src) => src,
-                None => match crate::stdlib::ail_module_source(&p.display().to_string()) {
+                None => match crate::stdlib::ail_module_source(&crate::shown::shown(&p)) {
                     Some(src) => src.to_string(),
-                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", p.display()))?,
+                    None => std::fs::read_to_string(&p).map_err(|e| format!("can't read {}: {e}", crate::shown::shown(&p)))?,
                 },
             };
             let base = files.len() * FILE_LINES;
@@ -134,7 +134,7 @@ fn load_package(
                 }
             }
             tokens.extend(toks);
-            files.push(SourceFile { path: p.display().to_string(), src, module: module.clone(), base });
+            files.push(SourceFile { path: crate::shown::shown(&p), src, module: module.clone(), base });
         }
     }
     let end = Pos { line: files.len() * FILE_LINES, col: 1 };
@@ -413,6 +413,23 @@ fn resolve(prog: &mut Program, diags: &mut Vec<Diagnostic>, packages: &crate::pa
         imports[fi].insert(name.to_string(), target.unwrap_or(Target::Std));
     }
     report_cycles(&edges, diags);
+    // Generated code (ct.gen.1) sees the imports of its module's files, so a
+    // generator can name `args.flag` for a program that has `use std.args`
+    // (ct.derive.6).
+    for gi in 0..prog.files.len() {
+        if !prog.files[gi].path.starts_with("gen:impl:") {
+            continue;
+        }
+        let mut merged = HashMap::default();
+        for (fi, f) in prog.files.iter().enumerate() {
+            if fi != gi && f.module == prog.files[gi].module && !f.path.starts_with("gen:") {
+                for (k, v) in &imports[fi] {
+                    merged.entry(k.clone()).or_insert_with(|| v.clone());
+                }
+            }
+        }
+        imports[gi] = merged;
+    }
 
     // Rename each module's declarations to their qualified names, so that
     // implicit `self` sees each type's own members (trait.method.6).

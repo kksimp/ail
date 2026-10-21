@@ -1,0 +1,31 @@
+## `fs.walk` (std.fs.8): files at every depth, joined with the directory,
+## sorted by bytes; dot names listed; a link to a directory listed, not followed.
+fn show(root str, dir str)
+    files := fs.walk(dir) else err
+        print("failed: {err.kind} {err.path.strip_prefix(root) else err.path}")
+        return
+    print("{dir.strip_prefix(root) else dir}: {files.len()}")
+    for f in files
+        print(f.strip_prefix(root) else f)
+
+fn main()
+    root := env.get("AIL_TEST_DIR") else return
+    base := "{root}/walk"
+    fs.make_dir("{base}/a/b") else return
+    fs.make_dir("{base}/.hidden") else return
+    fs.write_text("{base}/a.txt", "x") else return
+    fs.write_text("{base}/a/b/c.txt", "x") else return
+    fs.write_text("{base}/a/z", "x") else return
+    fs.write_text("{base}/.hidden/h", "x") else return
+    show(root, base)
+    show(root, "{base}/a")
+    show(root, "{base}/a.txt")
+    show(root, "{base}/nope")
+    fs.remove("{base}/.hidden/h") else return
+    fs.remove("{base}/.hidden") else return
+    fs.remove("{base}/a/b/c.txt") else return
+    fs.remove("{base}/a/b") else return
+    fs.remove("{base}/a/z") else return
+    fs.remove("{base}/a") else return
+    fs.remove("{base}/a.txt") else return
+    fs.remove(base) else return

@@ -19,6 +19,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
         ],
     ),
     ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
+    ("hw", &["at", "fence", "fence_io"]),
     ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
     ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "open", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
@@ -26,7 +27,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("regex", &["captures", "compile", "escape", "find", "find_all", "group_all", "is_match", "replace", "replace_first", "split"]),
-    ("tensor", &["from", "zeros"]),
+    ("tensor", &["from", "from_fn", "zeros"]),
     ("task", &["cancelled", "check", "select"]),
     ("time", &["now_ms", "sleep_ms"]),
     ("tz", &["offset", "system"]),
@@ -76,6 +77,9 @@ pub const BUILTIN_DOCS: &[(&str, &str)] = &[
     ("hash.sha256", "Returns the SHA-256 digest of `s` as lower-case hex."),
     ("hash.sha384", "Returns the SHA-384 digest of `s` as lower-case hex."),
     ("hash.sha512", "Returns the SHA-512 digest of `s` as lower-case hex."),
+    ("hw.at", "Returns a pointer of the example's type at the fixed address `addr`, in unsafe driver code only."),
+    ("hw.fence", "Orders all earlier memory accesses before all later ones, in unsafe driver code only."),
+    ("hw.fence_io", "Orders all earlier device accesses before all later ones, in unsafe driver code only."),
     ("io.eprint", "Writes the value's text and a newline to standard error."),
     ("io.exit", "Ends the program with exit status `code` after writing pending output."),
     ("io.read_all", "Reads the rest of standard input."),
@@ -128,6 +132,7 @@ pub const BUILTIN_DOCS: &[(&str, &str)] = &[
     ("task.check", "Returns an error when the running task was cancelled, so `task.check()?` stops it at that point."),
     ("task.select", "Waits until one of the channels in `chans` is ready and returns its index."),
     ("tensor.from", "Makes a tensor from `xs`, 1-D, or with `shape` when given."),
+    ("tensor.from_fn", "Makes a tensor of `shape` (a length or a list of sizes) whose element at flat index `i` is `f(i)`."),
     ("tensor.zeros", "Returns a tensor of `shape` with every element zero."),
     ("time.now_ms", "Returns the current time in milliseconds since 1970-01-01T00:00:00Z."),
     ("time.sleep_ms", "Pauses the program for at least `ms` milliseconds."),
@@ -275,6 +280,7 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 /// The standard modules written in AIL (std.ui.19): their dotted path, the
 /// file name they are read under, and their source.
 const AIL_MODULES: &[(&str, &str, &str)] = &[
+    ("std.app", "<std>/app/app.ail", include_str!("std/app/app.ail")),
     ("std.args", "<std>/args/args.ail", include_str!("std/args/args.ail")),
     ("std.csv", "<std>/csv/csv.ail", include_str!("std/csv/csv.ail")),
     ("std.log", "<std>/log/log.ail", include_str!("std/log/log.ail")),

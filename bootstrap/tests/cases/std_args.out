@@ -1,3 +1,6 @@
+5 none 0.25 5.0
+none none none none
+none none none none
 false a.txt in.txt []
 true b.txt in.txt ["x", "y"]
 false c.txt -weird ["z"]
