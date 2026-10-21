@@ -114,8 +114,7 @@ program and its library additions.
 # Agent round 4: standard-library parity with Python (lane 192)
 Date: 2026-10-21. Twins in `tools/tokbench/corpus/agent-r4/` (`tNN_*.py` and
 `tNN_*.ail`), measured with `tools/tokbench/run.sh` (mean over the five
-tokenizers). Eighteen of the planned 25 tasks are written so far; the table is
-updated as more land. Before the lane's additions the same tasks needed
+tokenizers). All 25 planned tasks are written. Before the lane's additions the same tasks needed
 hand-written loops (see the `csv_manual`/`args_manual` pairs below).
 ## Result
 | task | Python | AIL | AIL vs Python |
@@ -138,7 +137,14 @@ hand-written loops (see the `csv_manual`/`args_manual` pairs below).
 | t16_run_cmd | 40.8 | 39.6 | -3% |
 | t17_http_json | 32.6 | 34.2 | +5% |
 | t18_env_default | 22.0 | 21.2 | -4% |
-| **total** | 732.6 | 878.0 | +20% |
+| t19_kv_config | 63.6 | 96.2 | +51% |
+| t20_grep_count | 42.2 | 62.6 | +48% |
+| t21_digest | 27.6 | 23.4 | -15% |
+| t22_dedup | 18.4 | 21.2 | +15% |
+| t23_copy_tree | 14.4 | 27.4 | +90% |
+| t24_report | 65.8 | 79.0 | +20% |
+| t25_sleep_loop | 26.2 | 28.0 | +7% |
+| **total** | 990.8 | 1215.8 | +23% |
 
 By hand against the new modules (ADRs 0626, 0627):
 | task | by hand | with std | change |
@@ -175,6 +181,23 @@ By hand against the new modules (ADRs 0626, 0627):
   is the whole cost; Python's `int(l)` raises. Not a library gap.
 - **Where AIL wins:** `fs.glob` (t13, -57%), `flatten`, `chunks`, small
   logging.
+
+## Findings from the last seven twins (t19-t25)
+
+- **`key=value` lines (t19, +51%).** Splitting once at the first `=` takes
+  `find`, `else continue` and two `slice` calls. A `partition`-style method needs
+  a pair type; recommendation: `s.split_once(sep)` returning a two-element
+  `List[str]?` is not worth a new idiom, so wait for tuples (open question)
+  rather than add it.
+- **Regex (t20, +48%).** `regex.compile(...)?` and `regex.is_match(re, l)` carry
+  the module name twice per use; methods on `Regex` (`re.is_match(l)`) would cut
+  ~6 tokens per call. Not done: it changes the std.regex surface (ADR needed).
+- **Copying a tree (t23, +90%).** No recursive `fs.copy`; a loop over `fs.walk`
+  with parent-directory creation is the agent's workaround. Candidate: `fs.copy`
+  on a directory copies it recursively.
+- **Formatting (t24, +20%).** Format specs cover Python's f-string cases
+  except the percent suffix; the cost is one `* 100.0` and a literal `%`.
+- **Wins:** digest (-15%), glob (-57%), flatten (-29%), batches (-18%).
 
 ## Added by this lane
 `std.csv`, `std.args`, `std.log` (ADRs 0626-0628); list `chunks`, `windows`,
