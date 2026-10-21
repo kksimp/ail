@@ -185,3 +185,8 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   of another type). Every store here forgets a whole class instead; the loads
   that survive in the measured programs are in loops, where nothing carries
   over anyway.
+15. **`join("")` on characters is one pass.** `rt.list_join_chars` made one
+    pass to OR the characters (to learn they are ASCII) and a second to store
+    them. With no separator it now allocates `k` bytes, stores while it ORs,
+    and returns if every character is below 128, else builds the string as
+    before. fasta 36.1M to 33.4M instructions (-7.6%; matched C 29.1M).
