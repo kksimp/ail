@@ -400,8 +400,8 @@ pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
 
 /// ct.derive.3 (ADR 0227): the effects that keep function `f` from running
 /// at compile time, each with the chain of calls that gives it.
-pub fn impure_chains(prog: &Program, resolved: &Resolved, f: usize) -> Vec<String> {
-    let fx = Effects::infer(prog, resolved);
+/// `fx` is inferred once for the program, so many functions share one walk.
+pub fn impure_chains(fx: &Effects, f: usize) -> Vec<String> {
     fx.of(f).iter().filter(|e| impure(e)).map(|e| format!("effect `{e}` via {}", fx.chain(f, e))).collect()
 }
 

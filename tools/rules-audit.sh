@@ -13,7 +13,13 @@
 #   3. diagnostics with no `ail explain` entry: a rule ID emitted as a string
 #      literal (a diagnostic's rule) that `ail explain` cannot explain;
 #   4. `ail explain` entries with no example: a rule whose explanation has no
-#      `example` (checked through `ail explain RULE --json`).
+#      `example` (checked through `ail explain RULE --json`);
+#   5. std functions with no spec mention: a function in the MODULES table of
+#      bootstrap/src/stdlib.rs that docs/spec/ never names (tools/card-spec-audit.py,
+#      ADR 0698).
+#   4. `ail explain` entries with no example: a rule whose explanation has
+#      neither an `example` nor a worked `rejected` example (checked through
+#      `ail explain RULE --json`; ADR 0670).
 #
 # Ranges such as `eff.cap.4-5` count as citations of each ID in the range.
 # Self-setting-up (ADR 0071): the first `./ail explain` builds the bootstrap
@@ -118,9 +124,19 @@ report(
 no_example = []
 for rule in sorted(explained):
     out = subprocess.run([str(ail), "explain", rule, "--json"], capture_output=True, text=True, check=True).stdout
-    if json.loads(out).get("example") in (None, ""):
+    entry = json.loads(out)
+    # A worked example (error=RULE, printed as `rejected`) replaces the nearest
+    # plain example in the JSON, so both count (ADR 0670).
+    if entry.get("example") in (None, "") and entry.get("rejected") in (None, ""):
         no_example.append(rule)
 report("4. `ail explain` entries with no example", [f"{r}  ({spec.get(r, '?')})" for r in no_example])
+
+# 5. The std functions against the spec (ADR 0698).
+audit = subprocess.run(
+    [sys.executable, "-I", str(root / "tools" / "card-spec-audit.py"), str(root)],
+    capture_output=True, text=True, check=False,
+)
+report("5. std functions with no spec mention", [l.removeprefix("no spec mention: ") for l in audit.stdout.splitlines() if l.startswith("no spec mention: ")])
 
 print(f"rules in spec: {len(spec)}; explained: {len(explained)}; findings: {problems}")
 sys.exit(1 if problems else 0)

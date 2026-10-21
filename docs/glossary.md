@@ -33,6 +33,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
 | **Budget (token budget)** | `--budget N` on any command: about N estimated tokens of its output, most severe records first, then a note counting the rest with a `--from K` handle to continue (ADR 0394). |
+| **Build cache** | `ail build` keeps each finished executable under a SHA-256 of its inputs and copies it when the same inputs come again; `--no-cache` skips it (native.build.5, ADR 0655). |
 | **Card (program card)** | `ail api --card`: one Markdown page of a program or package (entry, tests, manifest, examples, each module's signatures), trimmed to a token budget. The language card is the same idea for the language. See ADRs 0310 and 0311. |
 | **Channel** | A bounded queue between tasks, `Channel[T](capacity)`: `send` waits while it is full, `recv` waits while it is empty and gives `none` once it is closed and empty; `for v in ch` receives until then (ADR 0100, ADR 0188, ADR 0300). |
 | **Child** | A process started with `proc.start`: a unique value with a process id and three `Channel[str]` streams (`stdin`, `out`, `err`); `proc.wait(move c)` or `proc.kill(move c)` ends it (ADRs 0424–0428). |
@@ -73,6 +74,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Error set** | The closed union of error types a function can fail with. Inferred from the body for non-public functions (`!T`), explicit at package APIs (`T ! E`). See ADR 0046. |
 | **Error type** | A struct or enum declared with `error` (`error enum ParseError`). Only error types can be errors (ADR 0120). |
 | **Escape analysis** | Compiler analysis that determines whether a value can outlive or leave its creating scope. A value that does not escape can be stack-allocated. |
+| **Cookie jar** | `std.net.jar`: stores the `Set-Cookie` lines of responses and gives the `Cookie` header for a URL by RFC 6265 domain, path, expiry and `Secure` rules; `Jar.request` carries cookies through redirects (`std.net.20`, `std.net.21`, ADR 0638). |
+| **Body** | A `net.Body` from `net.open`: the response head is read and the body is left on the connection, read with `read_bytes(max)` until it gives no bytes (`std.net.25`, ADR 0716). |
 | **Exchange** | A request the `std.net` server has received, with the handle to answer it: `ex.request` and `ex.respond(response)` (`std.net.9`, `std.net.11`, ADR 0419). |
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
 | **Failure path** | A place in a function where it fails, passes a failure on or handles one: `?` on a result, `else` on a result, or a `return` of an error. `ail check --errors` lists them (`err.paths.1`, ADR 0286). |

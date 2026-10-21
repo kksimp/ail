@@ -1,4 +1,3 @@
-bootstrap/tests/native/subset.ail:8:5: error[native.subset.1]: not in the native subset yet: string interpolation outside `print`
 bootstrap/tests/native/subset.ail:11:14: error[native.subset.1]: not in the native subset yet: maps
-bootstrap/tests/native/subset.ail:12:10: error[native.subset.1]: not in the native subset yet: string interpolation outside `print`
-bootstrap/tests/native/subset.ail:14:11: error[native.subset.1]: not in the native subset yet: `char`
+bootstrap/tests/native/subset.ail:14:10: error[native.subset.1]: not in the native subset yet: printing a `int?`
+bootstrap/tests/native/subset.ail:15:10: error[native.subset.1]: not in the native subset yet: printing a `int?`

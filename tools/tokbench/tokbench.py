@@ -25,7 +25,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 CACHE = HERE / ".cache"
-DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
+DEFAULT_CLAUDE_MODEL = os.environ.get("TOKBENCH_CLAUDE_MODEL", "")  # set to the model to count with
 
 
 def offline_tokenizers():
@@ -104,7 +104,7 @@ def main():
     ap.add_argument("files", nargs="*", type=pathlib.Path,
                     help="files to measure (default: every file under corpus/)")
     ap.add_argument("--claude", action="store_true", help="add current-Claude counts via the API")
-    ap.add_argument("--model", default=DEFAULT_CLAUDE_MODEL, help="Claude model for --claude")
+    ap.add_argument("--model", default=DEFAULT_CLAUDE_MODEL, help="model for --claude (default: $TOKBENCH_CLAUDE_MODEL)")
     ap.add_argument("--json", action="store_true", help="print JSON instead of a table")
     args = ap.parse_args()
 
@@ -118,6 +118,8 @@ def main():
 
     counters = offline_tokenizers()
     if args.claude:
+        if not args.model:
+            sys.exit("--claude needs --model or $TOKBENCH_CLAUDE_MODEL")
         counters[f"claude:{args.model}"] = claude_tokenizer(args.model)
 
     rows = []

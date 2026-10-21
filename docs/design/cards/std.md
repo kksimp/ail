@@ -49,6 +49,8 @@ struct Options  ## std.net.6: what a request can set beyond its method and URL.
     timeout_ms int
     max_redirects int
     data bytes
+    connect_ms int
+    total_ms int
 struct Request  ## std.net.9-11: a request the server received, and the server.
     method str
     path str
@@ -57,6 +59,11 @@ struct Request  ## std.net.9-11: a request the server received, and the server.
     body str
     peer str
     data bytes
+struct Body  ## std.net.25: a response whose body is read in pieces.
+    status int
+    headers Map[str, str]
+    all_headers Map[str, List[str]]
+    handle int
 struct Server
     handle int
 struct Exchange
@@ -112,3 +119,5 @@ struct Captures  ## `groups[0]` is the whole match; a group that didn't take par
     groups List[str?]
     named Map[str, str]
 ```
+
+trimmed to fit 4000 tokens (~919); dropped: private items

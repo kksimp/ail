@@ -52,7 +52,7 @@ Results may be off by about one token per file.
 
 | Column | Source | Notes |
 |---|---|---|
-| `cl100k` | OpenAI `cl100k_base`, via the pinned `litellm` wheel | GPT-4 era |
+| `cl100k` | OpenAI `cl100k_base`, via the pinned `litellm` wheel | OpenAI, 2023 |
 | `o200k` | OpenAI `o200k_base`, via the same wheel | GPT-4o era |
 | `claude-legacy` | `anthropic_tokenizer.json`, via the same wheel | Old Claude tokenizer. Use `--claude` for current models. |
 | `mistral-tekken` | `tekken_240911.json`, via the pinned `mistral-common` wheel | Recent Mistral |

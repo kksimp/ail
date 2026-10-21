@@ -1,0 +1,5 @@
+fn label(n int) str
+    "n={n}"
+
+fn main()
+    print(label(4))

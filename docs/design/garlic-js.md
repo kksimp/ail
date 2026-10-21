@@ -79,9 +79,10 @@ scripts run after it is parsed, with external scripts fetched first, a
 budget of 1 s of virtual time and 5,000,000 steps, and the real time as the
 clock. Their changes are replayed into Garlic's tree. A navigation a
 script asks for, or else a `<meta http-equiv=refresh>` outside `<noscript>`,
-is followed, up to 5 hops. `jsdom/cookies.ail` is the cookie jar: cookies
-from `Set-Cookie` and `document.cookie` are sent back to their site (no
-paths, `Secure` or `SameSite` yet). `--no-js` skips scripts, and then a
+is followed, up to 5 hops. `std.net.jar` (ADR 0638) is the cookie jar: cookies
+from `Set-Cookie` and `document.cookie` are sent back by domain, path and
+`Secure` (`SameSite` is in the jar; Garlic does not pass the initiating page
+yet). `--no-js` skips scripts, and then a
 refresh inside `<noscript>` is followed too.
 
 ```sh

@@ -202,6 +202,9 @@ fn main()
     mut id := asm.new_asm()
     id.idiv(9)
     emit("idiv r9", id)
+    mut im := asm.new_asm()
+    im.imul1(12)
+    emit("imul r12", im)
     for op in ["shl", "shr", "sar"]
         for k in [1, 3, 63]
             mut a := asm.new_asm()

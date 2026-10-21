@@ -1,0 +1,6 @@
+fn main()
+    m := {"a": 1, "b": 2}
+    mut t := 0
+    for k in m.keys()
+        t += m[k]
+    print(t)

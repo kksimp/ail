@@ -1,0 +1,3 @@
+fn main()
+    names := ["a", "b"]
+    print(names.join(", "))

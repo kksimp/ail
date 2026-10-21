@@ -1,0 +1,18 @@
+## Agent task: apply a hunk-format edit to a fixture with `ail edit --dry-run`,
+## and report the diagnostics the edited file would have, without writing it.
+##   ./ail run examples/tool_edit_preview.ail
+
+fn main() !
+    here := path.dir(env.program())
+    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    edits := fs.read_text("{data}/edit.txt")? "reading the edit"
+    r := proc.run(
+        "{here}/../ail",
+        ["edit", "{data}/ok.ail", "--dry-run", "--json"],
+        edits,
+    )? "editing"
+    for line in r.out.lines()
+        d := parse_json(line) else continue
+        summary := d.bool("summary") else false
+        if summary
+            print("edits {d.int("edits") else 0}, errors {d.int("errors") else 0}, warnings {d.int("warnings") else 0}, written {d.bool("written") else true}")
