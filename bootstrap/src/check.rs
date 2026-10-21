@@ -4931,7 +4931,7 @@ impl<'p> Checker<'p> {
                 Ty::Str if op == BinOp::Add => self.diags.push(
                     Diagnostic::new("trait.op.1", pos, "`+` doesn't join strings")
                         .help("build text with interpolation: \"{a}{b}\"")
-                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp\"")]),
+                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp$c\"")]),
                 ),
                 t => {
                     let msg = format!("`{sym}` is not defined for {}", self.show(t));
