@@ -378,6 +378,31 @@ impl Tensor {
         Ok(Tensor { shape: self.shape.clone(), data })
     }
 
+    /// std.tensor.24: `softmax` along the last axis, one row at a time. Each
+    /// row is shifted by its largest element before `exp`, and the sum runs
+    /// in element order. A row holding a NaN or an infinity gives NaN.
+    pub fn softmax(&self) -> Result<Tensor, Fault> {
+        let Some(&n) = self.shape.last() else {
+            return fault("std.tensor.24", "`softmax` needs a tensor with at least one axis".to_string());
+        };
+        if matches!(self.data, Data::I(_)) {
+            return fault("std.tensor.24", "`softmax` is on `float` tensors, and this one holds `int`".to_string());
+        }
+        if n == 0 {
+            return fault("std.tensor.24", "`softmax` over an empty last axis".to_string());
+        }
+        let data = match &self.data {
+            Data::F(v) => Data::F(softmax_rows(v, n)),
+            // Computed in `f64` and rounded once, as `activate` does (std.tensor.21).
+            Data::F32(v) => {
+                let wide: Vec<f64> = v.iter().map(|&x| f64::from(x)).collect();
+                Data::F32(softmax_rows(&wide, n).into_iter().map(|x| x as f32).collect())
+            }
+            Data::I(_) => unreachable!("checked above"),
+        };
+        Ok(Tensor { shape: self.shape.clone(), data })
+    }
+
     /// std.tensor.12: the transpose of a 2-D tensor.
     pub fn transpose(&self) -> Result<Tensor, Fault> {
         let &[m, n] = self.shape.as_slice() else {
@@ -389,6 +414,33 @@ impl Tensor {
             Data::I(v) => Data::I(transpose(v, m, n)),
         };
         Ok(Tensor { shape: vec![n, m], data })
+    }
+
+    /// std.tensor.23: along `axis`, the best index, the second-best index and
+    /// the margin (best minus second) of each row. The best is the first
+    /// largest element, and a tie with it is the second; a NaN never replaces
+    /// either. A NaN best, or a row with no second value, traps.
+    pub fn top2(&self, axis: i64) -> Result<(Tensor, Tensor, Tensor), Fault> {
+        let (before, n, after, shape) = self.split(Some(axis), "top2")?;
+        if n < 2 {
+            return fault("std.tensor.23", format!("`top2({axis})` needs two elements along the axis, but the shape is {:?}", self.shape));
+        }
+        let (best, second, margin) = match &self.data {
+            Data::F(v) => {
+                let (b, s, m) = top2_axis(v, before, n, after)?;
+                (b, s, Data::F(m))
+            }
+            Data::F32(v) => {
+                let (b, s, m) = top2_axis(v, before, n, after)?;
+                (b, s, Data::F32(m))
+            }
+            Data::I(_) => return fault("std.tensor.23", "`top2` is on `float` and `f32` tensors".into()),
+        };
+        Ok((
+            Tensor { shape: shape.clone(), data: Data::I(best) },
+            Tensor { shape: shape.clone(), data: Data::I(second) },
+            Tensor { shape, data: margin },
+        ))
     }
 
     /// The sizes around `axis`: (before, along, after), and the shape
@@ -652,6 +704,37 @@ fn conv_t<T: Float>(img: &[T], k: &[T], (w, kh, kw): (usize, usize, usize), (oh,
     out
 }
 
+/// std.tensor.23 along an axis of `n` elements, `after` apart, for each of
+/// the `before * after` rows: the best index, second index and margin.
+fn top2_axis<T: Float>(v: &[T], before: usize, n: usize, after: usize) -> Result<(Vec<i64>, Vec<i64>, Vec<T>), Fault> {
+    let mut best_i = Vec::with_capacity(before * after);
+    let mut second_i = Vec::with_capacity(before * after);
+    let mut margin = Vec::with_capacity(before * after);
+    for o in 0..before {
+        for j in 0..after {
+            let at = |k: usize| v[(o * n + k) * after + j];
+            let mut best = 0;
+            let mut second: Option<usize> = None;
+            for k in 1..n {
+                let x = at(k);
+                if x > at(best) {
+                    second = Some(best);
+                    best = k;
+                } else if second.map_or(!x.is_nan(), |s| x > at(s)) {
+                    second = Some(k);
+                }
+            }
+            let Some(s) = second.filter(|_| !at(best).is_nan()) else {
+                return fault("std.tensor.23", "`top2` of a row with no second value, or with a NaN best".into());
+            };
+            best_i.push(best as i64);
+            second_i.push(s as i64);
+            margin.push(at(best) - at(s));
+        }
+    }
+    Ok((best_i, second_i, margin))
+}
+
 fn overflow() -> Fault {
     Fault { rule: "std.tensor.6", message: "integer overflow in a tensor operation".into() }
 }
@@ -683,9 +766,18 @@ fn combine<T: Float>(mut acc: [T; LANES]) -> T {
 /// either type, in the same order; the vector paths are lockstep twins
 /// (ADR 0008). The `f32` kernels are in `tensor32.rs`.
 pub trait Float:
-    Copy + Default + PartialOrd + Send + Sync + std::ops::Add<Output = Self> + std::ops::AddAssign + std::ops::Mul<Output = Self>
+    Copy
+    + Default
+    + PartialOrd
+    + Send
+    + Sync
+    + std::ops::Add<Output = Self>
+    + std::ops::Sub<Output = Self>
+    + std::ops::AddAssign
+    + std::ops::Mul<Output = Self>
 {
     fn zero() -> Self;
+    fn is_nan(self) -> bool;
     /// `n` as an element, for `mean`.
     fn from_count(n: usize) -> Self;
     fn div(self, y: Self) -> Self;
@@ -697,6 +789,9 @@ pub trait Float:
 impl Float for f64 {
     fn zero() -> f64 {
         0.0
+    }
+    fn is_nan(self) -> bool {
+        f64::is_nan(self)
     }
     fn from_count(n: usize) -> f64 {
         n as f64
@@ -718,6 +813,9 @@ impl Float for f64 {
 impl Float for f32 {
     fn zero() -> f32 {
         0.0
+    }
+    fn is_nan(self) -> bool {
+        f32::is_nan(self)
     }
     fn from_count(n: usize) -> f32 {
         n as f32
@@ -834,6 +932,18 @@ impl Reduce {
 /// they are contiguous and `sum_f64` adds them; otherwise the partial
 /// sums are rows of `after` results, added a whole row at a time, which
 /// is the same order element by element.
+/// std.tensor.24: `softmax` of each `n`-element row of `v`.
+fn softmax_rows(v: &[f64], n: usize) -> Vec<f64> {
+    let mut out = Vec::with_capacity(v.len());
+    for row in v.chunks(n) {
+        let top = row.iter().fold(f64::NEG_INFINITY, |a, &x| if x > a { x } else { a });
+        let exps: Vec<f64> = row.iter().map(|&x| (x - top).exp()).collect();
+        let total: f64 = exps.iter().sum();
+        out.extend(exps.into_iter().map(|e| e / total));
+    }
+    out
+}
+
 fn mean_axis<T: Float>(v: &[T], before: usize, n: usize, after: usize) -> Vec<T> {
     let mut s = sum_axis(v, before, n, after);
     for x in &mut s {

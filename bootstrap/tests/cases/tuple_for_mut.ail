@@ -1,0 +1,5 @@
+# type.tuple.5: `for mut` changes elements in place, so it can't take them apart.
+fn main()
+    xs := [(1, 2)]
+    for mut a, b in xs
+        print(a)

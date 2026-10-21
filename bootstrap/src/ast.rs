@@ -397,6 +397,8 @@ pub enum TypeKind {
     Ptr(Box<TypeRef>),
     /// `fn(A, B) R`, a function value's type; `ret` is `None` for no result (type.fn.1).
     Fn { params: Vec<TypeRef>, ret: Option<Box<TypeRef>> },
+    /// `(A, B)`, a tuple of two or more elements (type.tuple.1).
+    Tuple(Vec<TypeRef>),
 }
 
 pub type Block = Vec<Stmt>;
@@ -462,12 +464,28 @@ pub enum Stmt {
         body: Block,
         pos: Pos,
     },
+    /// `a, mut b := t`: one binding per element of a tuple, `_` for none
+    /// (type.tuple.4). `pos` is the first name's. `for a, b in xs` is parsed
+    /// as a `for` over a hidden variable whose body starts with this.
+    LetTuple {
+        names: Vec<Binder>,
+        value: Expr,
+        pos: Pos,
+    },
+}
+
+/// One name of a destructuring binding (type.tuple.4).
+#[derive(Debug, Clone)]
+pub struct Binder {
+    pub name: String,
+    pub pos: Pos,
+    pub mutable: bool,
 }
 
 impl Stmt {
     pub fn pos(&self) -> Pos {
         match self {
-            Stmt::Let { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } | Stmt::Unsafe { pos, .. } => *pos,
+            Stmt::Let { pos, .. } | Stmt::LetTuple { pos, .. } | Stmt::While { pos, .. } | Stmt::For { pos, .. } | Stmt::With { pos, .. } | Stmt::Unsafe { pos, .. } => *pos,
             Stmt::Assign { target, .. } => target.pos(),
             Stmt::Break(p) | Stmt::Continue(p) | Stmt::Return(_, p) | Stmt::Defer(_, p) => *p,
             Stmt::Expr(e) | Stmt::Handle { value: e, .. } => e.pos(),
@@ -612,6 +630,8 @@ pub enum Expr {
     Map(Vec<(Expr, Expr)>, Pos),
     /// `{a, b, ...}` (type.coll.2)
     Set(Vec<Expr>, Pos),
+    /// `(a, b, ...)`, two or more elements (type.tuple.2).
+    Tuple(Vec<Expr>, Pos),
     /// `if c` / `elif c` / `else` (expr.if.1); `else_err` is the name in
     /// `else err` (expr.if.6).
     If {
@@ -678,6 +698,7 @@ impl Expr {
             | Expr::Match { pos: p, .. }
             | Expr::Map(_, p)
             | Expr::Set(_, p)
+            | Expr::Tuple(_, p)
             | Expr::Ref { pos: p, .. }
             | Expr::Comp { pos: p, .. }
             | Expr::Range { lo: None, pos: p, .. } => *p,
@@ -711,6 +732,9 @@ pub struct CompFor {
     pub var_pos: Pos,
     pub iter: Expr,
     pub cond: Option<Expr>,
+    /// `for a, b in xs`: the names bound to each element's parts, with
+    /// `var` a hidden name for the whole element (type.tuple.5).
+    pub unpack: Vec<Binder>,
 }
 
 /// A condition of `if` or `elif`: a `bool` expression, or a binding
@@ -769,6 +793,10 @@ pub enum Pattern {
     },
     /// `lo..hi` or `lo..=hi` over integer or character literals (expr.match.12).
     Range { lo: Literal, hi: Literal, inclusive: bool, pos: Pos },
+    /// `(p, q, ...)`: a tuple whose elements match (type.tuple.6).
+    Tuple(Vec<Pattern>, Pos),
+    /// A name inside a tuple pattern: binds the element (type.tuple.6).
+    Bind(String, Pos),
 }
 
 /// The value of a literal pattern.
@@ -787,7 +815,9 @@ impl Pattern {
             | Pattern::Literal(_, p)
             | Pattern::Or(_, p)
             | Pattern::Variant { pos: p, .. }
-            | Pattern::Range { pos: p, .. } => *p,
+            | Pattern::Range { pos: p, .. }
+            | Pattern::Tuple(_, p)
+            | Pattern::Bind(_, p) => *p,
         }
     }
 }

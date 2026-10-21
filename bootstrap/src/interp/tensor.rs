@@ -248,6 +248,12 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
             }
             "transpose" => wrap(t.transpose())?,
+            "top2" => {
+                let axis = other.as_ref().map(Value::int).expect("checked: an axis");
+                let (best, second, margin) = t.top2(axis).map_err(|e| trapped(e, pos))?;
+                let parts = [best, second, margin].map(|r| Value::Tensor(Rc::new(r)));
+                Value::Tuple(Rc::new(parts.to_vec()))
+            }
             "round" => wrap(t.round_int())?,
             "argmax" | "argmin" => {
                 let r = t.arg_reduce(other.as_ref().map(Value::int), m == "argmax").map_err(|e| trapped(e, pos))?;
@@ -280,6 +286,7 @@ impl<'a, W: Write> Interp<'a, W> {
             "relu" => wrap(t.activate(Activation::Relu))?,
             "sigmoid" => wrap(t.activate(Activation::Sigmoid))?,
             "tanh" => wrap(t.activate(Activation::Tanh))?,
+            "softmax" => wrap(t.softmax())?,
             "reshape" => {
                 let shape = ints(other.as_ref().expect("checked: a shape"));
                 let shape = Tensor::shape_of(&shape, Some(t.len())).map_err(|e| trapped(e, pos))?;

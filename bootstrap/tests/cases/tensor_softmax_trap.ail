@@ -1,0 +1,2 @@
+fn main()
+    print(tensor.zeros([2, 0]).softmax())

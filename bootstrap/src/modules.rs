@@ -674,6 +674,7 @@ impl Cx<'_> {
                 args.iter_mut().for_each(|a| self.type_ref(a));
             }
             TypeKind::Optional(inner) | TypeKind::Ref(inner) | TypeKind::Ptr(inner) => self.type_ref(inner),
+            TypeKind::Tuple(elems) => elems.iter_mut().for_each(|e| self.type_ref(e)),
             TypeKind::Fn { params, ret } => {
                 params.iter_mut().for_each(|p| self.type_ref(p));
                 if let Some(r) = ret {
@@ -743,6 +744,12 @@ impl Cx<'_> {
             }
             Stmt::Unsafe { body, .. } => self.block(body),
             Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
+            Stmt::LetTuple { names, value, .. } => {
+                self.expr(value);
+                for b in names.iter() {
+                    self.local(&b.name, b.pos);
+                }
+            }
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
                 self.otherwise(otherwise);
@@ -775,7 +782,8 @@ impl Cx<'_> {
                     self.local(name, *pos);
                 }
             }
-            Pattern::Or(alts, _) => alts.iter_mut().for_each(|a| self.pattern(a)),
+            Pattern::Or(alts, _) | Pattern::Tuple(alts, _) => alts.iter_mut().for_each(|a| self.pattern(a)),
+            Pattern::Bind(name, pos) => self.local(name, *pos),
             Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
         }
     }
@@ -836,7 +844,7 @@ impl Cx<'_> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter_mut().for_each(|x| self.expr(x)),
             Expr::Map(pairs, _) => pairs.iter_mut().for_each(|(k, v)| {
                 self.expr(k);
                 self.expr(v);
@@ -845,6 +853,9 @@ impl Cx<'_> {
                 for c in clauses.iter_mut() {
                     self.expr(&mut c.iter);
                     self.local(&c.var, c.var_pos);
+                    for b in c.unpack.iter() {
+                        self.local(&b.name, b.pos);
+                    }
                     if let Some(cond) = &mut c.cond {
                         self.expr(cond);
                     }

@@ -1,3 +1,4 @@
+//! Primitive causes: std.tls.4 (crypto primitives), surfaced only as TLS failures.
 //! Cryptographic primitives for the in-house TLS 1.3 client (ADR 0360,
 //! ADR 0366). Rust standard library only. Each primitive is tested against
 //! the known-answer vectors of the document that defines it.
