@@ -69,7 +69,7 @@ for path in sorted((root / "docs" / "spec").glob("*.md")):
 cited = {}  # rule -> set of files that cite it (comments or literals)
 emitted = {}  # rule -> set of files that emit it as a literal
 sources = (list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "bootstrap" / "src").rglob("*.ail"))
-           + list((root / "compiler").rglob("*.ail")))
+           + [root / "bootstrap" / "tests" / "explain_coverage.rs"] + list((root / "compiler").rglob("*.ail")))
 for path in sources:
     rel = str(path.relative_to(root))
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -81,6 +81,8 @@ for path in sources:
             for m in RULE.finditer(comment):
                 for rule in expand(m):
                     cited.setdefault(rule, set()).add(rel)
+        if path.name == "explain_coverage.rs":
+            continue  # a test whose string literals are deliberately bad rule IDs; its comments are read above
         for m in QUOTED.finditer(line):
             cited.setdefault(m.group(1), set()).add(rel)
             emitted.setdefault(m.group(1), set()).add(rel)
