@@ -6,6 +6,8 @@ fn main()
     print("héllo".chars().join("·"))
     print("ascii only".chars().join(""))
     print("ascii".chars().join("--"))
+    print("😀 ok ü".chars().join(""))
+    print("a😀".chars().join(""))
     print("".chars().join("x"))
     print(['x'].join(""))
     mut line := []
