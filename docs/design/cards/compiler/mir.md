@@ -164,8 +164,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1551); dropped: private items, doc comments
-trimmed to fit 2000 tokens (~1515); dropped: private items, doc comments
-trimmed to fit 2000 tokens (~1529); dropped: private items, doc comments
-trimmed to fit 2000 tokens (~1505); dropped: private items, doc comments
-trimmed to fit 2000 tokens (~1544); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1617); dropped: private items, doc comments
