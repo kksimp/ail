@@ -294,6 +294,11 @@ fn Lower.list_method(
 ) Val?
     if name == "len" and vs.len() == 0
         return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
+    if name == "is_empty" and vs.len() == 0
+        return Val(
+            id: op("eq", [op("len", [r.id], Ty.Int), konst(0, Ty.Int)], Ty.Bool),
+            ty: Ty.Bool,
+        )
     # type.coll.9
     if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
         return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
