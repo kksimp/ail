@@ -32,6 +32,24 @@ fn Lower.lower_chan_new(mut self, targs List[ast.TypeRef], args List[ast.Arg], p
     tensor_trap_if(msg, "conc.share.4", pos)
     Val(id: call("rt.chan_new_cap", [cap.id], t), ty: t)
 
+## Trap at `pos` when the runtime found a deadlock (conc.task.7): the blocking
+## operation returned without a value and left the message.
+fn Lower.chan_deadlock_trap(mut self, pos ast.Pos)
+    msg := call("rt.chan_fault", [], Ty.Int)
+    tensor_trap_if(msg, "conc.task.7", pos)
+
+## `chan_deadlock_trap` after an operation whose result `r` is 0 (`none`).
+fn Lower.chan_deadlock_check(mut self, r int, pos ast.Pos)
+    found := new_block()
+    cont := new_block()
+    branch(op("eq", [r, konst(0, Ty.Int)], Ty.Bool), found, [], cont, [])
+    seal(found)
+    cur = found
+    chan_deadlock_trap(pos)
+    jump(cont, [])
+    seal(cont)
+    cur = cont
+
 ## `send`, `recv` and `close` on a channel.
 fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
@@ -46,7 +64,9 @@ fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[a
         return Val(id: -1, ty: Ty.Unit)
     if name == "recv" and args.len() == 0
         t := Ty.Opt(Ty.Str)
-        return Val(id: call("rt.chan_recv", [ch.id], t), ty: t)
+        r := call("rt.chan_recv", [ch.id], t)
+        chan_deadlock_check(r, npos)
+        return Val(id: r, ty: t)
     if name == "close" and args.len() == 0
         msg := call("rt.chan_close", [ch.id], Ty.Int)
         tensor_trap_if(msg, "conc.share.4", npos)
@@ -54,14 +74,19 @@ fn Lower.lower_chan_method(mut self, ch Val, name str, npos ast.Pos, args List[a
     unsupported(npos, "`.{name}()` on `{ch.ty.name()}`")
 
 ## `for v in ch`: receive until the channel is closed and empty (conc.share.7).
-fn Lower.lower_chan_for(mut self, var str, ch Val, body List[ast.Stmt])
+fn Lower.lower_chan_for(mut self, var str, ch Val, body List[ast.Stmt], pos ast.Pos)
     head := new_block()
     jump(head, [])
     cur = head
     v := call("rt.chan_recv", [ch.id], Ty.Str)
     inner := new_block()
     exit := new_block()
-    branch(op("ne", [v, konst(0, Ty.Int)], Ty.Bool), inner, [], exit, [])
+    ended := new_block()
+    branch(op("ne", [v, konst(0, Ty.Int)], Ty.Bool), inner, [], ended, [])
+    seal(ended)
+    cur = ended
+    chan_deadlock_trap(pos)
+    jump(exit, [])
     seal(inner)
     cur = inner
     declare(var, Ty.Str, v)
@@ -90,4 +115,5 @@ fn Lower.lower_chan_select(mut self, args List[ast.Arg], pos ast.Pos) Val?
         call("rt.chan_slot", [arr, konst(k, Ty.Int), c.id], Ty.Unit)
     t := Ty.Opt(Ty.Int)
     i := call("rt.chan_select", [arr, konst(n, Ty.Int)], t)
+    chan_deadlock_check(i, pos)
     Val(id: i, ty: t)

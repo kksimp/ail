@@ -145,6 +145,7 @@ fn task_start(rec int)
         store64(tail + T_NEXT, rec)
     store64(p + P_TAIL, rec)
     store64(p + P_SEQ, load64(p + P_SEQ) + 1)
+    atomic_add(global(TASKS_LIVE), 1)
     idle := load64(p + P_IDLE)
     live := load64(p + P_LIVE)
     mut fresh := -1
@@ -230,6 +231,8 @@ fn worker_main(idx int)
 fn finish_task(rec int, state int)
     atomic_xchg(rec + T_STATE, state)
     futex_wake(rec + T_STATE, 2147483647)
+    atomic_add(global(TASKS_LIVE), -1)
+    atomic_add(global(CHAN_EPOCH), 1)
 
 ## Called first by `trap`: on a worker, the trap ends the task and the
 ## worker goes on with the next one; on the main thread it returns and the
@@ -275,7 +278,7 @@ fn wait_done(rec int)
         if k >= 0
             wait_enter()
         while atomic_load(rec + T_STATE) == 0
-            futex_wait(rec + T_STATE, 0)
+            prog_wait(rec + T_STATE, 0, "a task to finish", false)
         if k >= 0
             wait_leave()
 

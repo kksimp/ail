@@ -33,6 +33,12 @@ CHAN_SEL := 26
 # Global slot 27: channels made so far; a channel's id is its number in order,
 # as the interpreter names it (`Channel#N`).
 CHAN_COUNT := 27
+# Global slots 28-30: the message of a deadlock the main task found (taken by
+# `chan_fault`), the tasks not yet finished, and the threads sleeping on a
+# change only the program can make (conc.task.7).
+CHAN_FAULT := 28
+TASKS_LIVE := 29
+BLOCKED_N := 30
 
 ## A channel that holds up to `cap` values (the lowering has checked `cap >= 1`).
 fn chan_new_cap(cap int) int
@@ -72,17 +78,63 @@ fn chan_wake(ch int)
         futex_wake(global(CHAN_EPOCH), 1000000)
 
 ## Called holding the lock: release it, sleep until the channel changes, take
-## it again.
-fn chan_sleep(ch int)
+## it again. Whether the main task found a deadlock instead (`what` is what
+## it waited for; the message waits in `CHAN_FAULT`).
+fn chan_sleep(ch int, what str) bool
     w := load64(ch + C_WAKE)
     unlock(ch + C_LOCK)
     k := worker_index()
     if k >= 0
         wait_enter()
-    futex_wait(ch + C_WAKE, w)
+    dead := prog_wait(ch + C_WAKE, w, what, true)
     if k >= 0
         wait_leave()
     lock(ch + C_LOCK)
+    dead
+
+## Sleep while `*a == v`, counted among the blocked threads. The main task
+## sleeps in slices; when every unfinished task is blocked and nothing has
+## changed for 100 ms it is a deadlock (conc.task.7): with `report` it returns
+## true after storing the message, else it goes on waiting.
+fn prog_wait(a int, v int, what str, report bool) bool
+    atomic_add(global(BLOCKED_N), 1)
+    mut dead := false
+    if worker_index() >= 0
+        futex_wait(a, v)
+    else
+        mut idle := 0
+        while atomic_load(a).bit_and(4294967295) == v and not dead
+            e := atomic_load(global(CHAN_EPOCH))
+            futex_wait_timed(a, v, 25)
+            blocked := atomic_load(global(BLOCKED_N))
+            if atomic_load(global(CHAN_EPOCH)) == e and blocked == atomic_load(global(TASKS_LIVE)) + 1
+                idle += 1
+            else
+                idle = 0
+            if idle >= 4 and report
+                dead = true
+                sb_reset()
+                sb_text("deadlock: the main task waits for ")
+                sb_text(what)
+                sb_text(", and ")
+                others := blocked - 1
+                if others == 0
+                    sb_text("no other tasks are")
+                elif others == 1
+                    sb_text("1 other task is")
+                else
+                    put_int(others)
+                    sb_text(" other tasks are")
+                sb_text(" blocked")
+                store64(global(CHAN_FAULT), str_addr(sb_str()))
+    atomic_add(global(BLOCKED_N), -1)
+    dead
+
+## The deadlock message the last blocking operation found, or 0; clears it.
+fn chan_fault() int
+    m := load64(global(CHAN_FAULT))
+    store64(global(CHAN_FAULT), 0)
+    m
 
 ## Called holding the lock: add `v` at the tail, growing the ring if it is full.
 fn chan_put(ch int, v int)
@@ -130,7 +182,9 @@ fn chan_send(ch int, v int) int
             chan_put(ch, v)
             unlock(ch + C_LOCK)
             return 0
-        chan_sleep(ch)
+        if chan_sleep(ch, "room in a channel")
+            unlock(ch + C_LOCK)
+            return chan_fault()
     0
 
 ## `ch.recv()`: the oldest value, or 0 once the channel is closed and empty.
@@ -155,8 +209,9 @@ fn chan_recv(ch int) int
             unlock(ch + C_LOCK)
             chan_pump(ch)
             lock(ch + C_LOCK)
-        else
-            chan_sleep(ch)
+        elif chan_sleep(ch, "a value from a channel")
+            unlock(ch + C_LOCK)
+            return 0
     0
 
 ## `ch.close()`: 0, or the message of the trap when it was closed already.
@@ -211,8 +266,10 @@ fn chan_select_index(chans int, n int) int
             k := worker_index()
             if k >= 0
                 wait_enter()
-            futex_wait(global(CHAN_EPOCH), e.bit_and(4294967295))
+            dead := prog_wait(global(CHAN_EPOCH), e.bit_and(4294967295), "a value from one of several channels", true)
             if k >= 0
                 wait_leave()
             atomic_add(global(CHAN_SEL), -1)
+            if dead
+                return -1
     -1

@@ -98,6 +98,29 @@ fn futex_wait(a int, v int)
     futex_wait_raw(a, v)
     blocked_leave(s)
 
+## The same for at most `ms` milliseconds: it returns when the word changed,
+## when woken, or when the time ran out (the caller looks at the word).
+fn futex_wait_timed(a int, v int, ms int)
+    mut t := ms * 1000
+    if target() != 2
+        t = alloc(16, KIND_BYTES)
+        store64(t, ms / 1000)
+        store64(t + 8, ms % 1000 * 1000000)
+    if load64(global(MULTI)) == 0
+        futex_wait_raw_t(a, v, t)
+        return
+    s := blocked_enter()
+    futex_wait_raw_t(a, v, t)
+    blocked_leave(s)
+
+## `t` is the timeout: microseconds on macOS, else the address of a timespec.
+fn futex_wait_raw_t(a int, v int, t int)
+    if target() == 2
+        import_call("___ulock_wait", 1, a, v, t)
+        return
+    k := if target() == 0 then 202 else 98
+    syscall(k, a, 128, v, t, 0, 0)
+
 fn futex_wake(a int, n int)
     if target() == 2
         op := if n > 1 then 257 else 1
