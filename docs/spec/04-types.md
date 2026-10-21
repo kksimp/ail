@@ -499,6 +499,18 @@ fn main()
     print("a/b/c".rfind("/"))               # 3
 ```
 
+**type.str.19** — `s.is_empty()` is `s.len() == 0`. *(ADR 0630)*
+
+**type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
+*(ADR 0630)*
+
+```ail rules=type.str.19,type.coll.20
+fn main()
+    print("".is_empty())                    # true
+    print([1].is_empty())                   # false
+    print({"a": 1}.is_empty())              # false
+```
+
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
 `a` up to but excluding `b` (indexes count characters, as `len()` does:
 `type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never

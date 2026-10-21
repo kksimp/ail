@@ -388,6 +388,7 @@ impl<'a, W: Write> Interp<'a, W> {
             Value::Float(x) => float_method(x, name, a, pos)?,
             Value::List(items) => match name {
                 "len" => Value::Int(items.len() as i64),
+                "is_empty" => Value::Bool(items.is_empty()),
                 "last" => opt(items.last().cloned()),
                 "first" => opt(items.first().cloned()),
                 // type.coll.15: the first `n` elements, or all of them.
@@ -519,6 +520,7 @@ impl<'a, W: Write> Interp<'a, W> {
             },
             Value::Map(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                "is_empty" => Value::Bool(t.len() == 0),
                 "get" => opt(t.get(&a[0]).map(|i| t.val(i).clone())),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
                 "keys" => Value::List(Rc::new(t.key_list())),
@@ -527,6 +529,7 @@ impl<'a, W: Write> Interp<'a, W> {
             },
             Value::Set(t) => match name {
                 "len" => Value::Int(t.len() as i64),
+                "is_empty" => Value::Bool(t.len() == 0),
                 "contains" => Value::Bool(t.get(&a[0]).is_some()),
                 "sorted" => Value::List(Rc::new(self.sorted(t.key_list(), pos)?)),
                 "union" | "intersect" | "difference" => set_op(name, t.keys(), &a[0]),
@@ -568,6 +571,7 @@ impl<'a, W: Write> Interp<'a, W> {
             "to_float" => opt(parse_float(text).map(Value::Float)),
             "chars" => Value::List(Rc::new(text.chars().map(Value::Char).collect())),
             "len" => Value::Int(text.chars().count() as i64),
+            "is_empty" => Value::Bool(text.is_empty()),
             "byte_len" => Value::Int(text.len() as i64),
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),

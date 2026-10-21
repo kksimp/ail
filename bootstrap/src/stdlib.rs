@@ -22,7 +22,7 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
     ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
-    ("path", &["base", "dir", "ext", "join"]),
+    ("path", &["base", "dir", "ext", "join", "stem"]),
     ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
     ("regex", &["captures", "compile", "escape", "find", "find_all", "is_match", "replace", "replace_first", "split"]),
@@ -290,6 +290,16 @@ pub fn path_ext(p: &str) -> String {
     match base.rfind('.') {
         Some(i) if i > 0 => base[i + 1..].into(),
         _ => String::new(),
+    }
+}
+
+/// std.path.5: the base name without its extension (the text before its last
+/// `.`; a leading `.` doesn't count).
+pub fn path_stem(p: &str) -> String {
+    let base = path_split(p).1;
+    match base.rfind('.') {
+        Some(i) if i > 0 => base[..i].into(),
+        _ => base.into(),
     }
 }
 
