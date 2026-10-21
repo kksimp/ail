@@ -335,7 +335,7 @@ fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
             lower_stmt(st)
             if not done()
                 problem(pos, "this `else` must leave: `return`, `break` or `continue`")
-        Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
+        Handler(name, body, hpos) => handler_jump(name, body, hpos, vt, join)
     seal(join)
     cur = join
     Val(id: r, ty: vt)

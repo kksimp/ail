@@ -868,7 +868,7 @@ fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.
             lower_stmt(st)
             if not done()
                 problem(pos, "this `else` must leave: `return`, `break` or `continue`")
-        Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
+        Handler(name, body, hpos) => handler_jump(name, body, hpos, Ty.Int, join)
     seal(join)
     cur = join
     Val(id: r, ty: Ty.Int)
