@@ -1,4 +1,4 @@
-//! Private fields and methods of another module (mod.vis.1-2, ADR 0098).
+//! Private fields and methods of another module (mod.vis.1-3, ADR 0098).
 //! Items reached by a qualified name are checked in `modules.rs`; members
 //! need the receiver's type, so they are checked here.
 

@@ -10,7 +10,7 @@ const GAMMA: u64 = 0x9E37_79B9_7F4A_7C15;
 /// first use).
 static STATE: AtomicU64 = AtomicU64::new(0);
 
-/// `random.seed(s)` and `ail run --seed S` (std.random.3).
+/// `random.seed(s)` and `ail run --seed S` (std.random.3, eff.det.3).
 pub fn seed(s: i64) {
     // Mix the seed so nearby seeds give unrelated streams, and keep it nonzero.
     let mut z = (s as u64) ^ 0xD1B5_4A32_D192_ED03;
