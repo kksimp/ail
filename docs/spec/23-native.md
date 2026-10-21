@@ -215,7 +215,9 @@ fn main()
 ```
 
 **native.bce.3** — A list's capacity is not observable: a native executable
-may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*
+may allocate room for a list ahead of the pushes that fill it, at most 8 MiB
+of elements (2^20 elements of 8 bytes, 2^23 for a `List[bool]`) per list.
+*(ADR 0579, ADR 0816)*
 
 ```ail rules=native.bce.3
 fn main()
