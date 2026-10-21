@@ -185,7 +185,7 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   of another type). Every store here forgets a whole class instead; the loads
   that survive in the measured programs are in loops, where nothing carries
   over anyway.
-13. **The map probe keeps no registers on its first-slot hit.** Profiling
+12. **The map probe keeps no registers on its first-slot hit.** Profiling
     wordfreq (190 instructions per word, 3 map calls) showed `map_find` saving
     five callee-saved registers and reloading `m` from the stack around its
     probe loop, and `map_set` doing the same to store through the entry `get`
