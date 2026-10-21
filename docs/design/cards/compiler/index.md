@@ -2,7 +2,7 @@
 (root)  16 items
 a64  58 items
 ast  129 items
-check  304 items
+check  305 items
 codegen  39 items
 mir  289 items
 obj  53 items

@@ -57,6 +57,9 @@ pub fn verify(f Func) List[str]
 fn register_kind(t Ty) str
     if t == Ty.Char or t.is_sized()
         return "int"
+    # Every `T?` is one pointer-or-0 register; a `none` still typed `??` passes to any of them.
+    if t.opt_inner() != none
+        return "opt"
     t.name()
 
 fn check_use(
