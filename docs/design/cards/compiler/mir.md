@@ -60,10 +60,12 @@ pub struct mir.Source
     pub text str
     pub prog ast.Program
 pub fn mir.lower_package(input List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package_with(input List[mir.Source], rt ast.Program?, lazy int) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(e ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(prog ast.Program) Map[str, str]
 pub fn mir.imports_of(prog ast.Program) List[str]
+pub fn mir.prelude_text(text str) str
 pub enum mir.Ty
     Int
     Float
@@ -154,4 +156,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1513); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1567); dropped: private items, doc comments

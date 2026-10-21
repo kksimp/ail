@@ -1,0 +1,23 @@
+struct P
+    x int
+
+impl ToStr for P
+    fn to_str(self) str
+        "P({x})"
+
+enum E
+    A
+    B
+
+impl ToStr for E
+    fn to_str(self) str
+        match self
+            A => "a"
+            B => "b"
+
+fn main()
+    p := P(x: 2)
+    print(p.to_str())
+    print("{p} {E.B}")
+    print(p)
+    print(E.A)

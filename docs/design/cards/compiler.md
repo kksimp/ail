@@ -9,9 +9,13 @@ fn runtime(str) !ast.Program [fail fs io]
 fn runtime_with(str, str, str) !ast.Program [fail fs io]
 fn executable_hex(mir.Module, str, str) str [io]
 fn runtime_syntax(str, str) [io]
-fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
+fn lower_file(str, ast.Program?, str) !mir.Module [env fail fs io]
 fn std_file(str, str) str
+fn derived_sources() !Derived [env fail fs io]
+struct Derived
+fn derived_source(str, str, List[str]) mir.Source [io]
 fn parse_source(str, str) !mir.Source [fail fs io]
+fn parse_text(str, str, str) mir.Source [io]
 ```
 
 ## a64
@@ -228,10 +232,12 @@ pub impl ToStr for mir.Problems
 pub fn mir.lower_module(str, str, ast.Program, ast.Program?) mir.Module ! mir.Problems [fail]
 pub struct mir.Source
 pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package_with(List[mir.Source], ast.Program?, int) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
+pub fn mir.prelude_text(str) str
 pub enum mir.Ty
 pub struct mir.Inst
 pub fn mir.inst(int, str, List[int]) mir.Inst
@@ -333,4 +339,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3700); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3812); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
