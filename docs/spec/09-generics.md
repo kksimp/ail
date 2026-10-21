@@ -150,7 +150,8 @@ fn main()
 
 **gen.infer.2** — Explicit type arguments are written in brackets after the
 name of a generic function or type: `parse[int](s)`, `Stack[int].new()`,
-`Pair[int, str](first: 1, second: "a")`. *(ADR 0041, ADR 0129)*
+`Pair[int, str](first: 1, second: "a")`. The generic function or type may be
+declared in another file of the same module. *(ADR 0041, ADR 0129)*
 
 ```ail rules=gen.infer.2
 fn pick[T Ord](a T, b T) T
