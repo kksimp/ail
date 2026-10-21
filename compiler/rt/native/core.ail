@@ -16,17 +16,17 @@ PARSE_OK := 7
 # Threads (ADR 0599): the pool block, a flag that is 1 once a second thread
 # can exist, the allocator's and the output buffer's locks, and the
 # reentrant output lock's owner and depth.
-TASKS := 56
-MULTI := 57
-ALLOC_LOCK := 58
-OUT_LOCK := 59
-OUT_OWNER := 60
-OUT_DEPTH := 61
-STACKS := 62
+TASKS := 16
+MULTI := 17
+ALLOC_LOCK := 18
+OUT_LOCK := 19
+OUT_OWNER := 20
+OUT_DEPTH := 21
+STACKS := 22
 # A collection is under way (threads park), and the thread holding the
 # allocation lock (so a trap inside the allocator can release it).
-GC_REQ := 63
-ALLOC_OWNER := 64
+GC_REQ := 23
+ALLOC_OWNER := 24
 ## A trap's third number (a slice's list length); the program ends after
 ## it, so it shares `PARSE_OK`'s slot.
 TRAP_LEN := 7
