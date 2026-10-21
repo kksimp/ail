@@ -804,13 +804,24 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
     if recv == none
         lower_bind_else(name, pos, value, other)
         return
-    s := lower_value(recv?, Ty.Str) else
+    got := lower_str_to_int_else(recv?, other, pos) else
         declare(name, Ty.Unknown, -1)
         return
+    declare(name, got.ty, got.id)
+
+## The receiver of `s.to_int()` when `e` is that call.
+fn str_to_int_recv(e ast.Expr) ast.Expr?
+    match e
+        Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
+        _ => none
+
+## `s.to_int() else ...` (err.else.1-2) in any position: the parse, then the
+## `else` when it fails, a fallback value or a statement that leaves.
+fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.Pos) Val?
+    s := lower_value(recv, Ty.Str)?
     if not (s.ty == Ty.Str)
         problem(pos, "`.to_int()` on `{s.ty.name()}`")
-        declare(name, Ty.Unknown, -1)
-        return
+        return none
     n := call("rt.str_to_int", [s.id], Ty.Int)
     ok := call("rt.parse_ok", [], Ty.Bool)
     join := new_block()
@@ -822,9 +833,7 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
     cur = fail
     match other
         Fallback(x) =>
-            f := lower_value(x, Ty.Int) else
-                declare(name, Ty.Unknown, -1)
-                return
+            f := lower_value(x, Ty.Int)?
             jump(join, [convert(f, Ty.Int, pos)])
         Leave(st) =>
             lower_stmt(st)
@@ -833,7 +842,7 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
     seal(join)
     cur = join
-    declare(name, Ty.Int, r)
+    Val(id: r, ty: Ty.Int)
 
 fn Lower.lower_stmt(mut self, s ast.Stmt)
     match s
