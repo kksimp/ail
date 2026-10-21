@@ -13,6 +13,13 @@ pub struct Reloc
     pub sym str
     pub tail int
 
+## A user call: its return address (an offset in `code`), the position of
+## the call (`mir.call_pos`) and the function it is in.
+pub struct CallRow
+    pub off int
+    pub pos int
+    pub func str
+
 pub struct Image
     pub code List[int]
     pub funcs Map[str, int]
@@ -23,12 +30,24 @@ pub struct Image
     pub globals int
     ## The entry point's offset in `code`.
     pub entry int
+    ## Each user call, in address order (trace.frame.1).
+    pub calls List[CallRow]
     ## The libSystem symbols the code calls (`import_call`, native-abi.md
     ## §11), in the order of their pointer slots, which follow the globals.
     pub imports List[str]
 
 pub fn new_image() Image
-    Image(code: [], funcs: {}, relocs: [], data: [], data_syms: {}, globals: 64, entry: 0, imports: [])
+    Image(
+        code: [],
+        funcs: {},
+        relocs: [],
+        data: [],
+        data_syms: {},
+        globals: 64,
+        entry: 0,
+        calls: [],
+        imports: [],
+    )
 
 ## A string object (native-abi.md §2) in the read-only data, once per symbol.
 pub fn add_str(mut img Image, sym str, s str)
@@ -97,5 +116,87 @@ pub fn add_trap_texts(mut img Image, m mir.Module, k int, op str)
     lines := if site.file < m.file_lines.len() then m.file_lines[site.file] else m.lines
     add_str(mut img, "d:h{k}", "{path}:{site.line}:{site.col}: trap[{site.rule}]: ")
     line := if site.line >= 1 and site.line <= lines.len() then lines[site.line - 1] else ""
-    add_str(mut img, "d:t{k}", mir.excerpt(line, site.line, site.col))
+    excerpt := mir.excerpt(line, site.line, site.col)
+    # The stack's innermost lines: the trapping function and the functions
+    # inlined into (trace.frame.1-2).
+    mut frames := ""
+    mut s := site
+    mut depth := 0
+    while depth < 6
+        frames = "{frames}{frame_line(m, s)}\n"
+        if s.from < 0
+            break
+        s = m.sites[s.from]
+        depth += 1
+    add_str(mut img, "d:t{k}", "{excerpt}{frames}")
     add_str(mut img, "d:o{op}", op)
+
+## Append the call table the runtime reads to print a trap's stack
+## (trace.frame.1, ADR 0641) to the code, as the symbol `trace.tab`. Layout,
+## 8-byte words from the symbol: `count`, the table's own offset in `code`,
+## the number of functions; then `count` entries of two words (`ret_off |
+## line << 32`, `col | func << 32`) in address order; then per function two
+## words, the offsets (from the symbol) of its `NAME(..)` and `FILE:` string
+## objects (0: none); then the string objects.
+pub fn add_call_table(mut img Image, m mir.Module)
+    mut funcs := Map[str, int]()
+    mut takes := Map[str, bool]()
+    for f in m.funcs
+        takes[f.name] = f.params.len() > 0
+    mut keys := List[str]()
+    mut words := List[int]()
+    n := img.calls.len()
+    for c in img.calls
+        key := "{mir.call_file(c.pos)}:{c.func}"
+        if not funcs.contains(key)
+            funcs[key] = keys.len()
+            keys.push(key)
+        words.push(c.off.bit_or(mir.call_line(c.pos).shl(32)))
+        words.push(mir.call_col(c.pos).bit_or(funcs[key].shl(32)))
+    align(mut img.code, 8)
+    at := img.code.len()
+    img.funcs["trace.tab"] = at
+    push64(mut img.code, n)
+    push64(mut img.code, at)
+    push64(mut img.code, keys.len())
+    for w in words
+        push64(mut img.code, w)
+    mut strs := List[int]()
+    mut offs := List[int]()
+    base := 24 + 8 * words.len() + 16 * keys.len()
+    for key in keys
+        cut := key.find(":") else 0
+        file := key.slice(0, cut).to_int() else 0
+        name := key.slice(cut + 1, key.chars().len())
+        offs.push(base + strs.len())
+        dots := if (takes.get(name) else false) then ".." else ""
+        add_text(mut strs, "{name}({dots})")
+        if file == 0 or file >= m.files.len()
+            offs.push(0)
+        else
+            offs.push(base + strs.len())
+            add_text(mut strs, "{m.files[file]}:")
+    for o in offs
+        push64(mut img.code, o)
+    img.code.extend(strs)
+
+## A string object (native-abi.md §2) appended to `out`, padded to 8 bytes.
+fn add_text(mut out List[int], s str)
+    bytes := utf8(s)
+    push64(mut out, bytes.len())
+    push64(mut out, s.chars().len())
+    out.extend(bytes)
+    align(mut out, 8)
+
+## `  at [FILE:]LINE:COL in NAME(..)`: a frame at `site`.
+fn frame_line(m mir.Module, site mir.Site) str
+    root := if site.file == 0 or site.file >= m.files.len() then "" else "{m.files[site.file]}:"
+    dots := if params_of(m, site.func) then ".." else ""
+    "  at {root}{site.line}:{site.col} in {site.func}({dots})"
+
+## Whether function `name` takes parameters (its frame prints `(..)`).
+fn params_of(m mir.Module, name str) bool
+    for f in m.funcs
+        if f.name == name
+            return f.params.len() > 0
+    false

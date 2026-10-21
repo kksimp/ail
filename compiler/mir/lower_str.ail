@@ -114,7 +114,7 @@ fn Lower.trap_tail(mut self, pos ast.Pos) int
     chars := line.chars()
     for c in 0..pos.col - 1
         pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
-    str_value("  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n")
+    str_value("  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n{trap_frame(pos)}")
 
 ## A `str` or `char` argument of a search method (type.str.6) as a `str` value.
 fn Lower.text_arg(mut self, v Val, name str, pos ast.Pos) int?

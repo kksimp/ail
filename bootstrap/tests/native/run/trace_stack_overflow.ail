@@ -1,0 +1,9 @@
+# An overflow inside a loop in a callee (expr.arith.1).
+fn grow(x int) int
+    mut y := x
+    for _ in 0..70
+        y = y * 3
+    y
+
+fn main()
+    print(grow(2))

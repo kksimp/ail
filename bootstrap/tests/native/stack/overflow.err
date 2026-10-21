@@ -1,0 +1,1 @@
+bootstrap/tests/native/stack/overflow.ail:8:9: trap[err.trap.1]: call depth exceeded the native stack in `down`

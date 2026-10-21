@@ -160,3 +160,35 @@ fn single_file_checks_run_from_memory() {
     assert_eq!(fs::metadata(&f).unwrap().modified().unwrap(), before, "the file was rewritten");
     assert_eq!(fs::read_to_string(&f).unwrap(), SRC);
 }
+
+/// edit.out.3: while two previews run, a reader of the same file only ever sees its original text.
+#[test]
+fn concurrent_readers_never_see_a_preview() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let d = dir("readers");
+    let f = d.join("p.ail");
+    fs::write(&f, SRC).unwrap();
+    let done = AtomicBool::new(false);
+    std::thread::scope(|s| {
+        let reader = s.spawn(|| {
+            let mut seen = 0;
+            while !done.load(Ordering::Relaxed) {
+                assert_eq!(fs::read_to_string(&f).unwrap(), SRC, "a reader saw the edited text");
+                seen += 1;
+            }
+            seen
+        });
+        let bad = r#"[{"op":"replace_body","id":"fn:old","body":"nope"}]"#;
+        std::thread::scope(|p| {
+            for _ in 0..2 {
+                p.spawn(|| {
+                    for _ in 0..10 {
+                        edit(&f, &["--dry-run"], bad);
+                    }
+                });
+            }
+        });
+        done.store(true, Ordering::Relaxed);
+        assert!(reader.join().unwrap() > 0);
+    });
+}

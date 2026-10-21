@@ -6,7 +6,7 @@
 use ast
 
 ## `tensor.Tensor[T]` with `T` `int` or `float`.
-fn Lower.tensor_type_of(self, args List[ast.TypeRef]) Ty?
+fn Lower.tensor_type_of(mut self, args List[ast.TypeRef]) Ty?
     if args.len() != 1
         return none
     n := match args[0].shape

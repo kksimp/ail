@@ -1,0 +1,18 @@
+## The `else` block of an absent value in the special forms that lower their own
+## `else` (err.else.1-3): `s.to_int() else`, `xs.pop() else` and `m.get(k) else`.
+## The block runs where the value is missing; it either leaves (`return`,
+## `break`, `continue`) or ends in the value that replaces it, which goes on to
+## `join`. An absent value has no error, so a name after `else` is reported
+## (err.else.3). Matches `lower_else` for an optional.
+use ast
+
+fn Lower.handler_jump(mut self, name ast.Ident?, body List[ast.Stmt], hpos ast.Pos, t Ty, join int)
+    if n := name
+        problem(n.pos, "an absent value has no error to bind")
+        return
+    v := lower_block(body, true)
+    if not done()
+        x := v else
+            problem(hpos, "this `else` block needs a value")
+            return
+        jump(join, [convert(x, t, hpos)])

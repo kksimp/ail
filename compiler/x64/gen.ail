@@ -25,6 +25,8 @@ pub fn registers() codegen.Target
     )
 
 INT_ARGS := [7, 6, 2, 1, 8, 9]
+## The runtime global holding the stack limit (`rt.STACK_LIMIT`, ADR 0535).
+STACK_LIMIT := 15
 
 ## A move of the parallel moves at an edge or a call: into location `dst`
 ## from location `src`, or from a constant (`imm`) or a symbol's address.
@@ -50,6 +52,8 @@ struct Stub
 
 struct Gen
     a Asm
+    ## The Windows target (ADR 0608): `target()` is 3.
+    win bool
     img codegen.Image
     m mir.Module
     f mir.Func
@@ -99,10 +103,12 @@ pub fn generate(m mir.Module) codegen.Image
         if is_kernel(f.name)
             gen_kernel(mut img, f.name)
         else
-            gen_func(mut img, m, f)
+            gen_func(mut img, m, f, false)
+    codegen.add_call_table(mut img, m)
     img
 
-fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
+## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
+fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
     f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
@@ -115,6 +121,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    first := img.calls.len()
     mut globs := Map[int, int]()
     mut addr_uses := [0 for _ in 0..f.vals.len()]
     for blk in f.blocks
@@ -129,6 +136,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
                     globs[i.dst] = remat[i.args[0]].imm
     mut g := Gen(
         a: new_asm(),
+        win: win,
         img: img,
         m: m,
         f: f,
@@ -165,6 +173,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
     g.a.resolve_labels()
     img = g.img
     base := img.code.len()
+    for k in first..img.calls.len()
+        img.calls[k].off += base
     img.funcs[f.name] = base
     img.code.extend(g.a.code)
     for fx in g.a.fixups
@@ -1021,6 +1031,18 @@ fn Gen.push(mut self, i mir.Inst)
     a.bind(done)
 
 fn Gen.call_out(mut self, i mir.Inst)
+    if i.name.starts_with("libsys.")
+        # System DLL calls exist only on Windows (ADR 0606). Elsewhere the
+        # call traps if it is ever run.
+        if self.win
+            self.libsys_call(i)
+        else
+            a.ud2()
+        return
+    if i.site >= 0
+        # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
+        a.alu_rm("cmp", RSP, at_sym("globals", 8 * STACK_LIMIT))
+        a.jcc(CC_B, stub(11, -1, -1, i.site, m.sites[i.site].op))
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -1055,6 +1077,9 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.ud2()
     else
         a.call_sym(i.name)
+    if i.imm != 0
+        # The return address, for a trap's stack (trace.frame.1).
+        img.calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
     if room > 0
         a.alu_ri("add", RSP, room)
     if i.dst >= 0
@@ -1191,7 +1216,15 @@ fn Gen.prim(mut self, i mir.Inst)
             put_gpr(i.dst, d)
         "target" =>
             d := out_gpr(i.dst, S1)
-            a.mov_ri(d, 0)
+            a.mov_ri(d, if win then 3 else 0)
+            put_gpr(i.dst, d)
+        "code_tab" =>
+            d := out_gpr(i.dst, S1)
+            a.lea(d, at_sym("trace.tab", 0))
+            put_gpr(i.dst, d)
+        "frame_ptr" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, RBP)
             put_gpr(i.dst, d)
         "str_addr" | "str_at" | "list_addr" | "list_at" =>
             parallel([move_of(loc[i.dst], i.args[0])])
@@ -1317,9 +1350,10 @@ fn Gen.gen_stubs(mut self)
         if s.kind == 4
             # The float's bits.
             a.vmovq_rx(RSI, xmm(s.a, X0))
-        else
+        elif s.kind != 11
             moves.push(move_of(RSI, s.a))
-        moves.push(move_of(RDX, s.b))
+        if s.kind != 11
+            moves.push(move_of(RDX, s.b))
         moves.push(Move(dst: RCX, src: -1, imm: 0, sym: "d:h{s.site}", float: false))
         moves.push(Move(dst: R8, src: -1, imm: 0, sym: "d:o{s.op}", float: false))
         moves.push(Move(dst: R9, src: -1, imm: 0, sym: "d:t{s.site}", float: false))

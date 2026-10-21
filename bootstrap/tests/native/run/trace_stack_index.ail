@@ -1,0 +1,9 @@
+# A trap reports the stack: the function, then its callers (trace.frame.1).
+fn pick(xs List[int], i int) int
+    xs[i]
+
+fn middle(xs List[int]) int
+    pick(xs, 5) + 1
+
+fn main()
+    print(middle([1, 2, 3]))

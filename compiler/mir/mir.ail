@@ -229,6 +229,9 @@ pub struct Site
     pub func str
     ## The source file, an index into `Module.files` (ADR 0393).
     pub file int
+    ## For a check copied in by inlining: the site of the call it came from
+    ## (a stack frame of its own, trace.frame.2), else -1.
+    pub from int
 
 ## The source excerpt under a trap: the line with its number, and a caret
 ## under column `col` (native-abi.md §7).
@@ -261,3 +264,17 @@ pub fn Inst.is_pure(self) bool
         "band" | "bor" | "bxor" | "bnot" => true
         "add" | "sub" | "mul" | "neg" | "shl" | "shr" | "div" | "rem" => site < 0
         _ => false
+
+## A call's position as one number (trace.frame.1): file 44.., line 20..43,
+## column 0..19. Never 0, since lines start at 1.
+pub fn call_pos(file int, line int, col int) int
+    file.shl(44).bit_or(line.shl(20)).bit_or(col)
+
+pub fn call_file(pos int) int
+    pos.shr(44)
+
+pub fn call_line(pos int) int
+    pos.shr(20).bit_and(16777215)
+
+pub fn call_col(pos int) int
+    pos.bit_and(1048575)

@@ -75,6 +75,14 @@ fn globals_end() int
 fn target() int
     todo
 
+## The address of the call table (`trace.tab`, trace.frame.1).
+fn code_tab() int
+    todo
+
+## The frame pointer: `[fp]` is the caller's, `[fp + 8]` the return address.
+fn frame_ptr() int
+    todo
+
 ## Atomic operations on the 8 bytes at address `a`, sequentially consistent
 ## (ADR 0600): load, store, exchange (the old value), add (the old value),
 ## and compare-and-swap (the value found: `old` means it swapped).

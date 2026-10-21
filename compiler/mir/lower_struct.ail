@@ -44,7 +44,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[NET_OPTIONS] = []
     for s in prog.structs
         if s.generics.len() > 0
-            problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
+            declare_generic_struct(s)
         elif s.is_unique
             problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
         else
@@ -203,9 +203,14 @@ fn Lower.self_value(mut self) int
 
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    if not sigs.contains(key)
+        instance_method(key)
     if bad.contains(key)
+        release(key)
         fn_failed = true
         return none
+    if gen.fns.contains(key) and recv == none
+        return generic_call(key, key, [], args, pos, none)
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
         return proc_output_method(key, recv, args, pos)
     if key.starts_with("net.")
@@ -226,7 +231,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
     check_requires(key, vs, pos)
-    Val(id: call(key, vs, sig.ret), ty: sig.ret)
+    Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
 
 ## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
 ## status is zero; the standard output followed by the standard error.
@@ -364,6 +369,8 @@ fn Lower.lower_member_expr(
     e ast.Expr,
     want Ty?,
 ) Val?
+    if g := generic_enum_ref(recv)
+        return generic_variant(g, name, none, pos, want)
     if en := enum_ref(recv)
         return variant_member(en, name, pos)
     if key := qualified(e)

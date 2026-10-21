@@ -62,16 +62,19 @@ pub struct mir.Source
     pub text str
     pub prog ast.Program
 pub fn mir.lower_package(input List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package_with(input List[mir.Source], rt ast.Program?, lazy int) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(e ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(prog ast.Program) Map[str, str]
 pub fn mir.imports_of(prog ast.Program) List[str]
+pub fn mir.prelude_text(text str) str
 pub struct mir.TaskState
     on bool
     sites List[mir.TaskSite]
     pars List[mir.ParSite]
     rets Map[str, mir.Ty]
     in_chunk bool
+    owner str
     accs Set[str]
 pub fn mir.new_task_state() mir.TaskState
 pub fn mir.uses_tasks(text str) bool
@@ -148,6 +151,7 @@ pub struct mir.Site
     pub col int
     pub func str
     pub file int
+    pub from int
 pub fn mir.excerpt(line str, n int, col int) str
 pub struct mir.Module
     pub path str
@@ -158,6 +162,10 @@ pub struct mir.Module
     pub files List[str]
     pub file_lines List[List[str]]
     pub fn mir.Module.globals_used(self) int
+pub fn mir.call_pos(file int, line int, col int) int
+pub fn mir.call_file(pos int) int
+pub fn mir.call_line(pos int) int
+pub fn mir.call_col(pos int) int
 pub fn mir.keep_lengths(f mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
@@ -166,6 +174,7 @@ pub struct mir.Proven
     pub lows Map[int, int]
     pub highs Map[int, int]
 pub fn mir.prove(f mir.Func, defs List[mir.Def], lp mir.LoopInfo, c mir.Counted, order List[int], held List[bool]) mir.Proven
+pub fn mir.mark_recursion(m mir.Module) mir.Module
 pub fn mir.reuse_lists(m mir.Module) mir.Module
 pub fn mir.simplify(f mir.Func) mir.Func
 pub fn mir.subset_help(message str) str
@@ -175,4 +184,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1716); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1850); dropped: private items, doc comments

@@ -1,0 +1,6 @@
+# A generic function declared in one file of a module and called with
+# explicit type arguments from another file of the same module (gen.infer.2).
+use generic_mod
+
+fn main()
+    print(generic_mod.other())

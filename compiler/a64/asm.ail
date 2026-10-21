@@ -137,6 +137,11 @@ pub fn Asm.alu_ri(mut self, op str, d int, n int, imm int)
 pub fn Asm.cmp_rr(mut self, n int, m int)
     alu_rr("subs", XZR, n, m)
 
+## `cmp sp, xm` (`subs xzr, sp, xm, uxtx`): register 31 as the first
+## operand is `sp` only in the extended-register form.
+pub fn Asm.cmp_sp(mut self, m int)
+    word(3944768511 + m * 65536)
+
 ## `tst n, m`: the flags of `n & m`.
 pub fn Asm.tst_rr(mut self, n int, m int)
     alu_rr("ands", XZR, n, m)

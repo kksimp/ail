@@ -1,0 +1,7 @@
+# A shift count out of range in a callee (expr.bit.2).
+fn bit(k int) int
+    1.shl(k)
+
+fn main()
+    print(bit(3))
+    print(bit(64))

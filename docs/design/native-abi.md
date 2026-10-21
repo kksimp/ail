@@ -187,6 +187,13 @@ slots the MIR uses. `==` on an enum with fields compares the index when one
 side is a variant without fields, the index and that variant's fields when
 one side is built in place, else calls the generated `eq.E`.
 
+**Generic instances** (ADR 0536). Each generic function, struct or enum is
+compiled once per set of type arguments, as a plain function or type named
+with them: `first[int]`, `Box[str]`, `Box[str].get`, `Pair[int, str]`.
+An instance has the layout of the same struct or enum written out by hand;
+there is no boxing and no type information at run time. The methods of an
+`impl Trait for T` block are the symbols `T.m`, like any method of `T`.
+
 ## 3. Entry and exit
 
 The object writer points the entry at `_start` (ELF) or `_main` (Mach-O,
@@ -304,11 +311,40 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 end of its function, which calls
 `rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
 1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
-count; 15 prints a runtime-built message string, `a`), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+count, 7 slice, 11 stack exhausted, 14 `unreachable`; 15 prints a runtime-built message string, `a`), `a` and `b` are the operands (for 4, the float's bits), `head` is the
 constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
 constant source excerpt (`  L | line` and the caret line). The output is the
 interpreter's first line and excerpt, byte for byte; the snapshot lines
 after them are not printed. Runtime code has no checks: its arithmetic wraps.
+
+**Stack check (ADR 0535).** `rt.init` stores a limit in global slot 15: the
+argument vector's address (the top of the main stack) less the stack's size
+limit (`RLIMIT_STACK`; 8 MiB when unknown or unlimited, at most 1 GiB) less a
+1 MiB reserve for the trap itself. A call that can recurse, one whose callee
+is in its caller's strongly connected component of the call graph, first
+compares the stack pointer with it (`cmp rsp, [globals+96]; jb stub` on
+x86-64; `adrp`, `add`, `ldr`, `cmp sp, x16`, `b.lo` on ARM64) and traps with
+kind 11 at the call: `call depth exceeded the native stack in `NAME``. Other
+calls are unchecked: their chains are bounded by the program's functions.
+Threads other than the main one need their own limit (lane 178).
+**Stack (lane 195, ADR 0641).** The stub's `tail` text also holds the
+trapping function's frame line (and, for a check inlined from a callee, the
+frames it was inlined through, ADR 0643). `rt.trap` then calls
+`trace_frames(tail)` (`rt/native/trap.ail`), which walks the frame pointers
+(`[fp]` is the caller's frame, `[fp + 8]` the return address; `_start` and
+thread entries clear the frame pointer) and prints a line for each return
+address found in the **call table**. The table is the symbol `trace.tab`, in
+the code (8-aligned), in 8-byte words: `count`, the table's own offset in
+the code, the number of functions; then `count` rows of two words, in
+address order, `return offset | line << 32` and `col | function << 32`;
+then two words per function, the offsets from `trace.tab` of its
+`NAME(..)` string object and of its `FILE:` string object (0: the first
+file); then those string objects. Primitives `code_tab()` and `frame_ptr()`
+(runtime only) give the table's address and the frame pointer. A user
+`call` instruction carries its position in `imm` (`mir.call_pos`); runtime
+calls carry 0 and get no row. A runtime path with its own trap text calls
+`trace_frames` after printing it. Code-size cost: 16 bytes per user call and
+about 1.5 KB of runtime (ADR 0644).
 
 The trap-record design below was the first draft; a record can't hold the
 operands the interpreter's messages contain.
@@ -330,8 +366,8 @@ Output, byte for byte the first line the interpreter prints:
 FILE:LINE:COL: trap[RULE]: MESSAGE
 ```
 
-The interpreter then adds a source excerpt and a stack trace. The native
-version doesn't yet (frame metadata is a later ABI addition, ADR 0405). The
+The interpreter then adds a source excerpt and a stack trace. Native code
+prints the excerpt and the stack too (trace.frame.1, ADR 0641; see below). The
 differential harness compares exit status, the rule ID and the first line;
 `.trap` files hold the rule ID.
 
