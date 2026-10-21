@@ -123,7 +123,7 @@ the tree: `to` and its parents are made when missing, files already there are
 replaced, other files there are kept, and entries are copied in name order.
 A symbolic link is copied as the file it points to; a link to a directory
 fails with `other` at that path, and so does copying a directory into itself.
-A file at `to` fails with `exists`. For `rename` and `copy`, a failure's
+For `rename` and `copy`, a failure's
 `path` is `from` when `from` is missing, else the path that failed.
 *(ADR 0281, ADR 0751)*
 
@@ -517,7 +517,8 @@ fn main()
 
 ## Processes: `std.proc`
 
-**std.proc.1** — `run(cmd str, args List[str]) Output ! ProcError` runs the
+**std.proc.1** — `run(cmd str, args List[str], input str?, timeout_ms int?) Output ! ProcError`
+runs the
 program `cmd` with the arguments `args`, directly and without a shell, and
 waits for it. `cmd` is found on `PATH` unless it contains a path separator.
 On Windows the search also tries each extension of `PATHEXT`, so `"npm"`
