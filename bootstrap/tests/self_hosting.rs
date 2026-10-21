@@ -6,6 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod common;
+use common::shown;
+
 fn ail() -> Command {
     Command::new(env!("CARGO_BIN_EXE_ail"))
 }
@@ -101,10 +104,25 @@ fn compare_with_bootstrap(command: &str, flag: &str) {
     let files = corpus();
     let mut expected = String::new();
     for f in &files {
-        expected.push_str(&format!("== {}\n", f.display()));
+        expected.push_str(&format!("== {}\n", shown(f)));
         expected.push_str(&run(ail().args(["api", flag]).arg(f)));
     }
-    let actual = run(ail().arg("run").arg(root().join("compiler")).arg(command).args(&files));
+    // Batches keep each command line under the Windows limit of 32,767 characters;
+    // the compiler prints one block per file, so the batches join to the same text.
+    let mut batches: Vec<Vec<String>> = vec![Vec::new()];
+    let mut len = 0;
+    for f in files.iter().map(|f| shown(f)) {
+        if len + f.len() >= 20_000 && !batches.last().unwrap().is_empty() {
+            batches.push(Vec::new());
+            len = 0;
+        }
+        len += f.len() + 1;
+        batches.last_mut().unwrap().push(f);
+    }
+    let mut actual = String::new();
+    for batch in &batches {
+        actual.push_str(&run(ail().arg("run").arg(shown(&root().join("compiler"))).arg(command).args(batch)));
+    }
     if actual != expected {
         // Report the first file whose output differs.
         let split = |s: &str| s.split("\n== ").map(str::to_string).collect::<Vec<_>>();

@@ -19,6 +19,9 @@
 //!   `ail run NAME`, with the same expectations in `NAME/expected.out`,
 //!   `expected.rules`, `expected.trap` or `expected.err`.
 
+mod common;
+
+use common::{shown, windows_gap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -49,7 +52,7 @@ fn check_run(path: &Path, expect: &dyn Fn(&str) -> PathBuf) -> Result<(), String
     let trap_file = expect("trap");
     let err_file = expect("err");
     let test_file = expect("test");
-    let name = path.display();
+    let name = shown(path);
     let stderr_file = expect("stderr");
     if stderr_file.exists() {
         // trace.run.1: `ail run` with the options in NAME.args (one line),
@@ -58,7 +61,7 @@ fn check_run(path: &Path, expect: &dyn Fn(&str) -> PathBuf) -> Result<(), String
         let out = ail().arg("run").args(args.split_whitespace()).arg(path).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        let want = fs::read_to_string(&stderr_file).unwrap().replace("$FILE", &path.display().to_string());
+        let want = fs::read_to_string(&stderr_file).unwrap().replace("$FILE", &shown(path));
         if out.status.code() == Some(2) || stderr != want {
             return Err(format!(
                 "{name}: standard error differs\n--- expected\n{want}--- actual (exit {:?})\n{stderr}",
@@ -86,7 +89,7 @@ fn check_run(path: &Path, expect: &dyn Fn(&str) -> PathBuf) -> Result<(), String
         let out = ail().arg("run").arg(path).output().unwrap();
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        let want = fs::read_to_string(&err_file).unwrap().replace("$FILE", &path.display().to_string());
+        let want = fs::read_to_string(&err_file).unwrap().replace("$FILE", &shown(path));
         if out.status.code() != Some(1) || stderr != want {
             return Err(format!(
                 "{name}: expected exit 1 and this report\n--- expected\n{want}--- actual (exit {:?})\n{stderr}",
@@ -144,8 +147,18 @@ fn check_run(path: &Path, expect: &dyn Fn(&str) -> PathBuf) -> Result<(), String
     }
 }
 
+/// Prints a skip for a Windows gap and returns its reason; `None` if the failure is real.
+fn report_gap(path: &Path, failure: &str) -> Option<&'static str> {
+    let why = windows_gap(failure)?;
+    eprintln!("skipped {}: {why}", shown(path));
+    Some(why)
+}
+
 fn run_dir(dir: &Path) {
-    let failures: Vec<String> = ail_files(dir).iter().filter_map(|p| check_case(p).err()).collect();
+    let failures: Vec<String> = ail_files(dir)
+        .iter()
+        .filter_map(|p| check_case(p).err().filter(|f| report_gap(p, f).is_none()))
+        .collect();
     assert!(failures.is_empty(), "{} case(s) failed:\n\n{}", failures.len(), failures.join("\n\n"));
 }
 
@@ -165,8 +178,10 @@ fn packages() {
     let mut dirs: Vec<PathBuf> =
         fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
     dirs.sort();
-    let failures: Vec<String> =
-        dirs.iter().filter_map(|d| check_run(d, &|ext| d.join(format!("expected.{ext}"))).err()).collect();
+    let failures: Vec<String> = dirs
+        .iter()
+        .filter_map(|d| check_run(d, &|ext| d.join(format!("expected.{ext}"))).err().filter(|f| report_gap(d, f).is_none()))
+        .collect();
     assert!(failures.is_empty(), "{} package(s) failed:\n\n{}", failures.len(), failures.join("\n\n"));
 }
 

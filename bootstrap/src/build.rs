@@ -14,9 +14,10 @@ fn compiler_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("AIL_COMPILER") {
         return Some(PathBuf::from(dir));
     }
+    // `bootstrap/target/PROFILE/ail`, or `bootstrap/target/TRIPLE/PROFILE/ail`
+    // for a cross build: the first ancestor with a `compiler/` directory.
     let exe = std::env::current_exe().ok()?;
-    let dir = exe.ancestors().nth(4)?.join("compiler");
-    dir.join("main.ail").exists().then_some(dir)
+    exe.ancestors().skip(1).take(6).map(|a| a.join("compiler")).find(|d| d.join("main.ail").exists())
 }
 
 /// The repository root, beside `compiler/` (or the current directory).
@@ -127,7 +128,7 @@ pub fn command(args: &[&str]) -> ExitCode {
         return match write_executable(&out, &bytes) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("error[native.build.3]: can't write {}: {e}", out.display());
+                eprintln!("error[native.build.3]: can't write {}: {e}", crate::shown::shown(&out));
                 ExitCode::from(2)
             }
         };
@@ -148,7 +149,7 @@ pub fn command(args: &[&str]) -> ExitCode {
         build_cache::store(key, &bytes);
     }
     if let Err(e) = write_executable(&out, &bytes) {
-        eprintln!("error[native.build.3]: can't write {}: {e}", out.display());
+        eprintln!("error[native.build.3]: can't write {}: {e}", crate::shown::shown(&out));
         return ExitCode::from(2);
     }
     ExitCode::SUCCESS

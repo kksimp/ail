@@ -24,6 +24,10 @@ fn build(cache: &Path, src: &Path, out: &Path, extra: &[&str]) {
 // native.build.5
 #[test]
 fn cached_and_uncached_builds_are_identical() {
+    if cfg!(windows) {
+        eprintln!("skipped: `ail build` has no native target for Windows yet until the Windows PE writer lands (ADR 0597)");
+        return;
+    }
     let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("build_cache");
     let _ = fs::remove_dir_all(&tmp);
     let (cache, src) = (tmp.join("cache"), tmp.join("prog.ail"));

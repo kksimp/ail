@@ -74,7 +74,7 @@ impl Packages {
             opts: git::options(),
         };
         let mut declared: HashMap<String, (usize, Pos)> = HashMap::new();
-        let mut path = vec![(canonical(root), root.display().to_string())];
+        let mut path = vec![(canonical(root), crate::shown::shown(&root))];
         p.visit("", root, None, &mut path, &mut declared);
         // mod.pkg.4: the root package's modules are unqualified, so none may
         // share a package's name.
@@ -89,7 +89,7 @@ impl Packages {
                     Diagnostic::new(
                         "mod.pkg.4",
                         pos,
-                        format!("package `{name}` has the same name as the module directory `{}`", dir.display()),
+                        format!("package `{name}` has the same name as the module directory `{}`", crate::shown::shown(&dir)),
                     )
                     .help("rename the directory, or the dependency on this line and in its own `ail.pkg`"),
                 ));
@@ -201,7 +201,7 @@ impl Packages {
                 Diagnostic::new(
                     "mod.pkg.4",
                     pos,
-                    format!("the package in `{}` is named `{name}`, not `{pkg}`", dir.display()),
+                    format!("the package in `{}` is named `{name}`, not `{pkg}`", crate::shown::shown(&dir)),
                 )
                 .help(format!("declare it as `dep {name}`; `use {name} as {pkg}` renames it in one file")),
             );
@@ -221,7 +221,7 @@ impl Packages {
             };
             if !dir.is_dir() {
                 self.manifests[me].diags.push(
-                    Diagnostic::new("mod.pkg.3", dep.pos, format!("there is no directory `{}`", dir.display()))
+                    Diagnostic::new("mod.pkg.3", dep.pos, format!("there is no directory `{}`", crate::shown::shown(&dir)))
                         .help("a `path` is relative to the directory that holds this `ail.pkg`"),
                 );
                 continue;
@@ -229,7 +229,7 @@ impl Packages {
             let canon = canonical(&dir);
             if let Some(at) = path.iter().position(|(d, _)| *d == canon) {
                 let mut cycle: Vec<String> = path[at..].iter().map(|(_, shown)| shown.clone()).collect();
-                cycle.push(dir.display().to_string());
+                cycle.push(crate::shown::shown(&dir));
                 self.manifests[me].diags.push(
                     Diagnostic::new(
                         "mod.pkg.5",
@@ -260,8 +260,8 @@ impl Packages {
                             format!(
                                 "two packages are named `{}`: `{}` and `{}`",
                                 dep.name,
-                                seen.display(),
-                                dir.display()
+                                crate::shown::shown(&seen),
+                                crate::shown::shown(&dir)
                             ),
                         )
                         .help("the packages of one program need different names"),
@@ -270,7 +270,7 @@ impl Packages {
                 None => {
                     self.roots.insert(dep.name.clone(), dir.clone());
                     declared.insert(dep.name.clone(), (me, dep.pos));
-                    path.push((canon, dir.display().to_string()));
+                    path.push((canon, crate::shown::shown(&dir)));
                     self.visit(&dep.name, &dir, Some((me, dep.pos)), path, declared);
                     path.pop();
                 }
@@ -319,7 +319,7 @@ impl Packages {
             prog.grants.extend(m.grants.into_iter().map(|g| Grant { pos: at(g.pos), ..g }));
             prog.unsafe_allowed.get_or_insert_with(Vec::new).extend(m.unsafe_ok);
             prog.files.push(SourceFile {
-                path: m.path.display().to_string(),
+                path: crate::shown::shown(&m.path),
                 src: m.src,
                 module: m.package,
                 base,
