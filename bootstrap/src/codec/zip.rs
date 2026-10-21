@@ -73,6 +73,7 @@ pub fn write(entries: &mut [Entry], level: u32) -> Result<Vec<u8>, CodecError> {
     Ok(out)
 }
 
+// std.compress.11: the closed list of zip messages.
 fn bad(msg: &str) -> CodecError {
     CodecError::new("corrupt", msg)
 }

@@ -4,6 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+mod common;
+
 fn ail(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_ail")).args(args).output().unwrap()
 }
@@ -31,7 +33,7 @@ fn update_rewrites_and_passes() {
     let f = d.join("p.ail");
     fs::write(&f, PROGRAM).unwrap();
     fs::write(d.join("p.out"), "old\n").unwrap();
-    let path = f.display().to_string();
+    let path = common::shown(&f);
     let out = ail(&["test", "--update", &path]);
     let o = text(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "{o}");
@@ -51,7 +53,7 @@ fn dry_run_and_json() {
     let d = dir("dry");
     let f = d.join("p.ail");
     fs::write(&f, PROGRAM).unwrap();
-    let path = f.display().to_string();
+    let path = common::shown(&f);
     let out = ail(&["test", "--update", "--dry-run", "--json", &path]);
     let o = text(&out.stdout);
     assert_eq!(fs::read_to_string(&f).unwrap(), PROGRAM);
@@ -68,7 +70,7 @@ fn conflicts_and_non_literals_fail() {
     let f = d.join("p.ail");
     let src = "@test fn loops()\n    for i in 0..3\n        assert_eq(i * 2, 0)\n\n@test fn named()\n    want := 3\n    assert_eq(1 + 1, want)\n";
     fs::write(&f, src).unwrap();
-    let out = ail(&["test", "--update", &f.display().to_string()]);
+    let out = ail(&["test", "--update", &common::shown(&f)]);
     let o = text(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{o}");
     assert!(o.contains("left 1 whose value differed between runs (snap.update.3)"), "{o}");

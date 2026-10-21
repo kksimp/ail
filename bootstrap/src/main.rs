@@ -34,6 +34,7 @@ mod num;
 mod packages;
 mod parser;
 mod regex;
+mod shown;
 mod snapshot;
 mod stdlib;
 mod tensor;
