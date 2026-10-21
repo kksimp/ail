@@ -616,7 +616,8 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
             seal(yes)
             seal(no)
             cur = yes
-        text := if cases[k].fields.len() == 0 then str_value("{key}.{cases[k].name}") else (fields_text("{key}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
+        text := if cases[k].fields.len()
+            == 0 then str_value("{key}.{cases[k].name}") else (fields_text("{key}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
         jump(join, [text])
         if no >= 0
             cur = no
