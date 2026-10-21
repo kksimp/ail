@@ -559,6 +559,25 @@ fn time_now_ms() int
     syscall(os_pick(228, 113, 0), 0, ts, 0, 0, 0, 0)
     load64(ts) * 1000 + load64(ts + 8) / 1000000
 
+## A monotonic clock for deadlines (a runtime entry point; `std.time` has no
+## monotonic call): nanoseconds from `CLOCK_MONOTONIC` on Linux, unaffected by
+## changes of the wall clock. NOT monotonic on macOS: there it reads the wall
+## clock (`gettimeofday`), which can step backwards or jump, so a deadline built
+## on it can fire early or late. Follow-up for the Mac gate: read
+## `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` or `mach_continuous_time` through
+## libSystem (ADR 0534, `import_call`) and drop this branch.
+fn time_mono_ns() int
+    ts := os_scratch(OS_TMP)
+    if target() == 2
+        syscall(116, ts, 0, 0, 0, 0, 0)
+        return load64(ts) * 1000000000 + load64(ts + 8).bit_and(4294967295) * 1000
+    syscall(os_pick(228, 113, 0), 1, ts, 0, 0, 0, 0)
+    load64(ts) * 1000000000 + load64(ts + 8)
+
+## The same clock in milliseconds.
+fn time_mono_ms() int
+    time_mono_ns() / 1000000
+
 ## `time.sleep_ms(ms)` (std.time.2). A negative `ms` is reported without the
 ## source excerpt (the check's trap site comes with lane 120's next slice).
 fn time_sleep_ms(ms int)
