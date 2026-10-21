@@ -45,7 +45,7 @@ fn is_sorting(name str, args List[ast.Arg]) bool
 ## `r.sorted()`, `r.sorted(by: |x| e)`, `r.sort()`, `r.sort(by: |x| e)`.
 fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
     e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
-    if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str or tuple_elems(e) != none)
+    if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str or structural(e))
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if args.len() > 1
         return unsupported(npos, "`.{name}()` with {args.len()} arguments")
@@ -69,7 +69,7 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         scopes.pop()
         # A problem still closes the loop, so the half-built function stays well formed.
         if kv := k
-            if kv.ty == Ty.Int or orderable_tuple(kv.ty)
+            if kv.ty == Ty.Int or orderable_record(kv.ty)
                 kt = kv.ty
                 call("rt.list_push", [keys, kv.id], Ty.Unit)
             else

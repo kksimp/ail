@@ -231,7 +231,7 @@ fn holds_record(t Ty) bool
 ## `a == b` or `a != b` on structs or lists of lists, structs or enums: the
 ## generated `eq.T`, element by element or field by field.
 fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
-    if tuple_elems(a.ty) != none
+    if tuple_elems(a.ty) != none or struct_name(a.ty) != none
         return tuple_compare(o, a, b, pos)
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     name := op_name(o)
@@ -376,13 +376,12 @@ fn Lower.gen_enum_eqs(mut self)
             done.add(name)
             more = true
             t := eq_tys[name]
-            if e := t.elem()
+            if name.starts_with("lt.")
+                gen_lt(name, t)
+            elif e := t.elem()
                 gen_list_eq(name, t, e)
             elif xs := tuple_elems(t)
-                if name.starts_with("lt.")
-                    gen_tuple_lt(name, t, xs)
-                else
-                    gen_tuple_eq(name, t, xs)
+                gen_tuple_eq(name, t, xs)
             elif s := struct_name(t)
                 gen_struct_eq(name, s)
             else

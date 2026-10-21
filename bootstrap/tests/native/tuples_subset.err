@@ -1,7 +1,5 @@
 bootstrap/tests/native/tuples_subset.ail:6:10: error[native.subset.1]: not in the native subset yet: this `Map` type
 bootstrap/tests/native/tuples_subset.ail:8:10: error[native.subset.1]: not in the native subset yet: this `Set` type
-bootstrap/tests/native/tuples_subset.ail:11:14: error[native.subset.1]: not in the native subset yet: `.sorted()` on `List[(int, str)]`
-bootstrap/tests/native/tuples_subset.ail:12:14: error[native.subset.1]: not in the native subset yet: `.contains()` on `List[(int, str)]`
-bootstrap/tests/native/tuples_subset.ail:13:20: error[native.subset.1]: `<` on `(int, float)` isn't in the native subset yet
-bootstrap/tests/native/tuples_subset.ail:14:10: error[native.subset.1]: not in the native subset yet: printing a `List[(int, str)]`
-bootstrap/tests/native/tuples_subset.ail:15:10: error[native.subset.1]: not in the native subset yet: printing a `(int, List[int])`
+bootstrap/tests/native/tuples_subset.ail:10:10: error[native.subset.1]: not in the native subset yet: a map of `(int, int)` to `int`
+bootstrap/tests/native/tuples_subset.ail:12:10: error[native.subset.1]: not in the native subset yet: printing a `(int, char)`
+bootstrap/tests/native/tuples_subset.ail:13:14: error[native.subset.1]: not in the native subset yet: a `Map[str, int]` in a tuple
