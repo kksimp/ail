@@ -546,3 +546,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0711](0711-tool-driving-agent-programs.md) | Agent programs that drive AIL's own tools: the twin calls the same tool, output is byte-identical, fixtures are committed (round 5) *(delegated)* | Accepted | 2026-10-21 |
 | [0717](0717-transparent-content-encoding.md) | `std.net` sends `Accept-Encoding: gzip, deflate` and decodes the response unless the program sets the header itself *(delegated)* | Accepted | 2026-10-21 |
 | [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
+| [0719](0719-per-module-cards.md) | `ail api --card --module NAME` prints one module's card (api.card.6) *(delegated)* | Accepted | 2026-10-21 |
+| [0720](0720-package-index-card.md) | `ail api --card --index` lists a package's modules (api.card.7) *(delegated)* | Accepted | 2026-10-21 |

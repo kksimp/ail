@@ -138,6 +138,18 @@ path or a bad option is exit code 2.
 when either differs from the command's output. Regenerate with
 `./ail api --card tools/edit > docs/design/cards/edit.md`.
 
+**api.card.6** — `--module NAME` prints the card of one module of the
+package, with the same levels and budget as api.card.3. NAME is a module
+name as the index lists it, or `(root)` for the package's own module. The
+entry, manifest and examples appear only on the root module's card, and
+the tests only those of that module. An unknown module, or `--module` with
+`--index`, is exit code 2.
+
+**api.card.7** — `--index` prints one line per module, `NAME  N items`, under
+a `# PACKAGE` line; `--index --json` prints `api`, `card` and `modules` (each
+`module` and `count`). An agent reads the index, then one module card. The
+index is not trimmed.
+
 **api.query.1** — A position with nothing to answer (`--type` or `--refs` off
 a name, or a name with no recorded type or symbol) exits 1 and prints on
 stderr one object `{"api":1,"severity":"error","message":...}`. A missing or
@@ -576,6 +588,18 @@ fn main()
 ```ail tool=api,--card,--json,FILE expect=card rules=api.card.2
 fn main()
     print(1)
+```
+```ail tool=api,--card,--module,(root),FILE expect=add rules=api.card.6
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
+```
+```ail tool=api,--card,--index,FILE expect=(root) rules=api.card.7
+fn add(a int, b int) int
+    a + b
+fn main()
+    print(add(1, 2))
 ```
 ```ail tool=api,--card,--budget,30,FILE expect=entry rules=api.card.3
 fn add(a int, b int) int
