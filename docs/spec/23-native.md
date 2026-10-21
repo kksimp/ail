@@ -245,6 +245,15 @@ fn main()
 **native.bce.9** — A loop that adds an unchanging `s` to its induction value
 is treated as a counted loop where `s` is tested, before the loop, to be
 between 1 and 2^30. *(ADR 0622)*
+
+```ail rules=native.bce.9
+fn main()
+    mut total := 0
+    mut s := 2
+    for i in 0..4
+        total += i + s
+    print(total)
+```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
 (by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the
