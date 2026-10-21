@@ -23,7 +23,7 @@ fn tuple_elem_ok(t Ty) bool
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.
-fn Lower.tuple_type_of(self, elems List[ast.TypeRef]) Ty?
+fn Lower.tuple_type_of(mut self, elems List[ast.TypeRef]) Ty?
     mut out := List[Ty]()
     for e in elems
         t := type_of(e)?

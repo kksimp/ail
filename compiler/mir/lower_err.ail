@@ -601,7 +601,7 @@ fn with_error_owners(srcs List[Source]) List[Source]
 
 ## The error type a function that can fail names, when it names one: `E` in
 ## `T ! E` and `! E`. Unions and inferred sets give `Unknown`.
-fn Lower.error_ty_of(self, t ast.TypeRef) Ty
+fn Lower.error_ty_of(mut self, t ast.TypeRef) Ty
     match t.shape
         Fallible(ok, errors) =>
             if es := errors

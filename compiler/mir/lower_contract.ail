@@ -82,7 +82,7 @@ fn Lower.gen_unchecked(mut self)
         enter_file(fn_file[key])
         before := problems.len()
         unchecked = true
-        lower_fn_as(f, "{key}.nc", key)
+        lower_fn_as(f, "{key}.nc", key, fn_owner(f))
         unchecked = false
         stamp_problems()
         while problems.len() > before

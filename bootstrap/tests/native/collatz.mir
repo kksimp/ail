@@ -56,7 +56,7 @@ fn main() unit
     v22 bool = eq v34, v0:total
     branch v22, b9(), b10()
   b7:
-    v7 int = add v5:total, v30:k !s5
+    v7 int = add v5:total, v30:k !s6
     v8 bool = eq v3:i, v2
     branch v8, b3(v7), b4()
   b8(v18 int):

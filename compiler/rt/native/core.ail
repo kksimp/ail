@@ -16,6 +16,13 @@ PARSE_OK := 7
 ## A trap's third number (a slice's list length); the program ends after
 ## it, so it shares `PARSE_OK`'s slot.
 TRAP_LEN := 7
+## The lowest stack address a program's call may start from (err.trap.1,
+## ADR 0535).
+STACK_LIMIT := 15
+## The stack kept free below the limit for the trap's own calls.
+STACK_RESERVE := 1048576
+## The stack size assumed when the limit is unknown or unlimited.
+STACK_DEFAULT := 8388608
 
 OUT_CAP := 65536
 
@@ -54,6 +61,24 @@ fn init(argc int, argv int)
     store64(global(OUT_LEN), 0)
     heap_init(argv)
     limits_init()
+    # The argument vector sits at the top of the main stack. Windows
+    # (target 3) has no limit yet: a zero limit is never reached.
+    if target() != 3
+        store64(global(STACK_LIMIT), argv - stack_use())
+
+## How much of the main stack a program may use: its size limit
+## (`RLIMIT_STACK`, 3) less the reserve, capped at 1 GiB.
+fn stack_use() int
+    p := alloc(16, KIND_ATOMIC)
+    t := target()
+    if t == 2
+        syscall(194, 3, p, 0, 0, 0, 0)
+    else
+        syscall(if t == 0 then 302 else 261, 0, 3, 0, p, 0, 0)
+    mut size := load64(p)
+    if size <= 0 or size > 1073741824
+        size = STACK_DEFAULT
+    if size > 2 * STACK_RESERVE then size - STACK_RESERVE else size / 2
 
 ## `copy_bytes` for blocks of 256 bytes or more (list growth and extension):
 ## 64 bytes per round with two moving pointers, then the short rest. It is
@@ -658,6 +683,12 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("can't sleep for ")
         out_int(a)
         out_str(" milliseconds")
+    elif kind == 11
+        # A call with the stack nearly exhausted (err.trap.1); `op` is
+        # the callee.
+        out_str("call depth exceeded the native stack in `")
+        out_str(op)
+        out_byte(96)
     elif kind == 12
         # `b[a]` of `bytes` (type.bytes.3); `b` is the length.
         out_str("index ")

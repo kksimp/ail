@@ -494,6 +494,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
 | [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
 | [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
+| [0535](0535-native-stack-check-on-recursive-calls.md) | Native recursion traps when the stack runs out: a check on calls that can recurse *(delegated)* | Accepted | 2026-10-20 |
+| [0536](0536-native-generics-by-monomorphisation.md) | Generics and traits in native code by monomorphisation: instances named by their types, `impl` methods as methods of their type *(delegated)* | Accepted | 2026-10-20 |
 | [0565](0565-native-string-runtime-calls.md) | A native `str` method is one runtime call, and its traps carry constant text *(delegated)* | Accepted | 2026-10-20 |
 | [0566](0566-native-char-type.md) | `char` is a MIR type held in a register as an `int`, and `chars()` gives `List[char]` *(delegated)* | Accepted | 2026-10-20 |
 | [0567](0567-native-text-of-numbers-and-unicode-tables.md) | Native text of numbers reuses the output routines, and character predicates use generated Unicode tables *(delegated)* | Accepted | 2026-10-20 |

@@ -144,6 +144,8 @@ struct Lower
     ## them at start-up.
     globals Map[str, Global]
     global_consts List[GlobalConst]
+    ## Generic declarations and their instances (ADR 0536).
+    gen Gen
     ## The failure blocks of the `else` parts being lowered, innermost last:
     ## a `?` on an optional inside an `else` value goes there (err.prop.4).
     else_targets List[int]
@@ -254,6 +256,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         singletons: [],
         globals: {},
         global_consts: [],
+        gen: new_gen(),
         else_targets: [],
     )
     for src in srcs
@@ -282,10 +285,11 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
     for k in 0..srcs.len()
         l.enter_file(k)
         l.path = srcs[k].path
-        for f in srcs[k].prog.fns
+        for f in program_fns(srcs[k].prog)
             if not is_test(f)
                 l.lower_fn(f)
         l.stamp_problems()
+    l.gen_instances()
     l.enter_file(0)
     l.gen_unchecked()
     l.enter_file(0)
@@ -304,7 +308,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
             items: [l.problems[k] for k in order],
             files: [srcs[l.problem_files[k]].path for k in order],
         )
-    m := inline_module(Module(
+    m := mark_recursion(inline_module(Module(
         path: srcs[0].path,
         funcs: l.funcs,
         strs: l.strs,
@@ -312,7 +316,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         lines: srcs[0].text.lines(),
         files: [src.path for src in srcs],
         file_lines: [src.text.lines() for src in srcs],
-    ))
+    )))
     mut errs := List[Problem]()
     for f in m.funcs
         for err in verify(f)
@@ -372,8 +376,6 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
     problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
 
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
-    for t in prog.traits
-        problem(t.pos, "trait `{t.name}` isn't in the native subset yet")
     for c in prog.consts
         if is_const_expr(c.value)
             consts["{pre}{c.name}"] = c.value
@@ -382,7 +384,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
-    for f in prog.fns
+    for f in program_fns(prog)
         if is_test(f)
             continue
         before := problems.len()
@@ -399,8 +401,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             message: "`extern c fn {f.name}`: `ail build` can't link a C library yet (`ail run` can)",
         ))
         return
-    if f.generics.len() > 0
-        problem(f.pos, "`{f.name}`: generic functions aren't in the native subset yet")
+    if declare_generic_fn(f, pre)
         return
     mut params := List[Ty]()
     if o := f.owner
@@ -477,7 +478,7 @@ fn fn_key(f ast.FnDecl, pre str) str
     "{pre}{f.name}"
 
 ## The MIR type of a written type, if it is in the subset.
-fn Lower.type_of(self, t ast.TypeRef) Ty?
+fn Lower.type_of(mut self, t ast.TypeRef) Ty?
     match t.shape
         Optional(inner) => opt_of(type_of(inner)?)
         Named(name, args) =>
@@ -504,6 +505,8 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
+                    if g := generic_type(name, args)
+                        return g
                     if args.len() == 0
                         if k := type_key(name)
                             return Ty.Struct(k)
@@ -591,6 +594,17 @@ fn Lower.checked(mut self, op str, args List[int], site int, ty Ty) int
 fn Lower.call(mut self, name str, args List[int], ty Ty) int
     mut i := inst(-1, "call", args)
     i.name = name
+    if ty.is_unit()
+        emit_void(i)
+        return -1
+    emit(i, ty)
+
+## A call of a program's function: it traps at its site when the stack is
+## nearly exhausted (err.trap.1, ADR 0535). `shown` names the callee.
+fn Lower.user_call(mut self, name str, args List[int], ty Ty, pos ast.Pos, shown str) int
+    mut i := inst(-1, "call", args)
+    i.name = name
+    i.site = site("err.trap.1", "call", shown, pos)
     if ty.is_unit()
         emit_void(i)
         return -1
@@ -719,19 +733,26 @@ fn Lower.str_lit(mut self, s str) int
 # ---- functions ----
 
 fn Lower.lower_fn(mut self, f ast.FnDecl)
-    lower_fn_as(f, fn_key(f, prefix), fn_key(f, prefix))
+    lower_fn_as(f, fn_key(f, prefix), fn_key(f, prefix), fn_owner(f))
+
+## The type a method belongs to, as its key: `Tag` or `mod.Tag`; "" for a
+## free function.
+fn Lower.fn_owner(self, f ast.FnDecl) str
+    if o := f.owner then "{prefix}{o.name}" else ""
 
 ## `f` under the MIR name `name`, with the signature of `key`: the function
-## itself, or its `.nc` copy, which checks no contracts (contract.run.2).
-fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str)
+## itself, or its `.nc` copy, which checks no contracts (contract.run.2). It is
+## a method of type `owner` (ADR 0536: an instance of a generic function or
+## method has its own key and owner).
+fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     sig := sigs.get(key) else return
     params := begin_fn(name, sig.ret, sig.params)
     fails = sig.fails
     self_ty = ""
     mut k := 0
-    if o := f.owner
+    if f.owner != none
         if f.receiver != none
-            self_ty = "{prefix}{o.name}"
+            self_ty = owner
             declare("self", sig.params[0], params[0])
             borrowed.add(lookup("self") else "")
             k = 1
@@ -1340,6 +1361,8 @@ fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
 
 ## A call `f(...)`, or a variant built by calling it.
 fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+    if is_generic_callee(callee)
+        return lower_generic_callee(callee, args, pos, want)
     if v := call_variant(callee, want)
         return new_variant(v, args, pos)
     lower_call(callee, args, pos)
@@ -1507,6 +1530,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
+            if self_ty != "" and not sigs.contains("{self_ty}.{name}")
+                instance_method("{self_ty}.{name}")
             if self_ty != "" and sigs.contains("{self_ty}.{name}")
                 return struct_call(
                     "{self_ty}.{name}",
@@ -1534,7 +1559,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
             check_requires(key, vs, npos)
-            Val(id: call(contract_key(key), vs, sig.ret), ty: sig.ret)
+            Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
@@ -1660,6 +1685,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             message: "`mem.{name}`: `ail build` can't link the C allocator yet (`ail run` can)",
         ))
         return none
+    if g := generic_enum_ref(recv)
+        return generic_variant(g, name, args, npos, none)
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
