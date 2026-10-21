@@ -166,6 +166,8 @@ pub fn mir.call_pos(file int, line int, col int) int
 pub fn mir.call_file(pos int) int
 pub fn mir.call_line(pos int) int
 pub fn mir.call_col(pos int) int
+pub fn mir.mark_nonneg(f mir.Func) mir.Func
+pub fn mir.rewrite_nonneg(f mir.Func) mir.Func
 pub fn mir.keep_lengths(f mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
@@ -184,4 +186,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1850); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1884); dropped: private items, doc comments

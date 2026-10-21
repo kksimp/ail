@@ -185,3 +185,15 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
   of another type). Every store here forgets a whole class instead; the loads
   that survive in the measured programs are in loops, where nothing carries
   over anyway.
+16. **`/` and `%` by a power of two on a value that is not negative are a
+    shift and a mask.** spectralnorm's `(i + j) * (i + j + 1) / 2` paid the
+    four-instruction sign correction that a signed halving needs, though `i`
+    and `j` are counters from 0. `mir/nonneg.ail` finds the values that cannot
+    be negative: non-negative constants, `len`, a counted loop's variable when
+    its start is, a checked `add` or `mul` of two such values (it is not
+    negative or it traps; an unchecked one in the runtime wraps, so it proves
+    nothing), `/`, `%`, `>>` and `&` of them. It runs before the bounds-check
+    pass, while arithmetic still carries its trap sites, marks the `div` and
+    `rem` by 2, 4, 8, ... and rewrites them last to `shr` and `band`, which
+    both back ends already take. spectralnorm 52.9M to 45.4M instructions
+    (-14.2%), before the in-place `imul` of item 14.
