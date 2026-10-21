@@ -526,3 +526,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0566](0566-native-char-type.md) | `char` is a MIR type held in a register as an `int`, and `chars()` gives `List[char]` *(delegated)* | Accepted | 2026-10-20 |
 | [0567](0567-native-text-of-numbers-and-unicode-tables.md) | Native text of numbers reuses the output routines, and character predicates use generated Unicode tables *(delegated)* | Accepted | 2026-10-20 |
 | [0701](0701-native-error-context.md) | Native `?` with a context message: contexts ride at the head of the trace list *(delegated)* | Accepted | 2026-10-21 |
+| [0693](0693-test-captures-stderr.md) | `ail test` captures a test's standard error, shown under a failing test's `FAIL` line marked `!` *(delegated)* | Accepted | 2026-10-21 |

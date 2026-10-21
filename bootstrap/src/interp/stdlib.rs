@@ -253,8 +253,17 @@ impl<'a, W: Write> Interp<'a, W> {
                 let line = self.text(&values[0], pos)?;
                 // Keep standard output and standard error in the order written.
                 self.flush(pos)?;
-                let mut err = std::io::stderr().lock();
-                let _ = writeln!(err, "{line}");
+                match self.errs.as_mut() {
+                    // test.run.2: a test's standard error is captured like its standard output.
+                    Some(buf) => {
+                        buf.extend_from_slice(line.as_bytes());
+                        buf.push(b'\n');
+                    }
+                    None => {
+                        let mut err = std::io::stderr().lock();
+                        let _ = writeln!(err, "{line}");
+                    }
+                }
                 Value::Unit
             }
             ("io", "exit") => {
