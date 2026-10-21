@@ -401,6 +401,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
+| [0622](0622-loop-starts-steps-and-index-spans.md) | Versioned loops with computed starts and unchanging steps; index arithmetic bounded by a constant loop bound *(delegated)* | Accepted | 2026-10-21 |
+| [0623](0623-branch-and-codegen-peepholes.md) | Branch and codegen peepholes: flipped `not` branches, bit operations into the result register, direct spill moves *(delegated)* | Accepted | 2026-10-21 |
+| [0624](0624-loop-weighted-spill-choice.md) | Register allocation spills the value cheapest to keep in memory, weighted by loop depth *(delegated)* | Accepted | 2026-10-21 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |

@@ -308,6 +308,9 @@ fn Gen.emit_move(mut self, mv Move)
     if is_slot(mv.dst) and mv.src < 0 and mv.sym == "" and fits32(mv.imm)
         a.mov_mi(slot(mv.dst), mv.imm)
         return
+    if is_slot(mv.dst) and is_reg(mv.src)
+        a.mov_mr(slot(mv.dst), mv.src)
+        return
     r := if is_reg(mv.dst) then mv.dst else S0
     if mv.src < 0
         if mv.sym != ""
@@ -501,16 +504,26 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         "add" | "sub" | "mul" => arith(i)
         "div" | "rem" => divide(i)
         "band" | "bor" | "bxor" =>
-            a.mov_rr(S1, gpr(i.args[0], S1))
             alu := match i.op
                 "band" => "and"
                 "bor" => "or"
                 _ => "xor"
-            if k := imm32(i.args[1])
-                a.alu_ri(alu, S1, k)
+            # Into the result's register, with the operands swapped when it
+            # is the second one's (ADR 0624).
+            d := out_gpr(i.dst, S1)
+            mut x := i.args[0]
+            mut y := i.args[1]
+            if loc[y] == d and loc[x] != d
+                x = i.args[1]
+                y = i.args[0]
+            if k := imm32(y)
+                a.mov_rr(d, gpr(x, d))
+                a.alu_ri(alu, d, k)
             else
-                a.alu_rr(alu, S1, gpr(i.args[1], S0))
-            put_gpr(i.dst, S1)
+                ry := gpr(y, S0)
+                a.mov_rr(d, gpr(x, d))
+                a.alu_rr(alu, d, ry)
+            put_gpr(i.dst, d)
         "bnot" =>
             a.mov_rr(S1, gpr(i.args[0], S1))
             a.not_reg(S1)
@@ -753,7 +766,8 @@ fn Gen.shift_divide(mut self, i mir.Inst, k int)
     a.mov_rr(S1, x)
     if k > 0
         a.mov_rr(RAX, x)
-        a.shift_ri("sar", RAX, 63)
+        if k > 1
+            a.shift_ri("sar", RAX, 63)
         a.shift_ri("shr", RAX, 64 - k)
         a.alu_rr("add", S1, RAX)
     if i.op == "div"
@@ -774,9 +788,10 @@ fn Gen.shift(mut self, i mir.Inst)
     sar := i.op == "shr"
     if k := imm(n)
         if k >= 0 and k <= 63
-            a.mov_rr(S1, gpr(x, S1))
-            a.shift_ri(if sar then "sar" else "shl", S1, k)
-            put_gpr(i.dst, S1)
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, gpr(x, d))
+            a.shift_ri(if sar then "sar" else "shl", d, k)
+            put_gpr(i.dst, d)
             return
     c := gpr(n, S0)
     if i.site >= 0

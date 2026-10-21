@@ -336,6 +336,9 @@ fn Gen.emit_move(mut self, mv Move)
         if is_slot(mv.dst)
             a.str_d(x, SP, slot(mv.dst))
         return
+    if is_slot(mv.dst) and is_reg(mv.src)
+        a.str(mv.src, SP, slot(mv.dst))
+        return
     r := if is_reg(mv.dst) then mv.dst else S0
     if mv.src < 0
         if mv.sym != ""

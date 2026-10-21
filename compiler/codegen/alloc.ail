@@ -81,6 +81,7 @@ pub fn allocate(f mir.Func, t Target) Alloc
         bend[b] = pos
         pos += 2
     live_in := liveness(f, order)
+    weight := use_weights(f)
     # Each value's live ranges, block by block: from its definition (or the
     # block's start when it is live in) to its last use (or the block's end
     # when it is live out). Between ranges it has a hole, where another
@@ -152,10 +153,39 @@ pub fn allocate(f mir.Func, t Target) Alloc
         ranges: ranges,
         calls: calls,
         hints: hints,
+        weight: weight,
     )
     for v in queue
         s.assign(v, f.vals[v].is_float(), t)
     Alloc(loc: s.loc, order: order, slots: s.slots, saved: s.saved.sorted())
+
+## The cost of keeping each value in memory: one per definition or use,
+## times 8 for each loop around it (at most 4).
+fn use_weights(f mir.Func) List[int]
+    n := f.blocks.len()
+    mut depth := [0 for _ in 0..n]
+    for lp in mir.find_loops(f)
+        for b in lp.blocks
+            depth[b] += 1
+    mut w := [0 for _ in 0..f.vals.len()]
+    for b in 0..n
+        mut unit := 1
+        for _ in 0..(if depth[b] > 4 then 4 else depth[b])
+            unit *= 8
+        blk := f.blocks[b]
+        for p in blk.params
+            w[p] += unit
+        for i in blk.insts
+            if i.dst >= 0
+                w[i.dst] += unit
+            for a in i.args
+                w[a] += unit
+        for a in blk.term.uses()
+            w[a] += unit
+        for e in blk.term.args
+            for a in e
+                w[a] += unit
+    w
 
 ## Append the range `from..=to`, joining it to the last one when they meet
 ## (consecutive blocks are 2 positions apart).
@@ -228,6 +258,9 @@ struct Scan
     ranges List[List[int]]
     calls List[int]
     hints List[List[int]]
+    ## How much a value costs to keep in memory: its definitions and uses,
+    ## each counted 8 times over for every loop it sits in.
+    weight List[int]
 
 ## Whether `v` is live across a call, so it needs a callee-saved register.
 fn Scan.crosses(self, v int) bool
@@ -276,16 +309,19 @@ fn Scan.assign(mut self, v int, float bool, t Target)
                 pick = r
                 break
     if pick < 0
-        # Spill whichever of `v` and the values in its way ends last, when
-        # that value alone holds its register over `v`'s ranges.
+        # Spill whichever of `v` and the values in its way is cheapest to
+        # keep in memory (loop-weighted uses, ADR 0622), the one that ends
+        # last among equals, when that value alone holds its register over
+        # `v`'s ranges.
         mut victim := -1
         for a in active
-            if pool.contains(loc[a]) and overlaps(
-                ranges[a],
-                ranges[v],
-            ) and (victim < 0 or end[a] > end[victim]) and sole(a, v)
+            if pool.contains(loc[a])
+                and overlaps(ranges[a], ranges[v])
+                and sole(a, v)
+                and (victim < 0 or weight[a] < weight[victim] or (weight[a] == weight[victim] and end[a] > end[victim]))
                 victim = a
-        if victim >= 0 and end[victim] > end[v]
+        if victim >= 0
+            and (weight[victim] < weight[v] or (weight[victim] == weight[v] and end[victim] > end[v]))
             pick = loc[victim]
             loc[victim] = new_slot()
             mut rest := List[int]()

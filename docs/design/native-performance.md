@@ -199,3 +199,25 @@ the 8 to 10 instructions per swap against gcc's 6.
 matmul at 400: 1,106M → 979M instructions (callgrind), 0.128 s → 0.098 s on
 this VM. `rt.list_rows_min(b)` runs once before the outermost loop nest that
 leaves `b` alone; the inner loop's guard tests `j` against it.
+
+## Computed starts, steps and constant-bound indexes (ADRs 0622-0624)
+
+Lane 191. Loops with a start computed before them (`for j in i + 1..5`) and
+loops adding an unchanging `s` are versioned like counted loops; index
+arithmetic bounded by a constant loop bound (`xs[b * 7 + k]`, `b < 5`) is
+checked once against the list's length; `not` branches flip; bit operations
+and constant shifts compute in place; spills are chosen by loop-weighted
+use. Instructions retired (`valgrind --tool=lackey`, reduced sizes):
+
+| program | before | after |
+|---|---:|---:|
+| nbody 100000 | 163.0M | 120.2M |
+| sieve 3000000 | 117.8M | 91.3M |
+| collatz 100000 | 173.2M | 155.3M |
+| spectralnorm 200 | 46.7M | 45.1M |
+| fannkuch 8 | 22.4M | 21.7M |
+| matmul 150 | 49.8M | 49.6M |
+
+nbody wall: 0.176 s to 0.117 s (gcc -O2 0.085 s; 2.08x to 1.37x). What is
+left in fannkuch and binarytrees is values live across calls: x86-64 has
+five callee-saved registers, so loop-carried scalars spill.
