@@ -11,7 +11,7 @@
 ## `io_read_line` return the string, or 0 for `none`.
 ##
 ## Linux x86-64, Linux ARM64 and macOS ARM64 (`target()` 0, 1, 2). Windows
-## (`plat.win.1`) has no native target yet: its calls are not built.
+## (`plat.target.1`, Tier 1) has no native target yet: its calls are not built.
 
 # Global slots 32-47 are this file's (native-abi.md §2 lists the ranges).
 OS_OK := 32

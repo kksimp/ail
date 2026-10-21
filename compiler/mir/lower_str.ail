@@ -6,7 +6,7 @@
 ## prints the interpreter's trap byte for byte.
 use ast
 
-## `'x'` (lex.char.1): the scalar value, as a `char`.
+## `'x'` (type.char.1): the scalar value, as a `char`.
 fn Lower.lower_char(mut self, text str) Val
     Val(id: konst(text.chars()[0].code(), Ty.Char), ty: Ty.Char)
 
