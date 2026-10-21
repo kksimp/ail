@@ -255,7 +255,6 @@ or reason.
 | rule | owner | reason |
 |---|---|---|
 | `ct.eval.4` | 238 | optional reuse of compile-time results is a MAY rule; not built; cannot be enforced yet, see OQ-135 |
-| `err.type.3` | unowned | no check that a public function states its error type; none found |
 | `err.type.4` | unowned | match exhaustiveness on an inferred error set; lane 223 marks its example `skip=bootstrap` |
 | `gen.anon.2` | 238 | `ail fmt` keeps `[T Ord]` as written; the anonymous canonical form is not built (checked by running fmt); cannot be enforced yet, see OQ-135 |
 | `own.copy.1` | 238 | no report of deep-copy sites in a performance report; cannot be enforced yet, see OQ-135 |
