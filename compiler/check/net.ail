@@ -6,9 +6,10 @@ use ast
 
 ## Each handle type's methods, as `stdlib::NET_METHODS`.
 NET_METHODS := [
-    ["Server", "accept", "addr", "close"],
+    ["Server", "accept", "addr", "close", "shutdown"],
     ["Exchange", "respond", "respond_bytes"],
     ["Listener", "accept", "addr", "close"],
+    ["Body", "close", "read_bytes"],
     [
         "Conn",
         "close",
@@ -59,6 +60,9 @@ fn Checker.net_method(
         ret = net_fails(std_named("net.Conn"))
     elif n == "addr" or n == "peer"
         ret = Ty.Str
+    elif key == "Body.read_bytes"
+        params = [Ty.Int]
+        ret = net_fails(Ty.Bytes)
     elif n == "respond"
         params = [std_named("net.Response")]
         ret = net_fails(Ty.Unit)

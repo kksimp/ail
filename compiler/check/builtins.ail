@@ -38,6 +38,12 @@ pub STR_METHODS := [
     "repeat",
     "pad_left",
     "pad_right",
+    "center",
+    "words",
+    "trim_start",
+    "trim_end",
+    "count",
+    "rfind",
     "lines",
     "len",
     "byte_len",
@@ -105,7 +111,26 @@ pub INT_METHODS := [
     "to_f32",
 ]
 
-pub FLOAT_METHODS := ["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_f32"]
+pub FLOAT_METHODS := [
+    "abs",
+    "floor",
+    "ceil",
+    "round",
+    "sqrt",
+    "sin",
+    "cos",
+    "tan",
+    "atan",
+    "atan2",
+    "exp",
+    "ln",
+    "log10",
+    "pow",
+    "hypot",
+    "cbrt",
+    "to_int",
+    "to_f32",
+]
 
 pub SIZED_INT_METHODS := [
     "checked_add",
@@ -161,6 +186,10 @@ pub LIST_METHODS := [
     "union",
     "intersect",
     "difference",
+    "chunks",
+    "windows",
+    "counts",
+    "flatten",
 ]
 
 pub MAP_METHODS := ["len", "get", "contains", "remove", "keys", "values"]
@@ -202,8 +231,18 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Opt(Ty.Float))
             if n == "chars"
                 return read([], Ty.ListOf(Ty.Char))
-            if n == "trim" or n == "to_lower" or n == "to_upper"
+            if n == "trim"
+                or n == "trim_start"
+                or n == "trim_end"
+                or n == "to_lower"
+                or n == "to_upper"
                 return read([], Ty.Str)
+            if n == "words"
+                return read([], Ty.ListOf(Ty.Str))
+            if n == "count"
+                return read([Ty.Str], Ty.Int)
+            if n == "rfind"
+                return read([Ty.Str], Ty.Opt(Ty.Int))
             if n == "slice"
                 return read([Ty.Int, Ty.Int], Ty.Str)
             if n == "find"
@@ -218,7 +257,7 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([Ty.Str], Ty.Opt(Ty.Str))
             if n == "repeat"
                 return read([Ty.Int], Ty.Str)
-            if n == "pad_left" or n == "pad_right"
+            if n == "pad_left" or n == "pad_right" or n == "center"
                 return read([Ty.Int, Ty.Char], Ty.Str)
             if n == "lines"
                 return read([], Ty.ListOf(Ty.Str))
@@ -288,8 +327,25 @@ fn read(params List[Ty], result Ty) Builtin?
             k := convert(n) else return none
             read([], Ty.Num(k))
         Float =>
-            if ["abs", "floor", "ceil", "round", "sqrt"].contains(n)
+            if [
+                "abs",
+                "floor",
+                "ceil",
+                "round",
+                "sqrt",
+                "sin",
+                "cos",
+                "tan",
+                "atan",
+                "exp",
+                "ln",
+                "log10",
+                "cbrt",
+            ].contains(n)
                 return read([], Ty.Float)
+            # type.num.16
+            if n == "atan2" or n == "pow" or n == "hypot"
+                return read([Ty.Float], Ty.Float)
             if n == "to_int"
                 return read([], Ty.Int)
             if n == "to_f32"
@@ -348,6 +404,14 @@ fn read(params List[Ty], result Ty) Builtin?
                 return read([], Ty.Opt(e))
             if n == "take"
                 return read([Ty.Int], Ty.ListOf(e))
+            if n == "chunks" or n == "windows"
+                return read([Ty.Int], Ty.ListOf(Ty.ListOf(e)))
+            if n == "flatten"
+                match e
+                    ListOf(inner) => return read([], Ty.ListOf(inner))
+                    _ => return none
+            if n == "counts"
+                return make(false, [], Ty.MapOf(key: e, value: Ty.Int), Need.NeedHash)
             if n == "union" or n == "intersect" or n == "difference"
                 return make(false, [Ty.ListOf(e)], Ty.SetOf(e), Need.NeedHash)
             if n == "insert"

@@ -89,7 +89,7 @@ STD_EFFECTS := [
     StdEffects(module: "random", names: ["int", "float", "seed", "shuffle"], effects: ["random"]),
     StdEffects(
         module: "regex",
-        names: ["compile", "is_match", "find", "find_all", "captures", "replace", "replace_first", "split", "escape"],
+        names: ["compile", "is_match", "find", "find_all", "group_all", "captures", "replace", "replace_first", "split", "escape"],
         effects: [],
     ),
     StdEffects(module: "time", names: ["now_ms", "sleep_ms"], effects: ["clock"]),

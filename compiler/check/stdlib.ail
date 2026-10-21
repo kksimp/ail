@@ -46,6 +46,7 @@ STD_FUNCTIONS := [
         "get",
         "get_bytes",
         "listen",
+        "open",
         "options",
         "post",
         "post_bytes",
@@ -63,6 +64,7 @@ STD_FUNCTIONS := [
         "escape",
         "find",
         "find_all",
+        "group_all",
         "is_match",
         "replace",
         "replace_first",
@@ -112,6 +114,11 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
     if not fns_of.contains(n)
         args_only(args)
         mut d := new_diag("std.use.2", at, "module `{head}` has no function `{n}`")
+        # Another library's name for the same function, with the same arguments.
+        renamed := other_name(module, n)
+        if renamed != ""
+            diags.push(d.with_help("write `{head}.{renamed}`"))
+            return Ty.Unknown
         if s := suggest(n, fns_of)
             d = d.with_help("did you mean `{head}.{s}`?")
         else
@@ -128,6 +135,8 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         return tensor_call(n, args, at, expect)
     if module == "io" and n == "eprint"
         return eprint_call(args, at)
+    if module == "hash" or (module == "compress" and ["deflate", "gzip", "zlib"].contains(n))
+        return bytes_like_call(module, n, args, at)
     if module == "random" and n == "shuffle"
         return shuffle_call(args, at)
     if module == "task" and n == "select"
@@ -200,16 +209,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: text)
     if key == "env.vars"
         return StdSig(params: [], ret: Ty.MapOf(key: text, value: text))
-    if ["hash.sha256", "hash.sha384", "hash.sha512"].contains(key)
-        return StdSig(params: [text], ret: text)
-    if key == "hash.hmac_sha256"
-        return StdSig(params: [text, text], ret: text)
-    if key == "hash.crc32" or key == "hash.hash64"
-        return StdSig(params: [text], ret: Ty.Int)
-    if ["compress.deflate", "compress.gzip", "compress.zlib"].contains(key)
-        return StdSig(params: [text], ret: Ty.ListOf(Ty.Int))
     if ["compress.inflate", "compress.gunzip", "compress.unzlib"].contains(key)
-        return StdSig(params: [Ty.ListOf(Ty.Int)], ret: fails_with("compress.CompressError", text))
+        return StdSig(params: [Ty.Bytes], ret: fails_with("compress.CompressError", Ty.Bytes))
     if [
         "compress.gzip_file",
         "compress.gunzip_file",
@@ -277,6 +278,12 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [], ret: u8_ptr)
     if key == "net.options"
         return StdSig(params: [], ret: std_struct("net.Options"))
+    # std.net.25: a response whose body is read in pieces.
+    if key == "net.open"
+        return StdSig(
+            params: [text, text, std_struct("net.Options")],
+            ret: fails_with("net.NetError", std_struct("net.Body")),
+        )
     if key == "net.serve"
         return StdSig(params: [text], ret: fails_with("net.NetError", std_struct("net.Server")))
     if key == "net.listen"
@@ -297,6 +304,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [re_ty, text], ret: Ty.Opt(std_struct("regex.Match")))
     if key == "regex.find_all"
         return StdSig(params: [re_ty, text], ret: Ty.ListOf(std_struct("regex.Match")))
+    if key == "regex.group_all"
+        return StdSig(params: [re_ty, text, Ty.Int], ret: Ty.ListOf(text))
     if key == "regex.captures"
         return StdSig(params: [re_ty, text], ret: Ty.Opt(std_struct("regex.Captures")))
     if key == "regex.replace" or key == "regex.replace_first"
@@ -425,3 +434,46 @@ fn Checker.eprint_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     else
         text_form(t, expr_pos(v), "std.io.3")
     Ty.Unit
+
+## Another library's name for a standard function (empty when there is none).
+fn other_name(module str, n str) str
+    if module == "regex" and n == "matches"
+        return "is_match"
+    if module == "regex" and n == "findall"
+        return "find_all"
+    if module == "random" and n == "randint"
+        return "int"
+    if module == "random" and n == "random"
+        return "float"
+    ""
+
+## std.hash.1, std.compress.1: the data arguments of `std.hash` and of
+## `deflate`, `gzip` and `zlib` are `bytes` or `str` (its UTF-8 bytes).
+fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
+    rule := if module == "hash" then "std.hash.1" else "std.compress.1"
+    want := if f == "hmac_sha256" then 2 else 1
+    if args.len() != want
+        args_only(args)
+        err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
+    else
+        for a in args
+            if a.mutable
+                err_help(
+                    "own.param.2",
+                    expr_pos(a.value),
+                    "this parameter isn't `mut`",
+                    "remove the `mut`",
+                )
+            t := expr(a.value, none, true)
+            if t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
+                err_help(
+                    rule,
+                    expr_pos(a.value),
+                    "`{module}.{f}` needs `bytes` or `str`, not {ty_name(t)}",
+                    "convert a list of ints with `bytes.from_list(xs)`",
+                )
+    if f == "crc32" or f == "hash64"
+        return Ty.Int
+    if f == "deflate" or f == "gzip" or f == "zlib"
+        return Ty.Bytes
+    Ty.Str
