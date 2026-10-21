@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -45,6 +46,7 @@ def main():
         print(f"{task['id']}: {r.stdout.strip()}")
         updated.append(with_status(item, "done" if r.returncode == 0 else "failed"))
     out = json.dumps({"tasks": updated}, separators=(",", ":"), ensure_ascii=False)
+    out = re.sub(r"(\d)\.0(?=[,\]}])", r"\1", out)  # whole numbers print bare (ADR 0631)
     path = DATA / "tasks.out.json"
     path.write_text(out)
     back = json.loads(path.read_text())
