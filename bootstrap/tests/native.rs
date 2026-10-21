@@ -160,6 +160,9 @@ fn batch_builds_match_separate_builds() {
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|x| x == "ail"))
+        // A program with derive generators needs `ail build`'s `AIL_DERIVED` file (ADR 0807),
+        // which a batch run doesn't take; `executables_match` builds those one by one.
+        .filter(|p| !fs::read_to_string(p).unwrap().contains("derive"))
         .collect();
     all.sort();
     // Five programs spread over the directory.
