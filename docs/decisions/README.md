@@ -537,4 +537,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
 | [0629](0629-list-chunks-windows-counts-str-center.md) | List `chunks`, `windows`, `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`, `count`, `rfind` *(delegated)* | Accepted | 2026-10-21 |
 | [0741](0741-ref-arguments-to-spawn.md) | A `ref` is not passed to a spawned task (own.ref.2) *(delegated)* | Accepted | 2026-10-21 |
-| [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2` and `ct.const.4` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |
+| [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2`, `ct.const.4` and `err.type.3` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |

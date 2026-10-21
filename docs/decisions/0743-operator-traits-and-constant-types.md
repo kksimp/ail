@@ -1,10 +1,10 @@
-# 0743. `trait.op.2` and `ct.const.4` get their own diagnostics
+# 0743. `trait.op.2`, `ct.const.4` and `err.type.3` get their own diagnostics
 
 - **Status:** Accepted
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076)
-- **Topic:** 10 — Traits; 15 — Compile-time execution
-- **Spec rules:** trait.op.2, ct.const.4
+- **Topic:** 10 — Traits; 15 — Compile-time execution; 8 — Errors
+- **Spec rules:** trait.op.2, ct.const.4, err.type.3
 - **Builds on:** [ADR 0077](0077-operator-traits.md), [ADR 0225](0225-constants-call-compile-time-safe-functions.md)
 
 ## Context
@@ -29,6 +29,9 @@ function returned the cell.
   would report the same place, only the first does.
 - The self-hosted checker mirrors `trait.op.2`. `ct.const.4` needs constant types, which it
   does not compute yet; its `coverage.ail` does not list the rule.
+- `err.type.3`: a `pub fn` of a package (a program of more than one file) with an inferred error
+  set (`!` or `T !` with no error types) is an error, except `main`. `std.net.http.run` and `serve`
+  now name theirs (`! Trapped`, `! net.NetError | Trapped`). Case: `packages/pub_inferred_errors`.
 - `tools/garlic/js/vm/gen.ail` held `GO := Stop(...)`, a constant of a type that holds a
   `ref` (through `Value`). It is now `fn go()`, one line and no change in behaviour.
 

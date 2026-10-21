@@ -837,6 +837,19 @@ impl<'p> Checker<'p> {
                 params.push((p.mutable, ty));
             }
             let mut ret = f.ret.as_ref().map_or(Ty::Unit, |t| self.resolve_ret(t, i));
+            // err.type.3: a function of a package's public API states its error type.
+            if let (Some(t), Ty::Res(_, Errs::Inferred(_))) = (&f.ret, &ret)
+                && self.prog.public.contains(&f.pos.line)
+                && !(f.owner.is_none() && f.name == "main")
+                && self.prog.files.len() > 1
+            {
+                self.error_help(
+                    "err.type.3",
+                    t.pos,
+                    format!("`{}` is public, so its return type must name the errors it can fail with", f.name),
+                    "write `T ! E` (or `! E`) with the error types, e.g. `int ! ParseError | IoError`",
+                );
+            }
             // test.attr.4: a test can always fail, so `?` works in it.
             if f.ret.is_none() && f.is_test() {
                 ret = Ty::Res(Box::new(Ty::Unit), Errs::Inferred(i));

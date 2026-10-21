@@ -405,3 +405,15 @@ tensor an element, which changes std.tensor.15. Recommendation: (a), since
 the spec's shape rule stays true and an agent gets a diagnostic at the second
 index. The decision belongs to the designer, because it changes a spec rule
 (std.tensor.15). The corpus omits the program until then (ADR 0647).
+
+## OQ-135 — Spec rules that need a tool the bootstrap doesn't have (lane 238)
+
+Lane 238 implemented the rules of the lane 223 and lane 225 lists that a checker or interpreter change could carry (own.ref.2, trait.op.2, ct.const.4, err.type.3, ct.eval.3's step limit, ADRs 0741–0743). Six remain, each because the rule names something that doesn't exist yet. The spec is unchanged.
+
+| Rule | What's missing | Options | Recommendation |
+|---|---|---|---|
+| `gen.anon.2`, `type.enum.4` | They define a *canonical form* that rewrites tokens (`fn f[T Shape](s T)` to `fn f(s Shape)`, `Shape.Circle(r)` to `Circle(r)`). `ail fmt` only changes whitespace and refuses output whose tokens differ (fmt.safe, ADR 0169); `type.enum.4` also needs expected types. | (a) an `ail fix` rewrite with a lint-style diagnostic (new rule IDs); (b) let `ail fmt` rewrite tokens; (c) reword the rules as advice | (a): `ail fix` already rewrites tokens from checker information, and fmt.safe stays true. |
+| `err.type.4` | Matching on an inferred error set (OQ-029, "not designed yet"). | Decide OQ-029 first. | Wait for OQ-029. |
+| `ct.eval.4` | A MAY rule (reuse of compile-time results); nothing observable to test. | (a) implement with the build cache (lane 200); (b) keep it untested | (a) once `ail build` has its cache; no work before. |
+| `own.copy.1` | The "performance report" (ADR 0026) doesn't exist in any tool, so there is nothing to list copy sites in. | (a) a new `ail effects --copies FILE` listing each site where a list, map, set or struct is copied by assignment, argument or return; (b) wait for the report | (a), as the first line of the report: it follows the existing `--parallel` listing. |
+| `plat.isa.3` | A native start-up check of the CPU level needs the code generator's entry sequence (`compiler/mir/lower.ail`, the merge queue's critical path) or a start-up stub in the object writers. | (a) a stub in `compiler/obj/` that runs `cpuid` before `main`, x86-64 only (ARM64's baseline is checked by the OS); (b) wait for the queue to empty | (a) after the queue empties, so it lands without conflicts. |
