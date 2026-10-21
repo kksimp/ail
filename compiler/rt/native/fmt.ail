@@ -25,44 +25,51 @@ BASE := 1000000000
 
 # ---- the builder ----
 
-## Cell `k` (0 pointer, 1 length, 2 capacity) of this thread's builder: the
-## global slots while there is one thread, else the thread's own three words
-## in the pool block, so tasks format text at once (ADR 0599).
-fn sb_cell(k int) int
+## This thread's builder: three words (0 pointer, 1 length, 2 capacity) at
+## the address returned, which the global slots hold while there is one
+## thread, else the thread's own words in the pool block, so tasks format
+## text at once (ADR 0599). The address does not change while the builder
+## grows.
+fn sb_base() int
     if load64(global(MULTI)) == 0
-        return if k == 0 then global(SB_PTR) else if k == 1 then global(SB_LEN) else global(SB_CAP)
-    load64(global(TASKS)) + P_SB + 24 * thread_slot() + 8 * k
+        return global(SB_PTR)
+    load64(global(TASKS)) + P_SB + 24 * thread_slot()
 
 fn sb_reset()
-    store64(sb_cell(1), 0)
+    store64(sb_base() + 8, 0)
 
 fn sb_grow()
-    cap := load64(sb_cell(2))
+    c := sb_base()
+    cap := load64(c + 16)
     ncap := if cap == 0 then 256 else cap * 2
     p := alloc_raw(ncap, KIND_BYTES)
-    n := load64(sb_cell(1))
+    n := load64(c + 8)
     if n > 0
-        copy_bytes(p, load64(sb_cell(0)), n)
-    store64(sb_cell(0), p)
-    store64(sb_cell(2), ncap)
+        copy_bytes(p, load64(c), n)
+    store64(c, p)
+    store64(c + 16, ncap)
 
 fn sb_byte(b int)
-    n := load64(sb_cell(1))
-    if n == load64(sb_cell(2))
+    c := sb_base()
+    n := load64(c + 8)
+    if n == load64(c + 16)
         sb_grow()
-    store8(load64(sb_cell(0)) + n, b)
-    store64(sb_cell(1), n + 1)
+    store8(load64(c) + n, b)
+    store64(c + 8, n + 1)
 
 ## Room for `n` more bytes.
 fn sb_room(n int)
-    while load64(sb_cell(1)) + n > load64(sb_cell(2))
+    c := sb_base()
+    while load64(c + 8) + n > load64(c + 16)
         sb_grow()
 
 fn sb_bytes(p int, n int)
-    sb_room(n)
-    len := load64(sb_cell(1))
-    copy_bytes(load64(sb_cell(0)) + len, p, n)
-    store64(sb_cell(1), len + n)
+    c := sb_base()
+    while load64(c + 8) + n > load64(c + 16)
+        sb_grow()
+    len := load64(c + 8)
+    copy_bytes(load64(c) + len, p, n)
+    store64(c + 8, len + n)
 
 fn sb_text(s str)
     p := str_addr(s)
@@ -94,8 +101,9 @@ fn utf8_chars(p int, n int) int
 
 ## The builder's text as a string object (its characters counted).
 fn sb_str() str
-    n := load64(sb_cell(1))
-    p := load64(sb_cell(0))
+    c := sb_base()
+    n := load64(c + 8)
+    p := load64(c)
     s := str_new(n, utf8_chars(p, n))
     if n > 0
         copy_bytes(s + 16, p, n)
@@ -107,25 +115,28 @@ fn sb_str() str
 # in between.
 
 fn sb_begin()
-    store64(sb_cell(1), 0)
+    store64(sb_base() + 8, 0)
 
-fn sb_add_char(c int)
+fn sb_add_char(ch int)
     sb_room(4)
-    len := load64(sb_cell(1))
-    store64(sb_cell(1), len + u8_put(load64(sb_cell(0)) + len, c))
+    c := sb_base()
+    len := load64(c + 8)
+    store64(c + 8, len + u8_put(load64(c) + len, ch))
 
 ## The builder's text to standard output.
 fn sb_out()
-    out_bytes(load64(sb_cell(0)), load64(sb_cell(1)))
+    c := sb_base()
+    out_bytes(load64(c), load64(c + 8))
 
 # ---- integers ----
 
 ## Decimal, through `write_int`.
 fn put_int(n int)
-    while load64(sb_cell(1)) + 48 > load64(sb_cell(2))
+    c := sb_base()
+    while load64(c + 8) + 48 > load64(c + 16)
         sb_grow()
-    len := load64(sb_cell(1))
-    store64(sb_cell(1), len + write_int(load64(sb_cell(0)) + len, n))
+    len := load64(c + 8)
+    store64(c + 8, len + write_int(load64(c) + len, n))
 
 ## Lowercase hexadecimal without `0x`, `-` first for a negative `n`
 ## (type.str.11).
