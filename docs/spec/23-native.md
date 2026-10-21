@@ -18,6 +18,35 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
+function is a free function or a method of a struct (no generics or
+contracts), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics or
+invariants, and lists of those and of lists, using
+locals, constants whose values are literals, other constants and operators
+on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
+value), `while`, `for` over a range or a list, `break`, `continue`,
+`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
+field names in a method), method calls, `print` of numbers, strings and
+lists of them or an interpolation of them (with
+`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
+`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, and the
+methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
+`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Any other
+construct is reported at its position under this rule, all of them at once,
+`sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`, and `unreachable(message)` (err.model.2), and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its
+position under this rule, all of them at once, and nothing is built.
+*(ADRs 0384, 0390, 0392, 0393)*
+and the bit operations of expr.bit.1. Also: format specifications on numbers,
+`bool` and `str` in `print` (lex.str.7, type.str.11: width, fill, alignment,
+`.N`, `x`); `s.to_float()` in the `else` forms; and the calls `fs.exists`,
+`fs.read_text`, `fs.write_text`, `fs.append_text`, `fs.list_dir`,
+`fs.remove`, `fs.make_dir`, `fs.rename`, `env.get`, `env.home`, `env.cwd`,
+`env.program`, `io.read_line`, `io.read_all`, `io.eprint`, `io.exit`,
+`time.now_ms` and `time.sleep_ms` (std.fs, std.env, std.io, std.time). A
+call that can fail is in the subset only as the value of `else` with a
+fallback value, a statement that leaves, or a block without a binding
+(err.else.1-2); `else err` and `?` are not yet. Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is
+reported at its position under this rule, all of them at once, and nothing
+is built. *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0580, 0582)*
 function is a free function or a method of a struct or enum (no generics or
 contracts), in the root module or a module it imports (mod.unit.1-5), over
 `int`, `float`, `bool`, `char`, `str`, structs and enums without generics or
@@ -46,7 +75,9 @@ the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
-`float`, `bool` or `str` (not `by:` keys), in functions with at most eight
+`float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
+and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
+sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
@@ -55,9 +86,13 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path). Any other construct is reported at its position under this rule, all of them
+(std.fs, std.env, std.io, std.time, std.path); on Linux, `proc.run` (with
+`input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
+`Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
+(std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
+readable yet, and on macOS the program traps at `proc.run`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533, 0537,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
 
 ```ail
 fn steps(n int) int

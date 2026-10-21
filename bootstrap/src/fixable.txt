@@ -1,4 +1,6 @@
 conc.share.6
+contract.ens.2
+contract.ens.3
 err.else.1
 err.else.3
 err.prop.1

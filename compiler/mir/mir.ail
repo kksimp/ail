@@ -27,6 +27,8 @@ pub enum Ty
     Enum(name str)
     Unknown
     Unit
+    ## A function value: the address of a declared function (ADR 0573).
+    Fn(params List[Ty], ret Ty)
 
 pub fn Ty.is_float(self) bool
     match self
@@ -70,6 +72,14 @@ pub fn Ty.name(self) str
         Enum(n) => n
         Unknown => "?"
         Unit => "unit"
+        Fn(ps, r) =>
+            mut names := List[str]()
+            for p in ps
+                names.push(p.name())
+            if r.is_unit()
+                "fn({names.join(", ")})"
+            else
+                "fn({names.join(", ")}) {r.name()}"
 
 ## One instruction: `dst` is the value it defines (-1 for none), `args`
 ## the values it reads. The operations (`op`):
@@ -87,6 +97,9 @@ pub fn Ty.name(self) str
 ## | `itof` / `ftoi` | a | `n.to_float()`, `x.to_int()` (truncates; traps on NaN and out of range) |
 ## | `sqrt abs floor ceil` | a | on `float` |
 ## | `call` | arguments | function `name`; `dst` -1 when it returns nothing |
+## | `fnaddr` | | the address of function `name` (a function value) |
+## | `utrap` | message | `unreachable(message)` (err.model.2): flushes output, prints the trap at `site` and exits 1 |
+## | `icall` | callee, arguments | call through a function value; `dst` -1 when it returns nothing |
 ## | `prim` | arguments | runtime primitive `name` (native-abi.md §6) |
 ## | `get` | list, index | `xs[i]`, bounds-checked at `site` (type.coll.4); `site` -1: known in bounds |
 ## | `set` | list, index, value | `xs[i] = v`, bounds-checked at `site` |
@@ -194,7 +207,7 @@ pub struct Module
 ## Whether an instruction may be removed when its value is unused.
 pub fn Inst.is_pure(self) bool
     match op
-        "const" | "fconst" | "str" | "fadd" | "fsub" | "fmul" | "fdiv" => true
+        "const" | "fconst" | "str" | "fnaddr" | "fadd" | "fsub" | "fmul" | "fdiv" => true
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" => true
         "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" => true
         "fneg" | "not" | "itof" | "sqrt" | "abs" | "floor" | "ceil" | "len" | "cap" | "copy" => true

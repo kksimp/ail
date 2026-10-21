@@ -54,7 +54,7 @@ pub fn cells(f mir.Func) int
     n
 
 pub fn is_remat(i mir.Inst) bool
-    i.op == "const" or i.op == "fconst" or i.op == "str"
+    i.op == "const" or i.op == "fconst" or i.op == "str" or i.op == "fnaddr"
 
 ## Whether an instruction clobbers the caller-saved registers. A `push`
 ## calls the runtime only when the list is full, and that slow path saves
@@ -62,7 +62,7 @@ pub fn is_remat(i mir.Inst) bool
 pub fn is_call(i mir.Inst) bool
     if i.op == "call"
         return not is_push(i)
-    i.op == "prim" and i.name == "syscall"
+    i.op == "icall" or i.op == "prim" and i.name == "syscall"
 
 pub fn is_push(i mir.Inst) bool
     i.op == "call"

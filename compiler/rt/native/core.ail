@@ -145,7 +145,7 @@ fn out_str(s str)
 
 ## A string object of `n` bytes, uninitialised, with `chars` characters.
 fn str_new(n int, chars int) int
-    p := alloc(16 + n, KIND_STR)
+    p := alloc_raw(16 + n, KIND_STR)
     store64(p, n)
     store64(p + 8, chars)
     p
@@ -424,7 +424,7 @@ fn list_alloc(cap int, size int) List[int]
     p := alloc(24, KIND_LIST)
     c := if cap < 4 then 4 else cap
     store64(p + 8, c)
-    store64(p + 16, alloc(size * c, data_kind(size)))
+    store64(p + 16, alloc_raw(size * c, data_kind(size)))
     list_at(p)
 
 fn list_new(cap int) List[int]
@@ -442,7 +442,7 @@ fn list_new_for(lo int, hi int, per int) List[int]
 
 fn list_grow(p int, size int)
     cap := load64(p + 8) * 2
-    data := alloc(size * cap, data_kind(size))
+    data := alloc_raw(size * cap, data_kind(size))
     copy_bytes(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
     store64(p + 16, data)
@@ -460,7 +460,7 @@ fn list_reserve(xs List[int], lo int, hi int, per int, size int)
     need := load64(p) + want * per
     if need <= load64(p + 8)
         return
-    data := alloc(size * need, data_kind(size))
+    data := alloc_raw(size * need, data_kind(size))
     copy_bytes(data, load64(p + 16), size * load64(p))
     store64(p + 8, need)
     store64(p + 16, data)
@@ -645,6 +645,10 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
         out_str("call depth exceeded the native stack in `")
         out_str(op)
         out_byte(96)
+    elif kind == 14
+        # `unreachable(message)` (err.model.2): `a` is the message
+        out_str("unreachable: ")
+        out_str(str_at(a))
     out_byte(10)
     out_str(tail)
     flush_to(2)

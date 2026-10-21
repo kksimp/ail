@@ -784,6 +784,7 @@ struct FieldInfo
     name str
     type_text str
     public bool
+    doc str
 
 struct VariantInfo
     name str
