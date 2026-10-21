@@ -1,7 +1,4 @@
 use std.csv
 
 fn main() !
-    mut total := 0
-    for r in csv.records(fs.read_text(env.args()[0])?)?
-        total += r["qty"].to_int() else 0
-    print(total)
+    print([r["qty"].to_int() else 0 for r in csv.records(fs.read_text(env.args()[0])?)?].sum())
