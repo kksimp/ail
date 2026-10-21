@@ -577,6 +577,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
 | [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Accepted | 2026-10-21 |
 | [0759](0759-bytecode-tier-stalls-not-frames.md) | Bytecode tier: the cost left is stalls, not the frame layout; two frame redesigns measured and dropped *(delegated)* | Accepted | 2026-10-21 |
+| [0760](0760-packed-list-storage.md) | Lists of `int`, `float` and `bool` are stored packed (`Value::List(Rc<List>)`), invisible to programs; sieve 0.59 s to 0.21 s *(delegated)* | Accepted | 2026-10-21 |
 | [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |
 | [0757](0757-fuzz-math-special-values.md) | A fuzzer for `std.math` special values; the fuzz budget stays in the harness *(delegated)* | Accepted | 2026-10-21 |
 | [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |

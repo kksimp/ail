@@ -19,7 +19,7 @@ fn trapped(f: Fault, pos: Pos) -> super::Exit {
 
 fn ints(v: &Value) -> Vec<i64> {
     match v {
-        Value::List(xs) => xs.iter().map(Value::int).collect(),
+        Value::List(xs) => xs.iter().map(|x| x.int()).collect(),
         other => unreachable!("checked: List[int], found {other:?}"),
     }
 }
@@ -29,9 +29,9 @@ fn ints(v: &Value) -> Vec<i64> {
 fn elements(v: &Value, int: bool, f32: bool) -> Data {
     let Value::List(xs) = v else { unreachable!("checked: a list, found {v:?}") };
     match xs.first() {
-        Some(Value::Int(_)) => Data::I(xs.iter().map(Value::int).collect()),
+        Some(Value::Int(_)) => Data::I(xs.iter().map(|x| x.int()).collect()),
         Some(_) if f32 => Data::F32(xs.iter().map(|x| x.float() as f32).collect()),
-        Some(_) => Data::F(xs.iter().map(Value::float).collect()),
+        Some(_) => Data::F(xs.iter().map(|x| x.float()).collect()),
         None if int => Data::I(Vec::new()),
         None if f32 => Data::F32(Vec::new()),
         None => Data::F(Vec::new()),
@@ -51,7 +51,7 @@ fn f32_of(v: &Value) -> f32 {
 }
 
 fn list_of(xs: impl Iterator<Item = Value>) -> Value {
-    Value::List(Rc::new(xs.collect()))
+    Value::list(xs.collect())
 }
 
 /// A reduction's value; an `f32` tensor's is an `f32` (exact in `f64`).
