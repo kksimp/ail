@@ -18,9 +18,6 @@ fn same(a str, b str) bool
 fn label(n int) str
     "n is {n}"
 
-fn parse(s str) int
-    s.to_int() else 0
-
 fn loop_by_index(mut xs List[int]) int
     mut total := 0
     for mut x in xs

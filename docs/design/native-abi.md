@@ -89,7 +89,7 @@ box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
 value (zero on failure); failure is the runtime's global slot 8 holding the
 error's display text (a string object), 0 otherwise. Global 9 holds the return
 trace, a list of string objects `  at PATH:LINE:COL`. `rt.failed`, `rt.err_set`,
-`rt.err_trace`, `rt.err_take`, `rt.err_clear`; `rt.exit` reports a failure
+`rt.err_trace`, `rt.err_take`, `rt.err_clear`, and for error structs and enums global 12 holds the error value (`rt.err_value`, `rt.err_take_value`, ADR 0804); `rt.exit` reports a failure
 that reached `main` first (`error: TEXT`, the trace, status 1).
 
 **Heap object header** (ADR 0562). Every heap object has an 8-byte word at

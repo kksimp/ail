@@ -1,0 +1,4 @@
+print("hi")
+
+fn main()
+    print(1)

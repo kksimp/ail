@@ -1,0 +1,5 @@
+fn largest[T int](xs List[T]) T
+    xs[0]
+
+fn main()
+    print(largest([3]))

@@ -1,8 +1,8 @@
 api 43 0
 budget 6 0
 conc 44 1
-contract 18 0
-ct 16 0
+contract 18 2
+ct 17 0
 diff 7 0
 edit 17 0
 eff 15 0
@@ -30,4 +30,4 @@ trace 17 0
 trait 43 3
 type 107 10
 unsafe 16 0
-all 894 48
+all 895 50
