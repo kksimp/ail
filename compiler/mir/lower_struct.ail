@@ -286,3 +286,22 @@ fn Lower.gen_copy(mut self, name str, t Ty)
     for b in 0..blocks.len()
         sealed[b] = true
     end_fn(name, ast.Pos(line: 1, col: 1))
+
+## `x.f`, `E.V`, or a qualified constant.
+fn Lower.lower_member_expr(
+    mut self,
+    recv ast.Expr,
+    name str,
+    pos ast.Pos,
+    e ast.Expr,
+    want Ty?,
+) Val?
+    if en := enum_ref(recv)
+        return variant_member(en, name, pos)
+    if key := qualified(e)
+        if consts.contains(key)
+            return lower_const(key, want)
+        if globals.contains(key)
+            return global_const(key)
+        return unsupported(pos, "`{key}` as a value")
+    lower_member(recv, name, pos)
