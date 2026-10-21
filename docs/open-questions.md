@@ -431,3 +431,31 @@ Lane 238 implemented the rules of the lane 223 and lane 225 lists that a checker
 | `ct.eval.4` | A MAY rule (reuse of compile-time results); nothing observable to test. | (a) implement with the build cache (lane 200); (b) keep it untested | (a) once `ail build` has its cache; no work before. |
 | `own.copy.1` | The "performance report" (ADR 0026) doesn't exist in any tool, so there is nothing to list copy sites in. | (a) a new `ail effects --copies FILE` listing each site where a list, map, set or struct is copied by assignment, argument or return; (b) wait for the report | (a), as the first line of the report: it follows the existing `--parallel` listing. |
 | `plat.isa.3` | A native start-up check of the CPU level needs the code generator's entry sequence (`compiler/mir/lower.ail`, the merge queue's critical path) or a start-up stub in the object writers. | (a) a stub in `compiler/obj/` that runs `cpuid` before `main`, x86-64 only (ARM64's baseline is checked by the OS); (b) wait for the queue to empty | (a) after the queue empties, so it lands without conflicts. |
+
+## OQ-136 — A typed buffer for `mem.alloc` and C strings (day-3 brief)
+
+Raw FFI code is the most expensive shape in the corpus. In `ffi_buffers`, each
+buffer is an `extern` declaration, a `mem.alloc`/`free` pair, an `unsafe`
+block and index arithmetic on raw pointers. Measured on 079c6d8 (five-tokenizer
+mean): `ffi_buffers` 366.2 tokens against 254.2 for the Python ctypes twin
+(+112.0); `ffi_libc` 208.8 against 189.4 (+19.4). Both are rare constructs:
+they sum to 131.4 tokens on a 23,004-token corpus (0.6%), so under
+[ADR 0076](decisions/0076-delegated-decisions.md) the token criterion is close
+to a tie. The Python side is itself library ceremony (ctypes), so the gap is a
+ceiling, not a target. Not yet measured: a prototype of any option below.
+
+- **a.** Keep `mem.alloc`/`free` and `mem.cstr` as they are. Nothing changes;
+  FFI programs stay about 45% longer than the twin.
+- **b.** A typed buffer `mem.buffer[int](n)` with bounds-checked indexing, `len()`,
+  and release at scope end (no `free` pair), plus the C-string helpers in c.
+  Largest saving on `ffi_buffers`; largest surface: a new `std.mem` type,
+  spec rules for ownership and bounds, and checker and native parity for each.
+- **c.** Only C-string helpers: `mem.cstr(s)` and `cstr.text()` (no new buffer
+  type). Covers the `ffi_libc` gap and the `from_cstr` lines; `ffi_buffers`
+  keeps its raw pointer code.
+
+Recommendation: **a** now, because the gap sits in rare constructs and the
+criteria tie. Revisit with **c** when a third program needs C strings, and
+measure **b** with a prototype of `ffi_buffers` before adding a new type to the
+card. Both options change the card, so the designer should decide the
+ownership rule for **b** (release at scope end versus an explicit `free`).
