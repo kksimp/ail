@@ -875,6 +875,8 @@ fn Checker.method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg]
                     return t
             if sn == "tensor.Tensor"
                 return tensor_method(recv, rt, n, at, args, expect)
+            if sn == "proc.Output"
+                return output_method(n, at, args)
         PtrOf(target) => return ptr_method(rt, target, n, at, args, expect)
         _ => rt = rt
     cands := candidates(rt, n)
@@ -1093,6 +1095,26 @@ fn enum_of_def(d Def) int?
         DStruct => none
 
 ## Report a method call on a type without that method.
+## `o.m()` on a `proc.Output` (std.proc.9): `text` and `ok`, no arguments.
+fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
+    args_only(args)
+    names := ["ok", "text"]
+    if not names.contains(n)
+        mut d := new_diag("std.proc.9", at, "`proc.Output` has no method `{n}`")
+        if s := suggest(n, names)
+            d = d.did_you_mean(s)
+        else
+            d = d.with_help("a process result's methods are {list_names(names)}")
+        diags.push(d)
+        return Ty.Unknown
+    if args.len() > 0
+        err("std.proc.9", at, "`{n}` takes no arguments")
+        return Ty.Unknown
+    if n == "ok"
+        Ty.Bool
+    else
+        Ty.Str
+
 @allow("expr.match.3") fn Checker.no_method(mut self, rt Ty, n str, at ast.Pos)
     mut names := List[str]()
     if tn := type_name_of(rt)
