@@ -82,7 +82,14 @@ fn Lower.lower_net_method(mut self, key str, recv Val?, args List[ast.Arg], pos 
 
 ## Emit the call of `f` with the leading values `lead`, `args`, and the
 ## trailing values `after`.
-fn Lower.net_call(mut self, f NetFn, lead List[int], args List[ast.Arg], pos ast.Pos, after List[int]) Val?
+fn Lower.net_call(
+    mut self,
+    f NetFn,
+    lead List[int],
+    args List[ast.Arg],
+    pos ast.Pos,
+    after List[int],
+) Val?
     if args.len() != f.params.len()
         return unsupported(pos, "this call")
     mut vs := lead

@@ -208,7 +208,10 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     if r := recv
         vs.push(r.id)
     if args.len() + vs.len() != sig.params.len()
-        return unsupported(pos, "calling `{key}` with {args.len() + vs.len()} arguments instead of {sig.params.len()}")
+        return unsupported(
+            pos,
+            "calling `{key}` with {args.len() + vs.len()} arguments instead of {sig.params.len()}",
+        )
     for a in args
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")

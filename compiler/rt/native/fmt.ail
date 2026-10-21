@@ -71,7 +71,11 @@ fn utf8_chars(p int, n int) int
         if w.bit_and(-9187201950435737472) == 0
             chars += 8
         else
-            cont := w.bit_and(w.shl(1).bit_xor(-1)).bit_and(-9187201950435737472).shr(7).bit_and(72340172838076673)
+            cont := w
+                .bit_and(w.shl(1).bit_xor(-1))
+                .bit_and(-9187201950435737472)
+                .shr(7)
+                .bit_and(72340172838076673)
             chars += 8 - (cont * 72340172838076673).shr(56).bit_and(255)
         i += 8
     while i < n

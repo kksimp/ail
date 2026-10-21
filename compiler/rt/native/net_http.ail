@@ -413,8 +413,7 @@ fn http_head_lines(m int, strip bool)
             owned := http_ieq(k + 16, kn, "connection")
                 or http_ieq(k + 16, kn, "content-length")
                 or http_ieq(k + 16, kn, "transfer-encoding")
-                or (strip
-                    and (http_ieq(k + 16, kn, "authorization") or http_ieq(k + 16, kn, "cookie")))
+                or (strip and (http_ieq(k + 16, kn, "authorization") or http_ieq(k + 16, kn, "cookie")))
             if not owned
                 sb_bytes(k + 16, kn)
                 sb_text(": ")

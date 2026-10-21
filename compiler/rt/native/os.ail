@@ -971,7 +971,10 @@ fn os_copy_file(src str, dst str)
 
 ## `p` as an absolute path with `.` and `..` resolved by text.
 fn os_abs_norm(p str) str
-    full := if load64(str_addr(p)) > 0 and load8(str_addr(p) + 16) == 47 then p else path_join(env_cwd(), p)
+    full := if load64(str_addr(p)) > 0 and load8(str_addr(p) + 16) == 47 then p else path_join(
+        env_cwd(),
+        p,
+    )
     q := str_addr(full) + 16
     n := load64(str_addr(full))
     mut parts := List[str]()

@@ -56,7 +56,10 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
     if scalars > 0
         call("rt.sb_begin", [], Ty.Unit)
         for k in 0..pieces.len()
-            name := if kinds[k] == 0 then "rt.sb_text" else if kinds[k] == 1 then "rt.put_int" else if kinds[k] == 2 then "rt.sb_add_char" else "rt.put_bool"
+            name := if kinds[k]
+                == 0 then "rt.sb_text" else if kinds[k]
+                == 1 then "rt.put_int" else if kinds[k]
+                == 2 then "rt.sb_add_char" else "rt.put_bool"
             call(name, [pieces[k]], Ty.Unit)
         return Val(id: call("rt.sb_str", [], Ty.Str), ty: Ty.Str)
     mut acc := pieces[0]

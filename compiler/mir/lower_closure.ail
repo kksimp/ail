@@ -106,7 +106,10 @@ fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
         Fn(ps, r) => Sig(params: ps, ret: r, fails: false)
         _ => return unsupported(pos, "calling a `{f.ty.name()}`")
     if args.len() != sig.params.len()
-        return unsupported(pos, "calling a `fn` value with {args.len()} arguments instead of {sig.params.len()}")
+        return unsupported(
+            pos,
+            "calling a `fn` value with {args.len()} arguments instead of {sig.params.len()}",
+        )
     mut vs := [f.id]
     for k in 0..args.len()
         a := args[k]

@@ -620,7 +620,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0785](0785-native-subset-help-runs-with-ail-run.md) | Every `native.subset.1` help line says `ail run` runs the program | Accepted | 2026-10-21 |
 | [0774](0774-load-json-and-print-json.md) | `load_json[T](path)` and `print_json(v)` *(delegated)* | Accepted | 2026-10-21 |
 | [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
-| [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives (constant hoisting tried and dropped) *(delegated)* | Accepted | 2026-10-21 |
 | [0832](0832-native-str-char-cmp-and-char-index-of.md) | Native `.cmp()` on `str` and `char`, `.index_of()` on `List[char]` *(delegated)* | Accepted | 2026-10-21 |
 | [0820](0820-driver-level-unsafe.md) | `unsafe driver` manifest level unlocks hardware access through `std.hw`; 64-bit targets only | Accepted | 2026-10-21 |
 | [0823](0823-lower-ail-feature-files.md) | `lower.ail` is a core plus feature files with one-line hooks: a native feature lives in its own `lower_*.ail` and adds at most one dispatch line and one state field *(delegated)* | Accepted | 2026-10-21 |
