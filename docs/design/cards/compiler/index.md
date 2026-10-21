@@ -2,9 +2,9 @@
 (root)  5 items
 a64  45 items
 ast  126 items
-check  59 items
-codegen  30 items
-mir  178 items
+check  293 items
+codegen  36 items
+mir  181 items
 obj  53 items
-syntax  93 items
+syntax  94 items
 x64  58 items

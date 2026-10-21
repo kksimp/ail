@@ -41,10 +41,10 @@ struct Browser  ## The browser: the page shown (its tree and layout), where it i
     diff bool  ## Whether `--session` answers with diffs (`--diff`), and what it last sent.
     last_url str
     last_nodes Map[int, str]
-    jar jsdom.Jar  ## Cookies from responses and scripts, sent back to their sites.
+    cj std.net.jar.Jar  ## Cookies from responses and scripts, sent back to their sites.
 fn options() net.Options [io net]  ## The headers Garlic sends: who it is, and that it wants HTML.
 fn fetch(url str, method str, body str) str [clock fs io net]  ## The text of `url`: `http` and `https` through `net.request` (which
-fn fetch_with(url str, method str, body str, mut jar jsdom.Jar) str [clock fs io mutates net]  ## `fetch`, sending `jar`'s cookies for the site and keeping the ones the
+fn fetch_with(url str, method str, body str, mut cj std.net.jar.Jar) str [clock fs io mutates net]  ## `fetch`, sending `cj`'s cookies for the site and keeping the ones the
 WINDOWS_1252 := ...  ## The labels that name windows-1252, which HTML reads `iso-8859-1` and
 fn body_text(r net.RawResponse) str  ## A response body as text: its `Content-Encoding` (gzip or deflate)
 fn decode(data bytes, content_type str) str  ## `data` as text in the charset that `content_type` names, or failing that
@@ -59,7 +59,7 @@ fn fetch_text(url str) str [fs io net]  ## The text of a sub-resource, or "" whe
 struct Loaded  ## A loaded page: where it ended up and its tree.
     url str
     doc html.Doc
-fn load_doc(target str, method str, body str, mut jar jsdom.Jar) Loaded [clock env fs io mutates net]  ## Fetches and parses `target`, then runs its scripts (unless `--no-js`),
+fn load_doc(target str, method str, body str, mut cj std.net.jar.Jar) Loaded [clock env fs io mutates net]  ## Fetches and parses `target`, then runs its scripts (unless `--no-js`),
 fn script_url(u str) str  ## The address scripts see: a local file gets a file:// URL.
 fn local_url(u str) str
 fn edit_text(text str, key str) str?  ## `text` after a key typed into a prompt: Backspace deletes, a character
@@ -78,4 +78,4 @@ fn testdata() str [env fs io]  ## `tools/garlic/testdata`, from the repository r
 fn node_with(b Browser, tag str, attr str, value str) int  ## The id of the first element `tag` whose `attr` is `value` in `b`'s page.
 ```
 
-trimmed to fit 2000 tokens (~1831); dropped: private items
+trimmed to fit 2000 tokens (~1843); dropped: private items

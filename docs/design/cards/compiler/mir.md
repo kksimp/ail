@@ -68,6 +68,7 @@ pub enum mir.Ty
     Float
     Bool
     Str
+    Char
     List(elem mir.Ty)
     Opt(inner mir.Ty)
     Struct(name str)
@@ -138,10 +139,11 @@ pub struct mir.Proven
     pub highs Map[int, int]
 pub fn mir.prove(f mir.Func, defs List[mir.Def], lp mir.LoopInfo, c mir.Counted, order List[int], held List[bool]) mir.Proven
 pub fn mir.simplify(f mir.Func) mir.Func
+pub fn mir.subset_help(message str) str
 pub fn mir.module_text(m mir.Module) str
 pub fn mir.func_text(f mir.Func) str
 pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1387); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1403); dropped: private items, doc comments

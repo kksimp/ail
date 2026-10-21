@@ -16,12 +16,18 @@ pub struct codegen.Alloc
     pub order List[int]  ## The blocks in layout order.
     pub slots int
     pub saved List[int]  ## The callee-saved registers used, which the prologue saves.
+    pub wrap int  ## The block where the callee-saved registers are saved, or -1 for the
+    pub region List[bool]
 pub fn codegen.is_remat(i mir.Inst) bool  ## Whether an instruction's value is rebuilt at each use instead of held.
 pub fn codegen.is_call(i mir.Inst) bool  ## Whether an instruction clobbers the caller-saved registers. A `push`
 pub fn codegen.is_push(i mir.Inst) bool
 pub fn codegen.caller_used(al codegen.Alloc, t codegen.Target) List[int]  ## The caller-saved registers that hold some value of the function.
 pub fn codegen.allocate(f mir.Func, t codegen.Target) codegen.Alloc
 fn codegen.use_weights(f mir.Func) List[int]  ## The cost of keeping each value in memory: one per definition or use,
+struct codegen.Wrap
+    wrap int
+    region List[bool]
+fn codegen.shrink_wrap(f mir.Func, order List[int], s codegen.Scan, bstart List[int], bend List[int], t codegen.Target) codegen.Wrap  ## Where the callee-saved registers can be saved instead of at the entry:
 fn codegen.add_range(mut r List[int], from int, to int) [mutates]  ## Append the range `from..=to`, joining it to the last one when they meet
 fn codegen.overlaps(a List[int], b List[int]) bool  ## Whether two values' ranges overlap.
 fn codegen.liveness(f mir.Func, order List[int]) List[List[bool]]  ## Which values are live on entry to each block (the block's parameters
@@ -36,6 +42,8 @@ struct codegen.Scan
     calls List[int]
     hints List[List[int]]
     weight List[int]  ## How much a value costs to keep in memory: its definitions and uses,
+    weighed bool  ## Whether `weight` has been computed: only a function that runs out of
+    func mir.Func
     fn codegen.Scan.crosses(self, v int) bool  ## Whether `v` is live across a call, so it needs a callee-saved register.
     fn codegen.Scan.free(self, r int, v int) bool  ## Whether register `r` is free for all of `v`'s ranges.
     fn codegen.Scan.assign(mut self, v int, float bool, t codegen.Target) [mutates]
@@ -66,4 +74,8 @@ fn codegen.thread_jumps(f mir.Func) mir.Func  ## Retarget each edge into an empt
 fn codegen.is_forwarder(blk mir.Block) bool
 pub fn codegen.block_order(f mir.Func) List[int]  ## The blocks in reverse postorder from the entry.
 pub fn codegen.f64_bits(x float) int  ## Float constants in a 64-bit pattern, computed with exact float scaling
+pub fn codegen.split_for_calls(f mir.Func) mir.Func  ## Values that cross calls are copied where the calls begin (ADR 0625). The
+fn codegen.renamed(m Map[int, int], v int) int
+pub fn codegen.wrap_block(f mir.Func, order List[int], dom List[List[bool]], blocks List[int]) int  ## The deepest block, other than the entry, that dominates every block in
+pub fn codegen.div_magic(d int) List[int]  ## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
 ```
