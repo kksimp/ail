@@ -30,8 +30,14 @@ impl Out {
 
 /// Run `program args...` for at most `secs` seconds.
 pub fn exec_program(program: &Path, args: &[&str], secs: u64) -> Out {
+    exec_program_env(program, args, &[], secs)
+}
+
+/// `exec_program` with extra environment variables.
+pub fn exec_program_env(program: &Path, args: &[&str], env: &[(&str, &str)], secs: u64) -> Out {
     let mut child = Command::new(program)
         .args(args)
+        .envs(env.iter().copied())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
