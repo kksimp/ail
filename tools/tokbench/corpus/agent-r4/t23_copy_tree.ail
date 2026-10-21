@@ -1,3 +1,2 @@
 fn main() !
-    for f in fs.walk("src")?
-        fs.copy(f, "backup/{f}")?
+    fs.copy("src", "backup")?

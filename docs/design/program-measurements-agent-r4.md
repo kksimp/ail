@@ -221,3 +221,39 @@ Tokbench mean, five tokenizers, ten programs:
 `regex_codes` against its Python twin (94.2): +35% before, +22% after. The
 `task_sum` gap is a syntax question and stays open. The `frames` gap is
 mostly `wire[at].to_int()` and is not changed here.
+
+## Day 2: the 25 twins rerun with tonight's additions (lane 192)
+
+The six rewritten twins use `Map.top`, `List[T].from_json`, regex methods,
+recursive `fs.copy` and counting comprehensions (needs ADRs 0748, 0749, 0751).
+AIL against Python goes from +22.7% to **+14.6%** (1,215.8 to 1,135.2 tokens
+against 990.8). Nineteen twins are unchanged.
+
+| task | Python | AIL before | AIL after | after vs Python |
+|---|---|---|---|---|
+| t01_wordcount | 42.4 | 57.0 | 43.6 | +3% |
+| t02_batches | 32.6 | 26.8 | 26.8 | -18% |
+| t03_table | 36.8 | 38.8 | 38.8 | +5% |
+| t04_csv_report | 37.2 | 53.6 | 43.6 | +17% |
+| t05_args | 71.0 | 95.4 | 95.4 | +34% |
+| t06_log | 24.8 | 22.6 | 22.6 | -9% |
+| t07_flatten | 25.2 | 18.0 | 18.0 | -29% |
+| t08_whitespace | 30.2 | 38.0 | 38.0 | +26% |
+| t09_group | 37.8 | 41.6 | 41.6 | +10% |
+| t10_retry | 85.2 | 84.8 | 84.8 | -0% |
+| t11_json_transform | 57.6 | 107.0 | 89.6 | +56% |
+| t12_sort_ties | 51.4 | 91.4 | 91.4 | +78% |
+| t13_walk | 40.8 | 17.4 | 17.4 | -57% |
+| t14_stdin_sum | 19.8 | 39.0 | 26.4 | +33% |
+| t15_dates | 44.4 | 51.6 | 51.6 | +16% |
+| t16_run_cmd | 40.8 | 39.6 | 39.6 | -3% |
+| t17_http_json | 32.6 | 34.2 | 34.2 | +5% |
+| t18_env_default | 22.0 | 21.2 | 21.2 | -4% |
+| t19_kv_config | 63.6 | 96.2 | 96.2 | +51% |
+| t20_grep_count | 42.2 | 62.6 | 47.8 | +13% |
+| t21_digest | 27.6 | 23.4 | 23.4 | -15% |
+| t22_dedup | 18.4 | 21.2 | 21.2 | +15% |
+| t23_copy_tree | 14.4 | 27.4 | 15.0 | +4% |
+| t24_report | 65.8 | 79.0 | 79.0 | +20% |
+| t25_sleep_loop | 26.2 | 28.0 | 28.0 | +7% |
+| **total** | 990.8 | 1215.8 | 1135.2 | +14.6% |
