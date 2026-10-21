@@ -384,6 +384,10 @@ fn Lexer.push(mut self, tok Tok, pos ast.Pos)
 fn Lexer.diag(mut self, rule str, pos ast.Pos)
     diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false))
 
+## A diagnostic with its message and a fix, as the Rust front end gives it.
+fn Lexer.diag_fix(mut self, rule str, pos ast.Pos, msg str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true))
+
 ## Record the comment at `line[start..]`, if there is one.
 fn Lexer.comment(mut self, line List[char], start int, line_no int)
     if at(line, start) == '#' and start < line.len()
@@ -503,7 +507,7 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             diag("gram.foreign.1", pos)
             i += 2
         elif c == '&' and at(line, i + 1) != '&'
-            diag("gram.foreign.1", pos)
+            diag_fix("gram.foreign.1", pos, "AIL has no `&`")
             i += 1
         elif c == '^' or c == '~'
             diag("gram.foreign.1", pos)
