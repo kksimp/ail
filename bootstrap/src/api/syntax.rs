@@ -155,6 +155,8 @@ impl J {
         match self {
             J::Null => out.push_str("null"),
             J::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+            // json.print.1: whole numbers below 1e15 print without a fraction, as `Json.to_text` does.
+            J::Num(n) if n.is_finite() && n.abs() < 1e15 && n.fract() == 0.0 => out.push_str(&format!("{}", *n as i64)),
             J::Num(n) => out.push_str(&crate::interp::float_text(*n)),
             J::Str(s) => quote(s, out),
             J::Arr(items) => {

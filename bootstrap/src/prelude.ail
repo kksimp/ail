@@ -296,6 +296,15 @@ fn parse_json(text str) Json ! JsonError
     mut p := JsonParser(text.chars(), 0)
     p.document()
 
+## A number as JSON text: whole numbers below 1e15 without a fraction (json.print.1),
+## infinite and NaN as `null` (json.print.2).
+fn json_num(n float) str
+    if n - n != 0.0
+        return "null"
+    if n.abs() < 1000000000000000.0 and n.floor() == n
+        return "{n.to_int()}"
+    "{n}"
+
 fn json_quote(s str) str
     mut out := ["\""]
     for c in s.chars()
@@ -322,7 +331,7 @@ fn Json.to_text(self) str
     match self
         Null => "null"
         Bool(b) => "{b}"
-        Num(n) => if n - n != 0.0 then "null" else "{n}"
+        Num(n) => json_num(n)
         Str(s) => json_quote(s)
         Arr(items) =>
             mut parts := []
