@@ -295,3 +295,56 @@ an error with exit code 2. With none of them given, a run is not checked.
 fn main()
     print(1)
 ```
+
+## Checked examples for the run and value rules
+
+Each block runs `ail run` with the options on its fence (trace.run.1-5, trace.val.2).
+
+```ail tool=run,--trace=calls,FILE expect=call rules=trace.run.1
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+```
+
+```ail tool=run,--trace=calls,FILE expect=returned rules=trace.run.2
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+```
+
+```ail tool=run,--trace=effects,FILE expect=effect rules=trace.run.3
+use std.time
+
+fn main()
+    t := time.now_ms()
+    print(t > 0)
+```
+
+```ail tool=run,--trace=calls,--trace-limit,2,FILE expect=dropped rules=trace.run.4
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+    print(double(4))
+```
+
+```ail tool=run,--trace=all,FILE expect=done rules=trace.run.5
+fn main()
+    print("done")
+```
+
+```ail tool=run,--trace=calls,FILE expect=… rules=trace.val.2
+fn describe(s str) int
+    s.len()
+
+fn main()
+    print(describe("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"))
+```
