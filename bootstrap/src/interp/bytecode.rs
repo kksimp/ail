@@ -3939,8 +3939,9 @@ match {
                             let x = *x;
                             put_float(*dst, x, env, base, regs);
                         }
-                        _ => {
-                            let v = take!(*src);
+                        other => {
+                            // Not a scalar: the operand's kind is already known to be a read of a value.
+                            let v = if *src & KIND == REG { std::mem::replace(&mut regs[(*src & !KIND) as usize], Value::Unit) } else { other.clone() };
                             put(*dst, v, env, base, regs);
                         }
                     }
@@ -3957,8 +3958,8 @@ match {
                             let f = *f;
                             env.push((name, Value::Float(f)));
                         }
-                        _ => {
-                            let v = take!(*src);
+                        other => {
+                            let v = if *src & KIND == REG { std::mem::replace(&mut regs[(*src & !KIND) as usize], Value::Unit) } else { other.clone() };
                             env.push((name, v));
                         }
                     }
@@ -4048,29 +4049,57 @@ match {
                 }
                 Ins::Index { dst, recv, idx, pos } => {
                     pc += 1;
-                    let v = match get!(*recv) {
-                        Value::List(items) => {
-                            let i = get!(*idx).int();
-                            got(elem(items, i, *pos)?)
+                    // A list element is looked up once. A scalar reaches its slot from registers (ADR 0759); any
+                    // other element is cloned straight into it, as before: no intermediate enum for it to pay for.
+                    if let Value::List(items) = get!(*recv) {
+                        let i = get!(*idx).int();
+                        match elem(items, i, *pos)? {
+                            Value::Int(x) => {
+                                let x = *x;
+                                done(*recv, regs);
+                                done(*idx, regs);
+                                put_int(*dst, x, env, base, regs);
+                            }
+                            Value::Float(x) => {
+                                let x = *x;
+                                done(*recv, regs);
+                                done(*idx, regs);
+                                put_float(*dst, x, env, base, regs);
+                            }
+                            Value::Bool(x) => {
+                                let x = *x;
+                                done(*recv, regs);
+                                done(*idx, regs);
+                                put_bool(*dst, x, env, base, regs);
+                            }
+                            other => {
+                                let v = other.clone();
+                                done(*recv, regs);
+                                done(*idx, regs);
+                                put(*dst, v, env, base, regs);
+                            }
                         }
+                        continue;
+                    }
+                    let v = match get!(*recv) {
                         Value::Map(t) => {
                             let k = get!(*idx);
-                            Got::Other(map_value(t, k, || key_text(k), *pos)?.clone())
+                            map_value(t, k, || key_text(k), *pos)?.clone()
                         }
                         Value::Bytes(b) => {
                             let i = get!(*idx).int();
-                            Got::Other(bytes::at(b, i, *pos)?)
+                            bytes::at(b, i, *pos)?
                         }
                         // std.tensor.15: `t[i]` drops axis 0.
-                        Value::Tensor(t) => Got::Other(match t.row(get!(*idx).int()) {
+                        Value::Tensor(t) => match t.row(get!(*idx).int()) {
                             Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
                             Err(f) => return Err(Trap { rule: f.rule, pos: *pos, message: f.message }.into()),
-                        }),
+                        },
                         other => unreachable!("checked: list, map, bytes or tensor, found {other:?}"),
                     };
                     done(*recv, regs);
                     done(*idx, regs);
-                    put_got(*dst, v, env, base, regs);
+                    put(*dst, v, env, base, regs);
                 }
                 Ins::ListFast { slot, val, dst, push, done } => {
                     let at = base + *slot as usize;
