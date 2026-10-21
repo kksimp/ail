@@ -2061,7 +2061,7 @@ row's largest element. The sum runs in element order. A row that holds a NaN
 or an infinity gives NaN for that row. An empty last axis traps. An `f32`
 tensor is computed in `float` and rounded once, as std.tensor.21 does for the
 other activations. On a `Tensor[int]` it is a compile-time error. Fusion
-(std.tensor.20) does not cover it. *(ADR TBD, requested from the integrator)*
+(std.tensor.20) does not cover it. *(ADR 0827)*
 
 ```ail rules=std.tensor.24
 fn main()
