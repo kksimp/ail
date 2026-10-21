@@ -516,3 +516,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Accepted | 2026-10-21 |
 | [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
 | [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
+| [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Accepted | 2026-10-21 |
