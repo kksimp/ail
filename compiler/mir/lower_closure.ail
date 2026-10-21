@@ -69,9 +69,9 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         scopes.pop()
         # A problem still closes the loop, so the half-built function stays well formed.
         if kv := k
-            if kv.ty == Ty.Int or orderable_record(kv.ty)
+            if kv.ty == Ty.Int or kv.ty == Ty.Float or kv.ty == Ty.Str or orderable_record(kv.ty)
                 kt = kv.ty
-                call("rt.list_push", [keys, kv.id], Ty.Unit)
+                call(push_fn(kt), [keys, kv.id], Ty.Unit)
             else
                 problem(
                     expr_pos(a.value),
@@ -82,7 +82,12 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
         "rt.sort_perm",
         [keys],
         Ty.List(Ty.Int),
-    ) else tuple_sort_perm(keys, kt)
+    ) else if kt == Ty.Float
+        or kt == Ty.Str then call(
+            "rt.sort_perm_by",
+            [keys, compare_fn(if kt == Ty.Str then "rt.word_lt_str" else "rt.word_lt_float")],
+            Ty.List(Ty.Int),
+        ) else tuple_sort_perm(keys, kt)
     out := call("rt.list_new", [n], r.ty)
     c := count_open(n)
     idx := op("get", [perm, c.i], Ty.Int)
