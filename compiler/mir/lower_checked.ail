@@ -3,7 +3,8 @@
 ## on overflow or a zero divisor. Add, subtract and negate test the sign bits
 ## inline; multiply, divide and remainder ask the runtime (`rt.checked_ok`).
 ## The operation itself is the unchecked instruction, run only where the test
-## passed.
+## passed. `saturating_add`, `saturating_sub` and `saturating_mul` ask the
+## runtime to clamp (`rt.saturating`).
 use ast
 
 fn checked_code(name str) int
@@ -16,7 +17,22 @@ fn checked_code(name str) int
         "checked_neg" => 5
         _ => -1
 
+fn saturating_code(name str) int
+    match name
+        "saturating_add" => 0
+        "saturating_sub" => 1
+        "saturating_mul" => 2
+        _ => -1
+
 fn Lower.int_checked(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    sat := saturating_code(name)
+    if sat >= 0
+        if r.ty != Ty.Int or vs.len() != 1 or vs[0].ty != Ty.Int
+            return none
+        return Val(
+            id: call("rt.saturating", [konst(sat, Ty.Int), r.id, vs[0].id], Ty.Int),
+            ty: Ty.Int,
+        )
     code := checked_code(name)
     if code < 0 or r.ty != Ty.Int
         return none
