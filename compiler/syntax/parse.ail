@@ -372,6 +372,10 @@ fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str)
             return
     diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: "", fix: ""))
 
+## A diagnostic with the bootstrap's message, help line and fix title.
+fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: fix))
+
 fn Parser.int_too_big(mut self, pos ast.Pos)
     diag("lex.num.3", pos)
 
@@ -424,7 +428,13 @@ fn Parser.take_name(mut self, expected str, rule str) ast.Ident?
         pos := bump().pos
         return ast.Ident(name: n, pos: pos)
     if tag_at(0) == "kw" and not not_yet(kw_at(0))
-        diag("lex.kw.1", here())
+        error_text(
+            "lex.kw.1",
+            here(),
+            "`{kw_at(0)}` is a keyword and can't be used as a name",
+            "choose a different name",
+            "",
+        )
         return none
     unexpected(expected, rule)
     none
@@ -1062,10 +1072,23 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         e := otherwise()?
         return ast.Stmt.Let(name: text, pos: pos, mutable: false, value: value, otherwise: e.part)
     if tag == "id" and (text == "let" or text == "var" or text == "const") and tag_at(1) == "id"
-        diag("expr.bind.1", pos)
+        fix := if sym_at(2) == "=" then "declare it with `:=`" else ""
+        error_text(
+            "expr.bind.1",
+            pos,
+            "AIL has no `{text}`; bindings are declared with `:=`",
+            "write `name := value`, or `mut name := value` to allow reassignment",
+            fix,
+        )
         return none
     if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
-        diag("lex.kw.1", pos)
+        error_text(
+            "lex.kw.1",
+            pos,
+            "`{text}` is a keyword and can't be used as a name",
+            "choose a different name",
+            "",
+        )
         return none
     if tag == "kw" and text == "while"
         bump()
@@ -1123,7 +1146,7 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         value := expression()?
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
-        diag("expr.bind.1", here())
+        error_text("expr.bind.1", here(), "only a plain name can be declared with `:=`", "", "")
         return none
     ast.Stmt.Eval(target)
 
@@ -1132,7 +1155,13 @@ fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
     bump()
     mutable := eat_kw("mut")
     if at_sym("(")
-        diag("expr.loop.1", here())
+        error_text(
+            "expr.loop.1",
+            here(),
+            "AIL has no C-style `for`",
+            "loop over a range: `for i in 0..n` (excludes `n`) or `for i in 1..=n` (includes it); use `while` for other conditions",
+            "write the range loop",
+        )
         return none
     v := take_name("a loop variable after `for`", "expr.loop.1")?
     mut var := v.name
@@ -1144,6 +1173,14 @@ fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
             return none
         unpack = more_binders(ast.Binder(name: v.name, pos: v.pos, mutable: false), "type.tuple.5")?
         var = hidden_name(unpack)
+        error_text(
+            "expr.loop.1",
+            here(),
+            "a `for` loop has one variable",
+            "for the index and the item, loop over the indexes: `for i in 0..xs.len()` then `xs[i]`; for a map, `for k in m.keys()` then `m[k]`",
+            "",
+        )
+        return none
     if not eat_kw("in")
         unexpected("`in` after the loop variable", "expr.loop.1")
         return none
