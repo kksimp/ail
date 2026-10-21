@@ -1102,6 +1102,12 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_xmm(i.dst, X0)
             a.vmovq_xr(d, gpr(i.args[0], S0))
             put_xmm(i.dst, d)
+        "f32_round" =>
+            xa := xmm(i.args[0], X0)
+            d := out_xmm(i.dst, X0)
+            a.vcvtsd2ss(X1, xa, xa)
+            a.vcvtss2sd(d, X1, X1)
+            put_xmm(i.dst, d)
         _ => unreachable("x64: unknown primitive {i.name}")
 
 ## `xs[i]`: the list in S0, the index in S1, the elements' address in rax.

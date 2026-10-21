@@ -139,6 +139,7 @@ PRIMS := {
     "str_at": "str",
     "float_bits": "int",
     "bits_float": "float",
+    "f32_round": "float",
     "target": "int",
     "gc_regs": "int",
     "globals_end": "int",
@@ -1634,6 +1635,8 @@ fn out_fn(t Ty) str
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if tensor_f32(v.ty)
+        return unsupported(pos, "printing a `Tensor[f32]`")
     if v.ty.is_coll()
         return out_coll(v, pos)
     if e := v.ty.elem()

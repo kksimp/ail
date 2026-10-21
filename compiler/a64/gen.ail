@@ -1004,6 +1004,12 @@ fn Gen.prim(mut self, i mir.Inst)
             d := out_fpr(i.dst, X0)
             a.fmov_dx(d, gpr(i.args[0], S0))
             put_fpr(i.dst, d)
+        "f32_round" =>
+            xa := fpr(i.args[0], X0)
+            d := out_fpr(i.dst, X0)
+            a.fop1("fcvt_sd", X1, xa)
+            a.fop1("fcvt_ds", d, X1)
+            put_fpr(i.dst, d)
         _ => unreachable("a64: unknown primitive {i.name}")
 
 ## `xs[i]`: checks the index, then gives the elements' base in x8 and the

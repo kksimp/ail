@@ -480,6 +480,14 @@ pub fn Asm.vroundsd(mut self, dst int, a int, b int, mode int)
 pub fn Asm.vucomisd(mut self, a int, b int)
     vex_rr(1, 1, 0, 46, a, 0, b)
 
+## `vcvtsd2ss dst, a, b` and `vcvtss2sd dst, a, b`: `b`'s low double as a
+## single in `dst`, and back.
+pub fn Asm.vcvtsd2ss(mut self, dst int, a int, b int)
+    vex_rr(3, 1, 0, 90, dst, a, b)
+
+pub fn Asm.vcvtss2sd(mut self, dst int, a int, b int)
+    vex_rr(2, 1, 0, 90, dst, a, b)
+
 ## `vcvtsi2sd dst, dst, r64` and `vcvttsd2si r64, xmm`.
 pub fn Asm.vcvtsi2sd(mut self, dst int, src int)
     vex_rr(3, 1, 1, 42, dst, dst, src)
