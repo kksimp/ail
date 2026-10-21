@@ -640,3 +640,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0836](0836-native-tls.md) | Native TLS: the in-house client ported to AIL in slices, starting with native `std.hash` *(delegated)* | Accepted | 2026-10-21 |
 | [0824](0824-native-loop-list-reuse.md) | Native: reuse lists that do not outlive a loop iteration *(delegated)* | Accepted | 2026-10-21 |
 | [0828](0828-native-compress.md) | Native `std.compress`: the Rust codec ported to the runtime, byte for byte *(delegated)* | Accepted | 2026-10-21 |
+| [0841](0841-fix-single-case-mistakes.md) | `ail fix` for fn-type `->`, `reshape(2, 3)`, `e.message()` and `\u{..}` in bytes *(delegated)* | Accepted | 2026-10-21 |

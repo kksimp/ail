@@ -1197,6 +1197,20 @@ impl Parser {
                 }
             }
             self.expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?;
+            if self.at_sym("->") {
+                // The result type follows `)` directly, as in a declaration (gram.fn.2).
+                let at = self.pos();
+                let end = self.tokens.get(self.i + 1).filter(|t| t.pos.line == at.line).map_or(Pos { col: at.col + 2, ..at }, |t| t.pos);
+                self.error_fix(
+                    "gram.fn.2",
+                    at,
+                    "there is no `->` in a function type; the result type follows `)` directly",
+                    "write `fn(int) int`",
+                    "remove the `->`",
+                    vec![Edit::delete(at, end)],
+                );
+                return None;
+            }
             let ret = if matches!(self.peek(), Tok::Ident(_) | Tok::Sym("(")) || self.at_kw("any") || self.at_kw("ref") {
                 Some(Box::new(self.optional_type("the result type", "type.fn.1")?))
             } else {

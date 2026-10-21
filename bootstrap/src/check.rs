@@ -3866,11 +3866,15 @@ impl<'p> Checker<'p> {
     fn arg_slots(&mut self, what: &str, sig: &Sig, args: &'p [Arg], pos: Pos) -> Option<Vec<usize>> {
         let named = args.iter().position(|a| a.label.is_some());
         let miscount = |s: &mut Self| {
-            s.error(
-                "expr.call.1",
-                pos,
-                format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len())),
-            );
+            let msg = format!("`{what}` takes {}, but {} given", count(sig.params.len(), "argument"), was_were(args.len()));
+            let mut d = Diagnostic::new("expr.call.1", pos, msg);
+            // `t.reshape(2, 3)`: the shape is one list.
+            if what.ends_with("Tensor.reshape") && sig.params.len() == 1 && args.len() >= 2 && named.is_none() {
+                d = d
+                    .help("the new shape is one list: `t.reshape([2, 3])`")
+                    .fix("pass the shape as a list", vec![Edit::call(pos, "reshape", "reshape([$a])")]);
+            }
+            s.diags.push(d);
         };
         let Some(first) = named else {
             if args.len() != sig.params.len() {
@@ -4571,6 +4575,11 @@ impl<'p> Checker<'p> {
             d = d
                 .help("a map iterates as its entries: `for k, v in m`")
                 .fix(format!("drop `.{name}()`"), vec![Edit::replace(dot, format!(".{name}()"), "")]);
+        } else if self.is_error(rt) && matches!(name, "message" | "msg" | "description" | "getMessage" | "get_message") {
+            // An error's text is `to_str()` (the same text as interpolating it).
+            d = d
+                .help("an error's message is its text: interpolate `\"{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
+                .fix("write `to_str`", vec![Edit::replace(pos, name, "to_str")]);
         } else if let Some(new) = builtins::method_rename(rt, name) {
             d = d.help(format!("write `.{new}()`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
         } else if let Some(h) = builtins::method_help(rt, name) {

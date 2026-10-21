@@ -1,0 +1,6 @@
+use std.tensor
+
+fn main()
+    t := tensor.zeros([6])
+    r := t.reshape([2, 3])
+    print(r.shape())
