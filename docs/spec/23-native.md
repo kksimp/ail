@@ -62,8 +62,9 @@ guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
 `len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
 `o else d` and `o?` in a function returning an optional, functions that can
-fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
-without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
+fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s
+with fields and messages (`return E(...)`, `f()?`, `f() else ...`, `else err`,
+typed when the function names one error type, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
@@ -93,6 +94,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 readable yet, and on macOS the program traps at `proc.run`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770, 0771, 0802, 0803)*
+0568-0569, 0574-0576, 0804-0806, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
 
 ```ail
 fn steps(n int) int
