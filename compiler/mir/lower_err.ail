@@ -233,6 +233,8 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
 ## `e else ...` (err.else.1-6): the success value, or the `else` part.
 ## A value of type `Unit` when `e` has no success value.
 fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
+    if r := str_to_int_recv(e)
+        return lower_str_to_int_else(r, other, pos)
     m := lower_maybe(e)?
     mut t := m.val.ty
     if m.opt

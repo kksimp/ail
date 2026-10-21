@@ -49,7 +49,7 @@ statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
 `float`, `bool` or `str` (not `by:` keys), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
-alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
+alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
