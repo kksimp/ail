@@ -76,7 +76,8 @@ that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
 `float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
-and `index_of`, and `sorted` on a set of `int` or `str`, in functions with at most eight
+and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
+sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
@@ -92,6 +93,7 @@ readable yet, and on macOS the program traps at `proc.run`). Any other construct
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770)*
 0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0802)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0802, 0803)*
 
 ```ail
 fn steps(n int) int

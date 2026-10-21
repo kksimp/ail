@@ -311,7 +311,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 return map_push(r, kt, vt, args, npos)
             want := if name == "contains"
                 or name == "remove"
-                or name == "get" then kt else Ty.Unknown
+                or name == "get" then kt else if name == "top" then Ty.Int else Ty.Unknown
             for a in args
                 vs.push(lower_value(a.value, if want.is_unknown() then none else want)?)
             if name == "len" and vs.len() == 0
@@ -325,6 +325,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 # The removed value is an optional: only the statement form.
                 call("rt.map_remove", [r.id, convert(vs[0], kt, npos)], Ty.Unit)
                 return Val(id: -1, ty: Ty.Unit)
+            if name == "top" and vs.len() == 1 and vt == Ty.Int and kt != Ty.Bool
+                n := convert(vs[0], Ty.Int, npos)
+                return Val(id: call("rt.map_top", [r.id, n], Ty.List(kt)), ty: Ty.List(kt))
             if name == "keys" and vs.len() == 0
                 f := if kt == Ty.Bool then "rt.map_keys_bool" else "rt.map_keys"
                 return Val(id: call(f, [r.id], Ty.List(kt)), ty: Ty.List(kt))
@@ -334,6 +337,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
             if name == "get" and vs.len() == 1
                 return unsupported(npos, "`.get(k)` without `else` (an optional)")
         Set(et) =>
+            if is_set_op(name) and args.len() == 1
+                b := lower_value(args[0].value, none)?
+                return set_op(r, name, b, npos)
             for a in args
                 vs.push(lower_value(a.value, et)?)
             if name == "len" and vs.len() == 0
@@ -412,3 +418,34 @@ fn Lower.out_coll(mut self, v Val, pos ast.Pos) Val?
         Set(e) => call("rt.out_set", [v.id, konst(scalar_kind(e), Ty.Int)], Ty.Unit)
         _ => return unsupported(pos, "printing a `{v.ty.name()}`")
     Val(id: -1, ty: Ty.Unit)
+
+# ---- set algebra (type.coll.16) ----
+
+fn is_set_op(name str) bool
+    name == "union" or name == "intersect" or name == "difference"
+
+## `a.union(b)`, `a.intersect(b)` and `a.difference(b)`. `a` is a set or a
+## list, `b` a set or a list of the same element type; the result is a set.
+fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
+    e := match a.ty
+        Set(x) => x
+        List(x) => x
+        _ => return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
+    if e != Ty.Int and e != Ty.Str
+        return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
+    want := Ty.Set(e)
+    sa := as_set(a, e, pos)?
+    sb := as_set(b, e, pos)?
+    if name == "union"
+        return Val(id: call("rt.set_union", [sa, sb], want), ty: want)
+    keep := konst(if name == "intersect" then 1 else 0, Ty.Int)
+    Val(id: call("rt.set_filter", [sa, sb, keep], want), ty: want)
+
+## A set, or a list of `e`, as a set.
+fn Lower.as_set(mut self, v Val, e Ty, pos ast.Pos) int?
+    if v.ty == Ty.Set(e)
+        return v.id
+    if v.ty == Ty.List(e)
+        return call("rt.set_from_list", [konst(key_kind(e), Ty.Int), v.id], Ty.Set(e))
+    problem(pos, "expected a set or list of `{e.name()}`, found `{v.ty.name()}`")
+    none

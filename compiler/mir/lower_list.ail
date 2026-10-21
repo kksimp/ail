@@ -27,6 +27,7 @@ fn is_list_edit(name str) bool
         or name == "first"
         or name == "last"
         or name == "index_of"
+        or is_set_op(name)
 
 ## Bytes of one element of a list of `e`.
 fn elem_bytes(e Ty) int
@@ -133,6 +134,8 @@ fn Lower.lower_list_edit(
         if name == "sorted"
             return Val(id: target, ty: r.ty)
         return unit
+    if is_set_op(name) and vs.len() == 1
+        return set_op(r, name, vs[0], npos)
     if name == "swap" and vs.len() == 2
         # Both reads check their index (type.coll.7); the call then swaps.
         checked("get", [r.id, vs[0].id], bounds_site(npos), e)

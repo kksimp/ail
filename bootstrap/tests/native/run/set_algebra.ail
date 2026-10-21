@@ -1,0 +1,25 @@
+# type.coll.16, std.count.2: set algebra on sets and lists, and Map.top.
+fn main()
+    a := {1, 2, 3}
+    b := {3, 4}
+    print(a.union(b))
+    print(a.intersect(b))
+    print(a.difference(b))
+    print(a.union({9, 1}))
+    m := {"x": 1, "y": 2}
+    print(m.keys().union(["z"]))
+    print(["p", "q", "p"].intersect(["q"]))
+    print(a.difference(a))
+    mut counts := Map[str, int]()
+    for w in ["b", "a", "b", "c", "b", "a", "d"]
+        counts[w] += 1
+    print(counts.top(2))
+    print(counts.top(0))
+    print(counts.top(9))
+    for k in counts.top(3)
+        print("{k} x{counts[k]}")
+    mut nums := Map[int, int]()
+    nums[5] = 1
+    nums[7] = 1
+    nums[3] = 4
+    print(nums.top(2))
