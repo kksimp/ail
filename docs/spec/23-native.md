@@ -68,6 +68,11 @@ line on standard error is the interpreter's (`PATH:LINE:COL:
 trap[RULE]: MESSAGE`, err.trap.*); the interpreter's frame lines after it
 may be absent. *(ADRs 0384, 0385)*
 
+```ail rules=native.build.1
+fn main()
+    print(6 * 7)
+```
+
 **native.build.2** — An error inside the backend itself (MIR that fails the
 verifier, ir-architecture.md §4) is reported under this rule as an internal
 error, never turned into code. *(ADR 0384)*
@@ -79,6 +84,11 @@ name without `.ail`, in the current directory). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
+
+```ail rules=native.build.3
+fn main()
+    print("built")
+```
 
 **native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
 
@@ -97,13 +107,38 @@ and traps on the same iteration with the same message. A list that a call in
 the loop receives, or a `push` in the loop grows, is never assumed to keep
 its length. *(ADR 0577)*
 
+```ail rules=native.bce.1
+fn total(xs List[int]) int
+    mut sum := 0
+    for i in 0..xs.len()
+        sum += xs[i]
+    sum
+
+fn main()
+    print(total([1, 2, 3]))
+```
+
 **native.bce.2** — An access `xs[i]` has no bounds check when `i` was
 already used to index `xs` on every path to it, or is `xs.len()` taken
 before a `push` to `xs` that is on every path to it. This holds while no
 operation in the program shortens a list. *(ADR 0578)*
 
+```ail rules=native.bce.2
+fn main()
+    xs := [4, 5]
+    a := xs[1]
+    print(a + xs[1])
+```
+
 **native.bce.3** — A list's capacity is not observable: a native executable
 may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*
+
+```ail rules=native.bce.3
+fn main()
+    mut xs := [1]
+    xs.push(2)
+    print(xs.len())
+```
 
 **native.bce.4** — An overflow check (expr.arith.1) may be removed from a
 loop only where the operands' values, tested before the loop, rule the
@@ -111,12 +146,37 @@ overflow out; otherwise the loop with the check runs and traps as the
 interpreter does. A check on an operation that repeats an earlier identical
 one on every path may be removed. *(ADR 0611)*
 
+```ail rules=native.bce.4
+fn main()
+    mut sum := 0
+    for i in 0..10
+        sum += i * 2
+    print(sum)
+```
+
 **native.bce.5** — The check on `r[j]`, with `r` a row of a list of lists
 `b`, may be removed where `j` is at most the length of the shortest row of
 `b`, taken before a loop in which the rows of `b` can't be replaced, and no
 operation in the program shortens a list. *(ADR 0611)*
 
+```ail rules=native.bce.5
+fn main()
+    b := [[1, 2], [3, 4]]
+    mut total := 0
+    for j in 0..b[0].len()
+        total += b[0][j]
+    print(total)
+```
+
 **native.bce.6** — A `push` in a counted loop may skip the test that the
 list is full where, before the loop, the list's spare room is at least the
 number of pushes the loop can make; otherwise the loop with the test runs.
 *(ADR 0611)*
+
+```ail rules=native.bce.6
+fn main()
+    mut xs := [0]
+    for i in 0..3
+        xs.push(i)
+    print(xs.len())
+```

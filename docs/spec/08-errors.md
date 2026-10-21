@@ -567,6 +567,19 @@ changes an explicit error type. *(ADR 0285)*
 without duplicates. For an inferred set (`err.type.2`) it is the inferred set,
 and `ail api --text` spells it out as `fails with A | B`. *(ADR 0287)*
 
+```ail tool=api,FILE expect="fails_with":["Bad"] rules=err.api.1
+error enum Bad
+    Oops "oops"
+
+fn parse(n int) int ! Bad
+    if n < 0
+        return Oops
+    n
+
+fn main() !
+    print(parse(1)?)
+```
+
 **err.paths.1** — `ail check --errors FILE` prints, as JSON, every function in
 the file that can fail or touches a failure, with its `fails_with` list and its
 failure paths in source order. A path has `line`, `col`, `kind` and `errors`,
@@ -575,3 +588,16 @@ on a result), `handle` (`else` on a result), `return` (of an error value, or
 of a result), or `absent` (`?` or `else` on an optional, which has no error).
 `how` is `default`, `leave` or `block`. A trap isn't a failure path
 (`err.trap.1`). *(ADR 0286)*
+
+```ail tool=check,--errors,FILE expect="kind":"return" rules=err.paths.1
+error enum Bad
+    Oops "oops"
+
+fn parse(n int) int ! Bad
+    if n < 0
+        return Oops
+    n
+
+fn main() !
+    print(parse(1)?)
+```

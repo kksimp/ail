@@ -119,10 +119,9 @@ the `(`. Add the `)`, or write `\(` for a literal. *(ADR 0439)*
 use std.regex
 
 fn main()
-    r := regex.compile(r"(ab") else err
+    _ := regex.compile(r"(ab") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.12** — `kind` is `unopened_group` when a `)` has no `(`; `at` is
@@ -132,10 +131,9 @@ the `)`. Remove it, or write `\)`. *(ADR 0439)*
 use std.regex
 
 fn main()
-    r := regex.compile(r"ab)") else err
+    _ := regex.compile(r"ab)") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.13** — `kind` is `unclosed_class` when a `[` has no `]`; `at` is the
@@ -145,10 +143,9 @@ fn main()
 use std.regex
 
 fn main()
-    r := regex.compile(r"[ab") else err
+    _ := regex.compile(r"[ab") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.14** — `kind` is `bad_escape` for a `\` that does not start an
@@ -160,10 +157,9 @@ hex digits, or a code that is not a character. Write `\\` for a backslash.
 use std.regex
 
 fn main()
-    r := regex.compile(r"a\q") else err
+    _ := regex.compile(r"a\q") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.15** — `kind` is `bad_repeat` for a count above 1000, a count
@@ -174,10 +170,9 @@ whose lower bound is above its upper, or a repetition that follows another
 use std.regex
 
 fn main()
-    r := regex.compile(r"a**") else err
+    _ := regex.compile(r"a**") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.16** — `kind` is `nothing_to_repeat` for a `*`, `+` or `?` with no
@@ -188,10 +183,9 @@ expression before it, such as at the start of the pattern or after `|` or
 use std.regex
 
 fn main()
-    r := regex.compile(r"*a") else err
+    _ := regex.compile(r"*a") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.17** — `kind` is `bad_range` for a class range that runs backwards
@@ -201,10 +195,9 @@ fn main()
 use std.regex
 
 fn main()
-    r := regex.compile(r"[z-a]") else err
+    _ := regex.compile(r"[z-a]") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.18** — `kind` is `bad_class` for a `[[:name:]]` or `\p{Name}` that
@@ -215,10 +208,9 @@ is not in the list of `std.regex.10`. The message lists the supported names.
 use std.regex
 
 fn main()
-    r := regex.compile(r"[[:nope:]]") else err
+    _ := regex.compile(r"[[:nope:]]") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.19** — `kind` is `bad_group_name` for a group name that is empty,
@@ -229,10 +221,9 @@ not closed by `>`, or is used by two groups. *(ADR 0439)*
 use std.regex
 
 fn main()
-    r := regex.compile(r"(?P<1a>x)") else err
+    _ := regex.compile(r"(?P<1a>x)") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.20** — `kind` is `bad_flag` for a flag other than `i`, `s` and
@@ -242,10 +233,9 @@ fn main()
 use std.regex
 
 fn main()
-    r := regex.compile(r"(?x)a") else err
+    _ := regex.compile(r"(?x)a") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.21** — `kind` is `unsupported` for backreferences (`\1`,
@@ -257,10 +247,9 @@ Match the shape with groups and test the result in AIL instead. *(ADR 0438)*
 use std.regex
 
 fn main()
-    r := regex.compile(r"(a)\1") else err
+    _ := regex.compile(r"(a)\1") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.22** — `kind` is `too_large` for a pattern over the limits of
@@ -270,10 +259,9 @@ fn main()
 use std.regex
 
 fn main()
-    r := regex.compile(r"((a{100}){100}){100}") else err
+    _ := regex.compile(r"((a{100}){100}){100}") else err
         print(err.kind)
         return
-    print(regex.find(r, "x"))
 ```
 
 **std.regex.23** — A `RegexError` has `pattern`, `at` (the 0-based character
@@ -284,8 +272,7 @@ offset in the pattern), `kind` (the short names of `std.regex.11`–`22`),
 use std.regex
 
 fn main()
-    r := regex.compile(r"(ab") else err
+    _ := regex.compile(r"(ab") else err
         print(err.rule)
         return
-    print(regex.find(r, "x"))
 ```

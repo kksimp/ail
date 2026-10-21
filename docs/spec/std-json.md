@@ -24,10 +24,9 @@ offset of the problem, and `message str`. *(ADR 0161)*
 
 ```ail rules=json.err.1
 fn main()
-    v := parse_json("[1,]") else err
+    _ := parse_json("[1,]") else err
         print(err.at)
         return
-    print(v.to_text())
 ```
 
 ## Parsing and printing
@@ -41,10 +40,9 @@ All errors report the first problem found. *(ADR 0161, ADR 0162)*
 
 ```ail rules=json.parse.1
 fn main()
-    v := parse_json("[1,]") else err
+    _ := parse_json("[1,]") else err
         print(err.message)
         return
-    print(v.to_text())
 ```
 
 **json.print.1** — `Json.to_text(self) str` gives compact text: no spaces,
@@ -65,10 +63,9 @@ character, so a `Json.Num` read from text is always finite. *(ADR 0464)*
 
 ```ail rules=json.parse.2
 fn main()
-    v := parse_json("1e999") else err
+    _ := parse_json("1e999") else err
         print(err.message)
         return
-    print(v.to_text())
 ```
 
 **json.print.2** — `to_text` prints a `Num` that is infinite or NaN (only a
