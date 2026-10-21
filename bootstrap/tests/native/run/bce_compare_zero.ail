@@ -1,0 +1,32 @@
+# Comparisons with 0 on both sides, signed (native.build.1).
+fn sign(x int) int
+    if x < 0
+        return -1
+    if x > 0
+        return 1
+    if 0 == x
+        return 0
+    7
+
+fn rel(x int) int
+    mut r := 0
+    if 0 < x
+        r += 1
+    if 0 >= x
+        r += 10
+    if x <= 0
+        r += 100
+    if x >= 0
+        r += 1000
+    if 0 != x
+        r += 10000
+    r
+
+fn main()
+    print(sign(-5))
+    print(sign(0))
+    print(sign(9))
+    print(rel(-3))
+    print(rel(0))
+    print(rel(4))
+    print(rel(-9223372036854775807 - 1))

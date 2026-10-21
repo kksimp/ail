@@ -264,8 +264,13 @@ reading was recorded as OQ-090 and the designer accepted it in
 **Status (2026-10-20, lane 154):** the CPU slice has float division and the
 activations `relu`, `sigmoid` and `tanh` ([ADR 0507](../decisions/0507-tensor-divide-and-activations.md)).
 On 1,000,000 elements, four passes take 0.25–0.32 s in AIL against 0.39–0.50 s
-in CPython (Linux x86-64). `conv2d`, `f32`, indexing, slicing, broadcasting,
-unary `-` and fusion are not done yet.
+in CPython (Linux x86-64). Also done: `conv2d`, NumPy-style broadcasting,
+`argmax`/`argmin`/`clamp`/`round`, indexing, slicing and unary `-`
+([ADRs 0521–0523](../decisions/README.md)). Operator fusion of elementwise
+chains ([ADR 0524](../decisions/0524-tensor-operator-fusion.md)) runs one
+chunked pass: on 1,000,000 elements, 20 passes of a five-operator chain take
+0.29 s fused against 0.41–0.46 s unfused (a per-element version was slower,
+1.01 s). Still open: `f32`.
 
 1. **`std.tensor` on the CPU in the bootstrap** (about one lane-night):
    the type, the operations, lazy graph, exact CPU evaluation, tests. This

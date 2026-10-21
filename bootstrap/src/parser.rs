@@ -1809,6 +1809,16 @@ impl Parser {
                 None
             };
             let value = self.expression()?;
+            // expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
+            if self.at_sym("|") {
+                let at = self.tokens[self.i].pos;
+                self.diags.push(
+                    Diagnostic::new("gram.foreign.1", at, "AIL has no `|`")
+                        .help("bit operations are methods: `a.bit_or(b)` (expr.bit.1)")
+                        .fix("write `.bit_or`", vec![crate::fix::bit::operator(at, "|", "bit_or")]),
+                );
+                return None;
+            }
             args.push(Arg { label, mutable, moved, value, param });
             if !self.eat_sym(",") {
                 break;

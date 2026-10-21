@@ -331,27 +331,70 @@ expr.call.1).
 
 ## OQ-118 — Which transcendental functions the language and the native backend need
 
+**Answered** by the designer on 2026-10-21: the full `std.math` set (`sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`, `cbrt`) as float methods, with a stated tolerance. The ADR is pending: lane 184 writes it and adds the link here.
+
 The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
 or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
 (`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
 `exp` and `tanh`, through the platform's libm, so they already differ in the
 last bit between operating systems. A bit-exact match of libm across hosts
 isn't possible, so any new function needs a stated tolerance.
-
-Options:
-- **a.** Add nothing now. The native compiler doesn't need these functions.
-  `sigmoid` and `tanh` stay interpreter-only until native tensors exist.
-- **b.** Add `exp` and `tanh` natively, within 1 ulp of the platform libm
-  (a new rule in `std.tensor.13`), so native tensors can run the activations.
-  Defer `sin`, `cos`, `atan2`, `pow` and the rest until a program needs them.
-- **c.** Add a full `std.math` (`sin` to `cbrt`) now, within 1 ulp, with an
-  algorithm from an Apache-2.0-compatible source and a NOTICE credit.
-
-Recommendation: **b.** It gives native tensors their activations without
-committing the language to a whole math library that no program yet calls.
+**Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full
+set (option c, chosen by the designer on 2026-10-21), within one unit in the
+last place of the platform's libm.
 
 ## OQ-172 — Unicode tables for the native `char` predicates and case mapping
 
 **Resolved** by [ADR 0567](decisions/0567-native-text-of-numbers-and-unicode-tables.md)
 (option a: range tables generated from the interpreter by
 `tools/native/gen_unicode.ail`).
+
+## OQ-119 — A Python-syntax front end ("pail") after the core language (post-1.0)
+The designer asked (2026-10-20) whether a `pail` module could let developers
+write Python in the AIL editor while the code is really AIL, to help adoption.
+Not before the core language and the native toolchain are complete.
+- **a.** A Python-syntax front end that compiles directly: Python source in,
+  AIL semantics out. Every tool (`ail check`, `ail api`, diagnostics, the
+  card) would need a second syntax, and the parts of Python the semantics
+  can't express (untyped code, `eval`, monkey patching, shared-reference
+  aliasing where `b = a; b.append(1)` changes `a`, which AIL's mutable value
+  semantics forbids, ADRs 0060–0063) would have to be rejected with
+  Python-shaped diagnostics.
+- **b.** A one-way translator, `ail port app.py`, from typed Python to
+  readable AIL. Developers keep one language for the tooling and get an
+  on-ramp; the translator rejects the dynamic parts and the aliasing cases
+  with a message that names the AIL form. Precedents: Codon, Mojo and Nim
+  (each kept one language and offered a bridge).
+- **c.** Neither: AI agents already write AIL directly, and the editor's
+  cards and diagnostics are the on-ramp.
+Recommendation: **b.** One language in the tooling (the AI-first goal), a
+real on-ramp for Python developers, and no second syntax to keep in step
+with every rule. Decide after milestone 8; see the roadmap.
+## OQ-120 — Must a unique value be consumed, or does scope-end cleanup suffice?
+Lane 125 (streaming processes) kills a child process left running when the
+program ends (`std.proc.7`). A general rule that a unique value MUST be
+consumed (waited, closed, or moved) before its scope ends would replace that
+exit-time kill, but it changes `own.uniq.3` (ADR 0066, designer's decision):
+today a unique value's cleanup runs at scope end by any path, and nothing
+needs to be consumed. Task handles already must be waited (ADR 0096).
+- **a.** Keep scope-end cleanup (ADR 0066). A stray child is killed by its
+  `Drop`, as `std.proc.7` says. Nothing changes.
+- **b.** Require consumption for every unique value: a unique local that is
+  neither moved nor consumed is a compile-time error. Precise, but
+  every unique value then needs a consuming call, and `defer`-style cleanup
+  stops being automatic.
+- **c.** Require it only for handles declared with a marker (for example
+  `unique(consume)`), keeping ADR 0066 for the rest.
+Recommendation: **a.** The model stays affine, not linear, which is simpler
+for agents; the exit-time kill is the `Drop` of the child and needs no new
+rule. Reopen only if stray handles cause real bugs.
+## OQ-121 — Closures as `std.net.http` handlers
+`std.net.http` (lane 124, addendum to ADR 0418) takes a handler by name
+because AIL has no anonymous functions or captured variables (`type.fn.3`,
+ADR 0456). A handler that needs state (a counter, a store) has to reach it
+through a `ref` global or a struct method. The question is whether function
+values should grow captures. Options: keep the rule (handlers are named
+functions plus explicit state) or add closures as a later language feature
+with their own ADR. Recommendation: keep the rule until a program shows the
+need; the AI-first measurement (ADR 0076) is tokens per handler, and the
+named form costs few.

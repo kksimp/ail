@@ -42,6 +42,8 @@ These are recommendations only. Each will be put to the designer as a question.
 Drawn from what is still open after the overnight buildout; the order is a
 proposal, not a decision.
 
+Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests; Linux 360/360 and macOS 359/359 selftests). What landed is listed in [status.md](status.md).
+
 1. **Verify on macOS ARM64:** run `tools/verify.sh` on the whole 2026-10-20
    batch (the strict-lockstep rule, ADR 0008).
 2. **Stage 3 started 2026-10-20 (designer's decision):** the lexer, parser and checker in AIL under `compiler/`, run by the bootstrap and differentially tested against it (lanes 113–114). **Stage 3 and 4 groundwork:** build the tiers designed in
@@ -60,7 +62,10 @@ proposal, not a decision.
    time, test time, tokens, memory, and keystroke/redraw latency).
 5. **Hardware:** accelerator backends for `std.tensor` (allowed by ADR 0381; CPU slice gaps first, then Vulkan and Metal, then NPUs) and weaker
    atomic orderings (OQ-097).
-6. **Open language questions:** safe member access and matching on error sets
+6. **Post-1.0 (after milestone 8 and the native toolchain):** a Python
+   on-ramp, `ail port app.py` from typed Python to AIL, or a Python-syntax
+   front end (OQ-119, designer's question of 2026-10-20).
+7. **Open language questions:** safe member access and matching on error sets
    (OQ-029), custom hashing (OQ-042), unique values in generic code (OQ-050),
    loop invariants and static proof (OQ-060), downcasting `any Trait`
    (OQ-094).

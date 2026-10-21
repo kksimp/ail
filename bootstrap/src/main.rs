@@ -13,6 +13,7 @@ mod derive;
 mod diag;
 mod explain;
 mod fasthash;
+mod fuse;
 mod doctest;
 mod edit;
 mod docs;
@@ -122,8 +123,10 @@ options:
 #[global_allocator]
 static ALLOC: bump::FrontEnd = bump::FrontEnd::new();
 
-/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first.
-const STACK_BYTES: usize = 256 * 1024 * 1024;
+/// Interpreter stack; deep AIL recursion traps at interp::MAX_DEPTH first. A
+/// debug build spends about 50 KB of Rust stack per AIL call, so MAX_DEPTH
+/// calls need over 500 MB there. The pages are only mapped as they are used.
+const STACK_BYTES: usize = 1024 * 1024 * 1024;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

@@ -1,0 +1,176 @@
+## `match` in the native subset (ADR 0603), as a statement or a value
+## (expr.match.1-12). The arms are tried in order: each pattern is a chain
+## of comparisons that ends in a branch to the arm's body or to the next
+## arm; an enum's variant index is loaded once. Bindings (expr.match.6)
+## load the variant's fields; a guard (expr.match.11) that is false goes on
+## with the next arm. The checker makes a `match` exhaustive
+## (expr.match.2), so falling out of the last arm is unreachable, as in the
+## interpreter.
+
+use ast
+
+fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.Pos, want Ty?) Val?
+    s := lower_value(scrutinee, none)?
+    mut en := ""
+    match s.ty
+        Int | Bool | Str => en = ""
+        Enum(n) => en = n
+        _ => return unsupported(pos, "`match` on `{s.ty.name()}`")
+    tag := if en == "" then s.id else tag_of(en, s.id)
+    value := want_value(want)
+    join := new_block()
+    mut result := -1
+    mut rty := Ty.Unknown
+    if value
+        result = new_value(Ty.Unknown, "")
+        blocks[join].params.push(result)
+        rty = arms_start(want, [arm.body for arm in arms], none)
+    for arm in arms
+        if done()
+            # An earlier `_` took every value: the rest can't match.
+            break
+        body := new_block()
+        next := new_block()
+        if not test_pattern(arm.pat, s, tag, body, next)
+            return none
+        seal(body)
+        cur = body
+        scopes.push(Map[str, str]())
+        bind_fields(arm.pat, s)
+        if g := arm.guard
+            c := lower_value(g, Ty.Bool)?
+            pass := new_block()
+            branch(c.id, pass, [], next, [])
+            seal(pass)
+            cur = pass
+        before := problems.len()
+        v := lower_arm(arm.body, value, rty)
+        if value and v == none and problems.len() > before
+            # Reported in the arm; nothing is built.
+            finish(unreachable_term())
+        rty = arm_end(join, value, v, pos, rty)
+        scopes.pop()
+        seal(next)
+        cur = next
+    finish(unreachable_term())
+    seal(join)
+    cur = join
+    if value
+        vals[result] = rty
+        return Val(id: result, ty: rty)
+    Val(id: -1, ty: Ty.Unit)
+
+## An arm's statements in a new scope; with `value`, its last expression is
+## the arm's value, lowered expecting `rty` once that is known (so a bare
+## variant takes the enum of the other arms, type.enum.3).
+fn Lower.lower_arm(mut self, body List[ast.Stmt], value bool, rty Ty) Val?
+    if not value
+        return lower_block(body, false)
+    want := if rty.is_unknown() then none else rty
+    scopes.push(Map[str, str]())
+    mut result := Val(id: -2, ty: Ty.Unit)
+    for i in 0..body.len()
+        st := body[i]
+        if done()
+            dead_block()
+        if i == body.len() - 1
+            if e := final_expr(st)
+                result = lower_expr(e, want) else Val(id: -2, ty: Ty.Unit)
+                continue
+        lower_stmt(st)
+    scopes.pop()
+    if result.id == -2
+        return none
+    result
+
+## End the current block with a branch to `yes` when pattern `p` matches
+## scrutinee `s` (whose variant index is `tag`), else to `no`. False after a
+## problem.
+fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) bool
+    match p
+        Wildcard =>
+            jump(yes, [])
+        Literal(lit, lpos) =>
+            c := literal_test(lit, s, lpos) else return false
+            branch(c, yes, [], no, [])
+        Range(lo, hi, inclusive, rpos) =>
+            a := literal_int(lo, s, rpos) else return false
+            b := literal_int(hi, s, rpos) else return false
+            mid := new_block()
+            branch(op("ge", [s.id, konst(a, Ty.Int)], Ty.Bool), mid, [], no, [])
+            seal(mid)
+            cur = mid
+            c := op(if inclusive then "le" else "lt", [s.id, konst(b, Ty.Int)], Ty.Bool)
+            branch(c, yes, [], no, [])
+        Alt(alts, _) =>
+            for k in 0..alts.len()
+                if k == alts.len() - 1
+                    return test_pattern(alts[k], s, tag, yes, no)
+                other := new_block()
+                if not test_pattern(alts[k], s, tag, yes, other)
+                    return false
+                seal(other)
+                cur = other
+        Variant(_, name, _, vpos) =>
+            n := enum_name(s.ty) else
+                problem(vpos, "variant pattern `{name}` on `{s.ty.name()}`")
+                return false
+            k := case_index(n, name)
+            if k < 0
+                problem(vpos, "`{n}` has no variant `{name}`")
+                return false
+            branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+    true
+
+## The `bool` that says whether `s` equals literal `lit` (expr.match.7).
+fn Lower.literal_test(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
+    match lit
+        IntLit(_) =>
+            n := literal_int(lit, s, pos)?
+            op("eq", [s.id, konst(n, Ty.Int)], Ty.Bool)
+        BoolLit(b) =>
+            if not (s.ty == Ty.Bool)
+                problem(pos, "a `bool` pattern on `{s.ty.name()}`")
+                return none
+            op("eq", [s.id, konst(if b then 1 else 0, Ty.Bool)], Ty.Bool)
+        StrLit(text) =>
+            if not (s.ty == Ty.Str)
+                problem(pos, "a `str` pattern on `{s.ty.name()}`")
+                return none
+            call("rt.str_eq", [s.id, str_value(text)], Ty.Bool)
+        CharLit(_) =>
+            problem(pos, "`char` patterns aren't in the native subset yet")
+            none
+
+fn Lower.literal_int(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
+    text := match lit
+        IntLit(t) => t
+        _ =>
+            problem(pos, "only `int` ranges are in the native subset yet")
+            return none
+    if not (s.ty == Ty.Int)
+        problem(pos, "an `int` pattern on `{s.ty.name()}`")
+        return none
+    n := text.to_int() else
+        problem(pos, "integer literal `{text}` out of range")
+        return none
+    n
+
+## Declare the names a variant pattern binds to its fields (expr.match.6).
+## They belong to the enum value, so returning one copies it.
+fn Lower.bind_fields(mut self, p ast.Pattern, s Val)
+    match p
+        Variant(_, name, bindings, _) =>
+            binds := bindings else return
+            n := enum_name(s.ty) else return
+            k := case_index(n, name)
+            if k < 0
+                return
+            fields := enums[n][k].fields
+            for j in 0..binds.len()
+                if j >= fields.len() or binds[j].name == "_"
+                    continue
+                ft := fields[j].ty
+                declare(binds[j].name, ft, load(s.id, j + 1, ft))
+                borrowed.add(lookup(binds[j].name) else "")
+        _ => return

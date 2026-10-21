@@ -1,0 +1,10 @@
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/agent-data/records.txt")? "reading records"
+    mut big := ""
+    for i in 0..50
+        big = "{big}{text}"
+    packed := compress.gzip(big)
+    print("gzip is smaller: {packed.len() < big.to_bytes().len()}")
+    back := compress.gunzip(packed)?
+    print("round trip equal: {back.text() == big}")

@@ -66,6 +66,7 @@ struct Gen
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
     mut img := codegen.new_image()
+    img.globals = m.globals_used()
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
@@ -334,10 +335,20 @@ fn Gen.entry_moves(mut self)
                 float: true,
             ))
             nf += 1
-        else
+        elif ni < INT_ARGS.len()
             moves.push(Move(dst: loc[p], src: INT_ARGS[ni], imm: 0, sym: "", float: false))
             ni += 1
     parallel(moves)
+    # Integer parameters after the sixth are on the stack, above the return
+    # address (native-abi.md §1).
+    mut k := 0
+    for p in f.params
+        if not f.vals[p].is_float()
+            if k >= INT_ARGS.len()
+                d := out_gpr(p, S0)
+                a.mov_rm(d, at(RBP, 16 + 8 * (k - INT_ARGS.len())))
+                put_gpr(p, d)
+            k += 1
 
 # ---- blocks ----
 
@@ -361,7 +372,12 @@ fn Gen.gen_block(mut self, b int)
             ps := f.blocks[to].params
             parallel([move_of(loc[ps[j]], t.args[0][j]) for j in 0..ps.len()])
             if to != next_block
-                a.jmp(blabels[to])
+                if rotates(to)
+                    # The loop test again here, instead of a jump back to it.
+                    h := f.blocks[to]
+                    branch_to(compare(h.insts[0]), h.term.targets[0], h.term.targets[1])
+                else
+                    a.jmp(blabels[to])
         "branch" =>
             yes := t.targets[0]
             no := t.targets[1]
@@ -380,6 +396,16 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(RAX, t.value)])
             epilogue()
         _ => a.ud2()
+
+## Whether block `to` is only a comparison and a branch: a jump to it is
+## cheaper as the comparison and branch themselves, one instruction fewer
+## on the way round a loop (loop rotation, ADR 0611).
+fn Gen.rotates(self, to int) bool
+    h := f.blocks[to]
+    if h.term.kind != "branch" or h.insts.len() != 1
+        return false
+    last := h.insts[0]
+    last.dst == h.term.cond and uses[last.dst] == 1 and cc_of(last.op) >= 0
 
 ## Jump to `yes` when `cc` holds, else to `no`, falling through where the
 ## next block allows. A float comparison's condition may be a pair (§cc_of).
@@ -442,10 +468,19 @@ fn Gen.compare(mut self, i mir.Inst) int
         a.vucomisd(xa, xb)
         return cc
     if k := imm32(y)
-        a.alu_ri("cmp", gpr(x, S0), k)
+        r := gpr(x, S0)
+        # `test r, r` sets the flags a signed comparison with 0 reads.
+        if k == 0
+            a.test_rr(r, r)
+        else
+            a.alu_ri("cmp", r, k)
         return cc
     if k := imm32(x)
-        a.alu_ri("cmp", gpr(y, S0), k)
+        r := gpr(y, S0)
+        if k == 0
+            a.test_rr(r, r)
+        else
+            a.alu_ri("cmp", r, k)
         return swapped(cc)
     ra := gpr(x, S0)
     rb := gpr(y, S1)
@@ -569,6 +604,12 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(r, 0))
             put_gpr(i.dst, d)
+        "cap" =>
+            r := gpr(i.args[0], S0)
+            d := out_gpr(i.dst, S1)
+            a.mov_rm(d, at(r, 8))
+            put_gpr(i.dst, d)
+        "trap" => a.jmp(stub(i.imm, i.args[0], i.args[1], i.site, i.name))
         "load" =>
             r := gpr(i.args[0], S0)
             if f.vals[i.dst].is_float()
@@ -613,6 +654,19 @@ fn Gen.arith(mut self, i mir.Inst)
         return
     # Into the result's register when that leaves `x` and `y` intact.
     r := if d != S1 and d != loc[x] and d != loc[y] then d else S1
+    # `3 * n`: the constant goes second; the stub still reports `x OP y`.
+    kx := imm32(x)
+    if ky == none and kx != none and i.op != "sub"
+        k := kx else 0
+        if i.op == "mul"
+            a.imul_rri(r, gpr(y, r), k)
+        else
+            a.mov_rr(r, gpr(y, r))
+            a.alu_ri(i.op, r, k)
+        if i.site >= 0
+            a.jcc(CC_O, stub(0, x, y, i.site, sym))
+        put_gpr(i.dst, r)
+        return
     if k := ky
         if i.op == "mul"
             a.imul_rri(r, gpr(x, r), k)
@@ -746,11 +800,14 @@ fn Gen.call(mut self, i mir.Inst)
 ## full list calls the runtime, which grows it (native-abi.md §2).
 fn Gen.push(mut self, i mir.Inst)
     l := gpr(i.args[0], S0)
+    # `imm` 1: a loop guard saw room for every push the loop makes (native.bce.6).
+    room := i.imm == 1
     slow := a.label()
     done := a.label()
     a.mov_rm(RAX, at(l, 0))
-    a.alu_rm("cmp", RAX, at(l, 8))
-    a.jcc(CC_E, slow)
+    if not room
+        a.alu_rm("cmp", RAX, at(l, 8))
+        a.jcc(CC_E, slow)
     a.mov_rm(S1, at(l, 16))
     v := i.args[1]
     if f.vals[v].is_float()
@@ -761,6 +818,8 @@ fn Gen.push(mut self, i mir.Inst)
         a.mov_mr(at_index(S1, RAX, 8, 0), gpr(v, RDX))
     a.alu_ri("add", RAX, 1)
     a.mov_mr(at(l, 0), RAX)
+    if room
+        return
     a.jmp(done)
     a.bind(slow)
     # The runtime may use any caller-saved register: keep ours around it.
@@ -795,15 +854,27 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
+    mut extra := List[int]()
     for v in i.args
         if f.vals[v].is_float()
             moves.push(move_of(codegen.FLOAT_BASE + nf, v))
             nf += 1
-        else
+        elif ni < INT_ARGS.len()
             moves.push(move_of(INT_ARGS[ni], v))
             ni += 1
+        else
+            extra.push(v)
+    # Integer arguments after the sixth go on the stack, the seventh lowest,
+    # in a 16-byte multiple (native-abi.md §1).
+    room := (8 * extra.len() + 15) / 16 * 16
+    if room > 0
+        a.alu_ri("sub", RSP, room)
+        for k in 0..extra.len()
+            a.mov_mr(at(RSP, 8 * k), gpr(extra[k], S0))
     parallel(moves)
     a.call_sym(i.name)
+    if room > 0
+        a.alu_ri("add", RSP, room)
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_xmm(i.dst, 0)

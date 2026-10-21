@@ -1,11 +1,15 @@
-# A call that can fail is lowered only in an `else` (ADR 0580).
-fn main()
+# The edges of the OS calls in the native subset (ADR 0580): the error
+# of a failing call is its text, `?` needs a function that can fail, and an
+# optional is not printed.
+fn plain() str
     text := fs.read_text("x")?
-    print(text)
+    text
+
+fn main()
     other := fs.read_text("y") else err
         print(err.kind)
         ""
     print(other)
-    fs.write_text("z", "w")
     n := io.read_line()
     print(n)
+    print(plain())
