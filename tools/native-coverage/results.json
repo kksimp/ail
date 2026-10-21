@@ -1,6 +1,6 @@
 {
  "date": "2026-10-21",
- "commit": "482318a5",
+ "commit": "958552e5",
  "programs": [
   {
    "file": "bootstrap/tests/cases/absent_try.ail",
@@ -4977,18 +4977,13 @@
    "file": "bootstrap/tests/cases/std_fs_walk.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.glob`",
-    "not in the native subset yet: `fs.glob`",
-    "not in the native subset yet: `fs.glob`",
-    "not in the native subset yet: `fs.glob`",
-    "not in the native subset yet: `fs.glob`",
     "not in the native subset yet: `fs.metadata`",
     "not in the native subset yet: `fs.metadata`",
     "not in the native subset yet: `fs.copy`",
     "not in the native subset yet: `fs.copy`",
     "not in the native subset yet: `fs.metadata`"
    ],
-   "first": "not in the native subset yet: `fs.glob`",
+   "first": "not in the native subset yet: `fs.metadata`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -7943,11 +7938,10 @@
    "file": "examples/scan.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.glob`",
     "not in the native subset yet: an empty `{}` whose type isn't known",
     "not in the native subset yet: an empty `{}` whose type isn't known"
    ],
-   "first": "not in the native subset yet: `fs.glob`",
+   "first": "not in the native subset yet: an empty `{}` whose type isn't known",
    "detail": "",
    "source": "examples",
    "negative": false

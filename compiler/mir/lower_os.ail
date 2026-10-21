@@ -36,6 +36,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.write_text" => os_fn("rt.fs_write_text", [s, s], Ty.Unit, true)
         "fs.append_text" => os_fn("rt.fs_append_text", [s, s], Ty.Unit, true)
         "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)
+        "fs.glob" => os_fn("rt.fs_glob", [s], Ty.List(s), false)
         "fs.walk" => os_fn("rt.fs_walk", [s], Ty.List(s), true)
         "fs.remove" => os_fn("rt.fs_remove", [s], Ty.Unit, true)
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
