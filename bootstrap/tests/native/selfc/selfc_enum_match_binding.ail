@@ -1,0 +1,11 @@
+enum Shape
+    Circle(r int)
+    Square(s int)
+
+fn area(sh Shape) int
+    match sh
+        Circle(r) => 3 * r * r
+        Square(s) => s * s
+
+fn main()
+    print(area(Shape.Square(4)))
