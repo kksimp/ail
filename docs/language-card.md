@@ -15,6 +15,8 @@
 ./ail explain RULE           # a rule's text, its ADRs and an example
 ./ail effects FILE.ail       # what each function may do; run --deny fs,proc rejects
 ./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
+./ail run --record R.json FILE.ail     # effect results to R.json; `--replay R.json` repeats the run
+./ail CMD --budget N             # any command: about N tokens, errors first; `--from K` continues
 ./ail edit FILE.ail --test <<E   # change code by declaration name, then fmt, check, test
 average                          # the declaration
 -total / xs.len()                # one -/+ pair: replaces a unique part of a line
