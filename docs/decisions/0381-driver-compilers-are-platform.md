@@ -55,3 +55,8 @@ generation, and vendor kernel libraries are not allowed.
   broadcasting, elementwise fusion), then Vulkan (Linux and Windows) and
   Metal (macOS) in lockstep (ADR 0008), then NPUs through Core ML and ONNX.
 - The docs index, status and roadmap are updated in the same change.
+
+## Rejected alternatives
+
+- CPU only, no GPU or NPU ever: it leaves ADR 0010 untouched, but contradicts the designer's direction that AIL uses modern hardware automatically (ADR 0236 and following).
+- Vendor libraries as opaque kernels: rejected because AIL would depend on closed vendor code and its licences, against ADR 0009 and the intent of ADR 0010.
