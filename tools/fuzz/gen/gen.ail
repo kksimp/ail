@@ -101,6 +101,33 @@ PRELUDE := [
     "fn Pair.swap(self) Pair[B, A]",
     "    Pair(first: self.second, second: self.first)",
     "",
+    "trait Area",
+    "    fn area(self) int",
+    "    fn label(self) str",
+    "        \"area \{self.area()}\"",
+    "",
+    "struct Sq",
+    "    side int",
+    "",
+    "impl Area for Sq",
+    "    fn area(self) int",
+    "        self.side * self.side",
+    "",
+    "impl Area for Pt",
+    "    fn area(self) int",
+    "        self.a * self.b",
+    "    fn label(self) str",
+    "        \"pt\"",
+    "",
+    "fn show(x any Area) str",
+    "    x.label()",
+    "",
+    "fn total[T Area](xs List[T]) int",
+    "    mut t := 0",
+    "    for x in xs",
+    "        t += x.area()",
+    "    t",
+    "",
     "fn largest[T Ord](items List[T]) T",
     "    mut best := items[0]",
     "    for x in items",
@@ -229,7 +256,7 @@ fn Gen.stmt(mut self)
     if mistake > 0 and stmts == mistake_at
         wrong()
         return
-    k := random.int(0, 16)
+    k := random.int(0, 19)
     if k <= 2
         ty := pick_of(["int", "bool", "str", "ints", "pt", "shape", "opt"])
         e := expr(ty, 2)
@@ -299,6 +326,13 @@ fn Gen.stmt(mut self)
         emit("{p} := Pair(first: {expr("int", 1)}, second: {expr("str", 1)})")
         emit("print({p}.swap().first)")
         emit("print({p}.swap().swap().second)")
+    elif k == 17
+        emit("print(show(Sq(side: {expr("int", 1)})))")
+        emit("print(show(Pt(a: 1, b: {expr("int", 1)})))")
+    elif k == 18
+        emit("print(total([Sq(side: 1), Sq(side: {expr("int", 1)})]))")
+    elif k == 19
+        emit("print(Sq(side: {expr("int", 0)}).area() + Pt(a: 2, b: 3).area())")
     elif k == 11
         emit("print(chain({expr("int", 1)}) else 0)")
     elif k == 12
@@ -339,7 +373,14 @@ fn Gen.wrong(mut self)
         21 => emit("{name()} := Stack(items: [{iv}]).push(\"x\")")
         22 => emit("{name()} := Pair(first: {iv})")
         23 => emit("{name()} := largest({iv})")
-        _ => emit("{name()} := Stack(items: [Pt(a: 1, b: 2)]).max()")
+        24 => emit("{name()} := Stack(items: [Pt(a: 1, b: 2)]).max()")
+        25 => emit("{name()} := show({iv})")
+        26 => emit("{name()} := total([{iv}])")
+        27 => emit("{name()} := Sq(side: 1).nosuch()")
+        28 => emit("{name()} := Sq(side: 1).area({iv})")
+        29 => emit("print(0)")
+        30 => emit("print(0)")
+        _ => emit("{name()} := total(Sq(side: 1))")
 
 fn program(seed int) str
     random.seed(seed)
@@ -354,7 +395,7 @@ fn program(seed int) str
         stmts: 0,
     )
     if random.int(0, 3) == 0
-        g.mistake = random.int(1, 24)
+        g.mistake = random.int(1, 31)
         g.mistake_at = random.int(1, 12)
     # a few helper functions of two ints, then main
     mut helpers := ""
@@ -376,7 +417,11 @@ fn program(seed int) str
         helpers = "{helpers}fn f{h}(a int, b int) int\n{hg.lines.join("\n")}\n    {hg.expr("int", 2)}\n\n"
     for _ in 0..random.int(4, 14)
         g.stmt()
-    "{PRELUDE.join("\n")}\n{helpers}fn main()\n{g.lines.join("\n")}\n    print(0)\n"
+    bad := match g.mistake
+        29 => "struct Bad\n    n int\n\nimpl Area for Bad\n    fn label(self) str\n        \"bad\"\n\n"
+        30 => "struct Bad\n    n int\n\nimpl Area for Bad\n    fn area(self) str\n        \"bad\"\n\n"
+        _ => ""
+    "{PRELUDE.join("\n")}\n{bad}{helpers}fn main()\n{g.lines.join("\n")}\n    print(0)\n"
 
 fn main() !
     args := env.args()
