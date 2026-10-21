@@ -162,6 +162,7 @@ pub fn parse(tokens List[Token]) Parsed
         files: [],
         grants: [],
         unsafe_allowed: none,
+        driver_allowed: [],
         generated: [],
     )
     Parsed(program: program, diags: p.diags)

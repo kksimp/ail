@@ -140,6 +140,16 @@ impl Program {
         }
     }
 
+    /// The packages that may reach hardware (unsafe.hw.1), with `""` for a
+    /// program without `ail.pkg` run with `--unsafe driver`.
+    pub fn driver_list(&self) -> Vec<String> {
+        if self.unsafe_allowed.is_none() && UNSAFE_DRIVER.load(std::sync::atomic::Ordering::Relaxed) {
+            vec![String::new()]
+        } else {
+            self.driver_allowed.clone()
+        }
+    }
+
     /// Whether the declaration at `pos` is marked `pub`, or is in the prelude.
     pub fn is_pub(&self, pos: Pos) -> bool {
         is_prelude(pos) || self.public.contains(&pos.line)

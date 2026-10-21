@@ -53,6 +53,8 @@ STD_EFFECTS := [
         names: ["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"],
         effects: [],
     ),
+    # unsafe.hw.5: hardware access.
+    StdEffects(module: "hw", names: ["at", "fence", "fence_io"], effects: ["hw"]),
     StdEffects(module: "compress", names: ["gzip_file", "gunzip_file", "zip_dir", "unzip"], effects: ["fs", "io"]),
     StdEffects(
         module: "compress",
@@ -559,6 +561,9 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
             elif efs := std_fn_effects(fx, key, recv, n)
                 for ef in efs
                     add(ef, "{std_head(fx, key, recv) else ""}.{n}")
+            elif n.ends_with("_volatile") and fx.std_any.contains(key)
+                # unsafe.hw.5: a volatile access gives `hw`.
+                add("hw", "a pointer's `{n}`")
             elif m := fx.net_methods.get(key)
                 # std.net.14: the methods of the handles `net.serve`, `net.listen` and `net.connect` make.
                 for ef in ["net", "io"]
