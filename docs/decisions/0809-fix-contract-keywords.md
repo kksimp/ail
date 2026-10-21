@@ -1,4 +1,4 @@
-# ADR TBD: `ail fix` for misplaced contract keywords
+# ADR 0809: `ail fix` for misplaced contract keywords
 
 - Status: Accepted
 - Decided by: AI (delegated, ADR 0076)
