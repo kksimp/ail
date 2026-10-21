@@ -822,6 +822,124 @@ fn main()
     print(random.int(1, 6) <= 6)
 ```
 
+## Tables of text: `std.csv`
+
+**std.csv.1** — `use std.csv` provides `parse(text str)` and
+`parse_sep(text str, sep char)`, each giving `List[List[str]] ! CsvError`:
+one list of fields per row. Rows end at `\n` or `\r\n`; a blank line adds no
+row; a final newline adds no empty row. A field in double quotes may hold the
+separator, line breaks, and `""` for one quote. *(ADR 0626)*
+
+**std.csv.2** — `records(text str) List[Map[str, str]] ! CsvError` reads the
+first row as the header and gives each later row as a map from header name to
+field. A row whose field count differs from the header's is a `CsvError`.
+*(ADR 0626)*
+
+**std.csv.3** — `quote(field str) str` wraps a field in double quotes, and
+doubles the quotes inside it, when it holds a comma, a quote or a line break;
+otherwise it returns the field. `write(rows List[List[str]]) str` quotes each
+field and ends each row with `\n`. *(ADR 0626)*
+
+**std.csv.4** — `write_records(header List[str], recs List[Map[str, str]])
+str` writes the header and then each map's values in header order; a key a map
+lacks writes as an empty field. *(ADR 0626)*
+
+**std.csv.5** — `CsvError` is an error with `why str` and `row int` (1-based).
+An unterminated quote and a record of the wrong width are its causes.
+*(ADR 0626)*
+
+```ail rules=std.csv.1,std.csv.2,std.csv.3,std.csv.4
+use std.csv
+
+fn main() !
+    rows := csv.parse("a,b\n1,\"x, y\"\n")?
+    print(rows[1][1])
+    recs := csv.records("name,qty\nbolt,4\n")?
+    print(recs[0]["qty"])
+    print(csv.write(rows))
+```
+
+```ail rules=std.csv.5
+use std.csv
+
+fn main()
+    rows := csv.parse("a,\"b\n") else err
+        print("{err.why}, row {err.row}")
+        []
+    print(rows.len())
+```
+
+## Command-line arguments: `std.args`
+
+**std.args.1** — `use std.args` provides the spec makers `flag(name, short,
+help)` for a switch and `opt(name, short, help, default)` for an option that
+takes a value. `short` is one letter or `""`. *(ADR 0627)*
+
+**std.args.2** — `pos(name, help)` is a required positional word; the
+positionals are taken in the order the specs list them. `rest(name, help)`
+allows any number of further positionals, which `Args.rest` returns. Without a
+`rest` spec, an extra word is an error. *(ADR 0627)*
+
+**std.args.3** — `parse(name str, about str, specs List[Spec], words
+List[str]) Args ! ArgsError` reads `words` (usually `env.args()`). `--NAME` and
+`-S` set a switch; `--NAME V`, `--NAME=V` and `-S V` set an option; a bare `--`
+makes every later word a positional; a lone `-` is a positional. *(ADR 0627)*
+
+**std.args.4** — `Args.flag(name) bool` says whether the switch was given;
+`Args.get(name) str` gives an option's value (its default when absent) or a
+positional's word; `Args.rest` is the list of words past the named positionals.
+*(ADR 0627)*
+
+**std.args.5** — `--help` and `-h` print the usage text and exit with status 0.
+`usage(name, about, specs) str` returns that text: a `usage:` line, the
+`about` line, and one line per argument with its help and default. *(ADR 0627)*
+
+**std.args.6** — `ArgsError` is an error with `why str` and `usage str`; its
+display text is both. Causes: an unknown option, an option without its value,
+a value given to a switch, a missing positional, an extra positional.
+*(ADR 0627)*
+
+```ail rules=std.args.1,std.args.2,std.args.3,std.args.4
+use std.args
+
+fn main() !
+    spec := [args.flag("verbose", "v", "more output"), args.opt("out", "o", "output", "a.txt"), args.pos("input", "file")]
+    a := args.parse("tool", "demo", spec, ["-v", "in.txt"])?
+    print("{a.flag("verbose")} {a.get("out")} {a.get("input")}")
+```
+
+```ail rules=std.args.5,std.args.6
+use std.args
+
+fn main()
+    spec := [args.opt("out", "o", "output", "a.txt"), args.pos("input", "file")]
+    print(args.usage("tool", "demo", spec))
+    a := args.parse("tool", "demo", spec, ["--out"]) else err
+        print(err.why)
+        return
+    print(a.get("input"))
+```
+
+## Logging: `std.log`
+
+**std.log.1** — The environment variable `LOG_LEVEL` (`debug`, `info`, `warn`,
+`error` or `off`, case-insensitive; default `info`) says which messages show.
+An unknown value shows nothing. *(ADR 0628)*
+
+**std.log.2** — `use std.log` provides `debug`, `info`, `warn` and `err`, each
+taking a `str`. A message at or above the level is written to standard error as
+`LEVEL message` and a line break; the others are dropped. `err` is not named
+`error` because that is a keyword. *(ADR 0628)*
+
+```ail rules=std.log.1,std.log.2
+use std.log
+
+fn main()
+    log.debug("hidden at the default level")
+    log.info("shown on standard error")
+    print("done")
+```
+
 ## Windows: `std.ui`
 
 A window showing a grid of monospace text cells, with keyboard and resize
