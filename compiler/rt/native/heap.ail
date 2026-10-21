@@ -52,6 +52,12 @@ KIND_ATOMIC := 11
 ## memory until touched. A negative result is the error.
 fn heap_reserve(n int) int
     t := target()
+    # Windows has no overcommit: MEM_COMMIT | MEM_RESERVE counts against the
+    # commit limit, and a refusal (0) is the error the size loop halves on
+    # (ADR 0608).
+    if t == 3
+        p := import_call("VirtualAlloc", 0, n, 12288, 4)
+        return if p == 0 then -1 else p
     k := if t == 0 then 9 else if t == 1 then 222 else 197
     flags := if t == 2 then 4162 else 16418
     syscall(k, 0, n, 3, flags, -1, 0)

@@ -184,7 +184,7 @@ fn main()
     print("built")
 ```
 
-**native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
+**native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). A `libsys.NAME` call passes its arguments in Win64 positions and calls the import through its slot (ADR 0606). The writer is in `compiler/obj/pe.ail`; `ail build --target x86_64-windows` selects it, and the runtime reaches the OS through kernel32 imports (ADR 0608).
 
 **native.build.5** — `ail build` keeps the executables it makes, under a
 SHA-256 key of everything that decides their bytes: the path as given, the

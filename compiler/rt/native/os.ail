@@ -484,6 +484,11 @@ fn os_envp() int
 
 ## `env.get(name)` (std.env.2): "" with `os_ok()` false when unset or not UTF-8.
 fn os_env_get(name str) str
+    # Windows has no `envp` here: every variable reads as unset until the
+    # environment arm lands (ADR 0608).
+    if target() == 3
+        os_fail_kind(K_NOT_FOUND)
+        return ""
     q := str_addr(name)
     n := load64(q)
     mut e := os_envp()
