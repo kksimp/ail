@@ -234,7 +234,7 @@ fn alloc(n int, kind int) int
 ## can only keep a dead block alive a little longer, and a list's scan stops
 ## at its length (ADR 0564).
 fn alloc_raw(n int, kind int) int
-    if n <= 232 and load64(global(LIM_TICK)) == 0
+    if n <= 232 and load64(global(LIM_TICK)) == 0 and load64(global(MULTI)) == 0
         idx := (n + 23).shr(4)
         csz := idx.shl(4)
         m := load64(global(HEAP))
