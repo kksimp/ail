@@ -54,7 +54,7 @@ STD_FUNCTIONS := [
         "request_bytes",
         "serve",
     ],
-    ["path", "base", "dir", "ext", "join"],
+    ["path", "base", "dir", "ext", "join", "stem"],
     ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
     ["random", "float", "int", "seed", "shuffle"],
     [

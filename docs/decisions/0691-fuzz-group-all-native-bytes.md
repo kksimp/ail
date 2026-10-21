@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 16 — Testing
 - **Spec rules:** std.regex.24, type.bytes.1-4, native.build.1, fuzz.mod.1-7
-- **Builds on:** [ADR 0461](0461-module-fuzzers.md), [ADR 0667](0667-regex-group-all.md), [ADR 0702](0702-native-bytes.md)
+- **Builds on:** [ADR 0461](0461-module-fuzzers.md), [ADR 0667](0667-regex-group-all.md), ADR 0702 (native bytes, lands with #259)
 
 ## Decision
 
