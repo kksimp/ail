@@ -58,7 +58,7 @@ pub struct mir.Source
     pub path str
     pub text str
     pub prog ast.Program
-pub fn mir.lower_package(srcs List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package(input List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(e ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(prog ast.Program) Map[str, str]
@@ -75,6 +75,7 @@ pub enum mir.Ty
     Opt(inner mir.Ty)
     Struct(name str)
     Enum(name str)
+    Tensor(elem mir.Ty)
     Unknown
     Unit
     Fn(params List[mir.Ty], ret mir.Ty)
@@ -83,6 +84,7 @@ pub enum mir.Ty
     pub fn mir.Ty.is_unit(self) bool
     pub fn mir.Ty.is_unknown(self) bool
     pub fn mir.Ty.elem(self) mir.Ty?
+    pub fn mir.Ty.is_tensor(self) bool
     pub fn mir.Ty.is_coll(self) bool
     pub fn mir.Ty.name(self) str
 pub struct mir.Inst
@@ -150,4 +152,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1454); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1476); dropped: private items, doc comments
