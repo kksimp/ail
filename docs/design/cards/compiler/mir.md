@@ -60,7 +60,7 @@ pub struct mir.Source
     pub prog ast.Program
 pub fn mir.lower_package(srcs List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(e ast.Expr) ast.Pos
-pub mir.RT_GLOBALS := 16
+pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(prog ast.Program) Map[str, str]
 pub fn mir.imports_of(prog ast.Program) List[str]
 pub enum mir.Ty

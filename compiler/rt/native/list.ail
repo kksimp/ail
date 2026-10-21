@@ -130,7 +130,7 @@ fn list_sort(xs List[int], kind int)
     if n < 2
         return
     mut src := load64(p + 16)
-    mut dst := alloc(8 * n)
+    mut dst := alloc(8 * n, KIND_LDATA)
     mut width := 1
     while width < n
         mut lo := 0
