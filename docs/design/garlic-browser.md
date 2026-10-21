@@ -47,8 +47,8 @@ url ─► fetch (std.net) ─► bytes ─► decode ─► HTML tokenizer ─�
 
 | Stage | Module | First milestone | Later |
 |---|---|---|---|
-| Fetch | `std.net` | `net.get` over in-house TLS 1.3 (ADR 0360), which follows redirects | methods, headers, cookies and POST forms (lane 124), `Accept-Encoding: gzip` (lane 128), bytes bodies for images (lane 123), HTTP/2 |
-| Decode | `str` | UTF-8 only (std.net bodies are `str`) | charset sniffing once bodies are bytes |
+| Fetch | `std.net` | `net.request_bytes` over in-house TLS 1.3 (ADR 0360), which follows redirects; `Accept-Encoding: gzip, deflate` | cookies (with the JS engine's jar), HTTP/2 |
+| Decode | `str` | gzip and deflate undone; charset from `Content-Type`, then a `<meta charset>` in the first 1024 bytes, then UTF-8 when valid and windows-1252 when not; UTF-8 and windows-1252 (with its aliases `iso-8859-1`, `us-ascii`) decoded | other legacy charsets |
 | Tokenize | `html` | WHATWG tokenizer: data, tags, attributes (quoted, unquoted, bare), comments, doctype, raw text (`script`, `style`), escapable raw text (`title`, `textarea`), character references (numeric and a named subset) | the full named-reference table, every parse-error state |
 | Tree | `html` | simplified tree construction: implied `html`/`head`/`body`, void elements, implied end tags (`p`, `li`, `dt`, `dd`, `option`, `tr`, `td`, `th`), end tags close up to the matching open element | adoption agency, foster parenting, templates, foreign content (SVG, MathML) |
 | Style | `css` | a fixed user-agent model (block vs inline elements, headings, `pre`, hidden elements) plus author CSS from `<style>`, linked sheets (8 at most, `screen`/`all` media) and `style=`: type, `#id`, `.class`, `[attr]`, `[attr=v]`, descendant and child selectors, specificity, order, `!important`; `display` (`none`, block or inline), `visibility: hidden`, `font-weight`, `font-style`, `text-transform: uppercase`, `white-space: pre` | pseudo-classes, `+` and `~`, `@media` queries (skipped today), colors and margins on cells, then the box model in pixels |
@@ -90,10 +90,18 @@ Tested live on 2026-10-20 (macOS ARM64): google.com loads in about
 and every link). A search submits correctly, but Google answers any client
 without JavaScript with its "enable JavaScript" page, so results wait for
 the JS engine (the designer's choice, 2026-10-20; no user-agent spoofing).
+Google sends that page with HTTP 200 and a `<meta http-equiv=refresh
+content="0;url=/httpservice/retry/enablejs?...">` inside `<noscript>`, so
+Garlic follows a meta refresh at once when its delay is at most 5 s (up to
+5 hops; longer delays stay, as the page asks to be read). Once scripts run,
+`<noscript>` content must be skipped (HTML parses it as raw text when
+scripting is on), or this refresh would fire on every search. Captures of
+Google's pages, taken with Garlic's headers, are in the project files for
+the JS engine.
 
 Known limits: `std.net` follows redirects itself but doesn't report the
 final URL, so relative links on a redirected page resolve against the URL
-asked for; bodies are UTF-8 text; `std.ui` draws Latin-1, so other
+asked for; only UTF-8 and windows-1252 bodies decode; `std.ui` draws Latin-1, so other
 characters show as `?` in the window (not in `--print` or `--json`).
 
 ## The page model for agents
@@ -195,9 +203,9 @@ the page show up in the page model so an agent can see what a script did.
 |---|---|---|
 | HTTP GET over TLS 1.3 | done (`std.net`, ADR 0360) | nothing |
 | Request headers and methods | done (`net.request`, lane 124): Garlic sends its own `User-Agent` and `Accept`, and POSTs forms | nothing |
-| Cookies | none yet (Garlic can keep a jar once responses expose every `set-cookie`) | logins |
-| Binary bodies | lane 123 | images, non-UTF-8 pages, fonts |
-| gzip/deflate | done (`std.compress`, lane 128), but `std.net` bodies are text, so a gzip body can't be decoded yet | `Accept-Encoding`, smaller transfers; needs a bytes body in `std.net` |
+| Cookies | `Response.all_headers` done (lane 124); the jar arrives with the JS engine's Garlic glue (lane 160) | logins |
+| Binary bodies | done (`net.request_bytes`, lane 123) | images and fonts still need decoders |
+| gzip/deflate | done (`std.compress` on bytes, lane 128); Garlic sends `Accept-Encoding: gzip, deflate` | nothing |
 | Regex | lane 127 | nothing essential (CSS and HTML are hand-written state machines) |
 | Pixel drawing, images, fonts | **no lane** | graphical rendering. Needs a `std.ui` pixel surface (blit an RGBA buffer), PNG/JPEG decoders (PNG needs deflate), and text shaping and rasterization (a bitmap font first, then TrueType outlines) |
 | JS engine | parallel lane (lane 160) | dynamic sites |

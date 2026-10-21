@@ -1,0 +1,8 @@
+## std.hash.1: the hash functions take `bytes` as well as `str`.
+use std.hash
+
+fn main()
+    print(hash.sha256(b"abc") == hash.sha256("abc"))
+    print(hash.crc32(bytes.from_list([49, 50, 51, 52, 53, 54, 55, 56, 57])))
+    print(hash.hash64(b"x") == hash.hash64("x"))
+    print(hash.hmac_sha256(b"Jefe", "what do ya want for nothing?"))

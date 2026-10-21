@@ -18,35 +18,39 @@ with its own encoders and object writers (ADR 0010).
 ## The native subset
 
 **native.subset.1** — The native backend compiles programs whose every
-function is a free function or a method of a struct (no generics or
-contracts), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics or
-invariants, and lists of those and of lists, using
-locals, constants whose values are literals, other constants and operators
-on them, arithmetic, comparisons, `and`/`or`/`not`, `if` (statement or
-value), `while`, `for` over a range or a list, `break`, `continue`,
-`return`, calls, struct construction, fields (`x.f`, `x.f = v`, and bare
-field names in a method), method calls, `print` of numbers, strings and
-lists of them or an interpolation of them (with
-`{x:.N}` on a float), `xs[i]`, `xs[i] = v`, `len`, `push`, `join`,
-`chars`, `env.args()`, `s.to_int() else ...` as a binding's value, optionals
-of numbers, strings and lists (`none`, `x == none`, `if v := o`, `o else d`,
-`o?` in a function returning an optional), functions that can fail (`T ! E`,
-`! E`, `!`) whose errors are message-only `error struct`s without fields
-(`return E()`, `f()?`, `f() else ...`, `else err`, a failing `main`), and the
-methods `abs`, `min`, `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`,
-`round` (type.num.9, ADR 0591), and the bit operations of expr.bit.1. Also:
-format specifications on numbers, `bool` and `str` in `print` (lex.str.7,
-type.str.11: width, fill, alignment, `.N`, `x`); `s.to_float()` in the `else`
-forms; and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
+function is a free function or a method of a struct or enum (no generics or
+contracts), in the root module or a module it imports (mod.unit.1-5), over
+`int`, `float`, `bool`, `str`, structs and enums without generics or
+invariants, optionals of those (`T?`), and lists of those and of lists, using locals, module constants
+of any expression in the subset (computed once before `main` runs),
+arithmetic, comparisons (`==` on enums, structs and lists compares their
+values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
+range or a list, `break`, `continue`, `return`, calls, list comprehensions,
+slices `xs[a..b]`, struct construction, enum variants (bare or qualified),
+fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
+`match` as a statement or a value (variant patterns and bindings, `_`, `|`,
+guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
+strings and lists of them or an interpolation of them, `xs[i]`, `xs[i] = v`,
+`len`, `push`, `join`, `chars`, `env.args()`, `none`, `x == none`, `if v := o`,
+`o else d` and `o?` in a function returning an optional, functions that can
+fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
+without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
+`main`), the methods `abs`, `min`,
+`max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
+and the bit operations of expr.bit.1, in functions with at most eight
+`float` parameters (any number of others). Also: format specifications on
+numbers, `bool` and `str` in `print` (lex.str.7, type.str.11: width, fill,
+alignment, `.N`, `x`); `s.to_int()` and `s.to_float()` in the `else` forms;
+and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`,
 `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line`,
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
-(std.fs, std.env, std.io, std.time). An OS call that can fail is in the
-subset only as the value of `else` with a fallback value, a statement that
-leaves, or a block without a binding (err.else.1-2); `else err` and `?` on
-it are not yet. Any other construct is reported at its position under this
-rule, all of them at once, and nothing is built.
-*(ADRs 0384, 0390, 0392, 0393, 0574, 0575, 0576, 0580, 0582, 0591)*
+(std.fs, std.env, std.io, std.time). A call that can fail is in the subset
+only as the value of `else` with a fallback value, a statement that leaves,
+or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
+Any other construct is reported at its position under this rule, all of them
+at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
+0574-0576, 0580, 0582, 0591, 0602–0604)*
 
 ```ail
 fn steps(n int) int
@@ -103,3 +107,14 @@ operation in the program shortens a list. *(ADR 0578)*
 
 **native.bce.3** — A list's capacity is not observable: a native executable
 may allocate room for a list ahead of the pushes that fill it. *(ADR 0579)*
+
+**native.bce.4** — An overflow check (expr.arith.1) may be removed from a
+loop only where the operands' values, tested before the loop, rule the
+overflow out; otherwise the loop with the check runs and traps as the
+interpreter does. A check on an operation that repeats an earlier identical
+one on every path may be removed. *(ADR 0611)*
+
+**native.bce.5** — The check on `r[j]`, with `r` a row of a list of lists
+`b`, may be removed where `j` is at most the length of the shortest row of
+`b`, taken before a loop in which the rows of `b` can't be replaced, and no
+operation in the program shortens a list. *(ADR 0611)*

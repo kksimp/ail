@@ -443,7 +443,7 @@ impl Op {
         }
     }
 
-    fn f(self, x: f64, y: f64) -> f64 {
+    pub fn f(self, x: f64, y: f64) -> f64 {
         match self {
             Op::Add => x + y,
             Op::Sub => x - y,
@@ -495,7 +495,7 @@ impl Activation {
 
     /// `relu` keeps a positive element and makes the rest `0.0`, but a NaN
     /// stays NaN. `sigmoid` and `tanh` use the platform's `exp` and `tanh`.
-    fn apply(self, x: f64) -> f64 {
+    pub fn apply(self, x: f64) -> f64 {
         match self {
             Activation::Relu if x.is_nan() => x,
             Activation::Relu if x > 0.0 => x,

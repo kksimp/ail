@@ -17,13 +17,13 @@ use std.compress
     assert_eq(hash.sha384(s).len(), 96)
 
 @test fn deflate_round_trips(s str)
-    assert_eq(compress.inflate(compress.deflate(s))?, s)
+    assert_eq(compress.inflate(compress.deflate(s))?, s.to_bytes())
 
 @test fn gzip_round_trips(s str)
-    assert_eq(compress.gunzip(compress.gzip(s))?, s)
+    assert_eq(compress.gunzip(compress.gzip(s))?, s.to_bytes())
 
 @test fn zlib_round_trips(s str)
-    assert_eq(compress.unzlib(compress.zlib(s))?, s)
+    assert_eq(compress.unzlib(compress.zlib(s))?, s.to_bytes())
 
 @test fn gzip_header_is_magic(s str)
     z := compress.gzip(s)

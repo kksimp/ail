@@ -1,0 +1,25 @@
+# A module with an enum, its methods and computed constants (ADRs 0602,
+# 0604), used from enum_modules.ail.
+pub enum Tok
+    Word(text str)
+    Num(n int)
+    Eof
+
+pub enum Kind
+    Keyword
+    Other
+
+pub KEYWORDS := ["fn", "if", "match"]
+
+pub EOF_TOKENS := [Tok.Eof, Eof]
+
+pub fn Tok.kind(self) Kind
+    match self
+        Word(t) =>
+            match t
+                "fn" | "if" | "match" => Keyword
+                _ => Other
+        Num | Eof => Kind.Other
+
+pub fn word(t str) Tok
+    Word(t)

@@ -17,6 +17,9 @@ pub enum Ty
     Opt(inner Ty)
     ## A struct object (native-abi.md §2): one 8-byte slot per field.
     Struct(name str)
+    ## An enum (ADR 0602): an `int` when no variant has fields, else a
+    ## pointer to a kind-5 object.
+    Enum(name str)
     Unknown
     Unit
 
@@ -50,6 +53,7 @@ pub fn Ty.name(self) str
         List(e) => "List[{e.name()}]"
         Opt(t) => "{t.name()}?"
         Struct(n) => n
+        Enum(n) => n
         Unknown => "?"
         Unit => "unit"
 
@@ -79,6 +83,7 @@ pub fn Ty.name(self) str
 ## | `stx` | base, index, value | writes that element; not checked |
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
+## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
 pub struct Inst
     pub dst int
     pub op str

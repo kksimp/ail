@@ -247,6 +247,11 @@ fn spec_rules(spec: &Path) -> Vec<(String, String)> {
 /// Runs one program under both interpreter tiers (ADR 0361) and returns an error if they differ.
 /// Examples run in their own scratch directory, so the file examples can make and remove files there.
 fn run_both_tiers(file: &Path) -> Result<(), String> {
+    // A snippet that opens a window waits for it to close (fine headless on Linux,
+    // a real window on macOS), so it is checked but not run, as tests/bytecode.rs does.
+    if fs::read_to_string(file).is_ok_and(|src| src.contains("ui.open(")) {
+        return Ok(());
+    }
     let mut outputs = Vec::new();
     for tier in [&[][..], &["--no-bytecode"][..]] {
         let out = Command::new(env!("CARGO_BIN_EXE_ail"))

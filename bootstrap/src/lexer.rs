@@ -610,6 +610,13 @@ impl Lexer {
                             );
                             i += 1;
                         }
+                        None if c == '~' => {
+                            self.diags.push(
+                                Diagnostic::new("gram.foreign.1", pos, "AIL has no `~`")
+                                    .help("bitwise not is a method: `a.bit_not()` (expr.bit.1)"),
+                            );
+                            i += 1;
+                        }
                         None => {
                             self.unsupported(pos, &format!("the `{c}` symbol"), "chapter 05");
                             i += 1;

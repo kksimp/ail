@@ -1,4 +1,3 @@
-
 BATCH := 10
 
 struct Tally

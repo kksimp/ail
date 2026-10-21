@@ -1,4 +1,3 @@
-
 fn snapshot(dir str) !Map[str, List[str]]
     {name: fs.read_text("{dir}/{name}")?.lines() for name in fs.list_dir(dir)?}
 

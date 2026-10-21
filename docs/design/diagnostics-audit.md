@@ -194,3 +194,26 @@ Python name) is `std.use.2` with no fix; the help lists the real functions.
 Braces in strings (lane 147, from the whole-task study): `lex.str.2` for an
 empty `{}` or an unclosed `{` now has a fix that writes `\{` (`bootstrap/src/fix/string.rs`).
 A `}` after the escaped brace stays literal. Corpus: 148 programs, 92 fixed (62%).
+
+Named arguments (lane 147, ADR 0454): a positional argument after a named one
+is `expr.call.3` with a fix that names it with the parameter it fills
+(`bootstrap/src/fix/named.rs`); a duplicate parameter gets a help and no fix,
+since which of the two arguments is meant is a choice. Corpus: 150 programs,
+93 fixed (62%).
+
+Whole-number float defaults (lane 147): `n else 2.0` where `int` is expected
+is `err.else.1` with a fix to `2` (`bootstrap/src/fix/number.rs`; the anchored edit
+matches `2.0` only). Corpus: 151 programs, 94 fixed (62%). The whole-task t2 slip
+is a different error: `doc.num` gives `float`, so `retries + 1` ends in `float`
+under `!int`. Its fix is a choice (`.to_int()`, or `!float`), so none is applied.
+
+Bit operators, the rest (lane 147): `a | b` in a call's argument list is
+`gram.foreign.1` with a fix to `a.bit_or(b)` (both parsers; the AIL parser is
+ported). `~a` is `gram.foreign.1` with help `a.bit_not()` and no fix, since the
+operand's extent isn't in the tree for a prefix operator. Corpus: 153 programs,
+95 fixed (62%). `date.Date(2026, 10, 20)` (`type.struct.7`) now gets the named-field fix:
+the call anchor reads the dotted callee as written (`date.Date`).
+
+Qualified constructors (lane 147): `type.struct.7` on `date.Date(2026, 10, 20)` now
+has the named-field fix; the call anchor reads the dotted callee as written. Corpus:
+154 programs, 96 fixed (62%).
