@@ -2133,7 +2133,19 @@ impl<'p> Checker<'p> {
                             );
                             self.drop_else_name(name, *npos);
                         }
-                        None => {}
+                        // The value already failed to check: bind the name with an
+                        // error type, so its uses in the block don't cascade.
+                        None => {
+                            if self.declare(name, *npos) {
+                                self.locals.push(Local {
+                                    name: name.clone(),
+                                    ty: Ty::Err,
+                                    mutable: false,
+                                    kind: Kind::Binding,
+                                    decl: None,
+                                });
+                            }
+                        }
                     }
                 }
                 // err.else.4: with no value to supply, the block may just end.
