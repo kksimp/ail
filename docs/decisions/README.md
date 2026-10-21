@@ -529,21 +529,29 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0565](0565-native-string-runtime-calls.md) | A native `str` method is one runtime call, and its traps carry constant text *(delegated)* | Accepted | 2026-10-20 |
 | [0566](0566-native-char-type.md) | `char` is a MIR type held in a register as an `int`, and `chars()` gives `List[char]` *(delegated)* | Accepted | 2026-10-20 |
 | [0567](0567-native-text-of-numbers-and-unicode-tables.md) | Native text of numbers reuses the output routines, and character predicates use generated Unicode tables *(delegated)* | Accepted | 2026-10-20 |
-| [0701](0701-native-error-context.md) | Native `?` with a context message: contexts ride at the head of the trace list *(delegated)* | Accepted | 2026-10-21 |
-| [0693](0693-test-captures-stderr.md) | `ail test` captures a test's standard error, shown under a failing test's `FAIL` line marked `!` *(delegated)* | Accepted | 2026-10-21 |
-| [0700](0700-native-exit-sleep-range-traps.md) | Native `io.exit` and `time.sleep_ms` range traps *(delegated)* | Accepted | 2026-10-21 |
-| [0655](0655-build-cache.md) | A content-addressed cache of finished `ail build` executables, and derive expansion with one effect inference *(delegated)* | Accepted | 2026-10-21 |
+| [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
+| [0629](0629-list-chunks-windows-counts-str-center.md) | `chunks`, `windows`, `counts` on lists and `center` on strings *(delegated)* | Accepted | 2026-10-21 |
 | [0637](0637-http-persistent-connections-and-timeouts.md) | HTTP/1.1 client: a connection pool (keep-alive), chunked request bodies, `connect_ms` and `total_ms` timeouts *(delegated)* | Accepted | 2026-10-21 |
 | [0638](0638-cookie-jar.md) | A cookie jar in the standard library, `std.net.jar`: RFC 6265 domain, path, expiry, `Secure`, `HttpOnly`; the one jar for Garlic *(delegated)* | Accepted | 2026-10-21 |
 | [0639](0639-http-server-keep-alive.md) | HTTP server keeps connections alive between requests *(delegated)* | Accepted | 2026-10-21 |
-| [0703](0703-card-middle-trim-level.md) | `ail api --card` gets a middle trimming level (signatures and first sentences) and picks the richest level within budget; amends 0311 *(delegated)* | Accepted | 2026-10-21 |
-| [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |
 | [0640](0640-samesite-and-graceful-shutdown.md) | SameSite in the cookie jar; `srv.shutdown()` stops a server without dropping requests under way *(delegated)* | Accepted | 2026-10-21 |
-| [0716](0716-streaming-response-bodies.md) | Streaming response bodies: `net.open` returns a `net.Body` read with `read_bytes`, and a body read to its end returns its connection to the pool *(delegated)* | Accepted | 2026-10-21 |
 | [0646](0646-mistakes-corpus-round-two.md) | Mistakes corpus, round two: 96 programs on the batch's new features; `ail fix` resolves 60% *(delegated)* | Accepted | 2026-10-21 |
 | [0647](0647-round-two-diagnostics-help-and-anchors.md) | Diagnostics for round-two mistakes: help texts, fix anchors, and rules for `<<`, tuples, `case` and open ranges *(delegated)* | Accepted | 2026-10-21 |
 | [0648](0648-round-two-fix-rules-and-the-corpus-target.md) | Fix rules for round-two mistakes (renames with unchanged arguments, `=` to `:`, `@` to `matmul`, `or` to `else`), and the 60% target *(delegated)* | Accepted | 2026-10-21 |
+| [0655](0655-build-cache.md) | A content-addressed cache of finished `ail build` executables, and derive expansion with one effect inference *(delegated)* | Accepted | 2026-10-21 |
+| [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |
+| [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
+| [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
+| [0673](0673-definitional-rule-marker.md) | Spec rules that only describe the language carry a `[definitional]` marker and need no citation *(delegated)* | Accepted | 2026-10-21 |
+| [0675](0675-round-4-syntax-candidates.md) | Round-4 syntax candidates: no `for i, x`, no inferred `main !`; `par` over chunks already works *(delegated)* | Accepted | 2026-10-21 |
+| [0679](0679-native-test-runner.md) | `ail test --native`: build each `@test` function natively and compare it with the interpreter *(delegated)* | Accepted | 2026-10-21 |
+| [0693](0693-test-captures-stderr.md) | `ail test` captures a test's standard error, shown under a failing test's `FAIL` line marked `!` *(delegated)* | Accepted | 2026-10-21 |
 | [0695](0695-fix-bitwise-not.md) | `ail fix` for `~name`: the bitwise-not method *(delegated)* | Accepted | 2026-10-21 |
+| [0698](0698-card-spec-audit-for-std.md) | A std audit: every std function has a spec mention, checked by `tools/rules-audit.sh` *(delegated)* | Accepted | 2026-10-21 |
+| [0700](0700-native-exit-sleep-range-traps.md) | Native `io.exit` and `time.sleep_ms` range traps *(delegated)* | Accepted | 2026-10-21 |
+| [0701](0701-native-error-context.md) | Native `?` with a context message: contexts ride at the head of the trace list *(delegated)* | Accepted | 2026-10-21 |
+| [0703](0703-card-middle-trim-level.md) | `ail api --card` gets a middle trimming level (signatures and first sentences) and picks the richest level within budget; amends 0311 *(delegated)* | Accepted | 2026-10-21 |
 | [0711](0711-tool-driving-agent-programs.md) | Agent programs that drive AIL's own tools: the twin calls the same tool, output is byte-identical, fixtures are committed (round 5) *(delegated)* | Accepted | 2026-10-21 |
+| [0716](0716-streaming-response-bodies.md) | Streaming response bodies: `net.open` returns a `net.Body` read with `read_bytes`, and a body read to its end returns its connection to the pool *(delegated)* | Accepted | 2026-10-21 |
 | [0717](0717-transparent-content-encoding.md) | `std.net` sends `Accept-Encoding: gzip, deflate` and decodes the response unless the program sets the header itself *(delegated)* | Accepted | 2026-10-21 |
 | [0737](0737-runtime-small-block-allocator.md) | `ail run` and `ail test` allocate small blocks from per-thread free lists *(delegated)* | Accepted | 2026-10-21 |
