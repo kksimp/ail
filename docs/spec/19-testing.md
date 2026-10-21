@@ -50,7 +50,9 @@ fn one()
 
 **test.run.2** — Each test runs in isolation. A trap (including a failed
 assertion) or a returned error ends that test only. Constants are computed
-once. What a test prints is captured, and shown under its `FAIL` line.
+once. What a test prints to standard output or standard error is captured;
+a failing test shows it under its `FAIL` line, standard output plain and
+standard error marked `!`. *(ADR 0693)*
 *(ADR 0167)*
 
 ```ail tool=test,FILE status=1 expect=failed rules=test.run.2

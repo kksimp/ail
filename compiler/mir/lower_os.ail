@@ -88,7 +88,28 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
         vs.push(convert(v, f.params[i], expr_pos(a.value)))
     if f.fails
         vs.push(trace_line(pos))
+    if f.rt == "rt.io_exit" or f.rt == "rt.time_sleep_ms"
+        os_range_check(f.rt == "rt.io_exit", vs[0], pos)
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)
+
+## The argument checks of `io.exit` (status 0 to 255, std.io.4) and
+## `time.sleep_ms` (not negative, std.time.2): a trap at the call, kinds 9
+## and 10 of the runtime's trap messages.
+fn Lower.os_range_check(mut self, is_exit bool, v int, pos ast.Pos)
+    zero := konst(0, Ty.Int)
+    fail := new_block()
+    check(op("le", [zero, v], Ty.Bool), fail)
+    if is_exit
+        check(op("le", [v, konst(255, Ty.Int)], Ty.Bool), fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    mut t := inst(-1, "trap", [v, zero])
+    t.imm = if is_exit then 9 else 10
+    t.site = site(if is_exit then "std.io.4" else "std.time.2", "range", "", pos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
 
 ## `s.to_float()` (type.num.8): a `float?`.
 fn Lower.lower_to_float(mut self, s Val) Val
@@ -121,6 +142,7 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
                 text = call("rt.fmt_float", [v.id], Ty.Str)
         Bool => text = call("rt.fmt_bool", [v.id], Ty.Str)
         Str => text = v.id
+        Char => text = call("rt.str_char", [v.id], Ty.Str)
         _ => return unsupported(pos, "a format specification on a `{v.ty.name()}`")
     w := spec.width else return Val(id: text, ty: Ty.Str)
     numeric := v.ty == Ty.Int or v.ty.is_float()

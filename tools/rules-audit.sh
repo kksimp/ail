@@ -12,6 +12,11 @@
 #      `[definitional]` rules describe the language and need no code);
 #   3. diagnostics with no `ail explain` entry: a rule ID emitted as a string
 #      literal (a diagnostic's rule) that `ail explain` cannot explain;
+#   4. `ail explain` entries with no example: a rule whose explanation has no
+#      `example` (checked through `ail explain RULE --json`);
+#   5. std functions with no spec mention: a function in the MODULES table of
+#      bootstrap/src/stdlib.rs that docs/spec/ never names (tools/card-spec-audit.py,
+#      ADR 0698).
 #   4. `ail explain` entries with no example: a rule whose explanation has
 #      neither an `example` nor a worked `rejected` example (checked through
 #      `ail explain RULE --json`; ADR 0670).
@@ -125,6 +130,13 @@ for rule in sorted(explained):
     if entry.get("example") in (None, "") and entry.get("rejected") in (None, ""):
         no_example.append(rule)
 report("4. `ail explain` entries with no example", [f"{r}  ({spec.get(r, '?')})" for r in no_example])
+
+# 5. The std functions against the spec (ADR 0698).
+audit = subprocess.run(
+    [sys.executable, "-I", str(root / "tools" / "card-spec-audit.py"), str(root)],
+    capture_output=True, text=True, check=False,
+)
+report("5. std functions with no spec mention", [l.removeprefix("no spec mention: ") for l in audit.stdout.splitlines() if l.startswith("no spec mention: ")])
 
 print(f"rules in spec: {len(spec)}; explained: {len(explained)}; findings: {problems}")
 sys.exit(1 if problems else 0)

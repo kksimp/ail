@@ -515,7 +515,11 @@ fn to_text(d: &Diagnostic, path: &str, src: &str) -> String {
         let _ = writeln!(s, "note: {path}:{}:{}: {}", n.pos.line, n.pos.col, n.message);
     }
     for f in &d.fixes {
-        let _ = writeln!(s, "fix: {}", f.title);
+        // The text form repeats the help line when the fix says the same thing
+        // (`write `and``); the JSON form (ADR 0145) keeps every fix title.
+        if d.help.as_deref() != Some(f.title.as_str()) {
+            let _ = writeln!(s, "fix: {}", f.title);
+        }
     }
     s.trim_end().to_string()
 }

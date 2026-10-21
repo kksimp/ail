@@ -82,3 +82,14 @@ A block that cannot run because it uses names outside its own snippet keeps
   - *Possible mis-citation:* `check.rs` reports the nested-optional error with `type.opt.7`; spec `type.opt.8` describes that rule. The owner should decide which ID the diagnostic carries.
 
 Check 1 (cited but not in the spec) has three pre-existing entries that lane 207 did not change: `expr.lit.3` (`compiler/mir/lower.ail`), `plat.win.1` (`compiler/rt/native/os.ail`) and `std.tz.4` (`bootstrap/src/interp/tz.rs`).
+## Spec examples by chapter (lane 223, ADR 0498)
+`spec.rs` counts a rule as covered when a spec fence cites it (`rules=`,
+`error=`, or `skip=bootstrap rules=`). Before lane 223, chapters 01, 02 and 03
+had 8, 21 and 14 rules with no such example. Now they have none uncovered:
+| chapter | rules | uncovered before | uncovered now | notes |
+|---|---:|---:|---:|---|
+| 01-platforms.md | 8 | 8 | 0 | `norun` for target and layout rules; `plat.ptr.2` runs |
+| 02-lexical.md | 23 | 21 | 0 | `lex.kw.1` is `skip=bootstrap`: the bootstrap reports `gram.syntax.1` |
+| 03-grammar.md | 15 | 14 | 0 | `gram.rec.*` and `gram.help.2` show one reported case; the rest is in the mistakes corpus |
+The other chapters are unchanged: 382 uncovered rules before lane 223's first
+PR, 339 after chapters 01-03 (07-21, std and the rest still to do).

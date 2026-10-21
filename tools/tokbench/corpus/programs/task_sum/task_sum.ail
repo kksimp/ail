@@ -5,11 +5,7 @@ fn sum_range(lo int, hi int) int
         total += i
     total
 
-fn main() !
-    a := spawn sum_range(0, 250)
-    b := spawn sum_range(250, 500)
-    c := spawn sum_range(500, 750)
-    d := spawn sum_range(750, 1000)
-    total := a.wait()? + b.wait()? + c.wait()? + d.wait()?
+fn main()
+    total := [sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()
     print("sum of 0..1000 in four tasks: {total}")
     print("matches the formula: {total == 999 * 1000 / 2}")

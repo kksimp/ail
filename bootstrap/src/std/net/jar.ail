@@ -1,0 +1,394 @@
+## std.net.jar (spec std.net.20-22, ADR 0638): a cookie jar for HTTP clients
+## (RFC 6265 basics: domain, path, expiry, Secure, HttpOnly). A jar stores
+## the `Set-Cookie` lines of responses and gives back the `Cookie` header for
+## a URL. `Jar.request` and `Jar.get` do both around `net.request`, following
+## redirects themselves so that every hop's cookies are sent and kept.
+##
+## Not here: a public suffix list (a response may set a cookie for `com`),
+## `SameSite` (a jar has no notion of a site), and a size limit per host.
+use std.net
+use std.time
+
+## One stored cookie.
+pub struct Cookie
+    pub name str
+    pub value str
+    ## The domain it applies to, lowercase, without a leading dot.
+    pub domain str
+    ## Sent only to exactly `domain`, not its subdomains (no `Domain=` given).
+    pub host_only bool
+    pub path str
+    ## Unix milliseconds when it expires; 0 for a session cookie.
+    pub expires_ms int
+    pub secure bool
+    pub http_only bool
+    ## `lax` (the default), `strict` or `none` (spec std.net.23).
+    pub same_site str
+    ## Order of arrival, to break ties between equally long paths.
+    pub seq int
+
+pub struct Jar
+    pub items List[Cookie]
+    pub next_seq int
+
+## An empty jar.
+pub fn new() Jar
+    Jar(items: [], next_seq: 0)
+
+struct Target
+    scheme str
+    host str
+    path str
+    ## Host and port as written, lowercase: what makes two URLs one origin.
+    authority str
+
+fn parse_target(url str) Target
+    scheme := url.split("://")[0].to_lower()
+    rest := url.strip_prefix("{url.split("://")[0]}://") else url
+    mut end := rest.chars().len()
+    cs := rest.chars()
+    for i in 0..cs.len()
+        if cs[i] == '/' or cs[i] == '?' or cs[i] == '#'
+            end = i
+            break
+    authority := rest.slice(0, end)
+    after := rest.slice(end, cs.len())
+    mut host := authority.split("@").last() else authority
+    if host.starts_with("[")
+        host = host.split("]")[0].replace("[", "")
+    else
+        host = host.split(":")[0]
+    mut path := after.split("#")[0].split("?")[0]
+    if path == ""
+        path = "/"
+    Target(scheme: scheme, host: host.to_lower(), path: path, authority: authority.to_lower())
+
+## RFC 6265 5.1.4: the directory of a request path.
+fn default_path(path str) str
+    if not path.starts_with("/")
+        return "/"
+    parts := path.split("/")
+    if parts.len() <= 2
+        return "/"
+    parts.take(parts.len() - 1).join("/")
+
+fn is_ip(host str) bool
+    if host.contains(":")
+        return true
+    for part in host.split(".")
+        if part.to_int() == none
+            return false
+    host.split(".").len() == 4
+
+## RFC 6265 5.1.3.
+fn domain_matches(host str, domain str) bool
+    if host == domain
+        return true
+    not is_ip(host) and host.ends_with(".{domain}")
+
+## RFC 6265 5.1.4.
+fn path_matches(request_path str, cookie_path str) bool
+    if request_path == cookie_path
+        return true
+    if request_path.starts_with(cookie_path)
+        return cookie_path.ends_with("/") or request_path.char_at(cookie_path.len()) == '/'
+    false
+
+fn month_number(name str) int
+    months := ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    short := name.to_lower().slice(0, 3)
+    (months.index_of(short) else -2) + 1
+
+## Days since 1970-01-01 of a proleptic Gregorian date.
+fn days_from_civil(year int, month int, day int) int
+    y := if month <= 2 then year - 1 else year
+    era := if y >= 0 then y / 400 else (y - 399) / 400
+    yoe := y - era * 400
+    mp := (month + 9) % 12
+    doy := (153 * mp + 2) / 5 + day - 1
+    doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
+    era * 146097 + doe - 719468
+
+## RFC 6265 5.1.1: a cookie date in any of the three common layouts, as unix
+## milliseconds, or `none`.
+fn parse_date(text str) int?
+    mut hms := [-1, -1, -1]
+    mut day := 0
+    mut month := 0
+    mut year := -1
+    mut word := ""
+    mut words := List[str]()
+    for c in text.chars()
+        if c.is_alpha() or c.is_digit() or c == ':'
+            word = "{word}{c}"
+        else
+            if word != ""
+                words.push(word)
+            word = ""
+    if word != ""
+        words.push(word)
+    for w in words
+        if w.contains(":") and hms[0] < 0
+            t := w.split(":")
+            if t.len() == 3
+                hh := t[0].to_int() else -1
+                mm := t[1].to_int() else -1
+                ss := t[2].to_int() else -1
+                hms = [hh, mm, ss]
+        elif day == 0 and w.to_int() != none and w.len() <= 2
+            day = w.to_int() else 0
+        elif month == 0 and month_number(w) > 0 and not w.chars()[0].is_digit()
+            month = month_number(w)
+        elif year < 0 and w.to_int() != none and w.len() >= 2 and w.len() <= 4
+            year = w.to_int() else -1
+    if hms[0] < 0 or day == 0 or month == 0 or year < 0
+        return none
+    if year >= 70 and year <= 99
+        year += 1900
+    elif year >= 0 and year <= 69
+        year += 2000
+    if year < 1601 or day > 31 or hms[0] > 23 or hms[1] > 59 or hms[2] > 59
+        return none
+    days := days_from_civil(year, month, day)
+    (days * 86400 + hms[0] * 3600 + hms[1] * 60 + hms[2]) * 1000
+
+## Stores one `Set-Cookie` line received from `url` (RFC 6265 5.3). A line
+## that is malformed, or names a domain the host does not belong to, is
+## dropped and the result is `false`. An already expired cookie removes the
+## one it replaces.
+pub fn Jar.set_cookie(mut self, url str, line str) bool
+    t := parse_target(url)
+    pieces := line.split(";")
+    pair := pieces[0]
+    eq := pair.find("=") else return false
+    name := pair.slice(0, eq).trim()
+    value := pair.slice(eq + 1, pair.chars().len()).trim()
+    if name == ""
+        return false
+    mut domain := t.host
+    mut host_only := true
+    mut path := default_path(t.path)
+    mut expires := 0
+    mut max_age := none
+    mut secure := false
+    mut http_only := false
+    mut same_site := "lax"
+    for attr in pieces[1..]
+        part := attr.trim()
+        key := part.split("=")[0].trim().to_lower()
+        at := part.find("=") else -1
+        val := if at >= 0 then part.slice(at + 1, part.chars().len()).trim() else ""
+        if key == "domain" and val != ""
+            d := val.to_lower().strip_prefix(".") else val.to_lower()
+            if not domain_matches(t.host, d)
+                return false
+            domain = d
+            host_only = false
+        elif key == "path" and val.starts_with("/")
+            path = val
+        elif key == "expires"
+            if when := parse_date(val)
+                # Unix time 0 or earlier is long past, not "no expiry".
+                expires = if when > 0 then when else 1
+        elif key == "max-age"
+            max_age = val.to_int()
+        elif key == "secure"
+            secure = true
+        elif key == "httponly"
+            http_only = true
+        elif key == "samesite"
+            v := val.to_lower()
+            if v == "strict" or v == "none"
+                same_site = v
+    # A cookie sent across sites must be Secure (as browsers require).
+    if same_site == "none" and not secure
+        return false
+    now := time.now_ms()
+    mut gone := false
+    if age := max_age
+        if age <= 0
+            gone = true
+        else
+            expires = now + age * 1000
+    elif expires != 0 and expires <= now
+        gone = true
+    mut kept := List[Cookie]()
+    mut seq := self.next_seq
+    for c in self.items
+        if c.name == name and c.domain == domain and c.path == path
+            seq = c.seq
+        else
+            kept.push(c)
+    if not gone
+        kept.push(Cookie(
+            name: name,
+            value: value,
+            domain: domain,
+            host_only: host_only,
+            path: path,
+            expires_ms: expires,
+            secure: secure,
+            http_only: http_only,
+            same_site: same_site,
+            seq: seq,
+        ))
+        self.next_seq += 1
+    self.items = kept
+    true
+
+## Stores every `Set-Cookie` of a response received from `url`.
+pub fn Jar.store(mut self, url str, r net.Response)
+    for line in r.all_headers.get("set-cookie") else []
+        self.set_cookie(url, line)
+
+## Forgets cookies whose time has passed.
+pub fn Jar.drop_expired(mut self)
+    now := time.now_ms()
+    self.items = [c for c in self.items if c.expires_ms == 0 or c.expires_ms > now]
+
+## The cookies a request to `url` carries, longest path first and then oldest
+## first (RFC 6265 5.4). `http_only` cookies are included: this is the
+## transport. Expired cookies are skipped.
+pub fn Jar.matching(self, url str) List[Cookie]
+    matching_from(url, url, true)
+
+## The site of a host: its last two labels (an IP address is its own site).
+## There is no public suffix list, so `a.co.uk` and `b.co.uk` count as one.
+fn site_of(host str) str
+    if is_ip(host)
+        return host
+    parts := host.split(".")
+    if parts.len() <= 2
+        return host
+    parts[parts.len() - 2..].join(".")
+
+## The cookies a request to `url` carries when it is made from the page
+## `from` (`""` for a request typed by the user), with `navigation` true for
+## a top-level `GET` navigation (a link or form, not a subresource). Within
+## one site every cookie goes; across sites `none` cookies go, `lax` cookies
+## only on a navigation, and `strict` ones never (spec std.net.23).
+pub fn Jar.matching_from(self, url str, from str, navigation bool) List[Cookie]
+    t := parse_target(url)
+    cross := from != "" and site_of(parse_target(from).host) != site_of(t.host)
+    now := time.now_ms()
+    mut out := List[Cookie]()
+    for c in self.items
+        if c.expires_ms != 0 and c.expires_ms <= now
+            continue
+        if c.host_only and c.domain != t.host
+            continue
+        if not c.host_only and not domain_matches(t.host, c.domain)
+            continue
+        if c.secure and t.scheme != "https"
+            continue
+        if not path_matches(t.path, c.path)
+            continue
+        if cross and (c.same_site == "strict" or (c.same_site == "lax" and not navigation))
+            continue
+        out.push(c)
+    out.sorted(by: |c| c.seq).sorted(by: |c| -c.path.len())
+
+## The value of the `Cookie` header for `url`: `a=1; b=2`, or `""`.
+pub fn Jar.header(self, url str) str
+    ["{c.name}={c.value}" for c in matching(url)].join("; ")
+
+## `header` for a request made from the page `from` (see `matching_from`).
+pub fn Jar.header_from(self, url str, from str, navigation bool) str
+    ["{c.name}={c.value}" for c in matching_from(url, from, navigation)].join("; ")
+
+## The value of the cookie `name` that a request to `url` would carry.
+pub fn Jar.value(self, url str, name str) str?
+    for c in matching(url)
+        if c.name == name
+            return c.value
+    none
+
+## The cookies a page's scripts at `url` can read, by name: those without
+## `HttpOnly` (spec std.net.20).
+pub fn Jar.for_script(self, url str) Map[str, str]
+    mut out := Map[str, str]()
+    for c in matching(url)
+        if not c.http_only
+            out[c.name] = c.value
+    out
+
+## A `document.cookie = line` assignment from a script at `url`: like
+## `set_cookie`, but a script cannot set `HttpOnly` (spec std.net.20).
+pub fn Jar.set_from_script(mut self, url str, line str) bool
+    for attr in line.split(";")[1..]
+        if attr.trim().to_lower() == "httponly"
+            return false
+    set_cookie(url, line)
+
+## How many cookies are stored.
+pub fn Jar.len(self) int
+    self.items.len()
+
+## Forgets every cookie.
+pub fn Jar.clear(mut self)
+    self.items = []
+
+fn resolve(base str, location str) str
+    if location.contains("://")
+        return location
+    t := parse_target(base)
+    if location.starts_with("//")
+        return "{t.scheme}:{location}"
+    origin := "{t.scheme}://{t.authority}"
+    if location.starts_with("/")
+        return "{origin}{location}"
+    dir := default_path(t.path)
+    sep := if dir.ends_with("/") then "" else "/"
+    "{origin}{dir}{sep}{location}"
+
+## `net.request` with this jar's cookies attached and every response's
+## `Set-Cookie` lines stored (spec std.net.21). Redirects of `GET` and `HEAD`
+## are followed here, up to `opts.max_redirects`, so each hop sends and
+## stores its own cookies; a `Cookie` header the program set is kept and the
+## jar's cookies are added to it. The `Cookie` header is not sent to a host
+## other than the first one's unless the jar holds cookies for it.
+pub fn Jar.request(mut self, method str, url str, opts net.Options) net.Response ! net.NetError
+    mut o := opts
+    o.max_redirects = 0
+    follows := method.to_upper() == "GET" or method.to_upper() == "HEAD"
+    given := opts.headers.get("Cookie") else (opts.headers.get("cookie") else "")
+    mut cur := url
+    first := parse_target(url)
+    mut hops := 0
+    while true
+        mut hop := o
+        hop.headers = {}
+        for k in o.headers.keys()
+            if k.to_lower() != "cookie"
+                hop.headers[k] = o.headers[k]
+        jar_part := header(cur)
+        # What the program set goes only to the origin it asked for.
+        here := parse_target(cur)
+        mine := if here.scheme == first.scheme
+            and here.authority == first.authority then given else ""
+        both := [p for p in [mine, jar_part] if p != ""].join("; ")
+        if both != ""
+            hop.headers["Cookie"] = both
+        r := net.request(method, cur, hop)?
+        store(cur, r)
+        loc := r.headers.get("location") else ""
+        redirect := r.status == 301
+            or r.status == 302
+            or r.status == 303
+            or r.status == 307
+            or r.status == 308
+        if not (redirect and follows and loc != "" and opts.max_redirects > 0)
+            return r
+        if hops >= opts.max_redirects
+            return net.NetError(
+                url: cur,
+                kind: "protocol",
+                message: "more than {opts.max_redirects} redirects",
+            )
+        hops += 1
+        cur = resolve(cur, loc)
+    net.Response(status: 0, headers: {}, body: "", all_headers: {})
+
+## `GET url` through this jar, with the defaults of `net.get`.
+pub fn Jar.get(mut self, url str) net.Response ! net.NetError
+    request("GET", url, net.options())?

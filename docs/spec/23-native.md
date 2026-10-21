@@ -20,8 +20,8 @@ with its own encoders and object writers (ADR 0010).
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function or a method of a struct or enum (no generics or
 contracts), in the root module or a module it imports (mod.unit.1-5), over
-`int`, `float`, `bool`, `str`, structs and enums without generics or
-invariants, optionals of those (`T?`), and lists of those and of lists, using locals, module constants
+`int`, `float`, `bool`, `char`, `str`, structs and enums without generics or
+invariants, optionals of those and of `char`s (`T?`), and lists of those and of lists, using locals, module constants
 of any expression in the subset (computed once before `main` runs),
 arithmetic, comparisons (`==` on enums, structs and lists compares their
 values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
@@ -30,24 +30,24 @@ slices `xs[a..b]`, struct construction, enum variants (bare or qualified),
 fields (`x.f`, `x.f = v`, and bare field names in a method), method calls,
 `match` as a statement or a value (variant patterns and bindings, `_`, `|`,
 guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
-strings and lists of them or an interpolation of them, `xs[i]`, `xs[i] = v`,
-`len`, `push`, `join`, `chars`, `env.args()`, `none`, `x == none`, `if v := o`,
+strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
+`len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
 `o else d` and `o?` in a function returning an optional, functions that can
 fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
 without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
-`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), and the bit operations of expr.bit.1, in functions with at most eight
+`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), the bit operations of expr.bit.1, and those of native.str.1, in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
-numbers, `bool` and `str` in `print` (lex.str.7, type.str.11: width, fill,
+numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
 (std.fs, std.env, std.io, std.time). Any other construct is reported at its position under this rule, all of them
-at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
+at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0574-0576, 0580, 0582, 0591, 0592, 0602–0604)*
 
 ```ail
@@ -62,6 +62,26 @@ fn steps(n int) int
 fn main()
     print("27 takes {steps(27)} steps")
 ```
+
+**native.str.1** — In a native program `str` and `char` behave as
+type.str.3-14 and type.char.1-4 say, with the interpreter's results and
+traps. The subset has: interpolation as a value, with `{x:.N}`, `{x:x}`,
+width, fill and alignment (type.str.11); `==`, `!=`, `<`, `<=`, `>`, `>=` on
+`str` and on `char`; on `str`, `len`, `byte_len`, `chars` (a `List[char]`),
+`lines`, `trim`, `to_upper`, `to_lower`, `to_str`, `contains`,
+`starts_with`, `ends_with` and `split` (each taking a `str` or a `char`),
+`slice`, `replace`, `repeat`, `pad_left`, `pad_right`; on `char`, `code`,
+`to_str`, `is_digit`, `is_alpha`, `is_alnum`, `is_space`, `is_upper`,
+`is_lower`, `to_upper`, `to_lower`; `to_str` on `int`, `float` and `bool`;
+`print` of a `char`, a `List[char]` and a `List[str]`. The methods with an
+optional result are `find`, `char_at`, `strip_prefix`, `strip_suffix`,
+`to_digit` and `char.from_code`, used with the optional forms of
+native.subset.1.
+The character predicates and case mappings, and `to_upper` and `to_lower`
+on a `str`, are those of the interpreter on every scalar value, read from
+tables generated from it (a capital sigma becomes the final form by the
+Unicode rule, with its case-ignorable set approximated by the apostrophes,
+dots, accents and combining marks). *(ADRs 0565, 0566, 0567)*
 
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
@@ -92,6 +112,18 @@ fn main()
 ```
 
 **native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
+
+**native.build.5** — `ail build` keeps the executables it makes, under a
+SHA-256 key of everything that decides their bytes: the path as given, the
+target, the `.ail` sources of the backend and of the program's directory tree
+(a tree over 4,000 files or 32 MB is not cached), and the build of `ail`
+itself. Building again with the same key writes the stored bytes to OUT and
+runs nothing else; the check of native.build.3 still runs first. A build
+with problems is never stored. `--no-cache` or `AIL_NO_CACHE` reads and
+writes nothing. The cache is in `$AIL_CACHE_DIR`, else
+`$XDG_CACHE_HOME/ail/build`, else `%LOCALAPPDATA%\ail\build` or `~/.cache/ail/build`, and keeps the 64 most
+recently used entries. A cached and an uncached build are the same bytes.
+*(ADR 0655)*
 
 ```text
 $ ail build examples/hello.ail
