@@ -1,0 +1,11 @@
+fn main()
+    t := fs.read_text("/nonexistent/file.txt") else err
+        print("kind={err.kind} path={err.path}")
+        print(err)
+        "none"
+    print(t)
+    r := proc.run("/nonexistent/prog", []) else err
+        print("proc kind={err.kind} cmd={err.cmd}")
+        print(err)
+        return
+    print(r.status)
