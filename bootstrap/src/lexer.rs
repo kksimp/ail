@@ -720,7 +720,7 @@ impl Lexer {
                         let mut d = Diagnostic::new("lex.bytes.1", here, "invalid escape in a `bytes` literal")
                             .help("valid escapes: \\n \\t \\r \\0 \\\\ \\\" \\xHH");
                         // `\u{e9}` names a code point: its UTF-8 bytes are the `\xHH` escapes.
-                        let mut skip = 2;
+                        let mut width = 2;
                         if line.get(i + 1) == Some(&'u')
                             && line.get(i + 2) == Some(&'{')
                             && let Some(len) = line[i + 3..].iter().position(|c| *c == '}')
@@ -730,14 +730,15 @@ impl Lexer {
                         {
                             let mut buf = [0u8; 4];
                             let text: String = c.encode_utf8(&mut buf).bytes().map(|b| format!("\\x{b:02x}")).collect();
-                            skip = len + 4;
+                            width = len + 4;
                             d = d.fix(
                                 "write its UTF-8 bytes",
-                                vec![Edit::span(here, Pos { col: here.col + skip, ..here }, text)],
+                                vec![Edit::span(here, Pos { col: here.col + width, ..here }, text)],
                             );
                         }
                         self.diags.push(d);
-                        i += skip;
+                        // The escape's tail is read as plain text, as the self-hosted lexer does.
+                        i += 2;
                     }
                 }
                 c if c.is_ascii() => {

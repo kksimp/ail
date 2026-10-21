@@ -1,4 +1,4 @@
-# ADR TBD: `ail fix` for four one-rewrite mistakes
+# ADR 0841: `ail fix` for four one-rewrite mistakes
 
 - Status: Accepted
 - Decided by: AI (delegated, ADR 0076)
@@ -19,7 +19,8 @@ name, but carried no fix.
   `get_message`) on an error type: rename to `to_str`. An argument, if any,
   is left for the next round to report.
 - lex.bytes.1, `\u{e9}` in a `b"..."` literal: replace the escape with the
-  UTF-8 bytes of the code point as `\xHH` escapes.
+  UTF-8 bytes of the code point as `\xHH` escapes. The literal is still an
+  error until fixed (lex.bytes.1 is unchanged), so no program changes meaning.
 
 Not done, with the reason, from the same list of candidates:
 

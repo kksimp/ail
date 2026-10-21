@@ -1201,7 +1201,7 @@ impl Parser {
                     "remove the `->`",
                     vec![Edit::delete(at, end)],
                 );
-                self.i += 1;
+                return None;
             }
             let ret = if matches!(self.peek(), Tok::Ident(_) | Tok::Sym("(")) || self.at_kw("any") || self.at_kw("ref") {
                 Some(Box::new(self.optional_type("the result type", "type.fn.1")?))
