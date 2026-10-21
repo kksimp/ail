@@ -84,6 +84,7 @@ F32_METHODS := [
     "relu",
     "sigmoid",
     "tanh",
+    "softmax",
 ]
 
 fn tensor_elem(t Ty) Ty
@@ -217,6 +218,10 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
         if (name == "relu" or name == "sigmoid" or name == "tanh") and e != Ty.Int
             kind := konst(if name == "relu" then 0 else if name == "sigmoid" then 1 else 2, Ty.Int)
             return Val(id: call("rt.tensor_activate", [r.id, kind], r.ty), ty: r.ty)
+        if name == "softmax" and e != Ty.Int
+            msg := call("rt.tensor_softmax_fault", [r.id], Ty.Int)
+            tensor_trap_if(msg, "std.tensor.24", npos)
+            return Val(id: call("rt.tensor_softmax", [r.id], r.ty), ty: r.ty)
         if name == "transpose"
             msg := call("rt.tensor_transpose_fault", [r.id], Ty.Int)
             tensor_trap_if(msg, "std.tensor.12", npos)

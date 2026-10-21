@@ -504,3 +504,10 @@ leaf code using only rax, rcx-r11 and xmm0-xmm4, and `inline.ail` never inlines
 an `rt.vec_*` function. On ARM64 `compiler/a64/kernels.ail` assembles NEON
 loops in the same place (two doubles at a time, `fcvtn`/`fcvtl` for the `f32`
 rounding, x0-x9 and v0-v5 only), with the same results bit for bit.
+
+Step 6 (`softmax`, std.tensor.24): `rt.tensor_softmax_fault(a)` returns the
+fault message (no axis, empty last axis) or 0, and the lowering traps with
+imm 15 like the other tensor faults. `rt.tensor_softmax(a)` writes `exp(x - top)`
+per row of the last axis (top skips NaN), sums them in element order and
+divides, in `float` and rounded once for `f32`. `exp` is the runtime's own
+(ADR 0592), so a result may differ from `ail run` in the last bit.
