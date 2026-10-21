@@ -1,0 +1,10 @@
+hi /a
+100 requests fast: true
+bye
+server returned
+/ 200 text/html; charset=utf-8 <p>home</p>
+/sub/a.css 200 text/css; charset=utf-8 a.css
+/data.bin 200 application/octet-stream x
+/missing 404 text/plain; charset=utf-8 not found
+/sub/../x 403 text/plain; charset=utf-8 forbidden
+POST 405

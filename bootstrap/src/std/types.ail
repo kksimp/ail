@@ -80,6 +80,7 @@ struct Request
     body str
     peer str
     data bytes
+    server int
 
 ## std.net.25: a response whose body is read in pieces.
 struct Body

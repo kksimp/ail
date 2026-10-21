@@ -586,3 +586,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2` and `ct.const.4` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |
 | [0692](0692-fuzz-http-and-socket-templates.md) | HTTP fuzzers, `fuzz-net` templates that actually run, and the three-digit status fix *(delegated)* | Accepted | 2026-10-21 |
 | [0745](0745-branch-free-if-measured-not-enabled.md) | Branch-free `if` with deferred overflow checks: built and measured, not enabled *(delegated)* | Accepted | 2026-10-21 |
+| [0754](0754-stop-a-server-from-its-handler-and-poll-faster.md) | A handler stops its server with `req.stop()`; network waits poll faster *(delegated)* | Accepted | 2026-10-21 |
+| [0755](0755-http-serve-dir.md) | `http.serve_dir` serves a directory *(delegated)* | Accepted | 2026-10-21 |

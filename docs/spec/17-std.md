@@ -734,8 +734,9 @@ library's (Winsock); the code uses nothing else, and it is untested there
   stays a `str`, the same bytes with each invalid UTF-8 sequence as U+FFFD.
 - `Options` has a last field `data bytes`, empty from `options()`. A request
   sends `data` as its body when it isn't empty, and `body` otherwise.
-- `Request` has a last field `data bytes`: the body the server received, as
-  it arrived (`body` is its lossy text).
+- `Request` has a field `data bytes`: the body the server received, as
+  it arrived (`body` is its lossy text), and a last field `server int`, the
+  handle `req.stop()` uses (`http.serve.1`).
 - `ex.respond_bytes(status int, headers Map[str, str], data bytes) !
   NetError` answers an `Exchange` with `data` as the body; it checks the
   status and headers as `respond` does.
