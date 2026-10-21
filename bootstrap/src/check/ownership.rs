@@ -302,7 +302,7 @@ impl<'p> Checker<'p> {
             Stmt::Return(..) => Some("`return`"),
             Stmt::Break(_) => Some("`break`"),
             Stmt::Continue(_) => Some("`continue`"),
-            Stmt::Let { .. } => Some("a binding"),
+            Stmt::Let { .. } | Stmt::LetTuple { .. } => Some("a binding"),
             Stmt::Defer(..) => Some("another `defer`"),
             Stmt::While { .. } | Stmt::For { .. } => Some("a loop"),
             Stmt::With { .. } => Some("a `with` block"),

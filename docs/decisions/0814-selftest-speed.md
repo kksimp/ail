@@ -34,10 +34,28 @@ Three steps, each its own pull request, in this order:
    each run. The walker-tier test keeps its 60 s budget. The PR lists every
    test checked for ports, temporary directories and `AIL_BINARY`, and what
    changed. The gate runs three times on the final commit to shake out flakes.
-3. **One compiler load for many builds.** Batching several `ail build` calls
-   into one `ail run compiler` invocation would save about 120 s serially. It
-   changes the compiler's command-line interface, so it goes to a separate
-   lane and is not decided here.
+3. **One compiler load for many builds.** `ail run compiler build-many RT
+   TARGET MS MB FILE...` builds several programs in one run, so `compiler/`
+   loads and checks once per batch instead of once per program. Each
+   executable is printed as `== PATH` and its hex, as `build` prints one. The
+   target code is one function shared with `build`, and the runtime is read
+   once, so every program gets the same run limits (`run.limit.5`) baked in.
+   It is an internal mode of `ail run compiler`; `ail build`, `ail run` and
+   the build cache are unchanged. Step 1's four workers each build their own
+   quarter of the programs in one batch, so the compiler loads four times
+   instead of 140. Each file is checked with `ail check` first, as `ail build`
+   does. If a batch fails, its programs are built one at a time, so the failure
+   is still reported per program. Native rules: `native.build.3`, `run.limit.5`
+   (output unchanged). A test checks five programs byte for byte against
+   separate `ail build` runs.
+
+Step 2 (`./ail selftest` with no arguments in `ail`): cargo builds the test
+binaries, then the native test binary runs alone, since it already uses four
+threads, and the other 45 binaries run on four workers. After the first failure
+no new binary starts; the logs print in cargo's order. Tests that take a
+temporary path use the binary's own name or the process id, so runs cannot
+collide. Tests that pass a port use port 0. `AIL_BINARY` is read-only. A run
+with extra arguments still goes straight to `cargo test`.
 
 Measurements and the full table are in the day 3 selftest timing report
 (`reports/selftest-timing-day3.md` in the project files).
@@ -52,6 +70,12 @@ Measurements and the full table are in the day 3 selftest timing report
   directory on purpose (a change to the backend changes the bytes), and
   during batch churn every merge changes `compiler/`, so a finer key gives
   little in the gate.
+- **One batch for all 140 programs:** not measured. Four batches of 35 match
+  step 1's four workers, and a failure in one batch only moves its quarter to
+  per-program builds. Four batches measured 19.7 s for the native test against
+  73.4 s for step 1 alone.
+- **A separate lane for step 3:** the change is an internal mode the selftest
+  uses, not a change to `ail run` for users, so it is decided here.
 - **Run all test binaries in parallel at once:** the box has four cores, and
   unbounded parallelism would starve the native binary and make timings
   unreliable. Three or four workers bounds it.

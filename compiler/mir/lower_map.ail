@@ -12,10 +12,11 @@ use ast
 # ---- types ----
 
 fn is_key_ty(t Ty) bool
-    t == Ty.Int or t == Ty.Bool or t == Ty.Str
+    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char
 
 fn is_value_ty(t Ty) bool
-    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll()
+    is_number(t) or t == Ty.Char or t == Ty.Str or needs_copy(t) or t.is_coll()
+    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t)
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
 fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
@@ -31,11 +32,12 @@ fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
             return Ty.Set(e)
     none
 
-## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`.
+## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`, 4 `char`.
 fn key_kind(t Ty) int
     match t
         Str => 1
         Bool => 2
+        Char => 4
         _ => 0
 
 ## How the runtime prints a scalar: 0 `int`, 1 `str`, 2 `bool`, 3 `float`,
@@ -46,11 +48,15 @@ fn scalar_kind(t Ty) int
         Str => 1
         Bool => 2
         Float => 3
+        Char => 4
         _ => -1
 
 ## How a copy of a table treats its values: `[mode, info]`, with mode 1 for
 ## lists (info: nesting depth * 256 + element bytes) and 2 for tables.
 fn value_mode(v Ty) List[int]
+    if holds_struct(v)
+        # A copy of the table copies the structs (`copy.Map[...]`).
+        return [0, 0]
     if v.is_coll()
         return [2, 0]
     mut t := v.elem() else return [0, 0]
@@ -110,6 +116,15 @@ fn Lower.new_table(mut self, ty Ty) int
 
 ## A copy of the table `v` (own.val.1).
 fn Lower.copy_coll(mut self, v Val) int
+    x := match v.ty
+        Map(_, x) => x
+        _ => Ty.Unknown
+    if holds_struct(x)
+        name := "copy.{v.ty.name()}"
+        if not sigs.contains(name)
+            sigs[name] = Sig(params: [v.ty], ret: v.ty, fails: false)
+            copy_tys[name] = v.ty
+        return call(name, [v.id], v.ty)
     call("rt.map_copy", [v.id], v.ty)
 
 ## The trap's first line and source excerpt as string values, as the code
@@ -349,7 +364,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                     id: call("rt.map_add", [r.id, convert(vs[0], et, npos)], Ty.Bool),
                     ty: Ty.Bool,
                 )
-            if name == "sorted" and vs.len() == 0 and (et == Ty.Int or et == Ty.Str)
+            if name == "sorted"
+                and vs.len() == 0
+                and (et == Ty.Int or et == Ty.Str or et == Ty.Char)
                 keys := call("rt.map_keys", [r.id], Ty.List(et))
                 call("rt.list_sort", [keys, konst(if et == Ty.Str then 1 else 0, Ty.Int)], Ty.Unit)
                 return Val(id: keys, ty: Ty.List(et))
@@ -431,7 +448,7 @@ fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
         Set(x) => x
         List(x) => x
         _ => return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
-    if e != Ty.Int and e != Ty.Str
+    if e != Ty.Int and e != Ty.Str and e != Ty.Char
         return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
     want := Ty.Set(e)
     sa := as_set(a, e, pos)?

@@ -1,0 +1,4 @@
+# type.tuple.2: a tuple has two or more elements.
+fn main()
+    t := (1,)
+    print(t)

@@ -1,0 +1,35 @@
+# type.tuple.2-6, type.tuple.9, type.map.5 and expr.match.2 on tuples.
+enum Color
+    Red
+    Green
+
+fn nothing()
+    print("")
+
+fn main()
+    t := (1, "a")
+    print(t.2)
+    print(t.name)
+    xs := [1, 2]
+    print(xs.0)
+    a, b, c := t
+    d, e := 5
+    for k in {"a": 1}
+        print(k)
+    for i, x in xs
+        print(i)
+    print([i for i, x in xs])
+    match (Color.Red, 1)
+        (Red, _) => print("r")
+        _ => print("other")
+    match t
+        (1, "a") => print("x")
+    match t
+        (1, 2, 3) => print("three")
+        _ => print("other")
+    match 5
+        (n, _) => print(n)
+        _ => print("other")
+    u := (1, nothing())
+    print(zip(xs))
+    print(zip(xs, 5))

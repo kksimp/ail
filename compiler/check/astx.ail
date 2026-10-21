@@ -22,6 +22,7 @@ pub fn expr_pos(e ast.Expr) ast.Pos
         Match(_, _, p) => p
         MapLit(_, p) => p
         SetLit(_, p) => p
+        TupleLit(_, p) => p
         NewRef(_, p) => p
         Comp(_, _, _, _, p) => p
         Range(lo, _, _, p) =>
@@ -40,6 +41,7 @@ pub fn expr_pos(e ast.Expr) ast.Pos
 pub fn stmt_pos(s ast.Stmt) ast.Pos
     match s
         Let(_, p, _, _, _) => p
+        LetTuple(_, _, p) => p
         While(_, _, p) => p
         For(_, _, _, _, _, _, p) => p
         With(_, _, _, _, p) => p

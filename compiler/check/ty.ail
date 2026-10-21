@@ -40,6 +40,8 @@ pub enum Ty
     Conc(kind str, inner Ty)
     ## `fn(A, B) R`, a function value (type.fn.1); `ret` is `Unit` for no result.
     FnTy(params List[Ty], ret Ty)
+    ## `(A, B, ...)`, two or more elements (type.tuple.1).
+    Tuple(elems List[Ty])
 
 ## The error part of `T ! E`: a written set, or a function's inferred set.
 pub enum Errs
@@ -93,6 +95,10 @@ pub struct Bind
             match b
                 FnTy(ys, s) => same_all(xs, ys) and same(r, s)
                 _ => false
+        Tuple(xs) =>
+            match b
+                Tuple(ys) => same_all(xs, ys)
+                _ => false
         _ => a == b
 
 @allow("expr.match.3") fn elem_of_list(t Ty) Ty?
@@ -121,6 +127,7 @@ fn same_all(xs List[Ty], ys List[Ty]) bool
         Struct(_, xs) => any_unknown(xs)
         Enum(_, xs) => any_unknown(xs)
         Union(xs) => any_unknown(xs)
+        Tuple(xs) => any_unknown(xs)
         FnTy(xs, r) => any_unknown(xs) or has_unknown(r)
         _ => false
 
@@ -162,6 +169,7 @@ pub fn sort_errors(ts List[Ty]) List[Ty]
                 Inferred => Ty.Res(subst(x, binds), errs)
         Union(m) => Ty.Union(subst_all(m, binds))
         FnTy(xs, r) => Ty.FnTy(subst_all(xs, binds), subst(r, binds))
+        Tuple(xs) => Ty.Tuple(subst_all(xs, binds))
         _ => t
 
 pub fn subst_all(ts List[Ty], binds List[Bind]) List[Ty]
@@ -174,6 +182,7 @@ pub fn subst_all(ts List[Ty], binds List[Bind]) List[Ty]
         Struct(_, xs) => mentions_any(xs, p)
         Enum(_, xs) => mentions_any(xs, p)
         Union(xs) => mentions_any(xs, p)
+        Tuple(xs) => mentions_any(xs, p)
         ListOf(x) => mentions(x, p)
         Opt(x) => mentions(x, p)
         SetOf(x) => mentions(x, p)

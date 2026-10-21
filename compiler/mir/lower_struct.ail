@@ -193,6 +193,7 @@ fn holds_struct(t Ty) bool
     match t
         Struct(_) => true
         List(e) => holds_struct(e)
+        Map(_, v) => holds_struct(v)
         _ => false
 
 ## A copy of `v`, deep through lists and structs.
@@ -251,6 +252,33 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             cur = body
             item := copy_value(Val(id: op("get", [x, i], e), ty: e))
             call("rt.list_push", [out, item], Ty.Unit)
+            jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+            cur = exit
+            finish(return_of(out))
+        Map(_, vt) =>
+            # The runtime copies the table and shares the structs; each live
+            # entry's value is then replaced by its copy (own.val.1).
+            out := call("rt.map_copy", [x], t)
+            raw := op("copy", [out], Ty.Int)
+            used := call("rt.map_used", [raw], Ty.Int)
+            head := new_block()
+            i := new_value(Ty.Int, "")
+            blocks[head].params.push(i)
+            jump(head, [konst(0, Ty.Int)])
+            cur = head
+            body := new_block()
+            step := new_block()
+            exit := new_block()
+            branch(op("lt", [i, used], Ty.Bool), body, [], exit, [])
+            cur = body
+            e := call("rt.map_live", [raw, i], Ty.Int)
+            live := new_block()
+            branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), live, [], step, [])
+            cur = live
+            c := copy_value(Val(id: entry_value(e, vt), ty: vt))
+            rawop("store64", [op("add", [e, konst(16, Ty.Int)], Ty.Int), c], Ty.Unit)
+            jump(step, [])
+            cur = step
             jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
             cur = exit
             finish(return_of(out))

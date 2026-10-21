@@ -11,7 +11,7 @@
 use crate::fasthash::FastSet as HashSet;
 
 use crate::ast::{
-    Arg, Arm, Attr, BinOp, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
+    Arg, Arm, Attr, BinOp, Binder, Block, CompFor, CompKind, Cond, ConstDecl, Else, EnumDecl, Expr, Field, FnDecl,
     Extern, GenericParam, ImplDecl, InterpPart, Literal, Owner, PRELUDE_LINE, Param, Pattern, Program, Receiver, Stmt,
     StructDecl, TraitDecl, TypeKind, TypeRef, UnOp, Variant, Within, is_prelude,
 };
@@ -432,16 +432,22 @@ impl Parser {
             );
             return None;
         }
-        let (var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
+        let (mut var, var_pos) = self.name("a loop variable after `for`", "expr.loop.1")?;
+        // type.tuple.5: `for a, b in xs` takes each element apart.
+        let mut unpack = Vec::new();
         if self.at_sym(",") {
-            let at = self.pos();
-            self.error_help(
-                "expr.loop.1",
-                at,
-                "a `for` loop has one variable",
-                "for the index and the item, loop over the indexes: `for i in 0..xs.len()` then `xs[i]`; for a map, `for k in m.keys()` then `m[k]`",
-            );
-            return None;
+            if mutable {
+                let at = self.pos();
+                self.error_help(
+                    "type.tuple.5",
+                    at,
+                    "`for mut` has one variable",
+                    "loop with `for a, b in xs` and assign through an index to change the list",
+                );
+                return None;
+            }
+            unpack = self.more_binders(Binder { name: var.clone(), pos: var_pos, mutable: false }, "type.tuple.5")?;
+            var = hidden_name(&unpack);
         }
         if !self.eat_kw("in") {
             self.unexpected("`in` after the loop variable", "expr.loop.1");
@@ -450,8 +456,51 @@ impl Parser {
         let iter = self.range()?;
         // err.else.6: `for x in xs else []` (ADR 0252).
         let iter = self.else_expr(iter)?;
-        let body = self.block("the `for` header", "expr.loop.1")?;
+        let mut body = self.block("the `for` header", "expr.loop.1")?;
+        if !unpack.is_empty() {
+            let value = Expr::Name(var.clone(), var_pos);
+            body.insert(0, Stmt::LetTuple { names: unpack, value, pos: var_pos });
+        }
         Some(Stmt::For { par, var, var_pos, mutable, iter, body, pos })
+    }
+
+    /// After the first name of `a, b := e` or `for a, b in`, at `,`: the
+    /// first and the other names, each `mut` only in a binding (type.tuple.4).
+    fn more_binders(&mut self, first: Binder, rule: &'static str) -> Option<Vec<Binder>> {
+        let mut names = vec![first];
+        while self.eat_sym(",") {
+            let mutable = rule == "type.tuple.4" && self.eat_kw("mut");
+            let (name, pos) = self.name("a name or `_` for the element", rule)?;
+            names.push(Binder { name, pos, mutable });
+        }
+        Some(names)
+    }
+
+    /// At `a, b, ... :=` (names, each maybe `mut`, then `:=` on this line).
+    fn at_let_tuple(&self) -> bool {
+        let mut k = self.i;
+        loop {
+            if matches!(self.tokens.get(k).map(|t| &t.tok), Some(Tok::Kw("mut"))) {
+                k += 1;
+            }
+            if !matches!(self.tokens.get(k).map(|t| &t.tok), Some(Tok::Ident(_))) {
+                return false;
+            }
+            match self.tokens.get(k + 1).map(|t| &t.tok) {
+                Some(Tok::Sym(",")) => k += 2,
+                Some(Tok::Sym(":=")) => return true,
+                _ => return false,
+            }
+        }
+    }
+
+    /// `a, mut b := e` after the first name, at `,` (type.tuple.4).
+    fn let_tuple(&mut self, first: Binder) -> Option<Stmt> {
+        let pos = first.pos;
+        let names = self.more_binders(first, "type.tuple.4")?;
+        self.expect_sym(":=", "`:=` after the names", "type.tuple.4")?;
+        let value = self.expression()?;
+        Some(Stmt::LetTuple { names, value, pos })
     }
 
     fn unexpected(&mut self, expected: &str, rule: &'static str) {
@@ -780,7 +829,7 @@ impl Parser {
             self.i += 1;
         }
         let ret = match self.peek() {
-            Tok::Ident(_) | Tok::Sym("!" | "*") | Tok::Kw("any" | "ref" | "fn") => Some(self.type_ref("a return type", "gram.fn.2")?),
+            Tok::Ident(_) | Tok::Sym("!" | "*" | "(") | Tok::Kw("any" | "ref" | "fn") => Some(self.type_ref("a return type", "gram.fn.2")?),
             _ => None,
         };
         let full = match &owner {
@@ -1039,6 +1088,28 @@ impl Parser {
             let inner = self.named_type("a type after `*`", "unsafe.ptr.1")?;
             return Some(TypeRef { kind: TypeKind::Ptr(Box::new(inner)), pos });
         }
+        // `(A, B)`: a tuple type, two or more elements (type.tuple.1).
+        if self.at_sym("(") {
+            let pos = self.bump().pos;
+            let mut elems = Vec::new();
+            while !self.at_sym(")") {
+                elems.push(self.type_ref("an element type", "type.tuple.1")?);
+                if !self.eat_sym(",") {
+                    break;
+                }
+            }
+            self.expect_sym(")", "`)` or `,` in the tuple type", "type.tuple.1")?;
+            if elems.len() < 2 {
+                self.error_help(
+                    "type.tuple.1",
+                    pos,
+                    "a tuple type has two or more elements",
+                    "write the element type alone, or `(A, B)`",
+                );
+                return None;
+            }
+            return Some(TypeRef { kind: TypeKind::Tuple(elems), pos });
+        }
         // `fn(A, B) R`: a function value's type (type.fn.1).
         if self.at_kw("fn") {
             let pos = self.bump().pos;
@@ -1051,7 +1122,7 @@ impl Parser {
                 }
             }
             self.expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?;
-            let ret = if matches!(self.peek(), Tok::Ident(_)) || self.at_kw("any") || self.at_kw("ref") {
+            let ret = if matches!(self.peek(), Tok::Ident(_) | Tok::Sym("(")) || self.at_kw("any") || self.at_kw("ref") {
                 Some(Box::new(self.optional_type("the result type", "type.fn.1")?))
             } else {
                 None
@@ -1276,6 +1347,15 @@ impl Parser {
                 let inner = self.statement_inner()?;
                 Some(Stmt::Defer(Box::new(inner), pos))
             }
+            Tok::Kw("mut") if matches!(self.peek_at(1), Tok::Ident(_)) && matches!(self.peek_at(2), Tok::Sym(",")) => {
+                self.bump();
+                let (name, pos) = self.name("a binding name after `mut`", "expr.bind.2")?;
+                self.let_tuple(Binder { name, pos, mutable: true })
+            }
+            Tok::Ident(name) if matches!(self.peek_at(1), Tok::Sym(",")) && self.at_let_tuple() => {
+                self.i += 1;
+                self.let_tuple(Binder { name, pos, mutable: false })
+            }
             Tok::Kw("mut") => {
                 self.bump();
                 let (name, pos) = self.name("a binding name after `mut`", "expr.bind.2")?;
@@ -1462,14 +1542,20 @@ impl Parser {
                 );
                 return None;
             }
-            let (var, var_pos) = self.name("a variable after `for`", "expr.comp.2")?;
+            let (mut var, var_pos) = self.name("a variable after `for`", "expr.comp.2")?;
+            // type.tuple.5: `[e for a, b in xs]`.
+            let mut unpack = Vec::new();
+            if self.at_sym(",") {
+                unpack = self.more_binders(Binder { name: var.clone(), pos: var_pos, mutable: false }, "type.tuple.5")?;
+                var = hidden_name(&unpack);
+            }
             if !self.eat_kw("in") {
                 self.unexpected("`in` after the comprehension's variable", "expr.comp.2");
                 return None;
             }
             let iter = self.range()?;
             let cond = if self.eat_kw("if") { Some(self.expression()?) } else { None };
-            clauses.push(CompFor { par, var, var_pos, iter, cond });
+            clauses.push(CompFor { par, var, var_pos, iter, cond, unpack });
         }
         Some(clauses)
     }
@@ -1755,6 +1841,12 @@ impl Parser {
                     Err(args) => Expr::Call { callee: Box::new(expr), args, pos },
                 };
             } else if self.eat_sym(".") {
+                // type.tuple.3: `t.0`, an element of a tuple.
+                if let Tok::Int(k) = *self.peek() {
+                    let name_pos = self.bump().pos;
+                    expr = Expr::Field { recv: Box::new(expr), name: k.to_string(), name_pos };
+                    continue;
+                }
                 let (name, name_pos) = self.name("a field or method name after `.`", "gram.syntax.1")?;
                 if let Some(qualified) = self.qualified_type_args(&expr, &name)? {
                     expr = qualified;
@@ -1916,15 +2008,23 @@ impl Parser {
                 // expr.if.8: a parenthesised one-line `if` is an operand.
                 let inner = if self.at_kw("if") { self.if_expr()? } else { self.range()? };
                 let inner = self.else_expr(inner)?;
+                // type.tuple.2: `(a, b, ...)` is a tuple.
                 if self.at_sym(",") {
-                    let at = self.pos();
-                    self.error_help(
-                        "gram.foreign.1",
-                        at,
-                        "AIL has no tuples",
-                        "write a list `[a, b]`, or a struct with named fields",
-                    );
-                    return None;
+                    let mut elems = vec![inner];
+                    while self.eat_sym(",") && !self.at_sym(")") {
+                        elems.push(self.expression()?);
+                    }
+                    self.expect_sym(")", "`)` or `,` in the tuple", "type.tuple.2")?;
+                    if elems.len() < 2 {
+                        self.error_help(
+                            "type.tuple.2",
+                            pos,
+                            "a tuple has two or more elements",
+                            "write the value alone, without `(` `,` `)`",
+                        );
+                        return None;
+                    }
+                    return Some(Expr::Tuple(elems, pos));
                 }
                 self.expect_sym(")", "`)`", "gram.syntax.1")?;
                 Some(inner)
@@ -2315,6 +2415,33 @@ impl Parser {
                 self.i += 1;
                 Some(Pattern::Literal(Literal::Int(v), pos))
             }
+            // type.tuple.6: `(p, q)`; a plain name in it binds the element.
+            Tok::Sym("(") => {
+                self.i += 1;
+                let mut elems = Vec::new();
+                while !self.at_sym(")") {
+                    let bind = match (self.peek(), self.peek_at(1)) {
+                        (Tok::Ident(n), Tok::Sym("," | ")")) if n != "_" => Some(n.clone()),
+                        _ => None,
+                    };
+                    match bind {
+                        Some(n) => {
+                            let at = self.bump().pos;
+                            elems.push(Pattern::Bind(n, at));
+                        }
+                        None => elems.push(self.pattern()?),
+                    }
+                    if !self.eat_sym(",") {
+                        break;
+                    }
+                }
+                self.expect_sym(")", "`)` or `,` in the tuple pattern", "type.tuple.6")?;
+                if elems.len() < 2 {
+                    self.error_help("type.tuple.6", pos, "a tuple pattern has two or more elements", "write `(p, q)`");
+                    return None;
+                }
+                Some(Pattern::Tuple(elems, pos))
+            }
             Tok::Sym("-") if matches!(self.peek_at(1), Tok::Int(_) | Tok::IntMin) => {
                 self.i += 1;
                 let v = match self.bump().tok {
@@ -2355,6 +2482,13 @@ impl Parser {
             }
         }
     }
+}
+
+/// The hidden variable that holds each element of `for a, b in xs`
+/// (type.tuple.5): `(a, b)`, which no program can name.
+pub fn hidden_name(names: &[Binder]) -> String {
+    let parts: Vec<&str> = names.iter().map(|b| b.name.as_str()).collect();
+    format!("({})", parts.join(", "))
 }
 
 #[cfg(test)]
