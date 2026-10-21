@@ -69,6 +69,7 @@ pub fn check_declarations(p ast.Program) List[Diag]
 
 ## ct.gen.3: a diagnostic in generated code is reported at the deriving `impl`.
 fn Checker.remap_generated(mut self)
+    mut from_impl := [false for _ in diags]
     for g in prog.generated
         base := prog.files[g.file].base
         for k in 0..diags.len()
@@ -80,18 +81,37 @@ fn Checker.remap_generated(mut self)
                 )
                 diags[k].pos = g.impl_pos
                 diags[k] = json_field_problem(g, diags[k])
+                from_impl[k] = true
+    # After json.derive.1-2 names the field, the generated code's other
+    # problems are its follow-ons (an `else e` whose call failed).
+    mut named := List[ast.Pos]()
+    for k in 0..diags.len()
+        if from_impl[k] and diags[k].rule.starts_with("json.derive.")
+            named.push(diags[k].pos)
+    if named.len() == 0
+        return
+    mut kept := List[Diag]()
+    for k in 0..diags.len()
+        d := diags[k]
+        if not (from_impl[k] and named.contains(d.pos) and not d.rule.starts_with("json.derive."))
+            kept.push(d)
+    diags = kept
 
 ## json.derive.1-2: a derived JSON conversion that calls `to_json` or
 ## `from_json` on a field type with none says so in the user's terms.
 fn json_field_problem(g ast.Generated, d Diag) Diag
     mut trait_name := "FromJson"
     mut method := "from_json"
+    # `to_json` is a method; `from_json` is an associated function
+    # (`T.from_json(j)`).
+    mut missing := "associated function"
     if g.generator == "derive_to_json"
         trait_name = "ToJson"
         method = "to_json"
+        missing = "method"
     elif g.generator != "derive_from_json"
         return d
-    suffix := " has no method `{method}`"
+    suffix := " has no {missing} `{method}`"
     if d.rule != "expr.name.1" or not d.message.ends_with(suffix)
         return d
     ty := d.message.slice(0, d.message.len() - suffix.len())
