@@ -72,7 +72,7 @@ struct Stub
 ## Integer arguments passed in x0-x7 (native-abi.md §1).
 INT_ARGS := 8
 ## The runtime global holding the stack limit (`rt.STACK_LIMIT`, ADR 0535).
-STACK_LIMIT := 12
+STACK_LIMIT := 15
 
 struct Gen
     a Asm

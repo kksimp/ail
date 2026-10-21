@@ -295,7 +295,7 @@ constant source excerpt (`  L | line` and the caret line). The output is the
 interpreter's first line and excerpt, byte for byte; the snapshot lines
 after them are not printed. Runtime code has no checks: its arithmetic wraps.
 
-**Stack check (ADR 0535).** `rt.init` stores a limit in global slot 12: the
+**Stack check (ADR 0535).** `rt.init` stores a limit in global slot 15: the
 argument vector's address (the top of the main stack) less the stack's size
 limit (`RLIMIT_STACK`; 8 MiB when unknown or unlimited, at most 1 GiB) less a
 1 MiB reserve for the trap itself. A call that can recurse, one whose callee

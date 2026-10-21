@@ -18,7 +18,7 @@ PARSE_OK := 7
 TRAP_LEN := 7
 ## The lowest stack address a program's call may start from (err.trap.1,
 ## ADR 0535).
-STACK_LIMIT := 12
+STACK_LIMIT := 15
 ## The stack kept free below the limit for the trap's own calls.
 STACK_RESERVE := 1048576
 ## The stack size assumed when the limit is unknown or unlimited.

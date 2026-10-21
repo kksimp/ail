@@ -26,7 +26,7 @@ pub fn registers() codegen.Target
 
 INT_ARGS := [7, 6, 2, 1, 8, 9]
 ## The runtime global holding the stack limit (`rt.STACK_LIMIT`, ADR 0535).
-STACK_LIMIT := 12
+STACK_LIMIT := 15
 
 ## A move of the parallel moves at an edge or a call: into location `dst`
 ## from location `src`, or from a constant (`imm`) or a symbol's address.
