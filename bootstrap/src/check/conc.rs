@@ -466,7 +466,7 @@ fn stmt_spawns(s: &Stmt, diags: &mut Vec<Diagnostic>) {
             block(body, diags);
         }
         Stmt::Unsafe { body, .. } => block(body, diags),
-        Stmt::Return(Some(e), _) | Stmt::Expr(e) => spawns(e, diags),
+        Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => spawns(e, diags),
         Stmt::Handle { value, otherwise } => {
             spawns(value, diags);
             else_spawns(otherwise, diags);
@@ -501,7 +501,7 @@ fn children<'a>(e: &'a Expr, visit: &mut dyn FnMut(Node<'a>)) {
                 }
             }
         }
-        Expr::List(xs, _) | Expr::Set(xs, _) => xs.iter().for_each(|x| ex(x, visit)),
+        Expr::List(xs, _) | Expr::Set(xs, _) | Expr::Tuple(xs, _) => xs.iter().for_each(|x| ex(x, visit)),
         Expr::Map(pairs, _) => {
             for (k, v) in pairs {
                 ex(k, visit);
@@ -665,7 +665,7 @@ fn stmt_uses(name: &str, s: &Stmt, cond: bool, u: &mut Uses) {
             body.iter().for_each(|s| stmt_uses(name, s, cond, u));
         }
         Stmt::Unsafe { body, .. } => body.iter().for_each(|s| stmt_uses(name, s, cond, u)),
-        Stmt::Return(Some(e), _) | Stmt::Expr(e) => expr_uses(name, e, cond, u),
+        Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => expr_uses(name, e, cond, u),
         Stmt::Handle { value, otherwise } => {
             expr_uses(name, value, cond, u);
             else_uses(name, otherwise, u);

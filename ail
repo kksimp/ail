@@ -84,6 +84,59 @@ if [ "$(uname -s)" = Darwin ] && ! xcrun --find cc >/dev/null 2>&1; then
     die "Apple's command-line developer tools are required (one-time): run  xcode-select --install"
 fi
 
+# Runs the test binaries listed in $2 with $1 workers; logs and exit codes go to $3.
+run_binaries() {
+    AIL_SELFTEST_DIR="$3" AIL_SELFTEST_ROOT="$root/bootstrap" xargs -P "$1" -n 1 sh -c '
+        name="$(basename "$1")"
+        [ -e "$AIL_SELFTEST_DIR/FAILED" ] && exit 0
+        (cd "$AIL_SELFTEST_ROOT" && "$1") >"$AIL_SELFTEST_DIR/$name.log" 2>&1
+        rc=$?
+        echo "$rc" >"$AIL_SELFTEST_DIR/$name.rc"
+        [ "$rc" -eq 0 ] || touch "$AIL_SELFTEST_DIR/FAILED"
+        exit 0' sh <"$2"
+}
+
+# `./ail selftest` with no arguments (ADR 0814): build the test binaries with cargo, then run
+# them on four workers, the native test first since it is the longest. Each binary's output
+# goes to its own log, and the logs print in cargo's order at the end. After a failure, the
+# workers start no new binaries; those are reported as skipped. The workers only run the
+# binaries, so a test's own temporary paths must be unique per run (ADR 0814).
+selftest_parallel() {
+    local dir exe name rc status=0
+    dir="$(mktemp -d)" || die "can't make a temporary directory"
+    if ! (cd "$root/bootstrap" && "$cargo" test --release --manifest-path "$manifest" --no-run) >"$dir/build.log" 2>&1; then
+        cat "$dir/build.log" >&2
+        rm -rf "$dir"
+        return 1
+    fi
+    # cargo prints one `Executable NAME (PATH)` line per test binary; PATH is relative to bootstrap/.
+    sed -n 's/^ *Executable .*(\(.*\))$/\1/p' "$dir/build.log" > "$dir/all"
+    grep 'deps/native-' "$dir/all" > "$dir/first" || true
+    grep -v 'deps/native-' "$dir/all" > "$dir/rest" || true
+    cat "$dir/first" "$dir/rest" > "$dir/order"
+    # The native binary runs alone: it already uses four threads (ADR 0814). The rest
+    # share four workers.
+    run_binaries 1 "$dir/first" "$dir"
+    run_binaries 4 "$dir/rest" "$dir"
+    while read -r exe; do
+        name="$(basename "$exe")"
+        echo "     Running $exe"
+        if [ -e "$dir/$name.rc" ]; then
+            cat "$dir/$name.log"
+            read -r rc <"$dir/$name.rc"
+            if [ "$rc" -ne 0 ]; then
+                echo "test binary $name failed (exit $rc)" >&2
+                status=1
+            fi
+        else
+            echo "skipped after a failure: $name"
+            status=1
+        fi
+    done <"$dir/order"
+    rm -rf "$dir"
+    return "$status"
+}
+
 if [ "${1:-}" = selftest ]; then
     shift
     # `--fuzz N [SEED]` runs both fuzzers (fuzz.run.2); other words go to `cargo test`
@@ -94,6 +147,10 @@ if [ "${1:-}" = selftest ]; then
         case "${1:-}" in ''|*[!0-9]*) ;; *) export AIL_FUZZ_SEED="$1"; shift ;; esac
         echo "fuzz: $AIL_FUZZ_N inputs per fuzzer from seed ${AIL_FUZZ_SEED:-1}" >&2
         exec "$cargo" test --quiet --release --manifest-path "$manifest" --test fuzz --test fuzz_modules fuzz_ "$@" -- --nocapture
+    fi
+    if [ "$#" -eq 0 ]; then
+        selftest_parallel
+        exit $?
     fi
     exec "$cargo" test --quiet --release --manifest-path "$manifest" "$@"
 fi
