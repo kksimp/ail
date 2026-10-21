@@ -1,3 +1,4 @@
+
 MAX_HOURS := 3.0
 
 struct Todo
@@ -17,7 +18,7 @@ fn main() !
     mut failed := 0
     for item in doc.arr("tasks") else []
         mut task := Todo.from_json(item) else err
-            print("skip {item.str("id") else "?"}: {err.message}")
+            print("skip {item.text("id", "?")}: {err.message}")
             updated.push(item)
             continue
         if task.status != "todo" or task.hours > MAX_HOURS

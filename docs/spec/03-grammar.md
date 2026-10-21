@@ -45,10 +45,22 @@ one edit away, and applying the fix would change the program's meaning.
 **gram.help.1** — Every error diagnostic carries a `help` that says what to
 write. A rule without a specific help has a default one. *(ADR 0262)*
 
+```ail tool=check,FILE status=2 expect=help: rules=gram.help.1
+fn main()
+    x := 1
+    x = 2
+```
+
 **gram.help.2** — `ail fix` resolves a mistake only when the result checks
 without errors; a fix that leaves other errors is still a fix, but the
 mistakes corpus records which files `ail fix` leaves clean. *(ADR 0262,
 [audit](../design/diagnostics-audit.md))*
+
+```ail tool=fix,--dry-run,FILE expect=mut rules=gram.help.2
+fn main()
+    x := 1
+    x = 2
+```
 
 ## Function declarations
 
@@ -73,6 +85,15 @@ fn add(a i32, b i32) i32
 **gram.list.1** — In argument lists, parameter lists, list literals and struct
 literals, a comma MAY follow the last element. The canonical form has one only
 when the list spans several lines. *(ADR 0118)*
+
+```ail rules=gram.list.1
+fn main()
+    xs := [
+        1,
+        2,
+    ]
+    print(xs.len())
+```
 
 ## Generic arguments
 
@@ -110,12 +131,31 @@ it. The bootstrap accepts it and ignores it. *(ADR 0196)*
 **gram.attr.4** — `@deprecated("reason")` marks a function as deprecated. The
 reason is one string literal and is required. Each call of the function is a
 warning that names the function and gives the reason; the program still runs.
-The attributes known to the bootstrap are `@test`, `@pure`, `@inline` and
-`@deprecated`; any other attribute is an error (`test.attr.1`). *(ADR 0197)*
+The attributes known to the bootstrap are `@test`, `@pure`, `@inline`,
+`@deprecated` and `@allow`; any other attribute is an error (`test.attr.1`).
+*(ADR 0197, ADR 0379)*
 
 ```ail fragment
 @deprecated("use hash") fn old_hash(x u64) u64
     x * 17
+```
+
+**gram.attr.5** — `@allow("rule")` before a function allows the warning with
+that rule ID anywhere in the function: the checker doesn't report it. The
+argument is one string literal naming a warning that can be allowed; the
+bootstrap allows `expr.match.3` only. A missing or other argument is a
+compile-time error. *(ADR 0379)*
+
+```ail fragment
+enum Role
+    Admin
+    Editor
+    Guest
+
+@allow("expr.match.3") fn is_admin(r Role) bool
+    match r
+        Admin => true
+        _ => false
 ```
 
 ## Runnable examples for the rules above

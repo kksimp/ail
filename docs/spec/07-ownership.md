@@ -200,7 +200,19 @@ duration of the call. It cannot be stored in a value, captured beyond the
 call, or returned. Storing or returning a parameter stores or returns a value.
 *(ADR 0062)*
 
-**own.borrow.2** — The language has no lifetime parameters or lifetime
+```ail rules=own.borrow.1
+struct Holder
+    text str
+
+fn keep(s str) Holder
+    Holder(text: s)
+
+fn main()
+    h := keep("hi")
+    print(h.text)
+```
+
+**own.borrow.2** — [definitional] The language has no lifetime parameters or lifetime
 annotations. *(ADR 0062)*
 
 ## Shared references

@@ -15,6 +15,8 @@
 ./ail explain RULE           # a rule's text, its ADRs and an example
 ./ail effects FILE.ail       # what each function may do; run --deny fs,proc rejects
 ./ail run --trace --watch NAME FILE.ail   # events and a snapshot at a trap
+./ail run --record R.json FILE.ail     # effect results to R.json; `--replay R.json` repeats the run
+./ail CMD --budget N             # any command: about N tokens, errors first; `--from K` continues
 ./ail edit FILE.ail --test <<E   # change code by declaration name, then fmt, check, test
 average                          # the declaration
 -total / xs.len()                # one -/+ pair: replaces a unique part of a line
@@ -26,8 +28,7 @@ E
 `todo` is a typed hole: `ail check` warns with the expected type and the names in scope.
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. The
-standard modules (`compress`, `fs`, `env`, `hash`, `io`, `net`, `path`, `proc`, `random`, `tensor`, `time`, `ui`)
-standard modules (`fs`, `env`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time`, `ui`)
+standard modules (`compress`, `env`, `fs`, `hash`, `io`, `net`, `path`, `proc`, `random`, `regex`, `tensor`, `time`, `ui`)
 need no `use`: `fs.read_text(p)`. A local of the same name hides one.
 
 A program needs `fn main()`. `print(value)` writes any value and a newline.
@@ -78,12 +79,14 @@ update a `mut` variable in a loop, use `=`.
 
 `random.int(1, 6)` (inclusive), `random.float()`, `random.seed(n)`.
 
-Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `regex.is_match(re, s)`, `find(re, s)` (`Match?`: `start`, `end`, `text`), `find_all`, `captures(re, s)` (`groups` `List[str?]`, `named`), `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`. Offsets count characters.
+AIL-written modules: `use std.csv` (`parse`, `records`, `write`), `use std.args` (`parse`), `use std.log` (`info`, `warn`, `err`); float math methods `x.sin()`, `x.pow(y)` and more (type.num.16).
 
-`t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])`: `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
+Regex (linear time; RE2 syntax, no backreferences): `re := regex.compile(r"(\d+)-(\d+)")?`, then `regex.is_match(re, s)`, `find(re, s)` (`Match?`: `start`, `end`, `text`), `find_all`, `group_all(re, s, n)` (group `n` of each match, `""` if unset), `captures(re, s)` (`groups` `List[str?]`, `named`), `replace(re, s, "$2-$1")`, `replace_first`, `split(re, s)`, `escape(s)`. Offsets count characters.
+
+`t := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])` (or `tensor.zeros(shape)`): `t.matmul(t)`, `t + u`, `t - u`, `t * 2.0` (elementwise), `t.dot(u)`, `t.sum()`, `t.sum(0)`/`max(1)`/`mean(1)` (per axis), `t.transpose()`, `t.map(|x| x * 2.0)`, `t.to_list()`; SIMD and multi-core.
 
 `fs.read_text(p)?`, `fs.write_text(p, s)?`, `fs.walk(dir)?` (files, sorted), `fs.glob("src/**/*.ail")`.
-`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`.
+`proc.run(cmd, args, input?, timeout_ms?)?` gives `.status`, `.out`, `.err`, `.ok()` (status 0) and `.text()` (out then err).
 `net.get(url)?`, `net.post(url, body, content_type)?` give `.status`, `.headers`, `.body` (`get_bytes`/`post_bytes`/`request_bytes` give `.data` as `bytes`; `proc.run_bytes`) (`http://`, `https://`); `net.request(method, url, opts)` with `net.options()`; servers: `srv := net.serve(addr)?`, `ex := srv.accept()?`, `ex.respond(net.Response(status: 200, headers: {}, body: "hi"))?`; raw TCP: `net.connect(host, port)?` (`read`, `read_line`, `write`).
 
 Constants: top-level `NAME := value`, computed at compile time (pure calls allowed).
@@ -358,7 +361,7 @@ print("{n:>6}|{r:.2}|{s:*^8}")   # width, decimals, fill and align
 - `s.len()` counts characters, `s.byte_len()` bytes. `s.chars()` (a
   `List[char]`; strings have no indexing or `for`), `s.lines()`, `s.trim()`, `s.contains(x)`, `s.starts_with(x)`,
   `s.ends_with(x)` (`x` a `str` or `char`), `s.strip_prefix(p)` (gives
-  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
+  `str?`), `s.pad_left(width, ' ')`, `pad_right`, `center`, `is_empty()` (also on collections), `words()`, `trim_start`, `trim_end`, `count(sub)`, `rfind`, `s.slice(a, b)` (characters), `s.char_at(i)` (`char?`), `s.find(x)` (`int?`), `s.replace(a, b)`, `s.to_lower()`, `s.to_upper()`.
 - `xs.join(", ")` joins any list (`cs.join("")` for chars).
 - `char`: `c.is_digit()`, `c.is_alpha()`, `c.is_space()`, `c.to_upper()`,
   `c.to_digit(16)` (gives `int?`), `c.code()`, `char.from_code(n)`.
@@ -406,7 +409,7 @@ if seen.add("x")                       # true if it wasn't there
     print("new")
 ```
 
-Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`). Keys can't be floats.
+Also `contains`, `remove`, `len`, `sorted`; sets and `keys()` have `union`, `intersect`, `difference`; `m.push(k, x)` appends to a list-valued entry (a missing `k` starts `[]`); `m[k] += 1` counts up and `m.top(n)` gives the `n` keys with the largest counts, ties in insertion order. Keys can't be floats.
 
 ## Values and `mut`
 
@@ -496,22 +499,7 @@ fn main()
 
 ## Contracts
 
-```ail
-fn divide(a int, b int) int
-    requires b != 0                 # a pure bool; false traps at the call
-    ensures result * b + a % b == a # `result` is the returned value
-    a / b
-
-struct Account
-    balance int
-    invariant balance >= 0          # holds after construction and every `mut self` method
-
-fn Account.add(mut self, n int)
-    ensures balance == old(balance) + n   # `old(e)`: `e` on entry
-    balance += n
-```
-
-A trait method's contracts bind its implementations. `ail run --no-contracts` skips the checks.
+`requires`, `ensures` (`result`, `old(e)`) and struct `invariant` are checked at run time, and `ail run --no-contracts` skips them. A trait method's contracts bind its implementations.
 
 ## Tests
 
@@ -531,24 +519,18 @@ A block fenced `ail` in a `##` doc comment is a test; `# => text` asserts printe
 
 ## Packages, effects and the system
 
-`ail.pkg` in a package root lists the package and its dependencies; each `dep`
-is imported by name and may reach only the capabilities in its `caps`:
-
-```text
-package notes caps fs
-dep geo path ../geo caps fs
-```
+`ail.pkg` in a package root lists the package and its `dep`s; each `dep` may reach only the capabilities in its `caps` (spec `mod.pkg.*`).
 
 Effects are inferred: `io`, `fail`, `mutates`, `spawn`, and the capabilities `fs`,
 `env`, `proc`, `clock`, `random`, `net`, `net.serve`, `ui`. `@pure fn f()` is an error if it reaches
 one. `ail run --deterministic` denies `clock`, `random`, `proc` and `net`.
 
-`unsafe` and a block allow `unsafe fn` calls, C calls and `std.mem`; `ail.pkg` needs `unsafe allow`.
-`extern c "libm" fn hypot(a float, b float) float` declares a C function (types `int`, `float`,
-`bool`, `i32`, `u8`, `*T`...; a C `int` is `i32`); `mem.cstr(s) *u8`, `mem.from_cstr(p)`, `mem.alloc(n, 0) *int`, `mem.free(p)`; `p.read()`, `p.write(v)`, `p.offset(n)`.
+`unsafe` allows C calls (`extern c "libm" fn hypot(a float, b float) float`) and `std.mem` pointers (`mem.alloc(n, 0) *int`, `p.read()`, `p.write(v)`); `ail.pkg` needs `unsafe allow`; see `docs/spec/14-ffi.md`.
 
-A window is a grid of text cells; draw with `put`, then `present`:
+A window is a grid of text cells: `ui.open(title, cols, rows)` gives `w`, then `w.put(col, row, text, fg, bg)`, `w.present()` and `w.next_event()` (`Key`, `Close`, `Resize`, ...); `ail api` lists the signatures.
 
+`Json`, `parse_json(text)?` and the
+`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.
 ```ail
 fn main()
     mut w := ui.open("Demo", 40, 10) else return   # fails headless
@@ -565,4 +547,4 @@ fn main()
 
 A `Tensor[float]` (`tensor.from(xs)`, `zeros(shape)`) supports `+ - *` with tensors or scalars, `dot`,
 `matmul`, `sum`, `transpose`, on all cores. `Json`, `parse_json(text)?` and the
-`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`.
+`ToJson`/`FromJson` derives read and write JSON. A member's payload is `j.str(k)`, `num`, `int`, `bool` or `arr`, `none` when missing (`j.int("retries") else 2`); `j.set(k, v)` (`mut`); `j.need(k)?.need_int()?` fails with `missing KEY`; `j.text(k, default)` and `j.flag(k, default)` never fail; `parse_json_lines(text)` gives each line that parses.

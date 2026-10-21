@@ -1,0 +1,7 @@
+# Output: 300,000 formatted lines to stdout.
+
+fn main()
+    mut sum := 0
+    for i in 0..300000
+        sum += i % 13
+        print("row {i}: value {i * 7 % 1000} sum {sum}")

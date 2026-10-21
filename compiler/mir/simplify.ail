@@ -4,7 +4,7 @@
 ## reads are removed.
 
 pub fn simplify(f Func) Func
-    remove_dead(drop_unreachable(branch_on_inner(remove_trivial_params(f))))
+    remove_dead(drop_unreachable(thread_bools(branch_on_inner(remove_trivial_params(f)))))
 
 ## The argument each edge into `b` passes for parameter `k`.
 fn incoming(f Func, b int, k int) List[int]
@@ -81,6 +81,61 @@ fn branch_on_inner(f Func) Func
         t.targets = [t.targets[1], t.targets[0]]
         t.args = [t.args[1], t.args[0]]
         g.blocks[b].term = t
+    g
+
+## A block that only branches on its one `bool` parameter (what `a or b` and
+## `a and b` lower to) is bypassed (ADR 0623): an edge that passes a constant
+## goes straight to the matching target, and a jump that passes any other
+## value branches on it, so a comparison feeds a branch and not a flag that
+## is made, tested and thrown away.
+fn thread_bools(f Func) Func
+    mut g := f
+    n := g.blocks.len()
+    mut uses := [0 for _ in 0..g.vals.len()]
+    mut consts := Map[int, int]()
+    for blk in g.blocks
+        for i in blk.insts
+            for u in i.args
+                uses[u] += 1
+            if i.op == "const" and i.dst >= 0
+                consts[i.dst] = i.imm
+        for u in blk.term.uses()
+            uses[u] += 1
+    for b in 1..n
+        blk := g.blocks[b]
+        if blk.params.len() != 1 or blk.insts.len() != 0 or blk.term.kind != "branch"
+            continue
+        p := blk.params[0]
+        t := blk.term
+        if t.cond != p or uses[p] != 1 or g.vals[p] != Ty.Bool
+            continue
+        if t.args[0].len() != 0 or t.args[1].len() != 0 or t.targets[0] == b or t.targets[1] == b
+            continue
+        for q in 0..n
+            if q == b
+                continue
+            mut qt := g.blocks[q].term
+            mut changed := false
+            for e in 0..qt.targets.len()
+                if qt.targets[e] != b
+                    continue
+                arg := qt.args[e][0]
+                if v := consts.get(arg)
+                    qt.targets[e] = if v != 0 then t.targets[0] else t.targets[1]
+                    qt.args[e] = []
+                    changed = true
+                elif qt.kind == "jump"
+                    qt = Term(
+                        kind: "branch",
+                        cond: arg,
+                        targets: [t.targets[0], t.targets[1]],
+                        args: [[], []],
+                        value: -1,
+                    )
+                    changed = true
+                    break
+            if changed
+                g.blocks[q].term = qt
     g
 
 fn drop_unreachable(f Func) Func

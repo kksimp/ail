@@ -1,0 +1,6 @@
+1  fn square(n int) int
+4  fn shout(s str)
+7  fn count_lines(path str) int ! fs.IoError
+11  fn run_tool(name str) int ! proc.ProcError
+15  fn main()
+5 functions

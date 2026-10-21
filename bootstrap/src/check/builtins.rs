@@ -54,6 +54,7 @@ pub(super) const STR_METHODS: &[&str] = &[
     "count",
     "rfind",
     "lines",
+    "is_empty",
     "len",
     "byte_len",
     "to_bytes",
@@ -110,10 +111,10 @@ pub(super) const LIST_METHODS: &[&str] =
     &[
         "len", "push", "swap", "pop", "last", "first", "insert", "remove_at", "extend", "clear", "reverse", "contains",
         "index_of", "join", "sum", "min", "max", "sorted", "sort", "take", "union", "intersect", "difference", "chunks",
-        "windows", "counts", "flatten",
+        "windows", "counts", "flatten", "is_empty",
     ];
-pub(super) const MAP_METHODS: &[&str] = &["len", "get", "contains", "remove", "keys", "values"];
-pub(super) const SET_METHODS: &[&str] = &["len", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
+pub(super) const MAP_METHODS: &[&str] = &["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"];
+pub(super) const SET_METHODS: &[&str] = &["len", "is_empty", "add", "remove", "contains", "sorted", "is_subset", "union", "intersect", "difference"];
 
 /// `to_i8` ... `to_f32`: the sized type a conversion method names (type.num.15).
 fn convert(name: &str) -> Option<Num> {
@@ -147,6 +148,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             "pad_left" | "pad_right" | "center" => read(vec![Int, Char], Str),
             "lines" => read(vec![], list(Str)),
             "len" | "byte_len" => read(vec![], Int),
+            "is_empty" => read(vec![], Bool),
             "to_bytes" => read(vec![], Ty::Bytes),
             _ => None,
         },
@@ -227,6 +229,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             let e = (**e).clone();
             match name {
                 "len" => read(vec![], Int),
+                "is_empty" => read(vec![], Bool),
                 "push" => make(true, vec![e], Unit, Need::Nothing),
                 "swap" => make(true, vec![Int, Int], Unit, Need::Nothing),
                 "pop" => make(true, vec![], opt(e), Need::Nothing),
@@ -257,11 +260,17 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             let (k, v) = ((**k).clone(), (**v).clone());
             match name {
                 "len" => read(vec![], Int),
+                "is_empty" => read(vec![], Bool),
                 "get" => read(vec![k], opt(v)),
                 "contains" => read(vec![k], Bool),
                 "remove" => make(true, vec![k], opt(v), Need::Nothing),
                 "keys" => read(vec![], list(k)),
                 "values" => read(vec![], list(v)),
+                // std.count.2: the keys with the largest int values.
+                "top" => match v {
+                    Ty::Int => read(vec![Int], list(k)),
+                    _ => None,
+                },
                 // type.map.8: `m.push(k, x)` for a list-valued map.
                 "push" => match v {
                     Ty::List(e) => make(true, vec![k, *e], Unit, Need::Nothing),
@@ -274,6 +283,7 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             let e = (**e).clone();
             match name {
                 "len" => read(vec![], Int),
+                "is_empty" => read(vec![], Bool),
                 "add" => make(true, vec![e], Bool, Need::Nothing),
                 "remove" => make(true, vec![e], Bool, Need::Nothing),
                 "contains" => read(vec![e], Bool),

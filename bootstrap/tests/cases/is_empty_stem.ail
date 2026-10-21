@@ -1,0 +1,13 @@
+## type.str.19, type.coll.20, std.path.5: is_empty and path.stem.
+fn main()
+    print("".is_empty())
+    print("a".is_empty())
+    print([1].is_empty())
+    xs := List[int]()
+    print(xs.is_empty())
+    m := {"a": 1}
+    print(m.is_empty())
+    print(Set[int]().is_empty())
+    print(path.stem("dir/archive.tar.gz"))
+    print(path.stem(".bashrc"))
+    print(path.stem("plain"))

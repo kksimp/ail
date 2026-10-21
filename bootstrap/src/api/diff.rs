@@ -17,7 +17,7 @@ use crate::modules;
 pub const USAGE: &str = "usage: ail diff OLD NEW [--json] [--no-tests]   (two files, or two package directories)\n       ail diff --rev REV PATH [--json] [--no-tests]   (PATH as of git revision REV against now)\n";
 
 /// Item keys compared by `diff.out.2`; the rest repeat the signature.
-const KEYS: [&str; 10] =
+pub(super) const KEYS: [&str; 10] =
     ["signature", "pub", "effects", "fails_with", "requires", "ensures", "inherits", "default", "doc", "body"];
 
 /// One declaration: its id, kind and the compared properties as text.
@@ -507,9 +507,9 @@ fn shown(v: &str) -> &str {
 }
 
 /// A temporary copy of a path as git has it at a revision, removed on drop.
-struct Checkout {
+pub(super) struct Checkout {
     dir: std::path::PathBuf,
-    path: String,
+    pub(super) path: String,
 }
 
 impl Drop for Checkout {
@@ -520,7 +520,7 @@ impl Drop for Checkout {
 
 /// Extract `path` (a package directory, or a file with the directory that
 /// holds its modules) at `rev` into a temporary directory (diff.out.5).
-fn at_revision(rev: &str, path: &str) -> Result<Checkout, String> {
+pub(super) fn at_revision(rev: &str, path: &str) -> Result<Checkout, String> {
     let p = std::path::Path::new(path);
     let (dir, name) = if p.is_dir() {
         (p, None)

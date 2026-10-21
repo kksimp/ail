@@ -1,0 +1,6 @@
+{"test":"sin_squared_plus_cos_squared_is_one","status":"pass","line":17,"col":10,"message":"","cases":100,"seed":15904095625086175412}
+{"test":"exp_of_ln_is_identity","status":"pass","line":23,"col":10,"message":"","cases":100,"seed":7556321701143345323}
+{"test":"hypot_is_symmetric","status":"pass","line":27,"col":10,"message":"","cases":100,"seed":13488133891025553842}
+{"test":"atan2_quadrant_signs","status":"pass","line":32,"col":10,"message":"","cases":100,"seed":10898093179363865053}
+{"test":"special_values_follow_annex_f","status":"pass","line":41,"col":10,"message":""}
+{"summary":true,"passed":5,"failed":0}

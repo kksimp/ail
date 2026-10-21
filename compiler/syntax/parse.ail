@@ -161,6 +161,7 @@ pub fn parse(tokens List[Token]) Parsed
         public: public,
         files: [],
         grants: [],
+        unsafe_allowed: none,
         generated: [],
     )
     Parsed(program: program, diags: p.diags)
@@ -266,20 +267,23 @@ fn Parser.peek(self) Tok
     tokens[i].tok
 
 fn Parser.peek_at(self, n int) Tok
-    tokens[(i + n).min(tokens.len() - 1)].tok
+    k := i + n
+    if k < tokens.len() then tokens[k].tok else tokens[tokens.len() - 1].tok
 
 fn Parser.tag_at(self, n int) str
     tok_tag(peek_at(n))
 
 ## The symbol `n` tokens ahead, or "".
 fn Parser.sym_at(self, n int) str
-    t := peek_at(n)
-    if tok_tag(t) == "sym" then tok_text(t) else ""
+    match peek_at(n)
+        Sym(s) => s
+        Ident(_) | Kw(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 ## The keyword `n` tokens ahead, or "".
 fn Parser.kw_at(self, n int) str
-    t := peek_at(n)
-    if tok_tag(t) == "kw" then tok_text(t) else ""
+    match peek_at(n)
+        Kw(w) => w
+        Ident(_) | Sym(_) | Str(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => ""
 
 fn Parser.here(self) ast.Pos
     tokens[i].pos

@@ -1,0 +1,19 @@
+# `@allow("expr.match.3")` lets a function's `_` arms cover variants
+# without the warning (gram.attr.5); other functions still warn.
+enum Grade
+    A
+    B
+    C
+
+@allow("expr.match.3") fn is_a(g Grade) bool
+    match g
+        A => true
+        _ => false
+
+fn is_b(g Grade) bool
+    match g
+        B => true
+        _ => false
+
+fn main()
+    print("{is_a(Grade.A)} {is_b(Grade.A)}")

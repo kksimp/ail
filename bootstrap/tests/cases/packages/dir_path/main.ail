@@ -1,0 +1,4 @@
+use util.text
+
+fn main()
+    print(text.size())

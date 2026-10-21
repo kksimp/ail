@@ -195,18 +195,18 @@ conflicts in `check.rs`, `parser.rs` and `interp.rs` (the shared hot spots),
 runs `./ail selftest` on Linux and `tools/verify.sh` on macOS, and opens the
 final pull request against `main`.
 
-| # | Lane | Model | Touches | Depends on |
+| # | Lane | Size | Touches | Depends on |
 |---|---|---|---|---|
-| 1 | Diagnostics schema v1, `ail explain`, typed holes | Opus | `diag.rs`, `main.rs`, new `explain.rs`, `lexer.rs`, `parser.rs`, `check.rs`, `docs/design/semantic-api.md`, ADRs | none |
-| 2 | `ail api`: outline, symbols, references, doc comments | Opus | new `api.rs`, `lexer.rs` (doc comments), `main.rs` | none |
-| 3 | User modules: directories, `pub`, `use a.b`, qualified access (ADRs 0097–0099) | Opus | `main.rs`, `parser.rs`, `check.rs`, `interp.rs`, tests with module directories | none; shares `use` with 4 |
-| 4 | Standard modules `std.fs`, `std.env`, `std.io`, `std.proc`, `std.time` behind `use std.*` | Opus | `parser.rs` (`use std.x` only), `check.rs`, `interp.rs`, builtins, ADR | none; shares `use` with 3 |
-| 5 | `std.json` in the prelude: `Json`, `parse`, `to_text`, accessors | Sonnet | `prelude.ail`, builtins | none (prelude-level until 4 lands) |
-| 6 | Effects inference, `@pure`, capability denial (`ail run --deny`) | Opus | new `check/effects.rs`, `main.rs`, ADRs | none; capability names come from the §4 table; 2 integrates the display |
-| 7 | `ail test`, `@test`, `assert`, `assert_eq` | Sonnet | `parser.rs` (attributes), `main.rs`, `prelude.ail`, `interp.rs` | none |
-| 8 | Formatter `ail fmt` (roadmap refinement 4) | Opus | new `fmt.rs`, `lexer.rs` (comment tokens), `main.rs`, ADR | none |
-| 9 | Spec conformance harness; OQ-041 format specs by measurement; language card | Sonnet | `bootstrap/tests/spec.rs`, `docs/spec/*`, `lexer.rs`, `check.rs`, `interp.rs`, ADRs, `docs/language-card.md` | none |
-| 10 | Interpreter performance: perfbench and slot-resolved locals | Sonnet | `tools/perfbench/`, `interp.rs` | none |
+| 1 | Diagnostics schema v1, `ail explain`, typed holes | large | `diag.rs`, `main.rs`, new `explain.rs`, `lexer.rs`, `parser.rs`, `check.rs`, `docs/design/semantic-api.md`, ADRs | none |
+| 2 | `ail api`: outline, symbols, references, doc comments | large | new `api.rs`, `lexer.rs` (doc comments), `main.rs` | none |
+| 3 | User modules: directories, `pub`, `use a.b`, qualified access (ADRs 0097–0099) | large | `main.rs`, `parser.rs`, `check.rs`, `interp.rs`, tests with module directories | none; shares `use` with 4 |
+| 4 | Standard modules `std.fs`, `std.env`, `std.io`, `std.proc`, `std.time` behind `use std.*` | large | `parser.rs` (`use std.x` only), `check.rs`, `interp.rs`, builtins, ADR | none; shares `use` with 3 |
+| 5 | `std.json` in the prelude: `Json`, `parse`, `to_text`, accessors | medium | `prelude.ail`, builtins | none (prelude-level until 4 lands) |
+| 6 | Effects inference, `@pure`, capability denial (`ail run --deny`) | large | new `check/effects.rs`, `main.rs`, ADRs | none; capability names come from the §4 table; 2 integrates the display |
+| 7 | `ail test`, `@test`, `assert`, `assert_eq` | medium | `parser.rs` (attributes), `main.rs`, `prelude.ail`, `interp.rs` | none |
+| 8 | Formatter `ail fmt` (roadmap refinement 4) | large | new `fmt.rs`, `lexer.rs` (comment tokens), `main.rs`, ADR | none |
+| 9 | Spec conformance harness; OQ-041 format specs by measurement; language card | medium | `bootstrap/tests/spec.rs`, `docs/spec/*`, `lexer.rs`, `check.rs`, `interp.rs`, ADRs, `docs/language-card.md` | none |
+| 10 | Interpreter performance: perfbench and slot-resolved locals | medium | `tools/perfbench/`, `interp.rs` | none |
 
 The designer chose "modules and formatter too" for the buildout, so lanes 3
 and 8 exist.

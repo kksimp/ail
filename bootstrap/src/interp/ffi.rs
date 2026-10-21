@@ -220,6 +220,9 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
     /// (ffi.call.2).
     pub(super) fn call_extern(&mut self, f: &'a FnDecl, env: &Env<'a>, pos: Pos) -> Result<Value, Trap> {
         let ext = f.ext.as_ref().expect("an extern fn");
+        if ext.lib.as_deref() == Some(super::json::LIB) {
+            return self.json_native(f, env, pos);
+        }
         let addr = match resolve(ext.lib.as_deref(), &f.name) {
             Ok(a) => a,
             Err((rule, msg)) => return trap(rule, pos, msg),
@@ -483,6 +486,7 @@ impl<'a, W: std::io::Write> Interp<'a, W> {
                     }
                     Ok(Value::Int(p as i64))
                 }
+                // std.mem.1: `cstr` returns a new NUL-terminated copy of its string.
                 "cstr" => {
                     let Value::Str(s) = &values[0] else { unreachable!("checked: a str") };
                     let bytes = s.as_bytes();

@@ -49,3 +49,8 @@ is noted in [self-hosting status](../design/self-hosting-status.md) as fixed.
 - Tests: `bootstrap/tests/cases/if_operand.ail` (positive) and
   `if_operand_errors.ail` (`expr.if.8`).
 - Formatter: no change needed.
+
+## Rejected alternatives
+
+- Allowing a one-line `if` anywhere an operand is (option B): rejected because `a + if c then b else d + e` hides where the `else` branch ends.
+- Keeping the error (option C): rejected because two whole branches read worse than one expression.

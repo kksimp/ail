@@ -53,3 +53,8 @@ Apache-2.0).
   the lane rules say so.
 - The README's licence section and `AGENTS.md`'s escalation rule are the
   places a contributor sees this.
+
+## Rejected alternatives
+
+- Plain Apache 2.0 (option B): rejected because the attribution terms would reach every compiled program through the embedded runtime.
+- MIT or dual MIT/Apache (option C): rejected because it loses the patent grant, and it still has no runtime exception.

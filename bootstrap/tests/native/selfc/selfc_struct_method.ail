@@ -1,0 +1,9 @@
+struct Point
+    x int
+    y int
+
+fn Point.sum(self) int
+    self.x + self.y
+
+fn main()
+    print(Point(x: 2, y: 5).sum())
