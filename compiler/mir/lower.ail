@@ -1014,6 +1014,8 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
 ## `for x in a..b`, `a..=b` or a list (expr.loop.2-3). The index is a hidden
 ## variable; `continue` goes to the latch, which steps it.
 fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
+    if for_pairs(var, iter, body)
+        return
     scopes.push(Map[str, str]())
     mut lo := -1
     mut hi := -1

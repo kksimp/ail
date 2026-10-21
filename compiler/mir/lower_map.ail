@@ -505,3 +505,86 @@ fn Lower.as_set(mut self, v Val, e Ty, pos ast.Pos) int?
         return call("rt.set_from_list", [konst(key_kind(e), Ty.Int), v.id], Ty.Set(e))
     problem(pos, "expected a set or list of `{e.name()}`, found `{v.ty.name()}`")
     none
+
+## The two names of the `LetTuple` that starts a `for a, b in xs` body, or
+## none when `stmt` is anything else.
+fn pair_binders(var str, stmt ast.Stmt) List[ast.Binder]
+    match stmt
+        LetTuple(ns, value, _) =>
+            match value
+                Name(nm, _) => if nm == var and ns.len() == 2 then ns else []
+                _ => []
+        _ => []
+
+## `for k, v in m` over a map (type.tuple.5): the keys and values are taken
+## as two lists when the loop starts, so the body may change `m`, and the
+## loop runs over their indexes. `for a, b in xs` starts its body with a
+## `LetTuple` over the hidden loop variable `var`. True when the loop is
+## lowered here (or reported), false for any other `for`.
+fn Lower.for_pairs(mut self, var str, iter ast.Expr, body List[ast.Stmt]) bool
+    if body.len() == 0
+        return false
+    pair := pair_binders(var, body[0])
+    if pair.len() == 0
+        return false
+    pos := expr_pos(iter)
+    m := lower_value(iter, none) else return true
+    if not is_map_ty(m.ty)
+        problem(pos, "a `for` over a `{m.ty.name()}` with two names isn't in the native subset yet")
+        return true
+    nvars += 1
+    id := nvars
+    me := "#fm{id}"
+    declare(me, m.ty, m.id)
+    mut stmts := List[ast.Stmt]()
+    for part in ["keys", "values"]
+        call_expr := ast.Expr.Method(
+            recv: ast.Expr.Name(name: me, pos: pos),
+            name: part,
+            name_pos: pos,
+            args: [],
+        )
+        lower_stmt(ast.Stmt.Let(
+            name: "#f{part}{id}",
+            pos: pos,
+            mutable: false,
+            value: call_expr,
+            otherwise: none,
+        ))
+    at := ast.Expr.Name(name: "#fi{id}", pos: pos)
+    mut inner := List[ast.Stmt]()
+    mut k := 0
+    for b in pair
+        if b.name != "_"
+            list := ast.Expr.Name(name: "#f{if k == 0 then "keys" else "values"}{id}", pos: pos)
+            inner.push(ast.Stmt.Let(
+                name: b.name,
+                pos: b.pos,
+                mutable: b.mutable,
+                value: ast.Expr.Index(recv: list, index: at, pos: pos),
+                otherwise: none,
+            ))
+        k += 1
+    for rest in body[1..]
+        inner.push(rest)
+    count := ast.Expr.Method(
+        recv: ast.Expr.Name(name: "#fkeys{id}", pos: pos),
+        name: "len",
+        name_pos: pos,
+        args: [],
+    )
+    lower_stmt(ast.Stmt.For(
+        is_par: false,
+        var: "#fi{id}",
+        var_pos: pos,
+        mutable: false,
+        iter: ast.Expr.Range(
+            lo: ast.Expr.Int(value: "0", pos: pos),
+            hi: count,
+            inclusive: false,
+            pos: pos,
+        ),
+        body: inner,
+        pos: pos,
+    ))
+    true
