@@ -7,6 +7,18 @@
 ## subset yet (`native.subset.1` problems, never a wrong answer).
 use ast
 
+## The scalar number type a written name stands for.
+fn scalar_ty(name str) Ty
+    if name == "f32"
+        return Ty.F32
+    Ty.Sized(name)
+
+## The runtime function that prints a `float` or an `f32`.
+fn float_out_fn(t Ty) str
+    if t == Ty.F32
+        return "rt.out_f32"
+    "rt.out_float"
+
 ## A float literal: an `f32` where one is wanted (rounded now, as the
 ## interpreter rounds it), else a `float`.
 fn Lower.float_lit(mut self, x float, want Ty?) Val

@@ -252,6 +252,8 @@ fn Lower.ordering(mut self, k int) Val
 
 ## A method of a `float` (type.num.9, type.num.16).
 fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if r.ty == Ty.F32
+        return f32_method(r, name, npos, vs)
     if name == "to_int" and vs.len() == 0
         s := site("type.num.9", "float_int", "", npos)
         return Val(id: checked("ftoi", [r.id], s, Ty.Int), ty: Ty.Int)
