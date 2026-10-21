@@ -4,7 +4,7 @@
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — Compiler architecture
-- **Spec rules:** type.map.*, own.val.1
+- **Spec rules:** type.map.*, type.coll.*, own.val.1
 - **Builds on:** [ADR 0568](0568-native-map-and-set-layout.md) (tables), [ADR 0602](0602-native-enum-layout.md) (enum values), [ADR 0392](0392-native-structs-and-methods.md) (structs)
 
 ## Context
@@ -29,6 +29,15 @@ Struct values already built, but a copy of such a table shared its structs, so
 
 Printing a table of enums or structs is still reported under native.subset.1,
 as printing an enum or struct is.
+
+## Addendum: tables as list elements
+
+A list's elements may be maps and sets (`List[Map[str, str]]`, the result of
+`csv.records`), as parameters, results, fields and literals. A list of tables
+is copied by the generated `copy.List[...]`, which copies each table
+(`copy.Map[...]` or `rt.map_copy`), so a copy of the list is independent.
+This is a one-line change in `lower.ail` (list element types and list
+literals) plus `holds_struct` counting a table element.
 
 ## Consequences
 

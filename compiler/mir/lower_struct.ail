@@ -252,7 +252,7 @@ fn needs_copy(t Ty) bool
 fn holds_struct(t Ty) bool
     match t
         Struct(_) | Tuple(_) => true
-        List(e) => holds_struct(e)
+        List(e) => e.is_coll() or holds_struct(e)
         Map(_, v) => holds_struct(v)
         _ => false
 
