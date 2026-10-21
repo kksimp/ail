@@ -244,7 +244,11 @@ fn scan_uses(tokens: &[Token]) -> Vec<Vec<String>> {
                         _ => break,
                     }
                 }
-                out.push(path);
+                // A `use` with no name (`use`, `use 5`) has no path to load; the
+                // parser reports it as mod.use.1 (lane diag-checker-fixes).
+                if !path.is_empty() {
+                    out.push(path);
+                }
             }
             _ => {}
         }

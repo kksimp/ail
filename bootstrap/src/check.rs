@@ -207,6 +207,9 @@ pub struct Resolved {
     /// `tensor.from` and `tensor.zeros` calls typed `Tensor[int]`, by the
     /// position of the name (std.tensor.2).
     pub int_tensors: std::collections::HashSet<Pos>,
+    /// `tensor.from` and `tensor.zeros` calls typed `Tensor[f32]`, by the
+    /// position of the name (std.tensor.21).
+    pub f32_tensors: std::collections::HashSet<Pos>,
     /// Chains of elementwise tensor operations that run fused (std.tensor.20),
     /// by the chain's position.
     pub fused: std::collections::HashSet<Pos>,
@@ -306,7 +309,9 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         resolved: Resolved::default(),
         scope: Vec::new(),
         self_ty: None,
+        json_num: false,
         in_requires: false,
+        requires_pos: None,
         deferred: Some(Vec::new()),
         locals: Vec::new(),
         pending: Vec::new(),
@@ -498,8 +503,12 @@ struct Checker<'p> {
     /// Type parameter names in scope, and what `Self` means here.
     scope: Vec<(String, usize)>,
     self_ty: Option<Ty>,
+    /// The function being checked reads a `Json` member with `num` (expr.block.2's hint).
+    json_num: bool,
     /// Checking a `requires` condition, where `result` doesn't exist yet (contract.ens.1).
     in_requires: bool,
+    /// Where the `requires` keyword of that condition is.
+    requires_pos: Option<Pos>,
     /// Bounds to check once every declaration is known (gen.bound.3):
     /// the type, the trait, where, and what requires it.
     deferred: Option<Vec<(Ty, usize, Pos, String)>>,
@@ -1717,6 +1726,7 @@ impl<'p> Checker<'p> {
         }
         self.check_contracts(f, &sig.ret);
         let need = !Self::returns_nothing(&sig.ret);
+        self.json_num = false;
         let got = self.block(body, need.then_some(&sig.ret), need);
         if need && !self.accepts(&sig.ret, &got) {
             let ret_pos = f.ret.as_ref().map_or(f.pos, |t| t.pos);
@@ -1745,7 +1755,11 @@ impl<'p> Checker<'p> {
                 };
                 if want == Ty::Int && got == Ty::Float {
                     // Two candidates, the likelier first; neither is applied, since each is a choice.
-                    d = d.help("convert the value with `x.to_int()`, or declare the return type `float` instead");
+                    d = d.help(if self.json_num {
+                        "a `Json` member read with `num` is a float: read it with `int` and an int default (`j.int(k) else 2`), or convert with `x.to_int()`, or declare the return type `float`"
+                    } else {
+                        "convert the value with `x.to_int()`, or declare the return type `float` instead"
+                    });
                 }
                 if f.ret.is_some() {
                     d = d.note(ret_pos, "the return type is declared here");
@@ -4240,6 +4254,9 @@ impl<'p> Checker<'p> {
             self.args_only(args);
             return Ty::Err;
         }
+        if name == "num" && matches!(&rt, Ty::Enum(e, _) if self.prog.enums[*e].name == "Json") {
+            self.json_num = true;
+        }
         // own.ref.3: a method of a `ref T` is called on the `T` in the cell.
         let rt = match rt {
             Ty::Ref(t) => *t,
@@ -4898,6 +4915,14 @@ impl<'p> Checker<'p> {
                 "write `== none`, or bind it: `if i := ...`",
             );
         }
+        // err.use.1: the failure sits in an operand, so the fix goes after it.
+        if !matches!(lt, Ty::Err | Ty::Never) && !matches!(rt, Ty::Err | Ty::Never) {
+            for (t, side) in [(&lt, lhs), (&rt, rhs)] {
+                if self.reject_unhandled(t, side.pos()) {
+                    return Ty::Err;
+                }
+            }
+        }
         self.operator(op, &lt, &rt, pos)
     }
 
@@ -4966,7 +4991,7 @@ impl<'p> Checker<'p> {
                 Ty::Str if op == BinOp::Add => self.diags.push(
                     Diagnostic::new("trait.op.1", pos, "`+` doesn't join strings")
                         .help("build text with interpolation: \"{a}{b}\"")
-                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp\"")]),
+                        .fix("interpolate", vec![Edit::operands(pos, "+", "\"$lp$rp$c\"")]),
                 ),
                 t => {
                     let msg = format!("`{sym}` is not defined for {}", self.show(t));
@@ -5487,21 +5512,20 @@ impl<'p> Checker<'p> {
     /// An unknown name; `args` is the argument count when it was called.
     fn unknown_name(&mut self, name: &str, pos: Pos, args: Option<usize>) {
         if name == "old" && args.is_some() {
-            self.error_help(
-                "contract.ens.3",
-                pos,
-                "`old(...)` is only available in an `ensures` condition",
-                "name the value in the body before it changes, or move the condition to an `ensures` line",
-            );
+            let mut d = Diagnostic::new("contract.ens.3", pos, "`old(...)` is only available in an `ensures` condition")
+                .help("name the value in the body before it changes, or move the condition to an `ensures` line");
+            // On entry `old(e)` is `e`, so in a `requires` the call can go.
+            if self.in_requires {
+                d = d.fix("drop `old`: on entry it is the value itself", vec![Edit::call(pos, "old", "$p")]);
+            }
+            self.diags.push(d);
             return;
         }
         if name == "result" && args.is_none() && self.in_requires {
-            self.error_help(
-                "contract.ens.2",
-                pos,
-                "`result` is only available in an `ensures` condition",
-                "a `requires` condition can read only the parameters; move this check to an `ensures` line",
-            );
+            let d = Diagnostic::new("contract.ens.2", pos, "`result` is only available in an `ensures` condition")
+                .help("a `requires` condition can read only the parameters; move this check to an `ensures` line")
+                .fix("write `ensures`: the condition is about the result", vec![Edit::replace(self.requires_pos.unwrap_or(pos), "requires", "ensures")]);
+            self.diags.push(d);
             return;
         }
         let candidates: Vec<&str> = (self.locals.iter().map(|l| l.name.as_str()))
@@ -5727,6 +5751,16 @@ mod tests {
     }
 
     const GRADES: &str = "enum Grade\n    A\n    B\n    C\n";
+
+    #[test]
+    fn json_num_float_in_int_function_names_the_int_accessor() {
+        // expr.block.2: the hint for a float body in an int function.
+        let src = "fn f(j Json) int\n    r := j.num(\"n\") else 2.0\n    r + 1\n\nfn g(x float) int\n    x\n\nfn main()\n    print(f(Json.Null))\n    print(g(1.0))\n";
+        let helps: Vec<_> = diags(src).into_iter().filter(|d| d.rule == "expr.block.2").map(|d| d.help.unwrap_or_default()).collect();
+        assert_eq!(helps.len(), 2, "{helps:?}");
+        assert!(helps[0].contains("j.int(k) else 2"), "{}", helps[0]);
+        assert!(!helps[1].contains("j.int"), "{}", helps[1]);
+    }
 
     #[test]
     fn hello_world_is_clean() {

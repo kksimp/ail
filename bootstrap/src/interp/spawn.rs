@@ -22,6 +22,17 @@ pub struct Ext {
 }
 
 impl Ext {
+    /// A stream that already holds `lines` and has ended, for the scheduler's tests.
+    #[cfg(test)]
+    pub fn ended_with(lines: &[&str]) -> Arc<Ext> {
+        let e = Arc::new(Ext::default());
+        for l in lines {
+            e.push((*l).to_string());
+        }
+        e.finish();
+        e
+    }
+
     /// Take every queued line and whether the stream ended after them.
     pub fn take(&self) -> (VecDeque<String>, bool) {
         let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
