@@ -33,8 +33,9 @@ guards, ranges, and `int`, `bool` and `str` literals), `print` of numbers,
 strings and lists of them or an interpolation of them, interpolation as a value, `xs[i]`, `xs[i] = v`,
 `len`, `push`, `join`, `env.args()`, `none`, `x == none`, `if v := o`,
 `o else d` and `o?` in a function returning an optional, functions that can
-fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s (with fields and messages, `return E(...)`, `else err` typed by the one error type)
-without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
+fail (`T ! E`, `! E`, `!`) whose errors are `error struct`s and `error enum`s
+with fields and messages (`return E(...)`, `f()?`, `f() else ...`, `else err`,
+typed when the function names one error type, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
 the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
