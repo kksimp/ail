@@ -1,0 +1,6 @@
+# std.tensor.6: an int product or sum that overflows traps.
+fn main()
+    a := tensor.from([4611686018427387904, 1], [1, 2])
+    b := tensor.from([1, 2], [2, 1])
+    print(b.matmul(a))
+    print(a.matmul(b))

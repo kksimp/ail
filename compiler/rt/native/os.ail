@@ -831,6 +831,11 @@ fn os_error(path str, kind int, at str)
     os_put_quoted(kind_name(kind))
     sb_byte(41)
     err_set(sb_str(), at)
+    # The value, an `fs.IoError(path, kind)` struct (ADR 0804).
+    e := obj_new(16, 4)
+    store64(e, str_addr(path))
+    store64(e + 8, str_addr(kind_name(kind)))
+    err_value(e)
 
 fn fs_read_text(path str, at str) str
     s := os_fs_read_text(path)
@@ -853,6 +858,44 @@ fn fs_list_dir(path str, at str) List[int]
     if not os_ok()
         os_error(path, os_kind(), at)
     xs
+
+## Whether `path` is a directory itself, not a link to one: opening it with
+## `O_DIRECTORY | O_NOFOLLOW` works. A directory that can't be opened for
+## permission still counts, so listing it reports the failure (std.fs.8).
+fn os_is_real_dir(path str) bool
+    p := os_cstr(OS_PATH_B, path)
+    if p == 0
+        return false
+    flags := os_pick(196608, 49152, 1048832)
+    fd := os_open(p, flags, 0)
+    if fd < 0
+        return fd == -13
+    os_close(fd)
+    true
+
+## `fs.walk(dir)` (std.fs.8): every file below `dir`, joined with `dir` and
+## sorted by bytes; a directory that can't be read fails with its own path.
+fn fs_walk(dir str, at str) List[int]
+    mut out := List[int]()
+    mut dirs := [dir]
+    mut next := 0
+    while next < dirs.len()
+        d := dirs[next]
+        next += 1
+        names := os_fs_list_dir(d)
+        if not os_ok()
+            os_error(d, os_kind(), at)
+            return List[int]()
+        for i in 0..names.len()
+            full := path_join(d, str_at(names[i]))
+            if os_is_real_dir(full)
+                dirs.push(full)
+            else
+                out.push(str_addr(full))
+    os_succeed()
+    q := list_addr(out)
+    os_sort_names(load64(q + 16), load64(q))
+    out
 
 fn fs_remove(path str, at str)
     os_fs_remove(path)

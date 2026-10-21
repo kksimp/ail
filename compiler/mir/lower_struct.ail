@@ -17,10 +17,27 @@ struct Slot
 ## that no source declares; its key can't clash with a program's own name.
 PROC_OUTPUT := "proc.Output"
 
+## The errors of the OS layer (std.err.1): `fs.IoError` and `proc.ProcError`,
+## error structs of the standard library that no source declares. The
+## runtime builds them where a call fails (ADR 0804).
+IO_ERROR := "fs.IoError"
+PROC_ERROR := "proc.ProcError"
+
+## The raw TCP types of `std.net` (std.net.12) and its error (std.net.4):
+## structs of the standard library that no source declares.
+NET_ERROR := "net.NetError"
+NET_CONN := "net.Conn"
+NET_LISTENER := "net.Listener"
+
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
+    structs[IO_ERROR] = []
+    structs[PROC_ERROR] = []
+    structs[NET_ERROR] = []
+    structs[NET_CONN] = []
+    structs[NET_LISTENER] = []
     for s in prog.structs
         if s.generics.len() > 0
             problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
@@ -32,6 +49,15 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
             structs["{prefix}{s.name}"] = []
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
+    structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[NET_ERROR] = [
+        Slot(name: "url", ty: Ty.Str),
+        Slot(name: "kind", ty: Ty.Str),
+        Slot(name: "message", ty: Ty.Str),
+    ]
+    structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
     structs[PROC_OUTPUT] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "out", ty: Ty.Str),
@@ -154,6 +180,8 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         return none
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
         return proc_output_method(key, recv, args, pos)
+    if key.starts_with("net.")
+        return lower_net_method(key, recv, args, pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
     if r := recv

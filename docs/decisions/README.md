@@ -599,6 +599,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0794](0794-tuple-library-names.md) | `xs.enumerate()` and `zip(a, b)`; no `m.items()` or `m.pairs()` *(delegated)* | Accepted | 2026-10-21 |
 | [0795](0795-tuple-text-and-json.md) | Tuples as text and JSON: `(1, "a")` and arrays *(delegated)* | Accepted | 2026-10-21 |
 | [0796](0796-tensor-f32.md) | `Tensor[f32]`: a 32-bit float element type (designer) | Accepted | 2026-10-21 |
+| [0799](0799-one-path-spelling-in-tool-output.md) | One path spelling in every tool output: `/` in diagnostics, JSON and `ail api` *(delegated)* | Accepted | 2026-10-21 |
 | [0780](0780-fix-failure-in-operand-and-json-num-hint.md) | `ail fix` for a failure inside an operand; `expr.block.2` hint for `Json.num` in an `int` function *(delegated)* | Accepted | 2026-10-21 |
 | [0781](0781-stream-output-before-blocking.md) | A task blocking on a child's stream while output arrives is not a `conc.task.7` deadlock *(delegated)* | Accepted | 2026-10-21 |
 | [0764](0764-comprehension-if-and-text-len.md) | `if` elements in comprehensions and `len` of text, maps, sets and bytes compile in the tier: -43% on a micro-benchmark *(delegated)* | Accepted | 2026-10-21 |
@@ -614,6 +615,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0806](0806-native-typed-else-err.md) | Typed error binding in native `else err` *(delegated)* | Accepted | 2026-10-21 |
 | [0815](0815-native-tensors.md) | Native tensors: a runtime object and kernels written in AIL *(delegated)* | Accepted | 2026-10-21 |
 | [0783](0783-std-error-families.md) | Std error families: a closed kind list per module, as spec rules | Accepted | 2026-10-21 |
+| [0784](0784-std-error-compress-net.md) | Std error families: compress and net client causes | Accepted | 2026-10-21 |
 | [0774](0774-load-json-and-print-json.md) | `load_json[T](path)` and `print_json(v)` *(delegated)* | Accepted | 2026-10-21 |
 | [0775](0775-bytes-hex-separator.md) | `b.hex(sep)` spaces the byte pairs *(delegated)* | Accepted | 2026-10-21 |
 | [0816](0816-native-codegen-entry-addressing-constants.md) | Native code generation: parameters stay in their arrival registers, scaled addressing for load and store primitives (constant hoisting tried and dropped) *(delegated)* | Accepted | 2026-10-21 |
@@ -621,3 +623,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0823](0823-lower-ail-feature-files.md) | `lower.ail` is a core plus feature files with one-line hooks: a native feature lives in its own `lower_*.ail` and adds at most one dispatch line and one state field *(delegated)* | Accepted | 2026-10-21 |
 | [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
+| [0830](0830-native-raw-tcp.md) | Native raw TCP: sockets by system calls, handles in a table, `net.NetError` *(delegated)* | Accepted | 2026-10-21 |
+| [0821](0821-unsafe-driver-manifest-and-flag.md) | `unsafe driver` in `ail.pkg`, and `--unsafe driver` for a program without one *(delegated)* | Accepted | 2026-10-21 |
+| [0822](0822-std-hw-volatile-and-hw-effect.md) | `std.hw`: `at`, volatile methods and fences, and the effect `hw` *(delegated)* | Accepted | 2026-10-21 |
+| [0819](0819-native-std-regex-in-ail.md) | Native `std.regex` is an AIL module compiled with the program *(delegated)* | Accepted | 2026-10-21 |
+| [0811](0811-fix-for-over-recv.md) | `ail fix` turns `for v in ch.recv()` into `for v in ch` *(delegated)* | Accepted | 2026-10-21 |

@@ -465,6 +465,96 @@ fn tensor_transpose(a int) int
             store64(out + 8 * (j * m + i), load64(da + 8 * (i * n + j)))
     t
 
+## `a.matmul(b)` (std.tensor.7) needs two 2-D tensors with equal inner sizes:
+## the message, or 0.
+fn tensor_matmul_fault(a int, b int) int
+    if load64(a + 8) != 2 or load64(b + 8) != 2
+        sb_reset()
+        sb_text("`matmul` needs two 2-D tensors, but the shapes are ")
+        put_sizes(a + 32, load64(a + 8))
+        sb_text(" and ")
+        put_sizes(b + 32, load64(b + 8))
+        return str_addr(sb_str())
+    k := load64(a + 40)
+    k2 := load64(b + 32)
+    if k == k2
+        return 0
+    sb_reset()
+    sb_text("`matmul` of ")
+    put_int(load64(a + 32))
+    sb_text("x")
+    put_int(k)
+    sb_text(" and ")
+    put_int(k2)
+    sb_text("x")
+    put_int(load64(b + 40))
+    sb_text(": the inner sizes ")
+    put_int(k)
+    sb_text(" and ")
+    put_int(k2)
+    sb_text(" differ")
+    str_addr(sb_str())
+
+## The plain triple loop of std.tensor.7: element `(i, j)` adds `a(i, p) * b(p, j)`
+## for `p` in order from zero, each product and sum rounded (no fused
+## multiply-add). 0 when an `int` product or sum overflows (std.tensor.6).
+fn tensor_matmul(a int, b int) int
+    m := load64(a + 32)
+    k := load64(a + 40)
+    n := load64(b + 40)
+    kind := load64(a)
+    t := tensor_new(kind, 2, m * n)
+    store64(t + 32, m)
+    store64(t + 40, n)
+    da := tensor_data(a)
+    db := tensor_data(b)
+    out := tensor_data(t)
+    if kind == 1
+        for i in 0..m
+            for p in 0..k
+                x := loadf(da + 8 * (i * k + p))
+                for j in 0..n
+                    c := out + 8 * (i * n + j)
+                    storef(c, loadf(c) + x * loadf(db + 8 * (p * n + j)))
+        return t
+    box := alloc(8, KIND_ATOMIC)
+    for i in 0..m
+        for p in 0..k
+            x := load64(da + 8 * (i * k + p))
+            for j in 0..n
+                c := out + 8 * (i * n + j)
+                if not int_op(2, x, load64(db + 8 * (p * n + j)), box)
+                    return 0
+                if not int_op(0, load64(c), load64(box), c)
+                    return 0
+    t
+
+# Activations (std.tensor.13): kind 0 `relu`, 1 `sigmoid`, 2 `tanh`.
+
+## `relu` keeps a positive element and makes the rest `0.0`, but a NaN stays
+## NaN; `sigmoid` is `1 / (1 + exp(-x))`; `tanh` is fdlibm's.
+fn tensor_activate(a int, kind int) int
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(1, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for i in 0..n
+        x := loadf(da + 8 * i)
+        mut y := 0.0
+        if kind == 0
+            if x != x
+                y = x
+            elif x > 0.0
+                y = x
+        elif kind == 1
+            y = 1.0 / (1.0 + float_exp(0.0 - x))
+        else
+            y = float_tanh(x)
+        storef(out + 8 * i, y)
+    t
+
 # Reductions (std.tensor.11): kind 0 `sum`, 1 `max`, 2 `mean`.
 
 fn reduce_name(kind int) str
