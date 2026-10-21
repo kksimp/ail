@@ -45,7 +45,8 @@ struct Lower
     file_paths List[str]
     ## Zero-field `error struct`s to their messages (lower_err.ail).
     err_msgs Map[str, str]
-    err_fns Set[str]
+    ## The error type of each function that can fail, when it names one.
+    fn_errs Map[str, Ty]
     ## The type the next block's final expression should have (consumed by `lower_block`).
     tail_want Ty?
     ## The function being lowered can fail.
@@ -167,12 +168,13 @@ pub struct Source
 ## Lower the files of a package (mod.unit.1-5, ADR 0393) and, when given,
 ## the runtime. The first source is the root module's file holding `main`;
 ## problems name the file they are in (`Problems.files`).
-pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
+pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
+    srcs := with_error_owners(input)
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
         err_msgs: {"fs.IoError": "", "IoError": ""},
-        err_fns: Set[str](),
+        fn_errs: {},
         tail_want: none,
         fails: false,
         sigs: {},
@@ -344,8 +346,6 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
     for f in prog.fns
-        if is_error_message(f)
-            continue
         before := problems.len()
         declare_fn(f, pre)
         if problems.len() > before
@@ -411,6 +411,9 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             Ty.Unknown
         rty = t
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
+    if can_fail
+        if r := f.ret
+            fn_errs[fn_key(f, pre)] = error_ty_of(r)
 
 ## A function's name in MIR: `T.m` for a method of `T`.
 fn fn_key(f ast.FnDecl, pre str) str
@@ -438,6 +441,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                         return Ty.List(e)
                     none
                 "Map" | "Set" => coll_type_of(name, args)
+                "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
                     if args.len() == 0
                         if k := type_key(name)
@@ -445,6 +449,14 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                         if k := enum_key(name)
                             return Ty.Enum(k)
                     none
+        FnType(fparams, fret) =>
+            mut ps := List[Ty]()
+            for p in fparams
+                ps.push(type_of(p)?)
+            mut r := Ty.Unit
+            if rt := fret
+                r = type_of(rt)?
+            Ty.Fn(params: ps, ret: r)
         _ => none
 
 fn is_literal(e ast.Expr) bool
@@ -794,13 +806,24 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
     if recv == none
         lower_bind_else(name, pos, value, other)
         return
-    s := lower_value(recv?, Ty.Str) else
+    got := lower_str_to_int_else(recv?, other, pos) else
         declare(name, Ty.Unknown, -1)
         return
+    declare(name, got.ty, got.id)
+
+## The receiver of `s.to_int()` when `e` is that call.
+fn str_to_int_recv(e ast.Expr) ast.Expr?
+    match e
+        Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
+        _ => none
+
+## `s.to_int() else ...` (err.else.1-2) in any position: the parse, then the
+## `else` when it fails, a fallback value or a statement that leaves.
+fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.Pos) Val?
+    s := lower_value(recv, Ty.Str)?
     if not (s.ty == Ty.Str)
         problem(pos, "`.to_int()` on `{s.ty.name()}`")
-        declare(name, Ty.Unknown, -1)
-        return
+        return none
     n := call("rt.str_to_int", [s.id], Ty.Int)
     ok := call("rt.parse_ok", [], Ty.Bool)
     join := new_block()
@@ -812,9 +835,7 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
     cur = fail
     match other
         Fallback(x) =>
-            f := lower_value(x, Ty.Int) else
-                declare(name, Ty.Unknown, -1)
-                return
+            f := lower_value(x, Ty.Int)?
             jump(join, [convert(f, Ty.Int, pos)])
         Leave(st) =>
             lower_stmt(st)
@@ -823,7 +844,7 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
     seal(join)
     cur = join
-    declare(name, Ty.Int, r)
+    Val(id: r, ty: Ty.Int)
 
 fn Lower.lower_stmt(mut self, s ast.Stmt)
     match s
@@ -1156,6 +1177,8 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                 if k >= 0
                     t := structs[self_ty][k].ty
                     return Val(id: load(self_value(), k, t), ty: t)
+                if v := fn_value(name)
+                    return v
                 if globals.contains("{prefix}{name}")
                     return global_const("{prefix}{name}")
                 if v := bare_variant(name, want)
@@ -1324,6 +1347,9 @@ fn is_comparison(o ast.BinOp) bool
 
 fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
+    if (name == "eq" or name == "ne") and (a.ty.opt_inner() != none or b.ty.opt_inner() != none)
+        if opt_comparable(a.ty, b.ty)
+            return opt_compare(name == "ne", a, b, pos)
     if not same_ty(a.ty, b.ty)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
         return a
@@ -1357,6 +1383,7 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
             a
         Str => str_binary(o, a, b, pos) else a
         Char => char_binary(o, a, b, pos) else a
+        Tensor(_) => tensor_binary(o, a, b, pos)
         _ =>
             if eq := self.list_equal(o, a, b)
                 return eq
@@ -1494,6 +1521,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_print(args, pos)
             if is_rt and PRIMS.contains(name)
                 return lower_prim(name, args)
+            if name == "unreachable" and not is_rt and lookup(name) == none
+                return lower_unreachable(args, pos)
+            if k := lookup(name)
+                return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, pos)
             if lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
@@ -1534,7 +1565,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     return unsupported(tpos, "this list type")
                 return Val(id: call("rt.list_new", [konst(0, Ty.Int)], t), ty: t)
             unsupported(tpos, "`{name}[...]`")
-        _ => unsupported(pos, "this call")
+        _ =>
+            f := lower_value(callee, none)?
+            call_value(f, args, pos)
 
 fn Lower.lower_prim(mut self, name str, args List[ast.Arg]) Val?
     mut vs := List[int]()
@@ -1583,6 +1616,7 @@ fn out_fn(t Ty) str
         Bool => "rt.out_bool"
         Str => "rt.out_str"
         Char => "rt.out_char"
+        Tensor(_) => "rt.out_tensor"
         List(e) =>
             match e
                 Int => "rt.out_list_int"
@@ -1611,6 +1645,9 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
         if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
+    if s := display_call(v)
+        call("rt.out_str", [s], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
         return unsupported(pos, "printing a `{v.ty.name()}`")
@@ -1627,6 +1664,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_os_method(om, name, npos, args)
     if name == "from_code" and is_module(recv, "char")
         return lower_char_from_code(args, npos)
+    if name == "from" and is_module(recv, "tensor")
+        return lower_tensor_from(args, npos)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1645,8 +1684,12 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if is_sorting(name, args) and r.ty.elem() != none
+        return lower_sorted(r, name, args, npos)
     if r.ty.is_coll()
         return lower_coll_method(r, name, npos, args)
+    if r.ty.is_tensor()
+        return lower_tensor_method(r, name, npos, args)
     if s := struct_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)

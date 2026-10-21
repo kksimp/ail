@@ -16,7 +16,8 @@ module's path, empty at the package root), `kind` (`TypeKind.Struct` or
 `TypeKind.Enum`), `is_error` (whether it is an error type; `error` is a
 keyword, ADR 0306), `params` (generic
 parameter names in order), `fields` (a struct's fields) and `variants` (an
-enum's variants). A `FieldInfo` has `name`, `type_text` and `public`; a
+enum's variants). A `FieldInfo` has `name`, `type_text`, `public` and `doc` (the field's `##`
+comment, `ct.derive.5`); a
 `VariantInfo` has `name` and `fields`. Fields and variants are in
 declaration order, not layout order (ADR 0013). The prelude also declares
 `error struct DeriveError` with `message str`. They are read when the program
@@ -42,6 +43,7 @@ struct FieldInfo
     name str
     type_text str
     public bool
+    doc str
 
 struct VariantInfo
     name str
@@ -50,7 +52,7 @@ struct VariantInfo
 
 ```ail rules=refl.info.1
 fn main()
-    t := TypeInfo(name: "Point", id: "geo.Point", module: "geo", kind: TypeKind.Struct, is_error: false, params: [], fields: [FieldInfo(name: "x", type_text: "int", public: true)], variants: [])
+    t := TypeInfo(name: "Point", id: "geo.Point", module: "geo", kind: TypeKind.Struct, is_error: false, params: [], fields: [FieldInfo(name: "x", type_text: "int", public: true, doc: "")], variants: [])
     print("{t.name} {t.fields[0].name} {t.fields[0].type_text}")
 ```
 
@@ -75,7 +77,7 @@ struct Pair
     second int
 
 fn main()
-    f := FieldInfo(name: "first", type_text: "List[Map[str, int]]", public: false)
+    f := FieldInfo(name: "first", type_text: "List[Map[str, int]]", public: false, doc: "")
     print("{f.name} has type {f.type_text}")
 ```
 

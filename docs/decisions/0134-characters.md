@@ -68,7 +68,7 @@ value (and when `s.to_int()` accepts that digit, ADR 0124), so there is no
    range. Helps: `ord(c)` says "write `c.code()`", `chr(n)` says "write
    `char.from_code(n)`", and `c.to_int()` says "`c.code()` or `c.to_digit(10)`".
 
-```ail
+```ail fragment
 'é'.is_alpha()           # true
 '٣'.is_digit()           # false: ASCII only, so is_digit implies to_digit(10)
 'F'.to_digit(16)         # 15

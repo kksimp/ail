@@ -341,7 +341,7 @@ derive output.
 
 For
 
-```ail
+```ail fragment
 ## A point.
 struct Point
     x int
