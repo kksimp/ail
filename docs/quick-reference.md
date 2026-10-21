@@ -475,7 +475,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 
 ## Lists
 
-```ail skip=context
+```ail
 mut xs := [3, 1, 2]    # a trailing comma is allowed; `[]` needs a known type
 first := xs[0]         # out of bounds stops the program
 part := xs[1..3]       # a copy of elements 1 and 2; also xs[1..] and xs[..2]
@@ -484,6 +484,7 @@ xs.swap(0, 1)
 xs[0] = 7              # elements can be assigned, including fields: xs[i].qty = 0
 n := xs.len()          # int
 mut out := []          # typed by its first use: out.push("a") makes a List[str]
+out.push("a")
 empty := List[int]()   # an empty list of a given type, anywhere
 ```
 
@@ -549,11 +550,12 @@ fn main()
 
 ## Maps and sets
 
-```ail skip=context
+```ail
 mut ages := {"ann": 31, "bob": 27}     # Map[str, int]; keeps insertion order
 ages["cy"] = 40                        # inserts or replaces
 ages["ann"] += 1                       # `op=` on a missing key starts from 0
 mut counts := {}                       # typed by first use: counts[w] += 1
+counts["x"] += 1
 a := ages["bob"]                       # traps if missing...
 b := ages.get("dan") else 0            # ...`get` gives an optional
 for name in ages.keys()                # `for k in m` is an error; also values()

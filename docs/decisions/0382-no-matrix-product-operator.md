@@ -5,7 +5,7 @@
 - **Decided by:** Designer
 - **Topic:** 11 — Operators; standard library (`std.tensor`)
 - **Spec rules:** none changed (`trait.op.2` and the operator set of
-  [ADR 0077](0077-operator-overloading.md) stay as they are)
+  [ADR 0077](0077-operator-traits.md) stay as they are)
 - **Resolves:** OQ-113
 
 ## Context

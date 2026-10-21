@@ -331,31 +331,18 @@ expr.call.1).
 
 ## OQ-118 — Which transcendental functions the language and the native backend need
 
+**Answered** by the designer on 2026-10-21: the full `std.math` set (`sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`, `cbrt`) as float methods, with a stated tolerance. The ADR is pending: lane 184 writes it and adds the link here.
+
 The language has no `sin`, `cos`, `tan`, `atan2`, `exp`, `ln`, `pow`, `hypot`
 or `cbrt`. The float methods are `abs`, `floor`, `ceil`, `round` and `sqrt`
 (`type.num.9`). Only `std.tensor`'s `sigmoid` and `tanh` (`std.tensor.13`) call
 `exp` and `tanh`, through the platform's libm, so they already differ in the
 last bit between operating systems. A bit-exact match of libm across hosts
 isn't possible, so any new function needs a stated tolerance.
+**Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full
+set (option c, chosen by the designer on 2026-10-21), within one unit in the
+last place of the platform's libm.
 
-Options:
-- **a.** Add nothing now. The native compiler doesn't need these functions.
-  `sigmoid` and `tanh` stay interpreter-only until native tensors exist.
-- **b.** Add `exp` and `tanh` natively, within 1 ulp of the platform libm
-  (a new rule in `std.tensor.13`), so native tensors can run the activations.
-  Defer `sin`, `cos`, `atan2`, `pow` and the rest until a program needs them.
-- **c.** Add a full `std.math` (`sin` to `cbrt`) now, within 1 ulp, with an
-  algorithm from an Apache-2.0-compatible source and a NOTICE credit.
-
-Recommendation: **b.** It gives native tensors their activations without
-committing the language to a whole math library that no program yet calls.
-`col + if raw then 4 else 3` and `col + (if raw then 4 else 3)` are both
-syntax errors, so the one-line `if` (expr.if.8) only appears as a whole
-expression. Options: (a) allow it in parentheses (recommended: the bounds
-are plain, and the formatter can keep them); (b) allow it anywhere an
-operand is (shortest, but `a + if c then b else d + e` hides where the
-`else` branch ends); (c) keep it (no change; the lexer writes two whole
-branches). *Owner: AI under ADR 0076.*
 ## OQ-119 — A Python-syntax front end ("pail") after the core language (post-1.0)
 The designer asked (2026-10-20) whether a `pail` module could let developers
 write Python in the AIL editor while the code is really AIL, to help adoption.
@@ -406,7 +393,7 @@ with their own ADR. Recommendation: keep the rule until a program shows the
 need; the AI-first measurement (ADR 0076) is tokens per handler, and the
 named form costs few.
 
-## OQ-122 — Compare `bytes` with `str` directly?
+## OQ-123 — Compare `bytes` with `str` directly?
 
 Round 4 ([measurements](design/program-measurements-agent-r4.md)) found
 `gz_check` and `frames` comparing a file's bytes with its text through

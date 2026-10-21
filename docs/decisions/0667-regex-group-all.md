@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 17 — Standard library
 - **Spec rules:** [std.regex.1](../spec/std-regex.md), [std.regex.24](../spec/std-regex.md)
-- **Criterion that decided:** Token usage: `regex_codes` drops from 127.0 to 115.2 tokens (-9%), and the gap to Python falls from +35% to +22%. No other criterion differs.
+- **Criterion that decided:** Token usage: `regex_codes` drops from 127.0 to 106.2 tokens (-16%), and the gap to Python falls from +35% to +13%. No other criterion differs.
 - **Builds on:** [ADR 0440](0440-regex-api-is-module-functions-and-values.md), [ADR 0441](0441-regex-iteration-replace-and-split-rules.md)
 
 ## Context
@@ -42,11 +42,11 @@ does not have traps (std.regex.24), as `$name` does in `replace`
 
 | Program | Before | After | Change |
 |---|---|---|---|
-| `regex_codes.ail` | 127.0 | 115.2 | -11.8 (-9%) |
+| `regex_codes.ail` | 127.0 | 106.2 | -20.8 (-16%) |
 | `gz_check.ail` (`big.byte_len()` for `big.to_bytes().len()`) | 110.6 | 108.6 | -2.0 |
 | all other eight programs, `.ail` and `.py` | unchanged | unchanged | 0 |
 
-`regex_codes` against its Python twin (94.2): +35% before, +22% after.
+`regex_codes` against its Python twin (94.2): +35% before, +13% after.
 `gz_check` against its twin (130.0): -15% before, -16% after.
 
 ## Consequences
@@ -57,5 +57,5 @@ does not have traps (std.regex.24), as `$name` does in `replace`
   syntax question (`par` over a range), not a library addition, so it is for
   lane 208 and the integrator.
 - Bytes-to-str equality (`bytes == str`) would shorten `gz_check` further. It
-  changes semantics, so it goes to [open questions](../open-questions.md), not
+  changes semantics, so it goes to [open questions](../open-questions.md) as OQ-123, not
   into this ADR.

@@ -70,3 +70,13 @@ fn main()
         print("q {q}")
     else
         print("neither")
+    mut best := none
+    for x in xs
+        if x > 10
+            best = x
+    print(best else 0)
+    mut name := none
+    for word in ["a", "bb"]
+        if word.len() > 1
+            name = word
+    print(name else "?")
