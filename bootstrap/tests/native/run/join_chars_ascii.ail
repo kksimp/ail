@@ -1,0 +1,14 @@
+# `List[char].join` takes a byte-per-character path when every character is ASCII
+# and the separator is empty (type.coll.9, ADR 0825); other inputs keep the UTF-8 path.
+fn main()
+    print(["a", "b"].join("-"))
+    print("héllo wörld ✓".chars().join(""))
+    print("héllo".chars().join("·"))
+    print("ascii only".chars().join(""))
+    print("ascii".chars().join("--"))
+    print("".chars().join("x"))
+    print(['x'].join(""))
+    mut line := []
+    for i in 0..70
+        line.push("acgt".chars()[i % 4])
+    print(line.join(""))

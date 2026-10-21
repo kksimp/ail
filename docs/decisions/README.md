@@ -638,3 +638,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0812](0812-fix-ternary.md) | `ail fix` writes `c ? a : b` as `if c then a else b` *(delegated)* | Accepted | 2026-10-21 |
 | [0836](0836-native-tls.md) | Native TLS: the in-house client ported to AIL in slices, starting with native `std.hash` *(delegated)* | Accepted | 2026-10-21 |
 | [0824](0824-native-loop-list-reuse.md) | Native: reuse lists that do not outlive a loop iteration *(delegated)* | Accepted | 2026-10-21 |
+| [0825](0825-native-ascii-join-chars.md) | Native: an ASCII path for joining characters *(delegated)* | Accepted | 2026-10-21 |
