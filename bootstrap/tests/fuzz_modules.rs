@@ -69,7 +69,7 @@ fn fill(t: &Template, i: &Input) -> String {
     let body = if t.body.contains("{{BYTES}}") { t.body.replace("{{BYTES}}", &bytes(&i.text2)) } else { t.body.clone() };
     // `{{BLIT}}` and `{{BLIT2}}` are the primary and secondary hex inputs as `b"\xHH..."` literals.
     let blit = |h: &str| format!("b\"{}\"", (0..h.len() / 2).map(|k| format!("\\x{}", &h[2 * k..2 * k + 2])).collect::<String>());
-    let body = body.replace("{{BLIT2}}", &blit(&i.text2)).replace("{{BLIT}}", &blit(&i.text));
+    let body = if body.contains("{{BLIT") { body.replace("{{BLIT2}}", &blit(&i.text2)).replace("{{BLIT}}", &blit(&i.text)) } else { body };
     body.replace("{{TEXT2}}", &literal(&i.text2)).replace("{{TEXT}}", &literal(&i.text)).replace("{{INT}}", &i.int.to_string())
 }
 
