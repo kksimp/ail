@@ -112,6 +112,8 @@ pub(super) struct Code<'a> {
     loops: Vec<LoopInfo>,
     /// `==` on strings is plain: no `Eq` implementation for `str` (trait.res.1).
     str_eq: bool,
+    /// A call needs nothing the generic path adds: no extern body, no contracts, no error wrapping.
+    plain: bool,
 }
 
 /// The blocks around a point in the code, outermost first, each as its
@@ -131,6 +133,8 @@ struct LoopInfo {
     depth: u32,
     brk: u32,
     cont: u32,
+    /// The depth `continue` returns to: past the loop variable of a counted `for`.
+    cdepth: u32,
 }
 
 enum Ins<'a> {
@@ -320,6 +324,15 @@ enum Ins<'a> {
         idx: Opnd,
         pos: Pos,
     },
+    /// `recv[i][k]`: two index steps with no copy of the row between them.
+    Index2 {
+        dst: Opnd,
+        recv: Opnd,
+        i: Opnd,
+        k: Opnd,
+        pos1: Pos,
+        pos2: Pos,
+    },
     /// `recv.name` on a struct, or a `ref` to one (type.struct.6, own.ref.3);
     /// `cache` is the last struct and field index.
     Field {
@@ -418,8 +431,13 @@ enum Ins<'a> {
         inclusive: bool,
         end: u32,
     },
+    /// The next turn of the `for`: the counter in `i` moves on and the loop
+    /// variable, kept at local slot `var`, takes its value; or the loop ends.
     RangeNext {
         i: Opnd,
+        hi: Opnd,
+        inclusive: bool,
+        var: u32,
         end: u32,
         top: u32,
     },
@@ -479,9 +497,33 @@ fn take(o: Opnd, env: &Env<'_>, base: usize, regs: &mut [Value], consts: &[Value
 fn put(o: Opnd, v: Value, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
     let i = (o & !KIND) as usize;
     match o & KIND {
-        LOCAL => env[base + i].1 = v,
-        REG => regs[i] = v,
+        LOCAL => assign(&mut env[base + i].1, v),
+        REG => assign(&mut regs[i], v),
         _ => {}
+    }
+}
+
+/// `*slot = v`, with no call to drop the old value when it owns nothing.
+#[inline(always)]
+fn assign(slot: &mut Value, v: Value) {
+    let old = std::mem::replace(slot, v);
+    if matches!(
+        old,
+        Value::Str(_)
+            | Value::Bytes(_)
+            | Value::Struct(..)
+            | Value::Enum(..)
+            | Value::List(_)
+            | Value::Map(_)
+            | Value::Set(_)
+            | Value::Fail(_)
+            | Value::Ref(_)
+            | Value::Tensor(_)
+            | Value::Atomic(_)
+    ) {
+        drop(old);
+    } else {
+        std::mem::forget(old);
     }
 }
 
@@ -497,7 +539,7 @@ fn put_int(o: Opnd, r: i64, env: &mut Env<'_>, base: usize, regs: &mut [Value]) 
     if let Value::Int(x) = slot {
         *x = r;
     } else {
-        *slot = Value::Int(r);
+        assign(slot, Value::Int(r));
     }
 }
 
@@ -513,7 +555,7 @@ fn put_float(o: Opnd, r: f64, env: &mut Env<'_>, base: usize, regs: &mut [Value]
     if let Value::Float(x) = slot {
         *x = r;
     } else {
-        *slot = Value::Float(r);
+        assign(slot, Value::Float(r));
     }
 }
 
@@ -531,12 +573,26 @@ fn float_cmp(op: BinOp, a: f64, b: f64) -> Option<bool> {
     }
 }
 
+/// `recv[idx]` on a list, map, `bytes` or tensor (type.coll.4, type.map.3, std.tensor.15).
+fn index_value(recv: &Value, idx: &Value, pos: Pos) -> Result<Value, Trap> {
+    Ok(match recv {
+        Value::List(items) => element(items, idx.int(), pos)?.clone(),
+        Value::Map(t) => map_value(t, idx, || key_text(idx), pos)?.clone(),
+        Value::Bytes(b) => bytes::at(b, idx.int(), pos)?,
+        Value::Tensor(t) => match t.row(idx.int()) {
+            Ok(r) => Value::Tensor(std::rc::Rc::new(r)),
+            Err(f) => return Err(Trap { rule: f.rule, pos, message: f.message }),
+        },
+        other => unreachable!("checked: list, map, bytes or tensor, found {other:?}"),
+    })
+}
+
 /// Release a register an instruction read in place, so it holds no share
 /// of a list or string that the program may change next (own.val.2).
 #[inline(always)]
 fn done(o: Opnd, regs: &mut [Value]) {
     if o & KIND == REG {
-        regs[(o & !KIND) as usize] = Value::Unit;
+        assign(&mut regs[(o & !KIND) as usize], Value::Unit);
     }
 }
 
@@ -1030,6 +1086,17 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 let set = pairs.is_empty() && self.it.resolved.empty_sets.contains(pos);
                 self.emit(Ins::Map { dst, args: first, n: pairs.len() as u32, set });
             }
+            Expr::Index { recv, index, pos }
+                if !matches!(**index, Expr::Range { .. })
+                    && let Expr::Index { recv: inner, index: first, pos: pos1 } = &**recv
+                    && !matches!(**first, Expr::Range { .. })
+                    && matches!(**inner, Expr::Name(..))
+                    && self.effect_free(first)
+                    && self.effect_free(index) =>
+            {
+                let [recv, i, k] = self.operands([&**inner, &**first, &**index]);
+                self.emit(Ins::Index2 { dst, recv, i, k, pos1: *pos1, pos2: *pos });
+            }
             Expr::Index { recv, index, pos } if !matches!(**index, Expr::Range { .. }) => {
                 let [recv, idx] = self.operands([&**recv, &**index]);
                 self.emit(Ins::Index { dst, recv, idx, pos: *pos });
@@ -1321,7 +1388,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
 
     /// Start a loop at depth `depth`; `cont` is patched once known.
     fn loop_start(&mut self, depth: u32) -> u32 {
-        self.loops.push(LoopInfo { outer: self.blocks.len(), depth, brk: 0, cont: 0 });
+        self.loops.push(LoopInfo { outer: self.blocks.len(), depth, brk: 0, cont: 0, cdepth: depth });
         let l = (self.loops.len() - 1) as u32;
         self.loop_stack.push(l);
         self.exit_cache = None;
@@ -1457,11 +1524,19 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                     self.expr_to(hi, h);
                     let top = self.emit(Ins::RangeTest { name: var, i, hi: h, inclusive: *inclusive, end: 0 });
                     let l = self.loop_start(depth);
+                    self.loops[l as usize].cdepth = depth + 1;
                     self.scope.push(var);
                     self.block(body, NONE);
                     self.scope.truncate(depth as usize);
-                    self.emit(Ins::Truncate(depth));
-                    let next = self.emit(Ins::RangeNext { i, end: 0, top });
+                    self.emit(Ins::Truncate(depth + 1));
+                    let next = self.emit(Ins::RangeNext {
+                        i,
+                        hi: h,
+                        inclusive: *inclusive,
+                        var: depth,
+                        end: 0,
+                        top: top + 1,
+                    });
                     self.loop_end();
                     let end = self.here();
                     self.patch(top, end);
@@ -1713,7 +1788,12 @@ impl<'a, W: Write> Interp<'a, W> {
         }
         let (ins, consts, nregs, exits, loops) = (c.ins, c.consts, c.nregs as usize, c.exits, c.loops);
         let str_eq = self.dispatch(self.resolved.std.eq, "eq", &Value::Str(Rc::from(""))).is_none();
-        let code = Code { ins, consts, nregs, params, exits, loops, str_eq };
+        let plain = f.ext.is_none()
+            && f.contracts.is_empty()
+            && f.inherits.is_none()
+            && f.receiver.is_none()
+            && !matches!(f.ret.as_ref().map(|t| &t.kind), Some(TypeKind::Fallible { .. }));
+        let code = Code { ins, consts, nregs, params, exits, loops, str_eq, plain };
         Slot::Code(Rc::new(code))
     }
 
@@ -1738,13 +1818,41 @@ impl<'a, W: Write> Interp<'a, W> {
         }
     }
 
+    /// `run_body` for a call from compiled code: a plain compiled function runs without the
+    /// generic path's checks for tracing, contracts, extern bodies and error wrapping.
+    #[inline]
+    fn run_call(&mut self, f: &'a FnDecl, env: &mut Env<'a>, pos: Pos) -> Result<Value, Trap> {
+        if self.tracing == 0
+            && !self.has_unique
+            && let Some(code) = self.compiled(f)
+            && code.plain
+        {
+            self.depth += 1;
+            if self.depth > MAX_DEPTH {
+                return trap("err.trap.1", pos, format!("call depth exceeded {MAX_DEPTH} in `{}`", f.full_name()));
+            }
+            let n = env.len();
+            self.stats.calls[1] += 1;
+            let result = match self.run_code(&code, env) {
+                Ok(v) => v,
+                Err(Exit::Return) => self.returned.take().expect("a return leaves its value").0,
+                Err(Exit::Trap(t)) => return Err(self.unwound(f, env, pos, *t)),
+                Err(Exit::Break | Exit::Continue) => unreachable!("checked: `break` and `continue` are inside loops"),
+            };
+            self.depth -= 1;
+            env.truncate(n);
+            return Ok(result);
+        }
+        self.run_body(f, env, pos)
+    }
+
     /// Run a compiled body in `env`, which holds its receiver and
     /// parameters, as `block` runs the body: on return `env` holds just those.
     pub(super) fn run_code(&mut self, code: &Code<'a>, env: &mut Env<'a>) -> Flow<Value> {
         let entry = env.len();
         let base = entry - code.params;
         let mut regs = self.reg_pool.pop().unwrap_or_default();
-        regs.resize(code.nregs, Value::Unit);
+        regs.resize_with(code.nregs, || Value::Unit);
         let result = if self.stats.on {
             self.exec::<true>(code, env, base, &mut regs)
         } else {
@@ -1798,7 +1906,8 @@ impl<'a, W: Write> Interp<'a, W> {
                         env.truncate(base + mark as usize);
                     }
                 }
-                env.truncate(base + l.depth as usize);
+                let back = if matches!(how, Exit::Break) { l.depth } else { l.cdepth };
+                env.truncate(base + back as usize);
                 Ok(if matches!(how, Exit::Break) { l.brk } else { l.cont } as usize)
             }
         }
@@ -2027,7 +2136,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         let v = std::mem::replace(&mut regs[*args as usize + k], Value::Unit);
                         callee.push((p.name.as_str(), v));
                     }
-                    let result = self.run_body(f, &mut callee, *pos)?;
+                    let result = self.run_call(f, &mut callee, *pos)?;
                     callee.clear();
                     self.env_pool.push(callee);
                     put(*dst, result, env, base, regs);
@@ -2048,7 +2157,7 @@ impl<'a, W: Write> Interp<'a, W> {
                     for &(k, slot) in moves.iter() {
                         callee[k as usize].1 = std::mem::replace(&mut env[base + slot as usize].1, Value::Unit);
                     }
-                    let result = self.run_body(f, &mut callee, *pos)?;
+                    let result = self.run_call(f, &mut callee, *pos)?;
                     for &(k, slot) in moves.iter() {
                         env[base + slot as usize].1 = std::mem::replace(&mut callee[k as usize].1, Value::Unit);
                     }
@@ -2085,6 +2194,27 @@ impl<'a, W: Write> Interp<'a, W> {
                     };
                     done(*recv, regs);
                     done(*idx, regs);
+                    put(*dst, v, env, base, regs);
+                }
+                Ins::Index2 { dst, recv, i, k, pos1, pos2 } => {
+                    pc += 1;
+                    let fast = match (get!(*recv), get!(*i), get!(*k)) {
+                        (Value::List(rows), Value::Int(i), Value::Int(k)) => match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
+                            Some(Value::List(row)) => Some(element(row, *k, *pos2)?.clone()),
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+                    let v = match fast {
+                        Some(v) => v,
+                        None => {
+                            let mid = index_value(get!(*recv), get!(*i), *pos1)?;
+                            index_value(&mid, get!(*k), *pos2)?
+                        }
+                    };
+                    done(*recv, regs);
+                    done(*i, regs);
+                    done(*k, regs);
                     put(*dst, v, env, base, regs);
                 }
                 Ins::Field { dst, recv, name, cache, pos } => {
@@ -2151,7 +2281,7 @@ impl<'a, W: Write> Interp<'a, W> {
                             }
                         };
                         let Value::List(items) = &mut env[slot].1 else { unreachable!("a list") };
-                        Rc::make_mut(items)[u] = v;
+                        assign(&mut Rc::make_mut(items)[u], v);
                         continue;
                     }
                     let i = take!(*idx);
@@ -2312,6 +2442,17 @@ impl<'a, W: Write> Interp<'a, W> {
                     put(*dst, Value::List(Rc::new(items)), env, base, regs);
                 }
                 Ins::MethodGuard { recv, path, name, t, cache } => {
+                    // A built-in receiver held in a local needs no lookup.
+                    if *recv & KIND == LOCAL
+                        && path.is_empty()
+                        && !matches!(
+                            env[base + *recv as usize].1,
+                            Value::Struct(..) | Value::Enum(..) | Value::Ref(_) | Value::Handle(_) | Value::Atomic(_)
+                        )
+                    {
+                        pc += 1;
+                        continue;
+                    }
                     let ok = if *recv & KIND == LOCAL {
                         self.method_allowed(self.recv_at(env, base + *recv as usize, path), name, path.len(), cache)
                     } else {
@@ -2541,13 +2682,22 @@ impl<'a, W: Write> Interp<'a, W> {
                         pc = *end as usize;
                     }
                 }
-                Ins::RangeNext { i, end, top } => {
+                Ins::RangeNext { i, hi, inclusive, var, end, top } => {
                     let Value::Int(n) = &mut regs[(*i & !KIND) as usize] else { unreachable!("a counter") };
                     if *n == i64::MAX {
+                        env.truncate(base + *var as usize);
                         pc = *end as usize;
                     } else {
                         *n += 1;
-                        pc = *top as usize;
+                        let n = *n;
+                        let hi = get!(*hi).int();
+                        if if *inclusive { n <= hi } else { n < hi } {
+                            put_int(LOCAL | *var, n, env, base, regs);
+                            pc = *top as usize;
+                        } else {
+                            env.truncate(base + *var as usize);
+                            pc = *end as usize;
+                        }
                     }
                 }
                 Ins::IterStart { it, idx } => {
