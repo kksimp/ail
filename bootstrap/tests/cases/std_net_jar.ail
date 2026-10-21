@@ -9,12 +9,9 @@ fn site(r net.Request) net.Response
     if r.path == "/start" or r.path == "/"
         return net.Response(status: 302, headers: {"location": "login"}, body: "")
     if r.path == "/login"
-        return net.Response(
-            status: 302,
-            headers: {"location": "/home"},
-            body: "",
-            all_headers: {"set-cookie": ["sid=abc; Path=/; HttpOnly", "theme=dark; Path=/prefs; Max-Age=3600"]},
-        )
+        return net.Response(status: 302, headers: {"location": "/home"}, body: "", all_headers: {
+            "set-cookie": ["sid=abc; Path=/; HttpOnly", "theme=dark; Path=/prefs; Max-Age=3600"],
+        })
     net.Response(status: 200, headers: {}, body: "{r.path} cookie={seen}")
 
 fn rules()

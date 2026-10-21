@@ -691,6 +691,33 @@ limit of `std.net.10` applies per request, and `srv.close()` drops idle
 connections. Any other request is answered with `Connection: close`.
 *(ADR 0639)*
 
+```ail rules=std.net.19,std.net.20,std.net.21,std.net.22
+use std.net
+use std.net.http
+use std.net.jar
+
+fn site(r net.Request) net.Response
+    if r.path == "/login"
+        return net.Response(status: 302, headers: {"location": "/home"}, body: "", all_headers: {"set-cookie": ["sid=abc; Path=/"]})
+    net.Response(status: 200, headers: {}, body: "{r.peer} {r.headers.get("cookie") else "-"}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, site)
+    base := "http://{srv.addr()}"
+    mut j := jar.new()
+    a := j.get("{base}/login")?.body.split(" ")
+    b := j.get("{base}/again")?.body.split(" ")
+    print("{a[1]} {a[0] == b[0]}")
+    mut o := net.options()
+    o.total_ms = 5000
+    o.headers["Transfer-Encoding"] = "chunked"
+    o.body = "data"
+    print(net.request("POST", "{base}/x", o)?.status)
+    srv.close()
+    t.wait()?
+```
+
 ```ail rules=std.net.17,std.net.18
 use std.net
 use std.net.http

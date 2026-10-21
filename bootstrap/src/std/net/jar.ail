@@ -328,18 +328,27 @@ pub fn Jar.request(mut self, method str, url str, opts net.Options) net.Response
         jar_part := header(cur)
         # What the program set goes only to the origin it asked for.
         here := parse_target(cur)
-        mine := if here.scheme == first.scheme and here.authority == first.authority then given else ""
+        mine := if here.scheme == first.scheme
+            and here.authority == first.authority then given else ""
         both := [p for p in [mine, jar_part] if p != ""].join("; ")
         if both != ""
             hop.headers["Cookie"] = both
         r := net.request(method, cur, hop)?
         store(cur, r)
         loc := r.headers.get("location") else ""
-        redirect := r.status == 301 or r.status == 302 or r.status == 303 or r.status == 307 or r.status == 308
+        redirect := r.status == 301
+            or r.status == 302
+            or r.status == 303
+            or r.status == 307
+            or r.status == 308
         if not (redirect and follows and loc != "" and opts.max_redirects > 0)
             return r
         if hops >= opts.max_redirects
-            return net.NetError(url: cur, kind: "protocol", message: "more than {opts.max_redirects} redirects")
+            return net.NetError(
+                url: cur,
+                kind: "protocol",
+                message: "more than {opts.max_redirects} redirects",
+            )
         hops += 1
         cur = resolve(cur, loc)
     net.Response(status: 0, headers: {}, body: "", all_headers: {})

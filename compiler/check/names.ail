@@ -65,7 +65,7 @@ pub STD_MODULES := [
 ]
 
 ## The standard modules written in AIL (std.ui.19).
-pub AIL_STD_MODULES := ["std.net.http", "std.time.date", "std.ui.widgets"]
+pub AIL_STD_MODULES := ["std.net.http", "std.net.jar", "std.time.date", "std.ui.widgets"]
 
 ## Positions from here on are the prelude's.
 pub PRELUDE_LINE := 1073741824
