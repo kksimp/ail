@@ -112,7 +112,7 @@ impl Parser<'_> {
         match c {
             '{' => self.object(mk),
             '[' => self.array(mk),
-            '"' => Ok(mk.node(STR, vec![Value::Str(self.string()?.into())])),
+            '"' => Ok(mk.node(STR, vec![Value::Str(self.string()?)])),
             _ => {
                 for (word, variant, fields) in [
                     ("true", BOOL, Some(true)),
@@ -165,7 +165,7 @@ impl Parser<'_> {
             }
             self.pos += 1;
             let value = self.value(mk)?;
-            members.push(Value::Struct(mk.member, Rc::new(vec![Value::Str(key.into()), value])));
+            members.push(Value::Struct(mk.member, Rc::new(vec![Value::Str(key), value])));
             if self.container_end(b'}')? {
                 self.open -= 1;
                 return Ok(mk.node(OBJ, vec![Value::List(Rc::new(members))]));
@@ -211,21 +211,29 @@ impl Parser<'_> {
         Ok(false)
     }
 
-    fn string(&mut self) -> R<String> {
+    fn string(&mut self) -> R<Rc<str>> {
         let start = self.pos;
         self.pos += 1;
         let mut out = String::new();
+        let mut escaped = false;
         let mut run = self.pos;
         loop {
             let Some(&c) = self.b.get(self.pos) else { return bad(start, "unterminated string") };
             match c {
                 b'"' => {
-                    out.push_str(&self.text[run..self.pos]);
+                    // No escape: the text is a slice of the input, made once.
+                    let text: Rc<str> = if escaped {
+                        out.push_str(&self.text[run..self.pos]);
+                        Rc::from(out)
+                    } else {
+                        Rc::from(&self.text[run..self.pos])
+                    };
                     self.pos += 1;
-                    return Ok(out);
+                    return Ok(text);
                 }
                 b'\n' => return bad(start, "unterminated string"),
                 b'\\' => {
+                    escaped = true;
                     out.push_str(&self.text[run..self.pos]);
                     out.push(self.escape(start)?);
                     run = self.pos;

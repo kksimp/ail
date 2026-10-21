@@ -554,3 +554,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0716](0716-streaming-response-bodies.md) | Streaming response bodies: `net.open` returns a `net.Body` read with `read_bytes`, and a body read to its end returns its connection to the pool *(delegated)* | Accepted | 2026-10-21 |
 | [0717](0717-transparent-content-encoding.md) | `std.net` sends `Accept-Encoding: gzip, deflate` and decodes the response unless the program sets the header itself *(delegated)* | Accepted | 2026-10-21 |
 | [0737](0737-runtime-small-block-allocator.md) | `ail run` and `ail test` allocate small blocks from per-thread free lists *(delegated)* | Accepted | 2026-10-21 |
+| [0739](0739-json-parse-builds-text-once.md) | The native JSON parser builds each text value once *(delegated)* | Accepted | 2026-10-21 |
