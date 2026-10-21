@@ -185,8 +185,13 @@ fn Lower.is_error_expr(self, e ast.Expr) bool
         Call(callee, _, _) => is_error_callee(callee)
         Member(recv, _, _) => is_error_type_name(recv)
         Method(recv, name, _, _) => is_error_type_name(recv) or method_returns_error(recv, name)
-        Name(n, _) => is_error_variant(n)
+        Name(n, _) => is_error_variant(n) or local_is_error(n)
         _ => false
+
+## A local variable or parameter that holds an error value (`return e`).
+fn Lower.local_is_error(self, n str) bool
+    k := lookup(n) else return false
+    is_error_ty(var_ty[k])
 
 fn Lower.is_error_callee(self, callee ast.Expr) bool
     match callee
@@ -270,7 +275,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
     if not is_error_expr(e)
         return false
     if not fails
-        if is_error_ty(ret)
+        if is_error_ty(ret) or is_error_ty(ret.opt_inner() else Ty.Unknown)
             return false
         problem(pos, "returning an error from a function that can't fail")
         return true
@@ -566,16 +571,23 @@ fn Lower.display_call(mut self, v Val) int?
         return none
     default_error_text(key, v)
 
-## The text of an error struct with no message: its default form,
-## `Name(field: value, ...)` (trait.auto.2), for fields of `int`, `float`,
-## `bool` and `str`.
+## The text of an error type with no message: its default form,
+## `Name(field: value, ...)` for a struct and `Enum.Variant(field: value)`
+## for an enum (trait.auto.2), for fields of `int`, `float`, `bool` and `str`.
 fn Lower.default_error_text(mut self, key str, v Val) int?
+    if cases := enums.get(key)
+        return default_enum_text(key, cases, v)
     slots := structs.get(key) else return none
-    mut acc := str_value("{key}(")
+    fields_text("{key}(", slots, v.id, 0)
+
+## `head` then each of `slots` read from `obj` (the first at slot `skip`),
+## as `name: value` pairs, then `)`.
+fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) int?
+    mut acc := str_value(head)
     for k in 0..slots.len()
-        mut piece := str_value("{if k > 0 then ", " else ""}{slots[k].name}: ")
+        piece := str_value("{if k > 0 then ", " else ""}{slots[k].name}: ")
         acc = call("rt.str_cat", [acc, piece], Ty.Str)
-        f := load(v.id, k, slots[k].ty)
+        f := load(obj, k + skip, slots[k].ty)
         text := match slots[k].ty
             Int => call("rt.fmt_int", [f], Ty.Str)
             Float => call("rt.fmt_float", [f], Ty.Str)
@@ -586,3 +598,26 @@ fn Lower.default_error_text(mut self, key str, v Val) int?
             return none
         acc = call("rt.str_cat", [acc, text], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
+
+## The default text of an enum value: a chain of tests on the variant index.
+fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
+    join := new_block()
+    result := new_value(Ty.Str, "")
+    blocks[join].params.push(result)
+    tag := tag_of(key, v.id)
+    for k in 0..cases.len()
+        mut no := -1
+        if k + 1 < cases.len()
+            yes := new_block()
+            no = new_block()
+            branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+            seal(yes)
+            seal(no)
+            cur = yes
+        text := if cases[k].fields.len() == 0 then str_value("{key}.{cases[k].name}") else (fields_text("{key}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
+        jump(join, [text])
+        if no >= 0
+            cur = no
+    seal(join)
+    cur = join
+    result
