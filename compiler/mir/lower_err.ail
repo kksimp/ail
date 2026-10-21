@@ -135,6 +135,7 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                     s := sigs.get("{prefix}{n}") else return false
                     s.fails
                 _ => false
+        Method(recv, name, _, _) => os_fails(recv, name)
         _ => false
 
 ## `return Name()` in a function that can fail: record the error and leave.

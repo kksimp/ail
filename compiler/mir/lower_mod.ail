@@ -28,6 +28,7 @@ pub fn imports_of(prog ast.Program) List[str]
 fn Lower.enter_file(mut self, k int)
     stamp_problems()
     file = k
+    path = file_paths[k]
     prefix = file_prefix[k]
     aliases = file_aliases[k]
 
