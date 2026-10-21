@@ -44,6 +44,20 @@ and spectralnorm unchanged. Item 1 alone: wordfreq 240.9M, binarytrees
 399.5M, fannkuch 274.8M. L1 data misses on matmul (9,813,919 → 9,813,745)
 and fannkuch (1,247,171 → 1,247,781) are unchanged.
 
+3. **Lists sized at creation have their element size and a byte limit.**
+   `rt.list_new_for` took no element size and always made an 8-byte-element
+   buffer of the collector's scanned kind, and both it and `rt.list_reserve`
+   stopped at 2^20 elements. A `List[bool]` pushed 3,000,000 times (sieve)
+   got an 8 MB buffer the collector scanned word by word
+   (`gc_scan_range` calling `gc_mark` and `gc_find` for each, 34M of 124M
+   instructions), and the range guard of the versioned loop (room for every
+   push) failed, so the loop ran with a full-list test and a regrow per
+   push. Now `list_new_for(lo, hi, per, size)` takes the size of the element
+   (1 for `List[bool]`, else 8), allocates through `list_alloc` with that
+   size (so the buffer has the kind `list_grow` gives it: no-scan for
+   bytes, scanned for words), and both functions stop at 8 MiB of elements
+   (2^20 words, 2^23 bytes). sieve 3,000,000: 124.4M to 79.4M instructions.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register
