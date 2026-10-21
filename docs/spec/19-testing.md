@@ -296,3 +296,74 @@ fn one()
 fn main()
     print(1)
 ```
+
+## Checked examples for the attribute and property rules
+
+Each block runs `ail test` or checks the program, with the options on its fence (test.attr.1-4, test.prop.1, 3-5).
+
+```ail error=test.attr.1 rules=test.attr.1
+@slow fn main()
+    print(1)
+```
+
+```ail tool=test,FILE expect=checks rules=test.attr.2
+@test fn checks()
+    assert_eq(1, 1)
+
+fn main()
+    print("ok")
+```
+
+```ail error=test.attr.3 rules=test.attr.3
+@test fn checks()
+    assert(true)
+
+fn main()
+    checks()
+```
+
+```ail tool=test,FILE status=1 expect=FAIL rules=test.attr.4
+error struct Empty
+    why str
+
+fn parse(s str) int ! Empty
+    if s == ""
+        return Empty(why: "empty")
+    7
+
+@test fn reads()
+    n := parse("")?
+    assert(n == 7)
+```
+
+```ail tool=test,--cases,5,FILE expect=cases rules=test.prop.1
+@test fn doubles(x int)
+    assert(x * 2 >= x or x < 0)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--seed,7,FILE expect=seed rules=test.prop.3
+@test fn doubles(x int)
+    assert(x * 2 >= x or x < 0)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,FILE status=1 expect=input rules=test.prop.4
+@test fn small(x int)
+    assert(x < 10)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,FILE status=1 expect=10 rules=test.prop.5
+@test fn small(x int)
+    assert(x < 10)
+
+fn main()
+    print("ok")
+```
