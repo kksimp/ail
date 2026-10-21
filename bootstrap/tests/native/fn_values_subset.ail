@@ -1,0 +1,6 @@
+fn double(n int) int
+    n * 2
+
+fn main()
+    fs := [double, double]
+    print(fs.len())

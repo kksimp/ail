@@ -1658,6 +1658,33 @@ fn main()
     print((a * 2.0 - b).sigmoid().tanh().sum() > 0.0)   # true
 ```
 
+**std.tensor.21** — `tensor.Tensor[f32]` holds `f32` elements (ADR 0796). It has
+the methods and operators of `Tensor[float]`, and each result is rounded to
+`f32` once: the operations are single-precision IEEE operations, and `sum`,
+`dot`, `max`, `mean` and `matmul` accumulate in `f32` in the order of
+std.tensor.5, on every path. A `float` scalar in an expression is rounded to
+`f32` at the boundary. `tensor.from(xs, shape)` and `tensor.zeros(shape)` build
+a `Tensor[f32]` when the expected type is one; `xs` is a `List[float]`, rounded
+element by element. A `Tensor[f32]` and a `Tensor[float]` in one expression are
+a compile-time error. `to_list()` gives a `List[float]`. *(ADR 0796, ADR 0797)*
+
+**std.tensor.22** — `t.to_f32()` rounds each element of a `Tensor[float]` to
+`f32`, and `t.to_float()` widens each element of a `Tensor[f32]` exactly to
+`float`. Either on the other element type, or on an `int` tensor, is a
+compile-time error. *(ADR 0798)*
+
+```ail rules=std.tensor.21,std.tensor.22
+fn half() tensor.Tensor[f32]
+    tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
+
+fn main()
+    a := half()
+    print(a * 2.0 + a)             # tensor.from([3.0, 6.0, 9.0, 12.0], [2, 2]).to_f32()
+    print(a.to_list())             # [1.0, 2.0, 3.0, 4.0]
+    print(a.to_float().sum())      # 10.0
+    print(a.map(|x| x * x).sum())  # 30.0
+```
+
 ```ail rules=std.tensor.1,std.tensor.2,std.tensor.3,std.tensor.4,std.tensor.5,std.tensor.7,std.tensor.8,std.tensor.9,std.tensor.10,std.tensor.11,std.tensor.12,std.tensor.13,std.tensor.14
 fn main()
     a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])

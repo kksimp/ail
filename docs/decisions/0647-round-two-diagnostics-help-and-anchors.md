@@ -84,4 +84,4 @@ The round-two help texts and anchors are visible in `ail check --json`. The
 self-hosted parser agrees on the rule and position of every changed case
 (`cargo test --test self_hosting`, 4 of 4). Token cost of the help text
 changed by this ADR is reported in
-[diagnostics-audit.md](../design/diagnostics-audit.md#round-two).
+[diagnostics-audit.md](../design/diagnostics-audit.md#round-two-adrs-0646-0648-lane-197).

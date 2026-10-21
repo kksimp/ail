@@ -84,7 +84,7 @@ Where tokens differ they are the mean of five tokenizers.
    literal is an error, with help "`index_of` returns `none` when absent, not
    -1".
 
-```ail
+```ail fragment
 xs := [3, 1, 2]
 last := xs.last()                   # 2, an int?
 if i := xs.index_of(1)
