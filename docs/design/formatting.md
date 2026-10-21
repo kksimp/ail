@@ -37,7 +37,14 @@ head on one line. Elements still too long split the same way. Parenthesised
 expressions, indexes and type arguments aren't split; a statement with
 nothing to split stays long.
 
-```ail excerpt
+```ail fragment
+struct Name
+    text str
+    id int
+
+fn count(names List[Name], name Name) int
+    0
+
 print(count(
     [Name(text: "x", id: 1), Name(text: "y", id: 2), Name(text: "x", id: 3)],
     Name(text: "x", id: 0),
@@ -79,17 +86,23 @@ may not start with it; `<` and `>` are never split points (they bracket type
 arguments). A line with a top-level closure is left alone. Each piece lays out
 again, so a piece that is still long splits by the other rules.
 
-```ail excerpt
-if alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000
+```ail fragment
+alpha_value := 6
+beta_value := 6
+ok := alpha_value > 5 and beta_value > 5 and alpha_value + beta_value > 1000
     or alpha_value == beta_value
     or beta_value == 77
 ```
 
-```ail excerpt
+```ail fragment
+struct Person
+    name str
+    age int
+
+people := List[Person]()
 names := people
-    .filter(|p| p.age >= 18)
-    .map(|p| p.name)
-    .sorted()
+    .sorted(by: |p| p.age)
+    .first()
 ```
 
 **fmt.attr** (ADR 0083, ADR 0324): attributes are sorted by name and stay on
