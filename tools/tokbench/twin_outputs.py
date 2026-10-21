@@ -2,17 +2,19 @@
 """Check that each corpus twin pair prints the same output.
 
 Each program under corpus/programs/NAME/ has an AIL file NAME.ail and a Python
-twin NAME.py. Many programs find the tools they need by path (`{here}/../ail`,
-`{here}/../tools/...`), and the twins find the repository from their own file
-location (`parents[5]`). So each pair runs in a mirror tree laid out like the
-repository:
+twin NAME.py. The programs find the repository by path: AIL with
+`{here}/../../../../../...` and the twins with `parents[5]`, both counted from
+the program's own folder. So each pair runs from a mirror tree with the same
+depth as the repository:
 
-  MIRROR/ail                         wrapper for this checkout's launcher
-  MIRROR/tools/garlic, pdf           symlinks to the real tool directories
-  MIRROR/tools/tokbench/corpus/agent-r5/data   symlink to the fixture data
-  MIRROR/run/                        the AIL program's directory (ail run NAME.ail)
-  MIRROR/tools/tokbench/corpus/programs/NAME/  the Python twin, at repository depth
+  MIRROR/ail                                  wrapper for this checkout's launcher
+  MIRROR/tools/garlic, pdf                    symlinks to the real tool directories
+  MIRROR/tools/tokbench/corpus/agent-r5/data  symlink to the fixture data
+  MIRROR/examples                             symlink to the repository examples
+  MIRROR/agent-data/                          a copy of examples/agent-data, passed as the data argument
+  MIRROR/tools/tokbench/corpus/programs/NAME/ the program folder (both twins run here)
 
+Both sides run with MIRROR first on PATH, so `proc.which("ail")` finds the wrapper.
 No corpus file changes, so token counts stay the same. Pass --fixture DIR to build
 the mirror in DIR and keep it, for inspection or re-runs.
 
@@ -25,6 +27,7 @@ Exit status is 1 when any pair disagrees or fails to run.
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -67,6 +70,10 @@ def link(path, target):
     path.symlink_to(target)
 
 
+# Programs that take the data directory as an optional first argument (both twins).
+DATA_ARG = {"days_left", "digest_lines", "gz_check", "redact_mail", "regex_codes", "shift_dates"}
+
+
 def build_mirror(m):
     m.mkdir(parents=True, exist_ok=True)
     wrapper = m / "ail"
@@ -76,6 +83,7 @@ def build_mirror(m):
     link(m / "tools/pdf", ROOT / "tools/pdf")
     link(m / "tools/tokbench/corpus/agent-r5/data", AGENT_DATA)
     link(m / "examples", ROOT / "examples")
+    copy_dir(ROOT / "examples/agent-data", m / "agent-data")
 
 
 def copy_dir(src, dst):
@@ -84,9 +92,9 @@ def copy_dir(src, dst):
     shutil.copytree(src, dst)
 
 
-def run(cmd, cwd):
+def run(cmd, cwd, env):
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+        r = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True,
                            stdin=subprocess.DEVNULL, timeout=TIMEOUT_S)
         return r.returncode, r.stdout, r.stderr
     except subprocess.TimeoutExpired:
@@ -103,28 +111,16 @@ def first_difference(a, b):
     return ""
 
 
-def provide_data(dir_):
-    """Programs read the repository's examples/ (relative to the working directory) and
-    examples/agent-data (beside the program) when the program's own folder has none."""
-    link(dir_ / "examples", ROOT / "examples")
-    if not (dir_ / "agent-data").exists():
-        link(dir_ / "agent-data", ROOT / "examples/agent-data")
-
-
 def check_pair(m, d):
     name = d.name
     if name in NEEDS_NETWORK:
         return {"name": name, "status": "skipped", "detail": NEEDS_NETWORK[name]}
-    run_dir = m / "run"
-    copy_dir(d, run_dir)
-    twin_dir = m / "tools/tokbench/corpus/programs" / name
-    copy_dir(d, twin_dir)
-    provide_data(run_dir)
-    provide_data(twin_dir)
-
-    # Both sides run from the program's own directory, so relative defaults ("tool.ail") resolve.
-    a_rc, a_out, a_err = run([str(m / "ail"), "run", str(run_dir / f"{name}.ail")], run_dir)
-    p_rc, p_out, p_err = run([sys.executable, str(twin_dir / f"{name}.py")], run_dir)
+    folder = m / "tools/tokbench/corpus/programs" / name
+    copy_dir(d, folder)
+    env = dict(os.environ, PATH=f"{m}{os.pathsep}{os.environ.get('PATH', '')}")
+    data = [str(m / "agent-data")] if name in DATA_ARG else []
+    a_rc, a_out, a_err = run([str(m / "ail"), "run", str(folder / f"{name}.ail"), *data], folder, env)
+    p_rc, p_out, p_err = run([sys.executable, str(folder / f"{name}.py"), *data], folder, env)
 
     row = {"name": name, "ail_rc": a_rc, "py_rc": p_rc}
     if a_rc is None:
