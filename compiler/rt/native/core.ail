@@ -410,8 +410,9 @@ fn list_new(cap int) List[int]
 ## iterations' worth (2^20 words, 2^23 bytes).
 fn list_new_for(lo int, hi int, per int, size int) List[int]
     mut want := hi - lo
-    if want > 8388608 / size
-        want = 8388608 / size
+    most := if size == 1 then 8388608 else 1048576
+    if want > most
+        want = most
     if want < 0
         want = 0
     list_alloc(want * per, size)
@@ -431,8 +432,9 @@ fn list_reserve(xs List[int], lo int, hi int, per int, size int)
         return
     p := list_addr(xs)
     mut want := hi - lo
-    if want > 8388608 / size
-        want = 8388608 / size
+    most := if size == 1 then 8388608 else 1048576
+    if want > most
+        want = most
     need := load64(p) + want * per
     if need <= load64(p + 8)
         return
