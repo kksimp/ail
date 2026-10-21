@@ -51,8 +51,6 @@ struct Lower
     tail_want Ty?
     ## Where the function's last expression begins: the trace line of an error it ends in.
     tail_pos ast.Pos
-    ## The block an absent `?` goes to inside the value of an `else` (err.prop.4), or -1.
-    opt_exit int
     ## The function being lowered can fail.
     fails bool
     sigs Map[str, Sig]
@@ -173,7 +171,6 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         fn_errs: {},
         tail_want: none,
         tail_pos: ast.Pos(line: 1, col: 1),
-        opt_exit: -1,
         fails: false,
         sigs: {},
         bad: Set[str](),
