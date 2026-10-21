@@ -37,20 +37,18 @@ fail (`T ! E`, `! E`, `!`) whose errors are message-only `error struct`s
 without fields (`return E()`, `f()?`, `f() else ...`, `else err`, a failing
 `main`), the methods `abs`, `min`,
 `max`, `to_float`, `to_int`, `sqrt`, `floor`, `ceil`, `round` (type.num.9),
-and the bit operations of expr.bit.1, in functions with at most eight
+the functions of type.num.16 (`sin`, `cos`, `tan`, `atan`, `atan2`, `exp`, `ln`,
+`log10`, `pow`, `hypot`, `cbrt`, ADR 0592), and the bit operations of expr.bit.1, in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool` and `str` in `print` (lex.str.7, type.str.11: width, fill,
-alignment, `.N`, `x`); `s.to_int()` and `s.to_float()` in the `else` forms;
+alignment, `.N`, `x`); `s.to_int()` in an `else` form and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
-`fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`,
-`env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line`,
+`fs.append_text`, `fs.list_dir`, `fs.remove`, `fs.make_dir`, `fs.rename`
+(they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms` and `time.sleep_ms`
-(std.fs, std.env, std.io, std.time). A call that can fail is in the subset
-only as the value of `else` with a fallback value, a statement that leaves,
-or a block without a binding (err.else.1-2); `else err` and `?` are not yet.
-Any other construct is reported at its position under this rule, all of them
+(std.fs, std.env, std.io, std.time). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0532, 0533,
-0574-0576, 0580, 0582, 0591, 0602–0604)*
+0574-0576, 0580, 0582, 0591, 0592, 0602–0604)*
 
 ```ail
 fn steps(n int) int
@@ -123,3 +121,16 @@ operation in the program shortens a list. *(ADR 0611)*
 list is full where, before the loop, the list's spare room is at least the
 number of pushes the loop can make; otherwise the loop with the test runs.
 *(ADR 0611)*
+
+**native.bce.7** — A counted loop whose start is computed before it is
+treated as a counted loop where that start is tested, before the loop, to be
+at least 0 and at most 2^30; otherwise the loop with its checks runs.
+*(ADR 0622)*
+
+**native.bce.8** — The check on `xs[e]` may be removed where the arithmetic of
+the loop bounds `e` between 0 and a constant `hi`, from a constant loop bound
+and operands tested before the loop, and `xs` is longer than `hi`. *(ADR 0622)*
+
+**native.bce.9** — A loop that adds an unchanging `s` to its induction value
+is treated as a counted loop where `s` is tested, before the loop, to be
+between 1 and 2^30. *(ADR 0622)*

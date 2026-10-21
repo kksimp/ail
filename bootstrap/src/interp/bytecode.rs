@@ -211,6 +211,15 @@ enum Ins<'a> {
         args: u32,
         pos: Pos,
     },
+    /// `Call` of a function with `mut` parameters whose arguments are the
+    /// locals in `moves` (parameter, slot): each moves in and back (own.param.2).
+    CallMut {
+        f: &'a FnDecl,
+        dst: Opnd,
+        args: u32,
+        moves: Box<[(u32, u32)]>,
+        pos: Pos,
+    },
     Print {
         src: Opnd,
         pos: Pos,
@@ -324,6 +333,15 @@ enum Ins<'a> {
     IfNotListMap {
         slot: u32,
         t: u32,
+        /// A map goes to the walker too.
+        list_only: bool,
+    },
+    /// Trap now when `local[idx]` is outside the list, before the right side of
+    /// `local[idx] op= val` runs (expr.op.2, type.coll.4).
+    CheckIndex {
+        slot: u32,
+        idx: Opnd,
+        at: Pos,
     },
     /// `local[idx] = val`, or `local[idx] op= val` (type.coll.4, type.map.3, type.map.7).
     SetIndex {
@@ -480,6 +498,36 @@ fn put_int(o: Opnd, r: i64, env: &mut Env<'_>, base: usize, regs: &mut [Value]) 
         *x = r;
     } else {
         *slot = Value::Int(r);
+    }
+}
+
+/// `put` of a float, overwriting a float in place.
+#[inline(always)]
+fn put_float(o: Opnd, r: f64, env: &mut Env<'_>, base: usize, regs: &mut [Value]) {
+    let i = (o & !KIND) as usize;
+    let slot = match o & KIND {
+        LOCAL => &mut env[base + i].1,
+        REG => &mut regs[i],
+        _ => return,
+    };
+    if let Value::Float(x) = slot {
+        *x = r;
+    } else {
+        *slot = Value::Float(r);
+    }
+}
+
+/// type.num.6: a comparison of floats.
+#[inline(always)]
+fn float_cmp(op: BinOp, a: f64, b: f64) -> Option<bool> {
+    match op {
+        BinOp::Eq => Some(a == b),
+        BinOp::Ne => Some(a != b),
+        BinOp::Lt => Some(a < b),
+        BinOp::Le => Some(a <= b),
+        BinOp::Gt => Some(a > b),
+        BinOp::Ge => Some(a >= b),
+        _ => None,
     }
 }
 
@@ -1097,18 +1145,40 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             _ => return self.delegate(e, dst),
         };
         if f.receiver.is_some()
-            || f.params.iter().any(|p| p.mutable)
             || f.params.len() != args.len()
-            || args.iter().any(|a| a.label.is_some() || a.param.is_some() || a.mutable)
+            || args.iter().any(|a| a.label.is_some() || a.param.is_some())
         {
             return self.delegate(e, dst);
         }
+        // own.param.2: a `mut` argument that is a plain local moves into the call and back.
+        // trace.watch.3: the walker's `invoke` shows a watched value changing through a `mut` argument.
+        if self.it.tracing & trace::WATCH != 0 && f.params.iter().any(|p| p.mutable) {
+            return self.delegate(e, dst);
+        }
+        let mut moves = Vec::new();
+        for (k, (a, p)) in args.iter().zip(&f.params).enumerate() {
+            if a.mutable != p.mutable {
+                return self.delegate(e, dst);
+            }
+            if p.mutable {
+                match &a.value {
+                    Expr::Name(n, _) if let Some(slot) = self.local(n) => moves.push((k as u32, slot)),
+                    _ => return self.delegate(e, dst),
+                }
+            }
+        }
         let first = self.next_reg;
         let regs: Vec<Opnd> = args.iter().map(|_| self.reg()).collect();
-        for (a, r) in args.iter().zip(regs) {
-            self.expr_to(&a.value, r);
+        for ((a, r), p) in args.iter().zip(regs).zip(&f.params) {
+            if !p.mutable {
+                self.expr_to(&a.value, r);
+            }
         }
-        self.emit(Ins::Call { f, dst, args: first, pos: callee.pos() });
+        if moves.is_empty() {
+            self.emit(Ins::Call { f, dst, args: first, pos: callee.pos() });
+        } else {
+            self.emit(Ins::CallMut { f, dst, args: first, moves: moves.into(), pos: callee.pos() });
+        }
     }
 
     fn build(&mut self, what: Built, fields: &'a [crate::ast::Field], args: &'a [Arg], dst: Opnd) {
@@ -1331,10 +1401,12 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 if !matches!(**index, Expr::Range { .. })
                     && let Expr::Name(n, _) = &**recv
                     && let Some(slot) = self.local(n)
-                    && (op.is_none() || self.effect_free(value)) =>
+                    && (op.is_none() || self.effect_free(value) || !writes_locals(value, &self.it.resolved.moves)) =>
             {
                 // The walker's path for a local list or map; any other value takes its general path.
-                let guard = self.emit(Ins::IfNotListMap { slot, t: 0 });
+                // A right side that runs code is for lists only, after the index is checked.
+                let early = op.is_some() && !self.effect_free(value);
+                let guard = self.emit(Ins::IfNotListMap { slot, t: 0, list_only: early });
                 let idx = self.operand(index);
                 let idx = if idx & KIND == LOCAL && writes_locals(value, &self.it.resolved.moves) {
                     let r = self.reg();
@@ -1343,6 +1415,9 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 } else {
                     idx
                 };
+                if early {
+                    self.emit(Ins::CheckIndex { slot, idx, at: *at });
+                }
                 let val = self.operand(value);
                 self.emit(Ins::SetIndex { slot, idx, val, op: *op, at: *at, pos: *pos });
                 let j = self.emit(Ins::Jump(0));
@@ -1834,6 +1909,21 @@ impl<'a, W: Write> Interp<'a, W> {
                         }
                         continue;
                     }
+                    // type.num.6: IEEE arithmetic on floats traps never.
+                    if let (Value::Float(x), Value::Float(y)) = (get!(*a), get!(*b)) {
+                        let (x, y) = (*x, *y);
+                        match op {
+                            BinOp::Add => put_float(*dst, x + y, env, base, regs),
+                            BinOp::Sub => put_float(*dst, x - y, env, base, regs),
+                            BinOp::Mul => put_float(*dst, x * y, env, base, regs),
+                            BinOp::Div => put_float(*dst, x / y, env, base, regs),
+                            _ => {
+                                let t = float_cmp(*op, x, y).expect("a comparison");
+                                put(*dst, Value::Bool(t), env, base, regs);
+                            }
+                        }
+                        continue;
+                    }
                     if let (Value::Str(x), Value::Str(y)) = (get!(*a), get!(*b))
                         && code.str_eq
                         && matches!(op, BinOp::Eq | BinOp::Ne)
@@ -1860,6 +1950,7 @@ impl<'a, W: Write> Interp<'a, W> {
                 Ins::BrCmp { op, a, b, when, t, pos } => {
                     let c = match (get!(*a), get!(*b)) {
                         (Value::Int(x), Value::Int(y)) => int_cmp(*op, *x, *y).expect("a comparison"),
+                        (Value::Float(x), Value::Float(y)) => float_cmp(*op, *x, *y).expect("a comparison"),
                         // expr.cmp.1: strings are equal when their bytes are.
                         (Value::Str(x), Value::Str(y)) if code.str_eq && matches!(op, BinOp::Eq | BinOp::Ne) => {
                             (x == y) == (*op == BinOp::Eq)
@@ -1941,6 +2032,30 @@ impl<'a, W: Write> Interp<'a, W> {
                     self.env_pool.push(callee);
                     put(*dst, result, env, base, regs);
                 }
+                Ins::CallMut { f, dst, args, moves, pos } => {
+                    pc += 1;
+                    // own.excl.3: `mut` operands that overlap trap before the call.
+                    for j in 1..moves.len() {
+                        if moves[..j].iter().any(|m| m.1 == moves[j].1) {
+                            trap::<()>("own.excl.3", *pos, "two `mut` arguments of this call overlap".into())?;
+                        }
+                    }
+                    let mut callee = self.env_pool.pop().unwrap_or_else(|| Vec::with_capacity(16));
+                    for (k, p) in f.params.iter().enumerate() {
+                        let v = std::mem::replace(&mut regs[*args as usize + k], Value::Unit);
+                        callee.push((p.name.as_str(), v));
+                    }
+                    for &(k, slot) in moves.iter() {
+                        callee[k as usize].1 = std::mem::replace(&mut env[base + slot as usize].1, Value::Unit);
+                    }
+                    let result = self.run_body(f, &mut callee, *pos)?;
+                    for &(k, slot) in moves.iter() {
+                        env[base + slot as usize].1 = std::mem::replace(&mut callee[k as usize].1, Value::Unit);
+                    }
+                    callee.clear();
+                    self.env_pool.push(callee);
+                    put(*dst, result, env, base, regs);
+                }
                 Ins::Print { src, pos } => {
                     pc += 1;
                     let v = take!(*src);
@@ -1995,8 +2110,17 @@ impl<'a, W: Write> Interp<'a, W> {
                     done(*recv, regs);
                     put(*dst, v, env, base, regs);
                 }
-                Ins::IfNotListMap { slot, t } => {
-                    pc = if matches!(env[base + *slot as usize].1, Value::List(_) | Value::Map(_)) {
+                Ins::CheckIndex { slot, idx, at } => {
+                    pc += 1;
+                    let Value::List(items) = &env[base + *slot as usize].1 else { unreachable!("a list") };
+                    element(items, get!(*idx).int(), *at)?;
+                }
+                Ins::IfNotListMap { slot, t, list_only } => {
+                    pc = if match &env[base + *slot as usize].1 {
+                        Value::List(_) => true,
+                        Value::Map(_) => !*list_only,
+                        _ => false,
+                    } {
                         pc + 1
                     } else {
                         *t as usize
@@ -2005,6 +2129,31 @@ impl<'a, W: Write> Interp<'a, W> {
                 Ins::SetIndex { slot, idx, val, op, at, pos } => {
                     pc += 1;
                     let slot = base + *slot as usize;
+                    // type.coll.4: the in-bounds element of a list, with no path to walk.
+                    let fast = match (&env[slot].1, get!(*idx)) {
+                        (Value::List(items), Value::Int(i)) if (*i as u64) < items.len() as u64 => Some(*i as usize),
+                        _ => None,
+                    };
+                    if let Some(u) = fast {
+                        done(*idx, regs);
+                        let v = match op {
+                            None => take!(*val),
+                            Some(op) => {
+                                let Value::List(items) = &env[slot].1 else { unreachable!("a list") };
+                                let old = items[u].clone();
+                                let rhs = take!(*val);
+                                match (&old, &rhs) {
+                                    (Value::Int(x), Value::Int(y)) if let Some(r) = int_arith(*op, *x, *y) => {
+                                        Value::Int(r)
+                                    }
+                                    _ => self.binop(*op, old, rhs, *pos)?,
+                                }
+                            }
+                        };
+                        let Value::List(items) = &mut env[slot].1 else { unreachable!("a list") };
+                        Rc::make_mut(items)[u] = v;
+                        continue;
+                    }
                     let i = take!(*idx);
                     let is_map = matches!(env[slot].1, Value::Map(_));
                     // type.map.7: `m[k] op= v` on a missing key starts from zero.
@@ -2174,6 +2323,22 @@ impl<'a, W: Write> Interp<'a, W> {
                     pc += 1;
                     let place = *recv & KIND == LOCAL;
                     let at = base + (*recv & !KIND) as usize;
+                    // type.coll.5, type.coll.6: `len` and `push` on a list local, with no argument vector.
+                    if place && path.is_empty() && self.tracing & super::trace::WATCH == 0 {
+                        if let Value::List(items) = &mut env[at].1 {
+                            if *n == 1 && name.len() == 4 && *name == "push" {
+                                let v = std::mem::replace(&mut regs[*args as usize], Value::Unit);
+                                Rc::make_mut(items).push(v);
+                                put(*dst, Value::Unit, env, base, regs);
+                                continue;
+                            }
+                            if *n == 0 && name.len() == 3 && *name == "len" {
+                                let len = items.len() as i64;
+                                put_int(*dst, len, env, base, regs);
+                                continue;
+                            }
+                        }
+                    }
                     // A register receiver is moved out; a local's is read in place.
                     let owned = if place { None } else { Some(take!(*recv)) };
                     let me = match &owned {

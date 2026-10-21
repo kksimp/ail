@@ -90,7 +90,10 @@ pub(super) const INT_METHODS: &[&str] = &[
     "to_u64",
     "to_f32",
 ];
-pub(super) const FLOAT_METHODS: &[&str] = &["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_f32"];
+pub(super) const FLOAT_METHODS: &[&str] = &[
+    "abs", "floor", "ceil", "round", "sqrt", "sin", "cos", "tan", "atan", "atan2", "exp", "ln", "log10", "pow", "hypot",
+    "cbrt", "to_int", "to_f32",
+];
 pub(super) const SIZED_INT_METHODS: &[&str] = &[
     "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem", "checked_neg", "wrapping_add",
     "wrapping_sub", "wrapping_mul", "wrapping_neg", "saturating_add", "saturating_sub", "saturating_mul", "abs",
@@ -171,7 +174,10 @@ pub(super) fn builtin(t: &Ty, name: &str) -> Option<Builtin> {
             _ => convert(name).map(|k| Builtin { mutates: false, params: vec![], ret: Ty::Num(k), need: Need::Nothing }),
         },
         Ty::Float => match name {
-            "abs" | "floor" | "ceil" | "round" | "sqrt" => read(vec![], Float),
+            "abs" | "floor" | "ceil" | "round" | "sqrt" | "sin" | "cos" | "tan" | "atan" | "exp" | "ln" | "log10"
+            | "cbrt" => read(vec![], Float),
+            // type.num.16
+            "atan2" | "pow" | "hypot" => read(vec![Float], Float),
             "to_int" => read(vec![], Int),
             "to_f32" => read(vec![], Ty::Num(Num::F32)),
             _ => None,

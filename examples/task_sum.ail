@@ -1,0 +1,18 @@
+## Sum 0 to 999 in four tasks at once. Each task returns its part, and
+## `wait` gives it back, failing if the task trapped.
+##   ./ail run examples/task_sum.ail
+
+fn sum_range(lo int, hi int) int
+    mut total := 0
+    for i in lo..hi
+        total += i
+    total
+
+fn main() !
+    a := spawn sum_range(0, 250)
+    b := spawn sum_range(250, 500)
+    c := spawn sum_range(500, 750)
+    d := spawn sum_range(750, 1000)
+    total := a.wait()? + b.wait()? + c.wait()? + d.wait()?
+    print("sum of 0..1000 in four tasks: {total}")
+    print("matches the formula: {total == 999 * 1000 / 2}")

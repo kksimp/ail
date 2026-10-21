@@ -121,6 +121,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **MIR** | Mid-level IR: per body instance, a control-flow graph in SSA form with explicit allocations, copies, traps, dispatch and effects; the unit of the query compiler; internal and unversioned (ADR 0222, ADR 0223). |
 | **Mistakes corpus** | `bootstrap/tests/mistakes/`: small programs that each hold one plausible AI mistake, with the expected rules and what `ail fix` makes of them (`gram.help.2`, ADR 0262, [diagnostics-audit.md](design/diagnostics-audit.md)). |
 | **Module** | A directory of `.ail` files sharing one namespace (ADR 0097). |
+| **Monomorphisation** | Compiling a generic function once per set of type arguments, so each instance runs with concrete types. The compiler chooses per instance between specialising and sharing code (ADR 0080). |
 | **Move** | Handing a value to a new owner; the old binding can't be used afterwards on any path. Unique values move on binding, assignment, return and into fields; any value moves as a `move` argument (ADRs 0068, 0190); a `move self` method moves its receiver (ADR 0317). |
 | **`move self`** | A method receiver that takes ownership: `fn Conn.close(move self)`; `c.close()` moves `c`, with no mark at the call (ADR 0317). |
 | **MTE** | Memory Tagging Extension (ARMv8.5+): hardware tags on memory and pointers that detect memory-safety errors. |
@@ -216,6 +217,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |
 | **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). A list or map of a unique type is unique too (ADR 0318). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |
+| **Vtable** | A table of function pointers for one type's implementation of a trait, used to call a method through `any Trait` at run time. Planned by ADR 0616 (lane 120, not yet landed). |
 | **Walk** | `fs.walk(dir)`: every file below a directory at any depth, as paths, sorted (`std.fs.8`, ADR 0281). |
 | **Warning** | A diagnostic that doesn't stop a program from building or running, such as a `_` arm that hides enum variants (`expr.match.3`). Errors stop it. |
 | **Watch** | `ail run --watch NAME`: each assignment to a `mut` variable `NAME`, with its new value and position; follows it into `mut` arguments and `mut self` calls, naming the frame that wrote (ADRs 0268, 0327). |

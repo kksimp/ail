@@ -118,6 +118,9 @@ pub struct Counted
     pub exit int
     ## The edge of the header's branch that leaves.
     pub exit_edge int
+    ## What `p` steps by on every path back: a value defined outside the loop
+    ## (the guard tests that it is at least 1), or -1 for the constant 1.
+    pub step int
 
 pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
     if lp.pre < 0 or lp.exits != 1
@@ -153,17 +156,36 @@ pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
                 if dec.op != "sub" or dec.args[0] != q or const_of(f, defs, dec.args[1]) != 1
                     return none
     lo := f.blocks[lp.pre].term.args[0][k]
-    start := const_of(f, defs, lo)?
-    if start < 0
+    if start := const_of(f, defs, lo)
+        if start < 0
+            return none
+    elif lp.member[defs[lo].block] or f.vals[lo] != Ty.Int
+        # A start computed before the loop (`for j in i + 1..n`): the guard
+        # tests that it is not negative (ADR 0622).
         return none
+    mut stride := -1
+    mut strided := false
     for l in lp.latches
         lt := f.blocks[l].term
         for e in 0..lt.targets.len()
             if lt.targets[e] != lp.header
                 continue
             step := inst_of(f, defs, lt.args[e][k])?
-            if step.op != "add" or step.args[0] != p or const_of(f, defs, step.args[1]) != 1
+            if step.op != "add" or step.args[0] != p
                 return none
+            by := step.args[1]
+            if const_of(f, defs, by) == 1
+                if strided
+                    return none
+                continue
+            # `j += s` for an `s` that doesn't change (ADR 0622); not with a
+            # second induction variable, which needs steps of exactly 1.
+            if q >= 0 or lp.member[defs[by].block] or f.vals[by] != Ty.Int
+                return none
+            if strided and stride != by
+                return none
+            stride = by
+            strided = true
     Counted(
         p: p,
         k: k,
@@ -174,6 +196,7 @@ pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
         body: t.targets[0],
         exit: t.targets[1],
         exit_edge: 1,
+        step: stride,
     )
 
 fn param_index(h Block, v int) int
