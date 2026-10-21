@@ -70,15 +70,22 @@ fn check_dump(path str, many bool) !
     text := fs.read_text(path)?
     first := text.lines().first() else ""
     prog := ast.Program.from_json(parse_json(first)?)?
-    diags := check.check_declarations(prog).sorted(by: |d| d.pos.line * 100000 + d.pos.col)
+    report := check.check_program(prog)
+    diags := report.diags.sorted(by: |d| d.pos.line * 100000 + d.pos.col)
     if many
         print("== {path}")
     for d in diags
         print(d.to_json(prog.files))
     if many
         print("rules {check.COVERED_RULES.join(" ")}")
-        for s in check.skipped(prog)
+        for s in check.skipped(prog, report)
             print("skip {s.file} {s.first} {s.last}")
+        bodies := [
+            i
+            for i in 0..prog.fns.len() if prog.fns[i].body != none
+                and prog.fns[i].pos.line < 1073741824
+        ]
+        print("bodies {[i for i in bodies if not report.gapped.contains(i)].len()} {bodies.len()}")
 
 ## The native runtime in directory `dir`, parsed as one program.
 fn runtime(dir str) !ast.Program

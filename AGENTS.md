@@ -32,6 +32,9 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   both pass, open a pull request for the branch and merge it through GitHub.
   GitHub deletes the branch on merge (repository setting). There's no
   GitHub-hosted testing.
+- A change to the Rust checker (`bootstrap/src/check*`) ports to
+  `compiler/check/` in the same branch: the selftest `self_hosted_check`
+  requires the two to agree ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md)).
 - Keep open branches to the minimum (one per change in flight). Track every
   branch you create and report it until it's merged and deleted.
 - The AI's environment can push branches but can't delete them on GitHub.

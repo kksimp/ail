@@ -50,7 +50,10 @@ writes for an `ast.Program`, so `Program.from_json` reads it back
 
 **api.ast.3** — `ail api --ast --program FILE|DIR` prints the program the
 checker sees: the prelude (lines from 2^30), every imported module (lines
-from each file's `base`), the derive output and the standard declarations.
+from each file's `base`), the derive output and the standard declarations. Its
+`unsafe_allowed` lists the packages whose manifest allows `unsafe` (none
+when the program has no manifest), so a checker reading the dump can report
+unsafe.block.3 ([ADR 0740](../decisions/0740-self-hosted-checker-parity-gate.md)).
 
 **api.out.1** — The output is one JSON object with the keys `api` (the
 shape's version, `1`), `file` (the path as given) and `items`, then

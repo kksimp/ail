@@ -898,6 +898,10 @@ implementation.
 
 `@inline` is accepted and ignored. `@deprecated("use area")` warns at each call.
 Unknown attributes are errors.
+`@inline` is a speed hint, accepted and ignored for now. `@deprecated("use
+area")` before a function warns at each call, with the reason (required).
+`@allow("expr.match.3")` silences the warning for `_` arms that cover enum
+variants in that function. Unknown attributes are errors.
 
 ## Unsafe
 

@@ -305,8 +305,8 @@ compile-time error, and the diagnostic MUST list the uncovered cases.
 
 **expr.match.3** — When the scrutinee has an enum type and a catch-all arm
 `_` covers one or more of its named variants, the implementation MUST warn
-and name those variants, unless the warning is suppressed for that match.
-*(ADR 0056)*
+and name those variants, unless the function allows it with
+`@allow("expr.match.3")` (`gram.attr.5`). *(ADR 0056, ADR 0379)*
 
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
@@ -411,8 +411,9 @@ fn main()
 
 > **Note:** not yet designed: or-patterns that bind names, patterns nested
 > inside a variant's fields (`expr.match.6`), a binding pattern for a whole
-> scrutinee (`n if n > 0`), open-ended ranges (`10..`), and warning-
-> suppression syntax. *(ADR 0138, ADR 0452, ADR 0453)*
+> scrutinee (`n if n > 0`), and open-ended ranges (`10..`). Warnings are
+> suppressed with `@allow` (gram.attr.5). *(ADR 0138, ADR 0379, ADR 0452,
+> ADR 0453)*
 
 ## Comprehensions
 

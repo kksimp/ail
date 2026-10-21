@@ -32,6 +32,9 @@ pub struct SigParam
 pub struct Sig
     pub receiver bool?
     pub params List[SigParam]
+    ## The parameters' names, for named arguments (expr.call.3); empty for a
+    ## built-in whose parameters have no names.
+    pub names List[str]
     pub moves List[bool]
     pub ret Ty
     pub generics List[int]
@@ -79,6 +82,87 @@ pub struct Checker
     pub self_ty Ty?
     pub deferring bool
     pub deferred List[Deferred]
+    ## Constants' types once known, and which are being typed (mod.const.3).
+    pub const_types List[Ty?]
+    pub const_busy List[bool]
+    ## Checking a `requires` condition, where `result` doesn't exist yet.
+    pub in_requires bool
+    ## The function being checked: its locals (innermost last), the locals
+    ## typed by their first use, its return type, loop depth, and how many
+    ## `else` values enclose the expression and caught an optional `?`.
+    pub locals List[Local]
+    pub pending List[Pending]
+    pub fn_ret Ty
+    pub loop_depth int
+    pub catching int
+    pub caught int
+    pub cur_fn int
+    ## Names whose use moves the binding's value out, with the rule (own.uniq.2).
+    pub moved List[Moved]
+    ## Functions with a construct this checker doesn't type yet (ADR 0377):
+    ## their lines are left out of the comparison with `ail check`.
+    pub gapped Set[int]
+    pub gapped_structs Set[int]
+    pub gapped_consts Set[int]
+    pub gap_now bool
+    ## The function being checked has `@allow("expr.match.3")` (gram.attr.5).
+    pub allow_wildcards bool
+    ## How many `unsafe` blocks enclose the code being checked (unsafe.block.1).
+    pub unsafe_depth int
+    ## Calls resolved to a declared function, or an associated function of a
+    ## type, by `pos_key` of the name: the calls `spawn` can start (conc.task.1).
+    pub declared_fns Set[int]
+    ## Facts for the effect pass, by `pos_key` of a method's name: the
+    ## function a call runs, the trait whose implementations it may run, the
+    ## standard module of `m.f(...)`, and `ui.Window` methods (eff.infer.3-5).
+    pub targets Map[int, int]
+    ## Declared functions named as values, by the name's position, with the
+    ## function's index (type.fn.2).
+    pub fn_values Map[int, int]
+    pub trait_calls Map[int, int]
+    pub assoc_calls Map[int, int]
+    pub std_fns Map[int, str]
+    pub std_methods Set[int]
+    pub net_methods Map[int, str]
+    ## Writes through a `ref`, by `pos_key` of the place (own.ref.4).
+    pub ref_writes Set[int]
+    ## For the parallel-loop pass (conc.par.2, conc.atomic.6): calls of a
+    ## handle's or an atomic's methods, `with` and channel loops; calls of
+    ## any standard function, type or method; integer literals typed as
+    ## floats (type.num.10).
+    pub handle_calls Set[int]
+    pub atomic_calls Set[int]
+    pub std_any Set[int]
+    pub float_literals Set[int]
+
+## How a local was declared.
+pub enum LocalKind
+    Binding
+    ParamLocal
+    MoveParam
+    SelfParam
+    LoopVar
+
+pub struct Local
+    pub name str
+    pub ty Ty
+    pub mutable bool
+    pub how LocalKind
+    ## Where a `:=` binding's name is written.
+    pub decl ast.Pos?
+
+## A local declared from `[]` or `{}`, typed by its first use (type.coll.13).
+pub struct Pending
+    pub name str
+    pub lit ast.Pos
+    pub brace bool
+    ## Whether it is `none`, typed by its first assignment (type.opt.9).
+    pub opt bool
+    pub index int
+
+pub struct Moved
+    pub pos ast.Pos
+    pub rule str
 
 pub fn new_checker(p ast.Program) Checker
     Checker(
@@ -113,25 +197,37 @@ pub fn new_checker(p ast.Program) Checker
         self_ty: none,
         deferring: true,
         deferred: [],
+        const_types: [no_ty() for _ in p.consts],
+        const_busy: [false for _ in p.consts],
+        in_requires: false,
+        locals: [],
+        pending: [],
+        fn_ret: Ty.Unit,
+        loop_depth: 0,
+        catching: 0,
+        caught: 0,
+        cur_fn: 0,
+        moved: [],
+        gapped: Set[int](),
+        gapped_structs: Set[int](),
+        gapped_consts: Set[int](),
+        gap_now: false,
+        allow_wildcards: false,
+        unsafe_depth: 0,
+        declared_fns: Set[int](),
+        targets: Map[int, int](),
+        fn_values: Map[int, int](),
+        trait_calls: Map[int, int](),
+        assoc_calls: Map[int, int](),
+        std_fns: Map[int, str](),
+        std_methods: Set[int](),
+        net_methods: Map[int, str](),
+        ref_writes: Set[int](),
+        handle_calls: Set[int](),
+        atomic_calls: Set[int](),
+        std_any: Set[int](),
+        float_literals: Set[int](),
     )
-
-## The declaration passes of `check_with`, in its order.
-pub fn check_declarations(p ast.Program) List[Diag]
-    mut c := new_checker(p)
-    c.list_param = c.new_param("T", [])
-    c.collect_traits()
-    c.collect_types()
-    c.collect_impls()
-    c.resolve_fields()
-    c.check_unique_fields()
-    c.collect_fns()
-    c.collect_consts()
-    c.check_uses()
-    c.check_deferred_bounds()
-    c.check_main()
-    c.check_attrs()
-    c.check_impls()
-    c.diags
 
 fn Checker.err(mut self, rule str, at ast.Pos, text str)
     diags.push(new_diag(rule, at, text))
@@ -224,12 +320,12 @@ fn Checker.collect_supers(mut self)
     for i in 0..prog.traits.len()
         tr := prog.traits[i]
         mut all := List[int]()
-        mut pending := direct[i]
-        while pending.len() > 0
-            s := pending.pop() else break
+        mut todo_list := direct[i]
+        while todo_list.len() > 0
+            s := todo_list.pop() else break
             if not all.contains(s)
                 all.push(s)
-                pending.extend(direct[s])
+                todo_list.extend(direct[s])
         if all.contains(i)
             err_help(
                 "trait.super.1",
@@ -402,7 +498,7 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
 
 ## ---- Functions ----
 
-fn Checker.collect_fns(mut self)
+@allow("expr.match.3") fn Checker.collect_fns(mut self)
     for i in 0..prog.fns.len()
         f := prog.fns[i]
         mut owner_ids := List[int]()
@@ -467,16 +563,17 @@ fn Checker.collect_fns(mut self)
                         at,
                         "a trait method lists its errors (`T ! E`); the bootstrap can't infer them across implementations",
                     )
-            _ => ret = ret
+            TopLevel | InImpl => ret = ret
         fn_scopes.push(scope)
         scope = []
         fn_self.push(own_self)
         self_ty = none
-        moved := [p.moved for p in f.params]
+        param_moves := [p.moved for p in f.params]
         sigs.push(Sig(
             receiver: receiver_of(f),
             params: params,
-            moves: if moved.contains(true) then moved else [],
+            names: [p.name for p in f.params],
+            moves: if param_moves.contains(true) then param_moves else [],
             ret: ret,
             generics: generics,
             owner: owner_ids.len(),
@@ -491,12 +588,12 @@ fn receiver_of(f ast.FnDecl) bool?
     r.mutable
 
 ## `T ! E` whose success value is nothing.
-fn fails_only(t Ty) bool
+@allow("expr.match.3") fn fails_only(t Ty) bool
     match t
         Res(ok, _) => ok == Ty.Unit
         _ => false
 
-fn is_inferred(t Ty) bool
+@allow("expr.match.3") fn is_inferred(t Ty) bool
     match t
         Res(_, errs) =>
             match errs
@@ -602,9 +699,15 @@ fn Checker.collect_consts(mut self)
         else
             consts[n] = i
         constant_expr(c.value)
+    for i in 0..prog.consts.len()
+        gap_now = false
+        const_type(i)
+        if gap_now
+            gapped_consts.add(i)
+    gap_now = false
 
 ## Report the parts of a constant's value the bootstrap can't compute (ct.const.1).
-fn Checker.constant_expr(mut self, e ast.Expr)
+@allow("expr.match.3") fn Checker.constant_expr(mut self, e ast.Expr)
     match e
         Interp(parts, _) =>
             for p in parts
@@ -655,7 +758,7 @@ fn Checker.constant_expr(mut self, e ast.Expr)
                 Fallback(d) =>
                     constant_expr(value)
                     constant_expr(d)
-                _ => not_constant(at, "`else` with a block or a jump", "ct.const.1")
+                Leave | Handler => not_constant(at, "`else` with a block or a jump", "ct.const.1")
         If(_, _, _, at) => not_constant(at, "`if`", "ct.const.1")
         Match(_, _, at) => not_constant(at, "`match`", "ct.const.1")
         Try(_, _, at) => not_constant(at, "`?`", "ct.const.3")
@@ -698,8 +801,8 @@ fn Checker.check_main(mut self)
         ).with_help("add:\n    fn main()\n        print(\"Hello, world!\")"),
     )
 
-## test.attr.1-2, gram.attr.4: known attributes, and the shape of a test.
-fn Checker.check_attrs(mut self)
+## test.attr.1-2, gram.attr.4-5: known attributes, and the shape of a test.
+@allow("expr.match.3") fn Checker.check_attrs(mut self)
     for f in prog.fns
         mut is_test := false
         for a in f.attrs
@@ -712,6 +815,13 @@ fn Checker.check_attrs(mut self)
                     a.pos,
                     "unknown attribute `@{a.name}`",
                     "the known attributes are {known}",
+                )
+            if a.name == "allow" and not ALLOWABLE.contains(a.arg else "")
+                err_help(
+                    "gram.attr.5",
+                    a.pos,
+                    "`@allow` names a warning that a function may allow",
+                    "write `@allow(\"{ALLOWABLE.join("\")` or `@allow(\"")}\")`",
                 )
             if a.name == "deprecated" and a.arg == none
                 err_help(
@@ -814,7 +924,7 @@ fn Checker.ungeneratable(self, t ast.TypeRef, seen List[str]) str?
 
 ## ---- Unique types (own.uniq.1, own.uniq.5) ----
 
-fn Checker.is_unique(self, t Ty) bool
+@allow("expr.match.3") fn Checker.is_unique(self, t Ty) bool
     match t
         Struct(i, _) => prog.structs[i].is_unique
         Enum(i, _) => prog.enums[i].is_unique
@@ -834,7 +944,7 @@ fn Checker.no_unique(mut self, t Ty, at ast.Pos, what str)
         )
 
 ## unsafe.ptr.1: a raw pointer points to a type with a fixed C layout.
-fn Checker.ptr_target(mut self, inner Ty, at ast.Pos)
+@allow("expr.match.3") fn Checker.ptr_target(mut self, inner Ty, at ast.Pos)
     ok := match inner
         Int | Float | Bool | Num(_) | PtrOf(_) | Unknown => true
         _ => false

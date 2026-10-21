@@ -310,6 +310,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         caught: 0,
         cur_fn: 0,
         track: false,
+        allow_wildcards: false,
         fn_name: String::new(),
         fn_head: Pos { line: 0, col: 0 },
     };
@@ -517,6 +518,8 @@ struct Checker<'p> {
     /// are being recorded (the final pass only, err.paths.1).
     cur_fn: usize,
     track: bool,
+    /// The function being checked has `@allow("expr.match.3")` (gram.attr.5).
+    allow_wildcards: bool,
     /// Name and header line of the function being checked (err.fix.1).
     fn_name: String,
     fn_head: Pos,
@@ -1638,6 +1641,7 @@ impl<'p> Checker<'p> {
             Some((f.pos, !f.params.is_empty(), st.fields.iter().map(|x| x.name.clone()).collect()))
         });
         self.cur_fn = idx;
+        self.allow_wildcards = f.attrs.iter().any(|a| a.name == "allow" && a.arg.as_deref() == Some("expr.match.3"));
         self.fn_name = f.name.clone();
         self.fn_head = f.pos;
         if f.receiver.is_some() {
@@ -5297,14 +5301,16 @@ impl<'p> Checker<'p> {
                     .filter(|(_, c)| !**c)
                     .map(|(v, _)| v.name.as_str())
                     .collect();
-                self.diags.push(
-                    Diagnostic::warning(
-                        "expr.match.3",
+                if !self.allow_wildcards {
+                    self.diags.push(
+                        Diagnostic::warning(
+                            "expr.match.3",
                         *pos,
-                        format!("`_` covers {}, so a variant added later won't be flagged here", list_names(&hidden)),
-                    )
-                    .help("list the variants instead of `_`"),
-                );
+                            format!("`_` covers {}, so a variant added later won't be flagged here", list_names(&hidden)),
+                        )
+                        .help("list the variants instead of `_`, or mark the function `@allow(\"expr.match.3\")`"),
+                    );
+                }
                 *wildcard = true;
                 Vec::new()
             }

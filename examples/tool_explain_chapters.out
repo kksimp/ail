@@ -15,6 +15,8 @@ fix 9 0
 gen 14 0
 gram 15 2
 json 17 0
+gram 16 2
+json 14 0
 lex 24 6
 mod 29 2
 native 21 0
@@ -35,3 +37,4 @@ unsafe 16 0
 all 873 48
 all 864 48
 all 872 48
+all 868 48
