@@ -754,18 +754,30 @@ fn save(work: &Work) -> Result<Saved, String> {
     for (f, src) in &work.files {
         let before = std::fs::read_to_string(f).ok();
         if before.as_deref() != Some(src.as_str()) {
-            std::fs::write(f, src).map_err(|e| format!("can't write {}: {e}", f.display()))?;
+            write_file(f, src).map_err(|e| format!("can't write {}: {e}", f.display()))?;
             saved.push((f.clone(), before));
         }
     }
     Ok(saved)
 }
 
+/// Write `text` to a temporary file beside `path` and rename it over, so a reader sees the old
+/// text or the new, never a partial file.
+fn write_file(path: &Path, text: &str) -> std::io::Result<()> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(format!(".{}.tmp", std::process::id()));
+    let tmp = PathBuf::from(tmp);
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
+}
+
 fn restore(saved: Saved) {
     for (f, before) in saved {
         match before {
             Some(s) => {
-                let _ = std::fs::write(&f, s);
+                let _ = write_file(&f, &s);
             }
             None => {
                 let _ = std::fs::remove_file(&f);
