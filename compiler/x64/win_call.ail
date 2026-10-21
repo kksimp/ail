@@ -47,7 +47,7 @@ fn Gen.libsys_call(mut self, i mir.Inst)
 
 ## The Windows entry (ADR 0606): `_start` calls `main` and passes its result
 ## to kernel32's `ExitProcess`. The loader enters with rsp 8 mod 16, so
-## `sub rsp, 40` aligns the stack for the calls. Unlike `generate`, it calls
+## `sub rsp, 56` aligns the stack for the calls and makes room for an empty `argv`. Unlike `generate`, it calls
 ## no runtime start-up or exit (`rt.init`, `rt.exit`), which use Linux system calls.
 pub fn generate_windows(m mir.Module) codegen.Image
     mut img := codegen.new_image()
@@ -58,10 +58,17 @@ pub fn generate_windows(m mir.Module) codegen.Image
     rt := has_fn(m, "rt.init")
     # No frame above `main`: the trap stack's walk ends here (trace.frame.1).
     a.alu_rr("xor", RBP, RBP)
-    a.alu_ri("sub", RSP, 40)
+    # 40 bytes for the callee's shadow space and alignment, then two zero
+    # words: `argv` (an empty vector) and the `envp` that follows it. Its
+    # address is above every frame of the program, so it is also the stack
+    # top the collector scans up to (`heap_init(top)`).
+    a.alu_ri("sub", RSP, 56)
+    a.alu_rr("xor", RAX, RAX)
+    a.mov_mr(at(RSP, 40), RAX)
+    a.mov_mr(at(RSP, 48), RAX)
     if rt
         a.mov_ri(RDI, 0)
-        a.mov_ri(RSI, 0)
+        a.lea(RSI, at(RSP, 40))
         a.call_sym("rt.init")
     a.call_sym("main")
     if rt
