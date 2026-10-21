@@ -36,15 +36,22 @@ fn map_hash_int(k int) int
     h = h.bit_xor(h.shr(29).bit_and(34359738367))
     h.bit_and(4611686018427387903)
 
-## FNV-1a over a string object's bytes.
+## A string object's bytes hashed eight at a time: each word is xored in and
+## multiplied, the last partial word is masked to its bytes, and the high half
+## is folded into the low bits at the end (the index uses the low bits). Reading
+## the whole last word is safe: an object's block is 16-byte rounded, which
+## leaves at least seven readable bytes past any data end (ADR 0766). The hash
+## only places keys in the index; iteration order is insertion order.
 fn map_hash_str(s int) int
     n := load64(s)
-    mut h := -3750763034362895579
+    mut h := n
     mut i := 0
-    while i < n
-        h = h.bit_xor(load8(s + 16 + i)) * 1099511628211
-        i += 1
-    h = h.bit_xor(h.shr(32).bit_and(4294967295))
+    while i + 8 <= n
+        h = h.bit_xor(load64(s + 16 + i)) * -7046029254386353131
+        i += 8
+    if i < n
+        h = h.bit_xor(load64(s + 16 + i).bit_and(1.shl(8 * (n - i)) - 1)) * -7046029254386353131
+    h = h.bit_xor(h.shr(32))
     h.bit_and(4611686018427387903)
 
 fn map_hash(kind int, k int) int
@@ -95,21 +102,34 @@ fn map_new(kind int, vmode int, vinfo int) int
     map_tables(m, 8)
     m
 
-## The entry for key `k` (hash `h`), or 0.
-fn map_find_h(m int, k int, h int) int
+## The entry for key `k` (hash `h`), or 0, probing from index slot `i`.
+fn map_probe(m int, k int, h int, i int) int
     mask := load64(m + 24)
     idx := load64(m + 48)
     ents := load64(m + 40)
     kind := load64(m + 32)
-    mut i := h.bit_and(mask)
-    mut s := load64(idx + 8 * i)
+    mut j := i
+    mut s := load64(idx + 8 * j)
     while s != 0
         e := ents + 24 * (s - 1)
         if load64(e) == h and map_key_eq(kind, load64(e + 8), k)
             return e
-        i = (i + 1).bit_and(mask)
-        s = load64(idx + 8 * i)
+        j = (j + 1).bit_and(mask)
+        s = load64(idx + 8 * j)
     0
+
+## The entry for key `k` (hash `h`), or 0. The first probe is the common hit
+## on the very key object and needs no saved registers; anything else goes to
+## `map_probe` from the same slot (ADR 0767).
+fn map_find_h(m int, k int, h int) int
+    i := h.bit_and(load64(m + 24))
+    s := load64(load64(m + 48) + 8 * i)
+    if s == 0
+        return 0
+    e := load64(m + 40) + 24 * (s - 1)
+    if load64(e) == h and load64(e + 8) == k
+        return e
+    map_probe(m, k, h, i)
 
 ## `get` then assignment on one key is the common pattern: the entry of the
 ## last key found or added is remembered, so the second lookup skips the
