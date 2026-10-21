@@ -439,3 +439,23 @@ criteria tie. Revisit with **c** when a third program needs C strings, and
 measure **b** with a prototype of `ffi_buffers` before adding a new type to the
 card. Both options change the card, so the designer should decide the
 ownership rule for **b** (release at scope end versus an explicit `free`).
+
+## OQ-137 — Free-form inline assembly in `driver` packages
+
+[ADR 0820](decisions/0820-driver-level-unsafe.md) gives `unsafe driver`
+packages CPU intrinsics (`hw.x64.*`, `hw.a64.*`) but no free-form assembly.
+
+- **a.** Intrinsics only. Each one is typed, checked and explained by
+  `ail explain`, and emitted by the in-house assemblers. Con: an instruction
+  without an intrinsic needs a compiler change.
+- **b.** An `asm` block with AIL's own assembler syntax and a register
+  constraint list. It covers everything. Con: a constraint language to design,
+  per-ISA text that agents can't check, and the optimiser must treat the block
+  as opaque.
+- **c.** Whole functions in assembly (`asm fn`), with the calling convention
+  fixed by the native ABI (`native-abi.md`). No constraint language. Con: a
+  call per use.
+
+Recommendation: **a** now. Revisit **c** when a driver needs an instruction
+sequence that intrinsics can't express. Measure tokens on a real driver before
+adding anything to the card.

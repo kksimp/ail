@@ -50,7 +50,7 @@ fn Lower.ok_type(mut self, t ast.TypeRef) Ty?
             o := ok else return Ty.Unit
             # `! E` is written like `!T`; an error type there is the error (err.type.7).
             if n := written_name(o)
-                if err_msgs.contains(n)
+                if names_error(n)
                     return Ty.Unit
             type_of(o)
         _ => none
@@ -247,8 +247,11 @@ fn Lower.fallible_call(self, e ast.Expr) bool
         Method(recv, name, _, _) => os_fails(recv, name) or method_fails(recv, name)
         _ => false
 
-## The signature key of `x.name(...)` when `x` is a local struct or enum value.
+## The signature key of `x.name(...)` when `x` is an imported module or a local
+## struct or enum value.
 fn Lower.method_key(self, recv ast.Expr, name str) str?
+    if m := module_name(recv)
+        return "{m}.{name}"
     match recv
         Name(n, _) =>
             k := lookup(n) else return none
@@ -267,6 +270,11 @@ fn Lower.method_fails(self, recv ast.Expr, name str) bool
     key := method_key(recv, name) else return false
     s := sigs.get(key) else return false
     s.fails
+
+## An error value as the last expression of a function that can fail is its
+## error (err.decl.3): leave with it. False when `e` isn't one.
+fn Lower.tail_error(mut self, e ast.Expr) bool
+    fails and is_error_expr(e) and lower_fail_return(e, tail_pos)
 
 ## `return E(...)` in a function that can fail: build the error, record its
 ## display text and the value, and leave (ADR 0804).
@@ -400,8 +408,7 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
                 problem(pos, "`else` with a value, but there is no value to replace")
                 jump(join, [])
             else
-                f := lower_value(x, t)?
-                jump(join, [convert(f, t, pos)])
+                fallback_jump(x, t, join, pos)
         Leave(st) =>
             if not m.opt
                 call("rt.err_clear", [], Ty.Unit)
@@ -455,9 +462,21 @@ fn Lower.declare_errors(mut self, prog ast.Program)
     for s in prog.structs
         if s.is_error
             err_msgs[s.name] = ""
+            err_msgs["{prefix}{s.name}"] = ""
     for e in prog.enums
         if e.is_error
             err_msgs[e.name] = ""
+            err_msgs["{prefix}{e.name}"] = ""
+
+## Whether a written type name (`E`, `m.E`) names an error type here.
+fn Lower.names_error(self, name str) bool
+    if err_msgs.contains("{prefix}{name}")
+        return true
+    if k := type_key(name)
+        return err_msgs.contains(k)
+    if k := enum_key(name)
+        return err_msgs.contains(k)
+    false
 
 ## The message an error type defines (err.msg.1) is the parser's generated
 ## `impl ToStr`; make its `to_str` a method of the type, so it lowers like
@@ -494,7 +513,7 @@ fn Lower.error_ty_of(mut self, t ast.TypeRef) Ty
                 return Ty.Unknown
             o := ok else return Ty.Unknown
             if n := written_name(o)
-                if err_msgs.contains(n)
+                if names_error(n)
                     return type_of(o) else Ty.Unknown
             Ty.Unknown
         _ => Ty.Unknown
@@ -517,7 +536,9 @@ fn is_pending_opt(t Ty) bool
 ## that has a value), else unknown.
 fn arms_start(want Ty?, bodies List[List[ast.Stmt]], els List[ast.Stmt]?) Ty
     if w := want
-        return w
+        # A pending `[]` or `{}` (type.coll.13) is typed by the arms instead.
+        if not is_pending_coll(w)
+            return w
     mut has_none := false
     for b in bodies
         has_none = has_none or ends_in_none(b)
@@ -541,7 +562,7 @@ fn settle_arm_ty(t Ty, xt Ty) Ty
 ## variable (and every value it has had) by that value.
 fn Lower.settle_var(mut self, target ast.Expr, ty Ty, r Val) Ty
     if not is_pending_opt(ty)
-        return ty
+        return settle_coll(target, ty, r)
     t := settle_arm_ty(ty, r.ty)
     if is_pending_opt(t)
         return ty
@@ -624,3 +645,11 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
     seal(join)
     cur = join
     result
+
+## `e else ...` (err.else.1-6).
+fn Lower.lower_or_else(mut self, x ast.Expr, other ast.Else, pos ast.Pos) Val?
+    if is_pop_call(x)
+        return lower_pop_else(x, other, pos)
+    if self.is_get_call(x)
+        return lower_get_else(x, other, pos)
+    lower_else(x, other, pos)

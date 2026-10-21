@@ -293,6 +293,16 @@ fn write_value(s: &mut String, v: &Value, budget: usize) {
             }
             Err(_) => s.push_str("ref …"),
         },
+        Value::Tuple(items) => {
+            s.push('(');
+            for (i, x) in items.iter().enumerate() {
+                if i > 0 {
+                    s.push_str(", ");
+                }
+                write_value(s, x, budget);
+            }
+            s.push(')');
+        }
         Value::List(items) => {
             s.push('[');
             for (i, x) in items.iter().enumerate() {

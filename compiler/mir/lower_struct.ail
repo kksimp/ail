@@ -197,6 +197,7 @@ fn holds_struct(t Ty) bool
     match t
         Struct(_) => true
         List(e) => holds_struct(e)
+        Map(_, v) => holds_struct(v)
         _ => false
 
 ## A copy of `v`, deep through lists and structs.
@@ -258,7 +259,55 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
             cur = exit
             finish(return_of(out))
+        Map(_, vt) =>
+            # The runtime copies the table and shares the structs; each live
+            # entry's value is then replaced by its copy (own.val.1).
+            out := call("rt.map_copy", [x], t)
+            raw := op("copy", [out], Ty.Int)
+            used := call("rt.map_used", [raw], Ty.Int)
+            head := new_block()
+            i := new_value(Ty.Int, "")
+            blocks[head].params.push(i)
+            jump(head, [konst(0, Ty.Int)])
+            cur = head
+            body := new_block()
+            step := new_block()
+            exit := new_block()
+            branch(op("lt", [i, used], Ty.Bool), body, [], exit, [])
+            cur = body
+            e := call("rt.map_live", [raw, i], Ty.Int)
+            live := new_block()
+            branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), live, [], step, [])
+            cur = live
+            c := copy_value(Val(id: entry_value(e, vt), ty: vt))
+            rawop("store64", [op("add", [e, konst(16, Ty.Int)], Ty.Int), c], Ty.Unit)
+            jump(step, [])
+            cur = step
+            jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+            cur = exit
+            finish(return_of(out))
         _ => finish(return_of(x))
     for b in 0..blocks.len()
         sealed[b] = true
     end_fn(name, ast.Pos(line: 1, col: 1))
+
+## `x.f`, `E.V`, or a qualified constant.
+fn Lower.lower_member_expr(
+    mut self,
+    recv ast.Expr,
+    name str,
+    pos ast.Pos,
+    e ast.Expr,
+    want Ty?,
+) Val?
+    if g := generic_enum_ref(recv)
+        return generic_variant(g, name, none, pos, want)
+    if en := enum_ref(recv)
+        return variant_member(en, name, pos)
+    if key := qualified(e)
+        if consts.contains(key)
+            return lower_const(key, want)
+        if globals.contains(key)
+            return global_const(key)
+        return unsupported(pos, "`{key}` as a value")
+    lower_member(recv, name, pos)

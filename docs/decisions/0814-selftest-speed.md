@@ -49,6 +49,14 @@ Three steps, each its own pull request, in this order:
    (output unchanged). A test checks five programs byte for byte against
    separate `ail build` runs.
 
+Step 2 (`./ail selftest` with no arguments in `ail`): cargo builds the test
+binaries, then the native test binary runs alone, since it already uses four
+threads, and the other 45 binaries run on four workers. After the first failure
+no new binary starts; the logs print in cargo's order. Tests that take a
+temporary path use the binary's own name or the process id, so runs cannot
+collide. Tests that pass a port use port 0. `AIL_BINARY` is read-only. A run
+with extra arguments still goes straight to `cargo test`.
+
 Measurements and the full table are in the day 3 selftest timing report
 (`reports/selftest-timing-day3.md` in the project files).
 

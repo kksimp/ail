@@ -1,0 +1,5 @@
+# type.tuple.6: a tuple pattern has two or more elements.
+fn main()
+    match (1, 2)
+        (x) => print(x)
+        _ => print("other")

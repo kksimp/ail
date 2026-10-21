@@ -482,3 +482,14 @@ tensor is never changed in place, so a copy shares the object. Calls: `rt.tensor
 message string object or 0, and a message traps with runtime trap kind 15),
 `rt.tensor_to_list`, `rt.tensor_shape`, `rt.tensor_eq`, `rt.tensor_text` and
 `rt.out_tensor`.
+
+Step 2 (elementwise operators, reductions, transpose): `rt.tensor_zip_fault`
+and `rt.tensor_zip` (`op` 0 `+`, 1 `-`, 2 `*`, 3 `/`; broadcasting as
+std.tensor.4), `rt.tensor_scalar_f` and `rt.tensor_scalar_i`, `rt.tensor_neg`,
+`rt.tensor_sum_f`, `rt.tensor_sum_i`, `rt.tensor_dot_f`, `rt.tensor_dot_i`,
+`rt.tensor_reduce_fault` and `rt.tensor_reduce` (`kind` 0 sum, 1 max, 2 mean),
+`rt.tensor_transpose_fault` and `rt.tensor_transpose`. A kernel that can
+overflow an `int` (std.tensor.6) returns 0, and `sum`/`dot` of `int` return a
+one-element tensor read with `rt.tensor_first_i`; the lowering traps with the
+constant message when it sees 0. A float `sum`, `dot` and axis sum follow
+std.tensor.5's 16 partial sums.

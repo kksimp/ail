@@ -1,0 +1,5 @@
+# std.tensor.12: `transpose` needs a 2-D tensor.
+fn main()
+    a := tensor.from([1, 2, 3])
+    print(a + 1)
+    print(a.transpose())

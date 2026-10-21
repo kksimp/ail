@@ -1,0 +1,28 @@
+## std.net.23 and std.net.20: `matching` gives the cookies for a URL, longest
+## path first; `matching_from` applies SameSite across sites; `drop_expired`
+## removes a cookie whose time has passed and keeps the others.
+use std.net.jar
+use std.time
+
+fn names(cs List[jar.Cookie]) str
+    [c.name for c in cs].join(",")
+
+fn main()
+    mut j := jar.new()
+    j.set_cookie("https://www.shop.test/", "a=1; Path=/")
+    j.set_cookie("https://www.shop.test/", "b=2; Path=/x; Max-Age=1")
+    j.set_cookie("https://www.shop.test/", "l=3; Path=/")
+    j.set_cookie("https://www.shop.test/", "s=4; Path=/; SameSite=Strict")
+    j.set_cookie("https://www.shop.test/", "n=5; Path=/; SameSite=None; Secure")
+    u := "https://www.shop.test/x/y"
+    for c in j.matching(u)
+        print("{c.name}={c.value} {c.path}")
+    print(names(j.matching_from(u, "https://www.shop.test/", false)))
+    print(names(j.matching_from(u, "https://evil.test/", false)))
+    print(names(j.matching_from(u, "https://evil.test/", true)))
+    print(names(j.matching_from(u, "", false)))
+    print(j.len())
+    time.sleep_ms(1200)
+    j.drop_expired()
+    print(j.len())
+    print(names(j.matching(u)))
