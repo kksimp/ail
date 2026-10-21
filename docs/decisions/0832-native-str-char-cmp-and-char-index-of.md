@@ -20,7 +20,7 @@ with `.cmp()`. PR 224 gives `int` and `float` a native `.cmp()` and a flat
   `char`s it reuses `rt.int_cmp`, since a `char` is its scalar value.
 - `xs.index_of(c)` and `xs.contains(c)` work on `List[char]`: the element
   compares like an `int` (equality kind 0).
-- The lowering is in `lower_cmp.ail`; `lower.ail` gains one dispatch line.
+- The lowering is in `lower_cmp.ail`; `lower.ail` is unchanged (the dispatch lines are in `lower_str.ail`).
 
 ## Rejected alternatives
 
