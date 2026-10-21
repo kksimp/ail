@@ -1203,7 +1203,11 @@ mod tests {
         assert!(parse_body(&h, &raw[..raw.len() - 4]).unwrap().is_none());
         let bad = b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n";
         let h = parse_head(bad).unwrap().unwrap();
-        assert_eq!(parse_body(&h, bad).unwrap_err().0, 400);
+        assert_eq!(parse_body(&h, bad).unwrap_err(), (400, "a bad chunk size"));
+        // The chunk's data must end in a line break before the next size.
+        let no_break = b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWikiXX\r\n0\r\n\r\n";
+        let h = parse_head(no_break).unwrap().unwrap();
+        assert_eq!(parse_body(&h, no_break).unwrap_err(), (400, "a chunk is not followed by a line break"));
     }
 
     #[test]
