@@ -18,7 +18,7 @@ fn is_value_ty(t Ty) bool
     is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll()
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
-fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
+fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
     if name == "Map" and args.len() == 2
         k := type_of(args[0])?
         v := type_of(args[1])?

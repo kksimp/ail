@@ -369,7 +369,7 @@ fn Lower.instance(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner str
             bad.add(key)
             return none
         rty = t
-    sig := Sig(params: ps, ret: rty)
+    sig := Sig(params: ps, ret: rty, fails: false)
     sigs[key] = sig
     gen.queue.push(Instance(key: key, decl: f, binds: binds, owner: owner, file: k))
     sig
