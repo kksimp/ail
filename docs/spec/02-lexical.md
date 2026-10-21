@@ -345,3 +345,139 @@ lo := -9223372036854775808     # valid: the minimum int
 hi := 9223372036854775808      # compile-time error: doesn't fit int
 big := 1e999                   # compile-time error: overflows float
 ```
+
+## Runnable examples for the rules above
+
+Each rule ID has a checked example (ADR 0498). Blocks marked `error=` must
+report their rule; blocks marked `rules=` must check and run with the printed
+output shown in the comments.
+
+`lex.kw.1` is shown as a skipped example: the bootstrap reports `gram.syntax.1`
+for `while := 1`, not `lex.kw.1` (see the PR that added this section).
+
+```ail skip=bootstrap rules=lex.kw.1
+fn main()
+    while := 1      # reserved: `while` can't be a name
+    print(while)
+```
+
+```ail rules=lex.kw.2
+fn main()
+    c := 2          # `c` is not reserved outside `extern` and `use`
+    print(c)        # 2
+```
+
+```ail rules=lex.name.1
+fn main()
+    é := 1          # a letter outside ASCII
+    _x := 2         # `_` may start a name
+    print(é + _x)   # 3
+```
+
+```ail rules=lex.block.1
+fn main()
+    if true
+        print("inside")   # one unit deeper opens a block
+    print("outside")      # less deep closes it
+```
+
+```ail error=lex.block.2
+fn main()
+   print(1)         # three spaces: the unit is exactly four
+```
+
+```ail error=lex.block.3
+fn main()
+        print(1)    # eight spaces from the line that opens the block: two units
+```
+
+```ail error=lex.block.4
+fn main()
+	print(1)        # a tab in the indentation
+```
+
+```ail rules=lex.stmt.1,lex.stmt.3
+fn main()
+    a := 1          # a newline ends the statement
+    print(a)        # 1; there is no `;` token
+```
+
+```ail rules=lex.stmt.2
+fn main()
+    print(1 +       # a newline after a binary operator continues the statement
+        2)
+    print([1,       # ... after a comma, and inside brackets
+        2])         # 3 then [1, 2]
+```
+
+```ail rules=lex.comment.1
+fn main()
+    a := 1  # a comment runs to the end of the line
+    print(a)        # 1
+```
+
+```ail rules=lex.comment.2
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b
+
+fn main()
+    print(add(2, 3))    # 5
+```
+
+```ail rules=lex.comment.3
+fn main()
+    # a comment with /* markers */ is still one line; there are no block comments
+    print(1)            # 1
+```
+
+```ail error=lex.str.1
+fn main()
+    print("\q")          # `\q` is not an escape sequence
+```
+
+```ail rules=lex.str.3
+fn main()
+    s := """
+    one
+    two
+    """
+    print(s)            # one, then two
+```
+
+```ail rules=lex.str.4
+fn main()
+    print('a')          # a single character
+    print('\n')         # an escape: a line break
+```
+
+```ail rules=lex.str.5
+fn main()
+    print("héllo")      # UTF-8 text, prints héllo
+```
+
+```ail rules=lex.str.6
+fn main()
+    print(r"a\b")       # raw: the backslash is literal; prints a\b
+```
+
+```ail rules=lex.bytes.1
+fn main()
+    print(b"ab\x41")    # b"abA"
+```
+
+```ail error=lex.bytes.1
+fn main()
+    print(b"café")      # bytes literals are ASCII
+```
+
+```ail rules=lex.num.1
+fn main()
+    print(0x1F + 0b101 + 0o17 + 1_000)   # 31 + 5 + 15 + 1000 = 1051
+```
+
+```ail rules=lex.num.2
+fn main()
+    print(1e3)          # 1000.0
+    print(2.5)          # 2.5
+```
