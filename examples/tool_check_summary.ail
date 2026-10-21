@@ -11,7 +11,10 @@ fn main() !
     for name in names.sorted()
         if not name.ends_with(".ail")
             continue
-        r := proc.run("{here}/../bootstrap/target/release/ail", ["check", "--json", "{data}/{name}"])? "checking {name}"
+        r := proc.run(
+            "{here}/../bootstrap/target/release/ail",
+            ["check", "--json", "{data}/{name}"],
+        )? "checking {name}"
         mut errors := 0
         mut warnings := 0
         for line in r.err.lines()
