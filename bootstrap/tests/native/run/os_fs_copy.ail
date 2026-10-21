@@ -1,0 +1,37 @@
+## `fs.copy` (std.fs.12): a file, replacing a file; a tree with its parents made;
+## failures: missing source, a directory at the target, a tree into itself.
+fn try_copy(root str, from str, to str)
+    fs.copy(from, to) else err
+        print("copy {from.replace(root, "R")} failed: {err.kind} {err.path.replace(root, "R")}")
+        return
+    print("copied {from.replace(root, "R")} to {to.replace(root, "R")}")
+
+fn put(path str, text str)
+    fs.write_text(path, text) else return
+
+fn main()
+    root := env.get("AIL_TEST_DIR") else return
+    base := "{root}/copy"
+    fs.make_dir("{base}/src/sub") else return
+    put("{base}/src/a.txt", "alpha")
+    put("{base}/src/sub/b.txt", "bravo\nline")
+    put("{base}/old.txt", "old")
+    try_copy(root, "{base}/src/a.txt", "{base}/dest.txt")
+    print(fs.read_text("{base}/dest.txt") else "?")
+    try_copy(root, "{base}/src/sub/b.txt", "{base}/old.txt")
+    print(fs.read_text("{base}/old.txt") else "?")
+    try_copy(root, "{base}/src", "{base}/deep/er/tree")
+    for f in fs.walk("{base}/deep") else []
+        print(f.replace(root, "R"))
+    print(fs.read_text("{base}/deep/er/tree/sub/b.txt") else "?")
+    try_copy(root, "{base}/src", "{base}/deep/er/tree")
+    try_copy(root, "{base}/nope", "{base}/x")
+    try_copy(root, "{base}/src/a.txt", "{base}/src")
+    try_copy(root, "{base}/src", "{base}/src/inside")
+    try_copy(root, "{base}/src", "{base}/src")
+    try_copy(root, "{base}/src", "{base}/dest.txt")
+    print(fs.exists("{base}/src/inside"))
+    for f in fs.walk(base) else []
+        fs.remove(f) else return
+    for d in ["{base}/deep/er/tree/sub", "{base}/deep/er/tree", "{base}/deep/er", "{base}/deep", "{base}/src/sub", "{base}/src", base]
+        fs.remove(d) else return
