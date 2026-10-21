@@ -19,7 +19,7 @@ fn tuple_elems(t Ty) List[Ty]?
 ## table or a function value is not (its copy would share state).
 fn tuple_elem_ok(t Ty) bool
     match t
-        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | F32 | Unit | Unknown => false
+        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | Unit | Unknown => false
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.
@@ -286,6 +286,7 @@ fn Lower.tuple_text(mut self, v Val) int?
         piece := match xs[k]
             Int => call("rt.fmt_int", [e], Ty.Str)
             Float => call("rt.fmt_float", [e], Ty.Str)
+            F32 => call("rt.fmt_f32", [e], Ty.Str)
             Bool => call("rt.fmt_bool", [e], Ty.Str)
             Str => call("rt.str_quoted", [e], Ty.Str)
             Tuple => tuple_text(Val(id: e, ty: xs[k]))?

@@ -40,7 +40,7 @@ fn eq_kind(e Ty) int
     match e
         Int | Bool | Char => 0
         Str => 1
-        Float => 2
+        Float | F32 => 2
         _ => -1
 
 ## `xs.NAME(args)` for the methods above. `vs` are the lowered arguments.
@@ -124,7 +124,7 @@ fn Lower.lower_list_edit(
         k := match e
             Int => 0
             Str => 1
-            Float => 2
+            Float | F32 => 2
             _ => -1
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
@@ -150,6 +150,8 @@ fn Lower.lower_list_edit(
     if name == "sum" and vs.len() == 0
         if e == Ty.Float
             return Val(id: call("rt.list_sum_float", [r.id], Ty.Float), ty: Ty.Float)
+        if e == Ty.F32
+            return Val(id: call("rt.list_sum_f32", [r.id], Ty.Float), ty: Ty.F32)
         if e != Ty.Int
             return unsupported(npos, "`.sum()` on `{r.ty.name()}`")
         texts := trap_texts("expr.arith.1", npos)
@@ -165,7 +167,7 @@ fn Lower.lower_list_edit(
         k := match e
             Int => 0
             Str => 1
-            Float => 2
+            Float | F32 => 2
             _ => -1
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
