@@ -1,0 +1,7 @@
+unique struct Tok
+    id int
+
+fn main()
+    t := Tok(id: 1)
+    xs := [t]
+    print(t.id)
