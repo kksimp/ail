@@ -1,6 +1,6 @@
 {
  "date": "2026-10-21",
- "commit": "c3172c65",
+ "commit": "482318a5",
  "programs": [
   {
    "file": "bootstrap/tests/cases/absent_try.ail",
@@ -2682,8 +2682,7 @@
     "not in the native subset yet: `fs.copy`",
     "not in the native subset yet: `fs.copy`",
     "not in the native subset yet: `fs.copy`",
-    "not in the native subset yet: `fs.copy`",
-    "not in the native subset yet: `fs.walk`"
+    "not in the native subset yet: `fs.copy`"
    ],
    "first": "not in the native subset yet: `fs.copy`",
    "detail": "",
@@ -4866,10 +4865,8 @@
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `fs.walk`",
     "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `fs.walk`"
+    "`compress` isn't in the native subset yet (only locals, parameters and constants)"
    ],
    "first": "`compress` isn't in the native subset yet (only locals, parameters and constants)",
    "detail": "",
@@ -4980,7 +4977,6 @@
    "file": "bootstrap/tests/cases/std_fs_walk.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `fs.walk`",
     "not in the native subset yet: `fs.glob`",
     "not in the native subset yet: `fs.glob`",
     "not in the native subset yet: `fs.glob`",
@@ -4990,13 +4986,9 @@
     "not in the native subset yet: `fs.metadata`",
     "not in the native subset yet: `fs.copy`",
     "not in the native subset yet: `fs.copy`",
-    "not in the native subset yet: `fs.walk`",
-    "not in the native subset yet: `fs.walk`",
-    "not in the native subset yet: `fs.metadata`",
-    "not in the native subset yet: `fs.walk`",
-    "not in the native subset yet: `fs.walk`"
+    "not in the native subset yet: `fs.metadata`"
    ],
-   "first": "not in the native subset yet: `fs.walk`",
+   "first": "not in the native subset yet: `fs.glob`",
    "detail": "",
    "source": "cases",
    "negative": false
