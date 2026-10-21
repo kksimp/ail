@@ -536,7 +536,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "str" => Ty.Str
                 "bytes" => Ty.Bytes
                 "char" => Ty.Char
-                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Ty.Sized(name)
+                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "f32" => scalar_ty(name)
                 "List" =>
                     if args.len() != 1
                         return none
@@ -1394,7 +1394,7 @@ fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
 fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
     match e
         Int(text, pos) => lower_int_lit(text, pos, want)
-        Float(x, _) => Val(id: fconst(x), ty: Ty.Float)
+        Float(x, _) => float_lit(x, want)
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
         Bytes(hex, pos) => lower_bytes_lit(hex, pos)
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
@@ -1735,7 +1735,7 @@ fn Lower.lower_print_body(mut self, args List[ast.Arg], pos ast.Pos) Val?
 fn out_fn(t Ty) str
     match t
         Int | Sized(_) => "rt.out_int"
-        Float => "rt.out_float"
+        Float | F32 => float_out_fn(t)
         Bool => "rt.out_bool"
         Str => "rt.out_str"
         Atomic(e) => if e == Ty.Bool then "rt.out_atomic_bool" else "rt.out_atomic_int"
@@ -1850,7 +1850,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     match r.ty
         Bytes | Byte => return bytes_method(r, name, vs, npos)
         Int | Sized(_) => return int_method(r, name, npos, vs)
-        Float => return float_method(r, name, npos, vs)
+        Float | F32 => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
         Char => return lower_char_method(r, name, npos, vs)
         List(e) => return list_method(e, r, name, npos, vs, args, recv)

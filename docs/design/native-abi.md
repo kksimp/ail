@@ -643,8 +643,9 @@ One rounding of the double-precision result is the correctly rounded
 single-precision result for `+ - * /` (a double has more than twice an `f32`'s
 precision), so the values are the interpreter's `f32` kernels'.
 `rt.tensor_to_f32` and `rt.tensor_to_float` convert. A `Tensor[f32]` has type
-`Ty.Tensor(Ty.F32)`; there is no scalar `f32` yet, so `sum`, `dot`, `max`,
-`mean`, `item`, printing and the text form of a `Tensor[f32]` are
+`Ty.Tensor(Ty.F32)`. A scalar `f32` (ADR 0834) is a `Ty.F32` value in a float
+register, rounded after every operation, but `sum`, `dot`, `max`, `mean`,
+`item`, printing and the text form of a `Tensor[f32]` are still
 `native.subset.1` problems, and `to_list` gives a `List[float]`.
 
 Step 5 (vector kernels, x86-64): `rt.vec_axpy` (matmul's inner loop), `rt.vec_zip`

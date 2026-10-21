@@ -64,3 +64,11 @@ and `op=` on a map entry of one stay `native.subset.1`, because both need the
 type's overflow check. `f32` in these places follows once scalar `f32` has
 merged.
 
+Part 3 adds scalar `f32` as `Ty.F32` in a float register (`is_float` is true
+for it), in `lower_f32.ail`. `+ - * /` are the `float` operation followed by
+the `f32_round` primitive, `to_f32` rounds once (an `int` through
+`rt.int_to_f32`, which folds the bits below a `float`'s 53 into a sticky bit so
+no value rounds twice), and the text is the shortest digits that read back as an
+`f32` (`digits_of_f32` in `rt/native/fmt.ail`), in the interpreter's shape.
+`f32` in lists, maps, `Opt` and tuples, `min`, `max`, `cmp` and the
+transcendental methods are `native.subset.1` until part 4.

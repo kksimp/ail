@@ -82,3 +82,22 @@ fn sized_abs_msg(a int, k int) int
     sb_kind(k)
     sb_text("`")
     str_addr(sb_str())
+
+## `to_f32` of an `int` (type.num.15): rounded to the nearest `f32` once, ties
+## to even. Going through a `float` first would round twice, so a value of 54
+## bits or more has its low bits folded into one sticky bit (round to odd)
+## before the first conversion, which then cannot change the second.
+fn int_to_f32(v int) float
+    if v == -9223372036854775807 - 1
+        return f32_round(v.to_float())
+    neg := v < 0
+    mut u := if neg then 0 - v else v
+    mut shift := 0
+    while u >= 9007199254740992
+        sticky := if u % 2 == 1 then 1 else 0
+        u = u.shr(1).bit_or(sticky)
+        shift += 1
+    mut x := u.to_float()
+    for _ in 0..shift
+        x = x * 2.0
+    f32_round(if neg then 0.0 - x else x)

@@ -50,7 +50,7 @@ fn Lower.lower_int_lit(mut self, text str, pos ast.Pos, want Ty?) Val?
         problem(pos, "integer literal `{text}` out of range")
         return none
     if wants_float(want)
-        return Val(id: fconst(n.to_float()), ty: Ty.Float)
+        return float_lit(n.to_float(), want)
     k := want_sized(want)
     if k != ""
         if n > sized_hi(k)
@@ -240,7 +240,9 @@ fn Lower.sized_conversion(mut self, r Val, name str, npos ast.Pos, vs List[Val])
         if r.ty.is_sized()
             return Val(id: r.id, ty: Ty.Int)
         return none
-    if target == "u64" or target == "f32"
+    if target == "f32"
+        return int_to_f32(r)
+    if target == "u64"
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     code := sized_code(target)
     if code < 0
