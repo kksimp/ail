@@ -537,3 +537,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
 | [0629](0629-list-chunks-windows-counts-str-center.md) | List `chunks`, `windows`, `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`, `count`, `rfind` *(delegated)* | Accepted | 2026-10-21 |
+| [0729](0729-api-diff-command.md) | `ail api --diff`: the public API change between two versions *(delegated)* | Accepted | 2026-10-21 |
+| [0730](0730-api-diff-breaking-rules.md) | What `ail api --diff` marks as breaking *(delegated)* | Accepted | 2026-10-21 |
+| [0731](0731-api-diff-output-and-budget.md) | Output of `ail api --diff` and its token budget *(delegated)* | Accepted | 2026-10-21 |

@@ -65,6 +65,8 @@ commands:
                 the program's native-backend MIR (ADR 0384)
   api --card [--budget N] DIR|FILE
                 a program's card: modules, signatures, tests, manifest, examples
+  api --diff OLD NEW
+                public API changes by id, breaking ones marked; --rev REV PATH: against git (api.diff.1)
   diff OLD NEW  what changed between two versions of a file or package:
                 declarations (signature, pub, effects, errors, contracts, docs),
                 diagnostics, and test outcomes (--no-tests: skip them) (diff.out.1)

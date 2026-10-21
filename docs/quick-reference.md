@@ -36,6 +36,7 @@
 ./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
 ./ail check --budget 500 DIR  # any command: ~500 tokens, errors first, then `[budget ...; continue with --from K]`
 ./ail diff OLD NEW            # what changed by meaning: declarations, diagnostics, tests (--rev HEAD FILE: against git)
+./ail api --diff OLD NEW       # public API changes by id, `breaking:` marked (--rev HEAD PATH: against git)
 ./ail edit FILE.ail --test <<E # hunks by declaration: a line `average`, then `-old` / `+new` lines (one pair: a unique part of a line); `rename f g`; fmt + check + tests
 ./ail edit FILE.ail < E.json  # JSON ops by id: replace_body, replace, insert, delete, rename, import, hunk
 ./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
