@@ -124,6 +124,8 @@ pub struct Checker
     pub std_fns Map[int, str]
     pub std_methods Set[int]
     pub net_methods Map[int, str]
+    ## Calls of `regex.Regex` methods (std.regex.25), by `pos_key`.
+    pub regex_methods Set[int]
     ## Writes through a `ref`, by `pos_key` of the place (own.ref.4).
     pub ref_writes Set[int]
     ## For the parallel-loop pass (conc.par.2, conc.atomic.6): calls of a
@@ -222,6 +224,7 @@ pub fn new_checker(p ast.Program) Checker
         std_fns: Map[int, str](),
         std_methods: Set[int](),
         net_methods: Map[int, str](),
+        regex_methods: Set[int](),
         ref_writes: Set[int](),
         handle_calls: Set[int](),
         atomic_calls: Set[int](),
@@ -569,6 +572,17 @@ fn Checker.owner_params(mut self, owner ast.Owner, declared List[int]) List[int]
         mut ret := Ty.Unit
         if r := f.ret
             ret = resolve_ret(r, i)
+            # err.type.3: a function of a package's public API states its error type.
+            if is_inferred(ret)
+                and prog.public.contains(f.pos.line)
+                and not (f.owner == none and f.name == "main")
+                and prog.files.len() > 1
+                err_help(
+                    "err.type.3",
+                    r.pos,
+                    "`{f.name}` is public, so its return type must name the errors it can fail with",
+                    "write `T ! E` (or `! E`) with the error types, e.g. `int ! ParseError | IoError`",
+                )
         is_test := [a for a in f.attrs if a.name == "test"].len() > 0
         if f.ret == none and is_test
             ret = Ty.Res(Ty.Unit, Errs.Inferred(i))

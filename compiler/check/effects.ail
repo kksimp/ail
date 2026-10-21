@@ -118,6 +118,8 @@ struct Facts
     std_methods Set[int]
     ## `net` handle methods, by key (`net.Conn.read`).
     net_methods Map[int, str]
+    ## `regex.Regex` method calls (std.regex.25).
+    regex_methods Set[int]
     ref_writes Set[int]
     handle_calls Set[int]
     atomic_calls Set[int]
@@ -161,6 +163,7 @@ fn Checker.facts(self) Facts
         std_fns: std_fns,
         std_methods: std_methods,
         net_methods: net_methods,
+        regex_methods: regex_methods,
         ref_writes: ref_writes,
         handle_calls: handle_calls,
         atomic_calls: atomic_calls,
@@ -559,6 +562,9 @@ fn Walked.expr(mut self, prog ast.Program, fx Facts, e ast.Expr)
             elif fx.std_methods.contains(key)
                 for ef in ["ui", "io"]
                     add(ef, "ui.Window.{n}")
+            elif fx.regex_methods.contains(key)
+                # std.regex.9: text in, text out, so no effects.
+                regex_calls := 0
             elif not is_enum_name(prog, recv)
                 # A built-in method (`xs.sort()`, `m.get(k)`) may compare,
                 # hash or show its elements.
