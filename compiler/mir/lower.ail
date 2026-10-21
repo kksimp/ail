@@ -818,6 +818,17 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         return
     declare(name, got.ty, got.id)
 
+## An `else` fallback value, jumped to `join`; a fallback that leaves, such as
+## `unreachable(...)` (err.model.2), ends the block and has no value to join.
+fn Lower.fallback_jump(mut self, x ast.Expr, t Ty, join int, pos ast.Pos)
+    v := lower_expr(x, t) else return
+    if done()
+        return
+    if v.id < 0
+        problem(expr_pos(x), "this expression has no value")
+        return
+    jump(join, [convert(v, t, pos)])
+
 ## The receiver of `s.to_int()` when `e` is that call.
 fn str_to_int_recv(e ast.Expr) ast.Expr?
     match e
@@ -841,9 +852,7 @@ fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.
     seal(fail)
     cur = fail
     match other
-        Fallback(x) =>
-            f := lower_value(x, Ty.Int)?
-            jump(join, [convert(f, Ty.Int, pos)])
+        Fallback(x) => fallback_jump(x, Ty.Int, join, pos)
         Leave(st) =>
             lower_stmt(st)
             if not done()
@@ -1738,6 +1747,9 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
                 return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
             if name == "abs" and vs.len() == 0
                 return Val(id: int_abs(r.id, npos), ty: Ty.Int)
+            # type.str.8
+            if name == "to_hex" and vs.len() == 0
+                return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)
             if (name == "min" or name == "max") and vs.len() == 1
                 return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
             # expr.bit.1-2

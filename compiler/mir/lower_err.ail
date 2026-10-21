@@ -408,8 +408,7 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
                 problem(pos, "`else` with a value, but there is no value to replace")
                 jump(join, [])
             else
-                f := lower_value(x, t)?
-                jump(join, [convert(f, t, pos)])
+                fallback_jump(x, t, join, pos)
         Leave(st) =>
             if not m.opt
                 call("rt.err_clear", [], Ty.Unit)

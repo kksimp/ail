@@ -237,9 +237,7 @@ fn Lower.lower_pop_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     seal(missing)
     cur = missing
     match other
-        Fallback(x) =>
-            f := lower_value(x, e)?
-            jump(join, [convert(f, e, pos)])
+        Fallback(x) => fallback_jump(x, e, join, pos)
         Leave(st) =>
             lower_stmt(st)
             if not done()
