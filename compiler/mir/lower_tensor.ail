@@ -193,7 +193,7 @@ fn Lower.tensor_reduce(mut self, r Val, kind int, axis_arg ast.Arg?, npos ast.Po
 fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable
-            return unsupported(npos, "this method call")
+            return unsupported(npos, "`.{name}()` on a tensor with a labelled or `mut` argument")
     e := tensor_elem(r.ty)
     # ADR 0815: a `Tensor[f32]` holds rounded `float`s; what returns an `f32`
     # scalar, and the reductions, wait for the scalar type.

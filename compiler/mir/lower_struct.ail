@@ -195,10 +195,10 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     if r := recv
         vs.push(r.id)
     if args.len() + vs.len() != sig.params.len()
-        return unsupported(pos, "this call")
+        return unsupported(pos, "calling `{key}` with {args.len() + vs.len()} arguments instead of {sig.params.len()}")
     for a in args
         if a.label != none
-            return unsupported(pos, "labelled arguments")
+            return unsupported(pos, "calling `{key}` with a labelled argument")
         t := sig.params[vs.len()]
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
@@ -209,7 +209,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
 fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
     r := recv else return unsupported(pos, "calling `{key}`")
     if args.len() > 0
-        return unsupported(pos, "this call")
+        return unsupported(pos, "`{key}` takes no arguments")
     if key == "{PROC_OUTPUT}.ok"
         status := load(r.id, 0, Ty.Int)
         return Val(id: op("eq", [status, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
