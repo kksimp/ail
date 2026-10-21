@@ -229,6 +229,16 @@ pub fn Asm.rep_stosq(mut self)
     byte(72)
     byte(171)
 
+## `rep movsb` and `rep movsq`: copy `[rsi]` to `[rdi]`, `rcx` times, forward.
+pub fn Asm.rep_movsb(mut self)
+    byte(243)
+    byte(164)
+
+pub fn Asm.rep_movsq(mut self)
+    byte(243)
+    byte(72)
+    byte(165)
+
 pub fn Asm.lea(mut self, dst int, m Mem)
     op_rm(false, 141, dst, m)
 

@@ -24,7 +24,7 @@ Criterion 4 (speed) with no cost to the others, and the order follows the size o
 
 ## Consequences
 
-- `rt.fill` is a runtime root (one line in `lower.ail`'s `RT_ROOTS`); `rt.copy` will be another.
+- `rt.fill` is a runtime root (one line in `lower.ail`'s `RT_ROOTS`); `rt.copy` is another.
 - Instruction counts under callgrind undersell `rep` string instructions (one per iteration); the gate for these PRs is the interpreter match plus the instruction table, and wall time at a cached size.
 
 ## Rejected alternatives

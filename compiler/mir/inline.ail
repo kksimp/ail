@@ -22,7 +22,7 @@ pub fn inline_module(m Module) Module
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
     grow_only := lists_only_grow(m)
-    fills := by_name.contains("rt.fill")
+    fills := by_name.contains("rt.fill") and by_name.contains("rt.copy")
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
         mut budget := INLINE_BUDGET
@@ -50,7 +50,7 @@ pub fn inline_module(m Module) Module
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
     # `rt.vec_*` are replaced by assembled kernels where the target has them.
-    if f.name.starts_with("rt.vec_") or f.name == "rt.fill"
+    if f.name.starts_with("rt.vec_") or f.name == "rt.fill" or f.name == "rt.copy"
         return false
     mut n := 0
     for blk in f.blocks

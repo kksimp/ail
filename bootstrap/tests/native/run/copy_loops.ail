@@ -1,0 +1,63 @@
+## Copy loops become `rt.copy` (ADR 0816): same results as the loop, including
+## overlapping ranges, empty and short trips, byte lists and floats.
+
+fn copy_of(src List[int]) List[int]
+    mut out := List[int]()
+    for x in src
+        out.push(x)
+    out
+
+fn copy_into(src List[int], mut dst List[int])
+    for i in 0..src.len()
+        dst[i] = src[i]
+
+fn shift(mut xs List[int], k int)
+    for i in 0..xs.len() - k
+        xs[i + k] = xs[i]
+
+fn copy_bools(src List[bool]) List[bool]
+    mut out := List[bool]()
+    for x in src
+        out.push(x)
+    out
+
+fn copy_floats(src List[float]) List[float]
+    mut out := List[float]()
+    for x in src
+        out.push(x)
+    out
+
+fn sum(xs List[int]) int
+    mut t := 0
+    for x in xs
+        t = (t * 31 + x) % 1000003
+    t
+
+fn main()
+    mut a := List[int]()
+    for i in 0..100
+        a.push(i * 7 + 1)
+    for n in [0, 1, 5, 15, 16, 17, 100]
+        b := copy_of(a[0..n])
+        print("{n} {b.len()} {sum(b)}")
+    mut d := List[int]()
+    for _ in 0..100
+        d.push(0)
+    copy_into(a, mut d)
+    print(sum(d))
+    shift(mut d, 3)
+    print(sum(d))
+    mut flags := List[bool]()
+    for i in 0..130
+        flags.push(i % 3 == 0)
+    c := copy_bools(flags)
+    mut t := 0
+    for i in 0..c.len()
+        if c[i]
+            t += i
+    print("{c.len()} {t}")
+    mut fl := List[float]()
+    for i in 0..40
+        fl.push(i.to_float() / 3.0)
+    g := copy_floats(fl)
+    print("{g.len()} {g[39]} {g[7]}")

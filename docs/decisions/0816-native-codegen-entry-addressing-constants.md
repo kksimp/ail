@@ -180,8 +180,21 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     60.8M to 48.8M; the string instruction itself is far cheaper than that on
     hardware, but sieve at n = 60M is bound by page faults on the fresh
     list, so its wall time did not move. Nothing else among the ten changes.
-    Copy loops (`memcpy`) are not done yet: they need the two lists proved
-    distinct and a forward-overlap rule.
+    Copy loops are item 12.
+12. **A loop that copies consecutive elements is a copy.** The same pass
+    takes a body with one `ldx` whose value is the one `stx` stores, both
+    at the loop's counters (`for x in src: out.push(x)`, `dst[i] = src[i]`),
+    and calls `rt.copy(d, s, n, size)`. No proof that the lists are distinct
+    is needed: the call copies first to last, as the loop did (`rep movs`
+    with the direction flag clear is defined element by element, and the
+    AIL body is a forward loop), so an overlap, or one list passed twice
+    (the native build then shares the pointer, which differs from the
+    interpreter's snapshot with or without this pass), gives the loop's
+    result. x86-64: `rep movsb`/`movsq` from 64 bytes / 16 words, an indexed
+    loop below; ARM64 runs the AIL body. Measured: no program among the ten
+    gains (fannkuch's 9-element copy goes from 148.3M to 151.2M
+    instructions, +2.0%, wall time unchanged); the pass is for long copies
+    in user code (`copy_of`, list slices).
 
 ## Consequences
 

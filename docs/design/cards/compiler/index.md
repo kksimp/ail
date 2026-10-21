@@ -7,4 +7,4 @@ codegen  40 items
 mir  277 items
 obj  53 items
 syntax  99 items
-x64  70 items
+x64  71 items

@@ -338,6 +338,7 @@ RT_ROOTS := [
     "rt.list_rows_min",
     "rt.list_new_for",
     "rt.fill",
+    "rt.copy",
 ]
 
 ## Lower the runtime functions the program reaches, and those they reach

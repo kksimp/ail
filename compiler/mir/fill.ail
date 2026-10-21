@@ -1,10 +1,14 @@
-## Fill loops (ADR 0816): a counted loop whose only work is to store one
-## unchanging value into consecutive elements (`for _ in 0..n: xs.push(true)`
-## once the push loop keeps its length, or `xs[i] = 0` once the checks are
-## gone) becomes one call to `rt.fill`, which the x86-64 code generator
-## assembles as `rep stos` and ARM64 runs as a word loop. gcc -O2 does the
-## same with `memset`. The loop and its zero-trip path are replaced by a test
-## of the trip count; what the loop left in its two counters is computed.
+## Fill and copy loops (ADRs 0816, 0845): a counted loop whose only work is to
+## store one unchanging value into consecutive elements (`for _ in 0..n:
+## xs.push(true)` once the push loop keeps its length, or `xs[i] = 0` once the
+## checks are gone) becomes one call to `rt.fill`; one that copies consecutive
+## elements of one list to consecutive elements of another (`for x in src:
+## out.push(x)`) becomes `rt.copy`. The x86-64 code generator assembles them
+## as `rep stos` and `rep movs`; ARM64 runs the AIL bodies. gcc -O2 does the
+## same with `memset` and `memcpy`. The copy goes in order, element by
+## element, so it gives what the loop gave even when the two ranges overlap.
+## The loop and its zero-trip path are replaced by a test of the trip count;
+## what the loop left in its two counters is computed.
 
 ## Replace each fill loop, when the program has `rt.fill` (`on`).
 pub fn fill_loops(f Func, on bool) Func
@@ -58,14 +62,19 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
             return none
         if defs[latch[rk]].block != c.body
             return none
-    # The body: constants, the two steps and one store.
+    # The body: constants, the two steps, one store and maybe the load it stores.
     mut at := -1
+    mut load_at := -1
     for k in 0..bb.insts.len()
         i := bb.insts[k]
         if i.op == "stx"
             if at >= 0
                 return none
             at = k
+        elif i.op == "ldx"
+            if load_at >= 0
+                return none
+            load_at = k
         elif i.op != "const"
             and i.op != "fconst"
             and i.dst != latch[c.k]
@@ -74,6 +83,20 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
     if at < 0
         return none
     s := bb.insts[at]
+    # A copy reads the element it stores, at the same distance from the start.
+    copying := load_at >= 0
+    mut src := -1
+    mut lix := -1
+    if copying
+        ld := bb.insts[load_at]
+        if load_at > at or ld.op != "ldx" or ld.site >= 0 or ld.elem_off() != 0 or ld.imm != s.imm
+            return none
+        if s.args[2] != ld.dst or lp.member[defs[ld.args[0]].block]
+            return none
+        if ld.args[1] != c.p and ld.args[1] != r
+            return none
+        src = ld.args[0]
+        lix = ld.args[1]
     base := s.args[0]
     ix := s.args[1]
     v := s.args[2]
@@ -82,7 +105,7 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
     if s.imm != 1 and s.imm != 8
         return none
     mut again := -1
-    if lp.member[defs[v].block]
+    if not copying and lp.member[defs[v].block]
         d := inst_of(f, defs, v) else return none
         if d.op != "const" and d.op != "fconst"
             return none
@@ -159,7 +182,7 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
     # The test of the trip count, in the block before the loop.
     cond := new_val(mut g, Ty.Bool)
     g.blocks[pre].insts.push(inst(cond, "lt", [lo, hi]))
-    # The fill.
+    # The fill or copy.
     mut body := List[Inst]()
     n := new_val(mut g, Ty.Int)
     body.push(inst(n, "sub", [hi, lo]))
@@ -173,20 +196,29 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
     ptr := new_val(mut g, Ty.Int)
     body.push(inst(ptr, "add", [base, off]))
     mut value := v
-    if again >= 0
+    if copying
+        soff := new_val(mut g, Ty.Int)
+        body.push(inst(soff, "mul", [if lix == c.p then lo else r0, size]))
+        sptr := new_val(mut g, Ty.Int)
+        body.push(inst(sptr, "add", [src, soff]))
+        mut cc := inst(-1, "call", [ptr, sptr, n, size])
+        cc.name = "rt.copy"
+        body.push(cc)
+    elif again >= 0
         value = new_val(mut g, f.vals[v])
         mut copy := f.blocks[c.body].insts[again]
         copy.dst = value
         body.push(copy)
-    if f.vals[v] == Ty.Float
+    if not copying and f.vals[v] == Ty.Float
         bits := new_val(mut g, Ty.Int)
         mut fb := inst(bits, "prim", [value])
         fb.name = "float_bits"
         body.push(fb)
         value = bits
-    mut call := inst(-1, "call", [ptr, n, value, size])
-    call.name = "rt.fill"
-    body.push(call)
+    if not copying
+        mut call := inst(-1, "call", [ptr, n, value, size])
+        call.name = "rt.fill"
+        body.push(call)
     mut r1 := -1
     if r >= 0
         r1 = new_val(mut g, Ty.Int)

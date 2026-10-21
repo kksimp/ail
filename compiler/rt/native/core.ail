@@ -437,9 +437,6 @@ fn list_alloc(cap int, size int) List[int]
 fn list_new(cap int) List[int]
     list_alloc(cap, 8)
 
-## A list made with room for a loop's pushes (`list_reserve` would regrow
-## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
-## iterations' worth (2^20 words, 2^23 bytes).
 ## `n` elements from `p` set to `v` (its low byte when `size` is 1): what the
 ## compiler turns a loop that stores one unchanging value into (ADR 0816).
 ## x86-64 assembles this as `rep stos` (x64/kernels.ail); this body is the
@@ -461,6 +458,20 @@ fn fill(p int, n int, v int, size int)
         store8(p + i, b)
         i += 1
 
+## `copy(d, s, n, size)`: copy `n` elements of `size` bytes from `s` to `d`, first
+## to last. The compiler turns a loop that copies consecutive elements into
+## this call (ADR 0816); x86-64 assembles it as `rep movs`.
+fn copy(d int, s int, n int, size int)
+    if size == 8
+        for i in 0..n
+            store64(d + 8 * i, load64(s + 8 * i))
+        return
+    for i in 0..n
+        store8(d + i, load8(s + i))
+
+## A list made with room for a loop's pushes (`list_reserve` would regrow
+## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
+## iterations' worth (2^20 words, 2^23 bytes).
 fn list_new_for(lo int, hi int, per int, size int) List[int]
     mut want := hi - lo
     most := if size == 1 then 8388608 else 1048576
