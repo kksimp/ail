@@ -32,6 +32,8 @@ An error value held in a local (`return e`) or in an optional
 (`fn known(z str) BadZone?`, `if e := known(z)  return e`) can be returned as
 the error.
 
+An error type of an imported module is found by its qualified name (`! compress.CompressError`), and `m.f(...)?` and `m.f(...) else err` apply to a module's fallible functions.
+
 A function whose result is an error type (`fn fail(self, m str) JsonError`)
 is an error constructor: `return fail(...)` in a function that can fail
 leaves with that value, and calling one is an ordinary call elsewhere. A
