@@ -162,6 +162,27 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     stack adjustment. Instructions (x86-64): binarytrees 247.0M to 228.1M.
     The same code runs for ARM64 (shared prep); its count needs the Mac.
 
+11. **A loop that stores one unchanging value is a fill.** gcc -O2 turns
+    sieve's `for _ in 0..n: is_prime.push(true)` into `memset`; here it was
+    five instructions per element. `mir/fill.ail` (`fill_loops`, after the
+    push-loop length pass) finds an innermost counted loop of step 1 whose
+    body is constants, the steps of its one or two counters (the loop
+    counter and the kept length) and a single `stx` of a loop-invariant
+    value (or a constant) at a counter, and replaces it with a test of the
+    trip count and a call to `rt.fill(p, n, v, size)` (`float_bits` first for
+    a float). The loop's counters leave the loop as block parameters of its
+    exit, holding the values the loop would have left. x86-64 assembles
+    `rt.fill` as `rep stosb`/`stosq` above 64 bytes / 16 words and a loop
+    below (x64/kernels.ail, the same mechanism as the tensor kernels);
+    ARM64 runs the AIL body (words of the repeated byte). `rt.fill` is a
+    runtime root (one line in `lower.ail`'s `RT_ROOTS`). Instructions
+    (x86-64, callgrind counts each `rep` iteration as an instruction): sieve
+    60.8M to 48.8M; the string instruction itself is far cheaper than that on
+    hardware, but sieve at n = 60M is bound by page faults on the fresh
+    list, so its wall time did not move. Nothing else among the ten changes.
+    Copy loops (`memcpy`) are not done yet: they need the two lists proved
+    distinct and a forward-overlap rule.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register

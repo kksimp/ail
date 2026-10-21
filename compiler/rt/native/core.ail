@@ -580,6 +580,27 @@ fn list_new(cap int) List[int]
 ## A list made with room for a loop's pushes (`list_reserve` would regrow
 ## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
 ## iterations' worth (2^20 words, 2^23 bytes).
+## `n` elements from `p` set to `v` (its low byte when `size` is 1): what the
+## compiler turns a loop that stores one unchanging value into (ADR 0816).
+## x86-64 assembles this as `rep stos` (x64/kernels.ail); this body is the
+## reference and what ARM64 runs.
+fn fill(p int, n int, v int, size int)
+    if size == 8
+        for i in 0..n
+            store64(p + 8 * i, v)
+        return
+    b := v.bit_and(255)
+    mut w := b.bit_or(b.shl(8))
+    w = w.bit_or(w.shl(16))
+    w = w.bit_or(w.shl(32))
+    mut i := 0
+    while i + 8 <= n
+        store64(p + i, w)
+        i += 8
+    while i < n
+        store8(p + i, b)
+        i += 1
+
 fn list_new_for(lo int, hi int, per int, size int) List[int]
     mut want := hi - lo
     most := if size == 1 then 8388608 else 1048576

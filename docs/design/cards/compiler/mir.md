@@ -10,6 +10,7 @@ pub struct mir.Versioned
     pub floors Map[str, int]
 pub fn mir.bce(f mir.Func, reserve bool, grow_only bool) mir.Func
 pub fn mir.lists_only_grow(m mir.Module) bool
+pub fn mir.fill_loops(f mir.Func, on bool) mir.Func
 pub fn mir.fold(f mir.Func) mir.Func
 pub fn mir.rpo(f mir.Func) List[int]
 pub fn mir.forward_loads(f mir.Func) mir.Func
@@ -185,3 +186,4 @@ pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
 trimmed to fit 2000 tokens (~1850); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1636); dropped: private items, doc comments
