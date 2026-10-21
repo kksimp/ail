@@ -1,0 +1,41 @@
+struct Box
+    at (int, int)
+    tag str
+
+fn mk() (int, str)
+    (7, "seven")
+
+fn pick(xs List[(int, str)]) (int, str)?
+    for x in xs
+        if x.0 > 1
+            return x
+    none
+
+fn main()
+    t := (1, [1, 2])
+    mut u := t
+    u.0 = 9
+    u.1.push(3)
+    print(t.1.len())
+    print(u.1.len())
+    print(t.0)
+    b := Box(at: (3, 4), tag: "k")
+    mut c := b
+    c.at.0 = 100
+    print(b.at.0)
+    print(c.at.0)
+    print(mk())
+    r := pick([(1, "a"), (2, "b")])
+    if x := r
+        print(x)
+    xs := [3, 1, 2]
+    ys := [x for x in xs]
+    for i, x in xs.enumerate()
+        print("{i}={x}")
+    for a, b2 in zip(xs, ys)
+        print(a + b2)
+    ps := [(a, a * 2) for a in xs]
+    print(ps.len())
+    qs := [a + b3 for a, b3 in ps]
+    print(qs)
+    print([a for a, _ in ps if a > 1])

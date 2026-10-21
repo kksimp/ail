@@ -619,3 +619,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0820](0820-driver-level-unsafe.md) | `unsafe driver` manifest level unlocks hardware access through `std.hw`; 64-bit targets only | Accepted | 2026-10-21 |
 | [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
+| [0829](0829-native-tuples.md) | Native tuples: a kind-4 struct object with one slot per element; `eq.T`, `lt.T` and `copy.T` generated; table keys stay out | Accepted | 2026-10-21 |

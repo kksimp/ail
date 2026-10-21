@@ -29,6 +29,9 @@ pub enum Ty
     ## `int` or `float`. A tensor is never changed in place, so a copy of the
     ## value shares the object.
     Tensor(elem Ty)
+    ## `(A, B, ...)` (ADR 0829): a struct object (kind 4) with one 8-byte slot
+    ## per element, in order.
+    Tuple(elems List[Ty])
     Unknown
     Unit
     ## A function value: the address of a declared function (ADR 0573).
@@ -78,6 +81,7 @@ pub fn Ty.name(self) str
         Set(e) => "Set[{e.name()}]"
         Opt(t) => "{t.name()}?"
         Tensor(e) => "Tensor[{e.name()}]"
+        Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
         Enum(n) => n
         Unknown => "?"

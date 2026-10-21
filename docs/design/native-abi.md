@@ -55,6 +55,7 @@ shortens a list must be added to the optimiser's decision first.
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
 | `Map[K, V]`, `Set[T]` | pointer to a **table object** (kind 7, 8) |
+| `(A, B, ...)` | pointer to a struct object (kind 4), one 8-byte slot per element in order (ADR 0829) |
 
 **String object** (immutable, 16-byte aligned):
 

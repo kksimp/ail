@@ -451,6 +451,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                         if k := enum_key(name)
                             return Ty.Enum(k)
                     none
+        TupleType(elems) => tuple_type_of(elems)
         FnType(fparams, fret) =>
             mut ps := List[Ty]()
             for p in fparams
@@ -904,7 +905,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
         Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
-        LetTuple(_, _, pos) => problem(pos, "tuples aren't in the native subset yet")
+        LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
@@ -1287,7 +1288,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
                 return lower_get_else(x, other, pos)
             lower_else(x, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
-        TupleLit(_, pos) => unsupported(pos, "a tuple")
+        TupleLit(items, pos) => lower_tuple_lit(items, pos, want)
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
     problem(pos, "not in the native subset yet: {what}")
@@ -1575,6 +1576,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if bad.contains(key)
                 fn_failed = true
                 return none
+            if name == "zip" and not sigs.contains(key)
+                return lower_zip(args, pos)
             sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")
@@ -1717,6 +1720,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, npos)
     r := lower_value(recv, none)?
+    if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
+        return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none
         return lower_sorted(r, name, args, npos)
     if r.ty.is_coll()
