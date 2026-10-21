@@ -108,3 +108,9 @@ fn err_report()
         i += 1
     flush_to(2)
     sys_exit(1)
+
+## `s` as the interpreter shows a string inside a value: in quotes, escaped.
+fn str_quoted(s str) str
+    sb_reset()
+    os_put_quoted(s)
+    sb_str()
