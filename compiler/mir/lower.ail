@@ -84,9 +84,6 @@ struct Lower
     ## Source names in scope, innermost last, to unique variable keys.
     scopes List[Map[str, str]]
     var_ty Map[str, Ty]
-    ## The variables bound by `else err` to a standard-library error's text, to
-    ## the name of that error's first field (`path` or `cmd`); see `lower_std_err_field`.
-    std_errs Map[str, str]
     ## Every value a variable has had, so typing an empty list by its first
     ## `push` reaches them all.
     var_vals Map[str, List[int]]
@@ -205,7 +202,6 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
         cur: 0,
         scopes: [],
         var_ty: {},
-        std_errs: {},
         var_vals: {},
         nvars: 0,
         loops: [],
