@@ -1,0 +1,7 @@
+fn main()
+    xs := [1, 2, 3, 4, 5]
+    print("{xs.take(3)} {xs.take(0)} {xs.take(9)}")
+    names := ["a", "bb", "ccc"]
+    print("{names.take(2)} {names.take(7).len()}")
+    flags := [true, false, true]
+    print("{flags.take(2)}")
