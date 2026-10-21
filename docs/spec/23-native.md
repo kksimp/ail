@@ -157,9 +157,12 @@ ready index or `none` (conc.select.1); a handle and its copies are the same
 channel. A trap (`Channel(0)`, `send` on a closed channel, closing twice)
 names the channel `Channel#N` in the order the program made them, as the
 interpreter does. Other element types, a `select` over a list that isn't
-written out, and cancellation (conc.cancel.2, conc.cancel.4) are not built; a
-program whose tasks all wait on channels hangs instead of trapping
-(conc.task.7). *(ADR 0599)*
+written out, and cancellation (conc.cancel.2, conc.cancel.4) are not built.
+A deadlock (conc.task.7) is found by the main task: when it waits in `send`,
+`recv`, `for` or `select`, every unfinished task is waiting too, and nothing
+has changed for 100 ms, it traps with the interpreter's message. A
+deadlock the main task is not part of, or one reached through `t.wait()`,
+hangs as before. *(ADR 0599, ADR 0186)*
 
 **native.task.1** — Native code runs tasks and `par for` iterations in
 parallel on a pool of threads, at most 8 and no more than the cores the

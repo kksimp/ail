@@ -26,6 +26,9 @@ H_MARKN := 10
 H_NOFIT := 13
 H_REUSED := 12
 H_REGS := 14
+## The limit the allocation fast path tests against: `H_THRESH`, or 0 once the
+## process has threads, so every allocation takes the locked path (ADR 0599).
+H_FASTLIM := 24
 H_HEADS := 32
 H_BUMP := 72
 H_BEND := 112
@@ -103,6 +106,7 @@ fn heap_init(top int)
     hset(H_MARKS, marks)
     hset(H_MARKCAP, cap / 8)
     hset(H_THRESH, MIN_THRESH)
+    hset(H_FASTLIM, MIN_THRESH)
 
 # ---- size classes ----
 #
@@ -240,12 +244,12 @@ fn alloc(n int, kind int) int
 ## can only keep a dead block alive a little longer, and a list's scan stops
 ## at its length (ADR 0564).
 fn alloc_raw(n int, kind int) int
-    if n <= 232 and load64(global(LIM_TICK)) == 0 and load64(global(MULTI)) == 0
+    if n <= 232 and load64(global(LIM_TICK)) == 0
         idx := (n + 23).shr(4)
         csz := idx.shl(4)
         m := load64(global(HEAP))
         a := load64(m + 8 * H_ALLOCD) + csz
-        if a <= load64(m + 8 * H_THRESH)
+        if a <= load64(m + 8 * H_FASTLIM)
             s := m + idx.shl(3)
             b := load64(s + 8 * H_HEADS)
             if b != 0
@@ -265,12 +269,12 @@ fn alloc_raw(n int, kind int) int
 ## filled while no collection or time check is due, is straight-line code
 ## with no calls; everything else is `alloc_slow`.
 fn alloc_z(n int, kind int, zero int) int
-    if n <= 232 and load64(global(LIM_TICK)) == 0 and load64(global(MULTI)) == 0
+    if n <= 232 and load64(global(LIM_TICK)) == 0
         idx := (n + 23).shr(4)
         csz := idx.shl(4)
         m := load64(global(HEAP))
         a := load64(m + 8 * H_ALLOCD) + csz
-        if a <= load64(m + 8 * H_THRESH)
+        if a <= load64(m + 8 * H_FASTLIM)
             # This class's slots, 8 bytes apart in each table.
             s := m + idx.shl(3)
             b := load64(s + 8 * H_HEADS)

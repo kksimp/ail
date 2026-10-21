@@ -1254,7 +1254,7 @@ fn Lower.lower_for(
         _ =>
             l0 := lower_value(iter, none) else return
             if chan_elem(l0.ty) != none
-                lower_chan_for(var, l0, body)
+                lower_chan_for(var, l0, body, expr_pos(iter))
                 return
             if is_pair_loop(var, l0, body)
                 scopes.pop()
