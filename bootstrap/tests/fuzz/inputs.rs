@@ -12,6 +12,7 @@ pub struct Input {
 }
 
 pub const KINDS: [&str; 9] = ["text", "json", "bytes", "regex", "date", "http", "compress", "csv", "args"];
+pub const KINDS: [&str; 9] = ["text", "json", "bytes", "regex", "date", "http", "compress", "cookie", "httpresp"];
 
 pub fn generate(kind: &str, seed: u64) -> Input {
     let mut r = Rng::new(seed ^ 0x5EED_F00D);
@@ -29,6 +30,8 @@ pub fn generate(kind: &str, seed: u64) -> Input {
         "http" => (http_text(&mut r), http_text(&mut r)),
         "csv" => (csv_text(&mut r), csv_text(&mut r)),
         "args" => (args_text(&mut r), args_text(&mut r)),
+        "cookie" => (cookie_text(&mut r), cookie_text(&mut r)),
+        "httpresp" => (response_text(&mut r), plain(&mut r)),
         _ => (plain(&mut r), plain(&mut r)),
     };
     Input { text, text2, int }
@@ -284,6 +287,18 @@ fn csv_text(r: &mut Rng) -> String {
     }
     if r.chance(1, 12) {
         s = s.repeat(1 + r.below(200));
+// ---- cookies and responses (std.net.jar, the HTTP/1.1 client) ----
+/// A `Set-Cookie` line: name, value, and attributes in good and bad forms.
+fn cookie_text(r: &mut Rng) -> String {
+    let mut s = String::from(*r.pick(&["a=b", "sid=1", "=x", "x", "", "a=b=c", "a = b", "__Host-id=1", "é=ü", "a=\"q\"", "a=;", "n=v\r\nX: y"]));
+    for _ in 0..r.below(5) {
+        s.push_str("; ");
+        s.push_str(r.pick(&[
+            "Path=/", "Path=/a/b", "Path=", "Path=a", "Domain=example.com", "Domain=.example.com", "Domain=com", "Domain=", "Domain=other.org",
+            "Max-Age=60", "Max-Age=0", "Max-Age=-1", "Max-Age=99999999999999999999", "Max-Age=x", "Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+            "Expires=Wed, 21-Oct-15 07:28:00 GMT", "Expires=Wed Oct 21 07:28:00 2015", "Expires=garbage", "Expires=Fri, 31 Dec 9999 23:59:59 GMT",
+            "Secure", "HttpOnly", "SameSite=Lax", "SameSite=None", "SameSite=Strict", "SameSite=x", "secure=1", "Unknown=1", "",
+        ]));
     }
     s
 }
@@ -298,6 +313,32 @@ fn args_text(r: &mut Rng) -> String {
         words.push(*r.pick(&WORDS));
     }
     words.join("\n")
+/// A raw HTTP/1.1 response a hostile server might send.
+fn response_text(r: &mut Rng) -> String {
+    let status = *r.pick(&["HTTP/1.1 200 OK", "HTTP/1.1 404 Not Found", "HTTP/1.0 200 OK", "HTTP/1.1 204 No Content", "HTTP/1.1 301 Moved", "HTTP/1.1 100 Continue", "HTTP/1.1 999 X", "HTTP/1.1 20 OK", "HTTP/2 200", "HTTP/1.1", "200 OK", "", "HTTP/1.1 200", "HTTP/1.1 abc OK"]);
+    let mut s = format!("{status}\r\n");
+    let chunked = r.chance(2, 5);
+    for _ in 0..r.below(6) {
+        s.push_str(r.pick(&[
+            "Content-Type: text/plain", "Content-Length: 5", "Content-Length: 0", "Content-Length: -1", "Content-Length: 99999999999", "Content-Length: 5, 5",
+            "Set-Cookie: a=b; Path=/", "Set-Cookie: =", "Location: /x", "Location: http://127.0.0.1:1/", "Connection: close", "Connection: keep-alive",
+            "Content-Encoding: gzip", "Content-Encoding: deflate", "Content-Encoding: br", "Transfer-Encoding: chunked", "Transfer-Encoding: gzip",
+            "no-colon", " folded: x", "X: a\u{0}b", "Host:", "Trailer: x",
+        ]));
+        s.push_str(if r.chance(1, 10) { "\n" } else { "\r\n" });
+    if chunked {
+        s.push_str("Transfer-Encoding: chunked\r\n");
+    s.push_str(if r.chance(1, 12) { "" } else { "\r\n" });
+    if chunked {
+        for _ in 0..r.below(4) {
+            s.push_str(r.pick(&["5\r\nhello\r\n", "0\r\n", "1\r\nxx\r\n", "g\r\nabc\r\n", "FFFFFFFFFFFFFFFFF\r\n", "-1\r\n", "3;ext=1\r\nabc\r\n", "3\nabc\n", "", "\r\n", "5\r\nhi"]));
+        }
+        if r.chance(2, 3) {
+            s.push_str(r.pick(&["0\r\n\r\n", "0\r\nX-T: 1\r\n\r\n", "0\r\n"]));
+        }
+    } else {
+        s.push_str(r.pick(&["hello", "", "hello world, longer than five", "\u{1f600}", "\r\n\r\n", "\u{1f}\u{8b}\u{8}garbage"]));
+    s
 }
 
 // ---- HTTP ----

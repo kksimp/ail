@@ -571,3 +571,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0742](0742-compile-time-step-limit.md) | A statement-count limit on computing constants (ct.eval.3) *(delegated)* | Accepted | 2026-10-21 |
 | [0746](0746-native-subset-constructs-table.md) | One table of native-subset constructs, with owners *(delegated)* | Accepted | 2026-10-21 |
 | [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2` and `ct.const.4` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |
+| [0692](0692-fuzz-http-and-socket-templates.md) | HTTP fuzzers, `fuzz-net` templates that actually run, and the three-digit status fix *(delegated)* | Accepted | 2026-10-21 |

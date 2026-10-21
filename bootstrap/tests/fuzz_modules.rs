@@ -8,6 +8,7 @@
 //!     # fuzz-input: json|text|bytes|regex|date|http|compress
 //!     # fuzz-needs: std.bytes        (blank when built in)
 //!     # fuzz-native: yes             (optional: also build with `ail build`, fuzz.mod.6)
+//!     # fuzz-net: yes                (optional: uses sockets, so runs without --deterministic)
 //!
 //! A template whose module isn't merged yet is skipped and reported. A lane
 //! adds a module's fuzzer by adding one file, with no Rust. The properties:
@@ -123,7 +124,10 @@ fn check(r: &Runner, src: &str, with_native: bool) -> Option<String> {
     if c.code != Some(0) {
         return Some(format!("fuzz.mod.0 template does not check: {}", c.stdout.lines().chain(c.stderr.lines()).next().unwrap_or("")));
     }
-    let walker = r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10);
+    // `# fuzz-net: yes` templates talk to a socket on this machine, which `--deterministic` and `--deny net`
+    // refuse before the program starts: they run as they are and skip the tier and repeat checks.
+    let net = src.contains("# fuzz-net: yes");
+    let walker = if net { r.exec(&["run", "--no-contracts"], &p, 20) } else { r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10) };
     if walker.code.is_none() {
         return Some("fuzz.mod.2 hang: no result in 10 s".into());
     }
@@ -141,7 +145,7 @@ fn check(r: &Runner, src: &str, with_native: bool) -> Option<String> {
     }
     // `--deterministic` keeps a run on the walker; denying the clock gives the tier the same sandbox.
     let tier = r.exec(&["run", "--no-contracts", "--deny", "clock,random,proc,net"], &p, 10);
-    if !same(&walker, &tier) {
+    if !net && !same(&walker, &tier) {
         return Some(format!(
             "fuzz.mod.5 the bytecode tier changed the run\n--- walker (exit {:?})\n{}{}--- tier (exit {:?})\n{}{}",
             walker.code, walker.stdout, walker.stderr, tier.code, tier.stdout, tier.stderr
@@ -156,7 +160,7 @@ fn check(r: &Runner, src: &str, with_native: bool) -> Option<String> {
             }
         }
     }
-    if !smoke() {
+    if !smoke() && !net {
         let again = r.exec(&["run", "--no-contracts", "--deterministic"], &p, 10);
         if !same(&walker, &again) {
             return Some("fuzz.mod.7 run is not deterministic".into());
