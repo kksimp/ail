@@ -61,4 +61,4 @@ pub fn codegen.wrap_block(f mir.Func, order List[int], dom List[List[bool]], blo
 pub fn codegen.div_magic(d int) List[int]  ## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
 ```
 
-trimmed to fit 2000 tokens (~1181); dropped: private items
+trimmed to fit 2000 tokens (~1253); dropped: private items
