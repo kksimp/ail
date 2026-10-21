@@ -82,7 +82,7 @@ fn Lower.gen_unchecked(mut self)
         enter_file(fn_file[key])
         before := problems.len()
         unchecked = true
-        lower_fn_as(f, "{key}.nc", key)
+        lower_fn_as(f, "{key}.nc", key, fn_owner(f))
         unchecked = false
         stamp_problems()
         while problems.len() > before
@@ -130,7 +130,7 @@ fn Lower.trap_open(mut self, rule str, pos ast.Pos)
 fn Lower.trap_close(mut self, pos ast.Pos)
     src := src_lines[file]
     line := if pos.line >= 1 and pos.line <= src.len() then src[pos.line - 1] else ""
-    call("rt.trap_end", [str_value(excerpt(line, pos.line, pos.col))], Ty.Unit)
+    call("rt.trap_end", [str_value("{excerpt(line, pos.line, pos.col)}{trap_frame(pos)}")], Ty.Unit)
     finish(unreachable_term())
 
 ## Branch on `cond`: the current block continues when it holds; the

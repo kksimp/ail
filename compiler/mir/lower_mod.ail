@@ -18,6 +18,7 @@ STD_MODULES := [
     "regex",
     "tensor",
     "time",
+    "tz",
     "ui",
 ]
 
@@ -94,7 +95,10 @@ fn Lower.type_key(self, name str) str?
         key := "{m}.{parts[1..].join(".")}"
         return if structs.contains(key) then key else none
     key := "{prefix}{name}"
-    if structs.contains(key) then key else none
+    if structs.contains(key)
+        return key
+    k := prelude_key(name)?
+    if structs.contains(k) then k else none
 
 ## The key a qualified name `m.x` has, when `m` is an import here.
 fn Lower.qualified(self, e ast.Expr) str?

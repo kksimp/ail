@@ -494,6 +494,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
 | [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
 | [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
+| [0535](0535-native-stack-check-on-recursive-calls.md) | Native recursion traps when the stack runs out: a check on calls that can recurse *(delegated)* | Accepted | 2026-10-20 |
+| [0536](0536-native-generics-by-monomorphisation.md) | Generics and traits in native code by monomorphisation: instances named by their types, `impl` methods as methods of their type *(delegated)* | Accepted | 2026-10-20 |
 | [0565](0565-native-string-runtime-calls.md) | A native `str` method is one runtime call, and its traps carry constant text *(delegated)* | Accepted | 2026-10-20 |
 | [0566](0566-native-char-type.md) | `char` is a MIR type held in a register as an `int`, and `chars()` gives `List[char]` *(delegated)* | Accepted | 2026-10-20 |
 | [0567](0567-native-text-of-numbers-and-unicode-tables.md) | Native text of numbers reuses the output routines, and character predicates use generated Unicode tables *(delegated)* | Accepted | 2026-10-20 |
@@ -516,6 +518,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0592](0592-std-math-float-methods.md) | Transcendental float methods (`sin`…`cbrt`), with a one-ulp bound (Designer) | Accepted | 2026-10-21 |
 | [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
 | [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
+| [0599](0599-native-threads-and-task-pool.md) | Native threads: `clone` and futex on Linux, one pool, replacement workers *(delegated)* | Accepted | 2026-10-20 |
+| [0600](0600-native-atomics.md) | Native atomics: sequentially consistent cells, LSE on ARM64, `add` as a compare-and-swap loop *(delegated)* | Accepted | 2026-10-20 |
+| [0601](0601-native-par-for.md) | Native `par for`: the body becomes a chunk function with exact accumulators *(delegated)* | Accepted | 2026-10-20 |
 | [0602](0602-native-enum-layout.md) | Enums in native code: fieldless enums are `int`s, others kind-5 objects with the index in slot 0; fieldless variants are shared start-up objects; values immutable and shared *(delegated)* | Accepted | 2026-10-20 |
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
@@ -631,6 +636,9 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0835](0835-native-raw-pointers-and-hw.md) | Native `*T` is an address in an integer register; `std.hw` lowers to plain loads, stores and fences *(delegated)* | Accepted | 2026-10-21 |
 | [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
+| [0807](0807-native-build-passes-derived-methods.md) | `ail build` passes derived methods to the native backend as `gen:impl` sources; `Self` in method signatures *(delegated)* | Accepted | 2026-10-21 |
+| [0808](0808-native-prelude-json-lowered-on-demand.md) | Native builds get the prelude's JSON and `Default` modules, lowered only where the program reaches them *(delegated)* | Accepted | 2026-10-21 |
+| [0840](0840-native-std-tz-in-the-runtime.md) | Native `std.tz`: a TZif reader and POSIX rules in the runtime, so `std.time.date` builds natively *(delegated)* | Accepted | 2026-10-21 |
 | [0830](0830-native-raw-tcp.md) | Native raw TCP: sockets by system calls, handles in a table, `net.NetError` *(delegated)* | Accepted | 2026-10-21 |
 | [0821](0821-unsafe-driver-manifest-and-flag.md) | `unsafe driver` in `ail.pkg`, and `--unsafe driver` for a program without one *(delegated)* | Accepted | 2026-10-21 |
 | [0822](0822-std-hw-volatile-and-hw-effect.md) | `std.hw`: `at`, volatile methods and fences, and the effect `hw` *(delegated)* | Accepted | 2026-10-21 |
@@ -648,3 +656,11 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0829](0829-native-tuples.md) | Native tuples: a kind-4 struct object with one slot per element; `eq.T`, `lt.T` and `copy.T` generated; table keys stay out | Accepted | 2026-10-21 |
 | [0838](0838-std-app-native-windows.md) | `std.app`: native windows from a view tree, drawn by a generic host (SwiftUI on macOS) over JSON lines; capability `app` | Accepted | 2026-10-21 |
 | [0825](0825-native-ascii-join-chars.md) | Native: an ASCII path for joining characters *(delegated)* | Accepted | 2026-10-21 |
+| [0606](0606-win64-calls-to-system-dlls.md) | Win64 calls to system DLL functions: `libsys.NAME` through the PE import table *(delegated)* | Accepted | 2026-10-20 |
+| [0607](0607-windows-runtime-guard.md) | `ail build --target x86_64-windows` is refused until the Windows runtime lands *(delegated)* | Accepted | 2026-10-20 |
+| [0608](0608-windows-target-and-runtime.md) | The Windows x86-64 target: `target()` is 3, the entry runs the runtime, and output, exit and the heap use kernel32 *(delegated)* | Accepted | 2026-10-20 |
+| [0826](0826-native-reset-in-place.md) | Native: reset a list in place *(delegated)* | Accepted | 2026-10-21 |
+| [0641](0641-native-trap-stack-from-frame-pointers.md) | A native trap prints its stack by walking frame pointers over a call table in the code *(delegated)* | Accepted | 2026-10-21 |
+| [0642](0642-native-trap-stack-format.md) | The native stack lines name the function and the call position, and leave out values *(delegated)* | Accepted | 2026-10-21 |
+| [0643](0643-inlined-callees-keep-their-frame.md) | A check inlined from a callee keeps the callee's frame and the call that was inlined *(delegated)* | Accepted | 2026-10-21 |
+| [0644](0644-native-trap-stack-always-on.md) | The trap stack is always built, with no flag: cost measured *(delegated)* | Accepted | 2026-10-21 |

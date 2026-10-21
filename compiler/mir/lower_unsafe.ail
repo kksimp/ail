@@ -11,7 +11,7 @@ use ast
 
 ## The pointer type for `*inner`, if its target is in the subset
 ## (unsafe.ptr.1: `int`, `float`, `bool`, a sized number, another pointer).
-fn Lower.ptr_type_of(self, inner ast.TypeRef) Ty?
+fn Lower.ptr_type_of(mut self, inner ast.TypeRef) Ty?
     t := type_of(inner)?
     if ptr_target_ok(t)
         return Ty.Ptr(t)

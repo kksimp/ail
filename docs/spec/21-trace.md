@@ -235,6 +235,20 @@ fn main()
 error with `"severity":"trap"`, the rule, position and message, the source
 line, the condition's values, and the stack. *(ADR 0267)*
 
+**trace.frame.1** — An executable built by `ail build` reports a trap with
+the stack the interpreter reports (trace.snap.2, trace.snap.3), without the
+frames' values: the trap's first line and source excerpt, then one line
+`  at [FILE:]LINE:COL in NAME(..)` per frame, innermost first (`NAME()` for a
+function without parameters; `FILE:` only outside the first file), where
+`LINE:COL` is the trap for the innermost frame and the call for each other.
+At most seven frames print; with more, the first six and then
+`  … N more frames`. A constant's initialiser (mod.const.*, ADR 0604) has no
+frame. *(ADRs 0641, 0642)*
+
+**trace.frame.2** — A check that the compiler copied into a caller by inlining
+reports the callee's frame, then the caller at the inlined call, as if the
+call had been made. *(ADR 0643)*
+
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
 
@@ -366,7 +380,8 @@ message as `ail run`, and exits with status 1. The line has no `FILE:LINE:COL`
 prefix and no snapshot, because the native program has no statement to point at.
 The memory limit is checked when the heap takes a new chunk and counts the
 heap bytes in use. The time limit is checked every 256 allocations and when
-the heap takes a chunk, so a loop that never allocates is not stopped, and the
+the heap takes a chunk. A `while` loop also checks it, but only in an executable
+built with `--timeout` (ADR 0727); so without that, a loop that never allocates is not stopped. The
 limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
 `gettimeofday`. *(ADR 0726, ADR 0727)*
 

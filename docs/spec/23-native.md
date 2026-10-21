@@ -45,10 +45,13 @@ fallback value, a statement that leaves, or a block without a binding
 (err.else.1-2); `else err` and `?` are not yet. Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is
 reported at its position under this rule, all of them at once, and nothing
 is built. *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0580, 0582)*
-function is a free function or a method of a struct or enum (no generics or
-contracts), in the root module or a module it imports (mod.unit.1-5), over
-`int`, `float`, `bool`, `char`, `str`, structs and enums without generics or
-invariants, optionals of those and of `char`s (`T?`), and lists of those and of lists, using locals, module constants
+function is a free function, a method of a struct or enum, or a method of
+an `impl` block (no generic methods, `any Trait` values or contracts), in
+the root module or a module it imports (mod.unit.1-5), over `int`, `float`,
+`bool`, `char`, `str`, structs and enums without invariants, generic or not,
+optionals of those and of `char`s (`T?`), and lists of those and of lists,
+with generic functions and types monomorphised (gen.decl.1-2, gen.bound.1),
+using locals, module constants
 of any expression in the subset (computed once before `main` runs),
 arithmetic, comparisons (`==` on enums, structs and lists compares their
 values), `and`/`or`/`not`, `if` (statement or value), `while`, `for` over a
@@ -83,37 +86,33 @@ statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
 and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
 sets and lists of `int` or `str`, `top` on a `Map[K, int]` (`int` or `str` keys), and set and map comprehensions
 whose type is expected (a function result, argument or field), in functions with at most eight
-`float` parameters (any number of others). Also: format specifications on
+`float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); the methods derive generators write (ct.gen.1, ADR 0807); the prelude's `Json` and `Default`, as far as the program reaches them (ADR 0808); format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
-alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
+alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression), and `else` followed by a block on `s.to_int()`, `xs.pop()` and `m.get(k)` (the block leaves or ends in the replacement value, err.else.1-3) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.walk`, `fs.glob`, `fs.copy`, `fs.remove`, `fs.make_dir`, `fs.rename`
 (`fs.walk` and the others can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
+(std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet, and on macOS the program traps at `proc.run`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
+readable yet, and on macOS the program traps at `proc.run`); `t := spawn f(args)`
+and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
+`store`, `cas` and `add` (`native.task.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
 `net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
 `close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
 per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
 fails with kind `tls`, and `Accept-Encoding` and connection pooling are not built), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
 other host fails with kind `not_found`, as there is no DNS client yet), no TLS, a wait does not let other tasks run, the
 `bytes` forms are not built, and a message's wording may differ from the interpreter's (the `kind` is the same); and the standard
-modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log` and `std.regex`; `regex.captures` is not built yet). Any other construct is reported at its position under this rule, all of them
-at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0830)*
-readable yet, and on macOS the program traps at `proc.run`); and the standard
 modules written in AIL (`std.app`, `std.args`, `std.csv`, `std.log`, `std.net.http`,
-`std.net.jar`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log`; `std.app`
+`std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
+the constructs their source uses are in the subset (so far `std.log`, `std.regex` and `std.time.date`; `regex.captures` is not built yet, and `std.app`
 waits for native `proc.start`, std.app.10). Any other construct is reported at its position under this rule, all of them
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0838)*
+at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
+0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0599–0601, 0602–0604, 0605, 0770-0772, 0802-0806, 0818, 0830, 0838, 0840)*
 
 ```ail
 fn steps(n int) int
@@ -148,11 +147,34 @@ tables generated from it (a capital sigma becomes the final form by the
 Unicode rule, with its case-ignorable set approximated by the apostrophes,
 dots, accents and combining marks). *(ADRs 0565, 0566, 0567)*
 
+**native.task.1** — Native code runs tasks and `par for` iterations in
+parallel on a pool of threads, at most 8 and no more than the cores the
+process may use (`conc.par.9`, `conc.par.7`). `spawn f(args)` takes a free
+function of the subset's types and copies a list argument (`conc.share.1`);
+`t.wait()?` is the task's result, and if the task trapped it ends the
+program as an uncaught `Trapped` does: `error: Trapped(rule: "R", message:
+"L:C: M")` on standard error, exit status 1. A `par for` gives the
+sequential result (`conc.par.1`): a chunk that traps, or a sum that would
+leave `int` at any point, makes it run in order (`conc.par.4`,
+`conc.par.11`), except in a loop that updates an atomic, which reports the
+trap it met (`conc.atomic.6`). Atomic operations are sequentially consistent
+whatever `order:` says (`conc.atomic.2`). The program's output is the
+interpreter's wherever the interpreter defines it (`conc.task.9`); `print`
+holds a lock for one statement, so lines from different tasks don't mix.
+On macOS the threads are libSystem's pthreads, bound at load by dyld. *(ADRs
+0599–0601)*
+
 **native.build.1** — A native executable's standard output and exit status
 equal the interpreter's on the same program and input, and a trap's first
 line on standard error is the interpreter's (`PATH:LINE:COL:
 trap[RULE]: MESSAGE`, err.trap.*); the interpreter's frame lines after it
-may be absent. *(ADRs 0384, 0385)*
+may be absent. Recursion is the exception: the interpreter traps after a
+fixed number of nested calls, a native executable when its stack is nearly
+exhausted. It traps under err.trap.1 at the call, with `call depth exceeded
+the native stack in `NAME``, so it may recurse deeper than the interpreter
+allows. *(ADRs 0384, 0385, 0535)*
+trap[RULE]: MESSAGE`, err.trap.*), then its source excerpt and the stack
+without the frames' values (trace.frame.1). *(ADRs 0384, 0385, 0641)*
 
 ```ail rules=native.build.1
 fn main()
@@ -342,6 +364,21 @@ fn main()
         rows.push(row)
     print(rows)
 ```
+**native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
+and no reference to the old list survives, the old list may be emptied
+instead, under the conditions of native.reuse.1 and when the old list is
+the compiler's own: not a parameter of the function. *(ADR 0826)*
+
+```ail rules=native.reuse.2
+fn main()
+    mut line := []
+    for i in 0..7
+        line.push(i)
+        if line.len() == 3
+            print(line)
+            line = []
+    print(line)
+```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
 (by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the
@@ -403,11 +440,14 @@ fn main()
 ```
 
 ```ail tool=test,--native,FILE expect=not-native rules=native.test.3
-fn first[T](xs List[T]) T
-    xs[0]
+struct Tag
+    n int
+
+fn Tag.pick[T](self, xs List[T]) T
+    xs[n]
 
 @test fn picks()
-    assert(first([1, 2]) == 1)
+    assert(Tag(n: 0).pick([1, 2]) == 1)
 
 fn main()
     print("ok")
@@ -425,11 +465,14 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-fn first[T](xs List[T]) T
-    xs[0]
+struct Tag
+    n int
+
+fn Tag.pick[T](self, xs List[T]) T
+    xs[n]
 
 fn main()
-    print(first([1, 2]))
+    print(Tag(n: 0).pick([1, 2]))
 ```
 
 ```ail norun rules=native.build.2

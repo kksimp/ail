@@ -380,6 +380,7 @@ fn map_at(m int, k int, head str, tail str) int
     out_scalar(load64(m + 32), k)
     out_byte(10)
     out_str(tail)
+    trace_frames(tail)
     flush_to(2)
     sys_exit(1)
     0

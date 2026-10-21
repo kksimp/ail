@@ -33,15 +33,22 @@ tuple needs.
   `for a, b in xs` and the same clause in comprehensions, tuple patterns in
   `match` (literals, names, `_`, nested tuples, enum variants), `==` and `!=`
   through a generated `eq.T`, `<` `<=` `>` `>=` through a generated `lt.T`
-  (integers, booleans, characters, strings and tuples of those), `print` and
-  interpolation of tuples of `int`, `float`, `bool`, `str` and tuples, and
-  `xs.enumerate()` and `zip(a, b)` over native lists.
+  (numbers, booleans, characters, strings, and tuples, structs and enums of
+  those; a float orders as in `ail run`, NaN after every number), `print` and
+  interpolation of tuples and lists of `int`, `float`, `bool`, `str`, tuples
+  and lists, `xs.enumerate()` and `zip(a, b)` over native lists.
+- **Lists of tuples, structs and enums with fields.** `contains`,
+  `index_of`, `min`, `max`, `sort`, `sorted()` and `sorted(by: |x| key)` with
+  a number, string or tuple key use the same generated `eq.T` and `lt.T`
+  (structs and enums need `impl Ord`, which has no methods, as in
+  `ail run`). The runtime orders indices with `rt.sort_perm_by`, a stable
+  merge sort that calls the `lt.T` function value; `rt.list_find_by` and
+  `rt.list_extreme_by` do the same for `==` and `min`/`max`.
 - **Out of the subset, each a `native.subset.1` report and never a wrong
   program:** tuples as map keys and set elements (native tables key `int`,
-  `bool`, `str` and `char`: ADR 0568), `sorted`, `contains`, `index_of`,
-  `min`, `max` and `counts` on a list of tuples, `<` on a tuple with a float
-  element (NaN has no order to keep), and the text of a tuple that holds a
-  list, `char` or enum.
+  `bool`, `str` and `char`: ADR 0568), `counts` on a list of tuples, the text
+  of a tuple that holds a `char`, optional or enum, and a table or function
+  value as an element.
 - **Code.** A new `compiler/mir/lower_tuple.ail`; each existing file gets a
   dispatch line or an arm (ADR 0823's rule).
 

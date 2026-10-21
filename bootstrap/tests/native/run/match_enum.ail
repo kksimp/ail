@@ -1,6 +1,6 @@
 # `match` on enums (ADR 0603): bindings, `_` fields, bare variants with
 # data, `|`, guards on bindings, qualified patterns, nested matches and
-# statements in arms.
+# statements in arms. `@allow` (a lint setting) doesn't change the code.
 enum Expr
     Num(n int)
     Neg(e Expr)
@@ -46,10 +46,11 @@ fn next(c Color) Color
         Green => Blue
         Blue => Red
 
+@allow("expr.match.3")
 fn name(c Color) str
     match c
         Color.Red => "red"
-        Green | Blue => "cool"
+        _ => "cool"
 
 fn main()
     e := Expr.Add(a: Expr.Mul(a: Num(3), b: Var("x")), b: Neg(Num(4)))

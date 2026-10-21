@@ -1,0 +1,22 @@
+# conc.par.4: accumulators combine in a fixed order; sums that stay in range
+# are the sequential ones, with negative and positive terms (ADR 0601).
+fn main()
+    mut plus := 0
+    mut minus := 5
+    mut near := 0
+    par for i in 0..1000
+        plus += i * i
+    par for i in 0..1000
+        minus += 3 - i
+    par for i in 0..64
+        near += if i == 0 then 9223372036854775800 else if i == 20 then 3 else if i == 21 then -3 else 0
+    print(plus)
+    print(minus)
+    print(near)
+    mut a := 0
+    mut b := 0
+    par for i in 1..=100
+        a += i
+        b += i * 2
+    print(a)
+    print(b)

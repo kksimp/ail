@@ -234,7 +234,7 @@ fn alloc(n int, kind int) int
 ## can only keep a dead block alive a little longer, and a list's scan stops
 ## at its length (ADR 0564).
 fn alloc_raw(n int, kind int) int
-    if n <= 232 and load64(global(LIM_TICK)) == 0
+    if n <= 232 and load64(global(LIM_TICK)) == 0 and load64(global(MULTI)) == 0
         idx := (n + 23).shr(4)
         csz := idx.shl(4)
         m := load64(global(HEAP))
@@ -259,7 +259,7 @@ fn alloc_raw(n int, kind int) int
 ## filled while no collection or time check is due, is straight-line code
 ## with no calls; everything else is `alloc_slow`.
 fn alloc_z(n int, kind int, zero int) int
-    if n <= 232 and load64(global(LIM_TICK)) == 0
+    if n <= 232 and load64(global(LIM_TICK)) == 0 and load64(global(MULTI)) == 0
         idx := (n + 23).shr(4)
         csz := idx.shl(4)
         m := load64(global(HEAP))
@@ -288,6 +288,18 @@ fn alloc_z(n int, kind int, zero int) int
 ## `alloc_z` for everything the fast path does not take: large objects, a
 ## class with no block ready, a collection or time check due.
 fn alloc_slow(n int, kind int, zero int) int
+    # With threads, the heap's state is guarded by one lock; the fast path
+    # above is only for a single thread (ADR 0599).
+    if load64(global(MULTI)) == 0
+        return alloc_locked(n, kind, zero)
+    lock(global(ALLOC_LOCK))
+    atomic_store(global(ALLOC_OWNER), thread_id())
+    p := alloc_locked(n, kind, zero)
+    atomic_store(global(ALLOC_OWNER), 0)
+    unlock(global(ALLOC_LOCK))
+    p
+
+fn alloc_locked(n int, kind int, zero int) int
     tick := load64(global(LIM_TICK))
     if tick != 0
         limits_tick(tick)

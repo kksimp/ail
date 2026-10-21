@@ -1,0 +1,12 @@
+# Natively, recursion is bounded by the stack, not by the interpreter's
+# call count: 100000 calls fit, unbounded recursion traps at the call
+# (err.trap.1, ADR 0535).
+
+fn down(n int) int
+    if n == 0
+        return 0
+    1 + down(n - 1)
+
+fn main()
+    print(down(100000))
+    print(down(100000000))

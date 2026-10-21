@@ -18,7 +18,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Char | Str | Bytes | List | Struct | Enum | Tuple => Ty.Opt(t)
+        Int | Float | Bool | Char | Str | Bytes | List | Map | Set | Struct | Enum | Tuple => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -257,12 +257,34 @@ fn Lower.fallible_call(self, e ast.Expr) bool
 fn Lower.method_key(self, recv ast.Expr, name str) str?
     if m := module_name(recv)
         return "{m}.{name}"
-    match recv
+    # `Type.f(...)`, a function of a type (an associated one such as `from_json`).
+    if a := assoc_owner(recv)
+        return "{a}.{name}"
+    if t := type_name(recv)
+        return "{t}.{name}"
+    if en := enum_ref(recv)
+        return "{en}.{name}"
+    match recv_ty(recv)?
+        Struct(s) => "{s}.{name}"
+        Enum(s) => "{s}.{name}"
+        _ => none
+
+## The type of a receiver written as a local, an element `xs[i]` of a list
+## local, or a field `x.f` of one, without lowering it.
+fn Lower.recv_ty(self, e ast.Expr) Ty?
+    match e
         Name(n, _) =>
-            k := lookup(n) else return none
-            match var_ty[k]
-                Struct(s) => "{s}.{name}"
-                Enum(s) => "{s}.{name}"
+            k := lookup(n)?
+            t := var_ty[k]
+            if t.is_unknown() then none else t
+        Index(r, _, _) => recv_ty(r)?.elem()
+        Member(r, f, _) =>
+            match recv_ty(r)?
+                Struct(s) =>
+                    for slot in structs.get(s)?
+                        if slot.name == f
+                            return slot.ty
+                    none
                 _ => none
         _ => none
 
@@ -335,6 +357,9 @@ fn Lower.add_context(mut self, context ast.Expr?)
 
 ## `e?` (err.prop.1, err.prop.2, err.prop.5).
 fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
+    # `t.wait()?` on a task: a trapped task ends the program (lower_task.ail).
+    if tk.on and is_wait_call(e)
+        return lower_wait(e, pos)
     if fallible_call(e)
         v := lower_expr(e, none)?
         return propagate_result(v, context, pos)
@@ -496,14 +521,23 @@ fn Lower.else_part(
 fn Lower.chain_try(self, e ast.Expr) bool
     match e
         Member(r, _, _) => receiver_try(r)
-        Method(r, _, _, _) => receiver_try(r)
-        Index(r, _, _) => receiver_try(r)
+        Method(r, _, _, args) => receiver_try(r) or args_try(args)
+        Index(r, i, _) => receiver_try(r) or receiver_try(i)
+        Call(_, args, _) => args_try(args)
+        Binary(_, l, r, _) => receiver_try(l) or receiver_try(r)
+        Unary(_, x, _) => receiver_try(x)
         _ => false
 
 fn Lower.receiver_try(self, e ast.Expr) bool
     match e
         Try(x, _, _) => not fallible_call(x) or receiver_try(x)
         _ => chain_try(e)
+
+fn Lower.args_try(self, args List[ast.Arg]) bool
+    for a in args
+        if receiver_try(a.value)
+            return true
+    false
 
 ## `e else ...` where a `?` inside `e` meets an absent value: that `?`
 ## jumps to the `else` part, and `e` has type `T?` if it isn't optional
@@ -601,7 +635,7 @@ fn with_error_owners(srcs List[Source]) List[Source]
 
 ## The error type a function that can fail names, when it names one: `E` in
 ## `T ! E` and `! E`. Unions and inferred sets give `Unknown`.
-fn Lower.error_ty_of(self, t ast.TypeRef) Ty
+fn Lower.error_ty_of(mut self, t ast.TypeRef) Ty
     match t.shape
         Fallible(ok, errors) =>
             if es := errors
@@ -694,6 +728,7 @@ fn Lower.display_call(mut self, v Val) int?
         Struct(k) => k
         Enum(k) => k
         Tuple => return tuple_text(v)
+        List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
