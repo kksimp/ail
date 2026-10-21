@@ -90,6 +90,11 @@ struct Gen
     sp_shift int
     ## Caller-saved registers in use, which a `push`'s slow path saves.
     caller_used List[int]
+    ## Shrink-wrapping (ADR 0625): the block that saves the callee-saved
+    ## registers (-1: the prologue does), and the blocks whose returns
+    ## restore them.
+    wrap int
+    region List[bool]
 
 ## Generate the whole program for `os`: the entry, then each function.
 pub fn generate(m mir.Module, os int) codegen.Image
@@ -124,7 +129,7 @@ fn add_code(mut img codegen.Image, a Asm, name str)
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: fx.kind, sym: fx.sym, tail: 0))
 
 fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
-    f := codegen.split_edges(f0)
+    f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
     mut uses := [0 for _ in 0..f.vals.len()]
@@ -153,6 +158,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
         slots: al.slots,
         frame: 0,
         sp_shift: 0,
+        wrap: al.wrap,
+        region: al.region,
     )
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
     g.prologue()
@@ -184,8 +191,9 @@ fn Gen.prologue(mut self)
     if 8 * (saved.len() + slots) > 32760
         unreachable("a64: frame of {frame} bytes is too large")
     adjust_sp("sub", frame)
-    for k in 0..saved.len()
-        save(saved[k], 8 * k, true)
+    if wrap < 0
+        for k in 0..saved.len()
+            save(saved[k], 8 * k, true)
 
 fn Gen.save(mut self, r int, off int, store bool)
     if r >= FB
@@ -198,9 +206,10 @@ fn Gen.save(mut self, r int, off int, store bool)
     else
         a.ldr(r, SP, off)
 
-fn Gen.epilogue(mut self)
-    for k in 0..saved.len()
-        save(saved[k], 8 * k, false)
+fn Gen.epilogue(mut self, block int)
+    if wrap < 0 or region[block]
+        for k in 0..saved.len()
+            save(saved[k], 8 * k, false)
     a.mov_rr(SP, FP)
     a.pop_pair(FP, LR)
     a.ret()
@@ -393,6 +402,9 @@ fn Gen.gen_block(mut self, b int)
         if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.args[0] == mask.dst
             if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0
                 masked = fused - 1
+    if b == wrap
+        for k in 0..saved.len()
+            save(saved[k], 8 * k, true)
     for k in 0..n
         if k != fused and k != masked
             gen_inst(blk.insts[k])
@@ -432,7 +444,7 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(FB, t.value)])
                 else
                     parallel([move_of(0, t.value)])
-            epilogue()
+            epilogue(b)
         _ => a.brk()
 
 ## Jump to `yes` when `cc` holds, else to `no`, falling through where the

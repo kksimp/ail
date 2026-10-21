@@ -107,3 +107,127 @@ pub fn f64_bits(x float) int
     if neg
         bits = bits.bit_or(1.shl(63))
     bits
+
+## Values that cross calls are copied where the calls begin (ADR 0625). The
+## deepest block that dominates every block with a call, when it is not the
+## entry and no edge leaves or re-enters what it dominates, gets a `copy` of
+## each value defined before it and used in it; the uses there read the copy.
+## A path that returns before it (`if n < 0: return 1` in a recursive
+## function) then holds nothing in callee-saved registers, so the
+## allocator can leave them to the code after it and save them there.
+pub fn split_for_calls(f mir.Func) mir.Func
+    order := block_order(f)
+    mut calling := List[int]()
+    for b in order
+        for i in f.blocks[b].insts
+            if is_call(i)
+                calling.push(b)
+                break
+    if calling.len() == 0 or f.blocks.len() < 3
+        return f
+    dom := mir.dominators(f)
+    x := wrap_block(f, order, dom, calling)
+    if x <= 0
+        return f
+    n := f.blocks.len()
+    mut region := [false for _ in 0..n]
+    for b in order
+        region[b] = dom[b][x]
+    # Values defined outside the region.
+    mut inside := [false for _ in 0..f.vals.len()]
+    mut rebuilt := [false for _ in 0..f.vals.len()]
+    for b in 0..n
+        for p in f.blocks[b].params
+            inside[p] = region[b]
+        for i in f.blocks[b].insts
+            if i.dst >= 0
+                inside[i.dst] = region[b]
+                rebuilt[i.dst] = is_remat(i)
+    mut copies := Map[int, int]()
+    mut vals := f.vals
+    mut names := f.names
+    mut head := List[mir.Inst]()
+    for b in order
+        if not region[b]
+            continue
+        mut seen := List[int]()
+        for i in f.blocks[b].insts
+            for a in i.args
+                seen.push(a)
+        for a in f.blocks[b].term.uses()
+            seen.push(a)
+        for a in seen
+            if inside[a] or rebuilt[a] or copies.contains(a)
+                continue
+            vals.push(f.vals[a])
+            names.push("")
+            copies[a] = vals.len() - 1
+            head.push(mir.inst(vals.len() - 1, "copy", [a]))
+    if copies.len() == 0
+        return f
+    mut g := f
+    g.vals = vals
+    g.names = names
+    for b in order
+        if not region[b]
+            continue
+        mut blk := g.blocks[b]
+        mut insts := List[mir.Inst]()
+        if b == x
+            insts.extend(head)
+        for i in blk.insts
+            mut r := i
+            r.args = [renamed(copies, a) for a in i.args]
+            insts.push(r)
+        blk.insts = insts
+        mut tm := blk.term
+        if tm.cond >= 0
+            tm.cond = renamed(copies, tm.cond)
+        if tm.value >= 0
+            tm.value = renamed(copies, tm.value)
+        tm.args = [[renamed(copies, a) for a in edge] for edge in tm.args]
+        blk.term = tm
+        g.blocks[b] = blk
+    g
+
+fn renamed(m Map[int, int], v int) int
+    if c := m.get(v)
+        return c
+    v
+
+## The deepest block, other than the entry, that dominates every block in
+## `blocks`, has no parameters, and whose dominated blocks form a region that
+## nothing leaves and nothing re-enters at the block itself (a loop header
+## fails; the block before it does not): where the code that needs the
+## callee-saved registers begins. -1 if there is none.
+pub fn wrap_block(f mir.Func, order List[int], dom List[List[bool]], blocks List[int]) int
+    mut cands := List[int]()
+    for c in order
+        if c == 0 or f.blocks[c].params.len() > 0
+            continue
+        mut all := true
+        for b in blocks
+            if not dom[b][c]
+                all = false
+        if all
+            cands.push(c)
+    # Deepest first: the one the most blocks dominate is the deepest.
+    mut depth := Map[int, int]()
+    for c in cands
+        mut d := 0
+        for k in 0..f.blocks.len()
+            if dom[c][k]
+                d += 1
+        depth[c] = d
+    cands = cands.sorted(by: |c| 0 - depth[c])
+    for c in cands
+        mut closed := true
+        for b in order
+            if not dom[b][c]
+                continue
+            for succ in f.blocks[b].term.targets
+                if not dom[succ][c] or succ == c
+                    closed = false
+        if closed
+            return c
+    -1
