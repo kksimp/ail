@@ -1,0 +1,6 @@
+# std.tensor.2: a shape that the elements do not fill traps.
+fn main()
+    a := tensor.from([1], [1])
+    print(a)
+    b := tensor.from([1.0, 2.0, 3.0], [2, 2])
+    print(b)

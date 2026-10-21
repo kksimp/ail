@@ -402,7 +402,7 @@ print("{n:>6}|{r:.2}|{n:0>4x}|{s:^8}|{s:*<5}")  # width, fill, align, decimals, 
 - `bytes` is immutable binary data (ADR 0412): `b"GET /\r\n\x00"` (ASCII, escapes `\xHH`),
   `s.to_bytes()`, `b.len()`, `b[i]` (a `u8`), `b[a..b]`, `a + b`, `for x in b`,
   `b.to_str()` (`str?`, strict UTF-8), `b.text()` (lossy `str`), `b.to_list()`,
-  `b.find(x)` (`int?`), `contains`, `starts_with`, `ends_with`, `b.hex()`,
+  `b.find(x)` (`int?`), `contains`, `starts_with`, `ends_with`, `b.hex()` (`b.hex(sep)` between pairs),
   `b.base64()`, `bytes.from_list(xs)`, `bytes.from_hex(s)` and
   `bytes.from_base64(s)` (`bytes?`), `bytes.zeros(n)`. No `b[i] = x`.
 
@@ -500,6 +500,7 @@ doc.to_text()                                  # {"a":[1.0,"x"]}, compact, membe
 doc.text("id", "none")                         # str: the text member, or the default (json.query.5)
 doc.flag("ok", false)                          # bool: the bool member, or the default (json.query.6)
 parse_json_lines("1\nbad\n\"x\"\n")          # List[Json]: every line that parses (json.lines.1)
+load_json[List[U]](path)?                      # a file decoded as T (FromJson); print_json(v) prints v as JSON (json.load.1-2)
 ```
 
 Variants: `Null`, `Bool(b)`, `Num(n float)`, `Str(s)`, `Arr(items)`,

@@ -11,6 +11,8 @@ pub struct codegen.Target  ## The registers a target lets the allocator use, bes
     pub int_callee List[int]
     pub float_caller List[int]
     pub float_callee List[int]
+    pub int_args List[int]  ## The registers the first integer and float arguments arrive in.
+    pub float_args List[int]
 pub struct codegen.Alloc
     pub loc List[int]  ## The location of each value.
     pub order List[int]  ## The blocks in layout order.
@@ -41,6 +43,7 @@ struct codegen.Scan
     ranges List[List[int]]
     calls List[int]
     hints List[List[int]]
+    arrive List[int]  ## The register a parameter arrived in, else -1.
     weight List[int]  ## How much a value costs to keep in memory: its definitions and uses,
     weighed bool  ## Whether `weight` has been computed: only a function that runs out of
     func mir.Func

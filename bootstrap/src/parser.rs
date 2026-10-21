@@ -49,7 +49,7 @@ const PRELUDE: &str = include_str!("prelude.ail");
 const JSON_NAMES: &[&str] = &["Json", "JsonMember", "JsonError", "parse_json", "parse_json_lines"];
 
 /// Names of its derivable traits, read with it only when named (ADR 0308).
-const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson"];
+const JSON_DERIVE_NAMES: &[&str] = &["ToJson", "FromJson", "load_json", "print_json"];
 
 /// Names of the optional `derive` prelude module: what a derive generator
 /// receives (refl.info.1, ADR 0306).
