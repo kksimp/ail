@@ -1014,6 +1014,18 @@ fn main()
     print(3.to_float())            # 3.0
 ```
 
+```ail rules=type.num.16
+fn main()
+    print(0.0.sin())                # 0.0
+    print(1.0.exp())                # 2.718281828459045
+    print(100.0.log10())            # 2.0
+    print(2.0.pow(10.0))            # 1024.0
+    print(3.0.hypot(4.0))           # 5.0
+    print(27.0.cbrt())              # 3.0
+    print(1.0.atan2(1.0) * 4.0)     # 3.141592653589793
+    print((0.0 / 0.0).pow(0.0))     # 1.0: pow(x, 0) is 1 even for nan
+```
+
 ```ail rules=type.struct.1,type.struct.2,type.struct.3,type.struct.4,type.struct.6
 struct User
     id int
