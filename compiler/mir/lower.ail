@@ -1129,7 +1129,7 @@ fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
     v
 
 ## Lower an expression; `want` is the type the context expects, which lets
-## an `int` literal stand for a `float` (expr.lit.3), and is `unit` for an
+## an `int` literal stand for a `float` (type.num.10), and is `unit` for an
 ## expression statement. `none` after a problem.
 fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
     match e

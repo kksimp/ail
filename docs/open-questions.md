@@ -318,7 +318,7 @@ under ADR 0076, measured once the evaluator counts steps.*
 
 **Resolved** by [ADR 0592](decisions/0592-std-math-float-methods.md): the full `std.math` set, within one ulp of the platform's libm (option c, the designer's choice on 2026-10-21).
 
-## OQ-172 — Unicode tables for the native `char` predicates and case mapping
+## OQ-125 — Unicode tables for the native `char` predicates and case mapping
 
 **Resolved** by [ADR 0567](decisions/0567-native-text-of-numbers-and-unicode-tables.md)
 (option a: range tables generated from the interpreter by
