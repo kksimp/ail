@@ -80,6 +80,17 @@ fix is to cache the checked compiler closure per source hash under
 `Resolved`. That changes the bootstrap's data model and needs the designer's
 view, so it is flagged here rather than started.
 
+## After lane 200 (ADR 0655)
+
+Profiling `ail run compiler` showed 77% of the Rust front end in derive
+expansion (84 generators, each re-running the whole-program effect inference,
+plus a token scan per `impl`). Fixing those took the front end from 0.57 s to
+0.33 s and a cold hello from 1.82 s to 1.47 s. A content-addressed cache of
+finished executables (native.build.5) makes an unchanged rebuild 0.01-0.04 s.
+The "caching the whole output" rejection below stands for a build loop that
+edits the program every time: that case is the cold build. The remaining cold
+cost is the interpreted backend parsing and lowering the runtime (about 1.1 s).
+
 ## Rejected alternatives
 
 - **Caching the whole `ail build` output by program hash.** Every program

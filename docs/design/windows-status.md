@@ -25,3 +25,4 @@ selftest is the merge gate, so this list is for the designer's check on Windows.
 - UI: Windows key and metric branches (`bootstrap/src/ui.rs`).
 - Not yet on the batch branch, so not reviewed here: bytes, FFI loading, dates and zones, compression, regex, and server sockets (lanes 123–129). Each adds a step here when it lands.
 - Native PE writer (ADRs 0597–0598): not runnable on Windows yet. `ail build --target x86_64-windows` is not wired, so there is no step for the designer here.
+- Build cache (ADR 0655): `ail build` has no Windows host target yet, so the cache is not reached; its directory falls back to `%LOCALAPPDATA%\ail\build` when `XDG_CACHE_HOME` is unset.

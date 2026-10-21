@@ -72,6 +72,8 @@ A program needs `fn main()`. `print(value)` writes any value and a newline.
   `ail build` names the first one it meets (`error[native.subset.1]`).
 - A trap prints the same first line as `ail run` and exits 1.
 - Targets: `--target x86_64-linux`, `aarch64-linux`, `aarch64-macos`.
+- An unchanged program rebuilds from a cache in `~/.cache/ail/build` (about 0.03 s
+  instead of 1.5 s); `--no-cache` skips it (native.build.5).
 - Guide: [design/native-guide.md](design/native-guide.md).
 
 ## Layout
