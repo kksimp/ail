@@ -30,5 +30,11 @@ fn try(line str) str
     res
 
 fn main()
-    for line in ["HTTP/1.1 200 OK", "HTTP/1.1 20 OK", "HTTP/1.1 2000 OK", "HTTP/1.1 +20 OK", "HTTP/1.1 abc OK"]
+    for line in [
+        "HTTP/1.1 200 OK",
+        "HTTP/1.1 20 OK",
+        "HTTP/1.1 2000 OK",
+        "HTTP/1.1 +20 OK",
+        "HTTP/1.1 abc OK",
+    ]
         print("{line}: {try(line)}")
