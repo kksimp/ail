@@ -303,6 +303,7 @@ fn scan_stmt(mut sc ParScan, s ast.Stmt, depth int)
                 sc.bad = true
             scan_expr(mut sc, value)
             sc.decls.add(name)
+        LetTuple(_, _, _) => sc.bad = true
         Assign(target, op, value, _) =>
             scan_expr(mut sc, value)
             match target

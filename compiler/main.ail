@@ -74,10 +74,11 @@ fn main() !
             # one run, so the compiler loads and checks once. Each executable is printed
             # as `== PATH` and its hex, as `build` prints it; the first problem ends the
             # run, and the caller then builds each file on its own to report per file.
-            # The runtime is read once, so the limits (run.limit.5) are the same for all.
-            rt := runtime_with(args[1], args[3], args[4])?
+            # The limits (run.limit.5) are the same for all; the runtime is chosen per program
+            # (a program that spawns tasks links the task runtime).
             for path in args[6..]
                 print("== {path}")
+                rt := runtime_with(args[1], path, args[3], args[4])?
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
         _ =>
             io.eprint("unknown command {args[0]}")
