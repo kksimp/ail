@@ -1797,6 +1797,16 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
                 return;
             }
         }
+        // The length of a constant list, map or set is a constant (type.coll.5).
+        if recv_op & KIND == CONST
+            && name == "len"
+            && args.is_empty()
+            && let Value::List(items) = &self.consts[(recv_op & !KIND) as usize]
+        {
+            let k = self.konst(Value::Int(items.len() as i64));
+            self.emit(Ins::Move { dst, src: k });
+            return;
+        }
         // `x.to_float()`, `x.sqrt()`, `x.abs()`: in place for an `int` or `float`, else the call below.
         let fast = if path.is_empty()
             && args.is_empty()
@@ -2158,20 +2168,42 @@ impl<'a, W: Write> Interp<'a, W> {
         }
             let place = *recv & KIND == LOCAL;
             let at = base + (*recv & !KIND) as usize;
-            // type.coll.5, type.coll.6: `len` and `push` on a list local, with no argument vector.
+            // type.coll.5, type.coll.6, type.map.4: `push`, `get`, `contains` and `len` on a list or
+            // map local, with no argument vector.
             if place && path.is_empty() && self.tracing & super::trace::WATCH == 0 {
-                if let Value::List(items) = &mut env[at].1 {
-                    if *n == 1 && name.len() == 4 && *name == "push" {
-                        let v = std::mem::replace(&mut regs[*args as usize], Value::Unit);
-                        Rc::make_mut(items).push(v);
-                        put(*dst, Value::Unit, env, base, regs);
-                        return Ok(());
+                match &mut env[at].1 {
+                    Value::List(items) => {
+                        if *n == 1 && *name == "push" {
+                            let v = std::mem::replace(&mut regs[*args as usize], Value::Unit);
+                            Rc::make_mut(items).push(v);
+                            put(*dst, Value::Unit, env, base, regs);
+                            return Ok(());
+                        }
+                        if *n == 0 && *name == "len" {
+                            let len = items.len() as i64;
+                            put_int(*dst, len, env, base, regs);
+                            return Ok(());
+                        }
                     }
-                    if *n == 0 && name.len() == 3 && *name == "len" {
-                        let len = items.len() as i64;
-                        put_int(*dst, len, env, base, regs);
-                        return Ok(());
+                    Value::Map(t) => {
+                        if *n == 1 && (*name == "get" || *name == "contains") {
+                            let found = t.get(&regs[*args as usize]);
+                            let r = match (found, *name == "get") {
+                                (Some(i), true) => Value::present(t.val(i).clone()),
+                                (None, true) => Value::None,
+                                (found, false) => Value::Bool(found.is_some()),
+                            };
+                            assign(&mut regs[*args as usize], Value::Unit);
+                            put(*dst, r, env, base, regs);
+                            return Ok(());
+                        }
+                        if *n == 0 && *name == "len" {
+                            let len = t.len() as i64;
+                            put_int(*dst, len, env, base, regs);
+                            return Ok(());
+                        }
                     }
+                    _ => {}
                 }
             }
             // A register receiver is moved out; a local's is read in place.
@@ -3326,6 +3358,28 @@ match {
                         };
                         let Value::List(items) = &mut env[slot].1 else { unreachable!("a list") };
                         assign(&mut Rc::make_mut(items)[u], v);
+                        continue;
+                    }
+                    // type.map.3, type.map.7: `m[k] = v` and `m[k] op= v` on a map, one lookup for the key.
+                    if matches!(env[slot].1, Value::Map(_)) {
+                        let k = take!(*idx);
+                        let v = match op {
+                            None => take!(*val),
+                            Some(op) => {
+                                let Value::Map(t) = &env[slot].1 else { unreachable!("a map") };
+                                let old = t.get(&k).map(|i| t.val(i).clone());
+                                let rhs = take!(*val);
+                                match (old, rhs) {
+                                    (Some(Value::Int(x)), Value::Int(y)) if let Some(r) = int_arith(*op, x, y) => {
+                                        Value::Int(r)
+                                    }
+                                    (Some(old), rhs) => self.binop(*op, old, rhs, *pos)?,
+                                    (None, rhs) => self.binop(*op, zero_like(&rhs), rhs, *pos)?,
+                                }
+                            }
+                        };
+                        let Value::Map(t) = &mut env[slot].1 else { unreachable!("a map") };
+                        Rc::make_mut(t).insert(k, Some(v));
                         continue;
                     }
                     let i = take!(*idx);

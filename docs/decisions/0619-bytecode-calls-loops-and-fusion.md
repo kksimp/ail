@@ -47,7 +47,10 @@ resized and cleared, and a code lookup.
    literals and hand-offs are separate non-inlined methods, so the hot loop
    has fewer values to keep live (4% fewer instructions on a counting loop,
    2 to 4% on the benchmarks).
-10. **Register writes** use `assign`, which does not call the drop function
+10. **Maps and constants**: `get`, `contains` and `len` on a map local, and
+    `m[k] = v` / `m[k] op= v`, take one lookup without an argument vector;
+    `len` of a constant list and negated number literals are constants.
+11. **Register writes** use `assign`, which does not call the drop function
    for values that own nothing; `MethodGuard` skips the lookup for built-in
    receivers held in locals.
 
