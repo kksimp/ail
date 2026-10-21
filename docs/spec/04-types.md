@@ -428,6 +428,126 @@ fn main()
     print("{apply(double, 4)}")
 ```
 
+## Tuples
+
+**type.tuple.1** — `(A, B, ...)` is the type of a tuple: an anonymous value
+of two or more elements, each with its own type. A tuple is a value like a
+struct: assignment copies it, it is `mut` where its holder is, and it is never
+shared. A one-element or empty tuple type is an error; a value of a unique
+type can't be an element (`own.uniq.5`). *(ADR 0791, ADR 0792)*
+
+**type.tuple.2** — `(a, b, ...)` is a tuple whose elements are the values of
+`a`, `b`, .... Each element is checked against the matching element of the
+expected type, so `(1, none)` can be an `(int, str?)`. A parenthesised single
+expression is not a tuple, and `(a,)` is an error. *(ADR 0791, ADR 0792)*
+
+**type.tuple.3** — `t.0`, `t.1`, ... read element 0, 1, ... of the tuple `t`,
+and assign it when `t` is a `mut` place. The index is a decimal literal
+smaller than the number of elements; anything else is a compile-time error.
+`t.0.1` is element 1 of element 0. *(ADR 0791, ADR 0792)*
+
+**type.tuple.4** — `a, b := e` declares one local per element of the tuple
+`e`, in order. The number of names MUST equal the number of elements. `_`
+skips an element, and `mut` before a name makes that local mutable:
+`a, mut b := e`. *(ADR 0791, ADR 0792)*
+
+**type.tuple.5** — `for a, b in xs` takes each element of `xs`, which must be
+a tuple of as many elements, apart as `type.tuple.4` does; so does a
+comprehension clause `for a, b in xs`. `for k, v in m` iterates the entries of
+a map `m` as `(key, value)` pairs, in insertion order (`type.map.5`). `for
+mut` takes one name. *(ADR 0791, ADR 0792)*
+
+**type.tuple.6** — A `match` on a tuple takes tuple patterns `(p, q, ...)`
+with one pattern per element. An element pattern is `_`, a name, which binds
+the element, a literal, a range, a variant, or a nested tuple pattern. A name
+that is a variant of the element's enum is an error: write `Enum.Name` to
+match the variant. A `match` on a tuple MUST have a `_` arm or an arm that
+matches every tuple, such as `(a, _)` (`expr.match.2`). *(ADR 0791, ADR 0793)*
+
+**type.tuple.7** — A tuple is `Eq`, `Ord` and `Hash` when every element is.
+`==` compares elementwise, `<` and `sorted` compare lexicographically, element
+0 first, and a tuple can be a map key or set element. *(ADR 0791)*
+
+**type.tuple.8** — The text form of a tuple is its elements' text forms,
+strings quoted, in parentheses: `(1, "a")`. A derived `ToJson` writes a
+tuple-typed field as a JSON array of its elements, and a derived `FromJson`
+reads one back, failing with `expected N elements` when the length differs
+(`json.derive.1-2`). *(ADR 0791, ADR 0795)*
+
+**type.tuple.9** — `xs.enumerate()` returns a `List[(int, T)]` of each element
+of the list `xs` with its index. `zip(a, b)` returns a `List[(A, B)]` pairing
+the elements of the lists `a` and `b` in order, as long as the shorter. A
+program's own function named `zip` replaces it. *(ADR 0791, ADR 0794)*
+
+```ail rules=type.tuple.1,type.tuple.2,type.tuple.3,type.tuple.4
+fn divmod(a int, b int) (int, int)
+    (a / b, a % b)
+
+fn main()
+    q, r := divmod(17, 5)
+    print("{q} {r}")                              # 3 2
+    mut p := (1, "a")
+    p.0 = 10
+    print(p.0)                                    # 10
+    mut n, _ := p
+    n += 1
+    print(n)                                      # 11
+```
+
+```ail rules=type.tuple.5,type.tuple.9
+fn main()
+    ages := {"ann": 31, "bob": 25}
+    for name, age in ages
+        print("{name} is {age}")
+    for i, x in ["a", "b"].enumerate()
+        print("{i}: {x}")
+    print([n * 2 for n, _ in zip([1, 2, 3], ["x", "y"])])   # [2, 4]
+```
+
+```ail rules=type.tuple.6
+fn describe(t (int, str)) str
+    match t
+        (0, _) => "zero"
+        (n, "") => "{n} and nothing"
+        (n, s) => "{n} {s}"
+
+fn main()
+    print(describe((0, "x")))                     # zero
+    print(describe((2, "y")))                     # 2 y
+```
+
+```ail rules=type.tuple.7,type.tuple.8
+struct Edge
+    ends (str, str)
+
+impl ToJson for Edge
+
+fn main()
+    pairs := [(2, "b"), (1, "z"), (1, "a")]
+    print(pairs.sorted())                         # [(1, "a"), (1, "z"), (2, "b")]
+    seen := {(0, 0): "origin"}
+    print(seen[(0, 0)])                           # origin
+    print(Edge(ends: ("a", "b")).to_json().to_text())   # {"ends":["a","b"]}
+```
+
+```ail error=type.tuple.3
+fn main()
+    t := (1, "a")
+    print(t.2)                                    # error: no element 2
+```
+
+```ail error=type.tuple.4
+fn main()
+    a, b, c := (1, 2)                             # error: 3 names, 2 elements
+    print(a)
+```
+
+```ail error=expr.match.2
+fn main()
+    match (1, "a")
+        (0, _) => print("zero")                   # error: no arm covers (1, "a")
+```
+
 ## Booleans
 
 **type.opt.9** — A `mut` local declared with `:=` from `none` has no type
@@ -986,10 +1106,10 @@ is ignored, so equal maps can print differently. Maps and sets aren't `Ord` or
 
 **type.map.5** — `for x in s` iterates a set in insertion order, over the
 value `s` had when the loop started (`expr.loop.4`, amended to allow a
-`Set`). `for k in m` on a map is a
-compile-time error whose help says to iterate `m.keys()`: a key and a pair are
-both plausible readings. `for mut` over a set, or over `m.keys()` or
-`m.values()`, is a compile-time error. *(ADR 0131)*
+`Set`). `for k, v in m` iterates a map's entries as pairs
+(`type.tuple.5`); `for k in m`, with one name, is a compile-time error whose
+help says to write `for k, v in m` or iterate `m.keys()`. `for mut` over a set, or over `m.keys()` or
+`m.values()`, is a compile-time error. *(ADR 0131, ADR 0792)*
 
 **type.map.6** — Maps and sets have these methods. *(ADR 0131)*
 - Map: `m.len()` returns an `int`; `m.get(k)` returns a `V?`;
@@ -1542,7 +1662,7 @@ fn main()
 ```ail error=type.map.5
 fn main()
     m := {"a": 1}
-    for k in m                                    # error: iterate m.keys() instead
+    for k in m                                    # error: write `for k, v in m` or m.keys()
         print(k)
 ```
 

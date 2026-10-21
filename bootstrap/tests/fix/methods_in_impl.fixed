@@ -1,0 +1,12 @@
+struct Point
+    x int
+
+fn Point.get(self) int
+    self.x
+
+fn Point.twice(self) int
+    self.x * 2
+
+fn main()
+    p := Point(x: 2)
+    print(p.get() + p.twice())

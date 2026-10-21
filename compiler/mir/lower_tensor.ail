@@ -14,11 +14,10 @@ fn Lower.tensor_type_of(self, args List[ast.TypeRef]) Ty?
         return Ty.Tensor(e)
     none
 
-## Trap at `pos` with the runtime-built message `msg` (a string object) unless
-## `msg` is 0.
-fn Lower.tensor_trap_if(mut self, msg int, rule str, pos ast.Pos)
+## Trap at `pos` with the message string `msg` unless `ok` holds.
+fn Lower.tensor_trap_unless(mut self, ok int, msg int, rule str, pos ast.Pos)
     fail := new_block()
-    check(op("eq", [msg, konst(0, Ty.Int)], Ty.Bool), fail)
+    check(ok, fail)
     good := cur
     seal(fail)
     cur = fail
@@ -28,6 +27,16 @@ fn Lower.tensor_trap_if(mut self, msg int, rule str, pos ast.Pos)
     emit_void(t)
     finish(unreachable_term())
     cur = good
+
+## Trap at `pos` with the runtime-built message `msg` (a string object) unless
+## `msg` is 0.
+fn Lower.tensor_trap_if(mut self, msg int, rule str, pos ast.Pos)
+    tensor_trap_unless(op("eq", [msg, konst(0, Ty.Int)], Ty.Bool), msg, rule, pos)
+
+## Trap with std.tensor.6's message when a kernel returned 0 (an `int` overflow).
+fn Lower.tensor_overflow_if_zero(mut self, r int, pos ast.Pos)
+    msg := str_value("integer overflow in a tensor operation")
+    tensor_trap_unless(op("ne", [r, konst(0, Ty.Int)], Ty.Bool), msg, "std.tensor.6", pos)
 
 ## `tensor.from(xs)` and `tensor.from(xs, shape)` (std.tensor.2).
 fn Lower.lower_tensor_from(mut self, args List[ast.Arg], npos ast.Pos) Val?
@@ -51,13 +60,110 @@ fn Lower.lower_tensor_from(mut self, args List[ast.Arg], npos ast.Pos) Val?
     tensor_trap_if(msg, "std.tensor.2", npos)
     Val(id: call("rt.tensor_from_shape", [xs.id, kind, shape.id], t), ty: t)
 
+fn tensor_elem(t Ty) Ty
+    match t
+        Tensor(e) => e
+        _ => Ty.Unknown
+
+## The code the runtime gives `+ - * /`.
+fn tensor_op_code(o ast.BinOp) int
+    match o
+        Add => 0
+        Sub => 1
+        Mul => 2
+        Div => 3
+        _ => -1
+
+## `a op b` on two tensors (std.tensor.4, std.tensor.10).
+fn Lower.tensor_zip(mut self, k int, a Val, b Val, pos ast.Pos) Val
+    kk := konst(k, Ty.Int)
+    msg := call("rt.tensor_zip_fault", [a.id, b.id, kk], Ty.Int)
+    tensor_trap_if(msg, "std.tensor.4", pos)
+    r := call("rt.tensor_zip", [a.id, b.id, kk], a.ty)
+    if tensor_elem(a.ty) == Ty.Int
+        tensor_overflow_if_zero(r, pos)
+    Val(id: r, ty: a.ty)
+
+## A tensor and a scalar of its element type, on either side (std.tensor.10).
+fn Lower.tensor_scalar(mut self, k int, t Val, s Val, left bool, pos ast.Pos) Val
+    e := tensor_elem(t.ty)
+    mut sv := s
+    if s.ty == Ty.Int and e == Ty.Float
+        sv = Val(id: op("itof", [s.id], Ty.Float), ty: Ty.Float)
+    if not same_ty(sv.ty, e)
+        problem(pos, "a `{s.ty.name()}` beside a `{t.ty.name()}` isn't in the native subset yet")
+        return t
+    lf := konst(if left then 1 else 0, Ty.Bool)
+    if e == Ty.Float
+        return Val(
+            id: call("rt.tensor_scalar_f", [t.id, sv.id, konst(k, Ty.Int), lf], t.ty),
+            ty: t.ty,
+        )
+    r := call("rt.tensor_scalar_i", [t.id, sv.id, konst(k, Ty.Int), lf], t.ty)
+    tensor_overflow_if_zero(r, pos)
+    Val(id: r, ty: t.ty)
+
+## `a op b` where an operand is a tensor: `== !=` on two tensors (std.tensor.9),
+## and `+ - * /` on two tensors or a tensor and a scalar (std.tensor.10).
+fn Lower.tensor_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    if a.ty.is_tensor() and b.ty.is_tensor() and not same_ty(a.ty, b.ty)
+        problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
+        return a
+    k := tensor_op_code(o)
+    if k >= 0
+        if a.ty.is_tensor() and b.ty.is_tensor()
+            return tensor_zip(k, a, b, pos)
+        if a.ty.is_tensor()
+            return tensor_scalar(k, a, b, false, pos)
+        return tensor_scalar(k, b, a, true, pos)
+    if not (a.ty.is_tensor() and b.ty.is_tensor())
+        problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
+        return a
+    eq := Val(id: call("rt.tensor_eq", [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+    match o
+        Eq => eq
+        Ne => Val(id: op("not", [eq.id], Ty.Bool), ty: Ty.Bool)
+        _ =>
+            problem(pos, "`{op_symbol(o)}` on a tensor isn't in the native subset yet")
+            eq
+
+## `-t` (std.tensor.14).
+fn Lower.tensor_neg(mut self, t Val, pos ast.Pos) Val
+    r := call("rt.tensor_neg", [t.id], t.ty)
+    if tensor_elem(t.ty) == Ty.Int
+        tensor_overflow_if_zero(r, pos)
+    Val(id: r, ty: t.ty)
+
+## The one element of a 1-element tensor kernel result, as a scalar of type `e`.
+fn Lower.tensor_first(mut self, t int, e Ty) Val
+    if e == Ty.Float
+        return Val(id: call("rt.tensor_first_f", [t], Ty.Float), ty: Ty.Float)
+    Val(id: call("rt.tensor_first_i", [t], Ty.Int), ty: Ty.Int)
+
+## `t.sum(axis)`, `max` and `mean` (std.tensor.11); `kind` is 0, 1 or 2.
+fn Lower.tensor_reduce(mut self, r Val, kind int, axis_arg ast.Arg?, npos ast.Pos) Val?
+    e := tensor_elem(r.ty)
+    mut axis := konst(0, Ty.Int)
+    mut has := 0
+    if a := axis_arg
+        axis = lower_value(a.value, Ty.Int)?.id
+        has = 1
+    k := konst(kind, Ty.Int)
+    h := konst(has, Ty.Int)
+    msg := call("rt.tensor_reduce_fault", [r.id, k, axis, h], Ty.Int)
+    tensor_trap_if(msg, "std.tensor.11", npos)
+    out := call("rt.tensor_reduce", [r.id, k, axis, h], r.ty)
+    if e == Ty.Int and kind == 0
+        tensor_overflow_if_zero(out, npos)
+    if has == 1
+        return Val(id: out, ty: r.ty)
+    tensor_first(out, e)
+
 fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "this method call")
-    e := match r.ty
-        Tensor(x) => x
-        _ => Ty.Unknown
+    e := tensor_elem(r.ty)
     if args.len() == 0
         if name == "len"
             return Val(id: load(r.id, 2, Ty.Int), ty: Ty.Int)
@@ -67,14 +173,35 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
         if name == "to_list"
             l := Ty.List(e)
             return Val(id: call("rt.tensor_to_list", [r.id], l), ty: l)
+        if name == "transpose"
+            msg := call("rt.tensor_transpose_fault", [r.id], Ty.Int)
+            tensor_trap_if(msg, "std.tensor.12", npos)
+            return Val(id: call("rt.tensor_transpose", [r.id], r.ty), ty: r.ty)
+        if name == "sum" and e == Ty.Float
+            return Val(id: call("rt.tensor_sum_f", [r.id], Ty.Float), ty: Ty.Float)
+        if name == "sum" and e == Ty.Int
+            t := call("rt.tensor_sum_i", [r.id], r.ty)
+            tensor_overflow_if_zero(t, npos)
+            return tensor_first(t, e)
+        if name == "max"
+            return tensor_reduce(r, 1, none, npos)
+        if name == "mean"
+            return tensor_reduce(r, 2, none, npos)
+    if args.len() == 1
+        if name == "sum" or name == "max" or name == "mean"
+            kind := if name == "sum" then 0 else if name == "max" then 1 else 2
+            return tensor_reduce(r, kind, args[0], npos)
+        if name == "add" or name == "mul" or name == "dot"
+            b := lower_value(args[0].value, r.ty)?
+            if not same_ty(b.ty, r.ty)
+                return unsupported(npos, "`.{name}()` with a `{b.ty.name()}`")
+            if name == "dot"
+                msg := call("rt.tensor_dot_fault", [r.id, b.id], Ty.Int)
+                tensor_trap_if(msg, "std.tensor.4", npos)
+                if e == Ty.Float
+                    return Val(id: call("rt.tensor_dot_f", [r.id, b.id], Ty.Float), ty: Ty.Float)
+                t := call("rt.tensor_dot_i", [r.id, b.id], r.ty)
+                tensor_overflow_if_zero(t, npos)
+                return tensor_first(t, e)
+            return tensor_zip(if name == "add" then 0 else 2, r, b, npos)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
-
-## `a == b` and `a != b` on tensors (std.tensor.9).
-fn Lower.tensor_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
-    eq := Val(id: call("rt.tensor_eq", [a.id, b.id], Ty.Bool), ty: Ty.Bool)
-    match o
-        Eq => eq
-        Ne => Val(id: op("not", [eq.id], Ty.Bool), ty: Ty.Bool)
-        _ =>
-            problem(pos, "`{op_symbol(o)}` on a tensor isn't in the native subset yet")
-            eq
