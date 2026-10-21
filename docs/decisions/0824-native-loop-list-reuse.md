@@ -41,8 +41,9 @@ after bounds-check elimination:
    capacity, so correctness never depends on the size.
 
 Instructions executed (callgrind, x86-64, perfbench sizes), before → after:
-fannkuch 274.8M → 160.4M (−42%), binarytrees 399.5M → 256.7M (−36%); the other
-eight programs unchanged. Wall clock (median of 5): fannkuch 10 396 → 321 ms
+fannkuch 252M → 160M (−37%), binarytrees 334M → 256M (−23%) on batch head
+after chain D (on the earlier head 1832f8f: 274.8M → 160.4M and 399.5M → 256.7M);
+the other eight programs unchanged. Wall clock (median of 5): fannkuch 10 396 → 321 ms
 (C 243), binarytrees 17 338 → 252 ms (C 135). Output matches the interpreter
 on x86-64 and on aarch64 under qemu.
 
