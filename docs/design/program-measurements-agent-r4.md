@@ -114,7 +114,7 @@ program and its library additions.
 # Agent round 4: standard-library parity with Python (lane 192)
 Date: 2026-10-21. Twins in `tools/tokbench/corpus/agent-r4/` (`tNN_*.py` and
 `tNN_*.ail`), measured with `tools/tokbench/run.sh` (mean over the five
-tokenizers). Ten of the planned 25 tasks are written so far; the table is
+tokenizers). Eighteen of the planned 25 tasks are written so far; the table is
 updated as more land. Before the lane's additions the same tasks needed
 hand-written loops (see the `csv_manual`/`args_manual` pairs below).
 ## Result
@@ -130,7 +130,16 @@ hand-written loops (see the `csv_manual`/`args_manual` pairs below).
 | t08_whitespace | 30.2 | 38.0 | +26% |
 | t09_group | 37.8 | 41.6 | +10% |
 | t10_retry | 85.2 | 84.8 | -0% |
-| **total** | 423.2 | 476.6 | +13% |
+| t11_json_transform | 57.6 | 107.0 | +86% |
+| t12_sort_ties | 51.4 | 91.4 | +78% |
+| t13_walk | 40.8 | 17.4 | -57% |
+| t14_stdin_sum | 19.8 | 39.0 | +97% |
+| t15_dates | 44.4 | 51.6 | +16% |
+| t16_run_cmd | 40.8 | 39.6 | -3% |
+| t17_http_json | 32.6 | 34.2 | +5% |
+| t18_env_default | 22.0 | 21.2 | -4% |
+| **total** | 732.6 | 878.0 | +20% |
+
 By hand against the new modules (ADRs 0626, 0627):
 | task | by hand | with std | change |
 |---|---|---|---|
@@ -149,6 +158,24 @@ By hand against the new modules (ADRs 0626, 0627):
 - **No `zip`, `enumerate`, `items()`**: these need tuples or two-variable
   `for` (a language change, out of this lane's scope; recommendation: a
   `for k, v in map` and `for i, x in xs.enumerate()` form, to be measured).
+## Findings from the second batch of twins (t11-t18)
+
+- **Building JSON by hand (t11, +86%).** Reading with `as_arr`, `int(k)`, `str(k)`
+  and writing through a derived `ToJson` struct still costs a struct
+  declaration plus accessor fallbacks. `List[U].from_json(j)` is rejected
+  (`List[...]` is a function, not a value), so the typed read path needs one
+  `U.from_json` call per element. Candidate: let `List[T].from_json` work, or
+  add `Json.to_list`. Recommendation: allow the generic associated call.
+- **Sorting with ties (t12, +78%).** AIL has no tuples, so Python's
+  `key=lambda p: (-p.age, p.name)` becomes two stable `sorted(by:)` calls
+  (type.coll.11 guarantees stability) and a struct declaration. A `by:` key
+  that is a list `[-p.age, p.name]` of ints would not type; recommendation:
+  keep the two-pass idiom (already in the quick reference next to `counts`).
+- **stdin (t14, +97%).** `io.read_all().lines()` plus `trim().to_int() else 0`
+  is the whole cost; Python's `int(l)` raises. Not a library gap.
+- **Where AIL wins:** `fs.glob` (t13, -57%), `flatten`, `chunks`, small
+  logging.
+
 ## Added by this lane
 `std.csv`, `std.args`, `std.log` (ADRs 0626-0628); list `chunks`, `windows`,
 `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`,
