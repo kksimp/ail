@@ -31,7 +31,7 @@ fn sb_reset()
 fn sb_grow()
     cap := load64(global(SB_CAP))
     ncap := if cap == 0 then 256 else cap * 2
-    p := alloc(ncap)
+    p := alloc(ncap, KIND_BYTES)
     n := load64(global(SB_LEN))
     if n > 0
         copy_bytes(p, load64(global(SB_PTR)), n)
@@ -72,23 +72,12 @@ fn sb_out()
 
 # ---- integers ----
 
-## Decimal, working on negative remainders so the smallest `int` needs no
-## negation.
+## Decimal, through `write_int`.
 fn put_int(n int)
-    if n == 0
-        sb_byte(48)
-        return
-    if n < 0
-        sb_byte(45)
-    mut v := n
-    mut scale := 1
-    while v / 10 != 0
-        v = v / 10
-        scale *= 10
-    v = n
-    while scale > 0
-        sb_byte(48 + (v / scale % 10).abs())
-        scale = scale / 10
+    while load64(global(SB_LEN)) + 48 > load64(global(SB_CAP))
+        sb_grow()
+    len := load64(global(SB_LEN))
+    store64(global(SB_LEN), len + write_int(load64(global(SB_PTR)) + len, n))
 
 ## Lowercase hexadecimal without `0x`, `-` first for a negative `n`
 ## (type.str.11).
@@ -389,11 +378,11 @@ fn big_sub(a List[int], b List[int]) List[int]
 ## -1, 0 or 1.
 fn big_cmp(a List[int], b List[int]) int
     if a.len() != b.len()
-        return if a.len() < b.len() then - 1 else 1
+        return if a.len() < b.len() then -1 else 1
     mut i := a.len() - 1
     while i >= 0
         if a[i] != b[i]
-            return if a[i] < b[i] then - 1 else 1
+            return if a[i] < b[i] then -1 else 1
         i -= 1
     0
 

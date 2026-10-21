@@ -49,6 +49,8 @@ struct Options  ## std.net.6: what a request can set beyond its method and URL.
     timeout_ms int
     max_redirects int
     data bytes
+    connect_ms int
+    total_ms int
 struct Request  ## std.net.9-11: a request the server received, and the server.
     method str
     path str
@@ -57,6 +59,12 @@ struct Request  ## std.net.9-11: a request the server received, and the server.
     body str
     peer str
     data bytes
+    server int
+struct Body  ## std.net.25: a response whose body is read in pieces.
+    status int
+    headers Map[str, str]
+    all_headers Map[str, List[str]]
+    handle int
 struct Server
     handle int
 struct Exchange

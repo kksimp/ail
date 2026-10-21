@@ -1,0 +1,83 @@
+## Function values (type.fn.1-3, lane 130), as `fn_value` and `call_value`
+## in check.rs.
+use ast
+
+## type.fn.2: the name of a declared function used as a value, `f := double`.
+fn Checker.fn_value(mut self, n str, i int, at ast.Pos) Ty
+    f := prog.fns[i]
+    sig := sigs[i]
+    mut why := ""
+    if f.receiver != none or f.owner != none
+        why = "a method"
+    elif sig.generics.len() > 0
+        why = "generic"
+    elif [p for p in sig.params if p.mutable].len() > 0 or sig.moves.contains(true)
+        why = "a function with a `mut` or `move` parameter"
+    elif is_res(sig.ret)
+        why = "a function that can fail"
+    elif has_attr(f, "test")
+        why = "a test"
+    if why != ""
+        err_help(
+            "type.fn.2",
+            at,
+            "`{n}` is {why}, so it can't be used as a value",
+            "wrap the call in a plain function and pass that",
+        )
+        return Ty.Unknown
+    fn_values[pos_key(at)] = i
+    Ty.FnTy([p.ty for p in sig.params], sig.ret)
+
+## type.fn.3: call a value of function type.
+fn Checker.call_value(mut self, what str, t Ty, args List[ast.Arg], at ast.Pos) Ty
+    fp := fn_parts(t) else
+        args_only(args)
+        if t != Ty.Unknown
+            err("expr.call.1", at, "`{what}` is a value, not a function")
+        return Ty.Unknown
+    for a in args
+        if l := a.label
+            args_only(args)
+            err_help(
+                "expr.call.3",
+                l.pos,
+                "a function value takes no named arguments",
+                "pass them by position",
+            )
+            return Ty.Unknown
+    if args.len() != fp.params.len()
+        args_only(args)
+        err(
+            "expr.call.1",
+            at,
+            "`{what}` takes {count(fp.params.len(), "argument")}, but {was_were(args.len())} given",
+        )
+        return fp.ret
+    for k in 0..args.len()
+        a := args[k]
+        want := fp.params[k]
+        mut hint := no_ty()
+        if not has_unknown(want)
+            hint = want
+        got := expr(a.value, hint, true)
+        move_arg(a, false)
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "this parameter isn't `mut`",
+                "remove the `mut`",
+            )
+        if not accepts(want, got)
+            mismatch("expr.call.2", expr_pos(a.value), want, got)
+    fp.ret
+
+struct FnParts
+    params List[Ty]
+    ret Ty
+
+@allow("expr.match.3") fn fn_parts(t Ty) FnParts?
+    match t
+        FnTy(ps, r) => return FnParts(params: ps, ret: r)
+        _ => return none
+    none

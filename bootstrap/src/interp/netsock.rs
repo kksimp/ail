@@ -30,6 +30,10 @@ const MAX_BODY: usize = 16 * 1024 * 1024;
 /// How long a connection may take to send a whole request (std.net.10).
 const REQUEST_TIME: Duration = Duration::from_secs(10);
 
+/// How long the server keeps a connection that has answered a request and
+/// heard nothing since (std.net.19).
+const KEEP_IDLE: Duration = Duration::from_secs(15);
+
 thread_local! {
     /// The running task's way to let other tasks run (std.net.8). Each task
     /// runs on its own thread, so this is per task.
@@ -52,7 +56,7 @@ fn pause(idle: &mut u32) -> io::Result<()> {
     if gone {
         return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "the task was cancelled"));
     }
-    std::thread::sleep(Duration::from_micros(50u64 << (*idle).min(5)));
+    std::thread::sleep(Duration::from_micros(50u64 << (*idle).min(3)));
     *idle += 1;
     Ok(())
 }
@@ -63,13 +67,53 @@ fn pause(idle: &mut u32) -> io::Result<()> {
 pub struct Coop {
     stream: TcpStream,
     timeout: Arc<AtomicU64>,
+    /// Milliseconds since `epoch()` after which every wait fails; `NO_DEADLINE` for none (std.net.19).
+    deadline: Arc<AtomicU64>,
+}
+
+const NO_DEADLINE: u64 = u64::MAX;
+
+fn epoch() -> Instant {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    *START.get_or_init(Instant::now)
+}
+
+fn now_ms() -> u64 {
+    epoch().elapsed().as_millis() as u64
+}
+
+/// The limits of a client stream, kept by the connection pool so a reused
+/// stream gets the next request's limits (std.net.19).
+#[derive(Clone)]
+pub struct Limits {
+    timeout: Arc<AtomicU64>,
+    deadline: Arc<AtomicU64>,
+}
+
+impl Limits {
+    /// Sets the inactivity timeout and the instant after which every wait fails.
+    pub fn set(&self, timeout: Duration, deadline: Option<Instant>) {
+        self.timeout.store(timeout.as_millis() as u64, Ordering::Relaxed);
+        let at = deadline.map_or(NO_DEADLINE, |d| d.saturating_duration_since(epoch()).as_millis() as u64);
+        self.deadline.store(at, Ordering::Relaxed);
+    }
 }
 
 impl Coop {
     pub fn for_client(stream: TcpStream, timeout: Duration) -> io::Result<Coop> {
         stream.set_nonblocking(true)?;
         stream.set_nodelay(true)?;
-        Ok(Coop { stream, timeout: Arc::new(AtomicU64::new(timeout.as_millis() as u64)) })
+        let timeout = Arc::new(AtomicU64::new(timeout.as_millis() as u64));
+        Ok(Coop { stream, timeout, deadline: Arc::new(AtomicU64::new(NO_DEADLINE)) })
+    }
+
+    /// A second handle on the socket, for asking whether an idle pooled stream is still open.
+    pub fn probe(&self) -> io::Result<TcpStream> {
+        self.stream.try_clone()
+    }
+
+    pub fn limits(&self) -> Limits {
+        Limits { timeout: self.timeout.clone(), deadline: self.deadline.clone() }
     }
 
     fn wait<T>(&mut self, mut op: impl FnMut(&mut TcpStream) -> io::Result<T>) -> io::Result<T> {
@@ -78,7 +122,9 @@ impl Coop {
         loop {
             match op(&mut self.stream) {
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    if start.elapsed() >= Duration::from_millis(self.timeout.load(Ordering::Relaxed)) {
+                    if start.elapsed() >= Duration::from_millis(self.timeout.load(Ordering::Relaxed))
+                        || now_ms() >= self.deadline.load(Ordering::Relaxed)
+                    {
                         return Err(io::ErrorKind::TimedOut.into());
                     }
                     pause(&mut idle)?;
@@ -203,12 +249,15 @@ struct Pending {
     peer: String,
     head: Option<Head>,
     continued: bool,
+    /// A kept-alive connection waiting for its next request (std.net.19).
+    idle: bool,
 }
 
 /// An HTTP server (std.net.9): the listener and the connections still
 /// sending their requests.
 struct Server {
-    listener: TcpListener,
+    /// `None` once `shutdown` has stopped it listening (std.net.24).
+    listener: Option<TcpListener>,
     addr: String,
     pending: Vec<Pending>,
 }
@@ -218,6 +267,10 @@ struct Exchange {
     stream: TcpStream,
     method: String,
     peer: String,
+    /// The client asked to keep the connection and sent nothing past this request (std.net.19).
+    keep: bool,
+    /// The slot of the server to give the connection back to.
+    server: i64,
 }
 
 enum Slot {
@@ -225,6 +278,8 @@ enum Slot {
     Listener(TcpListener, String),
     Conn(Conn),
     Exchange(Exchange),
+    /// A response body being read (std.net.25), with the URL for errors.
+    Body(super::net::Streaming, String),
     /// Taken out by an operation that is waiting; `close` while busy
     /// leaves `Gone` so the operation drops it when it ends.
     Busy,
@@ -305,6 +360,8 @@ struct Head {
     body_start: usize,
     framing: Framing,
     expect_continue: bool,
+    /// HTTP/1.1 without `Connection: close`: the client wants the connection kept (std.net.19).
+    keep: bool,
 }
 
 /// A request the server refuses: status and reason.
@@ -399,6 +456,7 @@ fn parse_head(buf: &[u8]) -> Result<Option<Head>, Bad> {
         }
         (false, None) => Framing::Length(0),
     };
+    let keep = http11 && !header("connection").is_some_and(|v| v.to_ascii_lowercase().contains("close"));
     let expect_continue = header("expect").is_some_and(|v| v.eq_ignore_ascii_case("100-continue"));
     Ok(Some(Head {
         method: method.to_string(),
@@ -407,6 +465,7 @@ fn parse_head(buf: &[u8]) -> Result<Option<Head>, Bad> {
         body_start: end + 4,
         framing,
         expect_continue,
+        keep,
     }))
 }
 
@@ -522,7 +581,7 @@ fn reason(status: i64) -> &'static str {
 
 /// The bytes of a response (std.net.11). `head_only` omits the body of a
 /// reply to `HEAD`. Headers the server owns are not taken from the program.
-fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_only: bool) -> Result<Vec<u8>, String> {
+fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_only: bool, keep: bool) -> Result<Vec<u8>, String> {
     if !(100..=599).contains(&status) {
         return Err(format!("{status} is not an HTTP status; use 100 to 599"));
     }
@@ -549,12 +608,17 @@ fn response_bytes(status: i64, headers: &[(String, String)], body: &[u8], head_o
     if !(status / 100 == 1 || status == 204) {
         out.push_str(&format!("Content-Length: {}\r\n", if no_body { 0 } else { body.len() }));
     }
-    out.push_str("Connection: close\r\n\r\n");
+    out.push_str(if keep { "Connection: keep-alive\r\n\r\n" } else { "Connection: close\r\n\r\n" });
     let mut bytes = out.into_bytes();
     if !no_body && !head_only {
         bytes.extend_from_slice(body);
     }
     Ok(bytes)
+}
+
+/// Whether the program's headers ask for the connection to close (std.net.19).
+fn headers_close(headers: &[(String, String)]) -> bool {
+    headers.iter().any(|(k, v)| k.eq_ignore_ascii_case("connection") && v.to_ascii_lowercase().contains("close"))
 }
 
 /// Best effort: answer a connection the server is dropping.
@@ -576,10 +640,9 @@ enum Poll {
 }
 
 impl Server {
-    /// Takes new connections, reads what the pending ones have sent, and
-    /// returns the first whole request (std.net.9). Never waits.
-    fn poll(&mut self) -> Poll {
-        while let Ok((stream, peer)) = self.listener.accept() {
+    /// Takes the connections waiting at the listener.
+    fn take_new(&mut self) {
+        while let Some(Ok((stream, peer))) = self.listener.as_ref().map(TcpListener::accept) {
             if stream.set_nonblocking(true).is_ok() {
                 let _ = stream.set_nodelay(true);
                 self.pending.push(Pending {
@@ -589,9 +652,16 @@ impl Server {
                     peer: peer.to_string(),
                     head: None,
                     continued: false,
+                    idle: false,
                 });
             }
         }
+    }
+
+    /// Takes new connections, reads what the pending ones have sent, and
+    /// returns the first whole request (std.net.9). Never waits.
+    fn poll(&mut self) -> Poll {
+        self.take_new();
         let mut i = 0;
         while i < self.pending.len() {
             let p = &mut self.pending[i];
@@ -618,6 +688,10 @@ impl Server {
                     }
                 }
             }
+            if grew && p.idle {
+                p.idle = false;
+                p.since = Instant::now();
+            }
             let outcome: Result<Option<(Head, Vec<u8>)>, Bad> = (|| {
                 if p.head.is_none() && (grew || eof) {
                     p.head = parse_head(&p.buf)?;
@@ -636,17 +710,23 @@ impl Server {
             match outcome {
                 Ok(Some((head, body))) => {
                     let p = self.pending.remove(i);
+                    let exact = match head.framing {
+                        Framing::Length(n) => p.buf.len() == head.body_start + n,
+                        Framing::Chunked => true,
+                    };
+                    let keep = head.keep && exact;
                     let (path, query) = match head.target.split_once('?') {
                         Some((a, b)) => (a.to_string(), parse_query(b)),
                         None => (head.target.clone(), Vec::new()),
                     };
                     let parsed = Parsed { method: head.method.clone(), path, query, headers: head.headers, body };
-                    return Poll::Ready(parsed, Exchange { stream: p.stream, method: head.method, peer: p.peer });
+                    return Poll::Ready(parsed, Exchange { stream: p.stream, method: head.method, peer: p.peer, keep, server: -1 });
                 }
-                Ok(None) if !eof && p.since.elapsed() < REQUEST_TIME => i += 1,
+                Ok(None) if !eof && p.since.elapsed() < if p.idle { KEEP_IDLE } else { REQUEST_TIME } => i += 1,
                 Ok(None) => {
                     let p = self.pending.remove(i);
-                    if !eof {
+                    // A kept connection that stays quiet is closed without a word.
+                    if !eof && !p.idle {
                         refuse(p.stream, 408, "the request took too long");
                     }
                 }
@@ -655,6 +735,10 @@ impl Server {
                     refuse(p.stream, status, message);
                 }
             }
+        }
+        // A server that has stopped listening is done once nothing is pending.
+        if self.listener.is_none() && self.pending.is_empty() {
+            return Poll::Closed;
         }
         Poll::Pending
     }
@@ -727,10 +811,27 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     /// `net.serve(addr)` (std.net.9): a `Server` listening on `addr`.
+    /// The `net.Body` for a response whose body is left on its connection.
+    pub(super) fn net_body(&self, r: super::net::Response, st: super::net::Streaming) -> Value {
+        let mut headers = Table::default();
+        for (k, v) in r.headers {
+            headers.insert(text(k), Some(text(v)));
+        }
+        let mut all = Table::default();
+        for (k, vs) in r.all {
+            all.insert(text(k), Some(Value::List(Rc::new(vs.into_iter().map(text).collect()))));
+        }
+        let id = add(Slot::Body(st, String::new()));
+        Value::Struct(
+            self.structs["net.Body"],
+            Rc::new(vec![Value::Int(r.status), Value::Map(Rc::new(headers)), Value::Map(Rc::new(all)), Value::Int(id)]),
+        )
+    }
+
     pub(super) fn net_serve(&mut self, addr: &str, pos: Pos) -> Value {
         match bind(addr) {
             Ok((listener, shown)) => {
-                let id = add(Slot::Server(Server { listener, addr: shown, pending: Vec::new() }));
+                let id = add(Slot::Server(Server { listener: Some(listener), addr: shown, pending: Vec::new() }));
                 self.handle_struct("net.Server", id)
             }
             Err((kind, message)) => self.net_error(addr, kind, message, pos),
@@ -826,8 +927,42 @@ impl<'a, W: Write> Interp<'a, W> {
                 Some(Slot::Listener(_, a)) => text(a.clone()),
                 _ => text(""),
             },
-            "Server.close" | "Listener.close" | "Conn.close" => {
+            "Body.read_bytes" => {
+                self.flush(pos)?;
+                let max = values[0].int();
+                if max <= 0 {
+                    return Ok(self.net_error("", "other", format!("`read_bytes` needs a size of at least 1, not {max}"), pos));
+                }
+                let taken = {
+                    let mut t = sockets();
+                    match t.get_mut(id as usize) {
+                        Some(s) if matches!(s, Slot::Body(..)) => Some(std::mem::replace(s, Slot::Busy)),
+                        _ => None,
+                    }
+                };
+                let Some(Slot::Body(mut st, url)) = taken else {
+                    return Ok(closed(self, "body"));
+                };
+                let got = st.read_some(max as usize);
+                put_back(id, Slot::Body(st, url));
+                match got {
+                    Ok(data) => super::bytes::bytes_value(data),
+                    Err((kind, message)) => self.net_error("", kind, message, pos),
+                }
+            }
+            "Server.close" | "Listener.close" | "Conn.close" | "Body.close" => {
                 close(id);
+                Value::Unit
+            }
+            "Server.shutdown" | "Request.stop" => {
+                // http.serve.1: `stop` is `shutdown` on the request's server.
+                // std.net.24: stop listening and drop idle connections; requests
+                // already arriving are still answered.
+                if let Some(Slot::Server(s)) = sockets().get_mut(id as usize) {
+                    s.take_new();
+                    s.listener = None;
+                    s.pending.retain(|p| !p.idle);
+                }
                 Value::Unit
             }
             "Server.accept" => {
@@ -839,7 +974,8 @@ impl<'a, W: Write> Interp<'a, W> {
                         _ => Poll::Closed,
                     };
                     match polled {
-                        Poll::Ready(req, ex) => {
+                        Poll::Ready(req, mut ex) => {
+                            ex.server = id;
                             let peer = ex.peer.clone();
                             let slot = add(Slot::Exchange(ex));
                             let request = Value::Struct(
@@ -852,6 +988,7 @@ impl<'a, W: Write> Interp<'a, W> {
                                     text(String::from_utf8_lossy(&req.body).into_owned()),
                                     text(peer),
                                     super::bytes::bytes_value(req.body.clone()),
+                                    Value::Int(id),
                                 ]),
                             );
                             return Ok(Value::Struct(self.structs["net.Exchange"], Rc::new(vec![request, Value::Int(slot)])));
@@ -914,7 +1051,10 @@ impl<'a, W: Write> Interp<'a, W> {
                     h.extend(many);
                     (r[0].int(), h, body.as_bytes().to_vec())
                 };
-                let sent = response_bytes(status, &headers, &body, ex.method == "HEAD");
+                // std.net.19: a final response to a request that asked for it keeps the connection.
+                let draining = matches!(sockets().get(ex.server as usize), Some(Slot::Server(s)) if s.listener.is_none());
+                let keep = ex.keep && status >= 200 && ex.server >= 0 && !draining && !headers_close(&headers);
+                let sent = response_bytes(status, &headers, &body, ex.method == "HEAD", keep);
                 let result = match sent {
                     Err(message) => {
                         // The exchange stays open so the program can answer again.
@@ -926,7 +1066,21 @@ impl<'a, W: Write> Interp<'a, W> {
                         match Coop::for_client(ex.stream, super::net::TIMEOUT) {
                             Ok(mut c) => {
                                 let r = c.write_all(&bytes);
-                                let _ = c.stream.shutdown(std::net::Shutdown::Write);
+                                if keep && r.is_ok() {
+                                    if let Some(Slot::Server(srv)) = sockets().get_mut(ex.server as usize) {
+                                        srv.pending.push(Pending {
+                                            stream: c.stream,
+                                            buf: Vec::new(),
+                                            since: Instant::now(),
+                                            peer: peer.clone(),
+                                            head: None,
+                                            continued: false,
+                                            idle: true,
+                                        });
+                                    }
+                                } else {
+                                    let _ = c.stream.shutdown(std::net::Shutdown::Write);
+                                }
                                 r.map_err(|e| (peer, e))
                             }
                             Err(e) => Err((peer, e)),
@@ -1049,7 +1203,11 @@ mod tests {
         assert!(parse_body(&h, &raw[..raw.len() - 4]).unwrap().is_none());
         let bad = b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n";
         let h = parse_head(bad).unwrap().unwrap();
-        assert_eq!(parse_body(&h, bad).unwrap_err().0, 400);
+        assert_eq!(parse_body(&h, bad).unwrap_err(), (400, "a bad chunk size"));
+        // The chunk's data must end in a line break before the next size.
+        let no_break = b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWikiXX\r\n0\r\n\r\n";
+        let h = parse_head(no_break).unwrap().unwrap();
+        assert_eq!(parse_body(&h, no_break).unwrap_err(), (400, "a chunk is not followed by a line break"));
     }
 
     #[test]
@@ -1068,19 +1226,19 @@ mod tests {
 
     #[test]
     fn responses() {
-        let r = response_bytes(200, &[("X-A".into(), "1".into())], b"hi", false).unwrap();
+        let r = response_bytes(200, &[("X-A".into(), "1".into())], b"hi", false, false).unwrap();
         let t = String::from_utf8(r).unwrap();
         assert!(t.starts_with("HTTP/1.1 200 OK\r\nX-A: 1\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 2\r\n"));
         assert!(t.ends_with("\r\n\r\nhi"));
-        let t = String::from_utf8(response_bytes(204, &[], b"ignored", false).unwrap()).unwrap();
+        let t = String::from_utf8(response_bytes(204, &[], b"ignored", false, false).unwrap()).unwrap();
         assert!(!t.contains("Content-Length") && t.ends_with("\r\n\r\n"));
-        let t = String::from_utf8(response_bytes(200, &[], b"hi", true).unwrap()).unwrap();
+        let t = String::from_utf8(response_bytes(200, &[], b"hi", true, false).unwrap()).unwrap();
         assert!(t.contains("Content-Length: 2") && t.ends_with("\r\n\r\n"));
-        assert!(response_bytes(99, &[], b"", false).is_err());
-        assert!(response_bytes(200, &[("X".into(), "a\r\nB: c".into())], b"", false).is_err());
-        assert!(response_bytes(200, &[("X Y".into(), "a".into())], b"", false).is_err());
+        assert!(response_bytes(99, &[], b"", false, false).is_err());
+        assert!(response_bytes(200, &[("X".into(), "a\r\nB: c".into())], b"", false, false).is_err());
+        assert!(response_bytes(200, &[("X Y".into(), "a".into())], b"", false, false).is_err());
         // The server owns the framing headers.
-        let t = String::from_utf8(response_bytes(200, &[("Content-Length".into(), "9".into())], b"hi", false).unwrap()).unwrap();
+        let t = String::from_utf8(response_bytes(200, &[("Content-Length".into(), "9".into())], b"hi", false, false).unwrap()).unwrap();
         assert_eq!(t.matches("Content-Length").count(), 1);
     }
 

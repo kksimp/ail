@@ -1,0 +1,35 @@
+# sort and sorted: stable, for int, float (nan last) and str (type.coll.11, type.num.11).
+fn main()
+    xs := [5, 3, 9, -2, 3, 0, 100, 7, 7, 1]
+    print(xs.sorted())
+    print(xs)
+    mut ys := xs
+    ys.sort()
+    print(ys)
+    mut fs := [2.5, 0.0 / 0.0, -1.0, 2.5, 0.5]
+    fs.sort()
+    print(fs)
+    mut ws := ["pear", "apple", "fig", "apple pie", "", "Zed", "é"]
+    ws.sort()
+    print(ws)
+    print(ws.sorted())
+    mut big := List[int]()
+    mut seed := 7
+    for _ in 0..1000
+        seed = (seed * 3877 + 29573) % 139968
+        big.push(seed)
+    s := big.sorted()
+    mut ok := true
+    for i in 1..s.len()
+        if s[i - 1] > s[i]
+            ok = false
+    print(ok)
+    print(s.len())
+    print(s[0])
+    print(s[999])
+    mut one := [4]
+    one.sort()
+    print(one)
+    mut empty := List[int]()
+    empty.sort()
+    print(empty)

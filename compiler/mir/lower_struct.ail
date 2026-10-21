@@ -109,6 +109,7 @@ fn Lower.assign_member(
     op ast.BinOp?,
     value ast.Expr,
     pos ast.Pos,
+    at ast.Pos,
 )
     r := lower_value(recv, none) else return
     n := struct_name(r.ty) else
@@ -118,7 +119,7 @@ fn Lower.assign_member(
     if k < 0
         problem(pos, "`{n}` has no field `{name}`")
         return
-    assign_slot(r.id, n, k, op, value, pos)
+    assign_slot(r.id, n, k, op, value, at)
 
 fn Lower.assign_slot(mut self, obj int, n str, k int, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     t := structs[n][k].ty
@@ -175,6 +176,8 @@ fn holds_struct(t Ty) bool
 
 ## A copy of `v`, deep through lists and structs.
 fn Lower.copy_value(mut self, v Val) int
+    if v.ty.is_coll()
+        return copy_coll(v)
     if not holds_struct(v.ty)
         return copy_list(v)
     name := "copy.{v.ty.name()}"

@@ -1,0 +1,6 @@
+fn main()
+    sales := {"north": 12.5, "south": 7.25}
+    total := sales.values().sum()
+    for region in sales.keys().sorted()
+        amount := sales[region]
+        print("{region:<8}{amount:>8.2}{amount / total * 100.0:>6.1}%")

@@ -32,6 +32,9 @@ Rules for rule IDs:
 
 1. Once published, a rule ID is **never reused or renumbered**.
 2. A removed rule stays in place with the marker `[removed in <ADR>]`.
+   A rule that only describes the language, with no behaviour for code to
+   implement, carries the marker `[definitional]` and no citation is expected
+   (`tools/rules-audit.sh` check 2 skips it).
 3. A changed rule keeps its ID. The change is recorded in the ADR that
    justifies it.
 4. Every rule cites the ADR(s) that justify it.
@@ -100,6 +103,7 @@ aren't run.
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
+| std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |
 
 Chapters and keys are provisional until the designer approves the spec outline
 (see [open-questions.md](../open-questions.md)).

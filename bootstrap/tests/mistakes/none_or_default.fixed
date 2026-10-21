@@ -1,0 +1,4 @@
+fn main()
+    xs := [1, 2]
+    v := xs.first() else 0
+    print(v)

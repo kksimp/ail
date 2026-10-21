@@ -1,0 +1,65 @@
+## std.net.25: a response body read in pieces, by length and by chunks, and
+## the connection reused once the body is read to its end.
+use std.net
+use std.net.http
+
+fn big(r net.Request) net.Response
+    if r.path == "/who"
+        return net.Response(status: 200, headers: {}, body: r.peer)
+    net.Response(status: 200, headers: {"x-kind": "big"}, body: "ab".repeat(50000))
+
+fn chunky(l net.Listener) !
+    c := l.accept()?
+    while true
+        line := c.read_line()? else break
+        if line == "" or line == "\r"
+            break
+    c.write("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n")?
+    c.write("6\r\n world\r\n0\r\n\r\n")?
+    c.close()
+
+fn drain(b net.Body) !
+    mut total := 0
+    mut pieces := 0
+    while true
+        part := b.read_bytes(4096)?
+        if part.len() == 0
+            break
+        total += part.len()
+        pieces += 1
+    print("{total} bytes in {pieces > 1} pieces")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, big)
+    base := "http://{srv.addr()}"
+    b := net.open("GET", "{base}/", net.options())?
+    print("{b.status} {b.headers["x-kind"]}")
+    drain(b)?
+    first := net.get("{base}/who")?.body
+    b2 := net.open("GET", "{base}/", net.options())?
+    drain(b2)?
+    second := net.get("{base}/who")?.body
+    print("connection reused after a full read: {first == second}")
+    # Closing early drops the connection.
+    b3 := net.open("GET", "{base}/", net.options())?
+    b3.read_bytes(10)?
+    b3.close()
+    gone := b3.read_bytes(1) else err
+        print("after close: {err.kind}")
+        bytes.zeros(0)
+    print(gone.len())
+    srv.close()
+    t.wait()?
+
+    l := net.listen("127.0.0.1:0")?
+    t2 := spawn chunky(l)
+    c := net.open("GET", "http://{l.addr()}/", net.options())?
+    mut text := ""
+    while true
+        part := c.read_bytes(4)?
+        if part.len() == 0
+            break
+        text = "{text}{part.text()}"
+    print(text)
+    t2.wait()?

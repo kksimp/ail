@@ -1,0 +1,5 @@
+use std.tensor
+
+fn main()
+    z := tensor.zeros((2, 3))
+    print(z.sum())

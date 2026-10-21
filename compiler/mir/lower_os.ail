@@ -40,6 +40,11 @@ fn os_lookup(mod str, name str) OsFn?
         "env.home" => os_fn("rt.env_home", [], maybe, false)
         "env.cwd" => os_fn("rt.env_cwd", [], s, false)
         "env.program" => os_fn("rt.env_program", [], s, false)
+        "path.dir" => os_fn("rt.path_dir", [s], s, false)
+        "path.base" => os_fn("rt.path_base", [s], s, false)
+        "path.ext" => os_fn("rt.path_ext", [s], s, false)
+        "path.stem" => os_fn("rt.path_stem", [s], s, false)
+        "path.join" => os_fn("rt.path_join", [s, s], s, false)
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
@@ -49,7 +54,7 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time"]
+    for m in ["fs", "env", "io", "time", "path"]
         if is_module(recv, m)
             return m
     ""
@@ -62,7 +67,7 @@ fn Lower.os_fails(self, recv ast.Expr, name str) bool
     f := os_lookup(m, name) else return false
     f.fails
 
-## `fs.NAME(...)`, `io.NAME(...)`, `env.NAME(...)` and `time.NAME(...)`, from
+## `fs.NAME(...)`, `io.NAME(...)`, `env.NAME(...)`, `time.NAME(...)` and `path.NAME(...)`, from
 ## `lower_method`. `none` after a report.
 fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.Arg]) Val?
     if m == "io" and name == "eprint"
@@ -88,7 +93,28 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
         vs.push(convert(v, f.params[i], expr_pos(a.value)))
     if f.fails
         vs.push(trace_line(pos))
+    if f.rt == "rt.io_exit" or f.rt == "rt.time_sleep_ms"
+        os_range_check(f.rt == "rt.io_exit", vs[0], pos)
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)
+
+## The argument checks of `io.exit` (status 0 to 255, std.io.4) and
+## `time.sleep_ms` (not negative, std.time.2): a trap at the call, kinds 9
+## and 10 of the runtime's trap messages.
+fn Lower.os_range_check(mut self, is_exit bool, v int, pos ast.Pos)
+    zero := konst(0, Ty.Int)
+    fail := new_block()
+    check(op("le", [zero, v], Ty.Bool), fail)
+    if is_exit
+        check(op("le", [v, konst(255, Ty.Int)], Ty.Bool), fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    mut t := inst(-1, "trap", [v, zero])
+    t.imm = if is_exit then 9 else 10
+    t.site = site(if is_exit then "std.io.4" else "std.time.2", "range", "", pos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
 
 ## `s.to_float()` (type.num.8): a `float?`.
 fn Lower.lower_to_float(mut self, s Val) Val
@@ -121,6 +147,7 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
                 text = call("rt.fmt_float", [v.id], Ty.Str)
         Bool => text = call("rt.fmt_bool", [v.id], Ty.Str)
         Str => text = v.id
+        Char => text = call("rt.str_char", [v.id], Ty.Str)
         _ => return unsupported(pos, "a format specification on a `{v.ty.name()}`")
     w := spec.width else return Val(id: text, ty: Ty.Str)
     numeric := v.ty == Ty.Int or v.ty.is_float()
@@ -146,4 +173,3 @@ fn Lower.lower_fmt_print(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     s := fmt_text(v, spec, pos)?
     call("rt.out_str", [s.id], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
-

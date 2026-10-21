@@ -17,3 +17,7 @@ offered as machine-applicable fixes ([ai-author-wishlist.md 2.4](../design/ai-au
 Every name used in an expression must refer to a declaration visible at that
 point. Otherwise it's a compile-time error, and the diagnostic suggests the
 closest visible names.
+
+## Rejected alternatives
+
+- A plain "unknown name" error with no suggestions: rejected because a typo'd name should give one precise, fixable diagnostic with the nearest declared names offered as machine-applicable fixes (ai-author-wishlist 2.4). (reconstructed 2026-10-21.)

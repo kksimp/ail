@@ -12,8 +12,6 @@ enum Bag
     Items(xs List[Pt])
     Empty
 
-TABLE := {"a": 1}
-
 fn same(a Bag, b Bag) bool
     a == b
 
@@ -24,4 +22,3 @@ fn main()
     match x < 3.0
         true => print(1)
         false => print(2)
-    print(TABLE.len())

@@ -1,0 +1,4 @@
+# A negative start traps (type.str.13).
+fn main()
+    s := "hello"
+    print(s.slice(0 - 1, 2))

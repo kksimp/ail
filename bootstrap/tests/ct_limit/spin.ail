@@ -1,0 +1,12 @@
+fn spin(n int) int
+    mut i := 0
+    mut s := 0
+    while i < n
+        s += i
+        i += 1
+    s
+
+BIG := spin(1000)
+
+fn main()
+    print(BIG)

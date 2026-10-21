@@ -255,14 +255,14 @@ fn pdf_reader_checks_clean_and_reads_its_fixtures() {
     let (code, _, _) = pdf(&["grep", "not in the file", &report]);
     assert_eq!(code, Some(1), "pdf grep with no hit exits 1");
     let (_, out, _) = pdf(&["json", &report, "--page", "1"]);
-    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0.0,\"page\":2.0}"), "pdf json:\n{out}");
+    assert!(out.contains("\"uri\":\"https://example.com/ledger\"") && out.contains("{\"title\":\"Appendix\",\"depth\":0,\"page\":2}"), "pdf json:\n{out}");
     let (_, out, _) = pdf(&["info", &tool("tools/pdf/testdata/scan.pdf")]);
     assert!(out.contains("image-only pages (scans, read by OCR when shown or searched): 1"), "pdf info on a scan:\n{out}");
     let (_, out, _) = pdf(&["view", &report, "--find", "without OCR", "--print", "--rows", "20"]);
     assert!(out.contains(" report.pdf  page 1/2") && out.contains("Searching a PDF without OCR works") && out.contains(" match 1 of 1"), "pdf view --print:\n{out}");
     // ADR 0511: the viewer reads only the page it shows, and says what is on screen.
     let (_, out, _) = pdf(&["view", &report, "--json", "--page", "2"]);
-    assert!(out.contains("\"pages_read\":1.0") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
+    assert!(out.contains("\"pages_read\":1") && out.contains("\"visible\":[{\"text\":\"Appendix\""), "pdf view --json:\n{out}");
     let (code, out, _) = pdf(&["grep", "--first", "the", &report]);
     assert!(code == Some(0) && !out.contains("2: "), "pdf grep --first stops after page 1:\n{out}");
     // ADR 0512: a Group 4 fax scan is read by OCR when asked for, and not with --no-ocr.
@@ -302,4 +302,28 @@ fn garlic_js_parses_and_runs_its_suites() {
         let stdout = String::from_utf8_lossy(&out.stdout);
         assert!(out.status.success(), "ail run {dir} {flag} {data}:\n{stdout}");
     }
+}
+
+/// Garlic fetches pages from `http.serve_dir` (http.serve.2): the files of
+/// `tools/garlic/testdata` served by one AIL program, read by another.
+#[test]
+fn garlic_reads_a_page_from_serve_dir() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+    let mut server = ail().args(["run", "tools/garlic/testdata/serve_dir.ail", &free.to_string()]).current_dir(&root).spawn().unwrap();
+    let url = format!("http://{free}/index.html");
+    let garlic = tool("tools/garlic/garlic.ail");
+    // The server needs a moment to bind; Garlic reports a refused connection.
+    let mut text = String::new();
+    for _ in 0..50 {
+        let out = ail().args(["run", &garlic, "--width", "60", "--print", &url]).output().unwrap();
+        text = String::from_utf8_lossy(&out.stdout).into_owned();
+        if out.status.success() && text.contains("# Garlic") {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    server.kill().unwrap();
+    server.wait().unwrap();
+    assert!(text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n"), "garlic over serve_dir:\n{text}");
 }

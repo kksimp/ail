@@ -1,0 +1,2 @@
+fn main() !
+    print(hash.sha256(fs.read_bytes(env.args()[0])?))

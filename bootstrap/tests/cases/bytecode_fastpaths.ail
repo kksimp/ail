@@ -1,0 +1,36 @@
+# Fast paths of the bytecode tier (ADR 0618): float math, list element
+# updates, push and len, and calls with `mut` arguments.
+
+fn bump(mut xs List[int], mut ys List[float], by int)
+    xs.push(by)
+    ys.push(1.5 * by.to_float())
+    xs[0] += by
+    ys[0] -= 0.25
+
+fn swap_ends(mut a List[int], mut b List[int])
+    t := a[0]
+    a[0] = b[0]
+    b[0] = t
+
+fn main()
+    mut xs := [10]
+    mut ys := [0.5]
+    for i in 1..4
+        bump(mut xs, mut ys, i)
+    print("{xs} {ys} {xs.len()}")
+    mut a := [1, 2]
+    mut b := [3]
+    swap_ends(mut a, mut b)
+    print("{a} {b}")
+    f := 2.5
+    g := 0.5
+    print("{f + g} {f - g} {f * g} {f / g} {f < g} {f >= g} {f == f} {f != g}")
+    mut zs := [1, 2, 3]
+    k := 2
+    zs[k] += zs[0] * 10 + k
+    zs[1] *= zs[2]
+    print("{zs}")
+    mut w := 1.0
+    while w < 100.0
+        w *= 1.5
+    print("{w}")

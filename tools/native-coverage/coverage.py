@@ -45,29 +45,28 @@ DIAG = re.compile(r"(error|warning)\[[^\]]+\]")
 STATUSES = ["built-match", "built-differs", "not-subset", "check-rejected",
             "backend-error", "build-error"]
 
-# Which queued lane or PR owns a blocker (from the lane briefs). Checked in order; the
-# first match names the owner. `blocker_owner` returns "unowned" when nothing matches.
-OWNERS = [
-    (r"mut. parameter", "lane 120, PR #205 (mut parameters)"),
-    (r"attribute `@|contracts|`(hash|path|random)`|`unsafe` block", "lane 174, PRs #207, #208"),
-    (r"string|\.split|\.lines|\.contains|\.join|interpolation|to_str|`==` on `str`", "lane 172, PRs #184, #204"),
-    (r"\bmaps?\b|\bsets?\b|Map\[", "lane 173, PRs #180, #197"),
-    (r"optional|if x :=|else. on a binding", "lane 175, PRs #177, #203"),
-    (r"enum|match|comprehension", "lane 179, enums and match"),
-    (r"constant ", "lane 179, non-literal constants"),
-    (r"trait|methods and generic|impl. blocks", "lane 179 (generics, PR #219), lane 120 (traits, PR #222)"),
-    (r"tensor", "lane 193, native tensors"),
-    (r"struct |fields|calling `|field `", "lane 120, structs"),
-]
+# The constructs outside the subset and their owners: the one table (ADR 0746), shared
+# with `ail explain native.subset.1`. A wording found in a message names its owner.
+SUBSET_TABLE = os.path.join(ROOT, "docs", "design", "native-subset-constructs.md")
 FOLLOWS = re.compile(r"result type|its type|must end with its result|only locals, parameters and constants")
 
 
+def subset_rows():
+    rows = []
+    with open(SUBSET_TABLE, encoding="utf-8") as f:
+        for line in f:
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if line.startswith("|") and len(cells) == 3 and cells[0] not in ("Construct",) and not cells[0].startswith("---"):
+                rows.append(cells)
+    return rows
+
+
 def blocker_owner(msg):
-    for pattern, owner in OWNERS:
-        if re.search(pattern, msg):
+    text = msg.replace("`", "")
+    for _construct, wording, owner in subset_rows():
+        if wording in text:
             return owner
     return "unowned" if not FOLLOWS.search(msg) else None
-
 
 
 def rel(path):

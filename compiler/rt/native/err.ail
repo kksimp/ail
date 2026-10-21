@@ -4,7 +4,8 @@
 ## Optionals and results (ADRs 0574-0576). An optional is a pointer or 0; a
 ## scalar is boxed in 8 bytes. A fallible function reports failure through
 ## the error slot, which holds the error's display text and is 0 otherwise;
-## the return trace is a list of ready-made `  at PATH:LINE:COL` lines.
+## the return trace is a list of ready-made `  at PATH:LINE:COL` lines. Its
+## first element is the list of context messages (err.ctx.2).
 
 ERR := 8
 TRACE := 9
@@ -12,17 +13,17 @@ TRACE := 9
 # ---- optionals ----
 
 fn box(v int) int
-    p := alloc(8)
+    p := alloc(8, KIND_ATOMIC)
     store64(p, v)
     p
 
 fn box_bool(b bool) int
-    p := alloc(8)
+    p := alloc(8, KIND_ATOMIC)
     store64(p, if b then 1 else 0)
     p
 
 fn boxf(x float) int
-    p := alloc(8)
+    p := alloc(8, KIND_ATOMIC)
     storef(p, x)
     p
 
@@ -41,12 +42,18 @@ fn unboxf(p int) float
 fn err_set(msg str, at str)
     store64(global(ERR), str_addr(msg))
     xs := list_new(8)
+    list_push(xs, list_addr(list_new(8)))
     list_push(xs, str_addr(at))
     store64(global(TRACE), list_addr(xs))
 
 ## A `?` passes the failure on: add its location to the trace.
 fn err_trace(at str)
     list_push(list_at(load64(global(TRACE))), str_addr(at))
+
+## `e? "msg"` passes the failure on with a context message (err.ctx.2).
+fn err_context(msg str)
+    xs := list_at(load64(global(TRACE)))
+    list_push(list_at(load64(load64(list_addr(xs) + 16))), str_addr(msg))
 
 fn failed() bool
     load64(global(ERR)) != 0
@@ -72,7 +79,14 @@ fn err_report()
     out_byte(10)
     xs := list_at(load64(global(TRACE)))
     n := load64(list_addr(xs))
-    mut i := 0
+    cs := list_at(load64(load64(list_addr(xs) + 16)))
+    mut j := 0
+    while j < load64(list_addr(cs))
+        out_str("  context: ")
+        out_str(str_at(load64(load64(list_addr(cs) + 16) + 8 * j)))
+        out_byte(10)
+        j += 1
+    mut i := 1
     while i < n
         out_str(str_at(load64(load64(list_addr(xs) + 16) + 8 * i)))
         out_byte(10)

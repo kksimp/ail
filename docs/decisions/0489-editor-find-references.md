@@ -48,3 +48,8 @@ key. Readability: one row per place. Speed: one `ail api` call per press.
 - Headless tests: `references_list_declaration_and_uses` and
   `reference_rows_stay_short_for_long_paths` in `tools/edit/edit.ail`.
 - `docs/design/cards/edit.md` is regenerated.
+
+## Rejected alternatives
+
+- A count in the F12 status line only (option B): rejected because the user cannot reach the places from a count, and it adds nothing F12 does not already do.
+- A regex find bar now (option C): deferred, since `std.regex` was not in the tree yet. Added later by ADR 0490.

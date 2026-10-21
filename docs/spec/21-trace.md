@@ -70,6 +70,13 @@ structural text form (trait.auto.2, strings and characters quoted), without
 calling any `to_str`: showing a value runs no user code, so it has no effects
 and can't trap. *(ADR 0266)*
 
+```ail tool=run,--watch,s,FILE expect="hi" rules=trace.val.1
+fn main()
+    mut s := "hi"
+    s = "there"
+    print(s)
+```
+
 **trace.val.2** — A value is cut to a character budget and ends in `…` when
 cut; a list, map or set that is cut says how many elements are left. The
 budget is 60 characters in trace lines and in the default trap report, and
@@ -83,10 +90,30 @@ assignment whose target is rooted in a variable called `NAME` (`NAME = e`,
 the variable's whole new value and the position of the assignment. It counts
 against the event budget (trace.run.4). *(ADR 0268)*
 
+```ail tool=run,--watch,s,FILE expect=watch: rules=trace.watch.1
+fn main()
+    mut s := "hi"
+    mut xs := [1]
+    s = "there"
+    xs.push(2)
+    xs[0] = 5
+    print(s)
+```
+
 **trace.watch.2** — A builtin mutating method (`NAME.push(x)`) is shown as
 a write to the element (trace.watch.4). A change
 made by a user function through a `mut` argument or `mut self` is shown
 (trace.watch.3). *(ADRs 0268, 0327)*
+
+```ail tool=run,--watch,xs,FILE expect=push rules=trace.watch.2
+fn main()
+    mut s := "hi"
+    mut xs := [1]
+    s = "there"
+    xs.push(2)
+    xs[0] = 5
+    print(s)
+```
 
 **trace.watch.4** — A write to one element of the watched collection is a
 watch event with the whole new value and what was written: the list methods
@@ -99,6 +126,13 @@ watch event with the whole new value and what was written: the list methods
 `"index"` or `"key"`. A `pop`, `remove_at`, `remove` or `add` that changes nothing
 is not shown. *(ADR 0347)*
 
+```ail tool=run,--watch,xs,FILE expect=set rules=trace.watch.4
+fn main()
+    mut xs := [1]
+    xs[0] = 9
+    print(xs.len())
+```
+
 **trace.watch.3** — A user function or method called with the watched variable
 (or a name that stands for it) as a `mut` argument or `mut` receiver follows it
 under the callee's own name for it: an assignment rooted in that name shows the
@@ -108,6 +142,16 @@ differs, that name (`via`). In JSON: `"frame":"Counter.bump","via":"self"`;
 in text, ` in Counter.bump (as \`self\`)` after the position, left out for the
 first frame so a plain run reads as before. A call that passes the value by
 copy (not `mut`) does not follow it. *(ADR 0327)*
+
+```ail tool=run,--watch,x,FILE expect=bump rules=trace.watch.3
+fn bump(mut n int)
+    n += 1
+
+fn main()
+    mut x := 1
+    bump(mut x)
+    print(x)
+```
 
 ## Tracing tests
 
@@ -120,16 +164,42 @@ a property test, and a run without `--trace` have no `trace` key. In the human
 form the events are printed under `FAIL`, indented, before the test's output.
 *(ADR 0326)*
 
+```ail tool=test,--trace=calls,FILE status=1 expect=adds() rules=trace.test.1
+@test
+fn adds()
+    assert_eq(1 + 1, 3)
+```
+
 **trace.test.2** — The budget (trace.run.4) applies per test. When it drops
 events, the list ends with `{"api":1,"trace":"dropped","count":N}` (text:
 `trace: N more events dropped`). Tracing never changes a test's result.
 *(ADR 0326)*
+
+```ail tool=test,--trace=calls,--trace-limit,2,FILE status=1 expect=dropped rules=trace.test.2
+fn step(n int) int
+    n + 1
+
+@test
+fn counts()
+    mut n := 0
+    for i in 0..5
+        n = step(n)
+    assert_eq(n, 99)
+```
 
 ## Trap snapshots
 
 **trace.snap.1** — A trap that ends `ail run` (err.trap.3) is reported with
 a snapshot: the source line of the trap's position, and the call stack at
 the trap. *(ADR 0267)*
+
+```ail tool=run,FILE status=1 expect=trap[type.coll.4] rules=trace.snap.1
+fn inner(xs List[int]) int
+    xs[5]
+
+fn main()
+    print(inner([1]))
+```
 
 **trace.snap.2** — The stack lists frames innermost first. Each frame names
 its function, the position it was executing (the trap for the innermost
@@ -139,11 +209,27 @@ values. At most 64 frames are kept; the rest are counted. A failed
 `requires` or `ensures` also gives the value of each name its condition
 reads. *(ADR 0267)*
 
+```ail tool=run,FILE status=1 expect=main() rules=trace.snap.2
+fn inner(xs List[int]) int
+    xs[5]
+
+fn main()
+    print(inner([1]))
+```
+
 **trace.snap.3** — The human report keeps the trap's first line
 (`FILE:LINE:COL: trap[RULE]: MESSAGE`) and is at most ten lines: the source
 line with a caret at the column, the condition's values, then one line per
 frame until the limit, then how many frames were left out. `--verbose` shows
 every kept frame and each local on its own line, at the long budget. *(ADR 0267)*
+
+```ail tool=run,FILE status=1 expect=^ rules=trace.snap.3
+fn inner(xs List[int]) int
+    xs[5]
+
+fn main()
+    print(inner([1]))
+```
 
 **trace.snap.4** — With `--json`, the trap is one JSON object on standard
 error with `"severity":"trap"`, the rule, position and message, the source
@@ -151,6 +237,14 @@ line, the condition's values, and the stack. *(ADR 0267)*
 
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
+
+```ail tool=run,--json,FILE status=1 expect="severity":"trap" rules=trace.snap.4
+fn inner(xs List[int]) int
+    xs[5]
+
+fn main()
+    print(inner([1]))
+```
 
 ## Run limits
 
@@ -161,17 +255,111 @@ run that has taken longer than `MS` milliseconds of wall-clock time, with
 happens between statements, so a single call that blocks (`sleep`, a read)
 ends only once it returns. *(ADR 0288)*
 
+```ail tool=run,--timeout,200,FILE status=1 expect=run.limit.1 rules=run.limit.1
+fn main()
+    mut n := 0
+    while true
+        n += 1
+```
+
 **run.limit.2** — `--max-memory MB` stops a run whose process uses more than
 `MB` megabytes of resident memory, with `trap[run.limit.2]`, as for run.limit.1.
 A single statement that allocates past the limit may still exhaust the machine
 first. Not available on Windows, where it is rejected before the run. *(ADR 0288)*
+
+```ail tool=run,--max-memory,16,FILE status=1 expect=run.limit.2 rules=run.limit.2
+fn main()
+    mut xs := [0]
+    while true
+        xs.push(1)
+```
 
 **run.limit.3** — `--max-steps N` stops a run that has run more than `N`
 steps, with `trap[run.limit.3]`. A step is one statement run, or one turn of
 a `while` loop. Steps count the same on every machine, so a limit found once
 reproduces the same trap. `ail test` counts per test. *(ADR 0288)*
 
+```ail tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
+fn main()
+    mut n := 0
+    while true
+        n += 1
+```
+
 **run.limit.4** — The three options take a positive whole number. Any other
 value, a missing value, or use with a command other than `run` or `test`, is
 an error with exit code 2. With none of them given, a run is not checked.
 *(ADR 0288)*
+
+```ail tool=run,--timeout,0,FILE status=2 expect=run.limit.4 rules=run.limit.4
+fn main()
+    print(1)
+```
+
+## Checked examples for the run and value rules
+
+Each block runs `ail run` with the options on its fence (trace.run.1-5, trace.val.2).
+
+```ail tool=run,--trace=calls,FILE expect=call rules=trace.run.1
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+```
+
+```ail tool=run,--trace=calls,FILE expect=returned rules=trace.run.2
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+```
+
+```ail tool=run,--trace=effects,FILE expect=effect rules=trace.run.3
+use std.time
+
+fn main()
+    t := time.now_ms()
+    print(t > 0)
+```
+
+```ail tool=run,--trace=calls,--trace-limit,2,FILE expect=dropped rules=trace.run.4
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(2))
+    print(double(3))
+    print(double(4))
+```
+
+```ail tool=run,--trace=all,FILE expect=done rules=trace.run.5
+fn main()
+    print("done")
+```
+
+```ail tool=run,--trace=calls,FILE expect=… rules=trace.val.2
+fn describe(s str) int
+    s.len()
+
+fn main()
+    print(describe("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"))
+```
+**run.limit.5** — A native executable (`ail build`) reads the environment at
+start: `AIL_TIMEOUT_MS` and `AIL_MAX_MEMORY_MB`, each a positive whole number.
+`ail build --timeout MS --max-memory MB` bakes in defaults that the
+environment overrides. An invalid value ends the program with exit code 2
+before `main` runs. With neither set, the program is not checked. Windows
+executables have no native build yet. *(ADR 0728)*
+**run.limit.6** — A native program that goes past a limit prints its
+output so far, then `trap[run.limit.1]` or `trap[run.limit.2]` with the same
+message as `ail run`, and exits with status 1. The line has no `FILE:LINE:COL`
+prefix and no snapshot, because the native program has no statement to point at.
+The memory limit is checked when the heap takes a new chunk and counts the
+heap bytes in use. The time limit is checked every 256 allocations and when
+the heap takes a chunk, so a loop that never allocates is not stopped, and the
+limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
+`gettimeofday`. *(ADR 0726, ADR 0727)*

@@ -14,8 +14,20 @@ Chapter key: `json`
 `key str` and `value Json`. An object keeps its members in document order,
 and duplicate keys are kept. *(ADR 0161)*
 
+```ail rules=json.type.1
+fn main()
+    print(Json.Arr([Json.Bool(true), Json.Str("x")]).to_text())
+```
+
 **json.err.1** — `error struct JsonError` has `at int`, the 0-based character
 offset of the problem, and `message str`. *(ADR 0161)*
+
+```ail rules=json.err.1
+fn main()
+    _ := parse_json("[1,]") else err
+        print(err.at)
+        return
+```
 
 ## Parsing and printing
 
@@ -26,19 +38,47 @@ unterminated strings, invalid escapes, and unpaired surrogate escapes. A
 `😀` pair decodes to one character. Every number is a `float`.
 All errors report the first problem found. *(ADR 0161, ADR 0162)*
 
+```ail rules=json.parse.1
+fn main()
+    _ := parse_json("[1,]") else err
+        print(err.message)
+        return
+```
+
 **json.print.1** — `Json.to_text(self) str` gives compact text: no spaces,
 members in document order, `"`, `\`, `\n`, `\r`, `\t`, `\b`, `\f` escaped by
 name, other control characters as `\u00XX`, everything else as itself. A
-number prints as the `float` does (`1.0`, `2.5`). The same value always gives
-the same text. *(ADR 0161)*
+number prints as the `float` does (`2.5`), except that a whole number of
+magnitude below 1e15 prints without a fraction (`3`, `-12`, `0`; the sign of
+a zero is dropped), so an `int` field derived through `ToJson` reads back
+as an integer in other languages. The same value always gives the same text.
+*(ADR 0161, ADR 0631)*
+
+```ail rules=json.print.1
+fn main()
+    v := parse_json("\{\"a\": [1, true]}") else return
+    print(v.to_text())
+```
 
 **json.parse.2** — A number whose value doesn't fit a finite `float`
 (`1e999`) fails with the message `number out of range` at its first
 character, so a `Json.Num` read from text is always finite. *(ADR 0464)*
 
+```ail rules=json.parse.2
+fn main()
+    _ := parse_json("1e999") else err
+        print(err.message)
+        return
+```
+
 **json.print.2** — `to_text` prints a `Num` that is infinite or NaN (only a
 program can build one) as `null`, so the text it gives always parses again
 and `parse_json(j.to_text())?.to_text() == j.to_text()`. *(ADR 0464)*
+
+```ail rules=json.print.2
+fn main()
+    print(Json.Num(1.0 / 0.0).to_text())
+```
 
 ## Querying
 
@@ -50,6 +90,17 @@ payload of the matching variant, and `none` for any other. They chain with
 `?` in a function that returns an optional, or before an `else`
 (`err.prop.4`). *(ADR 0161)*
 
+```ail rules=json.query.1
+fn main()
+    doc := parse_json("\{\"id\": \"t1\"}") else return
+    id := doc.get("id") else return
+    print(id.as_str() else "none")
+    gone := doc.get("missing") else
+        print("no member")
+        return
+    print(gone.as_str())
+```
+
 **json.query.2** — `j.str(key)`, `j.num(key)`, `j.bool(key)` and
 `j.arr(key)` are `j.get(key)?.as_str()` and so on: member `key` when it holds
 that variant, and `none` otherwise. *(ADR 0254)*
@@ -58,13 +109,13 @@ that variant, and `none` otherwise. *(ADR 0254)*
 value of the first member named `key`, or adds the member at the end. It traps
 (`err.model.2`) unless `j` is an object. *(ADR 0254)*
 
-```ail
+```ail rules=json.query.2,json.query.3
 fn main()
     mut doc := parse_json("\{\"id\": \"t1\", \"hours\": 2}") else return
     print(doc.str("id"))       # t1
     print(doc.str("hours"))    # none
     doc.set("done", Json.Bool(true))
-    print(doc.to_text())       # {"id":"t1","hours":2.0,"done":true}
+    print(doc.to_text())       # {"id":"t1","hours":2,"done":true}
 ```
 
 **json.query.4** — `j.as_int()` is the number when it has no fraction, and
@@ -79,7 +130,39 @@ tied to a place in a text. `j.non_null()` is `none` for `null`, else `j`;
 `j.variant_name()` is a string, or the string member `kind` of an object.
 *(ADR 0308, ADR 0343)*
 
+```ail rules=json.query.4
+fn main()
+    v := parse_json("\{\"n\": 7}") else return
+    print(v.int("n") else 0)
+```
+
 ## Derives
+
+**json.query.5** — `j.text(key str, default str) str` is the text of member
+`key` when it holds a string, and `default` otherwise: when the member is missing,
+or holds another kind. It never fails. *(ADR 0732)*
+
+**json.query.6** — `j.flag(key str, default bool) bool` is the same for a bool
+member: `j.bool(key)` or `default`. *(ADR 0732)*
+
+```ail rules=json.query.5,json.query.6
+fn main() !
+    doc := parse_json("\{\"name\": \"ada\", \"admin\": true}")?
+    print(doc.text("name", "anon"))       # ada
+    print(doc.text("email", "none"))      # none
+    print(doc.flag("admin", false))       # true
+    print(doc.flag("active", false))      # false
+```
+
+**json.lines.1** — `parse_json_lines(text str) List[Json]` is each line of `text`
+that parses as one JSON document, in order. A line that doesn't parse is skipped,
+so a log with some broken lines still gives the good ones. *(ADR 0732)*
+
+```ail rules=json.lines.1
+fn main()
+    docs := parse_json_lines("1\nnot json\n\"two\"\n")
+    print(docs.len())                     # 2
+```
 
 **json.derive.1** — `trait ToJson` has `fn to_json(self) Json`, with the
 generator `derive_to_json` (`ct.derive.1`). `str`, `int`, `float`, `bool`,
@@ -96,7 +179,8 @@ bounds on the `impl`: `impl ToJson for Pair[A ToJson, B ToJson]`.
 `fn from_json(j Json) Self ! JsonError` (`trait.assoc.1`); its generator
 `derive_from_json` fills an empty `impl` with it, and `str`, `int`,
 `float`, `bool`, `Json` and `List[T FromJson]` implement it. It is called as
-`T.from_json(j)` (`trait.assoc.4`), in generic code too (`trait.assoc.2`). A
+`T.from_json(j)` (`trait.assoc.4`), in generic code too (`trait.assoc.2`); a
+list is read with `List[U].from_json(j)` (ADR 0748). A
 struct reads each field from the member of its name with `need` and the
 `need_*` of its type, so a missing or mistyped member fails with its
 message; a field of another type `U` calls `U.from_json`, which `U` derives
@@ -116,7 +200,7 @@ the document root: `missing items[2].kind` for a missing member, and
 `Box` `` for the others. `e.under(part)`, with `part` a member name or
 `[i]`, puts a `JsonError` under one more step of its path. *(ADR 0343)*
 
-```ail
+```ail rules=json.derive.1,json.derive.2,json.derive.3
 struct Item
     id str
     hours float
@@ -146,3 +230,8 @@ fn main()
 `Json`, `JsonMember`, `JsonError`, `parse_json`, `ToJson` or `FromJson`. A
 program that declares one of those names itself gets its own and none of the
 module's. *(ADR 0162, ADR 0308)*
+
+```ail rules=json.prelude.1
+fn main()
+    print(Json.Null.to_text())
+```

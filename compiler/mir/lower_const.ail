@@ -22,7 +22,7 @@ struct GlobalConst
     file int
 
 ## The runtime's global slots (native-abi.md §5); the program's start after.
-pub RT_GLOBALS := 16
+pub RT_GLOBALS := 64
 
 ## Give `key` the next global slot.
 fn Lower.new_global(mut self, key str, t Ty) int

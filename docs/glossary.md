@@ -8,6 +8,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **ABI** | Application Binary Interface: calling conventions, data layout, and symbol rules that let separately compiled code interoperate. Windows x64 and the System V ABI (Linux, macOS) differ. |
 | **Absent** | The prelude error `Absent` ("a value is absent") that `?` on a `none` fails with in a function whose errors are inferred, or in a test (ADR 0279, `err.prop.5`). |
 | **Ad hoc signature** | A code signature with no certificate: SHA-256 hashes of the file's pages in a code directory. Apple Silicon runs only signed executables; `ail build` signs Mach-O files this way itself (ADR 0389). |
+| **Address folding** | Folding a constant offset into a memory access, so `s[bi + 3]` loads directly instead of copying the index, adding, then loading ([ADR 0625](decisions/0625-address-folding.md)). |
 | **ADR** | Architecture Decision Record: one file per design decision in `docs/decisions/`. See ADR 0001. |
 | **AEAD** | Authenticated encryption with associated data: a cipher that encrypts and authenticates in one step and refuses to decrypt on a bad tag. TLS 1.3 uses ChaCha20-Poly1305 and AES-GCM (ADR 0366). |
 | **Agent-tool corpus** | The benchmark programs of the kind an AI agent writes when operating a computer (`logscan`, `tasks`, `build`, and since ADR 0280 `snapdiff` and `csvreport`), each with a Python twin, measured for tokens and speed. See ADRs 0217 and 0218. |
@@ -33,9 +34,12 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Capability** | An effect that reaches an ambient resource: `fs`, `env`, `proc`, `clock`, `random`, `net`, `ui`. `ail run --deny` refuses a program whose `main` reaches a denied one (ADR 0163, ADR 0165). |
 | **Capability grant** | `caps LIST` on a manifest line: the capabilities a dependency (`dep` line) or the package itself (`package` line) may reach, checked at compile time; a `dep` line without one grants none (ADR 0232). |
 | **Budget (token budget)** | `--budget N` on any command: about N estimated tokens of its output, most severe records first, then a note counting the rest with a `--from K` handle to continue (ADR 0394). |
+| **Build cache** | `ail build` keeps each finished executable under a SHA-256 of its inputs and copies it when the same inputs come again; `--no-cache` skips it (native.build.5, ADR 0655). |
 | **Card (program card)** | `ail api --card`: one Markdown page of a program or package (entry, tests, manifest, examples, each module's signatures), trimmed to a token budget. The language card is the same idea for the language. See ADRs 0310 and 0311. |
+| **Card level** | One of the fixed levels to which `ail api --card` trims a card, from full docs down to names; the middle level keeps signatures without docs ([ADR 0703](decisions/0703-card-middle-trim-level.md)). |
 | **Channel** | A bounded queue between tasks, `Channel[T](capacity)`: `send` waits while it is full, `recv` waits while it is empty and gives `none` once it is closed and empty; `for v in ch` receives until then (ADR 0100, ADR 0188, ADR 0300). |
 | **Child** | A process started with `proc.start`: a unique value with a process id and three `Channel[str]` streams (`stdin`, `out`, `err`); `proc.wait(move c)` or `proc.kill(move c)` ends it (ADRs 0424–0428). |
+| **Chunked transfer** | The HTTP framing that sends a body in sized chunks when its length is not known up front; `std.net` uses it for request bodies ([ADR 0637](decisions/0637-http-persistent-connections-and-timeouts.md)). |
 | **Closing line** | In a multi-line string, the line holding the closing `"""`. When only spaces precede the delimiter, they count toward the common indentation and the line adds no text, not even a final newline (ADR 0135). |
 | **Coherence** | The guarantee that a type has at most one implementation of a given trait across a whole program (OQ-036). |
 | **Colorless tasks** | Concurrency where any function may block and the runtime suspends the task; no async/await marking (ADR 0095). |
@@ -48,6 +52,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Constant** | A top-level `NAME := expr` whose value is a constant expression, computed at compile time (before `main` in the bootstrap); visible in the whole module (ADR 0132, ADR 0225). |
 | **Constant expression** | A constant's value: literals, other constants, collection and struct literals, operators, and calls of compile-time-safe functions; it can't hold a failure (`mod.const.2`, `ct.const.*`, ADR 0132, ADR 0225). |
 | **Constraint (bound)** | A trait a generic type parameter must implement, written inline as `[T Trait]` (ADR 0074). |
+| **Content encoding** | The HTTP `Content-Encoding` of a response body (gzip or deflate). `std.net` asks for it with `Accept-Encoding` and decodes the body itself ([ADR 0717](decisions/0717-transparent-content-encoding.md)). |
+| **Context message** | The text given to a `?` as `e? "msg"`; a failing run prints it as `context:` lines after `error:`, innermost first ([ADR 0701](decisions/0701-native-error-context.md)). |
 | **Contract** | `requires` and `ensures` lines under a function's signature: what callers must satisfy and what the function promises, checked at run time (ADR 0210). |
 | **Cooperative wait** | A network call that lets the other ready tasks run while it waits, so a client and a server in one program make progress (`std.net.8`, ADR 0420). |
 | **Copy-on-write (COW)** | Values share storage until one of them is mutated, at which point that one gets its own copy. Unobservable to programs (`own.val.2`). |
@@ -55,6 +61,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Deadlock** | Every unfinished task is blocked, so none can continue. The program traps with `conc.task.7` instead of hanging (ADR 0186). |
 | **`defer`** | `defer S` runs statement `S` when the enclosing block exits by any path, including a trap; with the block's cleanups, last first (ADR 0066, ADR 0191). |
 | **Date, DateTime** | `std.time.date` types: a calendar day, and an instant with its zone and calendar fields. A duration is an `int` of milliseconds; a zone is a `str` (`"UTC"`, `"+05:30"` or an IANA name) (`std.date.1–15`, ADRs 0447–0451). |
+| **Definitional rule** | A spec rule marked `[definitional]`: it describes the language rather than a behaviour the code must implement, so the rules audit does not require a citation ([ADR 0673](decisions/0673-definitional-rule-marker.md)). |
 | **DEFLATE** | The compressed format of RFC 1951 inside gzip and zip, written and read in-house by `std.compress` (ADR 0445). |
 | **Delegated decision** | A routine design decision made by the AI using the designer's priority order (ADR 0076). |
 | **Dependency** | A package another package declares with a `dep` line in its `ail.pkg` and imports by that name (`use geo.shapes`) (ADR 0231). |
@@ -65,7 +72,6 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Diverging statement** | A statement that never completes normally: `return`, `break`, `continue`, `unreachable(msg)`, a `while true` with no `break`, or a branch whose arms all diverge. A block ending in one fits any expected type (ADR 0139). |
 | **Doc comment** | A run of `##` lines directly above a declaration, with no blank line between; it documents that declaration (lex.comment.2, ADR 0152). |
 | **Doc example** | A block fenced `ail` in a `##` doc comment, run by `ail test` as the test `doc:NAME` (ADR 0200). |
-| **Drag race** | A head-to-head benchmark: the same small program in AIL, idiomatic C and tuned C, built and run automatically with identical outputs checked (ADR 0030, ADR 0036). |
 | **`Drop`** | The prelude trait whose `fn drop(mut self)` is a unique type's cleanup; it runs once when the value's last owner goes out of scope and is never called directly (ADR 0191). |
 | **Effect set** | What a function may do to the world outside its arguments: `io`, `fail`, `mutates`, `unsafe`, `spawn`, plus capabilities. Inferred over the call graph, never written; shown by `ail effects` (ADR 0163). |
 | **Error message** | A string written after an error struct's name or an error variant (`BadName(text str) "bad name {text}"`); it is the type's display text and defines its `impl ToStr` (ADR 0278, `err.msg.1`). |
@@ -73,6 +79,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Error set** | The closed union of error types a function can fail with. Inferred from the body for non-public functions (`!T`), explicit at package APIs (`T ! E`). See ADR 0046. |
 | **Error type** | A struct or enum declared with `error` (`error enum ParseError`). Only error types can be errors (ADR 0120). |
 | **Escape analysis** | Compiler analysis that determines whether a value can outlive or leave its creating scope. A value that does not escape can be stack-allocated. |
+| **Cookie jar** | `std.net.jar`: stores the `Set-Cookie` lines of responses and gives the `Cookie` header for a URL by RFC 6265 domain, path, expiry and `Secure` rules; `Jar.request` carries cookies through redirects (`std.net.20`, `std.net.21`, ADR 0638). |
+| **Body** | A `net.Body` from `net.open`: the response head is read and the body is left on the connection, read with `read_bytes(max)` until it gives no bytes (`std.net.25`, ADR 0716). |
 | **Exchange** | A request the `std.net` server has received, with the handle to answer it: `ex.request` and `ex.respond(response)` (`std.net.9`, `std.net.11`, ADR 0419). |
 | **Exclusivity** | The rule that two `mut` arguments of one call can't overlap. A read-only argument that overlaps a `mut` one is passed as a copy (ADR 0064, ADR 0119). |
 | **Failure path** | A place in a function where it fails, passes a failure on or handles one: `?` on a result, `else` on a result, or a `return` of an error. `ail check --errors` lists them (`err.paths.1`, ADR 0286). |
@@ -83,8 +91,12 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Format specification** | The `[[fill]align][width][.decimals][x]` after the `:` in `"{x:spec}"` (ADR 0173). |
 | **Front-end allocator** | The global allocator `ail check`, `ail api` and `ail effects` use: small blocks reused by 16-byte size class, larger ones bumped from one reserved region with huge pages; other commands use the system allocator. `AIL_SYSTEM_ALLOC=1` turns it off. See ADR 0332. |
 | **Function value** | A declared function used as a value, of type `fn(A, B) R`, that can be stored, passed and called; no closures (`type.fn.1-3`, ADRs 0455, 0456). |
+| **Fused instruction** | A bytecode instruction that does several steps of a loop body at once, cutting dispatch cost ([ADR 0619](decisions/0619-bytecode-calls-loops-and-fusion.md)). |
 | **Fuzz harness** | `tools/fuzz/run.sh`: seeded, well-typed programs, edge-value probes and token-level mutants, run through `ail` with crash, determinism, `fmt`, `api` and contract-differential checks. A crash becomes a regression case (ADRs 0269–0271). |
+| **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Garlic** | The web browser written in AIL (`tools/garlic`): text mode first, with a page model for agents. See [garlic-browser.md](design/garlic-browser.md). |
+| **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
+| **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
 | **Module fuzzer** | A template program in `bootstrap/tests/fuzz/modules/` that `fuzz_modules.rs` fills with seeded adversarial inputs (text, JSON, hex bytes, regexes, dates, HTTP) and runs on both tiers and, once it exists, natively (ADR 0461). |
 | **Drag race** | `tools/perfbench/run.sh --all`: min and median wall time of AIL, native AIL, `clang -O2`, `gcc -O2` and Python on twin programs, with ratios (ADR 0460). |
@@ -118,7 +130,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Managed reference** | A reference to an object whose storage is managed by the compiler or runtime, as opposed to a raw pointer. See spec `plat.ptr.3`. |
 | **Manifest** | A package's `ail.pkg` file: its `package` line and one `dep` line per dependency (ADR 0230). |
 | **MIR** | Mid-level IR: per body instance, a control-flow graph in SSA form with explicit allocations, copies, traps, dispatch and effects; the unit of the query compiler; internal and unversioned (ADR 0222, ADR 0223). |
-| **Mistakes corpus** | `bootstrap/tests/mistakes/`: small programs that each hold one plausible AI mistake, with the expected rules and what `ail fix` makes of them (`gram.help.2`, ADR 0262, [diagnostics-audit.md](design/diagnostics-audit.md)). |
+| **Mistakes corpus** | `bootstrap/tests/mistakes/`: small programs that each hold one plausible AI mistake, with the expected rules and what `ail fix` makes of them (`gram.help.2`, [ADR 0262](decisions/0262-report-foreign-syntax-once-with-help.md), [diagnostics-audit.md](design/diagnostics-audit.md), [ADR 0646](decisions/0646-mistakes-corpus-round-two.md), [ADR 0648](decisions/0648-round-two-fix-rules-and-the-corpus-target.md)). |
 | **Module** | A directory of `.ail` files sharing one namespace (ADR 0097). |
 | **Monomorphisation** | Compiling a generic function once per set of type arguments, so each instance runs with concrete types. The compiler chooses per instance between specialising and sharing code (ADR 0080). |
 | **Move** | Handing a value to a new owner; the old binding can't be used afterwards on any path. Unique values move on binding, assignment, return and into fields; any value moves as a `move` argument (ADRs 0068, 0190); a `move self` method moves its receiver (ADR 0317). |
@@ -127,6 +139,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
 | **Native subset** | The constructs the native backend compiles (native.subset.1): free functions over numbers, string literals and lists of numbers; anything else is reported before code is made (ADR 0384). |
+| **Native test runner** | `ail test --native`: builds each `@test` function natively and checks its verdict against the interpreter, which is the oracle ([ADR 0679](decisions/0679-native-test-runner.md)). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **net.serve** | The capability to listen for connections, held in addition to `net` (`std.net.14`, ADR 0422). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
@@ -140,6 +153,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Page model** | Garlic's agent-facing view of a page: each perceivable element's role, accessible name and the cells it was drawn in, as `--json` (api 1). See [garlic-browser.md](design/garlic-browser.md). |
 | **`par for`** | A `for` loop with an assertion that its iterations are independent, for what the checker can't prove; provable conflicts are still errors (`conc.par.5`, ADR 0237). |
 | **`par for` comprehension** | `[f(x) par for x in xs]`: a list whose elements are computed on the thread pool, in order, with the sequential result (`conc.par.12`, ADR 0302). |
+| **Peephole** | A small rewrite of adjacent machine or bytecode instructions into a cheaper form ([ADR 0623](decisions/0623-branch-and-codegen-peepholes.md)). |
 | **PGO** | Profile-Guided Optimisation: optimising using measurements from real runs. |
 | **Pike VM** | The matcher of `std.regex`: one thread per program position stepped across the text once, so every pattern runs in time proportional to pattern size times text length (`std.regex.4`, ADR 0438). |
 | **Pinning** | Preventing the GC from moving an object, e.g. while foreign code holds its address. |
@@ -147,6 +161,15 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Poisoned lock** | A synchronisation primitive whose holder trapped. Later users get an error instead of possibly inconsistent state (ADR 0047). |
 | **Pooled task** | A spawned task whose function touches no handle and has no ordering effect; the interpreter runs it on its own thread outside the scheduler (`conc.par.10`, ADR 0273). |
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
+| **SameSite** | The cookie attribute (`Strict`, `Lax` or `None`) that limits which cross-site requests carry the cookie; the cookie jar honours it ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
+| **Spill** | Storing a value in memory because no register is free for it; the allocator spills the value cheapest to keep in memory ([ADR 0624](decisions/0624-loop-weighted-spill-choice.md)). |
+| **`std.args`** | The standard module for flags, options and positional arguments, with generated help ([ADR 0627](decisions/0627-std-args.md)). |
+| **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
+| **`std.log`** | The standard module for leveled messages on standard error ([ADR 0628](decisions/0628-std-log.md)). |
+| **Stderr capture** | `ail test` collects a test's `io.eprint` output and shows it only under a failing test's `FAIL` line ([ADR 0693](decisions/0693-test-captures-stderr.md)). |
+| **Typed fast path** | A bytecode instruction specialised to the operand types the compiler knows, which skips the checks the general path makes ([ADR 0618](decisions/0618-bytecode-typed-fast-paths.md)). |
+| **Replay** | Running a program again with the same inputs and thread schedule so a failure reproduces exactly. Property tests print the seed that replays a failing case (ADR 0199); random schedule testing reproduces from its seed on every target (ADR 0322). |
+| **Stack trace** | The chain of calls from the point of a trap outward. A trap's diagnostic includes it (ADR 0047). |
 | **`unsafe` block** | `unsafe` and an indented block: the only place an unsafe operation (`unsafe fn` call, later C calls and raw pointers) is allowed. A package may contain one only if its `ail.pkg` says `unsafe allow` (`unsafe.block.1–5`, ADR 0430). |
 | **`extern c fn`** | A C function declared with a signature and no body, optionally with its library: `extern c "libm" fn hypot(a float, b float) float`. Calling it is unsafe; the interpreter loads the library on first call (`ffi.decl.2`, `ffi.load.1–3`, ADR 0431). |
 | **Raw pointer** | `*T`: an address with no ownership, for C interop. Copying one is safe, using one (`read`, `write`, `offset`) is `unsafe` (`unsafe.ptr.1–6`, ADRs 0433, 0435). |
@@ -211,6 +234,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Trap stub** | Code at the end of a native function that a failed check branches to; it calls `rt.trap` with the check's kind, operands and constant source text (ADR 0385). |
 | **Trapped** | The prelude error `Trapped { rule, message }` that `Task.wait()` fails with when the task trapped (ADR 0187). |
 | **TSO** | Total Store Order: x86's relatively strong memory-ordering model. |
+| **Table object** | The native runtime's `Map` or `Set`: an insertion-ordered entry array plus an open-addressing hash index, one allocation per table (ADR 0568). |
 | **Type argument inference** | Working out a generic call's type arguments from its arguments and expected type (ADR 0129). |
 | **Typed hole** | `todo` written where code isn't finished: it takes the expected type, the checker warns with what it needs and the names in scope, and running it traps (ADR 0147). |
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |

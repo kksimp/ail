@@ -37,3 +37,8 @@ cheaper than own-line.
   suppressing warnings, FFI names). Features that change ownership or
   semantics stay keywords (`unique`, `mut`, `move`).
 - The set of standard attributes is defined per feature.
+
+## Rejected alternatives
+
+- Keyword modifiers (`inline fn hash`): 17.2 tokens against 18.2 for the same-line attribute. Rejected because a growing set of modifier keywords is harder to recognise than one `@` mechanism, and `unique`, `mut` and `move` stay as keywords for ownership.
+- Own-line attributes (`@inline` on its own line): 19.2 tokens against 18.2 for the same-line form, so the chosen layout is one token cheaper. The formatter still moves an attribute to its own line when a line is too long.

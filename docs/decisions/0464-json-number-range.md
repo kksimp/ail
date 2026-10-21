@@ -32,3 +32,8 @@ the module prints must be one too.
 
 Option A. Test: `bootstrap/tests/cases/json_number_range.ail`. Criterion **AI
 understanding**: a round trip that always holds needs no caveat in the docs.
+
+## Rejected alternatives
+
+- Keeping infinity and printing it as `1e999` (option B): rejected because a value that is not a float would come back as one, and `Num(NaN)` still needs an answer.
+- A parse failure only (option C): rejected because a program can still build `Json.Num(inf)`, and its text would not parse.

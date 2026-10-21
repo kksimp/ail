@@ -1,0 +1,60 @@
+## Property tests for the night's round-two laws (lane 248): JSON whole
+## numbers, Map.top order, regex group nesting, and cookie jar round trips.
+## Run with `ail test` (the harness uses the default 100 cases).
+use std.net
+use std.net.jar
+use std.regex
+
+@test fn json_whole_number_prints_without_fraction(n int)
+    if n > 1000000000000000 or n < -1000000000000000
+        return
+    j := parse_json("{n}") else return
+    assert_eq(j.to_text(), "{n}")
+
+@test fn json_number_text_is_a_fixed_point(n int)
+    if n > 1000000000000000 or n < -1000000000000000
+        return
+    j := parse_json("{n}") else return
+    back := parse_json(j.to_text()) else return
+    assert_eq(back.to_text(), j.to_text())
+
+@test fn map_top_is_ordered_by_value(keys List[str], n int)
+    mut counts := Map[str, int]()
+    for k in keys
+        counts[k] += 1
+    take := if n < 0 then 0 else n
+    top := counts.top(take)
+    assert_eq(top.len(), if take < counts.len() then take else counts.len())
+    for i in 0..top.len() - 1
+        assert_eq(counts[top[i]] >= counts[top[i + 1]], true)
+
+@test fn group_all_groups_lie_inside_their_match(text str)
+    re := regex.compile("(\\w+)@(\\w+)") else return
+    found := regex.find_all(re, text)
+    users := regex.group_all(re, text, 1)
+    assert_eq(users.len(), found.len())
+    for i in 0..found.len()
+        assert_eq(found[i].text.contains(users[i]), true)
+        assert_eq(found[i].text.starts_with(users[i]), true)
+
+@test fn cookie_value_round_trips_on_its_host(name str, value str)
+    if name == "" or value == "" or name.len() > 20 or value.len() > 40
+        return
+    tok := regex.compile("^[A-Za-z0-9]+$") else return
+    if regex.find_all(tok, name).len() != 1 or regex.find_all(tok, value).len() != 1
+        return
+    url := "http://www.shop.test/"
+    mut j := jar.new()
+    assert_eq(j.set_cookie(url, "{name}={value}"), true)
+    assert_eq(j.value(url, name) else "", value)
+    assert_eq(j.header(url).contains("{name}={value}"), true)
+
+@test fn host_only_cookie_is_not_sent_to_a_subdomain(name str, value str)
+    if name == "" or value == "" or name.len() > 20 or value.len() > 40
+        return
+    tok := regex.compile("^[A-Za-z0-9]+$") else return
+    if regex.find_all(tok, name).len() != 1 or regex.find_all(tok, value).len() != 1
+        return
+    mut j := jar.new()
+    assert_eq(j.set_cookie("http://www.shop.test/", "{name}={value}"), true)
+    assert_eq(j.header("http://sub.www.shop.test/").contains("{name}={value}"), false)

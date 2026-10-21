@@ -79,9 +79,10 @@ scripts run after it is parsed, with external scripts fetched first, a
 budget of 1 s of virtual time and 5,000,000 steps, and the real time as the
 clock. Their changes are replayed into Garlic's tree. A navigation a
 script asks for, or else a `<meta http-equiv=refresh>` outside `<noscript>`,
-is followed, up to 5 hops. `jsdom/cookies.ail` is the cookie jar: cookies
-from `Set-Cookie` and `document.cookie` are sent back to their site (no
-paths, `Secure` or `SameSite` yet). `--no-js` skips scripts, and then a
+is followed, up to 5 hops. `std.net.jar` (ADR 0638) is the cookie jar: cookies
+from `Set-Cookie` and `document.cookie` are sent back by domain, path and
+`Secure` (`SameSite` is in the jar; Garlic does not pass the initiating page
+yet). `--no-js` skips scripts, and then a
 refresh inside `<noscript>` is followed too.
 
 ```sh
@@ -365,6 +366,27 @@ call, and a JavaScript loop step takes about 30 of them: a
 0.1 s), and loading acorn takes 6.6 s. Arithmetic on two numbers and blocks
 without declarations have fast paths. Running pages at speed needs the
 bytecode compiler (slice 4) and AIL's native backend.
+
+A profile (2026-10-21, `--trace=calls` counts and `AIL_BYTECODE_STATS=2`)
+shows no single hot spot. An expression statement such as `a;` makes six
+`eval` calls, three `lookup` calls, two `exec`/`exec_in`/`tick` calls and
+about ten others, and each costs about the same. Measured per loop step, a
+local read adds 8 µs, a call 22 µs, a method call 32 µs, and `push` 28 µs.
+The step counter is under 1 µs, so is the per-iteration scope copy, and
+so are the walker hand-offs (`.get` on a field reached through a `ref`
+hands off, at about 70 ns each). Two engine changes would cut the AIL calls
+per operation:
+
+- Resolve each name to a scope depth and slot at parse time, so that
+  `lookup` doesn't search maps up the chain.
+- Compile function bodies to a flat instruction list, so that `exec` and
+  `eval` don't recurse for each node.
+
+The larger step is native code. On 2026-10-21, `ail build tools/garlic/js`
+reports 1,324 constructs outside the native subset: `?` 342, `==` on `str`
+174, string interpolation 107, optionals as parameters and indexes, and
+string methods. These are the same groups the native lanes are closing for
+self-compilation.
 
 ## Notes on writing it in AIL
 

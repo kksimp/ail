@@ -1,0 +1,5 @@
+use std.time.date
+
+fn main()
+    a := date.Date(2026, 10, 20)
+    print(a - "2026-10-01")

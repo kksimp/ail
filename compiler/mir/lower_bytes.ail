@@ -24,7 +24,7 @@ fn Lower.bytes_index(mut self, l Val, index ast.Expr, pos ast.Pos) Val?
     seal(fail)
     cur = fail
     mut t := inst(-1, "trap", [i.id, n])
-    t.imm = 11
+    t.imm = 12
     t.site = site("type.bytes.3", "bounds", "", pos)
     emit_void(t)
     finish(unreachable_term())
@@ -56,7 +56,7 @@ fn Lower.bytes_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool
     call("rt.note_len", [n], Ty.Unit)
     dots := if inclusive and hi != none then "..=" else ".."
     mut t := inst(-1, "trap", [a, b])
-    t.imm = 12
+    t.imm = 13
     t.name = dots
     t.site = site("type.bytes.4", "slice", dots, rpos)
     emit_void(t)

@@ -1,0 +1,7 @@
+fn main()
+    data := b"abc"
+    mut count := 0
+    for ch in data
+        if ch == 'a'
+            count += 1
+    print(count)

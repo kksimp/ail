@@ -1,0 +1,29 @@
+## Parse `[-v] [--out FILE] INPUT` by hand.
+fn main() !
+    words := env.args()
+    mut verbose := false
+    mut out := "a.txt"
+    mut input := ""
+    mut i := 0
+    while i < words.len()
+        w := words[i]
+        i += 1
+        if w == "-v" or w == "--verbose"
+            verbose = true
+        elif w == "--out" or w == "-o"
+            if i >= words.len()
+                io.eprint("--out needs a value")
+                io.exit(2)
+            out = words[i]
+            i += 1
+        elif w.starts_with("--out=")
+            out = w.slice(6, w.len())
+        elif w.starts_with("-")
+            io.eprint("unknown option {w}")
+            io.exit(2)
+        else
+            input = w
+    if input == ""
+        io.eprint("usage: tool [-v] [--out FILE] INPUT")
+        io.exit(2)
+    print("{verbose} {out} {input}")

@@ -51,3 +51,8 @@ functions. UTC and fixed offsets work on every target.
 - Cited stub in `std.tz.3`; Linux and macOS are tested in lockstep.
 - Leap-second ("right/") tables are not read; time is POSIX seconds.
 - The self-hosted checker lists `tz` among the standard modules.
+
+## Rejected alternatives
+
+- Embedding the database in the toolchain (option B): rejected because the copy goes stale and must be released, and the rules change several times a year.
+- A crate such as `chrono-tz` or `tz-rs` (option C): rejected because it adds an external dependency for about 300 lines (ADR 0009), and one more thing to remove before the toolchain is free of Rust.

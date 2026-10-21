@@ -42,7 +42,10 @@ pub SIZED := ["i8", "i16", "i32", "u8", "u16", "u32", "u64", "f32"]
 pub CONC_TYPES := ["Task", "TaskGroup", "Channel", "Mutex", "Atomic"]
 
 ## The attributes the bootstrap knows (test.attr.1).
-pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated"]
+pub KNOWN_ATTRS := ["test", "pure", "inline", "deprecated", "allow"]
+
+## The warnings `@allow` can name (gram.attr.5).
+ALLOWABLE := ["expr.match.3"]
 
 ## The standard modules (std.use.1), sorted.
 pub STD_MODULES := [
@@ -65,7 +68,15 @@ pub STD_MODULES := [
 ]
 
 ## The standard modules written in AIL (std.ui.19).
-pub AIL_STD_MODULES := ["std.net.http", "std.time.date", "std.ui.widgets"]
+pub AIL_STD_MODULES := [
+    "std.args",
+    "std.csv",
+    "std.log",
+    "std.net.http",
+    "std.net.jar",
+    "std.time.date",
+    "std.ui.widgets",
+]
 
 ## Positions from here on are the prelude's.
 pub PRELUDE_LINE := 1073741824

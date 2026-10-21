@@ -54,3 +54,8 @@ kernels (the JPEG inverse DCT already runs as a matrix product).
   RGB bitmap joins it when a colour user needs one.
 - Unsupported codecs report `ImageError.Unsupported`, and OCR skips those
   images rather than failing the page.
+
+## Rejected alternatives
+
+- Rust built-ins in the bootstrap (option B): rejected because the bootstrap is to be retired (ADR 0023), so code written now in Rust would be written twice. Speed comes from the native backend instead.
+- Leaving scans unsupported (option C): rejected because the designer's goal is searchable scans.

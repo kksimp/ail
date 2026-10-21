@@ -21,8 +21,8 @@ literal as hex digits.
    object where the literal stands. This adds no instruction to the MIR or
    either code generator. A literal in a hot loop pays an allocation and a
    decode; a data-section object is the follow-up if a benchmark needs it.
-3. **Index and slice:** the lowering checks the bounds and traps with kind 11
-   (`type.bytes.3`) or 12 (`type.bytes.4`), printing the interpreter's
+3. **Index and slice:** the lowering checks the bounds and traps with kind 12
+   (`type.bytes.3`) or 13 (`type.bytes.4`), printing the interpreter's
    messages (`... for bytes of length N`), then calls `rt.bytes_at` or
    `rt.bytes_slice`.
 4. **The byte:** `b[i]` has the new type `Ty.Byte`, held in a register as an
