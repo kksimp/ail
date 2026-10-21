@@ -55,9 +55,11 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path). Any other construct is reported at its position under this rule, all of them
+(std.fs, std.env, std.io, std.time, std.path); and the standard modules written in AIL (`std.args`,
+`std.csv`, `std.log`, `std.net.http`, `std.net.jar`, `std.time.date`), which build like a module of the program
+when the constructs their source uses are in the subset (so far `std.log`). Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
-0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605)*
+0568-0569, 0574-0576, 0580, 0582, 0591, 0592, 0602–0604, 0605, 0772)*
 
 ```ail
 fn steps(n int) int
