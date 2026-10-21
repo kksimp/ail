@@ -29,8 +29,11 @@ All errors report the first problem found. *(ADR 0161, ADR 0162)*
 **json.print.1** — `Json.to_text(self) str` gives compact text: no spaces,
 members in document order, `"`, `\`, `\n`, `\r`, `\t`, `\b`, `\f` escaped by
 name, other control characters as `\u00XX`, everything else as itself. A
-number prints as the `float` does (`1.0`, `2.5`). The same value always gives
-the same text. *(ADR 0161)*
+number prints as the `float` does (`2.5`), except that a whole number of
+magnitude below 1e15 prints without a fraction (`3`, `-12`, `0`; the sign of
+a zero is dropped), so an `int` field derived through `ToJson` reads back
+as an integer in other languages. The same value always gives the same text.
+*(ADR 0161, ADR 0631)*
 
 **json.parse.2** — A number whose value doesn't fit a finite `float`
 (`1e999`) fails with the message `number out of range` at its first
@@ -64,7 +67,7 @@ fn main()
     print(doc.str("id"))       # t1
     print(doc.str("hours"))    # none
     doc.set("done", Json.Bool(true))
-    print(doc.to_text())       # {"id":"t1","hours":2.0,"done":true}
+    print(doc.to_text())       # {"id":"t1","hours":2,"done":true}
 ```
 
 **json.query.4** — `j.as_int()` is the number when it has no fraction, and

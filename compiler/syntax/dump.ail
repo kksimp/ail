@@ -53,8 +53,8 @@ fn token_lines(t Token, mut out List[str])
 fn spec_text(f FormatSpec) str
     fill := if c := f.fill then quote("{c}") else "null"
     align := if c := f.align then quote("{c}") else "null"
-    width := if w := f.width then "{w.to_float()}" else "null"
-    precision := if w := f.precision then "{w.to_float()}" else "null"
+    width := if w := f.width then "{w}" else "null"
+    precision := if w := f.precision then "{w}" else "null"
     "\{\"fill\":{fill},\"align\":{align},\"width\":{width},\"precision\":{precision},\"hex\":{f.hex}}"
 
 ## A string in JSON, as the prelude's `json_quote` writes it.
