@@ -141,6 +141,11 @@ PRIMS := {
 ## The `int` methods of two operands that are one instruction (expr.bit.1).
 BIT_OPS := {"bit_and": "band", "bit_or": "bor", "bit_xor": "bxor", "shl": "shl", "shr": "shr"}
 
+## std.math's float methods that are runtime functions (type.num.16): one
+## argument (`x.sin()`), or the receiver and one more (`x.pow(y)`).
+MATH1 := ["sin", "cos", "tan", "atan", "exp", "ln", "log10", "cbrt"]
+MATH2 := ["atan2", "pow", "hypot"]
+
 ## Lower a program and, when given, the runtime; `Problems` lists what is
 ## outside the subset.
 pub fn lower_module(path str, text str, prog ast.Program, rt ast.Program?) Module ! Problems
@@ -1627,6 +1632,11 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             # type.num.9
             if name == "round" and vs.len() == 0
                 return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
+            # type.num.16: std.math's float functions, in rt/native/math.ail
+            if MATH1.contains(name) and vs.len() == 0
+                return Val(id: call("rt.float_{name}", [r.id], Ty.Float), ty: Ty.Float)
+            if MATH2.contains(name) and vs.len() == 1
+                return Val(id: call("rt.float_{name}", [r.id, vs[0].id], Ty.Float), ty: Ty.Float)
         Str =>
             # type.str.3, type.str.5
             if name == "chars" and vs.len() == 0
