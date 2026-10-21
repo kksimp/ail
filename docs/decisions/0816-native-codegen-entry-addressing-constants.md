@@ -60,6 +60,22 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
    on the batch head (124.4M to 79.4M before chain E, which already
    removed part of the collector's scan); fannkuch 9 is unchanged.
 
+4. **Push loops keep the length in a register.** In a versioned loop whose
+   pushes have room guaranteed (native.bce.6), each push still loaded the
+   list's length and element pointer and stored the length again: five
+   instructions where a copy loop in C has one store. `keep_lengths`
+   (`pushes.ail`, after `bce`) rewrites a loop that calls nothing but those
+   pushes, has one latch and leaves only through its header, when no other
+   instruction or edge in it mentions the list and every push runs once per
+   iteration (its block dominates the latch). The element pointer (`data`)
+   and the length are read in the preheader; the length is a block
+   parameter of the header, each push becomes `stx data, length, v` and an
+   add, and a new block on the loop's exit edge stores the length back. The
+   loop allocates nothing, so the collector cannot see the stale length. A
+   loop with a conditional push, a read of the list, or a call keeps the
+   old code. sieve 3,000,000: 79.4M to 70.4M; fannkuch 9: 251.5M to
+   244.6M; matmul 116.60M to 116.37M.
+
 ## Consequences
 
 - A parameter's register is held from the entry, so a callee-saved register
