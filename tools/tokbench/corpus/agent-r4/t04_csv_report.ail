@@ -1,0 +1,4 @@
+use std.csv
+
+fn main() !
+    print([r["qty"].to_int() else 0 for r in csv.records(fs.read_text(env.args()[0])?)?].sum())

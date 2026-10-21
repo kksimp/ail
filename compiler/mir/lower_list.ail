@@ -1,0 +1,193 @@
+## List methods that edit, search or order a list (type.coll.9, 11, 14;
+## ADR 0605): `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop`,
+## `contains`, `sort` and `sorted`. Each is a runtime call
+## (`compiler/rt/native/list.ail`); the index checks are MIR checks, so a
+## trap names the interpreter's rule and position.
+##
+## Reported as outside the subset: `contains` and `sort` on elements that
+## are not `int`, `bool`, `float` or `str`; `sort` of a `List[bool]`;
+## `by:` key functions; `pop()` used as a value other than with `else`.
+use ast
+
+## The methods this file lowers.
+fn is_list_edit(name str) bool
+    name == "extend"
+        or name == "remove_at"
+        or name == "insert"
+        or name == "clear"
+        or name == "reverse"
+        or name == "pop"
+        or name == "contains"
+        or name == "sort"
+        or name == "sorted"
+
+## Bytes of one element of a list of `e`.
+fn elem_bytes(e Ty) int
+    if e == Ty.Bool then 1 else 8
+
+## How `contains` compares: 0 integers and bools, 1 strings, 2 floats; -1 if
+## the element type has no native equality yet.
+fn eq_kind(e Ty) int
+    match e
+        Int | Bool => 0
+        Str => 1
+        Float => 2
+        _ => -1
+
+## `xs.NAME(args)` for the methods above. `vs` are the lowered arguments.
+fn Lower.lower_list_edit(
+    mut self,
+    r Val,
+    e Ty,
+    name str,
+    npos ast.Pos,
+    args List[ast.Arg],
+    vs List[Val],
+) Val?
+    size := konst(elem_bytes(e), Ty.Int)
+    unit := Val(id: -1, ty: Ty.Unit)
+    if name == "extend" and vs.len() == 1
+        if not same_ty(vs[0].ty, r.ty)
+            return unsupported(npos, "`.extend()` of a `{vs[0].ty.name()}` onto a `{r.ty.name()}`")
+        ys := copy_if_place(args[0].value, vs[0])
+        call("rt.list_extend", [r.id, ys, size], Ty.Unit)
+        return unit
+    if name == "clear" and vs.len() == 0
+        call("rt.list_clear", [r.id], Ty.Unit)
+        return unit
+    if name == "reverse" and vs.len() == 0
+        call("rt.list_reverse", [r.id, size], Ty.Unit)
+        return unit
+    if name == "remove_at" and vs.len() == 1
+        # The read checks the index (type.coll.4); the call then removes it.
+        v := checked("get", [r.id, vs[0].id], bounds_site(npos), e)
+        call("rt.list_remove_at", [r.id, vs[0].id, size], Ty.Unit)
+        return Val(id: v, ty: e)
+    if name == "insert" and vs.len() == 2
+        item := Val(id: copy_if_place(args[1].value, vs[1]), ty: vs[1].ty)
+        x := convert(item, e, npos)
+        n := op("len", [r.id], Ty.Int)
+        i := vs[0].id
+        fail := new_block()
+        check(op("le", [konst(0, Ty.Int), i], Ty.Bool), fail)
+        check(op("le", [i, n], Ty.Bool), fail)
+        good := cur
+        seal(fail)
+        cur = fail
+        mut t := inst(-1, "trap", [i, n])
+        t.imm = 8
+        t.site = site("type.coll.4", "insert", "", npos)
+        emit_void(t)
+        finish(unreachable_term())
+        cur = good
+        mut w := x
+        if e.is_float()
+            w = list_prim("float_bits", [x], Ty.Int)
+        call("rt.list_insert", [r.id, i, w, size], Ty.Unit)
+        return unit
+    if name == "pop" and vs.len() == 0
+        # The removed element is an optional: only the statement form here;
+        # `pop() else ...` is `lower_pop_else`.
+        n := op("len", [r.id], Ty.Int)
+        has := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
+        yes := new_block()
+        join := new_block()
+        branch(has, yes, [], join, [])
+        seal(yes)
+        cur = yes
+        call("rt.list_drop_last", [r.id], Ty.Unit)
+        jump(join, [])
+        seal(join)
+        cur = join
+        return unit
+    if name == "contains" and vs.len() == 1
+        k := eq_kind(e)
+        if k < 0
+            return unsupported(npos, "`.contains()` on `{r.ty.name()}`")
+        mut w := convert(vs[0], e, npos)
+        if e.is_float()
+            w = list_prim("float_bits", [w], Ty.Int)
+        return Val(
+            id: call("rt.list_contains", [r.id, w, konst(k, Ty.Int), size], Ty.Bool),
+            ty: Ty.Bool,
+        )
+    if (name == "sort" or name == "sorted") and vs.len() == 0
+        k := match e
+            Int => 0
+            Str => 1
+            Float => 2
+            _ => -1
+        if k < 0
+            return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+        mut target := r.id
+        if name == "sorted"
+            target = call("rt.list_copy", [r.id, size], r.ty)
+        call("rt.list_sort", [target, konst(k, Ty.Int)], Ty.Unit)
+        if name == "sorted"
+            return Val(id: target, ty: r.ty)
+        return unit
+    unsupported(npos, "`.{name}()` with these arguments")
+
+## A runtime primitive used by the lowering itself.
+fn Lower.list_prim(mut self, name str, args List[int], ty Ty) int
+    mut i := inst(-1, "prim", args)
+    i.name = name
+    emit(i, ty)
+
+## `xs.pop() else ...` as a binding or an operand (err.else.1-2): the last
+## element, else the fallback or a statement that leaves.
+fn Lower.lower_pop_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) Val?
+    recv := match value
+        Method(r, _, _, _) => r
+        _ => return none
+    l := lower_value(recv, none)?
+    e := l.ty.elem() else return unsupported(pos, "`.pop() else` on a `{l.ty.name()}`")
+    n := op("len", [l.id], Ty.Int)
+    has := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
+    join := new_block()
+    r := new_value(e, "")
+    blocks[join].params.push(r)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(found)
+    cur = found
+    last := op("sub", [n, konst(1, Ty.Int)], Ty.Int)
+    v := op("get", [l.id, last], e)
+    call("rt.list_drop_last", [l.id], Ty.Unit)
+    jump(join, [v])
+    seal(missing)
+    cur = missing
+    match other
+        Fallback(x) =>
+            f := lower_value(x, e)?
+            jump(join, [convert(f, e, pos)])
+        Leave(st) =>
+            lower_stmt(st)
+            if not done()
+                problem(pos, "this `else` must leave: `return`, `break` or `continue`")
+        Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
+    seal(join)
+    cur = join
+    Val(id: r, ty: e)
+
+fn is_pop_call(e ast.Expr) bool
+    match e
+        Method(_, n, _, a) => n == "pop" and a.len() == 0
+        _ => false
+
+## `xs == ys` and `xs != ys` on lists of `int`, `float`, `bool` or `str`
+## (type.coll.*, trait.auto.1): the same length and equal elements.
+fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
+    e := a.ty.elem()?
+    k := eq_kind(e)
+    if k < 0 or not (op_name(o) == "eq" or op_name(o) == "ne")
+        return none
+    same := call(
+        "rt.list_eq",
+        [a.id, b.id, konst(k, Ty.Int), konst(elem_bytes(e), Ty.Int)],
+        Ty.Bool,
+    )
+    if op_name(o) == "ne"
+        return Val(id: op("not", [same], Ty.Bool), ty: Ty.Bool)
+    Val(id: same, ty: Ty.Bool)

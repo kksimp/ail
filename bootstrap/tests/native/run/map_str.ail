@@ -1,0 +1,35 @@
+# Map[str, int]: string keys, growth past the first table, removal and re-adding (type.map.1).
+fn main()
+    mut m := Map[str, int]()
+    names := ["ann", "bob", "cy", "dee", "eve", "fay", "gus", "hal", "ivy", "jo", "kim", "lee"]
+    for i in 0..names.len()
+        m[names[i]] = i
+    print(m.len())
+    for i in 0..200
+        m[[names[i % 12], names[i / 12 % 12], names[i / 144]].join("-")] = i * i
+    print(m.len())
+    print(m["ann-ann-ann"])
+    print(m["ivy-ann-bob"])
+    print(m["cy"])
+    m.remove("bob")
+    m.remove("fay-ann-ann")
+    m.remove("nobody")
+    m["bob"] = 99
+    print(m.len())
+    mut total := 0
+    for k in m.keys()
+        total += m[k]
+    print(total)
+    ks := m.keys()
+    print(ks[0])
+    print(ks[ks.len() - 1])
+    print(ks[ks.len() - 2])
+    m["ann"] += 1000
+    print(m["ann"])
+    print(m.contains("fay-ann-ann"))
+    print(m.contains("gus-ann-ann"))
+    small := {"a": 1, "b": 2}
+    print(small)
+    mut e := Map[str, str]()
+    e["say \"hi\""] = "line\nbreak"
+    print(e)

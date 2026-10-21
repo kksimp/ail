@@ -1,4 +1,3 @@
-
 fn field(line str, key str) str?
     for part in line.split(" ")
         if value := part.strip_prefix("{key}=")

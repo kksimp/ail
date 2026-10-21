@@ -1,0 +1,15 @@
+error struct Bad "too big"
+
+fn inner(n int) int ! Bad
+    if n > 2
+        return Bad()
+    n
+
+fn mid(n int) int ! Bad
+    x := inner(n)? "calling inner"
+    y := inner(x)? "again"
+    x + y
+
+fn main() !
+    print(mid(1)?)
+    print(mid(5)? "in main")

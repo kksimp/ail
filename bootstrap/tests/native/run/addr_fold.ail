@@ -1,0 +1,32 @@
+# An unchecked list access at `y + k` is one address with a displacement
+# (native.bce.8); a displacement of either sign, the largest ones, and
+# constant indexes must read and write the same elements as `ail run`.
+fn shift(mut xs List[int])
+    for i in 1..9
+        xs[i - 1] = xs[i + 2] * 10 + i
+    for i in 0..4
+        xs[i + 6] = xs[i] - xs[i + 1]
+
+fn far(mut xs List[float])
+    for i in 0..3
+        xs[i + 2000] = xs[i + 1] + xs[i + 4094]
+
+fn flags(mut fs List[bool])
+    for i in 0..5
+        fs[i + 3] = not fs[i + 1]
+
+fn main()
+    mut xs := [0 for _ in 0..14]
+    for i in 0..14
+        xs[i] = i * i
+    shift(mut xs)
+    print(xs)
+    mut ys := [0.5 for _ in 0..4200]
+    ys[4094] = 1.25
+    ys[4095] = 2.5
+    far(mut ys)
+    print(ys[2000])
+    print(ys[2002])
+    mut fs := [i % 2 == 0 for i in 0..10]
+    flags(mut fs)
+    print(fs)

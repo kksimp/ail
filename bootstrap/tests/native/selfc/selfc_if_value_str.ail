@@ -1,0 +1,5 @@
+fn word(n int) str
+    if n == 1 then "one" else "many"
+
+fn main()
+    print(word(1))

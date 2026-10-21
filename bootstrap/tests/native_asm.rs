@@ -17,7 +17,12 @@ fn root() -> PathBuf {
 }
 
 fn have(tool: &str) -> bool {
-    Command::new(tool).arg("--version").output().is_ok()
+    match Command::new(tool).arg("--version").output() {
+        // macOS ships LLVM's objdump under the GNU name; it has no `-b binary`.
+        Ok(out) if tool == "objdump" => String::from_utf8_lossy(&out.stdout).contains("GNU"),
+        Ok(_) => true,
+        Err(_) => false,
+    }
 }
 
 /// One encoded case: the intent and the bytes the encoder produced.

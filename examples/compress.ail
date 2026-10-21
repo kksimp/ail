@@ -11,6 +11,7 @@ fn main() ! compress.CompressError
     packed := compress.gzip(log)
     print("gzip is smaller: {packed.len() < log.len()}")
     back := compress.gunzip(packed)?
-    print("round trip equal: {back == log}")
-    bad := [1, 2, 3]
-    print("corrupt input: {compress.gunzip(bad) else "rejected"}")
+    print("round trip equal: {back.to_str() == log}")
+    bad := b"\x01\x02\x03"
+    empty := compress.gunzip(bad) else b""
+    print("corrupt input rejected: {empty.len() == 0}")

@@ -1,0 +1,6 @@
+struct Box
+    v int?
+
+fn main()
+    b := Box(v: 3)
+    print(b.v else 0)

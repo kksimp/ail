@@ -71,6 +71,15 @@ as written, every argument (`name = value`, values in their quoted text form,
 `` `divide` requires `b != 0`, but it was called with a = 7, b = 0 (contract at 3:5) ``.
 A failed `requires` is the caller's error. *(ADR 0211)*
 
+```ail tool=run,FILE status=1 expect=trap[contract.req.1] rules=contract.req.1
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(-4))
+```
+
 ## `ensures`
 
 **contract.ens.1** — When the function returns a value (not a failure of a
@@ -231,6 +240,15 @@ at every call, including calls through a trait (`trait.any.1`), direct
 recursion, and calls from tests (`test.run.1`). Invariants are checked at the
 points `contract.inv.2` and `contract.inv.3` name. *(ADR 0211, ADR 0305)*
 
+```ail rules=contract.run.1
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(4))
+```
+
 **contract.run.2** — Calls made while evaluating a condition don't check
 their own contracts, so a condition may call the function it describes:
 `ensures n == 0 or result == n * fact(n - 1)`. *(ADR 0211)*
@@ -241,12 +259,30 @@ are pure (`contract.decl.3`), the only difference a program can show is that a
 contract trap doesn't occur.
 Checks are on by default. *(ADR 0212)*
 
+```ail tool=run,--no-contracts,FILE expect=-2 rules=contract.run.3
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(-4))
+```
+
 ## Tools
 
 **contract.api.1** — `ail api` lists a function's conditions, as written,
 under the keys `requires` and `ensures` (arrays of strings, present only when
 non-empty), and `ail api --text` prints them under the signature.
 *(ADR 0213)*
+
+```ail tool=api,FILE expect="requires" rules=contract.api.1
+fn half(n int) int
+    requires n >= 0
+    n / 2
+
+fn main()
+    print(half(4))
+```
 
 **contract.api.2** — For a method that implements a trait method with
 contracts, `ail api` adds `"inherits"` (the trait method's name) and the
@@ -255,3 +291,99 @@ trait's conditions as written under `"inherited_requires"` and
 prints them after the method's own, marked `(inherited)`. A struct's
 invariants are listed under `"invariants"`, and `--text` prints each as an
 `invariant` line under the struct. *(ADR 0303, ADR 0304, ADR 0305)*
+
+```ail tool=api,FILE expect=inherited_ensures rules=contract.api.2
+trait Shape
+    fn area(s Self) int
+        ensures result >= 0
+
+struct Sq
+    side int
+
+impl Shape for Sq
+    fn area(s Sq) int
+        ensures result >= 0
+        s.side * s.side
+
+fn main()
+    print(Sq.area(Sq(side: 2)))
+```
+
+## Checked examples for the rules without one
+
+Each block is checked; the blocks marked `norun` trap on purpose, so they are not run (contract.ens.1, contract.inv.2, contract.inv.3).
+
+```ail norun rules=contract.ens.1
+fn half(n int) int
+    ensures result * 2 == n
+    n / 2
+
+fn main()
+    print(half(8))
+    print(half(7))
+```
+
+```ail rules=contract.inv.1
+struct Range
+    lo int
+    hi int
+    invariant lo <= hi
+
+fn main()
+    r := Range(lo: 1, hi: 5)
+    print(r.hi - r.lo)
+```
+
+```ail norun rules=contract.inv.2
+struct Range
+    lo int
+    hi int
+    invariant lo <= hi
+
+fn main()
+    r := Range(lo: 5, hi: 1)
+    print(r.hi)
+```
+
+```ail norun rules=contract.inv.3
+struct Counter
+    n int
+    invariant n >= 0
+
+fn Counter.drop_to(mut self, k int)
+    self.n = k - 10
+
+fn main()
+    mut c := Counter(n: 3)
+    c.drop_to(2)
+    print(c.n)
+```
+
+```ail rules=contract.inh.1,contract.inh.2,contract.inh.3
+trait Sized
+    fn size(self) int
+        ensures result >= 0
+
+struct Box
+    w int
+
+impl Sized for Box
+    fn size(self) int
+        ensures result < 100
+        self.w * self.w
+
+fn main()
+    print(Box(w: 4).size())
+```
+
+```ail rules=contract.run.2
+fn fact(n int) int
+    requires n >= 0
+    ensures n == 0 or result == n * fact(n - 1)
+    if n <= 1
+        return 1
+    n * fact(n - 1)
+
+fn main()
+    print(fact(5))
+```

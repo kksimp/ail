@@ -89,12 +89,32 @@ fannkuch 442M → 272M, matmul 223M → 142M, sieve 144M → 133M, binarytrees
 shared VM vary by 10–20% between runs: fannkuch ran 0.84–0.94 s before and
 0.51–0.61 s after, matmul 0.20 s before and 0.13–0.14 s after.
 
-What is left against C: the row of `b[k][j]` in matmul keeps its length
-check (the rows' lengths aren't known), the elements' address is
+What is left against C: (the row check of `b[k][j]` in matmul went away
+with the row-length floor, ADR 0611), the elements' address is
 kept in a register only inside versioned loops (`data`, `ldx`, `stx`),
 `n` still spills in matmul's inner loop, and binarytrees and fasta are
 allocation and call bound, not check bound. `ail build` takes about 0.1 s
 longer per program.
+
+## Range guards and smaller wins (ADR 0611)
+
+Wall time, best of 7, against `gcc -O2 -ffp-contract=off` at the large sizes;
+the "before" column is the batch head with #181. The VM varies 10-20%.
+
+| program | before | now | gcc -O2 | before/gcc | now/gcc |
+|---|---:|---:|---:|---:|---:|
+| collatz 1000000 | 0.315 | 0.297 | 0.218 | 1.45 | 1.36 |
+| mandelbrot 1000 | 0.109 | 0.097 | 0.077 | 1.42 | 1.26 |
+| spectralnorm 1000 | 0.074 | 0.062 | 0.051 | 1.45 | 1.21 |
+| matmul 400 | 0.125 | 0.117 | 0.050 | 2.51 | 2.35 |
+| fannkuch 10 | 0.804 | 0.551 | 0.220 | 3.65 | 2.50 |
+| sieve 30000000 | 0.237 | 0.245 | 0.199 | 1.19 | 1.23 |
+| binarytrees 17 | 0.665 | 0.674 | 0.135 | 4.94 | 5.01 |
+| fasta 5000000 | 0.166 | 0.159 | 0.059 | 2.80 | 2.68 |
+
+What is left: matmul's `b[k][j]` keeps its row check (the rows' lengths
+aren't known), collatz and the float kernels pay for loop structure and
+copies, and binarytrees and fasta are bound by allocation and memory.
 
 ## perfbench sizes (`tools/perfbench/run.sh --all`, min of 5)
 
@@ -116,8 +136,9 @@ what `ail build` buys.
 | fasta | 0.118 | 0.017 | 0.005 | 0.007 | 0.226 | 0.08 | 7x |
 | race_smoke | 0.104 | 0.010 | 0.004 | 0.005 | 0.183 | 0.05 | 10x |
 
-`loops`, `wordfreq` and the tensor programs are outside the native subset
-(maps, interpolation into a value, comprehensions, `std.tensor`).
+`wordfreq` builds natively since ADR 0568 (see below). `loops` needs string
+interpolation into a value, and the tensor programs need comprehensions and
+`std.tensor`; they are outside the native subset.
 
 ## Where the time goes against C
 
@@ -164,3 +185,58 @@ out by a dominating bound, inline `push`, inlining of leaf functions. Left:
    uses on the paths that need them.
 4. **Division by a power of two** as a shift with a sign fix (collatz).
 5. Cache the runtime's machine code (compile time).
+
+## Maps: `wordfreq` (ADRs 0568–0569)
+
+`Map[str, int]` counts 10 million words from a 12-word list (best of 3,
+seconds; Linux x86-64, same VM): native 0.359, `gcc -O2` 0.055, CPython
+1.876, so native is 5.2x faster than Python and 6.5x slower than C. Each
+iteration hashes the key twice (`get`, then the assignment) and compares it
+by pointer, then bytes. A cached hash in the string object, a combined
+find-or-insert, and keeping `map_find` and `map_set` inline are the next
+steps. At the `.args` size (1 million words) the run takes 0.07 s and
+prints the interpreter's bytes on x86-64 and on ARM64 under qemu.
+
+**Remembered entry (follow-up).** A table keeps the last key it found or added
+and its entry, so the assignment after `get(k)` skips the hash and the probe
+(a rebuild, removal or copy forgets it). 10 million words: 0.341 s -> 0.260 s
+(gcc -O2 0.055 s, CPython 1.9 s). Still open: a cached hash in the string
+object (needs a spare word; agree the layout with the strings and GC lanes),
+and inlining `map_find` and `map_set` into the caller.
+
+## Pushes with room, sized lists, loop rotation (ADR 0611)
+
+fannkuch at N = 9, instructions: 274M → 218M (gcc -O2: 103M); wall 0.58 s →
+0.49 s against 0.22 s. What is left is the allocation of a list per
+permutation (about half of the gap: `rt.alloc` runs three times each with
+the checks `a == 0 or b > c` materialised as booleans, `list_new`,
+`list_reserve`), `n` spilled to the stack by the register allocator, and
+the 8 to 10 instructions per swap against gcc's 6.
+
+## Row-length floors (ADR 0611)
+
+matmul at 400: 1,106M → 979M instructions (callgrind), 0.128 s → 0.098 s on
+this VM. `rt.list_rows_min(b)` runs once before the outermost loop nest that
+leaves `b` alone; the inner loop's guard tests `j` against it.
+
+## Computed starts, steps and constant-bound indexes (ADRs 0622-0624)
+
+Lane 191. Loops with a start computed before them (`for j in i + 1..5`) and
+loops adding an unchanging `s` are versioned like counted loops; index
+arithmetic bounded by a constant loop bound (`xs[b * 7 + k]`, `b < 5`) is
+checked once against the list's length; `not` branches flip; bit operations
+and constant shifts compute in place; spills are chosen by loop-weighted
+use. Instructions retired (`valgrind --tool=lackey`, reduced sizes):
+
+| program | before | after |
+|---|---:|---:|
+| nbody 100000 | 163.0M | 104.7M |
+| sieve 3000000 | 117.8M | 91.3M |
+| collatz 100000 | 173.2M | 119.4M |
+| spectralnorm 200 | 46.7M | 37.1M |
+| fannkuch 8 | 22.4M | 21.7M |
+| matmul 150 | 49.8M | 49.6M |
+
+nbody wall: 0.176 s to 0.117 s (gcc -O2 0.085 s; 2.08x to 1.37x). What is
+left in fannkuch and binarytrees is values live across calls: x86-64 has
+five callee-saved registers, so loop-carried scalars spill.

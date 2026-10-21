@@ -67,7 +67,7 @@ fn tokens_list_one_token_per_line() {
     assert_eq!(
         text,
         "1:1 id x\n1:3 sym :=\n1:6 interp\nlit \"a\"\n\
-         fmt {\"fill\":null,\"align\":\">\",\"width\":4.0,\"precision\":null,\"hex\":false}\n\
+         fmt {\"fill\":null,\"align\":\">\",\"width\":4,\"precision\":null,\"hex\":false}\n\
          1:9 id b\n1:10 eof\nend\n1:22 nl\n2:1 id y\n2:3 sym :=\n2:6 int 0\n2:8 nl\n3:1 eof\n\
          1:16 comment \"# note\"\n2:6 diag lex.num.1\n"
     );

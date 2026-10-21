@@ -1,8 +1,8 @@
 # The edges of the subset's newer pieces: `else` on a binding only after
 # `s.to_int()`, `s.to_float()` and the OS calls, format specifications only
-# on numbers, `bool` and `str`, constants only of constant expressions
-# (native.subset.1), at most 8 float parameters, `mut` arguments only of
-# locals.
+# on numbers, `bool` and `str` (native.subset.1), at most 8 float
+# parameters, `mut` arguments only of locals. A computed constant is fine
+# (ADR 0604).
 struct Box
     n int
 

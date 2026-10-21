@@ -1,0 +1,26 @@
+# A `mut` parameter's changes reach the caller when the function fails, by
+# `return E()` or `?`, as with `ail run` (own.param.2, ADR 0537).
+error struct Oops "stopped"
+
+fn step(mut n int, stop bool) ! Oops
+    n += 1
+    if stop
+        return Oops()
+    n += 10
+
+fn twice(mut n int) ! Oops
+    n += 100
+    step(mut n, true)?
+    n += 1000
+
+fn main()
+    mut a := 0
+    step(mut a, false) else err
+        print("failed")
+    print(a)
+    step(mut a, true) else err
+        print("failed")
+    print(a)
+    twice(mut a) else err
+        print("failed")
+    print(a)

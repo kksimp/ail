@@ -1,5 +1,3 @@
-bootstrap/tests/native/subset_ext.ail:10:1: error[native.subset.1]: constant `SCALE`: only literals, other constants and arithmetic on them are in the native subset yet
-bootstrap/tests/native/subset_ext.ail:13:5: error[native.subset.1]: `else` on a binding isn't in the native subset yet, but for `s.to_int()` and the OS calls
 bootstrap/tests/native/subset_ext.ail:16:4: error[native.subset.1]: `nine` has more than 8 float parameters
 bootstrap/tests/native/subset_ext.ail:24:11: error[native.subset.1]: not in the native subset yet: a format specification on a `List[int]`
 bootstrap/tests/native/subset_ext.ail:29:16: error[native.subset.1]: not in the native subset yet: a `mut` argument other than a local

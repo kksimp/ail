@@ -1,0 +1,11 @@
+json=true out=report.txt input=data.csv
+more=["a.txt", "b.txt"]
+usage: count [--json] [--out] INPUT [MORE...]
+count lines
+
+  -j, --json            print JSON
+  -o, --out V           output file (default -)
+  INPUT                 input file
+  MORE                  extra files
+  -h, --help            show this help
+

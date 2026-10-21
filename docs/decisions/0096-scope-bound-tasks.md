@@ -41,3 +41,7 @@ print(b.wait()?)
 - Cancellation propagates downward through scopes. Its API is to be designed.
 - `TaskGroup` cleanup behaviour (how failures of grouped tasks are reported)
   is to be specified with the standard library.
+
+## Rejected alternatives
+
+- Free-running tasks (Go-style): simplest to start, but leaks tasks and loses their errors. Rejected because scope-bound tasks cannot leak, errors and traps always reach a parent (ADR 0047), and cancellation is natural.

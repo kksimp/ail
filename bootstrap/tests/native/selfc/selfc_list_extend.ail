@@ -1,0 +1,4 @@
+fn main()
+    mut xs := [1, 2]
+    xs.extend([3, 4])
+    print(xs)

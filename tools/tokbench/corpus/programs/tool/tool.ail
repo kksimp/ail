@@ -3,6 +3,7 @@ struct Stats
     blank int
     comments int
     functions List[str]
+
 fn measure(text str) Stats
     mut stats := Stats(lines: 0, blank: 0, comments: 0, functions: [])
     for line in text.lines()
@@ -15,9 +16,11 @@ fn measure(text str) Stats
         elif name := t.strip_prefix("fn ")
             stats.functions.push(name.split("(")[0])
     stats
+
 fn base_name(path str) str
     parts := path.split("/")
     parts[parts.len() - 1]
+
 fn main() !
     path := env.program()
     stats := measure(fs.read_text(path)? "reading my own source")

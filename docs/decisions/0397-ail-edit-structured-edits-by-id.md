@@ -4,6 +4,7 @@
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 22 — Tools; AI semantic API
+- **Amended by:** [ADR 0399](0399-compact-edits-and-diff-hunks.md)
 - **Spec rules:** [edit.in.1–2, edit.id.1–2, edit.op.1–6, edit.out.1–3](../spec/22-tools.md#structured-edits)
 
 ## Context
@@ -80,3 +81,9 @@ Option B with the details above.
   not edit targets yet; a later version can add them by the same spans.
 - Windows: the command reads standard input and writes files through the
   standard library (ADR 0004).
+
+## Rejected alternatives
+
+- Edits on the syntax tree, printed back by the formatter (option A): rejected because the formatter prints from tokens, comments would need re-attaching, and it is a large new subsystem in shared files.
+- Line-and-column edits, as `ail fix` applies them (option C): rejected because positions go stale after the first edit, so the agent must read the file to learn them.
+- An AIL-like edit language: rejected because it is another syntax to learn and measure. Input is JSON.
