@@ -38,7 +38,16 @@ resized and cleared, and a code lookup.
 6. **`xs[i + k]` / `xs[i - k]`** with an int literal `k` is one instruction
    (`IndexOff`); the sum is checked as the operator would be, and compound
    assignment to a list element does float arithmetic in place as well.
-7. **Register writes** use `assign`, which does not call the drop function
+7. **`x op= y` on a local** is one instruction (`OpAssign`, `OpAssignK`), and
+   `to_float`, `sqrt` and `abs` on an `int` or `float` run in place (`NumFast`).
+8. **Calls** keep the callee's code in the call instruction, and the register
+   vectors come back all `Unit` instead of being cleared and resized.
+9. **Cold arms leave `exec`**: the user-method call, traits, `?`, string
+   interpolation, struct and variant construction, `match` arms, collection
+   literals and hand-offs are separate non-inlined methods, so the hot loop
+   has fewer values to keep live (4% fewer instructions on a counting loop,
+   2 to 4% on the benchmarks).
+10. **Register writes** use `assign`, which does not call the drop function
    for values that own nothing; `MethodGuard` skips the lookup for built-in
    receivers held in locals.
 
@@ -53,19 +62,20 @@ CPython):
 
 | Program | CPython s | Before s (ratio) | After s (ratio) |
 |---|---:|---:|---:|
-| collatz | 0.832 | 0.385 (0.46x) | 0.366 (0.44x) |
-| nbody | 0.301 | 0.805 (2.67x) | 0.320 (1.06x) |
-| spectralnorm | 0.388 | 0.693 (1.79x) | 0.516 (1.33x) |
-| mandelbrot | 0.229 | 0.665 (2.90x) | 0.246 (1.07x) |
-| fannkuch | 0.762 | 1.080 (1.42x) | 0.692 (0.91x) |
-| binarytrees | 0.475 | 1.782 (3.75x) | 1.022 (2.15x) |
-| matmul | 0.424 | 0.884 (2.08x) | 0.488 (1.15x) |
-| sieve | 0.558 | 1.202 (2.15x) | 0.694 (1.24x) |
-| geometric mean | | 1.88x | 1.08x |
+| collatz | 0.869 | 0.376 (0.43x) | 0.328 (0.38x) |
+| nbody | 0.295 | 0.864 (2.93x) | 0.287 (0.97x) |
+| spectralnorm | 0.444 | 0.694 (1.56x) | 0.331 (0.74x) |
+| mandelbrot | 0.227 | 0.643 (2.83x) | 0.209 (0.92x) |
+| fannkuch | 0.723 | 1.044 (1.44x) | 0.680 (0.94x) |
+| binarytrees | 0.474 | 1.851 (3.90x) | 0.909 (1.92x) |
+| matmul | 0.413 | 0.813 (1.97x) | 0.541 (1.31x) |
+| sieve | 0.502 | 1.192 (2.37x) | 0.568 (1.13x) |
+| geometric mean | | 1.87x | 0.95x |
 
-Callgrind instruction counts (millions; stable where wall time is not):
-sieve 300,000: 615 to 351; binarytrees 10: 725 to 452; nbody 20,000: 3,614
-to 1,585 (ADR 0618 and this ADR); matmul 60: 202 to 145.
+Callgrind instruction counts (millions; stable where wall time is not),
+batch head to this change: sieve 300,000: 615 to 322; binarytrees 10: 725 to
+439; nbody 20,000: 3,614 to 1,489; spectralnorm 100: 1,240 to 772; matmul
+60: 202 to 144; a counting loop of 1,000,000 turns: 247 to 157.
 
 ## Rejected alternatives
 

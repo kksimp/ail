@@ -394,10 +394,11 @@ sieve 2.56x to 1.94x); the table is in the ADR. Agent programs are unchanged.
 
 [ADR 0619](../decisions/0619-bytecode-calls-loops-and-fusion.md) cuts the
 per-instruction and per-call overhead (lean calls, loop shapes, fused
-`push`/`len` and `a[i][k]`): geometric mean 1.88x of CPython at the batch head,
-1.08x now; fannkuch 0.91x, nbody 1.06x, mandelbrot 1.07x, matmul 1.15x, sieve 1.24x,
-spectralnorm 1.33x, binarytrees 2.15x (calls and `mut`
-arguments). What is left is the cost of reading a local: the walker's
-environment is a vector of (name, value) pairs behind a pointer, so every
-local read reloads its length and bounds-checks it. A frame with locals in the
-register file would remove that; it is the next step.
+`push`/`len`, `a[i][k]`, `xs[i+k]`, op-assign and numeric methods, cold arms
+moved out of the dispatch loop): geometric mean 1.87x of CPython at the batch
+head, 0.95x now (nbody 0.97x, mandelbrot 0.92x, fannkuch 0.94x, spectralnorm
+0.74x, collatz 0.38x, sieve 1.13x, matmul 1.31x, binarytrees 1.92x). What is
+left is the cost of reading a local: the walker's environment is a vector of
+(name, value) pairs behind a pointer, so every local read reloads its length
+and bounds-checks it. A frame with locals in the register file, or audited
+unchecked access (about 12% fewer instructions, measured), would remove that.
