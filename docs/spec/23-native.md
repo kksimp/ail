@@ -154,6 +154,8 @@ fixed number of nested calls, a native executable when its stack is nearly
 exhausted. It traps under err.trap.1 at the call, with `call depth exceeded
 the native stack in `NAME``, so it may recurse deeper than the interpreter
 allows. *(ADRs 0384, 0385, 0535)*
+trap[RULE]: MESSAGE`, err.trap.*), then its source excerpt and the stack
+without the frames' values (trace.frame.1). *(ADRs 0384, 0385, 0641)*
 
 ```ail rules=native.build.1
 fn main()

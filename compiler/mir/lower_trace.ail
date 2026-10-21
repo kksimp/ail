@@ -1,0 +1,25 @@
+## Call positions for a trap's stack (trace.frame.1, ADR 0641): a user call
+## carries the position of the call in `imm` (file, line and column packed
+## by `call_pos`), which the code generators turn into a row of the call
+## table. The runtime's own calls carry none.
+use ast
+
+## A call to a user function at `pos`.
+fn Lower.call_at(mut self, name str, args List[int], ty Ty, pos ast.Pos) int
+    mut i := inst(-1, "call", args)
+    i.name = name
+    # A constant's initialiser runs before `main` here, but is lazy in the
+    # interpreter, whose stack has no frame for it.
+    if not is_rt and not fname.starts_with("init.")
+        i.imm = call_pos(file, pos.line, pos.col)
+    if ty.is_unit()
+        emit_void(i)
+        return -1
+    emit(i, ty)
+
+## The line of the stack for the function being lowered, to end a runtime
+## trap's source excerpt (trace.frame.1): `  at [FILE:]LINE:COL in NAME(..)`.
+fn Lower.trap_frame(self, pos ast.Pos) str
+    root := if file == 0 then "" else "{src_paths[file]}:"
+    dots := if blocks[0].params.len() > 0 then ".." else ""
+    "  at {root}{pos.line}:{pos.col} in {fname}({dots})\n"

@@ -104,6 +104,7 @@ pub fn generate(m mir.Module) codegen.Image
             gen_kernel(mut img, f.name)
         else
             gen_func(mut img, m, f, false)
+    codegen.add_call_table(mut img, m)
     img
 
 ## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
@@ -120,6 +121,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    first := img.calls.len()
     mut globs := Map[int, int]()
     mut addr_uses := [0 for _ in 0..f.vals.len()]
     for blk in f.blocks
@@ -171,6 +173,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
     g.a.resolve_labels()
     img = g.img
     base := img.code.len()
+    for k in first..img.calls.len()
+        img.calls[k].off += base
     img.funcs[f.name] = base
     img.code.extend(g.a.code)
     for fx in g.a.fixups
@@ -1067,6 +1071,9 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.call_reg(S0)
     else
         a.call_sym(i.name)
+    if i.imm != 0
+        # The return address, for a trap's stack (trace.frame.1).
+        img.calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
     if room > 0
         a.alu_ri("add", RSP, room)
     if i.dst >= 0
@@ -1142,6 +1149,14 @@ fn Gen.prim(mut self, i mir.Inst)
         "target" =>
             d := out_gpr(i.dst, S1)
             a.mov_ri(d, if win then 3 else 0)
+            put_gpr(i.dst, d)
+        "code_tab" =>
+            d := out_gpr(i.dst, S1)
+            a.lea(d, at_sym("trace.tab", 0))
+            put_gpr(i.dst, d)
+        "frame_ptr" =>
+            d := out_gpr(i.dst, S1)
+            a.mov_rr(d, RBP)
             put_gpr(i.dst, d)
         "str_addr" | "str_at" | "list_addr" | "list_at" =>
             parallel([move_of(loc[i.dst], i.args[0])])

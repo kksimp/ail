@@ -653,3 +653,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0607](0607-windows-runtime-guard.md) | `ail build --target x86_64-windows` is refused until the Windows runtime lands *(delegated)* | Accepted | 2026-10-20 |
 | [0608](0608-windows-target-and-runtime.md) | The Windows x86-64 target: `target()` is 3, the entry runs the runtime, and output, exit and the heap use kernel32 *(delegated)* | Accepted | 2026-10-20 |
 | [0826](0826-native-reset-in-place.md) | Native: reset a list in place *(delegated)* | Accepted | 2026-10-21 |
+| [0641](0641-native-trap-stack-from-frame-pointers.md) | A native trap prints its stack by walking frame pointers over a call table in the code *(delegated)* | Accepted | 2026-10-21 |
+| [0642](0642-native-trap-stack-format.md) | The native stack lines name the function and the call position, and leave out values *(delegated)* | Accepted | 2026-10-21 |
+| [0643](0643-inlined-callees-keep-their-frame.md) | A check inlined from a callee keeps the callee's frame and the call that was inlined *(delegated)* | Accepted | 2026-10-21 |
+| [0644](0644-native-trap-stack-always-on.md) | The trap stack is always built, with no flag: cost measured *(delegated)* | Accepted | 2026-10-21 |

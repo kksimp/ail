@@ -181,6 +181,28 @@ fn batch_builds_match_separate_builds() {
     let _ = fs::remove_dir_all(&tmp);
 }
 
+/// The interpreter's report line as the native one prints it (trace.frame.1,
+/// ADR 0641): a frame's values and locals are left out, `f(a = 1)` being
+/// `f(..)`, and the elision line has no `--verbose` hint. The interpreter's
+/// `note:` and `help:` lines have no native counterpart.
+fn interp_line(l: &str) -> Option<String> {
+    if l.starts_with("note:") || l.starts_with("help:") || l.starts_with("  values:") {
+        return None;
+    }
+    if l.starts_with("  at ") {
+        if let Some(i) = l.find(" in ") {
+            let name = &l[i + 4..];
+            let open = name.find('(')?;
+            let args = if name[open..].starts_with("()") { "()" } else { "(..)" };
+            return Some(format!("{}{}{}", &l[..i + 4], &name[..open], args));
+        }
+    }
+    if l.starts_with("  \u{2026} ") {
+        return Some(l.split(" (--verbose").next().unwrap().to_string());
+    }
+    Some(l.to_string())
+}
+
 /// `ail build` on each `tests/native/run/NAME.ail`, then the executable's
 /// output against `ail run`'s: stdout, the exit code, and a trap's message
 /// and excerpt (the interpreter's snapshot lines aside, trace.snap.1).
@@ -303,11 +325,8 @@ fn executable_matches(
         }
         None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
     };
-    let snapshot = |l: &&str| {
-        !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:") || l.starts_with("  values:"))
-    };
-    let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
-    let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();
+    let want_err: Vec<String> = std::str::from_utf8(&want.stderr).unwrap().lines().filter_map(interp_line).collect();
+    let got_err: Vec<String> = std::str::from_utf8(&got.stderr).unwrap().lines().map(str::to_string).collect();
     if want.stdout == got.stdout && want.status.code() == got.status.code() && want_err == got_err {
         return None;
     }

@@ -235,6 +235,20 @@ fn main()
 error with `"severity":"trap"`, the rule, position and message, the source
 line, the condition's values, and the stack. *(ADR 0267)*
 
+**trace.frame.1** — An executable built by `ail build` reports a trap with
+the stack the interpreter reports (trace.snap.2, trace.snap.3), without the
+frames' values: the trap's first line and source excerpt, then one line
+`  at [FILE:]LINE:COL in NAME(..)` per frame, innermost first (`NAME()` for a
+function without parameters; `FILE:` only outside the first file), where
+`LINE:COL` is the trap for the innermost frame and the call for each other.
+At most seven frames print; with more, the first six and then
+`  … N more frames`. A constant's initialiser (mod.const.*, ADR 0604) has no
+frame. *(ADRs 0641, 0642)*
+
+**trace.frame.2** — A check that the compiler copied into a caller by inlining
+reports the callee's frame, then the caller at the inlined call, as if the
+call had been made. *(ADR 0643)*
+
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
 
