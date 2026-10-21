@@ -1,0 +1,9 @@
+# A trap inside a function called through a value shows the caller (trace.frame.1).
+fn apply(f fn(int) int, x int) int
+    f(x) + 1
+
+fn boom(i int) int
+    [1, 2][i]
+
+fn main()
+    print(apply(boom, 7))

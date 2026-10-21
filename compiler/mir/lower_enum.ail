@@ -26,7 +26,7 @@ OBJ_ENUM := 5
 fn Lower.declare_enum_names(mut self, prog ast.Program)
     for e in prog.enums
         if e.generics.len() > 0
-            problem(e.pos, "generic enum `{e.name}` isn't in the native subset yet")
+            declare_generic_enum(e)
         else
             enums["{prefix}{e.name}"] = []
 
@@ -65,6 +65,9 @@ fn Lower.enum_key(self, name str) str?
     key := "{prefix}{name}"
     if enums.contains(key)
         return key
+    if k := prelude_key(name)
+        if enums.contains(k)
+            return k
     # The prelude's `Ordering` is visible in every module.
     if name == "Ordering" and enums.contains(name) then name else none
 
@@ -92,7 +95,15 @@ fn Lower.case_index(self, n str, name str) int
 
 ## The type a method's `self` has: a struct or an enum.
 fn Lower.owner_ty(self, n str) Ty
-    if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
+    match n
+        "int" => Ty.Int
+        "float" => Ty.Float
+        "bool" => Ty.Bool
+        "str" => Ty.Str
+        _ =>
+            if t := gen.owner_tys.get(n)
+                return t
+            if enums.contains(n) then Ty.Enum(n) else Ty.Struct(n)
 
 ## The enum `e` names, when it names one and no local: `E` or `m.E`, as
 ## in `E.V` or `m.E.V(...)`.
@@ -177,6 +188,11 @@ fn Lower.new_variant(mut self, v VariantRef, args List[ast.Arg]?, pos ast.Pos) V
         ft := c.fields[at].ty
         x := lower_value(a[k].value, ft)?
         vs[at] = copy_if_place(a[k].value, Val(id: convert(x, ft, expr_pos(a[k].value)), ty: ft))
+    build_variant(v, vs)
+
+## A new object of variant `v` with field values `vs`.
+fn Lower.build_variant(mut self, v VariantRef, vs List[int]) Val
+    t := Ty.Enum(v.en)
     obj := call("rt.obj_new", [konst(8 * (vs.len() + 1), Ty.Int), konst(OBJ_ENUM, Ty.Int)], t)
     store(obj, 0, konst(v.k, Ty.Int))
     for k in 0..vs.len()

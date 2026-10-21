@@ -226,7 +226,7 @@ fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) L
             []
         Alt(alts, _) =>
             for a in alts
-                mut covers := false
+                mut covers := Covers(all: false)
                 names := elem_pattern(tuple, a, mut covers)
                 for nm in names
                     if nm.name != "_"
@@ -239,9 +239,9 @@ fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) L
                         break
             []
         TuplePat(_, at) =>
-            mut covers := true
+            mut covers := Covers(all: true)
             names := elem_pattern(tuple, pat, mut covers)
-            if covers
+            if covers.all
                 if cov.wildcard
                     err(
                         "expr.match.5",
@@ -268,10 +268,14 @@ fn Checker.tuple_arm(mut self, xs List[Ty], pat ast.Pattern, mut cov Coverage) L
         Num(k) => k != "f32"
         _ => false
 
+## Whether the patterns seen so far match every value.
+struct Covers
+    all bool
+
 ## A pattern for a value of type `t` inside a tuple pattern: its names, and
 ## `covers` stays true only if it matches every value.
 @allow("expr.match.3")
-fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers bool) List[Binding]
+fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers Covers) List[Binding]
     match pat
         Wildcard => return []
         BindName(n, at) =>
@@ -285,7 +289,7 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers bool) List[B
                             "`{n}` here binds a new name; it doesn't match the variant",
                             "write `{en}.{n}` to match the variant, or another name to bind the element",
                         )
-                _ => covers = covers
+                _ => covers.all = covers.all
             return [Binding(name: n, pos: at, ty: t)]
         TuplePat(ps, at) =>
             if xs := tuple_elems(t)
@@ -295,14 +299,14 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers bool) List[B
                         at,
                         "this pattern has {ps.len()} elements, but the value is {show(t)}",
                     )
-                    covers = false
+                    covers.all = false
                     return []
                 mut names := List[Binding]()
                 for k in 0..ps.len()
                     names.extend(elem_pattern(xs[k], ps[k], mut covers))
                 return names
-        _ => covers = covers
-    covers = false
+        _ => covers.all = covers.all
+    covers.all = false
     match t
         Unknown => return []
         Enum(e, args) =>
@@ -313,12 +317,12 @@ fn Checker.elem_pattern(mut self, t Ty, pat ast.Pattern, mut covers bool) List[B
                 wildcard: false,
             )
             return pattern(e, args, pat, mut c)
-        _ => covers = false
+        _ => covers.all = false
     match pat
         TuplePat(_, at) =>
             err("type.tuple.6", at, "a tuple pattern, but this element is {show(t)}")
             return []
-        _ => covers = false
+        _ => covers.all = false
     if is_literal_ty(t)
         mut c := Coverage(variants: [], literals: [], wildcard: false)
         literal_pattern(t, pat, mut c)

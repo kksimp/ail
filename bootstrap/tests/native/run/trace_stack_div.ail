@@ -1,0 +1,9 @@
+# Division by zero through two calls (expr.arith.3).
+fn ratio(a int, b int) int
+    a / b
+
+fn twice(a int, b int) int
+    ratio(a, b) + ratio(a, b)
+
+fn main()
+    print(twice(7, 0))

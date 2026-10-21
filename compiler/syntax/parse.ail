@@ -112,7 +112,7 @@ fn comparison(s str) ast.BinOp?
 
 ## Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
 ## these, `[` starts type arguments rather than an index (gen.infer.2).
-fn generic_names(tokens List[Token]) Set[str]
+pub fn generic_names(tokens List[Token]) Set[str]
     mut names := {"List", "Map", "Set", "Channel", "Mutex", "Atomic"}
     for k in 2..tokens.len()
         a := tok_text(tokens[k - 2].tok)
@@ -146,8 +146,15 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
 pub fn parse(tokens List[Token]) Parsed
+    parse_with(tokens, Set[str]())
+
+## `parse` of a file whose module's other files declare generic names too:
+## `extra` are theirs (`absent[int]()` in a file that doesn't declare `absent`).
+pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
     mut p := new_parser(tokens, [])
     p.generic_names = generic_names(tokens)
+    for n in extra.sorted()
+        p.generic_names.add(n)
     p.top_level()
     public := p.public.sorted()
     program := ast.Program(

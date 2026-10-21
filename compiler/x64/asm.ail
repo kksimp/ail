@@ -391,6 +391,20 @@ pub fn Asm.syscall(mut self)
     byte(15)
     byte(5)
 
+## Atomic read-modify-write on a 64-bit memory operand (ADR 0600): `xchg`
+## is implicitly locked; `cmpxchg` compares with and returns in rax; `xadd`
+## returns the old value in `r`.
+pub fn Asm.xchg_mr(mut self, m Mem, r int)
+    op_rm(false, 135, r, m)
+
+pub fn Asm.lock_cmpxchg(mut self, m Mem, r int)
+    byte(240)
+    op_rm(true, 177, r, m)
+
+pub fn Asm.lock_xadd(mut self, m Mem, r int)
+    byte(240)
+    op_rm(true, 193, r, m)
+
 pub fn Asm.ud2(mut self)
     byte(15)
     byte(11)

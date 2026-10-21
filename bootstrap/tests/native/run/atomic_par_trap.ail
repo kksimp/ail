@@ -1,0 +1,7 @@
+# conc.atomic.6: a `par for` on an atomic that traps reports that trap; the
+# iterations that ran are not undone (ADR 0600).
+fn main()
+    total := Atomic(9223372036854775807)
+    par for i in 0..400
+        total.add(1)
+    print(total.load())

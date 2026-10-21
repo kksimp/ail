@@ -137,7 +137,28 @@ fn reuse_in(f Func, e Escape) Func
             if i.op != "call" or not MAKERS.contains(i.name) or i.dst < 0 or i.dst >= e.up.len()
                 continue
             r := e.root(i.dst)
-            if e.escapes[r] or carried.contains(r)
+            if e.escapes[r]
+                continue
+            if carried.contains(r)
+                old := dead_member(g, e, b, k - 1)
+                if old >= 0
+                    g.vals.push(Ty.Int)
+                    g.names.push("")
+                    zero := g.vals.len() - 1
+                    mut z := inst(zero, "const", [])
+                    z.imm = 0
+                    mut wipe := inst(-1, "store", [old, zero])
+                    wipe.imm = 0
+                    mut insts := List[Inst]()
+                    for x in 0..g.blocks[b].insts.len()
+                        if x == k - 1
+                            insts.push(z)
+                            insts.push(wipe)
+                            insts.push(inst(i.dst, "copy", [old]))
+                        else
+                            insts.push(g.blocks[b].insts[x])
+                    g.blocks[b].insts = insts
+                    k += 2
                 continue
             lp := innermost(loops, b) else continue
             if lp.pre < 0
@@ -183,3 +204,80 @@ fn innermost(loops List[LoopInfo], b int) LoopInfo?
         if loops[k].member[b] and (best < 0 or loops[k].blocks.len() < loops[best].blocks.len())
             best = k
     if best < 0 then none else loops[best]
+
+## Resetting in place (native.reuse.2, ADR 0826): the list made at `blocks[b].insts[at]`
+## replaces another list of its group (`buf = []`) that is dead from there
+## on. Returns that list's value, else -1. Every other value of the group
+## must be a copy, a maker or a parameter of a block other than the entry (a
+## function's own parameter belongs to the caller), the returned value must
+## be defined before every path to `at`, and no value of the group but the
+## new list may be read after `at`.
+fn dead_member(f Func, e Escape, b int, at int) int
+    made := f.blocks[b].insts[at].dst
+    r := e.root(made)
+    defs := defs_of(f)
+    dom := dominators(f)
+    mut inside := Set[int]()
+    mut members := List[int]()
+    for v in 0..e.up.len()
+        if e.root(v) != r
+            continue
+        members.push(v)
+        inside.add(v)
+        if v == made
+            continue
+        d := defs[v]
+        if d.at < 0
+            if d.block == 0
+                return -1
+        else
+            op := f.blocks[d.block].insts[d.at]
+            if op.op != "copy" and not (op.op == "call" and MAKERS.contains(op.name))
+                return -1
+    n := f.blocks.len()
+    mut live_in := [Set[int]() for _ in 0..n]
+    mut changed := true
+    while changed
+        changed = false
+        for x in 0..n
+            now := live_before(f, inside, live_in, x, 0)
+            if now.len() != live_in[x].len()
+                live_in[x] = now
+                changed = true
+    for v in live_before(f, inside, live_in, b, at + 1)
+        if v != made
+            return -1
+    for v in members
+        if v == made
+            continue
+        d := defs[v]
+        if d.block == b and d.at >= at
+            continue
+        if d.block != b and not dom[b][d.block]
+            continue
+        return v
+    -1
+
+## The members of `inside` live just before instruction `from` of block `x`
+## (before its parameters when `from` is 0).
+fn live_before(f Func, inside Set[int], live_in List[Set[int]], x int, from int) Set[int]
+    mut live := Set[int]()
+    for t in f.blocks[x].term.targets
+        for v in live_in[t]
+            live.add(v)
+    for v in f.blocks[x].term.uses()
+        if inside.contains(v)
+            live.add(v)
+    mut k := f.blocks[x].insts.len()
+    while k > from
+        k -= 1
+        i := f.blocks[x].insts[k]
+        if i.dst >= 0
+            live.remove(i.dst)
+        for v in i.args
+            if inside.contains(v)
+                live.add(v)
+    if from == 0
+        for p in f.blocks[x].params
+            live.remove(p)
+    live

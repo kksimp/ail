@@ -1,0 +1,45 @@
+# `buf = []` must not empty a list that something else can still reach: a
+# struct field, a function value's argument, or a list that was pushed (native.reuse.2). Each line prints what the
+# interpreter prints.
+struct Holder
+    items List[int]
+
+fn total(xs List[int]) int
+    mut s := 0
+    for x in xs
+        s += x
+    s
+
+fn main()
+    # Stored in a struct field.
+    holder := Holder(items: [5, 6])
+    mut c := holder.items
+    c = []
+    c.push(8)
+    print(holder.items)
+    print(c)
+    # Passed to a function value.
+    f := total
+    mut e := [1, 2, 3]
+    print(f(e))
+    e = []
+    e.push(10)
+    print(f(e))
+    # Reset in a loop, each old list also pushed into a list of lists.
+    mut rows := List[List[int]]()
+    mut d := [0]
+    for i in 1..4
+        rows.push(d)
+        d = []
+        d.push(i)
+    print(rows)
+    print(d)
+    # Stored into a struct field inside the loop.
+    mut kept := Holder(items: [])
+    mut buf := [1]
+    for i in 0..3
+        kept.items = buf
+        buf = []
+        buf.push(i + 20)
+    print(kept.items)
+    print(buf)

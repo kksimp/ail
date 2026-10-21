@@ -226,6 +226,7 @@ fn list_take(xs List[int], n int, size int, head str, tail str) List[int]
         out_int(n)
         out_str("\n")
         out_str(tail)
+        trace_frames(tail)
         flush_to(2)
         sys_exit(1)
     len := load64(list_addr(xs))
@@ -243,6 +244,7 @@ fn list_sum_int(xs List[int], head str, tail str) int
             out_str(head)
             out_str("`sum` overflows `int`\n")
             out_str(tail)
+            trace_frames(tail)
             flush_to(2)
             sys_exit(1)
         s = t

@@ -1,0 +1,9 @@
+# A float that doesn't fit an int (type.num.9).
+fn to_i(x float) int
+    x.to_int()
+
+fn scale(x float) int
+    to_i(x * 1e30)
+
+fn main()
+    print(scale(2.5))

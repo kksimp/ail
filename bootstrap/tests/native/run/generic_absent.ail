@@ -1,0 +1,18 @@
+fn absent[T]() T?
+    none
+
+struct S
+    n int
+
+fn main()
+    mut a := absent[str]()
+    mut b := absent[S]()
+    mut c := absent[int]()
+    print(a == none)
+    print(b == none)
+    c = 3
+    a = "x"
+    if v := a
+        print(v)
+    if w := c
+        print(w)

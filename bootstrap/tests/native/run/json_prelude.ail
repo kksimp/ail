@@ -1,0 +1,24 @@
+# The prelude's `Json` and derived `to_json` in a native build (ADR 0808):
+# only the functions the program reaches are lowered.
+struct Point
+    x int
+    name str
+
+impl ToJson for Point
+
+fn count(j Json) int
+    match j
+        Arr(items) => items.len()
+        Obj(members) => members.len()
+        Null | Bool(_) | Num(_) | Str(_) => 1
+
+fn main()
+    a := Json.Arr([Json.Num(1.0), Json.Str("x"), Json.Null])
+    print(a.kind())
+    print(count(a))
+    o := Point(x: 3, name: "a").to_json()
+    print(o.kind())
+    print(count(o))
+    if g := o.get("name")
+        print(g.kind())
+    print(o.get("y") == none)

@@ -487,11 +487,12 @@ fn shift(tokens: &mut [Token], base: usize) {
 
 /// ct.gen.3: a diagnostic inside generated code is reported at the deriving
 /// `impl`, with a note at its place in the generated text.
-pub fn remap(prog: &Program, diags: &mut [Diagnostic]) {
+pub fn remap(prog: &Program, diags: &mut Vec<Diagnostic>) {
     if prog.generated.is_empty() {
         return;
     }
-    for d in diags {
+    let mut from_impl = vec![None; diags.len()];
+    for (k, d) in diags.iter_mut().enumerate() {
         let Some(g) = prog.generated.iter().find(|g| {
             let base = prog.files[g.file].base;
             d.pos.line > base && d.pos.line <= base + FILE_LINES
@@ -511,7 +512,22 @@ pub fn remap(prog: &Program, diags: &mut [Diagnostic]) {
         d.pos = g.impl_pos;
         d.end = None;
         d.fixes.clear();
+        from_impl[k] = Some(g.impl_pos);
     }
+    // After json.derive.1-2 names the field, the generated code's other
+    // problems are its follow-ons (an `else e` whose call failed).
+    let named: Vec<Pos> = diags
+        .iter()
+        .zip(&from_impl)
+        .filter(|(d, at)| at.is_some() && d.rule.starts_with("json.derive."))
+        .map(|(d, _)| d.pos)
+        .collect();
+    let mut k = 0;
+    diags.retain(|d| {
+        let at = from_impl[k];
+        k += 1;
+        !(at.is_some_and(|p| named.contains(&p)) && !d.rule.starts_with("json.derive."))
+    });
 }
 
 /// json.derive.1-2: a derived JSON conversion that calls `to_json` or

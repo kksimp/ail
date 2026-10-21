@@ -1,0 +1,70 @@
+# Generic structs and enums (ADR 0536): instances from the fields' values,
+# the expected type or written types; methods of instances; `match` on an
+# enum instance; nested instances; copies stay independent (own.val.1).
+struct Box[T]
+    item T
+    count int
+
+fn Box[T].get(self) T
+    item
+
+fn Box[T].bump(mut self)
+    count += 1
+
+fn Box[T].twice(self) List[T]
+    [get(), item]
+
+struct Pair[A, B]
+    left A
+    right B
+
+enum Tree[T]
+    Leaf(value T)
+    Node(left Tree[T], right Tree[T])
+    Empty
+
+fn Tree[T].size(self) int
+    match self
+        Leaf => 1
+        Node(l, r) => l.size() + r.size()
+        Empty => 0
+
+fn total(t Tree[int]) int
+    match t
+        Leaf(v) => v
+        Node(l, r) => total(l) + total(r)
+        Empty => 0
+
+fn swap[A, B](p Pair[A, B]) Pair[B, A]
+    Pair(left: p.right, right: p.left)
+
+fn wrap[T](x T) Box[T]
+    Box(item: x, count: 0)
+
+fn main()
+    mut b := Box(item: "hi", count: 0)
+    b.bump()
+    b.bump()
+    print(b.get())
+    print(b.count)
+    print(b.twice())
+    c := Box[float](item: 2.5, count: 1)
+    print(c.get())
+    p := Pair(left: 1, right: "one")
+    q := swap(p)
+    print(q.left)
+    print(q.right)
+    t := Tree.Node(left: Tree.Leaf(3), right: Tree.Node(left: Tree.Leaf(4), right: Tree.Empty))
+    print(total(t))
+    print(t.size())
+    s := Tree.Node(left: Tree.Leaf("a"), right: Tree.Leaf("b"))
+    print(s.size())
+    mut boxes := [wrap(1), wrap(2)]
+    boxes[0].bump()
+    copy := boxes
+    boxes[1].bump()
+    print(copy[1].count)
+    print(boxes[1].count)
+    nested := wrap(Pair(left: [1, 2], right: wrap("x")))
+    print(nested.get().right.get())
+    print(nested.item.left)
