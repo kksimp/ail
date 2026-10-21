@@ -53,3 +53,18 @@ A rule is tested when its id appears in a case, example or Rust test; spec examp
 - **21-trace.md** (5): `trace.run.5` `trace.val.1` `trace.val.2` `trace.watch.2` `trace.watch.3`
 - **22-tools.md** (6): `api.doc.1` `api.id.1` `explain.list.1` `explain.show.1` `fix.edit.1` `fix.edit.6`
 - **std-json.md** (2): `json.query.4` `json.type.1`
+
+## Documentation snippets (lane 198, 2026-10-21)
+
+The spec harness (`bootstrap/tests/spec.rs`, run by `./ail selftest`) also
+checks the `ail` fences of the documents agents load. Counts for the
+documents with fences:
+
+| Document | Blocks | Checked and run | Skipped (`skip=context`) | Notes |
+|---|---|---|---|---|
+| `docs/quick-reference.md` | 33 | 22 | 11 | Two `skip=context` blocks became runnable this lane (the list and map blocks, which lacked the use their comment describes). The other 11 use names they don't declare: deliberate illustrations. |
+| `docs/language-card.md` | 18 | 12 | 6 | Unchanged. The card is the token-budgeted file. |
+| `README.md`, `docs/design/native-guide.md`, `docs/design/ai-first-plan.md`, `docs/design/cards/edit.md`, `docs/design/cards/std.md` | 0 | 0 | 0 | Added to the harness. Their examples are `sh`, `text` or untagged, and the cards are signature listings, so nothing to run. A future `ail` fence there is checked. |
+
+A block that cannot run because it uses names outside its own snippet keeps
+`skip=context`; that tag is the mark.

@@ -18,7 +18,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Str | List | Struct => Ty.Opt(t)
+        Int | Float | Bool | Str | List | Struct | Enum => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -64,6 +64,11 @@ fn Lower.some(mut self, v Val) Val
         Int => Val(id: call("rt.box", [v.id], t), ty: t)
         Float => Val(id: call("rt.boxf", [v.id], t), ty: t)
         Bool => Val(id: call("rt.box_bool", [v.id], t), ty: t)
+        Enum(n) =>
+            # A fieldless enum is an `int` tag, and tag 0 is a value: box it.
+            if is_flat(n)
+                return Val(id: call("rt.box", [v.id], t), ty: t)
+            Val(id: op("copy", [v.id], t), ty: t)
         _ => Val(id: op("copy", [v.id], t), ty: t)
 
 ## The value inside a present optional.
@@ -73,6 +78,11 @@ fn Lower.unwrap(mut self, o Val) Val
         Int => Val(id: call("rt.unbox", [o.id], t), ty: t)
         Float => Val(id: call("rt.unboxf", [o.id], t), ty: t)
         Bool => Val(id: call("rt.unbox_bool", [o.id], t), ty: t)
+        Enum(n) =>
+            if is_flat(n)
+                tag := call("rt.unbox", [o.id], Ty.Int)
+                return Val(id: op("copy", [tag], t), ty: t)
+            Val(id: op("copy", [o.id], t), ty: t)
         _ => Val(id: op("copy", [o.id], t), ty: t)
 
 ## `v` where an optional of type `want` is expected (a plain value is `some`).
@@ -135,6 +145,7 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                     s := sigs.get("{prefix}{n}") else return false
                     s.fails
                 _ => false
+        Method(recv, name, _, _) => os_fails(recv, name)
         _ => false
 
 ## `return Name()` in a function that can fail: record the error and leave.
@@ -317,3 +328,52 @@ fn Lower.declare_errors(mut self, prog ast.Program)
 
 fn Lower.is_error_message(self, f ast.FnDecl) bool
     err_fns.contains("{f.pos.line}:{f.pos.col}") and f.name == "to_str"
+
+# ---- the type of an `if` or `match` that may give `none` ----
+
+fn ends_in_none(body List[ast.Stmt]) bool
+    if body.len() == 0
+        return false
+    match body[body.len() - 1]
+        Eval(e) => is_none_lit(e)
+        _ => false
+
+fn is_pending_opt(t Ty) bool
+    inner := t.opt_inner() else return false
+    inner.is_unknown()
+
+## The type the arms of a value `if` or `match` start with: the expected
+## type, else `T?` for an arm that is `none` (settled by the first arm
+## that has a value), else unknown.
+fn arms_start(want Ty?, bodies List[List[ast.Stmt]], els List[ast.Stmt]?) Ty
+    if w := want
+        return w
+    mut has_none := false
+    for b in bodies
+        has_none = has_none or ends_in_none(b)
+    if e := els
+        has_none = has_none or ends_in_none(e)
+    if has_none
+        return Ty.Opt(Ty.Unknown)
+    Ty.Unknown
+
+## The arms' type once an arm with a value (type `xt`) is seen.
+fn settle_arm_ty(t Ty, xt Ty) Ty
+    if not is_pending_opt(t)
+        return xt
+    if inner := xt.opt_inner()
+        if inner.is_unknown()
+            return t
+        return xt
+    opt_of(xt) else xt
+
+## `mut x := none` has no type until it is assigned a value: type the
+## variable (and every value it has had) by that value.
+fn Lower.settle_var(mut self, target ast.Expr, ty Ty, r Val) Ty
+    if not is_pending_opt(ty)
+        return ty
+    t := settle_arm_ty(ty, r.ty)
+    if is_pending_opt(t)
+        return ty
+    retype(target, t)
+    t
