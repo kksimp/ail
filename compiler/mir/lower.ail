@@ -454,20 +454,15 @@ fn is_literal(e ast.Expr) bool
         _ => false
 
 ## A constant's value that is inlined at each use: literals, names of other
-## constants, and arithmetic on them (no calls, so no effects).
+## constants, and arithmetic on them (no calls, so no effects). A list is not:
+## inlining it rebuilds it at every use, so it gets a program global (ADR 0604).
 fn is_const_expr(e ast.Expr) bool
     match e
         Int | Float | Bool | Str | Name => true
-        ListLit(items, _) => all_const(items)
+        ListLit(_, _) => false
         Unary(_, x, _) => is_const_expr(x)
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
-
-fn all_const(items List[ast.Expr]) bool
-    for x in items
-        if not is_const_expr(x)
-            return false
-    true
 
 fn is_number(t Ty) bool
     match t
