@@ -134,6 +134,8 @@ compile-time error that names the limit, the constant or `impl`, and the call
 stack where evaluation stopped. *(ADR 0226)*
 
 ```ail norun rules=ct.eval.3
+# norun: the limit is a run-time trap while the constant is computed before `main`, which the gate
+# does not assert. bootstrap/tests/ct_limit.rs checks the same trap with AIL_CT_MAX_STEPS set low.
 fn spin(n int) int
     mut i := 0
     while i < n
