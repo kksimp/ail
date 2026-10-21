@@ -8,7 +8,8 @@ fn check_dump(str, bool) ! [env fail fs io]
 fn runtime(str) !ast.Program [fail fs io]
 fn runtime_with(str, str, str) !ast.Program [fail fs io]
 fn runtime_syntax(str, str) [io]
-fn lower_file(str, ast.Program?) !mir.Module [fail fs io]
+fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
+fn std_file(str, str) str
 fn parse_source(str, str) !mir.Source [fail fs io]
 ```
 
@@ -202,7 +203,6 @@ pub fn codegen.div_magic(int) List[int]
 ## mir
 ```
 pub fn mir.fold_addresses(mir.Func) mir.Func
-pub fn mir.fold_prim_addresses(mir.Func) mir.Func
 pub struct mir.Versioned
 pub fn mir.bce(mir.Func, bool, bool) mir.Func
 pub fn mir.lists_only_grow(mir.Module) bool
@@ -329,4 +329,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3643); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3638); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
