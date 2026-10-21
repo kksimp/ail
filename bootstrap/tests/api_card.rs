@@ -132,7 +132,14 @@ fn rejected_programs_and_bad_options() {
 /// Regenerate with the command in each file's name below, from the repository root.
 #[test]
 fn committed_cards_are_fresh() {
-    for (target, file) in [("tools/edit", "edit.md"), ("bootstrap/src/std", "std.md")] {
+    for (target, file) in [
+        ("tools/edit", "edit.md"),
+        ("bootstrap/src/std", "std.md"),
+        ("tools/garlic", "garlic.md"),
+        ("tools/garlic/js", "garlic-js.md"),
+        ("tools/pdf", "pdf.md"),
+        ("compiler", "compiler.md"),
+    ] {
         let out = ail().current_dir(repo()).args(["api", "--card", target]).output().unwrap();
         assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
         let want = String::from_utf8(out.stdout).unwrap();
