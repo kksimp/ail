@@ -73,6 +73,7 @@ pub struct ast.Param
 pub struct ast.TypeRef
 pub enum ast.TypeShape
 pub enum ast.Stmt
+pub struct ast.Binder
 pub enum ast.Else
 pub enum ast.BinOp
 pub enum ast.UnOp
@@ -326,4 +327,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3578); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3586); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
