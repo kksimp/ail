@@ -1,0 +1,9 @@
+fn sum(m Map[str, int]) int
+    mut t := 0
+    for k in m.keys()
+        t += m[k]
+    t
+
+fn main()
+    m := {"a": 1, "b": 2}
+    print(sum(m))

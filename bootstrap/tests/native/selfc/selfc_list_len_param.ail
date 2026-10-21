@@ -1,0 +1,5 @@
+fn size(xs List[int]) int
+    xs.len()
+
+fn main()
+    print(size([1, 2, 3]))
