@@ -1245,7 +1245,14 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         SetLit(items, pos) => lower_set_lit(items, pos, want)
         Match(scrutinee, arms, pos) => lower_match(scrutinee, arms, pos, want)
         Try(x, context, pos) => lower_try(x, context, pos)
-        Comp(form, elem, _, clauses, pos) => lower_comp(form, elem, clauses, pos, want)
+        Comp(form, elem, body_val, clauses, pos) => lower_comp(
+            form,
+            elem,
+            body_val,
+            clauses,
+            pos,
+            want,
+        )
         OrElse(x, other, pos) =>
             if is_pop_call(x)
                 return lower_pop_else(x, other, pos)

@@ -78,7 +78,8 @@ list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
 `float`, `bool` or `str` (not `by:` keys), `swap`, `sum`, `min`, `max`, `first`, `last`
 and `index_of`, `sorted` on a set of `int` or `str`, `union`, `intersect` and `difference` on
-sets and lists of `int` or `str`, and `top` on a `Map[K, int]` (`int` or `str` keys), in functions with at most eight
+sets and lists of `int` or `str`, `top` on a `Map[K, int]` (`int` or `str` keys), and set and map comprehensions
+whose type is expected (a function result, argument or field), in functions with at most eight
 `float` parameters (any number of others). Also: format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression) and `s.to_float()` (a `float?`, type.num.8);
