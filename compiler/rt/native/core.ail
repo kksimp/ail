@@ -178,24 +178,35 @@ fn out_nl()
     if line_buffered()
         flush()
 
-## Decimal, working on negative remainders so the smallest `int` needs no
-## negation.
-fn out_int(n int)
-    if n == 0
-        out_byte(48)
-        return
+## Decimal `n` written at address `at`, which has 48 bytes to use (24 for the
+## window, 24 read past it); the count of bytes. It works on negative remainders so the smallest `int` needs no
+## negation. The digits are produced from the end of that window, one
+## division by 10 each, then moved down to `at` in three 8-byte pieces (the
+## bytes after the number are scratch).
+fn write_int(at int, n int) int
+    mut v := if n < 0 then n else 0 - n
+    mut q := at + 23
+    store8(q, 48 - v % 10)
+    v = v / 10
+    while v != 0
+        q -= 1
+        r := v / 10
+        store8(q, 48 + r * 10 - v)
+        v = r
     if n < 0
-        out_byte(45)
-    mut v := n
-    mut scale := 1
-    while v / 10 != 0
-        v = v / 10
-        scale *= 10
-    v = n
-    while scale > 0
-        d := v / scale % 10
-        out_byte(48 + d.abs())
-        scale = scale / 10
+        q -= 1
+        store8(q, 45)
+    store64(at, load64(q))
+    store64(at + 8, load64(q + 8))
+    store64(at + 16, load64(q + 16))
+    at + 24 - q
+
+fn out_int(n int)
+    mut used := load64(global(OUT_LEN))
+    if OUT_CAP - used < 48
+        flush()
+        used = 0
+    store64(global(OUT_LEN), used + write_int(load64(global(OUT_BUF)) + used, n))
 
 fn out_bool(b bool)
     if b
