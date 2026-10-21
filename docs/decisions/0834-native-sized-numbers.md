@@ -48,6 +48,9 @@ interpreter behaviour is the spec (`type.num.13-15`).
 
 ## Consequences
 
-Programs that use sized numbers start to build natively. Arithmetic on them
-is still `native.subset.1` until PR 2. Tests `sized_basics` and `sized_trap`
+Programs that use sized numbers start to build natively. Part 2 adds checked
+`+ - * / %`, negation, `abs`, `wrapping_*` and `saturating_*` (not
+`saturating_mul` on `u32`, which needs a 128-bit product), with the
+interpreter's trap texts; `checked_*` waits for `Opt` of a sized integer
+(part 4). Tests `sized_basics` and `sized_trap`
 in `bootstrap/tests/native/run/` check the executable against `ail run`.

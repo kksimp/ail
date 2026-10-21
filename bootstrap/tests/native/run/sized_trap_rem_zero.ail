@@ -1,0 +1,6 @@
+# A sized integer rem_zero traps.
+fn f(a i16, b i16) i16
+    a % b
+
+fn main()
+    print(f(5.to_i16(), 0.to_i16()))

@@ -5,13 +5,8 @@
 ## doesn't fit. The compiler checks the range inline and calls this only on
 ## the failing path; the trap prints the string object it returns.
 
-## `300` doesn't fit in `u8`: `v` is the value, `k` the target's code in
-## `SIZED_KINDS` (compiler/mir/lower_sized.ail).
-fn sized_msg(v int, k int) int
-    sb_reset()
-    sb_text("`")
-    put_int(v)
-    sb_text("` doesn't fit in `")
+## The name of the kind with code `k` (`SIZED_KINDS` in lower_sized.ail).
+fn sb_kind(k int)
     if k == 0
         sb_text("i8")
     elif k == 1
@@ -24,5 +19,66 @@ fn sized_msg(v int, k int) int
         sb_text("u16")
     else
         sb_text("u32")
+
+## `a OP b`: `op` is the code of lower_sized.ail's `arith_code`.
+fn sb_expr(a int, b int, op int)
+    sb_text("`")
+    put_int(a)
+    if op == 0
+        sb_text(" + ")
+    elif op == 1
+        sb_text(" - ")
+    elif op == 2
+        sb_text(" * ")
+    elif op == 3
+        sb_text(" / ")
+    else
+        sb_text(" % ")
+    put_int(b)
+    sb_text("`")
+
+## `300` doesn't fit in `u8`: `v` is the value, `k` the target's code.
+fn sized_msg(v int, k int) int
+    sb_reset()
+    sb_text("`")
+    put_int(v)
+    sb_text("` doesn't fit in `")
+    sb_kind(k)
+    sb_text("`")
+    str_addr(sb_str())
+
+## `200 + 100` overflows `u8` (expr.arith.1, expr.arith.3).
+fn sized_over_msg(a int, b int, op int, k int) int
+    sb_reset()
+    sb_expr(a, b, op)
+    sb_text(" overflows `")
+    sb_kind(k)
+    sb_text("`")
+    str_addr(sb_str())
+
+## division by zero in `5 / 0` (expr.arith.3).
+fn sized_zero_msg(a int, b int, op int, k int) int
+    sb_reset()
+    sb_text("division by zero in ")
+    sb_expr(a, b, op)
+    str_addr(sb_str())
+
+## `-(-128)` overflows `i8` (type.num.14).
+fn sized_neg_msg(a int, k int) int
+    sb_reset()
+    sb_text("`-(")
+    put_int(a)
+    sb_text(")` overflows `")
+    sb_kind(k)
+    sb_text("`")
+    str_addr(sb_str())
+
+## `(-128).abs()` overflows `i8` (type.num.14).
+fn sized_abs_msg(a int, k int) int
+    sb_reset()
+    sb_text("`(")
+    put_int(a)
+    sb_text(").abs()` overflows `")
+    sb_kind(k)
     sb_text("`")
     str_addr(sb_str())

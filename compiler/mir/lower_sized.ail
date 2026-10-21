@@ -2,8 +2,10 @@
 ## i32 u8 u16 u32` as `Ty.Sized(kind)`. A value lives in a register like an
 ## `int`, sign- or zero-extended from its width, so it is always inside its
 ## type's range; comparison and printing are the `int` ones. This file has
-## literals, the conversions and comparison. Arithmetic, `u64` and `f32` come
-## later (not yet: `native.subset.1` problems, never a wrong answer).
+## literals, the conversions, comparison and arithmetic (checked `+ - * / %`,
+## negation, `abs`, `wrapping_*` and `saturating_*`). `checked_*` (needs
+## `Opt` of a sized integer), `u64` and `f32` come later (not yet:
+## `native.subset.1` problems, never a wrong answer).
 use ast
 
 ## The kinds, in the order of the codes `rt.sized_msg` knows.
@@ -72,12 +74,160 @@ fn Lower.negative_sized_lit(mut self, operand ast.Expr, want Ty?) Val?
         return none
     Val(id: konst(0 - n, Ty.Sized(k)), ty: Ty.Sized(k))
 
-## Comparison of two sized integers of one type; the register order is the
-## value order. Arithmetic comes with ADR 0834's second change.
+## `a OP b` on two sized integers of one type. Comparison is the register
+## order. `+ - * / %` compute in 64 bits, where no 32-bit operand pair can
+## overflow (an unsigned product that passes 2^63 wraps negative, which the
+## range check below still rejects), then trap with `expr.arith.1` when the
+## result is outside the type (type.num.14); `/` and `%` by zero and
+## `MIN / -1` trap with `expr.arith.3`.
 fn Lower.sized_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val?
     if is_comparison(o)
         return Val(id: op(op_name(o), [a.id, b.id], Ty.Bool), ty: Ty.Bool)
-    unsupported(pos, "`{op_symbol(o)}` on `{a.ty.name()}`")
+    name := op_name(o)
+    k := sized_kind(a.ty)
+    if arith_code(name) < 0
+        return unsupported(pos, "`{op_symbol(o)}` on `{a.ty.name()}`")
+    r := self.sized_arith(name, k, a.id, b.id, pos)
+    Val(id: r, ty: a.ty)
+
+fn arith_code(name str) int
+    match name
+        "add" => 0
+        "sub" => 1
+        "mul" => 2
+        "div" => 3
+        "rem" => 4
+        _ => -1
+
+## The checked result of `a name b` on sized integers of kind `k`.
+fn Lower.sized_arith(mut self, name str, k str, a int, b int, pos ast.Pos) int
+    code := arith_code(name)
+    kc := konst(sized_code(k), Ty.Int)
+    args := [a, b, konst(code, Ty.Int), kc]
+    divides := name == "div" or name == "rem"
+    if divides
+        nz := op("ne", [b, konst(0, Ty.Int)], Ty.Bool)
+        sized_trap_unless(nz, "expr.arith.3", "rt.sized_zero_msg", args, pos)
+    r := op(name, [a, b], Ty.Int)
+    if name == "rem"
+        return r
+    rule := if divides then "expr.arith.3" else "expr.arith.1"
+    signed := sized_lo(k) < 0
+    if name != "div" and (signed or name != "add")
+        sized_trap_unless(
+            op("ge", [r, konst(sized_lo(k), Ty.Int)], Ty.Bool),
+            rule,
+            "rt.sized_over_msg",
+            args,
+            pos,
+        )
+    if name != "div" or signed
+        sized_trap_unless(
+            op("le", [r, konst(sized_hi(k), Ty.Int)], Ty.Bool),
+            rule,
+            "rt.sized_over_msg",
+            args,
+            pos,
+        )
+    r
+
+## `-x` on a sized integer: traps with `type.num.14` when `x` is the smallest
+## value of a signed type, and on any non-zero unsigned `x`.
+fn Lower.sized_neg(mut self, a Val, pos ast.Pos) Val?
+    k := sized_kind(a.ty)
+    r := op("neg", [a.id], Ty.Int)
+    args := [a.id, konst(sized_code(k), Ty.Int)]
+    sized_trap_unless(
+        op("ge", [r, konst(sized_lo(k), Ty.Int)], Ty.Bool),
+        "type.num.14",
+        "rt.sized_neg_msg",
+        args,
+        pos,
+    )
+    sized_trap_unless(
+        op("le", [r, konst(sized_hi(k), Ty.Int)], Ty.Bool),
+        "type.num.14",
+        "rt.sized_neg_msg",
+        args,
+        pos,
+    )
+    Val(id: r, ty: a.ty)
+
+## The value `v` wrapped into kind `k`: sign- or zero-extended from its width.
+fn Lower.sized_wrap(mut self, k str, v int) int
+    if sized_lo(k) < 0
+        sh := konst(64 - sized_bits(k), Ty.Int)
+        return op("shr", [op("shl", [v, sh], Ty.Int), sh], Ty.Int)
+    op("band", [v, konst(sized_hi(k), Ty.Int)], Ty.Int)
+
+fn sized_bits(k str) int
+    match k
+        "i8" | "u8" => 8
+        "i16" | "u16" => 16
+        _ => 32
+
+## `wrapping_*` (on `int` too, where 64-bit arithmetic already wraps),
+## `saturating_*` and `abs` of a sized integer (type.num.14). `None` for any
+## other method.
+fn Lower.sized_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    is_int := r.ty == Ty.Int
+    if not (is_int or r.ty.is_sized())
+        return none
+    if name == "wrapping_neg" and vs.len() == 0
+        v := op("neg", [r.id], Ty.Int)
+        if is_int
+            return Val(id: v, ty: Ty.Int)
+        return Val(id: sized_wrap(sized_kind(r.ty), v), ty: r.ty)
+    if name == "abs" and vs.len() == 0 and not is_int
+        k := sized_kind(r.ty)
+        if sized_lo(k) == 0
+            return Val(id: r.id, ty: r.ty)
+        # `abs` of the smallest value of a signed type doesn't fit.
+        neg := op("neg", [r.id], Ty.Int)
+        ok := op("le", [neg, konst(sized_hi(k), Ty.Int)], Ty.Bool)
+        sized_trap_unless(
+            ok,
+            "type.num.14",
+            "rt.sized_abs_msg",
+            [r.id, konst(sized_code(k), Ty.Int)],
+            npos,
+        )
+        pos_b := new_block()
+        join := new_block()
+        res := new_value(Ty.Int, "")
+        blocks[join].params.push(res)
+        neg_b := new_block()
+        branch(op("lt", [r.id, konst(0, Ty.Int)], Ty.Bool), neg_b, [], pos_b, [])
+        seal(neg_b)
+        seal(pos_b)
+        cur = neg_b
+        jump(join, [neg])
+        cur = pos_b
+        jump(join, [r.id])
+        seal(join)
+        cur = join
+        return Val(id: res, ty: r.ty)
+    if vs.len() != 1 or not same_ty(vs[0].ty, r.ty)
+        return none
+    if name.starts_with("wrapping_")
+        base := name.slice(9, name.len())
+        if base == "add" or base == "sub" or base == "mul"
+            v := op(base, [r.id, vs[0].id], Ty.Int)
+            if is_int
+                return Val(id: v, ty: Ty.Int)
+            return Val(id: sized_wrap(sized_kind(r.ty), v), ty: r.ty)
+        return none
+    if name.starts_with("saturating_") and not is_int
+        base := name.slice(11, name.len())
+        k := sized_kind(r.ty)
+        if base != "add" and base != "sub" and base != "mul"
+            return none
+        if base == "mul" and k == "u32"
+            return unsupported(npos, "`.saturating_mul()` on `u32`")
+        v := op(base, [r.id, vs[0].id], Ty.Int)
+        capped := int_minmax("min", v, konst(sized_hi(k), Ty.Int))
+        return Val(id: int_minmax("max", capped, konst(sized_lo(k), Ty.Int)), ty: r.ty)
+    none
 
 ## The conversions of type.num.15 between `int` and the sized integers:
 ## `to_i8` ... `to_u32` on any of them, and `to_int` back. A conversion that
@@ -101,23 +251,34 @@ fn Lower.sized_conversion(mut self, r Val, name str, npos ast.Pos, vs List[Val])
         and sized_hi(sized_kind(r.ty)) <= sized_hi(target)
         # Every value of the source type is in range: only the type changes.
         return Val(id: r.id, ty: t)
-    sized_trap_unless(op("ge", [r.id, konst(sized_lo(target), Ty.Int)], Ty.Bool), r.id, code, npos)
-    sized_trap_unless(op("le", [r.id, konst(sized_hi(target), Ty.Int)], Ty.Bool), r.id, code, npos)
+    sized_trap_unless(
+        op("ge", [r.id, konst(sized_lo(target), Ty.Int)], Ty.Bool),
+        "type.num.15",
+        "rt.sized_msg",
+        [r.id, konst(code, Ty.Int)],
+        npos,
+    )
+    sized_trap_unless(
+        op("le", [r.id, konst(sized_hi(target), Ty.Int)], Ty.Bool),
+        "type.num.15",
+        "rt.sized_msg",
+        [r.id, konst(code, Ty.Int)],
+        npos,
+    )
     Val(id: r.id, ty: t)
 
-## Trap at `pos` with `type.num.15`'s message unless `ok` holds. The runtime
-## builds the message from the value and the target's code (runtime message
-## kind 15).
-fn Lower.sized_trap_unless(mut self, ok int, v int, code int, pos ast.Pos)
+## Trap at `pos` with `rule` unless `ok` holds. The runtime function `msg_fn`
+## builds the message from `args` on the failing path (runtime message kind 15).
+fn Lower.sized_trap_unless(mut self, ok int, rule str, msg_fn str, args List[int], pos ast.Pos)
     fail := new_block()
     check(ok, fail)
     good := cur
     seal(fail)
     cur = fail
-    msg := call("rt.sized_msg", [v, konst(code, Ty.Int)], Ty.Int)
+    msg := call(msg_fn, args, Ty.Int)
     mut t := inst(-1, "trap", [msg, msg])
     t.imm = 15
-    t.site = site("type.num.15", "tensor", "", pos)
+    t.site = site(rule, "tensor", "", pos)
     emit_void(t)
     finish(unreachable_term())
     cur = good

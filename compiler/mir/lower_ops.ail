@@ -46,6 +46,7 @@ fn Lower.lower_unary(mut self, o ast.UnOp, operand ast.Expr, pos ast.Pos, want T
                 )
                 Float => Val(id: op("fneg", [a.id], Ty.Float), ty: Ty.Float)
                 Tensor(_) => tensor_neg(a, pos)
+                Sized(_) => sized_neg(a, pos)
                 _ => unsupported(pos, "`-` on `{a.ty.name()}`")
         Not =>
             a := lower_value(operand, Ty.Bool)?
@@ -219,6 +220,8 @@ fn Lower.lower_binary_expr(
 fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     if conv := sized_conversion(r, name, npos, vs)
         return conv
+    if m := sized_method(r, name, npos, vs)
+        return m
     if r.ty != Ty.Int
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "to_float" and vs.len() == 0
