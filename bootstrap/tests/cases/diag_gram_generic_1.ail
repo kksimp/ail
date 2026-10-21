@@ -1,0 +1,5 @@
+fn f(x List<int>) int
+    1
+
+fn main()
+    print(f([1]))

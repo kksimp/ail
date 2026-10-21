@@ -43,3 +43,7 @@ when the pull request is merged.
 - Documentation-only changes still go directly to `main` (ADR 0028).
 - Pull request descriptions summarise the change, the spec rules affected, and
   the gate results.
+
+## Rejected alternatives
+
+- Direct merges, with `tools/verify.sh` deleting merged branches: nothing to change, but merged branches linger until the next verify run. Rejected in favour of GitHub deleting the head branch on merge, which keeps the merge record readable. The verify script stays as the safety net.

@@ -1,0 +1,13 @@
+## Map.top: an agent counts the error codes in a day's log and keeps the most
+## frequent. Keys with equal counts keep their first-seen order.
+##   ./ail run examples/map_top.ail
+
+fn main()
+    codes := ["E12", "E07", "E12", "E30", "E07", "E12", "E41", "E30", "E55"]
+    mut counts := Map[str, int]()
+    for c in codes
+        counts[c] += 1
+    print(counts.top(3))
+    print(counts.top(0))
+    for code in counts.top(2)
+        print("{code} x{counts[code]}")

@@ -1,4 +1,4 @@
-## Static ELF executables for Linux (ADR 0387): no dynamic linker, no libc.
+## Static ELF executables for Linux (ffi.link.1, ADR 0387): no dynamic linker, no libc.
 ## One read-and-execute segment holds the headers, the code and the
 ## read-only data; a second, zero-filled read-write segment holds the
 ## runtime's globals. After them, outside every segment, a symbol table

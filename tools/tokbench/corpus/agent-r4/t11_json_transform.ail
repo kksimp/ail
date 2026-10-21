@@ -1,0 +1,10 @@
+struct U
+    name str
+    age int
+
+impl ToJson for U
+impl FromJson for U
+
+fn main() !
+    users := load_json[List[U]](env.args()[0])?
+    print_json([U(name: u.name, age: u.age + 1) for u in users if u.age > 18])

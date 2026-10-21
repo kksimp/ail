@@ -1,0 +1,25 @@
+
+fn main() !
+    here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
+    data := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data"
+    names := fs.list_dir(data)? "listing fixtures"
+    mut total_errors := 0
+    mut total_warnings := 0
+    for name in names.sorted()
+        if not name.ends_with(".ail")
+            continue
+        r := proc.run(ail, ["check", "--json", "{data}/{name}"])? "checking {name}"
+        mut errors := 0
+        mut warnings := 0
+        for line in r.err.lines()
+            d := parse_json(line) else continue
+            sev := d.text("severity", "")
+            if sev == "error"
+                errors += 1
+            elif sev == "warning"
+                warnings += 1
+        total_errors += errors
+        total_warnings += warnings
+        print("{name}: {errors} errors, {warnings} warnings")
+    print("total: {total_errors} errors, {total_warnings} warnings")

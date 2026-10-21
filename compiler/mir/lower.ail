@@ -15,6 +15,8 @@ use ast
 pub struct Sig
     pub params List[Ty]
     pub ret Ty
+    ## The function can fail: `ret` is its success type (lower_err.ail).
+    pub fails bool
 
 pub struct Problem
     pub rule str
@@ -38,6 +40,19 @@ struct Val
     ty Ty
 
 struct Lower
+    ## The source file being lowered (for error traces) and every file's.
+    path str
+    file_paths List[str]
+    ## Zero-field `error struct`s to their messages (lower_err.ail).
+    err_msgs Map[str, str]
+    ## The error type of each function that can fail, when it names one.
+    fn_errs Map[str, Ty]
+    ## The type the next block's final expression should have (consumed by `lower_block`).
+    tail_want Ty?
+    ## Where the function's last expression begins: the trace line of an error it ends in.
+    tail_pos ast.Pos
+    ## The function being lowered can fail.
+    fails bool
     sigs Map[str, Sig]
     ## Functions outside the subset, already reported: calls of them are
     ## not reported again.
@@ -47,6 +62,9 @@ struct Lower
     consts Map[str, ast.Expr]
     strs List[str]
     str_index Map[str, int]
+    ## The source path and lines, for the trap texts of `lower_str.ail`.
+    src_paths List[str]
+    src_lines List[List[str]]
     sites List[Site]
     problems List[Problem]
     funcs List[Func]
@@ -97,9 +115,6 @@ struct Lower
     const_home Map[str, int]
     ## The file of each problem, filled in by `stamp_problems`.
     problem_files List[int]
-    ## Each file's path and lines, for the excerpts of contract traps.
-    src_paths List[str]
-    src_lines List[List[str]]
     ## The functions with contracts, by key, and the file of every function.
     contracted Map[str, ast.FnDecl]
     ## The structs with `invariant` lines, and the file of each.
@@ -120,6 +135,15 @@ struct Lower
     ens_label str
     ens_vars List[NameKey]
     ens_nargs int
+    ## The enums' variants (ADR 0602), the `eq.E` functions asked for, and
+    ## the variants without fields that have a shared object.
+    enums Map[str, List[Case]]
+    eq_tys Map[str, Ty]
+    singletons List[VariantRef]
+    ## Program globals by key (ADR 0604), and the constants computed into
+    ## them at start-up.
+    globals Map[str, Global]
+    global_consts List[GlobalConst]
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -138,10 +162,9 @@ PRIMS := {
     "float_bits": "int",
     "bits_float": "float",
     "target": "int",
+    "gc_regs": "int",
+    "globals_end": "int",
 }
-
-## The `int` methods of two operands that are one instruction (expr.bit.1).
-BIT_OPS := {"bit_and": "band", "bit_or": "bor", "bit_xor": "bxor", "shl": "shl", "shr": "shr"}
 
 ## Lower a program and, when given, the runtime; `Problems` lists what is
 ## outside the subset.
@@ -159,13 +182,23 @@ pub struct Source
 ## Lower the files of a package (mod.unit.1-5, ADR 0393) and, when given,
 ## the runtime. The first source is the root module's file holding `main`;
 ## problems name the file they are in (`Problems.files`).
-pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
+pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
+    srcs := with_error_owners(input)
     mut l := Lower(
+        path: srcs[0].path,
+        file_paths: [src.path for src in srcs],
+        err_msgs: {"fs.IoError": "", "IoError": ""},
+        fn_errs: {},
+        tail_want: none,
+        tail_pos: ast.Pos(line: 1, col: 1),
+        fails: false,
         sigs: {},
         bad: Set[str](),
         consts: {},
         strs: [],
         str_index: {},
+        src_paths: [src.path for src in srcs],
+        src_lines: [src.text.lines() for src in srcs],
         sites: [],
         problems: [],
         funcs: [],
@@ -199,8 +232,6 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         file_prefix: [],
         const_home: {},
         problem_files: [],
-        src_paths: [src.path for src in srcs],
-        src_lines: [src.text.lines() for src in srcs],
         contracted: {},
         invariants: {},
         inv_file: {},
@@ -214,6 +245,11 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
         ens_label: "",
         ens_vars: [],
         ens_nargs: 0,
+        enums: {},
+        eq_tys: {},
+        singletons: [],
+        globals: {},
+        global_consts: [],
     )
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
@@ -221,18 +257,25 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     if r := rt
         l.declare_all(r, "rt.")
     l.problem_files = [0 for _ in l.problems]
+    for src in srcs
+        l.declare_errors(src.prog)
     for k in 0..srcs.len()
         l.enter_file(k)
+        l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
+        l.declare_enum_names(srcs[k].prog)
     for k in 0..srcs.len()
         l.enter_file(k)
         l.declare_struct_fields(srcs[k].prog)
+        l.declare_enums(srcs[k].prog)
     for k in 0..srcs.len()
         l.enter_file(k)
         l.declare_all(srcs[k].prog, l.prefix)
     l.stamp_problems()
+    l.gen_const_init()
     for k in 0..srcs.len()
         l.enter_file(k)
+        l.path = srcs[k].path
         for f in srcs[k].prog.fns
             if not is_test(f)
                 l.lower_fn(f)
@@ -241,6 +284,9 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
     l.gen_unchecked()
     l.enter_file(0)
     l.gen_copies()
+    l.gen_enum_eqs()
+    l.gen_init_enums()
+    l.call_inits()
     l.stamp_problems()
     if r := rt
         l.lower_rt(r)
@@ -275,7 +321,17 @@ pub fn lower_package(srcs List[Source], rt ast.Program?) Module ! Problems
 
 ## The runtime functions the code generators call by name, besides those
 ## the MIR calls.
-RT_ROOTS := ["rt.init", "rt.exit", "rt.trap", "rt.list_push", "rt.list_pushf", "rt.list_pushb"]
+RT_ROOTS := [
+    "rt.init",
+    "rt.exit",
+    "rt.trap",
+    "rt.list_push",
+    "rt.list_pushf",
+    "rt.list_pushb",
+    "rt.list_reserve",
+    "rt.list_rows_min",
+    "rt.list_new_for",
+]
 
 ## Lower the runtime functions the program reaches, and those they reach
 ## (ADR 0393): a program pays only for the runtime it uses.
@@ -310,19 +366,16 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
     problems.push(Problem(rule: "native.subset.1", pos: pos, message: message))
 
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
-    for e in prog.enums
-        problem(e.pos, "enum `{e.name}` isn't in the native subset yet")
     for t in prog.traits
         problem(t.pos, "trait `{t.name}` isn't in the native subset yet")
     for c in prog.consts
         if is_const_expr(c.value)
             consts["{pre}{c.name}"] = c.value
             const_home["{pre}{c.name}"] = file
+        elif pre != "rt."
+            global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
         else
-            problem(
-                c.pos,
-                "constant `{c.name}`: only literals, other constants and arithmetic on them are in the native subset yet",
-            )
+            problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
     for f in prog.fns
         if is_test(f)
             continue
@@ -345,14 +398,15 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         return
     mut params := List[Ty]()
     if o := f.owner
-        if o.params != none or not structs.contains("{pre}{o.name}")
+        owner := "{pre}{o.name}"
+        if o.params != none or not (structs.contains(owner) or enums.contains(owner))
             problem(
                 f.pos,
                 "`{o.name}.{f.name}`: methods of `{o.name}` aren't in the native subset yet",
             )
             return
         if f.receiver != none
-            params.push(Ty.Struct("{pre}{o.name}"))
+            params.push(owner_ty(owner))
     elif f.receiver != none
         problem(
             f.pos,
@@ -362,32 +416,35 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     for a in f.attrs
         if a.name != "inline" and a.name != "pure" and a.name != "test" and a.name != "deprecated"
             problem(a.pos, "attribute `@{a.name}` isn't in the native subset yet")
-    mut ints := params.len()
     mut floats := 0
     for p in f.params
         t := type_of(p.ty) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
-        if p.mutable and not needs_copy(t)
+        if p.mutable and not needs_copy(t) and not t.is_unknown() and not t.is_coll()
             problem(
                 p.pos,
                 "`mut` parameter `{p.name}` of a number type isn't in the native subset yet",
             )
         if t.is_float()
             floats += 1
-        else
-            ints += 1
         params.push(t)
-    # Primitives are not called through the ABI.
-    if (ints > 6 or floats > 8) and not (pre == "rt." and PRIMS.contains(f.name))
-        problem(f.pos, "`{f.name}` has more than 6 integer or 8 float parameters")
+    # Primitives are not called through the ABI. Integer arguments past the
+    # registers go on the stack; float ones don't yet.
+    if floats > 8 and not (pre == "rt." and PRIMS.contains(f.name))
+        problem(f.pos, "`{f.name}` has more than 8 float parameters")
     mut rty := Ty.Unit
+    mut can_fail := false
     if r := f.ret
-        t := type_of(r) else
+        can_fail = is_fallible(r)
+        t := (if can_fail then ok_type(r) else type_of(r)) else
             problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
             Ty.Unknown
         rty = t
-    sigs[fn_key(f, pre)] = Sig(params: params, ret: rty)
+    sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
+    if can_fail
+        if r := f.ret
+            fn_errs[fn_key(f, pre)] = error_ty_of(r)
     if pre != "rt."
         fn_decl[fn_key(f, pre)] = f
         fn_file[fn_key(f, pre)] = file
@@ -411,23 +468,29 @@ fn fn_key(f ast.FnDecl, pre str) str
 ## The MIR type of a written type, if it is in the subset.
 fn Lower.type_of(self, t ast.TypeRef) Ty?
     match t.shape
+        Optional(inner) => opt_of(type_of(inner)?)
         Named(name, args) =>
             match name
                 "int" => Ty.Int
                 "float" => Ty.Float
                 "bool" => Ty.Bool
                 "str" => Ty.Str
+                "char" => Ty.Char
                 "List" =>
                     if args.len() != 1
                         return none
                     e := type_of(args[0])?
-                    if is_number(e) or e == Ty.Str or needs_copy(e)
+                    if is_number(e) or e == Ty.Str or needs_copy(e) or is_enum(e)
                         return Ty.List(e)
                     none
+                "Map" | "Set" => coll_type_of(name, args)
+                "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
                     if args.len() == 0
                         if k := type_key(name)
                             return Ty.Struct(k)
+                        if k := enum_key(name)
+                            return Ty.Enum(k)
                     none
         FnType(fparams, fret) =>
             mut ps := List[Ty]()
@@ -449,17 +512,19 @@ fn is_literal(e ast.Expr) bool
         _ => false
 
 ## A constant's value that is inlined at each use: literals, names of other
-## constants, and arithmetic on them (no calls, so no effects).
+## constants, and arithmetic on them (no calls, so no effects). A list is not:
+## inlining it rebuilds it at every use, so it gets a program global (ADR 0604).
 fn is_const_expr(e ast.Expr) bool
     match e
         Int | Float | Bool | Str | Name => true
+        ListLit(_, _) => false
         Unary(_, x, _) => is_const_expr(x)
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
 
 fn is_number(t Ty) bool
     match t
-        Int | Float | Bool => true
+        Int | Float | Bool | Char => true
         _ => false
 
 # ---- building blocks and values ----
@@ -636,6 +701,7 @@ fn Lower.lower_fn(mut self, f ast.FnDecl)
 fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str)
     sig := sigs.get(key) else return
     params := begin_fn(name, sig.ret, sig.params)
+    fails = sig.fails
     self_ty = ""
     mut k := 0
     if o := f.owner
@@ -652,6 +718,11 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str)
     if not unchecked
         enter_contracts(f, key)
     want := not ret.is_unit()
+    if want
+        tail_want = ret
+        if body.len() > 0
+            if e := final_expr(body[body.len() - 1])
+                tail_pos = expr_pos(e)
     result := lower_block(body, want)
     if not done()
         if want
@@ -661,7 +732,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str)
                 rv := copy_if_borrowed(e, v)
                 check_ensures(rv, tail_pos(f, body))
                 finish(return_of(rv))
-            elif problems.len() == fn_problems
+            elif not failing()
                 problem(f.pos, "`{f.name}` must end with its result")
         else
             check_ensures(-1, tail_pos(f, body))
@@ -697,6 +768,11 @@ fn Lower.begin_fn(mut self, name str, rty Ty, ptys List[Ty]) List[int]
         blocks[cur].params.push(new_value(t, ""))
     blocks[cur].params
 
+## Whether the current function already failed: later problems in it
+## would only repeat the first.
+fn Lower.failing(self) bool
+    problems.len() > fn_problems or fn_failed
+
 ## Finish the function begun with `begin_fn`: simplify, fold, verify.
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
     # After a problem the MIR may be inconsistent; it is never built.
@@ -721,11 +797,19 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
 ## The value as the type the context expects: an `int` literal already
 ## became a `float` where one was expected; anything else must match.
 fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
-    if not same_ty(v.ty, want)
+    if want.opt_inner() != none and not v.ty.is_unknown()
+        return convert_opt(v, want, pos)
+    if want.is_unknown() or v.ty.is_unknown()
+        # A type outside the subset, already reported.
+        fn_failed = true
+    elif not same_ty(v.ty, want)
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
 
 fn same_ty(a Ty, b Ty) bool
+    if p := a.opt_inner()
+        q := b.opt_inner() else return false
+        return same_ty(p, q) or p.is_unknown() or q.is_unknown()
     x := a.elem() else return a.name() == b.name()
     y := b.elem() else return false
     same_ty(x, y) or x.is_unknown() or y.is_unknown()
@@ -733,6 +817,8 @@ fn same_ty(a Ty, b Ty) bool
 ## Lower statements in a new scope. With `want`, a final expression
 ## statement is the block's value.
 fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
+    tail := tail_want
+    tail_want = none
     scopes.push(Map[str, str]())
     mut result := Val(id: -2, ty: Ty.Unit)
     for i in 0..body.len()
@@ -741,22 +827,15 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
             dead_block()
         if want and i == body.len() - 1
             if e := final_expr(s)
-                result = lower_expr(e, none) else Val(id: -2, ty: Ty.Unit)
-                continue
-            # An `unsafe` block gives its last expression's value.
-            if inner := unsafe_body(s)
-                result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
+                if tail_error(e)
+                    continue
+                result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
                 continue
         lower_stmt(s)
     scopes.pop()
     if result.id == -2
         return none
     result
-
-fn unsafe_body(s ast.Stmt) List[ast.Stmt]?
-    match s
-        Unsafe(body, _) => body
-        _ => none
 
 fn final_expr(s ast.Stmt) ast.Expr?
     match s
@@ -768,25 +847,53 @@ fn final_expr(s ast.Stmt) ast.Expr?
 ## `n := s.to_int() else ...` (err.else.1-2): the parse, then the `else`
 ## when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
+    if is_pop_call(value)
+        got := lower_pop_else(value, other, pos) else
+            declare(name, Ty.Unknown, -1)
+            return
+        declare(name, got.ty, got.id)
+        return
+    if self.is_get_call(value)
+        got := lower_get_else(value, other, pos) else
+            declare(name, Ty.Unknown, -1)
+            return
+        declare(name, got.ty, got.id)
+        return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
         _ => none
     if recv == none
-        if lower_os_let_else(name, pos, value, other)
-            return
-        problem(
-            pos,
-            "`else` on a binding isn't in the native subset yet, but for `s.to_int()` and the OS calls",
-        )
+        lower_bind_else(name, pos, value, other)
+        return
+    got := lower_str_to_int_else(recv?, other, pos) else
         declare(name, Ty.Unknown, -1)
         return
-    s := lower_value(recv?, Ty.Str) else
-        declare(name, Ty.Unknown, -1)
+    declare(name, got.ty, got.id)
+
+## An `else` fallback value, jumped to `join`; a fallback that leaves, such as
+## `unreachable(...)` (err.model.2), ends the block and has no value to join.
+fn Lower.fallback_jump(mut self, x ast.Expr, t Ty, join int, pos ast.Pos)
+    v := lower_expr(x, t) else return
+    if done()
         return
+    if v.id < 0
+        problem(expr_pos(x), "this expression has no value")
+        return
+    jump(join, [convert(v, t, pos)])
+
+## The receiver of `s.to_int()` when `e` is that call.
+fn str_to_int_recv(e ast.Expr) ast.Expr?
+    match e
+        Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
+        _ => none
+
+## `s.to_int() else ...` (err.else.1-2) in any position: the parse, then the
+## `else` when it fails, a fallback value or a statement that leaves.
+fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.Pos) Val?
+    s := lower_value(recv, Ty.Str)?
     if not (s.ty == Ty.Str)
         problem(pos, "`.to_int()` on `{s.ty.name()}`")
-        declare(name, Ty.Unknown, -1)
-        return
+        return none
     n := call("rt.str_to_int", [s.id], Ty.Int)
     ok := call("rt.parse_ok", [], Ty.Bool)
     join := new_block()
@@ -797,11 +904,7 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
     seal(fail)
     cur = fail
     match other
-        Fallback(x) =>
-            f := lower_value(x, Ty.Int) else
-                declare(name, Ty.Unknown, -1)
-                return
-            jump(join, [convert(f, Ty.Int, pos)])
+        Fallback(x) => fallback_jump(x, Ty.Int, join, pos)
         Leave(st) =>
             lower_stmt(st)
             if not done()
@@ -809,7 +912,7 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
     seal(join)
     cur = join
-    declare(name, Ty.Int, r)
+    Val(id: r, ty: Ty.Int)
 
 fn Lower.lower_stmt(mut self, s ast.Stmt)
     match s
@@ -840,6 +943,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 return
             jump(loops[loops.len() - 1].cont, [])
         Return(value, pos) =>
+            if lower_fail_return(value, pos)
+                return
             if e := value
                 v := lower_value(e, ret) else return
                 rv := copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))
@@ -850,14 +955,17 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             lower_expr(e, Ty.Unit)
-        Handle(value, other) => lower_os_handle(value, other)
+        Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
-        Unsafe(body, _) => lower_block(body, false)
+        Unsafe(_, pos) => problem(pos, "`unsafe` blocks aren't in the native subset yet")
+        LetTuple(_, _, pos) => problem(pos, "tuples aren't in the native subset yet")
 
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
+    if v.ty.is_coll() and is_place(e)
+        return copy_coll(v)
     if not needs_copy(v.ty) or not is_place(e)
         return v.id
     copy_value(v)
@@ -910,10 +1018,14 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
                 v = binary(o, old, r, pos).id
             else
                 r := lower_value(value, ty) else return
-                v = copy_if_place(value, Val(id: convert(r, ty, pos), ty: ty))
+                ty2 := settle_var(target, ty, r)
+                v = copy_if_place(value, Val(id: convert(r, ty2, pos), ty: ty2))
             write_var(key, cur, v)
         Index(recv, index, ipos) =>
             l := lower_value(recv, none) else return
+            if l.ty.is_coll()
+                lower_map_assign(l, index, op, value, pos, ipos)
+                return
             elem := l.ty.elem() else
                 problem(ipos, "indexing a `{l.ty.name()}` isn't in the native subset yet")
                 return
@@ -929,7 +1041,7 @@ fn Lower.lower_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, 
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
-        Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos)
+        Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos, pos)
         _ => problem(pos, "this assignment target isn't in the native subset yet")
 
 fn Lower.bounds_site(mut self, pos ast.Pos) int
@@ -939,10 +1051,16 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
     head := new_block()
     jump(head, [])
     cur = head
-    c := lower_value(cond, Ty.Bool) else return
+    forever := match cond
+        Bool(v, _) => v
+        _ => false
     inner := new_block()
     exit := new_block()
-    branch(c.id, inner, [], exit, [])
+    if forever
+        jump(inner, [])
+    else
+        c := lower_value(cond, Ty.Bool) else return
+        branch(c.id, inner, [], exit, [])
     seal(inner)
     cur = inner
     loops.push(Loop(cont: head, exit: exit))
@@ -952,6 +1070,9 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
     seal(head)
     seal(exit)
     cur = exit
+    # `while true` with no `break` never falls out (expr.loop.1).
+    if forever and preds[exit].len() == 0
+        finish(unreachable_term())
 
 ## `for x in a..b`, `a..=b` or a list (expr.loop.2-3). The index is a hidden
 ## variable; `continue` goes to the latch, which steps it.
@@ -973,7 +1094,8 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
             hi = y.id
             inclusive = incl
         _ =>
-            l := lower_value(iter, none) else return
+            l0 := lower_value(iter, none) else return
+            l := iter_coll(l0)
             e := l.ty.elem() else
                 problem(
                     expr_pos(iter),
@@ -982,7 +1104,7 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
                 return
             elem = e
             list = l.id
-            if mutates(body, iter)
+            if mutates(body, iter) and l.id == l0.id
                 list = copy_list(l)
             lo = konst(0, Ty.Int)
             hi = op("len", [list], Ty.Int)
@@ -1113,223 +1235,94 @@ fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
     v
 
 ## Lower an expression; `want` is the type the context expects, which lets
-## an `int` literal stand for a `float` (expr.lit.3), and is `unit` for an
+## an `int` literal stand for a `float` (type.num.10), and is `unit` for an
 ## expression statement. `none` after a problem.
 fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
     match e
-        Int(text, pos) =>
-            n := text.to_int() else
-                problem(pos, "integer literal `{text}` out of range")
-                return none
-            if wants_float(want)
-                return Val(id: fconst(n.to_float()), ty: Ty.Float)
-            Val(id: konst(n, Ty.Int), ty: Ty.Int)
+        Int(text, pos) => lower_int_lit(text, pos, want)
         Float(x, _) => Val(id: fconst(x), ty: Ty.Float)
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
         Bytes(_, pos) => unsupported(pos, "`bytes` literals")
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
-        Name(name, pos) =>
-            key := lookup(name) else
-                if consts.contains("{prefix}{name}")
-                    return lower_const("{prefix}{name}", want)
-                k := self_slot(name)
-                if k >= 0
-                    t := structs[self_ty][k].ty
-                    return Val(id: load(self_value(), k, t), ty: t)
-                if v := fn_value(name, pos)
-                    return v
-                problem(
-                    pos,
-                    "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
-                )
-                return none
-            if var_ty[key].is_unknown()
-                fn_failed = true
-                return none
-            Val(id: read_var(key, cur), ty: var_ty[key])
+        Name(name, pos) => lower_name(name, pos, want)
         Unary(o, operand, pos) => lower_unary(o, operand, pos, want)
-        Binary(o, lhs, rhs, pos) =>
-            match o
-                And => short_circuit(true, lhs, rhs)
-                Or => short_circuit(false, lhs, rhs)
-                _ =>
-                    if is_int_lit(lhs)
-                        # Lower the other side first to learn the type: a literal has no effects.
-                        b := lower_value(rhs, operand_want(o, want))?
-                        a := lower_value(lhs, b.ty)?
-                        return binary(o, a, b, pos)
-                    a := lower_value(lhs, operand_want(o, want))?
-                    b := lower_value(rhs, a.ty)?
-                    binary(o, a, b, pos)
-        Call(callee, args, pos) => lower_call(callee, args, pos)
+        Binary(o, lhs, rhs, pos) => lower_binary_expr(o, lhs, rhs, pos, want)
+        Call(callee, args, pos) => lower_call_expr(callee, args, pos, want)
         Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
-        Index(recv, index, pos) =>
-            l := lower_value(recv, none)?
-            elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
-            if is_range(index)
-                return unsupported(pos, "list slices")
-            i := lower_value(index, Ty.Int)?
-            Val(id: checked("get", [l.id, i.id], bounds_site(pos), elem), ty: elem)
+        Index(recv, index, pos) => lower_index(recv, index, pos)
         ListLit(items, pos) => lower_list(items, pos, want)
         If(branches, els, _, pos) => lower_if(branches, els, pos, want)
-        Interp(_, pos) => unsupported(pos, "string interpolation outside `print`")
-        Char(_, pos) => unsupported(pos, "`char`")
-        NoneLit(pos) => unsupported(pos, "`none`")
+        Interp(parts, pos) => lower_interp_value(parts, pos)
+        Char(text, _) => lower_char(text)
+        NoneLit(pos) => lower_none(want, pos)
         Hole(pos) => unsupported(pos, "`todo`")
         TypeArgs(_, _, pos) => unsupported(pos, "this expression")
-        Member(recv, name, pos) =>
-            if key := qualified(e)
-                if consts.contains(key)
-                    return lower_const(key, want)
-                return unsupported(pos, "`{key}` as a value")
-            lower_member(recv, name, pos)
+        Member(recv, name, pos) => lower_member_expr(recv, name, pos, e, want)
         Range(_, _, _, pos) => unsupported(pos, "a range outside `for`")
-        MapLit(_, pos) => unsupported(pos, "maps")
-        SetLit(_, pos) => unsupported(pos, "sets")
-        Match(_, _, pos) => unsupported(pos, "`match`")
-        Try(_, _, pos) => unsupported(pos, "`?`")
-        Comp(_, _, _, _, pos) => unsupported(pos, "comprehensions")
-        OrElse(value, other, pos) => lower_os_or_else(value, other, pos)
+        MapLit(entries, pos) => lower_map_lit(entries, pos, want)
+        SetLit(items, pos) => lower_set_lit(items, pos, want)
+        Match(scrutinee, arms, pos) => lower_match(scrutinee, arms, pos, want)
+        Try(x, context, pos) => lower_try(x, context, pos)
+        Comp(form, elem, body_val, clauses, pos) => lower_comp(
+            form,
+            elem,
+            body_val,
+            clauses,
+            pos,
+            want,
+        )
+        OrElse(x, other, pos) => lower_or_else(x, other, pos)
         NewRef(_, pos) => unsupported(pos, "`ref`")
+        TupleLit(_, pos) => unsupported(pos, "a tuple")
+
+## An integer literal, as a `float` where one is wanted.
+fn Lower.lower_int_lit(mut self, text str, pos ast.Pos, want Ty?) Val?
+    n := text.to_int() else
+        problem(pos, "integer literal `{text}` out of range")
+        return none
+    if wants_float(want)
+        return Val(id: fconst(n.to_float()), ty: Ty.Float)
+    Val(id: konst(n, Ty.Int), ty: Ty.Int)
+
+## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
+fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
+    key := lookup(name) else
+        if consts.contains("{prefix}{name}")
+            return lower_const("{prefix}{name}", want)
+        k := self_slot(name)
+        if k >= 0
+            t := structs[self_ty][k].ty
+            return Val(id: load(self_value(), k, t), ty: t)
+        if v := fn_value(name, pos)
+            return v
+        if globals.contains("{prefix}{name}")
+            return global_const("{prefix}{name}")
+        if v := bare_variant(name, want)
+            return new_variant(v, none, pos)
+        problem(
+            pos,
+            "`{name}` isn't in the native subset yet (only locals, parameters and constants)",
+        )
+        return none
+    if var_ty[key].is_unknown()
+        fn_failed = true
+        return none
+    Val(id: read_var(key, cur), ty: var_ty[key])
+
+## A call `f(...)`, or a variant built by calling it.
+fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+    if v := call_variant(callee, want)
+        return new_variant(v, args, pos)
+    lower_call(callee, args, pos)
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
     problem(pos, "not in the native subset yet: {what}")
     none
 
-fn wants_float(want Ty?) bool
-    w := want else return false
-    w.is_float()
-
-fn is_int_lit(e ast.Expr) bool
-    match e
-        Int => true
-        _ => false
-
 fn is_range(e ast.Expr) bool
     match e
         Range => true
         _ => false
-
-## What an operator's first operand should be: arithmetic passes the
-## context's type on; a comparison's operands decide their own.
-fn operand_want(o ast.BinOp, want Ty?) Ty?
-    match o
-        Add | Sub | Mul | Div | Rem => want
-        _ => none
-
-fn Lower.lower_unary(mut self, o ast.UnOp, operand ast.Expr, pos ast.Pos, want Ty?) Val?
-    match o
-        Neg =>
-            if int_text(operand) == "9223372036854775808"
-                # The smallest `int` is written `-9223372036854775808` (lex.num.3).
-                if wants_float(want)
-                    return Val(id: fconst(-9223372036854775807.0 - 1.0), ty: Ty.Float)
-                return Val(id: konst(-9223372036854775807 - 1, Ty.Int), ty: Ty.Int)
-            a := lower_value(operand, want)?
-            match a.ty
-                Int => Val(
-                    id: checked("neg", [a.id], site("expr.arith.1", "neg", "-", pos), Ty.Int),
-                    ty: Ty.Int,
-                )
-                Float => Val(id: op("fneg", [a.id], Ty.Float), ty: Ty.Float)
-                _ => unsupported(pos, "`-` on `{a.ty.name()}`")
-        Not =>
-            a := lower_value(operand, Ty.Bool)?
-            Val(id: op("not", [a.id], Ty.Bool), ty: Ty.Bool)
-        Spawn => unsupported(pos, "`spawn`")
-
-fn int_text(e ast.Expr) str
-    match e
-        Int(t, _) => t
-        _ => ""
-
-fn op_name(o ast.BinOp) str
-    match o
-        Add => "add"
-        Sub => "sub"
-        Mul => "mul"
-        Div => "div"
-        Rem => "rem"
-        Eq => "eq"
-        Ne => "ne"
-        Lt => "lt"
-        Le => "le"
-        Gt => "gt"
-        Ge => "ge"
-        And => "and"
-        Or => "or"
-
-fn op_symbol(o ast.BinOp) str
-    match o
-        Add => "+"
-        Sub => "-"
-        Mul => "*"
-        Div => "/"
-        Rem => "%"
-        Eq => "=="
-        Ne => "!="
-        Lt => "<"
-        Le => "<="
-        Gt => ">"
-        Ge => ">="
-        And => "and"
-        Or => "or"
-
-fn is_comparison(o ast.BinOp) bool
-    match o
-        Eq | Ne | Lt | Le | Gt | Ge => true
-        _ => false
-
-fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
-    name := op_name(o)
-    if not same_ty(a.ty, b.ty)
-        problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
-        return a
-    cmp := is_comparison(o)
-    match a.ty
-        Int =>
-            if cmp
-                return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
-            divides := name == "div" or name == "rem"
-            rule := if divides then "expr.arith.3" else "expr.arith.1"
-            kind := if divides then "div" else "arith"
-            s := site(rule, kind, op_symbol(o), pos)
-            Val(id: checked(name, [a.id, b.id], s, Ty.Int), ty: Ty.Int)
-        Float =>
-            if cmp
-                return Val(id: op("f{name}", [a.id, b.id], Ty.Bool), ty: Ty.Bool)
-            if name == "rem"
-                problem(pos, "`%` on `float`")
-                return a
-            Val(id: op("f{name}", [a.id, b.id], Ty.Float), ty: Ty.Float)
-        Bool =>
-            if name == "eq" or name == "ne"
-                return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
-            problem(pos, "`{op_symbol(o)}` on `bool` isn't in the native subset yet")
-            a
-        _ =>
-            problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
-            a
-
-## `a and b` (`is_and`) or `a or b`: `b` runs only when it decides.
-fn Lower.short_circuit(mut self, is_and bool, lhs ast.Expr, rhs ast.Expr) Val?
-    a := lower_value(lhs, Ty.Bool)?
-    join := new_block()
-    r := new_value(Ty.Bool, "")
-    blocks[join].params.push(r)
-    rhs_b := new_block()
-    k := konst(if is_and then 0 else 1, Ty.Bool)
-    if is_and
-        branch(a.id, rhs_b, [], join, [k])
-    else
-        branch(a.id, join, [k], rhs_b, [])
-    seal(rhs_b)
-    cur = rhs_b
-    b := lower_value(rhs, Ty.Bool)?
-    jump(join, [b.id])
-    seal(join)
-    cur = join
-    Val(id: r, ty: Ty.Bool)
 
 ## `if`, as a statement or a value (expr.if.1-4). The arms of a value `if`
 ## pass their results to the join block's first parameter.
@@ -1347,20 +1340,36 @@ fn Lower.lower_if(
     if value
         result = new_value(Ty.Unknown, "")
         blocks[join].params.push(result)
+        rty = arms_start(want, [br.body for br in branches], els)
     for br in branches
+        mut bound := ""
+        mut bval := Val(id: -1, ty: Ty.Unit)
         c := match br.cond
             Test(x) => lower_value(x, Ty.Bool)?
-            Bind(_, bpos, _) => return unsupported(bpos, "`if x := e`")
+            Bind(bname, bpos, x) =>
+                o := lower_value(x, none)?
+                if o.ty.opt_inner() == none
+                    return unsupported(bpos, "`if {bname} := e` on a `{o.ty.name()}`")
+                bound = bname
+                bval = o
+                Val(id: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
         yes := new_block()
         no := new_block()
         branch(c.id, yes, [], no, [])
         seal(yes)
         seal(no)
         cur = yes
+        scopes.push(Map[str, str]())
+        if bound != ""
+            u := unwrap(bval)
+            declare(bound, u.ty, u.id)
+        tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(br.body, value)
+        scopes.pop()
         rty = arm_end(join, value, v, pos, rty)
         cur = no
     if body := els
+        tail_want = if value and not rty.is_unknown() then rty else none
         v := lower_block(body, value)
         rty = arm_end(join, value, v, pos, rty)
     else
@@ -1385,12 +1394,13 @@ fn Lower.arm_end(mut self, join int, value bool, v Val?, pos ast.Pos, rty Ty) Ty
         jump(join, [])
         return rty
     x := v else
-        problem(pos, "this `if` needs a value in every branch")
+        if not failing()
+            problem(pos, "this `if` needs a value in every branch")
         jump(join, [])
         return rty
     mut t := rty
-    if t.is_unknown()
-        t = x.ty
+    if t.is_unknown() or is_pending_opt(t)
+        t = settle_arm_ty(t, x.ty)
     jump(join, [convert(x, t, pos)])
     t
 
@@ -1404,7 +1414,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         v := lower_value(x, if elem.is_unknown() then none else elem)?
         if elem.is_unknown()
             elem = v.ty
-        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem)
+        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem) and not is_enum(elem)
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
@@ -1435,7 +1445,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if self_ty != "" and sigs.contains("{self_ty}.{name}")
                 return struct_call(
                     "{self_ty}.{name}",
-                    Val(id: self_value(), ty: Ty.Struct(self_ty)),
+                    Val(id: self_value(), ty: owner_ty(self_ty)),
                     args,
                     npos,
                 )
@@ -1457,12 +1467,14 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(convert(v, sig.params[i], expr_pos(a.value)))
             check_requires(key, vs, npos)
-            Val(id: call(callee_key(key), vs, sig.ret), ty: sig.ret)
+            Val(id: call(contract_key(key), vs, sig.ret), ty: sig.ret)
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
             unsupported(pos, "this call")
         TypeArgs(name, targs, tpos) =>
+            if (name == "Map" or name == "Set") and args.len() == 0
+                return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
                 t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
                     return unsupported(tpos, "this list type")
@@ -1518,6 +1530,8 @@ fn out_fn(t Ty) str
         Float => "rt.out_float"
         Bool => "rt.out_bool"
         Str => "rt.out_str"
+        Char => "rt.out_char"
+        Tensor(_) => "rt.out_tensor"
         List(e) =>
             match e
                 Int => "rt.out_list_int"
@@ -1528,6 +1542,8 @@ fn out_fn(t Ty) str
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if v.ty.is_coll()
+        return out_coll(v, pos)
     if e := v.ty.elem()
         mut depth := 0
         mut leaf := e
@@ -1539,10 +1555,14 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             Float => 1
             Bool => 2
             Str => 3
+            Char => 4
             _ => -1
-        if k >= 0 and (depth > 0 or k == 3)
+        if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
+    if s := display_call(v)
+        call("rt.out_str", [s], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
         return unsupported(pos, "printing a `{v.ty.name()}`")
@@ -1560,6 +1580,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     sm := std_module(recv)
     if sm != ""
         return lower_std_call(sm, name, npos, args)
+    if name == "from_code" and is_module(recv, "char")
+        return lower_char_from_code(args, npos)
+    if name == "from" and is_module(recv, "tensor")
+        return lower_tensor_from(args, npos)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1567,6 +1591,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             message: "`mem.{name}`: `ail build` can't link the C allocator yet (`ail run` can)",
         ))
         return none
+    if en := enum_ref(recv)
+        if case_index(en, name) >= 0
+            return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
+        return struct_call("{en}.{name}", none, args, npos)
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, npos)
     if m := module_name(recv)
@@ -1576,7 +1604,13 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     r := lower_value(recv, none)?
     if is_sorting(name, args) and r.ty.elem() != none
         return lower_sorted(r, name, args, npos)
+    if r.ty.is_coll()
+        return lower_coll_method(r, name, npos, args)
+    if r.ty.is_tensor()
+        return lower_tensor_method(r, name, npos, args)
     if s := struct_name(r.ty)
+        return struct_call("{s}.{name}", r, args, npos)
+    if s := enum_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
     mut vs := List[Val]()
     for a in args
@@ -1588,54 +1622,16 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
             if name == "join"
                 arg_want = Ty.Str
         vs.push(lower_value(a.value, if arg_want.is_unknown() then none else arg_want)?)
+    if name == "to_str" and vs.len() == 0
+        # type.str.3
+        text := text_of(r, npos)?
+        return Val(id: text, ty: Ty.Str)
     match r.ty
-        Int =>
-            if name == "to_float" and vs.len() == 0
-                return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
-            if name == "abs" and vs.len() == 0
-                return Val(id: int_abs(r.id, npos), ty: Ty.Int)
-            if (name == "min" or name == "max") and vs.len() == 1
-                return Val(id: int_minmax(name, r.id, vs[0].id), ty: Ty.Int)
-            # expr.bit.1-2
-            if BIT_OPS.contains(name) and vs.len() == 1
-                mut s := -1
-                if name == "shl" or name == "shr"
-                    s = site("expr.bit.2", "shift", name, npos)
-                return Val(id: checked(BIT_OPS[name], [r.id, vs[0].id], s, Ty.Int), ty: Ty.Int)
-            if name == "bit_not" and vs.len() == 0
-                return Val(id: op("bnot", [r.id], Ty.Int), ty: Ty.Int)
-        Float =>
-            if name == "to_int" and vs.len() == 0
-                s := site("type.num.9", "float_int", "", npos)
-                return Val(id: checked("ftoi", [r.id], s, Ty.Int), ty: Ty.Int)
-            if (name == "sqrt" or name == "abs" or name == "floor" or name == "ceil")
-                and vs.len() == 0
-                return Val(id: op(name, [r.id], Ty.Float), ty: Ty.Float)
-            # type.num.9
-            if name == "round" and vs.len() == 0
-                return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
-        Str =>
-            # type.str.3, type.str.5
-            if name == "chars" and vs.len() == 0
-                t := Ty.List(Ty.Str)
-                return Val(id: call("rt.str_chars", [r.id], t), ty: t)
-            if name == "len" and vs.len() == 0
-                return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
-        List(e) =>
-            if name == "len" and vs.len() == 0
-                return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
-            # type.coll.9
-            if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
-                return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
-            if name == "push" and vs.len() == 1
-                mut el := e
-                if e.is_unknown()
-                    el = vs[0].ty
-                    retype(recv, Ty.List(el))
-                # A list pushed from a place is copied: lists are values (ADR 0060).
-                item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
-                call(push_fn(el), [r.id, convert(item, el, npos)], Ty.Unit)
-                return Val(id: -1, ty: Ty.Unit)
+        Int => return int_method(r, name, npos, vs)
+        Float => return float_method(r, name, npos, vs)
+        Str => return str_method(r, name, npos, vs)
+        Char => return lower_char_method(r, name, npos, vs)
+        List(e) => return list_method(e, r, name, npos, vs, args, recv)
         _ => return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 
@@ -1671,35 +1667,6 @@ fn Lower.retype(mut self, recv ast.Expr, t Ty)
     for v in var_vals[key]
         vals[v] = t
 
-fn Lower.int_abs(mut self, a int, pos ast.Pos) int
-    # |a| is `-a` when `a < 0`, which traps on the smallest `int` (expr.arith.1).
-    neg := op("lt", [a, konst(0, Ty.Int)], Ty.Bool)
-    join := new_block()
-    r := new_value(Ty.Int, "")
-    blocks[join].params.push(r)
-    yes := new_block()
-    branch(neg, yes, [], join, [a])
-    seal(yes)
-    cur = yes
-    jump(join, [checked("neg", [a], site("expr.arith.1", "abs", "abs", pos), Ty.Int)])
-    seal(join)
-    cur = join
-    r
-
-fn Lower.int_minmax(mut self, name str, a int, b int) int
-    pick_a := op(if name == "min" then "le" else "ge", [a, b], Ty.Bool)
-    join := new_block()
-    r := new_value(Ty.Int, "")
-    blocks[join].params.push(r)
-    other := new_block()
-    branch(pick_a, join, [a], other, [])
-    seal(other)
-    cur = other
-    jump(join, [b])
-    seal(join)
-    cur = join
-    r
-
 pub fn expr_pos(e ast.Expr) ast.Pos
     match e
         Str(_, p) => p
@@ -1729,3 +1696,4 @@ pub fn expr_pos(e ast.Expr) ast.Pos
         Comp(_, _, _, _, p) => p
         OrElse(_, _, p) => p
         NewRef(_, p) => p
+        TupleLit(_, p) => p

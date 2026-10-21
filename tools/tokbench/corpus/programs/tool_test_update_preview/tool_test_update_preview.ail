@@ -1,0 +1,16 @@
+
+fn main() !
+    here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
+    file := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data/tests.ail"
+    r := proc.run(ail, ["test", "--update", "--dry-run", file])? "previewing updates"
+    mut added := 0
+    mut removed := 0
+    for line in r.out.lines()
+        if line.starts_with("+") and not line.starts_with("+++")
+            added += 1
+            print(line)
+        elif line.starts_with("-") and not line.starts_with("---")
+            removed += 1
+            print(line)
+    print("{added} lines added, {removed} removed")

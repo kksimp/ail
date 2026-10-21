@@ -34,6 +34,28 @@ Options (the same for both scripts):
 | `run.sh FILE ...` | Measure specific files (paths relative to where you run it) |
 | `run.sh --json` | Machine-readable output |
 | `run.sh --claude` | Also count with the **current** Claude tokenizer (optional, see below) |
+| `run.sh --check-budgets` | Check the language card and quick reference against their token budgets (see below) |
+
+### Budget check
+
+`run.sh --check-budgets` measures `docs/language-card.md` and
+`docs/quick-reference.md` on the offline five-tokenizer mean (the `mean` column)
+and prints each number with its budget. It exits 1 if either is over, so the gate
+can run it. It always uses the offline tokenizers, even when `--claude` is given.
+
+The budgets are in one place, the `BUDGETS` table at the top of `tokbench.py`:
+
+| Page | Budget | Source |
+|---|---:|---|
+| `docs/language-card.md` | 8,000 | [ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md) |
+| `docs/quick-reference.md` | 12,518 | [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md) |
+
+The mean rule is [ADR 0817](../../docs/decisions/0817-token-budgets-for-agent-pages.md).
+ADR 0276 stated the card budget per tokenizer ("on every tokbench tokenizer"); the
+mean is looser, so a card that passes the mean can still fail one tokenizer. ADR 0703
+is about `ail api --card` trimming levels and does not state a budget. Change a budget
+only here, and cite its ADR next to it. Any quick-reference addition is paid for by a
+trim in the same change (ADR 0817).
 
 ### Optional: the current Claude tokenizer
 
@@ -52,7 +74,7 @@ Results may be off by about one token per file.
 
 | Column | Source | Notes |
 |---|---|---|
-| `cl100k` | OpenAI `cl100k_base`, via the pinned `litellm` wheel | GPT-4 era |
+| `cl100k` | OpenAI `cl100k_base`, via the pinned `litellm` wheel | OpenAI, 2023 |
 | `o200k` | OpenAI `o200k_base`, via the same wheel | GPT-4o era |
 | `claude-legacy` | `anthropic_tokenizer.json`, via the same wheel | Old Claude tokenizer. Use `--claude` for current models. |
 | `mistral-tekken` | `tekken_240911.json`, via the pinned `mistral-common` wheel | Recent Mistral |
@@ -61,7 +83,7 @@ Results may be off by about one token per file.
 
 ## Corpus
 
-The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md), amending ADR 0174); check it with `run.sh docs/language-card.md`.
+The language card has a budget of 8,000 tokens ([ADR 0276](../../docs/decisions/0276-language-card-budget-8000.md), amending ADR 0174); check it with `run.sh --check-budgets` (or `run.sh docs/language-card.md` for the per-tokenizer table).
 
 | Directory | Contents |
 |---|---|
@@ -87,3 +109,32 @@ Run it after `run.sh` has set up once:
 tools/tokbench/.venv/bin/python tools/tokbench/attribute.py [--json]
 ```
 
+
+## Known print difference: csv2json (lane 252)
+
+`corpus/programs/csv2json` prints the same JSON in both twins except for number text. AIL prints a whole float without a fraction (`12`, json.print.1 under ADR 0631), and Python's `json` prints `12.0`. The difference is inherent to the two languages' printing rules, so the twin is kept as it is, and the difference is not a bug. Its output is therefore not byte-identical to AIL's, and the token rows for this pair are unchanged by it.
+## Corpus change log
+
+- **2026-10-21, data argument, `ail` lookup and repository depth** (21 AIL programs, 19 tools-path programs, and their twins; output checked against the Python twin):
+  - `programs/days_left`, `digest_lines`, `gz_check`, `redact_mail`, `regex_codes`, `shift_dates`: the data directory is an optional first argument, defaulting to `agent-data` beside the program. Both twins read it the same way. No copies of `agent-data` in the program folders.
+  - All 21 programs that run `ail` find it with `proc.which("ail")`, falling back to the repository root (`{here}/../../../../../ail`). The twins use `shutil.which("ail")`.
+  - 19 programs read `{here}/../tools/...` data; they now use `{here}/../../../../../tools/...`, so they resolve from the repository layout as well as from the fixture.
+  - Measured on the same 72 pairs (144 files) in `corpus/programs`: AIL 28,845.4 → 29,251.2 (+1.41%); Python 32,262.0 → 32,643.0 (+1.18%); AIL/Python 0.8941 → 0.8961 (+0.2%, inside the 2% tie band). The AIL rise is the `ail` lookup and data-argument lines, one per program.
+
+- **2026-10-21, twin output check** (no corpus file changed; no token count changed): `twin_outputs.py` runs every `corpus/programs/NAME` pair and diffs the AIL program's output against its Python twin's. Each pair runs in a mirror tree laid out like the repository (`ail` wrapper, `tools/` links, `examples/` and `agent-data/` links), because the programs find their tools and data by path. `tools/bench/bench.py` prints the result. Result: 70 of 72 pairs match exactly, `csv2json` matches apart from the documented whole-float difference, and `fetch` is skipped (it needs network access). `scan` agreed once the mirror linked `examples/`.
+Day-over-day totals move when a corpus program changes, not only when the language does. Each entry
+says which program changed and why, with its five-tokenizer mean before and after.
+- **2026-10-21, idiomatic rewrites** (four programs; output checked byte-identical to the Python twin):
+  - `programs/report_dates`: `date.utc(ms).format(...)` (std.time.date) replaces the hand-written civil-date function, with `use std.time.date`. 409.2 → 217.6.
+  - `programs/hexdump`: reads bytes with `fs.read_bytes` and formats rows in-process, instead of shelling out to `od`. 147.0 → 124.2.
+  - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
+  - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
+  Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
+- **2026-10-21, tuples (ADR 0791-0794)** (two twins; output checked byte-identical to the Python twin):
+  - `agent-r4/t12_sort_ties`: the people are `(name, age)` pairs sorted by the key `(-p.1, p.0)`, as the Python twin does, instead of a `struct P` and two `sorted` passes. 91.4 → 57.6.
+  - `agent-r4/t03_table`: the rows are `(str, int)` pairs taken apart by `for name, qty in rows`, as in Python. 38.8 → 35.2.
+  Total for the 25 std twins: 1,128.6 → 1,091.2 (−37.4), AIL against Python +13.9% → +10.1%. This change is the language's.
+- **2026-10-21, day 3** (output checked byte-identical to the Python twin where one runs):
+  - `agent-r4/t11_json_transform`: `load_json[List[U]](p)?` and `print_json(v)` replace the `from_json`/`parse_json`/`to_text` chain (ADR 0774). 89.6 → 76.4.
+  - `programs/hexdump`: `data[a..b].hex(" ")` replaces the row comprehension and join (ADR 0775). 124.2 → 104.2.
+  - Removed the superseded duplicates `agent-r4/t11b_json_typed`, `t20b_grep_methods` and `t23b_copy_tree_std`; t11, t20 and t23 are those forms.

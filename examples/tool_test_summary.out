@@ -1,0 +1,4 @@
+pass doubles
+fail wrong
+1 passed, 1 failed
+exit 1

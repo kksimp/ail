@@ -1,0 +1,13 @@
+
+use std.time.date
+
+fn main() !
+    today := date.parse_date("2026-10-21")?
+    dir := env.args().first() else "{path.dir(env.program())}/agent-data"
+    text := fs.read_text("{dir}/dates.txt")? "reading dates"
+    for line in text.lines()
+        left := date.parse_date(line)?.since(today)
+        if left < 0
+            print("{line}: {-left} days late")
+        else
+            print("{line}: {left} days left")

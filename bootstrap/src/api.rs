@@ -16,6 +16,7 @@ use crate::docs;
 use crate::modules;
 
 pub mod card;
+pub mod apidiff;
 pub mod diff;
 pub mod errors;
 mod expanded;
@@ -31,7 +32,7 @@ fn is_prelude(pos: Pos) -> bool {
 /// The version of the output shape (api.out.1). Bump it when a key changes meaning.
 pub const API_VERSION: i64 = 1;
 
-pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api (--tokens | --ast) FILE\n       ail api --ast --program DIR|FILE\n       ail api [--outline] DIR|FILE [--text | --pretty] [--symbols] [--expanded] [--json]\n       ail api (--locals | --type | --refs) [DIR] FILE LINE COL [--pretty] [--json]\n";
+pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n       ail api --diff OLD NEW [--json]   (or: ail api --diff --rev REV PATH)\n       ail api (--tokens | --ast) FILE\n       ail api --ast --program DIR|FILE\n       ail api [--outline] DIR|FILE [--text | --pretty] [--symbols] [--expanded] [--json]\n       ail api (--locals | --type | --refs) [DIR] FILE LINE COL [--pretty] [--json]\n";
 
 /// How the outline is written (api.out.2, api.text.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,6 +47,10 @@ pub enum Form {
 
 /// `ail api ...`; `json` asks for diagnostics as JSON lines.
 pub fn command(args: &[&str], json: bool) -> ExitCode {
+    // api.diff.1: what changed in the public API between two versions.
+    if args.contains(&"--diff") {
+        return apidiff::command(args, json);
+    }
     if args.contains(&"--card") {
         return card::command(args, json);
     }
@@ -188,6 +193,7 @@ enum PackageFailure {
 /// is prefixed with its module (`fn:net.get`, `type:ui.Window`), and it gains
 /// `module` and `file` keys after the single-file ones; `line` counts from
 /// the top of its own file. `--symbols` adds `references` with a `file` key.
+/// The single-file forms and their JSON are unchanged (api.pkg.4).
 fn package_outline(dir: &str, symbols: bool, form: Form) -> Result<String, PackageFailure> {
     let (mut prog, mut diags) = modules::load(dir).map_err(PackageFailure::Message)?;
     let mut resolved = Resolved::default();
@@ -825,6 +831,10 @@ pub(crate) fn type_text(t: &TypeRef) -> String {
                 None => format!("fn({})", ps.join(", ")),
             }
         }
+        TypeKind::Tuple(elems) => {
+            let es: Vec<String> = elems.iter().map(type_text).collect();
+            format!("({})", es.join(", "))
+        }
         TypeKind::Fallible { ok, errors } => {
             let errs = errors.as_ref().map(|es| es.iter().map(type_text).collect::<Vec<_>>().join(" | "));
             match (ok, errs) {
@@ -995,6 +1005,7 @@ impl<'p> Refs<'p> {
                 }
             }
             TypeKind::Optional(t) | TypeKind::Ref(t) | TypeKind::Ptr(t) => self.type_ref(t),
+            TypeKind::Tuple(elems) => elems.iter().for_each(|e| self.type_ref(e)),
             TypeKind::Fn { params, ret } => {
                 params.iter().for_each(|p| self.type_ref(p));
                 if let Some(r) = ret {
@@ -1027,6 +1038,7 @@ impl<'p> Refs<'p> {
                     self.otherwise(o);
                 }
             }
+            Stmt::LetTuple { value, .. } => self.expr(value),
             Stmt::Assign { target, value, .. } => {
                 self.expr(target);
                 self.expr(value);
@@ -1120,7 +1132,7 @@ impl<'p> Refs<'p> {
                     self.type_ref(a);
                 }
             }
-            Expr::List(xs, _) | Expr::Set(xs, _) => {
+            Expr::List(xs, _) | Expr::Set(xs, _) | Expr::Tuple(xs, _) => {
                 for x in xs {
                     self.expr(x);
                 }
@@ -1219,8 +1231,8 @@ impl<'p> Refs<'p> {
 
     fn pattern(&mut self, p: &Pattern) {
         match p {
-            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } => {}
-            Pattern::Or(ps, _) => {
+            Pattern::Wildcard(_) | Pattern::Literal(..) | Pattern::Range { .. } | Pattern::Bind(..) => {}
+            Pattern::Or(ps, _) | Pattern::Tuple(ps, _) => {
                 for p in ps {
                     self.pattern(p);
                 }
@@ -1402,7 +1414,7 @@ fn main()
             let path = entry.unwrap().path();
             if path.extension().is_some_and(|x| x == "ail") {
                 let src = std::fs::read_to_string(&path).unwrap();
-                let p = path.display().to_string();
+                let p = crate::shown::shown(&path);
                 for (symbols, form) in [(false, Form::Json), (true, Form::Pretty), (true, Form::Text)] {
                     if let Err(d) = outline(&p, &src, symbols, form) {
                         panic!("{p}: {d:?}");

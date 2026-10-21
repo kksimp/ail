@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md); the designer delegated tonight's serious decisions on 2026-10-20)
 - **Topic:** 13 — Package management; 27 — Build system
 - **Spec rules:** `mod.pkg.8` (with ADR 0356)
-- **Design:** [packages.md](../design/packages.md#versions-git-dependencies-and-the-lockfile-design-not-implemented)
+- **Design:** [packages.md](../design/packages.md#versions-git-dependencies-and-the-lockfile)
 
 ## Context
 

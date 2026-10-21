@@ -1,0 +1,56 @@
+# expr.comp.1-2 in compiled code: list, set and map comprehensions with
+# nested clauses, filters, ranges, and elements that read outer locals.
+struct P
+    x int
+    y int
+
+fn squares(n int) List[int]
+    [i * i for i in 0..n]
+
+fn pairs(n int) List[int]
+    [i * 10 + j for i in 0..n for j in 0..i if (i + j) % 2 == 0]
+
+fn main()
+    base := 100
+    xs := [3, 1, 4, 1, 5, 9, 2, 6]
+    print(squares(6))
+    print(pairs(5))
+    print([x + base for x in xs if x > 2])
+    print([x for x in xs if x > 100])
+    print([i for i in 5..2])
+    print([i for i in 1..=4])
+    s := {x % 4 for x in xs}
+    print(s.len())
+    m := {x: x * x for x in xs if x < 5}
+    print(m.len())
+    print(m[4])
+    ps := [P(x: i, y: i * 2) for i in 0..3]
+    print([p.x + p.y for p in ps])
+    names := ["ab", "cde", "f"]
+    print([n.len() for n in names])
+    print(["{n}!" for n in names if n.len() > 1])
+    mut ys := xs
+    ys = [y + 1 for y in ys]
+    print(ys)
+    i := 7
+    print([i + k for k in 0..3])
+    print(i)
+    print([[a * b for b in 0..3] for a in 0..3])
+    mut total := 0
+    for r in 0..3
+        total += [r * k for k in 0..4].len()
+    print(total)
+    for r in 0..2
+        print([v * r for v in squares(3)])
+    print([c for c in b"hi"])
+    big := [x * 3000000000 for x in 0..3]
+    print(big)
+    print([if x > 3 then x * 2 else x for x in xs])
+    print([if x % 2 == 0 then "even" else "odd" for x in xs if x < 5])
+    print({if x > 4 then "big" else "small": x for x in xs}.len())
+    word := "héllo"
+    print(word.len())
+    print(m.len() + s.len() + b"abc".len())
+    print([w.len() for w in ["a", "bcd", "éé"]])
+    print([k.len() for k in [m, m]])
+    print([x for x in xs].len())

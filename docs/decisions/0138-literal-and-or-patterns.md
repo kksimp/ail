@@ -80,7 +80,7 @@ Or-patterns also remove the arms that existed only to dodge `expr.match.3`.
 5. **Not designed.** Range patterns (`'0'..='9'`) and guards (`x if x > 0`)
    are errors whose help suggests an `if` chain inside a `_` arm.
 
-```ail
+```ail excerpt
 for c in text.chars()
     match c
         '(' | '[' => depth += 1

@@ -1,0 +1,6 @@
+fn same(a str, b str) bool
+    a == b
+
+fn main()
+    print(same("ab", "ab"))
+    print(same("ab", "b"))

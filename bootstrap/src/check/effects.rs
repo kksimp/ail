@@ -11,14 +11,15 @@ use super::{Call, Resolved};
 use crate::ast::{BinOp, Block, Cond, Else, Expr, FnDecl, InterpPart, Program, Stmt, TypeKind, Within, is_prelude};
 use crate::diag::{Diagnostic, Pos};
 
-/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `spawn` gives `spawn`.
-const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "spawn"];
+/// The effects (eff.infer.1). An `unsafe` block gives `unsafe`; `std.hw` and a
+/// volatile access give `hw`; `spawn` gives `spawn`.
+const EFFECT_NAMES: &[&str] = &["io", "fail", "mutates", "unsafe", "hw", "spawn"];
 
 /// Capabilities: the ambient resources a function may reach (eff.cap.1).
 /// `std.net` gives `net` (std.net.1).
 pub const CAPABILITIES: &[&str] = &["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui"];
 
-/// What `ail run --deterministic` denies (std.random.5, ADR 0207): the
+/// What `ail run --deterministic` denies (std.random.5, eff.det.2, ADR 0207): the
 /// capabilities whose results the program's inputs don't fix.
 pub const DETERMINISTIC_DENY: [&str; 4] = ["clock", "net", "proc", "random"];
 
@@ -64,6 +65,8 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
         // std.hash.1: values only. std.compress.1: the byte functions are
         // values only; the file and directory ones read and write files.
         "hash" => (&["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"], &[]),
+        // unsafe.hw.5: hardware access.
+        "hw" => (&["at", "fence", "fence_io"], &["hw"]),
         "compress" if matches!(name, "gzip_file" | "gunzip_file" | "zip_dir" | "unzip") => {
             (&["gzip_file", "gunzip_file", "zip_dir", "unzip"], &["fs", "io"])
         }
@@ -80,11 +83,11 @@ pub fn std_effects(module: &str, name: &str) -> Option<&'static [&'static str]> 
             (&["get", "post", "request", "get_bytes", "post_bytes", "request_bytes", "options", "connect", "connect_tls"], &["net", "io"])
         }
         // std.path.1: text only, so no effects.
-        "path" => (&["base", "dir", "ext", "join"], &[]),
+        "path" => (&["base", "dir", "ext", "join", "stem"], &[]),
         "random" => (&["int", "float", "seed", "shuffle"], &["random"]),
         // std.regex.1: text in, text out, so no effects.
         "regex" => (
-            &["compile", "is_match", "find", "find_all", "captures", "replace", "replace_first", "split", "escape"],
+            &["compile", "is_match", "find", "find_all", "group_all", "captures", "replace", "replace_first", "split", "escape"],
             &[],
         ),
         "time" => (&["now_ms", "sleep_ms"], &["clock"]),
@@ -331,7 +334,7 @@ pub fn check_contracts(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
     diags
 }
 
-/// ct.const.2 (ADR 0225): a constant is computed at compile time, so
+/// ct.const.2 (ADR 0225) and ct.eval.1 (ADR 0226): a constant is computed at compile time, so
 /// everything its value may call must be compile-time-safe: no `io`,
 /// `unsafe`, `spawn` or capability. One diagnostic per constant, naming each
 /// chain of calls.
@@ -400,8 +403,8 @@ pub fn check_constants(prog: &Program, resolved: &Resolved) -> Vec<Diagnostic> {
 
 /// ct.derive.3 (ADR 0227): the effects that keep function `f` from running
 /// at compile time, each with the chain of calls that gives it.
-pub fn impure_chains(prog: &Program, resolved: &Resolved, f: usize) -> Vec<String> {
-    let fx = Effects::infer(prog, resolved);
+/// `fx` is inferred once for the program, so many functions share one walk.
+pub fn impure_chains(fx: &Effects, f: usize) -> Vec<String> {
     fx.of(f).iter().filter(|e| impure(e)).map(|e| format!("effect `{e}` via {}", fx.chain(f, e))).collect()
 }
 
@@ -571,7 +574,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                 self.block(body);
             }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(None, _) => {}
-            Stmt::Return(Some(e), _) | Stmt::Expr(e) => self.expr(e),
+            Stmt::Return(Some(e), _) | Stmt::Expr(e) | Stmt::LetTuple { value: e, .. } => self.expr(e),
             Stmt::Handle { value, otherwise } => {
                 self.expr(value);
                 self.otherwise(otherwise);
@@ -627,7 +630,7 @@ impl<'p, 'r> Walker<'p, 'r> {
                     }
                 }
             }
-            Expr::List(items, _) | Expr::Set(items, _) => items.iter().for_each(|x| self.expr(x)),
+            Expr::List(items, _) | Expr::Set(items, _) | Expr::Tuple(items, _) => items.iter().for_each(|x| self.expr(x)),
             Expr::Comp { elem, value, clauses, .. } => {
                 for c in clauses {
                     self.expr(&c.iter);
@@ -689,6 +692,11 @@ impl<'p, 'r> Walker<'p, 'r> {
                     for &e in effects {
                         self.add(e, format!("{m}.{name}"));
                     }
+                } else if let Some(crate::stdlib::StdCall::Ptr(m, _)) = self.resolved.std_calls.get(name_pos)
+                    && m.ends_with("_volatile")
+                {
+                    // unsafe.hw.5: a volatile access gives `hw`.
+                    self.add("hw", format!("a pointer's `{m}`"));
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && m.starts_with("net.")
                 {
@@ -696,6 +704,10 @@ impl<'p, 'r> Walker<'p, 'r> {
                     for e in ["net", "io"] {
                         self.add(e, (*m).to_string());
                     }
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && m.starts_with("regex.")
+                {
+                    // std.regex.9: text in, text out, so no effects.
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && let Some(effects) = std_effects("ui", "Window")
                 {

@@ -1,0 +1,156 @@
+## Address folding (ADR 0625): an unchecked `ldx`/`stx` whose index is `y + k`
+## for a small constant `k`, from an `add` that carries no overflow check
+## (the loop's range guards removed it), reads or writes `base[y + k]` as the
+## address `base + 8 * y + 8 * k`. The `add` stays for other users and dies
+## if there are none. The sum wraps the same way the address does.
+
+## The largest offset folded, in elements.
+MAX_OFF := 4095
+
+pub fn fold_addresses(f Func) Func
+    defs := defs_of(f)
+    mut g := f
+    for b in 0..g.blocks.len()
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.op != "ldx" and i.op != "stx"
+                continue
+            d := inst_of(f, defs, i.args[1]) else continue
+            if (d.op != "add" and d.op != "sub") or d.site >= 0
+                continue
+            mut y := d.args[0]
+            mut c := const_of(f, defs, d.args[1])
+            if c == none and d.op == "add"
+                y = d.args[1]
+                c = const_of(f, defs, d.args[0])
+            mut n := c else continue
+            if d.op == "sub"
+                n = 0 - n
+            total := i.elem_off() + n
+            if total < 0 - MAX_OFF or total > MAX_OFF
+                continue
+            g.blocks[b].insts[k].args[1] = y
+            g.blocks[b].insts[k].fimm = total.to_float()
+    simplify(g)
+
+# ---- load and store primitives ----
+
+## `prim load64(p)` (and `load8`, `loadf`, `store64`, `store8`, `storef`) at an
+## address `p = base + k` or `p = base + i * 8` that nothing else uses reads
+## or writes the memory directly: the primitive takes `base` (and `i`) and
+## its `imm` holds the offset `k`, or, with an index, `k * 16 + log2(scale)`.
+## An indexed load has two arguments and an indexed store three. Only the
+## forms both ISAs have: an offset 0 to 32760 (a multiple of 8 for words), a
+## scale of 8 for words and floats and 1 for bytes. The `add` and `mul` die
+## if nothing else uses them.
+
+fn prim_kind(name str) int
+    match name
+        "load64" | "loadf" => 8
+        "load8" => 1
+        "store64" | "storef" => 9
+        "store8" => 2
+        _ => 0
+
+pub fn fold_prim_addresses(f Func) Func
+    defs := defs_of(f)
+    mut uses := [0 for _ in 0..f.vals.len()]
+    for blk in f.blocks
+        for i in blk.insts
+            for u in i.args
+                uses[u] += 1
+        for u in blk.term.uses()
+            uses[u] += 1
+    mut g := f
+    mut changed := false
+    for b in 0..g.blocks.len()
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
+            if i.op != "prim"
+                continue
+            kind := prim_kind(i.name)
+            if kind == 0
+                continue
+            word := kind == 8 or kind == 9
+            size := if word then 8 else 1
+            mut base := i.args[0]
+            mut idx := -1
+            mut disp := 0
+            mut d := inst_of(f, defs, base)
+            # `base + i * size`, or `i * size + base`.
+            if x := d
+                if x.op == "add" and x.site < 0 and uses[base] == 1
+                    mut got := scaled(f, defs, uses, x.args[1], size)
+                    mut other := x.args[0]
+                    if got < 0
+                        got = scaled(f, defs, uses, x.args[0], size)
+                        if got >= 0
+                            other = x.args[1]
+                    if got < 0 and size == 1
+                        # A byte address `base + i`.
+                        if const_of(f, defs, x.args[1]) == none
+                            got = x.args[1]
+                            other = x.args[0]
+                        elif const_of(f, defs, x.args[0]) == none
+                            got = x.args[0]
+                            other = x.args[1]
+                    if got >= 0
+                        idx = got
+                        base = other
+                        d = inst_of(f, defs, base)
+            # Constants added to the base.
+            mut more := true
+            while more
+                more = false
+                x := d else break
+                if (x.op != "add" and x.op != "sub") or x.site >= 0 or uses[base] != 1
+                    break
+                mut c := const_of(f, defs, x.args[1])
+                mut next := x.args[0]
+                if c == none and x.op == "add"
+                    c = const_of(f, defs, x.args[0])
+                    next = x.args[1]
+                n := c else break
+                total := disp + (if x.op == "sub" then 0 - n else n)
+                if total < 0 or total > (if word then 32760 else 4095) or (word and total % 8 != 0)
+                    break
+                disp = total
+                base = next
+                d = inst_of(f, defs, base)
+                more = true
+            if idx < 0 and disp == 0
+                continue
+            if idx >= 0 and disp > 4095
+                continue
+            mut r := i
+            mut args := [base]
+            if idx >= 0
+                args.push(idx)
+            for j in 1..i.args.len()
+                args.push(i.args[j])
+            r.args = args
+            r.imm = if idx < 0 then disp else disp * 16 + (if word then 3 else 0)
+            g.blocks[b].insts[k] = r
+            changed = true
+    if not changed
+        return g
+    simplify(g)
+
+## The `i` in `y = i * size` (a `mul` or `shl` with no overflow check and no
+## other use), else -1.
+fn scaled(f Func, defs List[Def], uses List[int], y int, size int) int
+    if uses[y] != 1
+        return -1
+    m := inst_of(f, defs, y) else return -1
+    if m.site >= 0
+        return -1
+    if m.op == "mul"
+        if size == 1
+            return -1
+        if const_of(f, defs, m.args[1]) == size
+            return m.args[0]
+        if const_of(f, defs, m.args[0]) == size
+            return m.args[1]
+    if m.op == "shl" and size == 8 and const_of(f, defs, m.args[1]) == 3
+        return m.args[0]
+    -1

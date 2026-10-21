@@ -1,0 +1,22 @@
+# Allocates more than 10 GB in short-lived lists (1.3 million lists of 1000
+# ints) and keeps 100 of them; the collector keeps the process small
+# (ADR 0564). Expected output: gc_10gb.out. Not part of `cargo test`:
+# the interpreter would take hours.
+
+fn fill(n int, seed int) List[int]
+    mut xs := List[int]()
+    for i in 0..n
+        xs.push(seed + i)
+    xs
+
+fn main()
+    mut keep := List[List[int]]()
+    mut total := 0
+    for round in 0..1300000
+        xs := fill(1000, round)
+        total += xs[999]
+        if round % 13000 == 0
+            keep.push(xs)
+    print(total)
+    print(keep.len())
+    print(keep[99][0])

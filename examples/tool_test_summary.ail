@@ -1,0 +1,17 @@
+## Agent task: run a file's tests with `ail test` and list which passed and which
+## failed, with the name of each failing test, then the exit status.
+##   ./ail run examples/tool_test_summary.ail
+
+fn main() !
+    here := path.dir(env.program())
+    file := "{here}/../tools/tokbench/corpus/agent-r5/data/tests.ail"
+    r := proc.run("{here}/../ail", ["test", file])? "running tests"
+    for line in r.out.lines()
+        if line.starts_with("ok ")
+            print("pass {line.replace("ok ", "")}")
+        elif line.starts_with("FAIL ")
+            name := (line.replace("FAIL ", "").split(":").first()) else ""
+            print("fail {name}")
+        elif line.contains(" passed, ")
+            print(line.trim())
+    print("exit {r.status}")

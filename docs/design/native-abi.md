@@ -22,7 +22,10 @@ files carry the Runtime Exception header (see [Licensing](#licensing)).
 
 AIL functions use the platform's C convention (System V AMD64, AAPCS64), so an
 `extern` call (lane 126, `ffi.call.1`) needs no thunk. Arguments beyond the
-registers go on the stack, 8 bytes each, in order. Callee-saved registers are
+registers go on the stack, 8 bytes each, in order, the first lowest; the
+caller reserves a 16-byte-aligned area below its frame for them and frees it
+after the call, and the callee reads them above its frame record (ADR 0533).
+Float arguments beyond the eighth aren't supported yet. Callee-saved registers are
 the platform's, plus **xmm8–xmm13 on x86-64** between AIL functions (ADR 0385;
 an `extern` call treats them as clobbered). No variadics. Structs are passed
 by pointer.
@@ -48,9 +51,10 @@ shortens a list must be added to the optimiser's decision first.
 | `int` | `i64` |
 | `float` | `f64` (IEEE 754 binary64) |
 | `bool` | `i64`, 0 or 1 |
-| `char` | `i64`, a Unicode scalar value |
+| `char` | `i64`, a Unicode scalar value; `List[char]` has 8-byte slots (ADR 0566) |
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
+| `Map[K, V]`, `Set[T]` | pointer to a **table object** (kind 7, 8) |
 
 **String object** (immutable, 16-byte aligned):
 
@@ -72,17 +76,30 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 ```
 
 `data` is separate so `push` can grow without moving the header the caller
-holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
+holds. A full list grows to 16 elements if it has fewer than 8, else doubles
+(ADR 0562); blocks of 256 bytes or more are copied 64 bytes per round. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
-**Heap object header** (ADR 0392). Objects allocated with `rt.obj_new(size,
-kind)` have an 8-byte word just before the address the program holds, so a
-pointer is to the first field:
+**Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
+optional is the pointer itself. An `int`, `float` or `bool` optional points at
+an 8-byte box (the value, or its bits for a `float`); the heap lane gives the
+box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
+`rt.unbox`, `rt.unboxf`, `rt.unbox_bool`.
 
-```text
--8   u64  header  bits 0-7 kind, bit 8 mark, bits 16-63 size in bytes
-+0        fields  `size` bytes
-```
+**Results** (ADRs 0575, 0576). A function that can fail returns its success
+value (zero on failure); failure is the runtime's global slot 8 holding the
+error's display text (a string object), 0 otherwise. Global 9 holds the return
+trace, a list of string objects `  at PATH:LINE:COL`. `rt.failed`, `rt.err_set`,
+`rt.err_trace`, `rt.err_take`, `rt.err_clear`, and for error structs and enums global 12 holds the error value (`rt.err_value`, `rt.err_take_value`, ADR 0804); `rt.exit` reports a failure
+that reached `main` first (`error: TEXT`, the trace, status 1).
+
+**Heap object header** (ADR 0562). Every heap object has an 8-byte word at
+pointer minus 8: bits 0-7 kind, bit 8 mark (collector only), bits 9-15
+reserved, bits 16-63 payload bytes. Kinds: 1 string, 2 list header, 3 list
+data, 4 struct, 5 enum payload, 6 closure, 7 map, 8 set, 9 bytes, 10 boxed
+optional/result, 11 pointer-free words (`List[bool]` data), 12-255 reserved.
+The object pointer is 8-byte aligned (16-byte blocks start 8 bytes before it).
+Literals in read-only data have no header and are never freed.
 
 | kind | object |
 |---:|---|
@@ -96,15 +113,75 @@ pointer is to the first field:
 | 8 | set |
 | 9 | bytes |
 | 10 | boxed optional or result |
+| 11 | pointer-free words |
+| 12 | task record (scanned word by word) |
+| 13 | environment record (scanned word by word) |
+| 14 | atomic cell (scanned word by word) |
 
-Strings and lists don't carry the header yet; lane 171 moves every
-allocation to `rt.obj_new` with the collector.
+Strings, lists and structs all take their memory from `rt.alloc` (ADR 0562);
+`rt.obj_new(size, kind)` is `alloc` for compiled code. Kind 11 (pointer-free
+words) is also defined.
 
 **Struct object** (ADR 0392): one 8-byte slot per field, in declaration
 order (a `float` as its bits, a `bool` as 0 or 1, a string, list or struct
 as a pointer). A struct is a value: reading one from a place to bind,
 store, push or return it copies it, deeply through the lists and structs
 it holds (a generated `copy.T` function); fields change in place.
+
+**Table object** (`Map` and `Set`, ADR 0568; `compiler/rt/native/map.ail`):
+
+```text
++0   u64  len     live entries
++8   u64  used    entry-array slots used, live or dead
++16  u64  ecap    entry-array capacity (a power of two)
++24  u64  mask    index size - 1
++32  u64  kind    key kind: 0 int, 1 str, 2 bool
++40  ptr  ents    ecap * 24 bytes: hash (-1 when dead), key, value
++48  ptr  index   (mask + 1) * 8 bytes: 0 empty, else entry number + 1
++56  u64  vmode   copy mode of values: 0 plain, 1 lists, 2 tables
++64  u64  vinfo   vmode 1: nesting depth * 256 + element bytes
++72  u64  lastkey the last key found or added
++80  ptr  laste   its entry, or 0 (cleared by a rebuild, removal or copy)
+```
+
+The entry array is in insertion order, which is iteration order
+(type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
+A set uses the same layout and ignores the value word.
+
+**Socket object** (`net.Conn`, `net.Listener`; ADR 0830; `compiler/rt/native/net.ail`).
+A `Conn` or `Listener` value is a struct (kind 4) of one `int` field: an index
+into a list of socket objects that global slot 40 keeps alive.
+
+```text
++0   i64  fd       descriptor, -1 once closed
++8   u64  timeout  milliseconds a read, write or connect may wait
++16  ptr  buf      read buffer (pointer-free), or 0
++24  u64  pos      first unread byte in buf
++32  u64  len      bytes in buf
++40  u64  flags    1 end of stream seen
++48  ptr  peer     string: peer address of a Conn
++56  u64  kind     0 connection, 1 listener
++64  ptr  addr     string: bound address of a Listener
++72  u64  cap      size of buf
+```
+
+**Enum values** (ADR 0602, lane 179). An enum none of whose variants has
+fields is an `i64`, the variant's index in declaration order. Any other enum
+is a pointer to an **enum object** (heap kind 5, immutable, shared, never
+copied):
+
+```text
++0   i64  index   the variant, in declaration order
++8   ...  fields  one 8-byte slot per field of the variant, in order
+```
+
+A variant without fields of such an enum is one shared object per program,
+built by the generated `init.enums` into a program global before `main`
+runs; program globals (computed constants, ADR 0604) follow the runtime's
+first `RT_GLOBALS` (16) slots, and the image's global area is sized from the
+slots the MIR uses. `==` on an enum with fields compares the index when one
+side is a variant without fields, the index and that variant's fields when
+one side is built in place, else calls the generated `eq.E`.
 
 ## 3. Entry and exit
 
@@ -168,16 +245,31 @@ Linux clobbers `rcx` and `r11` on x86-64. The shim is four functions
 
 **macOS risk.** Apple documents `libSystem` as the stable interface and
 reserves the right to change raw syscall numbers. The raw route works on
-current macOS ARM64 and is what the first slice uses; the fallback is to import
-`_write`, `_exit` and `_mmap` from `libSystem` through the dyld stubs lane 126
-needs for `extern` anyway. Only the four shim functions change (ADR 0406).
+current macOS ARM64 and is what the first slice uses. ADR 0534 moves the macOS
+OS layer to libSystem calls (`_write`, `_exit`, `_mmap`, ...) through the dyld
+imports lane 178 adds; Linux keeps raw syscalls.
 
-## 5. Allocator
+## 5. Allocator and collector
 
-A bump allocator over `mmap`ed chunks: first chunk 1 MiB, each later chunk
-`max(request, 2 * previous)`, 16-byte alignment, zeroed by the kernel, never
-freed. `alloc(n)` aborts with trap `run.limit.2` if `mmap` fails. This is
-the interim for the GC (ADR 0407).
+**As built (lane 171, ADRs 0562-0564).** `rt.alloc(n, kind)` returns `n`
+zeroed payload bytes with the header word before them; `rt.alloc_raw(n, kind)`
+skips the zeroing for blocks the caller fills before reading. `rt.init` reserves up
+to 16 GiB of address space (`mmap`, no-reserve; the size halves until it is
+accepted), cut into 16,448-byte pages with a page table (free, small page of class
+c, first or later page of a large span). Blocks up to 8192 bytes, header
+included, come from 36 size classes (16 to 256 in steps of 16, then four per
+doubling) with free lists; larger objects take whole pages. Failure to get
+memory traps `run.limit.2`.
+
+The collector (`compiler/rt/native/gc.ail`) is stop-the-world mark and sweep,
+run from `alloc` when the bytes allocated since the last collection exceed
+`max(16 MiB, 2 x live bytes)`. Roots: the stack from the stack pointer to the
+`argv` address saved by `rt.init`, the callee-saved registers (primitive
+`gc_regs`), and the global slots, all read as possible pointers, interior
+pointers included. Objects are scanned by kind (list headers: the data
+pointer; strings, bytes and kind 11: nothing; others: every word). The
+collector does not move objects. Global slots 8 and 9 hold the heap state
+block and the stack top; the runtime's slots are 0-63 and the program's constants start at 64; the collector scans them all (`globals_end`).
 
 ## 6. Output
 
@@ -186,6 +278,12 @@ the interim for the GC (ADR 0407).
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
 flag), 40-47 `fmt.ail` (the byte builder), 48-61 free, 62-63 `random.ail`
 (the generator's state and whether it is seeded).
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
+constant `NAME := N` read as `global(NAME)`; two names may share a slot only
+if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
+`bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
+past `Image.globals`, an undeclared name, or a code generator constant of
+the same name with another value.
 
 **Flush points** (ADR 0581): the buffer fills; `rt.exit` (called by the entry
 after `main` and by `io.exit`); every trap; before reading standard input;
@@ -204,7 +302,7 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 end of its function, which calls
 `rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
 1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
-count), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+count; 15 prints a runtime-built message string, `a`), `a` and `b` are the operands (for 4, the float's bits), `head` is the
 constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
 constant source excerpt (`  L | line` and the caret line). The output is the
 interpreter's first line and excerpt, byte for byte; the snapshot lines
@@ -260,8 +358,22 @@ call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `fmt_int`, `fmt_hex`, `fmt_bool`, `fmt_float`, `fmt_float_fixed`, `fmt_pad`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
-its value (empty on failure) and sets `os_ok()`; the lowering follows it
-with the status call.
+its value and, on failure, sets the error slot (global 8) to the display text
+of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
+`io_read_line` return a string or 0.
+
+**Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
+adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
+`str_float`, `str_fixed`, `str_char`, `str_pad`, `str_pad_checked`,
+`str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
+(character index or -1), `str_find_opt`, `str_char_at`, `str_strip_prefix`, `str_strip_suffix`,
+`char_to_digit`, `char_from_code` (optional results), `str_replace`, `str_split`,
+`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
+`str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
+`out_char`, `out_list_char`, and `str_trap`. A function that
+can trap takes the constant head and excerpt as its last arguments (`str`
+values the lowering builds from the call's position). A character crosses the
+runtime as an `int`.
 
 The table below is the first draft:
 
@@ -361,3 +473,31 @@ is Runtime Code. Every file there starts with the header
 Nothing in `compiler/rt/` is ported from another project; the float text
 algorithm is written from the textbook description (ADR 0409), so there is no
 third-party notice to carry.
+
+## Tensors (ADR 0815)
+
+`tensor.Tensor[T]` is a pointer to an object of heap kind 4: `+0` element kind
+(0 `int`, 1 `float`), `+8` rank, `+16` element count, `+24` pointer to the
+elements (8 bytes each, heap kind 11), `+32` the axis sizes, one word each. A
+tensor is never changed in place, so a copy shares the object. Calls: `rt.tensor_from`,
+`rt.tensor_shape_fault` and `rt.tensor_from_shape` (the fault helper returns a
+message string object or 0, and a message traps with runtime trap kind 15),
+`rt.tensor_to_list`, `rt.tensor_shape`, `rt.tensor_eq`, `rt.tensor_text` and
+`rt.out_tensor`.
+
+Step 2 (elementwise operators, reductions, transpose): `rt.tensor_zip_fault`
+and `rt.tensor_zip` (`op` 0 `+`, 1 `-`, 2 `*`, 3 `/`; broadcasting as
+std.tensor.4), `rt.tensor_scalar_f` and `rt.tensor_scalar_i`, `rt.tensor_neg`,
+`rt.tensor_sum_f`, `rt.tensor_sum_i`, `rt.tensor_dot_f`, `rt.tensor_dot_i`,
+`rt.tensor_reduce_fault` and `rt.tensor_reduce` (`kind` 0 sum, 1 max, 2 mean),
+`rt.tensor_transpose_fault` and `rt.tensor_transpose`. A kernel that can
+overflow an `int` (std.tensor.6) returns 0, and `sum`/`dot` of `int` return a
+one-element tensor read with `rt.tensor_first_i`; the lowering traps with the
+constant message when it sees 0. A float `sum`, `dot` and axis sum follow
+std.tensor.5's 16 partial sums.
+
+Step 3 (matmul, activations): `rt.tensor_matmul_fault` and `rt.tensor_matmul`
+(the plain triple loop of std.tensor.7, each product and sum rounded, no fused
+multiply-add; 0 on `int` overflow, as above), and `rt.tensor_activate` (`kind`
+0 `relu`, 1 `sigmoid` through `rt.float_exp`, 2 `tanh` through `rt.float_tanh`,
+fdlibm's, which uses `rt.float_expm1`).

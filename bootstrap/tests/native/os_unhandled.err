@@ -1,4 +1,2 @@
-bootstrap/tests/native/os_unhandled.ail:3:30: error[native.subset.1]: not in the native subset yet: `?`
-bootstrap/tests/native/os_unhandled.ail:5:32: error[native.subset.1]: `else err` isn't in the native subset yet: error values come with lane 175
-bootstrap/tests/native/os_unhandled.ail:9:8: error[native.subset.1]: not in the native subset yet: `fs.write_text` outside `else` (error values come with lane 175)
-bootstrap/tests/native/os_unhandled.ail:10:13: error[native.subset.1]: not in the native subset yet: `io.read_line` outside `else` (error values come with lane 175)
+bootstrap/tests/native/os_unhandled.ail:5:30: error[native.subset.1]: `?` in a function that can't fail
+bootstrap/tests/native/os_unhandled.ail:14:10: error[native.subset.1]: not in the native subset yet: printing a `str?`

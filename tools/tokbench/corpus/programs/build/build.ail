@@ -1,4 +1,3 @@
-
 struct Finding
     severity str
     rule str
@@ -18,12 +17,13 @@ fn count(found List[Finding], severity str) int
 
 fn main() !
     here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
     mut errors := 0
     mut warnings := 0
     for name in fs.list_dir(here)? "listing examples"
         if not name.ends_with(".ail")
             continue
-        r := proc.run("{here}/../ail", ["check", "--json", "{here}/{name}"])? "checking {name}"
+        r := proc.run(ail, ["check", "--json", "{here}/{name}"])? "checking {name}"
         found := parse_findings(r.err)
         errors += count(found, "error")
         warnings += count(found, "warning")

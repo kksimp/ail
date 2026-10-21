@@ -42,10 +42,28 @@ function in source order. A file of tests needs no `main`. A program the
 checker rejects is reported as for `ail check` (exit 2) and no test runs.
 *(ADR 0167)*
 
+```ail tool=test,FILE expect=passed rules=test.run.1
+@test
+fn one()
+    assert(1 == 1)
+```
+
 **test.run.2** — Each test runs in isolation. A trap (including a failed
 assertion) or a returned error ends that test only. Constants are computed
-once. What a test prints is captured, and shown under its `FAIL` line.
+once. What a test prints to standard output or standard error is captured;
+a failing test shows it under its `FAIL` line, standard output plain and
+standard error marked `!`. *(ADR 0693)*
 *(ADR 0167)*
+
+```ail tool=test,FILE status=1 expect=failed rules=test.run.2
+@test
+fn one()
+    assert(1 == 1)
+
+@test
+fn two()
+    assert(false)
+```
 
 **test.run.3** — The text report has one line per test, `ok NAME` or
 `FAIL NAME: MESSAGE at LINE:COL`, then `N passed, M failed`. The message is
@@ -53,11 +71,31 @@ once. What a test prints is captured, and shown under its `FAIL` line.
 position is where the trap occurred or the error was first returned. The exit
 status is 0 if every test passed and 1 otherwise. *(ADR 0167)*
 
+```ail tool=test,FILE status=1 expect=FAIL rules=test.run.3
+@test
+fn one()
+    assert(1 == 1)
+
+@test
+fn two()
+    assert(false)
+```
+
 **test.run.4** — With `--json`, standard output has one line per test,
 `{"test":NAME,"status":"pass"|"fail","line":N,"col":N,"message":TEXT}`, then
 `{"summary":true,"passed":N,"failed":M}`. For a passing test, `line` and `col`
 are the test's name and `message` is empty. Order and text are deterministic.
 *(ADR 0167)*
+
+```ail tool=test,--json,FILE status=1 expect="status":"fail" rules=test.run.4
+@test
+fn one()
+    assert(1 == 1)
+
+@test
+fn two()
+    assert(false)
+```
 
 ## Assertions
 
@@ -67,9 +105,26 @@ with a message showing both values' text forms. Both are in the prelude and
 are allowed anywhere, not only in tests: outside a test, the trap ends the
 program (`err.trap.3`). *(ADR 0168)*
 
+```ail tool=test,FILE status=1 expect=test.assert.1 rules=test.assert.1
+@test
+fn one()
+    assert(1 == 1)
+
+@test
+fn two()
+    assert(false)
+```
+
 **test.assert.2** — `assert` takes one `bool`. `assert_eq` takes two values of
 one type that supports `==` and has a text form. Anything else is a
 compile-time error. *(ADR 0168)*
+
+```ail rules=test.assert.2
+fn main()
+    assert(1 < 2)
+    assert_eq("a", "a")
+    print("ok")
+```
 
 ## Property tests
 
@@ -133,10 +188,38 @@ Blocks with any other tag (`ail fragment`, `text`) are not run. Doc examples
 run after the file's own tests, in source order. A problem in an example is
 reported at its line in the doc comment. *(ADR 0200)*
 
+```ail tool=test,FILE expect=doc:add rules=test.doc.1,test.doc.3
+## Adds two numbers.
+##
+## ```ail
+## print(add(1, 2))
+## # => 3
+## ```
+fn add(a int, b int) int
+    a + b
+
+fn main()
+    print(add(1, 2))
+```
+
 **test.doc.2** — If an example has lines `# => text`, the text after `# =>`
 (one leading space dropped, trailing spaces ignored), in order, must equal the
 lines the example prints; otherwise the test fails with `trap[test.doc.2]`.
 An example with no such lines only has to pass. *(ADR 0201)*
+
+```ail tool=test,FILE status=1 expect=FAIL rules=test.doc.2
+## Adds two numbers.
+##
+## ```ail
+## print(add(1, 2))
+## # => 4
+## ```
+fn add(a int, b int) int
+    a + b
+
+fn main()
+    print(add(1, 2))
+```
 
 **test.doc.3** — A doc example is reported as `doc:NAME`, where `NAME` is the
 declaration's name (`doc:Type.method` for a method, `doc:Enum.Variant` for a
@@ -152,8 +235,24 @@ failed contract condition read, and the stack. With `--json`, the failing
 line carries it as `"snapshot"`. A contract failure (contract.req.1,
 contract.ens.1) names the contract in the failure message. *(ADR 0290)*
 
+```ail tool=test,FILE status=1 expect=two() rules=test.run.5
+@test
+fn one()
+    assert(1 == 1)
+
+@test
+fn two()
+    assert(false)
+```
+
 **test.run.6** — `ail test --trace` adds the failing test's trace to its
 report (trace.test.1-2). *(ADR 0326)*
+
+```ail tool=test,--trace=calls,FILE status=1 expect=adds() rules=test.run.6
+@test
+fn adds()
+    assert_eq(1 + 1, 3)
+```
 
 **test.cover.1** — `ail test --coverage` runs the tests and then prints, for
 each source file of the program, the lines and functions they ran. A line
@@ -161,12 +260,110 @@ counts when it starts a statement of a function that is not a test. A
 function counts as run when its first statement ran. The prelude and test
 functions are not counted. *(ADR 0289)*
 
+```ail tool=test,--coverage,FILE expect=coverage rules=test.cover.1
+@test
+fn one()
+    assert(1 == 1)
+
+fn main()
+    print(1)
+```
+
 **test.cover.2** — The text form is one line per file:
 `coverage FILE: lines H/T (P%), functions H/T`. `--coverage=lines` adds
 `  not run: 7-8, 12` listing the unexecuted line ranges. *(ADR 0289)*
+
+```ail tool=test,--coverage=lines,FILE expect=lines rules=test.cover.2
+@test
+fn one()
+    assert(1 == 1)
+
+fn main()
+    print(1)
+```
 
 **test.cover.3** — With `--json`, each file is a line
 `{"coverage":true,"file","lines","lines_hit","functions","functions_hit","missed":[[from,to],...]}`
 after the summary line; `missed` is always present. Coverage is off unless
 asked for and then costs one flag test per statement; a run without it is
 unchanged. *(ADR 0289)*
+
+```ail tool=test,--coverage,--json,FILE expect="coverage":true rules=test.cover.3
+@test
+fn one()
+    assert(1 == 1)
+
+fn main()
+    print(1)
+```
+
+## Checked examples for the attribute and property rules
+
+Each block runs `ail test` or checks the program, with the options on its fence (test.attr.1-4, test.prop.1, 3-5).
+
+```ail error=test.attr.1 rules=test.attr.1
+@slow fn main()
+    print(1)
+```
+
+```ail tool=test,FILE expect=checks rules=test.attr.2
+@test fn checks()
+    assert_eq(1, 1)
+
+fn main()
+    print("ok")
+```
+
+```ail error=test.attr.3 rules=test.attr.3
+@test fn checks()
+    assert(true)
+
+fn main()
+    checks()
+```
+
+```ail tool=test,FILE status=1 expect=FAIL rules=test.attr.4
+error struct Empty
+    why str
+
+fn parse(s str) int ! Empty
+    if s == ""
+        return Empty(why: "empty")
+    7
+
+@test fn reads()
+    n := parse("")?
+    assert(n == 7)
+```
+
+```ail tool=test,--cases,5,FILE expect=cases rules=test.prop.1
+@test fn doubles(x int)
+    assert(x * 2 >= x or x < 0)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,--seed,7,FILE expect=seed rules=test.prop.3
+@test fn doubles(x int)
+    assert(x * 2 >= x or x < 0)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,FILE status=1 expect=input rules=test.prop.4
+@test fn small(x int)
+    assert(x < 10)
+
+fn main()
+    print("ok")
+```
+
+```ail tool=test,FILE status=1 expect=10 rules=test.prop.5
+@test fn small(x int)
+    assert(x < 10)
+
+fn main()
+    print("ok")
+```

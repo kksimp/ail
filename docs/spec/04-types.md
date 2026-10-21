@@ -91,6 +91,20 @@ number is `nan`. `x.to_int()` returns an `int`: it truncates toward zero, and
 traps on `nan` or when the truncated value is outside `int`. `n.to_float()`
 rounds to nearest, ties to even, and never traps. *(ADR 0130)*
 
+**type.num.16** — `x.sin()`, `x.cos()`, `x.tan()`, `x.atan()`, `x.exp()`,
+`x.ln()` (the natural logarithm), `x.log10()` and `x.cbrt()` return a
+`float`; so do `x.atan2(y)`, `x.pow(y)` and `x.hypot(y)` for a `float` `y`
+(`x` is the first argument: `atan2(x, y)` is the angle of `(y, x)`, as in
+Rust, and `pow` is `x` raised to `y`). Special arguments give the IEEE 754
+and C99 Annex F results: `nan` for `sin` of an infinity and for `ln` of a
+negative number; `pow(1, y)` and `pow(x, 0)` are `1` even for `nan`; `atan2`
+keeps the sign of zero; `hypot` of an infinity is infinite even beside a
+`nan`. For finite arguments the result is within one unit in the last place
+of the platform's libm, except that `log10` may differ by two units; the
+platforms' libms may differ from each other by the same bound, so the last
+bit of these results isn't fixed across operating systems (as for
+std.tensor.13). The native backend meets the same bound. *(ADR 0592)*
+
 **type.num.10** — An integer literal whose expected type is `float` is a
 float literal. Only literals (and `-` applied to a literal) convert: an
 expression of type `int` never does. *(ADR 0130)*
@@ -257,8 +271,51 @@ known enum type, its variants MAY be written without qualification
 (`Circle(r)`). Elsewhere they MUST be qualified with the enum name
 (`Shape.Circle(r)`). *(ADR 0057)*
 
+```ail error=type.enum.3
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    c := Circle(2)
+    print(area(c))
+```
+
+```ail
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Circle(2)))
+```
+
 **type.enum.4** — The canonical form omits the qualification wherever
 `type.enum.3` permits it. *(ADR 0057)*
+
+```ail rules=type.enum.4
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Shape.Circle(2)))
+```
 
 **type.enum.5** — An enum's variant names MUST be distinct. *(ADR 0117)*
 
@@ -266,9 +323,23 @@ known enum type, its variants MAY be written without qualification
 (`type.struct.3–4`, `type.struct.7`): `Circle(r: 1.0)`, or `Circle(1.0)`.
 *(ADR 0123, ADR 0142)*
 
+```ail rules=type.enum.6
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w
+
+fn main()
+    print(area(Rect(w: 2, h: 3)))
+```
+
 ## Optional types
 
-**type.opt.1** — AIL has no null value. *(ADR 0048)*
+**type.opt.1** — [definitional] AIL has no null value. *(ADR 0048)*
 
 **type.opt.2** — `T?` denotes an optional value of type `T`. It is exactly
 equivalent to `Option[T]`. *(ADR 0048)*
@@ -357,6 +428,126 @@ fn main()
     print("{apply(double, 4)}")
 ```
 
+## Tuples
+
+**type.tuple.1** — `(A, B, ...)` is the type of a tuple: an anonymous value
+of two or more elements, each with its own type. A tuple is a value like a
+struct: assignment copies it, it is `mut` where its holder is, and it is never
+shared. A one-element or empty tuple type is an error; a value of a unique
+type can't be an element (`own.uniq.5`). *(ADR 0791, ADR 0792)*
+
+**type.tuple.2** — `(a, b, ...)` is a tuple whose elements are the values of
+`a`, `b`, .... Each element is checked against the matching element of the
+expected type, so `(1, none)` can be an `(int, str?)`. A parenthesised single
+expression is not a tuple, and `(a,)` is an error. *(ADR 0791, ADR 0792)*
+
+**type.tuple.3** — `t.0`, `t.1`, ... read element 0, 1, ... of the tuple `t`,
+and assign it when `t` is a `mut` place. The index is a decimal literal
+smaller than the number of elements; anything else is a compile-time error.
+`t.0.1` is element 1 of element 0. *(ADR 0791, ADR 0792)*
+
+**type.tuple.4** — `a, b := e` declares one local per element of the tuple
+`e`, in order. The number of names MUST equal the number of elements. `_`
+skips an element, and `mut` before a name makes that local mutable:
+`a, mut b := e`. *(ADR 0791, ADR 0792)*
+
+**type.tuple.5** — `for a, b in xs` takes each element of `xs`, which must be
+a tuple of as many elements, apart as `type.tuple.4` does; so does a
+comprehension clause `for a, b in xs`. `for k, v in m` iterates the entries of
+a map `m` as `(key, value)` pairs, in insertion order (`type.map.5`). `for
+mut` takes one name. *(ADR 0791, ADR 0792)*
+
+**type.tuple.6** — A `match` on a tuple takes tuple patterns `(p, q, ...)`
+with one pattern per element. An element pattern is `_`, a name, which binds
+the element, a literal, a range, a variant, or a nested tuple pattern. A name
+that is a variant of the element's enum is an error: write `Enum.Name` to
+match the variant. A `match` on a tuple MUST have a `_` arm or an arm that
+matches every tuple, such as `(a, _)` (`expr.match.2`). *(ADR 0791, ADR 0793)*
+
+**type.tuple.7** — A tuple is `Eq`, `Ord` and `Hash` when every element is.
+`==` compares elementwise, `<` and `sorted` compare lexicographically, element
+0 first, and a tuple can be a map key or set element. *(ADR 0791)*
+
+**type.tuple.8** — The text form of a tuple is its elements' text forms,
+strings quoted, in parentheses: `(1, "a")`. A derived `ToJson` writes a
+tuple-typed field as a JSON array of its elements, and a derived `FromJson`
+reads one back, failing with `expected N elements` when the length differs
+(`json.derive.1-2`). *(ADR 0791, ADR 0795)*
+
+**type.tuple.9** — `xs.enumerate()` returns a `List[(int, T)]` of each element
+of the list `xs` with its index. `zip(a, b)` returns a `List[(A, B)]` pairing
+the elements of the lists `a` and `b` in order, as long as the shorter. A
+program's own function named `zip` replaces it. *(ADR 0791, ADR 0794)*
+
+```ail rules=type.tuple.1,type.tuple.2,type.tuple.3,type.tuple.4
+fn divmod(a int, b int) (int, int)
+    (a / b, a % b)
+
+fn main()
+    q, r := divmod(17, 5)
+    print("{q} {r}")                              # 3 2
+    mut p := (1, "a")
+    p.0 = 10
+    print(p.0)                                    # 10
+    mut n, _ := p
+    n += 1
+    print(n)                                      # 11
+```
+
+```ail rules=type.tuple.5,type.tuple.9
+fn main()
+    ages := {"ann": 31, "bob": 25}
+    for name, age in ages
+        print("{name} is {age}")
+    for i, x in ["a", "b"].enumerate()
+        print("{i}: {x}")
+    print([n * 2 for n, _ in zip([1, 2, 3], ["x", "y"])])   # [2, 4]
+```
+
+```ail rules=type.tuple.6
+fn describe(t (int, str)) str
+    match t
+        (0, _) => "zero"
+        (n, "") => "{n} and nothing"
+        (n, s) => "{n} {s}"
+
+fn main()
+    print(describe((0, "x")))                     # zero
+    print(describe((2, "y")))                     # 2 y
+```
+
+```ail rules=type.tuple.7,type.tuple.8
+struct Edge
+    ends (str, str)
+
+impl ToJson for Edge
+
+fn main()
+    pairs := [(2, "b"), (1, "z"), (1, "a")]
+    print(pairs.sorted())                         # [(1, "a"), (1, "z"), (2, "b")]
+    seen := {(0, 0): "origin"}
+    print(seen[(0, 0)])                           # origin
+    print(Edge(ends: ("a", "b")).to_json().to_text())   # {"ends":["a","b"]}
+```
+
+```ail error=type.tuple.3
+fn main()
+    t := (1, "a")
+    print(t.2)                                    # error: no element 2
+```
+
+```ail error=type.tuple.4
+fn main()
+    a, b, c := (1, 2)                             # error: 3 names, 2 elements
+    print(a)
+```
+
+```ail error=expr.match.2
+fn main()
+    match (1, "a")
+        (0, _) => print("zero")                   # error: no arm covers (1, "a")
+```
+
 ## Booleans
 
 **type.opt.9** — A `mut` local declared with `:=` from `none` has no type
@@ -389,6 +580,11 @@ fn half(n int) int?
 **type.bool.1** — `bool` is the type of the literals `true` and `false`.
 Logical operators take and produce `bool` (`expr.op.1`). *(ADR 0110)*
 
+```ail rules=type.bool.1
+fn main()
+    print(true and not false)
+```
+
 ## Strings and characters
 
 **type.str.1** — `str` is the type of immutable UTF-8 text. `char` is the type
@@ -410,7 +606,10 @@ and `!=`; `str` equality compares UTF-8 bytes. `str` also supports `<`, `<=`,
 **type.str.4** — `s.split(sep)` returns a `List[str]` of the pieces of `s`
 between occurrences of `sep`, keeping empty pieces, so `n` occurrences give
 `n + 1` pieces. An empty `sep` traps. `sep` is a `str` or a `char`
-(`type.str.6`). *(ADR 0124, ADR 0135)*
+(`type.str.6`). `s.split(sep, limit)` makes at most `limit` pieces and the
+last keeps the rest of `s`, so `"a=b=c".split("=", 2)` is `["a", "b=c"]`;
+`limit` is an `int` of at least 1, otherwise it traps. *(ADR 0124, ADR 0135,
+ADR 0758)*
 
 **type.str.5** — `s.to_int()` returns an `int?`. It holds the value of `s`
 when `s` is an optional `-` followed by one or more decimal digits and the
@@ -455,6 +654,46 @@ arguments. *(ADR 0135)*
 ```ail fragment
 "7".pad_left(3, '0')        # 007
 "ab".pad_right(4, ' ')      # "ab  "
+```
+
+**type.str.16** — `s.center(width, fill)` pads with copies of the `char` `fill`
+on both sides until `s` has `width` characters; when the padding is odd, the
+extra copy goes on the right. A string already that wide is returned
+unchanged. *(ADR 0629)*
+
+```ail rules=type.str.16
+fn main()
+    print("[{"ab".center(7, '*')}]")         # [**ab***]
+```
+
+**type.str.17** — `s.words()` returns the pieces of `s` between runs of
+whitespace, with no empty pieces (an empty list for blank text).
+`s.trim_start()` and `s.trim_end()` remove whitespace from one end only.
+*(ADR 0629)*
+
+**type.str.18** — `s.count(sub)` returns the number of non-overlapping
+occurrences of `sub`; it traps when `sub` is empty. `s.rfind(sub)` is the
+character index of the last occurrence, or `none` (compare `type.str.14`).
+*(ADR 0629)*
+
+```ail rules=type.str.17,type.str.18
+fn main()
+    print("  a  b ".words())                # ["a", "b"]
+    print("[{"  x ".trim_end()}]")          # [  x]
+    print("abababa".count("aba"))           # 2
+    print("a/b/c".rfind("/"))               # 3
+```
+
+**type.str.19** — `s.is_empty()` is `s.len() == 0`. *(ADR 0630)*
+
+**type.coll.20** — `xs.is_empty()` on a list, map or set is `xs.len() == 0`.
+*(ADR 0630)*
+
+```ail rules=type.str.19,type.coll.20
+fn main()
+    print("".is_empty())                    # true
+    print([1].is_empty())                   # false
+    print({"a": 1}.is_empty())              # false
 ```
 
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
@@ -570,13 +809,18 @@ for each byte. *(ADR 0414)*
   with its padding and no other character.
 - `bytes.zeros(n)` is `n` zero bytes; it traps if `n` is negative or above 2^32.
 
-```ail fragment rules=type.bytes.1,type.bytes.2,type.bytes.3,type.bytes.4,type.bytes.5,type.bytes.6,type.bytes.7,type.bytes.8,type.bytes.9,type.bytes.10,type.bytes.11,type.bytes.12,type.bytes.13
+**type.bytes.14** — `b.hex(sep)` is `b.hex()` with the `str` `sep` between the byte
+pairs: `b"\x00\x0f".hex(" ")` is `"00 0f"`. An empty `sep` gives `b.hex()`, and
+empty bytes give `""`. *(ADR 0775)*
+
+```ail fragment rules=type.bytes.1,type.bytes.2,type.bytes.3,type.bytes.4,type.bytes.5,type.bytes.6,type.bytes.7,type.bytes.8,type.bytes.9,type.bytes.10,type.bytes.11,type.bytes.12,type.bytes.13,type.bytes.14
 b := b"hello\x00\n"
 print(b.len())                       # 7
 print(b[1])                          # 101
 print(b[1..3])                       # b"el"
 print(b[..2] + b[3..])               # b"helo\x00\n"
 print(b.hex())                       # 68656c6c6f000a
+print(b[..3].hex(" "))               # 68 65 6c
 print("hi".to_bytes().to_list())     # [104, 105]
 print(bytes.from_base64("aGk=") else b"")
 for x in b"abc"
@@ -752,6 +996,31 @@ function, `by: |x| key` (`expr.key.1`); `s.sorted(by: ...)` works on a set.
 elements, or all of them when the list is shorter. A negative `n` traps.
 *(ADR 0250)*
 
+**type.coll.17** — `xs.chunks(n)` returns the list's elements as lists of `n`
+(the last may be shorter); `xs.windows(n)` returns every run of `n`
+neighbouring elements (none when the list is shorter than `n`). Both give a
+`List[List[T]]`, and trap when `n < 1`. *(ADR 0629)*
+
+**type.coll.18** — `xs.counts()` returns a `Map[T, int]` of how many times each
+element occurs, keys in order of first appearance. `T` must be hashable.
+*(ADR 0629)*
+
+```ail rules=type.coll.17,type.coll.18
+fn main()
+    xs := [1, 2, 3, 4, 5]
+    print(xs.chunks(2))                      # [[1, 2], [3, 4], [5]]
+    print(xs.windows(3))                     # [[1, 2, 3], [2, 3, 4], [3, 4, 5]]
+    print("a b a".split(" ").counts())       # {"a": 2, "b": 1}
+```
+
+**type.coll.19** — `xs.flatten()` on a `List[List[T]]` returns one `List[T]`
+with the inner lists' elements in order. *(ADR 0629)*
+
+```ail rules=type.coll.19
+fn main()
+    print([[1, 2], [], [3]].flatten())      # [1, 2, 3]
+```
+
 **type.coll.12** — `xs.sum()` exists only for `List[int]`, returning an `int`,
 and `List[float]`, returning a `float`. It is a built-in special case that user
 code can't declare (ADR 0128 is unchanged for user code). An empty list
@@ -837,10 +1106,10 @@ is ignored, so equal maps can print differently. Maps and sets aren't `Ord` or
 
 **type.map.5** — `for x in s` iterates a set in insertion order, over the
 value `s` had when the loop started (`expr.loop.4`, amended to allow a
-`Set`). `for k in m` on a map is a
-compile-time error whose help says to iterate `m.keys()`: a key and a pair are
-both plausible readings. `for mut` over a set, or over `m.keys()` or
-`m.values()`, is a compile-time error. *(ADR 0131)*
+`Set`). `for k, v in m` iterates a map's entries as pairs
+(`type.tuple.5`); `for k in m`, with one name, is a compile-time error whose
+help says to write `for k, v in m` or iterate `m.keys()`. `for mut` over a set, or over `m.keys()` or
+`m.values()`, is a compile-time error. *(ADR 0131, ADR 0792)*
 
 **type.map.6** — Maps and sets have these methods. *(ADR 0131)*
 - Map: `m.len()` returns an `int`; `m.get(k)` returns a `V?`;
@@ -1000,6 +1269,18 @@ fn main()
     print(3.to_float())            # 3.0
 ```
 
+```ail rules=type.num.16
+fn main()
+    print(0.0.sin())                # 0.0
+    print(1.0.exp())                # 2.718281828459045
+    print(100.0.log10())            # 2.0
+    print(2.0.pow(10.0))            # 1024.0
+    print(3.0.hypot(4.0))           # 5.0
+    print(27.0.cbrt())              # 3.0
+    print(1.0.atan2(1.0) * 4.0)     # 3.141592653589793
+    print((0.0 / 0.0).pow(0.0))     # 1.0: pow(x, 0) is 1 even for nan
+```
+
 ```ail rules=type.struct.1,type.struct.2,type.struct.3,type.struct.4,type.struct.6
 struct User
     id int
@@ -1153,6 +1434,7 @@ fn main()
     parts := "a,,b".split(",")
     print(parts.len())                            # 3: empty pieces are kept
     print("a/b/c".split('/').len())               # 3: a char separator
+    print("k=v=w".split("=", 2))                  # ["k", "v=w"]: at most 2 pieces
     print("-42".to_int())                         # -42
     print("4x".to_int())                          # none
     print("x".to_int() else 0)                    # 0
@@ -1380,7 +1662,7 @@ fn main()
 ```ail error=type.map.5
 fn main()
     m := {"a": 1}
-    for k in m                                    # error: iterate m.keys() instead
+    for k in m                                    # error: write `for k, v in m` or m.keys()
         print(k)
 ```
 

@@ -1,0 +1,497 @@
+## Calls to the standard modules (ADR 0377), as `check/stdlib.rs`:
+## `m.f(...)` and `m.Type(...)` (std.use.2), with each function's signature.
+use ast
+
+## The functions of each standard module, as `stdlib::MODULES`.
+STD_FUNCTIONS := [
+    [
+        "compress",
+        "deflate",
+        "gunzip",
+        "gunzip_file",
+        "gzip",
+        "gzip_file",
+        "inflate",
+        "unzip",
+        "unzlib",
+        "zip_dir",
+        "zlib",
+    ],
+    ["env", "args", "cwd", "get", "home", "program", "vars"],
+    [
+        "fs",
+        "append_bytes",
+        "append_text",
+        "copy",
+        "exists",
+        "glob",
+        "list_dir",
+        "make_dir",
+        "metadata",
+        "read_bytes",
+        "read_text",
+        "remove",
+        "rename",
+        "walk",
+        "write_bytes",
+        "write_text",
+    ],
+    ["hash", "crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"],
+    ["hw", "at", "fence", "fence_io"],
+    ["mem", "alloc", "cast", "cstr", "free", "from_cstr", "null"],
+    ["io", "eprint", "exit", "read_all", "read_bytes", "read_line"],
+    [
+        "net",
+        "connect",
+        "connect_tls",
+        "get",
+        "get_bytes",
+        "listen",
+        "open",
+        "options",
+        "post",
+        "post_bytes",
+        "request",
+        "request_bytes",
+        "serve",
+    ],
+    ["path", "base", "dir", "ext", "join", "stem"],
+    ["proc", "kill", "run", "run_bytes", "start", "wait", "which"],
+    ["random", "float", "int", "seed", "shuffle"],
+    [
+        "regex",
+        "captures",
+        "compile",
+        "escape",
+        "find",
+        "find_all",
+        "group_all",
+        "is_match",
+        "replace",
+        "replace_first",
+        "split",
+    ],
+    ["tensor", "from", "zeros"],
+    ["task", "cancelled", "check", "select"],
+    ["time", "now_ms", "sleep_ms"],
+    ["tz", "offset", "system"],
+    ["ui", "clipboard_get", "clipboard_set", "open"],
+]
+
+## The functions of standard module `m`.
+fn std_functions(m str) List[str]
+    for row in STD_FUNCTIONS
+        if row[0] == m
+            return row[1..]
+    []
+
+## `m.f(...)` or `m.Type(...)` where `head` may name a standard module.
+## `none` when it doesn't, so the caller goes on.
+fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty?
+    module := std_module(head) else
+        if std_like(head)
+            args_only(args)
+            err_help(
+                "std.use.2",
+                at,
+                "the standard module `{head}` is not imported",
+                "add `use std.{head}` at the top of the file",
+            )
+            return Ty.Unknown
+        return none
+    if module == "tensor" and n == "Tensor"
+        args_only(args)
+        err_help(
+            "std.tensor.1",
+            at,
+            "a tensor isn't built from fields",
+            "use `{head}.from(xs, shape)` or `{head}.zeros(shape)`",
+        )
+        return Ty.Unknown
+    if s := struct_named("{module}.{n}")
+        std_any.add(pos_key(at))
+        return struct_literal(s, none, args, at, expect)
+    fns_of := std_functions(module)
+    if not fns_of.contains(n)
+        args_only(args)
+        mut d := new_diag("std.use.2", at, "module `{head}` has no function `{n}`")
+        # Another library's name for the same function, with the same arguments.
+        renamed := other_name(module, n)
+        if renamed != ""
+            diags.push(d.with_help("write `{head}.{renamed}`"))
+            return Ty.Unknown
+        if s := suggest(n, fns_of)
+            d = d.with_help("did you mean `{head}.{s}`?")
+        else
+            d = d.with_help("`std.{module}` provides {list_names(fns_of)}")
+        diags.push(d)
+        return Ty.Unknown
+    std_fns[pos_key(at)] = module
+    std_any.add(pos_key(at))
+    if module == "mem"
+        note_unsafe_op("`{head}.{n}`", at)
+        if t := mem_generic(n, args, at, expect)
+            return t
+    if module == "hw"
+        # unsafe.hw.1-2: hardware access is unsafe, and needs `unsafe driver`.
+        note_unsafe_op("`{head}.{n}`", at)
+        driver_opt_in("`{head}.{n}`", at)
+        if n == "at"
+            return hw_at(args, at, expect)
+    if module == "tensor"
+        return tensor_call(n, args, at, expect)
+    if module == "io" and n == "eprint"
+        return eprint_call(args, at)
+    if module == "hash" or (module == "compress" and ["deflate", "gzip", "zlib"].contains(n))
+        return bytes_like_call(module, n, args, at)
+    if module == "random" and n == "shuffle"
+        return shuffle_call(args, at)
+    if module == "task" and n == "select"
+        return select_call(args, at)
+    sig := std_signature(module, n)
+    mut params := sig.params
+    if module == "proc" and (n == "run" or n == "run_bytes")
+        # std.proc.2: `input` and `timeout_ms` may be left off from the end.
+        params = params[..args.len().max(2).min(4)]
+    if module == "proc" and n == "start"
+        # std.proc.4: `timeout_ms int?` may be left off.
+        params = params[..args.len().max(2).min(3)]
+    mut call_sig := plain_sig(none, params, sig.ret)
+    if module == "proc" and (n == "wait" or n == "kill")
+        # std.proc.7: the child is consumed.
+        call_sig.moves = [true]
+    check_call("{head}.{n}", call_sig, [], args, none, at, expect)
+
+fn Checker.struct_named(self, n str) int?
+    d := types.get(n)?
+    match d
+        DStruct(s) => s
+        DEnum => none
+
+## A standard module's struct, by its qualified name.
+fn Checker.std_struct(self, n str) Ty
+    d := types.get(n) else return Ty.Unknown
+    match d
+        DStruct(s) => Ty.Struct(s, [])
+        DEnum => Ty.Unknown
+
+## A standard function's parameters and result.
+struct StdSig
+    params List[Ty]
+    ret Ty
+
+## The signature of `module.f`, as `std_signature` in check/stdlib.rs.
+fn Checker.std_signature(self, module str, f str) StdSig
+    key := "{module}.{f}"
+    text := Ty.Str
+    u8_ptr := Ty.PtrOf(Ty.Num("u8"))
+    re_ty := std_struct("regex.Regex")
+    # std.tensor.1-2 (ADR 0507): see the note on `from` in check/stdlib.rs.
+    if key == "tensor.from"
+        return StdSig(
+            params: [Ty.ListOf(Ty.Unknown), Ty.ListOf(Ty.Int)],
+            ret: self.tensor_ty(Ty.Unknown),
+        )
+    if key == "tensor.zeros"
+        return StdSig(params: [Ty.ListOf(Ty.Int)], ret: self.tensor_ty(Ty.Unknown))
+    if key == "fs.read_text"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", text))
+    if key == "fs.write_text" or key == "fs.append_text"
+        return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.read_bytes"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Bytes))
+    if key == "fs.write_bytes" or key == "fs.append_bytes"
+        return StdSig(params: [text, Ty.Bytes], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.exists"
+        return StdSig(params: [text], ret: Ty.Bool)
+    if key == "fs.list_dir" or key == "fs.walk"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.ListOf(text)))
+    if key == "fs.remove" or key == "fs.make_dir"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "fs.glob"
+        return StdSig(params: [text], ret: Ty.ListOf(text))
+    if key == "fs.metadata"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Metadata")))
+    if key == "fs.rename" or key == "fs.copy"
+        return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
+    if key == "env.args"
+        return StdSig(params: [], ret: Ty.ListOf(text))
+    if key == "env.get"
+        return StdSig(params: [text], ret: Ty.Opt(text))
+    if key == "env.home"
+        return StdSig(params: [], ret: Ty.Opt(text))
+    if key == "env.cwd" or key == "env.program"
+        return StdSig(params: [], ret: text)
+    if key == "env.vars"
+        return StdSig(params: [], ret: Ty.MapOf(key: text, value: text))
+    if ["compress.inflate", "compress.gunzip", "compress.unzlib"].contains(key)
+        return StdSig(params: [Ty.Bytes], ret: fails_with("compress.CompressError", Ty.Bytes))
+    if [
+        "compress.gzip_file",
+        "compress.gunzip_file",
+        "compress.zip_dir",
+        "compress.unzip",
+    ].contains(key)
+        return StdSig(params: [text, text], ret: fails_with("compress.CompressError", Ty.Unit))
+    if ["path.dir", "path.base", "path.ext", "path.stem"].contains(key)
+        return StdSig(params: [text], ret: text)
+    if key == "path.join"
+        return StdSig(params: [text, text], ret: text)
+    if key == "io.read_line"
+        return StdSig(params: [], ret: Ty.Opt(text))
+    if key == "io.read_all"
+        return StdSig(params: [], ret: text)
+    if key == "io.read_bytes"
+        return StdSig(params: [], ret: Ty.Bytes)
+    # std.io.4: `exit` never returns.
+    if key == "io.exit"
+        return StdSig(params: [Ty.Int], ret: Ty.Never)
+    if key == "proc.run"
+        return StdSig(
+            params: [text, Ty.ListOf(text), Ty.Opt(text), Ty.Opt(Ty.Int)],
+            ret: fails_with("proc.ProcError", std_struct("proc.Output")),
+        )
+    if key == "proc.run_bytes"
+        return StdSig(
+            params: [text, Ty.ListOf(text), Ty.Opt(Ty.Bytes), Ty.Opt(Ty.Int)],
+            ret: fails_with("proc.ProcError", std_struct("proc.RawOutput")),
+        )
+    if key == "proc.which"
+        return StdSig(params: [text], ret: Ty.Opt(text))
+    if key == "proc.start"
+        return StdSig(
+            params: [text, Ty.ListOf(text), Ty.Opt(Ty.Int)],
+            ret: fails_with("proc.ProcError", std_struct("proc.Child")),
+        )
+    if key == "proc.wait"
+        return StdSig(params: [std_struct("proc.Child")], ret: fails_with("proc.ProcError", Ty.Int))
+    if key == "proc.kill"
+        return StdSig(params: [std_struct("proc.Child")], ret: Ty.Int)
+    if ["net.get", "net.get_bytes"].contains(key)
+        return StdSig(params: [text], ret: fails_with("net.NetError", std_struct(net_response(f))))
+    if key == "net.post"
+        return StdSig(
+            params: [text, text, text],
+            ret: fails_with("net.NetError", std_struct(net_response(f))),
+        )
+    if key == "net.post_bytes"
+        return StdSig(
+            params: [text, Ty.Bytes, text],
+            ret: fails_with("net.NetError", std_struct(net_response(f))),
+        )
+    if key == "net.request" or key == "net.request_bytes"
+        return StdSig(
+            params: [text, text, std_struct("net.Options")],
+            ret: fails_with("net.NetError", std_struct(net_response(f))),
+        )
+    # unsafe.mem.1: C strings in memory the program frees itself.
+    if key == "mem.cstr"
+        return StdSig(params: [text], ret: u8_ptr)
+    if key == "mem.from_cstr"
+        return StdSig(params: [u8_ptr], ret: text)
+    # unsafe.hw.4: barriers take and return nothing.
+    if key == "hw.fence" or key == "hw.fence_io"
+        return StdSig(params: [], ret: Ty.Unit)
+    if key == "mem.null"
+        return StdSig(params: [], ret: u8_ptr)
+    if key == "net.options"
+        return StdSig(params: [], ret: std_struct("net.Options"))
+    # std.net.25: a response whose body is read in pieces.
+    if key == "net.open"
+        return StdSig(
+            params: [text, text, std_struct("net.Options")],
+            ret: fails_with("net.NetError", std_struct("net.Body")),
+        )
+    if key == "net.serve"
+        return StdSig(params: [text], ret: fails_with("net.NetError", std_struct("net.Server")))
+    if key == "net.listen"
+        return StdSig(params: [text], ret: fails_with("net.NetError", std_struct("net.Listener")))
+    if key == "net.connect" or key == "net.connect_tls"
+        return StdSig(
+            params: [text, Ty.Int],
+            ret: fails_with("net.NetError", std_struct("net.Conn")),
+        )
+    if key == "regex.compile"
+        return StdSig(params: [text], ret: Ty.Res(
+            re_ty,
+            Errs.ErrSet([std_struct("regex.RegexError")]),
+        ))
+    if key == "regex.is_match"
+        return StdSig(params: [re_ty, text], ret: Ty.Bool)
+    if key == "regex.find"
+        return StdSig(params: [re_ty, text], ret: Ty.Opt(std_struct("regex.Match")))
+    if key == "regex.find_all"
+        return StdSig(params: [re_ty, text], ret: Ty.ListOf(std_struct("regex.Match")))
+    if key == "regex.group_all"
+        return StdSig(params: [re_ty, text, Ty.Int], ret: Ty.ListOf(text))
+    if key == "regex.captures"
+        return StdSig(params: [re_ty, text], ret: Ty.Opt(std_struct("regex.Captures")))
+    if key == "regex.replace" or key == "regex.replace_first"
+        return StdSig(params: [re_ty, text, text], ret: text)
+    if key == "regex.split"
+        return StdSig(params: [re_ty, text], ret: Ty.ListOf(text))
+    if key == "regex.escape"
+        return StdSig(params: [text], ret: text)
+    if key == "random.int"
+        return StdSig(params: [Ty.Int, Ty.Int], ret: Ty.Int)
+    if key == "random.float"
+        return StdSig(params: [], ret: Ty.Float)
+    if key == "random.seed"
+        return StdSig(params: [Ty.Int], ret: Ty.Unit)
+    # conc.cancel.2
+    if key == "task.cancelled"
+        return StdSig(params: [], ret: Ty.Bool)
+    if key == "task.check"
+        return StdSig(params: [], ret: Ty.Res(Ty.Unit, Errs.ErrSet([std_struct("Cancelled")])))
+    if key == "time.now_ms"
+        return StdSig(params: [], ret: Ty.Int)
+    if key == "time.sleep_ms"
+        return StdSig(params: [Ty.Int], ret: Ty.Unit)
+    if key == "tz.offset"
+        return StdSig(params: [text, Ty.Int], ret: Ty.Opt(Ty.Int))
+    if key == "tz.system"
+        return StdSig(params: [], ret: text)
+    if key == "ui.clipboard_get"
+        return StdSig(params: [], ret: Ty.Opt(text))
+    if key == "ui.clipboard_set"
+        return StdSig(params: [text], ret: Ty.Unit)
+    if key == "ui.open"
+        return StdSig(params: [text, Ty.Int, Ty.Int], ret: Ty.Res(
+            std_struct("ui.Window"),
+            Errs.ErrSet([std_struct("ui.UiError")]),
+        ))
+    StdSig(params: [], ret: Ty.Unit)
+
+## `t ! E` for the standard error type `err`.
+fn Checker.fails_with(self, err str, t Ty) Ty
+    Ty.Res(t, Errs.ErrSet([std_struct(err)]))
+
+fn net_response(f str) str
+    if f.ends_with("_bytes") then "net.RawResponse" else "net.Response"
+
+## conc.select.1 (ADR 0427): `task.select(chans)` takes a `List[Channel[T]]`
+## and gives the index of a channel with a value waiting, or none.
+@allow("expr.match.3") fn Checker.select_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    result := Ty.Opt(Ty.Int)
+    if args.len() != 1
+        args_only(args)
+        err(
+            "conc.select.1",
+            at,
+            "`select` takes exactly one argument, but {was_were(args.len())} given",
+        )
+        return result
+    t := expr(args[0].value, none, true)
+    mut ok := t == Ty.Unknown
+    match t
+        ListOf(e) =>
+            match e
+                Conc(k, _) => ok = k == "Channel"
+                Unknown => ok = true
+                _ => ok = false
+        _ => ok = ok
+    if not ok
+        err_help(
+            "conc.select.1",
+            expr_pos(args[0].value),
+            "`select` needs a list of channels, not {ty_name(t)}",
+            "write `task.select([a, b])`, then `recv` from the channel at the index it gives",
+        )
+    result
+
+## std.random.4: `random.shuffle(mut xs)` reorders any `List[T]` in place.
+fn Checker.shuffle_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    if args.len() != 1
+        args_only(args)
+        err(
+            "std.random.4",
+            at,
+            "`shuffle` takes exactly one argument, but {was_were(args.len())} given",
+        )
+        return Ty.Unit
+    a := args[0]
+    t := expr(a.value, none, true)
+    if not a.mutable
+        err_help(
+            "own.param.2",
+            expr_pos(a.value),
+            "this parameter is `mut`, so the argument must be marked `mut`",
+            "write `mut` before the argument",
+        )
+    else
+        require_mutable(a.value, "own.param.2", "passed `mut`")
+    if not is_list_ty(t) and t != Ty.Unknown
+        err_help(
+            "std.random.4",
+            expr_pos(a.value),
+            "`shuffle` needs a list, not {ty_name(t)}",
+            "to pick one element, use `xs[random.int(0, xs.len() - 1)]`",
+        )
+    Ty.Unit
+
+## std.io.3: `io.eprint(value)` takes one value with a text form.
+fn Checker.eprint_call(mut self, args List[ast.Arg], at ast.Pos) Ty
+    for a in args
+        if l := a.label
+            unsupported(l.pos, "named arguments are not supported by the bootstrap yet (ADR 0058)")
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "`eprint`'s parameter isn't `mut`",
+                "remove the `mut`",
+            )
+    if args.len() != 1
+        args_only(args)
+        err("std.io.3", at, "`eprint` takes exactly one argument, but {was_were(args.len())} given")
+        return Ty.Unit
+    v := args[0].value
+    t := expr(v, none, true)
+    if t == Ty.Unit
+        err("std.io.3", expr_pos(v), "this expression produces no value to print")
+    else
+        text_form(t, expr_pos(v), "std.io.3")
+    Ty.Unit
+
+## Another library's name for a standard function (empty when there is none).
+fn other_name(module str, n str) str
+    if module == "regex" and n == "matches"
+        return "is_match"
+    if module == "regex" and n == "findall"
+        return "find_all"
+    if module == "random" and n == "randint"
+        return "int"
+    if module == "random" and n == "random"
+        return "float"
+    ""
+
+## std.hash.1, std.compress.1: the data arguments of `std.hash` and of
+## `deflate`, `gzip` and `zlib` are `bytes` or `str` (its UTF-8 bytes).
+fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at ast.Pos) Ty
+    rule := if module == "hash" then "std.hash.1" else "std.compress.1"
+    want := if f == "hmac_sha256" then 2 else 1
+    if args.len() != want
+        args_only(args)
+        err(rule, at, "`{module}.{f}` takes {want} argument(s), but {was_were(args.len())} given")
+    else
+        for a in args
+            if a.mutable
+                err_help(
+                    "own.param.2",
+                    expr_pos(a.value),
+                    "this parameter isn't `mut`",
+                    "remove the `mut`",
+                )
+            t := expr(a.value, none, true)
+            if t != Ty.Str and t != Ty.Bytes and t != Ty.Unknown
+                err_help(
+                    rule,
+                    expr_pos(a.value),
+                    "`{module}.{f}` needs `bytes` or `str`, not {ty_name(t)}",
+                    "convert a list of ints with `bytes.from_list(xs)`",
+                )
+    if f == "crc32" or f == "hash64"
+        return Ty.Int
+    if f == "deflate" or f == "gzip" or f == "zlib"
+        return Ty.Bytes
+    Ty.Str

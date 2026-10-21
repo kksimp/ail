@@ -1,4 +1,3 @@
-
 fn row_json(header List[str], cells List[str]) Json
     mut members := []
     for i in 0..header.len()

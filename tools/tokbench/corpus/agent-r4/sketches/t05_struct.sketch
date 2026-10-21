@@ -1,0 +1,11 @@
+struct Opts
+    ## more output
+    verbose bool
+    ## output file
+    out str
+    ## file to read
+    input str
+
+fn main() !
+    a := args.parse[Opts]("tool", "demo", env.args())?
+    print("{a.verbose} {a.out} {a.input}")

@@ -565,6 +565,16 @@ impl Lexer {
                     );
                     i += 1;
                 }
+                // expr.bit.1: `a << k` and `a >> k` are `a.shl(k)` and `a.shr(k)`.
+                '<' | '>' if line.get(i + 1) == Some(&c) => {
+                    let (op, method) = if c == '<' { ("<<", "shl") } else { (">>", "shr") };
+                    self.diags.push(
+                        Diagnostic::new("gram.foreign.1", pos, format!("AIL has no `{op}`"))
+                            .help(format!("shifts are methods: `a.{method}(k)`, `k` in `0..=63` (expr.bit.1)"))
+                            .fix(format!("write `.{method}`"), vec![crate::fix::bit::operator(pos, op, method)]),
+                    );
+                    i += 2;
+                }
                 '&' if line.get(i + 1) != Some(&'&') => {
                     self.diags.push(
                         Diagnostic::new("gram.foreign.1", pos, "AIL has no `&`")
@@ -609,6 +619,28 @@ impl Lexer {
                                     .fix("write `.bit_xor`", vec![crate::fix::bit::operator(pos, "^", "bit_xor")]),
                             );
                             i += 1;
+                        }
+                        None if c == '~' => {
+                            // expr.bit.1: `~a` is `a.bit_not()` when the operand is one name, not
+                            // followed by `.`, `(` or `[` (which would bind to the call instead).
+                            let word: String =
+                                line[i + 1..].iter().take_while(|c| c.is_ascii_alphanumeric() || **c == '_').collect();
+                            let after = line.get(i + 1 + word.chars().count()).copied();
+                            let atom = !word.is_empty()
+                                && !word.starts_with(|c: char| c.is_ascii_digit())
+                                && !matches!(after, Some('.' | '(' | '['));
+                            let mut d = Diagnostic::new("gram.foreign.1", pos, "AIL has no `~`")
+                                .help("bitwise not is a method: `a.bit_not()` (expr.bit.1)");
+                            if atom {
+                                let end = Pos { line: line_no, col: i + 2 + word.chars().count() };
+                                d = d.fix(
+                                    "write `.bit_not()`",
+                                    vec![Edit::span(pos, end, format!("{word}.bit_not()"))],
+                                );
+                            }
+                            // The name after `~` is lexed as usual, so the token stream is unchanged.
+                            i += 1;
+                            self.diags.push(d);
                         }
                         None => {
                             self.unsupported(pos, &format!("the `{c}` symbol"), "chapter 05");
@@ -1018,6 +1050,21 @@ impl Lexer {
     /// Integer or floating-point literal (lex.num.1-3).
     fn number(&mut self, line: &[char], start: usize, line_no: usize) -> usize {
         let pos = Pos { line: line_no, col: start + 1 };
+        // type.tuple.3: after a single `.`, digits are an element index, so
+        // `t.0.1` is two accesses rather than `t` and the float `0.1`.
+        let element = start > 0 && line[start - 1] == '.' && (start < 2 || line[start - 2] != '.');
+        if element {
+            let end = start + line[start..].iter().take_while(|c| c.is_ascii_digit()).count();
+            let digits: String = line[start..end].iter().collect();
+            match digits.parse::<i64>() {
+                Ok(v) => self.push(Tok::Int(v), pos),
+                Err(_) => {
+                    self.diags.push(Diagnostic::new("lex.num.3", pos, format!("integer literal `{digits}` doesn't fit in `int` (64-bit signed)")));
+                    self.placeholder(pos);
+                }
+            }
+            return end;
+        }
         if let Some(end) = float_end(line, start) {
             let text: String = line[start..end].iter().filter(|c| **c != '_').collect();
             match text.parse::<f64>() {
@@ -1376,6 +1423,17 @@ mod tests {
         // One line, and quotes at the end of the text.
         assert_eq!(toks(r#"r"""say "hi"""""#)[0], Tok::Str("say \"hi\"".into()));
         assert_eq!(toks(r#""""a\tb""""#)[0], Tok::Str("a\tb".into()));
+    }
+
+    #[test]
+    fn bit_not_fix_only_for_a_plain_name() {
+        let fix = |src: &str| {
+            let (_, diags) = crate::modules::load_src("t.ail", src);
+            diags.iter().find(|d| d.rule == "gram.foreign.1").map(|d| d.fixes.len())
+        };
+        assert_eq!(fix("fn main()\n    print(~a)\n"), Some(1));
+        assert_eq!(fix("fn main()\n    print(~a.b)\n"), Some(0));
+        assert_eq!(fix("fn main()\n    print(~(a))\n"), Some(0));
     }
 
     #[test]

@@ -1,0 +1,3 @@
+# type.tuple.1: a tuple type has two or more elements.
+fn first(t (int)) int
+    t

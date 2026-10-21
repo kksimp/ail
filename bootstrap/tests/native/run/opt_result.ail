@@ -1,0 +1,63 @@
+error struct Empty "the list is empty"
+error struct TooBig "the number is too big"
+
+fn first(xs List[int]) int ! Empty
+    if xs.len() == 0
+        return Empty()
+    xs[0]
+
+fn small(n int) int ! TooBig
+    if n > 100
+        return TooBig()
+    n
+
+fn sum_firsts(a List[int], b List[int]) int ! Empty | TooBig
+    x := small(first(a)?)?
+    y := small(first(b)?)?
+    x + y
+
+fn check(n int) ! TooBig
+    if n > 10
+        return TooBig()
+
+fn lookup(xs List[int], i int) int?
+    if i < 0 or i >= xs.len()
+        return none
+    xs[i]
+
+fn twice(xs List[int], i int) int ! Empty
+    v := first(xs)?
+    w := lookup(xs, i) else return Empty()
+    v + w
+
+fn main()
+    print(first([9, 8]) else 0)
+    print(first([]) else -1)
+    n := first([]) else err
+        print("failed: {err}")
+        -2
+    print(n)
+    k := small(500) else err
+        print("failed: {err}")
+        0
+    print(k)
+    print(sum_firsts([1], [2]) else -1)
+    print(sum_firsts([], [2]) else -1)
+    print(sum_firsts([1], [200]) else -1)
+    check(5) else return
+    check(50) else err
+        print("check: {err}")
+    check(60) else
+        print("check again")
+    m := first([]) else
+        print("fallback block")
+        7
+    print(m)
+    print(twice([1, 2, 3], 1) else -9)
+    print(twice([1, 2, 3], 7) else -9)
+    mut count := 0
+    for i in 0..5
+        v := small(i * 40) else continue
+        count += v
+    print(count)
+    print("done")

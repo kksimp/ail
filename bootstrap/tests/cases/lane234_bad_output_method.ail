@@ -1,0 +1,7 @@
+## std.proc.9: `text` takes no arguments, and `Output` has no `stdout` method.
+use std.proc
+
+fn main() !
+    r := proc.run("echo", ["hi"])?
+    print(r.text(1))
+    print(r.stdout())

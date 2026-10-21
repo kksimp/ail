@@ -1,0 +1,3 @@
+fn main()
+    n := 256
+    print(n.shr(2))

@@ -1,0 +1,32 @@
+# std.path on the native target (std.path.1-5)
+use std.path
+
+fn show(p str)
+    print("{p}|{path.dir(p)}|{path.base(p)}|{path.ext(p)}|{path.stem(p)}")
+
+fn main()
+    for p in [
+        "examples/logscan.ail",
+        "archive.tar.gz",
+        "a/archive.tar.gz",
+        "/x",
+        "/",
+        "x",
+        "",
+        ".bashrc",
+        "dir/.bashrc",
+        "a/b/",
+        "a.b/c",
+        "/a/b.c/",
+        "x.",
+        "..",
+        "a//b.txt",
+    ]
+        show(p)
+    print(path.join("examples", "data"))
+    print(path.join("a/", "b"))
+    print(path.join("", "b"))
+    print(path.join("a", "/abs"))
+    print(path.join("a", ""))
+    print(path.join("/", "x"))
+    print(path.dir(env.program()).len() > 0)

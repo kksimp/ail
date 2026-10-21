@@ -52,6 +52,7 @@ impl<W: Write> Interp<'_, W> {
             return Ok(match regex::compile(&pat) {
                 Ok(_) => Value::Struct(self.structs["regex.Regex"], Rc::new(vec![Value::Str(pat)])),
                 Err(e) => {
+                    // std.regex.23: a `RegexError` has pattern, at, kind, rule and message.
                     let s = self.structs["regex.RegexError"];
                     fail(
                         Value::Struct(s, Rc::new(vec![
@@ -66,6 +67,7 @@ impl<W: Write> Interp<'_, W> {
                 }
             });
         }
+        // std.regex.26: the escaped pattern matches its text as plain text.
         if f == "escape" {
             return Ok(text(regex::escape(&str_arg(0))));
         }
@@ -80,6 +82,23 @@ impl<W: Write> Interp<'_, W> {
             "find_all" => {
                 let ms = prog.find_all(&chars, 2, usize::MAX);
                 Value::List(Rc::new(ms.iter().map(|m| self.match_value(&chars, m)).collect()))
+            }
+            "group_all" => {
+                let Value::Int(g) = values[2] else { unreachable!("checked: an int group") };
+                if g < 0 || g as usize >= prog.groups {
+                    return stop(
+                        "std.regex.24",
+                        pos,
+                        format!("the pattern has groups 0 to {}, not group {g}", prog.groups - 1),
+                    );
+                }
+                let g = g as usize;
+                let ms = prog.find_all(&chars, 2 * prog.groups, usize::MAX);
+                Value::List(Rc::new(
+                    ms.iter()
+                        .map(|m| if m[2 * g] == UNSET { text("") } else { text(regex::slice(&chars, m[2 * g], m[2 * g + 1])) })
+                        .collect(),
+                ))
             }
             "captures" => match prog.exec(&chars, 0, 2 * prog.groups, false) {
                 None => Value::None,

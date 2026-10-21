@@ -1,0 +1,238 @@
+## `unsafe` blocks and functions (unsafe.block.1-3, ffi.call.1, ADRs 0102,
+## 0104, 0430), as `check/unsafety.rs`: an unsafe operation is allowed only
+## inside an `unsafe` block, and only a package whose manifest allows it may
+## contain one.
+use ast
+
+## unsafe.block.3: the code at `at` is in a package that may contain `unsafe`.
+fn Checker.unsafe_opt_in(mut self, at ast.Pos)
+    allowed := prog.unsafe_allowed else return
+    pkg := package_at(at)
+    if is_prelude_line(at.line) or allowed.contains(pkg)
+        return
+    who := if pkg == "" then "this package" else "dependency `{pkg}`"
+    err_help(
+        "unsafe.block.3",
+        at,
+        "{who} contains `unsafe` code, which its manifest doesn't allow",
+        "add `unsafe allow` to the `package` line (or the `dep` line) of `ail.pkg`, or remove the `unsafe` code",
+    )
+
+## unsafe.hw.1: `what` reaches hardware, which only a package whose
+## manifest says `unsafe driver` may do. A package without `unsafe allow`
+## already has its error at the `unsafe` block.
+fn Checker.driver_opt_in(mut self, what str, at ast.Pos)
+    if is_prelude_line(at.line)
+        return
+    pkg := package_at(at)
+    mut help := "run or build it with `--unsafe driver`, or give it an `ail.pkg` that says `unsafe driver`"
+    mut who := "this program"
+    if allowed := prog.unsafe_allowed
+        if not allowed.contains(pkg)
+            return
+        help = "write `unsafe driver` on the `package` line of `ail.pkg`"
+        who = "this package"
+        if pkg != ""
+            help = "write `unsafe driver` on the `dep` line that grants it"
+            who = "dependency `{pkg}`"
+    if prog.driver_allowed.contains(pkg)
+        return
+    err_help("unsafe.hw.1", at, "{what} reaches hardware, which {who} isn't allowed to do", help)
+
+## The dependency the code at `at` belongs to; "" for the root package.
+fn Checker.package_at(self, at ast.Pos) str
+    head := module_at(prog, at).split(".")[0]
+    for g in prog.grants
+        if not g.own and g.package == head
+            return head
+    ""
+
+## unsafe.block.2, ffi.call.1: calling an `unsafe fn` or a C function is an
+## unsafe operation (unsafe.op.1).
+fn Checker.note_unsafe_call(mut self, i int, at ast.Pos)
+    f := prog.fns[i]
+    if unsafe_depth > 0 or not (f.unsafe_fn or f.ext != none)
+        return
+    mut rule := "unsafe.block.2"
+    mut what := "`{f.name}` is an `unsafe fn`, and calling one"
+    if f.ext != none
+        rule = "ffi.call.1"
+        what = "`{f.name}` is a C function, and calling one"
+    err_help(
+        rule,
+        at,
+        "{what} is an unsafe operation, allowed only inside an `unsafe` block",
+        "wrap the call in `unsafe`, ideally inside a safe AIL function that checks the preconditions",
+    )
+
+## unsafe.op.1: `what` is an unsafe operation (raw memory, a pointer
+## access), allowed only inside an `unsafe` block.
+fn Checker.note_unsafe_op(mut self, what str, at ast.Pos)
+    if unsafe_depth > 0
+        return
+    err_help(
+        "unsafe.op.1",
+        at,
+        "{what} is an unsafe operation, allowed only inside an `unsafe` block",
+        "wrap it in `unsafe`, ideally inside a safe AIL function that checks the preconditions",
+    )
+
+## A type with a fixed C layout: a number, a `bool` or a raw pointer.
+@allow("expr.match.3") fn c_layout(t Ty) bool
+    match t
+        Int | Float | Bool | Num(_) | PtrOf(_) => true
+        _ => false
+
+## ffi.decl.3: an `extern c fn` has only types with a C layout, no `mut`
+## parameters, and fits the registers of a C call (six integer-like and
+## eight float arguments).
+fn Checker.check_extern(mut self, idx int, f ast.FnDecl)
+    sig := sigs[idx]
+    mut ints := 0
+    mut floats := 0
+    for i in 0..f.params.len().min(sig.params.len())
+        p := f.params[i]
+        t := sig.params[i].ty
+        if p.mutable
+            err_help(
+                "ffi.decl.3",
+                p.pos,
+                "an `extern c fn` parameter is passed by value, not `mut`",
+                "pass a raw pointer `*T` to let C write to memory",
+            )
+        if not c_layout(t) and t != Ty.Unknown
+            err_help(
+                "ffi.decl.3",
+                p.ty.pos,
+                "{show(t)} has no C layout, so it can't be a parameter of an `extern c fn`",
+                "use `int`, `float`, `bool`, a sized number such as `i32` or `u8`, or a raw pointer `*T`",
+            )
+        if t == Ty.Float or t == Ty.Num("f32")
+            floats += 1
+        else
+            ints += 1
+    if ints > 6 or floats > 8
+        err_help(
+            "ffi.decl.3",
+            f.pos,
+            "`{f.name}` takes {ints} integer-like and {floats} float arguments; a C call takes at most 6 and 8",
+            "declare a smaller wrapper, or pass a pointer to a struct-like buffer",
+        )
+    if not c_layout(sig.ret) and sig.ret != Ty.Unknown and sig.ret != Ty.Unit
+        mut at := f.pos
+        if r := f.ret
+            at = r.pos
+        err_help(
+            "ffi.decl.3",
+            at,
+            "{show(sig.ret)} has no C layout, so it can't be the result of an `extern c fn`",
+            "return `int`, `float`, `bool`, a sized number or a raw pointer, or nothing",
+        )
+
+## The methods of a raw pointer `*T` (unsafe.ptr.2-3), sorted.
+PTR_METHODS := ["is_null", "offset", "read", "read_volatile", "write", "write_volatile"]
+
+## `p.read()`, `p.write(v)`, `p.offset(n)` and `p.is_null()` on a raw
+## pointer `rt` to `target` (unsafe.ptr.2-3).
+fn Checker.ptr_method(
+    mut self,
+    rt Ty,
+    target Ty,
+    n str,
+    at ast.Pos,
+    args List[ast.Arg],
+    expect Ty?,
+) Ty
+    if not PTR_METHODS.contains(n)
+        args_only(args)
+        err_help(
+            "unsafe.ptr.3",
+            at,
+            "a raw pointer has no method `{n}`",
+            "its methods are {list_names(PTR_METHODS)}",
+        )
+        return Ty.Unknown
+    if not c_layout(target)
+        args_only(args)
+        return Ty.Unknown
+    std_any.add(pos_key(at))
+    if n != "is_null"
+        note_unsafe_op("`{n}` on a raw pointer", at)
+    if n.ends_with("_volatile")
+        # unsafe.hw.3: a volatile access is hardware access.
+        driver_opt_in("`{n}` on a raw pointer", at)
+    mut params := List[Ty]()
+    mut ret := Ty.Bool
+    if n == "read" or n == "read_volatile"
+        ret = target
+    elif n == "write" or n == "write_volatile"
+        params = [target]
+        ret = Ty.Unit
+    elif n == "offset"
+        params = [Ty.Int]
+        ret = rt
+    check_call("ptr.{n}", plain_sig(none, params, ret), [], args, none, at, expect)
+
+## `mem.alloc(n, example)`, `mem.cast(p, example)` and `mem.free(p)`: the
+## pointee type comes from an example value or from the pointer
+## (unsafe.mem.3). None for the other `std.mem` functions.
+@allow("expr.match.3")
+fn Checker.mem_generic(mut self, f str, args List[ast.Arg], at ast.Pos, expect Ty?) Ty?
+    if f != "alloc" and f != "cast" and f != "free"
+        return none
+    want := if f == "free" then 1 else 2
+    mut tys := [quiet_type(a.value) for a in args]
+    if args.len() != want
+        unknowns := [Ty.Unknown for _ in 0..want]
+        return check_call(
+            "mem.{f}",
+            plain_sig(none, unknowns, Ty.Unknown),
+            [],
+            args,
+            none,
+            at,
+            expect,
+        )
+    mut params := List[Ty]()
+    if f != "alloc"
+        mut is_ptr := tys[0] == Ty.Unknown
+        match tys[0]
+            PtrOf => is_ptr = true
+            _ => is_ptr = is_ptr
+        if not is_ptr
+            err_help(
+                "unsafe.ptr.1",
+                expr_pos(args[0].value),
+                "`mem.{f}` takes a raw pointer, but this is {show(tys[0])}",
+                "a raw pointer is `*T`, such as the result of `mem.alloc` or `mem.cstr`",
+            )
+            tys[0] = Ty.Unknown
+        params.push(tys[0])
+    else
+        params.push(Ty.Int)
+    mut ret := Ty.Unit
+    if f != "free"
+        example := tys[1]
+        ptr_target(example, expr_pos(args[1].value))
+        params.push(example)
+        ret = if example == Ty.Unknown then Ty.Unknown else Ty.PtrOf(example)
+    check_call("mem.{f}", plain_sig(none, params, ret), [], args, none, at, expect)
+
+## `hw.at(addr, example)`: a pointer to the example's type at a fixed
+## address, the only way from a number to a pointer (unsafe.hw.2).
+fn Checker.hw_at(mut self, args List[ast.Arg], at ast.Pos, expect Ty?) Ty
+    tys := [quiet_type(a.value) for a in args]
+    if args.len() != 2
+        return check_call(
+            "hw.at",
+            plain_sig(none, [Ty.Unknown, Ty.Unknown], Ty.Unknown),
+            [],
+            args,
+            none,
+            at,
+            expect,
+        )
+    example := tys[1]
+    ptr_target(example, expr_pos(args[1].value))
+    ret := if example == Ty.Unknown then Ty.Unknown else Ty.PtrOf(example)
+    check_call("hw.at", plain_sig(none, [Ty.Int, example], ret), [], args, none, at, expect)

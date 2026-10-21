@@ -1,0 +1,1162 @@
+## Parallel loops (ADR 0377), as `check/parallel.rs`: which `for` loops have
+## independent iterations (conc.par.2-4), the check on `par for`
+## (conc.par.5) and on `par for` comprehensions (conc.par.12).
+use ast
+
+## Effects that order a loop's iterations (conc.par.2): output, `unsafe`,
+## tasks, and every capability.
+fn orders_loop(e str) bool
+    ["io", "unsafe", "hw", "spawn", "fs", "env", "proc", "clock", "random", "net", "ui"].contains(e)
+
+## Built-in methods that change their receiver (type.coll.5-11).
+MUTATING := ["push", "pop", "swap", "sort", "remove", "add"]
+
+## `sync` flags: calls a handle's method, or an atomic's.
+SYNC := 1
+ATOMIC := 2
+
+## Why a loop isn't proven independent. `provable` problems make
+## iterations interfere for certain; the others are what `par for` asserts
+## away (conc.par.5).
+struct Problem
+    rule str
+    reason str
+    help str
+    at ast.Pos
+    provable bool
+    ## A call of a handle's method (conc.par.2).
+    handle bool
+    ## A call of an atomic's method (conc.atomic.6).
+    atomic bool
+
+## How a write reaches a place that outlives an iteration.
+enum WriteKind
+    ## `x = ...`, `x.push(...)`, `f(mut x)`: the whole variable.
+    Whole
+    ## `x += e` (conc.par.4).
+    AddTo
+    ## `x[i]...` with `i` the loop variable: the steps up to `[i]` (conc.par.3).
+    Element(steps List[str])
+    ## Any other element: the steps written.
+    Unproven(steps List[str])
+
+struct Write
+    root str
+    kind WriteKind
+    pos ast.Pos
+    ## Loops nested inside the body around the write.
+    depth int
+
+## A read of a variable that outlives the iteration.
+struct Read
+    root str
+    steps List[str]
+    ## Only `.len()` of the place.
+    len_only bool
+    pos ast.Pos
+
+## What every loop's analysis shares.
+struct ParContext
+    prog ast.Program
+    fx Facts
+    effects Effects
+    ## Per function: it may call a method of a handle or of an atomic.
+    sync List[int]
+
+## The analysis of one loop body.
+struct Scan
+    cx ParContext
+    var str
+    ## The loop is over a range, so `var` differs in every iteration.
+    range bool
+    scopes List[List[str]]
+    ## Loops nested inside the body, so `break` there is local.
+    depth int
+    writes List[Write]
+    reads List[Read]
+    problems List[Problem]
+
+fn new_scan(cx ParContext, var str, range bool) Scan
+    Scan(cx: cx, var: var, range: range, scopes: [], depth: 0, writes: [], reads: [], problems: [])
+
+## `[i]`, `[i - 1]`, `.name`; `[...]` for an index too complex to show.
+fn step_text(s Step) str
+    match s
+        SField(n) => ".{n}"
+        SIndex(e) => "[{show_index(e) else "..."}]"
+
+## A short index expression as source text: names, literals, arithmetic,
+## fields, indexes and `len()`.
+@allow("expr.match.3") fn show_index(e ast.Expr) str?
+    match e
+        Name(n, _) => n
+        Int(k, _) => k
+        Binary(op, lhs, rhs, _) =>
+            if not is_arithmetic(op)
+                return none
+            "{show_index(lhs)?} {op_symbol(op)} {show_index(rhs)?}"
+        Member(recv, n, _) => "{show_index(recv)?}.{n}"
+        Index(recv, index, _) => "{show_index(recv)?}[{show_index(index)?}]"
+        Method(recv, n, _, args) => if args.len() == 0 then "{show_index(recv)?}.{n}()" else none
+        _ => none
+
+fn place_text(root str, steps List[str]) str
+    "{root}{steps.join("")}"
+
+fn Scan.local(self, n str) bool
+    if n == var
+        return true
+    for s in scopes
+        if s.contains(n)
+            return true
+    false
+
+fn Scan.bind(mut self, n str)
+    if scopes.len() > 0
+        scopes[scopes.len() - 1].push(n)
+
+fn Scan.problem(mut self, rule str, at ast.Pos, provable bool, reason str, help str)
+    problems.push(Problem(
+        rule: rule,
+        reason: reason,
+        help: help,
+        at: at,
+        provable: provable,
+        handle: false,
+        atomic: false,
+    ))
+
+fn Scan.exit(mut self, what str, at ast.Pos)
+    problem(
+        "conc.par.2",
+        at,
+        true,
+        "leaves the loop early with {what}",
+        "a later iteration must not run after an earlier one leaves; keep the loop sequential (drop `par`), or collect the results and decide after the loop",
+    )
+
+fn Scan.block(mut self, b List[ast.Stmt])
+    scopes.push([])
+    for s in b
+        stmt(s)
+    scopes.pop()
+
+fn Scan.scoped(mut self, names List[str], b List[ast.Stmt])
+    scopes.push(names)
+    block(b)
+    scopes.pop()
+
+fn Scan.stmt(mut self, s ast.Stmt)
+    match s
+        Let(n, _, _, value, o) =>
+            expr(value)
+            if e := o
+                otherwise(e)
+            bind(n)
+        LetTuple(names, value, _) =>
+            expr(value)
+            for b in names
+                bind(b.name)
+        Assign(target, op, value, _) =>
+            write(target, op, expr_pos(target))
+            expr(value)
+        While(c, body, _) =>
+            expr(c)
+            depth += 1
+            block(body)
+            depth -= 1
+        For(_, v, _, mutable, iter, body, _) =>
+            if mutable
+                write(iter, none, expr_pos(iter))
+            else
+                expr(iter)
+                channel_loop(iter)
+            depth += 1
+            scoped([v], body)
+            depth -= 1
+        Break(p) =>
+            if depth == 0
+                exit("`break`", p)
+        Continue => return
+        Return(e, p) =>
+            if x := e
+                expr(x)
+            exit("`return`", p)
+        Eval(e) => expr(e)
+        Handle(value, o) =>
+            expr(value)
+            otherwise(o)
+        # `defer` runs at block exit; its statement is part of the body (own.defer.1).
+        Defer(inner, _) => stmt(inner)
+        Unsafe(body, _) => block(body)
+        # conc.share.6: holding a mutex synchronises with other tasks.
+        With(mutex, v, _, body, p) =>
+            expr(mutex)
+            sync_problem(p, "holds a mutex with `with`")
+            scoped([v], body)
+
+fn Scan.otherwise(mut self, o ast.Else)
+    match o
+        Fallback(e) => expr(e)
+        Leave(s) => stmt(s)
+        Handler(err_name, body, _) =>
+            mut names := List[str]()
+            if n := err_name
+                names.push(n.name)
+            scoped(names, body)
+
+## A write to `target`: a variable, a field or an element.
+fn Scan.write(mut self, target ast.Expr, op ast.BinOp?, at ast.Pos)
+    place := place_path(target) else
+        expr(target)
+        return
+    for st in place.steps
+        if i := index_of_step(st)
+            expr(i)
+    if local(place.root)
+        return
+    texts := [step_text(st) for st in place.steps]
+    mut kind := WriteKind.Whole
+    if place.steps.len() == 0
+        if op == ast.BinOp.Add
+            kind = WriteKind.AddTo
+    else
+        mut at_var := -1
+        for k in 0..place.steps.len()
+            if at_var < 0 and is_var_index(place.steps[k], var)
+                at_var = k
+        if at_var >= 0 and range and same_place(place.steps[..at_var])
+            kind = WriteKind.Element(texts[..at_var + 1])
+        else
+            kind = WriteKind.Unproven(texts)
+    writes.push(Write(root: place.root, kind: kind, pos: at, depth: depth))
+
+fn index_of_step(s Step) ast.Expr?
+    match s
+        SIndex(i) => i
+        SField => none
+
+@allow("expr.match.3") fn is_var_index(s Step, v str) bool
+    match s
+        SIndex(i) =>
+            match i
+                Name(n, _) => n == v
+                _ => false
+        SField => false
+
+## The steps pick the same place in every iteration: fields, literal
+## indexes, and indexes by variables declared outside the body.
+@allow("expr.match.3") fn Scan.same_place(self, steps List[Step]) bool
+    for s in steps
+        match s
+            SField => continue
+            SIndex(i) =>
+                match i
+                    Int => continue
+                    Name(n, _) =>
+                        if local(n)
+                            return false
+                    _ => return false
+    true
+
+fn Scan.read_place(mut self, e ast.Expr, len_only bool) bool
+    place := place_path(e) else return false
+    for st in place.steps
+        if i := index_of_step(st)
+            expr(i)
+    if not local(place.root)
+        reads.push(Read(
+            root: place.root,
+            steps: [step_text(st) for st in place.steps],
+            len_only: len_only,
+            pos: expr_pos(e),
+        ))
+    true
+
+## A problem that orders the iterations because they synchronise through a
+## handle (conc.par.2).
+fn Scan.sync_problem(mut self, at ast.Pos, reason str)
+    problem(
+        "conc.par.2",
+        at,
+        true,
+        reason,
+        "synchronisation orders the iterations; keep the loop sequential (drop `par`)",
+    )
+    problems[problems.len() - 1].handle = true
+
+## `for v in ch` receives from a channel (conc.share.7), which synchronises.
+fn Scan.channel_loop(mut self, iter ast.Expr)
+    at := expr_pos(iter)
+    if cx.fx.handle_calls.contains(pos_key(at))
+        sync_problem(at, "receives from a channel with `for ... in`")
+
+## A call of function `i`, which may synchronise through a handle.
+fn Scan.calls_sync(mut self, i int, n str, at ast.Pos)
+    flags := if i < cx.sync.len() then cx.sync[i] else 0
+    if flags % 2 == 0 and flags / 2 % 2 == 1
+        atomic_problem(at, "calls `{n}`, which uses an `Atomic`")
+    if flags % 2 == 1
+        problem(
+            "conc.par.2",
+            at,
+            true,
+            "calls `{n}`, which uses a task, channel or mutex handle",
+            "synchronisation orders the iterations; keep the loop sequential (drop `par`)",
+        )
+
+## conc.atomic.6: an atomic's operations may observe the order of the
+## iterations, so only `par for` asserts that they don't matter.
+fn Scan.atomic_problem(mut self, at ast.Pos, reason str)
+    problem(
+        "conc.atomic.6",
+        at,
+        false,
+        reason,
+        "iterations update the atomic in any order; write `par for` if the result doesn't depend on it",
+    )
+    problems[problems.len() - 1].atomic = true
+
+fn Scan.arg(mut self, mutable bool, value ast.Expr)
+    if mutable
+        write(value, none, expr_pos(value))
+    else
+        expr(value)
+
+fn Scan.expr(mut self, e ast.Expr)
+    match e
+        # A `ref` cell is shared by every copy of it (own.ref.1), so
+        # iterations that make one may also write through it.
+        NewRef(value, p) =>
+            expr(value)
+            problem(
+                "conc.par.2",
+                p,
+                false,
+                "makes a `ref` cell, which copies share",
+                "iterations may write through the cell in any order; keep the loop sequential (drop `par`)",
+            )
+        Str | Bytes | Int | Float | Char | Bool | NoneLit | Hole | TypeArgs => return
+        Name => read_place(e, false)
+        Member(recv, _, _) =>
+            if not read_place(e, false)
+                expr(recv)
+        Index(recv, index, _) =>
+            if not read_place(e, false)
+                expr(recv)
+                expr(index)
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    Hole(x) => expr(x)
+                    Fmt(x, _) => expr(x)
+        ListLit(items, _) =>
+            for x in items
+                expr(x)
+        SetLit(items, _) =>
+            for x in items
+                expr(x)
+        TupleLit(items, _) =>
+            for x in items
+                expr(x)
+        MapLit(entries, _) =>
+            for en in entries
+                expr(en.key)
+                expr(en.value)
+        Call(callee, args, _) =>
+            if n := callee_name(callee)
+                if i := cx.fx.free.get(n)
+                    calls_sync(i, n, expr_pos(callee))
+            else
+                expr(callee)
+            for a in args
+                arg(a.mutable, a.value)
+        Method(recv, n, name_pos, args) => method_call(recv, n, name_pos, args)
+        Unary(_, operand, _) => expr(operand)
+        Binary(_, lhs, rhs, _) =>
+            expr(lhs)
+            expr(rhs)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                expr(x)
+            if x := hi
+                expr(x)
+        If(branches, els, _, _) =>
+            for br in branches
+                match br.cond
+                    Test(x) =>
+                        expr(x)
+                        block(br.body)
+                    Bind(n, _, value) =>
+                        expr(value)
+                        scoped([n], br.body)
+            if b := els
+                block(b)
+        Match(scrutinee, arms, _) =>
+            expr(scrutinee)
+            for arm in arms
+                if g := arm.guard
+                    expr(g)
+                scoped(pattern_names(arm.pat), arm.body)
+        Try(x, context, p) =>
+            expr(x)
+            if c := context
+                expr(c)
+            exit("`?`", p)
+        OrElse(value, o, _) =>
+            expr(value)
+            otherwise(o)
+        # expr.comp.1: the clauses' variables are local, and `else break`
+        # ends the comprehension, not the loop.
+        Comp(_, elem, value, clauses, _) =>
+            depth += 1
+            scopes.push([])
+            for c in clauses
+                expr(c.iter)
+                channel_loop(c.iter)
+                bind(c.var)
+                for b in c.unpack
+                    bind(b.name)
+                if x := c.cond
+                    expr(x)
+            expr(elem)
+            if v := value
+                expr(v)
+            scopes.pop()
+            depth -= 1
+
+fn Scan.method_call(mut self, recv ast.Expr, n str, name_pos ast.Pos, args List[ast.Arg])
+    key := pos_key(name_pos)
+    std_module := cx.fx.std_any.contains(key)
+    task_module := (cx.fx.std_fns.get(key) else "") == "task"
+    if cx.fx.atomic_calls.contains(key)
+        atomic_problem(name_pos, "calls `.{n}()` on an `Atomic`")
+    elif cx.fx.handle_calls.contains(key) or task_module
+        sync_problem(name_pos, "calls `.{n}()` on a task, channel or mutex handle")
+    elif i := cx.fx.targets.get(key)
+        calls_sync(i, n, name_pos)
+    mut mutating := false
+    if f := cx.fx.targets.get(key)
+        mutating = cx.prog.fns[f].receiver?.mutable else false
+    else
+        # An atomic's methods change the shared cell, not the binding.
+        mutating = not std_module
+            and not cx.fx.atomic_calls.contains(key)
+            and not cx.fx.trait_calls.contains(key)
+            and MUTATING.contains(n)
+    if mutating
+        write(recv, none, expr_pos(recv))
+    elif not (n == "len" and read_place(recv, true))
+        expr(recv)
+    for a in args
+        arg(a.mutable, a.value)
+
+fn pattern_names(p ast.Pattern) List[str]
+    match p
+        Variant(_, _, bindings, _) =>
+            bs := bindings else return []
+            [b.name for b in bs if b.name != "_"]
+        BindName(n, _) => [n]
+        TuplePat(ps, _) =>
+            mut out := List[str]()
+            for q in ps
+                out.extend(pattern_names(q))
+            out
+        Wildcard | Literal | Alt | Range => []
+
+## Whether `n`, declared in `f`, holds an `int` (1), a float (0), or
+## something the analysis can't tell (-1) (conc.par.4).
+fn holds_int(f ast.FnDecl, fx Facts, n str) int
+    for p in f.params
+        if p.name == n
+            match p.ty.shape
+                Named(t, targs) =>
+                    if targs.len() > 0
+                        return -1
+                    if ["int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64"].contains(t)
+                        return 1
+                    if ["float", "f64", "f32"].contains(t)
+                        return 0
+                    return -1
+                Optional | Fallible | AnyTrait | RefTo | PtrTo | FnType | TupleType => return -1
+    body := f.body else return -1
+    mut found := -1
+    for l in each_let(body)
+        if l.name == n
+            found = literal_kind(l.value, fx)
+    found
+
+## Whether `n` is a `ref` in `f`: a `ref T` parameter or `n := ref ...`.
+@allow("expr.match.3") fn is_ref_local(f ast.FnDecl, n str) bool
+    for p in f.params
+        if p.name == n
+            match p.ty.shape
+                RefTo => return true
+                _ => return false
+    body := f.body else return false
+    mut found := false
+    for l in each_let(body)
+        if l.name == n
+            match l.value
+                NewRef => found = true
+                _ => found = false
+    found
+
+@allow("expr.match.3") fn literal_kind(e ast.Expr, fx Facts) int
+    match e
+        Int(_, p) => if fx.float_literals.contains(pos_key(p)) then 0 else 1
+        Float => 0
+        Unary(op, operand, _) => if op == ast.UnOp.Neg then literal_kind(operand, fx) else -1
+        _ => -1
+
+struct LetOf
+    name str
+    value ast.Expr
+
+## Each `name := value` in `b`, nested blocks included, in source order.
+fn each_let(b List[ast.Stmt]) List[LetOf]
+    mut out := List[LetOf]()
+    for s in b
+        match s
+            Let(n, _, _, value, _) => out.push(LetOf(name: n, value: value))
+            Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => out = out
+        for inner in each_block(s)
+            out.extend(each_let(inner))
+    out
+
+## The blocks directly inside `s` (not nested deeper).
+fn each_block(s ast.Stmt) List[List[ast.Stmt]]
+    mut out := List[List[ast.Stmt]]()
+    match s
+        Let(_, _, _, value, o) =>
+            out.extend(expr_blocks(value))
+            if e := o
+                out.extend(else_blocks(e))
+        LetTuple(_, value, _) => out.extend(expr_blocks(value))
+        Assign(target, _, value, _) =>
+            out.extend(expr_blocks(target))
+            out.extend(expr_blocks(value))
+        While(e, body, _) =>
+            out.extend(expr_blocks(e))
+            out.push(body)
+        For(_, _, _, _, e, body, _) =>
+            out.extend(expr_blocks(e))
+            out.push(body)
+        With(e, _, _, body, _) =>
+            out.extend(expr_blocks(e))
+            out.push(body)
+        Break | Continue => return out
+        Return(v, _) =>
+            if e := v
+                out.extend(expr_blocks(e))
+        Eval(e) => out.extend(expr_blocks(e))
+        Handle(value, o) =>
+            out.extend(expr_blocks(value))
+            out.extend(else_blocks(o))
+        Defer(inner, _) => out.extend(each_block(inner))
+        Unsafe(body, _) => out.push(body)
+    out
+
+fn else_blocks(o ast.Else) List[List[ast.Stmt]]
+    match o
+        Fallback(e) => expr_blocks(e)
+        Leave(s) => each_block(s)
+        Handler(_, body, _) => [body]
+
+## The blocks inside `e` (`if`, `match`, `else` blocks).
+@allow("expr.match.3") fn expr_blocks(e ast.Expr) List[List[ast.Stmt]]
+    mut out := List[List[ast.Stmt]]()
+    match e
+        If(branches, els, _, _) =>
+            for br in branches
+                out.extend(expr_blocks(cond_value(br.cond)))
+                out.push(br.body)
+            if b := els
+                out.push(b)
+        Match(scrutinee, arms, _) =>
+            out.extend(expr_blocks(scrutinee))
+            for a in arms
+                if g := a.guard
+                    out.extend(expr_blocks(g))
+                out.push(a.body)
+        OrElse(value, o, _) =>
+            out.extend(expr_blocks(value))
+            out.extend(else_blocks(o))
+        Call(callee, args, _) =>
+            out.extend(expr_blocks(callee))
+            for a in args
+                out.extend(expr_blocks(a.value))
+        Method(recv, _, _, args) =>
+            out.extend(expr_blocks(recv))
+            for a in args
+                out.extend(expr_blocks(a.value))
+        Member(recv, _, _) => out.extend(expr_blocks(recv))
+        Index(a, b, _) =>
+            out.extend(expr_blocks(a))
+            out.extend(expr_blocks(b))
+        Binary(_, a, b, _) =>
+            out.extend(expr_blocks(a))
+            out.extend(expr_blocks(b))
+        Unary(_, x, _) => out.extend(expr_blocks(x))
+        Try(x, _, _) => out.extend(expr_blocks(x))
+        Comp(_, elem, value, clauses, _) =>
+            for c in clauses
+                out.extend(expr_blocks(c.iter))
+                if x := c.cond
+                    out.extend(expr_blocks(x))
+            out.extend(expr_blocks(elem))
+            if v := value
+                out.extend(expr_blocks(v))
+        ListLit(items, _) =>
+            for x in items
+                out.extend(expr_blocks(x))
+        SetLit(items, _) =>
+            for x in items
+                out.extend(expr_blocks(x))
+        TupleLit(items, _) =>
+            for x in items
+                out.extend(expr_blocks(x))
+        MapLit(entries, _) =>
+            for en in entries
+                out.extend(expr_blocks(en.key))
+                out.extend(expr_blocks(en.value))
+        _ => out = out
+    out
+
+## Every `for` loop in `b`, outer loops before the loops inside them.
+@allow("expr.match.3") fn loops(b List[ast.Stmt]) List[ast.Stmt]
+    mut out := List[ast.Stmt]()
+    for s in b
+        match s
+            For => out.push(s)
+            _ => out = out
+        for inner in each_block(s)
+            out.extend(loops(inner))
+    out
+
+## One loop's verdict, as much of it as a diagnostic needs (conc.par.6).
+struct Verdict
+    pos ast.Pos
+    var str
+    is_par bool
+    sequential bool
+    rule str
+    reason str
+    at ast.Pos
+    help str?
+
+fn first_problem(problems List[Problem]) Problem?
+    if problems.len() == 0
+        return none
+    problems.sorted(by: |p| problem_key(p))[0]
+
+fn problem_key(p Problem) int
+    rank := if p.provable then 0 else 1
+    rank * 4611686018427387904 + p.at.line * 100000 + p.at.col
+
+fn is_whole(k WriteKind) bool
+    match k
+        Whole => true
+        AddTo | Element | Unproven => false
+
+fn is_add(k WriteKind) bool
+    match k
+        AddTo => true
+        Whole | Element | Unproven => false
+
+fn element_steps(k WriteKind) List[str]?
+    match k
+        Element(s) => s
+        Whole | AddTo | Unproven => none
+
+fn unproven_steps(k WriteKind) List[str]?
+    match k
+        Unproven(s) => s
+        Whole | AddTo | Element => none
+
+## The verdict on loop `s` of function `f` (conc.par.2-5).
+@allow("expr.match.3") fn judge(cx ParContext, f ast.FnDecl, s ast.Stmt) Verdict?
+    match s
+        For(is_par, var, _, mutable, iter, body, pos) => judge_for(
+            cx,
+            f,
+            is_par,
+            var,
+            mutable,
+            iter,
+            body,
+            pos,
+        )
+        _ => none
+
+fn judge_for(
+    cx ParContext,
+    f ast.FnDecl,
+    is_par bool,
+    var str,
+    mutable bool,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    pos ast.Pos,
+) Verdict
+    ranged := is_range(iter) and not mutable
+    mut scan := new_scan(cx, var, ranged)
+    scan.block(body)
+    if not mutable
+        scan.channel_loop(iter)
+    mut w := Walked(direct: Map[str, str](), calls: [])
+    w.block(cx.prog, cx.fx, body)
+    found := cx.effects.of_walk(cx.prog, w)
+    for e in found.keys().sorted()
+        if orders_loop(e)
+            help := if e
+                == "io" then "collect each iteration's result in a list (`out[i] = ...`) and print after the loop" else "move the effect out of the loop and pass its result in"
+            scan.problem("conc.par.2", pos, true, "has effect `{e}` via {found[e]}", help)
+            break
+    mut problems := scan.problems
+    mut roots := List[str]()
+    for wr in scan.writes
+        if not roots.contains(wr.root)
+            roots.push(wr.root)
+    mut reductions := List[str]()
+    mut elements := List[str]()
+    for root in roots.sorted()
+        ws := [wr for wr in scan.writes if wr.root == root]
+        reads_of := [r for r in scan.reads if r.root == root]
+        whole := [wr for wr in ws if is_whole(wr.kind)]
+        adds := [wr for wr in ws if is_add(wr.kind)]
+        if whole.len() > 0
+            problems.push(Problem(
+                rule: "conc.par.2",
+                reason: "writes `{root}`, which outlives the iteration",
+                help: "declare `{root}` inside the loop, give each iteration its own element (`{root}[{var}]` in a range loop), or keep the loop sequential",
+                at: whole[0].pos,
+                provable: true,
+                handle: false,
+                atomic: false,
+            ))
+        elif adds.len() > 0
+            at := ws[0].pos
+            others := [wr for wr in ws if not is_add(wr.kind)]
+            if others.len() > 0
+                problems.push(Problem(
+                    rule: "conc.par.4",
+                    reason: "adds to `{root}` and also writes part of it",
+                    help: "use a separate accumulator for `{root} +=`",
+                    at: others[0].pos,
+                    provable: true,
+                    handle: false,
+                    atomic: false,
+                ))
+            elif reads_of.len() > 0
+                problems.push(Problem(
+                    rule: "conc.par.4",
+                    reason: "reads `{root}`, which the iterations add to",
+                    help: "an accumulator may only be added to; read `{root}` after the loop",
+                    at: reads_of[0].pos,
+                    provable: true,
+                    handle: false,
+                    atomic: false,
+                ))
+            else
+                kind := holds_int(f, cx.fx, root)
+                if kind == 1
+                    reductions.push(root)
+                elif kind == 0
+                    problems.push(Problem(
+                        rule: "conc.par.4",
+                        reason: "adds floats into `{root}`; float `+` isn't associative, so another order changes the result",
+                        help: "collect the values in a list and call `.sum()`, which adds in a fixed tree order that can run in parallel (type.coll.12)",
+                        at: at,
+                        provable: true,
+                        handle: false,
+                        atomic: false,
+                    ))
+                else
+                    problems.push(Problem(
+                        rule: "conc.par.4",
+                        reason: "adds to `{root}`, which the analysis can't tell is an `int`",
+                        help: "declare `{root}` with an `int` literal in this function",
+                        at: at,
+                        provable: false,
+                        handle: false,
+                        atomic: false,
+                    ))
+        else
+            sigs := [element_steps(wr.kind) else [] for wr in ws if element_steps(wr.kind) != none]
+            unproven := [wr for wr in ws if unproven_steps(wr.kind) != none]
+            mut differ := false
+            for k in 1..sigs.len()
+                if sigs[k - 1] != sigs[k]
+                    differ = true
+            if unproven.len() > 0 and is_ref_local(f, root)
+                # conc.par.2: every iteration writes the one cell a `ref` names.
+                problems.push(Problem(
+                    rule: "conc.par.2",
+                    reason: "writes through the `ref` `{root}`, which every iteration shares",
+                    help: "give each iteration its own element (`out[{var}] = ...`), keep `{root}` in a `Mutex` or `Atomic`, or drop `par`",
+                    at: unproven[0].pos,
+                    provable: true,
+                    handle: false,
+                    atomic: false,
+                ))
+            elif unproven.len() > 0
+                steps := unproven_steps(unproven[0].kind) else []
+                why := if ranged then "its index isn't the loop variable `{var}`" else "the loop isn't over a range, so its variable may repeat"
+                problems.push(Problem(
+                    rule: "conc.par.3",
+                    reason: "writes `{place_text(root, steps)}`, and {why}: two iterations may write the same element",
+                    help: "write `{root}[{var}]` from a range loop, or assert independence with `par for`",
+                    at: unproven[0].pos,
+                    provable: false,
+                    handle: false,
+                    atomic: false,
+                ))
+            elif differ
+                problems.push(Problem(
+                    rule: "conc.par.3",
+                    reason: "writes `{root}` through different paths",
+                    help: "write one element path per iteration",
+                    at: ws[1].pos,
+                    provable: false,
+                    handle: false,
+                    atomic: false,
+                ))
+            else
+                sig := sigs[0]
+                for r in reads_of
+                    n := sig.len()
+                    ok := (r.steps.len() >= n and r.steps[..n] == sig)
+                        or (r.len_only and r.steps.len() < n and r.steps == sig[..r.steps.len()])
+                    if ok
+                        continue
+                    part := r.steps.len() < n
+                    mut reason := "reads `{place_text(root, r.steps)}` beside writing `{place_text(root, sig)}`: another iteration may write it"
+                    if part
+                        reason = "reads all of `{place_text(root, r.steps)}`, which other iterations write"
+                    problems.push(Problem(
+                        rule: "conc.par.3",
+                        reason: reason,
+                        help: "read only `{place_text(root, sig)}` in the body, or keep the loop sequential",
+                        at: r.pos,
+                        provable: part,
+                        handle: false,
+                        atomic: false,
+                    ))
+                    break
+                elements.push(place_text(root, sig))
+    if p := first_problem(problems)
+        return Verdict(
+            pos: pos,
+            var: var,
+            is_par: is_par,
+            sequential: not (is_par and not p.provable),
+            rule: p.rule,
+            reason: p.reason,
+            at: p.at,
+            help: p.help,
+        )
+    mut rule := "conc.par.2"
+    mut reason := "writes nothing that outlives the iteration"
+    if reductions.len() > 0
+        names := ["`{r}`" for r in reductions].join(", ")
+        more := if elements.len() == 0 then "" else " and writes only `{elements.join("`, `")}`"
+        rule = "conc.par.4"
+        reason = "adds to {names} in a fixed order{more}"
+    elif elements.len() > 0
+        rule = "conc.par.3"
+        reason = "writes only `{elements.join("`, `")}`"
+    Verdict(
+        pos: pos,
+        var: var,
+        is_par: is_par,
+        sequential: false,
+        rule: rule,
+        reason: reason,
+        at: pos,
+        help: none,
+    )
+
+## Which functions synchronise through a handle or an atomic: directly, or
+## by calling a function that does (a fixed point over the call graph).
+fn Checker.par_context(self) ParContext
+    fx := facts()
+    effects := infer_effects(prog, fx)
+    mut cx := ParContext(prog: prog, fx: fx, effects: effects, sync: [])
+    mut direct := List[int]()
+    mut bare := cx
+    bare.fx.free = Map[str, int]()
+    for f in prog.fns
+        mut flags := 0
+        if body := f.body
+            mut s := new_scan(bare, "", false)
+            s.block(body)
+            for p in s.problems
+                if p.handle and flags % 2 == 0
+                    flags += SYNC
+                if p.atomic and flags / 2 % 2 == 0
+                    flags += ATOMIC
+        direct.push(flags)
+    mut sync := direct
+    mut changed := true
+    while changed
+        changed = false
+        mut next := sync
+        for i in 0..prog.fns.len()
+            mut flags := sync[i]
+            for j in effects.calls[i]
+                if sync[j] % 2 == 1 and flags % 2 == 0
+                    flags += SYNC
+                if sync[j] / 2 % 2 == 1 and flags / 2 % 2 == 0
+                    flags += ATOMIC
+            if flags != sync[i]
+                next[i] = flags
+                changed = true
+        sync = next
+    cx.sync = sync
+    cx
+
+## conc.par.5: a `par for` whose iterations provably interfere is an error.
+fn Checker.check_par(self) List[Diag]
+    mut any_par := false
+    for f in prog.fns
+        if body := f.body
+            for s in loops(body)
+                match s
+                    For(is_par, _, _, _, _, _, _) =>
+                        if is_par
+                            any_par = true
+                    Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => any_par = any_par
+    if not any_par
+        return []
+    cx := par_context()
+    mut verdicts := List[Verdict]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        body := f.body else continue
+        for s in loops(body)
+            if v := judge(cx, f, s)
+                verdicts.push(v)
+    mut out := List[Diag]()
+    for v in verdicts.sorted(by: |v| v.pos.line * 100000 + v.pos.col)
+        if v.is_par and v.sequential
+            mut d := new_diag(
+                "conc.par.5",
+                v.at,
+                "`par for {v.var}` iterations aren't independent: the body {v.reason} ({v.rule})",
+            )
+            if h := v.help
+                d = d.with_help(h)
+            out.push(d)
+    out
+
+## A `[e par for x in xs]` comprehension (conc.par.12).
+struct ParComp
+    fn_index int
+    elem ast.Expr
+    clause ast.CompFor
+
+## Every `par for` comprehension in `b`, in source order.
+@allow("expr.match.3") fn par_comps_expr(e ast.Expr, mut out List[ParComp], fi int)
+    match e
+        Comp(_, elem, value, clauses, _) =>
+            if clauses.len() == 1 and clauses[0].is_par
+                out.push(ParComp(fn_index: fi, elem: elem, clause: clauses[0]))
+            for c in clauses
+                par_comps_expr(c.iter, mut out, fi)
+                if x := c.cond
+                    par_comps_expr(x, mut out, fi)
+            par_comps_expr(elem, mut out, fi)
+            if v := value
+                par_comps_expr(v, mut out, fi)
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    Hole(x) => par_comps_expr(x, mut out, fi)
+                    Fmt(x, _) => par_comps_expr(x, mut out, fi)
+        ListLit(xs, _) =>
+            for x in xs
+                par_comps_expr(x, mut out, fi)
+        SetLit(xs, _) =>
+            for x in xs
+                par_comps_expr(x, mut out, fi)
+        TupleLit(xs, _) =>
+            for x in xs
+                par_comps_expr(x, mut out, fi)
+        MapLit(entries, _) =>
+            for en in entries
+                par_comps_expr(en.key, mut out, fi)
+                par_comps_expr(en.value, mut out, fi)
+        Call(callee, args, _) =>
+            par_comps_expr(callee, mut out, fi)
+            for a in args
+                par_comps_expr(a.value, mut out, fi)
+        Method(recv, _, _, args) =>
+            par_comps_expr(recv, mut out, fi)
+            for a in args
+                par_comps_expr(a.value, mut out, fi)
+        Member(x, _, _) => par_comps_expr(x, mut out, fi)
+        Unary(_, x, _) => par_comps_expr(x, mut out, fi)
+        Try(x, _, _) => par_comps_expr(x, mut out, fi)
+        NewRef(x, _) => par_comps_expr(x, mut out, fi)
+        Index(a, b, _) =>
+            par_comps_expr(a, mut out, fi)
+            par_comps_expr(b, mut out, fi)
+        Binary(_, a, b, _) =>
+            par_comps_expr(a, mut out, fi)
+            par_comps_expr(b, mut out, fi)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                par_comps_expr(x, mut out, fi)
+            if x := hi
+                par_comps_expr(x, mut out, fi)
+        If(branches, els, _, _) =>
+            for br in branches
+                par_comps_expr(cond_value(br.cond), mut out, fi)
+                par_comps_block(br.body, mut out, fi)
+            if b := els
+                par_comps_block(b, mut out, fi)
+        Match(scrutinee, arms, _) =>
+            par_comps_expr(scrutinee, mut out, fi)
+            for a in arms
+                if g := a.guard
+                    par_comps_expr(g, mut out, fi)
+                par_comps_block(a.body, mut out, fi)
+        OrElse(value, o, _) =>
+            par_comps_expr(value, mut out, fi)
+            par_comps_else(o, mut out, fi)
+        _ => return
+
+fn par_comps_else(o ast.Else, mut out List[ParComp], fi int)
+    match o
+        Fallback(x) => par_comps_expr(x, mut out, fi)
+        Leave(s) => par_comps_stmt(s, mut out, fi)
+        Handler(_, body, _) => par_comps_block(body, mut out, fi)
+
+fn par_comps_stmt(s ast.Stmt, mut out List[ParComp], fi int)
+    match s
+        Let(_, _, _, value, o) =>
+            par_comps_expr(value, mut out, fi)
+            if e := o
+                par_comps_else(e, mut out, fi)
+        LetTuple(_, value, _) => par_comps_expr(value, mut out, fi)
+        Assign(target, _, value, _) =>
+            par_comps_expr(target, mut out, fi)
+            par_comps_expr(value, mut out, fi)
+        While(e, body, _) =>
+            par_comps_expr(e, mut out, fi)
+            par_comps_block(body, mut out, fi)
+        For(_, _, _, _, e, body, _) =>
+            par_comps_expr(e, mut out, fi)
+            par_comps_block(body, mut out, fi)
+        With(e, _, _, body, _) =>
+            par_comps_expr(e, mut out, fi)
+            par_comps_block(body, mut out, fi)
+        Return(v, _) =>
+            if e := v
+                par_comps_expr(e, mut out, fi)
+        Eval(e) => par_comps_expr(e, mut out, fi)
+        Handle(value, o) =>
+            par_comps_expr(value, mut out, fi)
+            par_comps_else(o, mut out, fi)
+        Defer(inner, _) => par_comps_stmt(inner, mut out, fi)
+        Unsafe(body, _) => par_comps_block(body, mut out, fi)
+        Break | Continue => return
+
+fn par_comps_block(b List[ast.Stmt], mut out List[ParComp], fi int)
+    for s in b
+        par_comps_stmt(s, mut out, fi)
+
+## The verdict on `[elem par for c.var in c.iter if c.cond]` (conc.par.12):
+## each element is computed as an iteration of a loop that writes nothing
+## outside it.
+fn judge_comp(cx ParContext, elem ast.Expr, c ast.CompFor) Verdict
+    mut scan := new_scan(cx, c.var, false)
+    scan.scopes = [[]]
+    scan.channel_loop(c.iter)
+    if x := c.cond
+        scan.expr(x)
+    scan.expr(elem)
+    mut w := Walked(direct: Map[str, str](), calls: [])
+    w.expr(cx.prog, cx.fx, elem)
+    mut found := cx.effects.of_walk(cx.prog, w)
+    if x := c.cond
+        mut wc := Walked(direct: Map[str, str](), calls: [])
+        wc.expr(cx.prog, cx.fx, x)
+        more := cx.effects.of_walk(cx.prog, wc)
+        for e in more.keys()
+            found[e] = more[e]
+    for e in found.keys().sorted()
+        if orders_loop(e)
+            help := if e
+                == "io" then "compute the values with `par for`, then print them after" else "move the effect out of the comprehension"
+            scan.problem(
+                "conc.par.2",
+                expr_pos(elem),
+                true,
+                "has effect `{e}` via {found[e]}",
+                help,
+            )
+            break
+    mut problems := scan.problems
+    for wr in scan.writes
+        problems.push(Problem(
+            rule: "conc.par.12",
+            reason: "writes `{wr.root}`, which outlives the element",
+            help: "an element of a `par for` comprehension only computes a value",
+            at: wr.pos,
+            provable: true,
+            handle: false,
+            atomic: false,
+        ))
+    if p := first_problem(problems)
+        return Verdict(
+            pos: c.var_pos,
+            var: c.var,
+            is_par: true,
+            sequential: p.provable,
+            rule: p.rule,
+            reason: p.reason,
+            at: p.at,
+            help: p.help,
+        )
+    Verdict(
+        pos: c.var_pos,
+        var: c.var,
+        is_par: true,
+        sequential: false,
+        rule: "conc.par.12",
+        reason: "computes each element independently",
+        at: c.var_pos,
+        help: none,
+    )
+
+## conc.par.12: a `par for` comprehension whose elements provably
+## interfere, or synchronise, is an error.
+fn Checker.check_par_comps(self) List[Diag]
+    mut found := List[ParComp]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if is_prelude_line(f.pos.line)
+            continue
+        if body := f.body
+            par_comps_block(body, mut found, i)
+    if found.len() == 0
+        return []
+    cx := par_context()
+    verdicts := [judge_comp(cx, pc.elem, pc.clause) for pc in found]
+    mut out := List[Diag]()
+    for v in verdicts.sorted(by: |v| v.pos.line * 100000 + v.pos.col)
+        if v.sequential
+            mut d := new_diag(
+                "conc.par.12",
+                v.at,
+                "`par for {v.var}` elements aren't independent: the element {v.reason} ({v.rule})",
+            )
+            if h := v.help
+                d = d.with_help(h)
+            out.push(d)
+    out

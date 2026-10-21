@@ -1,0 +1,21 @@
+## std.json: an agent reads an event log in JSON lines, one object per line.
+## parse_json_lines skips lines that are not JSON. Json.text and Json.flag read
+## a field with a default when it is missing.
+##   ./ail run examples/json_lines.ail
+
+fn main()
+    text := [
+        "\{\"level\": \"warn\", \"msg\": \"disk 91%\", \"retry\": true}",
+        "not json at all",
+        "\{\"level\": \"error\", \"msg\": \"write failed\"}",
+        "\{\"level\": \"info\", \"msg\": \"done\", \"retry\": false}",
+    ].join("\n")
+    events := parse_json_lines(text)
+    mut retries := 0
+    for e in events
+        level := e.text("level", "?")
+        msg := e.text("msg", "")
+        if e.flag("retry", false)
+            retries += 1
+        print("{level}: {msg}")
+    print("{events.len()} events, {retries} retried")

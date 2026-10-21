@@ -1,0 +1,10 @@
+## std.regex.24: the text of one group in every match, "" for a group that took no part.
+use std.regex
+
+fn main()
+    codes := regex.compile(r"code=(\d+)") else return
+    print(regex.group_all(codes, "code=12 x code=7 code=  code=305", 1))
+    pair := regex.compile(r"(a)?(b)") else return
+    print(regex.group_all(pair, "b ab", 1))
+    print(regex.group_all(pair, "b ab", 0))
+    print(regex.group_all(pair, "xyz", 1).len())

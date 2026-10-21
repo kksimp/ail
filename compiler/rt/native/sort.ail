@@ -19,7 +19,7 @@ fn sort_perm(keys List[int]) List[int]
             store64(load64(q + 16), 0)
         return out
     mut src := load64(q + 16)
-    mut dst := alloc(8 * n)
+    mut dst := alloc(8 * n, KIND_ATOMIC)
     for i in 0..n
         store64(src + 8 * i, i)
     mut width := 1

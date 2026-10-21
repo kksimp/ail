@@ -13,16 +13,36 @@ struct Slot
     name str
     ty Ty
 
+## The result of `proc.run` (std.proc.1), a struct of the standard library
+## that no source declares; its key can't clash with a program's own name.
+PROC_OUTPUT := "proc.Output"
+
+## The errors of the OS layer (std.err.1): `fs.IoError` and `proc.ProcError`,
+## error structs of the standard library that no source declares. The
+## runtime builds them where a call fails (ADR 0804).
+IO_ERROR := "fs.IoError"
+PROC_ERROR := "proc.ProcError"
+
+## The raw TCP types of `std.net` (std.net.12) and its error (std.net.4):
+## structs of the standard library that no source declares.
+NET_ERROR := "net.NetError"
+NET_CONN := "net.Conn"
+NET_LISTENER := "net.Listener"
+
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
+    structs[PROC_OUTPUT] = []
+    structs[IO_ERROR] = []
+    structs[PROC_ERROR] = []
+    structs[NET_ERROR] = []
+    structs[NET_CONN] = []
+    structs[NET_LISTENER] = []
     for s in prog.structs
         if s.generics.len() > 0
             problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
         elif s.is_unique
             problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
-        elif s.is_error
-            problem(s.pos, "error struct `{s.name}` isn't in the native subset yet")
         else
             structs["{prefix}{s.name}"] = []
             if s.invariants.len() > 0
@@ -30,6 +50,20 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
                 inv_file["{prefix}{s.name}"] = file
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
+    structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[NET_ERROR] = [
+        Slot(name: "url", ty: Ty.Str),
+        Slot(name: "kind", ty: Ty.Str),
+        Slot(name: "message", ty: Ty.Str),
+    ]
+    structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[PROC_OUTPUT] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "out", ty: Ty.Str),
+        Slot(name: "err", ty: Ty.Str),
+    ]
     for s in prog.structs
         key := "{prefix}{s.name}"
         if not structs.contains(key)
@@ -109,6 +143,7 @@ fn Lower.assign_member(
     op ast.BinOp?,
     value ast.Expr,
     pos ast.Pos,
+    at ast.Pos,
 )
     r := lower_value(recv, none) else return
     n := struct_name(r.ty) else
@@ -118,7 +153,7 @@ fn Lower.assign_member(
     if k < 0
         problem(pos, "`{n}` has no field `{name}`")
         return
-    assign_slot(r.id, n, k, op, value, pos)
+    assign_slot(r.id, n, k, op, value, at)
 
 fn Lower.assign_slot(mut self, obj int, n str, k int, op ast.BinOp?, value ast.Expr, pos ast.Pos)
     t := structs[n][k].ty
@@ -145,6 +180,10 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     if bad.contains(key)
         fn_failed = true
         return none
+    if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
+        return proc_output_method(key, recv, args, pos)
+    if key.starts_with("net.")
+        return lower_net_method(key, recv, args, pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
     if r := recv
@@ -160,6 +199,19 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     check_requires(key, vs, pos)
     Val(id: call(callee_key(key), vs, sig.ret), ty: sig.ret)
 
+## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
+## status is zero; the standard output followed by the standard error.
+fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    r := recv else return unsupported(pos, "calling `{key}`")
+    if args.len() > 0
+        return unsupported(pos, "this call")
+    if key == "{PROC_OUTPUT}.ok"
+        status := load(r.id, 0, Ty.Int)
+        return Val(id: op("eq", [status, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    out := load(r.id, 1, Ty.Str)
+    err := load(r.id, 2, Ty.Str)
+    Val(id: call("rt.str_cat", [out, err], Ty.Str), ty: Ty.Str)
+
 ## Whether a value of type `t` read from a place must be copied to stay
 ## independent (own.val.1).
 fn needs_copy(t Ty) bool
@@ -172,15 +224,18 @@ fn holds_struct(t Ty) bool
     match t
         Struct(_) => true
         List(e) => holds_struct(e)
+        Map(_, v) => holds_struct(v)
         _ => false
 
 ## A copy of `v`, deep through lists and structs.
 fn Lower.copy_value(mut self, v Val) int
+    if v.ty.is_coll()
+        return copy_coll(v)
     if not holds_struct(v.ty)
         return copy_list(v)
     name := "copy.{v.ty.name()}"
     if not sigs.contains(name)
-        sigs[name] = Sig(params: [v.ty], ret: v.ty)
+        sigs[name] = Sig(params: [v.ty], ret: v.ty, fails: false)
         copy_tys[name] = v.ty
     call(name, [v.id], v.ty)
 
@@ -231,7 +286,53 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
             cur = exit
             finish(return_of(out))
+        Map(_, vt) =>
+            # The runtime copies the table and shares the structs; each live
+            # entry's value is then replaced by its copy (own.val.1).
+            out := call("rt.map_copy", [x], t)
+            raw := op("copy", [out], Ty.Int)
+            used := call("rt.map_used", [raw], Ty.Int)
+            head := new_block()
+            i := new_value(Ty.Int, "")
+            blocks[head].params.push(i)
+            jump(head, [konst(0, Ty.Int)])
+            cur = head
+            body := new_block()
+            step := new_block()
+            exit := new_block()
+            branch(op("lt", [i, used], Ty.Bool), body, [], exit, [])
+            cur = body
+            e := call("rt.map_live", [raw, i], Ty.Int)
+            live := new_block()
+            branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), live, [], step, [])
+            cur = live
+            c := copy_value(Val(id: entry_value(e, vt), ty: vt))
+            rawop("store64", [op("add", [e, konst(16, Ty.Int)], Ty.Int), c], Ty.Unit)
+            jump(step, [])
+            cur = step
+            jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+            cur = exit
+            finish(return_of(out))
         _ => finish(return_of(x))
     for b in 0..blocks.len()
         sealed[b] = true
     end_fn(name, ast.Pos(line: 1, col: 1))
+
+## `x.f`, `E.V`, or a qualified constant.
+fn Lower.lower_member_expr(
+    mut self,
+    recv ast.Expr,
+    name str,
+    pos ast.Pos,
+    e ast.Expr,
+    want Ty?,
+) Val?
+    if en := enum_ref(recv)
+        return variant_member(en, name, pos)
+    if key := qualified(e)
+        if consts.contains(key)
+            return lower_const(key, want)
+        if globals.contains(key)
+            return global_const(key)
+        return unsupported(pos, "`{key}` as a value")
+    lower_member(recv, name, pos)

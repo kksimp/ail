@@ -1,8 +1,10 @@
-//! `ail diff OLD NEW` (diff.out.1-6, ADR 0396).
+//! `ail diff OLD NEW` (diff.out.1-7, ADRs 0396, 0399).
 
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
+
+mod common;
 
 fn ail(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_ail")).args(args).output().unwrap()
@@ -29,10 +31,10 @@ fn pair(name: &str) -> (String, String) {
     fs::create_dir_all(d.join("new")).unwrap();
     fs::write(d.join("old/p.ail"), OLD).unwrap();
     fs::write(d.join("new/p.ail"), NEW).unwrap();
-    (d.join("old/p.ail").display().to_string(), d.join("new/p.ail").display().to_string())
+    (common::shown(&d.join("old/p.ail")), common::shown(&d.join("new/p.ail")))
 }
 
-/// diff.out.2-4, diff.out.6: declarations, diagnostics and tests, as text.
+/// diff.out.2-4, diff.out.6-7: declarations, diagnostics and tests, as text.
 #[test]
 fn text_report() {
     let (old, new) = pair("text");
@@ -40,8 +42,8 @@ fn text_report() {
     let o = text(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{o}{}", text(&out.stderr));
     for want in [
-        "~ fn:add (doc, body changed)\n    signature: fn add(a int, b int) int -> fn add(a int, b int, c int) int\n    pub: false -> true\n    requires: (none) -> [\"n >= 0\"]\n",
-        "+ fn:fresh fn fresh() int\n~ fn:adds (body changed)\n~ fn:main (body changed)\n",
+        "~ fn:add (doc, body changed)\n    signature: fn add(a int, b int) int -> fn add(a int, b int, c int) int\n    pub: false -> true\n    requires: (none) -> [\"n >= 0\"]\n    +requires n >= 0\n",
+        "+ fn:fresh fn fresh() int\n~ fn:adds (body changed)\n    -assert(add(1, 2) == 3)\n    +assert(add(1, 2, 0) == 4)\n~ fn:main (body changed)\n    -print(add(1, 2))\n    +print(add(1, 2, 0))\n",
         "- fn:gone fn gone() int\n",
         &format!("+ warning[expr.hole.1] {new}:10: hole: expected `int`; in scope: nothing\n"),
         "test adds: pass -> fail: trap[test.assert.1]: assertion failed\n",
@@ -79,6 +81,12 @@ fn json_lines() {
 /// diff.out.5: `--rev REV PATH` compares against git's copy.
 #[test]
 fn against_a_git_revision() {
+    // Skipped when `git` is missing (under Wine it is not installed): the test
+    // builds its own git repository to compare against.
+    if Command::new("git").arg("--version").output().is_err() {
+        eprintln!("skipped: no `git`");
+        return;
+    }
     let d = dir("rev");
     let git = |args: &[&str]| {
         let ok = Command::new("git")

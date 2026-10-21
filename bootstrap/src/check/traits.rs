@@ -48,6 +48,7 @@ fn map_params(t: &Ty, f: &dyn Fn(usize) -> Option<Ty>) -> Ty {
         Ty::Res(x, errs) => Ty::Res(Box::new(map_params(x, f)), errs.clone()),
         Ty::Union(m) => Ty::Union(all(m)),
         Ty::Fn(ps, r) => Ty::Fn(all(ps), Box::new(map_params(r, f))),
+        Ty::Tuple(xs) => Ty::Tuple(all(xs)),
         t => t.clone(),
     }
 }
@@ -82,6 +83,11 @@ pub(crate) fn bind(pattern: &Ty, actual: &Ty, vars: &[usize], binds: &mut Vec<(u
             }
             bind(r, s, vars, binds);
         }
+        (Ty::Tuple(xs), Ty::Tuple(ys)) if xs.len() == ys.len() => {
+            for (x, y) in xs.iter().zip(ys) {
+                bind(x, y, vars, binds);
+            }
+        }
         (Ty::Res(x, _), Ty::Res(y, _)) => bind(x, y, vars, binds),
         (Ty::Res(x, _), y) => bind(x, y, vars, binds),
         _ => {}
@@ -97,7 +103,7 @@ pub(super) fn bound(binds: &[(usize, Ty)], p: usize) -> Ty {
 fn mentions(t: &Ty, p: usize) -> bool {
     match t {
         Ty::Param(q) => *q == p,
-        Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) => xs.iter().any(|x| mentions(x, p)),
+        Ty::Struct(_, xs) | Ty::Enum(_, xs) | Ty::Union(xs) | Ty::Tuple(xs) => xs.iter().any(|x| mentions(x, p)),
         Ty::List(x) | Ty::Opt(x) | Ty::Set(x) | Ty::Conc(_, x) => mentions(x, p),
         Ty::Map(k, v) => mentions(k, p) || mentions(v, p),
         Ty::Res(x, Errs::Set(set)) => mentions(x, p) || set.iter().any(|e| mentions(e, p)),
@@ -325,6 +331,10 @@ impl<'p> Checker<'p> {
             // type.map.4: maps and sets compare with `==`, and aren't keys.
             Ty::Map(k, v) => tr == eq && self.implements_in(k, eq, seen) && self.implements_in(v, eq, seen),
             Ty::Set(e) => tr == eq && self.implements_in(e, eq, seen),
+            // type.tuple.7: a tuple is `Eq`, `Ord` and `Hash` when every element is.
+            Ty::Tuple(xs) => {
+                (tr == eq || tr == self.std.ord || tr == self.std.hash) && xs.iter().all(|x| self.implements_in(x, tr, seen))
+            }
             _ => {
                 let Some(con) = con_of(t) else { return false };
                 if let Some(&i) = self.impl_of.get(&(tr, con)) {
@@ -448,7 +458,7 @@ impl<'p> Checker<'p> {
 
     /// The types of every field of a struct, or of every variant of an enum,
     /// with its type arguments filled in.
-    fn field_types_of(&self, t: &Ty, args: &[Ty]) -> Vec<Ty> {
+    pub(super) fn field_types_of(&self, t: &Ty, args: &[Ty]) -> Vec<Ty> {
         let (params, fields): (&[usize], Vec<&Ty>) = match t {
             Ty::Struct(s, _) => {
                 (&self.struct_params[*s], self.field_types.get(*s).map(|f| f.iter().collect()).unwrap_or_default())

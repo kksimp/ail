@@ -1,0 +1,13 @@
+# A negative start takes the checked loop and traps on the same index
+# (native.bce.9).
+fn mark(mut flags List[bool], from int, step int)
+    mut j := from
+    while j < flags.len()
+        flags[j] = true
+        j += step
+
+fn main()
+    mut flags := [false for _ in 0..10]
+    mark(mut flags, 2, 3)
+    print(flags)
+    mark(mut flags, -3, 2)

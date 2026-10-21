@@ -28,3 +28,7 @@ trait Shape
 - `Self` (the implementing type) is used in trait signatures. Its exact
   rules are to be specified.
 - Associated types vs. trait type parameters is still open (OQ-037).
+
+## Rejected alternatives
+
+- No default methods (every implementation spells out each derivable method, such as `!=` from `==`): loses on token usage, the criterion that decides here.

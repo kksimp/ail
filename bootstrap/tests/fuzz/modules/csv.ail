@@ -1,0 +1,29 @@
+# fuzz-input: csv
+# fuzz-needs: std.csv
+# std.csv on hostile text (std.csv.1-5): a failure is a CsvError, never a crash; what
+# `write` produces parses back to the same rows; `records` agrees with `parse`.
+use std.csv
+
+fn main()
+    rows := csv.parse({{TEXT}}) else err
+        print("rejected {err.row >= 1}")
+        return
+    for row in rows
+        if row.len() == 0
+            print("FAIL an empty row")
+    out := csv.write(rows)
+    back := csv.parse(out) else e2
+        print("FAIL written text does not parse: {e2.why}")
+        return
+    if back != rows
+        print("FAIL write then parse changed the rows")
+    print(rows.len())
+    recs := csv.records({{TEXT}}) else e3
+        print("records rejected {e3.row >= 1}")
+        return
+    if recs.len() != (if rows.len() > 0 then rows.len() - 1 else 0)
+        print("FAIL records and parse disagree")
+    other := csv.parse_sep({{TEXT2}}, ';') else e4
+        print("rejected {e4.row >= 1}")
+        return
+    print(other.len() >= 0)

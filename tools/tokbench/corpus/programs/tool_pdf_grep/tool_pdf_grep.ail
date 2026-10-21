@@ -1,0 +1,21 @@
+
+fn main() !
+    here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
+    pdfs := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data/pdf"
+    reader := "{here}/../../../../../tools/pdf/pdf.ail"
+    for name in fs.list_dir(pdfs)?.sorted()
+        r := proc.run(ail, [
+            "run",
+            reader,
+            "grep",
+            "--json",
+            "ledger",
+            "{pdfs}/{name}",
+        ])? "searching {name}"
+        mut hits := 0
+        for line in r.out.lines()
+            d := parse_json(line) else continue
+            hits += 1
+            print("{name} page {d.num("page") else 0.0} : {d.str("text") else ""}")
+        print("{name}: {hits} hits")

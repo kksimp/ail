@@ -1,2 +1,2 @@
-bootstrap/tests/native/fn_sorted_subset.ail:3:14: error[native.subset.1]: not in the native subset yet: `.sorted()` on `List[float]`
+bootstrap/tests/native/fn_sorted_subset.ail:3:29: error[native.subset.1]: not in the native subset yet: a key of type `float`
 bootstrap/tests/native/fn_sorted_subset.ail:5:29: error[native.subset.1]: not in the native subset yet: a key of type `str`

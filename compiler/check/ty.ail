@@ -40,6 +40,8 @@ pub enum Ty
     Conc(kind str, inner Ty)
     ## `fn(A, B) R`, a function value (type.fn.1); `ret` is `Unit` for no result.
     FnTy(params List[Ty], ret Ty)
+    ## `(A, B, ...)`, two or more elements (type.tuple.1).
+    Tuple(elems List[Ty])
 
 ## The error part of `T ! E`: a written set, or a function's inferred set.
 pub enum Errs
@@ -57,7 +59,7 @@ pub struct Bind
     pub ty Ty
 
 ## `a` and `b` are the same type, or an error already reported makes it moot.
-pub fn same(a Ty, b Ty) bool
+@allow("expr.match.3") fn same(a Ty, b Ty) bool
     if a == Ty.Unknown or b == Ty.Unknown
         return true
     match a
@@ -93,9 +95,13 @@ pub fn same(a Ty, b Ty) bool
             match b
                 FnTy(ys, s) => same_all(xs, ys) and same(r, s)
                 _ => false
+        Tuple(xs) =>
+            match b
+                Tuple(ys) => same_all(xs, ys)
+                _ => false
         _ => a == b
 
-fn elem_of_list(t Ty) Ty?
+@allow("expr.match.3") fn elem_of_list(t Ty) Ty?
     match t
         ListOf(x) => x
         _ => none
@@ -109,7 +115,7 @@ fn same_all(xs List[Ty], ys List[Ty]) bool
     true
 
 ## Whether `t` contains an unknown part.
-pub fn has_unknown(t Ty) bool
+@allow("expr.match.3") fn has_unknown(t Ty) bool
     match t
         Unknown => true
         ListOf(x) => has_unknown(x)
@@ -121,6 +127,7 @@ pub fn has_unknown(t Ty) bool
         Struct(_, xs) => any_unknown(xs)
         Enum(_, xs) => any_unknown(xs)
         Union(xs) => any_unknown(xs)
+        Tuple(xs) => any_unknown(xs)
         FnTy(xs, r) => any_unknown(xs) or has_unknown(r)
         _ => false
 
@@ -131,7 +138,7 @@ fn any_unknown(xs List[Ty]) bool
     false
 
 ## Sort key that keeps error sets in a canonical order.
-pub fn ty_key(t Ty) int
+@allow("expr.match.3") fn ty_key(t Ty) int
     match t
         Struct(i, _) => i
         Enum(i, _) => 1000000000 + i
@@ -142,7 +149,7 @@ pub fn sort_errors(ts List[Ty]) List[Ty]
     ts.sorted(by: |t| ty_key(t))
 
 ## Replace the type parameters bound in `binds`.
-pub fn subst(t Ty, binds List[Bind]) Ty
+@allow("expr.match.3") fn subst(t Ty, binds List[Bind]) Ty
     match t
         Param(p) =>
             for b in binds
@@ -162,18 +169,20 @@ pub fn subst(t Ty, binds List[Bind]) Ty
                 Inferred => Ty.Res(subst(x, binds), errs)
         Union(m) => Ty.Union(subst_all(m, binds))
         FnTy(xs, r) => Ty.FnTy(subst_all(xs, binds), subst(r, binds))
+        Tuple(xs) => Ty.Tuple(subst_all(xs, binds))
         _ => t
 
 pub fn subst_all(ts List[Ty], binds List[Bind]) List[Ty]
     [subst(t, binds) for t in ts]
 
 ## Whether `t` mentions the type parameter `p`.
-pub fn mentions(t Ty, p int) bool
+@allow("expr.match.3") fn mentions(t Ty, p int) bool
     match t
         Param(q) => q == p
         Struct(_, xs) => mentions_any(xs, p)
         Enum(_, xs) => mentions_any(xs, p)
         Union(xs) => mentions_any(xs, p)
+        Tuple(xs) => mentions_any(xs, p)
         ListOf(x) => mentions(x, p)
         Opt(x) => mentions(x, p)
         SetOf(x) => mentions(x, p)
@@ -194,7 +203,7 @@ fn mentions_any(xs List[Ty], p int) bool
 
 ## The type constructor of a type that can have an `impl` (trait.impl.6),
 ## as a key: `int`, `list`, `s3` for struct 3, `e2` for enum 2.
-pub fn con_of(t Ty) str?
+@allow("expr.match.3") fn con_of(t Ty) str?
     match t
         Int => "int"
         Float => "float"
@@ -208,7 +217,7 @@ pub fn con_of(t Ty) str?
         _ => none
 
 ## The type arguments of a struct, enum or list.
-pub fn args_of(t Ty) List[Ty]
+@allow("expr.match.3") fn args_of(t Ty) List[Ty]
     match t
         Struct(_, a) => a
         Enum(_, a) => a

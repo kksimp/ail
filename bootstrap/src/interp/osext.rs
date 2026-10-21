@@ -177,7 +177,8 @@ pub fn move_or_copy(from: &str, to: &str, copy: bool) -> Result<(), FsFail> {
     let source = std::fs::metadata(from);
     match &source {
         Err(e) => return Err((from.to_string(), error_kind(e))),
-        Ok(m) if copy && m.is_dir() => return Err((from.to_string(), "is_dir")),
+        // std.fs.12: copying a directory copies the tree.
+        Ok(m) if copy && m.is_dir() => return copy_tree(from, to),
         Ok(_) => {}
     }
     let result = if copy { std::fs::copy(from, to).map(|_| ()) } else { std::fs::rename(from, to) };
@@ -185,6 +186,56 @@ pub fn move_or_copy(from: &str, to: &str, copy: bool) -> Result<(), FsFail> {
         let kind = if Path::new(to).is_dir() && !source.as_ref().is_ok_and(|m| m.is_dir()) { "is_dir" } else { error_kind(&e) };
         (to.to_string(), kind)
     })
+}
+
+/// std.fs.12: copies the directory `from` and everything under it to `to`,
+/// which is made (with its parents) when missing; files already there are
+/// replaced. A symbolic link is copied as what it points to, a link to a
+/// directory is not followed (kind `other`), and so is copying a directory
+/// into itself.
+fn copy_tree(from: &str, to: &str) -> Result<(), FsFail> {
+    if let (Ok(src), Some(dst)) = (std::fs::canonicalize(from), nearest_canonical(Path::new(to)))
+        && dst.starts_with(&src)
+    {
+        return Err((to.to_string(), "other"));
+    }
+    copy_dir(Path::new(from), Path::new(to))
+}
+
+/// The canonical form of `p`, or of its nearest existing ancestor.
+fn nearest_canonical(p: &Path) -> Option<std::path::PathBuf> {
+    let mut cur = p;
+    loop {
+        if let Ok(c) = std::fs::canonicalize(cur) {
+            return Some(c);
+        }
+        cur = cur.parent().filter(|q| !q.as_os_str().is_empty())?;
+    }
+}
+
+fn copy_dir(from: &Path, to: &Path) -> Result<(), FsFail> {
+    let fail = |p: &Path, e: &std::io::Error| (crate::shown::shown(&p), error_kind(e));
+    std::fs::create_dir_all(to).map_err(|e| fail(to, &e))?;
+    let mut entries: Vec<_> = std::fs::read_dir(from)
+        .map_err(|e| fail(from, &e))?
+        .collect::<Result<_, _>>()
+        .map_err(|e| fail(from, &e))?;
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let (src, dst) = (entry.path(), to.join(entry.file_name()));
+        let kind = entry.file_type().map_err(|e| fail(&src, &e))?;
+        if kind.is_dir() {
+            copy_dir(&src, &dst)?;
+        } else if kind.is_symlink() && std::fs::metadata(&src).is_ok_and(|m| m.is_dir()) {
+            return Err((crate::shown::shown(&src), "other"));
+        } else {
+            std::fs::copy(&src, &dst).map_err(|e| {
+                let k = if dst.is_dir() { "is_dir" } else { error_kind(&e) };
+                (crate::shown::shown(&dst), k)
+            })?;
+        }
+    }
+    Ok(())
 }
 
 /// std.env.5: the environment's UTF-8 variables, sorted by name.

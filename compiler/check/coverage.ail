@@ -3,33 +3,145 @@
 ## doesn't check yet. Each slice widens it; at the end nothing is skipped.
 use ast
 
-## The rules the declaration passes report (slice 1).
+## The rules the declaration passes (slice 1), the bodies (slice 2) and the
+## flow passes (slice 3) report.
 pub COVERED_RULES := [
     "bootstrap.unsupported",
     "conc.atomic.3",
+    "conc.atomic.7",
+    "conc.par.12",
+    "conc.par.5",
+    "conc.select.1",
+    "conc.share.1",
+    "conc.share.4",
+    "conc.share.6",
+    "conc.task.1",
     "conc.task.5",
+    "conc.task.8",
+    "contract.decl.2",
+    "contract.decl.3",
+    "contract.ens.2",
+    "contract.ens.3",
+    "ct.const.2",
+    "ct.const.3",
+    "ct.const.4",
+    "eff.pure.1",
+    "err.ctx.2",
     "err.decl.2",
     "err.decl.3",
+    "err.type.3",
+    "err.else.1",
+    "err.else.2",
+    "err.else.3",
+    "err.else.4",
+    "err.prop.1",
+    "err.prop.2",
+    "err.prop.3",
+    "err.prop.4",
+    "err.ret.1",
+    "err.ret.2",
+    "err.ret.3",
+    "err.use.1",
+    "err.use.2",
+    "expr.bind.1",
+    "expr.bind.3",
+    "expr.bind.4",
+    "expr.bind.5",
+    "expr.bind.6",
+    "expr.block.2",
+    "expr.call.1",
+    "expr.call.2",
+    "expr.call.3",
+    "expr.cmp.1",
+    "expr.cmp.3",
+    "expr.comp.3",
+    "expr.hole.1",
+    "expr.if.2",
+    "expr.if.4",
+    "expr.if.5",
+    "expr.if.6",
+    "expr.key.1",
+    "expr.key.3",
+    "expr.loop.3",
+    "expr.loop.4",
+    "expr.loop.5",
+    "expr.loop.6",
+    "expr.match.12",
+    "expr.match.2",
+    "expr.match.3",
+    "expr.match.4",
+    "expr.match.5",
+    "expr.match.6",
+    "expr.match.7",
+    "expr.match.8",
     "expr.name.1",
+    "expr.op.3",
+    "ffi.call.1",
+    "ffi.decl.3",
     "gen.bound.1",
     "gen.bound.3",
     "gen.decl.1",
     "gen.decl.2",
+    "gen.infer.1",
+    "gen.infer.2",
     "gen.method.2",
     "gram.attr.4",
+    "gram.attr.5",
     "gram.generic.1",
+    "json.derive.1",
+    "json.derive.2",
+    "lex.str.2",
     "mod.const.2",
+    "mod.const.3",
     "mod.main.1",
+    "mod.main.3",
     "mod.unit.1",
+    "mod.vis.1",
+    "own.defer.3",
+    "own.excl.2",
+    "own.excl.5",
+    "own.move.2",
+    "own.move.3",
+    "own.move.4",
+    "own.move.6",
+    "own.param.1",
+    "own.param.2",
+    "own.ref.5",
+    "own.uniq.1",
+    "own.uniq.10",
+    "own.uniq.2",
+    "own.ref.2",
     "own.uniq.5",
+    "own.uniq.6",
+    "own.uniq.8",
+    "std.io.3",
+    "std.net.9",
+    "std.random.4",
+    "std.tensor.1",
+    "std.tensor.10",
+    "std.tensor.11",
+    "std.tensor.13",
+    "std.tensor.15",
+    "std.tensor.16",
+    "std.tensor.18",
+    "std.tensor.19",
+    "std.tensor.3",
+    "std.tensor.8",
+    "std.ui.17",
+    "std.ui.2",
     "std.use.1",
     "std.use.2",
     "std.use.3",
+    "std.use.4",
+    "test.assert.2",
     "test.attr.1",
     "test.attr.2",
+    "test.attr.3",
     "test.prop.2",
     "trait.any.1",
     "trait.any.2",
+    "trait.any.4",
+    "trait.assoc.2",
     "trait.auto.4",
     "trait.auto.5",
     "trait.derive.1",
@@ -38,16 +150,52 @@ pub COVERED_RULES := [
     "trait.impl.4",
     "trait.impl.5",
     "trait.impl.6",
+    "trait.method.1",
+    "trait.method.3",
+    "trait.method.4",
     "trait.method.5",
+    "trait.op.1",
+    "trait.op.2",
+    "trait.op.3",
+    "trait.res.1",
     "trait.self.1",
     "trait.std.2",
     "trait.super.1",
     "trait.super.2",
+    "type.bool.1",
+    "type.bytes.13",
+    "type.bytes.2",
+    "type.bytes.3",
+    "type.coll.13",
+    "type.coll.2",
+    "type.coll.3",
+    "type.coll.4",
+    "type.coll.8",
+    "type.enum.3",
     "type.enum.5",
+    "type.enum.6",
+    "type.fn.2",
+    "type.map.1",
     "type.map.2",
+    "type.map.3",
+    "type.map.5",
+    "type.num.13",
+    "type.num.14",
     "type.opt.3",
+    "type.opt.4",
+    "type.opt.9",
+    "type.str.11",
+    "type.str.2",
+    "type.struct.4",
     "type.struct.5",
+    "type.struct.6",
+    "type.struct.7",
+    "unsafe.block.2",
+    "unsafe.block.3",
+    "unsafe.hw.1",
+    "unsafe.op.1",
     "unsafe.ptr.1",
+    "unsafe.ptr.3",
 ]
 
 ## A range of lines of one file not checked yet: `first` to `last`, inclusive.
@@ -56,9 +204,10 @@ pub struct Skip
     pub first int
     pub last int
 
-## The lines not checked yet: function bodies with their contracts, and
-## struct invariants (slices 2 and 3).
-pub fn skipped(p ast.Program) List[Skip]
+## The lines not checked yet: functions with a construct this checker
+## doesn't type yet, from their header to the next declaration, and the
+## invariants and constants it couldn't type.
+pub fn skipped(p ast.Program, r Report) List[Skip]
     mut starts := List[int]()
     for f in p.fns
         starts.push(f.pos.line)
@@ -74,20 +223,27 @@ pub fn skipped(p ast.Program) List[Skip]
         starts.push(c.pos.line)
     starts.sort()
     mut out := List[Skip]()
-    for f in p.fns
-        if f.body != none and f.pos.line < 1073741824
-            mut end := 1073741823
-            for l in starts
-                if l > f.pos.line
-                    end = l - 1
-                    break
-            out.push(local_skip(p, f.pos.line + 1, end))
-    for s in p.structs
-        for inv in s.invariants
+    for k in r.gapped
+        f := p.fns[k]
+        mut end := if f.pos.line < 1073741824 then 1073741823 else 2147483647
+        for l in starts
+            if l > f.pos.line
+                end = l - 1
+                break
+        out.push(local_skip(p, f.pos.line, end))
+    for line in r.gapped_lines
+        out.push(local_skip(p, line, line))
+    for k in r.gapped_structs
+        for inv in p.structs[k].invariants
             out.push(local_skip(p, inv.pos.line, inv.pos.line))
+    for k in r.gapped_consts
+        line := p.consts[k].pos.line
+        out.push(local_skip(p, line, line))
     out
 
 fn local_skip(p ast.Program, first int, last int) Skip
+    if first >= 1073741824
+        return Skip(file: "", first: first, last: last)
     mut file := ""
     mut base := 0
     for f in p.files

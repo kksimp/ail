@@ -1,0 +1,46 @@
+# Rows of a list of lists that are all long enough: the row check of
+# `b[k][j]` is made once before the loops (ADR 0612). Ragged rows, rows that
+# grow in the loops and an empty list keep the checks.
+fn product(a List[List[int]], b List[List[int]], n int) int
+    mut total := 0
+    for i in 0..n
+        for j in 0..n
+            mut s := 0
+            for k in 0..n
+                s += a[i][k] * b[k][j]
+            total += s
+    total
+
+fn grows(b List[List[int]], n int) int
+    mut rows := b
+    mut total := 0
+    for j in 0..n
+        for k in 0..rows.len()
+            total += rows[k][j]
+        rows[0].push(j)
+    total
+
+fn column(b List[List[int]], j int, n int) int
+    mut s := 0
+    for k in 0..n
+        s += b[k][j]
+    s
+
+fn square(n int) List[List[int]]
+    mut m := List[List[int]]()
+    for i in 0..n
+        mut row := []
+        for j in 0..n
+            row.push((i * 3 + j * 5) % 7)
+        m.push(row)
+    m
+
+fn main()
+    for n in [0, 1, 5, 40]
+        m := square(n)
+        print(product(m, m, n))
+    print(grows([[1, 2, 3], [4, 5, 6, 7]], 3))
+    print(column([[1, 2], [3, 4], [5, 6]], 1, 3))
+    print(column([[1, 2, 3], [3, 4], [5, 6]], 1, 3))
+    empty := List[List[int]]()
+    print(column(empty, 0, 0))

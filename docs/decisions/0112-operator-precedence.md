@@ -30,3 +30,8 @@ From tightest to loosest binding:
 | 9 | `..` `..=` | none |
 
 Writing two comparisons in a row without parentheses is a compile-time error.
+
+## Rejected alternatives
+
+- Chained comparisons (`a < b < c`): rejected because they would be a silent surprise. Writing two comparisons in a row without parentheses is an error.
+- `not` binding tighter than comparisons: the chosen table puts `not` below comparisons, as in Python, so `not a == b` means `not (a == b)`. (reconstructed 2026-10-21: the record gives the reason but no debate.)

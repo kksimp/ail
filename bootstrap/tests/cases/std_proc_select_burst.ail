@@ -1,0 +1,29 @@
+# std.proc.5, conc.task.7: output that arrives while a task is about to block on
+# `task.select` or `recv` is seen, not reported as a deadlock, even with the
+# child still running. Each round's child answers a line, then writes to both
+# streams at once and exits.
+use std.proc
+use std.task
+
+fn round() !
+    s := proc.start("sh", ["-c", "echo first; read go; echo second >&2; echo third; exit 4"])?
+    mut open := true
+    mut seen := 0
+    while open
+        i := task.select([s.out, s.err])
+        if i == none
+            open = false
+        elif i == 0
+            line := s.out.recv()
+            if line == "first"
+                s.stdin.send("go\n")
+        else
+            s.err.recv()
+        seen += 1
+    assert_eq(seen, 4)
+    assert_eq(proc.wait(move s)?, 4)
+
+fn main() !
+    for _ in 0..60
+        round()?
+    print("60 rounds")

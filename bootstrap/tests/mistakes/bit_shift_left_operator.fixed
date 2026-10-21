@@ -1,0 +1,3 @@
+fn main()
+    n := 1
+    print(n.shl(4))

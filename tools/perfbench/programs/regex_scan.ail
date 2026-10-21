@@ -1,0 +1,63 @@
+# Regex scanning over generated log lines: an integer LCG builds each line from
+# six tokens (words, numbers, `id=N` and `val=N` pairs, addresses), and four
+# patterns run over every line: digit runs (count and total length), addresses,
+# key=value pairs, and a replacement of the digit runs. N lines come from argv.
+# The text is generated in memory, not read from disk.
+use std.regex
+
+WORDS := ["the", "of", "and", "to", "in", "fox", "jumps", "lazy", "dog", "river", "stone", "moss"]
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn step(seed int) int
+    (seed * 3877 + 29573) % 139968
+
+fn line(start int) str
+    mut parts := List[str]()
+    mut seed := start
+    for _ in 0..6
+        seed = step(seed)
+        t := seed / 16 % 8
+        if t == 0
+            parts.push("user{seed % 97}@host{seed % 13}.com")
+        elif t == 1
+            parts.push("id={seed % 1000}")
+        elif t == 2
+            parts.push("{seed % 100000}")
+        elif t == 3
+            parts.push("val={seed % 50}")
+        else
+            parts.push(WORDS[seed % WORDS.len()])
+    parts.join(" ")
+
+fn main() !
+    n := size(20000)
+    digits := regex.compile("[0-9]+")?
+    mail := regex.compile(r"[a-z0-9]+@[a-z0-9]+\.com")?
+    pair := regex.compile("[a-z]+=[0-9]+")?
+    mut seed := 7
+    mut runs := 0
+    mut digit_chars := 0
+    mut mails := 0
+    mut pairs := 0
+    mut replaced := 0
+    for _ in 0..n
+        text := line(seed)
+        for k in 0..6
+            seed = step(seed)
+        for m in regex.find_all(digits, text)
+            runs += 1
+            digit_chars += m.end - m.start
+        mails += regex.find_all(mail, text).len()
+        pairs += regex.find_all(pair, text).len()
+        replaced += regex.replace(digits, text, "#").len()
+    print("digit runs {runs}")
+    print("digit chars {digit_chars}")
+    print("addresses {mails}")
+    print("pairs {pairs}")
+    print("replaced length {replaced}")

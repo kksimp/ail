@@ -1,0 +1,12 @@
+## regex.group_all: the text of one group in every match, in order. Group 1
+## is the digits after `code=`; group 0 would be the whole match.
+##   ./ail run examples/std_regex_groups.ail
+
+use std.regex
+
+fn main() !
+    re := regex.compile("code=(\\d+)")?
+    text := "code=404 ok code=200 code=503"
+    print(regex.group_all(re, text, 1))
+    print(regex.group_all(re, text, 0))
+    print(regex.find_all(re, text).len())

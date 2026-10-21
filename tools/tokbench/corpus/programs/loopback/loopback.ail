@@ -1,0 +1,13 @@
+use std.net
+fn ask(url str) net.Response ! net.NetError
+    net.get(url)
+fn main() ! Trapped | net.NetError
+    srv := net.serve("127.0.0.1:0")?
+    url := "http://{srv.addr()}/hello?name=ail"
+    t := spawn ask(url)
+    ex := srv.accept()?
+    print("server got {ex.request.method} {ex.request.path} query {ex.request.query}")
+    ex.respond(net.Response(status: 200, headers: {}, body: "hi there"))?
+    reply := t.wait()?
+    print("client got {reply.status}: {reply.body}")
+    srv.close()

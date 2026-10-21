@@ -77,3 +77,40 @@ Also seen, smaller: `.extend()` on `List[int]` (4, 176), `for mut` and
 3. When `ail build compiler/main.ail` succeeds, diff the native `mir` and
    `build` output against the interpreted compiler's on every perfbench
    program, and report the result here.
+
+## Repro cases and owners (lane 226, 2026-10-21, batch head fcc7f33d)
+
+Minimal native cases for the blocked constructs live in
+`bootstrap/tests/native/selfc/` (`selfc_NAME.ail`, with `selfc_NAME.out` from
+`ail run`). They are not in `tests/native/run/`, so they do not gate
+`cargo test --test native`; a case that fails is a blocker, not a broken test.
+`tools/self-compile/selfc-cases.sh` builds each one and prints the pass count.
+
+Current: **25 of 29 pass** (rerun on bd982d24; was 20 on 1c370770, 16 on fcc7f33d). The four still failing are `.contains()` and `.extend()` on lists, `unreachable`, and a sorted closure. The survey is stale in one large way: the
+`parameter \`f\`: its type isn't in the native subset` count (43 of 169 on this
+head) comes from lowering one file alone. `Func` is declared in
+`compiler/mir/mir.ail`, not in `addr.ail`, so the survey reports it as unknown.
+A struct, enum or list-of-struct parameter already builds natively when the type
+is in the same file (cases `struct_param`, `struct_list_param`, `enum_param`,
+`struct_return`, `struct_field`, `struct_method`). Module loading would clear
+those rows, not a native lane.
+
+| construct | case | owner (queue order) | status |
+|---|---|---|---|
+| `==` on `str` (and `<`) | `str_eq`, `str_lt` | lane 172 (#184, then #204) | pass |
+| string interpolation outside `print` | `str_interp` | lane 172 (#184) | pass |
+| comprehension whose element type isn't known | `comprehension_str` | lane 172 (#184) | pass |
+| `Map` as a parameter, field or local | `map_param`, `map_field`, `map_get`, `for_over_map` | lane 173 (#180) | pass |
+| `Set` (`add`, `len`) | `set_add` | lane 173 (#180) | pass |
+| `.extend()` / `.contains()` on `List[int]` | `list_extend`, `list_contains` | lane 173 (#197) | fail |
+| `sorted(by: closure)` (method with a closure) | `sorted_closure` | lane 174 (#170, #207, #208, #224) | fail |
+| calling `unreachable(...)` | `unreachable_call` | lane 170 (#170) | fail |
+| struct / enum / list-of-struct parameter, return, field, method | `struct_*`, `enum_param`, `struct_method` | same file: pass | pass (cross-module: module loading) |
+| optional return and field | `optional_param`, `optional_field` | lane 175 (#177, #203) | pass |
+| `.join()`, `.len()` on `str`, nested lists, indexing a struct list, `if` yielding `str`, `enum` match bindings | `list_join_str`, `str_len`, `nested_list`, `index_struct_list`, `if_value_str`, `enum_match_binding` | — | pass |
+| indexing a list of ints (control) | `index_int_list` | — | pass |
+
+Owners follow the native queue in `/mnt/project-files/lanes/170-native-rules.md`. A row changes
+status when its owner's PR lands on the batch head: rerun
+`tools/self-compile/selfc-cases.sh` and `tools/self-compile/run.sh`, then update
+the table. Last rerun: 25 of 29 pass on bd982d24 (the five newly passing cases are the map and set rows, from #180, and `str_eq`, `str_lt`, `str_interp`, `comprehension_str`, which the table still listed as failing).

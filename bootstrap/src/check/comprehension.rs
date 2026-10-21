@@ -41,8 +41,13 @@ impl<'p> Checker<'p> {
         // expr.comp.4: `continue` skips an element and `break` ends the comprehension.
         self.loops += 1;
         for c in clauses {
-            let t = self.iterable(&c.iter);
-            if self.declare(&c.var, c.var_pos) {
+            let unpack = !c.unpack.is_empty();
+            let t = self.iterable(&c.iter, unpack);
+            if unpack {
+                // type.tuple.5: `for a, b in xs` binds the parts.
+                self.locals.push(Local { name: c.var.clone(), ty: t.clone(), mutable: false, kind: Kind::LoopVar, decl: None });
+                self.unpack_clause(&c.unpack, &t, c.var_pos);
+            } else if self.declare(&c.var, c.var_pos) {
                 self.locals.push(Local { name: c.var.clone(), ty: t, mutable: false, kind: Kind::LoopVar, decl: None });
             }
             if let Some(cond) = &c.cond {

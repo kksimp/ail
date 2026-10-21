@@ -7,10 +7,10 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 ## Environment
 
 - date: 2026-10-20
-- commit: fb8e4fb
+- commit: 9aae6cf3
 - os: Linux x86_64
-- cpu: Intel(R) Xeon(R) Processor @ 2.80GHz, 4 logical cores
-- runs per cell: 5
+- cpu: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 logical cores
+- runs per cell: 3
 - clang: Ubuntu clang version 18.1.3 (1ubuntu1)
 - gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
 - python: 3.13.16
@@ -19,27 +19,60 @@ A cell that reads `DIFF` printed different bytes from the AIL interpreter and is
 
 | program | ail min | ail med | native min | native med | clang min | clang med | gcc min | gcc med | python min | python med | ail/clang | native/clang | ail/gcc | native/gcc | ail/python | native/python |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| interp | 0.091 | 0.101 | - | - | no twin | no twin | no twin | no twin | 0.108 | 0.149 | - | - | - | - | 0.84 | - |
-| json | 0.008 | 0.010 | - | - | no twin | no twin | no twin | no twin | 0.050 | 0.067 | - | - | - | - | 0.17 | - |
-| sheet | 0.020 | 0.023 | - | - | no twin | no twin | no twin | no twin | 0.062 | 0.082 | - | - | - | - | 0.32 | - |
-| loops | 0.164 | 0.188 | - | - | no twin | no twin | no twin | no twin | 0.305 | 0.327 | - | - | - | - | 0.54 | - |
-| logscan | 0.004 | 0.005 | - | - | no twin | no twin | no twin | no twin | 0.030 | 0.032 | - | - | - | - | 0.15 | - |
-| tasks | 0.024 | 0.029 | - | - | no twin | no twin | no twin | no twin | 0.044 | 0.049 | - | - | - | - | 0.54 | - |
-| build | 0.495 | 0.544 | - | - | no twin | no twin | no twin | no twin | 0.549 | 0.591 | - | - | - | - | 0.90 | - |
-| parsum | 0.197 | 0.216 | - | - | no twin | no twin | no twin | no twin | 1.014 | 1.099 | - | - | - | - | 0.19 | - |
-| tensor | 0.014 | 0.016 | - | - | no twin | no twin | no twin | no twin | 0.414 | 0.463 | - | - | - | - | 0.03 | - |
-| tensor_loops | 0.806 | 0.943 | - | - | no twin | no twin | no twin | no twin | 0.454 | 0.486 | - | - | - | - | 1.78 | - |
-| tensor_ops | 0.031 | 0.033 | - | - | no twin | no twin | no twin | no twin | 0.304 | 0.393 | - | - | - | - | 0.10 | - |
-| tensor_ops_loops | 0.640 | 0.707 | - | - | no twin | no twin | no twin | no twin | 0.396 | 0.461 | - | - | - | - | 1.62 | - |
-| race_smoke | 0.106 | 0.139 | - | - | 0.005 | 0.006 | 0.007 | 0.008 | 0.271 | 0.289 | 21.05 | - | 15.24 | - | 0.39 | - |
+| interp | 0.084 | 0.087 | build | build | no twin | no twin | no twin | no twin | 0.084 | 0.092 | - | - | - | - | 1.00 | - |
+| json | 0.007 | 0.008 | build | build | no twin | no twin | no twin | no twin | 0.041 | 0.052 | - | - | - | - | 0.17 | - |
+| sheet | 0.014 | 0.015 | build | build | no twin | no twin | no twin | no twin | 0.048 | 0.049 | - | - | - | - | 0.30 | - |
+| loops | 0.150 | 0.153 | build | build | no twin | no twin | no twin | no twin | 0.241 | 0.248 | - | - | - | - | 0.62 | - |
+| logscan | 0.003 | 0.003 | build | build | no twin | no twin | no twin | no twin | 0.022 | 0.024 | - | - | - | - | 0.14 | - |
+| tasks | 0.017 | 0.018 | build | build | no twin | no twin | no twin | no twin | 0.033 | 0.034 | - | - | - | - | 0.53 | - |
+| build | 0.603 | 0.637 | build | build | no twin | no twin | no twin | no twin | 0.642 | 0.659 | - | - | - | - | 0.94 | - |
+| parsum | 0.148 | 0.168 | 0.029 | 0.030 | no twin | no twin | no twin | no twin | 0.765 | 0.778 | - | - | - | - | 0.19 | 0.04 |
+| tensor | 0.012 | 0.013 | build | build | no twin | no twin | no twin | no twin | 0.282 | 0.305 | - | - | - | - | 0.04 | - |
+| tensor_loops | 0.650 | 0.670 | 0.005 | 0.005 | no twin | no twin | no twin | no twin | 0.290 | 0.296 | - | - | - | - | 2.24 | 0.02 |
+| tensor_ops | 0.031 | 0.031 | build | build | no twin | no twin | no twin | no twin | 0.162 | 0.166 | - | - | - | - | 0.19 | - |
+| tensor_ops_loops | 0.417 | 0.470 | 0.012 | 0.013 | no twin | no twin | no twin | no twin | 0.182 | 0.187 | - | - | - | - | 2.30 | 0.07 |
+| race_smoke | 0.098 | 0.117 | 0.008 | 0.008 | 0.005 | 0.005 | 0.006 | 0.006 | 0.217 | 0.230 | 21.58 | 1.81 | 16.32 | 1.37 | 0.45 | 0.04 |
+| collatz | 0.369 | 0.392 | 0.030 | 0.037 | 0.015 | 0.016 | 0.024 | 0.026 | 0.836 | 0.837 | 24.32 | 2.01 | 15.62 | 1.29 | 0.44 | 0.04 |
+| nbody | 0.784 | 0.798 | 0.005 | 0.005 | 0.004 | 0.005 | 0.004 | 0.004 | 0.282 | 0.282 | 190.88 | 1.13 | 218.92 | 1.29 | 2.78 | 0.02 |
+| spectralnorm | 0.699 | 0.701 | 0.004 | 0.004 | 0.004 | 0.004 | 0.004 | 0.005 | 0.354 | 0.399 | 160.50 | 1.02 | 164.14 | 1.05 | 1.98 | 0.01 |
+| mandelbrot | 0.617 | 0.635 | 0.007 | 0.008 | 0.006 | 0.006 | 0.006 | 0.006 | 0.209 | 0.234 | 107.03 | 1.18 | 105.72 | 1.17 | 2.95 | 0.03 |
+| fannkuch | 1.036 | 1.037 | 0.054 | 0.054 | 0.023 | 0.025 | 0.023 | 0.026 | 0.724 | 0.810 | 45.67 | 2.36 | 45.14 | 2.34 | 1.43 | 0.07 |
+| binarytrees | 1.757 | 1.881 | 0.077 | 0.085 | 0.020 | 0.020 | 0.016 | 0.017 | 0.444 | 0.449 | 89.68 | 3.91 | 111.88 | 4.88 | 3.95 | 0.17 |
+| fasta | 0.143 | 0.145 | 0.020 | 0.021 | 0.006 | 0.006 | 0.007 | 0.007 | 0.104 | 0.105 | 23.18 | 3.30 | 21.46 | 3.06 | 1.37 | 0.19 |
+| wordfreq | 0.251 | 0.257 | build | build | 0.005 | 0.005 | 0.006 | 0.007 | 0.139 | 0.140 | 49.55 | - | 40.43 | - | 1.80 | - |
+| matmul | 0.668 | 0.688 | 0.010 | 0.011 | 0.004 | 0.004 | 0.005 | 0.005 | 0.391 | 0.395 | 165.25 | 2.56 | 134.23 | 2.08 | 1.71 | 0.03 |
+| sieve | 0.989 | 0.996 | 0.017 | 0.017 | 0.010 | 0.011 | 0.013 | 0.014 | 0.348 | 0.364 | 95.91 | 1.69 | 75.98 | 1.34 | 2.84 | 0.05 |
 
 ## Notes
 
-- `race_smoke` is the harness check: integer-only code with C and Python twins.
-  Every other program waits for lane 143's C twins, so its C columns read `no twin`.
-- The `native` columns are empty until lane 120's `ail build` lands; the harness
-  fills them without a change (ADR 0460).
-- `ail` is the bytecode tier (`ail run`). Process start and the check pass are
-  inside the time, as they are for `python3`; for short programs that is most of it.
-- macOS ARM64 is run by the integrator with the same command:
-  `tools/perfbench/run.sh --all --md docs/design/drag-race.md`.
+- Each program gets the size in its `NAME.args` in every language; C is built with `-std=c11 -O2 -ffp-contract=off -lm`.
+- `native` is `ail build FILE -o OUT`; a program outside the native subset reads `build` (native.subset.1). The `-` in a ratio means one side has no number.
+- `ail` is the bytecode tier (`ail run`); process start and the check pass are inside its time, as start-up is for `python3`.
+- Programs without a C twin read `no twin`. The integrator runs macOS ARM64 with the same command.
+
+## Agent programs
+
+String, map, JSON and output programs (`tools/perfbench/agent/`, lane 201), run
+with `tools/perfbench/run.sh --native --c --python --programs FILE`. Only the
+programs that build natively have a native number; the rest wait on queued
+work (maps on #180, `.to_int()` on strings, native `Json`).
+
+| program | ail min | native min | gcc min | python min | native/gcc | native/python |
+|---|---|---|---|---|---|---|
+| print_many | 0.230 | 0.037 | 0.071 | 0.346 | 0.53 | 0.11 |
+| lines_split | | build | | | | |
+| json_roundtrip | | build | | | | |
+| map_ops | 0.172 | 0.083 | 0.028 | 0.165 | 2.96 | 0.50 |
+
+`print_many` was 0.077 s native before ADR 0734 (integer text), 0.026 s after,
+measured alone; the table row is from the shared race harness run on a loaded machine.
+
+## Day 2 refresh (lane 252, 2026-10-21)
+
+Commit `bd982d24`. Intel Xeon @ 2.10 GHz, 4 logical cores, Linux 6.18. `tools/perfbench/run.sh 7 --all`, minimum of 7 runs, wall seconds. clang 18.1.3, gcc 13.3.0 -O2, CPython 3.13.16.
+
+Native against C: collatz 1.58x clang, nbody 1.00x, spectralnorm 0.60x, fannkuch 2.04x, binarytrees 3.20x, matmul 2.50x, sieve 1.38x, race_smoke 1.25x. Two programs no longer build natively, because `.join()` on `List[char]` is outside the native subset: mandelbrot and fasta (lane 241 is bisecting). wordfreq builds natively but runs 25x slower than C.
+
+`tasks` printed different output from its Python twin (DIFF) and has no ratio.
+
+Full tables, and the day-1 comparison: the day-2 report `/mnt/project-files/reports/day2-benchmarks.md`. The `tools/bench/run.sh` token and before/after tables were not rerun in this refresh.

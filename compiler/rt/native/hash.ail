@@ -83,7 +83,7 @@ fn hash_hex(p int, n int) str
 
 ## `n` zero bytes.
 fn hash_zeros(n int) int
-    p := alloc(n)
+    p := alloc(n, KIND_BYTES)
     mut i := 0
     while i < n
         store8(p + i, 0)
@@ -244,12 +244,12 @@ fn hash_sha256_raw(src int, n int, out int)
         528734635,
         1541459225,
     ]
-    h := alloc(64)
+    h := alloc(64, KIND_BYTES)
     mut i := 0
     while i < 8
         store64(h + 8 * i, iv[i])
         i += 1
-    w := alloc(512)
+    w := alloc(512, KIND_BYTES)
     full := n - n % 64
     mut off := 0
     while off < full
@@ -401,7 +401,7 @@ fn hash_sha512_raw(src int, n int, out int, wide bool)
         6902733635092675308,
         7801388544844847127,
     ]
-    h := alloc(64)
+    h := alloc(64, KIND_BYTES)
     mut i := 0
     if wide
         iv := [
@@ -431,7 +431,7 @@ fn hash_sha512_raw(src int, n int, out int, wide bool)
         while i < 8
             store64(h + 8 * i, iv[i])
             i += 1
-    w := alloc(640)
+    w := alloc(640, KIND_BYTES)
     full := n - n % 128
     mut off := 0
     while off < full
@@ -454,19 +454,19 @@ fn hash_sha512_raw(src int, n int, out int, wide bool)
 ## std.hash.2: `sha256`, `sha384` and `sha512` as lower-case hex.
 fn hash_sha256(s str) str
     a := str_addr(s)
-    out := alloc(32)
+    out := alloc(32, KIND_BYTES)
     hash_sha256_raw(a + 16, load64(a), out)
     hash_hex(out, 32)
 
 fn hash_sha384(s str) str
     a := str_addr(s)
-    out := alloc(64)
+    out := alloc(64, KIND_BYTES)
     hash_sha512_raw(a + 16, load64(a), out, false)
     hash_hex(out, 48)
 
 fn hash_sha512(s str) str
     a := str_addr(s)
-    out := alloc(64)
+    out := alloc(64, KIND_BYTES)
     hash_sha512_raw(a + 16, load64(a), out, true)
     hash_hex(out, 64)
 
@@ -481,20 +481,20 @@ fn hash_hmac_sha256(key str, s str) str
         copy_bytes(block, kp + 16, kn)
     sp := str_addr(s)
     n := load64(sp)
-    inner := alloc(64 + n)
+    inner := alloc(64 + n, KIND_BYTES)
     mut i := 0
     while i < 64
         store8(inner + i, load8(block + i).bit_xor(54))
         i += 1
     copy_bytes(inner + 64, sp + 16, n)
-    digest := alloc(32)
+    digest := alloc(32, KIND_BYTES)
     hash_sha256_raw(inner, 64 + n, digest)
-    outer := alloc(96)
+    outer := alloc(96, KIND_BYTES)
     i = 0
     while i < 64
         store8(outer + i, load8(block + i).bit_xor(92))
         i += 1
     copy_bytes(outer + 64, digest, 32)
-    mac := alloc(32)
+    mac := alloc(32, KIND_BYTES)
     hash_sha256_raw(outer, 96, mac)
     hash_hex(mac, 32)

@@ -1,0 +1,7 @@
+fn tier(n int) str
+    match n
+        5.. => "big"
+        _ => "small"
+
+fn main()
+    print("ok")

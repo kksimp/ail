@@ -1,0 +1,6 @@
+fn work(n int) int
+    n * n
+
+fn main()
+    t := spawn work(2)
+    print(t + 1)

@@ -4,6 +4,7 @@
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 22 — Tools; AI semantic API
+- **Amended by:** [ADR 0399](0399-compact-edits-and-diff-hunks.md)
 - **Spec rules:** [diff.out.1–6](../spec/22-tools.md#semantic-diff)
 - **Builds on:** [ADR 0150](0150-ail-api-outline.md) and the ids of `api.id.1`
 
@@ -79,3 +80,9 @@ Option B with the details above.
   declaration with the same body hash.
 - Windows: `--rev` needs `git` and `tar` on the path (both ship with
   current Windows and Git for Windows); the rest is portable (ADR 0004).
+
+## Rejected alternatives
+
+- A generic JSON diff of the `ail api` output (option A): rejected because it reports moved lines as changes, misses bodies, diagnostics and tests, and its output is longer than the textual diff.
+- A structural diff of the syntax trees (option C): rejected because it is much more work, its output is longer, and reviewers want meaning rather than tree edits.
+- A `REV:PATH` syntax for `--rev`: rejected because it clashes with Windows drive letters.

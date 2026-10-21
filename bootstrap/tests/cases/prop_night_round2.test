@@ -1,0 +1,7 @@
+{"test":"json_whole_number_prints_without_fraction","status":"pass","line":8,"col":10,"message":"","cases":100,"seed":17638256314217519552}
+{"test":"json_number_text_is_a_fixed_point","status":"pass","line":14,"col":10,"message":"","cases":100,"seed":17132139489233404642}
+{"test":"map_top_is_ordered_by_value","status":"pass","line":21,"col":10,"message":"","cases":100,"seed":5911605445928877326}
+{"test":"group_all_groups_lie_inside_their_match","status":"pass","line":31,"col":10,"message":"","cases":100,"seed":10129167611006959320}
+{"test":"cookie_value_round_trips_on_its_host","status":"pass","line":40,"col":10,"message":"","cases":100,"seed":14803459024891926821}
+{"test":"host_only_cookie_is_not_sent_to_a_subdomain","status":"pass","line":52,"col":10,"message":"","cases":100,"seed":16944337031686590096}
+{"summary":true,"passed":6,"failed":0}

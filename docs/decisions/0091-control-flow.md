@@ -30,3 +30,9 @@ fewer keywords.
 
 - Loop labels, `for` with an index, and pattern destructuring in `for` are to
   be designed with iteration (OQ-037).
+
+## Rejected alternatives
+
+- `else if` in place of `elif`: 31.0 tokens against 30.0. Rejected on token usage.
+- `range(0, n)` in place of `0..n`: 16.2 tokens against 14.6 (10% more). Rejected on token usage.
+- An infinite `loop` keyword: rejected because `while true` is rare, so the token cost ties, and AI understanding prefers fewer keywords.

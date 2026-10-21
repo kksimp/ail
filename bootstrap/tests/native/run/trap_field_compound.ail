@@ -1,0 +1,9 @@
+# A compound assignment to a field traps at its operator, as `ail run`
+# does (err.trap.1, native.build.1).
+struct P
+    a int
+
+fn main()
+    mut p := P(a: 9223372036854775807)
+    p.a += 1
+    print(p.a)

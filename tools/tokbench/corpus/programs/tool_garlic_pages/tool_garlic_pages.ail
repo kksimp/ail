@@ -1,0 +1,22 @@
+
+fn main() !
+    here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
+    pages := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data/pages"
+    garlic := "{here}/../../../../../tools/garlic/garlic.ail"
+    names := fs.list_dir(pages)? "listing pages"
+    mut all_words := 0
+    for name in names.sorted()
+        r := proc.run(ail, [
+            "run",
+            garlic,
+            "--print",
+            "--width",
+            "60",
+            "{pages}/{name}",
+        ])? "rendering {name}"
+        text := r.out.replace("\n", " ")
+        words := [w for w in text.split(" ") if w.len() > 0].len()
+        all_words += words
+        print("{name}: {r.out.lines().len()} lines, {words} words")
+    print("total words: {all_words}")

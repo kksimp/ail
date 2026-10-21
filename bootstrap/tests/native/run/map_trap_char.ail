@@ -1,0 +1,5 @@
+# type.map.3: a missing character key names the key, quoted.
+fn main()
+    mut m := Map[char, int]()
+    m['a'] = 1
+    print(m['q'])
