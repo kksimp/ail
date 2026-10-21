@@ -7,6 +7,7 @@ fn main() ! [env fail fs io]
 fn check_dump(str, bool) ! [env fail fs io]
 fn runtime(str) !ast.Program [fail fs io]
 fn runtime_with(str, str, str) !ast.Program [fail fs io]
+fn executable_hex(mir.Module, str, str) str [io]
 fn runtime_syntax(str, str) [io]
 fn lower_file(str, ast.Program?, str) !mir.Module [fail fs io]
 fn std_file(str, str) str
@@ -74,6 +75,7 @@ pub struct ast.Param
 pub struct ast.TypeRef
 pub enum ast.TypeShape
 pub enum ast.Stmt
+pub struct ast.Binder
 pub enum ast.Else
 pub enum ast.BinOp
 pub enum ast.UnOp
@@ -242,7 +244,6 @@ pub struct mir.Block
 pub struct mir.Func
 pub struct mir.Site
 pub struct mir.Module
-pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
@@ -331,4 +332,4 @@ pub fn x64.registers() codegen.Target
 pub fn x64.generate(mir.Module) codegen.Image
 ```
 
-trimmed to fit 4000 tokens (~3671); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3682); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

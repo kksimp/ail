@@ -105,7 +105,7 @@ impl G<'_> {
     /// Calls that return a value through `mut self`, and a struct holding a list.
     fn extra(&mut self, ind: usize, out: &mut String) {
         let tgt = self.target();
-        match self.r.below(5) {
+        match self.r.below(6) {
             0 => {
                 let (i, e) = (self.index(), self.expr(1));
                 
@@ -121,6 +121,31 @@ impl G<'_> {
                 Self::push(out, ind, &format!("mut b{n} := bag"));
                 Self::push(out, ind, &format!("b{n}.add({})", self.r.below(50)));
                 Self::push(out, ind, &format!("{tgt} += b{n}.n - bag.n"));
+            }
+            5 => {
+                // Comprehensions (expr.comp.1-3): lists, sets and maps, with filters, `if` elements and two clauses.
+                let (n, m) = (self.id(), self.id());
+                let (q, q2) = (format!("q{n}"), format!("q{m}"));
+                let (lo, hi) = (self.r.below(3), self.r.below(7));
+                let kind = self.r.below(6);
+                self.ints.push(q.clone());
+                if kind == 3 {
+                    self.ints.push(q2.clone());
+                }
+                let (e, c, e2) = (self.expr(2), self.cond(1), self.expr(1));
+                let line = match kind {
+                    0 => format!("print([{e} for {q} in {lo}..{hi}])"),
+                    1 => format!("{tgt} += [{e} for {q} in {lo}..{hi} if {c}].len()"),
+                    2 => format!("print([if {c} then {e} else {e2} for {q} in {lo}..={hi}])"),
+                    3 => format!("print([{e} for {q} in 0..{hi} for {q2} in 0..{q} % 4 if {c}])"),
+                    4 => format!("print({{{e} % 7 for {q} in {lo}..{hi}}}.len())"),
+                    _ => format!("print({{{q}: {e} for {q} in {lo}..{hi}}}.len())"),
+                };
+                if kind == 3 {
+                    self.ints.pop();
+                }
+                self.ints.pop();
+                Self::push(out, ind, &line);
             }
             _ => {
                 let i = if self.wild > 0 && self.r.chance(1, 2) { "bag.n".to_string() } else { "0".to_string() };
