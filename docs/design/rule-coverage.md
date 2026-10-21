@@ -237,13 +237,13 @@ or reason.
 
 | rule | owner | reason |
 |---|---|---|
-| `ct.eval.4` | unowned | optional reuse of compile-time results is a MAY rule; not built |
+| `ct.eval.4` | 238 | optional reuse of compile-time results is a MAY rule; not built; cannot be enforced yet, see OQ-135 |
 | `err.type.3` | unowned | no check that a public function states its error type; none found |
 | `err.type.4` | unowned | match exhaustiveness on an inferred error set; lane 223 marks its example `skip=bootstrap` |
-| `gen.anon.2` | unowned | `ail fmt` keeps `[T Ord]` as written; the anonymous canonical form is not built (checked by running fmt) |
-| `own.copy.1` | unowned | no report of deep-copy sites in a performance report |
+| `gen.anon.2` | 238 | `ail fmt` keeps `[T Ord]` as written; the anonymous canonical form is not built (checked by running fmt); cannot be enforced yet, see OQ-135 |
+| `own.copy.1` | 238 | no report of deep-copy sites in a performance report; cannot be enforced yet, see OQ-135 |
 | `plat.isa.3` | unowned | no start-up check of the CPU feature level in the native runtime |
-| `type.enum.4` | unowned | `ail fmt` keeps `Shape.Circle` where the qualifier can be omitted (checked by running fmt) |
+| `type.enum.4` | 238 | `ail fmt` keeps `Shape.Circle` where the qualifier can be omitted (checked by running fmt); cannot be enforced yet, see OQ-135 |
 | `conc.race.1` | unowned | a guarantee of the conc.share checks; no citation located |
 | `gram.help.2` | unowned | the fix loop's clean-result rule; the site is not located |
 | `native.bce.4` | unowned | overflow-check removal in loops; not located in `compiler/mir/bce.ail` |
