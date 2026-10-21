@@ -402,3 +402,5 @@ left is the cost of reading a local: the walker's environment is a vector of
 (name, value) pairs behind a pointer, so every local read reloads its length
 and bounds-checks it. A frame with locals in the register file, or audited
 unchecked access (about 12% fewer instructions, measured), would remove that.
+
+See also the [flat enum and struct value proposal](flat-enum-struct-value.md) (measured ceiling about 11% on json_roundtrip, none on binarytrees).
