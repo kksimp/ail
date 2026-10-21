@@ -222,6 +222,8 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         return conv
     if m := sized_method(r, name, npos, vs)
         return m
+    if c := int_checked(r, name, npos, vs)
+        return c
     if r.ty != Ty.Int
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "to_float" and vs.len() == 0
