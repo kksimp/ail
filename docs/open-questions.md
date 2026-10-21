@@ -343,6 +343,12 @@ isn't possible, so any new function needs a stated tolerance.
 set (option c, chosen by the designer on 2026-10-21), within one unit in the
 last place of the platform's libm.
 
+## OQ-172 — Unicode tables for the native `char` predicates and case mapping
+
+**Resolved** by [ADR 0567](decisions/0567-native-text-of-numbers-and-unicode-tables.md)
+(option a: range tables generated from the interpreter by
+`tools/native/gen_unicode.ail`).
+
 ## OQ-119 — A Python-syntax front end ("pail") after the core language (post-1.0)
 The designer asked (2026-10-20) whether a `pail` module could let developers
 write Python in the AIL editor while the code is really AIL, to help adoption.

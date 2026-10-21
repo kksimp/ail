@@ -1,0 +1,5 @@
+# `a > b` traps too (type.str.13).
+fn main()
+    s := "hello"
+    a := 3
+    print(s.slice(a, a - 1))

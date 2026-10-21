@@ -121,6 +121,7 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
                 text = call("rt.fmt_float", [v.id], Ty.Str)
         Bool => text = call("rt.fmt_bool", [v.id], Ty.Str)
         Str => text = v.id
+        Char => text = call("rt.str_char", [v.id], Ty.Str)
         _ => return unsupported(pos, "a format specification on a `{v.ty.name()}`")
     w := spec.width else return Val(id: text, ty: Ty.Str)
     numeric := v.ty == Ty.Int or v.ty.is_float()

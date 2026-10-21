@@ -44,7 +44,7 @@ pub fn verify(f Func) List[str]
                 errs.push("{f.name}: b{b} passes {args.len()} values to b{t}, which has {params.len()} parameters")
                 continue
             for j in 0..args.len()
-                if f.vals[args[j]].name() != f.vals[params[j]].name()
+                if register_kind(f.vals[args[j]]) != register_kind(f.vals[params[j]])
                     errs.push("{f.name}: b{b} passes a {f.vals[args[j]].name()} to b{t}'s {f.vals[params[j]].name()}")
         if blk.term.kind == "branch" and blk.term.targets[0] == blk.term.targets[1]
             errs.push("{f.name}: b{b} branches twice to b{blk.term.targets[0]}")
@@ -52,6 +52,12 @@ pub fn verify(f Func) List[str]
             if f.ret.is_unit() != (blk.term.value < 0)
                 errs.push("{f.name}: b{b} returns the wrong kind of value")
     errs
+
+## The kind of register a value lives in: a `char` is an `int` (type.char.1).
+fn register_kind(t Ty) str
+    if t == Ty.Char
+        return "int"
+    t.name()
 
 fn check_use(
     f Func,
@@ -84,7 +90,9 @@ fn check_types(f Func, i Inst, mut errs List[str])
     if want == ""
         return
     for a in i.args
-        if f.vals[a].name() != want
+        # A `char` is an `int` in a register (type.char.1).
+        have := if f.vals[a] == Ty.Char then "int" else f.vals[a].name()
+        if have != want
             errs.push("{f.name}: `{i.op}` on a {f.vals[a].name()} (v{a})")
 
 ## `dom[b][d]`: block `d` dominates block `b` (the iterative data-flow

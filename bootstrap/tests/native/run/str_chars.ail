@@ -1,0 +1,57 @@
+# `char` values, `s.chars()` and the `char` methods (type.char.1-4).
+fn count_vowels(s str) int
+    mut n := 0
+    for c in s.chars()
+        if c == 'a' or c == 'e' or c == 'i' or c == 'o' or c == 'u'
+            n += 1
+    n
+
+fn caesar(s str, k int) str
+    mut out := List[str]()
+    for c in s.chars()
+        if c >= 'a' and c <= 'z'
+            shifted := (c.code() - 97 + k) % 26 + 97
+            out.push(shifted.to_str())
+        else
+            out.push(c.to_str())
+    out.join("")
+
+fn main()
+    print('a')
+    print('é')
+    print('\n'.code())
+    print('\''.to_str().len())
+    print("hello".chars())
+    print("".chars())
+    print("héllo wörld ✓ 😀".chars())
+    print("héllo wörld ✓ 😀".chars().len())
+    print("héllo wörld ✓ 😀".len())
+    print("héllo wörld ✓ 😀".byte_len())
+    print(count_vowels("the quick brown fox jumps over the lazy dog"))
+    print('x' == 'x')
+    print('x' != 'x')
+    print('a' < 'b')
+    print('b' <= 'a')
+    print('é' > 'z')
+    print('z'.code())
+    print('😀'.code())
+    print("{'q'}{'é'}")
+    s := "a\tb\\c\"d'e\nf"
+    print(s.chars())
+    print([s])
+    print(["x", "y\n", "é"])
+    print(['\0', '\u{7f}', '\u{85}', '\u{1f}'])
+    for c in "Ab1 _é!".chars()
+        print("{c} {c.is_digit()} {c.is_alpha()} {c.is_alnum()} {c.is_space()} {c.is_upper()} {c.is_lower()} {c.to_upper()} {c.to_lower()}")
+    for c in "ÀÖØÞ àöøþ ÿŸ ĀāŁł ΑΩαως ЖЯжя ß".chars()
+        print("{c} {c.to_upper()} {c.to_lower()} {c.is_upper()} {c.is_lower()} {c.is_alpha()}")
+    for c in "\t\n\r\u{0b}\u{0c} \u{85}\u{a0}\u{2003}\u{3000}\u{200b}x".chars()
+        print(c.is_space())
+    print(caesar("hello, world", 3))
+    print("ÀÉ".to_lower())
+    print("àé".to_upper())
+    print(" \u{a0}ab\u{3000}".trim().len())
+    big := "ab".repeat(40000)
+    print(big.len())
+    print(big.slice(79990, 80000))
+    print("{big}{big}".len())
