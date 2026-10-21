@@ -147,22 +147,66 @@ fn main() !
 words after the program's file, so `ail run tool.ail a b` gives
 `["a", "b"]`. *(ADR 0159)*
 
+```ail rules=std.env.1
+use std.env
+
+fn main()
+    print(env.args().len())
+```
+
 **std.env.2** — `get(name str) str?` returns an environment variable, or
 `none` when it isn't set or isn't UTF-8. *(ADR 0157)*
+
+```ail rules=std.env.2
+use std.env
+
+fn main()
+    home := env.get("AIL_NO_SUCH_VAR_X") else "unset"
+    print(home)
+```
 
 **std.env.3** — `cwd() str` returns the working directory. If it can't be
 read, the program traps. *(ADR 0157)*
 
+```ail rules=std.env.3
+use std.env
+
+fn main()
+    print(env.cwd().len() > 0)
+```
+
 **std.env.4** — `program() str` returns the program's file path as it was
 given to `ail run`. *(ADR 0159)*
+
+```ail rules=std.env.4
+use std.env
+
+fn main()
+    print(env.program().len() > 0)
+```
 
 **std.env.5** — `vars() Map[str, str]` returns the environment variables
 whose names and values are UTF-8, in order of their names' bytes.
 *(ADR 0282)*
 
+```ail rules=std.env.5
+use std.env
+
+fn main()
+    print(env.vars().len() > 0)
+```
+
 **std.env.6** — `home() str?` returns the user's home directory: `HOME`,
 else `USERPROFILE` (Windows), or `none` when neither is set or one is
 empty. *(ADR 0296)*
+
+```ail rules=std.env.6
+use std.env
+
+fn main()
+    h := env.home() else "none"
+    print(h.len() > 0)
+```
 
 ## Paths: `std.path`
 
@@ -281,20 +325,58 @@ fn main() !
 without its line ending (`\n` or `\r\n`), or returns `none` at the end of
 input. Bytes that aren't UTF-8 become U+FFFD. *(ADR 0157)*
 
+```ail rules=std.io.1
+use std.io
+
+fn main()
+    line := io.read_line() else "eof"
+    print(line)
+```
+
 **std.io.2** — `read_all() str` reads the rest of standard input.
 *(ADR 0157)*
+
+```ail rules=std.io.2
+use std.io
+
+fn main()
+    print(io.read_all().len())
+```
 
 **std.io.3** — `eprint(value)` writes the value's text form and a newline to
 standard error, as `print` does to standard output (`mod.main.3`). Output
 already printed reaches standard output first. *(ADR 0157)*
+
+```ail rules=std.io.3
+use std.io
+
+fn main()
+    io.eprint("note")
+    print("done")
+```
 
 **std.io.4** — `exit(code int)` ends the program with exit status `code`,
 after writing any pending standard output. It never returns, so the code
 after it is unreachable (ADR 0139). A status outside 0 to 255 traps.
 *(ADR 0157)*
 
+```ail norun rules=std.io.4
+use std.io
+
+fn main()
+    print("bye")
+    io.exit(3)
+```
+
 **std.io.5** — `read_bytes() bytes` reads the rest of standard input as
 `bytes`, without decoding it. *(ADR 0415)*
+
+```ail rules=std.io.5
+use std.io
+
+fn main()
+    print(io.read_bytes().len())
+```
 
 ## Processes: `std.proc`
 
@@ -822,8 +904,23 @@ fn main() !
 **std.time.1** — `now_ms() int` returns the time in milliseconds since
 1970-01-01T00:00:00Z. *(ADR 0157)*
 
+```ail rules=std.time.1
+use std.time
+
+fn main()
+    print(time.now_ms() > 0)
+```
+
 **std.time.2** — `sleep_ms(ms int)` pauses the program for at least `ms`
 milliseconds. A negative `ms` traps. *(ADR 0157)*
+
+```ail rules=std.time.2
+use std.time
+
+fn main()
+    time.sleep_ms(1)
+    print("woke")
+```
 
 ## Calendar: `std.time.date`
 
@@ -914,12 +1011,35 @@ from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
 POSIX rule for instants after its last transition. It has the effects `fs` and
 `env`. *(ADR 0448)*
 
+```ail rules=std.tz.1
+use std.tz
+
+fn main()
+    off := tz.offset("Europe/Paris", 0) else 0
+    print(off)
+```
+
 **std.tz.2** — `tz.system()` is the system zone: `TZ` if it names a safe zone,
 else the zone `/etc/localtime` links to, else `"UTC"`.
+
+```ail rules=std.tz.2
+use std.tz
+
+fn main()
+    print(tz.system().len() > 0)
+```
 
 **std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
 every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
 lands; UTC and fixed offsets work everywhere.
+
+```ail rules=std.tz.3
+use std.tz
+
+fn main()
+    off := tz.offset("UTC", 0) else 0
+    print(off)
+```
 
 ## Randomness: `std.random`
 

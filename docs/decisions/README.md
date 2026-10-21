@@ -390,6 +390,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
+| [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Accepted | 2026-10-21 |
+| [0670](0670-explain-examples-from-tagged-blocks.md) | `ail explain` examples: worked examples count in the audit; a `rules=` block fills a rule with no example in its section *(delegated)* | Accepted | 2026-10-21 |
 | [0622](0622-loop-starts-steps-and-index-spans.md) | Versioned loops with computed starts and unchanging steps; index arithmetic bounded by a constant loop bound *(delegated)* | Accepted | 2026-10-21 |
 | [0623](0623-branch-and-codegen-peepholes.md) | Branch and codegen peepholes: flipped `not` branches, bit operations into the result register, direct spill moves *(delegated)* | Accepted | 2026-10-21 |
 | [0624](0624-loop-weighted-spill-choice.md) | Register allocation spills the value cheapest to keep in memory, weighted by loop depth *(delegated)* | Accepted | 2026-10-21 |
