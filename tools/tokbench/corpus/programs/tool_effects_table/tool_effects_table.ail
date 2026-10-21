@@ -2,7 +2,7 @@
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
-    file := "{here}/../tools/tokbench/corpus/agent-r5/data/effects.ail"
+    file := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data/effects.ail"
     r := proc.run(ail, ["effects", file])? "reading effects"
     mut users := Map[str, int]()
     for line in r.out.lines()

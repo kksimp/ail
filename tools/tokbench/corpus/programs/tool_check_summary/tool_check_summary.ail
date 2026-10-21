@@ -2,7 +2,7 @@
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
-    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    data := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data"
     names := fs.list_dir(data)? "listing fixtures"
     mut total_errors := 0
     mut total_warnings := 0

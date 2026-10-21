@@ -2,7 +2,7 @@
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
-    file := "{here}/../tools/tokbench/corpus/agent-r5/data/tests.ail"
+    file := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data/tests.ail"
     r := proc.run(ail, ["test", file])? "running tests"
     for line in r.out.lines()
         if line.starts_with("ok ")

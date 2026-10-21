@@ -2,7 +2,7 @@
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
-    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    data := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data"
     for file in ["{data}/pkg/mathx.ail", "{data}/ok.ail"]
         r := proc.run(ail, ["api", file])? "reading {path.base(file)}"
         doc := parse_json(r.out)? "parsing {path.base(file)}"

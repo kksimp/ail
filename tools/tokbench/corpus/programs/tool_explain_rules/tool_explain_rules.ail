@@ -2,7 +2,7 @@
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
-    text := fs.read_text("{here}/../tools/tokbench/corpus/agent-r5/data/rules.txt")? "reading rules"
+    text := fs.read_text("{here}/../../../../../tools/tokbench/corpus/agent-r5/data/rules.txt")? "reading rules"
     for rule in text.lines()
         r := proc.run(ail, ["explain", rule])? "explaining {rule}"
         shown := if r.ok() then r.out else r.err

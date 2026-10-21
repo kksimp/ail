@@ -2,7 +2,7 @@
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
-    data := "{here}/../tools/tokbench/corpus/agent-r5/data"
+    data := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data"
     rec := "{data}/replay.rec"
     program := "{data}/replay_fixture.ail"
     recorded := proc.run(ail, ["run", "--record", rec, program])? "recording"
