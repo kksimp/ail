@@ -54,6 +54,8 @@ fn os_lookup(mod str, name str) OsFn?
         "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
         "compress.gunzip" => os_fn("rt.compress_gunzip", [Ty.Bytes], Ty.Bytes, true)
         "compress.unzlib" => os_fn("rt.compress_unzlib", [Ty.Bytes], Ty.Bytes, true)
+        "bytes.from_hex" => os_fn("rt.bytes_parse_hex", [s], Ty.Opt(Ty.Bytes), false)
+        "bytes.from_base64" => os_fn("rt.bytes_parse_base64", [s], Ty.Opt(Ty.Bytes), false)
         "proc.run" =>
             OsFn(
                 rt: "rt.proc_run",
@@ -72,7 +74,7 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc", "compress"]
+    for m in ["fs", "env", "io", "time", "path", "proc", "compress", "bytes"]
         if is_module(recv, m)
             return m
     ""

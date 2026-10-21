@@ -67,6 +67,8 @@ fn Lower.bytes_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool
 ## `a == b` and `a != b` on `bytes` (type.bytes.2).
 fn Lower.bytes_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
+    if name == "add"
+        return bytes_concat(a, b)
     if name != "eq" and name != "ne"
         problem(pos, "`{op_symbol(o)}` on `bytes` isn't in the native subset yet")
         return a
@@ -75,8 +77,15 @@ fn Lower.bytes_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         return Val(id: same, ty: Ty.Bool)
     Val(id: op("not", [same], Ty.Bool), ty: Ty.Bool)
 
+## `a + b` on `bytes` (type.bytes.6).
+fn Lower.bytes_concat(mut self, a Val, b Val) Val
+    Val(id: call("rt.bytes_concat", [a.id, b.id], Ty.Bytes), ty: Ty.Bytes)
+
+## `bytes.from_hex(s)` and `bytes.from_base64(s)` are in `lower_os.ail`'s table.
+
 ## A method of `bytes`, or of a byte (`to_int`).
-fn Lower.bytes_method(mut self, r Val, name str, nargs int, npos ast.Pos) Val?
+fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val?
+    nargs := vs.len()
     if r.ty == Ty.Byte
         if name == "to_int" and nargs == 0
             return Val(id: r.id, ty: Ty.Int)
@@ -88,4 +97,17 @@ fn Lower.bytes_method(mut self, r Val, name str, nargs int, npos ast.Pos) Val?
             return Val(id: call("rt.bytes_text", [r.id], Ty.Str), ty: Ty.Str)
         if name == "hex"
             return Val(id: call("rt.bytes_hex", [r.id], Ty.Str), ty: Ty.Str)
+        if name == "base64"
+            return Val(id: call("rt.bytes_base64", [r.id], Ty.Str), ty: Ty.Str)
+        if name == "to_str"
+            t := Ty.Opt(Ty.Str)
+            return Val(id: call("rt.bytes_to_str", [r.id], t), ty: t)
+    if nargs == 1 and vs[0].ty == Ty.Bytes
+        if name == "concat"
+            return bytes_concat(r, vs[0])
+        if name == "contains" or name == "starts_with" or name == "ends_with"
+            return Val(id: call("rt.bytes_{name}", [r.id, vs[0].id], Ty.Bool), ty: Ty.Bool)
+        if name == "find"
+            t := Ty.Opt(Ty.Int)
+            return Val(id: call("rt.bytes_index_of", [r.id, vs[0].id], t), ty: t)
     unsupported(npos, "`.{name}()` on `bytes`")

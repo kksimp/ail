@@ -1,0 +1,197 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `bytes` conversions and searches (type.bytes.6, 8-13, ADR 0414): `+`,
+## `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`,
+## `bytes.from_hex`, `bytes.from_base64` and `str.to_bytes`. A bytes object
+## has a string object's layout (`+0` length, `+8` the same, `+16` data); an
+## optional result is the object's address, or 0 for `none`.
+
+## A bytes object of `n` uninitialised bytes.
+fn bytes_new(n int) int
+    str_new(n, n)
+
+## `str.to_bytes()` (type.bytes.10): the UTF-8 bytes of a string.
+fn str_to_bytes(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    q := bytes_new(n)
+    copy_bytes(q + 16, p + 16, n)
+    str_at(q)
+
+## `a + b` and `a.concat(b)` (type.bytes.6).
+fn bytes_concat(a str, b str) str
+    p := str_addr(a)
+    q := str_addr(b)
+    n := load64(p)
+    m := load64(q)
+    r := bytes_new(n + m)
+    copy_bytes(r + 16, p + 16, n)
+    copy_bytes(r + 16 + n, q + 16, m)
+    str_at(r)
+
+## Whether `sub` occurs in `b` at `at` (it fits).
+fn bytes_has_at(p int, q int, at int, m int) bool
+    mut i := 0
+    while i < m
+        if load8(p + 16 + at + i) != load8(q + 16 + i)
+            return false
+        i += 1
+    true
+
+## `b.find(sub)` (type.bytes.9): the first index boxed, or 0 for none.
+fn bytes_index_of(b str, sub str) int
+    p := str_addr(b)
+    q := str_addr(sub)
+    n := load64(p)
+    m := load64(q)
+    mut at := 0
+    while at + m <= n
+        if bytes_has_at(p, q, at, m)
+            return box(at)
+        at += 1
+    0
+
+fn bytes_contains(b str, sub str) bool
+    bytes_index_of(b, sub) != 0
+
+fn bytes_starts_with(b str, pre str) bool
+    p := str_addr(b)
+    q := str_addr(pre)
+    m := load64(q)
+    m <= load64(p) and bytes_has_at(p, q, 0, m)
+
+fn bytes_ends_with(b str, suf str) bool
+    p := str_addr(b)
+    q := str_addr(suf)
+    m := load64(q)
+    n := load64(p)
+    m <= n and bytes_has_at(p, q, n - m, m)
+
+## `b.to_str()` (type.bytes.8): the text if `b` is valid UTF-8, else 0.
+fn bytes_to_str(b str) str
+    p := str_addr(b)
+    n := load64(p)
+    mut i := 0
+    mut chars := 0
+    while i < n
+        k := utf8_step(p, i, n)
+        if k < 0
+            return str_at(0)
+        i += k
+        chars += 1
+    s := str_new(n, chars)
+    copy_bytes(s + 16, p + 16, n)
+    str_at(s)
+
+# ---- hex and base64 ----
+
+## The value of hexadecimal digit `c` of either case, else -1.
+fn bytes_hex_val(c int) int
+    if c >= 48 and c <= 57
+        return c - 48
+    if c >= 97 and c <= 102
+        return c - 87
+    if c >= 65 and c <= 70
+        return c - 55
+    -1
+
+## `bytes.from_hex(s)` (type.bytes.13): an even number of hex digits.
+fn bytes_parse_hex(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    if n % 2 != 0
+        return str_at(0)
+    r := bytes_new(n / 2)
+    mut i := 0
+    while i < n / 2
+        hi := bytes_hex_val(load8(p + 16 + 2 * i))
+        lo := bytes_hex_val(load8(p + 17 + 2 * i))
+        if hi < 0 or lo < 0
+            return str_at(0)
+        store8(r + 16 + i, hi * 16 + lo)
+        i += 1
+    str_at(r)
+
+## The base64 alphabet's value of byte `c`, else -1.
+fn bytes_b64_val(c int) int
+    if c >= 65 and c <= 90
+        return c - 65
+    if c >= 97 and c <= 122
+        return c - 71
+    if c >= 48 and c <= 57
+        return c + 4
+    if c == 43
+        return 62
+    if c == 47
+        return 63
+    -1
+
+## The base64 character of the 6-bit value `v`.
+fn bytes_b64_char(v int) int
+    if v < 26
+        return 65 + v
+    if v < 52
+        return 71 + v
+    if v < 62
+        return v - 4
+    if v == 62
+        return 43
+    47
+
+## `b.base64()` (type.bytes.12): standard, padded with `=`.
+fn bytes_base64(b str) str
+    p := str_addr(b)
+    n := load64(p)
+    m := (n + 2) / 3 * 4
+    r := str_new(m, m)
+    mut i := 0
+    mut o := 0
+    while i < n
+        left := n - i
+        c0 := load8(p + 16 + i)
+        c1 := if left > 1 then load8(p + 17 + i) else 0
+        c2 := if left > 2 then load8(p + 18 + i) else 0
+        v := c0.shl(16).bit_or(c1.shl(8)).bit_or(c2)
+        store8(r + 16 + o, bytes_b64_char(v.shr(18).bit_and(63)))
+        store8(r + 17 + o, bytes_b64_char(v.shr(12).bit_and(63)))
+        store8(r + 18 + o, if left > 1 then bytes_b64_char(v.shr(6).bit_and(63)) else 61)
+        store8(r + 19 + o, if left > 2 then bytes_b64_char(v.bit_and(63)) else 61)
+        i += 3
+        o += 4
+    str_at(r)
+
+## `bytes.from_base64(s)` (type.bytes.13): standard base64 with its padding
+## and no other character; 0 for none.
+fn bytes_parse_base64(s str) str
+    p := str_addr(s)
+    n := load64(p)
+    if n % 4 != 0
+        return str_at(0)
+    mut pad := 0
+    if n > 0 and load8(p + 15 + n) == 61
+        pad = 1
+        if load8(p + 14 + n) == 61
+            pad = 2
+    r := bytes_new(n / 4 * 3 - pad)
+    mut q := 0
+    mut o := 0
+    while q < n
+        last := q + 4 == n
+        used := if last then 4 - pad else 4
+        mut v := 0
+        for k in 0..4
+            c := if k < used then bytes_b64_val(load8(p + 16 + q + k)) else 0
+            if c < 0
+                return str_at(0)
+            if k >= used and load8(p + 16 + q + k) != 61
+                return str_at(0)
+            v = v.shl(6).bit_or(c)
+        store8(r + 16 + o, v.shr(16).bit_and(255))
+        if used > 2
+            store8(r + 17 + o, v.shr(8).bit_and(255))
+        if used > 3
+            store8(r + 18 + o, v.bit_and(255))
+        o += used - 1
+        q += 4
+    str_at(r)

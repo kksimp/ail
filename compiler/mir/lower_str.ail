@@ -113,9 +113,9 @@ fn Lower.str_to_int_opt(mut self, r Val) Val
     Val(id: res, ty: t)
 
 ## The methods whose result is an optional that the subset lacks: `to_float`
-## has its own `else` form (lane 177), and `to_bytes` waits for `bytes`.
+## has its own `else` form (lane 177).
 fn Lower.str_unsupported(mut self, name str, npos ast.Pos) Val?
-    if name == "to_float" or name == "to_bytes"
+    if name == "to_float"
         return unsupported(npos, "`.{name}()` on `str` (its result is an optional)")
     unsupported(npos, "`.{name}()` on `str`")
 
@@ -128,6 +128,7 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
             "byte_len" => return Val(id: call("rt.str_byte_len", [r.id], Ty.Int), ty: Ty.Int)
             "to_str" => return r
             "to_int" => return str_to_int_opt(r)
+            "to_bytes" => return Val(id: call("rt.str_to_bytes", [r.id], Ty.Bytes), ty: Ty.Bytes)
             "chars" =>
                 t := Ty.List(Ty.Char)
                 return Val(id: call("rt.str_chars", [r.id], t), ty: t)
