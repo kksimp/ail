@@ -233,7 +233,15 @@ pub fn pe_image(img codegen.Image) List[int]
 ## The DLL that exports `name`. kernel32 is the default; the socket and random
 ## calls are named here (ADR 0598).
 fn pe_dll_of(name str) str
-    if name.starts_with("WSA") or name == "socket" or name == "connect" or name == "bind" or name == "listen" or name == "accept" or name == "recv" or name == "send" or name == "closesocket"
+    if name.starts_with("WSA")
+        or name == "socket"
+        or name == "connect"
+        or name == "bind"
+        or name == "listen"
+        or name == "accept"
+        or name == "recv"
+        or name == "send"
+        or name == "closesocket"
         return "WS2_32.dll"
     if name == "ProcessPrng"
         return "bcryptprimitives.dll"

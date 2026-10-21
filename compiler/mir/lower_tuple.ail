@@ -525,7 +525,12 @@ fn Lower.tuple_list_edit(mut self, r Val, e Ty, name str, npos ast.Pos, vs List[
     Val(id: -1, ty: Ty.Unit)
 
 fn tuple_list_method(name str) bool
-    name == "contains" or name == "index_of" or name == "min" or name == "max" or name == "sort" or name == "sorted"
+    name == "contains"
+        or name == "index_of"
+        or name == "min"
+        or name == "max"
+        or name == "sort"
+        or name == "sorted"
 
 fn Lower.orderable_record(self, t Ty) bool
     structural(t) and can_order(t)

@@ -78,7 +78,11 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
                     "not in the native subset yet: a key of type `{kv.ty.name()}`",
                 )
         count_close(c)
-    perm := if kt == Ty.Int then call("rt.sort_perm", [keys], Ty.List(Ty.Int)) else tuple_sort_perm(keys, kt)
+    perm := if kt == Ty.Int then call(
+        "rt.sort_perm",
+        [keys],
+        Ty.List(Ty.Int),
+    ) else tuple_sort_perm(keys, kt)
     out := call("rt.list_new", [n], r.ty)
     c := count_open(n)
     idx := op("get", [perm, c.i], Ty.Int)

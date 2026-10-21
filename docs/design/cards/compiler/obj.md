@@ -51,6 +51,9 @@ struct obj.PeImports  ## The import directory laid out at RVA `base`: `bytes` (t
 pub fn obj.pe(img codegen.Image, dlls List[obj.PeDll]) List[int]  ## A PE32+ executable for `img` that imports `dlls`. The entry point is
 fn obj.pe_section(mut out List[int], name str, size int, rva int, raw int, at int, flags int) [mutates]  ## One 40-byte section header: the name padded to 8 bytes, the virtual
 fn obj.pe_imports(dlls List[obj.PeDll], base int) obj.PeImports  ## The import directory at RVA `base` (ADR 0598): one descriptor per DLL and
+pub fn obj.pe_image(img codegen.Image) List[int]  ## A PE32+ executable for `img`, with its imports taken from the `imp:NAME`
+fn obj.pe_dll_of(name str) str  ## The DLL that exports `name`. kernel32 is the default; the socket and random
+obj.PE_DLLS := ...  ## The DLLs `pe_dll_of` can return, in the order their descriptors are written.
 fn obj.pe_resolve(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int) List[int]  ## The code with its relocations resolved, for `.text` at RVA `code_rva`,
 fn obj.pe_address(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int, sym str) int  ## The RVA of a relocation's symbol.
 fn obj.pe_pad(mut out List[int], n int) [mutates]  ## Zero bytes, up to `n` in all.
