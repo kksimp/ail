@@ -11,6 +11,7 @@ fn runtime(dir str) !ast.Program [fail fs io]  ## The native runtime in director
     fails with fs.IoError
 fn runtime_with(dir str, ms str, mb str) !ast.Program [fail fs io]  ## The runtime with `ail build`'s default time limit in milliseconds and
     fails with fs.IoError
+fn executable_hex(m mir.Module, path str, target str) str [io]  ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 fn runtime_syntax(path str, text str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn lower_file(path str, rt ast.Program?) !mir.Module [fail fs io]  ## Parse a program and the modules it imports, and lower them to MIR
     fails with fs.IoError
