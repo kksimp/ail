@@ -1,0 +1,407 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.tz` (std.tz.1-3, ADR 0448): the UTC offset of an IANA zone
+## from the platform's TZif files (RFC 9636), with the POSIX rule of the
+## file's footer for instants after its last transition, and the system zone.
+## It follows `bootstrap/src/interp/tz.rs` step by step, so both agree. No
+## global slots; a parse keeps its values in a small scratch object.
+
+## The slots of a parse's scratch object (8 bytes each).
+TZ_STD := 0
+TZ_DST := 1
+TZ_HAS_DST := 2
+## A rule day: kind (0 `Mm.w.d`, 1 `Jn`, 2 `n`), three numbers, a time.
+TZ_START := 3
+TZ_END := 8
+TZ_CURSOR := 13
+TZ_OK := 14
+TZ_OUT := 15
+TZ_SLOTS := 16
+
+# ---- calendar ----
+
+## `a / b` rounded down.
+fn tz_fdiv(a int, b int) int
+    q := a / b
+    if a % b != 0 and (a < 0) != (b < 0)
+        return q - 1
+    q
+
+## `a % b` with the sign of `b`'s positive side (`rem_euclid` for `b > 0`).
+fn tz_fmod(a int, b int) int
+    a - tz_fdiv(a, b) * b
+
+## Days since 1970-01-01 of a civil date.
+fn tz_days(y0 int, m int, d int) int
+    y := if m <= 2 then y0 - 1 else y0
+    era := tz_fdiv(y, 400)
+    yoe := y - era * 400
+    mp := if m > 2 then m - 3 else m + 9
+    doy := (153 * mp + 2) / 5 + d - 1
+    doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
+    era * 146097 + doe - 719468
+
+## The year containing day number `z0` (days since 1970-01-01).
+fn tz_year_of(z0 int) int
+    z := z0 + 719468
+    era := tz_fdiv(z, 146097)
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    m := if mp < 10 then mp + 3 else mp - 9
+    yoe + era * 400 + (if m <= 2 then 1 else 0)
+
+fn tz_leap(y int) bool
+    y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)
+
+## Seconds since the epoch of the midnight of the rule day at `r + 8 * at`
+## in year `y`, as if UTC.
+fn tz_midnight(r int, at int, y int) int
+    kind := load64(r + 8 * at)
+    a := load64(r + 8 * (at + 1))
+    first := tz_days(y, 1, 1)
+    mut days := 0
+    if kind == 2
+        days = first + a
+    elif kind == 1
+        days = first + a - 1 + (if tz_leap(y) and a >= 60 then 1 else 0)
+    else
+        w := load64(r + 8 * (at + 2))
+        d := load64(r + 8 * (at + 3))
+        start := tz_days(y, a, 1)
+        wd := tz_fmod(start + 4, 7)
+        mut day := start + tz_fmod(d - wd, 7) + (w - 1) * 7
+        next := if a == 12 then tz_days(y + 1, 1, 1) else tz_days(y, a + 1, 1)
+        while day >= next
+            day -= 7
+        days = day
+    days * 86400
+
+## The UTC offset at instant `t` under the parsed rule `r`.
+fn tz_rule_offset(r int, t int) int
+    std := load64(r + 8 * TZ_STD)
+    if load64(r + 8 * TZ_HAS_DST) == 0
+        return std
+    dst := load64(r + 8 * TZ_DST)
+    y := tz_year_of(tz_fdiv(t + std, 86400))
+    on := tz_midnight(r, TZ_START, y) + load64(r + 8 * (TZ_START + 4)) - std
+    off := tz_midnight(r, TZ_END, y) + load64(r + 8 * (TZ_END + 4)) - dst
+    mut in_dst := false
+    if on < off
+        in_dst = t >= on and t < off
+    else
+        in_dst = t >= on or t < off
+    if in_dst
+        return dst
+    std
+
+# ---- the POSIX rule of a footer ----
+
+fn tz_digit(c int) bool
+    c >= 48 and c <= 57
+
+fn tz_alpha(c int) bool
+    (c >= 65 and c <= 90) or (c >= 97 and c <= 122)
+
+fn tz_fail(r int)
+    store64(r + 8 * TZ_OK, 0)
+
+## The digits at `i` up to `j`: their value; the cursor is left after them.
+## No digit fails the parse.
+fn tz_num(r int, p int, i int, j int) int
+    mut v := 0
+    mut k := i
+    while k < j and tz_digit(load8(p + k))
+        v = v * 10 + load8(p + k) - 48
+        k += 1
+    if k == i
+        tz_fail(r)
+    store64(r + 8 * TZ_CURSOR, k)
+    v
+
+## `[+-]hh[:mm[:ss]]` between `i` and `j`, in seconds.
+fn tz_clock(r int, p int, i0 int, j int) int
+    mut i := i0
+    mut sign := 1
+    if i < j and load8(p + i) == 45
+        sign = -1
+        i += 1
+    elif i < j and load8(p + i) == 43
+        i += 1
+    h := tz_num(r, p, i, j)
+    i = load64(r + 8 * TZ_CURSOR)
+    mut m := 0
+    mut s := 0
+    if i < j and load8(p + i) == 58
+        m = tz_num(r, p, i + 1, j)
+        i = load64(r + 8 * TZ_CURSOR)
+        if i < j and load8(p + i) == 58
+            s = tz_num(r, p, i + 1, j)
+            i = load64(r + 8 * TZ_CURSOR)
+    if i != j
+        tz_fail(r)
+    sign * (h * 3600 + m * 60 + s)
+
+## A zone name at `i`: letters (three or more) or `<...>`; the index after
+## it, or -1.
+fn tz_name(p int, i int, n int) int
+    if i < n and load8(p + i) == 60
+        mut j := i + 1
+        while j < n and load8(p + j) != 62
+            j += 1
+        if j >= n
+            return -1
+        return j + 1
+    mut j := i
+    while j < n and tz_alpha(load8(p + j))
+        j += 1
+    if j - i >= 3
+        return j
+    -1
+
+## The end of the offset text at `i`: digits, `:`, `+` and `-`.
+fn tz_otext_end(p int, i int, n int) int
+    mut j := i
+    while j < n
+        c := load8(p + j)
+        if not (tz_digit(c) or c == 58 or c == 43 or c == 45)
+            return j
+        j += 1
+    j
+
+## The rule day written at `i` up to `j` (`Mm.w.d`, `Jn` or `n`, then an
+## optional `/time`, default 02:00), stored at slots `at` to `at + 4`.
+fn tz_day(r int, p int, i int, j int, at int)
+    mut slash := i
+    while slash < j and load8(p + slash) != 47
+        slash += 1
+    mut t := 7200
+    if slash < j
+        t = tz_clock(r, p, slash + 1, j)
+    store64(r + 8 * (at + 4), t)
+    c := if i < slash then load8(p + i) else 0
+    if c == 77
+        a := tz_num(r, p, i + 1, slash)
+        mut k := load64(r + 8 * TZ_CURSOR)
+        if k >= slash or load8(p + k) != 46
+            tz_fail(r)
+            return
+        b := tz_num(r, p, k + 1, slash)
+        k = load64(r + 8 * TZ_CURSOR)
+        if k >= slash or load8(p + k) != 46
+            tz_fail(r)
+            return
+        d := tz_num(r, p, k + 1, slash)
+        if load64(r + 8 * TZ_CURSOR) != slash
+            tz_fail(r)
+        store64(r + 8 * at, 0)
+        store64(r + 8 * (at + 1), a)
+        store64(r + 8 * (at + 2), b)
+        store64(r + 8 * (at + 3), d)
+        return
+    mut from := i
+    mut kind := 2
+    if c == 74
+        from = i + 1
+        kind = 1
+    a := tz_num(r, p, from, slash)
+    if load64(r + 8 * TZ_CURSOR) != slash
+        tz_fail(r)
+    store64(r + 8 * at, kind)
+    store64(r + 8 * (at + 1), a)
+
+## Parse a POSIX TZ rule such as `EST5EDT,M3.2.0,M11.1.0` at `p`, `n` bytes.
+## `r`'s `TZ_OK` slot is 0 when it is malformed.
+fn tz_parse_rule(r int, p int, n int)
+    mut i := tz_name(p, 0, n)
+    if i < 0
+        tz_fail(r)
+        return
+    mut j := tz_otext_end(p, i, n)
+    std := 0 - tz_clock(r, p, i, j)
+    store64(r + 8 * TZ_STD, std)
+    i = j
+    if i >= n
+        return
+    i = tz_name(p, i, n)
+    if i < 0
+        tz_fail(r)
+        return
+    j = tz_otext_end(p, i, n)
+    mut dst := std + 3600
+    if j != i
+        dst = 0 - tz_clock(r, p, i, j)
+    store64(r + 8 * TZ_DST, dst)
+    store64(r + 8 * TZ_HAS_DST, 1)
+    i = j
+    if i >= n or load8(p + i) != 44
+        tz_fail(r)
+        return
+    mut e := i + 1
+    while e < n and load8(p + e) != 44
+        e += 1
+    tz_day(r, p, i + 1, e, TZ_START)
+    if e >= n
+        tz_fail(r)
+        return
+    mut f := e + 1
+    while f < n and load8(p + f) != 44
+        f += 1
+    tz_day(r, p, e + 1, f, TZ_END)
+
+# ---- TZif files ----
+
+## A big-endian signed integer of `w` bytes (4 or 8) at `a`.
+fn tz_be(a int, w int) int
+    mut v := 0
+    for k in 0..w
+        v = v * 256 + load8(a + k)
+    if w == 4 and v >= 2147483648
+        return v - 4294967296
+    v
+
+## The offset in seconds at instant `t` of the TZif file `s` (a string
+## object holding its bytes), written to the `TZ_OUT` slot of `r`; false
+## when the bytes aren't a zone file.
+fn tz_zone_offset(r int, s int, t int) bool
+    size := load64(s)
+    b := s + 16
+    if size < 44 or load8(b) != 84 or load8(b + 1) != 90 or load8(b + 2) != 105 or load8(b + 3) != 102
+        return false
+    version := load8(b + 4)
+    mut at := 44
+    mut width := 4
+    mut cnt := b + 20
+    if version >= 50
+        at += tz_be(b + 32, 4) * 4 + tz_be(b + 32, 4) + tz_be(b + 36, 4) * 6 + tz_be(b + 40, 4)
+        at += tz_be(b + 28, 4) * 8 + tz_be(b + 24, 4) + tz_be(b + 20, 4)
+        if at + 44 > size
+            return false
+        cnt = b + at + 20
+        at += 44
+        width = 8
+    isut := tz_be(cnt, 4)
+    isstd := tz_be(cnt + 4, 4)
+    leapcnt := tz_be(cnt + 8, 4)
+    timecnt := tz_be(cnt + 12, 4)
+    typecnt := tz_be(cnt + 16, 4)
+    charcnt := tz_be(cnt + 20, 4)
+    times := b + at
+    kinds := times + timecnt * width
+    types := kinds + timecnt
+    tail := types + typecnt * 6 + charcnt + leapcnt * (width + 4) + isstd + isut
+    if typecnt == 0 or tail > b + size
+        return false
+    for k in 0..timecnt
+        if load8(kinds + k) >= typecnt
+            return false
+    # How many transitions are at or before `t`.
+    mut lo := 0
+    mut hi := timecnt
+    while lo < hi
+        mid := (lo + hi) / 2
+        if tz_be(times + mid * width, width) <= t
+            lo = mid + 1
+        else
+            hi = mid
+    mut off := 0
+    if lo == 0
+        off = tz_be(types, 4)
+    else
+        off = tz_be(types + load8(kinds + lo - 1) * 6, 4)
+    if lo == timecnt and version >= 50
+        end := b + size
+        if tail < end and load8(tail) == 10
+            mut e := tail + 1
+            while e < end and load8(e) != 10
+                e += 1
+            if e > tail + 1
+                store64(r + 8 * TZ_OK, 1)
+                tz_parse_rule(r, tail + 1, e - tail - 1)
+                if load64(r + 8 * TZ_OK) != 0
+                    off = tz_rule_offset(r, t)
+    store64(r + 8 * TZ_OUT, off)
+    true
+
+# ---- names and files ----
+
+## Whether `name` holds only letters, digits and `/_+-` (so no `..`), and
+## doesn't start with `/`.
+fn tz_safe(name str) bool
+    p := str_addr(name)
+    n := load64(p)
+    if n == 0 or load8(p + 16) == 47
+        return false
+    for k in 0..n
+        c := load8(p + 16 + k)
+        if not (tz_alpha(c) or tz_digit(c) or c == 47 or c == 95 or c == 43 or c == 45)
+            return false
+    true
+
+fn tz_dir(k int) str
+    if k == 0
+        return "/usr/share/zoneinfo"
+    if k == 1
+        return "/usr/lib/zoneinfo"
+    if k == 2
+        return "/usr/share/lib/zoneinfo"
+    "/etc/zoneinfo"
+
+## `tz.offset(zone, secs)` (std.tz.1) as an `int?`: the offset boxed, or 0
+## when the zone isn't installed or its name isn't safe. Windows has no
+## TZif files (std.tz.3).
+fn tz_offset(zone str, secs int) int
+    if target() == 3 or not tz_safe(zone)
+        return 0
+    for k in 0..4
+        p := os_cstr(OS_PATH_A, str_cat3(tz_dir(k), "/", zone))
+        if p == 0
+            continue
+        fd := os_open(p, 0, 0)
+        if fd < 0
+            continue
+        s := os_read_fd(fd)
+        os_close(fd)
+        if s < 0
+            continue
+        r := alloc(8 * TZ_SLOTS, KIND_ATOMIC)
+        if tz_zone_offset(r, s, secs)
+            return box(load64(r + 8 * TZ_OUT))
+        return 0
+    0
+
+## `tz.system()` (std.tz.2): `TZ` if it names a safe zone, else the zone
+## `/etc/localtime` links to, else `UTC`.
+fn tz_system() str
+    if target() == 3
+        return "UTC"
+    t := env_get("TZ")
+    if str_addr(t) != 0
+        tp := str_addr(t)
+        n := load64(tp)
+        mut from := 0
+        while from < n and load8(tp + 16 + from) == 58
+            from += 1
+        name := str_sub(tp, from, n)
+        if tz_safe(name)
+            return name
+    path := os_cstr(OS_PATH_A, "/etc/localtime")
+    if path != 0
+        buf := alloc(4096, KIND_ATOMIC)
+        mut got := 0
+        if target() == 2
+            got = syscall(58, path, buf, 4095, 0, 0, 0)
+        else
+            got = syscall(os_pick(267, 78, 0), -100, path, buf, 4095, 0, 0)
+        mut k := 0
+        while k + 9 <= got
+            if load8(buf + k) == 122 and load8(buf + k + 1) == 111 and load8(buf + k + 2) == 110 and load8(buf + k + 3) == 101
+                if load8(buf + k + 4) == 105 and load8(buf + k + 5) == 110 and load8(buf + k + 6) == 102 and load8(buf + k + 7) == 111 and load8(buf + k + 8) == 47
+                    n := got - k - 9
+                    s := str_new(n, n)
+                    copy_bytes(s + 16, buf + k + 9, n)
+                    return str_at(s)
+            k += 1
+    "UTC"

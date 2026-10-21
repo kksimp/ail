@@ -67,14 +67,14 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (they can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path); on Linux, `proc.run` (with
+(std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); on Linux, `proc.run` (with
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
 readable yet, and on macOS the program traps at `proc.run`); and the standard
 modules written in AIL (`std.args`, `std.csv`, `std.log`, `std.net.http`,
 `std.net.jar`, `std.time.date`), which build like a module of the program when
-the constructs their source uses are in the subset (so far `std.log`). Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its position under this rule, all of them
+the constructs their source uses are in the subset (so far `std.log` and `std.time.date`). Also `sorted`/`sort` on a list of `int`, `float` or `str` with a key function of an `int` key (expr.key.1-4), or without one on a list of `int`; `unreachable(message)` (err.model.2); and function values (type.fn.1-3): a declared function named as a value, a `fn(...)` parameter, result or local, and calls through one. Any other construct is reported at its position under this rule, all of them
 at once, and nothing is built. *(ADRs 0384, 0390, 0392, 0393, 0565, 0566, 0532, 0533,
 0568-0569, 0574-0576, 0580, 0582, 0536, 0591, 0592, 0602–0604, 0605, 0770-0772, 0802-0806, 0818)*
 

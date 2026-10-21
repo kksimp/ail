@@ -1,0 +1,29 @@
+# `std.time.date` in a native build (ADR 0772): the same results as
+# the interpreter, including zones from `std.tz`.
+use std.time.date
+
+fn main()
+    d := date.Date.new(2026, 10, 21) else return
+    print(d.weekday())
+    print(d.yday())
+    print(d.add_days(45).iso())
+    print(d.add_months(4).iso())
+    print(d.add_years(-3).iso())
+    y2k := date.Date.new(2000, 1, 1) else return
+    print(d.since(y2k))
+    print(d.format("%Y/%m/%d %A"))
+    print(date.is_leap(2024))
+    print(date.days_in_month(2026, 2))
+    t := date.utc(1700000000000)
+    print(t.iso())
+    print(t.weekday())
+    print(t.add_days(40).iso())
+    print(t.add_ms(86400000).unix_ms())
+    z := date.at(1700000000000, "America/New_York") else return
+    print(z.iso())
+    p := t.in_zone("Asia/Kolkata") else return
+    print(p.iso())
+    q := date.at(1700000000000, "Not/AZone") else
+        print("no zone")
+        return
+    print(q.iso())
