@@ -213,7 +213,6 @@ instance is specialised or shares code with other instances. The
 implementation chooses per instance and MUST report its choices in the
 performance report. *(ADR 0080)*
 
-<<<<<<< HEAD
 ```ail rules=gen.impl.1
 fn pick[T Ord](a T, b T) T
     a.max(b)
@@ -221,7 +220,8 @@ fn pick[T Ord](a T, b T) T
 fn main()
     print(pick(1, 2))
     print(pick(1.5, 2.5))
-=======
+```
+
 ## Runnable examples for the rules above
 
 Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must
@@ -331,5 +331,4 @@ fn main()
     # Generic code behaves the same whether or not an instance is specialised; the
     # observable behaviour is the same program output shown in the examples above.
     print("instances")
->>>>>>> origin/pr288
 ```

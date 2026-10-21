@@ -519,7 +519,6 @@ error, since custom hashing isn't designed. A constraint `[T Hash]` implies
 never visible to programs, so output can't depend on the hash function.
 *(ADR 0133)*
 
-<<<<<<< HEAD
 ```ail rules=trait.auto.5
 struct Sq
     s int
@@ -528,7 +527,8 @@ fn main()
     mut m := Map[Sq, int]()
     m[Sq(s: 1)] = 5
     print(m[Sq(s: 1)])
-=======
+```
+
 ## Runnable examples for the rules above
 
 Each rule ID is cited by a checked example (ADR 0498). `error=` blocks must
@@ -885,5 +885,4 @@ fn main()
 ```ail skip=context rules=trait.impl.4
 # An impl outside the package that declares the trait or the type is rejected. An example
 # needs two packages; the bootstrap's package tests cover it (bootstrap/tests/cases/packages).
->>>>>>> origin/pr288
 ```
