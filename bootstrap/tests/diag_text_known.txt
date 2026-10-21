@@ -13,7 +13,6 @@ bootstrap/tests/mistakes/bytes_unicode_escape.ail
 bootstrap/tests/mistakes/chained_cmp.ail
 bootstrap/tests/mistakes/class_keyword.ail
 bootstrap/tests/mistakes/colon_return.ail
-bootstrap/tests/mistakes/const_keyword.ail
 bootstrap/tests/mistakes/date_timedelta_python.ail
 bootstrap/tests/mistakes/def_keyword.ail
 bootstrap/tests/mistakes/else_colon.ail

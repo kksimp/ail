@@ -249,12 +249,25 @@ fn Parser.top_level(mut self)
                 unexpected("`struct` or `enum` after `error`", "err.decl.1")
                 skip_statement()
         elif tag == "kw" and text == "mut" and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            error_text(
+                "mod.const.1",
+                here(),
+                "there are no mutable top-level variables",
+                "declare a constant `NAME := value`, or pass the value to the functions that change it",
+                "",
+            )
             skip_statement()
         elif tag == "id"
             and (text == "const" or text == "let" or text == "var")
             and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            fix := if sym_at(2) == "=" then "declare the constant with `:=`" else ""
+            error_text(
+                "mod.const.1",
+                here(),
+                "AIL has no `{text}`; a constant is declared `NAME := value`",
+                "remove the keyword and write `NAME := value`",
+                fix,
+            )
             skip_statement()
         elif tag == "id" and foreign_decl(text)
             i += 0
