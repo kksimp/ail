@@ -1,10 +1,11 @@
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[5]
 DATA = ROOT / "tools/tokbench/corpus/agent-r5/data"
-AIL = str(ROOT / "ail")
+AIL = (shutil.which("ail") or str(ROOT / "ail"))
 
 
 def ail(*args, stdin=None):
