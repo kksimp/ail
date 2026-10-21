@@ -1,2 +1,1 @@
-bootstrap/tests/native/subset_help.ail:22:7: error[native.subset.1]: not in the native subset yet: `.to_int()` on `str`
-bootstrap/tests/native/subset_help.ail:26:5: error[native.subset.1]: `for mut` isn't in the native subset yet
+bootstrap/tests/native/subset_help.ail:23:5: error[native.subset.1]: `for mut` isn't in the native subset yet

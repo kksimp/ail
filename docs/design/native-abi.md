@@ -89,7 +89,7 @@ box kind 10. Built by `rt.box`, `rt.boxf`, `rt.box_bool`, read by
 value (zero on failure); failure is the runtime's global slot 8 holding the
 error's display text (a string object), 0 otherwise. Global 9 holds the return
 trace, a list of string objects `  at PATH:LINE:COL`. `rt.failed`, `rt.err_set`,
-`rt.err_trace`, `rt.err_take`, `rt.err_clear`; `rt.exit` reports a failure
+`rt.err_trace`, `rt.err_take`, `rt.err_clear`, and for error structs and enums global 12 holds the error value (`rt.err_value`, `rt.err_take_value`, ADR 0804); `rt.exit` reports a failure
 that reached `main` first (`error: TEXT`, the trace, status 1).
 
 **Heap object header** (ADR 0562). Every heap object has an 8-byte word at
@@ -282,7 +282,7 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 end of its function, which calls
 `rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
 1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
-count), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+count; 15 prints a runtime-built message string, `a`), `a` and `b` are the operands (for 4, the float's bits), `head` is the
 constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
 constant source excerpt (`  L | line` and the caret line). The output is the
 interpreter's first line and excerpt, byte for byte; the snapshot lines
@@ -475,28 +475,37 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
 - **Pool block** (one `mmap` page): lock, queue head and tail, the sequence
   word idle workers sleep on, live, blocked and idle counts, the target, and
   the task each worker runs.
-- **Atomic cell:** 8 bytes, no header yet.
+- **Atomic cell:** 8 bytes, heap kind 11.
 
-**With the collector (lane 171, PR #174).** Its collector is conservative and
-assumes every task is at a call; a worker in a loop that never allocates is
-not. The protocol for threaded programs:
+**With the collector (lane 171).** The collector is conservative and assumes
+every other thread is at a call; a worker in a loop that never allocates is
+not. As built, a threaded program works like this:
 
-1. The collector runs inside `alloc` holding `ALLOC_LOCK` and sets `GC_REQ`.
-2. Every other thread parks at its next `alloc`, lock wait or task wait: it
-   calls `gc_regs(buf)` on its own stack, publishes the returned stack pointer
-   in the pool block, and sleeps on a futex until the collection ends. A thread
-   already blocked in a futex wait publishes its stack pointer before sleeping.
-3. The collector waits until every live worker has parked, then scans the main
-   stack (to `STACK_TOP`), each worker stack (published pointer up to
-   `STACKS + k * STACK_SZ + STACK_SZ`), the registers, the globals and the pool
-   block. A loop that never allocates delays a collection but nothing else.
-4. `rt.gc_stop_world()` and `rt.gc_start_world()` do steps 1-3 and the wake;
-   they are no-ops in `notask.ail`. Lane 171 calls them around `gc_collect`.
+1. Once the pool exists (`MULTI`), the allocator's fast path is off and
+   `alloc_slow` runs under `ALLOC_LOCK`. A collection starts inside it, so the
+   collector holds the lock and no other thread can allocate.
+2. `gc_stop_world` sets `GC_REQ` and waits until every other live thread has
+   published a stack pointer (`P_PARK`). A thread publishes at each safe point:
+   before any futex sleep (`futex_wait`, which saves the callee-saved registers
+   with `gc_regs` first), when it finds `GC_REQ` set in `lock`, and between
+   tasks. After waking it stays published while `GC_REQ` is set, and clears its
+   mark first and re-checks, so the collector never scans a thread that runs.
+3. The collector scans its own stack, then each other thread's registers and
+   stack (published pointer up to the main stack's top or the worker's slice of
+   `STACKS`), the pool block (queued and running task records), each thread's
+   text builder, and the globals. A thread that computes without reaching the
+   runtime delays a collection, nothing else.
+4. `gc_start_world` clears `GC_REQ` and wakes the parked threads.
+   `notask.ail` stubs all of it.
 
-Header kinds (11 is lane 171's pointer-free words): 12 task record and 13
-environment or group record (every word may be a pointer), 14 atomic cell (no
-pointers). Until the collector merges, nothing is freed and `alloc` only
-serialises on `ALLOC_LOCK`.
+Heap kinds: 11 (`KIND_ATOMIC`, no pointers) is an atomic cell; 12 is a task
+record and 13 an environment or group record (every word may be a pointer).
+`str` formatting keeps one text builder per thread in the pool block
+(`fmt.ail`, `sb_cell`). A trap inside the allocator (a run limit) releases its
+lock before the task ends. What is still shared and not thread-safe: the error
+slot (`rt.err_set`), `PARSE_OK` and the OS layer's result slots (`os.ail`), so
+tasks must not use fallible calls or the file and environment functions at
+the same time.
 
 ## 11. Imports from libSystem (macOS)
 
@@ -535,3 +544,14 @@ is Runtime Code. Every file there starts with the header
 Nothing in `compiler/rt/` is ported from another project; the float text
 algorithm is written from the textbook description (ADR 0409), so there is no
 third-party notice to carry.
+
+## Tensors (ADR 0815)
+
+`tensor.Tensor[T]` is a pointer to an object of heap kind 4: `+0` element kind
+(0 `int`, 1 `float`), `+8` rank, `+16` element count, `+24` pointer to the
+elements (8 bytes each, heap kind 11), `+32` the axis sizes, one word each. A
+tensor is never changed in place, so a copy shares the object. Calls: `rt.tensor_from`,
+`rt.tensor_shape_fault` and `rt.tensor_from_shape` (the fault helper returns a
+message string object or 0, and a message traps with runtime trap kind 15),
+`rt.tensor_to_list`, `rt.tensor_shape`, `rt.tensor_eq`, `rt.tensor_text` and
+`rt.out_tensor`.

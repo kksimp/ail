@@ -13,7 +13,7 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
     s := lower_value(scrutinee, none)?
     mut en := ""
     match s.ty
-        Int | Bool | Str => en = ""
+        Int | Bool | Str | Char => en = ""
         Enum(n) => en = n
         _ => return unsupported(pos, "`match` on `{s.ty.name()}`")
     tag := if en == "" then s.id else tag_of(en, s.id)
@@ -97,10 +97,10 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
             a := literal_int(lo, s, rpos) else return false
             b := literal_int(hi, s, rpos) else return false
             mid := new_block()
-            branch(op("ge", [s.id, konst(a, Ty.Int)], Ty.Bool), mid, [], no, [])
+            branch(op("ge", [s.id, konst(a, s.ty)], Ty.Bool), mid, [], no, [])
             seal(mid)
             cur = mid
-            c := op(if inclusive then "le" else "lt", [s.id, konst(b, Ty.Int)], Ty.Bool)
+            c := op(if inclusive then "le" else "lt", [s.id, konst(b, s.ty)], Ty.Bool)
             branch(c, yes, [], no, [])
         Alt(alts, _) =>
             for k in 0..alts.len()
@@ -139,14 +139,19 @@ fn Lower.literal_test(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
                 return none
             call("rt.str_eq", [s.id, str_value(text)], Ty.Bool)
         CharLit(_) =>
-            problem(pos, "`char` patterns aren't in the native subset yet")
-            none
+            n := literal_int(lit, s, pos)?
+            op("eq", [s.id, konst(n, Ty.Char)], Ty.Bool)
 
 fn Lower.literal_int(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
     text := match lit
         IntLit(t) => t
+        CharLit(t) =>
+            if not (s.ty == Ty.Char)
+                problem(pos, "a `char` pattern on `{s.ty.name()}`")
+                return none
+            return t.chars()[0].code()
         _ =>
-            problem(pos, "only `int` ranges are in the native subset yet")
+            problem(pos, "only `int` and `char` ranges are in the native subset yet")
             return none
     if not (s.ty == Ty.Int)
         problem(pos, "an `int` pattern on `{s.ty.name()}`")

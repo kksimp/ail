@@ -734,6 +734,9 @@ fn trap_body(kind int, a int, b int, op str)
         out_str("exit status ")
         out_int(a)
         out_str(" is outside 0 to 255")
+    elif kind == 15
+        # A runtime-built message: `a` is a string object (std.tensor.*)
+        out_str(str_at(a))
     elif kind == 10
         # time.sleep_ms(a) with a negative a (std.time.2)
         out_str("can't sleep for ")

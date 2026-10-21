@@ -477,6 +477,8 @@ fn gc_scan_threads()
     me := thread_slot()
     n := 1 + load64(p + P_LIVE)
     gc_scan_range(p, p + P_PARK)
+    # Each thread's text builder (fmt.ail) points at a heap buffer.
+    gc_scan_range(p + P_SB, p + P_SB + 24 * (n + 1))
     for t in 0..n
         if t != me
             s := load64(p + P_PARK + 8 * t)

@@ -58,11 +58,21 @@ pub struct mir.Source
     pub path str
     pub text str
     pub prog ast.Program
-pub fn mir.lower_package(srcs List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package(input List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(e ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
 pub fn mir.aliases_of(prog ast.Program) Map[str, str]
 pub fn mir.imports_of(prog ast.Program) List[str]
+pub struct mir.TaskState
+    on bool
+    sites List[mir.TaskSite]
+    pars List[mir.ParSite]
+    rets Map[str, mir.Ty]
+    in_chunk bool
+    accs Set[str]
+pub fn mir.new_task_state() mir.TaskState
+pub fn mir.uses_tasks(text str) bool
+pub fn mir.is_wait_call(e ast.Expr) bool
 pub enum mir.Ty
     Int
     Float
@@ -75,14 +85,17 @@ pub enum mir.Ty
     Opt(inner mir.Ty)
     Struct(name str)
     Enum(name str)
+    Tensor(elem mir.Ty)
     Unknown
     Unit
+    Atomic(elem mir.Ty)
     Fn(params List[mir.Ty], ret mir.Ty)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
     pub fn mir.Ty.is_float(self) bool
     pub fn mir.Ty.is_unit(self) bool
     pub fn mir.Ty.is_unknown(self) bool
     pub fn mir.Ty.elem(self) mir.Ty?
+    pub fn mir.Ty.is_tensor(self) bool
     pub fn mir.Ty.is_coll(self) bool
     pub fn mir.Ty.name(self) str
 pub struct mir.Inst
@@ -150,4 +163,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1454); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1575); dropped: private items, doc comments
