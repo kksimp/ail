@@ -1,0 +1,16 @@
+# `lines()` finds newlines eight bytes at a time; a newline in any byte
+# position of a word, long and empty lines, CR before LF and a missing
+# final newline all give what the interpreter gives (type.str.7).
+fn main()
+    mut text := ""
+    for n in 0..20
+        text = "{text}{"x".repeat(n)}\n"
+    print(text.lines().len())
+    for k in 0..9
+        s := "{"ab".repeat(k)}\ncd\r\né\n\ntail"
+        print(s.lines())
+    print("no newline at all but long enough to cross words".lines())
+    print("one\n".lines())
+    print("\n\n\n".lines())
+    print("".lines())
+    print("a\r\nb\r\n\r\nc".lines())
