@@ -41,3 +41,10 @@ memory in small programs and thrashes in large ones.
 
 The pause is proportional to the heap in pages plus live objects; programs with
 very large live data see long pauses until a generational design (a later ADR).
+
+## Follow-ups (lane 191's measurements)
+
+`alloc` costs about 25 instructions per call, three callee-saved push/pop pairs
+included. Ideas for a later PR: a frameless fast path (free-list pop or bump
+within the class's page, falling to the current code on a miss), and a
+`list_new_for` that allocates a header and its first block in one call.
