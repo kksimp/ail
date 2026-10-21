@@ -173,7 +173,10 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
         if not is_key_ty(kt) or not is_value_ty(vt)
             return unsupported(pos, "a map of `{kt.name()}` to `{vt.name()}`")
         ks.push(convert(k, kt, expr_pos(e.key)))
-        vs.push(to_word(convert(Val(id: copy_if_place(e.value, v), ty: v.ty), vt, expr_pos(e.value)), vt))
+        vs.push(to_word(
+            convert(Val(id: copy_if_place(e.value, v), ty: v.ty), vt, expr_pos(e.value)),
+            vt,
+        ))
     t := Ty.Map(key: kt, val: vt)
     m := new_table(t)
     for i in 0..ks.len()
@@ -297,13 +300,7 @@ fn Lower.is_get_call(self, e ast.Expr) bool
 
 # ---- methods ----
 
-fn Lower.lower_coll_method(
-    mut self,
-    r Val,
-    name str,
-    npos ast.Pos,
-    args List[ast.Arg],
-) Val?
+fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "this method call")
@@ -312,13 +309,18 @@ fn Lower.lower_coll_method(
         Map(kt, vt) =>
             if name == "push" and args.len() == 2
                 return map_push(r, kt, vt, args, npos)
-            want := if name == "contains" or name == "remove" or name == "get" then kt else Ty.Unknown
+            want := if name == "contains"
+                or name == "remove"
+                or name == "get" then kt else Ty.Unknown
             for a in args
                 vs.push(lower_value(a.value, if want.is_unknown() then none else want)?)
             if name == "len" and vs.len() == 0
                 return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
             if name == "contains" and vs.len() == 1
-                return Val(id: call("rt.map_has", [r.id, convert(vs[0], kt, npos)], Ty.Bool), ty: Ty.Bool)
+                return Val(
+                    id: call("rt.map_has", [r.id, convert(vs[0], kt, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
             if name == "remove" and vs.len() == 1
                 # The removed value is an optional: only the statement form.
                 call("rt.map_remove", [r.id, convert(vs[0], kt, npos)], Ty.Unit)
@@ -337,11 +339,20 @@ fn Lower.lower_coll_method(
             if name == "len" and vs.len() == 0
                 return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
             if name == "add" and vs.len() == 1
-                return Val(id: call("rt.map_add", [r.id, convert(vs[0], et, npos)], Ty.Bool), ty: Ty.Bool)
+                return Val(
+                    id: call("rt.map_add", [r.id, convert(vs[0], et, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
             if name == "contains" and vs.len() == 1
-                return Val(id: call("rt.map_has", [r.id, convert(vs[0], et, npos)], Ty.Bool), ty: Ty.Bool)
+                return Val(
+                    id: call("rt.map_has", [r.id, convert(vs[0], et, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
             if name == "remove" and vs.len() == 1
-                return Val(id: call("rt.map_remove", [r.id, convert(vs[0], et, npos)], Ty.Bool), ty: Ty.Bool)
+                return Val(
+                    id: call("rt.map_remove", [r.id, convert(vs[0], et, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
         _ => return none
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 

@@ -265,7 +265,11 @@ fn map_copy(m int) int
                 else
                     depth := info / 256
                     bytes := info.bit_and(255)
-                    c := if depth == 0 then list_copy(list_at(v), bytes) else list_copy_deep(list_at(v), depth, bytes)
+                    c := if depth == 0 then list_copy(list_at(v), bytes) else list_copy_deep(
+                        list_at(v),
+                        depth,
+                        bytes,
+                    )
                     store64(e + 16, list_addr(c))
     n
 
