@@ -102,7 +102,9 @@ by `skip=context` blocks that show the layout. Their checks are the package case
 `bootstrap/tests/cases/packages/` and `bootstrap/tests/git_deps.rs`, not the spec gate.
 Chapter 13 (unsafe, 15 rules, lane 223): all cited. Runtime traps (`unsafe.ptr.4`–`6`, `unsafe.mem.2`, `unsafe.mem.3`) are `norun`. `unsafe.block.3` (manifest opt-in) is a `skip=context` block with the package cases named. `unsafe.block.1` is shown by the valid block example, since the bootstrap reports the disallowed case as `unsafe.op.1`.
 
-Chapters 14-16 and 19-21 remain.
+Chapter 14 (FFI, 12 rules, lane 223): all cited. `ffi.decl.1` (`use c "header.h"`) is `skip=bootstrap`: specified, not built. `ffi.native.1` is `norun` because `ail build` rejects the declaration and the gate only checks. The load traps (`ffi.load.1`–`3`) are `norun`. `ffi.load.3` is Windows-only behaviour and is shown by a `norun` block.
+
+Chapter 15 is taken by the Haiku lane; 16 onward too.
 
 Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integrator decision):
 `own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `lex.kw.1`, `trait.auto.4`.
