@@ -33,6 +33,10 @@ An error value held in a local (`return e`) or in an optional
 the error.
 
 An error type of an imported module is found by its qualified name (`! compress.CompressError`), and `m.f(...)?` and `m.f(...) else err` apply to a module's fallible functions.
+An error value as the last expression of a function that can fail, or of a
+`match` or `if` arm that ends it, is the function's error (err.decl.3); its
+trace line is where the function's last expression begins, as in `ail run`. A
+`while true` with no `break` never falls out, so a function may end in one.
 
 A function whose result is an error type (`fn fail(self, m str) JsonError`)
 is an error constructor: `return fail(...)` in a function that can fail

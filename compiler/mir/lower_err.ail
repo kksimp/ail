@@ -271,6 +271,11 @@ fn Lower.method_fails(self, recv ast.Expr, name str) bool
     s := sigs.get(key) else return false
     s.fails
 
+## An error value as the last expression of a function that can fail is its
+## error (err.decl.3): leave with it. False when `e` isn't one.
+fn Lower.tail_error(mut self, e ast.Expr) bool
+    fails and is_error_expr(e) and lower_fail_return(e, tail_pos)
+
 ## `return E(...)` in a function that can fail: build the error, record its
 ## display text and the value, and leave (ADR 0804).
 fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
