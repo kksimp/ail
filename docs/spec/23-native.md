@@ -331,11 +331,14 @@ fn main()
 ```
 
 ```ail tool=test,--native,FILE expect=not-native rules=native.test.3
-fn first[T](xs List[T]) T
-    xs[0]
+struct Tag
+    n int
+
+fn Tag.pick[T](self, xs List[T]) T
+    xs[n]
 
 @test fn picks()
-    assert(first([1, 2]) == 1)
+    assert(Tag(n: 0).pick([1, 2]) == 1)
 
 fn main()
     print("ok")
@@ -353,11 +356,14 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-fn first[T](xs List[T]) T
-    xs[0]
+struct Tag
+    n int
+
+fn Tag.pick[T](self, xs List[T]) T
+    xs[n]
 
 fn main()
-    print(first([1, 2]))
+    print(Tag(n: 0).pick([1, 2]))
 ```
 
 ```ail norun rules=native.build.2
