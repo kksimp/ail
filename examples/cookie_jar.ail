@@ -1,0 +1,21 @@
+## std.net.jar: an agent's session with one site. The site sets cookies at
+## login; the jar keeps them and builds the Cookie header for each request.
+##   ./ail run examples/cookie_jar.ail
+use std.net.jar
+
+fn main()
+    mut j := jar.new()
+    site := "https://api.shop.test/"
+    j.set_cookie(site, "sid=abc123; Path=/; Secure; HttpOnly")
+    j.set_cookie(site, "theme=dark; Path=/prefs")
+    j.set_cookie(site, "cart=3")
+    print(j.header("https://api.shop.test/prefs/list"))
+    print(j.header("https://api.shop.test/orders"))
+    print("over http: [{j.header("http://api.shop.test/orders")}]")
+    print("sid: {j.value(site, "sid") else "none"}")
+    print("scripts see {j.for_script(site).len()} of {j.len()} cookies")
+    print("foreign domain refused: {j.set_cookie(site, "x=1; Domain=other.test")}")
+    j.set_cookie(site, "cart=5")
+    print("cart: {j.value(site, "cart") else "none"}, cookies: {j.len()}")
+    j.clear()
+    print("after clear: [{j.header(site)}]")
