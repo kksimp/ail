@@ -532,3 +532,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0637](0637-http-persistent-connections-and-timeouts.md) | HTTP/1.1 client: a connection pool (keep-alive), chunked request bodies, `connect_ms` and `total_ms` timeouts *(delegated)* | Accepted | 2026-10-21 |
 | [0638](0638-cookie-jar.md) | A cookie jar in the standard library, `std.net.jar`: RFC 6265 domain, path, expiry, `Secure`, `HttpOnly`; the one jar for Garlic *(delegated)* | Accepted | 2026-10-21 |
 | [0639](0639-http-server-keep-alive.md) | HTTP server keeps connections alive between requests *(delegated)* | Accepted | 2026-10-21 |
+| [0703](0703-card-middle-trim-level.md) | `ail api --card` gets a middle trimming level (signatures and first sentences) and picks the richest level within budget; amends 0311 *(delegated)* | Accepted | 2026-10-21 |

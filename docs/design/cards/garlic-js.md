@@ -194,4 +194,4 @@ pub fn vm.from_units(List[int]) str
 pub fn vm.unit_len(str) int
 ```
 
-trimmed to fit 4000 tokens (~2232); dropped: private items, doc comments, parameter names, fields, variants, contracts and test names
+trimmed to fit 4000 tokens (~2232); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
