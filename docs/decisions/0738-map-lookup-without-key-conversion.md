@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 13 — Standard library (the interpreter's values)
 - **Spec rules:** none (no language behaviour changes)
-- **Builds on:** [ADR 0175](0175-interpreter-fast-hasher.md) (the fast hasher)
+- **Builds on:** [ADR 0175](0175-interpreter-fast-paths.md) (the fast hasher)
 
 ## Context
 
