@@ -100,7 +100,9 @@ their own blocks (`mod.unit.1`, `mod.const.*`, `mod.use.3`, `mod.use.4`, `mod.us
 or a git cache (`mod.unit.2`, `mod.unit.5`, `mod.use.5`, `mod.pkg.*`, `mod.vis.3`) are cited
 by `skip=context` blocks that show the layout. Their checks are the package cases in
 `bootstrap/tests/cases/packages/` and `bootstrap/tests/git_deps.rs`, not the spec gate.
-Chapters 13-16 and 19-21 remain.
+Chapter 13 (unsafe, 15 rules, lane 223): all cited. Runtime traps (`unsafe.ptr.4`–`6`, `unsafe.mem.2`, `unsafe.mem.3`) are `norun`. `unsafe.block.3` (manifest opt-in) is a `skip=context` block with the package cases named. `unsafe.block.1` is shown by the valid block example, since the bootstrap reports the disallowed case as `unsafe.op.1`.
+
+Chapters 14-16 and 19-21 remain.
 
 Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integrator decision):
 `own.excl.3`, `own.ref.2`, `own.ref.7`, `err.decl.2`, `err.type.4`, `err.ctx.3`, `err.trap.2`, `err.fix.1`, `lex.kw.1`, `trait.auto.4`.
