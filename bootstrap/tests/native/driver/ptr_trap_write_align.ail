@@ -1,0 +1,7 @@
+# The same for write_volatile (unsafe.hw.3).
+use std.hw
+
+fn main()
+    unsafe
+        p := hw.at(4097, 0.to_u16())
+        p.write_volatile(1.to_u16())

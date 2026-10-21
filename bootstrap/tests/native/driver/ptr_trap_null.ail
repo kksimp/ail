@@ -1,0 +1,11 @@
+# A read through an address below 4096 traps (unsafe.ptr.4).
+use std.hw
+
+fn rd(p *u32) u32
+    unsafe
+        return p.read()
+
+fn main()
+    unsafe
+        p := hw.at(8, 0.to_u32())
+        print(rd(p))

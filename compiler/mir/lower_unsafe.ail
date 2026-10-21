@@ -1,0 +1,171 @@
+## Raw pointers and `std.hw` in the native subset (ADR 0835, unsafe.ptr.1-4,
+## unsafe.hw.1-4). A `*T` is the address in a register (`Ty.Ptr(T)`), and the
+## only native way to get one is `hw.at(addr, example)`: `std.mem` and C calls
+## stay `ffi.native.1`. A read or write is one `pload`/`pstore` instruction of
+## the width of `T`, which the optimiser treats as a barrier (`prim` that no
+## pass knows is neither merged, moved nor dropped), so the volatile methods
+## differ from `read`/`write` only by the alignment check. A sized `T` loads
+## zero-extended and is then sign-extended in the register for the signed
+## kinds, as everywhere else (lower_sized.ail).
+use ast
+
+## The pointer type for `*inner`, if its target is in the subset
+## (unsafe.ptr.1: `int`, `float`, `bool`, a sized number, another pointer).
+fn Lower.ptr_type_of(self, inner ast.TypeRef) Ty?
+    t := type_of(inner)?
+    if ptr_target_ok(t)
+        return Ty.Ptr(t)
+    none
+
+fn ptr_target_ok(t Ty) bool
+    match t
+        Int | Float | Bool | Sized(_) | Ptr(_) => true
+        _ => false
+
+## Bytes in memory of one `T` (unsafe.ptr.2).
+fn ptr_size(t Ty) int
+    match t
+        Bool => 1
+        Sized(k) => sized_bits(k) / 8
+        _ => 8
+
+fn sized_bits(k str) int
+    match k
+        "i8" | "u8" => 8
+        "i16" | "u16" => 16
+        _ => 32
+
+fn ptr_target(t Ty) Ty
+    match t
+        Ptr(e) => e
+        _ => Ty.Unknown
+
+## `hw.at`, `hw.fence` and `hw.fence_io` (unsafe.hw.2, unsafe.hw.4).
+fn Lower.lower_hw_call(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    if name == "fence" or name == "fence_io"
+        if args.len() != 0
+            return unsupported(npos, "`hw.{name}` with arguments")
+        mut i := inst(-1, "prim", [])
+        i.name = if name == "fence" then "pfence" else "pfence_io"
+        emit_void(i)
+        return Val(id: -1, ty: Ty.Unit)
+    if name != "at" or args.len() != 2
+        return unsupported(npos, "`hw.{name}`")
+    addr := lower_value(args[0].value, Ty.Int)?
+    example := lower_value(args[1].value, none)?
+    if addr.ty != Ty.Int
+        return unsupported(npos, "`hw.at` of a `{addr.ty.name()}` address")
+    if not ptr_target_ok(example.ty)
+        return unsupported(npos, "`hw.at` with an example of type `{example.ty.name()}`")
+    ptr_trap_unless(
+        op("ge", [addr.id, konst(0, Ty.Int)], Ty.Bool),
+        "unsafe.hw.2",
+        "rt.hw_negative_msg",
+        [addr.id],
+        npos,
+    )
+    Val(id: op("copy", [addr.id], Ty.Ptr(example.ty)), ty: Ty.Ptr(example.ty))
+
+## The methods of a `*T`: `read`, `write`, `offset`, `is_null`, and the
+## volatile pair (unsafe.ptr.2, unsafe.hw.3).
+fn Lower.ptr_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    t := ptr_target(r.ty)
+    if name == "is_null" and vs.len() == 0
+        return Val(id: op("eq", [r.id, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+    if name == "offset" and vs.len() == 1 and vs[0].ty == Ty.Int
+        step := op("mul", [vs[0].id, konst(ptr_size(t), Ty.Int)], Ty.Int)
+        return Val(id: op("add", [r.id, step], r.ty), ty: r.ty)
+    volatile := name.ends_with("_volatile")
+    base := if volatile then name.slice(0, name.len() - 9) else name
+    if base == "read" and vs.len() == 0
+        return ptr_read(r, t, volatile, name, npos)
+    if base == "write" and vs.len() == 1
+        return ptr_write(r, t, vs[0], volatile, name, npos)
+    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+
+## The checks of an access: not null (unsafe.ptr.4), and for a volatile one
+## a multiple of the width (unsafe.hw.3).
+fn Lower.ptr_check(mut self, addr int, t Ty, volatile bool, name str, npos ast.Pos)
+    ptr_trap_unless(
+        op("ge", [addr, konst(4096, Ty.Int)], Ty.Bool),
+        "unsafe.ptr.4",
+        "rt.ptr_null_msg",
+        [addr],
+        npos,
+    )
+    w := ptr_size(t)
+    if volatile and w > 1
+        aligned := op(
+            "eq",
+            [op("band", [addr, konst(w - 1, Ty.Int)], Ty.Int), konst(0, Ty.Int)],
+            Ty.Bool,
+        )
+        ptr_trap_unless(
+            aligned,
+            "unsafe.hw.3",
+            "rt.ptr_align_msg",
+            [addr, konst(w, Ty.Int), konst(if name == "read_volatile" then 0 else 1, Ty.Int)],
+            npos,
+        )
+
+fn Lower.ptr_read(mut self, r Val, t Ty, volatile bool, name str, npos ast.Pos) Val
+    ptr_check(r.id, t, volatile, name, npos)
+    w := ptr_size(t)
+    load := "pload{w * 8}"
+    mut i := inst(-1, "prim", [r.id])
+    i.name = load
+    raw := emit(i, Ty.Int)
+    match t
+        Float => Val(id: bits_to_float(raw), ty: Ty.Float)
+        Bool => Val(id: op("ne", [raw, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+        Sized(k) =>
+            if sized_lo(k) < 0
+                sh := konst(64 - w * 8, Ty.Int)
+                return Val(id: op("shr", [op("shl", [raw, sh], Ty.Int), sh], Ty.Int), ty: t)
+            Val(id: raw, ty: t)
+        Ptr(_) => Val(id: op("copy", [raw], t), ty: t)
+        _ => Val(id: raw, ty: Ty.Int)
+
+fn Lower.ptr_write(mut self, r Val, t Ty, v Val, volatile bool, name str, npos ast.Pos) Val?
+    if not same_ty(v.ty, t)
+        return unsupported(npos, "`.{name}()` of a `{v.ty.name()}` through a `{r.ty.name()}`")
+    ptr_check(r.id, t, volatile, name, npos)
+    w := ptr_size(t)
+    mut bits := v.id
+    if t == Ty.Float
+        mut f := inst(-1, "prim", [v.id])
+        f.name = "float_bits"
+        bits = emit(f, Ty.Int)
+    mut i := inst(-1, "prim", [r.id, bits])
+    i.name = "pstore{w * 8}"
+    emit_void(i)
+    Val(id: -1, ty: Ty.Unit)
+
+fn Lower.bits_to_float(mut self, bits int) int
+    mut i := inst(-1, "prim", [bits])
+    i.name = "bits_float"
+    emit(i, Ty.Float)
+
+## Trap at `pos` with `rule` unless `ok` holds. The runtime function `msg_fn`
+## builds the message from `args` on the failing path (runtime message kind 15).
+fn Lower.ptr_trap_unless(mut self, ok int, rule str, msg_fn str, args List[int], pos ast.Pos)
+    fail := new_block()
+    check(ok, fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    msg := call(msg_fn, args, Ty.Int)
+    mut t := inst(-1, "trap", [msg, msg])
+    t.imm = 15
+    t.site = site(rule, "tensor", "", pos)
+    emit_void(t)
+    finish(unreachable_term())
+    cur = good
+
+## `==` and `!=` on two pointers (unsafe.op.2); a pointer is not a number.
+fn Lower.ptr_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    name := op_name(o)
+    if name == "eq" or name == "ne"
+        return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+    problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}`")
+    a

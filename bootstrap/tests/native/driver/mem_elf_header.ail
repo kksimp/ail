@@ -1,0 +1,19 @@
+# Reads the program's own ELF header at its load address, 0x400000, through every width (unsafe.ptr.2, unsafe.hw.3).
+# Native only: `ail run` has nothing mapped there.
+use std.hw
+
+fn main()
+    unsafe
+        w := hw.at(4194304, 0.to_u32())
+        print(w.read())
+        print(w.read_volatile())
+        h := hw.at(4194304, 0.to_u16())
+        print(h.read_volatile())
+        print(h.offset(1).read())
+        b := hw.at(4194304, 0.to_u8())
+        print(b.read())
+        print(b.offset(3).read_volatile())
+        s := hw.at(4194304, 0.to_i8())
+        print(s.read())
+        i := hw.at(4194304, 0)
+        print(i.read())

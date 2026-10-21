@@ -83,6 +83,7 @@ pub enum mir.Ty
     Tensor(elem mir.Ty)
     F32
     Tuple(elems List[mir.Ty])
+    Ptr(inner mir.Ty)
     Unknown
     Unit
     Fn(params List[mir.Ty], ret mir.Ty)
@@ -164,4 +165,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1617); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1625); dropped: private items, doc comments

@@ -39,6 +39,9 @@ pub enum Ty
     ## `(A, B, ...)` (ADR 0829): a struct object (kind 4) with one 8-byte slot
     ## per element, in order.
     Tuple(elems List[Ty])
+    ## `*T` (ADR 0835): an address in an integer register; `T` is `int`,
+    ## `float`, `bool`, a sized integer or another pointer.
+    Ptr(inner Ty)
     Unknown
     Unit
     ## A function value: the address of a declared function (ADR 0573).
@@ -102,6 +105,7 @@ pub fn Ty.name(self) str
         Opt(t) => "{t.name()}?"
         Tensor(e) => "Tensor[{e.name()}]"
         F32 => "f32"
+        Ptr(t) => "*{t.name()}"
         Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
         Enum(n) => n

@@ -480,6 +480,7 @@ fn fn_key(f ast.FnDecl, pre str) str
 fn Lower.type_of(self, t ast.TypeRef) Ty?
     match t.shape
         Optional(inner) => opt_of(type_of(inner)?)
+        PtrTo(inner) => ptr_type_of(inner)
         Named(name, args) =>
             match name
                 "int" => Ty.Int
@@ -1702,6 +1703,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         Int | Sized(_) => return int_method(r, name, npos, vs)
         Float => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
+        Ptr(_) => return ptr_method(r, name, npos, vs)
         Char => return lower_char_method(r, name, npos, vs)
         List(e) => return list_method(e, r, name, npos, vs, args, recv)
         _ => return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")

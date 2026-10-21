@@ -26,3 +26,32 @@ fn sized_msg(v int, k int) int
         sb_text("u32")
     sb_text("`")
     str_addr(sb_str())
+
+# ---- raw pointers and std.hw (ADR 0835) ----
+
+## `hw.at` of the negative address -8 (unsafe.hw.2).
+fn hw_negative_msg(a int) int
+    sb_reset()
+    sb_text("`hw.at` of the negative address ")
+    put_int(a)
+    str_addr(sb_str())
+
+## access through a null pointer (address 8) (unsafe.ptr.4).
+fn ptr_null_msg(a int) int
+    sb_reset()
+    sb_text("access through a null pointer (address ")
+    put_int(a)
+    sb_text(")")
+    str_addr(sb_str())
+
+## `read_volatile` of 4 bytes at an address that is not a multiple of 4
+## (unsafe.hw.3); `w` is 1 for `write_volatile`.
+fn ptr_align_msg(a int, width int, write int) int
+    sb_reset()
+    sb_text("`")
+    sb_text(if write == 1 then "write_volatile" else "read_volatile")
+    sb_text("` of ")
+    put_int(width)
+    sb_text(" bytes at an address that is not a multiple of ")
+    put_int(width)
+    str_addr(sb_str())

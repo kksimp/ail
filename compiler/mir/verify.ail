@@ -55,7 +55,7 @@ pub fn verify(f Func) List[str]
 
 ## The kind of register a value lives in: a `char` is an `int` (type.char.1).
 fn register_kind(t Ty) str
-    if t == Ty.Char or t.is_sized()
+    if t == Ty.Char or t.is_sized() or t.name().starts_with("*")
         return "int"
     t.name()
 
