@@ -749,7 +749,7 @@ fn trap_body(kind int, a int, b int, op str)
         # `unreachable(message)` (err.model.2): `a` is the message
         out_str("unreachable: ")
         out_str(str_at(a))
-    elif kind == 15
+    elif kind == 16
         # `Atomic.add` leaves `int` (conc.atomic.5, ADR 0600)
         out_str("atomic add overflows: ")
         out_int(a)
