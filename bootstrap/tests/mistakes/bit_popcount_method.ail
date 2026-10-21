@@ -1,0 +1,3 @@
+fn main()
+    n := 255
+    print(n.popcount())

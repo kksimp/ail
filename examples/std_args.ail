@@ -1,0 +1,25 @@
+## std.args in a command-line tool: a switch, an option, a positional and the
+## rest of the words. The word list is fixed so the example always prints the
+## same thing; pass env.args() instead to read the real command line.
+##   ./ail run examples/std_args.ail
+
+use std.args
+
+fn main() !
+    spec := [
+        args.flag("json", "j", "print JSON"),
+        args.opt("out", "o", "output file", "-"),
+        args.pos("input", "input file"),
+        args.rest("more", "extra files"),
+    ]
+    a := args.parse("count", "count lines", spec, [
+        "--json",
+        "-o",
+        "report.txt",
+        "data.csv",
+        "a.txt",
+        "b.txt",
+    ])?
+    print("json={a.flag("json")} out={a.get("out")} input={a.get("input")}")
+    print("more={a.rest}")
+    print(args.usage("count", "count lines", spec))

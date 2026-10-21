@@ -364,14 +364,12 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0373](0373-self-hosted-diagnostics-are-rule-and-position.md) | The self-hosted front end reports a rule and a position, and runs the corpus in one process *(delegated)* | Accepted | 2026-10-20 |
 | [0376](0376-syntax-tree-in-ail-and-its-json.md) | The syntax tree in AIL, `compiler/ast/`, and its JSON is the derived shape *(delegated)* | Accepted | 2026-10-20 |
 | [0377](0377-checker-in-ail-ported-pass-for-pass.md) | The checker in AIL is ported pass for pass, and says what it covers *(delegated)* | Accepted | 2026-10-20 |
+| [0378](0378-checker-gaps-are-skipped-not-guessed.md) | The AIL checker skips what it can't type yet, and the comparison skips it too *(delegated)* | Accepted | 2026-10-20 |
+| [0379](0379-allow-attribute.md) | `@allow("rule")` before a function allows a named warning in it *(delegated)* | Accepted | 2026-10-20 |
+| [0380](0380-self-hosted-checker-gate.md) | Checker changes are ported to the AIL checker in the same branch | Accepted | 2026-10-20 |
+| [0740](0740-self-hosted-checker-parity-gate.md) | The self-hosted checker must match `ail check` with nothing skipped *(delegated)* | Accepted | 2026-10-20 |
 | [0381](0381-driver-compilers-are-platform.md) | Accelerator drivers may compile code that AIL generates; the driver's compiler is platform (designer) | Accepted | 2026-10-20 |
 | [0382](0382-no-matrix-product-operator.md) | The matrix product stays `a.matmul(b)`; no `@` operator (designer) | Accepted | 2026-10-20 |
-| [0452](0452-match-guards.md) | Match guards: `pattern if cond => result` *(delegated)* | Accepted | 2026-10-20 |
-| [0453](0453-range-patterns.md) | Range patterns: `lo..hi` and `lo..=hi` over integer and character literals *(delegated)* | Accepted | 2026-10-20 |
-| [0454](0454-named-arguments.md) | Named arguments at call sites: `f(a, dy: 2, dx: 1)` *(delegated)* | Accepted | 2026-10-20 |
-| [0455](0455-function-types-and-values.md) | Function types `fn(A) R`, and declared functions as values *(delegated)* | Accepted | 2026-10-20 |
-| [0456](0456-calling-function-values.md) | Calling a function value, and its effects *(delegated)* | Accepted | 2026-10-20 |
-| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
 | [0383](0383-no-package-registry.md) | No package registry: dependencies are git URLs, with tags as versions (designer) | Accepted | 2026-10-20 |
 | [0384](0384-mir-shape-and-native-subset.md) | MIR: flat instructions, block parameters, built on the fly; the native subset *(delegated)* | Accepted | 2026-10-20 |
 | [0385](0385-x86-64-code-generation.md) | x86-64 code generation: the C convention, scratch registers, checks that branch to trap stubs *(delegated)* | Accepted | 2026-10-20 |
@@ -383,11 +381,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0391](0391-native-backend-optimisations.md) | First optimisations in the native backend: lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols *(delegated)* | Accepted | 2026-10-20 |
 | [0392](0392-native-structs-and-methods.md) | Structs and methods in the native subset: heap header word, slots, copies at the boundary, `T.m` methods *(delegated)* | Accepted | 2026-10-20 |
 | [0393](0393-native-modules.md) | Modules in the native backend: package loading, module-prefixed names, files in problems and traps *(delegated)* | Accepted | 2026-10-20 |
-| [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
-| [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
-| [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
-| [0535](0535-native-stack-check-on-recursive-calls.md) | Native recursion traps when the stack runs out: a check on calls that can recurse *(delegated)* | Accepted | 2026-10-20 |
-| [0536](0536-native-generics-by-monomorphisation.md) | Generics and traits in native code by monomorphisation: instances named by their types, `impl` methods as methods of their type *(delegated)* | Accepted | 2026-10-20 |
 | [0394](0394-token-budgets-on-every-command.md) | Token budgets on every command: `--budget N`, most severe first, `--from K` *(delegated)* | Accepted | 2026-10-20 |
 | [0395](0395-ail-test-update-rewrites-snapshots.md) | `ail test --update` rewrites failing literal expectations, `# =>` lines and `.out` files *(delegated)* | Accepted | 2026-10-20 |
 | [0396](0396-ail-diff-semantic-diff.md) | `ail diff`: a semantic diff of declarations, diagnostics and test outcomes, also against a git revision *(delegated)* | Accepted | 2026-10-20 |
@@ -400,6 +393,15 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
+| [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Accepted | 2026-10-21 |
+| [0670](0670-explain-examples-from-tagged-blocks.md) | `ail explain` examples: worked examples count in the audit; a `rules=` block fills a rule with no example in its section *(delegated)* | Accepted | 2026-10-21 |
+| [0622](0622-loop-starts-steps-and-index-spans.md) | Versioned loops with computed starts and unchanging steps; index arithmetic bounded by a constant loop bound *(delegated)* | Accepted | 2026-10-21 |
+| [0623](0623-branch-and-codegen-peepholes.md) | Branch and codegen peepholes: flipped `not` branches, bit operations into the result register, direct spill moves *(delegated)* | Accepted | 2026-10-21 |
+| [0624](0624-loop-weighted-spill-choice.md) | Register allocation spills the value cheapest to keep in memory, weighted by loop depth *(delegated)* | Accepted | 2026-10-21 |
+| [0646](0646-mistakes-corpus-round-two.md) | Mistakes corpus, round two: 96 programs on the batch's new features; `ail fix` resolves 60% *(delegated)* | Accepted | 2026-10-21 |
+| [0647](0647-round-two-diagnostics-help-and-anchors.md) | Diagnostics for round-two mistakes: help texts, fix anchors, and rules for `<<`, tuples, `case` and open ranges *(delegated)* | Accepted | 2026-10-21 |
+| [0648](0648-round-two-fix-rules-and-the-corpus-target.md) | Fix rules for round-two mistakes (renames with unchanged arguments, `=` to `:`, `@` to `matmul`, `or` to `else`), and the 60% target *(delegated)* | Accepted | 2026-10-21 |
+| [0625](0625-address-folding.md) | Address folding for unchecked `base[y + k]` accesses, and callee-saved registers saved where the calls start (shrink-wrapping) *(delegated)* | Accepted | 2026-10-21 |
 | [0447](0447-calendar-in-ail-std-time-date.md) | The calendar is a standard module written in AIL: `std.time.date` *(delegated)* | Accepted | 2026-10-20 |
 | [0448](0448-time-zones-from-the-platform-tz-database.md) | Time zones: UTC, fixed offsets and the platform tz database through `std.tz` *(delegated)* | Accepted | 2026-10-20 |
 | [0449](0449-calendar-arithmetic-rules.md) | Calendar arithmetic: months clamp, days keep the wall clock, gaps and folds resolve forward *(delegated)* | Accepted | 2026-10-20 |
@@ -411,19 +413,23 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0407](0407-bump-allocator-no-header.md) | Bump allocator over mmap, no object header, collector later *(delegated)* | Accepted | 2026-10-20 |
 | [0408](0408-buffered-output.md) | Output is buffered in the runtime; errors are not *(delegated)* | Accepted | 2026-10-20 |
 | [0409](0409-float-text-by-exact-digit-generation.md) | Float text by exact digit generation, written from the textbook *(delegated)* | Accepted | 2026-10-20 |
-| [0442](0442-std-hash.md) | `std.hash`: digests over `str` now, `bytes` when it lands *(delegated)* | Accepted | 2026-10-20 |
-| [0443](0443-std-compress-api.md) | `std.compress` API: `str` and `List[int]` now, one error type *(delegated)* | Accepted | 2026-10-20 |
-| [0444](0444-hash64-choice.md) | `hash64` is a wyhash-style multiply-fold hash, written from scratch *(delegated)* | Accepted | 2026-10-20 |
-| [0445](0445-deflate-gzip-in-house.md) | DEFLATE, gzip and CRC-32 are written in-house; measured throughput *(delegated)* | Accepted | 2026-10-20 |
-| [0446](0446-zip-archives.md) | Zip archives: store and deflate, deterministic, no zip64, no escaping the target *(delegated)* | Accepted | 2026-10-20 |
-| [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
-| [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
+| [0412](0412-bytes-type.md) | `bytes` is an immutable value type of `u8` *(delegated)* | Accepted | 2026-10-20 |
+| [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
+| [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
+| [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
+| [0416](0416-net-bodies-as-bytes.md) | `std.net` bodies as `bytes`: new functions and last fields, `body` stays `str` *(delegated)* | Accepted | 2026-10-20 |
+| [0417](0417-proc-run-bytes.md) | `proc.run_bytes`: bytes in, bytes out, `Output` unchanged *(delegated)* | Accepted | 2026-10-20 |
 | [0418](0418-request-options-and-redirect-rules.md) | Request options, redirect rules and streaming deferred for `std.net` *(delegated)* | Accepted | 2026-10-20 |
 | [0419](0419-http-server-as-accept-and-respond.md) | The HTTP server is `net.serve(addr)` with `accept` and `respond`; the handler form waits on function values *(delegated)* | Accepted | 2026-10-20 |
 | [0420](0420-cooperative-socket-waits.md) | Network waits are cooperative: non-blocking sockets, yield, back off *(delegated)* | Accepted | 2026-10-20 |
 | [0421](0421-raw-tcp-and-tls-conn.md) | Raw TCP: `Listener` and `Conn`, text first, TLS over the same `Conn` *(delegated)* | Accepted | 2026-10-20 |
 | [0422](0422-net-serve-capability.md) | `net.serve` is a capability on top of `net` *(delegated)* | Accepted | 2026-10-20 |
 | [0423](0423-net-platforms-and-deferred.md) | `std.net` on Windows and what is deferred *(delegated)* | Accepted | 2026-10-20 |
+| [0424](0424-streaming-child-processes.md) | Streaming child processes: `proc.start`, with the child's streams as channels *(delegated)* | Accepted | 2026-10-20 |
+| [0425](0425-child-is-unique-and-consumed.md) | A `Child` is a unique value, consumed by `wait` or `kill`, and ended with the program *(delegated)* | Accepted | 2026-10-20 |
+| [0426](0426-scheduler-waits-for-child-streams.md) | The scheduler waits for a child's output instead of reporting a deadlock *(delegated)* | Accepted | 2026-10-20 |
+| [0427](0427-task-select.md) | `task.select(chans)` waits on several channels and returns an index *(delegated)* | Accepted | 2026-10-20 |
+| [0428](0428-wait-yields-and-time-limit-kills.md) | `proc.wait` lets other tasks run, and the time limit kills the child *(delegated)* | Accepted | 2026-10-20 |
 | [0430](0430-unsafe-blocks-and-functions-built.md) | `unsafe` blocks and `unsafe fn`, with a manifest opt-in, are built *(delegated)* | Accepted | 2026-10-20 |
 | [0431](0431-extern-c-fn-and-dynamic-loading.md) | `extern c fn` declares a C function, loaded dynamically on first call *(delegated)* | Accepted | 2026-10-20 |
 | [0432](0432-c-calls-through-two-register-files.md) | C calls use two register-file trampolines, with no foreign-function library *(delegated)* | Accepted | 2026-10-20 |
@@ -431,33 +437,25 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0434](0434-std-mem-c-strings.md) | `std.mem` hands out C strings from C's allocator and traps on bad frees *(delegated)* | Accepted | 2026-10-20 |
 | [0435](0435-pointer-operations-and-typed-alloc.md) | Pointer reads, writes and offsets are methods; blocks are bounds-checked *(delegated)* | Accepted | 2026-10-20 |
 | [0436](0436-native-c-calls-by-dynamic-imports.md) | Native C calls use the platform convention and dynamic imports, planned before built *(delegated)* | Accepted | 2026-10-20 |
+| [0438](0438-regex-engine-is-a-pike-vm.md) | `std.regex` is a linear-time Pike VM, without backreferences or lookaround *(delegated)* | Accepted | 2026-10-20 |
+| [0439](0439-regex-syntax-is-the-re2-subset.md) | `std.regex` syntax is the RE2 subset; Unicode classes are a documented subset *(delegated)* | Accepted | 2026-10-20 |
+| [0440](0440-regex-api-is-module-functions-and-values.md) | `std.regex` API: module functions over a `Regex` value; no `re"..."` literal yet *(delegated)* | Accepted | 2026-10-20 |
+| [0441](0441-regex-iteration-replace-and-split-rules.md) | `find_all`, `replace` and `split` rules for empty matches *(delegated)* | Accepted | 2026-10-20 |
+| [0442](0442-std-hash.md) | `std.hash`: digests over `str` now, `bytes` when it lands *(delegated)* | Accepted | 2026-10-20 |
+| [0443](0443-std-compress-api.md) | `std.compress` API: `str` and `List[int]` now, one error type *(delegated)* | Accepted | 2026-10-20 |
+| [0444](0444-hash64-choice.md) | `hash64` is a wyhash-style multiply-fold hash, written from scratch *(delegated)* | Accepted | 2026-10-20 |
+| [0445](0445-deflate-gzip-in-house.md) | DEFLATE, gzip and CRC-32 are written in-house; measured throughput *(delegated)* | Accepted | 2026-10-20 |
+| [0446](0446-zip-archives.md) | Zip archives: store and deflate, deterministic, no zip64, no escaping the target *(delegated)* | Accepted | 2026-10-20 |
+| [0452](0452-match-guards.md) | Match guards: `pattern if cond => result` *(delegated)* | Accepted | 2026-10-20 |
+| [0453](0453-range-patterns.md) | Range patterns: `lo..hi` and `lo..=hi` over integer and character literals *(delegated)* | Accepted | 2026-10-20 |
+| [0454](0454-named-arguments.md) | Named arguments at call sites: `f(a, dy: 2, dx: 1)` *(delegated)* | Accepted | 2026-10-20 |
+| [0455](0455-function-types-and-values.md) | Function types `fn(A) R`, and declared functions as values *(delegated)* | Accepted | 2026-10-20 |
+| [0456](0456-calling-function-values.md) | Calling a function value, and its effects *(delegated)* | Accepted | 2026-10-20 |
 | [0460](0460-drag-race-harness.md) | The drag race is one Python harness that times AIL, native AIL, C and Python from twins *(delegated)* | Accepted | 2026-10-20 |
 | [0461](0461-module-fuzzers.md) | Module fuzzers are templates plus seeded input generators *(delegated)* | Accepted | 2026-10-20 |
 | [0462](0462-native-differential.md) | Every pure-subset program is built and diffed against both interpreter tiers *(delegated)* | Accepted | 2026-10-20 |
 | [0463](0463-rule-coverage.md) | Coverage is reported per spec rule, with per-file coverage from `ail test` *(delegated)* | Accepted | 2026-10-20 |
 | [0464](0464-json-number-range.md) | A JSON number outside the float range is a parse error, and a non-finite number prints as null *(delegated)* | Accepted | 2026-10-20 |
-| [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
-| [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
-| [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
-| [0511](0511-pdf-pages-read-on-demand.md) | The PDF reader reads pages on demand; search streams page by page (designer direction) | Accepted | 2026-10-20 |
-| [0512](0512-pdf-ocr-by-nearest-shape.md) | OCR of scanned PDF pages by nearest reference shape, on demand; shapes from DejaVu and OFL fonts (designer direction) | Accepted | 2026-10-20 |
-| [0513](0513-image-decoders-and-font-rasterizer-in-ail.md) | Image decoders (CCITT fax, JPEG) and a TrueType rasterizer written in AIL *(delegated)* | Accepted | 2026-10-20 |
-| [0520](0520-pdf-reader-on-the-text-layer.md) | A PDF reader and viewer in AIL that searches the text layer, no OCR *(delegated)* | Accepted | 2026-10-20 |
-| [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
-| [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
-| [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
-| [0490](0490-editor-regex-find.md) | Editor find bar: regex search on Alt-R (delegated) | Accepted | 2026-10-20 |
-| [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
-| [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
-| [0508](0508-tensor-unary-minus.md) | Unary `-` on tensors is elementwise (AI, delegated) | Accepted | 2026-10-20 |
-| [0509](0509-tensor-indexing-and-slicing.md) | Tensor `t[i]` drops the first axis, `t[lo..hi]` keeps it; `item()` (AI, delegated) | Accepted | 2026-10-20 |
-| [0521](0521-tensor-conv2d.md) | `conv2d` on 2-D float tensors: valid, stride 1, no padding (AI, delegated) | Accepted | 2026-10-20 |
-| [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
-| [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
-| [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
-| [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
-| [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
-| [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
 | [0465](0465-bit-operations-as-int-methods.md) | Bit operations are `int` methods (`bit_and`, `shl`, ...), not operators (delegated) | Accepted | 2026-10-20 |
 | [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
 | [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
@@ -466,37 +464,116 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
 | [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
+| [0490](0490-editor-regex-find.md) | Editor find bar: regex search on Alt-R (delegated) | Accepted | 2026-10-20 |
+| [0492](0492-bench-automation.md) | One command produces the before/after benchmark table for tokens and speed (`tools/bench/run.sh`) *(delegated)* | Accepted | 2026-10-20 |
+| [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
+| [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
+| [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |
 | [0501](0501-diagnostics-name-the-other-position.md) | Diagnostics point at the other position; the rule ID is the stable symbol *(delegated)* | Accepted | 2026-10-20 |
 | [0504](0504-windows-drive-paths.md) | Windows drive paths in `std.path` and glob: a drive root is a root *(delegated)* | Accepted | 2026-10-20 |
 | [0505](0505-windows-process-lookup.md) | Windows process lookup tries `PATHEXT` in `std.proc.run` *(delegated)* | Accepted | 2026-10-20 |
 | [0506](0506-windows-status-checklist.md) | Windows is checked by one checklist the designer can run top to bottom *(delegated)* | Accepted | 2026-10-20 |
-| [0424](0424-streaming-child-processes.md) | Streaming child processes: `proc.start`, with the child's streams as channels *(delegated)* | Accepted | 2026-10-20 |
-| [0425](0425-child-is-unique-and-consumed.md) | A `Child` is a unique value, consumed by `wait` or `kill`, and ended with the program *(delegated)* | Accepted | 2026-10-20 |
-| [0426](0426-scheduler-waits-for-child-streams.md) | The scheduler waits for a child's output instead of reporting a deadlock *(delegated)* | Accepted | 2026-10-20 |
-| [0427](0427-task-select.md) | `task.select(chans)` waits on several channels and returns an index *(delegated)* | Accepted | 2026-10-20 |
-| [0428](0428-wait-yields-and-time-limit-kills.md) | `proc.wait` lets other tasks run, and the time limit kills the child *(delegated)* | Accepted | 2026-10-20 |
 | [0507](0507-tensor-divide-and-activations.md) | Tensor `/` on floats, and the activations `relu`, `sigmoid`, `tanh` (AI, delegated) | Accepted | 2026-10-20 |
+| [0508](0508-tensor-unary-minus.md) | Unary `-` on tensors is elementwise (AI, delegated) | Accepted | 2026-10-20 |
+| [0509](0509-tensor-indexing-and-slicing.md) | Tensor `t[i]` drops the first axis, `t[lo..hi]` keeps it; `item()` (AI, delegated) | Accepted | 2026-10-20 |
 | [0510](0510-licence-apache-2-with-runtime-exception.md) | Licence: Apache 2.0 with a Runtime Library Exception (designer) | Accepted | 2026-10-20 |
-| [0438](0438-regex-engine-is-a-pike-vm.md) | `std.regex` is a linear-time Pike VM, without backreferences or lookaround *(delegated)* | Accepted | 2026-10-20 |
-| [0439](0439-regex-syntax-is-the-re2-subset.md) | `std.regex` syntax is the RE2 subset; Unicode classes are a documented subset *(delegated)* | Accepted | 2026-10-20 |
-| [0440](0440-regex-api-is-module-functions-and-values.md) | `std.regex` API: module functions over a `Regex` value; no `re"..."` literal yet *(delegated)* | Accepted | 2026-10-20 |
-| [0441](0441-regex-iteration-replace-and-split-rules.md) | `find_all`, `replace` and `split` rules for empty matches *(delegated)* | Accepted | 2026-10-20 |
-| [0412](0412-bytes-type.md) | `bytes` is an immutable value type of `u8` *(delegated)* | Accepted | 2026-10-20 |
-| [0413](0413-bytes-literal.md) | The `bytes` literal is `b"..."`, ASCII with `\xHH` *(delegated)* | Accepted | 2026-10-20 |
-| [0414](0414-bytes-methods.md) | `bytes` methods: strict `to_str`, lossy `text`, encodings on the type *(delegated)* | Accepted | 2026-10-20 |
-| [0415](0415-binary-files-and-input.md) | Binary file and standard-input functions: `read_bytes`, `write_bytes`, `append_bytes` *(delegated)* | Accepted | 2026-10-20 |
-| [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
-| [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
-| [0498](0498-spec-examples-cite-rules.md) | Spec examples cite the rules they demonstrate; batch chapters must have zero uncovered rules *(delegated)* | Accepted | 2026-10-20 |
-| [0499](0499-examples-run-on-both-tiers.md) | Every checked spec program runs under both interpreter tiers and must print the same *(delegated)* | Accepted | 2026-10-20 |
-| [0500](0500-spec-example-kinds-for-tools-and-fixtures.md) | Spec examples for tools, fixtures and flags: `tool=`, `fixture=`, `flags=` *(delegated)* | Accepted | 2026-10-20 |
-| [0492](0492-bench-automation.md) | One command produces the before/after benchmark table for tokens and speed (`tools/bench/run.sh`) *(delegated)* | Accepted | 2026-10-20 |
-| [0416](0416-net-bodies-as-bytes.md) | `std.net` bodies as `bytes`: new functions and last fields, `body` stays `str` *(delegated)* | Accepted | 2026-10-20 |
-| [0417](0417-proc-run-bytes.md) | `proc.run_bytes`: bytes in, bytes out, `Output` unchanged *(delegated)* | Accepted | 2026-10-20 |
+| [0511](0511-pdf-pages-read-on-demand.md) | The PDF reader reads pages on demand; search streams page by page (designer direction) | Accepted | 2026-10-20 |
+| [0512](0512-pdf-ocr-by-nearest-shape.md) | OCR of scanned PDF pages by nearest reference shape, on demand; shapes from DejaVu and OFL fonts (designer direction) | Accepted | 2026-10-20 |
+| [0513](0513-image-decoders-and-font-rasterizer-in-ail.md) | Image decoders (CCITT fax, JPEG) and a TrueType rasterizer written in AIL *(delegated)* | Accepted | 2026-10-20 |
+| [0520](0520-pdf-reader-on-the-text-layer.md) | A PDF reader and viewer in AIL that searches the text layer, no OCR *(delegated)* | Accepted | 2026-10-20 |
+| [0521](0521-tensor-conv2d.md) | `conv2d` on 2-D float tensors: valid, stride 1, no padding (AI, delegated) | Accepted | 2026-10-20 |
+| [0522](0522-tensor-broadcasting.md) | Tensor broadcasting, NumPy-style, in `+ - * /` and `add`/`mul` (designer) | Accepted | 2026-10-20 |
+| [0523](0523-tensor-argmax-clamp-round.md) | Tensor `argmax`, `argmin`, `clamp` and `round` (AI, delegated) | Accepted | 2026-10-20 |
+| [0524](0524-tensor-operator-fusion.md) | Operator fusion for elementwise tensor chains, identical results (AI, delegated) | Accepted | 2026-10-20 |
+| [0532](0532-native-comprehensions-and-slices.md) | List comprehensions and slices in the native subset, and the MIR `trap` operation *(delegated)* | Accepted | 2026-10-20 |
+| [0533](0533-native-stack-arguments.md) | Native calls pass integer arguments past the registers on the stack, as the C convention does *(delegated)* | Accepted | 2026-10-20 |
+| [0534](0534-macos-os-layer-through-libsystem.md) | The macOS OS layer calls libSystem, not raw syscalls; Linux keeps raw syscalls *(delegated)* | Accepted | 2026-10-20 |
+| [0535](0535-native-stack-check-on-recursive-calls.md) | Native recursion traps when the stack runs out: a check on calls that can recurse *(delegated)* | Accepted | 2026-10-20 |
+| [0536](0536-native-generics-by-monomorphisation.md) | Generics and traits in native code by monomorphisation: instances named by their types, `impl` methods as methods of their type *(delegated)* | Accepted | 2026-10-20 |
+| [0565](0565-native-string-runtime-calls.md) | A native `str` method is one runtime call, and its traps carry constant text *(delegated)* | Accepted | 2026-10-20 |
+| [0566](0566-native-char-type.md) | `char` is a MIR type held in a register as an `int`, and `chars()` gives `List[char]` *(delegated)* | Accepted | 2026-10-20 |
+| [0567](0567-native-text-of-numbers-and-unicode-tables.md) | Native text of numbers reuses the output routines, and character predicates use generated Unicode tables *(delegated)* | Accepted | 2026-10-20 |
+| [0574](0574-native-optional-layout.md) | Native optionals: a pointer or 0, scalars boxed *(delegated)* | Accepted | 2026-10-20 |
+| [0575](0575-native-results-error-slot.md) | Native results: the error slot and a return trace *(delegated)* | Accepted | 2026-10-20 |
+| [0576](0576-native-error-values-messages.md) | Native error values: messages only, for now *(delegated)* | Accepted | 2026-10-20 |
+| [0568](0568-native-map-and-set-layout.md) | Native `Map` and `Set`: one insertion-ordered table with a hash index *(delegated)* | Accepted | 2026-10-20 |
+| [0569](0569-native-map-lowering.md) | Lowering `Map` and `Set` operations to runtime calls, with the interpreter's trap *(delegated)* | Accepted | 2026-10-20 |
+| [0570](0570-native-constant-lists.md) | Constant lists are built once, on first use, in a global slot *(delegated)* | Superseded by 0604 | 2026-10-20 |
 | [0580](0580-os-calls-by-system-calls-with-a-status.md) | The OS layer is direct system calls, and a call that can fail reports a status *(delegated)* | Accepted | 2026-10-20 |
 | [0581](0581-output-flush-and-entry-exit.md) | Output flushing at exit, traps, input and terminals; standard error through the same buffer *(delegated)* | Accepted | 2026-10-20 |
 | [0582](0582-number-text-builder-and-format-specs.md) | Number text through a byte builder; format specifications and `to_float` in the runtime *(delegated)* | Accepted | 2026-10-20 |
+| [0585](0585-self-compile-survey-tool.md) | The self-compile survey is a script that lowers each module alone *(delegated)* | Accepted | 2026-10-20 |
+| [0586](0586-self-compile-blocker-ranking.md) | Self-compile blockers are ranked by problem count and owned by lane *(delegated)* | Accepted | 2026-10-20 |
+| [0591](0591-native-float-round.md) | The native backend lowers `x.round()` to a runtime function (AI, delegated) | Accepted | 2026-10-20 |
+| [0592](0592-std-math-float-methods.md) | Transcendental float methods (`sin`…`cbrt`), with a one-ulp bound (Designer) | Accepted | 2026-10-21 |
+| [0597](0597-pe-executables-for-windows.md) | Windows x86-64 executables: PE32+ written by the backend, fixed base, no relocations *(delegated)* | Accepted | 2026-10-20 |
+| [0598](0598-windows-imports-and-system-calls.md) | Windows imports: kernel32 through an import address table, Win64 convention at each call *(delegated)* | Accepted | 2026-10-20 |
 | [0602](0602-native-enum-layout.md) | Enums in native code: fieldless enums are `int`s, others kind-5 objects with the index in slot 0; fieldless variants are shared start-up objects; values immutable and shared *(delegated)* | Accepted | 2026-10-20 |
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
 | [0610](0610-self-host-bootstrap-harness.md) | A three-stage self-host bootstrap harness: fixed point plus the native tests *(delegated)* | Accepted | 2026-10-20 |
+| [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
+| [0626](0626-std-csv.md) | `std.csv`: CSV as rows and records *(delegated)* | Accepted | 2026-10-21 |
+| [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
+| [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
+| [0629](0629-list-chunks-windows-counts-str-center.md) | List `chunks`, `windows`, `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`, `count`, `rfind` *(delegated)* | Accepted | 2026-10-21 |
+| [0724](0724-quick-reference-trim.md) | Quick reference trimmed by 15% (15,176 to 12,891 tokens) with every construct kept *(delegated)* | Accepted | 2026-10-21 |
+| [0711](0711-tool-driving-agent-programs.md) | Agent programs that drive AIL's own tools: the twin calls the same tool, output is byte-identical, fixtures are committed (round 5) *(delegated)* | Accepted | 2026-10-21 |
+| [0732](0732-counts-and-json-reads-with-defaults.md) | `m.top(n)`, `j.text(key, default)`, `j.flag(key, default)` and `parse_json_lines(text)` *(delegated)* | Accepted | 2026-10-21 |
+| [0733](0733-process-result-methods.md) | `proc.Output` has `text()` (stdout then stderr) and `ok()` *(delegated)* | Accepted | 2026-10-21 |
+| [0667](0667-regex-group-all.md) | `regex.group_all`: the text of one group in every match, `""` when unset *(delegated)* | Accepted | 2026-10-21 |
+| [0673](0673-definitional-rule-marker.md) | Spec rules that only describe the language carry a `[definitional]` marker and need no citation *(delegated)* | Accepted | 2026-10-21 |
+| [0679](0679-native-test-runner.md) | `ail test --native`: build each `@test` function natively and compare it with the interpreter *(delegated)* | Accepted | 2026-10-21 |
+| [0675](0675-round-4-syntax-candidates.md) | Round-4 syntax candidates: no `for i, x`, no inferred `main !`; `par` over chunks already works *(delegated)* | Accepted | 2026-10-21 |
+| [0698](0698-card-spec-audit-for-std.md) | A std audit: every std function has a spec mention, checked by `tools/rules-audit.sh` *(delegated)* | Accepted | 2026-10-21 |
+| [0631](0631-json-whole-numbers-print-without-fraction.md) | `Json.to_text` prints whole numbers without a fraction *(delegated)* | Accepted | 2026-10-21 |
+| [0637](0637-http-persistent-connections-and-timeouts.md) | HTTP/1.1 client: a connection pool (keep-alive), chunked request bodies, `connect_ms` and `total_ms` timeouts *(delegated)* | Accepted | 2026-10-21 |
+| [0638](0638-cookie-jar.md) | A cookie jar in the standard library, `std.net.jar`: RFC 6265 domain, path, expiry, `Secure`, `HttpOnly`; the one jar for Garlic *(delegated)* | Accepted | 2026-10-21 |
+| [0639](0639-http-server-keep-alive.md) | HTTP server keeps connections alive between requests *(delegated)* | Accepted | 2026-10-21 |
+| [0640](0640-samesite-and-graceful-shutdown.md) | SameSite in the cookie jar; `srv.shutdown()` stops a server without dropping requests under way *(delegated)* | Accepted | 2026-10-21 |
+| [0655](0655-build-cache.md) | A content-addressed cache of finished `ail build` executables, and derive expansion with one effect inference *(delegated)* | Accepted | 2026-10-21 |
+| [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |
+| [0658](0658-native-json.md) | `parse_json`, `Json.to_text`, `json_quote` run natively *(delegated)* | Accepted | 2026-10-21 |
+| [0693](0693-test-captures-stderr.md) | `ail test` captures a test's standard error, shown under a failing test's `FAIL` line marked `!` *(delegated)* | Accepted | 2026-10-21 |
+| [0716](0716-streaming-response-bodies.md) | Streaming response bodies: `net.open` returns a `net.Body` read with `read_bytes`, and a body read to its end returns its connection to the pool *(delegated)* | Accepted | 2026-10-21 |
+| [0695](0695-fix-bitwise-not.md) | `ail fix` for `~name`: the bitwise-not method *(delegated)* | Accepted | 2026-10-21 |
+| [0700](0700-native-exit-sleep-range-traps.md) | Native `io.exit` and `time.sleep_ms` range traps *(delegated)* | Accepted | 2026-10-21 |
+| [0701](0701-native-error-context.md) | Native `?` with a context message: contexts ride at the head of the trace list *(delegated)* | Accepted | 2026-10-21 |
+| [0703](0703-card-middle-trim-level.md) | `ail api --card` gets a middle trimming level (signatures and first sentences) and picks the richest level within budget; amends 0311 *(delegated)* | Accepted | 2026-10-21 |
+| [0717](0717-transparent-content-encoding.md) | `std.net` sends `Accept-Encoding: gzip, deflate` and decodes the response unless the program sets the header itself *(delegated)* | Accepted | 2026-10-21 |
+| [0719](0719-per-module-cards.md) | `ail api --card --module NAME` prints one module's card (api.card.6) *(delegated)* | Accepted | 2026-10-21 |
+| [0720](0720-package-index-card.md) | `ail api --card --index` lists a package's modules (api.card.7) *(delegated)* | Accepted | 2026-10-21 |
+| [0630](0630-is-empty-and-path-stem.md) | `is_empty` on strings and collections, and `path.stem` *(delegated)* | Accepted | 2026-10-21 |
+| [0690](0690-fuzz-csv-args.md) | Fuzzers for std.csv and std.args; `csv.write` quotes a row of one empty field *(delegated)* | Accepted | 2026-10-21 |
+| [0691](0691-fuzz-group-all-native-bytes.md) | Fuzzers for `regex.group_all` and native `bytes` literals *(delegated)* | Accepted | 2026-10-21 |
+| [0722](0722-native-subset-help-lines.md) | `native.subset.1` problems print a `help:` line, keyed in the printer (no lower.ail edit) *(delegated)* | Accepted | 2026-10-21 |
+| [0741](0741-ref-arguments-to-spawn.md) | A `ref` is not passed to a spawned task (own.ref.2) *(delegated)* | Accepted | 2026-10-21 |
+| [0743](0743-operator-traits-and-constant-types.md) | `trait.op.2`, `ct.const.4` and `err.type.3` get their own diagnostics *(delegated)* | Accepted | 2026-10-21 |
+| [0729](0729-api-diff-command.md) | `ail api --diff`: the public API change between two versions *(delegated)* | Accepted | 2026-10-21 |
+| [0730](0730-api-diff-breaking-rules.md) | What `ail api --diff` marks as breaking *(delegated)* | Accepted | 2026-10-21 |
+| [0731](0731-api-diff-output-and-budget.md) | Output of `ail api --diff` and its token budget *(delegated)* | Accepted | 2026-10-21 |
+| [0734](0734-native-integer-text.md) | Native integer text: digits written from the end, one division by 10 each *(delegated)* | Accepted | 2026-10-21 |
+| [0725](0725-test-cases-audit.md) | Test-case audit: one audit script, a duplicate removed, one-theme cases split *(delegated)* | Accepted | 2026-10-21 |
+| [0748](0748-list-from-json-as-an-associated-call.md) | `List[T].from_json(j)`: associated calls on builtin generic types *(delegated)* | Accepted | 2026-10-21 |
+| [0742](0742-compile-time-step-limit.md) | A statement-count limit on computing constants (ct.eval.3) *(delegated)* | Accepted | 2026-10-21 |
+| [0746](0746-native-subset-constructs-table.md) | One table of native-subset constructs, with owners *(delegated)* | Accepted | 2026-10-21 |
+| [0692](0692-fuzz-http-and-socket-templates.md) | HTTP fuzzers, `fuzz-net` templates that actually run, and the three-digit status fix *(delegated)* | Accepted | 2026-10-21 |
+| [0745](0745-branch-free-if-measured-not-enabled.md) | Branch-free `if` with deferred overflow checks: built and measured, not enabled *(delegated)* | Accepted | 2026-10-21 |
+| [0754](0754-stop-a-server-from-its-handler-and-poll-faster.md) | A handler stops its server with `req.stop()`; network waits poll faster *(delegated)* | Accepted | 2026-10-21 |
+| [0755](0755-http-serve-dir.md) | `http.serve_dir` serves a directory *(delegated)* | Accepted | 2026-10-21 |
+| [0751](0751-fs-copy-copies-a-directory-tree.md) | `fs.copy` copies a directory tree *(delegated)* | Accepted | 2026-10-21 |
+| [0749](0749-regex-methods.md) | Methods on `regex.Regex` *(delegated)* | Accepted | 2026-10-21 |
+| [0753](0753-checker-differential-fuzz.md) | Differential fuzzing of the self-hosted checker against `ail check`: generator, driver, 19,800 programs compared, 0 disagreements *(delegated)* | Accepted | 2026-10-21 |
+| [0726](0726-native-memory-limit.md) | A memory cap for native programs, checked when the heap takes a chunk *(delegated)* | Accepted | 2026-10-21 |
+| [0727](0727-native-timeout.md) | A time limit for native programs, polled at the allocator *(delegated)* | Accepted | 2026-10-21 |
+| [0728](0728-native-limit-settings.md) | Where a native program gets its limits *(delegated)* | Accepted | 2026-10-21 |
+| [0738](0738-map-lookup-without-key-conversion.md) | Text and integer map keys are looked up without building a `Key` *(delegated)* | Accepted | 2026-10-21 |
+| [0737](0737-runtime-small-block-allocator.md) | `ail run` and `ail test` allocate small blocks from per-thread free lists *(delegated)* | Accepted | 2026-10-21 |
+| [0739](0739-json-parse-builds-text-once.md) | The native JSON parser builds each text value once *(delegated)* | Accepted | 2026-10-21 |
+| [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
+| [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Accepted | 2026-10-21 |
+| [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |
+| [0757](0757-fuzz-math-special-values.md) | A fuzzer for `std.math` special values; the fuzz budget stays in the harness *(delegated)* | Accepted | 2026-10-21 |
+| [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |
+| [0735](0735-module-list-constants-are-globals.md) | Module-level list constants get a program global instead of being rebuilt at every use: native wordfreq 0.277 s to 0.037 s *(delegated)* | Accepted | 2026-10-21 |
+| [0758](0758-str-split-limit.md) | `s.split(sep, limit)` makes at most `limit` pieces *(delegated)* | Accepted | 2026-10-21 |

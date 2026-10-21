@@ -1,0 +1,7 @@
+struct U
+    name str
+    age int
+
+fn main() !
+    users := json.load[List[U]](env.args()[0])?
+    json.print([U(name: u.name, age: u.age + 1) for u in users if u.age > 18])

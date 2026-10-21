@@ -1,0 +1,11 @@
+
+fn sum_range(lo int, hi int) int
+    mut total := 0
+    for i in lo..hi
+        total += i
+    total
+
+fn main()
+    total := [sum_range(lo, lo + 250) par for lo in [0, 250, 500, 750]].sum()
+    print("sum of 0..1000 in four tasks: {total}")
+    print("matches the formula: {total == 999 * 1000 / 2}")

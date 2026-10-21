@@ -34,3 +34,8 @@ Compressed data is `bytes`: `deflate`, `gzip` and `zlib` take `bytes` or `str` a
 
 - Effects: byte functions none; file and directory functions `fs`, `io`.
 - `inflate`/`gunzip` return `str`, so non-UTF-8 content fails with `invalid_utf8` until `bytes` exists.
+
+## Rejected alternatives
+
+- Hex or base64 `str` for compressed data (option B): rejected because it invents a text encoding that must be dropped later, and it costs a conversion. Compressed data is `bytes` now.
+- Waiting for `bytes` (option C): rejected because it would block the lane.

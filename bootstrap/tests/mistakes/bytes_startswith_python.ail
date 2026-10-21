@@ -1,0 +1,4 @@
+fn main()
+    req := b"GET /index"
+    if req.startswith(b"GET")
+        print("get")

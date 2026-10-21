@@ -1,0 +1,15 @@
+error struct Empty "the list is empty"
+
+fn first(xs List[int]) int ! Empty
+    if xs.len() == 0
+        return Empty()
+    xs[0]
+
+fn middle(xs List[int]) int ! Empty
+    first(xs)?
+
+fn main() !
+    print(first([4, 5])?)
+    print("before")
+    print(middle([])?)
+    print("not reached")

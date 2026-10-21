@@ -38,3 +38,8 @@ format without dashes are not accepted; the error names what was expected.
 
 - `DateError` carries the text and a reason an agent can act on.
 - Leap seconds (`:60`) are refused with a message saying so.
+
+## Rejected alternatives
+
+- Treating no offset as UTC (option B): rejected because it is wrong for local timestamps, silently.
+- Treating no offset as the system zone (option C): rejected because the same program would give different answers on different machines, which breaks `--deterministic` runs and tests.

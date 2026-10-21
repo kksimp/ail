@@ -424,6 +424,63 @@ fn twice(xs List[int], i int) int ! Empty\n    v := first(xs)?\n    w := lookup(
     o
 }
 
+// ---- enums, match and equality (native.enum, ADR 0602-0603) ----
+
+pub fn enums(seed: u64) -> String {
+    let mut r = Rng::new(seed ^ 0xE0E0);
+    let (a, b, c) = (1 + r.below(9), r.below(30), 2 + r.below(6));
+    let hi = 5 + r.below(8);
+    let mut o = format!(
+        "enum Color\n    Red\n    Green\n    Blue\n\n\
+enum Shape\n    Dot\n    Circle(r int)\n    Rect(w int, h int)\n    Label(text str, size int)\n\n\
+enum Tree\n    Leaf\n    Node(left Tree, value int, right Tree)\n\n\
+fn code(c Color) int\n    match c\n        Red => {a}\n        Green => {b}\n        Blue => {c}\n\n\
+fn area(s Shape) int\n    match s\n        Dot => 0\n        Circle(r) => 3 * r * r\n        Rect(w, h) => w * h\n        Label(_, n) => n\n\n\
+fn big(s Shape) bool\n    match s\n        Circle(r) if r > {c} => true\n        Rect(w, h) if w * h > {b} => true\n        Circle(_) | Rect(_, _) => false\n        Dot | Label(_, _) => false\n\n\
+fn name(s Shape) str\n    match s\n        Dot => \"dot\"\n        Circle(_) => \"circle\"\n        Rect(_, _) => \"rect\"\n        Label(t, _) => t\n\n\
+fn bucket(n int) str\n    match n\n        0 => \"zero\"\n        1 | 2 | 3 => \"few\"\n        4..{hi} => \"some\"\n        _ => \"many\"\n\n\
+fn word(s str) int\n    match s\n        \"one\" => 1\n        \"two\" | \"three\" => 23\n        _ => 0\n\n\
+fn insert(t Tree, v int) Tree\n    match t\n        Leaf => Node(left: Leaf, value: v, right: Leaf)\n        Node(l, x, rt) =>\n            if v < x\n                Node(left: insert(l, v), value: x, right: rt)\n            else\n                Node(left: l, value: x, right: insert(rt, v))\n\n\
+fn sum(t Tree) int\n    match t\n        Leaf => 0\n        Node(l, x, rt) => sum(l) + x + sum(rt)\n\n\
+fn depth(t Tree) int\n    match t\n        Leaf => 0\n        Node(l, _, rt) =>\n            dl := depth(l)\n            dr := depth(rt)\n            if dl > dr then dl + 1 else dr + 1\n\n\
+fn pick(i int) Color\n    match i % 3\n        0 => Red\n        1 => Green\n        _ => Blue\n\n"
+    );
+    o.push_str("fn main()\n");
+    let shape = |r: &mut Rng| -> String {
+        match r.below(4) {
+            0 => "Shape.Dot".to_string(),
+            1 => format!("Shape.Circle({})", r.below(12)),
+            2 => format!("Shape.Rect(w: {}, h: {})", r.below(12), r.below(12)),
+            _ => format!("Shape.Label(\"{}\", {})", ["a", "bc", "hello", ""][r.below(4) as usize], r.below(50)),
+        }
+    };
+    for u in 0..6 + r.below(10) {
+        let n = r.below(30) as i64 - 3;
+        let (s1, s2) = (shape(&mut r), shape(&mut r));
+        let col = ["Color.Red", "Color.Green", "Color.Blue"][r.below(3) as usize];
+        let col2 = ["Color.Red", "Color.Green", "Color.Blue"][r.below(3) as usize];
+        let b = match r.below(12) {
+            0 => format!("print(code({col}))"),
+            1 => format!("print(area({s1}))"),
+            2 => format!("print(big({s1}))"),
+            3 => format!("print(name({s1}))"),
+            4 => format!("print(bucket({n}))"),
+            5 => format!("print(word([\"one\", \"two\", \"three\", \"four\"][{} % 4]))", n.abs()),
+            6 => format!("print({col} == {col2})"),
+            7 => format!("print({s1} == {s2})"),
+            8 => format!("print({s1} != {s2})"),
+            9 => format!("mut t{u} := Tree.Leaf\n    for i in 0..{}\n        t{u} = insert(t{u}, (i * {}) % {})\n    print(sum(t{u}))\n    print(depth(t{u}))", 1 + r.below(12), 1 + r.below(9), 3 + r.below(20)),
+            10 => format!("mut total{u} := 0\n    for i in 0..{}\n        total{u} += code(pick(i))\n    print(total{u})", 1 + r.below(9)),
+            _ => format!("shapes{u} := [{s1}, {s2}, Shape.Dot]\n    mut sum{u} := 0\n    for s in shapes{u}\n        sum{u} += area(s)\n    print(sum{u})\n    print(shapes{u}[0] == shapes{u}[1])"),
+        };
+        o.push_str("    ");
+        o.push_str(&b);
+        o.push('\n');
+    }
+    o.push_str("    print(\"done\")\n");
+    o
+}
+
 // ---- function values and key sorts (native.fn, ADR 0571-0573) ----
 
 pub fn funcs(seed: u64) -> String {

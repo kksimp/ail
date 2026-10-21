@@ -1,0 +1,5 @@
+ada@example.com paid invoice 1042
+bo.lee+shop@mail.example.org paid invoice 1043
+order 66 shipped to depot 7
+cy <cy.w@corp.example> asked for a refund
+ticket 88 closed by dee

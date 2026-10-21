@@ -1,0 +1,3 @@
+fn main()
+    req := b"GET " + "/index.html"
+    print(req.len())

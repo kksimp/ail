@@ -69,3 +69,8 @@ arm and its own scoping.
   `task.cancelled`.
 - Stale waiter entries on the other channels are removed on return.
 - ADR 0429 is not used.
+
+## Rejected alternatives
+
+- A `select` block with an arm per channel (option B): 19% fewer tokens (84.0 against 104.2 for `task.select`). Rejected in the decision: the difference is in a rare construct (3 of 65 corpus programs use a channel), so it counts as a tie under ADR 0076. Criterion 2 then decides, since a block adds syntax and a second parser to keep in step. Re-measure if multi-way waits become common.
+- `select` returning a value and its index as a pair (option C): rejected because AIL has no tuples, and two channels may carry different value types.

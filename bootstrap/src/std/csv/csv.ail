@@ -1,0 +1,107 @@
+## std.csv (spec std.csv.1-5, ADR 0626): comma-separated values as lists of
+## rows, and rows as maps keyed by the header. RFC 4180 quoting: a field in
+## double quotes may hold the separator, newlines and `""` for one quote.
+## Rows end at `\n` or `\r\n`; blank lines add no row.
+
+## Why the text is not CSV (std.csv.5).
+pub error struct CsvError "{why} (row {row})"
+    pub why str
+    pub row int
+
+## The rows of `text`, split at commas (std.csv.1).
+pub fn parse(text str) List[List[str]] ! CsvError
+    parse_sep(text, ',')?
+
+## The rows of `text`, split at `sep` (std.csv.1).
+pub fn parse_sep(text str, sep char) List[List[str]] ! CsvError
+    mut rows := []
+    mut row := []
+    mut field := ""
+    mut quoted := false
+    mut started := false
+    cs := text.chars()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        i += 1
+        if quoted
+            if c == '"'
+                if i < cs.len() and cs[i] == '"'
+                    field = "{field}\""
+                    i += 1
+                else
+                    quoted = false
+            else
+                field = "{field}{c}"
+        elif c == '"' and field == ""
+            quoted = true
+            started = true
+        elif c == sep
+            row.push(field)
+            field = ""
+            started = true
+        elif c == '\n' or c == '\r'
+            if c == '\r' and i < cs.len() and cs[i] == '\n'
+                i += 1
+            if started or field != ""
+                row.push(field)
+                rows.push(row)
+            row = []
+            field = ""
+            started = false
+        else
+            field = "{field}{c}"
+            started = true
+    if quoted
+        return CsvError(why: "unterminated quote", row: rows.len() + 1)
+    if started or field != ""
+        row.push(field)
+        rows.push(row)
+    rows
+
+## The rows of `text` after the header, each a map from header name to
+## field (std.csv.2). A row with a different number of fields than the
+## header is an error (std.csv.5).
+pub fn records(text str) List[Map[str, str]] ! CsvError
+    rows := parse(text)?
+    mut out := List[Map[str, str]]()
+    if rows.len() == 0
+        return out
+    header := rows[0]
+    for r in 1..rows.len()
+        if rows[r].len() != header.len()
+            return CsvError(
+                why: "{rows[r].len()} fields, the header has {header.len()}",
+                row: r + 1,
+            )
+        mut m := {}
+        for k in 0..header.len()
+            m[header[k]] = rows[r][k]
+        out.push(m)
+    out
+
+## One field, quoted when it holds the separator, a quote or a line break
+## (std.csv.3).
+pub fn quote(field str) str
+    if field.contains(',') or field.contains('"') or field.contains('\n') or field.contains('\r')
+        return "\"{field.replace("\"", "\"\"")}\""
+    field
+
+## `rows` as CSV text, one `\n`-ended line per row (std.csv.3).
+pub fn write(rows List[List[str]]) str
+    mut out := ""
+    for row in rows
+        mut line := [quote(f) for f in row].join(",")
+        # A row of one empty field must not be a blank line, which `parse` skips (std.csv.3).
+        if line == ""
+            line = "\"\""
+        out = "{out}{line}\n"
+    out
+
+## A header and the maps `records` gives, back as CSV text (std.csv.4). A
+## key a row lacks writes as an empty field.
+pub fn write_records(header List[str], recs List[Map[str, str]]) str
+    mut rows := [header]
+    for m in recs
+        rows.push([m.get(h) else "" for h in header])
+    write(rows)

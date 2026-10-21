@@ -21,11 +21,11 @@ pub const MODULES: &[(&str, &[&str])] = &[
     ("hash", &["crc32", "hash64", "hmac_sha256", "sha256", "sha384", "sha512"]),
     ("mem", &["alloc", "cast", "cstr", "free", "from_cstr", "null"]),
     ("io", &["eprint", "exit", "read_all", "read_bytes", "read_line"]),
-    ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
-    ("path", &["base", "dir", "ext", "join"]),
+    ("net", &["connect", "connect_tls", "get", "get_bytes", "listen", "open", "options", "post", "post_bytes", "request", "request_bytes", "serve"]),
+    ("path", &["base", "dir", "ext", "join", "stem"]),
     ("proc", &["kill", "run", "run_bytes", "start", "wait", "which"]),
     ("random", &["float", "int", "seed", "shuffle"]),
-    ("regex", &["captures", "compile", "escape", "find", "find_all", "is_match", "replace", "replace_first", "split"]),
+    ("regex", &["captures", "compile", "escape", "find", "find_all", "group_all", "is_match", "replace", "replace_first", "split"]),
     ("tensor", &["from", "zeros"]),
     ("task", &["cancelled", "check", "select"]),
     ("time", &["now_ms", "sleep_ms"]),
@@ -58,12 +58,16 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
     ("Server", "accept", "net.Server.accept"),
     ("Server", "addr", "net.Server.addr"),
     ("Server", "close", "net.Server.close"),
+    ("Server", "shutdown", "net.Server.shutdown"),
+    ("Request", "stop", "net.Request.stop"),
     ("Exchange", "respond", "net.Exchange.respond"),
     ("Exchange", "respond_bytes", "net.Exchange.respond_bytes"),
     ("Listener", "accept", "net.Listener.accept"),
     ("Listener", "addr", "net.Listener.addr"),
     ("Listener", "close", "net.Listener.close"),
     ("Conn", "close", "net.Conn.close"),
+    ("Body", "close", "net.Body.close"),
+    ("Body", "read_bytes", "net.Body.read_bytes"),
     ("Conn", "peer", "net.Conn.peer"),
     ("Conn", "read", "net.Conn.read"),
     ("Conn", "read_bytes", "net.Conn.read_bytes"),
@@ -72,6 +76,9 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
     ("Conn", "write", "net.Conn.write"),
     ("Conn", "write_bytes", "net.Conn.write_bytes"),
 ];
+
+/// The methods of `proc.Output` (std.proc.9), sorted. Neither changes its receiver.
+pub const OUTPUT_METHODS: &[&str] = &["ok", "text"];
 
 /// The methods of `tensor.Tensor[T]` (std.tensor.3-8), sorted. None
 /// changes its receiver: a tensor is a value (ADRs 0060-0063).
@@ -93,6 +100,8 @@ pub enum StdCall {
     Method(&'static str),
     /// `t.m(...)` on a `tensor.Tensor` (std.tensor.3-8): the method's name.
     Tensor(&'static str),
+    /// `o.m()` on a `proc.Output` (std.proc.9-10): the method's name.
+    Output(&'static str),
     /// `m.NAME`: a constant of a module, such as `ui.RED` (std.ui.17).
     Const(i64),
     /// `p.m(...)` on a raw pointer (unsafe.ptr.3-5): the method's name and
@@ -129,6 +138,7 @@ const TYPES: &[(&str, &str)] = &[
     ("Request", "net"),
     ("Server", "net"),
     ("Exchange", "net"),
+    ("Body", "net"),
     ("Listener", "net"),
     ("Conn", "net"),
     ("Output", "proc"),
@@ -158,7 +168,11 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 /// The standard modules written in AIL (std.ui.19): their dotted path, the
 /// file name they are read under, and their source.
 const AIL_MODULES: &[(&str, &str, &str)] = &[
+    ("std.args", "<std>/args/args.ail", include_str!("std/args/args.ail")),
+    ("std.csv", "<std>/csv/csv.ail", include_str!("std/csv/csv.ail")),
+    ("std.log", "<std>/log/log.ail", include_str!("std/log/log.ail")),
     ("std.net.http", "<std>/net/http.ail", include_str!("std/net/http.ail")),
+    ("std.net.jar", "<std>/net/jar.ail", include_str!("std/net/jar.ail")),
     ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
     ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),
 ];
@@ -287,6 +301,16 @@ pub fn path_ext(p: &str) -> String {
     match base.rfind('.') {
         Some(i) if i > 0 => base[i + 1..].into(),
         _ => String::new(),
+    }
+}
+
+/// std.path.5: the base name without its extension (the text before its last
+/// `.`; a leading `.` doesn't count).
+pub fn path_stem(p: &str) -> String {
+    let base = path_split(p).1;
+    match base.rfind('.') {
+        Some(i) if i > 0 => base[..i].into(),
+        _ => base.into(),
     }
 }
 

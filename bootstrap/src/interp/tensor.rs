@@ -165,6 +165,18 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 
     /// `t.m(args)` (std.tensor.3-8).
+    /// `o.text()` and `o.ok()` on a `proc.Output` (std.proc.10).
+    pub(super) fn output_method(&mut self, m: &str, recv: &'a Expr, env: &mut Env<'a>) -> Flow<Value> {
+        let Value::Struct(_, fields) = self.eval(recv, env)? else { unreachable!("checked: a proc.Output") };
+        let (Value::Int(status), Value::Str(out), Value::Str(err)) = (&fields[0], &fields[1], &fields[2]) else {
+            unreachable!("checked: a proc.Output has an int status and two strings")
+        };
+        Ok(match m {
+            "ok" => Value::Bool(*status == 0),
+            _ => Value::Str(Rc::from(format!("{out}{err}").as_str())),
+        })
+    }
+
     pub(super) fn tensor_method(
         &mut self,
         m: &str,

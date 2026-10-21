@@ -1,0 +1,37 @@
+struct C
+    n int
+    log List[int]
+
+fn C.bump(mut self, by int) int
+    self.n += by
+    self.log.push(by)
+    self.n
+
+fn C.get(self) int
+    self.n
+
+enum Light
+    Off
+    On(v int)
+
+fn Light.flip(mut self)
+    self = match self
+        Off => On(1)
+        On(_) => Off
+
+fn main()
+    mut cs := [C(n: 0, log: []), C(n: 10, log: [])]
+    for i in 0..4
+        r := cs[i % 2].bump(i + 1)
+        print("{r}")
+    print("{cs[0].n} {cs[1].n} {cs[0].log.len()} {cs[1].log.len()}")
+    copy := cs
+    cs[0].bump(100)
+    print("{copy[0].get()} {cs[0].get()}")
+    mut ls := [Light.Off, Light.On(5)]
+    ls[0].flip()
+    ls[1].flip()
+    print("{ls[0]} {ls[1]}")
+    mut nested := [[C(n: 1, log: [])]]
+    nested[0][0].bump(2)
+    print("{nested[0][0].n}")

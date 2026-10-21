@@ -1,0 +1,98 @@
+## `std.ui`'s window methods (spec 17-std, std.ui.2-8) and named colors
+## (std.ui.17), as `check/ui.rs`. `ui.open` is an ordinary standard
+## function (stdlib.ail).
+use ast
+
+## The methods of `ui.Window`, sorted, and those with a `mut self` receiver.
+WINDOW_METHODS := [
+    "clear",
+    "close",
+    "cursor",
+    "font_size",
+    "modifiers",
+    "next_event",
+    "poll_event",
+    "present",
+    "put",
+    "put_styled",
+    "set_cursor",
+    "set_font_size",
+    "set_title",
+    "size",
+]
+
+READ_WINDOW_METHODS := ["font_size", "modifiers", "size"]
+
+UI_COLORS := [
+    "BLACK",
+    "BLUE",
+    "CYAN",
+    "GRAY",
+    "GREEN",
+    "MAGENTA",
+    "ORANGE",
+    "RED",
+    "WHITE",
+    "YELLOW",
+]
+
+## A standard module's struct or enum, by its qualified name.
+fn Checker.std_named(self, n str) Ty
+    d := types.get(n) else return Ty.Unknown
+    match d
+        DStruct(s) => Ty.Struct(s, [])
+        DEnum(e) => Ty.Enum(e, [])
+
+## `w.n(args)` on a `ui.Window` `w`.
+fn Checker.ui_method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.Arg], expect Ty?) Ty
+    if not WINDOW_METHODS.contains(n)
+        args_only(args)
+        mut d := new_diag("std.ui.2", at, "`ui.Window` has no method `{n}`")
+        if s := suggest(n, WINDOW_METHODS)
+            d = d.did_you_mean(s)
+        else
+            d = d.with_help("a window's methods are {list_names(WINDOW_METHODS)}")
+        diags.push(d)
+        return Ty.Unknown
+    mutable := not READ_WINDOW_METHODS.contains(n)
+    if mutable
+        require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
+    std_methods.add(pos_key(at))
+    std_any.add(pos_key(at))
+    mut params := List[Ty]()
+    mut ret := Ty.Unit
+    if n == "size"
+        ret = std_named("ui.Size")
+    elif n == "modifiers"
+        ret = std_named("ui.Modifiers")
+    elif n == "font_size"
+        ret = Ty.Int
+    elif n == "clear" or n == "set_font_size"
+        params = [Ty.Int]
+    elif n == "put"
+        params = [Ty.Int, Ty.Int, Ty.Str, Ty.Int, Ty.Int]
+    elif n == "put_styled"
+        params = [Ty.Int, Ty.Int, Ty.Str, Ty.Int, Ty.Int, std_named("ui.Style")]
+    elif n == "set_cursor"
+        params = [Ty.Int, Ty.Int, std_named("ui.Cursor")]
+    elif n == "cursor"
+        params = [Ty.Int, Ty.Int]
+    elif n == "set_title"
+        params = [Ty.Str]
+    elif n == "next_event"
+        ret = std_named("ui.Event")
+    elif n == "poll_event"
+        ret = Ty.Opt(std_named("ui.Event"))
+    check_call("ui.Window.{n}", plain_sig(mutable, params, ret), [], args, recv, at, expect)
+
+## `ui.NAME`, a named color (std.ui.17).
+fn Checker.ui_color(mut self, head str, n str, at ast.Pos) Ty
+    if UI_COLORS.contains(n)
+        return Ty.Int
+    err_help(
+        "std.ui.17",
+        at,
+        "module `{head}` has no color `{n}`",
+        "the colors are {list_names(UI_COLORS)}",
+    )
+    Ty.Unknown

@@ -1,0 +1,24 @@
+pub struct Point
+    x int
+    y int
+
+pub enum Color
+    Red
+    Green
+
+pub trait Shape
+    fn area(self) int
+    fn name(self) str
+        "shape"
+
+pub fn add(a int, b int) int
+    a + b
+
+pub fn gone() int
+    1
+
+pub fn show(p Point) str
+    "{p.x}"
+
+fn hidden() int
+    1

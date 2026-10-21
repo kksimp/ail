@@ -1,0 +1,6 @@
+fn half(n int) int
+    n / 2
+
+fn main()
+    x := half("4")
+    print(x)

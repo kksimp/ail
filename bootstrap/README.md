@@ -121,7 +121,7 @@ package's are reported file by file.
   (`geo.Point(x: 1, y: 2)`). `use std.NAME` imports a standard module (below).
 
 - **Tests (ADRs 0167–0168):** `@test fn name()` on top-level functions
-  (attributes `@test`, `@pure`, `@inline` and `@deprecated("why")`; other arguments are skipped), run by
+  (attributes `@test`, `@pure`, `@inline`, `@deprecated("why")` and `@allow("expr.match.3")`; other arguments are skipped), run by
   `ail test FILE [--json]`; `assert(cond)` and `assert_eq(a, b)` trap with
   `test.assert.1`. `NAME.test` cases hold the expected `--json` output.
 - **Property tests and doc examples (ADRs 0198–0201):** a `@test` with

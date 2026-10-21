@@ -1,3 +1,2 @@
-bootstrap/tests/native/subset_ext.ail:9:5: error[native.subset.1]: `else` on a binding isn't in the native subset yet, but for `s.to_int()` and the OS calls
 bootstrap/tests/native/subset_ext.ail:12:4: error[native.subset.1]: `nine` has more than 8 float parameters
 bootstrap/tests/native/subset_ext.ail:17:11: error[native.subset.1]: not in the native subset yet: a format specification on a `List[int]`

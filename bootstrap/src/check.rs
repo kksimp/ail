@@ -27,6 +27,7 @@ pub mod errpaths;
 pub mod facts;
 mod keyfn;
 mod net;
+mod regex_method;
 mod stdlib;
 mod tensor;
 pub mod effects;
@@ -247,6 +248,12 @@ pub struct Resolved {
 /// Names available without import (mod.main.3, ADR 0084).
 const PRELUDE: &[&str] = &["print", "unreachable", "assert", "assert_eq"];
 
+/// Traits other languages use to define operators AIL has none of (trait.op.2).
+const OTHER_OPERATOR_TRAITS: [&str; 17] = [
+    "Pow", "Not", "BitAnd", "BitOr", "BitXor", "Shl", "Shr", "AddAssign", "SubAssign", "MulAssign", "DivAssign",
+    "RemAssign", "Deref", "DerefMut", "Call", "Assign", "Concat",
+];
+
 const BUILTIN_TYPES: &[&str] = &[
     "int", "i64", "i8", "i16", "i32", "u8", "u16", "u32", "u64", "float", "f64", "f32", "str", "bytes", "char", "bool", "List",
     "Map", "Set", "Task", "TaskGroup", "Channel", "Mutex", "Atomic",
@@ -310,6 +317,7 @@ fn check_with(prog: &Program, record: bool) -> (Vec<Diagnostic>, Resolved) {
         caught: 0,
         cur_fn: 0,
         track: false,
+        allow_wildcards: false,
         fn_name: String::new(),
         fn_head: Pos { line: 0, col: 0 },
     };
@@ -517,6 +525,8 @@ struct Checker<'p> {
     /// are being recorded (the final pass only, err.paths.1).
     cur_fn: usize,
     track: bool,
+    /// The function being checked has `@allow("expr.match.3")` (gram.attr.5).
+    allow_wildcards: bool,
     /// Name and header line of the function being checked (err.fix.1).
     fn_name: String,
     fn_head: Pos,
@@ -677,7 +687,7 @@ impl<'p> Checker<'p> {
         bounds.iter().filter_map(|(n, p)| self.trait_named(n, *p, "gen.bound.1")).collect()
     }
 
-    /// The trait called `n`, reporting when there's none.
+    /// The trait called `n`, reporting when there's none (trait.op.2).
     fn trait_named(&mut self, n: &str, pos: Pos, rule: &'static str) -> Option<usize> {
         if let Some(&t) = self.traits.get(n) {
             return Some(t);
@@ -688,6 +698,16 @@ impl<'p> Checker<'p> {
                 pos,
                 format!("`{n}` is a type, not a trait"),
                 "a constraint or `impl` names a trait, e.g. `Ord`",
+            );
+            return None;
+        }
+        // trait.op.2: only the operators of trait.op.1 can be implemented.
+        if OTHER_OPERATOR_TRAITS.contains(&n) {
+            self.error_help(
+                "trait.op.2",
+                pos,
+                format!("`{n}` would define an operator, and no operator beyond those of `trait.op.1` can be defined"),
+                "write a named method instead, e.g. `fn pow(self, other Self) Self`, and call it as `a.pow(b)`",
             );
             return None;
         }
@@ -821,6 +841,19 @@ impl<'p> Checker<'p> {
                 params.push((p.mutable, ty));
             }
             let mut ret = f.ret.as_ref().map_or(Ty::Unit, |t| self.resolve_ret(t, i));
+            // err.type.3: a function of a package's public API states its error type.
+            if let (Some(t), Ty::Res(_, Errs::Inferred(_))) = (&f.ret, &ret)
+                && self.prog.public.contains(&f.pos.line)
+                && !(f.owner.is_none() && f.name == "main")
+                && self.prog.files.len() > 1
+            {
+                self.error_help(
+                    "err.type.3",
+                    t.pos,
+                    format!("`{}` is public, so its return type must name the errors it can fail with", f.name),
+                    "write `T ! E` (or `! E`) with the error types, e.g. `int ! ParseError | IoError`",
+                );
+            }
             // test.attr.4: a test can always fail, so `?` works in it.
             if f.ret.is_none() && f.is_test() {
                 ret = Ty::Res(Box::new(Ty::Unit), Errs::Inferred(i));
@@ -967,6 +1000,14 @@ impl<'p> Checker<'p> {
         }
     }
 
+    /// ct.const.4, once per place.
+    pub(super) fn ct_const_4(&mut self, pos: Pos, msg: String) {
+        if self.diags.iter().any(|d| d.pos == pos) {
+            return;
+        }
+        self.error_help("ct.const.4", pos, msg, "a constant is shared by the whole program; make the value inside a function");
+    }
+
     /// The type of constant `i`, typing it first if needed (mod.const.3).
     fn const_type(&mut self, i: usize) -> Ty {
         if let Some(t) = &self.const_types[i] {
@@ -990,6 +1031,12 @@ impl<'p> Checker<'p> {
         self.const_busy[i] = false;
         if t == Ty::Unit {
             self.error("mod.const.2", c.value.pos(), format!("`{}` would be a constant with no value", c.name));
+        }
+        // ct.const.4: a constant's type holds no `ref` and no `unique` type.
+        if self.holds_ref(&t, 0) || self.is_unique(&t) {
+            let what = if self.holds_ref(&t, 0) { "a `ref` cell" } else { "a `unique` value" };
+            let msg = format!("`{}` would hold {what}, and a constant is an immutable value copied into the program", c.name);
+            self.ct_const_4(c.value.pos(), msg);
         }
         if matches!(t, Ty::Res(..)) {
             self.error_help(
@@ -1434,6 +1481,8 @@ impl<'p> Checker<'p> {
                     );
                 }
             }
+            // type.opt.8: a `T?` doesn't convert to a `T??`. The help below still names type.opt.7;
+            // see docs/design/rule-coverage.md.
             (Ty::Opt(w), Ty::Opt(_)) if matches!(**w, Ty::Opt(_)) => self.error_help(
                 rule,
                 pos,
@@ -1479,13 +1528,15 @@ impl<'p> Checker<'p> {
             "handle it with `x := ... else d`, or declare this function's return type with `! E` and pass the error on with `?`"
         };
         self.error_help("err.use.1", pos, "this can fail, and the failure isn't handled", help);
+        // err.fix.1: where the failure sits, in a statement, a binding or an argument.
+        self.try_fix_at(t, pos);
         true
     }
 
     /// fix.edit.3: offer `?` after a statement-level fallible call when this
     /// function's error type already admits its errors. Adds the fix to the
     /// `err.use.1` diagnostic just reported.
-    fn try_fix(&mut self, t: &Ty, e: &Expr) {
+    fn try_fix_at(&mut self, t: &Ty, at: Pos) {
         let Ty::Res(_, errs) = t else { return };
         let errors = self.errs_of(errs);
         let admits = match &self.ret {
@@ -1495,17 +1546,14 @@ impl<'p> Checker<'p> {
         };
         // err.fix.1: a function that can't fail yet can be made to.
         let sig = if admits { None } else { self.signature_fix(&errors) };
-        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1") else { return };
-        if !matches!(e, Expr::Call { .. } | Expr::Method { .. }) {
-            return;
-        }
+        let Some(d) = self.diags.last_mut().filter(|d| d.rule == "err.use.1" && d.fixes.is_empty()) else { return };
         if admits {
             d.fixes.push(Fix {
                 title: "pass the error on with `?`".into(),
-                edits: vec![Edit::at_line_end(e.pos(), "?")],
+                edits: vec![Edit::after_expr(at, "?")],
             });
         } else if let Some((title, edit)) = sig {
-            d.fixes.push(Fix { title: format!("{title} and pass the error on with `?`"), edits: vec![edit, Edit::at_line_end(e.pos(), "?")] });
+            d.fixes.push(Fix { title: format!("{title} and pass the error on with `?`"), edits: vec![edit, Edit::after_expr(at, "?")] });
         }
     }
 
@@ -1639,6 +1687,7 @@ impl<'p> Checker<'p> {
             Some((f.pos, !f.params.is_empty(), st.fields.iter().map(|x| x.name.clone()).collect()))
         });
         self.cur_fn = idx;
+        self.allow_wildcards = f.attrs.iter().any(|a| a.name == "allow" && a.arg.as_deref() == Some("expr.match.3"));
         self.fn_name = f.name.clone();
         self.fn_head = f.pos;
         if f.receiver.is_some() {
@@ -1724,9 +1773,6 @@ impl<'p> Checker<'p> {
             }
             // err.use.1: a failure can't be discarded.
             if (!last || !need) && matches!(s, Stmt::Expr(_)) && self.reject_unhandled(&ty, s.pos()) {
-                if let Stmt::Expr(e) = s {
-                    self.try_fix(&ty, e);
-                }
                 ty = Ty::Err;
             }
         }
@@ -1766,7 +1812,6 @@ impl<'p> Checker<'p> {
                 let ty = match otherwise {
                     Some(o) => self.else_part(&vt, value, o),
                     None if self.reject_unhandled(&vt, value.pos()) => {
-                        self.try_fix(&vt, value);
                         Self::ok_type(&vt)
                     }
                     None => vt,
@@ -3805,6 +3850,13 @@ impl<'p> Checker<'p> {
                         let mut d = Diagnostic::new("expr.call.3", *lpos, format!("`{what}` has no parameter `{n}`"));
                         if let Some(s) = suggest(n, &names) {
                             d = d.did_you_mean(n, s);
+                        } else {
+                            let list: Vec<String> = names.iter().map(|s| format!("`{s}`")).collect();
+                            d = d.help(if list.is_empty() {
+                                format!("`{what}` has no parameters, so it takes no named arguments")
+                            } else {
+                                format!("its parameters are {}; name one of them", list.join(", "))
+                            });
                         }
                         self.diags.push(d);
                         ok = false;
@@ -4103,6 +4155,16 @@ impl<'p> Checker<'p> {
             if let Some(def) = self.types.get(tn).copied() {
                 return self.associated(def, targs, name, pos, args, expect);
             }
+            // trait.assoc.4: `List[U].from_json(j)`, an associated function of a
+            // trait that a builtin generic type implements.
+            if tn == "List"
+                && let Some([elem]) = targs
+            {
+                let ty = Ty::List(Box::new(self.resolve_type(elem)));
+                if let Some(t) = self.builtin_assoc_call(ty, name, pos, args, expect) {
+                    return t;
+                }
+            }
             // type.bytes.13: `bytes.from_list(xs)` and the like.
             if tn == "bytes" && targs.is_none() {
                 let sig = match name {
@@ -4113,12 +4175,19 @@ impl<'p> Checker<'p> {
                     "zeros" => Sig::plain(None, vec![(false, Ty::Int)], Ty::Bytes),
                     _ => {
                         self.args_only(args);
-                        self.error_help(
+                        let known = ["from_list", "from_hex", "from_base64", "zeros"];
+                        let spelt = name.replace('_', "");
+                        let mut d = Diagnostic::new(
                             "type.bytes.13",
                             pos,
                             format!("`bytes` has no associated function `{name}`"),
-                            "they are `from_list`, `from_hex`, `from_base64` and `zeros`",
-                        );
+                        )
+                        .help("they are `from_list`, `from_hex`, `from_base64` and `zeros`");
+                        // `bytes.fromhex` is `bytes.from_hex`: the same letters, spelt with `_`.
+                        if let Some(k) = known.iter().find(|k| k.replace('_', "") == spelt) {
+                            d = d.fix(format!("write `{k}`"), vec![Edit::replace(pos, name, *k)]);
+                        }
+                        self.diags.push(d);
                         return Ty::Err;
                     }
                 };
@@ -4168,7 +4237,13 @@ impl<'p> Checker<'p> {
         if let Some(t) = self.net_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
+        if let Some(t) = self.regex_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
+        if let Some(t) = self.output_method(&rt, name, pos, args) {
             return t;
         }
         if let Some(t) = self.ptr_method(&rt, name, pos, args, expect) {
@@ -4414,7 +4489,18 @@ impl<'p> Checker<'p> {
             return;
         }
         let mut d = Diagnostic::new("expr.name.1", pos, format!("{shown} has no method `{name}`"));
-        if let Some(new) = builtins::method_rename(rt, name) {
+        // `x.is_some()` on an optional is a comparison with `none` (type.opt.5).
+        let absent = match name {
+            "is_some" => Some(" != none"),
+            "is_none" => Some(" == none"),
+            _ => None,
+        };
+        if let (Some(text), Ty::Opt(_)) = (absent, rt) {
+            let dot = Pos { col: pos.col.saturating_sub(1), ..pos };
+            d = d
+                .help("compare the value with `none`, e.g. `x != none`")
+                .fix("compare with `none`", vec![Edit::replace(dot, format!(".{name}()"), text)]);
+        } else if let Some(new) = builtins::method_rename(rt, name) {
             d = d.help(format!("write `.{new}()`")).fix(format!("write `{new}`"), vec![Edit::replace(pos, name, new)]);
         } else if let Some(h) = builtins::method_help(rt, name) {
             d = d.help(h);
@@ -4511,7 +4597,18 @@ impl<'p> Checker<'p> {
                 }
                 let names: Vec<&str> = decl.fields.iter().map(|f| f.name.as_str()).collect();
                 let mut d = Diagnostic::new("type.struct.6", pos, format!("`{}` has no field `{name}`", decl.name));
-                if let Some(s) = suggest(name, &names) {
+                // Another library's field for the same thing (a `requests` response).
+                let other = match (decl.name.as_str(), name) {
+                    ("net.Response", "status_code") => Some("status"),
+                    ("net.Response", "text") => Some("body"),
+                    _ => None,
+                };
+                if let Some(new) = other {
+                    d = d.help(format!("`{}` has the field `{new}`", decl.name)).fix(
+                        format!("write `{new}`"),
+                        vec![Edit::replace(pos, name, new)],
+                    );
+                } else if let Some(s) = suggest(name, &names) {
                     d = d.did_you_mean(name, s);
                 } else if names.is_empty() {
                     d = d.help(format!("`{}` has no fields", decl.name));
@@ -4714,7 +4811,23 @@ impl<'p> Checker<'p> {
                 }
                 if !self.accepts(&Ty::Bool, &t) {
                     let msg = format!("`{}` needs `bool` operands, found {}", op.symbol(), self.show(&t));
-                    self.error("type.bool.1", side.pos(), msg);
+                    if matches!(t, Ty::Opt(_)) && op == BinOp::Or {
+                        // `x or d` on an optional is `x else d` (type.opt.4).
+                        self.diags.push(
+                            Diagnostic::new("type.bool.1", side.pos(), msg)
+                                .help("a default for a value that may be `none` is `x else d`")
+                                .fix("write `else`", vec![Edit::operands(pos, "or", "$l else $r")]),
+                        );
+                    } else if matches!(t, Ty::Opt(_)) {
+                        self.error_help(
+                            "type.bool.1",
+                            side.pos(),
+                            msg,
+                            format!("`{}` takes `bool`; a default for a value that may be `none` is `x else d`", op.symbol()),
+                        );
+                    } else {
+                        self.error("type.bool.1", side.pos(), msg);
+                    }
                 }
             }
             return Ty::Bool;
@@ -4754,7 +4867,7 @@ impl<'p> Checker<'p> {
     }
 
     /// Which types support which operators (type.num.5, type.str.3,
-    /// trait.op.1, trait.op.3, expr.cmp.1, trait.std.1-2).
+    /// trait.op.1, trait.op.2, trait.op.3, expr.cmp.1, trait.std.1-2).
     fn operator(&mut self, op: BinOp, lt: &Ty, rt: &Ty, pos: Pos) -> Ty {
         let sym = op.symbol();
         let fail = if op.is_arithmetic() { Ty::Err } else { Ty::Bool };
@@ -4775,7 +4888,15 @@ impl<'p> Checker<'p> {
         // argument would (`opt == 1`, type.opt.5).
         if !same(lt, rt) && (op.is_arithmetic() || !self.accepts(lt, rt)) {
             let msg = format!("`{sym}` needs operands of one type, found {} and {}", self.show(lt), self.show(rt));
-            if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
+            // `n / 4.0` with an `int` variable `n`: convert it, as `n.to_float()` (type.num.10).
+            if op.is_arithmetic() && matches!((lt, rt), (Ty::Int, Ty::Float) | (Ty::Float, Ty::Int)) {
+                let template = if *lt == Ty::Int { format!("$l.to_float() {sym} $r") } else { format!("$l {sym} $r.to_float()") };
+                self.diags.push(
+                    Diagnostic::new("trait.op.3", pos, msg)
+                        .help("`int` and `float` don't mix: convert the integer with `n.to_float()`")
+                        .fix("convert with `.to_float()`", vec![Edit::operands(pos, sym, template)]),
+                );
+            } else if op == BinOp::Add && (*lt == Ty::Str || *rt == Ty::Str) {
                 self.diags.push(
                     Diagnostic::new("trait.op.3", pos, msg)
                         .help("build text with interpolation: \"{a}{b}\"")
@@ -5144,7 +5265,12 @@ impl<'p> Checker<'p> {
             }
             Pattern::Variant { pos, name, .. } => {
                 let msg = format!("`{name}` is a variant pattern, but the value matched is {}", self.show(t));
-                self.error("expr.match.4", *pos, msg);
+                self.error_help(
+                    "expr.match.4",
+                    *pos,
+                    msg,
+                    "a name in a pattern is a variant, not a variable: test the matched value with a guard, e.g. `_ if n > 0 =>`",
+                );
             }
             // expr.match.12: a range covers some values, never all, so it
             // marks nothing as seen.
@@ -5234,14 +5360,16 @@ impl<'p> Checker<'p> {
                     .filter(|(_, c)| !**c)
                     .map(|(v, _)| v.name.as_str())
                     .collect();
-                self.diags.push(
-                    Diagnostic::warning(
-                        "expr.match.3",
+                if !self.allow_wildcards {
+                    self.diags.push(
+                        Diagnostic::warning(
+                            "expr.match.3",
                         *pos,
-                        format!("`_` covers {}, so a variant added later won't be flagged here", list_names(&hidden)),
-                    )
-                    .help("list the variants instead of `_`"),
-                );
+                            format!("`_` covers {}, so a variant added later won't be flagged here", list_names(&hidden)),
+                        )
+                        .help("list the variants instead of `_`, or mark the function `@allow(\"expr.match.3\")`"),
+                    );
+                }
                 *wildcard = true;
                 Vec::new()
             }

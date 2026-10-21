@@ -183,7 +183,7 @@ fn fixed_offset(zone str) int?
     first := zone.char_at(0) else return none
     if first != '+' and first != '-'
         return none
-    sign := if first == '-' then - 1 else 1
+    sign := if first == '-' then -1 else 1
     rest := zone.slice(1, zone.len()).replace(":", "")
     h := digits(rest, 0, 2)?
     mut m := 0
@@ -200,7 +200,7 @@ fn fixed_name(offset int) str
     if offset == 0
         return "UTC"
     sign := if offset < 0 then "-" else "+"
-    a := if offset < 0 then - offset else offset
+    a := if offset < 0 then -offset else offset
     "{sign}{pad2(a / 3600)}:{pad2(a % 3600 / 60)}"
 
 ## The offset of `zone` at the instant `secs`, or `none` for an unknown zone.
@@ -385,7 +385,7 @@ pub fn DateTime.format(self, pattern str) str
             if t == ':'
                 i += 1
             sign := if offset < 0 then "-" else "+"
-            a := if offset < 0 then - offset else offset
+            a := if offset < 0 then -offset else offset
             sep := if t == ':' then ":" else ""
             out.push("{sign}{pad2(a / 3600)}{sep}{pad2(a % 3600 / 60)}")
         elif t == 'Z'

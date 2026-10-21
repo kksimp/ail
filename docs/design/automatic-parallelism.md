@@ -310,3 +310,11 @@ parallelise if one write moved: the reason names the write and its position.
   `json` 0.011 → 0.012 s, `sheet` 0.023 → 0.023 s, `loops` 0.686 → 0.705 s
   (three re-runs: 0.699/0.704, 0.700/0.709, 0.791/0.690, so noise),
   `examples/parallel.ail` 0.029 → 0.029 s. No measurable change.
+- **Interpreter scaling (4-core Linux VM, `taskset`):** CPU-bound `par for` and
+  `spawn` bodies run on separate threads and speed up 2.7-3.5x from 1 to 4
+  cores (collatz 2.55 s to 0.92 s; allocation-heavy 5.47 s to 1.23 s, 4.5x).
+  The workers copy their results back as `Plain` values that the main thread
+  rebuilds serially, so a body that returns a large structure gains nothing:
+  lexing a file 16 times is 0.96 s on 1 core and 1.01 s on 4 when each
+  iteration returns its token list, and 0.80 s to 0.56 s when it returns a
+  count. Native programs share memory and don't pay this cost.

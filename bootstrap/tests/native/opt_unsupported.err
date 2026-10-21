@@ -1,0 +1,3 @@
+bootstrap/tests/native/opt_unsupported.ail:3:14: error[native.subset.1]: error struct `Missing` isn't in the native subset yet
+bootstrap/tests/native/opt_unsupported.ail:3:14: error[native.subset.1]: `to_str`: methods of traits and `impl` blocks aren't in the native subset yet
+bootstrap/tests/native/opt_unsupported.ail:14:18: error[native.subset.1]: `nested`: its result type isn't in the native subset yet

@@ -46,3 +46,8 @@ child timing is outside the seed (`--deterministic` denies `proc`).
 
 - `select`, `recv` and `for` over a child's stream behave like any channel
   once data is queued.
+
+## Rejected alternatives
+
+- One OS thread per blocking read, with results sent as values (option B): rejected because values would cross threads (`Rc`), breaking the scheduler's soundness argument.
+- Non-blocking reads polled by each task (option C): rejected because busy loops would be needed, and every program would have to write the loop.

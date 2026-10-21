@@ -65,3 +65,9 @@ pointers into a string need reads, writes and allocation too.
   with `read`/`write`/`offset` (`native-abi.md` §8). Compiled code has no block
   table, so `unsafe.ptr.4–6` are interpreter diagnostics; the native backend
   traps on a null pointer only (`native-abi.md`).
+
+## Rejected alternatives
+
+- Free functions `mem.load(p, i)` and `mem.store(p, i, v)` (option B): rejected because the pointee type is not on the call, so the checker would need a generic function type the language does not have.
+- `p[i]` indexing and `p[i] = v` (option C): rejected because it looks safe, reuses a bounds-checked syntax for an unchecked operation, and hides the unsafe marker (ADR 0102).
+- Unchecked everything (option D): rejected because a segmentation fault tells an AI agent nothing. The block table costs one ordered-map lookup per access, on an operation already outside the fast paths.

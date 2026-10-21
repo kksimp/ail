@@ -1,0 +1,2 @@
+fn main()
+    print(5.bit_xor(3))

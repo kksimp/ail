@@ -15,7 +15,7 @@ true
 hello
 false
 hello
-fs.IoError(path: "std_fs_walk_case.tmp/src", kind: "is_dir")
+["std_fs_walk_case.tmp/x/deep/util.ail", "std_fs_walk_case.tmp/x/main.ail", "std_fs_walk_case.tmp/x/notes.txt"]
 fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
 fs.IoError(path: "std_fs_walk_case.tmp/none", kind: "not_found")
 5

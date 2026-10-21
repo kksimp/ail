@@ -52,7 +52,7 @@ Results may be off by about one token per file.
 
 | Column | Source | Notes |
 |---|---|---|
-| `cl100k` | OpenAI `cl100k_base`, via the pinned `litellm` wheel | GPT-4 era |
+| `cl100k` | OpenAI `cl100k_base`, via the pinned `litellm` wheel | OpenAI, 2023 |
 | `o200k` | OpenAI `o200k_base`, via the same wheel | GPT-4o era |
 | `claude-legacy` | `anthropic_tokenizer.json`, via the same wheel | Old Claude tokenizer. Use `--claude` for current models. |
 | `mistral-tekken` | `tekken_240911.json`, via the pinned `mistral-common` wheel | Recent Mistral |
@@ -87,3 +87,16 @@ Run it after `run.sh` has set up once:
 tools/tokbench/.venv/bin/python tools/tokbench/attribute.py [--json]
 ```
 
+
+## Known print difference: csv2json (lane 252)
+
+`corpus/programs/csv2json` prints the same JSON in both twins except for number text. AIL prints a whole float without a fraction (`12`, json.print.1 under ADR 0631), and Python's `json` prints `12.0`. The difference is inherent to the two languages' printing rules, so the twin is kept as it is, and the difference is not a bug. Its output is therefore not byte-identical to AIL's, and the token rows for this pair are unchanged by it.
+## Corpus change log
+Day-over-day totals move when a corpus program changes, not only when the language does. Each entry
+says which program changed and why, with its five-tokenizer mean before and after.
+- **2026-10-21, idiomatic rewrites** (four programs; output checked byte-identical to the Python twin):
+  - `programs/report_dates`: `date.utc(ms).format(...)` (std.time.date) replaces the hand-written civil-date function, with `use std.time.date`. 409.2 → 217.6.
+  - `programs/hexdump`: reads bytes with `fs.read_bytes` and formats rows in-process, instead of shelling out to `od`. 147.0 → 124.2.
+  - `agent-r4/t01_wordcount`: `counts.top(3)` replaces the sort-by-count pipeline. 57.0 → 43.6.
+  - `programs/bits`: `mode_text` uses one-line `if ... then ... else`. 425.4 → 414.6.
+  Total for the four: 1,038.6 → 800.0 (−238.6). These programs are now idiomatic, so the AIL/Python ratio for them falls for a reason that is not a language change.
