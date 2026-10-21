@@ -195,3 +195,8 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     key equal but not the same string; `map_set` stores through the
     remembered entry before calling anything. wordfreq 195.5M to 167.2M
     instructions (-14.5%); no other program of the ten uses a map.
+    Rejected: folding `NAME.len()` of a constant list literal (so
+    `seed % WORDS.len()` becomes a multiply, not an `idiv`). It works (a
+    method arm in `lower_const.ail`, one dispatch line in `lower.ail`) but
+    saved 1.0M of 167M instructions and no wall time I could measure on
+    wordfreq, so it is not worth a slot in the lower.ail queue.
