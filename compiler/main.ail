@@ -6,7 +6,7 @@
 #   ail run compiler parse FILE...        the AIL parser's tree, as `ail api --ast FILE`
 #   ail run compiler mir FILE [RT]        the native backend's MIR of a program (ADR 0384), with
 #                                         the runtime in directory RT when given
-#   ail run compiler build FILE RT [TARGET]
+#   ail run compiler build FILE RT [TARGET [MS [MB]]]
 #                                         an executable of a program as hex text, with the runtime
 #                                         in directory RT, for x86_64-linux (the default) or
 #                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
@@ -48,7 +48,10 @@ fn main() !
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
         "build" =>
-            m := lower_file(args[1], runtime(args[2])?)?
+            # Optional defaults for the run limits (run.limit.5): `0` for none.
+            ms := if args.len() > 4 then args[4] else "0"
+            mb := if args.len() > 5 then args[5] else "0"
+            m := lower_file(args[1], runtime_with(args[2], ms, mb)?)?
             target := if args.len() > 3 then args[3] else "x86_64-linux"
             match target
                 "x86_64-linux" => print(obj.hex(obj.elf(x64.generate(m), obj.X86_64)))
@@ -82,6 +85,11 @@ fn check_dump(path str, many bool) !
 
 ## The native runtime in directory `dir`, parsed as one program.
 fn runtime(dir str) !ast.Program
+    runtime_with(dir, "0", "0")
+
+## The runtime with `ail build`'s default time limit in milliseconds and
+## memory limit in megabytes baked into `limits.ail` (run.limit.5).
+fn runtime_with(dir str, ms str, mb str) !ast.Program
     mut texts := List[str]()
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -89,7 +97,8 @@ fn runtime(dir str) !ast.Program
         texts.push(fs.read_text("{dir}/{name}")?)
     for name in fs.list_dir(dir)?.sorted()
         if name.ends_with(".ail") and not ["prim.ail", "core.ail", "math.ail"].contains(name)
-            texts.push(fs.read_text("{dir}/{name}")?)
+            text := fs.read_text("{dir}/{name}")?
+            texts.push(text.replace("0 # BAKED_TIMEOUT_MS", ms).replace("0 # BAKED_MEMORY_MB", mb))
     syntax.parse(syntax.lex(texts.join("\n")).tokens).program
 
 ## Parse a program and the modules it imports, and lower them to MIR
