@@ -1,0 +1,6 @@
+use std.regex
+
+fn main()
+    re := regex.compile("a+") else e
+        return
+    print(regex.sub(re, "aaa", "b"))

@@ -1,0 +1,12 @@
+# A compound assignment to `self.a` in a method traps at its operator, as
+# `ail run` does (err.trap.1, native.build.1).
+struct P
+    a int
+
+fn P.bump(mut self, d int)
+    self.a += d
+
+fn main()
+    mut p := P(a: 9223372036854775807)
+    p.bump(1)
+    print(p.a)

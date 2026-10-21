@@ -1,0 +1,5 @@
+# A text over 2^30 bytes traps instead of exhausting memory (type.str.15).
+fn main()
+    print("ab".repeat(2).len())
+    n := 600000000
+    print("ab".repeat(n).len())

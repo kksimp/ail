@@ -92,3 +92,9 @@ font file; `NOTICE` lists the fonts and their licences.
 - Next: page-adaptive shapes (re-learn confident glyphs on the page),
   word-level correction against the document's own vocabulary, skew
   correction, and touching-glyph splitting.
+
+## Rejected alternatives
+
+- A small neural network trained on rendered glyphs (option B): not chosen now. It needs a training loop and weights, is less explainable, and is slower on the interpreter until tensor kernels cover convolutions. A later step can replace the classifier behind the same features.
+- Whole-line recognition with LSTM/CTC, as Tesseract 4 (option C): rejected because it needs large models and training infrastructure, and is far slower here. It has the best accuracy, but out of proportion for searching scans.
+- Binding Tesseract (option D): rejected because it violates ADR 0009 and ADR 0010. It is Apache-2.0, but a C++ library.

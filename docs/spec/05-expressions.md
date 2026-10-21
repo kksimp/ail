@@ -114,6 +114,12 @@ fn main()
 **expr.block.1** — A block is an expression. Its value is the value of its
 last expression, or no value if it ends in a statement. *(ADR 0091)*
 
+```ail rules=expr.block.1
+fn main()
+    v := if true then 1 else 2
+    print(v)
+```
+
 **expr.block.2** — A function returns the value of its body block. `return e`
 exits the function early with value `e`. *(ADR 0091)*
 
@@ -125,6 +131,18 @@ statement diverges produces no value and is accepted wherever a value of any
 type is expected, including as a one-line arm (`expr.match.9`) and as an
 `else` part. So a function can end with `while true`. There is no nameable
 `Never` type. *(ADR 0117, ADR 0139)*
+
+```ail rules=expr.block.3
+fn find(n int) int
+    mut i := 0
+    while true
+        i += 1
+        if i > n
+            return i
+
+fn main()
+    print(find(3))
+```
 
 ## Conditionals and loops
 
@@ -287,8 +305,8 @@ compile-time error, and the diagnostic MUST list the uncovered cases.
 
 **expr.match.3** — When the scrutinee has an enum type and a catch-all arm
 `_` covers one or more of its named variants, the implementation MUST warn
-and name those variants, unless the warning is suppressed for that match.
-*(ADR 0056)*
+and name those variants, unless the function allows it with
+`@allow("expr.match.3")` (`gram.attr.5`). *(ADR 0056, ADR 0379)*
 
 **expr.match.4** — A pattern is `_`; a variant of the scrutinee's enum type,
 bare or qualified; a literal (`expr.match.7`); or an or-pattern
@@ -393,8 +411,9 @@ fn main()
 
 > **Note:** not yet designed: or-patterns that bind names, patterns nested
 > inside a variant's fields (`expr.match.6`), a binding pattern for a whole
-> scrutinee (`n if n > 0`), open-ended ranges (`10..`), and warning-
-> suppression syntax. *(ADR 0138, ADR 0452, ADR 0453)*
+> scrutinee (`n if n > 0`), and open-ended ranges (`10..`). Warnings are
+> suppressed with `@allow` (gram.attr.5). *(ADR 0138, ADR 0379, ADR 0452,
+> ADR 0453)*
 
 ## Comprehensions
 

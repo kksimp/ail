@@ -1,0 +1,3 @@
+fn main()
+    data := "hello".encode()
+    print(data.len())

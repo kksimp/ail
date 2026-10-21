@@ -131,4 +131,47 @@ impl<'p> Checker<'p> {
         self.resolved.assoc_calls.insert(pos, (tr, concrete));
         Some(t)
     }
+
+    /// `List[T].name(args)` on a builtin type that implements a trait with an
+    /// associated function (trait.assoc.4, ADR 0748): `List[U].from_json(j)`.
+    /// `None` when no trait offers `name` for `ty`.
+    pub(super) fn builtin_assoc_call(
+        &mut self,
+        ty: Ty,
+        name: &str,
+        pos: Pos,
+        args: &'p [Arg],
+        expect: Option<&Ty>,
+    ) -> Option<Ty> {
+        let con = super::con_of(&ty)?;
+        let prog = self.prog;
+        let (tr, f, i) = (0..prog.traits.len()).find_map(|tr| {
+            let decl = self.assoc_fn(tr, name)?;
+            let &i = self.impl_of.get(&(tr, con))?;
+            let own = prog.impls[i].methods.iter().copied().find(|&m| prog.fns[m].name == name);
+            Some((tr, own.unwrap_or(decl), i))
+        })?;
+        let target = self.impl_info[i].target.clone();
+        let params = self.impl_info[i].params.clone();
+        let mut binds = Vec::new();
+        super::bind_types(&target, &ty, &params, &mut binds);
+        let sig: Sig = if prog.fns[f].within == crate::ast::Within::Trait(tr) {
+            let s = self.sigs[f].clone();
+            let b = vec![(self.trait_self[tr], target.clone())];
+            Sig {
+                params: s.params.iter().map(|(m, t)| (*m, subst(t, &b))).collect(),
+                ret: subst(&s.ret, &b),
+                generics: params,
+                owner: self.impl_info[i].params.len(),
+                ..s
+            }
+        } else {
+            self.sigs[f].clone()
+        };
+        self.resolved.targets.insert(pos, f);
+        self.resolved.symbols.insert(pos, format!("method:{}.{name}", self.show(&ty)));
+        let t = self.check_call(&format!("{}.{name}", self.show(&ty)), &sig, binds, args, None, pos, expect);
+        self.resolved.assoc_calls.insert(pos, (tr, ty));
+        Some(t)
+    }
 }

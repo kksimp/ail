@@ -1,0 +1,13 @@
+struct C
+    n int
+
+fn C.bump(mut self, by int)
+    self.n += by
+
+fn main()
+    mut cs := [C(n: 1)]
+    cs[0].bump(1)
+    print("{cs[0].n}")
+    k := 3
+    cs[k].bump(1)
+    print("unreachable")

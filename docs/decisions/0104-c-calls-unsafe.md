@@ -23,3 +23,7 @@ contain the call in an `unsafe` block.
 
 - The standard library's OS layer is written this way on macOS and Windows,
   which must call system libraries (toolchain-constraints.md).
+
+## Rejected alternatives
+
+- Annotating C functions as safe: less ceremony, but unchecked claims can silently break memory safety. Rejected because the boundary should be exact and honest.

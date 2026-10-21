@@ -18,20 +18,25 @@ use crate::diag;
 use crate::docs;
 use crate::modules;
 
-pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] DIR|FILE\n";
+pub const USAGE: &str = "usage: ail api --card [--budget N] [--json] [--module NAME | --index] DIR|FILE\n";
 
 /// The default budget in estimated tokens (api.card.3, ADR 0311).
 pub const DEFAULT_BUDGET: usize = 4000;
 
-/// How much of the card is left, from everything (0) to module names (5).
-const LEVELS: usize = 5;
+/// How the root module (named "" internally) is written on the command line
+/// and in cards.
+const ROOT_TITLE: &str = "(root)";
+
+/// How much of the card is left, from everything (0) to module names (6).
+const LEVELS: usize = 6;
 
 /// What each level drops, for the card's last line (api.card.3).
 const DROPPED: [&str; LEVELS] = [
     "private items",
     "doc comments",
     "parameter names",
-    "fields, variants, contracts and test names",
+    "members, contracts and examples (docs past their first sentence)",
+    "fields, variants and test names",
     "signatures (names only)",
 ];
 
@@ -41,10 +46,20 @@ pub fn command(args: &[&str], json_diags: bool) -> ExitCode {
     // The global `--json` flag reaches here as `json_diags`.
     let mut json = json_diags;
     let mut path = None;
+    let mut module = None;
+    let mut index = false;
     let mut it = args.iter().copied().filter(|a| *a != "--card");
     while let Some(a) = it.next() {
         match a {
             "--json" => json = true,
+            "--index" => index = true,
+            "--module" => match it.next() {
+                Some(m) => module = Some(m),
+                None => {
+                    eprint!("{USAGE}");
+                    return ExitCode::from(2);
+                }
+            },
             "--budget" => match it.next().and_then(|n| n.parse::<usize>().ok()) {
                 Some(n) if n > 0 => budget = n,
                 _ => {
@@ -63,7 +78,18 @@ pub fn command(args: &[&str], json_diags: bool) -> ExitCode {
         eprint!("{USAGE}");
         return ExitCode::from(2);
     };
-    match card(path, budget, json) {
+    if index && module.is_some() {
+        eprint!("{USAGE}");
+        return ExitCode::from(2);
+    }
+    let out = if index {
+        self::index(path, json)
+    } else if let Some(m) = module {
+        module_card(path, m, budget, json)
+    } else {
+        card(path, budget, json)
+    };
+    match out {
         Ok(out) => {
             print!("{out}");
             ExitCode::SUCCESS
@@ -116,6 +142,8 @@ struct Card {
     name: String,
     entry: Option<String>,
     tests: Vec<String>,
+    /// The module of each test, parallel to `tests` (api.card.6).
+    test_modules: Vec<String>,
     manifest: Vec<String>,
     examples: Vec<(String, String)>,
     modules: Vec<Module>,
@@ -124,15 +152,74 @@ struct Card {
 /// The card of `path` (a package directory or a file) within `budget`
 /// estimated tokens, as Markdown or JSON (api.card.1-2).
 pub fn card(path: &str, budget: usize, json: bool) -> Result<String, Failure> {
+    fit(build(path)?, budget, json)
+}
+
+/// `ail api --card --module NAME`: the card of one module of the package
+/// (api.card.6). The package's entry, manifest and examples are the root
+/// module's, so they appear only on the root module's card.
+pub fn module_card(path: &str, module: &str, budget: usize, json: bool) -> Result<String, Failure> {
+    let mut built = build(path)?;
+    let name = if module == ROOT_TITLE { "" } else { module };
+    if !built.modules.iter().any(|m| m.name == name) {
+        return Err(Failure::Message(format!("no module `{module}` in {path}; `ail api --card --index {path}` lists the modules")));
+    }
+    built.modules.retain(|m| m.name == name);
+    built.name = format!("{}: {}", built.name, module_title_of(name));
+    if !name.is_empty() {
+        built.entry = None;
+        built.manifest.clear();
+        built.examples.clear();
+    }
+    let (tests, test_modules): (Vec<String>, Vec<String>) =
+        built.tests.drain(..).zip(built.test_modules.drain(..)).filter(|(_, m)| m.as_str() == name).unzip();
+    built.tests = tests;
+    built.test_modules = test_modules;
+    fit(built, budget, json)
+}
+
+/// `ail api --card --index`: one line per module with its item count, so an
+/// agent reads the index and then one module card (api.card.7).
+pub fn index(path: &str, json: bool) -> Result<String, Failure> {
     let built = build(path)?;
+    if json {
+        let modules = built
+            .modules
+            .iter()
+            .map(|m| Json::Obj(vec![("module", Json::Str(m.name.clone())), ("count", Json::Int(m.entries.len() as i64))]))
+            .collect();
+        let top = vec![("api", Json::Int(API_VERSION)), ("card", Json::Str(built.name.clone())), ("modules", Json::Arr(modules))];
+        let mut out = String::new();
+        Json::Obj(top).write(&mut out, None);
+        out.push('\n');
+        return Ok(out);
+    }
+    let mut out = String::new();
+    writeln!(out, "# {}", built.name).unwrap();
+    for m in &built.modules {
+        writeln!(out, "{}  {} items", module_title(m), m.entries.len()).unwrap();
+    }
+    Ok(out)
+}
+
+/// The richest card of `built` within `budget` (api.card.3).
+fn fit(built: Card, budget: usize, json: bool) -> Result<String, Failure> {
+    // api.card.3 (ADR 0703): the richest level within the budget. The levels
+    // are not nested (the first-sentence level keeps docs that a level after
+    // it drops), so the first level that fits is not always the fullest one.
+    // "Richest" counts the card's content, not its trailer (ADR 0719): a
+    // deeper level's trailer lists more dropped items, so counting it would
+    // let a trimmed card outrank a fuller one.
+    let mut best: Option<(usize, usize)> = None;
     for level in 0..=LEVELS {
-        let out = render(&built, level, json, budget);
-        let tokens = estimate_tokens(&out);
-        if tokens <= budget || level == LEVELS {
-            return Ok(out);
+        let content = estimate_tokens(&render(&built, level, json, budget, false));
+        let full = estimate_tokens(&render(&built, level, json, budget, true));
+        if full <= budget && best.is_none_or(|(t, _)| content > t) {
+            best = Some((content, level));
         }
     }
-    unreachable!("the last level returns")
+    let level = best.map_or(LEVELS, |(_, level)| level);
+    Ok(render(&built, level, json, budget, true))
 }
 
 fn build(path: &str) -> Result<Card, Failure> {
@@ -184,20 +271,22 @@ fn build(path: &str) -> Result<Card, Failure> {
         let file = prog.file_at(f.pos).map(|sf| file_label(&root, &sf.path)).unwrap_or_default();
         format!("main in {file}")
     });
-    let mut test_names: Vec<String> = tests
+    let mut tests_named: Vec<(String, String)> = tests
         .iter()
         .map(|&i| {
             let f = &prog.fns[i];
             let m = prog.module_at(f.pos);
-            if m.is_empty() { f.name.clone() } else { format!("{m}.{}", f.name) }
+            let qualified = if m.is_empty() { f.name.clone() } else { format!("{m}.{}", f.name) };
+            (m.to_string(), qualified)
         })
         .collect();
-    test_names.sort();
+    tests_named.sort_by(|a, b| a.1.cmp(&b.1));
+    let (test_modules, test_names): (Vec<String>, Vec<String>) = tests_named.into_iter().unzip();
 
     let manifest = std::fs::read_to_string(root.join(crate::packages::MANIFEST))
         .map(|s| s.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).map(String::from).collect())
         .unwrap_or_default();
-    Ok(Card { name, entry, tests: test_names, manifest, examples: examples(&root), modules })
+    Ok(Card { name, entry, tests: test_names, test_modules, manifest, examples: examples(&root), modules })
 }
 
 /// `edit.ail`, or `geo/shapes.ail`: the file's path below the package root.
@@ -305,9 +394,11 @@ fn private(module: &Module, e: &Entry) -> bool {
     !e.public && (!module.name.is_empty() || module.entries.iter().any(|x| x.public))
 }
 
-fn render(card: &Card, level: usize, json: bool, budget: usize) -> String {
-    let dropped: Vec<&str> = DROPPED[..level].to_vec();
-    if json { render_json(card, level, &dropped, budget) } else { render_md(card, level, &dropped, budget) }
+/// The card at `level`; `trailer` says whether it ends with what it dropped
+/// (and the budget), which `fit` leaves out when it ranks the levels.
+fn render(card: &Card, level: usize, json: bool, budget: usize, trailer: bool) -> String {
+    let dropped: Vec<&str> = if trailer { DROPPED[..level].to_vec() } else { Vec::new() };
+    if json { render_json(card, level, &dropped, budget, trailer) } else { render_md(card, level, &dropped, budget, trailer) }
 }
 
 fn shown<'a>(module: &'a Module, level: usize) -> Vec<&'a Entry> {
@@ -322,9 +413,19 @@ fn first_line(doc: &str) -> &str {
     doc.lines().next().unwrap_or("").trim()
 }
 
+/// The first sentence of a doc comment: its first line, cut after the first
+/// `. ` (api.card.3, ADR 0703).
+fn first_sentence(doc: &str) -> &str {
+    let line = first_line(doc);
+    match line.find(". ") {
+        Some(i) => &line[..=i],
+        None => line,
+    }
+}
+
 fn line(e: &Entry, level: usize, indent: &str, out: &mut String) {
     let vis = if e.public { "pub " } else { "" };
-    if level >= 5 {
+    if level >= 6 {
         writeln!(out, "{indent}{} {}", e.kind, e.name).unwrap();
         return;
     }
@@ -336,6 +437,10 @@ fn line(e: &Entry, level: usize, indent: &str, out: &mut String) {
         && let Some(d) = &e.doc
     {
         write!(out, "  ## {}", first_line(d)).unwrap();
+    } else if level == 4
+        && let Some(d) = &e.doc
+    {
+        write!(out, "  ## {}", first_sentence(d)).unwrap();
     }
     out.push('\n');
     if level < 4 {
@@ -351,7 +456,7 @@ fn line(e: &Entry, level: usize, indent: &str, out: &mut String) {
     }
 }
 
-fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize) -> String {
+fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize, trailer: bool) -> String {
     let mut out = String::new();
     writeln!(out, "# {}", card.name).unwrap();
     if let Some(e) = &card.entry {
@@ -368,7 +473,7 @@ fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize) -> Stri
             writeln!(out, "    {l}").unwrap();
         }
     }
-    if !card.examples.is_empty() {
+    if !card.examples.is_empty() && level < 4 {
         writeln!(out, "examples:").unwrap();
         for (f, d) in &card.examples {
             if d.is_empty() || level >= 2 { writeln!(out, "    {f}") } else { writeln!(out, "    {f}  ## {d}") }.unwrap();
@@ -376,7 +481,7 @@ fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize) -> Stri
     }
     for m in &card.modules {
         let es = shown(m, level);
-        if level >= 5 {
+        if level >= 6 {
             writeln!(out, "\n## {} ({} items)", module_title(m), m.entries.len()).unwrap();
             continue;
         }
@@ -402,7 +507,7 @@ fn render_md(card: &Card, level: usize, dropped: &[&str], budget: usize) -> Stri
         }
         out.push_str("```\n");
     }
-    if level > 0 {
+    if level > 0 && trailer {
         let est = estimate_tokens(&out);
         writeln!(out, "\ntrimmed to fit {budget} tokens (~{est}); dropped: {}", dropped.join(", ")).unwrap();
     }
@@ -416,7 +521,11 @@ fn private_member(m: &Entry) -> bool {
 }
 
 fn module_title(m: &Module) -> String {
-    if m.name.is_empty() { "(root)".to_string() } else { m.name.clone() }
+    module_title_of(&m.name)
+}
+
+fn module_title_of(name: &str) -> String {
+    if name.is_empty() { ROOT_TITLE.to_string() } else { name.to_string() }
 }
 
 fn entry_json(e: &Entry, level: usize) -> Json {
@@ -429,10 +538,12 @@ fn entry_json(e: &Entry, level: usize) -> Json {
         ("line", Json::Int(e.line as i64)),
         ("col", Json::Int(e.col as i64)),
     ];
-    if level < 5 {
+    if level < 6 {
         kvs.push(("signature", Json::Str(signature(e, level).to_string())));
         if level < 2 {
             kvs.push(("doc", Json::opt(e.doc.as_deref().map(|d| first_line(d).to_string()))));
+        } else if level == 4 {
+            kvs.push(("doc", Json::opt(e.doc.as_deref().map(|d| first_sentence(d).to_string()))));
         }
         if !e.effects.is_empty() {
             kvs.push(("effects", Json::Arr(e.effects.iter().cloned().map(Json::Str).collect())));
@@ -452,13 +563,13 @@ fn entry_json(e: &Entry, level: usize) -> Json {
     Json::Obj(kvs)
 }
 
-fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize) -> String {
+fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize, trailer: bool) -> String {
     let strs = |v: &[String]| Json::Arr(v.iter().cloned().map(Json::Str).collect());
     let modules = card
         .modules
         .iter()
         .map(|m| {
-            let items = if level >= 5 { Vec::new() } else { shown(m, level).into_iter().map(|e| entry_json(e, level)).collect() };
+            let items = if level >= 6 { Vec::new() } else { shown(m, level).into_iter().map(|e| entry_json(e, level)).collect() };
             Json::Obj(vec![
                 ("module", Json::Str(m.name.clone())),
                 ("count", Json::Int(m.entries.len() as i64)),
@@ -469,6 +580,7 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize) -> St
     let examples = card
         .examples
         .iter()
+        .filter(|_| level < 4)
         .map(|(f, d)| Json::Obj(vec![("file", Json::Str(f.clone())), ("doc", Json::Str(if level >= 2 { String::new() } else { d.clone() }))]))
         .collect();
     let top = vec![
@@ -480,9 +592,14 @@ fn render_json(card: &Card, level: usize, dropped: &[&str], budget: usize) -> St
         ("manifest", strs(&card.manifest)),
         ("examples", Json::Arr(examples)),
         ("modules", Json::Arr(modules)),
-        ("budget", Json::Int(budget as i64)),
-        ("dropped", Json::Arr(dropped.iter().map(|d| Json::Str(d.to_string())).collect())),
     ];
+    let top = if trailer {
+        top.into_iter()
+            .chain([("budget", Json::Int(budget as i64)), ("dropped", Json::Arr(dropped.iter().map(|d| Json::Str(d.to_string())).collect()))])
+            .collect()
+    } else {
+        top
+    };
     let mut out = String::new();
     Json::Obj(top).write(&mut out, None);
     out.push('\n');

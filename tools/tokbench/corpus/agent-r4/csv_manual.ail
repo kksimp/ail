@@ -1,0 +1,35 @@
+## Sum the qty column of a CSV with quoted fields, by hand.
+fn split_row(line str) List[str]
+    mut out := []
+    mut field := ""
+    mut quoted := false
+    cs := line.chars()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        i += 1
+        if quoted
+            if c == '"'
+                if i < cs.len() and cs[i] == '"'
+                    field = "{field}\""
+                    i += 1
+                else
+                    quoted = false
+            else
+                field = "{field}{c}"
+        elif c == '"'
+            quoted = true
+        elif c == ','
+            out.push(field)
+            field = ""
+        else
+            field = "{field}{c}"
+    out.push(field)
+    out
+
+fn main() !
+    text := fs.read_text("sales.csv")?
+    mut total := 0
+    for line in text.lines()[1..]
+        total += split_row(line)[1].to_int() else 0
+    print(total)

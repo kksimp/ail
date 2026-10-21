@@ -1,0 +1,3 @@
+fn main() !
+    r := proc.run("git", ["status", "--short"], none, 10000)?
+    print("{r.status} {r.out.trim()}")

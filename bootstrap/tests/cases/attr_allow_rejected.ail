@@ -1,0 +1,9 @@
+# `@allow` names a warning that a function may allow (gram.attr.5).
+@allow fn one() int
+    1
+
+@allow("expr.call.2") fn two() int
+    2
+
+fn main()
+    print("{one() + two()}")

@@ -11,11 +11,13 @@ pub struct Outcome {
     pub failure: Option<String>,
     /// What the test printed.
     pub output: String,
+    /// What the test wrote to standard error (test.run.2).
+    pub errput: String,
     /// Set for a property test (test.prop.4).
     pub prop: Option<PropInfo>,
     /// The trap's source line, values and frames, when a trap failed it (test.run.5).
     pub snapshot: Option<String>,
-    /// The failing test's trace events, one per line (trace.test.1).
+    /// The failing test's trace events, one per line (trace.test.1, test.run.6).
     pub trace: Vec<String>,
 }
 
@@ -83,6 +85,7 @@ fn is_literal(e: &Expr) -> bool {
 /// from its name (test.prop.3).
 pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u64>) -> Vec<Outcome> {
     let mut it = build(prog, resolved, Vec::<u8>::new());
+    it.errs = Some(Vec::new());
     let mut outcomes = Vec::new();
     let mut const_failure = None;
     for c in &prog.consts {
@@ -106,9 +109,10 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
             let (pos, failure, info) = it.run_property(f, cases, seed.unwrap_or_else(|| super::prop::default_seed(&f.name)));
             let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
             it.out.get_mut().clear();
+            let errput = take_errs(&mut it.errs);
             super::trace::capture_end();
             super::replay::end_test(failure.is_some());
-            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: Some(info), snapshot: None, trace: Vec::new() });
+            outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, errput, prop: Some(info), snapshot: None, trace: Vec::new() });
             continue;
         }
         let mut trapped = None;
@@ -142,10 +146,17 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
         let _ = it.out.flush();
         let output = String::from_utf8_lossy(it.out.get_ref()).into_owned();
         it.out.get_mut().clear();
+        let errput = take_errs(&mut it.errs);
         let events = super::trace::capture_end();
         let trace = if failure.is_some() { events } else { Vec::new() };
         super::replay::end_test(failure.is_some());
-        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, prop: None, snapshot, trace });
+        outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, errput, prop: None, snapshot, trace });
     }
     outcomes
+}
+
+/// The standard error a test wrote, taken and cleared (test.run.2).
+fn take_errs(errs: &mut Option<Vec<u8>>) -> String {
+    let bytes = errs.as_mut().map(std::mem::take).unwrap_or_default();
+    String::from_utf8_lossy(&bytes).into_owned()
 }

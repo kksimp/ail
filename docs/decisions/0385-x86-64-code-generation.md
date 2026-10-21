@@ -79,3 +79,10 @@ selector does beyond one MIR instruction at a time.
   (native.build.1 allows that).
 - `compiler/x64/gen.ail` is the only x86-64-specific file besides the
   encoder; the allocator (ADR 0386) and the runtime are shared with ARM64.
+
+## Rejected alternatives
+
+- Trap record per site (the first draft of native-abi.md section 7): rejected because the message must be formatted at compile time, so it cannot contain the operands in `` `9 * 3` overflows `int` ``, which need run-time values.
+- `ud2` with a signal handler: rejected because the handler needs a table from addresses to sites and per-OS signal setup, and gains nothing for the drag race.
+- Allocating every register and reserving per instruction: rejected for now, because `idiv`, `syscall` and shifts need fixed registers, so the allocator would need constraints and extra fix-up moves. Nine integer and 14 vector registers already hold every inner loop of the drag-race programs.
+- Pure System V with no callee-saved vector registers: rejected, because floats live across a call would always be spilled, a cost the user cannot opt out of (ADR 0076 section 3).

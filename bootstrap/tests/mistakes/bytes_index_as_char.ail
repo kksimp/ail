@@ -1,0 +1,4 @@
+fn main()
+    data := b"abc"
+    c := data[0]
+    print(c == "a")

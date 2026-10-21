@@ -55,3 +55,9 @@ shrinker, `test.prop.2`).
   a generatable property type (ADR 0377); the AIL lexer and parser read the
   literal (ADR 0376).
 - A user `impl Trait for bytes` is possible, like for `str`.
+
+## Rejected alternatives
+
+- `List[u8]` for binary data (option B): rejected because it costs 16 times the memory in the interpreter, has no literal, no `find` or `starts_with`, and nothing separates text from data.
+- A mutable `bytes` buffer (option C): rejected because AIL values are independent (ADRs 0060-0063), so a buffer would need `mut` rules of its own. Read, slice and join need no mutation, and `List[u8]` converts when it does.
+- Letting `str` hold invalid UTF-8 (option D): rejected because it breaks `type.str.1` and every `str` method's guarantees.

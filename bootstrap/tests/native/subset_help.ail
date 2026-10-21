@@ -1,0 +1,35 @@
+## One construct per `native.subset.1` help form (ADR 0722); forms whose construct
+## became native since (`.lines()`, `==` on `str`, interpolation, `Map`) no longer
+## report. The `.err` file
+## is the problems; each error line is followed by its `help:` line.
+struct Job
+    name str
+
+enum Maybe
+    Some
+    None
+
+fn lines_of(s str) int
+    s.lines().len()
+
+fn same(a str, b str) bool
+    a == b
+
+fn label(n int) str
+    "n is {n}"
+
+fn parse(s str) int
+    s.to_int() else 0
+
+fn loop_by_index(mut xs List[int]) int
+    mut total := 0
+    for mut x in xs
+        x += 1
+    total
+
+fn with_map() int
+    m := Map[str, int]()
+    m.len()
+
+fn main()
+    print(lines_of("a\nb"))

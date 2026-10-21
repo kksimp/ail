@@ -1,0 +1,8 @@
+theme=dark; sid=abc123; cart=3
+sid=abc123; cart=3
+over http: [cart=3]
+sid: abc123
+scripts see 1 of 3 cookies
+foreign domain refused: false
+cart: 5, cookies: 3
+after clear: []

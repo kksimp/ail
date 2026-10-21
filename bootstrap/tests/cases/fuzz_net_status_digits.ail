@@ -1,0 +1,40 @@
+# std.net.4: a status code of other than three digits is a malformed response (kind protocol).
+use std.net
+
+fn rogue(l net.Listener, line str) int
+    c := l.accept() else err
+        return 0
+    for _ in 0..20
+        got := c.read_line() else err
+            break
+        text := got else break
+        if text == ""
+            break
+    c.write("{line}\r\nContent-Length: 0\r\n\r\n") else err
+        return 0
+    c.close()
+    1
+
+fn visit(url str) str
+    r := net.get(url) else err
+        return err.kind
+    "ok {r.status}"
+
+fn try(line str) str
+    l := net.listen("127.0.0.1:0") else err
+        return "listen {err.kind}"
+    w := spawn rogue(l, line)
+    res := visit("http://{l.addr()}/")
+    l.close()
+    w.wait() else 0
+    res
+
+fn main()
+    for line in [
+        "HTTP/1.1 200 OK",
+        "HTTP/1.1 20 OK",
+        "HTTP/1.1 2000 OK",
+        "HTTP/1.1 +20 OK",
+        "HTTP/1.1 abc OK",
+    ]
+        print("{line}: {try(line)}")
