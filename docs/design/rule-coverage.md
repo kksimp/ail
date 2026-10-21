@@ -149,7 +149,7 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `11-concurrency.md:396` | norun | `(none cited)` | norun: the order of the two streams depends on how the child's writes race, so the output differs between runs; the example is checked, not compared. | unowned |
 | `12-modules.md:134` | skip=bootstrap | `(none cited)` | - | 238 |
 | `12-modules.md:169` | skip=bootstrap | `(none cited)` | - | 238 |
-| `15-compile-time.md:131` | norun | `ct.eval.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
+| `15-compile-time.md:131` | norun | `ct.eval.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | 223 |
 | `17-std.md:135` | norun | `std.fs.9` | needs a network, UI, process, device or clock the gate lacks | unowned |
 | `17-std.md:369` | norun | `std.io.4` | needs a network, UI, process, device or clock the gate lacks | unowned |
 | `17-std.md:403` | norun | `std.proc.1` | needs a network, UI, process, device or clock the gate lacks | unowned |
