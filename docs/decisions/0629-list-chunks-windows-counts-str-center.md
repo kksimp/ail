@@ -1,10 +1,10 @@
-# 0629. `chunks`, `windows`, `counts` on lists and `center` on strings
+# 0629. List `chunks`, `windows`, `counts`, `flatten`; string `center`, `words`, `trim_start`, `trim_end`, `count`, `rfind`
 
 - **Status:** Accepted
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 4 — Types
-- **Spec rules:** type.coll.17, type.coll.18, type.str.16 ([04-types](../spec/04-types.md))
+- **Spec rules:** type.coll.17-19, type.str.16-18 ([04-types](../spec/04-types.md))
 
 ## Context
 
@@ -17,8 +17,10 @@ agents' bugs are.
 
 - `xs.chunks(n)` and `xs.windows(n)`: `List[List[T]]`; trap for `n < 1`.
 - `xs.counts()`: `Map[T, int]`, first-seen order; `T` hashable.
-- `s.center(width, fill)`: extra padding on the right (Python puts it on the
-  left for odd widths of some strings; right is consistent with `pad_right`).
+- `xss.flatten()`: `List[List[T]] -> List[T]`.
+- `s.words()` (split on whitespace, no empties; Python's `s.split()`),
+  `trim_start`, `trim_end`, `s.count(sub)` (traps on empty `sub`), `s.rfind(sub)`.
+- `s.center(width, fill)`: extra padding on the right (consistent with `pad_right`).
 
 Not added: `any`, `all`, `count` (`any` is a keyword, and `for` with an early
 `return` is short), `partition`/`rsplit` (need tuples or a result struct;

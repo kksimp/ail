@@ -429,6 +429,15 @@ impl<'a, W: Write> Interp<'a, W> {
                     }
                     Value::Map(Rc::new(out))
                 }
+                // type.coll.19: one list of all the elements of the inner lists, in order.
+                "flatten" => {
+                    let mut out = Vec::new();
+                    for inner in items.iter() {
+                        let Value::List(l) = inner else { unreachable!("checked: a list of lists") };
+                        out.extend(l.iter().cloned());
+                    }
+                    Value::List(Rc::new(out))
+                }
                 "union" | "intersect" | "difference" => set_op(name, items.iter(), &a[0]),
                 "contains" | "index_of" => {
                     let mut found = None;
@@ -563,6 +572,22 @@ impl<'a, W: Write> Interp<'a, W> {
             "to_bytes" => super::bytes::bytes_value(text.as_bytes().to_vec()),
             "lines" => Value::List(Rc::new(text.lines().map(s).collect())),
             "trim" => s(text.trim()),
+            "trim_start" => s(text.trim_start()),
+            "trim_end" => s(text.trim_end()),
+            // type.str.17: the pieces between runs of whitespace; none for blank text.
+            "words" => Value::List(Rc::new(text.split_whitespace().map(s).collect())),
+            // type.str.18: non-overlapping occurrences of `sub`.
+            "count" => {
+                let sub = arg_str(0);
+                if sub.is_empty() {
+                    return trap("type.str.18", pos, "`count` needs a non-empty text to find".into());
+                }
+                Value::Int(text.matches(&*sub).count() as i64)
+            }
+            "rfind" => {
+                let sub = arg_str(0);
+                opt(text.rfind(&*sub).map(|b| Value::Int(text[..b].chars().count() as i64)))
+            }
             "to_lower" => s(text.to_lowercase()),
             "to_upper" => s(text.to_uppercase()),
             // type.str.13: character positions; bounds are never clamped.

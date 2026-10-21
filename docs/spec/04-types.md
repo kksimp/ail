@@ -467,6 +467,24 @@ fn main()
     print("[{"ab".center(7, '*')}]")         # [**ab***]
 ```
 
+**type.str.17** — `s.words()` returns the pieces of `s` between runs of
+whitespace, with no empty pieces (an empty list for blank text).
+`s.trim_start()` and `s.trim_end()` remove whitespace from one end only.
+*(ADR 0629)*
+
+**type.str.18** — `s.count(sub)` returns the number of non-overlapping
+occurrences of `sub`; it traps when `sub` is empty. `s.rfind(sub)` is the
+character index of the last occurrence, or `none` (compare `type.str.14`).
+*(ADR 0629)*
+
+```ail rules=type.str.17,type.str.18
+fn main()
+    print("  a  b ".words())                # ["a", "b"]
+    print("[{"  x ".trim_end()}]")          # [  x]
+    print("abababa".count("aba"))           # 2
+    print("a/b/c".rfind("/"))               # 3
+```
+
 **type.str.13** — `s.slice(a, b)` returns the characters of `s` from index
 `a` up to but excluding `b` (indexes count characters, as `len()` does:
 `type.str.12`). It traps unless `0 <= a <= b <= s.len()`; bounds are never
@@ -777,6 +795,14 @@ fn main()
     print(xs.chunks(2))                      # [[1, 2], [3, 4], [5]]
     print(xs.windows(3))                     # [[1, 2, 3], [2, 3, 4], [3, 4, 5]]
     print("a b a".split(" ").counts())       # {"a": 2, "b": 1}
+```
+
+**type.coll.19** — `xs.flatten()` on a `List[List[T]]` returns one `List[T]`
+with the inner lists' elements in order. *(ADR 0629)*
+
+```ail rules=type.coll.19
+fn main()
+    print([[1, 2], [], [3]].flatten())      # [1, 2, 3]
 ```
 
 **type.coll.12** — `xs.sum()` exists only for `List[int]`, returning an `int`,
