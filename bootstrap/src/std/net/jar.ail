@@ -22,6 +22,8 @@ pub struct Cookie
     pub expires_ms int
     pub secure bool
     pub http_only bool
+    ## `lax` (the default), `strict` or `none` (spec std.net.23).
+    pub same_site str
     ## Order of arrival, to break ties between equally long paths.
     pub seq int
 
@@ -170,6 +172,7 @@ pub fn Jar.set_cookie(mut self, url str, line str) bool
     mut max_age := none
     mut secure := false
     mut http_only := false
+    mut same_site := "lax"
     for attr in pieces[1..]
         part := attr.trim()
         key := part.split("=")[0].trim().to_lower()
@@ -193,6 +196,13 @@ pub fn Jar.set_cookie(mut self, url str, line str) bool
             secure = true
         elif key == "httponly"
             http_only = true
+        elif key == "samesite"
+            v := val.to_lower()
+            if v == "strict" or v == "none"
+                same_site = v
+    # A cookie sent across sites must be Secure (as browsers require).
+    if same_site == "none" and not secure
+        return false
     now := time.now_ms()
     mut gone := false
     if age := max_age
@@ -219,6 +229,7 @@ pub fn Jar.set_cookie(mut self, url str, line str) bool
             expires_ms: expires,
             secure: secure,
             http_only: http_only,
+            same_site: same_site,
             seq: seq,
         ))
         self.next_seq += 1
@@ -239,7 +250,26 @@ pub fn Jar.drop_expired(mut self)
 ## first (RFC 6265 5.4). `http_only` cookies are included: this is the
 ## transport. Expired cookies are skipped.
 pub fn Jar.matching(self, url str) List[Cookie]
+    matching_from(url, url, true)
+
+## The site of a host: its last two labels (an IP address is its own site).
+## There is no public suffix list, so `a.co.uk` and `b.co.uk` count as one.
+fn site_of(host str) str
+    if is_ip(host)
+        return host
+    parts := host.split(".")
+    if parts.len() <= 2
+        return host
+    parts[parts.len() - 2..].join(".")
+
+## The cookies a request to `url` carries when it is made from the page
+## `from` (`""` for a request typed by the user), with `navigation` true for
+## a top-level `GET` navigation (a link or form, not a subresource). Within
+## one site every cookie goes; across sites `none` cookies go, `lax` cookies
+## only on a navigation, and `strict` ones never (spec std.net.23).
+pub fn Jar.matching_from(self, url str, from str, navigation bool) List[Cookie]
     t := parse_target(url)
+    cross := from != "" and site_of(parse_target(from).host) != site_of(t.host)
     now := time.now_ms()
     mut out := List[Cookie]()
     for c in self.items
@@ -253,12 +283,18 @@ pub fn Jar.matching(self, url str) List[Cookie]
             continue
         if not path_matches(t.path, c.path)
             continue
+        if cross and (c.same_site == "strict" or (c.same_site == "lax" and not navigation))
+            continue
         out.push(c)
     out.sorted(by: |c| c.seq).sorted(by: |c| -c.path.len())
 
 ## The value of the `Cookie` header for `url`: `a=1; b=2`, or `""`.
 pub fn Jar.header(self, url str) str
     ["{c.name}={c.value}" for c in matching(url)].join("; ")
+
+## `header` for a request made from the page `from` (see `matching_from`).
+pub fn Jar.header_from(self, url str, from str, navigation bool) str
+    ["{c.name}={c.value}" for c in matching_from(url, from, navigation)].join("; ")
 
 ## The value of the cookie `name` that a request to `url` would carry.
 pub fn Jar.value(self, url str, name str) str?

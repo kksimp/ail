@@ -691,6 +691,42 @@ limit of `std.net.10` applies per request, and `srv.close()` drops idle
 connections. Any other request is answered with `Connection: close`.
 *(ADR 0639)*
 
+**std.net.23** — SameSite. A cookie has `same_site`: `lax` (the default, and
+any unknown value), `strict` or `none`; `none` without `Secure` drops the
+line (`set_cookie` gives `false`). `j.header_from(url, from, navigation)` and
+`j.matching_from(...)` give the cookies for a request to `url` made from the
+page `from` (`""` for one the user typed) with `navigation` true for a
+top-level `GET`: within one site every cookie goes; across sites `none` ones
+go, `lax` ones only on a navigation, `strict` ones never. A site is a host's
+last two labels, since there is no public suffix list. `header` and
+`matching` are the same-site case. *(ADR 0640)*
+
+**std.net.24** — `srv.shutdown()` stops a `Server` listening and closes its
+idle connections. A request that has already started to arrive is still
+accepted and answered, with `Connection: close`; when none is left `accept`
+fails with kind `closed`, as after `close`. *(ADR 0640)*
+
+```ail rules=std.net.23,std.net.24
+use std.net
+use std.net.http
+use std.net.jar
+
+fn hi(r net.Request) net.Response
+    net.Response(status: 200, headers: {}, body: "hi")
+
+fn main() !
+    mut j := jar.new()
+    j.set_cookie("https://shop.test/", "l=1; SameSite=Lax")
+    j.set_cookie("https://shop.test/", "s=2; SameSite=Strict")
+    print(j.header_from("https://shop.test/", "https://other.test/", true))
+    print(j.header_from("https://shop.test/", "https://other.test/", false) == "")
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, hi)
+    print(net.get("http://{srv.addr()}/")?.body)
+    srv.shutdown()
+    t.wait()?
+```
+
 ```ail rules=std.net.19,std.net.20,std.net.21,std.net.22
 use std.net
 use std.net.http

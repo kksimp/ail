@@ -535,3 +535,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0639](0639-http-server-keep-alive.md) | HTTP server keeps connections alive between requests *(delegated)* | Accepted | 2026-10-21 |
 | [0703](0703-card-middle-trim-level.md) | `ail api --card` gets a middle trimming level (signatures and first sentences) and picks the richest level within budget; amends 0311 *(delegated)* | Accepted | 2026-10-21 |
 | [0656](0656-compiler-hot-paths.md) | Cold-build hot paths in the AIL compiler: a per-function profile (`AIL_BYTECODE_STATS=3`), dominators by immediate dominator, the runtime parsed once, cheaper lexer and lookahead *(delegated)* | Accepted | 2026-10-21 |
+| [0640](0640-samesite-and-graceful-shutdown.md) | SameSite in the cookie jar; `srv.shutdown()` stops a server without dropping requests under way *(delegated)* | Accepted | 2026-10-21 |

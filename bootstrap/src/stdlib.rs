@@ -58,6 +58,7 @@ pub const NET_METHODS: &[(&str, &str, &str)] = &[
     ("Server", "accept", "net.Server.accept"),
     ("Server", "addr", "net.Server.addr"),
     ("Server", "close", "net.Server.close"),
+    ("Server", "shutdown", "net.Server.shutdown"),
     ("Exchange", "respond", "net.Exchange.respond"),
     ("Exchange", "respond_bytes", "net.Exchange.respond_bytes"),
     ("Listener", "accept", "net.Listener.accept"),

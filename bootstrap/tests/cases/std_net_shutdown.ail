@@ -1,0 +1,31 @@
+## std.net.24: a graceful shutdown. `shutdown` stops listening and closes idle
+## connections; a request already on its way is still answered, then
+## `accept` fails with kind `closed`.
+use std.net
+use std.net.http
+
+fn hi(r net.Request) net.Response
+    net.Response(status: 200, headers: {}, body: "hi {r.path}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, hi)
+    base := "http://{srv.addr()}"
+    print(net.get("{base}/one")?.body)
+
+    # A request half sent when the shutdown comes is still answered.
+    addr := srv.addr()
+    port := addr.split(":")[1].to_int() else 0
+    c := net.connect("127.0.0.1", port)?
+    c.write("GET /late HTTP/1.1\r\nHost: x\r\n")?
+    srv.shutdown()
+    c.write("\r\n")?
+    print(c.read_line()? else "")
+    c.close()
+    t.wait()?
+
+    late := net.connect("127.0.0.1", port) else err
+        print("new connections: {err.kind}")
+        return
+    late.close()
+    print("still listening")
