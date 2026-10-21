@@ -19,6 +19,21 @@ def read_request(conn):
     for line in lines[1:]:
         if line.lower().startswith("content-length:"):
             length = int(line.split(":", 1)[1])
+    if any(l.lower().startswith("transfer-encoding:") and "chunked" in l.lower() for l in lines[1:]):
+        while not rest.endswith(b"0\r\n\r\n"):
+            more = conn.recv(4096)
+            if not more:
+                break
+            rest += more
+        body = b""
+        while rest:
+            size, _, rest = rest.partition(b"\r\n")
+            n = int(size, 16)
+            if n == 0:
+                break
+            body += rest[:n]
+            rest = rest[n + 2:]
+        return lines[0], lines[1:], body
     while len(rest) < length:
         rest += conn.recv(4096)
     return lines[0], lines[1:], rest[:length]
@@ -64,6 +79,15 @@ def respond(conn, method, target, headers, body):
         return b"not http at all\r\n\r\n"
     if target == "/truncated":
         return b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nshort"
+    if target == "/xorigin":
+        host = [h.split(":", 1)[1].strip() for h in headers if h.lower().startswith("host:")][0]
+        port = host.rsplit(":", 1)[1]
+        return b"HTTP/1.1 302 Found\r\nLocation: http://localhost:%s/hdrs\r\nContent-Length: 0\r\n\r\n" % port.encode()
+    if target.startswith("/hdrs"):
+        keep = ("authorization", "cookie", "x-a", "content-type", "content-length", "transfer-encoding", "user-agent", "accept")
+        shown = sorted(h.lower() if h.split(":", 1)[0].lower() != "x-a" else h for h in headers if h.split(":", 1)[0].lower() in keep)
+        data = ("%s %s\n%s\nbody=%s" % (method, target, "\n".join(shown), body.decode("utf-8", "replace"))).encode()
+        return b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(data) + data
     if target.startswith("/echo"):
         ctype = ""
         for h in headers:

@@ -393,6 +393,10 @@ fn net_listen(addr str, at str) int
 ## Connect to `host:port`: the handle of a connection, or 0 after a failure
 ## whose `net.NetError` names `url`.
 fn net_dial(host str, port int, url str, at str) int
+    net_dial_ms(host, port, url, NET_DEFAULT_MS, at)
+
+## `net_dial` waiting `ms` milliseconds for the connection to open.
+fn net_dial_ms(host str, port int, url str, ms int, at str) int
     if port < 0 or port > 65535
         return net_fail(url, "bad_url", "{port} is not a port; use 0 to 65535", at)
     ip := net_resolve(host)
@@ -407,7 +411,7 @@ fn net_dial(host str, port int, url str, at str) int
         if r != -115 and r != -36
             os_close(fd)
             return net_fail(url, net_errno_kind(-r), "can't connect to {url}", at)
-        w := net_wait(fd, 4, NET_DEFAULT_MS)
+        w := net_wait(fd, 4, ms)
         if w == 0
             os_close(fd)
             return net_fail(url, "timed_out", "can't connect to {url}: timed out", at)

@@ -71,6 +71,9 @@ fn path_of(e ast.Expr) str?
 fn Lower.type_key(self, name str) str?
     parts := name.split(".")
     if parts.len() > 1
+        # A type of a standard module the runtime implements (`net.Options`).
+        if STD_MODULES.contains(parts[0]) and aliases.get(parts[0]) == none and structs.contains(name)
+            return name
         m := aliases.get(parts[0])?
         key := "{m}.{parts[1..].join(".")}"
         return if structs.contains(key) then key else none
