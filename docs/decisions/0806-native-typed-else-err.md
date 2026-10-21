@@ -40,3 +40,7 @@ where an OS call fails, next to the display text, so `else err` on `fs.*` and
 `x.get(k) else e` calls the method when `x` is a struct or enum with a `get`
 method, not the map built-in. `if v := f(i)` on a call that can fail binds the
 success value and takes the `else` side on failure, clearing the error.
+## Lists of optionals
+A list, field or parameter may hold optionals of numbers, strings and enums
+(`List[str?]`, `List[Expr?]`): an element is one word, 0 for none. A literal
+with a `none` among its items is a list of optionals.

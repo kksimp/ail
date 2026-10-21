@@ -1,0 +1,34 @@
+struct Captures
+    text str
+    groups List[str?]
+    nums List[int?]
+
+fn Captures.group(self, i int) str?
+    if i < 0 or i >= groups.len()
+        return none
+    groups[i]
+
+fn count(xs List[int?]) int
+    mut n := 0
+    for x in xs
+        if v := x
+            n += v
+    n
+
+fn main()
+    c := Captures("ab", ["a", none, "c"], [1, none, 3])
+    print(c.groups.len())
+    print(c.group(0) else "-")
+    print(c.group(1) else "-")
+    print(c.group(2) else "-")
+    print(c.group(9) else "-")
+    print(count(c.nums))
+    mut ys := List[str?]()
+    ys.push("x")
+    ys.push(none)
+    print(ys.len())
+    if s := ys[0]
+        print(s)
+    print(ys[1] == none)
+    zs := [m for m in c.groups]
+    print(zs.len())

@@ -489,7 +489,7 @@ fn Lower.type_of(self, t ast.TypeRef) Ty?
                     if args.len() != 1
                         return none
                     e := type_of(args[0])?
-                    if is_number(e) or e == Ty.Str or needs_copy(e) or is_enum(e)
+                    if is_number(e) or e == Ty.Str or needs_copy(e) or is_enum(e) or is_shared_opt(e)
                         return Ty.List(e)
                     none
                 "Map" | "Set" => coll_type_of(name, args)
@@ -530,6 +530,12 @@ fn is_const_expr(e ast.Expr) bool
         Unary(_, x, _) => is_const_expr(x)
         Binary(_, a, b, _) => is_const_expr(a) and is_const_expr(b)
         _ => false
+
+## An optional of a type that is immutable and shared when copied (a boxed
+## number, a string, an enum): it can be a list element or field.
+fn is_shared_opt(t Ty) bool
+    inner := t.opt_inner() else return false
+    is_number(inner) or inner == Ty.Str or is_enum(inner)
 
 fn is_number(t Ty) bool
     match t
@@ -1445,12 +1451,17 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
     if w := want
         elem = w.elem() else Ty.Unknown
     n := konst(items.len(), Ty.Int)
+    mut has_none := false
+    for x in items
+        if is_none_lit(x)
+            has_none = true
     mut vs := List[int]()
     for x in items
         v := lower_value(x, if elem.is_unknown() then none else elem)?
-        if elem.is_unknown()
-            elem = v.ty
-        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem) and not is_enum(elem)
+        if elem.is_unknown() or is_pending_opt(elem)
+            # A `none` among the items makes the element type optional.
+            elem = if has_none and v.ty.opt_inner() == none then (opt_of(v.ty) else v.ty) else v.ty
+        if not is_number(elem) and elem != Ty.Str and not needs_copy(elem) and not is_enum(elem) and not is_shared_opt(elem) and not is_pending_opt(elem)
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
