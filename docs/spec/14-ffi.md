@@ -37,11 +37,34 @@ extern c fn strlen(s *u8) int
 (`unsafe.op.1`): outside an `unsafe` block it is a compile-time error.
 *(ADR 0104)*
 
+```ail error=ffi.call.1
+extern c fn abs(x i32) i32
+
+fn main()
+    print(abs(-1))
+```
+
+```ail
+extern c fn abs(x i32) i32
+
+fn main()
+    unsafe
+        print(abs(-1))
+```
+
 **ffi.call.2** — A call runs the C function with the arguments passed by value
 in the platform's C calling convention, and returns its result. The
 implementation does not check that the declaration matches the C function; a
 wrong declaration is undefined behaviour, inside the `unsafe` block that made
 the call. Output printed by the program is flushed before the call. *(ADR 0432)*
+
+```ail tool=run,FILE expect=7 rules=ffi.call.2
+extern c fn abs(x i32) i32
+
+fn main()
+    unsafe
+        print(abs(-7))
+```
 
 ## Type mapping
 
@@ -50,16 +73,40 @@ the call. Output printed by the program is flushed before the call. *(ADR 0432)*
 the same name; `*T` is a pointer. A parameter narrower than 64 bits is passed
 extended to 64 bits by its signedness. *(ADR 0432)*
 
+```ail tool=run,FILE expect=5 rules=ffi.map.1
+extern c fn labs(x int) int
+
+fn main()
+    unsafe
+        print(labs(-5))
+```
+
 **ffi.map.2** — A result narrower than 64 bits is truncated to its declared
 type and extended again: C leaves the upper bits unspecified, so `abs` is
 declared `fn abs(x i32) i32`, not `int`. A `bool` result is true when its low
 byte is not zero. *(ADR 0432)*
+
+```ail tool=run,FILE expect=8 rules=ffi.map.2
+extern c fn abs(x i32) i32
+
+fn main()
+    unsafe
+        print(abs(-7) + 1)
+```
 
 ## Native builds
 
 **ffi.native.1** — `ail build` rejects a program that declares an `extern c fn`,
 or uses `std.mem`, until the native backend can link a dynamic library; the
 error names the declaration. The interpreter runs both. *(ADR 0436)*
+
+```ail tool=build,FILE status=1 expect=ffi.native.1 rules=ffi.native.1
+extern c fn abs(x i32) i32
+
+fn main()
+    unsafe
+        print(abs(-1))
+```
 
 ## Loading
 
@@ -72,8 +119,25 @@ on macOS. A declaration without a library names a symbol of the running
 program, which includes the C library. A library that cannot be loaded is a
 run-time trap. *(ADR 0431)*
 
+```ail tool=run,FILE status=1 expect=trap[ffi.load.1] rules=ffi.load.1
+extern c "definitely_not_a_library" fn f(x int) int
+
+fn main()
+    unsafe
+        print(f(1))
+```
+
 **ffi.load.2** — A symbol the loaded library does not have is a run-time trap
 at the call. *(ADR 0431)*
+
+```ail tool=run,FILE status=1 expect=trap[ffi.load.2] rules=ffi.load.2
+extern c fn no_such_function_in_libc(x int) int
+
+fn main()
+    print("before")
+    unsafe
+        print(no_such_function_in_libc(1))
+```
 
 **ffi.load.3** — On Windows `extern c fn` is reported at run time as not
 supported yet; the implementation needs `LoadLibraryA` and the Win64 calling
