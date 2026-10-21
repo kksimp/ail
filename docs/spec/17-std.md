@@ -152,6 +152,48 @@ kind `not_empty`; remove the entries first. *(ADR 0158)*
 **std.fs.19** — `read_text` of a file whose bytes aren't UTF-8 fails with kind
 `invalid_utf8`; `read_bytes` reads the same file as it is. *(ADR 0158)*
 
+**std.fs.20** — `exists` is the kind when a path names an existing file where
+the call needs a new directory: `make_dir` of a path that is a file fails with
+`exists`. (`make_dir` of an existing directory succeeds.) *(ADR 0783)*
+
+**std.fs.21** — `permission` is the kind when the OS refuses the access: a read,
+write or remove the process has no right to. It is the same on every platform.
+*(ADR 0783)*
+
+**std.fs.22** — `other` is the kind for an OS failure that has none of the kinds
+above. A program that reads `other` gets the path and the kind, not the OS text.
+*(ADR 0783)*
+
+```ail rules=std.fs.20
+use std.fs
+
+fn main() !
+    fs.write_text("fs_exists.txt", "x")?
+    fs.make_dir("fs_exists.txt") else err
+        print("{err.kind}")                  # exists
+    fs.remove("fs_exists.txt")?
+```
+
+```ail norun rules=std.fs.21
+use std.fs
+
+fn main() !
+    text := fs.read_text("/root/no-access.txt") else err
+        print("{err.kind}")                  # permission, for a user without access
+        ""
+    print(text.len())
+```
+
+```ail norun rules=std.fs.22
+use std.fs
+
+fn main() !
+    text := fs.read_text("fs_other.txt") else err
+        print("{err.kind}")                  # other, for an OS failure outside the list
+        ""
+    print(text.len())
+```
+
 ```ail rules=std.fs.15
 use std.fs
 
