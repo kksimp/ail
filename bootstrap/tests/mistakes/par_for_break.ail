@@ -1,0 +1,6 @@
+fn main()
+    xs := [1, 2, 3, 4]
+    par for x in xs
+        if x > 2
+            break
+        print(x)

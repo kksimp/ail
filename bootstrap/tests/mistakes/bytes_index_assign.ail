@@ -1,0 +1,4 @@
+fn main()
+    mut b := b"GET"
+    b[0] = 103
+    print(b)
