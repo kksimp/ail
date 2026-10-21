@@ -90,7 +90,7 @@ fn atom_before(line: &[char], end: usize) -> Option<usize> {
 }
 
 /// End (exclusive) of the postfix expression that starts at `from`.
-fn atom_after(line: &[char], from: usize) -> Option<usize> {
+pub(super) fn atom_after(line: &[char], from: usize) -> Option<usize> {
     let mut i = from;
     loop {
         match *line.get(i)? {

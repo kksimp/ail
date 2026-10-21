@@ -1,0 +1,48 @@
+# type.coll.7, 9, 11, 12, 14: swap, sum, min, max, first, last, index_of, and
+# Set.sorted.
+fn main()
+    mut xs := [5, 2, 9, 2]
+    xs.swap(0, 3)
+    xs.swap(1, 1)
+    print(xs)
+    print(xs.sum())
+    print(xs.min() else -1)
+    print(xs.max() else -1)
+    print(xs.first() else -1)
+    print(xs.last() else -1)
+    print(xs.index_of(9) else -1)
+    print(xs.index_of(7) else -1)
+    e := List[int]()
+    print(e.min() else -1)
+    print(e.first() else -1)
+    print(e.sum())
+    fs := [2.5, 0.5, 4.0]
+    print(fs.sum())
+    print(fs.min() else 0.0)
+    print(fs.max() else 0.0)
+    print(fs.index_of(4.0) else -1)
+    print(fs.sorted())
+    ws := ["pear", "fig", "apple"]
+    print(ws.min() else "")
+    print(ws.max() else "")
+    print(ws.first() else "")
+    print(ws.index_of("fig") else -1)
+    mut flags := [true, false, false]
+    flags.swap(0, 2)
+    print(flags)
+    print(flags.first() else true)
+    print(flags.index_of(true) else -1)
+    mut big := List[float]()
+    for i in 0..100
+        big.push(0.1 * i.to_float())
+    print(big.sum())
+    s := Set[int]()
+    mut t := s
+    t.add(3)
+    t.add(1)
+    t.add(2)
+    print(t.sorted())
+    mut u := Set[str]()
+    u.add("b")
+    u.add("a")
+    print(u.sorted())
