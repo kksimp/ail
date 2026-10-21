@@ -697,6 +697,10 @@ impl<'p, 'r> Walker<'p, 'r> {
                         self.add(e, (*m).to_string());
                     }
                 } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
+                    && m.starts_with("regex.")
+                {
+                    // std.regex.9: text in, text out, so no effects.
+                } else if let Some(crate::stdlib::StdCall::Method(m)) = self.resolved.std_calls.get(name_pos)
                     && let Some(effects) = std_effects("ui", "Window")
                 {
                     for &e in effects {

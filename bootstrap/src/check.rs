@@ -27,6 +27,7 @@ pub mod errpaths;
 pub mod facts;
 mod keyfn;
 mod net;
+mod regex_method;
 mod stdlib;
 mod tensor;
 pub mod effects;
@@ -4180,6 +4181,9 @@ impl<'p> Checker<'p> {
             return t;
         }
         if let Some(t) = self.net_method(recv, &rt, name, pos, args, expect) {
+            return t;
+        }
+        if let Some(t) = self.regex_method(recv, &rt, name, pos, args, expect) {
             return t;
         }
         if let Some(t) = self.tensor_method(recv, &rt, name, pos, args, expect) {

@@ -23,10 +23,10 @@ refl 4 0
 replay 10 0
 run 4 0
 snap 6 0
-std 186 1
+std 187 1
 test 23 0
 trace 17 0
 trait 43 3
 type 105 10
 unsafe 16 0
-all 867 48
+all 868 48
