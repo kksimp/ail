@@ -941,6 +941,90 @@ that does not decode fails with kind `protocol`. A program that sets
 itself with `std.compress`. `net.open` sends no `Accept-Encoding` of its own
 and decodes nothing. *(ADR 0717)*
 
+**std.net.27** — connection, DNS and timeout failures: A host that doesn't resolve, or an address with no address, fails with kind `not_found`; a refused or reset connection fails with `refused` or `closed`; a request past `connect_ms` or `total_ms` fails with `timed_out`. A `timeout_ms` or `max_redirects` out of range traps. *(ADR 0637)*
+
+**std.net.28** — HTTP shape failures: more than `max_redirects` redirects fails with kind `protocol`, and a body that does not decode under its `Content-Encoding` fails with kind `protocol` (std.net.26). *(ADR 0717)*
+
+**std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
+
+**std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*
+
+**std.tls.3** — protocol and root-store failures: A protocol error that is not a record error, and a root-store error passed through, fail with kind `tls` as a `TlsError` of kind `Protocol`. *(ADR 0360)*
+
+**std.tls.4** — crypto primitive failures: a primitive's failure surfaces only as a TLS failure of kind `tls`, never as a separate error of its own. *(ADR 0360)*
+
+```ail norun rules=std.net.27
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.net.28
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.1
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.2
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.3
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
+```ail norun rules=std.tls.4
+use std.net
+
+fn kind_of(url str) str
+    r := net.get(url) else err
+        return err.kind
+    return "ok"
+
+fn main()
+    print(kind_of("https://no-such-host.invalid"))
+```
+
 ```ail rules=std.net.26
 use std.net
 use std.compress

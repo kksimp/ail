@@ -801,6 +801,7 @@ fn resolve_addr(addr: &str) -> Result<SocketAddr, (&'static str, String)> {
 }
 
 impl<'a, W: Write> Interp<'a, W> {
+    // std.net.27 and std.net.28: the causes this error carries; TLS causes come through as std.tls.1-4.
     fn net_error(&self, url: &str, kind: &str, message: impl Into<String>, pos: Pos) -> Value {
         let s = self.structs["net.NetError"];
         fail(Value::Struct(s, Rc::new(vec![text(url), text(kind), text(message.into())])), pos)
