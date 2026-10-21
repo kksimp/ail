@@ -348,7 +348,7 @@ the buffer instead of building a string. List indexing and `len` are inline.
 The runtime is written over the primitives of `compiler/rt/native/prim.ail`
 (`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
-`target`), which the code generator expands inline and only runtime code may
+`f32_round`, `target`), which the code generator expands inline and only runtime code may
 call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 
 **OS layer and number text (lane 177, ADRs 0580-0582).** `os.ail` provides
@@ -499,3 +499,25 @@ Step 3 (matmul, activations): `rt.tensor_matmul_fault` and `rt.tensor_matmul`
 multiply-add; 0 on `int` overflow, as above), and `rt.tensor_activate` (`kind`
 0 `relu`, 1 `sigmoid` through `rt.float_exp`, 2 `tanh` through `rt.float_tanh`,
 fdlibm's, which uses `rt.float_expm1`).
+
+Step 4 (`Tensor[f32]`): element kind 2. An element is still a `float` word, but
+it always holds a value already rounded to `f32`; `f32_round` (a primitive:
+round to single precision and widen back, `vcvtsd2ss` and `vcvtss2sd` on
+x86-64, `fcvt s,d` and `fcvt d,s` on ARM64) is applied after every operation.
+One rounding of the double-precision result is the correctly rounded
+single-precision result for `+ - * /` (a double has more than twice an `f32`'s
+precision), so the values are the interpreter's `f32` kernels'.
+`rt.tensor_to_f32` and `rt.tensor_to_float` convert. A `Tensor[f32]` has type
+`Ty.Tensor(Ty.F32)`; there is no scalar `f32` yet, so `sum`, `dot`, `max`,
+`mean`, `item`, printing and the text form of a `Tensor[f32]` are
+`native.subset.1` problems, and `to_list` gives a `List[float]`.
+
+Step 5 (vector kernels, x86-64): `rt.vec_axpy` (matmul's inner loop), `rt.vec_zip`
+and `rt.vec_scal` (elementwise operators) are declared in `tensor.ail` with
+scalar bodies, and `compiler/x64/kernels.ail` assembles AVX loops in their
+place (four doubles at a time, then element by element; a multiply and an add,
+never a fused one, so every result is the scalar one bit for bit; a non-zero
+`r` rounds each result to `f32` through `vcvtpd2ps`/`vcvtps2pd`). They are
+leaf code using only rax, rcx-r11 and xmm0-xmm4, and `inline.ail` never inlines
+an `rt.vec_*` function. ARM64 still runs the scalar bodies until its NEON
+kernels land.

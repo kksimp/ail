@@ -55,6 +55,13 @@ fn float_bits(x float) int
 fn bits_float(n int) float
     todo
 
+## `x` rounded to the nearest `f32` (ties to even) and widened back: the
+## single-precision result of one operation done in `float` (a `float` holds
+## the exact product, sum or quotient of two `f32` to twice the precision
+## needed, so rounding once gives the correctly rounded `f32`).
+fn f32_round(x float) float
+    todo
+
 ## Store the callee-saved registers at `buf` (x86-64: 5 words, ARM64: 10) and
 ## return the stack pointer. The collector's view of the registers.
 fn gc_regs(buf int) int

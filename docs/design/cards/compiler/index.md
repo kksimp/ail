@@ -9,6 +9,7 @@ ast  126 items
 check  297 items
 codegen  36 items
 mir  213 items
+mir  210 items
 obj  53 items
 syntax  99 items
-x64  58 items
+x64  69 items

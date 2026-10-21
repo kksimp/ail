@@ -96,7 +96,10 @@ pub fn generate(m mir.Module) codegen.Image
     for fx in a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
     for f in m.funcs
-        gen_func(mut img, m, f)
+        if is_kernel(f.name)
+            gen_kernel(mut img, f.name)
+        else
+            gen_func(mut img, m, f)
     img
 
 fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func)
@@ -1126,6 +1129,12 @@ fn Gen.prim(mut self, i mir.Inst)
         "bits_float" =>
             d := out_xmm(i.dst, X0)
             a.vmovq_xr(d, gpr(i.args[0], S0))
+            put_xmm(i.dst, d)
+        "f32_round" =>
+            xa := xmm(i.args[0], X0)
+            d := out_xmm(i.dst, X0)
+            a.vcvtsd2ss(X1, xa, xa)
+            a.vcvtss2sd(d, X1, X1)
             put_xmm(i.dst, d)
         _ => unreachable("x64: unknown primitive {i.name}")
 

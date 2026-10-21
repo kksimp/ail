@@ -299,6 +299,8 @@ pub fn Asm.fop1(mut self, op str, d int, n int)
         "frintm" => 509952000
         "frintp" => 509919232
         "frintz" => 509984768
+        "fcvt_sd" => 509755392
+        "fcvt_ds" => 505593856
         _ => 509624320
     word(base + n * 32 + d)
 
