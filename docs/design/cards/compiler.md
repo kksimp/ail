@@ -212,6 +212,7 @@ pub fn mir.fold_prim_addresses(mir.Func) mir.Func
 pub struct mir.Versioned
 pub fn mir.bce(mir.Func, bool, bool) mir.Func
 pub fn mir.lists_only_grow(mir.Module) bool
+pub fn mir.fill_loops(mir.Func, bool) mir.Func
 pub fn mir.fold(mir.Func) mir.Func
 pub fn mir.rpo(mir.Func) List[int]
 pub fn mir.forward_loads(mir.Func) mir.Func
@@ -342,4 +343,4 @@ pub fn x64.is_kernel(str) bool
 pub fn x64.gen_kernel(mut codegen.Image, str) [mutates]
 ```
 
-trimmed to fit 4000 tokens (~3835); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~3852); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
