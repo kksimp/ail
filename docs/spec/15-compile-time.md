@@ -144,13 +144,6 @@ BIG := spin(1000000000)     # over 100,000,000 steps: computing `BIG` stops with
 
 fn main()
     print(BIG)
-LIMIT := sum_to(1000)
-fn sum_to(n int) int
-    mut total := 0
-    for i in 0..n
-        total = total + i
-    total
-    print(LIMIT)
 ```
 
 **ct.eval.4** — An implementation MAY reuse a result computed by an earlier

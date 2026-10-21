@@ -67,7 +67,6 @@ imported modules are loaded. *(ADR 0153)*
 ```ail pkg=module_local_names tool=run,DIR expect=6 rules=mod.unit.5
 ```
 
-```
 ```ail skip=context rules=mod.unit.2,mod.unit.5
 geometry/          ail run geometry
     main.ail       use geo         (the root module: main.ail and extra.ail)
