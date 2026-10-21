@@ -289,6 +289,10 @@ fn op_assign_k<'a>(op: BinOp, slot: u32, k: i64, pos: Pos) -> Ins<'a> {
 }
 
 enum Ins<'a> {
+    /// `for a, b in xs`: the parts of the element just bound, as new bindings after it (type.tuple.5).
+    Unpack {
+        names: &'a [crate::ast::Binder],
+    },
     /// `name := src`: a new binding at the end of the environment.
     Push {
         name: &'a str,
@@ -1967,7 +1971,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     }
 
     /// Whether a comprehension compiles to loops: no `?`, `else` that leaves, `if` or `match` in it,
-    /// no `for a, b in xs` clause (type.tuple.5) (the walker runs those), and no hook or trace that
+    /// and no hook or trace that
     /// expects the walker's steps.
     fn comp_plain(&self, elem: &Expr, value: Option<&Expr>, clauses: &[CompFor]) -> bool {
         let plain = comp_part_plain;
@@ -1975,7 +1979,7 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             && self.it.tracing == 0
             && plain(elem)
             && value.is_none_or(plain)
-            && clauses.iter().all(|c| !c.par && c.unpack.is_empty() && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
+            && clauses.iter().all(|c| !c.par && plain(&c.iter) && c.cond.as_ref().is_none_or(plain))
     }
 
     /// The loops of a comprehension's clauses around its element, collected into `acc`.
@@ -2018,6 +2022,10 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
             self.emit(Ins::IterStart { it, idx });
             let top = self.emit(Ins::IterNext { name: &c.var, it, idx, end: 0, pos: c.iter.pos() });
             self.scope.push(&c.var);
+            if !c.unpack.is_empty() {
+                self.emit(Ins::Unpack { names: &c.unpack });
+                self.scope.extend(c.unpack.iter().map(|b| b.name.as_str()));
+            }
             let skip = c.cond.as_ref().map(|cond| self.cond_jump(cond, false));
             self.comp_clauses(kind, rest, elem, value, acc);
             self.scope.truncate(depth as usize);
@@ -4607,6 +4615,14 @@ match {
                         }
                         None => pc = *end as usize,
                     }
+                }
+                Ins::Unpack { names } => {
+                    let Some((_, Value::Tuple(parts))) = env.last() else { unreachable!("checked: a tuple") };
+                    let parts = Rc::clone(parts);
+                    for (b, x) in names.iter().zip(parts.iter()) {
+                        env.push((b.name.as_str(), x.clone()));
+                    }
+                    pc += 1;
                 }
                 Ins::Bind { name, src, t } => match take!(*src) {
                     Value::None | Value::Fail(_) => pc = *t as usize,
