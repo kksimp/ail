@@ -1,0 +1,4 @@
+# std.tensor.15: a second index on a 1-D tensor traps at run time (OQ-122).
+fn main()
+    t := tensor.from([1.0, 2.0, 3.0])
+    print(t[0][1])

@@ -134,17 +134,19 @@ scalar or vector code. A vector kernel performs the same IEEE operations in
 the same order as std.tensor.5 describes, with no fused multiply-add, so its
 results are bit for bit the interpreter's. *(ADR 0632)*
 
-**native.tensor.1** — The native subset includes `tensor.Tensor[float]`
-(std.tensor.1-13): `tensor.zeros(shape)`, `tensor.from(xs)` and
-`tensor.from(xs, shape)` with `xs` a `List[float]`; the methods `shape`,
-`len`, `to_list`, `reshape`, `sum`, `mean`, `max`, `dot`, `add`, `mul`,
-`matmul`, `transpose`, `relu`, and `sum`, `max` and `mean` along an axis;
-the operators `+`, `-`, `*`, `/`, unary `-`, `==` and `!=` and the compound
-assignments, between tensors (broadcasting, std.tensor.4) or with a `float`
-or `int` literal; and `print` of a tensor. A native executable prints what
-`ail run` prints, to the bit, for every program in this subset. Other
-`std.tensor` constructs, including every `Tensor[int]`, are reported under
-native.subset.1. *(ADRs 0633, 0635)*
+**native.tensor.1** — The native subset includes `tensor.Tensor[float]` and
+`tensor.Tensor[int]` (std.tensor.1-19): `tensor.zeros(shape)`,
+`tensor.from(xs)` and `tensor.from(xs, shape)` with `xs` a `List[float]` or
+`List[int]`; the methods `shape`, `len`, `to_list`, `reshape`, `sum`, `max`,
+`dot`, `add`, `mul`, `matmul`, `transpose`, `item`, `argmax` and `argmin`
+(with or without an axis), `sum` and `max` along an axis, and on `float`
+tensors `mean`, `relu`, `clamp`, `round` and `conv2d`; indexing `t[i]` and
+row ranges; the operators `+`, `-`, `*`, `/` (`float` only), unary `-`,
+`==` and `!=` and the compound assignments, between tensors (broadcasting,
+std.tensor.4) or with a scalar of the element type; and `print` of a
+tensor. A native executable prints what `ail run` prints, to the bit, for
+every program in this subset. `map`, `sigmoid`, `tanh` and fused chains are
+reported under native.subset.1. *(ADRs 0633, 0635, 0636)*
 
 **native.tensor.2** — A tensor operation that fails (std.tensor.2,
 std.tensor.4, std.tensor.7, std.tensor.11, std.tensor.12) ends the program as

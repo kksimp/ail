@@ -1,0 +1,5 @@
+# std.tensor.18: the bounds must satisfy lo <= hi.
+fn main()
+    t := tensor.from([1.0, 2.0])
+    print(t.clamp(0.0, 3.0))
+    print(t.clamp(2.0, 1.5))

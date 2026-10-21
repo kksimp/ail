@@ -1,0 +1,4 @@
+# std.tensor.19: round of a value outside `int` traps.
+fn main()
+    print(tensor.from([1.5, 2.5]).round())
+    print(tensor.from([1.0e30]).round())

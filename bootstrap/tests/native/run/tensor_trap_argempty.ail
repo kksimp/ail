@@ -1,0 +1,4 @@
+# std.tensor.17: an empty axis traps.
+fn main()
+    print(tensor.zeros([2, 0]).argmax(0))
+    print(tensor.zeros([2, 0]).argmax(1))

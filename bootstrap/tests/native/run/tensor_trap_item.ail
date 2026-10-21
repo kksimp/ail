@@ -1,0 +1,4 @@
+# std.tensor.15: `item` needs exactly one element.
+fn main()
+    print(tensor.from([2.5]).item())
+    print(tensor.from([1.0, 2.0]).item())

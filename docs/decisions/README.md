@@ -505,4 +505,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0633](0633-native-tensor-kernels.md) | Float tensors in native code: a two-slot struct, kernels in AIL, the interpreter's summation order *(delegated)* | Accepted | 2026-10-21 |
 | [0634](0634-native-tensor-traps.md) | Tensor failures in native code: a failure record and trap kind 8 *(delegated)* | Accepted | 2026-10-21 |
 | [0635](0635-native-tensor-subset.md) | What of `std.tensor` is in the native subset *(delegated)* | Accepted | 2026-10-21 |
-
+| [0636](0636-native-tensor-int-and-indexing.md) | Native `Tensor[int]`, indexing, clamp, argmax, round and conv2d *(delegated)* | Accepted | 2026-10-21 |

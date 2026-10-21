@@ -1,0 +1,5 @@
+# std.tensor.16: the kernel must fit the image.
+fn main()
+    img := tensor.zeros([2, 2])
+    print(img.conv2d(tensor.zeros([2, 2])))
+    print(img.conv2d(tensor.zeros([3, 1])))

@@ -1152,9 +1152,14 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             if v := call_variant(callee, want)
                 return new_variant(v, args, pos)
             lower_call(callee, args, pos)
-        Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
+        Method(recv, name, npos, args) =>
+            if is_module(recv, "tensor")
+                return lower_tensor_module(name, npos, args, want)
+            lower_method(recv, name, npos, args)
         Index(recv, index, pos) =>
             l := lower_value(recv, none)?
+            if is_tensor(l.ty)
+                return lower_tensor_index(l, index, pos)
             elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
             if is_range(index)
                 return match index
@@ -1553,7 +1558,7 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
     if is_tensor(v.ty)
-        call("rt.out_tensor", [v.id], Ty.Unit)
+        call(if is_int_tensor(v.ty) then "rt.out_itensor" else "rt.out_tensor", [v.id], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
@@ -1570,7 +1575,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     if om != ""
         return lower_os_method(om, name, npos, args)
     if is_module(recv, "tensor")
-        return lower_tensor_module(name, npos, args)
+        return lower_tensor_module(name, npos, args, none)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",

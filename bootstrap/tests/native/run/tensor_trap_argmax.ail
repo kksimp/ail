@@ -1,0 +1,3 @@
+# std.tensor.17: argmax of no elements traps.
+fn main()
+    print(tensor.zeros([0]).argmax())

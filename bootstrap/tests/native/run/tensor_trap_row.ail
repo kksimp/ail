@@ -1,0 +1,5 @@
+# std.tensor.15: a row index outside the tensor traps.
+fn main()
+    t := tensor.from([1.0, 2.0, 3.0])
+    print(t[2])
+    print(t[3])

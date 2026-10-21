@@ -1,0 +1,6 @@
+# std.tensor.6: products and sums of `int` tensors are checked.
+fn main()
+    big := tensor.from([4611686018427387904, 3])
+    print(big.sum())
+    print(big.dot(tensor.from([1, 1])))
+    print(big * 2)

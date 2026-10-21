@@ -1,0 +1,5 @@
+# std.tensor.6: an `int` tensor operation that overflows traps.
+fn main()
+    big := tensor.from([9223372036854775807, 1])
+    print(big - big)
+    print(big + tensor.from([1, 1]))

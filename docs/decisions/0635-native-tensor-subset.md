@@ -1,4 +1,4 @@
-# 0635. What of `std.tensor` is in the native subset
+# 0635. What of `std.tensor` is in the native subset (first slice; extended by ADR 0636)
 
 - **Status:** Accepted
 - **Date:** 2026-10-21

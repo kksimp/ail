@@ -1,0 +1,4 @@
+# std.tensor.17: an axis outside the shape traps.
+fn main()
+    print(tensor.from([1.0, 2.0]).argmax(0))
+    print(tensor.from([1.0, 2.0]).argmin(1))
