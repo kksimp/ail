@@ -20,10 +20,13 @@
 ## What a loop needs for one list access to be in bounds.
 struct Need
     ## `index` (the access is `xs[i]`), `off` (`xs[i + arg]`), `inv`
-    ## (`xs[arg]`, a value that doesn't change) or `const` (`xs[arg]`).
+    ## (`xs[arg]`, a value that doesn't change), `invoff` (`xs[arg + off]`
+    ## for such a value) or `const` (`xs[arg]`).
     kind str
     x int
     arg int
+    ## For `invoff` (`xs[arg + off]`, `arg` fixed in the loop).
+    off int
 
 ## A load that the guard does once for the loop: `dst` is what the loop
 ## computes, `fresh` the guard's copy.
@@ -393,6 +396,8 @@ struct Guard
     lens Map[int, int]
     zero int
     ranged Set[int]
+    ## Values already checked to be at least 0.
+    nonneg Set[int]
 
 fn Guard.value(mut self, t Ty) int
     f.vals.push(t)
@@ -438,10 +443,17 @@ fn Guard.in_bounds(mut self, x int, idx int, k int?)
     if known >= 0
         check(emit("lt", [konst(known), l], Ty.Bool))
     else
-        if zero < 0
-            zero = konst(0)
-        check(emit("ge", [idx, zero], Ty.Bool))
+        non_negative(idx)
         check(emit("lt", [idx, l], Ty.Bool))
+
+## `0 <= v`, once per value.
+fn Guard.non_negative(mut self, v int)
+    if nonneg.contains(v)
+        return
+    nonneg.add(v)
+    if zero < 0
+        zero = konst(0)
+    check(emit("ge", [v, zero], Ty.Bool))
 
 ## `-LIMIT <= x <= LIMIT`.
 fn Guard.within(mut self, x int)
@@ -463,6 +475,10 @@ fn Guard.emit_need(mut self, nd Need, x int, idx int, hi int, hi_is_len bool)
             room := emit("sub", [l, konst(nd.arg)], Ty.Int)
             check(emit("le", [hi, room], Ty.Bool))
         "const" => in_bounds(x, -1, nd.arg)
+        "invoff" =>
+            l := len_of(x)
+            non_negative(idx)
+            check(emit("lt", [idx, emit("sub", [l, konst(nd.off)], Ty.Int)], Ty.Bool))
         _ => in_bounds(x, idx, none)
 
 fn cst(f Func, defs List[Def], v int) int?
@@ -618,7 +634,7 @@ fn version(
                 pb := parent(f, defs, x)
                 still := fixed(defs, inl, hidx, i.args[1]) and clean(f, defs, x, lt)
                 if pb >= 0 and still and floor_loop(f, defs, loops, lp, pb) >= 0
-                    needs.push(Need(kind: "row", x: pb, arg: i.args[1]))
+                    needs.push(Need(kind: "row", x: pb, arg: i.args[1], off: 0))
                     relax.add("{b}:{k}")
                 continue
             if not (is_list(f.vals[x]) and fixed(defs, inl, hidx, x) and clean(f, defs, x, lt))
@@ -629,22 +645,32 @@ fn version(
                 continue
             idx := i.args[1]
             if idx == c.p
-                needs.push(Need(kind: "index", x: x, arg: 0))
+                needs.push(Need(kind: "index", x: x, arg: 0, off: 0))
                 relax.add("{b}:{k}")
                 continue
             if c.q >= 0 and idx == c.q
-                needs.push(Need(kind: "off", x: x, arg: 1))
+                needs.push(Need(kind: "off", x: x, arg: 1, off: 0))
                 relax.add("{b}:{k}")
                 continue
             if kc := cst(f, defs, idx)
                 if kc >= 0
-                    needs.push(Need(kind: "const", x: x, arg: kc))
+                    needs.push(Need(kind: "const", x: x, arg: kc, off: 0))
                     relax.add("{b}:{k}")
                 continue
             if fixed(defs, inl, hidx, idx)
-                needs.push(Need(kind: "inv", x: x, arg: idx))
+                needs.push(Need(kind: "inv", x: x, arg: idx, off: 0))
                 relax.add("{b}:{k}")
                 continue
+            # `xs[y + k]` with `y` fixed in the loop and `k` a small constant: the
+            # guard tests `0 <= y < len - k` once (native.bce.10).
+            if ad := inst_of(f, defs, idx)
+                if ad.op == "add" and inl[defs[idx].block] and fixed(defs, inl, hidx, ad.args[0])
+                    if ko := cst(f, defs, ad.args[1])
+                        if ko >= 0 and ko <= 64
+                            needs.push(Need(kind: "invoff", x: x, arg: ad.args[0], off: ko))
+                            relax.add("{b}:{k}")
+                            relax.add("{defs[idx].block}:{defs[idx].at}")
+                            continue
             if lw := pr.lows.get(idx)
                 hg := pr.highs[idx]
                 if lw >= 0 and hg <= MAX_REACH and inl[defs[idx].block]
@@ -659,11 +685,11 @@ fn version(
                 continue
             off := cst(f, defs, a.args[1]) else continue
             if off >= 1 and off <= 16
-                needs.push(Need(kind: "off", x: x, arg: off))
+                needs.push(Need(kind: "off", x: x, arg: off, off: 0))
                 relax.add("{b}:{k}")
                 relax.add("{defs[idx].block}:{defs[idx].at}")
     for x in reach.keys()
-        needs.push(Need(kind: "const", x: x, arg: reach[x]))
+        needs.push(Need(kind: "const", x: x, arg: reach[x], off: 0))
     # Worth the guard on the operands: two checks, or one in a loop that is
     # versioned anyway.
     versioned := needs.len() > 0 or hoists.len() > 0 or roomy.len() > 0
@@ -712,6 +738,7 @@ fn version(
         lens: Map[int, int](),
         zero: -1,
         ranged: Set[int](),
+        nonneg: Set[int](),
     )
     hd := inst_of(f, defs, c.bound)
     if cst(f, defs, c.lo) == none
@@ -741,14 +768,22 @@ fn version(
     mut floor_call := List[Inst]()
     # `hi <= len - off` is stronger than `hi <= len`.
     mut shifted := Set[int]()
+    # `y < len - k` is stronger than `y < len - j` for j <= k.
+    mut deepest := Map[str, int]()
     for nd in needs
         if nd.kind == "off"
             shifted.add(nd.x)
+        if nd.kind == "invoff"
+            dk := "{nd.x}|{nd.arg}"
+            if not deepest.contains(dk) or deepest[dk] < nd.off
+                deepest[dk] = nd.off
     for nd in needs
-        key := "{nd.kind}|{nd.x}|{nd.arg}"
+        key := "{nd.kind}|{nd.x}|{nd.arg}|{nd.off}"
         if seen.contains(key) or (nd.kind == "index" and shifted.contains(nd.x))
             continue
         seen.add(key)
+        if nd.kind == "invoff" and deepest["{nd.x}|{nd.arg}"] != nd.off
+            continue
         if nd.kind == "row"
             pre := loops[floor_loop(f, defs, loops, lp, nd.x)].pre
             fkey := "{nd.x}|{pre}"
@@ -771,7 +806,7 @@ fn version(
         mut hi_is_len := false
         if d := hd
             hi_is_len = d.op == "len" and d.args[0] == nd.x
-        idx := if nd.kind == "inv" then fresh_of(hoists, hidx, nd.arg) else nd.arg
+        idx := if nd.kind == "inv" or nd.kind == "invoff" then fresh_of(hoists, hidx, nd.arg) else nd.arg
         gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.bound, hi_is_len)
     if roomy.len() > 0
         # Room for every push of the loop: `(hi - lo) * per` more elements.

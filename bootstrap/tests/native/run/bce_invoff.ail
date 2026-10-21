@@ -1,0 +1,26 @@
+# `xs[y + k]` with `y` fixed in the inner loop (native.bce.10): same results
+# with the checks gone, including a negative `y` and several offsets.
+fn mix(s List[float], n int) float
+    mut t := 0.0
+    for i in 0..n
+        bi := i * 7
+        for j in 0..3
+            t += s[bi + 1] * s[bi + 5] - s[bi + 2] + j.to_float() * s[bi + 6]
+    t
+
+fn shifted(xs List[int], y int) int
+    mut t := 0
+    for j in 0..4
+        t += xs[y + 2] + xs[y + 3] * j
+    t
+
+fn main()
+    mut s := List[float]()
+    for i in 0..40
+        s.push(i.to_float() / 4.0)
+    print(mix(s, 5))
+    print(mix(s, 0))
+    xs := [3, 1, 4, 1, 5, 9, 2, 6]
+    print(shifted(xs, 0))
+    print(shifted(xs, 4))
+    print(shifted(xs, 3))
