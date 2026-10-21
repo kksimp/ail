@@ -1,0 +1,8 @@
+# contract.req.1: a failed `requires` traps at the call, naming the values.
+fn divide(a int, b int) int
+    requires b != 0
+    a / b
+
+fn main()
+    print(divide(8, 2))
+    print(divide(7, 0))

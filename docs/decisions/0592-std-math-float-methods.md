@@ -45,7 +45,7 @@ The native algorithms follow Sun's fdlibm (permissive licence, credited in
 
 Measured on 30,000 random arguments with magnitudes from about 10^-8 to 10^7
 (so trigonometry also runs through the Payne–Hanek range), and on special and
-edge values, every function is within 1 ulp of the interpreter's libm. The one measured `log10`
+edge values, every function is within 1 ulp of the interpreter's libm. On macOS the platform libm's `tanh` also differs from the fdlibm one in the last digit, so `tanh` is within 1 ulp of the platform libm there, not bit-identical (the native test `tensor_tanh` is skipped on macOS). The one measured `log10`
 exception is 2 ulp: there glibc's result is 1.9e-16 from the true value, and
 ours is 6e-17.
 

@@ -1,9 +1,15 @@
 use std.args
 
+struct Opts
+    ## more output
+    verbose bool
+    ## output file
+    out str?
+    ## file to read
+    input str
+
+impl FromArgs for Opts
+
 fn main() !
-    a := args.parse("tool", "demo", [
-        args.flag("verbose", "v", "more output"),
-        args.opt("out", "o", "output file", "a.txt"),
-        args.pos("input", "file to read"),
-    ], env.args())?
-    print("{a.flag("verbose")} {a.get("out")} {a.get("input")}")
+    a := Opts.parse("tool", "demo", env.args())?
+    print("{a.verbose} {a.out else "a.txt"} {a.input}")

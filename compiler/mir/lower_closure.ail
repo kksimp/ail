@@ -97,9 +97,15 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
 
 ## A declared function used as a value (type.fn.2): its address. `none` if
 ## `name` isn't a function of the program.
-fn Lower.fn_value(mut self, name str) Val?
+fn Lower.fn_value(mut self, name str, pos ast.Pos) Val?
     key := "{prefix}{name}"
     sig := sigs.get(key) else return none
+    if contracted.contains(key)
+        problem(
+            pos,
+            "`{name}` has contracts: a function value of it isn't in the native subset yet",
+        )
+        return Val(id: konst(0, Ty.Int), ty: Ty.Int)
     mut i := inst(-1, "fnaddr", [])
     i.name = key
     t := Ty.Fn(params: sig.params, ret: sig.ret)
@@ -111,12 +117,15 @@ fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
         Fn(ps, r) => Sig(params: ps, ret: r, fails: false)
         _ => return unsupported(pos, "calling a `{f.ty.name()}`")
     if args.len() != sig.params.len()
-        return unsupported(pos, "this call")
+        return unsupported(
+            pos,
+            "calling a `fn` value with {args.len()} arguments instead of {sig.params.len()}",
+        )
     mut vs := [f.id]
     for k in 0..args.len()
         a := args[k]
         if a.label != none
-            return unsupported(pos, "labelled arguments")
+            return unsupported(pos, "a labelled argument in a call of a `fn` value")
         v := lower_value(a.value, sig.params[k])?
         vs.push(convert(v, sig.params[k], expr_pos(a.value)))
     mut i := inst(-1, "icall", vs)

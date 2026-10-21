@@ -65,6 +65,9 @@ shortens a list must be added to the optimiser's decision first.
 +16  u8[] data     UTF-8, `bytes` long, no terminator
 ```
 
+A `bytes` object has the same layout with `chars` equal to `bytes`
+(ADR 0702).
+
 A literal is a string object in read-only data. `chars` is computed once when
 the object is built, which makes `s.len()` free and byte indexing impossible.
 
@@ -77,7 +80,8 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 ```
 
 `data` is separate so `push` can grow without moving the header the caller
-holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
+holds. A full list grows to 16 elements if it has fewer than 8, else doubles
+(ADR 0562); blocks of 256 bytes or more are copied 64 bytes per round. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
 **Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
@@ -147,6 +151,23 @@ it holds (a generated `copy.T` function); fields change in place.
 The entry array is in insertion order, which is iteration order
 (type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
 A set uses the same layout and ignores the value word.
+
+**Socket object** (`net.Conn`, `net.Listener`; ADR 0830; `compiler/rt/native/net.ail`).
+A `Conn` or `Listener` value is a struct (kind 4) of one `int` field: an index
+into a list of socket objects that global slot 40 keeps alive.
+
+```text
++0   i64  fd       descriptor, -1 once closed
++8   u64  timeout  milliseconds a read, write or connect may wait
++16  ptr  buf      read buffer (pointer-free), or 0
++24  u64  pos      first unread byte in buf
++32  u64  len      bytes in buf
++40  u64  flags    1 end of stream seen
++48  ptr  peer     string: peer address of a Conn
++56  u64  kind     0 connection, 1 listener
++64  ptr  addr     string: bound address of a Listener
++72  u64  cap      size of buf
+```
 
 **Enum values** (ADR 0602, lane 179). An enum none of whose variants has
 fields is an `i64`, the variant's index in declaration order. Any other enum
@@ -259,7 +280,9 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
+flag), 40-47 `fmt.ail` (the byte builder), 48-61 free, 62-63 `random.ail`
+(the generator's state and whether it is seeded).
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
@@ -331,7 +354,7 @@ the buffer instead of building a string. List indexing and `len` are inline.
 The runtime is written over the primitives of `compiler/rt/native/prim.ail`
 (`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
-`target`), which the code generator expands inline and only runtime code may
+`f32_round`, `target`), which the code generator expands inline and only runtime code may
 call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 
 **OS layer and number text (lane 177, ADRs 0580-0582).** `os.ail` provides
@@ -341,7 +364,10 @@ and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
 its value and, on failure, sets the error slot (global 8) to the display text
 of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
-`io_read_line` return a string or 0.
+`io_read_line` return a string or 0. Runtime code that needs a deadline calls
+`time_mono_ns()` or `time_mono_ms()` (`CLOCK_MONOTONIC` on Linux; on macOS it is NOT
+monotonic yet, it reads the wall clock, until the libSystem switch moves it to
+`clock_gettime_nsec_np` or `mach_continuous_time`: a follow-up for the Mac gate); `time_now_ms()` is the wall clock of `time.now_ms`.
 
 **Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
 adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
@@ -349,7 +375,8 @@ adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
 `str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
 (character index or -1), `str_find_opt`, `str_char_at`, `str_strip_prefix`, `str_strip_suffix`,
 `char_to_digit`, `char_from_code` (optional results), `str_replace`, `str_split`,
-`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
+`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`, `str_trim_start`,
+`str_trim_end`, `str_words`, `str_count`, `str_rfind_opt`,
 `str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
 `out_char`, `out_list_char`, and `str_trap`. A function that
 can trap takes the constant head and excerpt as its last arguments (`str`
@@ -476,3 +503,39 @@ overflow an `int` (std.tensor.6) returns 0, and `sum`/`dot` of `int` return a
 one-element tensor read with `rt.tensor_first_i`; the lowering traps with the
 constant message when it sees 0. A float `sum`, `dot` and axis sum follow
 std.tensor.5's 16 partial sums.
+
+Step 3 (matmul, activations): `rt.tensor_matmul_fault` and `rt.tensor_matmul`
+(the plain triple loop of std.tensor.7, each product and sum rounded, no fused
+multiply-add; 0 on `int` overflow, as above), and `rt.tensor_activate` (`kind`
+0 `relu`, 1 `sigmoid` through `rt.float_exp`, 2 `tanh` through `rt.float_tanh`,
+fdlibm's, which uses `rt.float_expm1`).
+
+Step 4 (`Tensor[f32]`): element kind 2. An element is still a `float` word, but
+it always holds a value already rounded to `f32`; `f32_round` (a primitive:
+round to single precision and widen back, `vcvtsd2ss` and `vcvtss2sd` on
+x86-64, `fcvt s,d` and `fcvt d,s` on ARM64) is applied after every operation.
+One rounding of the double-precision result is the correctly rounded
+single-precision result for `+ - * /` (a double has more than twice an `f32`'s
+precision), so the values are the interpreter's `f32` kernels'.
+`rt.tensor_to_f32` and `rt.tensor_to_float` convert. A `Tensor[f32]` has type
+`Ty.Tensor(Ty.F32)`; there is no scalar `f32` yet, so `sum`, `dot`, `max`,
+`mean`, `item`, printing and the text form of a `Tensor[f32]` are
+`native.subset.1` problems, and `to_list` gives a `List[float]`.
+
+Step 5 (vector kernels, x86-64): `rt.vec_axpy` (matmul's inner loop), `rt.vec_zip`
+and `rt.vec_scal` (elementwise operators) are declared in `tensor.ail` with
+scalar bodies, and `compiler/x64/kernels.ail` assembles AVX loops in their
+place (four doubles at a time, then element by element; a multiply and an add,
+never a fused one, so every result is the scalar one bit for bit; a non-zero
+`r` rounds each result to `f32` through `vcvtpd2ps`/`vcvtps2pd`). They are
+leaf code using only rax, rcx-r11 and xmm0-xmm4, and `inline.ail` never inlines
+an `rt.vec_*` function. On ARM64 `compiler/a64/kernels.ail` assembles NEON
+loops in the same place (two doubles at a time, `fcvtn`/`fcvtl` for the `f32`
+rounding, x0-x9 and v0-v5 only), with the same results bit for bit.
+
+Step 6 (`softmax`, std.tensor.24): `rt.tensor_softmax_fault(a)` returns the
+fault message (no axis, empty last axis) or 0, and the lowering traps with
+imm 15 like the other tensor faults. `rt.tensor_softmax(a)` writes `exp(x - top)`
+per row of the last axis (top skips NaN), sums them in element order and
+divides, in `float` and rounded once for `f32`. `exp` is the runtime's own
+(ADR 0592), so a result may differ from `ail run` in the last bit.

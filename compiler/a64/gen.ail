@@ -119,7 +119,10 @@ pub fn generate(m mir.Module, os int) codegen.Image
     a.brk()
     add_code(mut img, a, "")
     for f in m.funcs
-        gen_func(mut img, m, f, os)
+        if is_kernel(f.name)
+            gen_kernel(mut img, f.name)
+        else
+            gen_func(mut img, m, f, os)
     img
 
 fn add_code(mut img codegen.Image, a Asm, name str)
@@ -1003,6 +1006,12 @@ fn Gen.prim(mut self, i mir.Inst)
         "bits_float" =>
             d := out_fpr(i.dst, X0)
             a.fmov_dx(d, gpr(i.args[0], S0))
+            put_fpr(i.dst, d)
+        "f32_round" =>
+            xa := fpr(i.args[0], X0)
+            d := out_fpr(i.dst, X0)
+            a.fop1("fcvt_sd", X1, xa)
+            a.fop1("fcvt_ds", d, X1)
             put_fpr(i.dst, d)
         _ => unreachable("a64: unknown primitive {i.name}")
 

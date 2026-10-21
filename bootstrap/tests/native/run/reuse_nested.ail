@@ -1,0 +1,14 @@
+# A list made in an inner loop is reused there, and the preheader's list in
+# an outer loop is reused too (native.reuse.1).
+fn main()
+    mut total := 0
+    for i in 0..3
+        mut outer := []
+        for j in 0..3
+            mut inner := []
+            inner.push(i)
+            inner.push(j)
+            outer.push(inner.len() + inner[1])
+        for v in outer
+            total += v
+    print(total)

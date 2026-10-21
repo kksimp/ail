@@ -38,7 +38,7 @@ fn elem_bytes(e Ty) int
 ## the element type has no native equality yet.
 fn eq_kind(e Ty) int
     match e
-        Int | Bool => 0
+        Int | Bool | Char => 0
         Str => 1
         Float => 2
         _ => -1
@@ -273,6 +273,8 @@ fn Lower.list_equal(mut self, o ast.BinOp, a Val, b Val) Val?
 ## `xs[i]`, `xs[a..b]`, and `m[k]` on a map.
 fn Lower.lower_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
     l := lower_value(recv, none)?
+    if l.ty == Ty.Bytes
+        return bytes_index(l, index, pos)
     if l.ty.is_coll()
         return lower_coll_index(l, index, pos)
     elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
@@ -296,6 +298,11 @@ fn Lower.list_method(
 ) Val?
     if name == "len" and vs.len() == 0
         return Val(id: op("len", [r.id], Ty.Int), ty: Ty.Int)
+    if name == "is_empty" and vs.len() == 0
+        return Val(
+            id: op("eq", [op("len", [r.id], Ty.Int), konst(0, Ty.Int)], Ty.Bool),
+            ty: Ty.Bool,
+        )
     # type.coll.9
     if name == "join" and vs.len() == 1 and e == Ty.Str and vs[0].ty == Ty.Str
         return Val(id: call("rt.list_join", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)

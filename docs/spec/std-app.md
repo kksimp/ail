@@ -1,0 +1,196 @@
+# Standard library: `std.app` native windows
+
+Chapter key: `std`
+
+> **Status:** Drafted. Specified and implemented in the bootstrap interpreter
+> (ADR 0838). Native builds wait for native `proc.start` (std.app.10). The
+> macOS host is `tools/app-host/macos`; Windows and Linux hosts are future
+> work.
+
+An app is a value whose type implements `app.App`. It says what the window
+shows as a *view tree* (`view`) and changes its state when something happens
+(`update`). A separate *host* program draws the tree with the platform's own
+controls and reports what the user does. The two talk over the host's
+standard input and output, so no AIL code runs on the host's threads and no
+callback crosses a language boundary (`ffi.decl.3`).
+
+**std.app.1** — `use std.app` imports a standard module written in AIL
+(`std.ui.19`). Its items are the types `Node`, `Op`, `Event`, `AppError` and
+the trait `App`, and the functions below. *(ADR 0838)*
+
+**std.app.2** — `enum Node` is the view tree: `Label(text str)`,
+`Button(id str, caption str)`, `Field(id str, value str, hint str)` (one line
+of text), `Toggle(id str, caption str, on bool)`, `Column(kids List[Node])`
+(top to bottom), `Row(kids List[Node])` (left to right), `Spacer` and
+`Canvas(id str, w float, h float, ops List[Op])`. A canvas whose `w` or `h`
+is `0.0` fills the space left in that direction. The builders
+`label(s)`, `column(kids)`, `row(kids)`, `button(id, caption)`,
+`field(id, value, hint)`, `toggle(id, caption, on)` and
+`canvas(id, w, h, ops)` give the same values without naming fields
+(`type.struct.7`). *(ADR 0838)*
+
+**std.app.3** — `enum Op` is a canvas's display list, drawn in order, in
+points from the canvas's top-left corner, colors `0xRRGGBB`:
+`Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
+`mono` or `sans`; `(x, y)` is the text's top-left corner),
+`Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
+`Pic(x, y, w, h, src)` (an image file path or URL), `Clip(x, y, w, h)`
+(limits later steps) and `Unclip` (ends the latest `Clip`).
+`draw_text(x, y, s, fg)` is a `Str` in `mono` at size 13, and
+`draw_rect(x, y, w, h, color)` a `Fill`. *(ADR 0838)*
+
+**std.app.4** — `trait App` has `update(mut self, ev Event)` and
+`view(self) Node`, and two methods with defaults: `title(self) str`
+(`"AIL"`), the window title, and `focus(self) str` (`""`), the `id` of the
+control that should have the keyboard focus; the host moves the focus when
+the value changes. *(ADR 0838)*
+
+**std.app.5** — `struct Event` has the fields `kind`, `id`, `text` (all
+`str`), `x`, `y`, `dx`, `dy`, `cell_w`, `cell_h` (all `float`) and `ctrl`,
+`alt`, `shift`, `meta` (all `bool`). Fields that don't apply to a kind are
+zero or empty. The kinds are: `start` (the host is ready); `press` (a
+button, `id`); `edit` (a field changed: `id`, `text`); `submit` (Return in a
+field, `id`); `toggle` (`id`, `text` is `on` or `off`); `click` (in a canvas:
+`id`, `x`, `y`, `text` is `left`, `right` or `other`); `scroll` (`id`, `dx`,
+`dy` in points, positive `dy` when the content should move up); `key` (in a
+canvas: `id`, `text` is a name or character as in `std.ui.7`, with `meta`
+for Command); `resize` (a canvas's size: `id`, `dx` wide, `dy` high, and
+`cell_w`, `cell_h`, the size of one character of `mono` at 13 points); and
+`close` (the window closed). `event(kind)` makes an event with every other
+field empty; `press(id)`, `edit(id, value)` and `key(name)` fill in one.
+*(ADR 0838)*
+
+**std.app.6** — `outline(n Node) str` is the tree as indented text, one
+node per line: `"text"` for a label, `[caption] #id` for a button,
+`<value> #id (hint)` for a field, `[x] caption #id` or `[ ] caption #id` for
+a toggle, `column`, `row`, `~` for a spacer, and `canvas #id WxH ops=N`
+followed by one line per step. It is how a test or an agent sees a screen
+without a window. *(ADR 0838)*
+
+**std.app.7** — The host and the program exchange newline-delimited JSON,
+one object per line. The program sends `{"v":1,"t":"view","title":T,
+"focus":F,"tree":N}`, where `N` is the `ToJson` form of `Node`
+(`json.derive.1`: `{"kind":"Column","kids":[...]}`); `frame(a)` is that
+line for app `a`. Every line the program sends carries `"v":1`. *(ADR 0838)*
+
+**std.app.8** — The host sends events as `{"kind":K, ...}` with the fields
+of `Event` (std.app.5) that apply; missing members are zero or empty
+(`event_from_json(j)`). Its first line also carries `"v":1`. A line that
+isn't a JSON object, or has no `kind`, is skipped. *(ADR 0838)*
+
+**std.app.9** — `run(mut a T) ! AppError` and
+`run_host(mut a T, cmd str, args List[str]) ! AppError`, for any `T` that
+implements `App`, start the
+host, send the first view, and wait for the host's first line. Then each
+event goes to `a.update`, and the view is sent again when its line differs
+from the last one sent. A `close` event is passed to `update`, then the
+program closes the host's input, copies the host's standard error to its
+own, waits for the host, and returns. The program's own standard output is
+free for `print`. `AppError` is `error struct AppError { kind str, message
+str }` with the kinds `no_host` (no host program), `start` (it couldn't
+start), `version` (its first line lacks `"v":1`) and `host_exited` (it ended
+before a `close`). *(ADR 0838)*
+
+**std.app.10** — `run` finds the host with `host_path() str ! AppError`:
+the environment variable `AIL_APP_HOST`, else `AIL_ROOT/tools/app-host/
+macos/build/AIL App Host.app/Contents/MacOS/AILAppHost`, where the `ail`
+command sets `AIL_ROOT` to its own directory. The host is started with
+`proc.start` (`std.proc.4`), which native builds don't compile yet, so a
+program that uses `run` runs on the interpreter. *(ADR 0838)*
+
+**std.app.11** — `script(mut a T, events List[Event]) List[str]`
+passes each event to `update` in order, with no host, and returns
+`outline(a.view())` after each one, so `ail test` covers an app's `update`
+and `view` without a window. *(ADR 0838)*
+
+**std.app.12** — `app.run_host`, and so `app.run`, has the effect `app`
+(`eff.infer.4`) as well as `proc` and `io`; `app` is a capability, so
+`ail run --deny app` rejects a program that opens a window
+(`eff.cap.1`). `script`, `outline` and the builders have no effects.
+*(ADR 0838)*
+
+## Examples
+
+```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
+use std.app
+
+struct Counter
+    n int
+
+impl app.App for Counter
+    fn update(mut self, ev app.Event)
+        if ev.kind == "press" and ev.id == "up"
+            n += 1
+
+    fn view(self) app.Node
+        app.column([app.label("count {n}"), app.button("up", "Up")])
+
+fn main()
+    mut c := Counter(n: 0)
+    screens := app.script(mut c, [app.press("up"), app.press("up")])
+    print(screens[1])
+```
+
+```ail rules=std.app.3,std.app.7,std.app.8
+use std.app
+
+struct Pad
+    clicks int
+
+impl app.App for Pad
+    fn update(mut self, ev app.Event)
+        if ev.kind == "click"
+            clicks += 1
+
+    fn view(self) app.Node
+        app.canvas("pad", 0.0, 0.0, [app.draw_rect(0.0, 0.0, 20.0, 20.0, 0xff0000), app.draw_text(4.0, 4.0, "{clicks}", 0xffffff)])
+
+    fn title(self) str
+        "Pad"
+
+fn main()
+    mut p := Pad(clicks: 0)
+    ev := app.event_from_json(parse_json("\{\"kind\":\"click\",\"id\":\"pad\",\"x\":3}") else Json.Null)
+    p.update(ev)
+    print(ev.x)
+    print(app.frame(p).starts_with("\{\"v\":1,\"t\":\"view\",\"title\":\"Pad\""))
+    print(app.outline(p.view()))
+```
+
+```ail norun rules=std.app.9,std.app.10
+use std.app
+
+struct Hello
+    name str
+
+impl app.App for Hello
+    fn update(mut self, ev app.Event)
+        if ev.kind == "edit"
+            name = ev.text
+
+    fn view(self) app.Node
+        app.column([app.field("name", name, "your name"), app.label("Hello, {name}")])
+
+fn main()
+    mut h := Hello(name: "")
+    app.run(mut h) else err
+        print("no window: {err.kind}: {err.message}")
+```
+
+```ail tool=effects,--json,FILE expect="fn:main":["app" rules=std.app.12
+use std.app
+
+struct Quiet
+    n int
+
+impl app.App for Quiet
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.label("{n}")
+
+fn main()
+    mut q := Quiet(n: 0)
+    app.run(mut q) else return
+```

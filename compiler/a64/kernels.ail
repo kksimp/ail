@@ -1,0 +1,169 @@
+## Vector kernels for the tensor runtime (ADR 0815): hand-assembled NEON
+## loops that replace the functions of `compiler/rt/native/tensor.ail` named
+## `rt.vec_*`, as `compiler/x64/kernels.ail` does there (their AIL bodies are
+## the scalar definitions and the reference). Each works two doubles at a time
+## and then element by element, with an IEEE operation per element and no
+## fused multiply-add, so the result is bit for bit the scalar one; a
+## non-zero `r` rounds every result to `f32`. They use x0..x11 and v0..v4
+## only, which calls don't preserve (native-abi.md §1).
+use codegen
+
+## The kernels this file assembles.
+pub fn is_kernel(name str) bool
+    name == "rt.vec_axpy" or name == "rt.vec_zip" or name == "rt.vec_scal"
+
+## Add the kernel `name` to `img`.
+pub fn gen_kernel(mut img codegen.Image, name str)
+    mut a := new_asm()
+    match name
+        "rt.vec_axpy" => kernel_axpy(mut a)
+        "rt.vec_zip" => kernel_zip(mut a)
+        _ => kernel_scal(mut a)
+    a.resolve_labels()
+    base := img.code.len()
+    img.funcs[name] = base
+    img.code.extend(a.code)
+
+## Round the two doubles of v`x` to `f32` and back, through v3.
+fn round_q(mut a Asm, flag int, x int)
+    skip := a.label()
+    a.cbz(flag, skip)
+    a.vcvtn(3, x)
+    a.vcvtl(x, 3)
+    a.bind(skip)
+
+## Round the double of d`x` to `f32` and back, through d3.
+fn round_d(mut a Asm, flag int, x int)
+    skip := a.label()
+    a.cbz(flag, skip)
+    a.fop1("fcvt_sd", 3, x)
+    a.fop1("fcvt_ds", x, 3)
+    a.bind(skip)
+
+## x8 = n / 2 (pairs), x9 = n % 2.
+fn split_count(mut a Asm, n int)
+    a.shift_ri("lsr", 8, n, 1)
+    a.shift_ri("lsl", 9, 8, 1)
+    a.alu_rr("sub", 9, n, 9)
+
+## `rt.vec_axpy(c, b, n, r; x)`: `c[i] = c[i] + x * b[i]` for `i < n`, the
+## product and the sum each rounded. x0 = c, x1 = b, x2 = n, x3 = r, d0 = x.
+fn kernel_axpy(mut a Asm)
+    a.vdup(5, 0)
+    split_count(mut a, 2)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.cbz(8, scalar)
+    a.ldr_q_post(1, 1)
+    a.vop("fmul", 1, 1, 5)
+    round_q(mut a, 3, 1)
+    a.ldr_q_post(2, 0)
+    a.alu_ri("sub", 0, 0, 16)
+    a.vop("fadd", 2, 2, 1)
+    round_q(mut a, 3, 2)
+    a.str_q_post(2, 0)
+    a.alu_ri("sub", 8, 8, 1)
+    a.b(vloop)
+    a.bind(scalar)
+    a.cbz(9, done)
+    a.ldr_d(1, 1, 0)
+    a.fop("fmul", 1, 1, 0)
+    round_d(mut a, 3, 1)
+    a.ldr_d(2, 0, 0)
+    a.fop("fadd", 2, 2, 1)
+    round_d(mut a, 3, 2)
+    a.str_d(2, 0, 0)
+    a.bind(done)
+    a.ret()
+
+## The four elementwise operations by code, as MIR names them.
+fn zip_op(k int) str
+    match k
+        0 => "fadd"
+        1 => "fsub"
+        2 => "fmul"
+        _ => "fdiv"
+
+## One loop of `rt.vec_zip`: `out[i] = a[i] op b[i]`. x1 = out, x2 = a,
+## x3 = b, x4 = n, x5 = r.
+fn zip_loop(mut a Asm, op str)
+    split_count(mut a, 4)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.cbz(8, scalar)
+    a.ldr_q_post(1, 2)
+    a.ldr_q_post(2, 3)
+    a.vop(op, 1, 1, 2)
+    round_q(mut a, 5, 1)
+    a.str_q_post(1, 1)
+    a.alu_ri("sub", 8, 8, 1)
+    a.b(vloop)
+    a.bind(scalar)
+    a.cbz(9, done)
+    a.ldr_d(1, 2, 0)
+    a.ldr_d(2, 3, 0)
+    a.fop(op, 1, 1, 2)
+    round_d(mut a, 5, 1)
+    a.str_d(1, 1, 0)
+    a.bind(done)
+    a.ret()
+
+## `rt.vec_zip(op, out, a, b, n, r)`: x0 = op (0 `+`, 1 `-`, 2 `*`, 3 `/`).
+fn kernel_zip(mut a Asm)
+    mut next := a.label()
+    for k in 0..4
+        next = a.label()
+        a.cmp_ri(0, k)
+        a.b_cond(NE, next)
+        zip_loop(mut a, zip_op(k))
+        a.bind(next)
+    a.brk()
+
+## One loop of `rt.vec_scal`: `out[i] = a[i] op s`, or `s op a[i]` when
+## `left`. x1 = out, x2 = a, x3 = n, x4 = r; d0 and v5 hold s.
+fn scal_loop(mut a Asm, op str, left bool)
+    a.vdup(5, 0)
+    split_count(mut a, 3)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.cbz(8, scalar)
+    a.ldr_q_post(1, 2)
+    if left
+        a.vop(op, 1, 5, 1)
+    else
+        a.vop(op, 1, 1, 5)
+    round_q(mut a, 4, 1)
+    a.str_q_post(1, 1)
+    a.alu_ri("sub", 8, 8, 1)
+    a.b(vloop)
+    a.bind(scalar)
+    a.cbz(9, done)
+    a.ldr_d(1, 2, 0)
+    if left
+        a.fop(op, 1, 0, 1)
+    else
+        a.fop(op, 1, 1, 0)
+    round_d(mut a, 4, 1)
+    a.str_d(1, 1, 0)
+    a.bind(done)
+    a.ret()
+
+## `rt.vec_scal(op, out, a, n, r, left; s)`: x0 = op, x5 = left.
+fn kernel_scal(mut a Asm)
+    mut next := a.label()
+    for k in 0..4
+        for l in 0..2
+            next = a.label()
+            a.cmp_ri(0, k)
+            a.b_cond(NE, next)
+            a.cmp_ri(5, l)
+            a.b_cond(NE, next)
+            scal_loop(mut a, zip_op(k), l == 1)
+            a.bind(next)
+    a.brk()

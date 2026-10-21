@@ -1,0 +1,45 @@
+fn same(a tensor.Tensor[f32], b tensor.Tensor[f32]) bool
+    a.to_list() == b.to_list()
+
+fn main()
+    x := tensor.from([0.1, -2.5, 3.75, 1000000.0, 0.0, -0.3, 7.0, 1.0e-3], [2, 4]).to_f32()
+    y := tensor.from([4.0, 8.0, -1.0, 2.0, 0.5, 0.25, -3.0, 9.0], [2, 4]).to_f32()
+    s := 0.7
+    # A fused chain against the same operations one at a time.
+    p := (x * y + x) * 0.5 - y
+    q := x * y
+    r := q + x
+    u := r * 0.5
+    print(same(p, u - y))
+    print(same((x * s - y) / y, ((x * s) - y) / y))
+    print(same(-(x - y) * 2.0, (-(x - y)) * 2.0))
+    print(same((x * y).relu() + x, (x * y).relu().add(x)))
+    m := x * 0.5
+    n := m - y
+    o := n.sigmoid()
+    print(same((x * 0.5 - y).sigmoid().tanh(), o.tanh()))
+    z := (x - x) / (y - y)
+    print(((x * y) / (y - y)).to_list())
+    print(z.to_list())
+    print(p)
+    print((x * 0.5 - y).sigmoid().tanh())
+    big := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0], [5]).to_f32()
+    print(((big * big + big) * 0.5 - big).to_list())
+    # Longer than one chunk, with values that round differently at f32.
+    count := 3000
+    v := tensor.from([((i * 7919) % 1009).to_float() * 0.0137 - 6.9 for i in 0..count]).to_f32()
+    w := tensor.from([((i * 104729) % 997).to_float() * 0.0071 + 0.3 for i in 0..count]).to_f32()
+    fa := (v * w + v) * 0.3 - w / (w + v * v)
+    ta := v * w
+    tb := ta + v
+    tc := tb * 0.3
+    td := v * v
+    te := w + td
+    tf := w / te
+    print(same(fa, tc - tf))
+    fb := ((v - w) * 0.1).sigmoid().tanh() * w
+    tg := v - w
+    th := tg * 0.1
+    ti := th.sigmoid()
+    tj := ti.tanh()
+    print(same(fb, tj * w))

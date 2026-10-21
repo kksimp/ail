@@ -1,0 +1,27 @@
+# A `?` on an optional inside the value of `else` runs the `else`
+# (err.prop.4): `a?.f`, `a?.m()`, results that are optional themselves.
+struct Owner
+    name str
+    tag str?
+
+struct Item
+    owner Owner?
+    n int
+
+fn label(i Item) str
+    i.owner?.name else "nobody"
+
+fn tag(i Item) str
+    i.owner?.tag else "-"
+
+# `@allow` on a function is accepted and has no effect on lowering.
+@allow("expr.match.3") fn size(i Item) int
+    i.owner?.name.len() else 0
+
+fn main()
+    a := Item(owner: Owner(name: "ann", tag: "x"), n: 1)
+    b := Item(owner: none, n: 2)
+    c := Item(owner: Owner(name: "cy", tag: none), n: 3)
+    print("{label(a)} {label(b)} {label(c)}")
+    print("{tag(a)} {tag(b)} {tag(c)}")
+    print("{size(a)} {size(b)} {size(c)}")

@@ -1,0 +1,6 @@
+# `compress.unzlib` fails with: compress.CompressError(kind: "corrupt", message: "not zlib data")
+use std.compress
+
+fn main() !
+    d := compress.unzlib(b"\x61\x62\x63")?
+    print(d.len())

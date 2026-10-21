@@ -27,3 +27,20 @@ native.subset.1.
 
 - **Carry the type with the value.** Costs a word per error and an any-box
   for the one case OQ-029 has not specified.
+
+## OS errors
+
+`fs.IoError(path, kind)` and `proc.ProcError(cmd, kind)` are error structs of
+the standard library that no source declares. The runtime builds the value
+where an OS call fails, next to the display text, so `else err` on `fs.*` and
+`proc.run` binds a typed value and `err.kind`, `err.path` and `err.cmd` read.
+
+## Methods and `if v := f(i)`
+
+`x.get(k) else e` calls the method when `x` is a struct or enum with a `get`
+method, not the map built-in. `if v := f(i)` on a call that can fail binds the
+success value and takes the `else` side on failure, clearing the error.
+## Lists of optionals
+A list, field or parameter may hold optionals of numbers, strings and enums
+(`List[str?]`, `List[Expr?]`): an element is one word, 0 for none. A literal
+with a `none` among its items is a list of optionals.

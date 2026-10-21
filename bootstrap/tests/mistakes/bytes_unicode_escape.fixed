@@ -1,0 +1,3 @@
+fn main()
+    s := b"caf\xc3\xa9"
+    print(s.len())

@@ -1,0 +1,68 @@
+# The client side of tools/native-net/check.sh for net.request and net.Options
+# (std.net.6, std.net.19): headers, query, body, methods, redirects, and the
+# refused requests. The scripted server's base URL is the first argument.
+use std.net
+
+fn show(label str, base str, path str, o net.Options, method str)
+    r := net.request(method, "{base}{path}", o) else err
+        print("{label}: error {err.kind}")
+        return
+    print("{label}: {r.status} {r.body}")
+
+fn main()
+    base := env.args()[0]
+    mut o := net.options()
+    print("{o.timeout_ms} {o.max_redirects} {o.connect_ms} {o.total_ms} {o.body.len()}")
+    show("plain", base, "/hdrs", o, "GET")
+    show("lower method", base, "/hdrs", o, "get")
+    mut h := net.options()
+    h.headers["X-A"] = "one"
+    h.headers["Authorization"] = "Bearer t"
+    h.headers["Cookie"] = "k=v"
+    h.headers["Connection"] = "keep-alive"
+    h.headers["Content-Length"] = "999"
+    show("headers", base, "/hdrs", h, "GET")
+    show("cross origin", base, "/xorigin", h, "GET")
+    mut q := net.options()
+    q.query["a b"] = "c&d"
+    q.query["é"] = "~-._"
+    show("query", base, "/echo?x=1", q, "GET")
+    show("query fragment", base, "/echo#frag", q, "GET")
+    mut b := net.options()
+    b.body = "payload"
+    b.headers["Content-Type"] = "text/plain"
+    show("put", base, "/hdrs", b, "PUT")
+    show("delete body", base, "/hdrs", b, "DELETE")
+    show("post empty", base, "/hdrs", net.options(), "POST")
+    mut c := net.options()
+    c.body = "chunked body"
+    c.headers["Transfer-Encoding"] = "chunked"
+    show("chunked", base, "/hdrs", c, "POST")
+    mut big := net.options()
+    big.body = "0123456789".repeat(1500)
+    big.headers["Transfer-Encoding"] = "chunked"
+    r := net.request("POST", "{base}/hdrs", big) else err
+        print("big: error {err.kind}")
+        return
+    print("big: {r.status} {r.body.len()}")
+    mut n := net.options()
+    n.max_redirects = 0
+    show("no redirects", base, "/redirect", n, "GET")
+    show("redirects", base, "/redirect", net.options(), "GET")
+    mut two := net.options()
+    two.max_redirects = 2
+    show("loop", base, "/loop", two, "GET")
+    show("head", base, "/plain", net.options(), "HEAD")
+    mut bad := net.options()
+    bad.headers["x-a"] = "1\r\nHost: evil"
+    show("injected value", base, "/hdrs", bad, "GET")
+    mut name := net.options()
+    name.headers["bad name"] = "1"
+    show("bad name", base, "/hdrs", name, "GET")
+    show("bad method", base, "/hdrs", net.options(), "GE T")
+    show("empty method", base, "/hdrs", net.options(), "")
+    show("scheme", "ftp://example.com", "/", net.options(), "GET")
+    mut t := net.options()
+    t.timeout_ms = 5000
+    t.connect_ms = 2000
+    show("timeouts", base, "/plain", t, "GET")
