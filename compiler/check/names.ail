@@ -70,6 +70,7 @@ pub AIL_STD_MODULES := [
     "std.csv",
     "std.log",
     "std.net.http",
+    "std.net.jar",
     "std.time.date",
     "std.ui.widgets",
 ]

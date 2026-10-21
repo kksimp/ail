@@ -53,3 +53,9 @@ must say which character is wrong and how to repair it.
 
 - A later Unicode data module replaces the approximations without changing
   the API.
+
+## Rejected alternatives
+
+- A new regex syntax (option B): rejected because every model would write it wrong, and familiarity cuts mistakes (ADR 0011).
+- Full Unicode tables for `\p{...}` (option C): deferred. It needs a generated table of tens of thousands of ranges, or a new data module, for rare use. The chosen form uses fixed ranges with documented approximations.
+- Case folding that matches `ß` against `SS`: rejected by the decision. Case folding is simple, one character to one.

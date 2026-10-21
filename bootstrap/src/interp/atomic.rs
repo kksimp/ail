@@ -100,7 +100,7 @@ impl<'a, W: Write> Interp<'a, W> {
     }
 }
 
-/// The ordering a checked `order:` argument names (conc.atomic.7).
+/// The ordering a checked `order:` argument names (conc.atomic.2, conc.atomic.7).
 fn order_of(e: &crate::ast::Expr) -> Ordering {
     match e {
         crate::ast::Expr::Name(n, _) => match n.as_str() {

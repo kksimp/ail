@@ -59,3 +59,9 @@ a reader already knows.
   changes between runs (`trace.run.1`).
 - Windows: `Command` pipes work the same; the tests use `sh`, which lane 153
   maps to `cmd` stubs.
+
+## Rejected alternatives
+
+- A new `Stream` type with `read_line()`, `read(n)` and `write()` (option B): rejected because a second way to wait for data would need `select` and `for` to learn it, and every use costs more tokens.
+- Callbacks such as `on_line(fn)` (option C): rejected because AIL had no function values yet (lane 130).
+- The name `spawn`: rejected because `spawn` is a keyword (`lex.kw.1`), so `proc.spawn(...)` does not lex; the function is `start`.

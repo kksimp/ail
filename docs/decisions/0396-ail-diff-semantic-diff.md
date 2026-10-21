@@ -80,3 +80,9 @@ Option B with the details above.
   declaration with the same body hash.
 - Windows: `--rev` needs `git` and `tar` on the path (both ship with
   current Windows and Git for Windows); the rest is portable (ADR 0004).
+
+## Rejected alternatives
+
+- A generic JSON diff of the `ail api` output (option A): rejected because it reports moved lines as changes, misses bodies, diagnostics and tests, and its output is longer than the textual diff.
+- A structural diff of the syntax trees (option C): rejected because it is much more work, its output is longer, and reviewers want meaning rather than tree edits.
+- A `REV:PATH` syntax for `--rev`: rejected because it clashes with Windows drive letters.

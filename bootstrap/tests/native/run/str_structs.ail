@@ -1,0 +1,22 @@
+# Strings and characters inside structs and methods.
+struct Token
+    kind str
+    text str
+    first char
+
+fn Token.show(self) str
+    "{kind}({text}) starts with {first}"
+
+fn make(text str) Token
+    cs := text.chars()
+    Token(kind: if cs[0].is_digit() then "num" else "word", text: text, first: cs[0])
+
+fn main()
+    mut toks := List[Token]()
+    for w in "let x1 = 42 + y".split(" ")
+        toks.push(make(w))
+    for t in toks
+        print(t.show())
+        if t.kind == "num" and t.first >= '0'
+            print("{t.text.len()} digits")
+    print(toks.len())

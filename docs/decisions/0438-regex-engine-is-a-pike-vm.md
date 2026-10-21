@@ -68,3 +68,9 @@ hand, and no third-party test file is included, so the repository's Apache
 - Native backend and the AIL port later need a matcher in AIL; this VM is
   small enough to port, and the vectors are the contract.
 - No `(?=`, `\1`: programs that need them test the captured text in AIL.
+
+## Rejected alternatives
+
+- A backtracking engine with backreferences and lookaround (option A): rejected because it takes exponential time on patterns such as `(a+)+b`, and an agent cannot see that cost from the pattern. That is a denial-of-service risk on untrusted text.
+- A lazy DFA with a Pike fallback for captures (option C): not chosen now. It is much more code, and speed is not what the first slice needs. It stays a later optimisation behind the same API.
+- A regex crate (option D): rejected because ADR 0009 prefers custom tooling, and the bootstrap carries no dependency that is not justified.

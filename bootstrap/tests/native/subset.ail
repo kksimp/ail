@@ -11,4 +11,5 @@ fn main()
     names := {"a": 1}
     s := "n = {names.len()}"
     print(s)
-    print('c')
+    print("ab".find("b"))
+    print('c'.to_digit(10))

@@ -43,3 +43,9 @@ status (137 on Unix); killing then waiting is one call. The interpreter's
 - Follow-up: a general "unique value must be consumed" rule would make the
   exit-time kill unnecessary; it would change `own.uniq.*`, so it is the
   designer's call (not made here).
+
+## Rejected alternatives
+
+- A runtime check that traps at scope end if a child is not waited (option B): rejected because it needs a per-scope hook for values in structs, and `end_tasks` does it only for task handles. It would cost every block for one rare value.
+- `wait` and `kill` as methods on `Child` (option C): rejected because a method on a standard struct needs plumbing that `ui.Window` has, and `move self` on a standard method adds more.
+- A general must-use rule for unique values now: left as the designer's call, since it would change `own.uniq.*`. Until then a leaked child is killed at program exit.

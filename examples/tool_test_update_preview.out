@@ -1,0 +1,3 @@
+-    assert_eq(double(2), 5)
++    assert_eq(double(2), 4)
+1 lines added, 1 removed
