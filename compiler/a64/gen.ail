@@ -688,6 +688,10 @@ fn Gen.divide(mut self, i mir.Inst)
     x := i.args[0]
     y := i.args[1]
     sym := if i.op == "div" then "/" else "%"
+    if k := imm(y)
+        if k > 2 and k < 2147483648 and k.bit_and(k - 1) != 0
+            magic_divide(i, k)
+            return
     ra := gpr(x, S0)
     rb := gpr(y, S1)
     d := out_checked(i.dst, i)
@@ -711,6 +715,26 @@ fn Gen.divide(mut self, i mir.Inst)
         a.bind(done)
     else
         a.sdiv(d, ra, rb)
+    put_gpr(i.dst, d)
+
+## Division and remainder by a constant `k` (not a power of two) with a high
+## multiply (`codegen.div_magic`), not `sdiv`.
+fn Gen.magic_divide(mut self, i mir.Inst, k int)
+    ra := gpr(i.args[0], S0)
+    mg := codegen.div_magic(k)
+    a.mov_ri(S1, mg[0])
+    a.smulh(S2, ra, S1)
+    a.alu_rr("add", S2, S2, ra)
+    if mg[1] > 0
+        a.shift_ri("asr", S2, S2, mg[1])
+    a.shift_ri("lsr", S1, ra, 63)
+    a.alu_rr("add", S2, S2, S1)
+    d := out_gpr(i.dst, S1)
+    if i.op == "div"
+        a.mov_rr(d, S2)
+    else
+        a.mov_ri(S1, k)
+        a.msub(d, S2, S1, ra)
     put_gpr(i.dst, d)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).

@@ -300,6 +300,12 @@ pub fn Asm.cqo(mut self)
     byte(72)
     byte(153)
 
+## `imul r`: the signed 128-bit product of `rax` and `r` in `rdx:rax`.
+pub fn Asm.imul1(mut self, r int)
+    rex(1, 0, 0, r, false)
+    byte(247)
+    modrm_reg(5, r)
+
 pub fn Asm.idiv(mut self, r int)
     rex(1, 0, 0, r, false)
     byte(247)

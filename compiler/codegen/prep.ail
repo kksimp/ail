@@ -231,3 +231,24 @@ pub fn wrap_block(f mir.Func, order List[int], dom List[List[bool]], blocks List
         if closed
             return c
     -1
+
+## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
+## Granlund and Montgomery: `[m, sh]` with
+## `x / d == ((mulhs(m, x) + x) >> sh) + (x >>> 63)`, where `m` is the 64-bit
+## pattern of `1 + floor(2^(63 + l) / d)` read as signed and `l` is
+## `ceil(log2 d)`. `x % d` is then `x - q * d`.
+pub fn div_magic(d int) List[int]
+    mut l := 0
+    while 1.shl(l) < d
+        l += 1
+    # floor(2^(63 + l) / d) mod 2^64, by long division
+    mut q := 0
+    mut r := 1
+    for _ in 0..63 + l
+        r = r * 2
+        q = q.shl(1)
+        if r >= d
+            r -= d
+            q = q.bit_or(1)
+    m := if q == 9223372036854775807 then 0 - q - 1 else q + 1
+    [m, l - 1]

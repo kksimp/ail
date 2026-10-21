@@ -36,6 +36,11 @@
    `sete`/`movzx`/`test` chains.
 10. **x86-64 globals touched only by loads and stores** are addressed
     `[rip + globals + 8k]`; the `lea` is skipped.
+11. **Division and remainder by a constant** `k` (3 <= k < 2^31, not a power
+    of two) are a high multiply, an add, a shift and a sign correction
+    (`codegen.div_magic`, Granlund and Montgomery), then `x - q * k` for
+    `%`, on both targets. `idiv` costs 20-40 cycles; the multiply, about 5.
+    Same results, including the extremes (`div_const` test).
 
 ## Measurements
 

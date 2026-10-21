@@ -797,6 +797,9 @@ fn Gen.divide(mut self, i mir.Inst)
         if k > 0 and power_of_two(k) >= 0
             shift_divide(i, power_of_two(k))
             return
+        if k > 2 and k < 2147483648
+            magic_divide(i, k)
+            return
         a.mov_ri(S1, k)
     else
         rb := gpr(y, S1)
@@ -862,6 +865,27 @@ fn Gen.shift_divide(mut self, i mir.Inst, k int)
     a.shift_ri("shl", S1, k)
     a.mov_rr(RAX, x)
     a.alu_rr("sub", RAX, S1)
+    put_gpr(i.dst, RAX)
+
+## Division and remainder by a constant `k` with a high multiply
+## (`codegen.div_magic`), not `idiv`.
+fn Gen.magic_divide(mut self, i mir.Inst, k int)
+    x := gpr(i.args[0], S0)
+    mg := codegen.div_magic(k)
+    a.mov_ri(RAX, mg[0])
+    a.imul1(x)
+    a.alu_rr("add", RDX, x)
+    if mg[1] > 0
+        a.shift_ri("sar", RDX, mg[1])
+    a.mov_rr(RAX, x)
+    a.shift_ri("shr", RAX, 63)
+    a.alu_rr("add", RDX, RAX)
+    if i.op == "div"
+        put_gpr(i.dst, RDX)
+        return
+    a.imul_rri(RDX, RDX, k)
+    a.mov_rr(RAX, x)
+    a.alu_rr("sub", RAX, RDX)
     put_gpr(i.dst, RAX)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
