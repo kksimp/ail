@@ -98,7 +98,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet, and on macOS the program traps at `proc.run`); `t := spawn f(args)`
+readable yet); `t := spawn f(args)`
 and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
 `store`, `cas` and `add` (`native.task.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
 `net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
