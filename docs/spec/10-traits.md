@@ -221,6 +221,21 @@ associated function or `impl` block, `Self` is the type it belongs to, with
 its type parameters. `Self` is not a type anywhere else. *(ADR 0081,
 ADR 0128)*
 
+```ail rules=trait.self.1
+trait Zero
+    fn zero() Self
+
+impl Zero for int
+    fn zero() int
+        0
+
+fn zeros[T Zero](n int) List[T]
+    [T.zero() for _ in 0..n]
+
+fn main()
+    print(zeros[int](3))
+```
+
 ## Call resolution
 
 **trait.res.1** — If a method call `x.f(...)` could refer to more than one
@@ -274,6 +289,26 @@ stay ambiguous under `trait.res.1`. *(ADR 0137)*
 and indexing `a[i]` MAY be implemented for a type by implementing the
 corresponding standard-library trait: `Eq` for `==` and `!=`, `Ord` for
 `< <= > >=` (`trait.std.1–2`). *(ADR 0077, ADR 0127)*
+
+```ail error=trait.op.1
+struct V
+    x int
+
+impl Add for V
+    fn add(self, o V) V
+        V(x: self.x + o.x)
+
+fn main()
+    print((V(x: 1) + V(x: 2)).x)
+```
+
+```ail
+struct V
+    x int
+
+fn main()
+    print(V(x: 1) == V(x: 1))
+```
 
 **trait.op.2** — No other operator can be defined or implemented. *(ADR 0077)*
 
@@ -483,3 +518,13 @@ error, since custom hashing isn't designed. A constraint `[T Hash]` implies
 `Eq`: the prelude declares `trait Hash Eq` (`trait.super.3`). Map keys and set elements MUST be `Hash` (`type.map.2`). Hash values are
 never visible to programs, so output can't depend on the hash function.
 *(ADR 0133)*
+
+```ail rules=trait.auto.5
+struct Sq
+    s int
+
+fn main()
+    mut m := Map[Sq, int]()
+    m[Sq(s: 1)] = 5
+    print(m[Sq(s: 1)])
+```
