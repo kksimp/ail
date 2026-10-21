@@ -648,6 +648,15 @@ fn float_cmp(op: BinOp, a: f64, b: f64) -> Option<bool> {
     }
 }
 
+/// `element`, with the in-bounds case inline (type.coll.4).
+#[inline(always)]
+fn elem(items: &[Value], i: i64, pos: Pos) -> Result<&Value, Trap> {
+    match items.get(i as usize) {
+        Some(v) => Ok(v),
+        None => element(items, i, pos),
+    }
+}
+
 /// `recv[idx]` on a list, map, `bytes` or tensor (type.coll.4, type.map.3, std.tensor.15).
 fn index_value(recv: &Value, idx: &Value, pos: Pos) -> Result<Value, Trap> {
     Ok(match recv {
@@ -932,6 +941,11 @@ impl<'c, 'a, W: Write> Compiler<'c, 'a, W> {
     fn literal(&mut self, e: &'a Expr) -> Option<Opnd> {
         match e {
             Expr::Int(..) | Expr::Float(..) | Expr::Str(..) | Expr::Bytes(..) | Expr::Char(..) | Expr::Bool(..) | Expr::None(_) => {
+                let v = self.it.eval(e, &mut Vec::new()).ok()?;
+                Some(self.konst(v))
+            }
+            // A negated number literal is a constant too (expr.arith.1: `-(int)` traps only at `int`'s edge).
+            Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..) | Expr::Float(..)) => {
                 let v = self.it.eval(e, &mut Vec::new()).ok()?;
                 Some(self.konst(v))
             }
@@ -3146,7 +3160,7 @@ match {
                     let v = match get!(*recv) {
                         Value::List(items) => {
                             let i = get!(*idx).int();
-                            element(items, i, *pos)?.clone()
+                            elem(items, i, *pos)?.clone()
                         }
                         Value::Map(t) => {
                             let k = get!(*idx);
@@ -3189,7 +3203,7 @@ match {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i)) {
                         (Value::List(items), Value::Int(x)) => match int_arith(*op, *x, *k) {
-                            Some(j) => Some(element(items, j, *pos)?.clone()),
+                            Some(j) => Some(elem(items, j, *pos)?.clone()),
                             None => None,
                         },
                         _ => None,
@@ -3227,7 +3241,7 @@ match {
                     pc += 1;
                     let fast = match (get!(*recv), get!(*i), get!(*k)) {
                         (Value::List(rows), Value::Int(i), Value::Int(k)) => match usize::try_from(*i).ok().and_then(|u| rows.get(u)) {
-                            Some(Value::List(row)) => Some(element(row, *k, *pos2)?.clone()),
+                            Some(Value::List(row)) => Some(elem(row, *k, *pos2)?.clone()),
                             _ => None,
                         },
                         _ => None,
