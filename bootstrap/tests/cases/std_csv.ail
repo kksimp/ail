@@ -1,0 +1,23 @@
+## std.csv.1-5: parsing, records and writing.
+use std.csv
+
+fn main() !
+    print(csv.parse("a,b,c\n1,2,3\n")?)
+    print(csv.parse("a,\"x, y\",\"he said \"\"hi\"\"\"\r\n\r\n,,\n")?)
+    print(csv.parse("one\ntwo")?)
+    print(csv.parse("")?.len())
+    print(csv.parse_sep("a;b\n1;2", ';')?)
+    print(csv.parse("\"multi\nline\",z\n")?)
+    recs := csv.records("name,qty\nbolt,4\nnut,9\n")?
+    print(recs.len())
+    print(recs[1]["name"])
+    print(csv.write([["a", "b,c"], ["say \"x\"", ""]]))
+    print(csv.write_records(["name", "qty"], recs))
+    bad := csv.parse("a,\"b\n") else err
+        print("error: {err}")
+        []
+    print(bad.len())
+    bad2 := csv.records("a,b\n1\n") else err
+        print("error: {err}")
+        []
+    print(bad2.len())

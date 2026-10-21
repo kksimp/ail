@@ -1,0 +1,8 @@
+## std.log.1-2: leveled messages on standard error.
+use std.log
+
+fn main()
+    log.debug("hidden")
+    log.info("starting")
+    log.warn("careful")
+    log.err("failed")
