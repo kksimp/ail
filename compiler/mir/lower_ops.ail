@@ -221,8 +221,6 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         return conv
     if r.ty != Ty.Int
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
-    if is_int_num_op(name, vs.len())
-        return int_num_method(r, name, vs, npos)
     if name == "to_float" and vs.len() == 0
         return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
     if name == "abs" and vs.len() == 0
