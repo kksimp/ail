@@ -10,7 +10,7 @@ Chapter key: `eff`
 ## Inference
 
 **eff.infer.1** — Every function has an *effect set*: the effects `io`,
-`fail`, `mutates`, `unsafe` and `spawn`, and the *capabilities* `fs`, `env`,
+`fail`, `mutates`, `unsafe`, `hw` and `spawn`, and the *capabilities* `fs`, `env`,
 `proc`, `clock`, `random`, `net`, `net.serve` and `ui`. The set is inferred; it is never written in
 source. *(ADR 0163)*
 
@@ -31,7 +31,7 @@ computed at compile time and may call only compile-time-safe code
 standard modules give their module's effects: `fs.*` gives `fs` and `io`,
 `env.*` gives `env`, `io.*` gives `io`, `proc.*` gives `proc` and `io`,
 `net.*` gives `net` and `io` (`std.net.1`), and `net.serve` and `net.listen` also give `net.serve` (`std.net.14`), `time.*` gives `clock`, `random.*` gives `random`, and `ui.*` and the methods
-of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `spawn` gives
+of `ui.Window` give `ui` and `io` (`std.ui.9`); an `unsafe` block gives `unsafe`; `std.hw` and volatile pointer methods give `hw` (`unsafe.hw.5`); `spawn` gives
 `spawn`. *(ADR 0163, ADR 0283)*
 
 **eff.infer.5** — A call whose target is known from the types (a free
@@ -61,7 +61,7 @@ fn main()
 
 ## Pure functions
 
-**eff.pure.1** — A function marked `@pure` MUST NOT have `io`, `unsafe`,
+**eff.pure.1** — A function marked `@pure` MUST NOT have `io`, `unsafe`, `hw`,
 `spawn` or any capability. It MAY have `fail` and `mutates`. The diagnostic
 names, for each forbidden effect, the shortest chain of calls that adds it,
 such as `f -> save -> log -> print`. *(ADR 0164)*

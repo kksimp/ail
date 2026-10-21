@@ -51,6 +51,8 @@ struct ManifestFile {
     grants: Vec<Grant>,
     /// The packages this manifest lets contain `unsafe` code (unsafe.block.3).
     unsafe_ok: Vec<String>,
+    /// The packages this manifest lets reach hardware: `unsafe driver` (unsafe.hw.1).
+    driver_ok: Vec<String>,
 }
 
 /// What an import path written in some module names.
@@ -190,9 +192,13 @@ impl Packages {
             diags,
             grants: Vec::new(),
             unsafe_ok: Vec::new(),
+            driver_ok: Vec::new(),
         });
         if manifest.unsafe_ok {
             self.manifests[me].unsafe_ok.push(pkg.to_string());
+        }
+        if manifest.driver_ok {
+            self.manifests[me].driver_ok.push(pkg.to_string());
         }
         if let (Some((name, _)), Some((parent, pos))) = (&manifest.name, from)
             && name != pkg
@@ -243,6 +249,9 @@ impl Packages {
             self.deps.get_mut(pkg).expect("visited").push(dep.name.clone());
             if dep.unsafe_ok {
                 self.manifests[me].unsafe_ok.push(dep.name.clone());
+            }
+            if dep.driver_ok {
+                self.manifests[me].driver_ok.push(dep.name.clone());
             }
             self.manifests[me].grants.push(Grant {
                 package: dep.name.clone(),
@@ -318,6 +327,7 @@ impl Packages {
             }
             prog.grants.extend(m.grants.into_iter().map(|g| Grant { pos: at(g.pos), ..g }));
             prog.unsafe_allowed.get_or_insert_with(Vec::new).extend(m.unsafe_ok);
+            prog.driver_allowed.extend(m.driver_ok);
             prog.files.push(SourceFile {
                 path: m.path.display().to_string(),
                 src: m.src,
@@ -339,6 +349,8 @@ struct Manifest {
     caps: Option<Vec<&'static str>>,
     /// `unsafe allow` on the `package` line (unsafe.block.3).
     unsafe_ok: bool,
+    /// `unsafe driver` on the `package` line (unsafe.hw.1).
+    driver_ok: bool,
     deps: Vec<Dep>,
 }
 
@@ -352,6 +364,8 @@ struct Dep {
     caps: Vec<&'static str>,
     /// `unsafe allow` on the `dep` line (unsafe.block.3).
     unsafe_ok: bool,
+    /// `unsafe driver` on the `dep` line (unsafe.hw.1).
+    driver_ok: bool,
 }
 
 /// The words of one line, with their columns: whitespace separates them,
@@ -474,16 +488,18 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
                 diags.push(Diagnostic::new("mod.pkg.2", kpos, format!("`{key}` is given twice on this line")));
             }
         }
-        let unsafe_ok = match keys.get("unsafe") {
-            Some(("allow", _)) => true,
+        // unsafe.block.3, unsafe.hw.1: `driver` allows everything `allow` does, and hardware access.
+        let (unsafe_ok, driver_ok) = match keys.get("unsafe") {
+            Some(("allow", _)) => (true, false),
+            Some(("driver", _)) => (true, true),
             Some((v, p)) => {
                 diags.push(
                     Diagnostic::new("unsafe.block.3", *p, format!("`unsafe {v}` is not an unsafe setting"))
-                        .help("write `unsafe allow` to let this package contain `unsafe` code"),
+                        .help("write `unsafe allow` to let this package contain `unsafe` code, or `unsafe driver` to let it reach hardware as well"),
                 );
-                false
+                (false, false)
             }
-            None => false,
+            None => (false, false),
         };
         let grant = keys.get("caps").map(|(v, p)| caps(v, *p, &mut diags));
         if kw == "package" {
@@ -494,6 +510,7 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
             m.name = Some((name.clone(), *name_pos));
             m.caps = grant;
             m.unsafe_ok = unsafe_ok;
+            m.driver_ok = driver_ok;
             continue;
         }
         if !names.insert(name.clone()) || name == "std" {
@@ -538,7 +555,7 @@ fn parse(src: &str) -> (Manifest, Vec<Diagnostic>) {
                 None
             }
         };
-        m.deps.push(Dep { name: name.clone(), pos: *name_pos, path, git, caps: grant.unwrap_or_default(), unsafe_ok });
+        m.deps.push(Dep { name: name.clone(), pos: *name_pos, path, git, caps: grant.unwrap_or_default(), unsafe_ok, driver_ok });
     }
     if m.name.is_none() {
         diags.push(
