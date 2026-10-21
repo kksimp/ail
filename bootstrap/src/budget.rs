@@ -30,7 +30,11 @@ pub fn take(args: &mut Vec<String>) -> Result<Option<Budget>, String> {
     if args.first().is_some_and(|c| c == "api") && args.iter().any(|a| a == "--card") {
         return Ok(None);
     }
-    let command = args.iter().find(|a| !a.starts_with("--")).cloned().unwrap_or_default();
+    let mut command = args.iter().find(|a| !a.starts_with("--")).cloned().unwrap_or_default();
+    // api.diff.5: `api --diff` takes the budget of `diff`.
+    if command == "api" && args.iter().any(|a| a == "--diff") {
+        command = "diff".to_string();
+    }
     let mut tokens = None;
     let mut from = None;
     let mut i = 0;
@@ -107,10 +111,10 @@ struct Record {
 
 /// The rank order (budget.out.3): errors and traps, failed tests, warnings,
 /// other lines, passed tests; summaries are always shown.
-const KINDS: [&str; 6] = ["error", "fail", "warning", "line", "ok", "summary"];
+const KINDS: [&str; 7] = ["error", "fail", "breaking", "warning", "line", "ok", "summary"];
 
 fn rank_of(kind: &'static str) -> u8 {
-    KINDS.iter().position(|k| *k == kind).unwrap_or(3) as u8
+    KINDS.iter().position(|k| *k == kind).unwrap_or(4) as u8
 }
 
 /// Split one stream into records (budget.out.2).
@@ -130,7 +134,7 @@ fn records(text: &str, stderr: bool, out: &mut Vec<Record>) {
             push(t, k);
         }
         let kind = classify(body);
-        if matches!(kind, "error" | "fail" | "warning") && !body.starts_with('{') {
+        if matches!(kind, "error" | "fail" | "breaking" | "warning") && !body.starts_with('{') {
             current = Some((line.to_string(), kind));
         } else {
             push(line.to_string(), kind);
@@ -151,6 +155,8 @@ fn classify(line: &str) -> &'static str {
             "error"
         } else if has("\"status\":\"fail\"") {
             "fail"
+        } else if has("\"breaking\":[\"") {
+            "breaking"
         } else if has("\"severity\":\"warning\"") {
             "warning"
         } else if has("\"status\":\"pass\"") {
@@ -167,6 +173,10 @@ fn classify(line: &str) -> &'static str {
     }
     if is_summary(line) {
         return "summary";
+    }
+    // api.diff.5: a change that breaks callers comes before the other changes.
+    if line.contains("  breaking: ") && line.starts_with(['+', '-', '~']) {
+        return "breaking";
     }
     // `PATH:LINE:COL: SEVERITY[RULE]: message`
     let mut parts = line.splitn(4, ':');

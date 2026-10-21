@@ -40,6 +40,42 @@
 ./ail edit FILE.ail --test <<E     # hunks by declaration: `-old` / `+new`; fmt, check, tests
 ./ail edit FILE.ail < E.json       # JSON ops by id: replace_body, replace, insert, delete, rename, import, hunk
 ./ail fmt FILE.ail                 # canonical layout (--check: exit 1; --stdout)
+./ail run FILE.ail           # check, then run
+./ail run DIR                # a package: DIR's files are the root module
+./ail run FILE.ail a b       # words after FILE are the program's: env.args()
+./ail check --json FILE.ail  # diagnostics only; each cites a spec rule ID
+./ail build FILE.ail [-o OUT] # native executable (see Native builds below)
+./ail test [--json] FILE.ail # run the `@test` functions; exit 0 if all pass
+./ail test --update [--dry-run] FILE.ail # after a reviewed change: rewrite stale `assert_eq` literals, `# =>` lines, FILE.out; prints the diff
+./ail run --record r.json FILE.ail      # write every effect's result; `--replay r.json` repeats the run exactly (`ail test --record` keeps failed tests)
+./ail test --coverage[=lines] FILE.ail # lines and functions the tests ran; =lines lists the unrun ranges
+./ail run --timeout MS --max-memory MB --max-steps N FILE.ail # a runaway run traps (run.limit.*) with a snapshot
+./ail effects [--json] FILE.ail       # each function's inferred effects
+./ail effects --parallel FILE.ail     # which loops may run on many cores, and what blocks the rest
+./ail run --deterministic FILE.ail # deny clock, random, proc, net: same inputs, same output; loops on one thread
+./ail run --parallel FILE.ail      # also pool loops proven independent; AIL_THREADS=N sets the pool size
+./ail run --seed 42 FILE.ail         # seed std.random so the run repeats
+./ail run --no-bytecode FILE.ail     # every function on the tree walker (the oracle), not the bytecode tier
+./ail run --deny fs,proc FILE.ail     # reject if `main` reaches fs or proc (or `all`)
+./ail explain RULE           # what a rule ID means, with its ADRs and an example
+./ail explain                # all rules, with chapter and whether `ail fix` repairs them
+./ail api --text FILE.ail    # declarations and ## docs, no bodies; `fails_with` lists a function's error types (JSON without --text)
+./ail check --errors FILE.ail  # JSON: each function's error types and failure paths (`?`, `else`, `return`)
+./ail api --card [--budget N] DIR|FILE   # the whole program on one page: modules, signatures, tests, ail.pkg, examples (default 4,000 tokens)
+./ail api --type FILE.ail L C   # type at a position (also --locals, --refs; `ail api DIR` and `--refs DIR FILE L C` cover a whole package)
+./ail api --expanded --text FILE.ail # also the code derives generated (ToJson, FromJson, @derive traits)
+./ail api --tokens FILE.ail  # the lexer's tokens, one per line; --ast: the parse as JSON (--program: with prelude and imports)
+./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, match arms); --dry-run: diff
+./ail fix FILE.ail           # apply the fixes diagnostics carry (mut, ?, elif, `&&`, `len(x)`, tabs, ...); --dry-run: diff
+./ail check --budget 500 DIR  # any command: ~500 tokens, errors first, then `[budget ...; continue with --from K]`
+./ail diff OLD NEW            # what changed by meaning: declarations, diagnostics, tests (--rev HEAD FILE: against git)
+./ail api --diff OLD NEW       # public API changes by id, `breaking:` marked (--rev HEAD PATH: against git)
+./ail edit FILE.ail --test <<E # hunks by declaration: a line `average`, then `-old` / `+new` lines (one pair: a unique part of a line); `rename f g`; fmt + check + tests
+./ail edit FILE.ail < E.json  # JSON ops by id: replace_body, replace, insert, delete, rename, import, hunk
+./ail fmt FILE.ail           # rewrite in canonical layout (--check: diff, exit 1; --stdout)
+./ail run --trace FILE.ail   # each call, return, effect, task, contract check on stderr (=calls, =effects; --trace-limit N; `ail test --trace` keeps a failing test's)
+./ail run --watch n FILE.ail # each assignment to `mut` variable n (and `push`, `pop`, `xs[i] = e`...), with value and position
+./ail run --verbose FILE.ail # a trap shows every frame's values (default: 10 lines; --json: one object)
 ```
 
 With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a

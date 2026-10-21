@@ -411,6 +411,60 @@ subsequence, at most 12 lines and then `... N more changed lines`. With
 
 ```ail pkg=diff_pair tool=diff,--rev,nosuch,main.ail status=2 expect=diff.out.5 rules=diff.out.5
 ```
+
+**api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
+API between two versions of a file or package directory. `ail api --diff
+--rev REV PATH` compares `PATH` as git has it at `REV` against `PATH` now,
+as `diff.out.5` does. An unknown revision or path, a missing argument or an
+unknown option is exit code 2
+([ADR 0729](../decisions/0729-api-diff-command.md)).
+
+**api.diff.2** — Only public declarations are compared, matched by id
+(`api.id.1`): those written `pub`, the variants of a public enum with their
+fields, the methods of a public trait, and the `impl` blocks of a public
+type. A declaration is changed when its signature, effects, error types,
+`requires`, `ensures` or trait-method default differs. A body, a doc comment
+or a private declaration is not part of the API and never shows.
+
+**api.diff.3** — A change is marked `breaking:` with the reasons when a
+caller or implementer can stop compiling or lose a guarantee: a removed
+declaration; a changed signature; an effect or error type that is new; a
+`requires` that is new or changed; an `ensures` that went away; a trait
+method that lost its default; and an added enum variant or required trait
+method (a trait method with no default). Other additions are not breaking
+([ADR 0730](../decisions/0730-api-diff-breaking-rules.md)).
+
+**api.diff.4** — Each side is checked as `ail check` would, except that a
+single file needs no `main`. When either side has errors, nothing is
+compared: the error is exit code 2.
+
+**api.diff.5** — The text form has one line per added (`+ ID SIGNATURE`) or
+removed (`- ID SIGNATURE`) declaration, a `~ ID` line per changed one with an
+indented `KEY: OLD -> NEW` line for each changed key, `  breaking: WHY` at
+the end of a breaking line, and a last line
+`N added, N removed, N changed; N breaking`. With `--json` each is a JSON
+line with `"change":"api"` and the last is `{"summary":true,...}`. The exit
+status is 0 when the API is the same, 1 when it changed, 2 for an error. A
+`--budget` bounds the output as for the other tools, keeping the `breaking`
+lines first ([ADR 0731](../decisions/0731-api-diff-output-and-budget.md)).
+
+```ail pkg=api_diff_pair tool=api,--diff,old/a.ail,new/a.ail status=1 expect=breaking: rules=api.diff.2,api.diff.3,api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,old/a.ail,old/a.ail status=0 expect=added, rules=api.diff.2,api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,--json,old/a.ail,new/a.ail status=1 expect="summary":true rules=api.diff.3,api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,--rev,nosuch,old/a.ail status=2 expect=api.diff.1 rules=api.diff.1
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,--budget,60,old/a.ail,new/a.ail status=1 expect=breaking: rules=api.diff.5
+```
+
+```ail pkg=api_diff_pair tool=api,--diff,bad/a.ail,new/a.ail status=2 expect=api.diff.4 rules=api.diff.4
+```
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that

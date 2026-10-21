@@ -557,3 +557,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0691](0691-fuzz-group-all-native-bytes.md) | Fuzzers for `regex.group_all` and native `bytes` literals *(delegated)* | Accepted | 2026-10-21 |
 | [0722](0722-native-subset-help-lines.md) | `native.subset.1` problems print a `help:` line, keyed in the printer (no lower.ail edit) *(delegated)* | Accepted | 2026-10-21 |
 | [0741](0741-ref-arguments-to-spawn.md) | A `ref` is not passed to a spawned task (own.ref.2) *(delegated)* | Accepted | 2026-10-21 |
+| [0729](0729-api-diff-command.md) | `ail api --diff`: the public API change between two versions *(delegated)* | Accepted | 2026-10-21 |
+| [0730](0730-api-diff-breaking-rules.md) | What `ail api --diff` marks as breaking *(delegated)* | Accepted | 2026-10-21 |
+| [0731](0731-api-diff-output-and-budget.md) | Output of `ail api --diff` and its token budget *(delegated)* | Accepted | 2026-10-21 |
