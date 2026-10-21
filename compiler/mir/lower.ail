@@ -1272,6 +1272,7 @@ fn Lower.lower_unary(mut self, o ast.UnOp, operand ast.Expr, pos ast.Pos, want T
                     ty: Ty.Int,
                 )
                 Float => Val(id: op("fneg", [a.id], Ty.Float), ty: Ty.Float)
+                Tensor(_) => tensor_neg(a, pos)
                 _ => unsupported(pos, "`-` on `{a.ty.name()}`")
         Not =>
             a := lower_value(operand, Ty.Bool)?
@@ -1322,6 +1323,8 @@ fn is_comparison(o ast.BinOp) bool
 
 fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
+    if a.ty.is_tensor() or b.ty.is_tensor()
+        return tensor_binary(o, a, b, pos)
     if not same_ty(a.ty, b.ty)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` and `{b.ty.name()}`")
         return a
@@ -1353,7 +1356,7 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
             a
         Str => str_binary(o, a, b, pos) else a
         Char => char_binary(o, a, b, pos) else a
-        Tensor(_) => tensor_binary(o, a, b, pos)
+
         _ =>
             if eq := self.list_equal(o, a, b)
                 return eq
