@@ -147,13 +147,13 @@ fn reuse_in(f Func, e Escape) Func
                     zero := g.vals.len() - 1
                     mut z := inst(zero, "const", [])
                     z.imm = 0
-                    mut clear := inst(-1, "store", [old, zero])
-                    clear.imm = 0
+                    mut wipe := inst(-1, "store", [old, zero])
+                    wipe.imm = 0
                     mut insts := List[Inst]()
                     for x in 0..g.blocks[b].insts.len()
                         if x == k - 1
                             insts.push(z)
-                            insts.push(clear)
+                            insts.push(wipe)
                             insts.push(inst(i.dst, "copy", [old]))
                         else
                             insts.push(g.blocks[b].insts[x])
