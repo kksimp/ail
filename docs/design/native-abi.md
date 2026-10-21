@@ -241,7 +241,8 @@ imports lane 178 adds; Linux keeps raw syscalls.
 ## 5. Allocator and collector
 
 **As built (lane 171, ADRs 0562-0564).** `rt.alloc(n, kind)` returns `n`
-zeroed payload bytes with the header word before them. `rt.init` reserves up
+zeroed payload bytes with the header word before them; `rt.alloc_raw(n, kind)`
+skips the zeroing for blocks the caller fills before reading. `rt.init` reserves up
 to 16 GiB of address space (`mmap`, no-reserve; the size halves until it is
 accepted), cut into 16 KiB pages with a page table (free, small page of class
 c, first or later page of a large span). Blocks up to 8192 bytes, header
