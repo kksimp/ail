@@ -49,3 +49,7 @@ and AArch64 generators are unchanged.
   `ail run`, on x86-64 here; AArch64 under qemu is pending the emulator) and
   `bootstrap/tests/native/round.mir`.
 - The runtime's file list in `compiler/main.ail` now includes `math.ail`.
+
+## Rejected alternatives
+
+- A new `round` MIR op with an encoder per ISA (option B): rejected for now. It may be faster in principle, but it needs an encoder sequence for each target, and neither x86-64 nor AArch64 has a single instruction for half-away-from-zero rounding.

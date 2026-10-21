@@ -1,0 +1,13 @@
+## Redact e-mail addresses from a record file, one regex replace per line.
+## The count shows how many lines held an address.
+##   ./ail run examples/redact_mail.ail
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/agent-data/records.txt")? "reading records"
+    mail := regex.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")?
+    mut hidden := 0
+    for line in text.lines()
+        if regex.is_match(mail, line)
+            hidden += 1
+        print(regex.replace(mail, line, "<email>"))
+    print("{hidden} lines redacted")

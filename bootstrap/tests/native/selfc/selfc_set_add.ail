@@ -1,0 +1,4 @@
+fn main()
+    mut s := Set[int]()
+    s.add(3)
+    print(s.len())

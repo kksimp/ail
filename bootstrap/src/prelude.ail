@@ -44,7 +44,7 @@ trait Hash Eq
 trait Drop
     fn drop(mut self)
 
-## What `Task.wait()` fails with when the task trapped (conc.task.6, ADR 0187):
+## What `Task.wait()` fails with when the task trapped (conc.task.6, err.trap.2, ADR 0187):
 ## the trap's rule and its message.
 error struct Trapped
     rule str
@@ -60,10 +60,12 @@ error struct Cancelled "the task was cancelled"
 ## @module json
 ## `std.json` (lane 5, plan section 4): a JSON value, parser and printer. It
 ## is read only when the program names one of its public items and doesn't
-## declare that name itself, so other programs pay nothing for it.
+## declare that name itself, so other programs pay nothing for it
+## (json.prelude.1).
 ## TODO(lane 4): once `use std.NAME` exists, move these to `use std.json` as
 ## `json.parse`, `json.Value`, and so on (ADR 0161).
 
+## The JSON value (json.type.1).
 enum Json
     Null
     Bool(b bool)
@@ -275,14 +277,33 @@ fn JsonParser.number(mut self) !Json
             return fail("invalid number")
     text := chars[start..pos].join("")
     n := text.to_float() else return fail_at(start, "invalid number")
+    ## json.parse.2: an infinite or NaN number fails at its first character.
     if n - n != 0.0
         return fail_at(start, "number out of range")
     Num(n)
+
+## Every line of `text` that is one JSON document, in order; other lines are
+## skipped (json.lines.1).
+fn parse_json_lines(text str) List[Json]
+    mut docs := []
+    for line in text.lines()
+        doc := parse_json(line) else continue
+        docs.push(doc)
+    docs
 
 ## Parse one JSON document (json.parse.1).
 fn parse_json(text str) Json ! JsonError
     mut p := JsonParser(text.chars(), 0)
     p.document()
+
+## A number as JSON text: whole numbers below 1e15 without a fraction (json.print.1),
+## infinite and NaN as `null` (json.print.2).
+fn json_num(n float) str
+    if n - n != 0.0
+        return "null"
+    if n.abs() < 1000000000000000.0 and n.floor() == n
+        return "{n.to_int()}"
+    "{n}"
 
 fn json_quote(s str) str
     mut out := ["\""]
@@ -305,11 +326,12 @@ fn json_quote(s str) str
     out.join("")
 
 ## Compact text: no spaces, object members in document order (json.print.1).
+## Infinite and NaN numbers print as `null` (json.print.2).
 fn Json.to_text(self) str
     match self
         Null => "null"
         Bool(b) => "{b}"
-        Num(n) => if n - n != 0.0 then "null" else "{n}"
+        Num(n) => json_num(n)
         Str(s) => json_quote(s)
         Arr(items) =>
             mut parts := []
@@ -377,6 +399,16 @@ fn Json.bool(self, key str) bool?
 
 fn Json.arr(self, key str) List[Json]?
     get(key)?.as_arr()
+
+## The text member `key`, or `default` when it is missing or not text (json.query.5).
+fn Json.text(self, key str, default str) str
+    v := get(key) else return default
+    v.as_str() else default
+
+## The bool member `key`, or `default` when it is missing or not a bool (json.query.6).
+fn Json.flag(self, key str, default bool) bool
+    v := get(key) else return default
+    v.as_bool() else default
 
 ## Replaces the first member named `key`, or adds one at the end; traps unless
 ## this is an object (json.query.3).
@@ -546,6 +578,18 @@ impl FromJson for List[T FromJson]
                 return e.under("[{i}]")
             out.push(x)
         out
+
+## json.load.1: reads the file at `path` and decodes it as a `T`. A file that
+## can't be read fails with a `JsonError` that starts with the path and the
+## I/O kind.
+fn load_json[T FromJson](path str) T ! JsonError
+    text := fs.read_text(path) else e
+        return JsonError(-1, "{path}: {e.kind}")
+    T.from_json(parse_json(text)?)?
+
+## json.load.2: prints `v` as one line of JSON.
+fn print_json[T ToJson](v T)
+    print(v.to_json().to_text())
 
 ## A struct becomes an object of its fields in declaration order; an enum
 ## variant without fields becomes its name, one with fields an object
@@ -752,6 +796,7 @@ struct FieldInfo
     name str
     type_text str
     public bool
+    doc str
 
 struct VariantInfo
     name str

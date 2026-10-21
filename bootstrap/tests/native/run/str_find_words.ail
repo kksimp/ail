@@ -1,0 +1,22 @@
+# `find`, `split`, `replace`, `contains` and `lines` with separators of 1-4 bytes over text with repeats and multi-byte letters (ADR 0768).
+fn main()
+    mut seed := 5
+    mut total := 0
+    letters := ["a", "b", "ab", "é", "日", "z", "Q", " ", "\n", "zz", "aba"]
+    seps := ["a", "b", "ab", "é", "日", "z", "zz", "aba", " ", "Qz", "bab", "日é", "abab"]
+    for n in 0..400
+        mut parts := List[str]()
+        for _ in 0..(n % 45)
+            seed = (seed * 3877 + 29573) % 139968
+            parts.push(letters[seed % letters.len()])
+        text := parts.join("")
+        for sep in seps
+            f := text.find(sep) else -1
+            pieces := text.split(sep)
+            total += f * 3 + pieces.len() + text.replace(sep, "<>").len()
+            if text.contains(sep)
+                total += 1
+            if n % 7 == 0
+                print("{n} {sep} {f} {pieces.len()} {pieces}")
+        total += text.lines().len()
+    print(total)

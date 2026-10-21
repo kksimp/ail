@@ -49,6 +49,24 @@ register before the `imul`, and `cmp r, 0`.
    `j` against it (two compares). A ragged matrix fails the guard and runs
    the checked loop, which traps as before. matmul at 400: 1.11G → 0.98G
    instructions, 0.128 s → 0.098 s.
+7. **Pushes with room.** A versioned counted loop that pushes to a list
+   defined before it, in blocks every iteration runs, and does nothing else
+   to the list (no call receives it), checks once that `cap - len >=
+   (hi - lo) * pushes_per_iteration` (with `hi` within ±2^30). Its pushes
+   then store and bump the length with no full-list test or runtime call.
+   New MIR op `cap`; `imm` 1 on a `push` call means room is guaranteed.
+8. **Lists sized where they are made.** If the list is `list_new(0)` and the
+   loop's bound is known at that point, `rt.list_new_for(lo, hi, per)` makes
+   it with room for the loop instead of making it 4 wide, then regrowing
+   in `list_reserve`; the reserve call is dropped when the list is made in
+   the loop's preheader.
+9. **Loop rotation in both code generators.** A jump to a block that is only
+   a compare and a branch is emitted as that compare and branch (one
+   instruction fewer on the way round a loop).
+
+fannkuch at N = 9: 274M → 218M instructions, 0.58 s → 0.49 s (gcc 0.22 s).
+collatz 184M → 173M, spectralnorm 75M → 73M, sieve 130M → 118M, matmul
+125M → 116M; the others within 2%.
 
 Instructions at the `.args` sizes, before → after: spectralnorm 88M → 75M,
 fannkuch 383M → 271M, collatz 188M → 184M, mandelbrot 44.0M → 43.0M, sieve
@@ -67,6 +85,10 @@ fannkuch 383M → 271M, collatz 188M → 184M, mandelbrot 44.0M → 43.0M, sieve
   form, not identical instructions).
 
 ## Rejected alternatives
+
+- **Rotating loops in MIR** (copying the header into the latch). The header's
+  values would have two definitions, so the body needs block parameters
+  for each; in the code generators the copy is a compare and a branch.
 
 - **Scanning the rows in each inner guard.** The scan costs as much as the
   loop it guards (one load and compare per row), so the check saved is paid

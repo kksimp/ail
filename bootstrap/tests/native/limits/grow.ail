@@ -1,0 +1,5 @@
+fn main()
+    print("start")
+    mut xs := [0]
+    while true
+        xs.push(1)

@@ -1,0 +1,451 @@
+## Lowering `Map` and `Set` (type.map.*, ADRs 0568-0570). The table is a
+## pointer to an object that `compiler/rt/native/map.ail` manages; every
+## operation is a runtime call, apart from `len` and reading a value out of
+## an entry, which are loads. A value is stored as one 8-byte word: a
+## `float` as its bits, a `bool` as 0 or 1, anything else as itself.
+##
+## Not here (reported as outside the subset): `m.get(k)` and `m.remove(k)`
+## used as a value (optionals), `==` on tables, `sorted`, `union`, set
+## algebra, and keys other than `int`, `bool` and `str`.
+use ast
+
+# ---- types ----
+
+fn is_key_ty(t Ty) bool
+    t == Ty.Int or t == Ty.Bool or t == Ty.Str
+
+fn is_value_ty(t Ty) bool
+    is_number(t) or t == Ty.Str or needs_copy(t) or t.is_coll()
+
+## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
+fn Lower.coll_type_of(self, name str, args List[ast.TypeRef]) Ty?
+    if name == "Map" and args.len() == 2
+        k := type_of(args[0])?
+        v := type_of(args[1])?
+        if is_key_ty(k) and is_value_ty(v)
+            return Ty.Map(key: k, val: v)
+        return none
+    if name == "Set" and args.len() == 1
+        e := type_of(args[0])?
+        if is_key_ty(e)
+            return Ty.Set(e)
+    none
+
+## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`.
+fn key_kind(t Ty) int
+    match t
+        Str => 1
+        Bool => 2
+        _ => 0
+
+## How the runtime prints a scalar: 0 `int`, 1 `str`, 2 `bool`, 3 `float`,
+## -1 for anything else.
+fn scalar_kind(t Ty) int
+    match t
+        Int => 0
+        Str => 1
+        Bool => 2
+        Float => 3
+        _ => -1
+
+## How a copy of a table treats its values: `[mode, info]`, with mode 1 for
+## lists (info: nesting depth * 256 + element bytes) and 2 for tables.
+fn value_mode(v Ty) List[int]
+    if v.is_coll()
+        return [2, 0]
+    mut t := v.elem() else return [0, 0]
+    mut depth := 0
+    while t.elem() != none
+        depth += 1
+        t = t.elem() else Ty.Unknown
+    [1, depth * 256 + (if t == Ty.Bool then 1 else 8)]
+
+# ---- building blocks ----
+
+## A runtime primitive (native-abi.md §6) used by the lowering itself.
+fn Lower.rawop(mut self, name str, args List[int], ty Ty) int
+    mut i := inst(-1, "prim", args)
+    i.name = name
+    if ty.is_unit()
+        emit_void(i)
+        return -1
+    emit(i, ty)
+
+## A value as the word a table stores.
+fn Lower.to_word(mut self, v int, t Ty) int
+    if t.is_float()
+        return rawop("float_bits", [v], Ty.Int)
+    v
+
+## The value of type `t` in the entry at address `e`.
+fn Lower.entry_value(mut self, e int, t Ty) int
+    addr := op("add", [e, konst(16, Ty.Int)], Ty.Int)
+    if t.is_float()
+        word := rawop("load64", [addr], Ty.Int)
+        return rawop("bits_float", [word], Ty.Float)
+    rawop("load64", [addr], t)
+
+## A call that returns a stored word, as a value of type `t`.
+fn Lower.word_call(mut self, name str, args List[int], t Ty) int
+    if t.is_float()
+        word := call(name, args, Ty.Int)
+        return rawop("bits_float", [word], Ty.Float)
+    call(name, args, t)
+
+fn Lower.new_table(mut self, ty Ty) int
+    match ty
+        Map(k, v) =>
+            m := value_mode(v)
+            call(
+                "rt.map_new",
+                [konst(key_kind(k), Ty.Int), konst(m[0], Ty.Int), konst(m[1], Ty.Int)],
+                ty,
+            )
+        Set(e) => call(
+            "rt.map_new",
+            [konst(key_kind(e), Ty.Int), konst(0, Ty.Int), konst(0, Ty.Int)],
+            ty,
+        )
+        _ => -1
+
+## A copy of the table `v` (own.val.1).
+fn Lower.copy_coll(mut self, v Val) int
+    call("rt.map_copy", [v.id], v.ty)
+
+## The trap's first line and source excerpt as string values, as the code
+## generator builds them for a checked operation.
+fn Lower.trap_texts(mut self, rule str, pos ast.Pos) List[int]
+    where := if file < file_paths.len() then file_paths[file] else ""
+    text := if file < src_lines.len() then src_lines[file] else []
+    head := "{where}:{pos.line}:{pos.col}: trap[{rule}]: "
+    line := if pos.line >= 1 and pos.line <= text.len() then text[pos.line - 1] else ""
+    gutter := "{pos.line}"
+    mut pad := List[str]()
+    chars := line.chars()
+    for c in 0..pos.col - 1
+        pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
+    tail := "  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n"
+    [str_value(head), str_value(tail)]
+
+## The entry's value when `e` isn't 0, else `zero`, joined.
+fn Lower.entry_or(mut self, e int, t Ty, zero int) int
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    join := new_block()
+    r := new_value(t, "")
+    blocks[join].params.push(r)
+    found := new_block()
+    branch(has, found, [], join, [zero])
+    seal(found)
+    cur = found
+    jump(join, [entry_value(e, t)])
+    seal(join)
+    cur = join
+    r
+
+# ---- constructors and literals ----
+
+## `Map[K, V]()` and `Set[T]()` (type.coll.8).
+fn Lower.coll_ctor(mut self, name str, targs List[ast.TypeRef], pos ast.Pos) Val?
+    t := self.coll_type_of(name, targs) else
+        return unsupported(pos, "this `{name}` type")
+    Val(id: new_table(t), ty: t)
+
+fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want Ty?) Val?
+    mut kt := Ty.Unknown
+    mut vt := Ty.Unknown
+    if w := want
+        match w
+            Map(k, v) =>
+                kt = k
+                vt = v
+            _ => kt = kt
+    if entries.len() == 0 and kt.is_unknown()
+        return unsupported(pos, "an empty `\{}` whose type isn't known")
+    mut ks := List[int]()
+    mut vs := List[int]()
+    for e in entries
+        k := lower_value(e.key, if kt.is_unknown() then none else kt)?
+        if kt.is_unknown()
+            kt = k.ty
+        v := lower_value(e.value, if vt.is_unknown() then none else vt)?
+        if vt.is_unknown()
+            vt = v.ty
+        if not is_key_ty(kt) or not is_value_ty(vt)
+            return unsupported(pos, "a map of `{kt.name()}` to `{vt.name()}`")
+        ks.push(convert(k, kt, expr_pos(e.key)))
+        vs.push(to_word(
+            convert(Val(id: copy_if_place(e.value, v), ty: v.ty), vt, expr_pos(e.value)),
+            vt,
+        ))
+    t := Ty.Map(key: kt, val: vt)
+    m := new_table(t)
+    for i in 0..ks.len()
+        call("rt.map_set", [m, ks[i], vs[i]], Ty.Unit)
+    Val(id: m, ty: t)
+
+fn Lower.lower_set_lit(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
+    mut et := Ty.Unknown
+    if w := want
+        match w
+            Set(e) => et = e
+            _ => et = et
+    if items.len() == 0 and et.is_unknown()
+        return unsupported(pos, "an empty set whose type isn't known")
+    mut xs := List[int]()
+    for x in items
+        v := lower_value(x, if et.is_unknown() then none else et)?
+        if et.is_unknown()
+            et = v.ty
+        if not is_key_ty(et)
+            return unsupported(pos, "a set of `{et.name()}`")
+        xs.push(convert(v, et, expr_pos(x)))
+    t := Ty.Set(et)
+    s := new_table(t)
+    for x in xs
+        call("rt.map_add", [s, x], Ty.Unit)
+    Val(id: s, ty: t)
+
+# ---- reading and writing ----
+
+## `m[k]` (type.map.3): traps when `k` is missing.
+fn Lower.lower_coll_index(mut self, m Val, index ast.Expr, pos ast.Pos) Val?
+    match m.ty
+        Map(kt, vt) =>
+            k := lower_value(index, kt)?
+            kid := convert(k, kt, expr_pos(index))
+            texts := trap_texts("type.map.3", pos)
+            Val(id: word_call("rt.map_at", [m.id, kid, texts[0], texts[1]], vt), ty: vt)
+        _ => unsupported(pos, "indexing a `{m.ty.name()}`")
+
+## `m[k] = v` and `m[k] op= v` (type.map.3, type.map.7). `k` is evaluated
+## before the right-hand side; a missing key under `op=` starts from zero.
+fn Lower.lower_map_assign(
+    mut self,
+    m Val,
+    index ast.Expr,
+    op ast.BinOp?,
+    value ast.Expr,
+    pos ast.Pos,
+    ipos ast.Pos,
+)
+    match m.ty
+        Map(kt, vt) =>
+            k := lower_value(index, kt) else return
+            kid := convert(k, kt, ipos)
+            r := lower_value(value, vt) else return
+            mut stored := -1
+            if o := op
+                zero := match vt
+                    Float => fconst(0.0)
+                    Int => konst(0, Ty.Int)
+                    _ =>
+                        problem(pos, "`{vt.name()}` has no `op=` for a missing key")
+                        return
+                e := call("rt.map_find", [m.id, kid], Ty.Int)
+                old := entry_or(e, vt, zero)
+                stored = binary(o, Val(id: old, ty: vt), r, pos).id
+            else
+                stored = copy_if_place(value, Val(id: convert(r, vt, pos), ty: vt))
+            call("rt.map_set", [m.id, kid, to_word(stored, vt)], Ty.Unit)
+        _ => problem(ipos, "assigning into a `{m.ty.name()}`")
+
+## `m.get(k) else ...` (err.else.1-2): the value, else a fallback or a
+## statement that leaves.
+fn Lower.lower_get_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) Val?
+    recv := match value
+        Method(r, _, _, _) => r
+        _ => return none
+    key := match value
+        Method(_, _, _, a) => a[0].value
+        _ => return none
+    m := lower_value(recv, none)?
+    kt := match m.ty
+        Map(k, _) => k
+        _ => return unsupported(pos, "`.get(k) else` on a `{m.ty.name()}`")
+    vt := match m.ty
+        Map(_, v) => v
+        _ => Ty.Unknown
+    k := lower_value(key, kt)?
+    kid := convert(k, kt, expr_pos(key))
+    e := call("rt.map_find", [m.id, kid], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    join := new_block()
+    r := new_value(vt, "")
+    blocks[join].params.push(r)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(found)
+    cur = found
+    jump(join, [entry_value(e, vt)])
+    seal(missing)
+    cur = missing
+    match other
+        Fallback(x) =>
+            f := lower_value(x, vt)?
+            jump(join, [convert(f, vt, pos)])
+        Leave(st) =>
+            lower_stmt(st)
+            if not done()
+                problem(pos, "this `else` must leave: `return`, `break` or `continue`")
+        Handler(_, _, hpos) => problem(hpos, "`else` with a handler isn't in the native subset yet")
+    seal(join)
+    cur = join
+    Val(id: r, ty: vt)
+
+fn Lower.is_get_call(self, e ast.Expr) bool
+    match e
+        Method(r, n, _, a) => n == "get" and a.len() == 1 and not self.is_module(r, "env")
+        _ => false
+
+# ---- methods ----
+
+fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    for a in args
+        if a.label != none or a.mutable
+            return unsupported(npos, "this method call")
+    mut vs := List[Val]()
+    match r.ty
+        Map(kt, vt) =>
+            if name == "push" and args.len() == 2
+                return map_push(r, kt, vt, args, npos)
+            want := if name == "contains"
+                or name == "remove"
+                or name == "get" then kt else if name == "top" then Ty.Int else Ty.Unknown
+            for a in args
+                vs.push(lower_value(a.value, if want.is_unknown() then none else want)?)
+            if name == "len" and vs.len() == 0
+                return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
+            if name == "contains" and vs.len() == 1
+                return Val(
+                    id: call("rt.map_has", [r.id, convert(vs[0], kt, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
+            if name == "remove" and vs.len() == 1
+                # The removed value is an optional: only the statement form.
+                call("rt.map_remove", [r.id, convert(vs[0], kt, npos)], Ty.Unit)
+                return Val(id: -1, ty: Ty.Unit)
+            if name == "top" and vs.len() == 1 and vt == Ty.Int and kt != Ty.Bool
+                n := convert(vs[0], Ty.Int, npos)
+                return Val(id: call("rt.map_top", [r.id, n], Ty.List(kt)), ty: Ty.List(kt))
+            if name == "keys" and vs.len() == 0
+                f := if kt == Ty.Bool then "rt.map_keys_bool" else "rt.map_keys"
+                return Val(id: call(f, [r.id], Ty.List(kt)), ty: Ty.List(kt))
+            if name == "values" and vs.len() == 0
+                f := if vt == Ty.Bool then "rt.map_values_bool" else "rt.map_values"
+                return Val(id: call(f, [r.id], Ty.List(vt)), ty: Ty.List(vt))
+            if name == "get" and vs.len() == 1
+                return unsupported(npos, "`.get(k)` without `else` (an optional)")
+        Set(et) =>
+            if is_set_op(name) and args.len() == 1
+                b := lower_value(args[0].value, none)?
+                return set_op(r, name, b, npos)
+            for a in args
+                vs.push(lower_value(a.value, et)?)
+            if name == "len" and vs.len() == 0
+                return Val(id: rawop("load64", [r.id], Ty.Int), ty: Ty.Int)
+            if name == "add" and vs.len() == 1
+                return Val(
+                    id: call("rt.map_add", [r.id, convert(vs[0], et, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
+            if name == "sorted" and vs.len() == 0 and (et == Ty.Int or et == Ty.Str)
+                keys := call("rt.map_keys", [r.id], Ty.List(et))
+                call("rt.list_sort", [keys, konst(if et == Ty.Str then 1 else 0, Ty.Int)], Ty.Unit)
+                return Val(id: keys, ty: Ty.List(et))
+            if name == "contains" and vs.len() == 1
+                return Val(
+                    id: call("rt.map_has", [r.id, convert(vs[0], et, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
+            if name == "remove" and vs.len() == 1
+                return Val(
+                    id: call("rt.map_remove", [r.id, convert(vs[0], et, npos)], Ty.Bool),
+                    ty: Ty.Bool,
+                )
+        _ => return none
+    unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+
+## `m.push(k, x)` on a `Map[K, List[T]]` (type.map.8): append to the list
+## at `k`, starting an empty one when `k` is missing.
+fn Lower.map_push(mut self, m Val, kt Ty, vt Ty, args List[ast.Arg], npos ast.Pos) Val?
+    et := vt.elem() else return unsupported(npos, "`.push(k, x)` on `{m.ty.name()}`")
+    k := lower_value(args[0].value, kt)?
+    kid := convert(k, kt, npos)
+    x := lower_value(args[1].value, et)?
+    item := Val(id: copy_if_place(args[1].value, x), ty: x.ty)
+    e := call("rt.map_find", [m.id, kid], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    join := new_block()
+    l := new_value(vt, "")
+    blocks[join].params.push(l)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(found)
+    cur = found
+    jump(join, [entry_value(e, vt)])
+    seal(missing)
+    cur = missing
+    fresh := call("rt.list_new", [konst(0, Ty.Int)], vt)
+    call("rt.map_set", [m.id, kid, fresh], Ty.Unit)
+    jump(join, [fresh])
+    seal(join)
+    cur = join
+    call(push_fn(et), [l, convert(item, et, npos)], Ty.Unit)
+    Val(id: -1, ty: Ty.Unit)
+
+# ---- iteration and text ----
+
+## `for x in s` over a set walks a snapshot of its elements in order
+## (type.map.5); other values are returned as they are.
+fn Lower.iter_coll(mut self, v Val) Val
+    match v.ty
+        Set(e) =>
+            f := if e == Ty.Bool then "rt.map_keys_bool" else "rt.map_keys"
+            Val(id: call(f, [v.id], Ty.List(e)), ty: Ty.List(e))
+        _ => v
+
+## `print(m)` and `print(s)` (type.map.4): `{"a": 1}`, `{1, 2}`.
+fn Lower.out_coll(mut self, v Val, pos ast.Pos) Val?
+    match v.ty
+        Map(k, x) =>
+            kk := scalar_kind(k)
+            vk := scalar_kind(x)
+            if vk < 0
+                return unsupported(pos, "printing a `{v.ty.name()}`")
+            call("rt.out_map", [v.id, konst(kk, Ty.Int), konst(vk, Ty.Int)], Ty.Unit)
+        Set(e) => call("rt.out_set", [v.id, konst(scalar_kind(e), Ty.Int)], Ty.Unit)
+        _ => return unsupported(pos, "printing a `{v.ty.name()}`")
+    Val(id: -1, ty: Ty.Unit)
+
+# ---- set algebra (type.coll.16) ----
+
+fn is_set_op(name str) bool
+    name == "union" or name == "intersect" or name == "difference"
+
+## `a.union(b)`, `a.intersect(b)` and `a.difference(b)`. `a` is a set or a
+## list, `b` a set or a list of the same element type; the result is a set.
+fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
+    e := match a.ty
+        Set(x) => x
+        List(x) => x
+        _ => return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
+    if e != Ty.Int and e != Ty.Str
+        return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
+    want := Ty.Set(e)
+    sa := as_set(a, e, pos)?
+    sb := as_set(b, e, pos)?
+    if name == "union"
+        return Val(id: call("rt.set_union", [sa, sb], want), ty: want)
+    keep := konst(if name == "intersect" then 1 else 0, Ty.Int)
+    Val(id: call("rt.set_filter", [sa, sb, keep], want), ty: want)
+
+## A set, or a list of `e`, as a set.
+fn Lower.as_set(mut self, v Val, e Ty, pos ast.Pos) int?
+    if v.ty == Ty.Set(e)
+        return v.id
+    if v.ty == Ty.List(e)
+        return call("rt.set_from_list", [konst(key_kind(e), Ty.Int), v.id], Ty.Set(e))
+    problem(pos, "expected a set or list of `{e.name()}`, found `{v.ty.name()}`")
+    none

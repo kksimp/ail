@@ -58,3 +58,9 @@ writes text only until binary writes land (lane 123).
 - Build time is the backend's time on the interpreter (about 0.5 s for small
   programs), dominated by front end and lowering; the bytecode tier and
   self-compilation shrink it.
+
+## Rejected alternatives
+
+- Writing a relocatable object and linking with `ld`: rejected by ADR 0010 (no external backend tools), and because it would make Linux builds depend on binutils.
+- A precompiled, checked-in runtime as machine code: rejected until build time matters. It would be a second artefact to keep in step with the source, and compiling about 600 lines of runtime costs about 0.1 s per build.
+- Emitting the runtime from the interpreter's Rust code: rejected, because the goal is no Rust in the shipped toolchain (Stage 3).

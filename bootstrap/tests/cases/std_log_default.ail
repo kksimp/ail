@@ -1,0 +1,10 @@
+## std.log at the default level (lane 215): debug is hidden, the rest show
+## as `LEVEL message` on standard error (std.log.1-2). Run with `ail run`.
+use std.log
+
+fn main()
+    log.debug("hidden")
+    log.info("starting 3 jobs")
+    log.warn("disk 90% full")
+    log.err("job 2 failed")
+    print("done")

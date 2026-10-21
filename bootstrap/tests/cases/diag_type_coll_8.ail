@@ -1,0 +1,3 @@
+fn main()
+    xs := List[int](3)
+    print(xs.len())

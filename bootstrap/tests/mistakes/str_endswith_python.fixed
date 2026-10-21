@@ -1,0 +1,4 @@
+fn main()
+    path := "/tmp/a.txt"
+    if path.ends_with(".txt")
+        print("text")

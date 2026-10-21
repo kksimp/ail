@@ -1,0 +1,17 @@
+## std.net.23: SameSite. Cookies cross sites by their SameSite value.
+use std.net.jar
+
+fn main()
+    mut j := jar.new()
+    j.set_cookie("https://shop.test/", "d=1")
+    j.set_cookie("https://shop.test/", "l=2; SameSite=Lax")
+    j.set_cookie("https://shop.test/", "s=3; SameSite=Strict")
+    j.set_cookie("https://shop.test/", "n=4; SameSite=None; Secure")
+    print(j.set_cookie("https://shop.test/", "bad=5; SameSite=None"))
+    url := "https://shop.test/x"
+    # Typed, or from a page on the same site: everything.
+    print(j.header_from(url, "", true))
+    print(j.header_from(url, "https://api.shop.test/", false))
+    # Cross-site navigation: Lax and None. Cross-site subresource: None only.
+    print(j.header_from("https://shop.test/", "https://other.test/", true))
+    print(j.header_from("https://shop.test/", "https://other.test/", false))

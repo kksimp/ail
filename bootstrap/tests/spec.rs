@@ -1,6 +1,7 @@
 //! Spec conformance harness (ADR 0002): every fenced `ail` block in
 //! `docs/spec/*.md`, `docs/quick-reference.md` and `docs/language-card.md` is
-//! checked with `ail check --json`.
+//! checked with `ail check --json`, and so is each `ail` fence in the README, the
+//! native guide, the AI-first plan and the edit and std cards (`spec_examples`).
 //!
 //! The fence line says what to expect (documented in `docs/spec/README.md`):
 //! - ```` ```ail ````: must check clean (warnings allowed).
@@ -43,7 +44,7 @@
 //! interpreter tiers (ADR 0361); the two outputs must match exactly.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 enum Expect {
@@ -69,10 +70,18 @@ struct Block {
 }
 
 /// Chapters changed by the batch: every rule in them needs a runnable example.
-const BATCH_CHAPTERS: [&str; 5] = ["04-types.md", "05-expressions.md", "17-std.md", "18-effects.md", "22-tools.md"];
+const BATCH_CHAPTERS: [&str; 7] = [
+    "04-types.md",
+    "05-expressions.md",
+    "15-compile-time.md",
+    "16-reflection.md",
+    "17-std.md",
+    "18-effects.md",
+    "22-tools.md",
+];
 
-fn blocks(dir: &Path, extra: &[&Path]) -> Result<Vec<Block>, String> {
-    let mut chapters: Vec<_> = fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
+fn blocks(dir: Option<&Path>, extra: &[&Path]) -> Result<Vec<Block>, String> {
+    let mut chapters: Vec<PathBuf> = dir.map_or(Vec::new(), |d| fs::read_dir(d).unwrap().map(|e| e.unwrap().path()).collect());
     chapters.sort();
     chapters.extend(extra.iter().map(|p| p.to_path_buf())); // the quick reference and the language card
     let mut out = Vec::new();
@@ -290,8 +299,18 @@ fn copy_dir(from: &Path, to: &Path) {
 fn spec_examples() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let docs = root.join("../docs");
-    let blocks = blocks(&docs.join("spec"), &[&docs.join("quick-reference.md"), &docs.join("language-card.md")])
-        .unwrap_or_else(|e| panic!("{e}"));
+    // The other documents agents load (lane 198): their `ail` fences follow the same rules.
+    let extra = [
+        docs.join("quick-reference.md"),
+        docs.join("language-card.md"),
+        root.join("../README.md"),
+        docs.join("design/native-guide.md"),
+        docs.join("design/ai-first-plan.md"),
+        docs.join("design/cards/edit.md"),
+        docs.join("design/cards/std.md"),
+    ];
+    let extra: Vec<&Path> = extra.iter().map(PathBuf::as_path).collect();
+    let blocks = blocks(Some(&docs.join("spec")), &extra).unwrap_or_else(|e| panic!("{e}"));
     let tmp = Path::new(env!("CARGO_TARGET_TMPDIR")).join("spec");
     fs::create_dir_all(&tmp).unwrap();
     let (mut run, mut skipped, mut failures) = (0, 0, Vec::new());

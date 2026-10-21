@@ -48,3 +48,8 @@ words directly) both favour it; it costs no tokens.
   next slices).
 - OCR, when it comes, follows the same rule: only pages shown or searched
   are recognised.
+
+## Rejected alternatives
+
+- Reading everything, faster (option B): rejected because it stays linear in the document for every question. Parallel reading helps both options, so it is not an alternative to A.
+- An index file written on first open (option C): rejected for now because it writes beside the user's files or into a cache directory, needs stale-index handling, and is not needed while a page reads in about 55 ms.

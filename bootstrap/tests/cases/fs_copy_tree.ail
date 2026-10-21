@@ -1,0 +1,28 @@
+## std.fs.12: copy on a directory copies the tree.
+fn main() !
+    base := "{env.get("TMPDIR") else env.get("TEMP") else "/tmp"}/ail-fs-copy-tree-case"
+    fs.make_dir("{base}/src/sub")?
+    fs.write_text("{base}/src/a.txt", "A")?
+    fs.write_text("{base}/src/sub/b.txt", "B")?
+    fs.copy("{base}/src", "{base}/out")?
+    print(fs.read_text("{base}/out/a.txt")?)
+    print(fs.read_text("{base}/out/sub/b.txt")?)
+    # Copying again replaces files and keeps the rest.
+    fs.write_text("{base}/src/a.txt", "A2")?
+    fs.copy("{base}/src", "{base}/out")?
+    print(fs.read_text("{base}/out/a.txt")?)
+    # A directory can't go into itself.
+    fs.copy("{base}/src", "{base}/src/inner") else err
+        print(err.kind)
+    # A file in the way of the target directory.
+    fs.write_text("{base}/f.txt", "F")?
+    fs.copy("{base}/src", "{base}/f.txt") else err
+        print(err.kind)
+    for f in fs.walk(base)?
+        fs.remove(f)?
+    fs.remove("{base}/out/sub")?
+    fs.remove("{base}/out")?
+    fs.remove("{base}/src/sub")?
+    fs.remove("{base}/src")?
+    fs.remove(base)?
+    print(fs.exists(base))

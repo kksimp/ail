@@ -29,6 +29,14 @@ impl<'a, W: Write> Interp<'a, W> {
         if let Some(rest) = m.strip_prefix("net.") {
             return self.net_method(rest, recv, args, pos, env);
         }
+        // The methods of `regex.Regex` are the `regex` functions with the regex first (std.regex.9).
+        if let Some(f) = m.strip_prefix("regex.") {
+            let mut values = vec![self.eval(recv, env)?];
+            for a in args {
+                values.push(self.eval(&a.value, env)?);
+            }
+            return self.regex_call(f, &values, pos);
+        }
         let Value::Struct(_, fields) = self.eval(recv, env)? else { unreachable!("checked: a ui.Window") };
         let id = fields[0].int();
         let mut values = Vec::with_capacity(args.len());

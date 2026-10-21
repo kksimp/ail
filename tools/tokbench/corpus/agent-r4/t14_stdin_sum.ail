@@ -1,0 +1,2 @@
+fn main()
+    print([w.to_int() else 0 for w in io.read_all().words()].sum())

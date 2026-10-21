@@ -1,0 +1,35 @@
+# fuzz-input: regex
+# fuzz-needs: std.regex
+# regex.group_all (std.regex.24): group 0 is the match texts of find_all, every group has one
+# entry per match, each entry is part of the haystack, and a group the pattern lacks traps
+# with a rule id.
+use std.regex
+
+fn main()
+    pat := {{TEXT}}
+    hay := {{TEXT2}}
+    re := regex.compile(pat) else err
+        print("rejected {err.message.len() > 0}")
+        return
+    all := regex.find_all(re, hay)
+    zero := regex.group_all(re, hay, 0)
+    if zero.len() != all.len()
+        print("FAIL group 0 has {zero.len()} entries for {all.len()} matches")
+    else
+        for i in 0..all.len()
+            if zero[i] != all[i].text
+                print("FAIL group 0 differs from the match text")
+    first := regex.captures(re, hay) else
+        print(zero.len())
+        return
+    for g in 1..first.groups.len()
+        xs := regex.group_all(re, hay, g)
+        if xs.len() != all.len()
+            print("FAIL group {g} has {xs.len()} entries for {all.len()} matches")
+        for x in xs
+            if not hay.contains(x)
+                print("FAIL group text is not part of the haystack")
+    if {{INT}} % 3 == 0
+        print(regex.group_all(re, hay, first.groups.len()).len())
+    if {{INT}} % 3 == 1
+        print(regex.group_all(re, hay, -1).len())

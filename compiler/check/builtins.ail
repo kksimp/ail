@@ -1,0 +1,695 @@
+## Methods of the built-in types (ADR 0377), as `check/builtins.rs` and
+## `check/keyfn.rs`: `str`, `char`, `int`, `float`, the sized numbers,
+## `List`, `Map` and `Set`.
+use ast
+
+## What a built-in method's element type must support.
+pub enum Need
+    NoNeed
+    NeedEq
+    NeedOrd
+    NeedHash
+    NeedNumber
+
+## A built-in method's signature.
+pub struct Builtin
+    pub mutates bool
+    pub params List[Ty]
+    pub ret Ty
+    pub need Need
+
+pub STR_METHODS := [
+    "split",
+    "to_int",
+    "to_float",
+    "chars",
+    "trim",
+    "slice",
+    "to_lower",
+    "to_upper",
+    "find",
+    "replace",
+    "char_at",
+    "starts_with",
+    "ends_with",
+    "strip_prefix",
+    "strip_suffix",
+    "contains",
+    "repeat",
+    "pad_left",
+    "pad_right",
+    "center",
+    "words",
+    "trim_start",
+    "trim_end",
+    "count",
+    "rfind",
+    "lines",
+    "len",
+    "is_empty",
+    "byte_len",
+    "to_bytes",
+]
+
+## type.bytes.7-12
+pub BYTES_METHODS := [
+    "len",
+    "to_str",
+    "text",
+    "to_list",
+    "concat",
+    "find",
+    "starts_with",
+    "ends_with",
+    "contains",
+    "hex",
+    "base64",
+]
+
+pub CHAR_METHODS := [
+    "is_digit",
+    "is_alpha",
+    "is_alnum",
+    "is_space",
+    "is_upper",
+    "is_lower",
+    "to_upper",
+    "to_lower",
+    "code",
+    "to_digit",
+]
+
+pub INT_METHODS := [
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+    "bit_not",
+    "shl",
+    "shr",
+    "checked_add",
+    "checked_sub",
+    "checked_mul",
+    "checked_div",
+    "checked_neg",
+    "checked_rem",
+    "wrapping_neg",
+    "wrapping_add",
+    "wrapping_sub",
+    "wrapping_mul",
+    "saturating_add",
+    "saturating_sub",
+    "saturating_mul",
+    "abs",
+    "to_float",
+    "to_hex",
+    "to_i8",
+    "to_i16",
+    "to_i32",
+    "to_u8",
+    "to_u16",
+    "to_u32",
+    "to_u64",
+    "to_f32",
+]
+
+pub FLOAT_METHODS := [
+    "abs",
+    "floor",
+    "ceil",
+    "round",
+    "sqrt",
+    "sin",
+    "cos",
+    "tan",
+    "atan",
+    "atan2",
+    "exp",
+    "ln",
+    "log10",
+    "pow",
+    "hypot",
+    "cbrt",
+    "to_int",
+    "to_f32",
+]
+
+pub SIZED_INT_METHODS := [
+    "checked_add",
+    "checked_sub",
+    "checked_mul",
+    "checked_div",
+    "checked_rem",
+    "checked_neg",
+    "wrapping_add",
+    "wrapping_sub",
+    "wrapping_mul",
+    "wrapping_neg",
+    "saturating_add",
+    "saturating_sub",
+    "saturating_mul",
+    "abs",
+    "to_int",
+    "to_float",
+    "to_hex",
+    "to_i8",
+    "to_i16",
+    "to_i32",
+    "to_u8",
+    "to_u16",
+    "to_u32",
+    "to_u64",
+    "to_f32",
+]
+
+pub F32_METHODS := ["abs", "floor", "ceil", "round", "sqrt", "to_int", "to_float"]
+
+pub LIST_METHODS := [
+    "len",
+    "push",
+    "swap",
+    "pop",
+    "last",
+    "first",
+    "insert",
+    "remove_at",
+    "extend",
+    "clear",
+    "reverse",
+    "contains",
+    "index_of",
+    "join",
+    "sum",
+    "min",
+    "max",
+    "sorted",
+    "sort",
+    "take",
+    "union",
+    "intersect",
+    "difference",
+    "chunks",
+    "windows",
+    "counts",
+    "flatten",
+    "is_empty",
+]
+
+pub MAP_METHODS := ["len", "is_empty", "get", "contains", "remove", "keys", "values", "top"]
+
+pub SET_METHODS := [
+    "len",
+    "is_empty",
+    "add",
+    "remove",
+    "contains",
+    "sorted",
+    "is_subset",
+    "union",
+    "intersect",
+    "difference",
+]
+
+## The sized type a conversion method names (type.num.15).
+fn convert(n str) str?
+    for k in SIZED
+        if n == "to_{k}"
+            return k
+    none
+
+fn make(mutates bool, params List[Ty], result Ty, need Need) Builtin?
+    Builtin(mutates: mutates, params: params, ret: result, need: need)
+
+fn read(params List[Ty], result Ty) Builtin?
+    make(false, params, result, Need.NoNeed)
+
+## The built-in method `n` of type `t`, if there is one.
+@allow("expr.match.3") fn builtin(t Ty, n str) Builtin?
+    match t
+        Str =>
+            if n == "split"
+                return read([Ty.Str], Ty.ListOf(Ty.Str))
+            if n == "to_int"
+                return read([], Ty.Opt(Ty.Int))
+            if n == "to_float"
+                return read([], Ty.Opt(Ty.Float))
+            if n == "chars"
+                return read([], Ty.ListOf(Ty.Char))
+            if n == "trim"
+                or n == "trim_start"
+                or n == "trim_end"
+                or n == "to_lower"
+                or n == "to_upper"
+                return read([], Ty.Str)
+            if n == "words"
+                return read([], Ty.ListOf(Ty.Str))
+            if n == "count"
+                return read([Ty.Str], Ty.Int)
+            if n == "rfind"
+                return read([Ty.Str], Ty.Opt(Ty.Int))
+            if n == "slice"
+                return read([Ty.Int, Ty.Int], Ty.Str)
+            if n == "find"
+                return read([Ty.Str], Ty.Opt(Ty.Int))
+            if n == "replace"
+                return read([Ty.Str, Ty.Str], Ty.Str)
+            if n == "char_at"
+                return read([Ty.Int], Ty.Opt(Ty.Char))
+            if n == "starts_with" or n == "ends_with" or n == "contains"
+                return read([Ty.Str], Ty.Bool)
+            if n == "strip_prefix" or n == "strip_suffix"
+                return read([Ty.Str], Ty.Opt(Ty.Str))
+            if n == "repeat"
+                return read([Ty.Int], Ty.Str)
+            if n == "pad_left" or n == "pad_right" or n == "center"
+                return read([Ty.Int, Ty.Char], Ty.Str)
+            if n == "lines"
+                return read([], Ty.ListOf(Ty.Str))
+            if n == "is_empty"
+                return read([], Ty.Bool)
+            if n == "len" or n == "byte_len"
+                return read([], Ty.Int)
+            if n == "to_bytes"
+                return read([], Ty.Bytes)
+            none
+        # type.bytes.7-12: `bytes` is immutable, so no method changes it.
+        Bytes =>
+            if n == "len"
+                return read([], Ty.Int)
+            if n == "to_str"
+                return read([], Ty.Opt(Ty.Str))
+            if n == "text" or n == "hex" or n == "base64"
+                return read([], Ty.Str)
+            if n == "to_list"
+                return read([], Ty.ListOf(Ty.Num("u8")))
+            if n == "concat"
+                return read([Ty.Bytes], Ty.Bytes)
+            if n == "find"
+                return read([Ty.Bytes], Ty.Opt(Ty.Int))
+            if n == "starts_with" or n == "ends_with" or n == "contains"
+                return read([Ty.Bytes], Ty.Bool)
+            none
+        Char =>
+            if ["is_digit", "is_alpha", "is_alnum", "is_space", "is_upper", "is_lower"].contains(n)
+                return read([], Ty.Bool)
+            if n == "to_upper" or n == "to_lower"
+                return read([], Ty.Char)
+            if n == "code"
+                return read([], Ty.Int)
+            if n == "to_digit"
+                return read([Ty.Int], Ty.Opt(Ty.Int))
+            none
+        Int =>
+            if [
+                "checked_add",
+                "checked_sub",
+                "checked_mul",
+                "checked_div",
+                "checked_rem",
+            ].contains(n)
+                return read([Ty.Int], Ty.Opt(Ty.Int))
+            if n == "checked_neg"
+                return read([], Ty.Opt(Ty.Int))
+            if n == "wrapping_neg" or n == "abs"
+                return read([], Ty.Int)
+            # expr.bit.1-2: bitwise operations on the 64-bit two's complement value.
+            if ["bit_and", "bit_or", "bit_xor", "shl", "shr"].contains(n)
+                return read([Ty.Int], Ty.Int)
+            if n == "bit_not"
+                return read([], Ty.Int)
+            if [
+                "wrapping_add",
+                "wrapping_sub",
+                "wrapping_mul",
+                "saturating_add",
+                "saturating_sub",
+                "saturating_mul",
+            ].contains(n)
+                return read([Ty.Int], Ty.Int)
+            if n == "to_float"
+                return read([], Ty.Float)
+            if n == "to_hex"
+                return read([], Ty.Str)
+            k := convert(n) else return none
+            read([], Ty.Num(k))
+        Float =>
+            if [
+                "abs",
+                "floor",
+                "ceil",
+                "round",
+                "sqrt",
+                "sin",
+                "cos",
+                "tan",
+                "atan",
+                "exp",
+                "ln",
+                "log10",
+                "cbrt",
+            ].contains(n)
+                return read([], Ty.Float)
+            # type.num.16
+            if n == "atan2" or n == "pow" or n == "hypot"
+                return read([Ty.Float], Ty.Float)
+            if n == "to_int"
+                return read([], Ty.Int)
+            if n == "to_f32"
+                return read([], Ty.Num("f32"))
+            none
+        Num(k) =>
+            if k == "f32"
+                if ["abs", "floor", "ceil", "round", "sqrt"].contains(n)
+                    return read([], t)
+                if n == "to_int"
+                    return read([], Ty.Int)
+                if n == "to_float"
+                    return read([], Ty.Float)
+                return none
+            if [
+                "checked_add",
+                "checked_sub",
+                "checked_mul",
+                "checked_div",
+                "checked_rem",
+            ].contains(n)
+                return read([t], Ty.Opt(t))
+            if n == "checked_neg" and is_signed(k)
+                return read([], Ty.Opt(t))
+            if (n == "wrapping_neg" or n == "abs") and is_signed(k)
+                return read([], t)
+            if [
+                "wrapping_add",
+                "wrapping_sub",
+                "wrapping_mul",
+                "saturating_add",
+                "saturating_sub",
+                "saturating_mul",
+            ].contains(n)
+                return read([t], t)
+            if n == "to_int"
+                return read([], Ty.Int)
+            if n == "to_float"
+                return read([], Ty.Float)
+            if n == "to_hex"
+                return read([], Ty.Str)
+            c := convert(n) else return none
+            if c == k
+                return none
+            read([], Ty.Num(c))
+        ListOf(e) =>
+            if n == "is_empty"
+                return read([], Ty.Bool)
+            if n == "len"
+                return read([], Ty.Int)
+            if n == "push"
+                return make(true, [e], Ty.Unit, Need.NoNeed)
+            if n == "swap"
+                return make(true, [Ty.Int, Ty.Int], Ty.Unit, Need.NoNeed)
+            if n == "pop"
+                return make(true, [], Ty.Opt(e), Need.NoNeed)
+            if n == "last" or n == "first"
+                return read([], Ty.Opt(e))
+            if n == "take"
+                return read([Ty.Int], Ty.ListOf(e))
+            if n == "chunks" or n == "windows"
+                return read([Ty.Int], Ty.ListOf(Ty.ListOf(e)))
+            if n == "flatten"
+                match e
+                    ListOf(inner) => return read([], Ty.ListOf(inner))
+                    _ => return none
+            if n == "counts"
+                return make(false, [], Ty.MapOf(key: e, value: Ty.Int), Need.NeedHash)
+            if n == "union" or n == "intersect" or n == "difference"
+                return make(false, [Ty.ListOf(e)], Ty.SetOf(e), Need.NeedHash)
+            if n == "insert"
+                return make(true, [Ty.Int, e], Ty.Unit, Need.NoNeed)
+            if n == "remove_at"
+                return make(true, [Ty.Int], e, Need.NoNeed)
+            if n == "extend"
+                return make(true, [Ty.ListOf(e)], Ty.Unit, Need.NoNeed)
+            if n == "clear" or n == "reverse"
+                return make(true, [], Ty.Unit, Need.NoNeed)
+            if n == "contains"
+                return make(false, [e], Ty.Bool, Need.NeedEq)
+            if n == "index_of"
+                return make(false, [e], Ty.Opt(Ty.Int), Need.NeedEq)
+            if n == "join"
+                return read([Ty.Str], Ty.Str)
+            if n == "sum"
+                return make(false, [], e, Need.NeedNumber)
+            if n == "min" or n == "max"
+                return make(false, [], Ty.Opt(e), Need.NeedOrd)
+            if n == "sorted"
+                return make(false, [], Ty.ListOf(e), Need.NeedOrd)
+            if n == "sort"
+                return make(true, [], Ty.Unit, Need.NeedOrd)
+            none
+        MapOf(k, v) =>
+            if n == "is_empty"
+                return read([], Ty.Bool)
+            if n == "len"
+                return read([], Ty.Int)
+            if n == "get"
+                return read([k], Ty.Opt(v))
+            if n == "contains"
+                return read([k], Ty.Bool)
+            if n == "remove"
+                return make(true, [k], Ty.Opt(v), Need.NoNeed)
+            if n == "keys"
+                return read([], Ty.ListOf(k))
+            if n == "values"
+                return read([], Ty.ListOf(v))
+            # std.count.2: the keys with the largest int values.
+            if n == "top"
+                match v
+                    Int => return read([Ty.Int], Ty.ListOf(k))
+                    _ => return none
+            # type.map.8: `m.push(k, x)` for a list-valued map.
+            if n == "push"
+                match v
+                    ListOf(e) => return make(true, [k, e], Ty.Unit, Need.NoNeed)
+                    _ => return none
+            none
+        SetOf(e) =>
+            if n == "is_empty"
+                return read([], Ty.Bool)
+            if n == "len"
+                return read([], Ty.Int)
+            if n == "add" or n == "remove"
+                return make(true, [e], Ty.Bool, Need.NoNeed)
+            if n == "contains"
+                return read([e], Ty.Bool)
+            if n == "sorted"
+                return make(false, [], Ty.ListOf(e), Need.NeedOrd)
+            if n == "is_subset"
+                return read([Ty.SetOf(e)], Ty.Bool)
+            if n == "union" or n == "intersect" or n == "difference"
+                return make(false, [Ty.SetOf(e)], Ty.SetOf(e), Need.NeedHash)
+            none
+        _ => none
+
+## The names of `t`'s built-in methods, for suggestions.
+@allow("expr.match.3") fn builtin_names(t Ty) List[str]
+    match t
+        Str => STR_METHODS
+        Bytes => BYTES_METHODS
+        Char => CHAR_METHODS
+        Int => INT_METHODS
+        Float => FLOAT_METHODS
+        Num(k) => if k == "f32" then F32_METHODS else SIZED_INT_METHODS
+        ListOf => LIST_METHODS
+        MapOf => MAP_METHODS
+        SetOf => SET_METHODS
+        _ => []
+
+@allow("expr.match.3") fn elem_of(t Ty) Ty
+    match t
+        ListOf(e) => e
+        SetOf(e) => e
+        _ => Ty.Unknown
+
+## `x.name(args)` for a built-in method of `x`'s type.
+fn Checker.builtin_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
+    if keyed(args)
+        return keyed_call(recv, rt, n, at, args)
+    b := builtin(rt, n) else return Ty.Unknown
+    # type.str.6: these take a `str` or a `char`.
+    if rt == Ty.Str and [
+        "contains",
+        "starts_with",
+        "ends_with",
+        "split",
+    ].contains(n) and (args.len() == 1 or (n == "split" and args.len() == 2))
+        a := args[0]
+        t := expr(a.value, none, true)
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "this parameter isn't `mut`",
+                "remove the `mut`",
+            )
+        if t != Ty.Str
+            and t != Ty.Char
+            and t != Ty.Unknown
+            and t != Ty.Never
+            and not reject_unhandled(t, expr_pos(a.value))
+            err("expr.call.2", expr_pos(a.value), "`{n}` takes a `str` or a `char`, not {show(t)}")
+        if args.len() == 2
+            lt := expr(args[1].value, none, true)
+            if lt != Ty.Int and lt != Ty.Unknown and lt != Ty.Never and not reject_unhandled(
+                lt,
+                expr_pos(args[1].value),
+            )
+                err(
+                    "expr.call.2",
+                    expr_pos(args[1].value),
+                    "the limit of `split` is an `int`, not {show(lt)}",
+                )
+        return b.ret
+    # type.bytes.14: `b.hex(sep)` puts `sep` between the byte pairs.
+    if rt == Ty.Bytes and n == "hex" and args.len() == 1
+        a := args[0]
+        t := expr(a.value, none, true)
+        if a.mutable
+            err_help(
+                "own.param.2",
+                expr_pos(a.value),
+                "this parameter isn't `mut`",
+                "remove the `mut`",
+            )
+        if t != Ty.Str and t != Ty.Unknown and t != Ty.Never and not reject_unhandled(
+            t,
+            expr_pos(a.value),
+        )
+            err(
+                "expr.call.2",
+                expr_pos(a.value),
+                "the separator of `hex` is a `str`, not {show(t)}",
+            )
+        return b.ret
+    if n == "get" and args.len() == 2 and is_map_ty(rt)
+        args_only(args)
+        err_help(
+            "expr.call.1",
+            at,
+            "`m.get(k)` takes only the key, and gives a `V?`",
+            "for a default, write `v := m.get(k) else default`",
+        )
+        return b.ret
+    elem := elem_of(rt)
+    mut ok := true
+    mut what := ""
+    mut tr := -1
+    match b.need
+        NoNeed => ok = true
+        NeedEq =>
+            tr = std_eq
+            what = "elements that can be compared with `==` (`Eq`)"
+        NeedOrd =>
+            tr = std_ord
+            what = "elements that can be ordered (`Ord`)"
+        NeedHash =>
+            tr = std_hash
+            what = "elements that can be hashed (`Hash`)"
+        NeedNumber =>
+            what = "`int` or `float` elements"
+            ok = elem == Ty.Int or elem == Ty.Float or elem == Ty.Unknown or num_name(elem) != none
+    if tr >= 0
+        ok = implements(elem, tr)
+    if not ok
+        text := "`{n}` needs {what}, and {show(rt)} has {show(elem)}"
+        mut hint := no_str()
+        if tr >= 0
+            hint = how_to_implement(elem, tr)
+        if h := hint
+            err_help("gen.bound.3", at, text, h)
+        else
+            err("gen.bound.3", at, text)
+    if b.mutates
+        require_mutable(recv, "trait.method.3", "the receiver of `{n}`")
+    moves := unique_builtin(rt, n, at, b.params.len())
+    mut sig := plain_sig(b.mutates, b.params, b.ret)
+    sig.moves = moves
+    check_call(n, sig, [], args, recv, at, none)
+
+## A call with a `by:` argument or a `|x|` key function.
+fn keyed(args List[ast.Arg]) bool
+    for a in args
+        if a.param != none
+            return true
+        if l := a.label
+            if l.name == "by"
+                return true
+    false
+
+## `xs.sorted(by: |x| key)`, `sort`, `min` and `max` (expr.key.1-4).
+@allow("expr.match.3")
+fn Checker.keyed_call(mut self, recv ast.Expr, rt Ty, n str, at ast.Pos, args List[ast.Arg]) Ty
+    mut elem := none
+    match rt
+        ListOf(e) => elem = e
+        SetOf(e) => elem = if n != "sort" then e else none
+        _ => elem = none
+    shape_ok := [
+        "sorted",
+        "sort",
+        "min",
+        "max",
+    ].contains(n) and elem != none and args.len() == 1 and (args[0].label?.name else "") == "by"
+    if not shape_ok
+        for a in args
+            if p := a.param
+                key_misplaced(p.pos)
+            else
+                expr(a.value, none, true)
+        mut where := at
+        if l := args[0].label
+            where = l.pos
+        err_help(
+            "expr.key.1",
+            where,
+            "`{n}` takes no `by:` argument here",
+            "`by: |x| key` goes in `sorted`, `sort`, `min` or `max` of a list (or a set, except `sort`)",
+        )
+        return Ty.Unknown
+    e := elem else Ty.Unknown
+    a := args[0]
+    p := a.param else
+        expr(a.value, none, true)
+        err_help(
+            "expr.key.1",
+            expr_pos(a.value),
+            "`by:` takes a key function",
+            "write `by: |x| key`, e.g. `by: |p| p.age`",
+        )
+        return Ty.Unknown
+    # expr.key.2: the parameter is a new immutable name, like a loop variable.
+    mark := locals.len()
+    if declare(p.name, p.pos)
+        locals.push(Local(name: p.name, ty: e, mutable: false, how: LocalKind.LoopVar, decl: none))
+    kt := expr(a.value, none, true)
+    end_scope(mark)
+    if kt != Ty.Unknown and not implements(kt, std_ord)
+        err_help(
+            "expr.key.3",
+            expr_pos(a.value),
+            "a sort key must be ordered (`Ord`), and this is {show(kt)}",
+            "use a number, string or `Ord` type as the key",
+        )
+    if n == "sort"
+        require_mutable(recv, "trait.method.3", "the receiver of `sort`")
+    if n == "sorted"
+        return Ty.ListOf(e)
+    if n == "sort"
+        return Ty.Unit
+    Ty.Opt(e)
+
+## expr.key.1: a `|x|` key function outside `by:` of a built-in.
+fn Checker.key_misplaced(mut self, at ast.Pos)
+    err_help(
+        "expr.key.1",
+        at,
+        "a `|x|` key function is only allowed as `by:` of `sorted`, `sort`, `min` or `max`",
+        "use a comprehension or a loop, e.g. `[f(x) for x in xs]`",
+    )

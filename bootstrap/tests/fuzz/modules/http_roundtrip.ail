@@ -1,0 +1,43 @@
+# fuzz-input: text
+# fuzz-net: yes
+# fuzz-needs: std.net
+# Differential: what the server accepts, the client reads back byte for byte (std.net.2, 3, 10, 11).
+# A body POSTed to an echo server comes back unchanged; a header the client sends arrives as sent.
+use std.net
+
+fn echo(srv net.Server) int
+    mut n := 0
+    for _ in 0..2
+        ex := srv.accept() else err
+            continue
+        req := ex.request
+        ex.respond(net.Response(status: 200, headers: {"x-seen": req.headers.get("x-probe") else "", "content-type": "text/plain; charset=utf-8"}, body: req.body)) else err
+            continue
+        n += 1
+    n
+
+fn visit(addr str) str
+    body := {{TEXT}}
+    r := net.post("http://{addr}/echo", body, "text/plain; charset=utf-8") else err
+        return "post error {err.kind}"
+    expect := body.replace("\r\n", "\n")
+    if r.status != 200
+        return "FAIL status {r.status}"
+    if r.body != body and r.body != expect
+        return "FAIL body changed: {r.body.len()} bytes for {body.len()}"
+    mut o := net.options()
+    o.headers = {"x-probe": "v-{{INT}}"}
+    q := net.request("GET", "http://{addr}/h", o) else err2
+        return "get error {err2.kind}"
+    seen := q.headers.get("x-seen") else "none"
+    if seen != "v-{{INT}}"
+        return "FAIL header changed: {seen}"
+    "ok"
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    w := spawn echo(srv)
+    msg := visit("{srv.addr()}")
+    srv.close()
+    w.wait()?
+    print(msg)

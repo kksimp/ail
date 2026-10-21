@@ -27,8 +27,6 @@ fn Lower.declare_enum_names(mut self, prog ast.Program)
     for e in prog.enums
         if e.generics.len() > 0
             problem(e.pos, "generic enum `{e.name}` isn't in the native subset yet")
-        elif e.is_error
-            problem(e.pos, "error enum `{e.name}` isn't in the native subset yet")
         else
             enums["{prefix}{e.name}"] = []
 
@@ -335,7 +333,7 @@ fn Lower.variant_eq(mut self, name str, a int, b int, v VariantRef, pos ast.Pos)
 fn Lower.eq_fn(mut self, t Ty) str
     name := "eq.{t.name()}"
     if not sigs.contains(name)
-        sigs[name] = Sig(params: [t, t], ret: Ty.Bool)
+        sigs[name] = Sig(params: [t, t], ret: Ty.Bool, fails: false)
         eq_tys[name] = t
     name
 
@@ -492,7 +490,7 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
 fn Lower.gen_init_enums(mut self)
     if singletons.len() == 0
         return
-    sigs["init.enums"] = Sig(params: [], ret: Ty.Unit)
+    sigs["init.enums"] = Sig(params: [], ret: Ty.Unit, fails: false)
     begin_fn("init.enums", Ty.Unit, [])
     for v in singletons
         t := Ty.Enum(v.en)

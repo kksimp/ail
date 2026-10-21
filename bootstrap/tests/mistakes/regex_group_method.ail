@@ -1,0 +1,7 @@
+use std.regex
+
+fn main()
+    re := regex.compile("(\\d+)") else e
+        return
+    m := regex.find(re, "a12") else return
+    print(m.group(1))

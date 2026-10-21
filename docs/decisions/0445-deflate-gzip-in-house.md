@@ -43,3 +43,8 @@ On 1.6 MB of this repository's docs at level 6: ours 569,345 bytes in 0.175 s in
 
 - Tests: RFC 1951 stream vectors, round trips from 0 bytes to 200 kB at levels 0, 1, 4, 6, 9, corrupt-input fuzz without panics, and cross-checks both ways with the system `gzip` (skipped with a note when absent).
 - No code or test data was taken from another project.
+
+## Rejected alternatives
+
+- Porting zlib (option B): rejected because a port adds attribution and a large surface for little gain.
+- Linking the system libz (option C): rejected because it violates ADR 0009 and the spirit of ADR 0010, and it is absent on some Windows setups.

@@ -36,8 +36,8 @@ slow one, and the interpreter is the permanent oracle ([ADR 0032](0032-keep-rust
 - **`fuzz.nat.2`** `fuzz_native_strings` does the same for programs over `str` and `char`
   (`fuzz/pure.rs::strings`: slicing, case, padding, replace, split, interpolation with
   width and fill, character predicates). Programs the backend declines are reported,
-  not failed, until the feature has merged on every branch. `fuzz_native_maps`, `fuzz_native_options` and `fuzz_native_funcs` cover maps and sets, optionals
-  and results, and function values with key sorts. A generator for enums and `match` follows its PR.
+  not failed, until the feature has merged on every branch. `fuzz_native_maps`, `fuzz_native_options`, `fuzz_native_enums` and `fuzz_native_funcs` cover maps and sets, enums and `match` (ADR 0602-0603), optionals
+  and results, and function values with key sorts.
 - **`fuzz.mod.6`** A module-fuzz template that carries `# fuzz-native: yes` is
   built and compared too. None do yet: module code uses strings, maps and
   optionals, which are outside the subset (ADR 0390).
@@ -45,3 +45,7 @@ slow one, and the interpreter is the permanent oracle ([ADR 0032](0032-keep-rust
   build costs about 1.3 s because the backend runs on the interpreter.
 - Lane 120 compares `bootstrap/tests/cases` and `examples` in `cases.rs`; this
   test covers what no one wrote by hand. The pure generator grows with the subset.
+
+## Rejected alternatives
+
+- A separate native test suite (option B): rejected because it means two lists to keep in step, and programs the suite forgets go untested.

@@ -1,0 +1,1 @@
+bootstrap/tests/native/opt_unsupported.ail:14:18: error[native.subset.1]: `nested`: its result type isn't in the native subset yet

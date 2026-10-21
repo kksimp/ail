@@ -155,6 +155,8 @@ impl J {
         match self {
             J::Null => out.push_str("null"),
             J::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+            // json.print.1: whole numbers below 1e15 print without a fraction, as `Json.to_text` does.
+            J::Num(n) if n.is_finite() && n.abs() < 1e15 && n.fract() == 0.0 => out.push_str(&format!("{}", *n as i64)),
             J::Num(n) => out.push_str(&crate::interp::float_text(*n)),
             J::Str(s) => quote(s, out),
             J::Arr(items) => {
@@ -302,6 +304,7 @@ fn program(p: &Program) -> J {
                 ("own", J::Bool(g.own)),
             ])
         })),
+        ("unsafe_allowed", opt(&p.unsafe_allowed, |l| arr(l, |p| s(p)))),
         ("generated", arr(&p.generated, |g| {
             J::Obj(vec![
                 ("file", n(g.file)),
@@ -507,6 +510,7 @@ fn stmt(st: &Stmt) -> J {
             variant("Handle", vec![("value", expr(value)), ("otherwise", otherwise_part(otherwise))])
         }
         Stmt::Defer(inner, p) => variant("Defer", vec![("stmt", stmt(inner)), ("pos", pos(*p))]),
+        // unsafe.block.4: `ail api --ast` lists every `unsafe` block (here) and `unsafe fn` (`unsafe_fn`).
         Stmt::Unsafe { body, pos: p } => variant("Unsafe", vec![("body", block(body)), ("pos", pos(*p))]),
         Stmt::With { mutex, var, var_pos, body, pos: p } => variant(
             "With",

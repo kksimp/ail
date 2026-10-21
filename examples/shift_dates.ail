@@ -1,0 +1,12 @@
+## Read ISO dates from a file, print each one's weekday (1 = Monday) and the
+## date a week later, with std.time.date.
+##   ./ail run examples/shift_dates.ail
+
+use std.time.date
+
+fn main() !
+    text := fs.read_text("{path.dir(env.program())}/agent-data/dates.txt")? "reading dates"
+    for line in text.lines()
+        d := date.parse_date(line)?
+        later := d.add_days(7)
+        print("{d.iso()} is a {d.weekday()}, a week later {later.iso()}")

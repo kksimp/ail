@@ -1,0 +1,1351 @@
+## Expressions (ADR 0377): literals, names, `?`, `else`, operators, `if`
+## and `match`, as `expr_of` onward in `bootstrap/src/check.rs`.
+use ast
+
+## The type of `e`. `expect` is the type the context wants, if known; it
+## resolves bare variants, empty lists and type arguments. `need` says
+## whether the value is used (expr.if.4).
+@allow("expr.match.3") fn Checker.expr(mut self, e ast.Expr, expect Ty?, need bool) Ty
+    match e
+        Str => Ty.Str
+        Bytes => Ty.Bytes
+        Int(v, at) =>
+            # type.num.10: an integer literal where a float is expected is a float.
+            if expect == Ty.Float
+                float_literals.add(pos_key(at))
+                return Ty.Float
+            # type.num.13: a literal is typed by the sized type the context expects.
+            if k := num_name(expect else Ty.Unknown)
+                sized_literal(v, false, at, k)
+                return Ty.Num(k)
+            Ty.Int
+        Float =>
+            if expect == Ty.Num("f32")
+                return Ty.Num("f32")
+            Ty.Float
+        Char => Ty.Char
+        Bool => Ty.Bool
+        NoneLit(at) => none_lit(at, expect)
+        Hole(at) => hole(at, expect)
+        Try(inner, context, at) => try_expr(inner, context, at)
+        # err.else.6: the value, or the fallback when it's absent or failed.
+        OrElse(value, otherwise, _) =>
+            vt := else_value(value, otherwise)
+            else_part(vt, value, otherwise)
+        Interp(parts, _) =>
+            for part in parts
+                match part
+                    Hole(x) =>
+                        t := expr(x, none, true)
+                        text_form(t, expr_pos(x), "lex.str.2")
+                    Fmt(x, spec) =>
+                        t := expr(x, none, true)
+                        text_form(t, expr_pos(x), "lex.str.2")
+                        format_spec(t, spec, expr_pos(x))
+                    Lit => continue
+            Ty.Str
+        Name(n, at) => name(n, at, expect)
+        TypeArgs(n, _, at) =>
+            what := if types.contains(n) then "a type" else "a function"
+            err_help(
+                "expr.name.1",
+                at,
+                "`{n}[...]` is {what}, not a value",
+                "call it, e.g. `f[int](x)`, or call an associated function, e.g. `Stack[int].new()`",
+            )
+            Ty.Unknown
+        ListLit(elems, at) =>
+            t := list(elems, at, expect)
+            match t
+                ListOf(el) => consume_elems(elems, el)
+                _ => return t
+            t
+        Call(callee, args, _) => call(callee, args, expect)
+        Method(recv, n, at, args) => method(recv, n, at, args, expect)
+        Member(recv, n, at) => field(recv, n, at, expect)
+        Index(recv, index, _) => index_expr(recv, index)
+        Unary(op, operand, at) => unary_expr(op, operand, at, expect)
+        Binary(op, lhs, rhs, at) => binary(op, lhs, rhs, at)
+        MapLit(entries, at) =>
+            t := map_literal(entries, at, expect)
+            match t
+                MapOf(_, v) => consume_elems([en.value for en in entries], v)
+                _ => return t
+            t
+        SetLit(items, at) => set_literal(items, at, expect)
+        Comp(form, elem, value, clauses, _) => comprehension(form, elem, value, clauses, expect)
+        Range(lo, hi, _, at) =>
+            range_bounds(lo, hi)
+            unsupported(
+                at,
+                "a range outside `for` and list slicing is not supported by the bootstrap yet (spec expr.loop.3)",
+            )
+            Ty.Unknown
+        If(branches, els, else_err, at) => if_expr(branches, els, else_err, at, expect, need)
+        Match(scrutinee, arms, at) => match_expr(scrutinee, arms, at, expect, need)
+        NewRef(value, at) => ref_expr(value, at, expect)
+
+@allow("expr.match.3") fn is_int_literal(e ast.Expr) bool
+    match e
+        Int => true
+        _ => false
+
+@allow("expr.match.3") fn is_number_literal(e ast.Expr) bool
+    match e
+        Int => true
+        Float => true
+        _ => false
+
+@allow("expr.match.3")
+fn Checker.unary_expr(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos, expect Ty?) Ty
+    if op == ast.UnOp.Neg and expect == Ty.Float and is_int_literal(operand)
+        float_literal(operand)
+        return Ty.Float
+    if op == ast.UnOp.Neg and is_number_literal(operand)
+        if k := num_name(expect else Ty.Unknown)
+            match operand
+                Int(v, p) => sized_literal(v, true, p, k)
+                _ => return Ty.Num(k)
+            return Ty.Num(k)
+    unary(op, operand, at)
+
+## `{x:spec}` (lex.str.7, type.str.11): `.N` needs a float, `x` an int.
+fn Checker.format_spec(mut self, t Ty, spec ast.FormatSpec, at ast.Pos)
+    if spec.precision != none and t != Ty.Float and t != Ty.Num("f32") and t != Ty.Unknown
+        err_help(
+            "type.str.11",
+            at,
+            "`.N` in a format specification needs a `float`",
+            "round a float with `\{x:.2}`; to cut an int or text, convert it first",
+        )
+    mut int_like := t == Ty.Int or t == Ty.Unknown
+    if k := num_name(t)
+        int_like = k != "f32"
+    if spec.hex and not int_like
+        err_help(
+            "type.str.11",
+            at,
+            "`x` in a format specification needs an `int`",
+            "drop the `x`, or convert the value to an `int` first",
+        )
+
+## Every value has a text form (trait.auto.2); "no value" and an unhandled
+## failure don't.
+fn Checker.text_form(mut self, t Ty, at ast.Pos, no_value_rule str)
+    if t == Ty.Unit
+        err(no_value_rule, at, "this expression produces no value")
+    elif is_res(t)
+        reject_unhandled(t, at)
+
+fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
+    if k := pending_of(n)
+        want := opt_inner(expect else Ty.Unknown)
+        brace := pending[k].brace
+        if (is_list_ty(want) and not brace and not pending[k].opt)
+            or ((is_map_ty(want) or is_set_ty(want)) and brace)
+            settle(k, want)
+            return want
+        unsettled(k, at)
+        return Ty.Unknown
+    if l := local(n)
+        return l.ty
+    if i := consts.get(n)
+        if gapped_consts.contains(i)
+            gap("a gapped constant")
+        return const_type(i)
+    if n == "self"
+        err_help(
+            "trait.method.1",
+            at,
+            "`self` is only available in methods declared with `self`",
+            "declare a method as `fn Type.name(self, ...)`",
+        )
+        return Ty.Unknown
+    # type.enum.3: a bare variant where the expected enum type is known.
+    if found := bare_variant(n, at, expect)
+        e := found.enum_index
+        v := found.variant
+        fields := prog.enums[e].variants[v].fields
+        if fields.len() > 0
+            shown := ["{f.name}: ..." for f in fields]
+            err_help(
+                "type.enum.6",
+                at,
+                "the variant `{n}` carries data",
+                "build it with `{n}({shown.join(", ")})`",
+            )
+            return Ty.Unknown
+        return enum_value(e, none, expect, at, n)
+    if variant_owners(n).len() > 0
+        return Ty.Unknown
+    if module_as_value(n, at)
+        return Ty.Unknown
+    if i := fns.get(n)
+        return fn_value(n, i, at)
+    if PRELUDE_FNS.contains(n)
+        unsupported(
+            at,
+            "using the built-in function `{n}` as a value is not supported by the bootstrap yet",
+        )
+        return Ty.Unknown
+    if d := types.get(n)
+        match d
+            DStruct => err_help(
+                "expr.name.1",
+                at,
+                "`{n}` is a type, not a value",
+                "build a value with `{n}(field: value, ...)`",
+            )
+            DEnum(e) =>
+                err_help(
+                    "expr.name.1",
+                    at,
+                    "`{n}` is a type, not a value",
+                    "use one of its variants, e.g. `{n}.{prog.enums[e].variants[0].name}`",
+                )
+        return Ty.Unknown
+    if traits.contains(n)
+        err_help(
+            "expr.name.1",
+            at,
+            "`{n}` is a trait, not a value",
+            "call its methods on a value, `x.method()`, or as `{n}.method(x)`",
+        )
+        return Ty.Unknown
+    if BUILTIN_TYPES.contains(n) or SPEC_TYPES_NOT_YET.contains(n)
+        err("expr.name.1", at, "`{n}` is a type, not a value")
+        return Ty.Unknown
+    unknown_name(n, at, none)
+    Ty.Unknown
+
+## `m` used as a value where `m` is a standard module (std.use.2).
+fn Checker.module_as_value(mut self, n str, at ast.Pos) bool
+    if std_module(n) == none
+        return false
+    err_help("std.use.2", at, "`{n}` is a module, not a value", "call one of its functions")
+    true
+
+## The type of constant `i`, typing it first if needed (mod.const.3).
+fn Checker.const_type(mut self, i int) Ty
+    if t := const_types[i]
+        return t
+    c := prog.consts[i]
+    if const_busy[i]
+        err_help(
+            "mod.const.3",
+            c.pos,
+            "the value of `{c.name}` depends on itself",
+            "constants can refer to other constants, but not in a cycle",
+        )
+        const_types[i] = Ty.Unknown
+        return Ty.Unknown
+    const_busy[i] = true
+    saved_locals := locals
+    saved_scope := scope
+    saved_self := self_ty
+    locals = []
+    scope = []
+    self_ty = none
+    t := expr(c.value, none, true)
+    locals = saved_locals
+    scope = saved_scope
+    self_ty = saved_self
+    const_busy[i] = false
+    if t == Ty.Unit
+        err("mod.const.2", expr_pos(c.value), "`{c.name}` would be a constant with no value")
+    if is_res(t)
+        err_help(
+            "ct.const.3",
+            expr_pos(c.value),
+            "`{c.name}` would hold a result that may fail; a constant can't hold a failure",
+            "supply a fallback with `else`: `NAME := parse(text) else 0`",
+        )
+    # ct.const.4: a constant's type holds no `ref` and no `unique` type.
+    if holds_ref(t, 0) or is_unique(t)
+        what := if holds_ref(t, 0) then "a `ref` cell" else "a `unique` value"
+        ct_const_4(
+            expr_pos(c.value),
+            "`{c.name}` would hold {what}, and a constant is an immutable value copied into the program",
+        )
+    out := const_types[i] else t
+    const_types[i] = out
+    out
+
+## ct.const.4, once per place.
+fn Checker.ct_const_4(mut self, at ast.Pos, message str)
+    for d in diags
+        if d.pos == at
+            return
+    err_help(
+        "ct.const.4",
+        at,
+        message,
+        "a constant is shared by the whole program; make the value inside a function",
+    )
+
+## Whether a value of type `t` can hold a `ref` cell: a `ref`, or a collection,
+## optional, result, struct or enum that holds one (own.ref.2, ct.const.4).
+@allow("expr.match.3") fn Checker.holds_ref(self, t Ty, depth int) bool
+    if depth > 6
+        return false
+    match t
+        RefOf(_) => true
+        ListOf(x) => holds_ref(x, depth + 1)
+        SetOf(x) => holds_ref(x, depth + 1)
+        Opt(x) => holds_ref(x, depth + 1)
+        Res(x, _) => holds_ref(x, depth + 1)
+        MapOf(k, v) => holds_ref(k, depth + 1) or holds_ref(v, depth + 1)
+        Struct(i, _) =>
+            for f in field_types[i]
+                if holds_ref(f, depth + 1)
+                    return true
+            false
+        Enum(i, _) =>
+            for vs in variant_types[i]
+                for f in vs
+                    if holds_ref(f, depth + 1)
+                        return true
+            false
+        _ => false
+
+## The type of a variant of enum `e` that carries no data. Its type
+## arguments are `explicit`, or come from the expected type (gen.infer.1).
+fn Checker.enum_value(mut self, e int, explicit List[Ty]?, expect Ty?, at ast.Pos, variant str) Ty
+    n := enum_params[e].len()
+    if n == 0
+        return Ty.Enum(e, [])
+    if a := explicit
+        return Ty.Enum(e, a)
+    if a := expected_args(Def.DEnum(e), expect)
+        return Ty.Enum(e, a)
+    en := prog.enums[e].name
+    err_help(
+        "gen.infer.1",
+        at,
+        "the type arguments of `{en}` aren't known here",
+        "write them, e.g. `{en}[int].{variant}`",
+    )
+    Ty.Enum(e, [Ty.Unknown for _ in 0..n])
+
+## The type arguments of `d` in the expected type, if that is (or wraps) an
+## instance of it.
+@allow("expr.match.3") fn Checker.expected_args(self, d Def, expect Ty?) List[Ty]?
+    t := expect?
+    match t
+        Struct(s, args) =>
+            match d
+                DStruct(x) => if x == s then args else none
+                DEnum => none
+        Enum(s, args) =>
+            match d
+                DEnum(x) => if x == s then args else none
+                DStruct => none
+        Opt(inner) => expected_args(d, inner)
+        Res(ok, errs) =>
+            if a := expected_args(d, ok)
+                return a
+            for x in errs_of(errs)
+                if a := expected_args(d, x)
+                    return a
+            none
+        Union(m) =>
+            for x in m
+                if a := expected_args(d, x)
+                    return a
+            none
+        _ => none
+
+## Bindings of `d`'s type parameters from the expected type, skipping
+## unknown ones.
+fn Checker.expected_binds(self, d Def, expect Ty?) List[Bind]
+    params := def_params(d)
+    args := expected_args(d, expect) else return []
+    mut out := List[Bind]()
+    for k in 0..params.len().min(args.len())
+        if not has_unknown(args[k])
+            out.push(Bind(param: params[k], ty: args[k]))
+    out
+
+## Enums whose variants may be written bare here (type.enum.3).
+@allow("expr.match.3") fn Checker.expected_enums(self, expect Ty?) List[int]
+    t := expect else return []
+    match t
+        Enum(e, _) => [e]
+        Opt(x) => expected_enums(x)
+        Union(m) => [enum_index_of(x) for x in m if enum_index_of(x) >= 0]
+        Res(ok, errs) =>
+            mut v := expected_enums(ok)
+            match errs
+                ErrSet(set) =>
+                    for x in set
+                        if enum_index_of(x) >= 0
+                            v.push(enum_index_of(x))
+                Inferred =>
+                    for e in 0..prog.enums.len()
+                        if prog.enums[e].is_error
+                            v.push(e)
+            v
+        _ => []
+
+@allow("expr.match.3") fn enum_index_of(t Ty) int
+    match t
+        Enum(e, _) => e
+        _ => -1
+
+## A variant of an enum.
+pub struct VariantRef
+    pub enum_index int
+    pub variant int
+
+fn Checker.variant_index(self, e int, n str) int?
+    vs := prog.enums[e].variants
+    for k in 0..vs.len()
+        if vs[k].name == n
+            return k
+    none
+
+## Resolve `n` as a bare variant (type.enum.3); reports when it needs
+## qualifying. `none` if it isn't one.
+fn Checker.bare_variant(mut self, n str, at ast.Pos, expect Ty?) VariantRef?
+    mut found := List[VariantRef]()
+    for e in expected_enums(expect)
+        if v := variant_index(e, n)
+            found.push(VariantRef(enum_index: e, variant: v))
+    if found.len() == 1
+        return found[0]
+    mut owners := List[str]()
+    if found.len() > 1
+        owners = ["{prog.enums[f.enum_index].name}.{n}" for f in found]
+    else
+        owners = variant_owners(n)
+    if owners.len() > 0
+        text := if found.len() > 1 then "`{n}` is a variant of more than one possible enum here" else "the type isn't known here, so the variant `{n}` needs its enum name"
+        err_help("type.enum.3", at, text, "write {list_names(owners).replace(" and ", " or ")}")
+    none
+
+fn Checker.variant_owners(self, n str) List[str]
+    mut out := List[str]()
+    for e in prog.enums
+        for v in e.variants
+            if v.name == n
+                out.push("{e.name}.{n}")
+                break
+    out
+
+## `none` needs a known optional type (type.opt.4).
+@allow("expr.match.3") fn Checker.none_lit(mut self, at ast.Pos, expect Ty?) Ty
+    if t := expect
+        match t
+            Opt => return t
+            Res(ok, _) =>
+                if is_opt(ok)
+                    return ok
+            Unknown => return Ty.Unknown
+            _ => return none_unknown(at)
+    none_unknown(at)
+
+fn Checker.none_unknown(mut self, at ast.Pos) Ty
+    err_help(
+        "type.opt.4",
+        at,
+        "the type of `none` isn't known here",
+        "use `none` where a `T?` is expected, e.g. as an argument or a return value",
+    )
+    Ty.Unknown
+
+## `todo`, a typed hole (expr.hole.1): it takes the expected type, or an
+## unknown one, and warns with what the gap needs.
+fn Checker.hole(mut self, at ast.Pos, expect Ty?) Ty
+    mut names := List[str]()
+    for l in locals
+        if l.ty == Ty.Unknown
+            names.push("`{l.name}` (type unknown)")
+        else
+            names.push("`{l.name} {ty_name(l.ty)}`")
+    names.sort()
+    in_scope := if names.len() == 0 then "nothing" else names.join(", ")
+    t := expect else Ty.Unknown
+    if t != Ty.Unknown
+        warn(
+            "expr.hole.1",
+            at,
+            "hole: expected {show(t)}; in scope: {in_scope}",
+            "replace `todo` with a value of type {show(t)}",
+        )
+        return t
+    warn(
+        "expr.hole.1",
+        at,
+        "hole: the expected type isn't known here; in scope: {in_scope}",
+        "replace `todo` with an expression",
+    )
+    Ty.Unknown
+
+## `e?` and `e? "context"` (err.prop.1-3, err.ctx.2).
+@allow("expr.match.3")
+fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
+    t := expr(inner, none, true)
+    if c := context
+        ct := expr(c, Ty.Str, true)
+        # err.prop.5: `opt? "context"` fails with `Absent` and the context.
+        absent := is_opt(t) and catching == 0 and is_inferred(fn_ret)
+        if not is_res(t) and t != Ty.Unknown and not absent
+            err("err.ctx.2", expr_pos(c), "only an error can carry context; this value can't fail")
+        elif not accepts(Ty.Str, ct)
+            mismatch("err.ctx.2", expr_pos(c), Ty.Str, ct)
+    # ct.const.3: `?` in a constant is reported with the constant.
+    if const_busy.contains(true)
+        match t
+            Res(ok, _) => return ok
+            Opt(v) => return v
+            _ => return t
+    match t
+        Opt(v) =>
+            if catching > 0
+                # err.prop.4: an enclosing `else` handles the absence.
+                caught += 1
+            elif not is_opt(fn_ret) and not absent_try(fn_ret)
+                err_help(
+                    "err.prop.2",
+                    at,
+                    "`?` on an optional only works in a function that returns an optional or infers its errors, or before an `else`",
+                    "add a fallback: `x?.y else d`, or leave: `x := value else return ...`",
+                )
+            v
+        Res(ok, errs) =>
+            errors := errs_of(errs)
+            match fn_ret
+                Res(_, want) =>
+                    missing := add_errors(want, errors)
+                    if missing.len() > 0
+                        names := [ty_name(m) for m in missing]
+                        mut hint := "add them to the return type (`T ! A | B`), use `!T` to infer them, or handle them with `else`"
+                        if r := failing_ret(missing)
+                            hint = "change the return type to `{r}`, use `!T` to infer it, or handle the error with `else`"
+                        err_help(
+                            "err.prop.3",
+                            at,
+                            "`?` passes on {list_names(names)}, which this function's error type doesn't include",
+                            hint,
+                        )
+                _ =>
+                    hint := if is_opt(fn_ret) then "this function returns an optional, which can't carry an error; handle the error with `else`, e.g. `x := ... else return none`" else "declare a return type with `! E` (e.g. `int ! E`, or `fn main() ! E`), or handle it with `else`"
+                    err_help(
+                        "err.prop.1",
+                        at,
+                        "`?` passes the error on, but this function can't fail",
+                        hint,
+                    )
+            ok
+        Unknown => Ty.Unknown
+        _ =>
+            err(
+                "err.prop.1",
+                at,
+                "`?` needs a value that can be absent or fail, but this is {show(t)}",
+            )
+            t
+
+## err.prop.5: in a function whose errors are inferred, `?` on an optional
+## adds the prelude's `Absent`. False when it doesn't apply.
+@allow("expr.match.3") fn Checker.absent_try(mut self, want Ty) bool
+    match want
+        Res(_, errs) =>
+            match errs
+                Inferred =>
+                    d := types.get("Absent") else return false
+                    match d
+                        DStruct(s) =>
+                            add_errors(errs, [Ty.Struct(s, [])])
+                            true
+                        DEnum => false
+                ErrSet => false
+        _ => false
+
+## ---- Operators ----
+
+## An integer literal `v` (negated when `neg`) typed as `k` by context
+## (type.num.13): it must fit.
+fn Checker.sized_literal(mut self, v str, neg bool, at ast.Pos, k str)
+    # The interpreter's fast path treats every such literal as special.
+    float_literals.add(pos_key(at))
+    if k == "f32"
+        return
+    n := v.to_int() else return
+    value := if neg then -n else n
+    mut lo := 0
+    mut hi := 0
+    if k == "i8"
+        lo = -128
+        hi = 127
+    elif k == "i16"
+        lo = -32768
+        hi = 32767
+    elif k == "i32"
+        lo = -2147483648
+        hi = 2147483647
+    elif k == "u8"
+        hi = 255
+    elif k == "u16"
+        hi = 65535
+    elif k == "u32"
+        hi = 4294967295
+    else
+        # u64: every non-negative `int` fits.
+        hi = 9223372036854775807
+    if value < lo or value > hi
+        max_text := if k == "u64" then "18446744073709551615" else "{hi}"
+        err_help(
+            "type.num.13",
+            at,
+            "`{value}` doesn't fit in `{k}`",
+            "`{k}` holds {lo} to {max_text}",
+        )
+
+## Whether `e` is an integer literal (or its negation) that takes the sized
+## type `k` from its other operand (type.num.13).
+@allow("expr.match.3") fn Checker.sized_operand(mut self, e ast.Expr, k str, neg bool) bool
+    match e
+        Int(v, at) =>
+            sized_literal(v, neg, at, k)
+            true
+        Unary(op, operand, _) =>
+            if op == ast.UnOp.Neg
+                return sized_operand(operand, k, true)
+            false
+        _ => false
+
+## Whether `e` is an integer literal or its negation, which can be a float
+## where one is expected; if so, it is recorded as one (type.num.10).
+@allow("expr.match.3") fn Checker.float_literal(mut self, e ast.Expr) bool
+    match e
+        Int(_, at) =>
+            float_literals.add(pos_key(at))
+            true
+        Unary(op, operand, _) => op == ast.UnOp.Neg and float_literal(operand)
+        _ => false
+
+fn is_signed(k str) bool
+    k == "i8" or k == "i16" or k == "i32"
+
+fn Checker.unary(mut self, op ast.UnOp, operand ast.Expr, at ast.Pos) Ty
+    if op == ast.UnOp.Spawn
+        return spawn_expr(operand, at)
+    neg := op == ast.UnOp.Neg
+    want := if neg then Ty.Int else Ty.Bool
+    t := expr(operand, want, true)
+    if reject_unhandled(t, expr_pos(operand))
+        return Ty.Unknown
+    # std.tensor.14: `-t` on a tensor is elementwise and keeps its type.
+    if neg and tensor_elem(t) != none
+        return t
+    if neg and t == Ty.Float
+        return Ty.Float
+    if neg
+        if k := num_name(t)
+            if not is_signed(k) and k != "f32"
+                err_help(
+                    "type.num.14",
+                    at,
+                    "unary `-` is not defined for `{k}`, which is unsigned",
+                    "negate a signed type, or subtract from zero with `wrapping_neg`",
+                )
+                return Ty.Unknown
+            return t
+    if accepts(want, t)
+        return want
+    if neg
+        err("trait.op.1", at, "unary `-` needs {show(want)}, found {show(t)}")
+    else
+        err("type.bool.1", at, "`not` needs {show(want)}, found {show(t)}")
+    Ty.Unknown
+
+@allow("expr.match.3") fn is_neg_int(e ast.Expr) bool
+    match e
+        Unary(op, operand, _) => op == ast.UnOp.Neg and is_int_literal(operand)
+        _ => false
+
+fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos) Ty
+    if op == ast.BinOp.And or op == ast.BinOp.Or
+        for side in [lhs, rhs]
+            t := expr(side, Ty.Bool, true)
+            if reject_unhandled(t, expr_pos(side))
+                continue
+            if not accepts(Ty.Bool, t)
+                err(
+                    "type.bool.1",
+                    expr_pos(side),
+                    "`{op_symbol(op)}` needs `bool` operands, found {show(t)}",
+                )
+        return Ty.Bool
+    # expr.cmp.1: the right operand's expected type is the left's.
+    mut lt := expr(lhs, none, true)
+    mut rt := expr(rhs, lt, true)
+    # type.num.10: `2 * x` with a float `x`.
+    if lt == Ty.Int and rt == Ty.Float and float_literal(lhs)
+        lt = Ty.Float
+    # std.tensor.10: `t * 2` and `2 * t` with a float tensor `t`.
+    if float_tensor_scalar(lt, rt, rhs)
+        rt = Ty.Float
+    elif float_tensor_scalar(rt, lt, lhs)
+        lt = Ty.Float
+    # type.num.13: `1 + x` with a sized `x`.
+    if lt == Ty.Int
+        if k := num_name(rt)
+            if sized_operand(lhs, k, false)
+                lt = rt
+    # expr.cmp.3: `xs.index_of(x) == -1` would always be false.
+    if (op == ast.BinOp.Eq or op == ast.BinOp.Ne) and lt == Ty.Opt(Ty.Int) and is_neg_int(rhs)
+        err_help(
+            "expr.cmp.3",
+            expr_pos(rhs),
+            "this compares an optional with a negative number, so it's never equal: absence is `none`",
+            "write `== none`, or bind it: `if i := ...`",
+        )
+    # err.use.1: the failure sits in an operand, so the fix goes after it.
+    if lt != Ty.Unknown and lt != Ty.Never and rt != Ty.Unknown and rt != Ty.Never
+        if reject_unhandled(lt, expr_pos(lhs)) or reject_unhandled(rt, expr_pos(rhs))
+            return Ty.Unknown
+    operator(op, lt, rt, at)
+
+## A `std.tensor` value.
+@allow("expr.match.3") fn Checker.is_tensor(self, t Ty) bool
+    match t
+        Struct(s, _) => prog.structs[s].name == "tensor.Tensor"
+        _ => false
+
+## Which types support which operators (type.num.5, type.str.3, trait.op.1,
+## trait.op.3, expr.cmp.1, trait.std.1-2).
+fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
+    sym := op_symbol(op)
+    arith := is_arithmetic(op)
+    fail := if arith then Ty.Unknown else Ty.Bool
+    if lt == Ty.Unknown or lt == Ty.Never or rt == Ty.Unknown or rt == Ty.Never
+        return fail
+    if reject_unhandled(lt, at) or reject_unhandled(rt, at)
+        return Ty.Unknown
+    if lt == Ty.Unit or rt == Ty.Unit
+        err("trait.op.1", at, "an operand of `{sym}` produces no value")
+        return Ty.Unknown
+    if t := tensor_operator(sym, arith, lt, rt, at)
+        return t
+    # expr.cmp.1: the right operand converts to the left's type.
+    if not same(lt, rt) and (arith or not accepts(lt, rt))
+        text := "`{sym}` needs operands of one type, found {show(lt)} and {show(rt)}"
+        if op == ast.BinOp.Add and (lt == Ty.Str or rt == Ty.Str)
+            err_help("trait.op.3", at, text, "build text with interpolation: \"\{a}\{b}\"")
+        elif lt == Ty.Str and op == ast.BinOp.Rem
+            err_help(
+                "trait.op.3",
+                at,
+                text,
+                "AIL has no `%` formatting; interpolate the values: \"n is \{n}\"",
+            )
+        elif lt == Ty.Str and op == ast.BinOp.Mul
+            err_help("trait.op.3", at, text, "repeat a string with `s.repeat(n)`")
+        else
+            err("trait.op.3", at, text)
+        return fail
+    if arith
+        if lt == Ty.Int
+            return Ty.Int
+        if k := num_name(lt)
+            if not (k == "f32" and op == ast.BinOp.Rem)
+                return lt
+        if lt == Ty.Float and op != ast.BinOp.Rem
+            return Ty.Float
+        # type.bytes.6: `a + b` joins two `bytes`.
+        if lt == Ty.Bytes and op == ast.BinOp.Add
+            return Ty.Bytes
+        if lt == Ty.Str and op == ast.BinOp.Add
+            err_help(
+                "trait.op.1",
+                at,
+                "`+` doesn't join strings",
+                "build text with interpolation: \"\{a}\{b}\"",
+            )
+        else
+            err("trait.op.1", at, "`{sym}` is not defined for {show(lt)}")
+        return Ty.Unknown
+    ordering := op == ast.BinOp.Lt or op == ast.BinOp.Le or op == ast.BinOp.Gt or op == ast.BinOp.Ge
+    tr := if ordering then std_ord else std_eq
+    if not implements(lt, tr)
+        trait_word := if ordering then "Ord" else "Eq"
+        text := "`{sym}` needs a type that implements `{trait_word}`, and {show(lt)} doesn't"
+        if h := how_to_implement(lt, tr)
+            err_help("expr.cmp.1", at, text, h)
+        else
+            err("expr.cmp.1", at, text)
+    Ty.Bool
+
+## ---- `if` and `match` ----
+
+## Whether the branches of an `if` or the arms of a `match` agree on a type
+## when the value is used (expr.if.4).
+pub struct Agree
+    pub expect Ty?
+    pub need bool
+    pub first Ty?
+    pub failed bool
+    pub part str
+    pub construct str
+    ## The `none` branches, typed once the other branches are (type.opt.10).
+    pub none_at List[ast.Pos]
+
+fn new_agree(expect Ty?, need bool, part str, construct str) Agree
+    Agree(
+        expect: expect,
+        need: need,
+        first: no_ty(),
+        failed: false,
+        part: part,
+        construct: construct,
+        none_at: [],
+    )
+
+fn Checker.agree_block(mut self, mut a Agree, body List[ast.Stmt], at ast.Pos)
+    if a.need and a.expect == none and body.len() == 1
+        if p := bare_none(body[0])
+            a.none_at.push(p)
+            return
+    mut hint := a.expect
+    if hint == none
+        hint = a.first
+    t := block(body, hint, a.need)
+    if not a.need
+        return
+    mut where := at
+    if s := body.last()
+        where = stmt_pos(s)
+    # With a known expected type, each branch must fit it.
+    if want := a.expect
+        if t != Ty.Unit
+            if not accepts(want, t)
+                a.failed = true
+                if not reject_unhandled(t, where)
+                    err(
+                        "expr.if.4",
+                        where,
+                        "this {a.part} is {show(t)}, but {show(want)} is expected",
+                    )
+            elif t != Ty.Never
+                a.first = want
+            return
+    if t == Ty.Never
+        return
+    if t == Ty.Unknown
+        a.failed = true
+        return
+    if t == Ty.Unit
+        a.failed = true
+        err(
+            "expr.if.4",
+            where,
+            "this {a.part} produces no value, but the {a.construct} is used as a value",
+        )
+        return
+    f := a.first else
+        a.first = t
+        return
+    if not same(t, f)
+        a.failed = true
+        err("expr.if.4", where, "this {a.part} is {show(t)}, but the first {a.part} is {show(f)}")
+
+## The position of `none` when `s` is just that.
+@allow("expr.match.3") fn bare_none(s ast.Stmt) ast.Pos?
+    match s
+        Eval(e) =>
+            match e
+                NoneLit(p) => return p
+                _ => return none
+        _ => return none
+    none
+
+fn agree_result(a Agree) Ty
+    if not a.need
+        return Ty.Unit
+    if f := a.first
+        return f
+    if a.failed then Ty.Unknown else Ty.Never
+
+@allow("expr.match.3")
+fn Checker.if_expr(
+    mut self,
+    branches List[ast.Branch],
+    els List[ast.Stmt]?,
+    else_err ast.Ident?,
+    at ast.Pos,
+    expect Ty?,
+    need bool,
+) Ty
+    if need and els == none
+        err_help(
+            "expr.if.4",
+            at,
+            "this `if` is used as a value, so it needs an `else`",
+            "add an `else` branch",
+        )
+    mut agree := new_agree(expect, need, "branch", "`if`")
+    mut binds_failure := false
+    mut errors := List[Ty]()
+    mut have_errors := false
+    for b in branches
+        mark := locals.len()
+        match b.cond
+            Test(c) => condition(c)
+            Bind(n, npos, value) =>
+                vt := expr(value, none, true)
+                mut ty := vt
+                have_errors = false
+                match vt
+                    Opt(x) => ty = x
+                    Res(x, e) =>
+                        ty = x
+                        errors = errs_of(e)
+                        have_errors = true
+                        binds_failure = true
+                    Unknown => ty = Ty.Unknown
+                    _ =>
+                        hint := never_absent_help(value) else "compare it instead, e.g. `if x == ...`"
+                        err_help(
+                            "expr.if.5",
+                            expr_pos(value),
+                            "`if {n} := ...` needs a value that can be absent (`T?`) or fail (`T ! E`), but this is {show(vt)}",
+                            hint,
+                        )
+                if declare(n, npos)
+                    locals.push(Local(
+                        name: n,
+                        ty: ty,
+                        mutable: false,
+                        how: LocalKind.Binding,
+                        decl: none,
+                    ))
+        agree_block(mut agree, b.body, at)
+        end_scope(mark)
+    # err.use.2: a failure is never ignored silently.
+    if binds_failure and els == none
+        err_help(
+            "err.use.2",
+            at,
+            "this `if` ignores the failure; an `if` on a result that can fail needs an `else`",
+            "add `else err` and handle the error",
+        )
+    if body := els
+        mark := locals.len()
+        if nm := else_err
+            if have_errors and branches.len() == 1
+                t := if errors.len() == 1 then errors[0] else Ty.Union(errors)
+                if declare(nm.name, nm.pos)
+                    locals.push(Local(
+                        name: nm.name,
+                        ty: t,
+                        mutable: false,
+                        how: LocalKind.Binding,
+                        decl: none,
+                    ))
+            else
+                err_help(
+                    "expr.if.6",
+                    nm.pos,
+                    "`else err` needs an `if` with one condition that binds a result that can fail",
+                    "remove the name, or write `if x := ...` on a `T ! E` value with no `elif`",
+                )
+        agree_block(mut agree, body, at)
+        end_scope(mark)
+    if need and els == none
+        return Ty.Unknown
+    t := agree_result(agree)
+    # type.opt.10: a bare `none` branch takes `T?` from the other branches.
+    if agree.none_at.len() == 0 or is_opt(t) or t == Ty.Unknown
+        return t
+    if t == Ty.Never
+        for p in agree.none_at
+            err_help(
+                "type.opt.4",
+                p,
+                "the type of `none` isn't known here",
+                "use `none` where a `T?` is expected, e.g. as an argument or a return value",
+            )
+        return Ty.Unknown
+    Ty.Opt(t)
+
+## The names a pattern binds, with their types.
+pub struct Binding
+    pub name str
+    pub pos ast.Pos
+    pub ty Ty
+
+## What a `match` has covered so far.
+pub struct Coverage
+    pub variants List[bool]
+    pub literals List[ast.Literal]
+    pub wildcard bool
+
+fn pattern_pos(p ast.Pattern) ast.Pos
+    match p
+        Wildcard(at) => at
+        Literal(_, at) => at
+        Alt(_, at) => at
+        Variant(_, _, _, at) => at
+        Range(_, _, _, at) => at
+
+@allow("expr.match.3")
+fn Checker.match_expr(
+    mut self,
+    scrutinee ast.Expr,
+    arms List[ast.Arm],
+    at ast.Pos,
+    expect Ty?,
+    need bool,
+) Ty
+    st := expr(scrutinee, none, true)
+    # An enum, or a type with literal patterns (expr.match.7).
+    mut enum_index := -1
+    mut enum_args := List[Ty]()
+    mut literal := false
+    match st
+        Enum(e, args) =>
+            enum_index = e
+            enum_args = args
+        Int => literal = true
+        Char => literal = true
+        Str => literal = true
+        Bool => literal = true
+        Num(k) => literal = k != "f32"
+        Unknown => literal = false
+        Res => reject_unhandled(st, expr_pos(scrutinee))
+        Union => unsupported(
+            expr_pos(scrutinee),
+            "matching on a set of error types is not designed yet (OQ-029); match on one error type",
+        )
+        _ =>
+            err_help(
+                "expr.match.4",
+                expr_pos(scrutinee),
+                "a `match` works on an enum, `int`, `char`, `str` or `bool`, not {show(st)}",
+                "use `if` and `==` instead",
+            )
+    if num_name(st) == "f32"
+        err_help(
+            "expr.match.4",
+            expr_pos(scrutinee),
+            "a `match` works on an enum, `int`, `char`, `str` or `bool`, not {show(st)}",
+            "use `if` and `==` instead",
+        )
+    nvariants := if enum_index >= 0 then prog.enums[enum_index].variants.len() else 0
+    mut cov := Coverage(variants: [false for _ in 0..nvariants], literals: [], wildcard: false)
+    mut agree := new_agree(expect, need, "arm", "`match`")
+    for arm in arms
+        # expr.match.11: a guarded arm covers nothing, so what the pattern
+        # marks as covered is undone once it's checked.
+        kept := cov
+        first_diag := diags.len()
+        mut bindings := List[Binding]()
+        if enum_index >= 0
+            bindings = pattern(enum_index, enum_args, arm.pat, mut cov)
+        elif literal
+            literal_pattern(st, arm.pat, mut cov)
+        else
+            # The scrutinee was already reported: bind names quietly.
+            match arm.pat
+                Variant(_, _, names, _) =>
+                    for nm in names else []
+                        bindings.push(Binding(name: nm.name, pos: nm.pos, ty: Ty.Unknown))
+                Wildcard | Literal | Alt | Range => bindings = []
+        if arm.guard != none
+            cov = kept
+            # `_ if c` hides nothing, so the `_` warning doesn't apply.
+            mut tail := diags[first_diag..]
+            diags = diags[..first_diag]
+            diags.extend([d for d in tail if d.rule != "expr.match.3"])
+        mark := locals.len()
+        for b in bindings
+            if b.name != "_" and declare(b.name, b.pos)
+                locals.push(Local(
+                    name: b.name,
+                    ty: b.ty,
+                    mutable: false,
+                    how: LocalKind.Binding,
+                    decl: none,
+                ))
+        if g := arm.guard
+            condition(g)
+        agree_block(mut agree, arm.body, at)
+        end_scope(mark)
+    if enum_index >= 0 and not cov.wildcard
+        vs := prog.enums[enum_index].variants
+        missing := [vs[k].name for k in 0..vs.len() if not cov.variants[k]]
+        if missing.len() > 0
+            err_help(
+                "expr.match.2",
+                at,
+                "this `match` doesn't cover {list_names(missing)}",
+                "add an arm for each, or a `_` arm",
+            )
+    if literal and not cov.wildcard
+        both_bools := st == Ty.Bool
+            and cov.literals.contains(ast.Literal.BoolLit(true))
+            and cov.literals.contains(ast.Literal.BoolLit(false))
+        if not both_bools
+            hint := if st
+                == Ty.Bool then "add the missing `true` or `false` arm" else "add a `_` arm for the other values"
+            err_help(
+                "expr.match.2",
+                at,
+                "this `match` on {show(st)} doesn't cover every value",
+                hint,
+            )
+    agree_result(agree)
+
+## Check a pattern on a value of type `t` with literal patterns
+## (expr.match.5, expr.match.7-8).
+fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
+    match pat
+        Wildcard(at) =>
+            # `true` and `false` cover a `bool` (expr.match.7).
+            bools := t == Ty.Bool
+                and cov.literals.contains(ast.Literal.BoolLit(true))
+                and cov.literals.contains(ast.Literal.BoolLit(false))
+            if cov.wildcard or bools
+                err("expr.match.5", at, "this arm can never match; earlier arms cover every case")
+            cov.wildcard = true
+        Alt(alts, _) =>
+            for a in alts
+                match a
+                    Wildcard(p) => err(
+                        "expr.match.8",
+                        p,
+                        "`_` can't be one of several alternatives; it already matches everything",
+                    )
+                    Literal | Alt | Variant | Range => literal_pattern(t, a, mut cov)
+        Literal(lit, at) =>
+            mut lt := Ty.Int
+            match lit
+                IntLit => lt = if num_name(t) != none and num_name(t) != "f32" then t else Ty.Int
+                CharLit => lt = Ty.Char
+                StrLit => lt = Ty.Str
+                BoolLit => lt = Ty.Bool
+            if lt != t
+                text := "this pattern is {show(lt)}, but the value matched is {show(t)}"
+                if lt == Ty.Str and t == Ty.Char
+                    err_help(
+                        "expr.match.7",
+                        at,
+                        text,
+                        "a character pattern is written in single quotes: `'a'`",
+                    )
+                elif lt == Ty.Char and t == Ty.Str
+                    err_help(
+                        "expr.match.7",
+                        at,
+                        text,
+                        "a string pattern is written in double quotes: `\"a\"`",
+                    )
+                else
+                    err("expr.match.7", at, text)
+            elif cov.wildcard or cov.literals.contains(lit)
+                err(
+                    "expr.match.5",
+                    at,
+                    "this arm can never match; an earlier arm covers this value",
+                )
+            else
+                cov.literals.push(lit)
+        Variant(_, n, _, at) =>
+            err(
+                "expr.match.4",
+                at,
+                "`{n}` is a variant pattern, but the value matched is {show(t)}",
+            )
+        # expr.match.12: a range covers some values, never all, so it marks
+        # nothing as seen.
+        Range(lo, hi, inclusive, at) => range_pattern(t, lo, hi, inclusive, at, cov.wildcard)
+
+fn binds_names(names List[ast.Ident]?) bool
+    for nm in names else []
+        if nm.name != "_"
+            return true
+    false
+
+## Check one pattern against the scrutinee's enum and type arguments
+## (expr.match.3-6, expr.match.8); the names it binds, with their types.
+fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Coverage) List[Binding]
+    decl := prog.enums[e]
+    match pat
+        # expr.match.8: alternatives bind no names.
+        Alt(alts, _) =>
+            for a in alts
+                match a
+                    Variant(_, _, names, p) =>
+                        if binds_names(names)
+                            err_help(
+                                "expr.match.8",
+                                p,
+                                "a pattern with alternatives can't bind names",
+                                "give this variant an arm of its own, or use `_` for its fields",
+                            )
+                        else
+                            pattern(e, args, a, mut cov)
+                    Wildcard(p) => err(
+                        "expr.match.8",
+                        p,
+                        "`_` can't be one of several alternatives; it already matches everything",
+                    )
+                    Literal | Alt | Range => pattern(e, args, a, mut cov)
+            []
+        Literal(_, at) =>
+            err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
+            []
+        Range(_, _, _, at) =>
+            err("expr.match.4", at, "`{decl.name}` is an enum; match it with its variants")
+            []
+        Wildcard(at) =>
+            if cov.wildcard or not cov.variants.contains(false)
+                err("expr.match.5", at, "this arm can never match; earlier arms cover every case")
+                return []
+            uncovered := [
+                decl.variants[k].name
+                for k in 0..decl.variants.len() if not cov.variants[k]
+            ]
+            if not allow_wildcards
+                warn(
+                    "expr.match.3",
+                    at,
+                    "`_` covers {list_names(uncovered)}, so a variant added later won't be flagged here",
+                    "list the variants instead of `_`, or mark the function `@allow(\"expr.match.3\")`",
+                )
+            cov.wildcard = true
+            []
+        Variant(qualifier, n, bindings, at) =>
+            if q := qualifier
+                if q != decl.name
+                    err("expr.match.4", at, "`{q}.{n}` isn't a variant of `{decl.name}`")
+                    return []
+            v := variant_index(e, n) else
+                names := [x.name for x in decl.variants]
+                mut d := new_diag("expr.name.1", at, "`{decl.name}` has no variant `{n}`")
+                if s := suggest(n, names)
+                    d = d.did_you_mean(s)
+                diags.push(d)
+                return []
+            if cov.wildcard or cov.variants[v]
+                err("expr.match.5", at, "this arm can never match; `{n}` is already covered")
+            else
+                cov.variants[v] = true
+            # expr.match.6: one binding (or `_`) per field, in order;
+            # expr.match.10: a bare name matches any fields and binds none.
+            fields := decl.variants[v].fields
+            given := bindings else return []
+            if fields.len() != given.len()
+                shown := [f.name for f in fields]
+                hint := if fields.len()
+                    == 0 then "write `{n}` without parentheses" else "write `{n}({shown.join(", ")})`, using `_` for fields you don't need"
+                err_help(
+                    "expr.match.6",
+                    at,
+                    "`{n}` has {count(fields.len(), "field")}, but the pattern gives {given.len()}",
+                    hint,
+                )
+                return []
+            binds := binds_of(enum_params[e], args)
+            ts := variant_types[e][v]
+            [
+                Binding(name: given[k].name, pos: given[k].pos, ty: subst(ts[k], binds))
+                for k in 0..given.len()
+            ]
+
+## An unknown name; `nargs` is the argument count when it was called.
+fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
+    if n == "old" and nargs != none
+        err_help(
+            "contract.ens.3",
+            at,
+            "`old(...)` is only available in an `ensures` condition",
+            "name the value in the body before it changes, or move the condition to an `ensures` line",
+        )
+        return
+    if n == "result" and nargs == none and in_requires
+        err_help(
+            "contract.ens.2",
+            at,
+            "`result` is only available in an `ensures` condition",
+            "a `requires` condition can read only the parameters; move this check to an `ensures` line",
+        )
+        return
+    mut candidates := [l.name for l in locals]
+    for f in fns.keys()
+        candidates.push(f)
+    for f in PRELUDE_FNS
+        candidates.push(f)
+    for t in types.keys()
+        candidates.push(t)
+    mut d := new_diag("expr.name.1", at, "unknown name `{n}`")
+    if s := suggest(n, candidates)
+        d = d.did_you_mean(s)
+    else
+        d = d.with_help("no variable, function or type named `{n}` is in scope here; declare it first, e.g. `{n} := value`")
+    diags.push(d)
+
+## expr.match.12: `lo..hi` or `lo..=hi` on a value of type `t`.
+fn Checker.range_pattern(
+    mut self,
+    t Ty,
+    lo ast.Literal,
+    hi ast.Literal,
+    inclusive bool,
+    at ast.Pos,
+    wildcard bool,
+)
+    ends := range_ends(lo, hi) else
+        err(
+            "expr.match.12",
+            at,
+            "the two ends of a range pattern must both be integers or both characters",
+        )
+        return
+    ok := ends.kind == t or (ends.kind == Ty.Int and num_name(t) != none and num_name(t) != "f32")
+    if not ok
+        err(
+            "expr.match.12",
+            at,
+            "this range is of {show(ends.kind)}, but the value matched is {show(t)}",
+        )
+    elif ends.lo > ends.hi or (ends.lo == ends.hi and not inclusive)
+        dots := if inclusive then "..=" else ".."
+        err_help(
+            "expr.match.12",
+            at,
+            "this range pattern is empty: the start is not below the end of `{dots}`",
+            "write the smaller bound first",
+        )
+    elif wildcard
+        err("expr.match.5", at, "this arm can never match; earlier arms cover every case")
+
+struct RangeEnds
+    kind Ty
+    lo int
+    hi int
+
+## The type and the two ends of a range pattern, as numbers; `none` when the
+## ends aren't both integers or both characters.
+@allow("expr.match.3") fn range_ends(lo ast.Literal, hi ast.Literal) RangeEnds?
+    match lo
+        IntLit(a) =>
+            match hi
+                IntLit(b) => return RangeEnds(
+                    kind: Ty.Int,
+                    lo: a.to_int() else 0,
+                    hi: b.to_int() else 0,
+                )
+                _ => return none
+        CharLit(a) =>
+            match hi
+                CharLit(b) => return RangeEnds(kind: Ty.Char, lo: char_code(a), hi: char_code(b))
+                _ => return none
+        _ => return none
+    none
+
+fn char_code(s str) int
+    cs := s.chars()
+    if cs.len() == 0 then 0 else cs[0].code()

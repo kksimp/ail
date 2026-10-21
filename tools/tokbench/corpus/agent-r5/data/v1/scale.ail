@@ -1,0 +1,6 @@
+## Scales a value by two.
+fn scale(x int) int
+    x * 2
+
+fn clamp(x int, hi int) int
+    if x > hi then hi else x

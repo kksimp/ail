@@ -1,3 +1,4 @@
+//! Certificate causes: std.tls.2 (certificate checks).
 //! X.509 certificates for the TLS client (RFC 5280; ADR 0368): parsing,
 //! signature checks, chain building to the platform's roots, and host name
 //! matching. Verification only, for server authentication.

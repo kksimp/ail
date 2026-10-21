@@ -1,0 +1,9 @@
+fn find(xs List[int], x int) int?
+    for y in xs
+        if y == x
+            return y
+    none
+
+fn main()
+    r := find([1, 2], 2)
+    print(r != none)

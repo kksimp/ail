@@ -1,0 +1,20 @@
+
+fn main() !
+    here := path.dir(env.program())
+    ail := proc.which("ail") else "{here}/../../../../../ail"
+    data := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data"
+    for name in ["scale.ail", "report.ail"]
+        r := proc.run(ail, [
+            "diff",
+            "--json",
+            "{data}/v1/{name}",
+            "{data}/v2/{name}",
+        ])? "diffing {name}"
+        for line in r.out.lines()
+            d := parse_json(line) else continue
+            summary := d.flag("summary", false)
+            if not summary
+                op := d.text("op", "")
+                id := d.text("id", "")
+                touched := (d.arr("lines") else []).len()
+                print("{op} {id} lines {touched}")

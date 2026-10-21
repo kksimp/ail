@@ -1,0 +1,7 @@
+## Adds two numbers after scaling them.
+pub fn combine(a int, b int) int
+    scale(a) + scale(b)
+
+## Doubles a number.
+pub fn scale(x int) int
+    x * 2

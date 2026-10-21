@@ -28,3 +28,8 @@ fn fetch(url str) Data ! FetchError
     resp := http.get(url)?
     json.decode(resp.body)?
 ```
+
+## Rejected alternatives
+
+- Selective imports (`use a.b.c.name`): 38.0 tokens against 35.6 for the qualified form (about 6% more). Rejected on token usage, and on AI understanding, since `http.get` shows where `get` comes from.
+- Wildcard imports: rejected by the decision (no wildcard imports), though the record gives no reason. (reconstructed 2026-10-21: the reason is implied by the qualified-access rule.)

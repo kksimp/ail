@@ -1,0 +1,15 @@
+## Days left until each date in the file, counted from a fixed "today".
+## A date already past reports how many days late it is.
+##   ./ail run examples/days_left.ail
+
+use std.time.date
+
+fn main() !
+    today := date.parse_date("2026-10-21")?
+    text := fs.read_text("{path.dir(env.program())}/agent-data/dates.txt")? "reading dates"
+    for line in text.lines()
+        left := date.parse_date(line)?.since(today)
+        if left < 0
+            print("{line}: {-left} days late")
+        else
+            print("{line}: {left} days left")

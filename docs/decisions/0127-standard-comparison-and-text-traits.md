@@ -23,7 +23,7 @@ tokens, against 57.2 for a hand-written `cmp`. The rest **ties** on tokens
 
 ## Decision
 
-```ail
+```ail excerpt
 enum Ordering
     Less
     Equal
@@ -50,7 +50,7 @@ trait ToStr
    lexicographically, which is Unicode code point order. Lists of an `Ord`
    type are ordered lexicographically.
 
-```ail
+```ail fragment
 struct Version
     major int
     minor int
