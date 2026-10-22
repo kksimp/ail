@@ -1,0 +1,175 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The DNS client for Linux (std.net.5): an `A` query over UDP to the
+## servers of `/etc/resolv.conf` (RFC 1035), used by `net_resolve` after the
+## literal, `localhost` and `/etc/hosts` checks. IPv4 only, no search list,
+## no TCP fallback; a CNAME chain is followed inside one answer. macOS asks
+## `getaddrinfo` instead (net.ail).
+
+DNS_CONF := "/etc/resolv.conf"
+DNS_TIMEOUT_MS := 2000
+DNS_TRIES := 2
+
+## The query for `host`'s `A` record with id `id` at `q`: its length, or 0 when
+## the name has a label over 63 bytes or the whole is over 255.
+fn dns_query(host str, id int, q int) int
+    n := load64(str_addr(host))
+    if n == 0 or n > 253
+        return 0
+    p := str_addr(host) + 16
+    store8(q, id.shr(8).bit_and(255))
+    store8(q + 1, id.bit_and(255))
+    store8(q + 2, 1)
+    store8(q + 3, 0)
+    store8(q + 4, 0)
+    store8(q + 5, 1)
+    for i in 6..12
+        store8(q + i, 0)
+    mut o := 12
+    mut start := 0
+    mut i := 0
+    while i <= n
+        if i == n or load8(p + i) == 46
+            len := i - start
+            if len == 0 and i == n and n > 0 and load8(p + n - 1) == 46
+                break
+            if len == 0 or len > 63
+                return 0
+            store8(q + o, len)
+            copy_bytes(q + o + 1, p + start, len)
+            o += len + 1
+            start = i + 1
+        i += 1
+    store8(q + o, 0)
+    store8(q + o + 1, 0)
+    store8(q + o + 2, 1)
+    store8(q + o + 3, 0)
+    store8(q + o + 4, 1)
+    o + 5
+
+## Skip the name at offset `o` of the `n`-byte message at `m`: the offset after
+## it, or -1.
+fn dns_skip(m int, n int, o0 int) int
+    mut o := o0
+    while o < n
+        c := load8(m + o)
+        if c == 0
+            return o + 1
+        if c >= 192
+            return if o + 2 <= n then o + 2 else -1
+        if c > 63
+            return -1
+        o += c + 1
+    -1
+
+## The first IPv4 address in the answer, or -1.
+fn dns_answer(m int, n int, id int) int
+    if n < 12 or load8(m) * 256 + load8(m + 1) != id
+        return -1
+    if load8(m + 2).bit_and(128) == 0 or load8(m + 3).bit_and(15) != 0
+        return -1
+    qd := load8(m + 4) * 256 + load8(m + 5)
+    an := load8(m + 6) * 256 + load8(m + 7)
+    mut o := 12
+    for k in 0..qd
+        o = dns_skip(m, n, o)
+        if o < 0 or o + 4 > n
+            return -1
+        o += 4
+    for k in 0..an
+        o = dns_skip(m, n, o)
+        if o < 0 or o + 10 > n
+            return -1
+        ty := load8(m + o) * 256 + load8(m + o + 1)
+        cl := load8(m + o + 2) * 256 + load8(m + o + 3)
+        rl := load8(m + o + 8) * 256 + load8(m + o + 9)
+        o += 10
+        if o + rl > n
+            return -1
+        if ty == 1 and cl == 1 and rl == 4
+            return load8(m + o)
+                .bit_or(load8(m + o + 1).shl(8))
+                .bit_or(load8(m + o + 2).shl(16))
+                .bit_or(load8(m + o + 3).shl(24))
+        o += rl
+    -1
+
+## Ask the server at `ns` (an IPv4 address) for `host`: its address, or -1.
+fn dns_ask(ns int, host str) int
+    fd := syscall(os_pick(41, 198, 97), 2, 2, 0, 0, 0, 0)
+    if fd < 0
+        return -1
+    syscall(os_pick(72, 25, 92), fd, 4, 2048, 0, 0, 0)
+    sa := net_sockaddr(ns, 53)
+    c := net_sys_connect(fd, sa)
+    if c < 0 and c != -115
+        os_close(fd)
+        return -1
+    q := alloc_raw(320, KIND_BYTES)
+    id := (time_now_ms() * 40503 + ns).bit_and(65535)
+    qn := dns_query(host, id, q)
+    ans := alloc_raw(1536, KIND_BYTES)
+    mut ip := -1
+    if qn > 0
+        mut tries := 0
+        while tries < DNS_TRIES and ip < 0
+            tries += 1
+            if net_wait(fd, 4, DNS_TIMEOUT_MS) <= 0
+                break
+            if net_sys_send(fd, q, qn) < 0
+                break
+            mut waited := 0
+            while waited < DNS_TIMEOUT_MS and ip < 0
+                t0 := time_now_ms()
+                if net_wait(fd, 1, DNS_TIMEOUT_MS - waited) <= 0
+                    break
+                r := os_read(fd, ans, 1536)
+                if r > 0
+                    ip = dns_answer(ans, r, id)
+                    if ip < 0 and load8(ans + 3).bit_and(15) != 0 and r >= 12
+                        tries = DNS_TRIES
+                        break
+                waited += time_now_ms() - t0 + 1
+    os_close(fd)
+    ip
+
+## The IPv4 address of `host` from the name servers of `/etc/resolv.conf`
+## (the first three), or -1.
+fn net_dns(host str) int
+    if load64(str_addr(host)) == 0
+        return -1
+    path := os_cstr(OS_PATH_A, DNS_CONF)
+    fd := os_open(path, 0, 0)
+    if fd < 0
+        return -1
+    buf := alloc_raw(8192, KIND_BYTES)
+    mut n := 0
+    while n < 8192
+        r := os_read(fd, buf + n, 8192 - n)
+        if r <= 0
+            break
+        n += r
+    os_close(fd)
+    mut asked := 0
+    mut i := 0
+    while i < n and asked < 3
+        mut j := i
+        while j < n and load8(buf + j) != 10
+            j += 1
+        # `nameserver ADDRESS`
+        if j - i > 11 and os_str_from(buf + i, 10) == "nameserver" and (load8(buf + i + 10) == 32 or load8(buf + i + 10) == 9)
+            mut a := i + 11
+            while a < j and (load8(buf + a) == 32 or load8(buf + a) == 9)
+                a += 1
+            mut b := a
+            while b < j and load8(buf + b) != 32 and load8(buf + b) != 9 and load8(buf + b) != 13
+                b += 1
+            ns := net_ipv4(os_str_from(buf + a, b - a))
+            if ns >= 0
+                asked += 1
+                ip := dns_ask(ns, host)
+                if ip >= 0
+                    return ip
+        i = j + 1
+    -1
