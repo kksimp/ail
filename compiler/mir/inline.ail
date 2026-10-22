@@ -33,12 +33,14 @@ pub fn inline_module(m Module) Module
                 at := first_call(f.blocks[b], leaves, f.name)
                 if at >= 0
                     callee := m.funcs[by_name[f.blocks[b].insts[at].name]]
-                    f = inline_call(f, b, at, callee, mut out.sites)
+                    inline_call(mut f, b, at, callee, mut out.sites)
                     budget -= 1
                     changed = true
                     break
         if budget < INLINE_BUDGET
-            f = simplify(fold(simplify(f)))
+            simplify_in(mut f)
+            fold_in(mut f)
+            simplify_in(mut f)
         out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(forward_loads(merge_blocks(f))) else fold_prim_addresses(
             fold_addresses(forward_loads(fill_loops(
                 kept_lengths(
@@ -82,8 +84,7 @@ fn first_call(blk Block, leaves Set[str], self_name str) int
 ## each `return` jumps to a new block, holding the rest of `b`, whose
 ## parameter is the call's value. The callee's checks are copied with a
 ## link to the call, a frame of the stack a trap prints (trace.frame.2).
-fn inline_call(f Func, b int, at int, callee Func, mut sites List[Site]) Func
-    mut g := f
+fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     nv := g.vals.len()
     nb := g.blocks.len()
     rest := nb + callee.blocks.len()
@@ -100,7 +101,7 @@ fn inline_call(f Func, b int, at int, callee Func, mut sites List[Site]) Func
             op: "",
             line: call_line(call.imm),
             col: call_col(call.imm),
-            func: f.name,
+            func: g.name,
             file: call_file(call.imm),
             from: -1,
         ))
@@ -142,13 +143,17 @@ fn inline_call(f Func, b int, at int, callee Func, mut sites List[Site]) Func
             nt.args = [[a + nv for a in edge] for edge in t.args]
         g.blocks.push(Block(params: [p + nv for p in blk.params], insts: insts, term: nt))
     g.blocks.push(cont)
-    g
 
 ## Join each block to the one it jumps to when it is that block's only
 ## predecessor: the jump's arguments replace the parameters, renamed once at
 ## the end.
 pub fn merge_blocks(f Func) Func
     mut g := f
+    merge_blocks_in(mut g)
+    g
+
+## `merge_blocks` in place.
+pub fn merge_blocks_in(mut g Func)
     n := g.blocks.len()
     mut preds := [0 for _ in 0..n]
     for blk in g.blocks
@@ -173,17 +178,17 @@ pub fn merge_blocks(f Func) Func
             g.blocks[s].term = unreachable_term()
             merged = true
     if not merged
-        return g
+        return
     # A parameter's argument may itself be a merged parameter.
     for v in 0..repl.len()
         mut r := repl[v]
         while repl[r] != r
             r = repl[r]
         repl[v] = r
-    simplify(rename(g, repl))
+    rename(mut g, repl)
+    simplify_in(mut g)
 
-fn rename(f Func, repl List[int]) Func
-    mut g := f
+fn rename(mut g Func, repl List[int])
     for b in 0..g.blocks.len()
         for k in 0..g.blocks[b].insts.len()
             g.blocks[b].insts[k].args = [repl[a] for a in g.blocks[b].insts[k].args]
@@ -194,7 +199,6 @@ fn rename(f Func, repl List[int]) Func
             t.value = repl[t.value]
         t.args = [[repl[a] for a in edge] for edge in t.args]
         g.blocks[b].term = t
-    g
 
 fn kept_lengths(f Func, on bool) Func
     if on then keep_lengths(f) else f
