@@ -1,8 +1,16 @@
 # pdf: image
-tests: image.image.decodes_a_group_4_row, image.image.fax_tables_are_prefix_free, image.image.reads_samples
+tests: image.image.decodes_a_group_4_row, image.image.dims_reads_each_format_header, image.image.fax_tables_are_prefix_free, image.image.gif_decodes_the_first_frame, image.image.jpeg_decodes_baseline_progressive_subsampled_and_restarts, image.image.png_decodes_every_colour_type_depth_and_interlace, image.image.reads_samples, image.image.unknown_data_is_refused
 
 ## image
 ```
+pub struct image.Rgba  ## Pixels row by row, `px[y * width + x]` as `0xAARRGGBB` (alpha 255 is opaque).
+    pub width int
+    pub height int
+    pub px List[int]
+    pub fn image.Rgba.new(width int, height int, color int) image.Rgba
+    pub fn image.Rgba.bytes(self) List[int]  ## The image as bytes `R, G, B, A` per pixel, for a window's bitmap surface.
+pub fn image.decode(data List[int]) image.Rgba ! image.ImageError [fail]  ## The image `data` (PNG, JPEG or GIF by its first bytes) as colour.
+pub fn image.dims(data List[int]) List[int]  ## The `[width, height]` of a PNG, JPEG or GIF read from its header alone, or
 pub struct image.Font  ## A parsed font: table offsets and the numbers every lookup needs.
     data List[int]
     tables Map[str, int]
@@ -26,6 +34,7 @@ pub struct image.Canvas  ## A coverage canvas: each pixel's ink from 0 to 1, y d
     pub fn image.Canvas.glyph(mut self, f image.Font, gid int, x float, y float, px float) [mutates]  ## Fills glyph `gid` with its origin at pixel (`x`, `y`) (the baseline),
     pub fn image.Canvas.text(mut self, f image.Font, text str, x float, y float, px float, track float) float [mutates]  ## Draws `text` from (`x`, `y`) on the baseline and returns the pen's x
     pub fn image.Canvas.gray(self) image.Gray  ## The ink so far as a grey bitmap: 0 where covered, 255 where bare.
+pub fn image.gif(d List[int]) image.Rgba ! image.ImageError [fail]  ## Decodes the first frame of a GIF to colour.
 pub struct image.Gray
     pub width int
     pub height int
@@ -43,7 +52,9 @@ pub fn image.from_samples(data List[int], w int, h int, bpc int, comps int) imag
 pub fn image.from_indexed(data List[int], w int, h int, bpc int, palette List[int], base int) image.Gray ! image.ImageError [fail]  ## Samples through a palette of `base` components each (8.6.6.3).
 pub fn image.ccitt(data List[int], cols int, rows int, k int, align bool, black1 bool) image.Gray ! image.ImageError [fail]  ## Decodes CCITT fax data (8.4 CCITTFaxDecode): `k` < 0 is Group 4, 0 is
 pub fn image.ccitt_rows(data List[int], cols int, rows int, k int, align bool) List[List[int]] ! image.ImageError [fail]  ## Each row's changing elements: where the colour flips, starting white,
-pub fn image.jpeg(d List[int]) image.Gray ! image.ImageError [fail]  ## Decodes a baseline (or extended sequential, Huffman) JPEG to grey: the
+pub fn image.jpeg(d List[int]) image.Gray ! image.ImageError [fail]  ## Decodes a baseline, extended sequential or progressive Huffman JPEG to
+pub fn image.jpeg_rgb(d List[int]) image.Rgba ! image.ImageError [fail]  ## Decodes a JPEG to colour. Three components are YCbCr unless an Adobe
+pub fn image.png(d List[int]) image.Rgba ! image.ImageError [fail]  ## Decodes a PNG to colour.
 ```
 
-trimmed to fit 2000 tokens (~974); dropped: private items
+trimmed to fit 2000 tokens (~1362); dropped: private items

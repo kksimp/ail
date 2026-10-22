@@ -41,6 +41,16 @@ ChaCha20-Poly1305 and X25519 (slices 1-2a); HKDF is slice 2b.
    a HelloRetryRequest with a cookie is answered as in the Rust client (checked by replaying a group retry from a modified build against `openssl s_server`; the cookie echo itself has no live server to test against); no `close_notify` on
    close; the roots are cached in global slot 42 after the first handshake; macOS reads `/etc/ssl/cert.pem` and does not run `security`.
 
+6. **AES-GCM and SHA-384 landed (item 183):** `tls_aes.ail` is a bit-sliced,
+   constant-time AES-128/256 with GCM (no table indexed by a secret; GHASH
+   under masks), and `tls_kdf.ail` takes the hash length so the key schedule
+   runs over SHA-256 or SHA-384. The client offers ChaCha20 first, then
+   AES-128-GCM and AES-256-GCM, as the Rust client does. About 6 MB/s over
+   `https` on the AES path. Vectors: the 32 `aesgcm` and 16 `sha384` lines of
+   the Rust client's `crosscheck.txt`, plus `tools/native-tls/vectors384.txt`
+   (HMAC and HKDF over SHA-384, made with Python's `hmac`); `https-check.sh`
+   runs each suite against `openssl s_server`.
+
 ## Rejected alternatives
 
 - **All three suites at once:** about 400 lines of AES-GCM and SHA-384 for

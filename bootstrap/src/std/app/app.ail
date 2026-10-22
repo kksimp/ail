@@ -25,6 +25,10 @@ pub enum Op
     Stroke(x1 float, y1 float, x2 float, y2 float, color int, width float)
     ## An image from a URL or file path, scaled to the rectangle.
     Pic(x float, y float, w float, h float, src str)
+    ## A bitmap of `pw` by `ph` pixels scaled to the rectangle. `data` is its
+    ## `R, G, B, A` bytes in standard base64; the host keeps the image under
+    ## `id`, so an empty `data` draws the image already sent under that `id`.
+    Bitmap(x float, y float, w float, h float, id str, pw int, ph int, data str)
     ## Limits later steps to a rectangle, until the matching `Unclip`.
     Clip(x float, y float, w float, h float)
     Unclip
@@ -104,6 +108,17 @@ impl ToJson for Op
                     member("w", num(w)),
                     member("h", num(h)),
                     member("src", txt(src)),
+                ])
+            Bitmap(x, y, w, h, id, pw, ph, data) =>
+                tagged("Bitmap", [
+                    member("x", num(x)),
+                    member("y", num(y)),
+                    member("w", num(w)),
+                    member("h", num(h)),
+                    member("id", txt(id)),
+                    member("pw", Json.Num(pw.to_float())),
+                    member("ph", Json.Num(ph.to_float())),
+                    member("data", txt(data)),
                 ])
             Clip(x, y, w, h) =>
                 tagged("Clip", [
@@ -224,6 +239,10 @@ pub fn draw_text(x float, y float, s str, fg int) Op
 pub fn draw_rect(x float, y float, w float, h float, color int) Op
     Fill(x: x, y: y, w: w, h: h, color: color)
 
+## `R, G, B, A` bytes (each 0..=255) as the `data` of a `Bitmap`.
+pub fn bitmap_data(rgba List[int]) str
+    bytes.from_list([v.to_u8() for v in rgba]).base64()
+
 ## An event of `kind` with every other field zero or empty.
 pub fn event(kind str) Event
     Event(
@@ -320,6 +339,7 @@ fn op_text(op Op) str
         Fill(x, y, w, h, color) => "fill {x},{y} {w}x{h} {color.to_hex()}"
         Stroke(x1, y1, x2, y2, color, width) => "stroke {x1},{y1} {x2},{y2} {width}"
         Pic(x, y, w, h, src) => "pic {x},{y} {w}x{h} {src}"
+        Bitmap(x, y, w, h, id, pw, ph, _) => "bitmap {x},{y} {w}x{h} {id} {pw}x{ph}"
         Clip(x, y, w, h) => "clip {x},{y} {w}x{h}"
         Unclip => "unclip"
 

@@ -1,0 +1,24 @@
+use std.app
+
+struct Pic
+    n int
+
+impl app.App for Pic
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        data := if n == 0 then app.bitmap_data([255, 0, 0, 255, 0, 255, 0, 128]) else ""
+        app.canvas("c", 0.0, 0.0, [
+            app.Op.Bitmap(x: 1.0, y: 2.0, w: 8.0, h: 4.0, id: "red", pw: 2, ph: 1, data: data),
+        ])
+
+    fn title(self) str
+        "Pic"
+
+fn main()
+    mut p := Pic(n: 0)
+    print(app.outline(p.view()))
+    print(app.frame(p))
+    p.update(app.event("key"))
+    print(app.frame(p))

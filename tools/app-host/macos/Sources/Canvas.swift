@@ -86,6 +86,14 @@ final class CanvasView: NSView {
                     NSColor.quaternaryLabelColor.setFill()
                     r.fill()
                 }
+            case let .bitmap(x, y, w, h, id):
+                let r = NSRect(x: x, y: y, width: w, height: h)
+                if let img = Bitmaps.image(id) {
+                    img.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                } else {
+                    NSColor.quaternaryLabelColor.setFill()
+                    r.fill()
+                }
             case let .clip(x, y, w, h):
                 g.saveGState()
                 g.clip(to: CGRect(x: x, y: y, width: w, height: h))
