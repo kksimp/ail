@@ -105,6 +105,23 @@ fn tlsprim_call(op str, args str) str
             return "tamper accepted"
         store8(out, load8(out).bit_xor(1))
         return tlsprim_hex(out, n + 16)
+    if op == "aesgcm"
+        n := f[3][1]
+        klen := f[0][1]
+        ak := alloc_raw(24 + 64 * 15, KIND_BYTES)
+        aes_setup(ak, f[0][0], klen)
+        out := alloc_raw(n + 16, KIND_BYTES)
+        aes_gcm_seal(ak, f[1][0], f[2][0], f[2][1], f[3][0], n, out)
+        back := alloc_raw(n + 16, KIND_BYTES)
+        if aes_gcm_open(ak, f[1][0], f[2][0], f[2][1], out, n + 16, back) != 0
+            return "open failed"
+        if not tls_ct_eq(back, f[3][0], n)
+            return "open differs"
+        store8(out, load8(out).bit_xor(1))
+        if aes_gcm_open(ak, f[1][0], f[2][0], f[2][1], out, n + 16, back) == 0
+            return "tamper accepted"
+        store8(out, load8(out).bit_xor(1))
+        return tlsprim_hex(out, n + 16)
     if op == "x25519"
         out := alloc_raw(32, KIND_BYTES)
         x25519_raw(out, f[0][0], f[1][0])
@@ -123,6 +140,21 @@ fn tlsprim_call(op str, args str) str
         kdf_extract(f[0][0], f[0][1], f[1][0], f[1][1], prk)
         out := alloc_raw(len + 8, KIND_BYTES)
         kdf_expand(prk, f[2][0], f[2][1], len, out)
+        return tlsprim_hex(out, len)
+    if op == "sha384" or op == "sha512"
+        out := alloc_raw(64, KIND_BYTES)
+        hash_sha512_raw(f[0][0], f[0][1], out, op == "sha512")
+        return tlsprim_hex(out, if op == "sha512" then 64 else 48)
+    if op == "hmac384"
+        out := alloc_raw(48, KIND_BYTES)
+        kdh_hmac(48, f[0][0], f[0][1], f[1][0], f[1][1], out)
+        return tlsprim_hex(out, 48)
+    if op == "hkdf384"
+        len := load8(f[3][0]) * 256 + load8(f[3][0] + 1)
+        prk := alloc_raw(48, KIND_BYTES)
+        kdh_extract(48, f[0][0], f[0][1], f[1][0], f[1][1], prk)
+        out := alloc_raw(len + 8, KIND_BYTES)
+        kdh_expand(48, prk, f[2][0], f[2][1], len, out)
         return tlsprim_hex(out, len)
     if op == "rfc8448"
         # RFC 8448 section 3: the early secret, then its `derived` secret.

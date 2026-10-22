@@ -32,7 +32,7 @@ fn main()
     print("status {r.status} {r.body.len()} {r.body.starts_with("<HTML>")}")
 P
 check() { # name server-cert server-key cafile host
-  openssl s_server -accept "$port" -cert "$2" -key "$3" -www -ciphersuites TLS_CHACHA20_POLY1305_SHA256 \
+  openssl s_server -accept "$port" -cert "$2" -key "$3" -www -ciphersuites "${suite:-TLS_CHACHA20_POLY1305_SHA256}" \
     -tls1_3 > "$tmp/server.log" 2>&1 &
   srv=$!
   sleep 1
@@ -55,6 +55,8 @@ if [ -n "$qemu" ]; then ./ail build "$tmp/get.ail" --target aarch64-linux -o "$t
 check "EC leaf under a CA" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" localhost
 check "RSA leaf, self-signed root" "$tmp/rsa.pem" "$tmp/rsa.key" "$tmp/rsa.pem" localhost
 check "IP address in the SAN" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" 127.0.0.1
+suite=TLS_AES_128_GCM_SHA256 check "AES-128-GCM-SHA256" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" localhost
+suite=TLS_AES_256_GCM_SHA384 check "AES-256-GCM-SHA384" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" localhost
 check "wrong host name" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" 127.0.0.2
 check "unknown CA" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/rsa.pem" localhost
 check "bad SSL_CERT_FILE" "$tmp/leaf.pem" "$tmp/leaf.key" /etc/hostname localhost

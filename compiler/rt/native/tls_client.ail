@@ -14,28 +14,32 @@
 TS_RKEY := 0
 TS_RIV := 32
 TS_RSEC := 48
-TS_WKEY := 80
-TS_WIV := 112
-TS_WSEC := 128
-TS_RSEQ := 160
-TS_WSEQ := 168
-TS_RON := 176
-TS_WON := 184
-TS_PLAIN := 192
-TS_PLEN := 200
-TS_PPOS := 208
-TS_CLOSED := 216
-TS_MSG := 224
-TS_HS := 232
-TS_HSN := 240
-TS_REC := 248
-TS_TYPE := 256
-TS_TR := 264
-TS_TRN := 272
-TS_PBUF := 280
-TS_MLEN := 288
-TS_ANCHOR := 296
-TS_BYTES := 304
+TS_WKEY := 96
+TS_WIV := 128
+TS_WSEC := 144
+TS_RSEQ := 192
+TS_WSEQ := 200
+TS_RON := 208
+TS_WON := 216
+TS_PLAIN := 224
+TS_PLEN := 232
+TS_PPOS := 240
+TS_CLOSED := 248
+TS_MSG := 256
+TS_HS := 264
+TS_HSN := 272
+TS_REC := 280
+TS_TYPE := 288
+TS_TR := 296
+TS_TRN := 304
+TS_PBUF := 312
+TS_MLEN := 320
+TS_ANCHOR := 328
+TS_SUITE := 336
+TS_HL := 344
+TS_RAK := 352
+TS_WAK := 360
+TS_BYTES := 368
 
 # Global slot 42: the cache of trusted roots (tc_cached_roots).
 TLS_ROOTS := 42
@@ -211,10 +215,17 @@ fn tc_set_keys(st int, read bool, secret int)
     sec := st + (if read then TS_RSEC else TS_WSEC)
     key := st + (if read then TS_RKEY else TS_WKEY)
     iv := st + (if read then TS_RIV else TS_WIV)
+    hl := load64(st + TS_HL)
+    suite := load64(st + TS_SUITE)
+    klen := if suite == 4865 then 16 else 32
     if sec != secret
-        copy_bytes(sec, secret, 32)
-    kdf_expand_label(sec, "key", 0, 0, 32, key)
-    kdf_expand_label(sec, "iv", 0, 0, 12, iv)
+        copy_bytes(sec, secret, hl)
+    kdh_expand_label(hl, sec, "key", 0, 0, klen, key)
+    kdh_expand_label(hl, sec, "iv", 0, 0, 12, iv)
+    if suite != 4867
+        ak := alloc_raw(24 + 64 * 15, KIND_BYTES)
+        aes_setup(ak, key, klen)
+        store64(st + (if read then TS_RAK else TS_WAK), ak)
     store64(st + (if read then TS_RSEQ else TS_WSEQ), 0)
     store64(st + (if read then TS_RON else TS_WON), 1)
 
@@ -225,6 +236,18 @@ fn tc_nonce(iv int, seq int, out int)
     for i in 0..8
         at := out + 4 + i
         store8(at, load8(at).bit_xor(seq.shr(8 * (7 - i)).bit_and(255)))
+
+## Open `len` sealed bytes at `rec` (header at `hdr`) with the read keys.
+fn tc_open(st int, nonce int, hdr int, rec int, len int, out int) int
+    if load64(st + TS_SUITE) == 4867
+        return chacha_open(st + TS_RKEY, nonce, hdr, 5, rec, len, out)
+    aes_gcm_open(load64(st + TS_RAK), nonce, hdr, 5, rec, len, out)
+
+fn tc_seal(st int, nonce int, hdr int, pt int, n int, out int)
+    if load64(st + TS_SUITE) == 4867
+        chacha_seal(st + TS_WKEY, nonce, hdr, 5, pt, n, out)
+    else
+        aes_gcm_seal(load64(st + TS_WAK), nonce, hdr, 5, pt, n, out)
 
 ## Read one record: its type in `TS_TYPE`, its plaintext at `TS_PLAIN` for
 ## `TS_PLEN` bytes. 0, 1 (the stream ended between records), or an error.
@@ -279,7 +302,7 @@ fn tc_read_record(o int) int
     seq := load64(st + TS_RSEQ)
     tc_nonce(st + TS_RIV, seq, nonce)
     pbuf := load64(st + TS_PBUF)
-    if chacha_open(st + TS_RKEY, nonce, hdr, 5, rec, len, pbuf) != 0
+    if tc_open(st, nonce, hdr, rec, len, pbuf) != 0
         return tc_err(st, 0, "a record from the server failed authentication (bad_record_mac)")
     store64(st + TS_RSEQ, seq + 1)
     mut end := len - 16
@@ -328,7 +351,7 @@ fn tc_write_record(o int, ty int, p int, n int) int
             nonce := alloc_raw(16, KIND_BYTES)
             seq := load64(st + TS_WSEQ)
             tc_nonce(st + TS_WIV, seq, nonce)
-            chacha_seal(st + TS_WKEY, nonce, out, 5, inner, k + 1, out + 5)
+            tc_seal(st, nonce, out, inner, k + 1, out + 5)
             store64(st + TS_WSEQ, seq + 1)
             r := tc_raw_write(o, out, k + 22)
             if r < 0
@@ -394,7 +417,7 @@ fn tc_tr_add(st int, p int, n int) int
     0
 
 fn tc_tr_hash(st int, out int)
-    hash_sha256_raw(load64(st + TS_TR), load64(st + TS_TRN), out)
+    kdh_hash(load64(st + TS_HL), load64(st + TS_TR), load64(st + TS_TRN), out)
 
 ## `expect`: the message at `TS_HS` must have type `ty`.
 fn tc_expect(st int, ty int, what str) int
@@ -407,10 +430,10 @@ fn tc_expect(st int, ty int, what str) int
         "the server sent handshake message {got} where {what} belongs (unexpected_message)",
     )
 
-fn tc_finished(base int, th int, out int)
-    fk := alloc_raw(32, KIND_BYTES)
-    kdf_expand_label(base, "finished", 0, 0, 32, fk)
-    kdf_hmac(fk, 32, th, 32, out)
+fn tc_finished(hl int, base int, th int, out int)
+    fk := alloc_raw(hl, KIND_BYTES)
+    kdh_expand_label(hl, base, "finished", 0, 0, hl, fk)
+    kdh_hmac(hl, fk, hl, th, hl, out)
 
 fn tc_random(p int, n int) int
     path := os_cstr(OS_PATH_A, "/dev/urandom")
@@ -504,8 +527,10 @@ fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien in
     b = tc_w8(ch, b, 32)
     copy_bytes(ch + b, rnd + 32, 32)
     b += 32
-    b = tc_w16(ch, b, 2)
+    b = tc_w16(ch, b, 6)
     b = tc_w16(ch, b, 4867)
+    b = tc_w16(ch, b, 4865)
+    b = tc_w16(ch, b, 4866)
     b = tc_w8(ch, b, 1)
     b = tc_w8(ch, b, 0)
     ext := b
@@ -670,12 +695,14 @@ fn tc_server_hello(st int, p int, n int, sid int, share int, ck int) int
         return tc_err(st, 0, "the server didn't echo the session id (illegal_parameter)")
     if comp != 0
         return tc_err(st, 0, "the server chose compression (illegal_parameter)")
-    if suite != 4867
+    if suite != 4867 and suite != 4865 and suite != 4866
         return tc_err(
             st,
             0,
             "the server chose cipher suite {tc_hex(suite, 4)}, which wasn't offered (illegal_parameter)",
         )
+    store64(st + TS_SUITE, suite)
+    store64(st + TS_HL, if suite == 4866 then 48 else 32)
     if retry
         return 1
     if not have_share
@@ -760,14 +787,16 @@ fn tc_connect(o int, host str) int
                 0,
                 "the server's HelloRetryRequest asked for nothing (illegal_parameter)",
             )
-        th1 := alloc_raw(40, KIND_BYTES)
+        first := load64(st + TS_SUITE)
+        hl := load64(st + TS_HL)
+        th1 := alloc_raw(64, KIND_BYTES)
         tc_tr_hash(st, th1 + 4)
         store8(th1, 254)
         store8(th1 + 1, 0)
         store8(th1 + 2, 0)
-        store8(th1 + 3, 32)
+        store8(th1 + 3, hl)
         store64(st + TS_TRN, 0)
-        e = tc_tr_add(st, th1, 36)
+        e = tc_tr_add(st, th1, 4 + hl)
         if e != 0
             return e
         e = tc_tr_add(st, hs, load64(st + TS_MLEN))
@@ -793,6 +822,12 @@ fn tc_connect(o int, host str) int
             return e
         if e == 1
             return tc_err(st, 0, "the server sent a second HelloRetryRequest (unexpected_message)")
+        if load64(st + TS_SUITE) != first
+            return tc_err(
+                st,
+                0,
+                "the server changed cipher suite after HelloRetryRequest (illegal_parameter)",
+            )
     e = tc_tr_add(st, hs, load64(st + TS_MLEN))
     if e != 0
         return e
@@ -812,24 +847,25 @@ fn tc_connect(o int, host str) int
             "the server's handshake message spanned a key change (unexpected_message)",
         )
     # The key schedule (RFC 8446 section 7.1).
-    sec := alloc_raw(256, KIND_BYTES)
-    zeros := sec + 224
-    for i in 0..4
+    hl := load64(st + TS_HL)
+    sec := alloc_raw(512, KIND_BYTES)
+    zeros := sec + 448
+    for i in 0..8
         store64(zeros + 8 * i, 0)
-    eh := sec + 192
-    hash_sha256_raw(zeros, 0, eh)
+    eh := sec + 320
+    kdh_hash(hl, zeros, 0, eh)
     early := sec
-    kdf_extract(zeros, 0, zeros, 32, early)
-    derived := sec + 32
-    kdf_derive_secret(early, "derived", eh, derived)
-    hsec := sec + 64
-    kdf_extract(derived, 32, shared, 32, hsec)
-    th := alloc_raw(32, KIND_BYTES)
+    kdh_extract(hl, zeros, 0, zeros, hl, early)
+    derived := sec + 64
+    kdh_derive_secret(hl, early, "derived", eh, derived)
+    hsec := sec + 128
+    kdh_extract(hl, derived, hl, shared, 32, hsec)
+    th := alloc_raw(64, KIND_BYTES)
     tc_tr_hash(st, th)
-    c_hs := sec + 96
-    s_hs := sec + 128
-    kdf_derive_secret(hsec, "c hs traffic", th, c_hs)
-    kdf_derive_secret(hsec, "s hs traffic", th, s_hs)
+    c_hs := sec + 192
+    s_hs := sec + 256
+    kdh_derive_secret(hl, hsec, "c hs traffic", th, c_hs)
+    kdh_derive_secret(hl, hsec, "s hs traffic", th, s_hs)
     tc_set_keys(st, true, s_hs)
 
     e = tc_msg(o, true)
@@ -924,12 +960,13 @@ fn tc_connect(o int, host str) int
             0,
             "the server signed with scheme {tc_hex(scheme, 4)}, which wasn't offered (illegal_parameter)",
         )
-    signed := alloc_raw(160, KIND_BYTES)
+    signed := alloc_raw(192, KIND_BYTES)
     for i in 0..64
         store8(signed + i, 32)
     copy_bytes(signed + 64, str_addr("TLS 1.3, server CertificateVerify") + 16, 33)
     store8(signed + 97, 0)
     tc_tr_hash(st, signed + 98)
+    signedn := 98 + hl
     roots := tc_cached_roots(st)
     if load64(st + TS_MSG) != 0
         return TC_ERR - 1
@@ -945,7 +982,7 @@ fn tc_connect(o int, host str) int
                 1,
                 "the server signed with scheme {tc_hex(scheme, 4)}, which doesn't match its certificate's key",
             )
-    if not x_verify(leaf, alg, signed, 130, sig, sl)
+    if not x_verify(leaf, alg, signed, signedn, sig, sl)
         return tc_err(
             st,
             1,
@@ -964,9 +1001,9 @@ fn tc_connect(o int, host str) int
         return e
     m = load64(st + TS_MLEN)
     tc_tr_hash(st, th)
-    want := alloc_raw(32, KIND_BYTES)
-    tc_finished(s_hs, th, want)
-    if m != 36 or not tls_ct_eq(hs + 4, want, 32)
+    want := alloc_raw(64, KIND_BYTES)
+    tc_finished(hl, s_hs, th, want)
+    if m != 4 + hl or not tls_ct_eq(hs + 4, want, hl)
         return tc_err(st, 0, "the server's Finished didn't verify (decrypt_error)")
     e = tc_tr_add(st, hs, m)
     if e != 0
@@ -979,14 +1016,14 @@ fn tc_connect(o int, host str) int
         )
     tc_drop(st)
     tc_tr_hash(st, th)
-    derived2 := sec + 160
-    kdf_derive_secret(hsec, "derived", eh, derived2)
-    master := alloc_raw(32, KIND_BYTES)
-    kdf_extract(derived2, 32, zeros, 32, master)
-    c_ap := alloc_raw(32, KIND_BYTES)
-    s_ap := alloc_raw(32, KIND_BYTES)
-    kdf_derive_secret(master, "c ap traffic", th, c_ap)
-    kdf_derive_secret(master, "s ap traffic", th, s_ap)
+    derived2 := sec + 384
+    kdh_derive_secret(hl, hsec, "derived", eh, derived2)
+    master := alloc_raw(64, KIND_BYTES)
+    kdh_extract(hl, derived2, hl, zeros, hl, master)
+    c_ap := alloc_raw(64, KIND_BYTES)
+    s_ap := alloc_raw(64, KIND_BYTES)
+    kdh_derive_secret(hl, master, "c ap traffic", th, c_ap)
+    kdh_derive_secret(hl, master, "s ap traffic", th, s_ap)
 
     # Our flight: change_cipher_spec for middleboxes, then Finished.
     ccs := alloc_raw(8, KIND_BYTES)
@@ -1017,12 +1054,12 @@ fn tc_connect(o int, host str) int
         if e != 0
             return e
     tc_tr_hash(st, th)
-    fin := alloc_raw(48, KIND_BYTES)
+    fin := alloc_raw(64, KIND_BYTES)
     store8(fin, 20)
     tc_w16(fin, 1, 0)
-    store8(fin + 3, 32)
-    tc_finished(c_hs, th, fin + 4)
-    w = tc_write_record(o, 22, fin, 36)
+    store8(fin + 3, hl)
+    tc_finished(hl, c_hs, th, fin + 4)
+    w = tc_write_record(o, 22, fin, 4 + hl)
     if w < 0
         return w
     tc_set_keys(st, true, s_ap)
@@ -1106,8 +1143,9 @@ fn tc_post(o int) int
             if len != 1 or load8(hs + 4) > 1
                 return tc_err(st, 0, "the server sent a malformed KeyUpdate (decode_error)")
             asked := load8(hs + 4) == 1
-            nx := alloc_raw(32, KIND_BYTES)
-            kdf_expand_label(st + TS_RSEC, "traffic upd", 0, 0, 32, nx)
+            hl := load64(st + TS_HL)
+            nx := alloc_raw(64, KIND_BYTES)
+            kdh_expand_label(hl, st + TS_RSEC, "traffic upd", 0, 0, hl, nx)
             tc_set_keys(st, true, nx)
             if asked
                 ku := alloc_raw(8, KIND_BYTES)
@@ -1119,7 +1157,7 @@ fn tc_post(o int) int
                 w := tc_write_record(o, 22, ku, 5)
                 if w < 0
                     return w
-                kdf_expand_label(st + TS_WSEC, "traffic upd", 0, 0, 32, nx)
+                kdh_expand_label(hl, st + TS_WSEC, "traffic upd", 0, 0, hl, nx)
                 tc_set_keys(st, false, nx)
         elif ty != 4
             return tc_err(
