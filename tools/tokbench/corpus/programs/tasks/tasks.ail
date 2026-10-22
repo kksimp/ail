@@ -1,3 +1,4 @@
+
 MAX_HOURS := 3.0
 
 struct Todo

@@ -1,3 +1,4 @@
+
 fn main() !
     dir := env.args().first() else "{path.dir(env.program())}/agent-data"
     text := fs.read_text("{dir}/records.txt")? "reading records"

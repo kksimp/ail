@@ -1,3 +1,4 @@
+
 fn load(url str) !str
     r := net.get(url) else err
         print("offline ({err.kind}), using the local copy")

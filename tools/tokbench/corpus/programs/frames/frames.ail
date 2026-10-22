@@ -1,3 +1,4 @@
+
 fn main()
     wire := b"\x05hello\x03abc\x00\x02hi"
     mut at := 0
