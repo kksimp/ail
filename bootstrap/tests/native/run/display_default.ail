@@ -1,0 +1,13 @@
+enum Color
+    Red
+    Rgb(r int, g int)
+
+struct P
+    x int
+    name str
+
+fn main()
+    print(Color.Red)
+    print(Color.Rgb(r: 1, g: 2))
+    print(P(x: 1, name: "a"))
+    print("{P(x: 2, name: "b")} and {Color.Red}")

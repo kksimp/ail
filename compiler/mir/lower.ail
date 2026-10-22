@@ -102,6 +102,8 @@ struct Lower
     borrowed Set[str]
     ## The generated `copy.T` functions asked for, by name.
     copy_tys Map[str, Ty]
+    ## `any T` implementations and dispatchers (ADR 0616).
+    traits Traits
     ## `problems.len()` when the current function began.
     fn_problems int
     ## Set when the function used something already reported elsewhere (a
@@ -251,6 +253,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
+        traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
         file: 0,
@@ -299,6 +302,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         l.declare_errors(srcs[k].prog)
         l.declare_struct_names(srcs[k].prog)
         l.declare_enum_names(srcs[k].prog)
+        l.declare_traits(srcs[k].prog)
         l.quiet_lazy(k, before)
     l.declare_prelude_enums()
     for k in 0..srcs.len()
@@ -326,6 +330,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     l.enter_file(0)
     l.gen_unchecked()
     l.enter_file(0)
+    l.gen_dispatch()
     l.gen_copies()
     l.gen_enum_eqs()
     l.gen_init_enums()
@@ -376,6 +381,7 @@ RT_ROOTS := [
     "rt.list_reserve",
     "rt.list_rows_min",
     "rt.list_new_for",
+    "rt.fill",
 ]
 
 ## Lower the runtime functions the program reaches, and those they reach
@@ -396,7 +402,7 @@ fn Lower.lower_rt(mut self, r ast.Program)
         while scanned < funcs.len()
             for blk in funcs[scanned].blocks
                 for i in blk.insts
-                    if i.op == "call" and decls.contains(i.name)
+                    if (i.op == "call" or i.op == "fnaddr") and decls.contains(i.name)
                         queue.push(i.name)
                     # Code the generator calls or takes the address of: the
                     # thread entry points (native-abi.md §10, §11).
@@ -535,7 +541,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "str" => Ty.Str
                 "bytes" => Ty.Bytes
                 "char" => Ty.Char
-                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" => Ty.Sized(name)
+                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "f32" => scalar_ty(name)
                 "List" =>
                     if args.len() != 1
                         return none
@@ -556,6 +562,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                     if e == Ty.Int or e == Ty.Bool
                         return Ty.Atomic(e)
                     none
+                "Channel" => chan_type_of(args)
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
@@ -571,6 +578,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         if k := enum_key(name)
                             return Ty.Enum(k)
                     none
+        AnyTrait(name) => any_type(name)
         TupleType(elems) => tuple_type_of(elems)
         FnType(fparams, fret) =>
             mut ps := List[Ty]()
@@ -610,7 +618,7 @@ fn is_shared_opt(t Ty) bool
 
 fn is_number(t Ty) bool
     match t
-        Int | Float | Bool | Char => true
+        Int | Float | F32 | Bool | Char | Sized(_) => true
         _ => false
 
 # ---- building blocks and values ----
@@ -1051,13 +1059,13 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
-            if mutable
-                problem(pos, "`for mut` isn't in the native subset yet")
-                return
             if is_par
+                if mutable
+                    problem(pos, "`for mut` isn't in the native subset yet")
+                    return
                 lower_par_for(var, iter, body, pos)
                 return
-            lower_for(var, iter, body)
+            lower_for(var, iter, body, mutable, pos)
         Break(pos) =>
             if loops.len() == 0
                 problem(pos, "`break` outside a loop")
@@ -1226,7 +1234,14 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
 
 ## `for x in a..b`, `a..=b` or a list (expr.loop.2-3). The index is a hidden
 ## variable; `continue` goes to the latch, which steps it.
-fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
+fn Lower.lower_for(
+    mut self,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    mutable bool,
+    fpos ast.Pos,
+)
     scopes.push(Map[str, str]())
     mut lo := -1
     mut hi := -1
@@ -1245,6 +1260,9 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
             inclusive = incl
         _ =>
             l0 := lower_value(iter, none) else return
+            if chan_elem(l0.ty) != none
+                lower_chan_for(var, l0, body, expr_pos(iter))
+                return
             if is_pair_loop(var, l0, body)
                 scopes.pop()
                 for_pairs(var, iter, l0, body)
@@ -1255,6 +1273,8 @@ fn Lower.lower_for(mut self, var str, iter ast.Expr, body List[ast.Stmt])
                     expr_pos(iter),
                     "a `for` over a `{l.ty.name()}` isn't in the native subset yet",
                 )
+                return
+            if mutable and not for_mut_ok(e, fpos)
                 return
             elem = e
             list = l.id
@@ -1386,6 +1406,9 @@ fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
     if v.id < 0
         problem(expr_pos(e), "this expression has no value")
         return none
+    if t := any_of(want)
+        if any_of(v.ty) == none and not v.ty.is_unknown()
+            return box_any(v, t, expr_pos(e))
     v
 
 ## Lower an expression; `want` is the type the context expects, which lets
@@ -1394,7 +1417,7 @@ fn Lower.lower_value(mut self, e ast.Expr, want Ty?) Val?
 fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
     match e
         Int(text, pos) => lower_int_lit(text, pos, want)
-        Float(x, _) => Val(id: fconst(x), ty: Ty.Float)
+        Float(x, _) => float_lit(x, want)
         Bool(b, _) => Val(id: konst(if b then 1 else 0, Ty.Bool), ty: Ty.Bool)
         Bytes(hex, pos) => lower_bytes_lit(hex, pos)
         Str(s, _) => Val(id: str_value(s), ty: Ty.Str)
@@ -1608,7 +1631,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
 
 fn push_fn(elem Ty) str
     match elem
-        Float => "rt.list_pushf"
+        Float | F32 => "rt.list_pushf"
         Bool => "rt.list_pushb"
         _ => "rt.list_push"
 
@@ -1623,8 +1646,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_prim(name, args)
             if name == "unreachable" and not is_rt and lookup(name) == none
                 return lower_unreachable(args, pos)
+            # A local that isn't a function value doesn't shadow a function or method.
             if k := lookup(name)
-                return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, npos)
+                if var_ty[k].is_fn()
+                    return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, npos)
             if lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
@@ -1669,6 +1694,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         TypeArgs(name, targs, tpos) =>
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(targs, args, pos)
+            if name == "Channel" and tk.on and not is_rt
+                return lower_chan_new(targs, args, pos)
             if (name == "Map" or name == "Set") and args.len() == 0
                 return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
@@ -1736,7 +1763,7 @@ fn Lower.lower_print_body(mut self, args List[ast.Arg], pos ast.Pos) Val?
 fn out_fn(t Ty) str
     match t
         Int | Sized(_) => "rt.out_int"
-        Float => "rt.out_float"
+        Float | F32 => float_out_fn(t)
         Bool => "rt.out_bool"
         Str => "rt.out_str"
         Atomic(e) => if e == Ty.Bool then "rt.out_atomic_bool" else "rt.out_atomic_int"
@@ -1744,7 +1771,7 @@ fn out_fn(t Ty) str
         Tensor(_) => "rt.out_tensor"
         List(e) =>
             match e
-                Int => "rt.out_list_int"
+                Int | Sized(_) => "rt.out_list_int"
                 Float => "rt.out_list_float"
                 Bool => "rt.out_list_bool"
                 # Lists of strings and of lists: `rt.out_list_deep`.
@@ -1754,6 +1781,8 @@ fn out_fn(t Ty) str
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
     if tensor_f32(v.ty)
         return unsupported(pos, "printing a `Tensor[f32]`")
+    if v.ty.opt_inner() != none
+        return out_opt(v, pos)
     if v.ty.is_coll()
         return out_coll(v, pos)
     if e := v.ty.elem()
@@ -1763,11 +1792,12 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             depth += 1
             leaf = leaf.elem() else Ty.Unknown
         k := match leaf
-            Int => 0
+            Int | Sized(_) => 0
             Float => 1
             Bool => 2
             Str => 3
             Char => 4
+            F32 => 5
             _ => -1
         if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
@@ -1796,6 +1826,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_char_from_code(args, npos)
     if name == "from" and is_module(recv, "tensor")
         return lower_tensor_from(args, npos)
+    if name == "select" and tk.on and is_module(recv, "task")
+        return lower_chan_select(args, npos)
     if is_module(recv, "mem")
         problems.push(Problem(
             rule: "ffi.native.1",
@@ -1820,6 +1852,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     r := lower_value(recv, none)?
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
+    if chan_elem(r.ty) != none
+        return lower_chan_method(r, name, npos, args)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none
@@ -1834,6 +1868,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)
         return struct_call("{s}.{name}", r, args, npos)
+    if t := any_of(r.ty)
+        return any_call(t, r, name, args, npos)
     mut vs := List[Val]()
     for a in args
         if a.label != none or a.mutable
@@ -1851,7 +1887,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     match r.ty
         Bytes | Byte => return bytes_method(r, name, vs, npos)
         Int | Sized(_) => return int_method(r, name, npos, vs)
-        Float => return float_method(r, name, npos, vs)
+        Float | F32 => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
         Char => return lower_char_method(r, name, npos, vs)
         List(e) => return list_method(e, r, name, npos, vs, args, recv)
@@ -1873,10 +1909,10 @@ fn Lower.module_name(self, e ast.Expr) str?
         Name(n, _) => module_of(n)
         _ => none
 
-## Whether `e` names module `m` (not a local of that name).
+## Whether `e` names module `m` (not a local or a field of that name).
 fn Lower.is_module(self, e ast.Expr, m str) bool
     match e
-        Name(n, _) => n == m and lookup(n) == none
+        Name(n, _) => n == m and lookup(n) == none and self_slot(n) < 0
         _ => false
 
 ## An empty list typed by its first `push` (type.coll.6): the variable takes

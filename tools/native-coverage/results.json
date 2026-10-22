@@ -1,14 +1,12 @@
 {
  "date": "2026-10-21",
- "commit": "e7083af7",
+ "commit": "dab6d872",
  "programs": [
   {
    "file": "bootstrap/tests/cases/absent_try.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.to_int()` on `str`"
-   ],
-   "first": "not in the native subset yet: `.to_int()` on `str`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": true
@@ -33,11 +31,9 @@
   },
   {
    "file": "bootstrap/tests/cases/attr_allow_wildcard.ail",
-   "status": "not-subset",
-   "problems": [
-    "attribute `@allow` isn't in the native subset yet"
-   ],
-   "first": "attribute `@allow` isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": true
@@ -53,22 +49,18 @@
   },
   {
    "file": "bootstrap/tests/cases/attr_inline_deprecated.ail",
-   "status": "not-subset",
-   "problems": [
-    "attribute `@deprecated` isn't in the native subset yet"
-   ],
-   "first": "attribute `@deprecated` isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": true
   },
   {
    "file": "bootstrap/tests/cases/attr_own_line.ail",
-   "status": "not-subset",
-   "problems": [
-    "attribute `@test` isn't in the native subset yet"
-   ],
-   "first": "attribute `@test` isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -239,14 +231,12 @@
     "`twice`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`size`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
     "not in the native subset yet: `ref`",
     "not in the native subset yet: calling `Pen.twice`",
     "not in the native subset yet: calling `Shape.to_str`",
     "not in the native subset yet: printing a `Shape`",
-    "not in the native subset yet: `.cmp()` on `int`",
-    "not in the native subset yet: `.cmp()` on `str`"
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`"
    ],
    "first": "trait `Sized` isn't in the native subset yet",
    "detail": "",
@@ -284,27 +274,26 @@
    "file": "bootstrap/tests/cases/bytes_basic.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `bytes` literals",
-    "not in the native subset yet: `bytes` literals",
-    "not in the native subset yet: `.to_bytes()` on `str` (its result is an optional)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `bytes` literals",
-    "not in the native subset yet: `bytes` literals",
-    "not in the native subset yet: `bytes` literals",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: printing a `bytes`",
+    "not in the native subset yet: printing a `u8`",
+    "not in the native subset yet: printing a `bytes`",
+    "not in the native subset yet: printing a `bytes`",
+    "not in the native subset yet: printing a `bytes`",
+    "not in the native subset yet: printing a `bytes`",
+    "`<` on `bytes` isn't in the native subset yet",
+    "not in the native subset yet: `.to_list()` on `bytes`",
+    "not in the native subset yet: `bytes.from_list`",
+    "not in the native subset yet: `bytes.zeros`",
+    "a `for` over a `bytes` isn't in the native subset yet",
     "not in the native subset yet: a comprehension whose element type isn't known",
-    "not in the native subset yet: `bytes` literals",
+    "a `for` over a `bytes` isn't in the native subset yet",
     "not in the native subset yet: `fs.write_bytes`",
     "not in the native subset yet: `fs.append_bytes`",
     "not in the native subset yet: `fs.read_bytes`",
-    "not in the native subset yet: `bytes` literals"
+    "not in the native subset yet: a map of `bytes` to `int`",
+    "not in the native subset yet: printing a `bytes`"
    ],
-   "first": "not in the native subset yet: `bytes` literals",
+   "first": "not in the native subset yet: printing a `bytes`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -322,9 +311,14 @@
    "file": "bootstrap/tests/cases/bytes_hex_sep.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `bytes` literals"
+    "not in the native subset yet: `.hex()` on `bytes`",
+    "not in the native subset yet: `.hex()` on `bytes`",
+    "not in the native subset yet: `.hex()` on `bytes`",
+    "not in the native subset yet: `.hex()` on `bytes`",
+    "not in the native subset yet: `.hex()` on `bytes`",
+    "not in the native subset yet: `.hex()` on `bytes`"
    ],
-   "first": "not in the native subset yet: `bytes` literals",
+   "first": "not in the native subset yet: `.hex()` on `bytes`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -342,9 +336,10 @@
    "file": "bootstrap/tests/cases/bytes_oob.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `bytes` literals"
+    "not in the native subset yet: printing a `u8`",
+    "not in the native subset yet: printing a `u8`"
    ],
-   "first": "not in the native subset yet: `bytes` literals",
+   "first": "not in the native subset yet: printing a `u8`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -362,9 +357,10 @@
    "file": "bootstrap/tests/cases/bytes_slice_oob.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `bytes` literals"
+    "not in the native subset yet: printing a `bytes`",
+    "not in the native subset yet: printing a `bytes`"
    ],
-   "first": "not in the native subset yet: `bytes` literals",
+   "first": "not in the native subset yet: printing a `bytes`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -386,9 +382,7 @@
     "not in the native subset yet: `.windows()` on `List[int]`",
     "not in the native subset yet: `.windows()` on `List[int]`",
     "not in the native subset yet: `.counts()` on `List[str]`",
-    "not in the native subset yet: `.counts()` on `List[int]`",
-    "not in the native subset yet: `.center()` on `str`",
-    "not in the native subset yet: `.center()` on `str`"
+    "not in the native subset yet: `.counts()` on `List[int]`"
    ],
    "first": "not in the native subset yet: `.chunks()` on `List[int]`",
    "detail": "",
@@ -397,13 +391,9 @@
   },
   {
    "file": "bootstrap/tests/cases/coll_op_assign_first_use.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known"
-   ],
-   "first": "not in the native subset yet: an empty `{}` whose type isn't known",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -450,14 +440,19 @@
    "file": "bootstrap/tests/cases/comp_loops.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: set comprehensions",
-    "not in the native subset yet: map comprehensions",
     "not in the native subset yet: a comprehension whose element type isn't known",
-    "not in the native subset yet: `bytes` literals",
-    "not in the native subset yet: map comprehensions",
-    "not in the native subset yet: a comprehension whose element type isn't known"
+    "a `for` over a `bytes` isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: set comprehensions",
+   "first": "not in the native subset yet: a comprehension whose element type isn't known",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/comp_unpack_tier.ail",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -473,12 +468,9 @@
   },
   {
    "file": "bootstrap/tests/cases/comprehension_forms.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: set comprehensions",
-    "not in the native subset yet: map comprehensions"
-   ],
-   "first": "not in the native subset yet: set comprehensions",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -812,12 +804,10 @@
    "file": "bootstrap/tests/cases/consts_forms.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: a set of `char`",
-    "not in the native subset yet: this `Set` type",
     "`==` on `Map[str, int]` isn't in the native subset yet",
     "not in the native subset yet: printing a `Map[str, List[int]]`"
    ],
-   "first": "not in the native subset yet: a set of `char`",
+   "first": "`==` on `Map[str, int]` isn't in the native subset yet",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -827,14 +817,15 @@
    "status": "not-subset",
    "problems": [
     "generic struct `Pair` isn't in the native subset yet",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
+    "expected `Set[int]`, found `Map[?, ?]`",
     "not in the native subset yet: calling `Pair`",
     "not in the native subset yet: calling `Pair`",
-    "not in the native subset yet: a map of `str` to `Shape`",
+    "not in the native subset yet: printing a `Config`",
     "not in the native subset yet: printing a `Config`",
     "not in the native subset yet: printing a `List[Shape]`",
     "not in the native subset yet: printing a `Color`",
-    "not in the native subset yet: printing a `Holder`"
+    "not in the native subset yet: printing a `Holder`",
+    "not in the native subset yet: printing a `Map[str, Shape]`"
    ],
    "first": "generic struct `Pair` isn't in the native subset yet",
    "detail": "",
@@ -843,11 +834,9 @@
   },
   {
    "file": "bootstrap/tests/cases/contract_ensures_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "`divide`: contracts aren't in the native subset yet"
-   ],
-   "first": "`divide`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -872,51 +861,36 @@
   },
   {
    "file": "bootstrap/tests/cases/contract_failure_skips_ensures.ail",
-   "status": "not-subset",
-   "problems": [
-    "`first`: contracts aren't in the native subset yet"
-   ],
-   "first": "`first`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/contract_invariant.ail",
-   "status": "not-subset",
-   "problems": [
-    "struct `Account`: invariants aren't in the native subset yet",
-    "`Account.deposit`: methods of `Account` aren't in the native subset yet",
-    "`Account.room`: methods of `Account` aren't in the native subset yet",
-    "not in the native subset yet: calling `Account`"
-   ],
-   "first": "struct `Account`: invariants aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/contract_invariant_built_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "struct `Range`: invariants aren't in the native subset yet",
-    "not in the native subset yet: calling `Range`",
-    "not in the native subset yet: calling `Range`"
-   ],
-   "first": "struct `Range`: invariants aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/contract_invariant_method_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "struct `Account`: invariants aren't in the native subset yet",
-    "`Account.withdraw`: methods of `Account` aren't in the native subset yet",
-    "not in the native subset yet: calling `Account`"
-   ],
-   "first": "struct `Account`: invariants aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -932,25 +906,18 @@
   },
   {
    "file": "bootstrap/tests/cases/contract_no_contracts.ail",
-   "status": "not-subset",
-   "problems": [
-    "struct `Box`: invariants aren't in the native subset yet",
-    "`Box.drop`: methods of `Box` aren't in the native subset yet",
-    "not in the native subset yet: calling `Box`"
-   ],
-   "first": "struct `Box`: invariants aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/contract_old.ail",
-   "status": "not-subset",
-   "problems": [
-    "`add`: contracts aren't in the native subset yet",
-    "`bump`: contracts aren't in the native subset yet"
-   ],
-   "first": "`add`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -966,36 +933,27 @@
   },
   {
    "file": "bootstrap/tests/cases/contract_old_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "`add`: contracts aren't in the native subset yet"
-   ],
-   "first": "`add`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/contract_requires_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "`divide`: contracts aren't in the native subset yet"
-   ],
-   "first": "`divide`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/contract_satisfied.ail",
-   "status": "not-subset",
-   "problems": [
-    "`withdraw`: contracts aren't in the native subset yet",
-    "`isqrt`: contracts aren't in the native subset yet",
-    "`fact`: contracts aren't in the native subset yet",
-    "`log`: contracts aren't in the native subset yet"
-   ],
-   "first": "`withdraw`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -1221,6 +1179,15 @@
    "negative": false
   },
   {
+   "file": "bootstrap/tests/cases/derive_from_json_field_without.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/derive_from_json_field_without.ail:9:1: error[json.derive.2]: can't derive `FromJson` for `Outer`: a field has type `Inner`, which has no JSON form",
+   "source": "cases",
+   "negative": true
+  },
+  {
    "file": "bootstrap/tests/cases/derive_from_json_generic.ail",
    "status": "not-subset",
    "problems": [
@@ -1251,7 +1218,7 @@
    "status": "check-rejected",
    "problems": [],
    "first": "",
-   "detail": "/home/user/ail/bootstrap/tests/cases/derive_from_json_map_key.ail:5:1: error[ct.derive.4]: `FromJson` can't be derived for `Scores`: it can't read the type `Map[int, str]`; it reads scalars, `Json`, `List[T]`, `Map[str, T]`, `T?` and types that derive `FromJson`",
+   "detail": "/home/user/ail/bootstrap/tests/cases/derive_from_json_map_key.ail:5:1: error[ct.derive.4]: `FromJson` can't be derived for `Scores`: it can't read the type `Map[int, str]`; it reads scalars, `Json`, `List[T]`, `Map[str, T]`, `T?`, tuples and types that derive `FromJson`",
    "source": "cases",
    "negative": true
   },
@@ -1269,7 +1236,7 @@
    "status": "check-rejected",
    "problems": [],
    "first": "",
-   "detail": "/home/user/ail/bootstrap/tests/cases/derive_from_json_unsupported.ail:5:1: error[ct.derive.4]: `FromJson` can't be derived for `Scores`: it can't read the type `Set[str]`; it reads scalars, `Json`, `List[T]`, `Map[str, T]`, `T?` and types that derive `FromJson`",
+   "detail": "/home/user/ail/bootstrap/tests/cases/derive_from_json_unsupported.ail:5:1: error[ct.derive.4]: `FromJson` can't be derived for `Scores`: it can't read the type `Set[str]`; it reads scalars, `Json`, `List[T]`, `Map[str, T]`, `T?`, tuples and types that derive `FromJson`",
    "source": "cases",
    "negative": true
   },
@@ -1336,7 +1303,6 @@
    "file": "bootstrap/tests/cases/derive_json_maps_optionals.ail",
    "status": "not-subset",
    "problems": [
-    "field `nums`: its type isn't in the native subset yet",
     "field `extra`: its type isn't in the native subset yet",
     "not in the native subset yet: `none` where no optional is expected",
     "not in the native subset yet: calling `parse_json`",
@@ -1346,7 +1312,7 @@
     "not in the native subset yet: calling `parse_json`",
     "not in the native subset yet: calling `Item.from_json`"
    ],
-   "first": "field `nums`: its type isn't in the native subset yet",
+   "first": "field `extra`: its type isn't in the native subset yet",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -1398,7 +1364,6 @@
     "`describe`: methods of traits and `impl` blocks aren't in the native subset yet",
     "parameter `t`: its type isn't in the native subset yet",
     "generic struct `Pair` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
     "not in the native subset yet: calling `Version.describe`",
     "not in the native subset yet: calling `Pair`",
     "not in the native subset yet: calling `Fault.describe`"
@@ -1650,10 +1615,9 @@
    "file": "bootstrap/tests/cases/diag_std_regex_2.ail",
    "status": "not-subset",
    "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `std.regex.Regex(...)` without every field"
    ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "not in the native subset yet: `std.regex.Regex(...)` without every field",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -1716,11 +1680,9 @@
   },
   {
    "file": "bootstrap/tests/cases/diag_type_coll_15.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.take()` on `List[int]`"
-   ],
-   "first": "not in the native subset yet: `.take()` on `List[int]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -1796,6 +1758,15 @@
    "detail": "/home/user/ail/bootstrap/tests/cases/diag_unsafe_block_1.ail:3:5: error[unsafe.block.1]: expected an indented block after `unsafe`",
    "source": "cases",
    "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/diag_unsafe_mem_1.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/diag_unsafe_mem_1.ail:6:19: error[ffi.native.1]: `mem.from_cstr`: `ail build` can't link the C allocator yet (`ail run` can)",
+   "source": "cases",
+   "negative": false
   },
   {
    "file": "bootstrap/tests/cases/div_zero_trap.ail",
@@ -1902,12 +1873,9 @@
   },
   {
    "file": "bootstrap/tests/cases/empty_literal_inference.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known"
-   ],
-   "first": "not in the native subset yet: an empty `{}` whose type isn't known",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2086,12 +2054,10 @@
   },
   {
    "file": "bootstrap/tests/cases/ffi_double_free.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/ffi_double_free.ail:7:18: error[ffi.native.1]: `mem.cstr`: `ail build` can't link the C allocator yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
@@ -2106,23 +2072,19 @@
   },
   {
    "file": "bootstrap/tests/cases/ffi_missing_library.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/ffi_missing_library.ail:2:40: error[ffi.native.1]: `extern c fn f`: `ail build` can't link a C library yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/ffi_missing_symbol.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/ffi_missing_symbol.ail:2:13: error[ffi.native.1]: `extern c fn no_such_function_in_libc`: `ail build` can't link a C library yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
@@ -2204,9 +2166,6 @@
    "problems": [
     "`==` on `Map[int, float]` isn't in the native subset yet",
     "`==` on `Map[int, float]` isn't in the native subset yet",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`",
     "not in the native subset yet: `.contains()` on `List[List[float]]`"
    ],
    "first": "`==` on `Map[int, float]` isn't in the native subset yet",
@@ -2318,43 +2277,18 @@
   },
   {
    "file": "bootstrap/tests/cases/float_parse_grammar.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `float?`"
-   ],
-   "first": "not in the native subset yet: printing a `float?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/float_parse_long.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`"
-   ],
-   "first": "not in the native subset yet: printing a `float?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2364,14 +2298,7 @@
    "status": "not-subset",
    "problems": [
     "expected `float`, found `int`",
-    "expected `float`, found `int`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`"
+    "expected `float`, found `int`"
    ],
    "first": "expected `float`, found `int`",
    "detail": "",
@@ -2382,10 +2309,9 @@
    "file": "bootstrap/tests/cases/float_parse_roundtrip.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: printing a `float?`"
+    "not in the native subset yet: printing a `Ordering`"
    ],
-   "first": "not in the native subset yet: `.cmp()` on `float`",
+   "first": "not in the native subset yet: printing a `Ordering`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2418,10 +2344,7 @@
     "not in the native subset yet: printing a `Shape`",
     "not in the native subset yet: printing a `Shape`",
     "not in the native subset yet: printing a `List[Shape]`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: a list of `float?`",
+    "not in the native subset yet: printing a `List[float?]`",
     "not in the native subset yet: printing a `Map[str, List[float]]`",
     "not in the native subset yet: `.join()` on `List[float]`"
    ],
@@ -2507,32 +2430,19 @@
    "status": "not-subset",
    "problems": [
     "`cmp`: methods of traits and `impl` blocks aren't in the native subset yet",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: `.cmp()` on `float`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
-    "not in the native subset yet: printing a `float?`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
     "not in the native subset yet: `.sorted()` on `List[List[float]]`",
     "not in the native subset yet: `.max()` on `List[List[float]]`",
     "not in the native subset yet: `.min()` on `List[List[float]]`",
@@ -2566,11 +2476,9 @@
   },
   {
    "file": "bootstrap/tests/cases/fmt_attr_long.ail",
-   "status": "not-subset",
-   "problems": [
-    "attribute `@test` isn't in the native subset yet"
-   ],
-   "first": "attribute `@test` isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2695,12 +2603,9 @@
   },
   {
    "file": "bootstrap/tests/cases/fuzz_csv_blank_row.ail",
-   "status": "not-subset",
-   "problems": [
-    "`records`: its result type isn't in the native subset yet",
-    "parameter `recs`: its type isn't in the native subset yet"
-   ],
-   "first": "`records`: its result type isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2709,12 +2614,9 @@
    "file": "bootstrap/tests/cases/fuzz_net_status_digits.ail",
    "status": "not-subset",
    "problems": [
-    "parameter `l`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "not in the native subset yet: `spawn`"
    ],
-   "first": "parameter `l`: its type isn't in the native subset yet",
+   "first": "not in the native subset yet: `spawn`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2776,13 +2678,9 @@
   },
   {
    "file": "bootstrap/tests/cases/habits_fixes_work.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2824,16 +2722,10 @@
    "status": "not-subset",
    "problems": [
     "parameter `r`: its type isn't in the native subset yet",
-    "`echo`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "parameter `ex`: its type isn't in the native subset yet",
@@ -2841,7 +2733,7 @@
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `srv`: its type isn't in the native subset yet",
     "`run_dir`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "`run`: its result type isn't in the native subset yet",
@@ -2854,13 +2746,9 @@
   },
   {
    "file": "bootstrap/tests/cases/if_bind.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `if cfg := e` on a `Config`",
-    "not in the native subset yet: `if cfg := e` on a `Config`",
-    "not in the native subset yet: `if cfg := e` on a `Config`"
-   ],
-   "first": "not in the native subset yet: `if cfg := e` on a `Config`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2894,11 +2782,9 @@
   },
   {
    "file": "bootstrap/tests/cases/if_then.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.to_int()` on `str`"
-   ],
-   "first": "not in the native subset yet: `.to_int()` on `str`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -2983,16 +2869,9 @@
   },
   {
    "file": "bootstrap/tests/cases/is_empty_stem.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.is_empty()` on `str`",
-    "not in the native subset yet: `.is_empty()` on `str`",
-    "not in the native subset yet: `.is_empty()` on `List[int]`",
-    "not in the native subset yet: `.is_empty()` on `List[int]`",
-    "not in the native subset yet: `.is_empty()` on `Map[str, int]`",
-    "not in the native subset yet: `.is_empty()` on `Set[int]`"
-   ],
-   "first": "not in the native subset yet: `.is_empty()` on `str`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3146,11 +3025,8 @@
     "not in the native subset yet: this method call",
     "not in the native subset yet: this method call",
     "not in the native subset yet: `.sort()` on `List[Person]`",
-    "not in the native subset yet: this method call",
-    "not in the native subset yet: this method call",
-    "not in the native subset yet: `.take()` on `List[int]`",
-    "not in the native subset yet: `.take()` on `List[int]`",
-    "not in the native subset yet: `.take()` on `List[int]`"
+    "not in the native subset yet: `.sorted()` with a labelled or `mut` argument",
+    "not in the native subset yet: this method call"
    ],
    "first": "not in the native subset yet: `.sorted()` on `List[Person]`",
    "detail": "",
@@ -3215,12 +3091,9 @@
   },
   {
    "file": "bootstrap/tests/cases/list_edit.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3272,11 +3145,9 @@
   },
   {
    "file": "bootstrap/tests/cases/main_fails.ail",
-   "status": "not-subset",
-   "problems": [
-    "expected `str`, found `ConfigError`"
-   ],
-   "first": "expected `str`, found `ConfigError`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": true
@@ -3305,6 +3176,7 @@
    "file": "bootstrap/tests/cases/map_push.ail",
    "status": "not-subset",
    "problems": [
+    "not in the native subset yet: an empty `{}` whose type isn't known",
     "not in the native subset yet: an empty `{}` whose type isn't known"
    ],
    "first": "not in the native subset yet: an empty `{}` whose type isn't known",
@@ -3325,23 +3197,12 @@
    "file": "bootstrap/tests/cases/maps_api.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.get(k)` without `else` (an optional)",
-    "not in the native subset yet: `.get(k)` without `else` (an optional)",
     "this expression has no value",
     "this expression has no value",
-    "not in the native subset yet: `.get(k)` without `else` (an optional)",
-    "not in the native subset yet: `.get(k)` without `else` (an optional)",
     "this expression has no value",
-    "this expression has no value",
-    "not in the native subset yet: `.is_subset()` on `Set[int]`",
-    "not in the native subset yet: `.is_subset()` on `Set[int]`",
-    "not in the native subset yet: `.is_subset()` on `Set[int]`",
-    "not in the native subset yet: `.is_subset()` on `Set[int]`",
-    "not in the native subset yet: `.is_subset()` on `Set[int]`",
-    "not in the native subset yet: `.is_subset()` on `Set[int]`",
-    "not in the native subset yet: this `Map` type"
+    "not in the native subset yet: `Map` with these type arguments"
    ],
-   "first": "not in the native subset yet: `.get(k)` without `else` (an optional)",
+   "first": "this expression has no value",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3359,21 +3220,18 @@
    "file": "bootstrap/tests/cases/maps_ctor_anywhere.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: this `Set` type",
     "not in the native subset yet: printing a `Map[str, Set[int]]`",
-    "not in the native subset yet: this list type",
+    "not in the native subset yet: printing a `List[Map[int, int]]`",
     "`==` on `Map[int, int]` isn't in the native subset yet",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
+    "`==` on `Set[int]` and `Map[?, ?]`",
     "not in the native subset yet: printing a `Box`",
-    "not in the native subset yet: a list of `Set[int]`",
+    "not in the native subset yet: printing a `List[Set[int]]`",
     "not in the native subset yet: printing a `Map[int, Set[str]]`",
-    "not in the native subset yet: this `Set` type",
-    "not in the native subset yet: this `Map` type",
-    "not in the native subset yet: `.get(k)` without `else` (an optional)",
-    "not in the native subset yet: `.is_subset()` on `Set[int]`",
+    "not in the native subset yet: `Set` with these type arguments",
+    "not in the native subset yet: `Map` with these type arguments",
     "`==` on `Map[int, int]` isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: this `Set` type",
+   "first": "not in the native subset yet: printing a `Map[str, Set[int]]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3382,19 +3240,21 @@
    "file": "bootstrap/tests/cases/maps_empty_expected.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: an empty `{}` whose type isn't known",
+    "expected `Set[int]`, found `Map[?, ?]`",
     "`opt`: its result type isn't in the native subset yet",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "`==` on `Map[str, int]` isn't in the native subset yet",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
+    "expected `Set[int]`, found `Map[?, ?]`",
     "not in the native subset yet: printing a `Reg`",
-    "not in the native subset yet: a list of `Map[int, int]`",
-    "not in the native subset yet: a list of `Set[int]`"
+    "expected `Set[str]`, found `Map[?, ?]`",
+    "expected `Set[int]`, found `Map[?, ?]`",
+    "`==` on `Set[int]` and `Map[?, ?]`",
+    "`==` on `Map[str, int]` isn't in the native subset yet",
+    "expected `Set[int]`, found `Map[?, ?]`",
+    "not in the native subset yet: printing a `Reg`",
+    "not in the native subset yet: printing a `List[Map[int, int]]`",
+    "expected `Set[int]`, found `Map[?, ?]`",
+    "not in the native subset yet: printing a `List[Set[int]]`"
    ],
-   "first": "not in the native subset yet: an empty `{}` whose type isn't known",
+   "first": "expected `Set[int]`, found `Map[?, ?]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3435,10 +3295,9 @@
     "`==` on `Holder`, which holds a `Map[str, int]`, isn't in the native subset yet",
     "`==` on `Holder`, which holds a `Map[str, int]`, isn't in the native subset yet",
     "`==` on `E`, which holds a `Map[int, int]`, isn't in the native subset yet",
-    "not in the native subset yet: a list of `Map[int, int]`",
-    "not in the native subset yet: a list of `Map[int, int]`",
+    "`==` on `List[Map[int, int]]`, which holds a `Map[int, int]`, isn't in the native subset yet",
+    "`==` on `List[Map[int, int]]`, which holds a `Map[int, int]`, isn't in the native subset yet",
     "`==` on `Map[str, int]` isn't in the native subset yet",
-    "not in the native subset yet: `.get(k)` without `else` (an optional)",
     "`==` on `Map[str, int]` isn't in the native subset yet",
     "`==` on `Map[str, int]` isn't in the native subset yet",
     "`==` on `Map[int, str]` isn't in the native subset yet",
@@ -3454,7 +3313,7 @@
    "status": "check-rejected",
    "problems": [],
    "first": "",
-   "detail": "/home/user/ail/bootstrap/tests/cases/maps_for_errors.ail:3:14: error[type.map.5]: `for` iterates a map's keys or values explicitly",
+   "detail": "/home/user/ail/bootstrap/tests/cases/maps_for_errors.ail:3:14: error[type.map.5]: `for` iterates a map's entries as `k, v`, or its keys or values",
    "source": "cases",
    "negative": true
   },
@@ -3536,21 +3395,19 @@
    "status": "not-subset",
    "problems": [
     "generic struct `Box` isn't in the native subset yet",
-    "field `o`: its type isn't in the native subset yet",
     "`cmp`: methods of traits and `impl` blocks aren't in the native subset yet",
     "not in the native subset yet: a set of `Pos`",
     "not in the native subset yet: a set of `Named`",
     "not in the native subset yet: a set of `Shape`",
     "not in the native subset yet: a set of `Tree`",
-    "not in the native subset yet: this `Set` type",
+    "not in the native subset yet: `Set` with these type arguments",
     "not in the native subset yet: a map of `List[int]` to `str`",
     "not in the native subset yet: a map of `List[List[int]]` to `int`",
     "not in the native subset yet: calling `Box`",
     "not in the native subset yet: calling `Box`",
     "not in the native subset yet: a set of `Fail`",
-    "not in the native subset yet: a set of `char`",
-    "`Less` isn't in the native subset yet (only locals, parameters and constants)",
-    "`Ordering` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: a set of `Flags`",
+    "not in the native subset yet: a set of `Ordering`",
     "not in the native subset yet: a set of `Empty`",
     "not in the native subset yet: a set of `Ranked`",
     "not in the native subset yet: a set of `Custom`",
@@ -3583,17 +3440,11 @@
    "file": "bootstrap/tests/cases/maps_in_structs.ail",
    "status": "not-subset",
    "problems": [
-    "field `scopes`: its type isn't in the native subset yet",
     "`new`: its result type isn't in the native subset yet",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: `.len()` on `?`",
-    "not in the native subset yet: indexing a `?`",
-    "not in the native subset yet: `.len()` on `?`",
-    "not in the native subset yet: `.len()` on `?`",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
+    "expected `Set[str]`, found `Map[?, ?]`",
     "this expression has no value"
    ],
-   "first": "field `scopes`: its type isn't in the native subset yet",
+   "first": "`new`: its result type isn't in the native subset yet",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3629,10 +3480,9 @@
    "file": "bootstrap/tests/cases/maps_place_opassign_trap.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: a map of `char` to `int`",
-    "not in the native subset yet: this `Map` type"
+    "not in the native subset yet: printing a `Map[char, Map[char, int]]`"
    ],
-   "first": "not in the native subset yet: a map of `char` to `int`",
+   "first": "not in the native subset yet: printing a `Map[char, Map[char, int]]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3752,7 +3602,7 @@
     "not in the native subset yet: printing a `Map[str, List[int]]`",
     "`for mut` isn't in the native subset yet",
     "not in the native subset yet: printing a `Map[str, List[int]]`",
-    "not in the native subset yet: a list of `Map[str, int]`",
+    "not in the native subset yet: printing a `List[Map[str, int]]`",
     "not in the native subset yet: printing a `Map[str, Map[str, List[int]]]`"
    ],
    "first": "`mut` parameter `n` of a number type isn't in the native subset yet",
@@ -3764,19 +3614,18 @@
    "file": "bootstrap/tests/cases/maps_text_forms.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: a map of `char` to `Pos`",
+    "not in the native subset yet: printing a `Map[char, Pos]`",
     "not in the native subset yet: a map of `Pos` to `char`",
-    "not in the native subset yet: a set of `char`",
     "not in the native subset yet: a map of `Dir` to `int`",
     "not in the native subset yet: a set of `Dir`",
     "not in the native subset yet: printing a `Map[str, Set[int]]`",
     "not in the native subset yet: printing a `Map[str, List[int]]`",
     "not in the native subset yet: printing a `Map[int, Map[str, int]]`",
-    "not in the native subset yet: a list of `Map[int, int]`",
+    "not in the native subset yet: printing a `List[Map[int, int]]`",
     "not in the native subset yet: a map of `List[int]` to `str`",
     "not in the native subset yet: printing a `Map[str, Pos]`"
    ],
-   "first": "not in the native subset yet: a map of `char` to `Pos`",
+   "first": "not in the native subset yet: printing a `Map[char, Pos]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -3803,11 +3652,9 @@
   },
   {
    "file": "bootstrap/tests/cases/maps_trap_msg_keys.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: a map of `char` to `int`"
-   ],
-   "first": "not in the native subset yet: a map of `char` to `int`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": true
@@ -3842,10 +3689,12 @@
     "not in the native subset yet: printing a `Map[str, List[int]]`",
     "not in the native subset yet: printing a `Map[str, Map[str, int]]`",
     "not in the native subset yet: printing a `Map[str, Map[str, int]]`",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: a list of `Map[str, int]`",
+    "expected `Set[str]`, found `Map[?, ?]`",
+    "not in the native subset yet: printing a `Env`",
+    "not in the native subset yet: printing a `Env`",
+    "not in the native subset yet: printing a `List[Map[str, int]]`",
     "not in the native subset yet: printing a `Map[str, Map[int, int]]`",
-    "not in the native subset yet: a list of `Set[int]`"
+    "not in the native subset yet: printing a `List[Set[int]]`"
    ],
    "first": "not in the native subset yet: printing a `Map[str, List[int]]`",
    "detail": "",
@@ -3917,23 +3766,19 @@
   },
   {
    "file": "bootstrap/tests/cases/mem_alloc_negative.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/mem_alloc_negative.ail:6:18: error[ffi.native.1]: `mem.alloc`: `ail build` can't link the C allocator yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/mem_cast.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/mem_cast.ail:6:19: error[ffi.native.1]: `mem.alloc`: `ail build` can't link the C allocator yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
@@ -4051,12 +3896,9 @@
   },
   {
    "file": "bootstrap/tests/cases/num_convert_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.to_u8()` on `int`",
-    "not in the native subset yet: `.to_u8()` on `int`"
-   ],
-   "first": "not in the native subset yet: `.to_u8()` on `int`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4083,10 +3925,9 @@
    "file": "bootstrap/tests/cases/num_overflow.ail",
    "status": "not-subset",
    "problems": [
-    "parameter `x`: its type isn't in the native subset yet",
-    "`grow`: its result type isn't in the native subset yet"
+    "not in the native subset yet: `*` on `u8`"
    ],
-   "first": "parameter `x`: its type isn't in the native subset yet",
+   "first": "not in the native subset yet: `*` on `u8`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4095,19 +3936,22 @@
    "file": "bootstrap/tests/cases/num_sized.ail",
    "status": "not-subset",
    "problems": [
-    "field `r`: its type isn't in the native subset yet",
-    "field `g`: its type isn't in the native subset yet",
-    "parameter `a`: its type isn't in the native subset yet",
-    "parameter `b`: its type isn't in the native subset yet",
-    "`mix`: its result type isn't in the native subset yet",
+    "not in the native subset yet: `*` on `i32`",
+    "not in the native subset yet: `+` on `i32`",
     "parameter `x`: its type isn't in the native subset yet",
     "`scale`: its result type isn't in the native subset yet",
     "`half`: its result type isn't in the native subset yet",
     "`big`: its result type isn't in the native subset yet",
-    "not in the native subset yet: `.to_u8()` on `int`",
-    "not in the native subset yet: printing a `Px`"
+    "not in the native subset yet: `+` on `u8`",
+    "not in the native subset yet: `+` on `u8`",
+    "not in the native subset yet: `.abs()` on `i32`",
+    "not in the native subset yet: printing a `Px`",
+    "not in the native subset yet: a list of `u8`",
+    "not in the native subset yet: a hex format on `u8`",
+    "not in the native subset yet: a map of `u8` to `str`",
+    "not in the native subset yet: `match` on `u8`"
    ],
-   "first": "field `r`: its type isn't in the native subset yet",
+   "first": "not in the native subset yet: `*` on `i32`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4116,13 +3960,15 @@
    "file": "bootstrap/tests/cases/num_sized_methods.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.to_u8()` on `int`",
-    "not in the native subset yet: `.to_i8()` on `int`",
-    "not in the native subset yet: `.to_u32()` on `int`",
-    "not in the native subset yet: `.to_f32()` on `float`",
-    "not in the native subset yet: `.to_i8()` on `int`"
+    "not in the native subset yet: `.wrapping_add()` on `u8`",
+    "not in the native subset yet: `.checked_sub()` on `u8`",
+    "not in the native subset yet: `.wrapping_add()` on `i8`",
+    "not in the native subset yet: `.wrapping_mul()` on `u32`",
+    "not in the native subset yet: `.to_u64()` on `u32`",
+    "not in the native subset yet: `.to_u64()` on `u32`",
+    "not in the native subset yet: `.to_f32()` on `float`"
    ],
-   "first": "not in the native subset yet: `.to_u8()` on `int`",
+   "first": "not in the native subset yet: `.wrapping_add()` on `u8`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4152,7 +3998,7 @@
     "`table`: its result type isn't in the native subset yet",
     "parameter `v`: its type isn't in the native subset yet",
     "parameter `v`: its type isn't in the native subset yet",
-    "parameter `xs`: its type isn't in the native subset yet",
+    "not in the native subset yet: an optional `int?`",
     "`wrap`: its result type isn't in the native subset yet"
    ],
    "first": "`table`: its result type isn't in the native subset yet",
@@ -4171,15 +4017,9 @@
   },
   {
    "file": "bootstrap/tests/cases/optional_none.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `str?`",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `str?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4197,10 +4037,9 @@
    "file": "bootstrap/tests/cases/optional_return_find.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.to_int()` on `str`",
     "`else` with a handler isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: `.to_int()` on `str`",
+   "first": "`else` with a handler isn't in the native subset yet",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4655,34 +4494,28 @@
   },
   {
    "file": "bootstrap/tests/cases/ptr_null.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/ptr_null.ail:7:18: error[ffi.native.1]: `mem.null`: `ail build` can't link the C allocator yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/ptr_oob.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/ptr_oob.ail:7:19: error[ffi.native.1]: `mem.alloc`: `ail build` can't link the C allocator yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/ptr_use_after_free.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/ptr_use_after_free.ail:7:18: error[ffi.native.1]: `mem.alloc`: `ail build` can't link the C allocator yet (`ail run` can)",
    "source": "cases",
    "negative": false
   },
@@ -4697,33 +4530,18 @@
   },
   {
    "file": "bootstrap/tests/cases/random_int_bad_range.ail",
-   "status": "not-subset",
-   "problems": [
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`random` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/random_seeded.ail",
-   "status": "not-subset",
-   "problems": [
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)",
-    "`random` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`random` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4741,10 +4559,9 @@
    "file": "bootstrap/tests/cases/regex_methods.ail",
    "status": "not-subset",
    "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: calling `std.regex.Regex.captures`"
    ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "not in the native subset yet: calling `std.regex.Regex.captures`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4797,10 +4614,91 @@
    "negative": true
   },
   {
+   "file": "bootstrap/tests/cases/std_app_calls.ail",
+   "status": "not-subset",
+   "problems": [
+    "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`view`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`title`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "not in the native subset yet: calling `parse_json`",
+    "parameter `value`: its type isn't in the native subset yet",
+    "`member`: its result type isn't in the native subset yet",
+    "parameter `rest`: its type isn't in the native subset yet",
+    "`tagged`: its result type isn't in the native subset yet",
+    "`num`: its result type isn't in the native subset yet",
+    "`txt`: its result type isn't in the native subset yet",
+    "`to_json`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`to_json`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "trait `App` isn't in the native subset yet",
+    "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`view`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`title`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`focus`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`step`: generic functions aren't in the native subset yet",
+    "parameter `j`: its type isn't in the native subset yet",
+    "`frame`: generic functions aren't in the native subset yet",
+    "`script`: generic functions aren't in the native subset yet",
+    "`run`: generic functions aren't in the native subset yet",
+    "`run_host`: generic functions aren't in the native subset yet",
+    "parameter `c`: its type isn't in the native subset yet",
+    "parameter `c`: its type isn't in the native subset yet"
+   ],
+   "first": "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/std_app_host.ail",
+   "status": "not-subset",
+   "problems": [
+    "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`view`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`title`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "not in the native subset yet: calling `Todo.view`",
+    "parameter `value`: its type isn't in the native subset yet",
+    "`member`: its result type isn't in the native subset yet",
+    "parameter `rest`: its type isn't in the native subset yet",
+    "`tagged`: its result type isn't in the native subset yet",
+    "`num`: its result type isn't in the native subset yet",
+    "`txt`: its result type isn't in the native subset yet",
+    "`to_json`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`to_json`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "trait `App` isn't in the native subset yet",
+    "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`view`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`title`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`focus`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`step`: generic functions aren't in the native subset yet",
+    "parameter `j`: its type isn't in the native subset yet",
+    "`frame`: generic functions aren't in the native subset yet",
+    "`script`: generic functions aren't in the native subset yet",
+    "`run`: generic functions aren't in the native subset yet",
+    "`run_host`: generic functions aren't in the native subset yet",
+    "parameter `c`: its type isn't in the native subset yet",
+    "parameter `c`: its type isn't in the native subset yet"
+   ],
+   "first": "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
    "file": "bootstrap/tests/cases/std_args.ail",
    "status": "built-match",
    "problems": [],
    "first": "",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/std_args_derive.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: calling `Opts.parse`"
+   ],
+   "first": "not in the native subset yet: calling `Opts.parse`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4827,27 +4725,13 @@
    "file": "bootstrap/tests/cases/std_compress.ail",
    "status": "not-subset",
    "problems": [
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
-    "parameter `b`: its type isn't in the native subset yet"
+    "not in the native subset yet: printing a `bytes`",
+    "not in the native subset yet: printing a `u8`",
+    "not in the native subset yet: `bytes.from_list`",
+    "not in the native subset yet: printing a `bytes`",
+    "not in the native subset yet: `bytes.from_list`"
    ],
-   "first": "`compress` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "not in the native subset yet: printing a `bytes`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4856,14 +4740,14 @@
    "file": "bootstrap/tests/cases/std_compress_files.ail",
    "status": "not-subset",
    "problems": [
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `compress.gzip_file`",
+    "not in the native subset yet: `compress.gunzip_file`",
+    "not in the native subset yet: `compress.zip_dir`",
+    "not in the native subset yet: `compress.unzip`",
+    "not in the native subset yet: `compress.gunzip_file`",
+    "not in the native subset yet: `compress.unzip`"
    ],
-   "first": "`compress` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "not in the native subset yet: `compress.gzip_file`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4879,12 +4763,18 @@
   },
   {
    "file": "bootstrap/tests/cases/std_csv.ail",
-   "status": "not-subset",
-   "problems": [
-    "`records`: its result type isn't in the native subset yet",
-    "parameter `recs`: its type isn't in the native subset yet"
-   ],
-   "first": "`records`: its result type isn't in the native subset yet",
+   "status": "backend-error",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/std_csv.ail:4:4: error[native.build.2]: internal error: invalid MIR: main: b17 passes a List[?] to b15's List[List[str]]",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/std_csv_quote.ail",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4893,16 +4783,15 @@
    "file": "bootstrap/tests/cases/std_date.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: printing a `std.time.date.Date?`",
-    "not in the native subset yet: printing a `std.time.date.Date?`",
+    "not in the native subset yet: printing a `std.time.date.Date`",
+    "not in the native subset yet: printing a `std.time.date.Date`",
     "`<` on `std.time.date.Date` isn't in the native subset yet",
     "not in the native subset yet: printing a `std.time.date.Date`",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`"
+    "`tz` isn't in the native subset yet (only locals, parameters and constants)"
    ],
-   "first": "not in the native subset yet: printing a `std.time.date.Date?`",
+   "first": "not in the native subset yet: printing a `std.time.date.Date`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -4913,8 +4802,7 @@
    "problems": [
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`"
+    "`tz` isn't in the native subset yet (only locals, parameters and constants)"
    ],
    "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
@@ -4941,12 +4829,10 @@
   },
   {
    "file": "bootstrap/tests/cases/std_env.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `str?`"
-   ],
-   "first": "not in the native subset yet: printing a `str?`",
-   "detail": "",
+   "status": "built-differs",
+   "problems": [],
+   "first": "",
+   "detail": "stdout (native `false`, interpreter `true`)",
    "source": "cases",
    "negative": false
   },
@@ -4983,22 +4869,9 @@
   },
   {
    "file": "bootstrap/tests/cases/std_hash.ail",
-   "status": "not-subset",
-   "problems": [
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet"
-   ],
-   "first": "`hash` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5007,24 +4880,21 @@
    "file": "bootstrap/tests/cases/std_hash_bytes.ail",
    "status": "not-subset",
    "problems": [
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)"
+    "expected `str`, found `bytes`",
+    "not in the native subset yet: `bytes.from_list`",
+    "expected `str`, found `bytes`",
+    "expected `str`, found `bytes`"
    ],
-   "first": "`hash` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "expected `str`, found `bytes`",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/std_implicit.ail",
-   "status": "not-subset",
-   "problems": [
-    "this `else` block needs a value",
-    "not in the native subset yet: `.kind` on `str`"
-   ],
-   "first": "this `else` block needs a value",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5040,11 +4910,9 @@
   },
   {
    "file": "bootstrap/tests/cases/std_io.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `str?`"
-   ],
-   "first": "not in the native subset yet: printing a `str?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5093,12 +4961,8 @@
    "status": "not-subset",
    "problems": [
     "parameter `srv`: its type isn't in the native subset yet",
-    "parameter `o`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `net.serve`",
+    "not in the native subset yet: `spawn`"
    ],
    "first": "parameter `srv`: its type isn't in the native subset yet",
    "detail": "",
@@ -5110,14 +4974,12 @@
    "status": "not-subset",
    "problems": [
     "parameter `srv`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `net.get_bytes`",
+    "not in the native subset yet: `net.post_bytes`",
+    "expected `int`, found `bytes`",
+    "not in the native subset yet: `net.request_bytes`"
    ],
    "first": "parameter `srv`: its type isn't in the native subset yet",
    "detail": "",
@@ -5128,12 +4990,14 @@
    "file": "bootstrap/tests/cases/std_net_conn_bytes.ail",
    "status": "not-subset",
    "problems": [
-    "parameter `l`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: calling `net.Conn.read_bytes`",
+    "not in the native subset yet: calling `net.Conn.write_bytes`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: calling `net.Conn.write_bytes`",
+    "not in the native subset yet: calling `net.Conn.read_bytes`",
+    "not in the native subset yet: calling `net.Conn.read_bytes`"
    ],
-   "first": "parameter `l`: its type isn't in the native subset yet",
+   "first": "not in the native subset yet: calling `net.Conn.read_bytes`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5143,13 +5007,9 @@
    "status": "not-subset",
    "problems": [
     "parameter `srv`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `net.request_bytes`"
    ],
    "first": "parameter `srv`: its type isn't in the native subset yet",
    "detail": "",
@@ -5161,12 +5021,8 @@
    "status": "not-subset",
    "problems": [
     "parameter `r`: its type isn't in the native subset yet",
-    "`greet`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "parameter `ex`: its type isn't in the native subset yet",
@@ -5174,7 +5030,7 @@
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `srv`: its type isn't in the native subset yet",
     "`run_dir`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "`run`: its result type isn't in the native subset yet",
@@ -5190,10 +5046,8 @@
    "status": "not-subset",
    "problems": [
     "parameter `r`: its type isn't in the native subset yet",
-    "`site`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "parameter `ex`: its type isn't in the native subset yet",
@@ -5201,22 +5055,29 @@
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `srv`: its type isn't in the native subset yet",
     "`run_dir`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "`run`: its result type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
-    "not in the native subset yet: `.take()` on `List[str]`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "parameter `r`: its type isn't in the native subset yet",
     "not in the native subset yet: `.sorted()` on `List[std.net.jar.Cookie]`",
-    "parameter `opts`: its type isn't in the native subset yet",
-    "`request`: its result type isn't in the native subset yet",
-    "`get`: its result type isn't in the native subset yet"
+    "not in the native subset yet: `net.NetError`",
+    "not in the native subset yet: `net.Response`"
    ],
    "first": "parameter `r`: its type isn't in the native subset yet",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/std_net_jar_matching.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `.sorted()` on `List[std.net.jar.Cookie]`",
+    "not in the native subset yet: `net.NetError`",
+    "not in the native subset yet: `net.Response`"
+   ],
+   "first": "not in the native subset yet: `.sorted()` on `List[std.net.jar.Cookie]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5226,18 +5087,8 @@
    "status": "not-subset",
    "problems": [
     "parameter `r`: its type isn't in the native subset yet",
-    "`whoami`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "parameter `ex`: its type isn't in the native subset yet",
@@ -5245,7 +5096,7 @@
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `srv`: its type isn't in the native subset yet",
     "`run_dir`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "`run`: its result type isn't in the native subset yet",
@@ -5267,24 +5118,18 @@
   },
   {
    "file": "bootstrap/tests/cases/std_net_offline.ail",
-   "status": "not-subset",
-   "problems": [
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`net` isn't in the native subset yet (only locals, parameters and constants)",
-   "detail": "",
+   "status": "built-differs",
+   "problems": [],
+   "first": "",
+   "detail": "stdout (native `tls: https://127.0.0.1:1/`, interpreter `refused: https://127.0.0.1:1/`)",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/std_net_options_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`net` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5293,17 +5138,11 @@
    "file": "bootstrap/tests/cases/std_net_samesite.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.take()` on `List[str]`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "parameter `r`: its type isn't in the native subset yet",
     "not in the native subset yet: `.sorted()` on `List[std.net.jar.Cookie]`",
-    "parameter `opts`: its type isn't in the native subset yet",
-    "`request`: its result type isn't in the native subset yet",
-    "`get`: its result type isn't in the native subset yet"
+    "not in the native subset yet: `net.NetError`",
+    "not in the native subset yet: `net.Response`"
    ],
-   "first": "not in the native subset yet: `.take()` on `List[str]`",
+   "first": "not in the native subset yet: `.sorted()` on `List[std.net.jar.Cookie]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5314,17 +5153,9 @@
    "problems": [
     "parameter `ex`: its type isn't in the native subset yet",
     "parameter `srv`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `spawn`"
    ],
    "first": "parameter `ex`: its type isn't in the native subset yet",
    "detail": "",
@@ -5336,12 +5167,8 @@
    "status": "not-subset",
    "problems": [
     "parameter `srv`: its type isn't in the native subset yet",
-    "parameter `c`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `net.serve`",
+    "not in the native subset yet: `spawn`"
    ],
    "first": "parameter `srv`: its type isn't in the native subset yet",
    "detail": "",
@@ -5353,12 +5180,8 @@
    "status": "not-subset",
    "problems": [
     "parameter `r`: its type isn't in the native subset yet",
-    "`hi`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "parameter `ex`: its type isn't in the native subset yet",
@@ -5366,7 +5189,7 @@
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `srv`: its type isn't in the native subset yet",
     "`run_dir`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "`run`: its result type isn't in the native subset yet",
@@ -5382,13 +5205,10 @@
    "status": "not-subset",
    "problems": [
     "parameter `srv`: its type isn't in the native subset yet",
-    "parameter `l`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.connect_tls`",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "not in the native subset yet: `spawn`"
    ],
    "first": "parameter `srv`: its type isn't in the native subset yet",
@@ -5401,19 +5221,14 @@
    "status": "not-subset",
    "problems": [
     "parameter `r`: its type isn't in the native subset yet",
-    "`big`: its result type isn't in the native subset yet",
-    "parameter `l`: its type isn't in the native subset yet",
     "parameter `b`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.open`",
+    "not in the native subset yet: `net.open`",
+    "not in the native subset yet: `net.open`",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.open`",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "parameter `ex`: its type isn't in the native subset yet",
@@ -5421,7 +5236,7 @@
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `srv`: its type isn't in the native subset yet",
     "`run_dir`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "parameter `srv`: its type isn't in the native subset yet",
     "parameter `handler`: its type isn't in the native subset yet",
     "`run`: its result type isn't in the native subset yet",
@@ -5436,13 +5251,9 @@
    "file": "bootstrap/tests/cases/std_net_tcp.ail",
    "status": "not-subset",
    "problems": [
-    "parameter `l`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `spawn`"
    ],
-   "first": "parameter `l`: its type isn't in the native subset yet",
+   "first": "not in the native subset yet: `spawn`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5451,29 +5262,21 @@
    "file": "bootstrap/tests/cases/std_net_timeouts.ail",
    "status": "not-subset",
    "problems": [
-    "parameter `l`: its type isn't in the native subset yet",
-    "parameter `l`: its type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
     "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `spawn`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "this `else` block needs a value",
+    "not in the native subset yet: `net.Response`",
+    "not in the native subset yet: `spawn`"
    ],
-   "first": "parameter `l`: its type isn't in the native subset yet",
+   "first": "not in the native subset yet: `spawn`",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/std_net_total_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`net` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5536,7 +5339,6 @@
    "problems": [
     "this `else` block needs a value",
     "not in the native subset yet: `proc.Output`",
-    "not in the native subset yet: printing a `str?`",
     "not in the native subset yet: `env.vars`"
    ],
    "first": "this `else` block needs a value",
@@ -5609,65 +5411,39 @@
    "file": "bootstrap/tests/cases/std_regex.ail",
    "status": "not-subset",
    "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: printing a `std.regex.Match`",
+    "not in the native subset yet: calling `std.regex.captures`",
+    "not in the native subset yet: printing a `std.regex.Match`"
    ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "not in the native subset yet: printing a `std.regex.Match`",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/std_regex_error.ail",
-   "status": "not-subset",
-   "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/std_regex_group_all.ail",
-   "status": "not-subset",
-   "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/std_regex_group_bad.ail",
-   "status": "not-subset",
-   "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-   "detail": "",
+   "status": "built-differs",
+   "problems": [],
+   "first": "",
+   "detail": "trap",
    "source": "cases",
    "negative": false
   },
@@ -5691,14 +5467,10 @@
   },
   {
    "file": "bootstrap/tests/cases/std_regex_template_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-   "detail": "",
+   "status": "built-differs",
+   "problems": [],
+   "first": "",
+   "detail": "trap",
    "source": "cases",
    "negative": false
   },
@@ -5743,10 +5515,10 @@
     "`largest`: generic functions aren't in the native subset yet",
     "`<` on `Version` isn't in the native subset yet",
     "`<` on `Level` isn't in the native subset yet",
-    "not in the native subset yet: `.cmp()` on `int`",
-    "not in the native subset yet: `.cmp()` on `str`",
+    "not in the native subset yet: printing a `Ordering`",
+    "not in the native subset yet: printing a `Ordering`",
     "not in the native subset yet: calling `Version.cmp`",
-    "`Ordering` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: printing a `Ordering`"
    ],
    "first": "`cmp`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
@@ -5828,6 +5600,19 @@
    "negative": false
   },
   {
+   "file": "bootstrap/tests/cases/std_ui_widgets_methods.ail",
+   "status": "not-subset",
+   "problems": [
+    "`widgets` isn't in the native subset yet (only locals, parameters and constants)",
+    "`widgets` isn't in the native subset yet (only locals, parameters and constants)",
+    "`widgets` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "`widgets` isn't in the native subset yet (only locals, parameters and constants)",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
    "file": "bootstrap/tests/cases/std_use_errors.ail",
    "status": "check-rejected",
    "problems": [],
@@ -5838,25 +5623,18 @@
   },
   {
    "file": "bootstrap/tests/cases/str_count_empty.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.count()` on `str`"
-   ],
-   "first": "not in the native subset yet: `.count()` on `str`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/str_edit.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `char?`",
-    "not in the native subset yet: printing a `char?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5929,17 +5707,10 @@
    "file": "bootstrap/tests/cases/str_words_count.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.words()` on `str`",
-    "not in the native subset yet: `.words()` on `str`",
-    "not in the native subset yet: `.trim_start()` on `str`",
-    "not in the native subset yet: `.count()` on `str`",
-    "not in the native subset yet: `.count()` on `str`",
-    "not in the native subset yet: `.rfind()` on `str`",
-    "not in the native subset yet: `.rfind()` on `str`",
     "not in the native subset yet: `.flatten()` on `List[List[int]]`",
     "not in the native subset yet: `.flatten()` on `List[List[str]]`"
    ],
-   "first": "not in the native subset yet: `.words()` on `str`",
+   "first": "not in the native subset yet: `.flatten()` on `List[List[int]]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5955,11 +5726,9 @@
   },
   {
    "file": "bootstrap/tests/cases/strings_char_classes.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.to_hex()` on `int`"
-   ],
-   "first": "not in the native subset yet: `.to_hex()` on `int`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -5968,75 +5737,63 @@
    "file": "bootstrap/tests/cases/strings_char_digits_codes.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: a list of `int?`",
-    "not in the native subset yet: a list of `int?`",
-    "not in the native subset yet: a list of `int?`",
-    "not in the native subset yet: a list of `int?`",
-    "not in the native subset yet: a list of `int?`",
-    "not in the native subset yet: a list of `int?`",
-    "not in the native subset yet: a list of `char?`",
-    "not in the native subset yet: printing a `char?`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[char?]`",
     "not in the native subset yet: `.sorted()` on `List[char]`",
     "not in the native subset yet: `.min()` on `List[char]`",
-    "not in the native subset yet: `.max()` on `List[char]`",
-    "not in the native subset yet: `.cmp()` on `char`"
+    "not in the native subset yet: `.max()` on `List[char]`"
    ],
-   "first": "not in the native subset yet: a list of `int?`",
+   "first": "not in the native subset yet: printing a `List[int?]`",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/strings_char_radix_0_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/strings_char_radix_1_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/strings_char_radix_37_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/strings_char_radix_huge_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/strings_char_radix_neg_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: printing a `int?`"
-   ],
-   "first": "not in the native subset yet: printing a `int?`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6270,15 +6027,9 @@
   },
   {
    "file": "bootstrap/tests/cases/strings_repeat_pad.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.to_hex()` on `int`",
-    "not in the native subset yet: `.to_hex()` on `int`",
-    "not in the native subset yet: `.to_hex()` on `int`",
-    "not in the native subset yet: `.to_hex()` on `int`",
-    "not in the native subset yet: `.to_hex()` on `int`"
-   ],
-   "first": "not in the native subset yet: `.to_hex()` on `int`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6305,11 +6056,11 @@
    "file": "bootstrap/tests/cases/strings_split_search.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: a list of `str?`",
-    "not in the native subset yet: a list of `str?`",
-    "not in the native subset yet: a list of `str?`"
+    "not in the native subset yet: printing a `List[str?]`",
+    "not in the native subset yet: printing a `List[str?]`",
+    "not in the native subset yet: printing a `List[str?]`"
    ],
-   "first": "not in the native subset yet: a list of `str?`",
+   "first": "not in the native subset yet: printing a `List[str?]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6318,30 +6069,28 @@
    "file": "bootstrap/tests/cases/strings_to_int_float.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: a list of `float?`",
-    "not in the native subset yet: a list of `float?`",
-    "not in the native subset yet: a list of `float?`",
-    "not in the native subset yet: a list of `float?`",
-    "not in the native subset yet: a list of `float?`"
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[int?]`",
+    "not in the native subset yet: printing a `List[float?]`",
+    "not in the native subset yet: printing a `List[float?]`",
+    "not in the native subset yet: printing a `List[float?]`",
+    "not in the native subset yet: printing a `List[float?]`",
+    "not in the native subset yet: printing a `List[float?]`"
    ],
-   "first": "not in the native subset yet: `.to_int()` on `str`",
+   "first": "not in the native subset yet: printing a `List[int?]`",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/strings_trim_lines_chars.ail",
-   "status": "not-subset",
-   "problems": [
-    "`==` on `List[char]` isn't in the native subset yet"
-   ],
-   "first": "`==` on `List[char]` isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6455,12 +6204,9 @@
   },
   {
    "file": "bootstrap/tests/cases/tensor_axis_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.sum()` on `Tensor[float]`",
-    "not in the native subset yet: `.max()` on `Tensor[float]`"
-   ],
-   "first": "not in the native subset yet: `.sum()` on `Tensor[float]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6470,13 +6216,7 @@
    "status": "not-subset",
    "problems": [
     "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.sum()` on `Tensor[float]`",
-    "not in the native subset yet: `.dot()` on `Tensor[float]`",
-    "not in the native subset yet: `.add()` on `Tensor[float]`",
-    "not in the native subset yet: `.mul()` on `Tensor[float]`",
-    "not in the native subset yet: `.matmul()` on `Tensor[float]`",
     "not in the native subset yet: `.map()` on `Tensor[float]`",
-    "not in the native subset yet: `.sum()` on `Tensor[int]`",
     "not in the native subset yet: `.map()` on `Tensor[int]`",
     "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
     "not in the native subset yet: `.map()` on `Tensor[float]`",
@@ -6491,25 +6231,18 @@
    "file": "bootstrap/tests/cases/tensor_broadcast.ail",
    "status": "not-subset",
    "problems": [
-    "`+` on a tensor isn't in the native subset yet",
-    "`*` on a tensor isn't in the native subset yet",
-    "not in the native subset yet: `.add()` on `Tensor[float]`",
-    "`+` on a tensor isn't in the native subset yet",
-    "`+` on a tensor isn't in the native subset yet",
     "not in the native subset yet: `.map()` on `Tensor[float]`"
    ],
-   "first": "`+` on a tensor isn't in the native subset yet",
+   "first": "not in the native subset yet: `.map()` on `Tensor[float]`",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/tensor_broadcast_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "`+` on a tensor isn't in the native subset yet"
-   ],
-   "first": "`+` on a tensor isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6552,19 +6285,9 @@
    "file": "bootstrap/tests/cases/tensor_divide_activation.ail",
    "status": "not-subset",
    "problems": [
-    "`/` on a tensor isn't in the native subset yet",
-    "`/` on `Tensor[float]` and `float`",
-    "`/` on `float` and `Tensor[float]`",
-    "`/` on a tensor isn't in the native subset yet",
-    "`*` on `bool` and `float`",
-    "not in the native subset yet: `.relu()` on `Tensor[float]`",
-    "not in the native subset yet: `.sigmoid()` on `Tensor[float]`",
-    "not in the native subset yet: `.tanh()` on `Tensor[float]`",
-    "not in the native subset yet: `.relu()` on `Tensor[float]`",
-    "not in the native subset yet: `.relu()` on `Tensor[float]`",
     "not in the native subset yet: `.map()` on `Tensor[float]`"
    ],
-   "first": "`/` on a tensor isn't in the native subset yet",
+   "first": "not in the native subset yet: `.map()` on `Tensor[float]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6582,11 +6305,21 @@
    "file": "bootstrap/tests/cases/tensor_f32.ail",
    "status": "not-subset",
    "problems": [
-    "`half`: its result type isn't in the native subset yet",
-    "not in the native subset yet: `.to_f32()` on `Tensor[float]`",
+    "expected `Tensor[f32]`, found `Tensor[float]`",
+    "not in the native subset yet: printing a `Tensor[f32]`",
+    "not in the native subset yet: printing a `Tensor[f32]`",
+    "not in the native subset yet: `.sum()` on `Tensor[f32]`",
+    "not in the native subset yet: printing a `Tensor[f32]`",
+    "not in the native subset yet: `.dot()` on `Tensor[f32]`",
+    "not in the native subset yet: indexing a `Tensor[f32]`",
+    "not in the native subset yet: `.map()` on `Tensor[f32]`",
+    "not in the native subset yet: printing a `Tensor[f32]`",
+    "not in the native subset yet: `.sum()` on `Tensor[f32]`",
+    "not in the native subset yet: `.clamp()` on `Tensor[f32]`",
+    "not in the native subset yet: `.round()` on `Tensor[f32]`",
     "`tensor` isn't in the native subset yet (only locals, parameters and constants)"
    ],
-   "first": "`half`: its result type isn't in the native subset yet",
+   "first": "expected `Tensor[f32]`, found `Tensor[float]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6610,29 +6343,82 @@
    "negative": false
   },
   {
+   "file": "bootstrap/tests/cases/tensor_from_fn.ail",
+   "status": "not-subset",
+   "problems": [
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_from_fn_errors.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tensor_from_fn_errors.ail:2:18: error[std.tensor.25]: `from_fn` takes a shape and a function, but 1 was given",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_from_fn_trap.ail",
+   "status": "not-subset",
+   "problems": [
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_from_zeros_arity_errors.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tensor_from_zeros_arity_errors.ail:2:18: error[expr.call.1]: `tensor.from` takes 2 arguments, but 0 were given",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_from_zeros_table.ail",
+   "status": "not-subset",
+   "problems": [
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
    "file": "bootstrap/tests/cases/tensor_fusion.ail",
    "status": "not-subset",
    "problems": [
-    "`*` on a tensor isn't in the native subset yet",
-    "`+` on `bool` and `Tensor[float]`",
-    "not in the native subset yet: `.relu()` on `bool`",
-    "not in the native subset yet: `-` on `bool`",
-    "`-` on a tensor isn't in the native subset yet",
-    "`*` on `Tensor[float]` and `float`",
-    "`-` on a tensor isn't in the native subset yet",
-    "not in the native subset yet: `.relu()` on `bool`",
-    "`+` on `Tensor[float]` and `float`",
-    "`*` on a tensor isn't in the native subset yet",
-    "`-` on `Tensor[float]` and `float`",
-    "`*` on `Tensor[float]` and `float`",
-    "`-` on `Tensor[float]` and `float`",
-    "not in the native subset yet: `.relu()` on `Tensor[float]`",
-    "`*` on a tensor isn't in the native subset yet",
-    "`+` on `bool` and `Tensor[float]`",
-    "`*` on a tensor isn't in the native subset yet",
-    "not in the native subset yet: `.relu()` on `bool`"
+    "not in the native subset yet: `.clamp()` on `Tensor[float]`"
    ],
-   "first": "`*` on a tensor isn't in the native subset yet",
+   "first": "not in the native subset yet: `.clamp()` on `Tensor[float]`",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_fusion_f32.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: printing a `Tensor[f32]`",
+    "not in the native subset yet: printing a `Tensor[f32]`"
+   ],
+   "first": "not in the native subset yet: printing a `Tensor[f32]`",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6656,7 +6442,6 @@
     "not in the native subset yet: indexing a `Tensor[float]`",
     "not in the native subset yet: indexing a `Tensor[float]`",
     "not in the native subset yet: indexing a `Tensor[float]`",
-    "not in the native subset yet: `.sum()` on `Tensor[int]`",
     "not in the native subset yet: indexing a `Tensor[int]`",
     "not in the native subset yet: indexing a `Tensor[int]`"
    ],
@@ -6689,12 +6474,9 @@
   },
   {
    "file": "bootstrap/tests/cases/tensor_matmul_pool.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.matmul()` on `Tensor[float]`",
-    "not in the native subset yet: `.dot()` on `Tensor[float]`"
-   ],
-   "first": "not in the native subset yet: `.matmul()` on `Tensor[float]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6712,25 +6494,18 @@
   },
   {
    "file": "bootstrap/tests/cases/tensor_negate.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `-` on `Tensor[float]`",
-    "not in the native subset yet: `-` on `Tensor[float]`",
-    "not in the native subset yet: `-` on `Tensor[int]`",
-    "not in the native subset yet: `-` on `Tensor[float]`"
-   ],
-   "first": "not in the native subset yet: `-` on `Tensor[float]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
   },
   {
    "file": "bootstrap/tests/cases/tensor_negate_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `-` on `Tensor[int]`"
-   ],
-   "first": "not in the native subset yet: `-` on `Tensor[int]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6739,29 +6514,10 @@
    "file": "bootstrap/tests/cases/tensor_ops.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.transpose()` on `Tensor[float]`",
-    "not in the native subset yet: `.sum()` on `Tensor[float]`",
-    "not in the native subset yet: `.sum()` on `Tensor[float]`",
-    "not in the native subset yet: `.max()` on `Tensor[float]`",
-    "not in the native subset yet: `.mean()` on `Tensor[float]`",
-    "not in the native subset yet: `.max()` on `Tensor[float]`",
-    "not in the native subset yet: `.mean()` on `Tensor[float]`",
-    "`+` on a tensor isn't in the native subset yet",
-    "`-` on a tensor isn't in the native subset yet",
-    "`*` on `Tensor[float]` and `float`",
-    "`*` on `int` and `Tensor[float]`",
-    "`-` on `float` and `Tensor[float]`",
-    "not in the native subset yet: `.max()` on `Tensor[int]`",
-    "not in the native subset yet: `.sum()` on `Tensor[int]`",
-    "not in the native subset yet: `.transpose()` on `Tensor[int]`",
-    "not in the native subset yet: `.transpose()` on `Tensor[float]`",
-    "not in the native subset yet: `.sum()` on `Tensor[float]`",
-    "not in the native subset yet: `.sum()` on `Tensor[float]`",
-    "not in the native subset yet: `.max()` on `Tensor[float]`",
     "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
-    "`+` on `?` and `Tensor[float]`"
+    "a `?` beside a `Tensor[float]` isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: `.transpose()` on `Tensor[float]`",
+   "first": "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6777,11 +6533,9 @@
   },
   {
    "file": "bootstrap/tests/cases/tensor_overflow_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.sum()` on `Tensor[int]`"
-   ],
-   "first": "not in the native subset yet: `.sum()` on `Tensor[int]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6799,12 +6553,9 @@
   },
   {
    "file": "bootstrap/tests/cases/tensor_shape_trap.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.sum()` on `Tensor[float]`",
-    "not in the native subset yet: `.add()` on `Tensor[float]`"
-   ],
-   "first": "not in the native subset yet: `.sum()` on `Tensor[float]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6821,13 +6572,74 @@
    "negative": false
   },
   {
-   "file": "bootstrap/tests/cases/tensor_transpose_trap.ail",
+   "file": "bootstrap/tests/cases/tensor_softmax.ail",
    "status": "not-subset",
    "problems": [
-    "`+` on `Tensor[int]` and `int`",
-    "not in the native subset yet: `.transpose()` on `Tensor[int]`"
+    "not in the native subset yet: `.map()` on `Tensor[float]`"
    ],
-   "first": "`+` on `Tensor[int]` and `int`",
+   "first": "not in the native subset yet: `.map()` on `Tensor[float]`",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_softmax_errors.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tensor_softmax_errors.ail:2:31: error[std.tensor.24]: `softmax` is on `float` tensors, and this one holds `int`",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_softmax_trap.ail",
+   "status": "not-subset",
+   "problems": [
+    "`tensor` isn't in the native subset yet (only locals, parameters and constants)"
+   ],
+   "first": "`tensor` isn't in the native subset yet (only locals, parameters and constants)",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_top2.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `.top2()` on `Tensor[f32]`",
+    "not in the native subset yet: `.top2()` on `Tensor[float]`",
+    "not in the native subset yet: `.top2()` on `Tensor[float]`"
+   ],
+   "first": "not in the native subset yet: `.top2()` on `Tensor[f32]`",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_top2_errors.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tensor_top2_errors.ail:3:18: error[std.tensor.23]: `top2` is on `float` tensors, and this one holds `int`",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_top2_trap.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `.top2()` on `Tensor[float]`"
+   ],
+   "first": "not in the native subset yet: `.top2()` on `Tensor[float]`",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tensor_transpose_trap.ail",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6935,8 +6747,6 @@
     "not in the native subset yet: printing a `Student`",
     "not in the native subset yet: printing a `Student`",
     "not in the native subset yet: printing a `List[Shape]`",
-    "not in the native subset yet: printing a `int?`",
-    "not in the native subset yet: printing a `int?`",
     "not in the native subset yet: calling `Student.to_str`"
    ],
    "first": "not in the native subset yet: printing a `Grade`",
@@ -6946,11 +6756,9 @@
   },
   {
    "file": "bootstrap/tests/cases/trace_calls.ail",
-   "status": "not-subset",
-   "problems": [
-    "`fact`: contracts aren't in the native subset yet"
-   ],
-   "first": "`fact`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -6968,11 +6776,9 @@
   },
   {
    "file": "bootstrap/tests/cases/trace_json.ail",
-   "status": "not-subset",
-   "problems": [
-    "`fact`: contracts aren't in the native subset yet"
-   ],
-   "first": "`fact`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -7133,11 +6939,9 @@
   },
   {
    "file": "bootstrap/tests/cases/trap_contract_values.ail",
-   "status": "not-subset",
-   "problems": [
-    "`withdraw`: contracts aren't in the native subset yet"
-   ],
-   "first": "`withdraw`: contracts aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -7175,6 +6979,98 @@
    "problems": [],
    "first": "",
    "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tuple_errors.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tuple_errors.ail:11:13: error[type.tuple.3]: `(int, str)` has no element 2",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tuple_for_mut.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tuple_for_mut.ail:4:14: error[type.tuple.5]: `for mut` has one variable",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tuple_literal_one.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tuple_literal_one.ail:3:10: error[type.tuple.2]: a tuple has two or more elements",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tuple_pattern_one.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tuple_pattern_one.ail:4:9: error[type.tuple.6]: a tuple pattern has two or more elements",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tuple_traits.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tuple_traits.ail:7:10: error[type.map.2]: `(float, int)` can't be a map key or set element (it isn't `Hash`)",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tuple_type_one.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tuple_type_one.ail:2:12: error[type.tuple.1]: a tuple type has two or more elements",
+   "source": "cases",
+   "negative": true
+  },
+  {
+   "file": "bootstrap/tests/cases/tuples_basic.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: `.sorted()` on `List[(int, str)]`",
+    "not in the native subset yet: a set of `(int, int)`",
+    "not in the native subset yet: a map of `(int, int)` to `str`",
+    "not in the native subset yet: printing a `List[(str, int)]`",
+    "not in the native subset yet: `.sorted()` on `List[P]`"
+   ],
+   "first": "not in the native subset yet: `.sorted()` on `List[(int, str)]`",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tuples_json.ail",
+   "status": "not-subset",
+   "problems": [
+    "not in the native subset yet: calling `Edge.to_json`",
+    "not in the native subset yet: calling `Edge.from_json`",
+    "not in the native subset yet: calling `Edge.to_json`",
+    "not in the native subset yet: calling `Edge.from_json`"
+   ],
+   "first": "not in the native subset yet: calling `Edge.to_json`",
+   "detail": "",
+   "source": "cases",
+   "negative": false
+  },
+  {
+   "file": "bootstrap/tests/cases/tuples_props.ail",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/bootstrap/tests/cases/tuples_props.ail:1:1: error[mod.main.1]: program has no `main` function",
    "source": "cases",
    "negative": false
   },
@@ -7225,13 +7121,9 @@
   },
   {
    "file": "bootstrap/tests/cases/unsafe_block.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet",
-    "`unsafe` blocks aren't in the native subset yet",
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "cases",
    "negative": false
@@ -7273,6 +7165,41 @@
    "negative": true
   },
   {
+   "file": "examples/app_todo.ail",
+   "status": "not-subset",
+   "problems": [
+    "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`view`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`title`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "expected `Set[str]`, found `Map[?, ?]`",
+    "parameter `value`: its type isn't in the native subset yet",
+    "`member`: its result type isn't in the native subset yet",
+    "parameter `rest`: its type isn't in the native subset yet",
+    "`tagged`: its result type isn't in the native subset yet",
+    "`num`: its result type isn't in the native subset yet",
+    "`txt`: its result type isn't in the native subset yet",
+    "`to_json`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`to_json`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "trait `App` isn't in the native subset yet",
+    "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`view`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`title`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`focus`: methods of traits and `impl` blocks aren't in the native subset yet",
+    "`step`: generic functions aren't in the native subset yet",
+    "parameter `j`: its type isn't in the native subset yet",
+    "`frame`: generic functions aren't in the native subset yet",
+    "`script`: generic functions aren't in the native subset yet",
+    "`run`: generic functions aren't in the native subset yet",
+    "`run_host`: generic functions aren't in the native subset yet",
+    "parameter `c`: its type isn't in the native subset yet",
+    "parameter `c`: its type isn't in the native subset yet"
+   ],
+   "first": "`update`: methods of traits and `impl` blocks aren't in the native subset yet",
+   "detail": "",
+   "source": "examples",
+   "negative": true
+  },
+  {
    "file": "examples/backup.ail",
    "status": "built-match",
    "problems": [],
@@ -7294,9 +7221,7 @@
    "file": "examples/build.ail",
    "status": "not-subset",
    "problems": [
-    "parameter `doc`: its type isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet"
+    "parameter `doc`: its type isn't in the native subset yet"
    ],
    "first": "parameter `doc`: its type isn't in the native subset yet",
    "detail": "",
@@ -7309,8 +7234,7 @@
    "problems": [
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`"
+    "`tz` isn't in the native subset yet (only locals, parameters and constants)"
    ],
    "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
@@ -7332,14 +7256,9 @@
   },
   {
    "file": "examples/checksums.ail",
-   "status": "not-subset",
-   "problems": [
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)",
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`hash` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7349,8 +7268,7 @@
    "status": "not-subset",
    "problems": [
     "`for mut` isn't in the native subset yet",
-    "`for mut` isn't in the native subset yet",
-    "`total_added`: contracts aren't in the native subset yet"
+    "`for mut` isn't in the native subset yet"
    ],
    "first": "`for mut` isn't in the native subset yet",
    "detail": "",
@@ -7374,8 +7292,7 @@
    "problems": [
     "not in the native subset yet: calling `Service.from_json`",
     "not in the native subset yet: calling `parse_json`",
-    "not in the native subset yet: calling `Service.from_json`",
-    "attribute `@test` isn't in the native subset yet"
+    "not in the native subset yet: calling `Service.from_json`"
    ],
    "first": "not in the native subset yet: calling `Service.from_json`",
    "detail": "",
@@ -7386,17 +7303,11 @@
    "file": "examples/cookie_jar.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.take()` on `List[str]`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "parameter `r`: its type isn't in the native subset yet",
     "not in the native subset yet: `.sorted()` on `List[std.net.jar.Cookie]`",
-    "parameter `opts`: its type isn't in the native subset yet",
-    "`request`: its result type isn't in the native subset yet",
-    "`get`: its result type isn't in the native subset yet"
+    "not in the native subset yet: `net.NetError`",
+    "not in the native subset yet: `net.Response`"
    ],
-   "first": "not in the native subset yet: `.take()` on `List[str]`",
+   "first": "not in the native subset yet: `.sorted()` on `List[std.net.jar.Cookie]`",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7417,13 +7328,9 @@
    "file": "examples/csvreport.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "attribute `@test` isn't in the native subset yet"
+    "not in the native subset yet: a key of type `float`"
    ],
-   "first": "not in the native subset yet: `.to_int()` on `str`",
+   "first": "not in the native subset yet: a key of type `float`",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7462,8 +7369,7 @@
    "problems": [
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`"
+    "`tz` isn't in the native subset yet (only locals, parameters and constants)"
    ],
    "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
@@ -7474,22 +7380,18 @@
    "file": "examples/digest.ail",
    "status": "not-subset",
    "problems": [
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "attribute `@test` isn't in the native subset yet"
+    "not in the native subset yet: `net.NetError`"
    ],
-   "first": "`net` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "not in the native subset yet: `net.NetError`",
    "detail": "",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/digest_lines.ail",
-   "status": "not-subset",
-   "problems": [
-    "`hash` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`hash` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7498,10 +7400,9 @@
    "file": "examples/fetch.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: `.kind` on `str`",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)"
+    "not in the native subset yet: `net.NetError`"
    ],
-   "first": "not in the native subset yet: `.kind` on `str`",
+   "first": "not in the native subset yet: `net.NetError`",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7510,9 +7411,7 @@
    "file": "examples/ffi_buffers.ail",
    "status": "not-subset",
    "problems": [
-    "parameter `p`: its type isn't in the native subset yet",
-    "`unsafe` blocks aren't in the native subset yet",
-    "`unsafe` blocks aren't in the native subset yet"
+    "parameter `p`: its type isn't in the native subset yet"
    ],
    "first": "parameter `p`: its type isn't in the native subset yet",
    "detail": "",
@@ -7521,24 +7420,18 @@
   },
   {
    "file": "examples/ffi_libc.ail",
-   "status": "not-subset",
-   "problems": [
-    "`unsafe` blocks aren't in the native subset yet",
-    "`unsafe` blocks aren't in the native subset yet",
-    "`unsafe` blocks aren't in the native subset yet"
-   ],
-   "first": "`unsafe` blocks aren't in the native subset yet",
-   "detail": "",
+   "status": "check-rejected",
+   "problems": [],
+   "first": "",
+   "detail": "/home/user/ail/examples/ffi_libc.ail:5:20: error[ffi.native.1]: `extern c fn hypot`: `ail build` can't link a C library yet (`ail run` can)",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/frames.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `bytes` literals"
-   ],
-   "first": "not in the native subset yet: `bytes` literals",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7554,12 +7447,9 @@
   },
   {
    "file": "examples/gz_check.ail",
-   "status": "not-subset",
-   "problems": [
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)",
-    "`compress` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`compress` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7575,12 +7465,9 @@
   },
   {
    "file": "examples/hex_base64.ail",
-   "status": "not-subset",
-   "problems": [
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
-    "`bytes` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`bytes` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7598,36 +7485,26 @@
    "file": "examples/interp.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: a map of `char` to `char`",
-    "expected `Token`, found `MiniError`",
+    "an error type needs a message in the native subset (err.msg.1)",
     "an error type needs a message in the native subset (err.msg.1)",
     "not in the native subset yet: calling a `Pos`",
-    "`tokenize` must end with its result",
+    "this `else` must leave: `return`, `break` or `continue`",
     "an error type needs a message in the native subset (err.msg.1)",
     "an error type needs a message in the native subset (err.msg.1)",
     "an error type needs a message in the native subset (err.msg.1)",
-    "expected `Expr`, found `MiniError`",
+    "an error type needs a message in the native subset (err.msg.1)",
     "this `else` must leave: `return`, `break` or `continue`",
     "an error type needs a message in the native subset (err.msg.1)",
     "an error type needs a message in the native subset (err.msg.1)",
     "an error type needs a message in the native subset (err.msg.1)",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
-    "field `scopes`: its type isn't in the native subset yet",
-    "not in the native subset yet: `.len()` on `?`",
-    "not in the native subset yet: indexing a `?`",
-    "not in the native subset yet: indexing a `?`",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
     "this `else` must leave: `return`, `break` or `continue`",
     "an error type needs a message in the native subset (err.msg.1)",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: `.pop()` on `?`",
-    "not in the native subset yet: indexing a `?`",
     "not in the native subset yet: `env.find`",
-    "not in the native subset yet: indexing a `?`",
     "this `else` must leave: `return`, `break` or `continue`",
     "an error type needs a message in the native subset (err.msg.1)",
     "expected `Value`, found `str`",
-    "expected `Value`, found `MiniError`",
+    "an error type needs a message in the native subset (err.msg.1)",
     "this `else` must leave: `return`, `break` or `continue`",
     "an error type needs a message in the native subset (err.msg.1)",
     "not in the native subset yet: `.checked_neg()` on `int`",
@@ -7650,29 +7527,18 @@
     "an error type needs a message in the native subset (err.msg.1)",
     "an error type needs a message in the native subset (err.msg.1)",
     "an error type needs a message in the native subset (err.msg.1)",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: `.len()` on `?`",
-    "not in the native subset yet: indexing a `?`",
     "not in the native subset yet: `.pos` on `str`"
    ],
-   "first": "not in the native subset yet: a map of `char` to `char`",
+   "first": "an error type needs a message in the native subset (err.msg.1)",
    "detail": "",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/json.ail",
-   "status": "not-subset",
-   "problems": [
-    "expected `Json`, found `ParseError`",
-    "`parse_object` must end with its result",
-    "`parse_array` must end with its result",
-    "not in the native subset yet: `.to_hex()` on `int`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "not in the native subset yet: map comprehensions",
-    "not in the native subset yet: `if value := e` on a `Json`"
-   ],
-   "first": "expected `Json`, found `ParseError`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7690,28 +7556,18 @@
   },
   {
    "file": "examples/logscan.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.take()` on `List[str]`",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet"
-   ],
-   "first": "not in the native subset yet: `.take()` on `List[str]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/logwatch.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known"
-   ],
-   "first": "not in the native subset yet: an empty `{}` whose type isn't known",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7720,11 +7576,10 @@
    "file": "examples/loopback.ail",
    "status": "not-subset",
    "problems": [
-    "`ask`: its result type isn't in the native subset yet",
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.serve`",
     "not in the native subset yet: `spawn`"
    ],
-   "first": "`ask`: its result type isn't in the native subset yet",
+   "first": "not in the native subset yet: `net.serve`",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7740,12 +7595,9 @@
   },
   {
    "file": "examples/matrix.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.matmul()` on `Tensor[int]`",
-    "not in the native subset yet: `.transpose()` on `Tensor[int]`"
-   ],
-   "first": "not in the native subset yet: `.matmul()` on `Tensor[int]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7759,8 +7611,7 @@
     "`overlay`: its result type isn't in the native subset yet",
     "not in the native subset yet: calling `parse_json`",
     "not in the native subset yet: calling `parse_json`",
-    "not in the native subset yet: calling `Config.from_json`",
-    "attribute `@test` isn't in the native subset yet"
+    "not in the native subset yet: calling `Config.from_json`"
    ],
    "first": "parameter `base`: its type isn't in the native subset yet",
    "detail": "",
@@ -7850,58 +7701,46 @@
    "file": "examples/poller.ail",
    "status": "not-subset",
    "problems": [
-    "`net` isn't in the native subset yet (only locals, parameters and constants)",
+    "not in the native subset yet: `net.NetError`",
     "not in the native subset yet: calling `parse_json`"
    ],
-   "first": "`net` isn't in the native subset yet (only locals, parameters and constants)",
+   "first": "not in the native subset yet: `net.NetError`",
    "detail": "",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/redact_mail.ail",
-   "status": "not-subset",
-   "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/regex.ail",
-   "status": "not-subset",
-   "problems": [
-    "`main`: its result type isn't in the native subset yet"
-   ],
-   "first": "`main`: its result type isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/regex_codes.ail",
-   "status": "not-subset",
-   "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
   },
   {
    "file": "examples/report_dates.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: an empty `{}` whose type isn't known"
-   ],
-   "first": "not in the native subset yet: an empty `{}` whose type isn't known",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7917,12 +7756,9 @@
   },
   {
    "file": "examples/runner.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.to_int()` on `str`",
-    "attribute `@test` isn't in the native subset yet"
-   ],
-   "first": "not in the native subset yet: `.to_int()` on `str`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -7959,11 +7795,7 @@
     "expected `Circle`, found `Rect`",
     "a `for` over a `?` isn't in the native subset yet",
     "not in the native subset yet: printing a `Size`",
-    "not in the native subset yet: indexing a `?`",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet"
+    "not in the native subset yet: indexing a `?`"
    ],
    "first": "trait `Shape` isn't in the native subset yet",
    "detail": "",
@@ -7975,26 +7807,17 @@
    "status": "not-subset",
    "problems": [
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
-    "not in the native subset yet: `.index_of()` on `List[char]`",
-    "not in the native subset yet: `.to_int()` on `str`",
-    "field `cmp`: its type isn't in the native subset yet",
-    "`Ordering` isn't in the native subset yet (only locals, parameters and constants)",
-    "`Greater` isn't in the native subset yet (only locals, parameters and constants)",
-    "`Equal` isn't in the native subset yet (only locals, parameters and constants)",
     "parameter `out`: its type isn't in the native subset yet",
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "expected `ParseError`, found `str`",
     "field `cells`: its type isn't in the native subset yet",
     "field `memo`: its type isn't in the native subset yet",
     "field `active`: its type isn't in the native subset yet",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
     "indexing a `?` isn't in the native subset yet",
     "not in the native subset yet: `.remove()` on `?`",
-    "not in the native subset yet: an empty `{}` whose type isn't known",
     "not in the native subset yet: `.get()` on `?`",
     "not in the native subset yet: `.get(k) else` on a `?`",
     "not in the native subset yet: `.contains()` on `?`",
-    "not in the native subset yet: `.cmp()` on `int`",
     "not in the native subset yet: `.contains()` on `?`",
     "not in the native subset yet: calling `Value.to_str`",
     "`snapshot`: its result type isn't in the native subset yet",
@@ -8002,12 +7825,16 @@
     "not in the native subset yet: `.keys()` on `?`",
     "not in the native subset yet: `.get(k) else` on a `?`",
     "not in the native subset yet: an empty `{}` whose type isn't known",
-    "not in the native subset yet: map comprehensions",
+    "not in the native subset yet: a map comprehension whose type isn't known",
+    "not in the native subset yet: a comprehension whose element type isn't known",
+    "not in the native subset yet: `.contains()` on `List[Pos]`",
     "not in the native subset yet: an empty `{}` whose type isn't known",
     "parameter `waits`: its type isn't in the native subset yet",
     "parameter `done`: its type isn't in the native subset yet",
-    "not in the native subset yet: set comprehensions",
-    "not in the native subset yet: set comprehensions",
+    "not in the native subset yet: a comprehension whose element type isn't known",
+    "not in the native subset yet: `.keys()` on `?`",
+    "not in the native subset yet: a comprehension whose element type isn't known",
+    "not in the native subset yet: `.keys()` on `?`",
     "`for mut` isn't in the native subset yet",
     "not in the native subset yet: indexing a `?`",
     "not in the native subset yet: indexing a `?`",
@@ -8027,8 +7854,7 @@
    "problems": [
     "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
     "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "`tz` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: `.to_int()` on `str`"
+    "`tz` isn't in the native subset yet (only locals, parameters and constants)"
    ],
    "first": "`to_str`: methods of traits and `impl` blocks aren't in the native subset yet",
    "detail": "",
@@ -8039,12 +7865,10 @@
    "file": "examples/snapdiff.ail",
    "status": "not-subset",
    "problems": [
-    "not in the native subset yet: map comprehensions",
     "`else` with a handler isn't in the native subset yet",
-    "`else` with a handler isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet"
+    "`else` with a handler isn't in the native subset yet"
    ],
-   "first": "not in the native subset yet: map comprehensions",
+   "first": "`else` with a handler isn't in the native subset yet",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -8060,12 +7884,9 @@
   },
   {
    "file": "examples/std_csv.ail",
-   "status": "not-subset",
-   "problems": [
-    "`records`: its result type isn't in the native subset yet",
-    "parameter `recs`: its type isn't in the native subset yet"
-   ],
-   "first": "`records`: its result type isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -8090,14 +7911,9 @@
   },
   {
    "file": "examples/std_regex_groups.ail",
-   "status": "not-subset",
-   "problems": [
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)",
-    "`regex` isn't in the native subset yet (only locals, parameters and constants)"
-   ],
-   "first": "`regex` isn't in the native subset yet (only locals, parameters and constants)",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -8139,9 +7955,7 @@
    "problems": [
     "not in the native subset yet: calling `parse_json`",
     "`Json` isn't in the native subset yet (only locals, parameters and constants)",
-    "not in the native subset yet: calling `parse_json`",
-    "attribute `@test` isn't in the native subset yet",
-    "attribute `@test` isn't in the native subset yet"
+    "not in the native subset yet: calling `parse_json`"
    ],
    "first": "not in the native subset yet: calling `parse_json`",
    "detail": "",
@@ -8150,18 +7964,9 @@
   },
   {
    "file": "examples/tensors.ail",
-   "status": "not-subset",
-   "problems": [
-    "`*` on `Tensor[float]` and `float`",
-    "not in the native subset yet: `.relu()` on `Tensor[float]`",
-    "not in the native subset yet: `.relu()` on `Tensor[float]`",
-    "not in the native subset yet: `-` on `Tensor[float]`",
-    "`/` on a tensor isn't in the native subset yet",
-    "not in the native subset yet: `.to_list()` on `bool`",
-    "not in the native subset yet: `.sigmoid()` on `Tensor[float]`",
-    "not in the native subset yet: `.tanh()` on `Tensor[float]`"
-   ],
-   "first": "`*` on `Tensor[float]` and `float`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -8261,11 +8066,9 @@
   },
   {
    "file": "examples/tool_effects_table.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.join()` on `List[?]`"
-   ],
-   "first": "not in the native subset yet: `.join()` on `List[?]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "examples",
    "negative": false
@@ -8495,6 +8298,15 @@
    "negative": false
   },
   {
+   "file": "tools/perfbench/programs/regex_scan.ail",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
+   "detail": "",
+   "source": "perfbench",
+   "negative": false
+  },
+  {
    "file": "tools/perfbench/programs/sieve.ail",
    "status": "built-match",
    "problems": [],
@@ -8514,12 +8326,9 @@
   },
   {
    "file": "tools/perfbench/programs/tensor.ail",
-   "status": "not-subset",
-   "problems": [
-    "not in the native subset yet: `.matmul()` on `Tensor[float]`",
-    "not in the native subset yet: `.add()` on `Tensor[float]`"
-   ],
-   "first": "not in the native subset yet: `.matmul()` on `Tensor[float]`",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "perfbench",
    "negative": false
@@ -8535,15 +8344,9 @@
   },
   {
    "file": "tools/perfbench/programs/tensor_ops.ail",
-   "status": "not-subset",
-   "problems": [
-    "`+` on a tensor isn't in the native subset yet",
-    "`*` on `bool` and `Tensor[float]`",
-    "`-` on `bool` and `Tensor[float]`",
-    "`*` on `Tensor[float]` and `float`",
-    "not in the native subset yet: `.transpose()` on `bool`"
-   ],
-   "first": "`+` on a tensor isn't in the native subset yet",
+   "status": "built-match",
+   "problems": [],
+   "first": "",
    "detail": "",
    "source": "perfbench",
    "negative": false

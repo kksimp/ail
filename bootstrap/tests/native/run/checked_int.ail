@@ -1,0 +1,42 @@
+# checked_* on int gives none on overflow or a zero divisor (type.num.12).
+fn show(v int?) str
+    if x := v
+        return "some({x})"
+    "none"
+
+fn main()
+    big := 9223372036854775807
+    least := 0 - big - 1
+    print(show(big.checked_add(1)))
+    print(show(big.checked_add(0 - 1)))
+    print(show(least.checked_add(0 - 1)))
+    print(show(least.checked_sub(1)))
+    print(show(0.checked_sub(least)))
+    print(show(7.checked_sub(9)))
+    print(show(big.checked_mul(2)))
+    print(show(3037000500.checked_mul(3037000500)))
+    print(show(3037000499.checked_mul(3037000499)))
+    print(show(least.checked_mul(0 - 1)))
+    print(show((0 - 1).checked_mul(least)))
+    print(show(least.checked_mul(1)))
+    print(show(0.checked_mul(least)))
+    print(show((0 - 4611686018427387904).checked_mul(2)))
+    print(show((0 - 4611686018427387904).checked_mul(0 - 2)))
+    print(show((0 - 5).checked_div(0)))
+    print(show(least.checked_div(0 - 1)))
+    print(show((0 - 7).checked_div(2)))
+    print(show(least.checked_rem(0 - 1)))
+    print(show(7.checked_rem(0)))
+    print(show((0 - 7).checked_rem(3)))
+    print(show(least.checked_neg()))
+    print(show(5.checked_neg()))
+    print(show((0 - big).checked_neg()))
+    mut n := 1
+    mut steps := 0
+    while true
+        if m := n.checked_mul(10)
+            n = m
+            steps += 1
+        else
+            break
+    print("{steps} {n}")
