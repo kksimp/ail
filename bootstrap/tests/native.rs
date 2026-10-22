@@ -488,6 +488,53 @@ fn unicode_tables_are_current() {
     );
 }
 
+/// `compiler/mir/prelude_embed.ail` is `bootstrap/src/prelude.ail` as
+/// `tools/native/gen_prelude.ail` writes it (json.prelude.1, ADR 0808).
+#[test]
+fn embedded_prelude_is_current() {
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "tools/native/gen_prelude.ail"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let have = fs::read_to_string(root().join("compiler/mir/prelude_embed.ail")).unwrap();
+    assert!(
+        String::from_utf8(out.stdout).unwrap() == have,
+        "compiler/mir/prelude_embed.ail is stale: run `./ail run tools/native/gen_prelude.ail > compiler/mir/prelude_embed.ail`"
+    );
+}
+
+/// json.print.1, json.parse.1: the native compiler run without `ail build`'s
+/// `AIL_DERIVED` file, as a natively built compiler is, gets the prelude's
+/// `Json` from its embedded copy and builds the same bytes `ail build` does.
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn json_builds_without_the_derived_file() {
+    let rel = "bootstrap/tests/native/run/json_modules.ail";
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .env_remove("AIL_DERIVED")
+        .args(["run", "compiler", "build", rel, "compiler/rt/native", host_target(), "0", "0"])
+        .arg(root().join("bootstrap/src/std"))
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let exe = unhex(&String::from_utf8(out.stdout).unwrap()).expect("hex text");
+    let tmp = std::env::temp_dir().join(format!("ail-json-embed-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let path = tmp.join("viaembed");
+    write_exe(&path, &exe);
+    let built = tmp.join("viabuild");
+    let b = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["build", rel, "-o"]).arg(&built).output().unwrap();
+    assert!(b.status.success(), "`ail build` failed");
+    assert!(fs::read(&built).unwrap() == exe, "the embedded prelude builds different bytes than `ail build`");
+    let native = Command::new(&path).output().unwrap();
+    let interp = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", rel]).output().unwrap();
+    assert!(native.stdout == interp.stdout, "native output differs from `ail run`");
+    let _ = fs::remove_dir_all(&tmp);
+}
+
 /// run.limit.5, run.limit.6: a native program stops at the limits of
 /// `AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB` and the defaults `ail build` bakes,
 /// with the trap line `ail run` prints (less its position), after its output
