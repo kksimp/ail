@@ -33,5 +33,13 @@ fn main()
     print(fs.exists("{base}/src/inside"))
     for f in fs.walk(base) else []
         fs.remove(f) else return
-    for d in ["{base}/deep/er/tree/sub", "{base}/deep/er/tree", "{base}/deep/er", "{base}/deep", "{base}/src/sub", "{base}/src", base]
+    for d in [
+        "{base}/deep/er/tree/sub",
+        "{base}/deep/er/tree",
+        "{base}/deep/er",
+        "{base}/deep",
+        "{base}/src/sub",
+        "{base}/src",
+        base,
+    ]
         fs.remove(d) else return

@@ -33,12 +33,14 @@ pub enum Ty
     ## `int`, `float` or `F32`. A tensor is never changed in place, so a copy of the
     ## value shares the object.
     Tensor(elem Ty)
-    ## The element type of a `Tensor[f32]` (ADR 0815); there is no scalar `f32`
-    ## value in the native subset yet.
+    ## `f32` (ADR 0815, ADR 0834): the element type of a `Tensor[f32]`, and a
+    ## scalar held in a float register already rounded to `f32`.
     F32
     ## `(A, B, ...)` (ADR 0829): a struct object (kind 4) with one 8-byte slot
     ## per element, in order.
     Tuple(elems List[Ty])
+    ## `any T`: a box with a tag and a value (ADR 0616).
+    Any(trait_name str)
     Unknown
     Unit
     ## A pointer to an 8-byte cell: `Atomic[int]` or `Atomic[bool]` (ADR 0600).
@@ -54,7 +56,7 @@ pub enum Ty
 
 pub fn Ty.is_float(self) bool
     match self
-        Float => true
+        Float | F32 => true
         _ => false
 
 pub fn Ty.is_unit(self) bool
@@ -109,6 +111,7 @@ pub fn Ty.name(self) str
         Tuple(es) => "({[e.name() for e in es].join(", ")})"
         Struct(n) => n
         Enum(n) => n
+        Any(t) => "any {t}"
         Unknown => "?"
         Unit => "unit"
         Atomic(e) => "Atomic[{e.name()}]"

@@ -13,7 +13,7 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
     s := lower_value(scrutinee, none)?
     mut en := ""
     match s.ty
-        Int | Bool | Str | Char | Tuple => en = ""
+        Int | Sized(_) | Bool | Str | Char | Tuple => en = ""
         Enum(n) => en = n
         _ => return unsupported(pos, "`match` on `{s.ty.name()}`")
     tag := if en == "" then s.id else tag_of(en, s.id)
@@ -159,7 +159,7 @@ fn Lower.literal_int(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
         _ =>
             problem(pos, "only `int` and `char` ranges are in the native subset yet")
             return none
-    if not (s.ty == Ty.Int)
+    if not (s.ty == Ty.Int or s.ty.is_sized())
         problem(pos, "an `int` pattern on `{s.ty.name()}`")
         return none
     n := text.to_int() else

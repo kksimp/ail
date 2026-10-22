@@ -1,0 +1,16 @@
+# std.tensor.7, std.tensor.21: matmul with rows wide enough for the blocked
+# kernels (whole blocks of columns plus a tail), float and f32, k from 0 up.
+fn data(n int, k float) List[float]
+    mut xs := List[float]()
+    for i in 0..n
+        xs.push(k * ((i * 37) % 23).to_float() / 7.0 - 1.3 * ((i * 11) % 5).to_float())
+    xs
+
+fn main()
+    for n in [1, 7, 8, 9, 16, 17, 23, 33]
+        for k in [0, 1, 2, 5]
+            x := tensor.from(data(3 * k, 0.9), [3, k])
+            y := tensor.from(data(k * n, 1.7), [k, n])
+            z := x.matmul(y)
+            print(z.to_list())
+            print(x.to_f32().matmul(y.to_f32()).to_float().to_list())

@@ -19,7 +19,7 @@ fn run(args: &[&str]) -> (i32, String) {
 #[test]
 fn passing_and_failing_tests_match_the_interpreter() {
     if cfg!(windows) {
-        eprintln!("skipped: `ail build` has no native target for Windows yet until the Windows PE writer lands (ADR 0597)");
+        eprintln!("skipped: the native test program reads `env.args()`, which the Windows native runtime does not have yet (ADR 0608)");
         return;
     }
     let (code, out) = run(&["bootstrap/tests/native_test/mixed.ail"]);
@@ -35,7 +35,7 @@ fn passing_and_failing_tests_match_the_interpreter() {
 #[test]
 fn json_lines_end_with_a_summary() {
     if cfg!(windows) {
-        eprintln!("skipped: `ail build` has no native target for Windows yet until the Windows PE writer lands (ADR 0597)");
+        eprintln!("skipped: the native test program reads `env.args()`, which the Windows native runtime does not have yet (ADR 0608)");
         return;
     }
     let (code, out) = run(&["--json", "bootstrap/tests/native_test/mixed.ail"]);
