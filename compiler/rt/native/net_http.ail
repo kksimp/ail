@@ -2,8 +2,9 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## The HTTP/1.1 client of the native subset (std.net.2, std.net.3): `net.get`
-## and `net.post` over plain `http://`, on the sockets of `net.ail`. One
-## connection per request, sent with `Connection: close`; the body is framed by
+## and `net.post` over plain `http://`, on the sockets of `net.ail`. A
+## connection a response leaves open waits in a pool for the next request to
+## its origin (std.net.19, global slot 41); the body is framed by
 ## `Content-Length`, chunked coding, or the end of the stream. Redirects
 ## (301, 302, 303, 307, 308 with a `Location`) of a `GET` are followed, at most
 ## five. `net.request` takes the options of std.net.6 and std.net.19:
@@ -11,7 +12,7 @@
 ## Not built yet: `https` (it fails with kind `tls`), `Accept-Encoding` and the
 ## undoing of `gzip` and `deflate` (std.net.26), `data` (`bytes` isn't in the
 ## native subset), `total_ms` (accepted and checked, not enforced),
-## keep-alive connection pooling (std.net.19), streaming bodies.
+## streaming bodies.
 ##
 ## A `net.Response` is a struct (kind 4) of four words: `status`, `headers`
 ## (a `Map[str, str]`, names in lowercase, repeated values joined with `, `),
@@ -534,7 +535,122 @@ fn net_options() int
 
 ## One request on a new connection: the response object, or 0 after a failure.
 ## `next` receives the redirect target (a string address, or 0).
+## Whether the request headers `m` say `Connection: close`.
+fn http_closes(m int) bool
+    for i in 0..http_slots(m)
+        e := http_slot(m, i)
+        if load64(e) != -1
+            k := str_addr(str_at(load64(e + 8)))
+            if http_ieq(k + 16, load64(k), "connection")
+                v := str_at(load64(e + 16))
+                if net_has(http_lower(str_addr(v) + 16, load64(str_addr(v))), "close")
+                    return true
+    false
+
+## Whether a status line begins `HTTP/1.1`.
+fn http_is11(line str) bool
+    p := str_addr(line)
+    load64(p) >= 8 and http_ieq(p + 16, 8, "http/1.1")
+
+## How long milliseconds a connection may stay idle: 30 seconds, or less if
+## the server's `Keep-Alive` header has `timeout=SECONDS`.
+fn http_keep_ms(v str) int
+    p := str_addr(v)
+    n := load64(p)
+    mut ms := POOL_IDLE_MS
+    for i in 0..n
+        if i + 8 <= n and http_ieq(p + 16 + i, 8, "timeout=")
+            mut j := i + 8
+            mut s := 0
+            while j < n and load8(p + 16 + j) >= 48 and load8(p + 16 + j) <= 57 and s < 100000
+                s = s * 10 + load8(p + 16 + j) - 48
+                j += 1
+            if s * 1000 < ms
+                ms = s * 1000
+            break
+    ms
+
+# ---- the pool of idle connections (global slot 41) ----
+#
+# One object: the count, then up to POOL_TOTAL entries of four words: the
+# connection's handle, its origin key (a string object), when it expires
+# (`time_mono_ms`), and a spare.
+
+POOL_PER_HOST := 4
+POOL_TOTAL := 32
+POOL_IDLE_MS := 30000
+
+fn pool_get() int
+    p := load64(global(NET_POOL))
+    if p == 0
+        p = obj_new(8 + 32 * POOL_TOTAL, 4)
+        store64(global(NET_POOL), p)
+    p
+
+## Forget entry `i`, moving the later ones down.
+fn pool_forget(p int, i int)
+    n := load64(p)
+    for j in i..n - 1
+        copy_bytes(p + 8 + 32 * j, p + 8 + 32 * (j + 1), 32)
+    store64(p, n - 1)
+
+## An idle connection to `key` that is still open, or 0. One the server has
+## closed (readable: end of file) or that has expired is closed and skipped.
+fn pool_take(key str) int
+    p := pool_get()
+    now := time_mono_ms()
+    mut i := load64(p) - 1
+    while i >= 0
+        e := p + 8 + 32 * i
+        if str_at(load64(e + 8)) == key
+            h := load64(e)
+            o := net_obj(h)
+            dead := o == 0 or now >= load64(e + 16) or net_wait(load64(o + NET_FD), 1, 0) != 0
+            pool_forget(p, i)
+            if dead
+                net_close(h)
+            else
+                store64(o + NET_POS, 0)
+                store64(o + NET_LEN, 0)
+                return h
+        i -= 1
+    0
+
+## Keep the open connection `h` to `key` for `ms`, closing the oldest idle
+## ones beyond 4 for the origin and 32 in all.
+fn pool_put(key str, h int, ms int)
+    p := pool_get()
+    mut same := 0
+    mut first := -1
+    for i in 0..load64(p)
+        if str_at(load64(p + 8 + 32 * i + 8)) == key
+            same += 1
+            if first < 0
+                first = i
+    if same >= POOL_PER_HOST
+        net_close(load64(p + 8 + 32 * first))
+        pool_forget(p, first)
+    if load64(p) >= POOL_TOTAL
+        net_close(load64(p + 8))
+        pool_forget(p, 0)
+    n := load64(p)
+    e := p + 8 + 32 * n
+    store64(e, h)
+    store64(e + 8, str_addr(key))
+    store64(e + 16, time_mono_ms() + ms)
+    store64(e + 24, 0)
+    store64(p, n + 1)
+
+## One request, on a pooled connection when there is one (std.net.19). A
+## pooled connection that fails before a response byte arrives is dropped and
+## the request is sent again on a new one, if its method may be repeated.
 fn http_exchange(method str, url str, body str, ctype str, spec int, next int, at str) int
+    r := http_exchange_on(method, url, body, ctype, spec, next, false, at)
+    if r == -1
+        return http_exchange_on(method, url, body, ctype, spec, next, true, at)
+    r
+
+fn http_exchange_on(method str, url str, body str, ctype str, spec int, next int, fresh bool, at str) int
     u := http_parse(url, at)
     if u == 0
         return 0
@@ -550,7 +666,18 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
         )
     timeout := if spec == 0 then NET_DEFAULT_MS else load64(spec + 8)
     cms := if spec == 0 then 0 else load64(spec + 16)
-    h := net_dial_ms(host, port, url, if cms > 0 then cms else timeout, at)
+    key := "{scheme}://{host}:{port}"
+    again := method == "GET"
+        or method == "HEAD"
+        or method == "PUT"
+        or method == "DELETE"
+        or method == "OPTIONS"
+    mut h := 0
+    if not fresh and not http_closes(if spec == 0 then 0 else load64(spec))
+        h = pool_take(key)
+    reused := h != 0
+    if h == 0
+        h = net_dial_ms(host, port, url, if cms > 0 then cms else timeout, at)
     if h == 0
         return 0
     o := net_obj(h)
@@ -558,6 +685,7 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
     # The request.
     hdrs := if spec == 0 then 0 else load64(spec)
     strip := spec != 0 and load64(spec + 24) != 0
+    closes := http_closes(hdrs)
     chunked := http_chunked(hdrs)
     has_body := load64(str_addr(body)) > 0
         or method == "POST"
@@ -579,7 +707,8 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
         sb_text("User-Agent: ail\r\n")
     if not http_given(hdrs, "accept")
         sb_text("Accept: */*\r\n")
-    sb_text("Connection: close\r\n")
+    if closes
+        sb_text("Connection: close\r\n")
     http_head_lines(hdrs, strip)
     if load64(str_addr(ctype)) > 0 and not http_given(hdrs, "content-type")
         sb_text("Content-Type: ")
@@ -600,11 +729,16 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
     net_write(h, req, at)
     if failed()
         net_close(h)
+        if reused and again
+            err_clear()
+            return -1
         return 0
     # The status line, skipping interim `1xx` responses.
     headers := map_new(1, 0, 0)
     all := map_new(1, 1, 8)
     mut status := 0
+    mut seen := false
+    mut http11 := false
     while true
         line := net_read_line(h, at)
         if failed()
@@ -612,7 +746,11 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
             return 0
         if str_addr(line) == 0
             net_close(h)
+            if reused and again and not seen
+                return -1
             return net_fail(url, "protocol", "the connection closed before a response", at)
+        seen = true
+        http11 = http_is11(line)
         status = http_status(line)
         if status < 0
             net_close(h)
@@ -705,7 +843,21 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
     if err < 0
         net_close(h)
         return http_read_fail(o, err, url, at)
-    net_close(h)
+    # Kept for the next request to this origin when the response left the
+    # connection open: HTTP/1.1, no `Connection: close`, a body framed by
+    # length or chunks, and nothing buffered beyond it (std.net.19).
+    ka := http_get_header(headers, "connection")
+    framed := nobody
+        or net_has(http_lower(str_addr(te) + 16, load64(str_addr(te))), "chunked")
+        or load64(str_addr(cl)) > 0
+    keep := http_keep_ms(http_get_header(headers, "keep-alive"))
+    if http11 and not closes and framed and keep > 0
+        and not net_has(http_lower(str_addr(ka) + 16, load64(str_addr(ka))), "close")
+        and load64(o + NET_POS) == load64(o + NET_LEN)
+        and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+        pool_put(key, h, keep)
+    else
+        net_close(h)
     text := net_text(load64(b), load64(b + 8))
     # The body as it arrived, for `*_bytes` (std.net.16), after the four
     # fields of a `Response`.

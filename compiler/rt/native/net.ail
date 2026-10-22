@@ -20,6 +20,9 @@
 # Global slot 40: the table of socket objects (a list of pointers).
 NET_TAB := 40
 
+# Global slot 41: the pool of idle HTTP connections (net_http.ail, std.net.19).
+NET_POOL := 41
+
 # A socket object: eleven words.
 NET_FD := 0
 NET_TIMEOUT := 8
@@ -293,14 +296,50 @@ fn net_hosts(host str) int
     -1
 
 ## The IPv4 address of `host`, or -1 (a name that isn't `localhost` or in
-## `/etc/hosts` is not found: there is no DNS client).
+## `/etc/hosts` is not found on Linux, which has no DNS client yet; macOS
+## asks the system resolver).
 fn net_resolve(host str) int
     ip := net_ipv4(host)
     if ip >= 0
         return ip
     if host == "localhost"
         return 16777343
-    net_hosts(host)
+    found := net_hosts(host)
+    if found < 0 and target() == 2
+        return net_getaddrinfo(host)
+    found
+
+## The IPv4 address of `host` from libSystem's `getaddrinfo` (macOS: the
+## system resolver, which knows the configured and scoped DNS servers), or -1.
+## `struct addrinfo` there is flags, family, socktype, protocol, addrlen (4
+## bytes each, padded), then `ai_canonname`, `ai_addr` and `ai_next`.
+fn net_getaddrinfo(host str) int
+    n := load64(str_addr(host))
+    name := alloc_raw(n + 8, KIND_BYTES)
+    copy_bytes(name, str_addr(host) + 16, n)
+    store8(name + n, 0)
+    hints := alloc_raw(48, KIND_BYTES)
+    for i in 0..6
+        store64(hints + 8 * i, 0)
+    # `ai_family` AF_INET at 4, then `ai_socktype` SOCK_STREAM at 8 (each store
+    # writes eight bytes, the second clears what the first spilled).
+    store64(hints + 4, 2)
+    store64(hints + 8, 1)
+    res := alloc_raw(8, KIND_BYTES)
+    store64(res, 0)
+    r := import_call("_getaddrinfo", name, 0, hints, res)
+    if r != 0 or load64(res) == 0
+        return -1
+    ai := load64(res)
+    sa := load64(ai + 32)
+    mut ip := -1
+    if sa != 0 and load8(sa + 1) == 2
+        ip = load8(sa + 4)
+            .bit_or(load8(sa + 5).shl(8))
+            .bit_or(load8(sa + 6).shl(16))
+            .bit_or(load8(sa + 7).shl(24))
+    import_call("_freeaddrinfo", ai, 0, 0, 0)
+    ip
 
 ## A `sockaddr_in` for `ip` and `port` (16 bytes; macOS has a length byte).
 fn net_sockaddr(ip int, port int) int
