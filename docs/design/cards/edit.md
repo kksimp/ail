@@ -87,16 +87,16 @@ fn parse_diags(str) List[Diag]
 fn parse_outline(str) List[OutlineItem]
 fn typed(str, List[Command]) Editor
 fn keys(str) List[Command]
-DIAG_JSON := "{\"api\":1,\"severity\":\"error\",\"rule\":\"expr.name.1\",\"file\":\"t.ail\",\"line\":2,\"col\":5,\"message\":\"unknown name `prnt`\",\"help\":\"did you mean `print`?\",\"end_line\":2,\"end_col\":9,\"fixes\":[{\"title\":\"replace `prnt` with `print`\",\"edits\":[{\"line\":2,\"col\":5,\"end_line\":2,\"end_col\":9,\"text\":\"print\"}]}]}"
-API_SRC := "struct P\n    x int\n\n## Adds.\nfn add(a int, b int) int\n    a + b\n\nfn main()\n    p := P(x: 1)\n    print(add(p.x, 2))"
-API_JSON := "{\"api\":1,\"file\":\"t.ail\",\"items\":[{\"kind\":\"struct\",\"name\":\"P\",\"id\":\"type:P\",\"line\":1,\"col\":8,\"doc\":null,\"signature\":\"struct P\",\"error\":false,\"fields\":[{\"kind\":\"field\",\"name\":\"x\",\"id\":\"field:P.x\",\"line\":2,\"col\":5,\"doc\":null,\"signature\":\"x int\",\"type\":\"int\"}],\"methods\":[]},{\"kind\":\"fn\",\"name\":\"add\",\"id\":\"fn:add\",\"line\":5,\"col\":4,\"doc\":\"Adds.\",\"signature\":\"fn add(a int, b int) int\",\"params\":[{\"name\":\"a\",\"type\":\"int\",\"mut\":false},{\"name\":\"b\",\"type\":\"int\",\"mut\":false}],\"returns\":\"int\",\"effects\":[]},{\"kind\":\"fn\",\"name\":\"main\",\"id\":\"fn:main\",\"line\":8,\"col\":4,\"doc\":null,\"signature\":\"fn main()\",\"params\":[],\"returns\":null,\"effects\":[\"io\"]}],\"references\":[{\"id\":\"type:P\",\"line\":9,\"col\":10},{\"id\":\"field:P.x\",\"line\":9,\"col\":12},{\"id\":\"fn:add\",\"line\":10,\"col\":11},{\"id\":\"field:P.x\",\"line\":10,\"col\":17}]}"
+DIAG_JSON := ...
+API_SRC := ...
+API_JSON := ...
 fn indexed(List[Command]) Editor
 fn press(str) ui.Event
-ADD_REFS_JSON := "{\"api\":1,\"symbol\":\"fn:add\",\"refs\":[{\"file\":\"t.ail.edit-query.ail\",\"line\":5,\"col\":4,\"def\":true},{\"file\":\"t.ail.edit-query.ail\",\"line\":10,\"col\":11,\"def\":false},{\"file\":\"other.ail\",\"line\":1,\"col\":1,\"def\":false}]}"
+ADD_REFS_JSON := ...
 fn fg_at(Screen, int, int) int
-LOCALS_JSON := "{\"api\":1,\"file\":\"t.ail\",\"line\":11,\"col\":15,\"locals\":[{\"name\":\"p\",\"type\":\"P\",\"mut\":false,\"kind\":\"binding\",\"line\":9,\"col\":5},{\"name\":\"index\",\"type\":\"int\",\"mut\":false,\"kind\":\"loop\",\"line\":10,\"col\":9}]}"
-REFS_JSON := "{\"api\":1,\"file\":\"t.ail.edit-query.ail\",\"line\":9,\"col\":5,\"symbol\":\"local:p\",\"refs\":[{\"file\":\"t.ail.edit-query.ail\",\"line\":9,\"col\":5,\"def\":true},{\"file\":\"t.ail.edit-query.ail\",\"line\":10,\"col\":15,\"def\":false},{\"file\":\"other.ail\",\"line\":1,\"col\":1,\"def\":false}]}"
-TYPE_JSON := "{\"api\":1,\"file\":\"t.ail\",\"line\":10,\"col\":11,\"text\":\"add\",\"start_col\":11,\"end_col\":14,\"type\":\"fn(int, int) int\",\"symbol\":\"fn:add\",\"callee\":{\"signature\":\"fn add(a int, b int) int\",\"doc\":\"Adds.\"}}"
+LOCALS_JSON := ...
+REFS_JSON := ...
+TYPE_JSON := ...
 fn draw(mut ui.Window, Screen) [io mutates ui]
 fn draw_themed(mut ui.Window, Screen, Palette) [io mutates ui]
 struct Palette
@@ -180,4 +180,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~3491); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~1869); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

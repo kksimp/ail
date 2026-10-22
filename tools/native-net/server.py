@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """A scripted HTTP server for tools/native-net/check.sh: it prints its port on
 its first line and serves canned responses on 127.0.0.1."""
+import gzip
 import socket
+import zlib
 import sys
 import threading
 
@@ -40,6 +42,23 @@ def read_request(conn):
 
 
 def respond(conn, method, target, headers, body):
+    if target == "/setcookie":
+        return (
+            b"HTTP/1.1 302 Found\r\nSet-Cookie: sid=abc; Path=/\r\nSet-Cookie: gone=1; Path=/; Max-Age=0\r\n"
+            b"Location: /showcookie\r\nContent-Length: 0\r\n\r\n"
+        )
+    if target == "/showcookie":
+        sent = [h.split(":", 1)[1].strip() for h in headers if h.lower().startswith("cookie:")]
+        data = ("cookie=" + ";".join(sent)).encode()
+        return b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(data) + data
+    if target == "/badgzip":
+        data = b"not gzip at all"
+        return b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: %d\r\n\r\n" % len(data) + data
+    if target in ("/gzip", "/deflate"):
+        text = b"compressed text " * 50
+        data = gzip.compress(text, mtime=0) if target == "/gzip" else zlib.compress(text)
+        enc = b"gzip" if target == "/gzip" else b"deflate"
+        return b"HTTP/1.1 200 OK\r\nContent-Encoding: %s\r\nContent-Length: %d\r\n\r\n" % (enc, len(data)) + data
     if target == "/plain":
         data = b"hello, plain"
         return b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n" % len(data) + data

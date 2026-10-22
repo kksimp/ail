@@ -182,6 +182,7 @@ pub fn mir.call_line(int) int
 pub fn mir.call_col(int) int
 pub fn mir.mark_nonneg(mir.Func) mir.Func
 pub fn mir.rewrite_nonneg(mir.Func) mir.Func
+pub mir.PRELUDE_EMBED := ...
 pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
@@ -200,4 +201,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1936); dropped: private items, doc comments, parameter names
+trimmed to fit 2000 tokens (~1948); dropped: private items, doc comments, parameter names

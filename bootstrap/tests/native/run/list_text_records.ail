@@ -1,0 +1,24 @@
+enum Kind
+    Text
+    Elem(tag str)
+
+struct Node
+    kind Kind
+    n int
+    kids List[int]
+
+struct Doc
+    nodes List[Node]
+
+fn Doc.add(mut self, n int)
+    requires n >= 0
+    self.nodes.push(Node(kind: Kind.Text, n: n, kids: [n]))
+
+fn main()
+    mut d := Doc(nodes: [])
+    d.add(1)
+    d.nodes.push(Node(kind: Kind.Elem("p"), n: 2, kids: []))
+    print(d.nodes)
+    print("{d.nodes}")
+    print(d)
+    d.add(-1)

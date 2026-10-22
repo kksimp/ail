@@ -3,6 +3,7 @@
 # an AIL program with it. From the repository root:
 #   tools/app-host/macos/run.sh                      # build only
 #   tools/app-host/macos/run.sh examples/app_todo.ail
+#   tools/app-host/macos/run.sh --native tools/garlic/garlic.ail URL   # compiled, not interpreted
 # Needs the Xcode command line tools (swiftc); no third-party packages.
 set -euo pipefail
 
@@ -38,6 +39,15 @@ PLIST
     swiftc -O -parse-as-library -target arm64-apple-macos13 \
         -framework SwiftUI -framework AppKit \
         "$here"/Sources/*.swift -o "$exe"
+fi
+
+if [ "${1:-}" = "--native" ]; then
+    # Build the program natively (ADR 0022) and run it against this host.
+    [ "$#" -ge 2 ] || { echo "usage: run.sh --native PROGRAM.ail [ARGS...]" >&2; exit 2; }
+    prog="$2"; shift 2
+    bin="$here/build/native-$(basename "$prog" .ail)"
+    (cd "$(dirname "$prog")" && "$root/ail" build "$(basename "$prog")" -o "$bin")
+    AIL_APP_HOST="$exe" exec "$bin" "$@"
 fi
 
 if [ "$#" -gt 0 ]; then
