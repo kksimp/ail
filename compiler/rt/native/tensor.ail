@@ -174,6 +174,16 @@ fn vec_axpy(c int, b int, n int, r int, x float)
             s = f32_round(s)
         storef(c + 8 * i, s)
 
+## One row of a matrix product (std.tensor.7): `c[j]` is the sum over `p < k`,
+## in order from 0.0, of `a[p] * b[p * n + j]`, each product and sum rounded
+## (`r` non-zero: to `f32`). ARM64 assembles it (`compiler/a64/kernels.ail`);
+## elsewhere this is `k` calls of `vec_axpy` on a zeroed row.
+fn vec_mm(c int, a int, b int, n int, k int, r int)
+    for j in 0..n
+        storef(c + 8 * j, 0.0)
+    for p in 0..k
+        vec_axpy(c, b + 8 * p * n, n, r, loadf(a + 8 * p))
+
 ## `out[i] = a[i] op b[i]` for `i < n` (`op` 0 `+`, 1 `-`, 2 `*`, 3 `/`).
 fn vec_zip(op int, out int, a int, b int, n int, r int)
     for i in 0..n
@@ -555,8 +565,7 @@ fn tensor_matmul(a int, b int) int
     if kind >= 1
         r := if kind == 2 then 1 else 0
         for i in 0..m
-            for p in 0..k
-                vec_axpy(out + 8 * i * n, db + 8 * p * n, n, r, loadf(da + 8 * (i * k + p)))
+            vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, r)
         return t
     box := alloc(8, KIND_ATOMIC)
     for i in 0..m
@@ -582,6 +591,12 @@ fn tensor_activate(a int, kind int) int
     tensor_copy_words(t + 32, a + 32, rank)
     da := tensor_data(a)
     out := tensor_data(t)
+    r := ek == 2
+    if kind == 1
+        for i in 0..n
+            y := 1.0 / (1.0 + float_exp(0.0 - loadf(da + 8 * i)))
+            storef(out + 8 * i, if r then f32_round(y) else y)
+        return t
     for i in 0..n
         x := loadf(da + 8 * i)
         mut y := 0.0
@@ -590,11 +605,9 @@ fn tensor_activate(a int, kind int) int
                 y = x
             elif x > 0.0
                 y = x
-        elif kind == 1
-            y = 1.0 / (1.0 + float_exp(0.0 - x))
         else
             y = float_tanh(x)
-        storef(out + 8 * i, elem_round(ek, y))
+        storef(out + 8 * i, if r then f32_round(y) else y)
     t
 
 ## The message of the fault `softmax` raises (std.tensor.24), or 0.

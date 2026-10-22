@@ -9,7 +9,13 @@ fn show(a u8, b i8) str
     "a={a} b={b}"
 
 fn main()
-    print(widen(200.to_u8(), (0 - 5).to_i8(), 65535.to_u16(), (0 - 7).to_i32(), 4000000000.to_u32()))
+    print(widen(
+        200.to_u8(),
+        (0 - 5).to_i8(),
+        65535.to_u16(),
+        (0 - 7).to_i32(),
+        4000000000.to_u32(),
+    ))
     x := pick(255)
     y := pick(3)
     print(x > y)

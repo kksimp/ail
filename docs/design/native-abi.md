@@ -650,8 +650,9 @@ One rounding of the double-precision result is the correctly rounded
 single-precision result for `+ - * /` (a double has more than twice an `f32`'s
 precision), so the values are the interpreter's `f32` kernels'.
 `rt.tensor_to_f32` and `rt.tensor_to_float` convert. A `Tensor[f32]` has type
-`Ty.Tensor(Ty.F32)`; there is no scalar `f32` yet, so `sum`, `dot`, `max`,
-`mean`, `item`, printing and the text form of a `Tensor[f32]` are
+`Ty.Tensor(Ty.F32)`. A scalar `f32` (ADR 0834) is a `Ty.F32` value in a float
+register, rounded after every operation, but `sum`, `dot`, `max`, `mean`,
+`item`, printing and the text form of a `Tensor[f32]` are still
 `native.subset.1` problems, and `to_list` gives a `List[float]`.
 
 Step 5 (vector kernels, x86-64): `rt.vec_axpy` (matmul's inner loop), `rt.vec_zip`
@@ -664,6 +665,13 @@ leaf code using only rax, rcx-r11 and xmm0-xmm4, and `inline.ail` never inlines
 an `rt.vec_*` function. On ARM64 `compiler/a64/kernels.ail` assembles NEON
 loops in the same place (two doubles at a time, `fcvtn`/`fcvtl` for the `f32`
 rounding, x0-x9 and v0-v5 only), with the same results bit for bit.
+
+Step 5b (ARM64 `matmul`): `rt.vec_mm(c, a, b, n, k, r)` computes one row of
+the product, `compiler/a64/kernels.ail` assembles it with eight columns' sums
+held in registers across the whole `p` loop (`f32` as four singles per register,
+which rounds like the `float` operation rounded to `f32`; doubles otherwise),
+and the remaining columns one at a time. The order of the sums is the same as
+`k` calls of `rt.vec_axpy` on a zeroed row, which is the body on other targets.
 
 Step 6 (`softmax`, std.tensor.24): `rt.tensor_softmax_fault(a)` returns the
 fault message (no axis, empty last axis) or 0, and the lowering traps with

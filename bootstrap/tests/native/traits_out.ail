@@ -1,0 +1,26 @@
+# The edges of traits in the native subset (ADR 0616): only structs convert
+# to `any Trait`, and an `any` value doesn't print yet.
+trait Named
+    fn name(self) str
+
+struct Cat
+    lives int
+
+impl Named for Cat
+    fn name(self) str
+        "cat"
+
+impl Named for int
+    fn name(self) str
+        "int"
+
+fn show(n any Named) str
+    n.name()
+
+fn echo(n any Named) any Named
+    n
+
+fn main()
+    print(show(Cat(lives: 9)))
+    print(show(3))
+    print(echo(Cat(lives: 2)))
