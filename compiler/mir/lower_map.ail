@@ -525,6 +525,10 @@ fn Lower.iter_coll(mut self, v Val) Val
         Set(e) =>
             f := if e == Ty.Bool then "rt.map_keys_bool" else "rt.map_keys"
             Val(id: call(f, [v.id], Ty.List(e)), ty: Ty.List(e))
+        # `for b in bytes` walks a list of the bytes as `u8`.
+        Bytes =>
+            t := Ty.List(Ty.Sized("u8"))
+            Val(id: call("rt.bytes_list", [v.id], t), ty: t)
         _ => v
 
 ## `print(m)` and `print(s)` (type.map.4): `{"a": 1}`, `{1, 2}`.

@@ -40,6 +40,18 @@ fn float_cmp(a float, b float) int
     if a_nan and b_nan
         return 1
     if a_nan then 2 else 0
+## `a.min(b)` and `a.max(b)` on `float`: the default methods of `Ord` over
+## `cmp` (type.num.11, ADR 0137), so a NaN is the greatest value.
+fn float_min(a float, b float) float
+    if float_cmp(a, b) == 2
+        return b
+    a
+
+fn float_max(a float, b float) float
+    if float_cmp(a, b) == 0
+        return b
+    a
+
 # ---- std.math: float methods the interpreter has (type.num.16, ADR 0592) ----
 #
 # Algorithms after Sun's fdlibm (1993, permissive licence; the same code

@@ -548,6 +548,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         return none
                     e := type_of(args[0])?
                     if is_number(e)
+                        or e.is_sized()
                         or e == Ty.Str
                         or needs_copy(e)
                         or is_enum(e)
@@ -1628,6 +1629,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             # A `none` among the items makes the element type optional.
             elem = if has_none and v.ty.opt_inner() == none then (opt_of(v.ty) else v.ty) else v.ty
         if not is_number(elem)
+            and not elem.is_sized()
             and elem != Ty.Str
             and not needs_copy(elem)
             and not is_enum(elem)

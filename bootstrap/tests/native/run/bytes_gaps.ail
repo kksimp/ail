@@ -1,0 +1,16 @@
+# float min/max, joined number lists, List[u8], `for` over bytes, bytes.from_list.
+fn main()
+    print(1.5.max(2.5))
+    print(1.5.min(2.5))
+    print([1, 2, 3].join(","))
+    print([1.5, 2.0].join(" "))
+    print([true, false].join("/"))
+    mut l := [104.to_u8()]
+    l.push(105.to_u8())
+    b := bytes.from_list(l)
+    print(b.len())
+    print(b.text())
+    mut sum := 0
+    for c in b
+        sum += c.to_int()
+    print(sum)

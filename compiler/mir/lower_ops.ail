@@ -10,7 +10,7 @@ BIT_OPS := {"bit_and": "band", "bit_or": "bor", "bit_xor": "bxor", "shl": "shl",
 ## argument (`x.sin()`), or the receiver and one more (`x.pow(y)`).
 MATH1 := ["sin", "cos", "tan", "atan", "exp", "ln", "log10", "cbrt"]
 
-MATH2 := ["atan2", "pow", "hypot"]
+MATH2 := ["atan2", "pow", "hypot", "min", "max"]
 
 fn wants_float(want Ty?) bool
     w := want else return false
