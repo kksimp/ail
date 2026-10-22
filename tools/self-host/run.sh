@@ -65,7 +65,10 @@ unhex() { perl -ne 'chomp; print pack("H*", $_)' > "$1" && chmod +x "$1"; }
 build_with() { # compiler src out
     local cc="$1" src="$2" dst="$3"
     ./ail build "$src" --derived-out "$dst.derived" > /dev/null 2>&1 || : > "$dst.derived"
-    AIL_DERIVED="$dst.derived" "$cc" build "$src" "$rt" "$TARGET" 0 0 bootstrap/src/std > "$dst.hex" 2> "$dst.err" || return 1
+    # The paths `ail build` passes (bootstrap/src/build.rs): absolute, since they
+    # end up in the trap texts of the executable. Relative ones make stage 1 and
+    # the later stages differ in size.
+    AIL_DERIVED="$dst.derived" "$cc" build "$src" "$root/compiler/rt/native" "$TARGET" 0 0 "$root/compiler/../bootstrap/src/std" > "$dst.hex" 2> "$dst.err" || return 1
     unhex "$dst" < "$dst.hex"
 }
 
@@ -125,7 +128,17 @@ say ""
 
 # ---- stage 2 and 3: the fixed point ----
 if [ "$TARGET" != "$host_target" ]; then
-    say "OK (build only: $TARGET can't run on this $host_target host, so stages 2, 3 and T were skipped)."
+    # The target's executables can't run here, but a host-target stage 1 can
+    # cross-build compiler/main.ail for it, and that must equal stage 1 byte
+    # for byte (the macOS stage 1 and 2 difference was the paths above).
+    say "## Cross check: a $host_target stage 1 builds compiler/main.ail for $TARGET"
+    if ./ail build compiler/main.ail -o "$out/host1" --target "$host_target" > "$out/host1.log" 2>&1 &&
+        build_with "$out/host1" compiler/main.ail "$out/cross" && cmp -s "$out/cross" "$stage1"; then
+        say "OK: the cross build is byte-identical to stage 1 ($(wc -c < "$stage1") bytes)."
+    else
+        blocked "cross check" "the $host_target stage 1's $TARGET build of compiler/main.ail differs from stage 1 (cmp $out/cross $stage1)"
+    fi
+    say "OK ($TARGET can't run on this $host_target host, so stages 2, 3 and T were skipped)."
     exit 0
 fi
 if [ -n "${TESTS_ONLY:-}" ] && [ -n "${STAGE1:-}" ]; then
