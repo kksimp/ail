@@ -1,0 +1,41 @@
+# std.net.jar (std.net.20-22) and content encodings (std.net.26) against the
+# scripted server: cookies set on a redirect are sent on the next hop, and
+# gzip and deflate bodies arrive decoded. The base URL is the first argument.
+use std.net
+use std.net.jar
+
+fn bad(base str)
+    b := net.get("{base}/badgzip") else err
+        print("badgzip {err.kind}: {err.message}")
+        return
+    print("badgzip {b.status}")
+
+fn main()
+    base := env.args()[0]
+    mut j := jar.new()
+    r := j.get("{base}/setcookie") else err
+        print("jar error {err.kind}")
+        return
+    print("jar {r.status} {r.body} {j.len()} {j.header("{base}/x")}")
+    g := net.get("{base}/gzip") else err
+        print("gzip error {err.kind}")
+        return
+    enc := g.headers.get("content-encoding") else "none"
+    print("gzip {g.status} {g.body.len()} {enc}")
+    d := net.get("{base}/deflate") else err
+        print("deflate error {err.kind}")
+        return
+    print("deflate {d.status} {d.body.len()}")
+    bad(base)
+    mut o := net.options()
+    o.max_redirects = 0
+    k := j.request("GET", "{base}/setcookie", o) else err
+        print("no-follow error {err.kind}")
+        return
+    print("no-follow {k.status}")
+    mut l := net.options()
+    l.max_redirects = 1
+    m := j.request("GET", "{base}/loop", l) else err
+        print("loop error {err.kind}")
+        return
+    print("loop {m.status}")
