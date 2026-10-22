@@ -1,0 +1,11 @@
+# conc.task.7: the main task and a spawned task both wait on channels nobody feeds.
+fn stuck(c Channel[str])
+    print(c.recv() else "none")
+
+fn main() !
+    c := Channel[str](1)
+    d := Channel[str](1)
+    t := spawn stuck(d)
+    for v in c
+        print(v)
+    t.wait()?

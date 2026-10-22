@@ -12,7 +12,7 @@ use ast
 # ---- types ----
 
 fn is_key_ty(t Ty) bool
-    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char
+    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char or t.is_sized()
 
 fn is_value_ty(t Ty) bool
     is_number(t) or t == Ty.Char or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t) or t.is_ref()
@@ -43,7 +43,7 @@ fn key_kind(t Ty) int
 ## -1 for anything else.
 fn scalar_kind(t Ty) int
     match t
-        Int => 0
+        Int | Sized(_) => 0
         Str => 1
         Bool => 2
         Float => 3
@@ -216,6 +216,9 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
             Map(k, v) =>
                 kt = k
                 vt = v
+            Set(_) =>
+                if entries.len() == 0
+                    return Val(id: new_table(w), ty: w)
             _ => kt = kt
     if entries.len() == 0 and kt.is_unknown()
         return pending_table()
@@ -398,6 +401,8 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
     if is_pending_table(r.ty)
         if name == "add" and args.len() == 1
             return settle_set_add(r, args, npos)
+        if name == "push" and args.len() == 2
+            return settle_map_push(r, args, npos)
         if name != "len"
             return unsupported(npos, "an empty `\{}` whose type isn't known")
     mut vs := List[Val]()
@@ -484,7 +489,12 @@ fn Lower.map_push(mut self, m Val, kt Ty, vt Ty, args List[ast.Arg], npos ast.Po
     k := lower_value(args[0].value, kt)?
     kid := convert(k, kt, npos)
     x := lower_value(args[1].value, et)?
-    item := Val(id: copy_if_place(args[1].value, x), ty: x.ty)
+    map_push_vals(m, vt, kid, x, args[1].value, npos)
+
+## The rest of `m.push(k, x)` once `k` (as `kid`) and `x` are lowered.
+fn Lower.map_push_vals(mut self, m Val, vt Ty, kid int, x Val, xe ast.Expr, npos ast.Pos) Val?
+    et := vt.elem() else return unsupported(npos, "`.push(k, x)` on `{m.ty.name()}`")
+    item := Val(id: copy_if_place(xe, x), ty: x.ty)
     e := call("rt.map_find", [m.id, kid], Ty.Int)
     has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
     join := new_block()

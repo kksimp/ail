@@ -13,6 +13,8 @@ OUT_LEN := 1
 ARGC := 5
 ARGV := 6
 PARSE_OK := 7
+# Windows: the byte count `WriteFile` reports (ADR 0608).
+WIN_WRITTEN := 13
 # Threads (ADR 0599): the pool block, a flag that is 1 once a second thread
 # can exist, the allocator's and the output buffer's locks, and the
 # reentrant output lock's owner and depth.
@@ -48,6 +50,9 @@ MAXW := 64
 
 fn sys_write(fd int, p int, n int)
     t := target()
+    if t == 3
+        win_write(fd, p, n)
+        return
     mut done := 0
     while done < n
         k := if t == 0 then 1 else if t == 1 then 64 else 4
@@ -60,14 +65,33 @@ fn sys_write(fd int, p int, n int)
 
 fn sys_exit(code int)
     t := target()
+    if t == 3
+        import_call("ExitProcess", code, 0, 0, 0)
+        return
     k := if t == 0 then 231 else if t == 1 then 94 else 1
     syscall(k, code, 0, 0, 0, 0, 0)
 
 fn sys_mmap(n int) int
     t := target()
+    # MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE (ADR 0608).
+    if t == 3
+        p := import_call("VirtualAlloc", 0, n, 12288, 4)
+        return if p == 0 then -1 else p
     k := if t == 0 then 9 else if t == 1 then 222 else 197
     flags := if t == 2 then 4098 else 34
     syscall(k, 0, n, 3, flags, -1, 0)
+
+## Windows output (ADR 0608): `WriteFile` on the standard handle until every
+## byte is written. A failed write ends the output, as on the other targets.
+fn win_write(fd int, p int, n int)
+    h := import_call("GetStdHandle", if fd == 2 then -12 else -11, 0, 0, 0)
+    mut done := 0
+    while done < n
+        ok := import_call("WriteFile", h, p + done, n - done, global(WIN_WRITTEN), 0)
+        w := load64(global(WIN_WRITTEN))
+        if ok == 0 or w <= 0
+            return
+        done += w
 
 ## A thread-stack region: `n` bytes that need no commit up front.
 fn sys_mmap_lazy(n int) int
@@ -97,6 +121,29 @@ fn futex_wait(a int, v int)
     s := blocked_enter()
     futex_wait_raw(a, v)
     blocked_leave(s)
+
+## The same for at most `ms` milliseconds: it returns when the word changed,
+## when woken, or when the time ran out (the caller looks at the word).
+fn futex_wait_timed(a int, v int, ms int)
+    mut t := ms * 1000
+    if target() != 2
+        t = alloc(16, KIND_BYTES)
+        store64(t, ms / 1000)
+        store64(t + 8, ms % 1000 * 1000000)
+    if load64(global(MULTI)) == 0
+        futex_wait_raw_t(a, v, t)
+        return
+    s := blocked_enter()
+    futex_wait_raw_t(a, v, t)
+    blocked_leave(s)
+
+## `t` is the timeout: microseconds on macOS, else the address of a timespec.
+fn futex_wait_raw_t(a int, v int, t int)
+    if target() == 2
+        import_call("___ulock_wait", 1, a, v, t)
+        return
+    k := if target() == 0 then 202 else 98
+    syscall(k, a, 128, v, t, 0, 0)
 
 fn futex_wake(a int, n int)
     if target() == 2
@@ -460,6 +507,16 @@ fn out_list_float(xs List[int])
         out_float(loadf(data + 8 * i))
     out_byte(93)
 
+fn out_list_f32(xs List[int])
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_f32(loadf(data + 8 * i))
+    out_byte(93)
+
 ## A string inside a printed value, in quotes, with `\\`, `"` and control
 ## characters escaped (trait.auto.2).
 fn out_quoted(s str)
@@ -510,7 +567,7 @@ fn hex_digit(d int) int
     if d < 10 then 48 + d else 87 + d
 
 ## A list of lists or strings: `depth` levels of lists around elements of
-## kind `leaf` (0 int, 1 float, 2 bool, 3 str, 4 char).
+## kind `leaf` (0 int, 1 float, 2 bool, 3 str, 4 char, 5 f32).
 fn out_list_deep(xs List[int], depth int, leaf int)
     if depth == 0
         if leaf == 0
@@ -521,6 +578,8 @@ fn out_list_deep(xs List[int], depth int, leaf int)
             out_list_bool(xs)
         elif leaf == 4
             out_list_char(xs)
+        elif leaf == 5
+            out_list_f32(xs)
         else
             p := list_addr(xs)
             data := load64(p + 16)
@@ -580,6 +639,27 @@ fn list_new(cap int) List[int]
 ## A list made with room for a loop's pushes (`list_reserve` would regrow
 ## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
 ## iterations' worth (2^20 words, 2^23 bytes).
+## `n` elements from `p` set to `v` (its low byte when `size` is 1): what the
+## compiler turns a loop that stores one unchanging value into (ADR 0816).
+## x86-64 assembles this as `rep stos` (x64/kernels.ail); this body is the
+## reference and what ARM64 runs.
+fn fill(p int, n int, v int, size int)
+    if size == 8
+        for i in 0..n
+            store64(p + 8 * i, v)
+        return
+    b := v.bit_and(255)
+    mut w := b.bit_or(b.shl(8))
+    w = w.bit_or(w.shl(16))
+    w = w.bit_or(w.shl(32))
+    mut i := 0
+    while i + 8 <= n
+        store64(p + i, w)
+        i += 8
+    while i < n
+        store8(p + i, b)
+        i += 1
+
 fn list_new_for(lo int, hi int, per int, size int) List[int]
     mut want := hi - lo
     most := if size == 1 then 8388608 else 1048576

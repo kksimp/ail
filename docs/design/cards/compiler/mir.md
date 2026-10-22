@@ -10,6 +10,7 @@ pub struct mir.Versioned
     pub floors Map[str, int]
 pub fn mir.bce(f mir.Func, reserve bool, grow_only bool) mir.Func
 pub fn mir.lists_only_grow(m mir.Module) bool
+pub fn mir.fill_loops(f mir.Func, on bool) mir.Func
 pub fn mir.fold(f mir.Func) mir.Func
 pub fn mir.rpo(f mir.Func) List[int]
 pub fn mir.forward_loads(f mir.Func) mir.Func
@@ -109,10 +110,10 @@ pub enum mir.Ty
     Unknown
     Unit
     Atomic(elem mir.Ty)
+    Chan(elem mir.Ty)
     Fn(params List[mir.Ty], ret mir.Ty)
     Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
-    pub fn mir.Ty.is_fn(self) bool
     pub fn mir.Ty.is_ref(self) bool
     pub fn mir.Ty.is_float(self) bool
     pub fn mir.Ty.is_unit(self) bool
@@ -196,4 +197,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1959); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1974); dropped: private items, doc comments

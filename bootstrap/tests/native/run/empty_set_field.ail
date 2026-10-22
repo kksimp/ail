@@ -1,0 +1,14 @@
+struct Todo
+    items List[str]
+    done Set[str]
+
+fn mark(mut t Todo, s str)
+    t.done.add(s)
+
+fn main()
+    mut t := Todo(items: [], done: {})
+    mark(mut t, "a")
+    mark(mut t, "b")
+    mark(mut t, "a")
+    print(t.done.len())
+    print(t.done.contains("b"))

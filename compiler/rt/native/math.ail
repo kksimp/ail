@@ -111,8 +111,40 @@ fn fm_is_int(y float) bool
     y.floor() == y
 
 ## exp(x) (fdlibm e_exp.c): reduce x = k ln2 + r, |r| <= ln2/2, then 2^k * e^r.
+## This is `fm_exp_dd(x, 0.0)` without the tail, step for step.
 fn float_exp(x float) float
-    fm_exp_dd(x, 0.0)
+    ax := x.abs()
+    # Large arguments and NaN (a comparison with it is false) take the general path.
+    if not (ax < 700.0)
+        return fm_exp_dd(x, 0.0)
+    if ax < 3.725290298461914e-09
+        return 1.0 + x
+    if ax <= 0.34657359027997264
+        return fm_exp_poly(x, x, -0.0, 0)
+    mut kf := 0.0
+    if ax < 1.0397207708399179
+        kf = if x > 0.0 then 1.0 else -1.0
+    else
+        kf = if x > 0.0 then (INVLN2 * x + 0.5).floor() else (INVLN2 * x - 0.5).ceil()
+    k := kf.to_int()
+    hi := x - kf * LN2HI
+    lo := kf * LN2LO
+    r := hi - lo
+    t := r * r
+    c := r -
+        t
+            * (1.66666666666666019037e-01 + t * (-2.77777777770155933842e-03 + t * (6.61375632143793436117e-05 + t * (-1.65339022054652515390e-06 + t * 4.13813679705723846039e-08))))
+    y := 1.0 - ((lo - (r * c) / (2.0 - c)) - hi)
+    y * fm_pow2(k)
+
+## The polynomial step of `exp` for `|x| <= ln2 / 2` (k = 0): `e^r` from `r = hi - lo`.
+fn fm_exp_poly(x float, hi float, lo float, k int) float
+    r := hi - lo
+    t := r * r
+    c := r -
+        t
+            * (1.66666666666666019037e-01 + t * (-2.77777777770155933842e-03 + t * (6.61375632143793436117e-05 + t * (-1.65339022054652515390e-06 + t * 4.13813679705723846039e-08))))
+    1.0 - ((r * c) / (c - 2.0) - r)
 
 ## exp(x + xl) for a small tail `xl`: the tail joins the reduced argument,
 ## so the result keeps the accuracy of the sum (used by pow).

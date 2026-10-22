@@ -46,6 +46,8 @@ fn Lower.lower_unary(mut self, o ast.UnOp, operand ast.Expr, pos ast.Pos, want T
                 )
                 Float => Val(id: op("fneg", [a.id], Ty.Float), ty: Ty.Float)
                 Tensor(_) => tensor_neg(a, pos)
+                Sized(_) => sized_neg(a, pos)
+                F32 => Val(id: op("fneg", [a.id], Ty.Float), ty: Ty.F32)
                 _ => unsupported(pos, "`-` on `{a.ty.name()}`")
         Not =>
             a := lower_value(operand, Ty.Bool)?
@@ -137,6 +139,7 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         Str => str_binary(o, a, b, pos) else a
         Char => char_binary(o, a, b, pos) else a
         Sized(_) => sized_binary(o, a, b, pos) else a
+        F32 => f32_binary(o, a, b, pos)
 
         _ =>
             if eq := self.list_equal(o, a, b)
@@ -221,6 +224,10 @@ fn Lower.lower_binary_expr(
 fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     if conv := sized_conversion(r, name, npos, vs)
         return conv
+    if m := sized_method(r, name, npos, vs)
+        return m
+    if c := int_checked(r, name, npos, vs)
+        return c
     if r.ty != Ty.Int
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "to_float" and vs.len() == 0
@@ -252,6 +259,8 @@ fn Lower.ordering(mut self, k int) Val
 
 ## A method of a `float` (type.num.9, type.num.16).
 fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if r.ty == Ty.F32
+        return f32_method(r, name, npos, vs)
     if name == "to_int" and vs.len() == 0
         s := site("type.num.9", "float_int", "", npos)
         return Val(id: checked("ftoi", [r.id], s, Ty.Int), ty: Ty.Int)
@@ -263,6 +272,8 @@ fn Lower.float_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val
     # type.num.9
     if name == "round" and vs.len() == 0
         return Val(id: call("rt.float_round", [r.id], Ty.Float), ty: Ty.Float)
+    if name == "to_f32" and vs.len() == 0
+        return Val(id: f32_round(r.id), ty: Ty.F32)
     # type.num.16: std.math's float functions, in rt/native/math.ail
     if MATH1.contains(name) and vs.len() == 0
         return Val(id: call("rt.float_{name}", [r.id], Ty.Float), ty: Ty.Float)

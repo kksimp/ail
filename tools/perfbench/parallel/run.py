@@ -1,10 +1,13 @@
 """Multi-core drag race: native AIL (`par for`), C (OpenMP) and Python (multiprocessing)
 on the programs in this directory (docs/design/native-performance.md, ADRs 0599-0601).
 Usage: python3 -I run.py [--cores 1,4] [--runs 3] [--python] [NAME...]
-Each program runs pinned to the first N cores with `taskset`; the pool of AIL, the
+Each program runs pinned to the first N cores with `taskset` (Linux); macOS has no pinning,
+so it runs with all cores only, and C uses OpenMP when libomp is installed, else serial; the pool of AIL, the
 OpenMP team and the Python workers all follow that count. The three outputs must be
 identical or the row says DIFF. Measurement only (ADR 0070)."""
-import hashlib, os, subprocess, sys, tempfile, time
+import hashlib, os, platform, shutil, subprocess, sys, tempfile, time
+
+MAC = platform.system() == "Darwin"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -12,7 +15,7 @@ SIZES = {"parsum": 3000000, "mandelbrot": 1000, "spectralnorm": 1500, "nbody": 1
 
 
 def args():
-    cores, runs, py, names = [1, os.cpu_count()], 3, False, []
+    cores, runs, py, names = ([os.cpu_count()] if MAC else [1, os.cpu_count()]), 3, False, []
     a = sys.argv[1:]
     while a:
         x = a.pop(0)
@@ -29,7 +32,7 @@ def args():
 
 def run(cmd, n, env=None):
     """Best wall time of several runs, and the hash of the output."""
-    pinned = ["taskset", "-c", f"0-{n - 1}"] + cmd
+    pinned = cmd if MAC else ["taskset", "-c", f"0-{n - 1}"] + cmd
     best, digest = None, None
     for _ in range(RUNS):
         t = time.perf_counter()
@@ -42,6 +45,22 @@ def run(cmd, n, env=None):
     return best, digest
 
 
+def compile_c(src, out):
+    if not MAC:
+        subprocess.run(["gcc", "-std=c11", "-O2", "-fopenmp", "-ffp-contract=off", "-o", out, src, "-lm"], check=True)
+        return
+    # macOS clang has no OpenMP unless libomp is installed (Homebrew); without it the pragmas
+    # are ignored and the C column is the serial program.
+    base = ["clang", "-std=c11", "-O2", "-ffp-contract=off", "-o", out, src, "-lm"]
+    for omp in ("/opt/homebrew/opt/libomp", "/usr/local/opt/libomp"):
+        if os.path.isdir(omp):
+            cmd = base[:4] + ["-Xpreprocessor", "-fopenmp", f"-I{omp}/include", f"-L{omp}/lib", "-lomp"] + base[4:]
+            if subprocess.run(cmd).returncode == 0:
+                return
+    print("note: no libomp, so the C column is serial", file=sys.stderr)
+    subprocess.run(base, check=True)
+
+
 cores, RUNS, with_python, names = args()
 tmp = tempfile.mkdtemp(prefix="ail-par-")
 print("| program | size | cores | native AIL | C OpenMP | Python | AIL vs C | AIL vs Python |")
@@ -51,7 +70,7 @@ for name in names:
     exe = os.path.join(tmp, name)
     subprocess.run([os.path.join(ROOT, "ail"), "build", f"{HERE}/{name}.ail", "-o", exe], check=True, cwd=ROOT)
     cexe = os.path.join(tmp, "c-" + name)
-    subprocess.run(["gcc", "-std=c11", "-O2", "-fopenmp", "-ffp-contract=off", "-o", cexe, f"{HERE}/{name}.c", "-lm"], check=True)
+    compile_c(f"{HERE}/{name}.c", cexe)
     for n in cores:
         a, ha = run([exe, size], n)
         env = dict(os.environ, OMP_NUM_THREADS=str(n))

@@ -1,2 +1,1 @@
-bootstrap/tests/native/os_unhandled.ail:5:30: error[native.subset.1]: `?` in a function that can't fail
-bootstrap/tests/native/os_unhandled.ail:14:10: error[native.subset.1]: not in the native subset yet: printing a `str?`
+bootstrap/tests/native/os_unhandled.ail:4:30: error[native.subset.1]: `?` in a function that can't fail
