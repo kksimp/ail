@@ -33,6 +33,12 @@ pub struct std.app.Event  ## What happened. `kind` is `start`, `press`, `edit`, 
     pub alt bool
     pub shift bool
     pub meta bool
+pub struct std.app.Measure  ## A run of text whose advance width the host measures (std.app.13); `font`
+    pub text str
+    pub font str
+    pub size float
+    pub bold bool
+    pub italic bool
 pub error struct std.app.AppError  ## Why an app couldn't run (std.app.9): `no_host`, `start`, `version` or
     pub kind str
     pub message str
@@ -63,4 +69,4 @@ pub fn std.app.run_host[T std.app.App](mut a T, cmd str, args List[str]) !std.ap
     fails with std.app.AppError
 ```
 
-trimmed to fit 2000 tokens (~1735); dropped: private items
+trimmed to fit 2000 tokens (~1791); dropped: private items

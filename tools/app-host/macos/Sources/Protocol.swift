@@ -119,6 +119,18 @@ final class Outbox {
     }
 }
 
+/// std.app.13: the advance width in points of each requested run, in the font a `Str` op
+/// of the same family, size and weight is drawn in, sent back as one `measured` event whose
+/// `text` is the widths joined by commas.
+func answerMeasure(_ runs: [[String: Any]]) {
+    let widths = runs.map { r -> String in
+        let f = font(text(r, "font"), num(r, "size"), bold: flag(r, "bold"), italic: flag(r, "italic"))
+        let w = (text(r, "text") as NSString).size(withAttributes: [.font: f]).width
+        return String(format: "%.3f", Double(w))
+    }
+    Outbox.shared.send("measured", ["text": widths.joined(separator: ",")])
+}
+
 /// Reads views from standard input on a background thread and hands each
 /// one to `onView` on the main thread; `onEnd` runs when the input ends.
 func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escaping () -> Void) {
@@ -127,8 +139,13 @@ func readViews(onView: @escaping (String, String, Node) -> Void, onEnd: @escapin
         while let line = readLine(strippingNewline: true) {
             guard let data = line.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  obj["t"] as? String == "view"
+                  let kind = obj["t"] as? String
             else { continue }
+            if kind == "measure" {
+                answerMeasure(obj["runs"] as? [[String: Any]] ?? [])
+                continue
+            }
+            if kind != "view" { continue }
             if first {
                 first = false
                 if (obj["v"] as? NSNumber)?.intValue != 1 {

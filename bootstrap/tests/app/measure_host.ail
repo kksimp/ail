@@ -1,0 +1,27 @@
+## A host for std.app that answers `measure` requests (std.app.13): each
+## run is `size / 2` points per character.
+
+fn send(line str)
+    print(line)
+
+fn main()
+    first := io.read_line() else return
+    _ := parse_json(first) else return
+    send("\{\"v\":1,\"kind\":\"start\"}")
+    mut asked := 0
+    while true
+        line := io.read_line() else break
+        j := parse_json(line) else break
+        match j.text("t", "")
+            "measure" =>
+                mut out := List[str]()
+                for r in j.arr("runs") else []
+                    n := r.text("text", "").chars().len().to_float()
+                    out.push("{n * (r.num("size") else 0.0) / 2.0}")
+                    asked += 1
+                send("\{\"kind\":\"measured\",\"text\":\"{out.join(",")}\"}")
+            "view" =>
+                send("\{\"kind\":\"close\"}")
+                break
+            _ => asked += 0
+    io.eprint("fake host: measured {asked} runs")
