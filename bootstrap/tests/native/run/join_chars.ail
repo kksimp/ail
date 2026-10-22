@@ -1,0 +1,16 @@
+# `join` on a list of characters, with and without a separator, ASCII and not
+# (type.coll.9): the one-pass ASCII path and the fallback agree with the interpreter.
+fn main()
+    ascii := "hello".chars()
+    mixed := "héllo, wörld ✓".chars()
+    empty := List[char]()
+    print(ascii.join(""))
+    print(mixed.join(""))
+    print(empty.join(""))
+    print(ascii.join("-"))
+    print(mixed.join("·"))
+    print(empty.join("-"))
+    one := "é".chars()
+    print(one.join(""))
+    print(one.join("--"))
+    print(mixed.join("").len())

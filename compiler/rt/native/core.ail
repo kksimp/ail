@@ -398,6 +398,18 @@ fn list_join_chars(xs List[int], sep str) str
     k := load64(q)
     items := load64(q + 16)
     sp := str_addr(sep)
+    # No separator: optimistically store each character as a byte while
+    # collecting its bits, in one pass. If every one is below 128 (ASCII) the
+    # string is done; otherwise it is built again below.
+    if load64(sp) == 0
+        t := str_new(k, k)
+        mut seen := 0
+        for i in 0..k
+            c := load64(items + 8 * i)
+            seen = seen.bit_or(c)
+            store8(t + 16 + i, c)
+        if seen < 128
+            return str_at(t)
     # One pass for the bits of every character: below 128 means all ASCII,
     # one byte each, so the width pass and `char_put` are skipped.
     mut bits := 0

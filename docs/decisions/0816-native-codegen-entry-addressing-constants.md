@@ -265,3 +265,8 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     `imul d, y` (or `imul d, d, k`); a checked `mul` still needs the stub's
     recovery and is unchanged. spectralnorm 52.9M to 47.9M instructions
     (-9.5%; C 36.6M).
+15. **`join("")` on characters is one pass.** `rt.list_join_chars` made one
+    pass to OR the characters (to learn they are ASCII) and a second to store
+    them. With no separator it now allocates `k` bytes, stores while it ORs,
+    and returns if every character is below 128, else builds the string as
+    before. fasta 36.1M to 33.4M instructions (-7.6%; matched C 29.1M).
