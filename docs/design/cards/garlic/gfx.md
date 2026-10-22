@@ -22,6 +22,7 @@ pub fn gfx.color(v str) int?  ## A color: `#rgb`, `#rrggbb`, `rgb()`, `rgba()` o
 pub fn gfx.color_over(v str, under int) int?  ## A color as `color` reads it, with `rgba()` and `#rrggbbaa` mixed into the
 pub fn gfx.layout(d html.Doc, url str, width float, sheet css.Sheet) gfx.Scene  ## Lays `d` out in a column `width` pixels wide with `sheet` (the linked
 pub fn gfx.layout_with(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]]) gfx.Scene  ## `layout` with the pictures' sizes (`images.prefetch`), so an `<img>`
+pub fn gfx.layout_editing(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]], editing int) gfx.Scene  ## `layout_with`, drawing text field `editing` (a node, or -1) with a caret.
 ```
 
-trimmed to fit 2000 tokens (~564); dropped: private items
+trimmed to fit 2000 tokens (~635); dropped: private items
