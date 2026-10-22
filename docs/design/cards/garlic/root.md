@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 66 (`ail test` lists them)
+tests: 70 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -51,7 +51,7 @@ fn usage() [io]
 VALUE_FLAGS := ...  ## Flags that take a value, so the address is the first argument that is
 fn target_of(List[str]) str
 fn op_line(draw.Op) str  ## One drawing operation as a line a person or the Mac gate can check:
-fn pixels_dump(Browser, float) [io]  ## `--pixels-dump`: the pixel layout of the page, one operation per line,
+fn pixels_dump(mut Browser, float) [fs io mutates net]  ## `--pixels-dump`: the pixel layout of the page, one operation per line,
 fn main() ! [app clock env fail fs io net proc]
 fn tree(str) str  ## The tree of `src` in the html5lib-tests format.
 fn lay(str, int) page.Page
@@ -65,6 +65,7 @@ fn pixels(str, float) gfx.Scene
 fn bench_run(int, str, html.Doc, css.Sheet) int
 fn bench(List[str]) [clock fs io]  ## `garlic --bench FILE [ROUNDS]`: `args` are the words after `--bench`.
 fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
+fn flat(gfx.Scene) List[str]  ## The `Str` and `Rect` operations of `s` as `text@x,y` and `rect@x,y wxh`.
 ```
 
-trimmed to fit 2000 tokens (~1667); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1718); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
