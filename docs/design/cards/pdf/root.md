@@ -3,7 +3,7 @@ entry: main in pdf.ail
 
 ## (root)
 ```
-USAGE := "usage: pdf COMMAND ...\n  text FILE [--page N]                  the text, pages split by form feeds\n  grep [--case] [--json] [--first] PATTERN FILE...  FILE:PAGE: line, for each line with a hit\n  json FILE [--page N]                  the page model: lines, boxes, links, outline\n  info FILE                             pages, metadata, and what could not be read\n  outline FILE                          the bookmarks, with their pages\n  bench FILE                            the time each stage of reading takes\n  images FILE [--page N] [--out F.pgm]  the page's images, decoded; --out saves the largest\n  view FILE [--page N] [--find TEXT] [--print] [--cols N]\n                                        the text layer in a window; --print shows it here"
+USAGE := ...
 struct Args
     words List[str]
     flags Map[str, str]
