@@ -282,3 +282,11 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     `rem` by 2, 4, 8, ... and rewrites them last to `shr` and `band`, which
     both back ends already take. spectralnorm 52.9M to 45.4M instructions
     (-14.2%), before the in-place `imul` of item 14.
+17. **A guard does not test what the loops around it already bound.** The
+    inner loop of nbody's `advance` starts at `i + 1` for an outer counter
+    over constants, and its guard still tested on every entry that the start
+    was not negative and within +-2^30, eight compares per outer iteration.
+    `iv_of` in `bce.ail` takes the range of a value from constants,
+    `+ - *` of such ranges and counted loops (step 1, `p < hi`) whose bounds
+    have ranges, and the guard leaves out the tests the range answers.
+    nbody 38.0M to 35.5M instructions (-6.6%, on top of item 13).

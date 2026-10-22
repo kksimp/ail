@@ -42,6 +42,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native unchecked `mul` in place (ADR 0816 item 14): spectralnorm 52.9M → 47.9M instructions.
 - Native `join("")` on characters in one pass (ADR 0816 item 15): fasta 36.1M → 33.4M instructions.
 - Native `/` and `%` by a power of two on non-negative values (ADR 0816 item 16): shift and mask; spectralnorm 52.9M → 45.4M instructions.
+- Native BCE guards skip tests that the enclosing counted loops answer (ADR 0816 item 17): nbody 38.0M → 35.5M instructions.
 - Native code generation (ADR 0816): parameters stay in their arrival registers (no swap moves at entry); wordfreq 254.6M → 240.9M instructions, binarytrees 412.2M → 399.5M, fannkuch 284.6M → 274.8M.
 - Native map probe (ADR 0816 item 12): first-slot hit without register saves, `map_set` through the remembered entry; wordfreq 195.5M → 167.2M instructions.
 - Native list reuse (ADR 0824, native.reuse.1): a list made in a loop that nothing keeps past the iteration is one list the preheader makes and each iteration empties; fannkuch 252M → 160M instructions, binarytrees 334M → 256M.
