@@ -97,8 +97,14 @@ fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val
             return Val(id: call("rt.bytes_text", [r.id], Ty.Str), ty: Ty.Str)
         if name == "hex"
             return Val(id: call("rt.bytes_hex", [r.id], Ty.Str), ty: Ty.Str)
+        if name == "to_list"
+            t := Ty.List(Ty.Sized("u8"))
+            return Val(id: call("rt.bytes_list", [r.id], t), ty: t)
         if name == "base64"
             return Val(id: call("rt.bytes_base64", [r.id], Ty.Str), ty: Ty.Str)
+        if name == "to_list"
+            t := Ty.List(Ty.Sized("u8"))
+            return Val(id: call("rt.bytes_list", [r.id], t), ty: t)
         if name == "to_str"
             t := Ty.Opt(Ty.Str)
             return Val(id: call("rt.bytes_to_str", [r.id], t), ty: t)

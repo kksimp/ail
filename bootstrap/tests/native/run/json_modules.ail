@@ -1,0 +1,9 @@
+# The prelude's `Json` used from another module (json.print.1, json.parse.1,
+# ADR 0808), as the compiler's own sources use it (SH-2).
+use json_mod as jt
+
+fn main()
+    print(jt.quote("a\"b\n\u{1}"))
+    print(jt.members("[1, 2, 3]"))
+    print(jt.members("\{\"a\": 1, \"b\": null}"))
+    print(jt.members("[1,]"))

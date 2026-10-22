@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076; approved by the integrator for the native self-compile lanes)
 - **Topic:** 23 — Compiler architecture
 - **Spec rules:** [native.subset.1](../spec/23-native.md), ct.gen.1, trait.self.1
+- **Amended by:** [ADR 0850](0850-native-compiler-runs-builtin-derive-generators.md) (the native compiler runs the built-in generators)
 - **Builds on:** [ADR 0536](0536-native-generics-by-monomorphisation.md) (`impl` methods in native code), ADRs 0227-0229 and 0306-0309 (derive generators), ADR 0774 (no implicit derive)
 
 ## Context

@@ -101,6 +101,10 @@ fn Lower.lower_comp(
     key := lookup(name) else return none
     if form == ast.CompKind.ListComp
         and (var_ty[key].elem() == none or (var_ty[key].elem() else Ty.Unknown).is_unknown())
+        # An earlier problem in this function (an unsupported call whose result
+        # is untyped) is the cause; report that one alone.
+        if problems.len() > fn_problems
+            return none
         return unsupported(pos, "a comprehension whose element type isn't known")
     Val(id: read_var(key, cur), ty: var_ty[key])
 

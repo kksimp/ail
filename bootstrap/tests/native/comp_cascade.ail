@@ -1,0 +1,4 @@
+fn main()
+    cs := ['b', 'a'].sorted()
+    xs := [i for i in 0..cs.len() if cs[i] != 'z']
+    print("{xs.len()}")

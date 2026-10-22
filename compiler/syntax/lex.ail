@@ -890,16 +890,18 @@ fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
 
 ## Tokens of the expression in `line[start..end]`, keeping real columns.
 fn Lexer.sub_lex(mut self, line List[char], start int, end int, line_no int) List[Token]
-    saved_tokens := tokens
+    # Lex onto the end of `tokens` and cut the new tail off, rather than
+    # swapping the whole list out (a copy of every token so far per interpolation).
+    base := tokens.len()
     saved_open := open
-    tokens = []
     open = []
     in_interp += 1
     _ := lex_line(line[0..end], start, line_no)
     in_interp -= 1
     open = saved_open
-    mut code := tokens
-    tokens = saved_tokens
+    mut code := tokens[base..]
+    while tokens.len() > base
+        tokens.pop()
     code.push(Token(tok: Eof, pos: ast.Pos(line: line_no, col: end + 1)))
     code
 
