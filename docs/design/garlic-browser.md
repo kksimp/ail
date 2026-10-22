@@ -177,6 +177,56 @@ that keeps them as data (like this page model) can search and point at
 text directly. Scanned image-only PDFs still need OCR; that limit is in the
 file, not the viewer.
 
+## Native window
+
+Kaleb asked (2026-10-21) for Garlic in a native macOS window as the fast
+route to a real site (`projects.voltare.us`). The window is the SwiftUI
+thread's `std.app`: an AIL program holds state, `update(event)` and
+`view()`, and a generic host draws the node tree and sends events back over
+a pipe. Garlic keeps its fetch, parse, style and layout, and hands the host
+a display list.
+
+- **Nodes**: a column of a row (back, reload, a URL field) and a `Canvas`
+  that fills the window, then a status line.
+- **First cut**: the page model's rows draw in a monospace font. The host
+  reports its cell size in points, so `cols = width / cell_w` and a click
+  at (x, y) is cell (x / cell_w, y / cell_h). Layout stays exactly the one
+  the `std.ui` window and `--json` show, and the page needs no pixel layout.
+- **Display list** (`draw` module): `Rect(x, y, w, h, color)` for the page
+  background and the focused link, and `Text(x, y, text, fg, bold, italic,
+  underline)` for each run, in points. `draw.display_list` builds it from
+  `pg.rows[scroll..]`; the `std.ui` window shares its colors.
+- **Events**: click, scroll (points, accumulated into lines), keys with the
+  `std.ui` names, field edit and submit, and resize with the cell size.
+- **Entry**: `--app` starts it (cell mode, verified on macOS 2026-10-21:
+  address bar, links, back, reload, wheel and key scrolling). `--app
+  --pixels` uses the pixel layout below. The `std.ui` window stays the
+  default.
+
+### Pixel layout (`gfx`, first cut, behind `--pixels`)
+
+Kaleb chose a full pixel layout with sans fonts (2026-10-21). The `gfx`
+module lays the document out in CSS pixels, with no cells:
+
+- **Box model**: margins (adjoining ones collapse), borders, padding,
+  `width`, `max-width` with `auto` margins, backgrounds, canvas color from
+  `body`/`html`.
+- **Text**: proportional, sized by `font-size`, `line-height`, `text-align`,
+  weight, style, color, underline; every word is drawn at its own x from a
+  Helvetica advance-width table, because the host cannot measure text yet
+  (so drift between fonts never accumulates).
+- **Blocks**: lists with markers, tables (column widths from content),
+  flexbox rows (`gap`, `flex-grow`, `justify-content`, `flex-wrap`), grid
+  tracks (`repeat`, `fr`, `minmax`), images with `width`/`height`
+  attributes, buttons and fields drawn as boxes (not yet interactive).
+- **Output**: `draw.Op.Str`/`Pic`/`Rect` in page pixels plus a rectangle for
+  each link (`Scene.link_at`); the window scrolls by points.
+- **Not yet**: floats, positioning, images without sizes, web fonts,
+  interactive form controls in pixel mode, page-model boxes with pixel
+  rectangles, a host text-measuring call. Unverified on a real window.
+
+The contract with the host is in the SwiftUI thread's spec (`std.app`).
+
 ## JavaScript
 
 JavaScript is a separate, large decision (the engine is bigger than the
@@ -220,8 +270,9 @@ the page show up in the page model so an agent can see what a script did.
    visibility, bold, italic, uppercase, `white-space`, `@media` by window
    width, aligned data tables. Next: colors with a contrast floor,
    margins, and tables with `colspan` and multi-line cells.
-4. **Pixels**: a pixel surface in `std.ui`, a bitmap font, then images (PNG
-   after lane 128) and a box-model layout in pixels.
+4. **Pixels** (started): the `std.app` window draws a box-model layout in
+   pixels (`gfx`, `--pixels`); next: verify on macOS, images without sizes,
+   interactive controls, pixel rectangles in the page model.
 5. **Scripts**: the JS engine's DOM bindings and event loop.
 
 ## Rejected alternatives
@@ -231,6 +282,9 @@ the page show up in the page model so an agent can see what a script did.
   behind a foreign API.
 - **Screenshot plus OCR for agent awareness**: lossy and slow; the browser
   already has the exact text and positions.
+- **A WebView in the native window** (WKWebView): shows every site at once,
+  but it is Apple's engine, so the page and its layout are hidden from the
+  agent and from AIL, against the goal (ADR 0009).
 - **Pixels first**: blocked on a pixel layer, images and fonts that no lane
   covers; text mode delivers a usable browser now and its layout and page
   model carry over.
