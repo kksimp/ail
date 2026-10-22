@@ -222,7 +222,7 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
     // (ADR 0592). They run in the Linux pass.
     if cfg!(target_os = "macos") || target.is_some_and(|t| t.contains("macos")) {
         const MACOS_KNOWN: &[&str] =
-            &["os_err_fields", "os_error_values", "proc_output_methods", "tensor_tanh"];
+            &["tensor_tanh"];
         cases.retain(|p| !MACOS_KNOWN.contains(&p.file_stem().unwrap().to_string_lossy().as_ref()));
     }
     let tmp = std::env::temp_dir().join(format!("ail-native-{}-{}", target.unwrap_or("host"), std::process::id()));
