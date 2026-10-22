@@ -401,7 +401,11 @@ fn tc_expect(st int, ty int, what str) int
     got := load8(load64(st + TS_HS))
     if got == ty
         return 0
-    tc_err(st, 0, "the server sent handshake message {got} where {what} belongs (unexpected_message)")
+    tc_err(
+        st,
+        0,
+        "the server sent handshake message {got} where {what} belongs (unexpected_message)",
+    )
 
 fn tc_finished(base int, th int, out int)
     fk := alloc_raw(32, KIND_BYTES)
@@ -550,7 +554,8 @@ fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien in
 fn tc_retry_random(p int) bool
     want := "cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c"
     for i in 0..32
-        v := tc_nib(load8(str_addr(want) + 16 + 2 * i)) * 16 + tc_nib(load8(str_addr(want) + 17 + 2 * i))
+        v := tc_nib(load8(str_addr(want) + 16 + 2 * i)) * 16
+            + tc_nib(load8(str_addr(want) + 17 + 2 * i))
         if load8(p + i) != v
             return false
     true
@@ -630,7 +635,11 @@ fn tc_server_hello(st int, p int, n int, sid int, share int, ck int) int
                 if kl + 4 != dl
                     return tc_bad(st, "ServerHello extension")
                 if kl != 32
-                    return tc_err(st, 0, "the server's X25519 key share has the wrong length (illegal_parameter)")
+                    return tc_err(
+                        st,
+                        0,
+                        "the server's X25519 key share has the wrong length (illegal_parameter)",
+                    )
                 copy_bytes(share, p + off + 4, 32)
                 have_share = true
             else
@@ -734,7 +743,11 @@ fn tc_connect(o int, host str) int
         # answer is a cookie; the transcript restarts from a message_hash.
         asked := load64(ck + 16)
         if asked == 29
-            return tc_err(st, 0, "the server asked again for X25519, which was already offered (illegal_parameter)")
+            return tc_err(
+                st,
+                0,
+                "the server asked again for X25519, which was already offered (illegal_parameter)",
+            )
         if asked != 0
             return tc_err(
                 st,
@@ -742,7 +755,11 @@ fn tc_connect(o int, host str) int
                 "the server requires key exchange group {tc_hex(asked, 4)}; AIL's TLS supports only X25519",
             )
         if load64(ck + 8) == 0
-            return tc_err(st, 0, "the server's HelloRetryRequest asked for nothing (illegal_parameter)")
+            return tc_err(
+                st,
+                0,
+                "the server's HelloRetryRequest asked for nothing (illegal_parameter)",
+            )
         th1 := alloc_raw(40, KIND_BYTES)
         tc_tr_hash(st, th1 + 4)
         store8(th1, 254)
@@ -789,7 +806,11 @@ fn tc_connect(o int, host str) int
     if zero
         return tc_err(st, 0, "the server's X25519 key share is invalid (illegal_parameter)")
     if load64(st + TS_HSN) != 0
-        return tc_err(st, 0, "the server's handshake message spanned a key change (unexpected_message)")
+        return tc_err(
+            st,
+            0,
+            "the server's handshake message spanned a key change (unexpected_message)",
+        )
     # The key schedule (RFC 8446 section 7.1).
     sec := alloc_raw(256, KIND_BYTES)
     zeros := sec + 224
@@ -951,7 +972,11 @@ fn tc_connect(o int, host str) int
     if e != 0
         return e
     if load64(st + TS_HSN) != m
-        return tc_err(st, 0, "the server's handshake message spanned a key change (unexpected_message)")
+        return tc_err(
+            st,
+            0,
+            "the server's handshake message spanned a key change (unexpected_message)",
+        )
     tc_drop(st)
     tc_tr_hash(st, th)
     derived2 := sec + 160

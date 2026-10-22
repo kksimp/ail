@@ -158,7 +158,10 @@ fn net_dns(host str) int
         while j < n and load8(buf + j) != 10
             j += 1
         # `nameserver ADDRESS`
-        if j - i > 11 and os_str_from(buf + i, 10) == "nameserver" and (load8(buf + i + 10) == 32 or load8(buf + i + 10) == 9)
+        if j - i > 11 and os_str_from(
+            buf + i,
+            10,
+        ) == "nameserver" and (load8(buf + i + 10) == 32 or load8(buf + i + 10) == 9)
             mut a := i + 11
             while a < j and (load8(buf + a) == 32 or load8(buf + a) == 9)
                 a += 1
