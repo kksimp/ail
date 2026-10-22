@@ -34,7 +34,12 @@ points from the canvas's top-left corner, colors `0xRRGGBB`:
 `Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
 `mono` or `sans`; `(x, y)` is the text's top-left corner),
 `Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
-`Pic(x, y, w, h, src)` (an image file path or URL), `Clip(x, y, w, h)`
+`Pic(x, y, w, h, src)` (an image file path or URL),
+`Bitmap(x, y, w, h, id, pw, ph, data)` (a `pw` by `ph` image scaled to the
+rectangle; `data` is its `R, G, B, A` bytes in standard base64, which
+`bitmap_data(rgba List[int])` makes; the host keeps the image under `id`, so an
+empty `data` draws the one already sent, and a host that has none under that
+`id` draws a placeholder), `Clip(x, y, w, h)`
 (limits later steps) and `Unclip` (ends the latest `Clip`).
 `draw_text(x, y, s, fg)` is a `Str` in `mono` at size 13, and
 `draw_rect(x, y, w, h, color)` a `Fill`. *(ADR 0838)*

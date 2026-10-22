@@ -20,6 +20,7 @@ pub fn gfx.text_width(text str, size float, bold bool, mono bool) float  ## The 
 pub fn gfx.length(v str, size float, rel float) float?  ## A length in pixels: `px`, `em`, `rem`, `pt`, `%` (of `rel`) or `0`.
 pub fn gfx.color(v str) int?  ## A color: `#rgb`, `#rrggbb`, `rgb()`, `rgba()` or a name. `none` for
 pub fn gfx.layout(d html.Doc, url str, width float, sheet css.Sheet) gfx.Scene  ## Lays `d` out in a column `width` pixels wide with `sheet` (the linked
+pub fn gfx.layout_with(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]]) gfx.Scene  ## `layout` with the pictures' sizes (`images.prefetch`), so an `<img>`
 ```
 
-trimmed to fit 2000 tokens (~454); dropped: private items
+trimmed to fit 2000 tokens (~522); dropped: private items
