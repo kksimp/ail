@@ -1,0 +1,208 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.mem` and the libc subset of native builds (ADR 0844, ffi.native.1,
+## unsafe.mem.1-3). A block is its own mapping with a 16-byte header holding the
+## mapping's length, so `free` can return it; the collected heap never sees it.
+## A pointer into one is a plain address (native-abi.md, Memory).
+
+## The message of a `mem.alloc` count that is out of range (unsafe.mem.3).
+fn mem_range_msg(n int, size int) int
+    sb_reset()
+    sb_text("`alloc` of ")
+    put_int(n)
+    sb_text(" elements of ")
+    put_int(size)
+    sb_text(" bytes is out of range")
+    str_addr(sb_str())
+
+fn mem_from_null_msg() int
+    sb_reset()
+    sb_text("`from_cstr` of a null pointer")
+    str_addr(sb_str())
+
+fn mem_free_null_msg() int
+    sb_reset()
+    sb_text("`free` of a null pointer")
+    str_addr(sb_str())
+
+## A zeroed block of `bytes` bytes.
+fn mem_alloc(bytes int) int
+    base := heap_reserve(bytes + 16)
+    if base < 0
+        fail(1, 0, 0)
+    store64(base, bytes + 16)
+    base + 16
+
+## Return a block of `mem_alloc`. Windows keeps it until the process ends.
+fn mem_free(p int)
+    t := target()
+    if t != 3
+        base := p - 16
+        k := if t == 0 then 11 else if t == 1 then 215 else 73
+        syscall(k, base, load64(base), 0, 0, 0, 0)
+
+## Set `n` elements of `size` bytes to the little-endian `bits`. A fresh block
+## is zero already.
+fn mem_fill(p int, n int, size int, bits int)
+    if bits == 0
+        return
+    for i in 0..n
+        for j in 0..size
+            store8(p + i * size + j, bits.shr(8 * j).bit_and(255))
+
+## `mem_fill` for a `bool` example: bytes of 1 or 0.
+fn mem_fill_bool(p int, n int, b bool)
+    if b
+        for i in 0..n
+            store8(p + i, 1)
+
+## `mem.cstr`: a NUL-terminated copy of a string.
+fn mem_cstr(s str) int
+    a := str_addr(s)
+    n := load64(a)
+    q := mem_alloc(n + 1)
+    copy_bytes(q, a + 16, n)
+    store8(q + n, 0)
+    q
+
+## `mem.from_cstr`: the string up to the first NUL.
+fn mem_from_cstr(a int) str
+    n := ffi_strlen(a)
+    mut chars := 0
+    for i in 0..n
+        if load8(a + i).bit_and(192) != 128
+            chars += 1
+    r := str_new(n, chars)
+    copy_bytes(r + 16, a, n)
+    str_at(r)
+
+# ---- the libc subset (extern c fn of lower_mem.ail's FFI_NAMES) ----
+
+## `v` as a C `int`: the low 32 bits, sign-extended.
+fn ffi_wrap32(v int) int
+    v.bit_and(4294967295).bit_xor(2147483648) - 2147483648
+
+fn ffi_strlen(p int) int
+    mut n := 0
+    while load8(p + n) != 0
+        n += 1
+    n
+
+fn ffi_abs(x int) int
+    ffi_wrap32(if x < 0 then 0 - x else x)
+
+fn ffi_toupper(c int) int
+    if c >= 97 and c <= 122 then c - 32 else c
+
+## C's `hypot`. Large and small operands are scaled by the larger one so the
+## squares neither overflow nor vanish; the last bit can differ from libm there.
+fn ffi_hypot(a float, b float) float
+    x := a.abs()
+    y := b.abs()
+    inf := 1.0e308 * 10.0
+    if x == inf or y == inf
+        return inf
+    if x != x
+        return x
+    if y != y
+        return y
+    m := if x > y then x else y
+    if m == 0.0
+        return 0.0
+    if m > 1.0e150 or m < 1.0e-150
+        u := x / m
+        v := y / m
+        return m * (u * u + v * v).sqrt()
+    (x * x + y * y).sqrt()
+
+fn ffi_is_space(c int) bool
+    c == 32 or (c >= 9 and c <= 13)
+
+## C's `atoi`: an optional sign and digits after white space, as a C `int`.
+fn ffi_atoi(p int) int
+    mut i := 0
+    while ffi_is_space(load8(p + i))
+        i += 1
+    mut neg := false
+    c := load8(p + i)
+    if c == 45 or c == 43
+        neg = c == 45
+        i += 1
+    mut v := 0
+    while load8(p + i) >= 48 and load8(p + i) <= 57
+        d := load8(p + i) - 48
+        if v > (9223372036854775807 - d) / 10
+            v = (9223372036854775807 - d) / 10
+        v = v * 10 + d
+        i += 1
+    ffi_wrap32(if neg then 0 - v else v)
+
+fn ffi_memset(p int, byte int, n int) int
+    b := byte.bit_and(255)
+    for i in 0..n
+        store8(p + i, b)
+    p
+
+fn ffi_memcpy(dst int, src int, n int) int
+    copy_bytes(dst, src, n)
+    dst
+
+## C's `strtod` for decimal text: the value, with `*rest` set past what was
+## read (or to the start when nothing was a number).
+fn ffi_strtod(p int, rest int) float
+    mut i := 0
+    while ffi_is_space(load8(p + i))
+        i += 1
+    mut neg := false
+    c := load8(p + i)
+    if c == 45 or c == 43
+        neg = c == 45
+        i += 1
+    mut digits := List[int]()
+    mut seen := 0
+    mut e10 := 0
+    while load8(p + i) >= 48 and load8(p + i) <= 57
+        seen += 1
+        d := load8(p + i) - 48
+        if digits.len() > 0 or d != 0
+            digits.push(d)
+        i += 1
+    if load8(p + i) == 46
+        j := i + 1
+        mut frac := 0
+        while load8(p + j) >= 48 and load8(p + j) <= 57
+            frac += 1
+            d := load8(p + j) - 48
+            if digits.len() > 0 or d != 0
+                digits.push(d)
+            e10 -= 1
+            j += 1
+        if seen > 0 or frac > 0
+            seen += frac
+            i = j
+    if seen == 0
+        if rest != 0
+            store64(rest, p)
+        return 0.0
+    c2 := load8(p + i)
+    if c2 == 101 or c2 == 69
+        mut j := i + 1
+        mut eneg := false
+        s := load8(p + j)
+        if s == 45 or s == 43
+            eneg = s == 45
+            j += 1
+        if load8(p + j) >= 48 and load8(p + j) <= 57
+            mut ev := 0
+            while load8(p + j) >= 48 and load8(p + j) <= 57
+                if ev < 100000
+                    ev = ev * 10 + load8(p + j) - 48
+                j += 1
+            e10 += if eneg then 0 - ev else ev
+            i = j
+    if rest != 0
+        store64(rest, p + i)
+    if digits.len() == 0
+        return if neg then 0.0 - 0.0 else 0.0
+    fmt_decimal_to_float(neg, digits, e10)

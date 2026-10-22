@@ -634,6 +634,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0823](0823-lower-ail-feature-files.md) | `lower.ail` is a core plus feature files with one-line hooks: a native feature lives in its own `lower_*.ail` and adds at most one dispatch line and one state field *(delegated)* | Accepted | 2026-10-21 |
 | [0834](0834-native-sized-numbers.md) | Native sized integers are `Ty.Sized(kind)`, held sign- or zero-extended in a register, with trapping conversions *(delegated)* | Accepted | 2026-10-21 |
 | [0835](0835-native-raw-pointers-and-hw.md) | Native `*T` is an address in an integer register; `std.hw` lowers to plain loads, stores and fences *(delegated)* | Accepted | 2026-10-21 |
+| [0844](0844-native-libc-subset.md) | Native `std.mem` over runtime page blocks and a fixed libc subset for `extern c fn`; other symbols stay `ffi.native.1` *(delegated)* | Accepted | 2026-10-22 |
 | [0810](0810-fix-method-placement.md) | `ail fix` moves methods out of `impl` blocks and structs *(delegated)* | Accepted | 2026-10-21 |
 | [0765](0765-plain-return-skips-unwind.md) | A `return` in a plain compiled body returns its value directly, without unwinding: binarytrees -1.7% *(delegated)* | Accepted | 2026-10-21 |
 | [0807](0807-native-build-passes-derived-methods.md) | `ail build` passes derived methods to the native backend as `gen:impl` sources; `Self` in method signatures *(delegated)* | Accepted | 2026-10-21 |
@@ -668,3 +669,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0845](0845-vectorization-order-and-idioms.md) | Vectorization order: idioms first, a runtime fill and copy on both ISAs, `break` loops under a bit-identical rule *(delegated)* | Accepted | 2026-10-21 |
 | [0842](0842-mac-first-gate.md) | Gate on the designer's Mac with `tools/gate/mac-gate.sh`; no Linux VM *(designer)* | Accepted | 2026-10-22 |
 | [0846](0846-native-proc-start-and-macos-proc.md) | Native `proc.start` with streams fed by a poll through the channels' `source` word; `std.proc` on macOS by libSystem `fork` *(delegated)* | Accepted | 2026-10-21 |
+| [0848](0848-idle-values-leave-registers-in-loops.md) | Values idle in a loop leave their registers; a checked `mul` result avoids its operands' registers *(delegated)* | Accepted | 2026-10-22 |
