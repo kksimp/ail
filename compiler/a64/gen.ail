@@ -99,6 +99,7 @@ struct Gen
     ## restore them.
     wrap int
     region List[bool]
+    holes List[codegen.Hole]
 
 ## Generate the whole program for `os`: the entry, then each function.
 pub fn generate(m mir.Module, os int) codegen.Image
@@ -169,6 +170,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
         sp_shift: 0,
         wrap: al.wrap,
         region: al.region,
+        holes: al.holes,
     )
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
     g.prologue()
@@ -401,6 +403,16 @@ fn Gen.entry_moves(mut self)
 
 # ---- blocks ----
 
+## The moves that park values in slots across a loop (ADR 0848): stores end
+## the block before the loop, loads start each block after it.
+fn Gen.hole_moves(mut self, b int, store bool)
+    for h in holes
+        if h.block == b and h.store == store
+            if store
+                emit_move(Move(dst: h.slot, src: h.reg, imm: 0, sym: "", float: h.float))
+            else
+                emit_move(Move(dst: h.reg, src: h.slot, imm: 0, sym: "", float: h.float))
+
 fn Gen.gen_block(mut self, b int)
     blk := f.blocks[b]
     n := blk.insts.len()
@@ -420,9 +432,11 @@ fn Gen.gen_block(mut self, b int)
     if b == wrap
         for k in 0..saved.len()
             save(saved[k], 8 * k, true)
+    hole_moves(b, false)
     for k in 0..n
         if k != fused and k != masked
             gen_inst(blk.insts[k])
+    hole_moves(b, true)
     t := blk.term
     match t.kind
         "jump" =>
