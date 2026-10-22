@@ -205,8 +205,14 @@ fn Lower.is_error_expr(self, e ast.Expr) bool
     match e
         Call(callee, _, _) => is_error_callee(callee)
         Member(recv, _, _) => is_error_type_name(recv)
-        Method(recv, name, _, _) => is_error_type_name(recv) or method_returns_error(recv, name)
+        Method(recv, name, _, _) => is_error_type_name(recv) or is_net_error(recv, name) or method_returns_error(recv, name)
         Name(n, _) => is_error_variant(n) or local_is_error(n)
+        _ => false
+
+## `net.NAME(...)` building a std.net error.
+fn Lower.is_net_error(self, recv ast.Expr, name str) bool
+    match recv
+        Name(m, _) => m == "net" and err_msgs.contains("net.{name}")
         _ => false
 
 ## A local variable or parameter that holds an error value (`return e`).
@@ -806,7 +812,7 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
             Struct | Enum => display_call(Val(id: f, ty: slots[k].ty)) else -1
-            List(e) => if e == Ty.Int then call("rt.fmt_int_list", [f], Ty.Str) else -1
+            List => if text_ok(slots[k].ty) then value_text(slots[k].ty, f) else -1
             _ => -1
         if text < 0
             return none

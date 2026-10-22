@@ -320,6 +320,25 @@ fn os_fs_read_text(path str) str
     os_succeed()
     str_at(s)
 
+## `fs.read_bytes(path)` (std.fs.13): the file as it is, with no UTF-8 check.
+fn os_fs_read_bytes(path str) str
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        return ""
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        return ""
+    s := os_read_fd(fd)
+    os_close(fd)
+    if s < 0
+        os_fail_errno(s)
+        return ""
+    store64(s + 8, load64(s))
+    os_succeed()
+    str_at(s)
+
 ## Write all of `s` to `fd`; 0, or a negative `errno`.
 fn os_write_all(fd int, p int, n int) int
     mut done := 0
@@ -863,6 +882,12 @@ fn os_error(path str, kind int, at str)
 
 fn fs_read_text(path str, at str) str
     s := os_fs_read_text(path)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+    s
+
+fn fs_read_bytes(path str, at str) str
+    s := os_fs_read_bytes(path)
     if not os_ok()
         os_error(path, os_kind(), at)
     s

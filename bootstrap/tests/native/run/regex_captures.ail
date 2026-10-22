@@ -1,0 +1,15 @@
+use std.regex
+
+fn main()
+    re := regex.compile("(?P<word>[a-z]+)(\\d+)?") else return
+    if c := regex.captures(re, "-- abc12 --")
+        print(c.start)
+        print(c.end)
+        print(c.groups.len())
+        print(c.groups[0] else "none")
+        print(c.groups[1] else "none")
+        print(c.groups[2] else "none")
+        print(c.named["word"])
+    if c := regex.captures(re, "xyz")
+        print(c.groups[2] else "none")
+    print(regex.captures(re, "123") == none)
