@@ -309,13 +309,22 @@ fn garlic_js_parses_and_runs_its_suites() {
 #[test]
 fn garlic_reads_a_page_from_serve_dir() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
-    let mut server = ail().args(["run", "tools/garlic/testdata/serve_dir.ail", &free.to_string()]).current_dir(&root).spawn().unwrap();
-    let url = format!("http://{free}/index.html");
+    let start = |root: &Path| {
+        let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+        let server = ail().args(["run", "tools/garlic/testdata/serve_dir.ail", &free.to_string()]).current_dir(root).spawn().unwrap();
+        (free, server)
+    };
+    let (mut free, mut server) = start(&root);
     let garlic = tool("tools/garlic/garlic.ail");
     // The server needs a moment to bind; Garlic reports a refused connection.
+    // Another process can take the free port before the server binds it: the
+    // server then exits, and a new one starts on another port.
     let mut text = String::new();
     for _ in 0..50 {
+        if server.try_wait().unwrap().is_some() {
+            (free, server) = start(&root);
+        }
+        let url = format!("http://{free}/index.html");
         let out = ail().args(["run", &garlic, "--width", "60", "--print", &url]).output().unwrap();
         text = String::from_utf8_lossy(&out.stdout).into_owned();
         if out.status.success() && text.contains("# Garlic") {
