@@ -75,7 +75,7 @@ way the editor's screen does (ADR 0181).
   rules, simple tables and inline emphasis, wrapped to the window width.
   Links are numbered `[3]`, and the title is in the window title.
 - **Navigate**: Tab and Shift-Tab move between links, Enter or a click
-  follows, Backspace goes back, Up/Down/PageUp/PageDown/Home/End and the
+  follows, Backspace goes back and Alt-Right forward (the last 16 pages left are kept, tree and scroll place, so neither fetches), Up/Down/PageUp/PageDown/Home/End and the
   wheel scroll, `g` opens a URL, `/` finds text (`n` again), `r` reloads,
   `q` quits.
 - **Headless**: `--print` writes the rendered page as text; `--json` writes
@@ -140,7 +140,7 @@ An agent drives Garlic headless, with no window:
 - `--do ACTION:ARG` (repeatable, in order) before `--json` or `--print`:
   `follow:3` (link number), `click:12` (node id, as Enter: follows a link,
   presses a button, toggles a box), `type:12=TEXT`, `submit:12` (the form
-  of node 12), `check:12`, `select:12=OPTION`, `open:URL`, `back`,
+  of node 12), `check:12`, `select:12=OPTION`, `open:URL`, `back`, `forward`,
   `find:TEXT`, `scroll:ROW`, `reload`.
 - `--session` keeps one browser open: one JSON action per line on stdin
   (`{"do":"follow","link":3}`, `{"do":"type","id":12,"text":"garlic"}`; the
