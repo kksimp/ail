@@ -1,0 +1,6 @@
+# mem.from_cstr of a null pointer traps (unsafe.mem.1).
+use std.mem
+
+fn main()
+    unsafe
+        print(mem.from_cstr(mem.null()))
