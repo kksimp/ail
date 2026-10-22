@@ -22,9 +22,11 @@
 #                 `build FILE RT [TARGET]` and print the executable as hex), to
 #                 test the later stages before stage 1 builds. A wrapper that
 #                 runs `ail run compiler build "$@"` stands in for it.
-#   TARGET=T      x86_64-linux (default on Linux x86-64), aarch64-linux, ...
-#                 Only the host's target can be run; other targets stop after
-#                 the build stages.
+#   TARGET=T      x86_64-linux, aarch64-linux or aarch64-macos. Default: the host's
+#                 (aarch64-macos on an Apple Silicon Mac, x86_64-linux on Linux
+#                 x86-64). Only the host's target can be run; other targets stop
+#                 after the build stages. The stage compilers are always given the
+#                 target explicitly: their own default is x86_64-linux.
 #   ONLY=NAMES    comma-separated test names (no .ail) for stage T.
 #   TESTS_ONLY=1  with STAGE1: skip stages 2 and 3 and run stage T with STAGE1
 #                 as the compiler (this checks the harness itself).
@@ -43,8 +45,12 @@ cd "$root" || exit 2
 rt=compiler/rt/native
 tests=bootstrap/tests/native/run
 report="$out/report.md"
-target_arg=()
-[ -n "${TARGET:-}" ] && target_arg=(--target "$TARGET")
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) host_target=aarch64-macos ;;
+    Linux-aarch64 | Linux-arm64) host_target=aarch64-linux ;;
+    *) host_target=x86_64-linux ;;
+esac
+TARGET="${TARGET:-$host_target}"
 : > "$report"
 
 say() { echo "$*" | tee -a "$report"; }
@@ -56,7 +62,7 @@ unhex() { perl -ne 'chomp; print pack("H*", $_)' > "$1" && chmod +x "$1"; }
 # build SRC with compiler CMD into OUT; the compiler prints hex
 build_with() { # compiler src out
     local cc="$1" src="$2" dst="$3"
-    "$cc" build "$src" "$rt" ${TARGET:+"$TARGET"} > "$dst.hex" 2> "$dst.err" || return 1
+    "$cc" build "$src" "$rt" "$TARGET" > "$dst.hex" 2> "$dst.err" || return 1
     unhex "$dst" < "$dst.hex"
 }
 
@@ -99,7 +105,7 @@ if [ -n "${STAGE1:-}" ]; then
     say "stage 1 supplied: $stage1"
 else
     stage1="$out/stage1"
-    if ./ail build compiler/main.ail -o "$stage1" "${target_arg[@]}" > "$out/stage1.log" 2>&1; then
+    if ./ail build compiler/main.ail -o "$stage1" --target "$TARGET" > "$out/stage1.log" 2>&1; then
         say "built $stage1 ($(wc -c < "$stage1") bytes)"
     else
         problems=$(grep -c 'error\[' "$out/stage1.log")
@@ -115,6 +121,10 @@ fi
 say ""
 
 # ---- stage 2 and 3: the fixed point ----
+if [ "$TARGET" != "$host_target" ]; then
+    say "OK (build only: $TARGET can't run on this $host_target host, so stages 2, 3 and T were skipped)."
+    exit 0
+fi
 if [ -n "${TESTS_ONLY:-}" ] && [ -n "${STAGE1:-}" ]; then
     say "(stages 2 and 3 skipped: TESTS_ONLY)"
     cp "$stage1" "$out/stage2" 2>/dev/null || ln -sf "$stage1" "$out/stage2"
@@ -172,7 +182,7 @@ for f in "$tests"/*.ail; do
     rm -f "$exe" "$exe.hex" "$exe.err"
 done
 say "$pass passed, $fail failed"
-for n in "${failed[@]:-}"; do [ -n "$n" ] && say "  - $n"; done
+for n in ${failed[@]+"${failed[@]}"}; do say "  - $n"; done
 [ "$fail" -eq 0 ] || blocked "stage T" "$fail native test programs differ when built by the self-hosted compiler"
 say ""
 if [ -n "${TESTS_ONLY:-}" ]; then

@@ -39,7 +39,7 @@ H_DIRTY := 152
 # had the same layout and the rows of a table all fell in a few sets.
 PAGE := 16448
 MAX_SMALL := 8192
-MIN_THRESH := 16777216
+MIN_THRESH := 33554432
 
 # Page table tags (low byte): 0 free, 1 small page (bits 8-15 class, 16-31
 # block size, 32-63 reciprocal),
