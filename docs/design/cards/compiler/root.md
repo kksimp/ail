@@ -3,8 +3,12 @@ entry: main in main.ail
 
 ## (root)
 ```
-fn main() ! [env fail fs io]
+fn main() ! [env fail fs io proc]
     fails with JsonError | fs.IoError
+BUILD_USAGE := ...
+fn positive(v str) bool  ## A positive whole number (run.limit.4).
+fn host_target() str [io proc]  ## The target `ail build` makes by default: the host's, from `uname`.
+fn build_cli(rest List[str]) [env fs io proc]  ## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
 fn check_dump(path str, many bool) ! [env fail fs io]  ## The checker's diagnostics for one dump, sorted by position as `ail check`
     fails with JsonError | fs.IoError
 fn runtime(dir str, path str) !ast.Program [fail fs io]  ## The native runtime in directory `dir`, parsed as one program.
