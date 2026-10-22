@@ -834,3 +834,27 @@ fn driver_programs_run_natively() {
     let _ = fs::remove_dir_all(&tmp);
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
+
+/// The native runtime is one namespace across `compiler/rt/native/*.ail`
+/// (native-abi.md): two files defining the same function would let one
+/// silently replace the other, so every top-level name must be unique.
+/// `notask.ail` stands in for `task.ail` (ADR 0599), so it is skipped.
+#[test]
+fn runtime_function_names_are_unique() {
+    let dir = root().join("compiler/rt/native");
+    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut dups = Vec::new();
+    let mut files: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
+    files.sort();
+    for f in files.iter().filter(|p| p.extension().is_some_and(|x| x == "ail") && !p.ends_with("notask.ail")) {
+        let file = f.file_name().unwrap().to_string_lossy().to_string();
+        for line in fs::read_to_string(f).unwrap().lines() {
+            let Some(rest) = line.strip_prefix("fn ").or_else(|| line.strip_prefix("pub fn ")) else { continue };
+            let name: String = rest.chars().take_while(|c| *c != '(' && *c != '[' && *c != ' ').collect();
+            if let Some(first) = seen.insert(name.clone(), file.clone()) {
+                dups.push(format!("{name}: {first} and {file}"));
+            }
+        }
+    }
+    assert!(dups.is_empty(), "runtime functions defined twice:\n{}", dups.join("\n"));
+}

@@ -9,6 +9,11 @@ MIN := -9223372036854775807 - 1
 
 pub fn fold(f Func) Func
     mut g := f
+    fold_in(mut g)
+    g
+
+## `fold` in place, for a caller that has no use for the old function.
+pub fn fold_in(mut g Func)
     mut defs := [-1 for _ in 0..g.vals.len()]
     mut insts := List[Inst]()
     for b in 0..g.blocks.len()
@@ -24,26 +29,27 @@ pub fn fold(f Func) Func
             for extra in fd.rewrite(i, mut g.vals, mut g.names)
                 out.push(extra)
         g.blocks[b].insts = out
-    cse(drop_bounded(g, fd))
+    drop_bounded(mut g, fd)
+    cse(mut g)
 
 ## Common subexpressions (ADR 0391): an instruction that computes what one
 ## in a dominating block already did reuses that value. Checked arithmetic
 ## counts too: had the first one trapped, the second wouldn't run.
-fn cse(f Func) Func
-    n := f.blocks.len()
-    dom := dominators(f)
+fn cse(mut g Func)
+    n := g.blocks.len()
+    dom := dominators(g)
     mut seen := Map[str, List[int]]()
-    mut repl := [v for v in 0..f.vals.len()]
-    mut where := [-1 for _ in 0..f.vals.len()]
+    mut repl := [v for v in 0..g.vals.len()]
+    mut where := [-1 for _ in 0..g.vals.len()]
     # Instructions that repeat an earlier one: the first would have trapped.
-    mut dup := [[false for _ in blk.insts] for blk in f.blocks]
-    for b in rpo(f)
-        for k in 0..f.blocks[b].insts.len()
-            i := f.blocks[b].insts[k]
+    mut dup := [[false for _ in blk.insts] for blk in g.blocks]
+    for b in rpo(g)
+        for k in 0..g.blocks[b].insts.len()
+            i := g.blocks[b].insts[k]
             if i.dst < 0 or not same_each_time(i)
                 continue
             args := [repl[a] for a in i.args]
-            key := "{i.op}|{args}|{i.imm}|{i.fimm}|{i.name}|{f.vals[i.dst].name()}"
+            key := "{i.op}|{args}|{i.imm}|{i.fimm}|{i.name}|{g.vals[i.dst].name()}"
             mut found := -1
             if prior := seen.get(key)
                 for v in prior
@@ -58,7 +64,6 @@ fn cse(f Func) Func
                 if not seen.contains(key)
                     seen[key] = []
                 seen[key].push(i.dst)
-    mut g := f
     for b in 0..n
         for k in 0..g.blocks[b].insts.len()
             g.blocks[b].insts[k].args = [repl[a] for a in g.blocks[b].insts[k].args]
@@ -73,7 +78,6 @@ fn cse(f Func) Func
             t.value = repl[t.value]
         t.args = [[repl[a] for a in edge] for edge in t.args]
         g.blocks[b].term = t
-    g
 
 ## Whether an instruction gives the same value from the same operands and
 ## does nothing else, but perhaps trap.
@@ -123,14 +127,14 @@ struct Bound
 
 ## `i + 1` where a dominating `i < n` held can't overflow, since `n` is at
 ## most the largest `int`; `i - 1` where `i > n` held likewise.
-fn drop_bounded(f Func, fd Folder) Func
-    n := f.blocks.len()
+fn drop_bounded(mut g Func, fd Folder)
+    n := g.blocks.len()
     mut preds := [0 for _ in 0..n]
-    for blk in f.blocks
+    for blk in g.blocks
         for t in blk.term.targets
             preds[t] += 1
     mut facts := List[Bound]()
-    for blk in f.blocks
+    for blk in g.blocks
         t := blk.term
         if t.kind != "branch"
             continue
@@ -156,9 +160,8 @@ fn drop_bounded(f Func, fd Folder) Func
                 facts.push(Bound(block: to, v: lo, up: true))
                 facts.push(Bound(block: to, v: hi, up: false))
     if facts.len() == 0
-        return f
-    dom := dominators(f)
-    mut g := f
+        return
+    dom := dominators(g)
     for b in 0..n
         for k in 0..g.blocks[b].insts.len()
             i := g.blocks[b].insts[k]
@@ -168,7 +171,6 @@ fn drop_bounded(f Func, fd Folder) Func
                 if fact.v == i.args[0] and fact.up == (i.op == "add") and dom[b][fact.block]
                     g.blocks[b].insts[k].site = -1
                     break
-    g
 
 struct Folder
     ## The index in `insts` of each value's defining instruction, or -1.

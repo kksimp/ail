@@ -1,0 +1,6 @@
+# to_float takes a single multiplication or division when at most 15 digits and a small exponent (Clinger); results equal the exact rounding (type.str.8).
+fn main()
+    xs := ["0.1", "0.5", "3.14159", "1e22", "1e-22", "123456789012345", "0.000001", "-2.5", "5e-324", "1.7976931348623157e308", "100", "0.30000000000000004", "9007199254740993", "4.35", "-0", "0", "1.0e-3", "2.2250738585072014e-308", "123456789.123456789"]
+    for x in xs
+        v := x.to_float() else 0.0
+        print("{x} {v} {v == 0.0}")

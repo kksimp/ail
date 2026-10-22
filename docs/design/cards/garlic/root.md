@@ -54,6 +54,8 @@ fn clicked(float, float) std.app.Event
 fn node_with(Browser, str, str, str) int  ## The id of the first element `tag` whose `attr` is `value` in `b`'s page.
 fn pixel_text(List[draw.Op]) List[str]  ## The text of the proportional `Str` operations in `ops`, as `text@x,y`.
 fn pixels(str, float) gfx.Scene
+fn bench_run(int, str, html.Doc, css.Sheet) int
+fn bench(List[str]) [clock fs io]  ## `garlic --bench FILE [ROUNDS]`: `args` are the words after `--bench`.
 ```
 
-trimmed to fit 2000 tokens (~1395); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1455); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

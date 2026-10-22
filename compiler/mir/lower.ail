@@ -831,15 +831,17 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     self_ty = ""
     mut k := 0
     if f.owner != none
-        if f.receiver != none
+        if recv := f.receiver
             self_ty = owner
             declare("self", sig.params[0], params[0])
             borrowed.add(lookup("self") else "")
+            note_stable_param("self", recv.mutable)
             k = 1
     for i in 0..f.params.len()
         p := f.params[i]
         declare(p.name, sig.params[k + i], params[k + i])
         note_mut_param(p, lookup(p.name) else "", params[k + i])
+        note_stable_param(p.name, p.mutable)
         borrowed.add(lookup(p.name) else "")
     body := f.body else
         lower_extern(f, name, params)
@@ -1061,7 +1063,7 @@ fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.
 
 fn Lower.lower_stmt(mut self, s ast.Stmt)
     match s
-        Let(name, pos, _, value, otherwise) =>
+        Let(name, pos, mutable, value, otherwise) =>
             if is_spawn(value)
                 lower_spawn_let(name, pos, value)
                 return
@@ -1072,8 +1074,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 # Reported; uses of the name stay quiet.
                 declare(name, Ty.Unknown, -1)
                 return
-            declare(name, v.ty, copy_if_place(value, v))
-            note_owned(name, value)
+            bind_let(name, mutable, value, v)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>

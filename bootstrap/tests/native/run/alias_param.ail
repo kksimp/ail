@@ -1,0 +1,48 @@
+# An immutable binding of a place inside a parameter reads it in place; anything that
+# keeps or returns it still gets its own copy (own.val.1).
+struct Blk
+    insts List[int]
+    tag int
+
+struct Fn
+    blocks List[Blk]
+    names List[str]
+
+fn pick(f Fn, i int) Blk
+    b := f.blocks[i]
+    b
+
+fn total(f Fn) int
+    mut t := 0
+    for i in 0..f.blocks.len()
+        b := f.blocks[i]
+        xs := b.insts
+        t += xs.len() + b.tag
+    t
+
+fn keep(f Fn, mut out List[Blk])
+    b := f.blocks[0]
+    out.push(b)
+    out[0].insts.push(99)
+    mut c := b
+    c.insts.push(7)
+    print("{b.insts} {c.insts} {out[0].insts}")
+
+fn chain(f Fn) List[int]
+    b := f.blocks[1]
+    xs := b.insts
+    ys := xs
+    ys
+
+fn main()
+    f := Fn(blocks: [Blk(insts: [1, 2], tag: 5), Blk(insts: [3], tag: 6)], names: ["a"])
+    mut p := pick(f, 1)
+    p.insts.push(4)
+    print("{p.insts} {f.blocks[1].insts}")
+    print("{total(f)}")
+    mut out := List[Blk]()
+    keep(f, mut out)
+    print("{f.blocks[0].insts} {out[0].insts}")
+    mut q := chain(f)
+    q.push(8)
+    print("{q} {f.blocks[1].insts}")
