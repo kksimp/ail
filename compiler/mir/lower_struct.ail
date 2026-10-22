@@ -153,7 +153,7 @@ fn Lower.store(mut self, obj int, k int, v int)
 
 ## `x.f` on a struct.
 fn Lower.lower_member(mut self, recv ast.Expr, name str, pos ast.Pos) Val?
-    r := lower_value(recv, none)?
+    r := deref(lower_value(recv, none)?)
     if xs := tuple_elems(r.ty)
         return tuple_member(r, xs, name, pos)
     n := struct_name(r.ty) else return unsupported(pos, "`.{name}` on `{r.ty.name()}`")
@@ -178,7 +178,8 @@ fn Lower.assign_member(
     pos ast.Pos,
     at ast.Pos,
 )
-    r := lower_value(recv, none) else return
+    held := lower_value(recv, none) else return
+    r := deref(held)
     if xs := tuple_elems(r.ty)
         assign_tuple_elem(r, xs, name, op, value, pos, at)
         return
@@ -213,6 +214,7 @@ fn Lower.self_value(mut self) int
 
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    rcv := take_receiver()
     if not sigs.contains(key)
         instance_method(key)
     if bad.contains(key)
@@ -228,18 +230,19 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
     if r := recv
-        vs.push(r.id)
+        vs.push(shield_recv(rcv, args, r))
     if args.len() + vs.len() != sig.params.len()
         return unsupported(
             pos,
             "calling `{key}` with {args.len() + vs.len()} arguments instead of {sig.params.len()}",
         )
-    for a in args
+    for i in 0..args.len()
+        a := args[i]
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         t := sig.params[vs.len()]
         v := lower_value(a.value, t)?
-        vs.push(convert(v, t, expr_pos(a.value)))
+        vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
     Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
 

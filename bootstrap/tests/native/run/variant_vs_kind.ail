@@ -1,0 +1,30 @@
+enum TokKind
+    Int
+    Str
+
+enum Value
+    Int(n int)
+    Str(s str)
+    Nil
+
+struct Tok
+    kind TokKind
+
+fn make(s str, n int, str_form bool) Value
+    if str_form
+        return Str(s)
+    Int(n)
+
+fn show(v Value) str
+    match v
+        Int(n) => "int {n}"
+        Str(s) => "str {s}"
+        Nil => "nil"
+
+fn main()
+    print(show(make("a", 1, true)))
+    print(show(make("a", 1, false)))
+    t := Tok(kind: Int)
+    match t.kind
+        Int => print("kind int")
+        Str => print("kind str")

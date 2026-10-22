@@ -1,0 +1,41 @@
+struct Frame
+    id int
+
+fn Frame.next(mut self) int
+    id += 1
+    id
+
+struct Vm
+    frames Map[int, Frame]
+    shared Map[int, ref Frame]
+    names Map[str, str]
+
+fn Vm.take(mut self, id int) Frame?
+    frames.remove(id)
+
+fn Vm.take_shared(mut self, id int) ref Frame?
+    shared.remove(id)
+
+fn Vm.name(mut self, k str) str?
+    names.remove(k)
+
+fn main()
+    mut vm := Vm(frames: {}, shared: {}, names: {})
+    vm.frames[1] = Frame(id: 10)
+    vm.shared[2] = ref Frame(id: 20)
+    vm.names["a"] = "alpha"
+    if f := vm.take(1)
+        print(f.id)
+    print(vm.take(1) == none)
+    if g := vm.take_shared(2)
+        print(g.next())
+    print(vm.shared.len())
+    print(vm.name("a") else "gone")
+    print(vm.name("a") else "gone")
+    vm.names["b"] = "beta"
+    vm.names.remove("b")
+    print(vm.names.len())
+    mut counts := {"x": 1}
+    if n := counts.remove("x")
+        print(n)
+    print(counts.len())

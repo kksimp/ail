@@ -18,7 +18,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple => Ty.Opt(t)
+        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple | Ref => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -295,7 +295,12 @@ fn Lower.method_key(self, recv ast.Expr, name str) str?
 fn Lower.recv_ty(self, e ast.Expr) Ty?
     match e
         Name(n, _) =>
-            k := lookup(n)?
+            k := lookup(n) else
+                # A bare field name in a method.
+                s := self_slot(n)
+                if s >= 0
+                    return structs[self_ty][s].ty
+                return none
             t := var_ty[k]
             if t.is_unknown() then none else t
         Index(r, _, _) => recv_ty(r)?.elem()
@@ -759,7 +764,7 @@ fn Lower.display_call(mut self, v Val) int?
 
 ## The text of an error type with no message: its default form,
 ## `Name(field: value, ...)` for a struct and `Enum.Variant(field: value)`
-## for an enum (trait.auto.2), for fields of `int`, `float`, `bool` and `str`.
+## for an enum (trait.auto.2), for fields of `int`, `float`, `bool`, `str`, and structs and enums of those.
 fn Lower.default_error_text(mut self, key str, v Val) int?
     if cases := enums.get(key)
         return default_enum_text(key, cases, v)
@@ -780,7 +785,8 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
             F32 => call("rt.fmt_f32", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
-            Struct(nk) => nested_text(nk, f)
+            Struct | Enum => display_call(Val(id: f, ty: slots[k].ty)) else -1
+            List(e) => if e == Ty.Int then call("rt.fmt_int_list", [f], Ty.Str) else -1
             _ => -1
         if text < 0
             return none

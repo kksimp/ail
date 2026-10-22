@@ -26,6 +26,20 @@ with no `to_str`, and an `any Trait` value, print as the interpreter prints
 them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`.
 *(ADRs 0536, 0616)*
 
+**native.subset.3** — A read-only argument or receiver of a struct, list or `any Trait` type that
+may overlap a `mut` argument of the same call (the same variable, with fields
+that agree and any index counting as equal) is copied before the call, as
+own.excl.4 says, so the callee doesn't see its own changes through it.
+*(ADR 0119)*
+
+**native.subset.4** — `ref S` of a struct `S` is in the native subset (own.ref.1-6):
+`ref e` makes a new object from a copy of `e`, a copy of the reference
+shares the object, field access, assignment and method calls apply to it
+(own.ref.3-4), `==` compares identity (own.ref.6), and a `ref` can be a
+field, a list element or an optional. A `ref` of anything but a struct, the
+text of a `ref`, and the trap of own.ref.7 are not in the subset yet.
+*(ADRs 0067, 0192)*
+
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators

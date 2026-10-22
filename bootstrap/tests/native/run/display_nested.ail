@@ -1,0 +1,28 @@
+struct Pos
+    line int
+    col int
+
+enum Kind
+    Plain
+    At(pos Pos)
+
+error struct Oops
+    pos Pos
+    msg str
+
+struct Mark
+    kind Kind
+    pos Pos
+
+fn fail(n int) int ! Oops
+    if n > 1
+        return Oops(Pos(line: n, col: 2), "too big")
+    n
+
+fn main()
+    print(Mark(kind: Kind.At(Pos(line: 1, col: 2)), pos: Pos(line: 3, col: 4)))
+    print(Mark(kind: Kind.Plain, pos: Pos(line: 0, col: 0)))
+    print(Oops(Pos(line: 5, col: 6), "m"))
+    x := fail(3) else 0
+    print(x)
+    print(fail(1) else 9)

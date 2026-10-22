@@ -1,0 +1,10 @@
+fn main()
+    mut m := Map[str, char]()
+    m["a"] = 'x'
+    m["b"] = 'y'
+    print(m["a"])
+    if c := m.get("b")
+        print(c)
+    print(m.len())
+    for k in m.keys()
+        print("{k}={m[k]}")

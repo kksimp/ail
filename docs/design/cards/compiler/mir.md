@@ -83,6 +83,10 @@ pub fn mir.is_wait_call(e ast.Expr) bool
 pub struct mir.Traits
     impls Map[str, List[str]]
     dispatch Map[str, List[str]]
+    mut_self Set[str]
+    recv_path List[str]
+    recv_mut bool
+    stmt_pos ast.Pos?
 pub fn mir.new_traits() mir.Traits
 pub enum mir.Ty
     Int
@@ -102,6 +106,7 @@ pub enum mir.Ty
     F32
     Tuple(elems List[mir.Ty])
     Any(trait_name str)
+    Ref(inner mir.Ty)
     Unknown
     Unit
     Atomic(elem mir.Ty)
@@ -109,6 +114,7 @@ pub enum mir.Ty
     Fn(params List[mir.Ty], ret mir.Ty)
     Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
+    pub fn mir.Ty.is_ref(self) bool
     pub fn mir.Ty.is_float(self) bool
     pub fn mir.Ty.is_unit(self) bool
     pub fn mir.Ty.is_unknown(self) bool
@@ -191,4 +197,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1928); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1974); dropped: private items, doc comments

@@ -49,6 +49,10 @@ contract, and the native tests compare the first stderr line with it.
   of a function in another module, and the `invariant` lines of a struct
   built from another module, until later slices. The `  values:` snapshot lines of the interpreter's trap
   are not produced (trace.snap.1); the tests drop them.
+- Update 2026-10-21: the `requires` of a function in another module are now
+  checked at the call. The condition is lowered in the callee's module, so
+  its names mean what they do there, and the trap names the contract's file.
+  A struct's `invariant` lines from another module are still outside the subset.
 
 ## Rejected alternatives
 
