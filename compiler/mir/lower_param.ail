@@ -7,14 +7,28 @@
 
 use ast
 
+## What lowering notes about the function it is on (lower_param.ail,
+## lower_move.ail): the object of each `mut` parameter, and the copies of an
+## owned local's last use that `elide_moves` may drop.
+struct Facts
+    mut_ptr Map[str, int]
+    moves List[int]
+    ## The locals whose every value is their own: set by a plain `x := e`
+    ## whose `e` is a place (copied), a literal or a call, and dropped by an
+    ## assignment of anything else (lower_move.ail).
+    owned Set[str]
+
+fn new_facts() Facts
+    Facts(mut_ptr: {}, moves: [], owned: Set[str]())
+
 ## A `mut` parameter's object, as `FUNCTION|KEY`.
 fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
     if p.mutable and v >= 0
-        mut_ptr["{fname}|{key}"] = v
+        facts.mut_ptr["{fname}|{key}"] = v
 
 ## The value to bind to `key` after `key = v` of type `ty`.
 fn Lower.assign_param(mut self, key str, ty Ty, v int) int
-    p := mut_ptr.get("{fname}|{key}") else return v
+    p := facts.mut_ptr.get("{fname}|{key}") else return v
     if p == v
         return v
     if xs := tuple_elems(ty)
