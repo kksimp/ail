@@ -492,7 +492,7 @@ fn tc_cached_roots(st int) List[List[int]]
 
 # ---- the handshake ----
 
-fn tc_client_hello(ch int, host str, rnd int, pubkey int) int
+fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien int) int
     mut b := 4
     b = tc_w16(ch, b, 771)
     copy_bytes(ch + b, rnd, 32)
@@ -535,6 +535,12 @@ fn tc_client_hello(ch int, host str, rnd int, pubkey int) int
     b = tc_w16(ch, b, 32)
     copy_bytes(ch + b, pubkey, 32)
     b += 32
+    if cookien > 0
+        b = tc_w16(ch, b, 44)
+        b = tc_w16(ch, b, cookien + 2)
+        b = tc_w16(ch, b, cookien)
+        copy_bytes(ch + b, cookie, cookien)
+        b += cookien
     tc_w16(ch, ext, b - ext - 2)
     store8(ch, 1)
     store8(ch + 1, 0)
@@ -554,17 +560,14 @@ fn tc_nib(c int) int
 
 ## The ServerHello at `p` (`n` bytes): 0 and its 32-byte key share copied to
 ## `share`, or an error.
-fn tc_server_hello(st int, p int, n int, sid int, share int) int
+## A HelloRetryRequest returns 1 with its cookie (address, length) and asked
+## group stored in the three words at `ck`.
+fn tc_server_hello(st int, p int, n int, sid int, share int, ck int) int
     what := "ServerHello"
     if n < 38
         return tc_bad(st, what)
     legacy := tc_r16(p)
-    if tc_retry_random(p + 2)
-        return tc_err(
-            st,
-            0,
-            "the server sent a HelloRetryRequest, which the native TLS client doesn't support yet",
-        )
+    retry := tc_retry_random(p + 2)
     sl := load8(p + 34)
     mut off := 35 + sl
     if off + 5 > n
@@ -599,6 +602,19 @@ fn tc_server_hello(st int, p int, n int, sid int, share int) int
                 if dl != 2
                     return tc_bad(st, "ServerHello extension")
                 version = tc_r16(p + off)
+            elif ty == 44 and retry
+                if dl < 2 or tc_r16(p + off) + 2 != dl
+                    return tc_bad(st, "ServerHello extension")
+                cn := dl - 2
+                cb := alloc_raw(cn + 8, KIND_BYTES)
+                copy_bytes(cb, p + off + 2, cn)
+                store64(ck, cb)
+                store64(ck + 8, cn)
+            elif ty == 51 and retry
+                seen_k = true
+                if dl != 2
+                    return tc_bad(st, "ServerHello extension")
+                store64(ck + 16, tc_r16(p + off))
             elif ty == 51
                 seen_k = true
                 if dl < 4
@@ -651,6 +667,8 @@ fn tc_server_hello(st int, p int, n int, sid int, share int) int
             0,
             "the server chose cipher suite {tc_hex(suite, 4)}, which wasn't offered (illegal_parameter)",
         )
+    if retry
+        return 1
     if not have_share
         return tc_err(st, 0, "the server sent no key share (missing_extension)")
     0
@@ -690,7 +708,7 @@ fn tc_connect(o int, host str) int
     pubkey := alloc_raw(32, KIND_BYTES)
     x25519_base(pubkey, rnd + 64)
     ch := alloc_raw(900, KIND_BYTES)
-    chn := tc_client_hello(ch, host, rnd, pubkey)
+    chn := tc_client_hello(ch, host, rnd, pubkey, 0, 0)
     w := tc_write_record(o, 22, ch, chn)
     if w < 0
         return w
@@ -705,9 +723,59 @@ fn tc_connect(o int, host str) int
     if e != 0
         return e
     peer := alloc_raw(32, KIND_BYTES)
-    e = tc_server_hello(st, hs + 4, load64(st + TS_MLEN) - 4, rnd + 32, peer)
-    if e != 0
+    ck := alloc_raw(32, KIND_BYTES)
+    for i in 0..4
+        store64(ck + 8 * i, 0)
+    e = tc_server_hello(st, hs + 4, load64(st + TS_MLEN) - 4, rnd + 32, peer, ck)
+    if e < 0
         return e
+    if e == 1
+        # HelloRetryRequest (RFC 8446 section 4.1.4): the only thing we can
+        # answer is a cookie; the transcript restarts from a message_hash.
+        asked := load64(ck + 16)
+        if asked == 29
+            return tc_err(st, 0, "the server asked again for X25519, which was already offered (illegal_parameter)")
+        if asked != 0
+            return tc_err(
+                st,
+                0,
+                "the server requires key exchange group {tc_hex(asked, 4)}; AIL's TLS supports only X25519",
+            )
+        if load64(ck + 8) == 0
+            return tc_err(st, 0, "the server's HelloRetryRequest asked for nothing (illegal_parameter)")
+        th1 := alloc_raw(40, KIND_BYTES)
+        tc_tr_hash(st, th1 + 4)
+        store8(th1, 254)
+        store8(th1 + 1, 0)
+        store8(th1 + 2, 0)
+        store8(th1 + 3, 32)
+        store64(st + TS_TRN, 0)
+        e = tc_tr_add(st, th1, 36)
+        if e != 0
+            return e
+        e = tc_tr_add(st, hs, load64(st + TS_MLEN))
+        if e != 0
+            return e
+        tc_drop(st)
+        ch2 := alloc_raw(900 + load64(ck + 8), KIND_BYTES)
+        ch2n := tc_client_hello(ch2, host, rnd, pubkey, load64(ck), load64(ck + 8))
+        w = tc_write_record(o, 22, ch2, ch2n)
+        if w < 0
+            return w
+        e = tc_tr_add(st, ch2, ch2n)
+        if e != 0
+            return e
+        e = tc_msg(o, true)
+        if e != 0
+            return e
+        e = tc_expect(st, 2, "ServerHello")
+        if e != 0
+            return e
+        e = tc_server_hello(st, hs + 4, load64(st + TS_MLEN) - 4, rnd + 32, peer, ck)
+        if e < 0
+            return e
+        if e == 1
+            return tc_err(st, 0, "the server sent a second HelloRetryRequest (unexpected_message)")
     e = tc_tr_add(st, hs, load64(st + TS_MLEN))
     if e != 0
         return e

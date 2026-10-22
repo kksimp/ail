@@ -38,7 +38,7 @@ ChaCha20-Poly1305 and X25519 (slices 1-2a); HKDF is slice 2b.
 5. **Landed (slice 4):** `tls_client.ail` is the record layer, the handshake
    and the post-handshake messages, wired into `net_fill`/`net_write` through
    the socket object's `NET_TLS` word. Known gaps against the Rust client:
-   a HelloRetryRequest fails with a clear message; no `close_notify` on
+   a HelloRetryRequest with a cookie is answered as in the Rust client (checked by replaying a group retry from a modified build against `openssl s_server`; the cookie echo itself has no live server to test against); no `close_notify` on
    close; the roots are cached in global slot 42 after the first handshake; macOS reads `/etc/ssl/cert.pem` and does not run `security`.
 
 ## Rejected alternatives
