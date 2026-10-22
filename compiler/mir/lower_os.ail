@@ -91,7 +91,7 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz"]
+    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz", "hw"]
         if is_module(recv, m)
             return m
     ""
@@ -160,6 +160,8 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
         return lower_eprint(args, npos)
     if m == "net"
         return lower_net_module(name, npos, args)
+    if m == "hw"
+        return lower_hw_call(name, npos, args)
     f := os_lookup(m, name) else
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"

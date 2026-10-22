@@ -105,6 +105,7 @@ pub enum mir.Ty
     Tensor(elem mir.Ty)
     F32
     Tuple(elems List[mir.Ty])
+    Ptr(inner mir.Ty)
     Any(trait_name str)
     Ref(inner mir.Ty)
     Unknown
@@ -200,3 +201,4 @@ pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
 trimmed to fit 2000 tokens (~1928); dropped: private items, doc comments, parameter names
+trimmed to fit 2000 tokens (~1936); dropped: private items, doc comments

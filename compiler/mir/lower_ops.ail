@@ -139,6 +139,7 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         Str => str_binary(o, a, b, pos) else a
         Char => char_binary(o, a, b, pos) else a
         Sized(_) => sized_binary(o, a, b, pos) else a
+        Ptr(_) => ptr_binary(o, a, b, pos)
         F32 => f32_binary(o, a, b, pos)
 
         _ =>

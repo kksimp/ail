@@ -153,7 +153,13 @@ pub fn command(args: &[&str]) -> ExitCode {
     };
     // The backend assumes a checked program.
     let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("ail"));
-    match Command::new(exe).args(["check", file]).status() {
+    // `--unsafe driver` (unsafe.hw.1) reaches the check this way.
+    let mut check = Command::new(exe);
+    check.arg("check");
+    if crate::ast::UNSAFE_DRIVER.load(std::sync::atomic::Ordering::Relaxed) {
+        check.args(["--unsafe", "driver"]);
+    }
+    match check.arg(file).status() {
         Ok(s) if s.success() => {}
         _ => return ExitCode::from(1),
     }

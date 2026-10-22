@@ -219,6 +219,36 @@ pub fn Asm.mov8_mr(mut self, m Mem, src int)
     byte(136)
     modrm_mem(src, m, 0)
 
+## `movzx r32, word [m]`, and `mov r32, dword [m]` (which zero-extends).
+pub fn Asm.movzx16_rm(mut self, dst int, m Mem)
+    rex(0, dst, index_of(m), base_of(m), false)
+    byte(15)
+    byte(183)
+    modrm_mem(dst, m, 0)
+
+pub fn Asm.mov32_rm(mut self, dst int, m Mem)
+    rex(0, dst, index_of(m), base_of(m), false)
+    byte(139)
+    modrm_mem(dst, m, 0)
+
+## `mov word [m], r16` and `mov dword [m], r32`.
+pub fn Asm.mov16_mr(mut self, m Mem, src int)
+    byte(102)
+    rex(0, src, index_of(m), base_of(m), false)
+    byte(137)
+    modrm_mem(src, m, 0)
+
+pub fn Asm.mov32_mr(mut self, m Mem, src int)
+    rex(0, src, index_of(m), base_of(m), false)
+    byte(137)
+    modrm_mem(src, m, 0)
+
+## `mfence`: all earlier loads and stores before all later ones.
+pub fn Asm.mfence(mut self)
+    byte(15)
+    byte(174)
+    byte(240)
+
 ## `rep stosb` and `rep stosq`: store `al` or `rax` at `[rdi]`, `rcx` times.
 pub fn Asm.rep_stosb(mut self)
     byte(243)

@@ -12,6 +12,7 @@ entry: main in main.ail
 ## codegen (46 items)
 
 ## mir (356 items)
+## mir (343 items)
 
 ## obj (58 items)
 

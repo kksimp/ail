@@ -1,0 +1,22 @@
+# Raw pointers without touching memory: hw.at, offset, ==, is_null, fences (unsafe.ptr.1-2, unsafe.hw.2, unsafe.hw.4).
+use std.hw
+
+fn same(a *u32, b *u32) bool
+    a == b
+
+fn main()
+    unsafe
+        p := hw.at(4096, 0.to_u32())
+        print(p.is_null())
+        q := p.offset(3)
+        print(same(q, hw.at(4108, 0.to_u32())))
+        print(q == p)
+        print(q != p)
+        print(hw.at(0, 0).is_null())
+        r := hw.at(100, 0.to_i16()).offset(0 - 2)
+        print(r == hw.at(96, 0.to_i16()))
+        pp := hw.at(64, p)
+        print(pp.offset(1) == hw.at(72, p))
+        hw.fence()
+        hw.fence_io()
+        print("done")

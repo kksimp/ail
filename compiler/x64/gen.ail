@@ -1144,6 +1144,34 @@ fn Gen.prim(mut self, i mir.Inst)
         "storef" =>
             v := xmm(i.args[i.args.len() - 1], X0)
             a.vmovsd_mr(address(i), v)
+        "pload8" | "pload16" | "pload32" | "pload64" =>
+            # A raw pointer's read (ADR 0835): the width in the name, the
+            # result zero-extended. Never moved, merged or dropped.
+            mem := at(gpr(i.args[0], S0), 0)
+            d := out_gpr(i.dst, S1)
+            if i.name == "pload8"
+                a.movzx8_rm(d, mem)
+            elif i.name == "pload16"
+                a.movzx16_rm(d, mem)
+            elif i.name == "pload32"
+                a.mov32_rm(d, mem)
+            else
+                a.mov_rm(d, mem)
+            put_gpr(i.dst, d)
+        "pstore8" | "pstore16" | "pstore32" | "pstore64" =>
+            mem := at(gpr(i.args[0], S0), 0)
+            if i.name == "pstore8"
+                store_byte(mem, i.args[1])
+            elif i.name == "pstore64"
+                store_word(mem, i.args[1])
+            else
+                v := gpr(i.args[1], RDX)
+                if i.name == "pstore16"
+                    a.mov16_mr(mem, v)
+                else
+                    a.mov32_mr(mem, v)
+        "pfence" | "pfence_io" =>
+            a.mfence()
         "syscall" =>
             regs := [RAX, RDI, RSI, RDX, S0, R8, R9]
             parallel([move_of(regs[k], i.args[k]) for k in 0..i.args.len()])
