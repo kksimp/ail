@@ -35,6 +35,11 @@ pub fn repo_root() -> PathBuf {
 /// `jsonderive` and `default` modules the backend lowers as the program
 /// reaches them (ADR 0808). `None` when there is neither.
 fn derived_file(file: &str) -> Option<PathBuf> {
+    derived_file_at(file, std::env::temp_dir().join(format!("ail-derived-{}.txt", std::process::id())))
+}
+
+/// `derived_file` written to `path`.
+fn derived_file_at(file: &str, path: PathBuf) -> Option<PathBuf> {
     let (prog, _) = crate::modules::load(file).ok()?;
     let prelude = prog.files.iter().any(|f| ["json", "Json", "Default"].iter().any(|w| f.src.contains(w)));
     if prog.generated.is_empty() && !prelude {
@@ -50,7 +55,6 @@ fn derived_file(file: &str) -> Option<PathBuf> {
         text.push_str("@@prelude\n");
         text.push_str(crate::parser::PRELUDE);
     }
-    let path = std::env::temp_dir().join(format!("ail-derived-{}.txt", std::process::id()));
     std::fs::write(&path, text).ok()?;
     Some(path)
 }
@@ -125,6 +129,9 @@ fn host_target() -> Option<&'static str> {
 /// (native.build.3).
 pub fn command(args: &[&str]) -> ExitCode {
     let (mut file, mut out, mut target, mut no_cache) = (None, None, None, std::env::var_os("AIL_NO_CACHE").is_some());
+    // `--derived-out PATH`: write the derive file the native compiler reads
+    // through AIL_DERIVED (ADR 0807) and stop; self-host stages use it.
+    let mut derived_out: Option<&str> = None;
     // run.limit.5: defaults for the run limits baked into the executable.
     let (mut timeout, mut memory) = (String::from("0"), String::from("0"));
     let mut i = 0;
@@ -133,20 +140,29 @@ pub fn command(args: &[&str]) -> ExitCode {
             ("-o", Some(o)) => (out, i) = (Some(*o), i + 1),
             ("--target", Some(t)) => (target, i) = (Some(*t), i + 1),
             ("--no-cache", _) => no_cache = true,
+            ("--derived-out", Some(o)) => (derived_out, i) = (Some(*o), i + 1),
             ("--timeout", Some(v)) if positive(v) => (timeout, i) = (v.to_string(), i + 1),
             ("--max-memory", Some(v)) if positive(v) => (memory, i) = (v.to_string(), i + 1),
             (f, _) if file.is_none() && !f.starts_with('-') => file = Some(f),
             _ => {
-                eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]");
+                eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--derived-out PATH] [--timeout MS] [--max-memory MB]");
                 return ExitCode::from(2);
             }
         }
         i += 1;
     }
     let Some(file) = file else {
-        eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]");
+        eprintln!("usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--derived-out PATH] [--timeout MS] [--max-memory MB]");
         return ExitCode::from(2);
     };
+    if let Some(o) = derived_out {
+        // Always leave a file, empty when the program derives nothing.
+        if derived_file_at(file, PathBuf::from(o)).is_none() && std::fs::write(o, "").is_err() {
+            eprintln!("error[native.build.3]: can't write {o}");
+            return ExitCode::from(2);
+        }
+        return ExitCode::SUCCESS;
+    }
     let Some(dir) = compiler_dir() else {
         eprintln!("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
         return ExitCode::from(2);

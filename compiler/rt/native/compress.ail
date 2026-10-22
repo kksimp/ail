@@ -934,16 +934,17 @@ fn cz_raise(st int, kind int, msg str, at str) str
     cz_wr(st, 4, str_addr(msg))
     cz_report(st, at)
 
-## Report the failure recorded in `st`; the empty bytes object.
+## Report the failure recorded in `st`; the empty bytes object. With an empty
+## `at` nothing is raised and the caller reads the failure from `st`.
 fn cz_report(st int, at str) str
-    cz_error(cz_rd(st, 3), cz_rd(st, 4), at)
+    if load64(str_addr(at)) > 0
+        cz_error(cz_rd(st, 3), cz_rd(st, 4), at)
     os := str_new(0, 0)
     str_at(os)
 
 ## `compress.inflate(data)`.
-fn compress_inflate(data str, at str) str
+fn cz_inflate_data(data str, st int, at str) str
     p := str_addr(data)
-    st := cz_words(8)
     n := load64(p)
     if not cz_inflate(p + 16, n, 1073741824, st)
         return cz_report(st, at)
@@ -951,11 +952,13 @@ fn compress_inflate(data str, at str) str
         return cz_raise(st, 1, "extra bytes after the end of the compressed data", at)
     str_at(cz_rd(st, 5))
 
+fn compress_inflate(data str, at str) str
+    cz_inflate_data(data, cz_words(8), at)
+
 ## `compress.unzlib(data)` (std.compress.7).
-fn compress_unzlib(data str, at str) str
+fn cz_unzlib(data str, st int, at str) str
     p := str_addr(data)
     n := load64(p)
-    st := cz_words(8)
     if n < 6
         return cz_raise(st, 1, "not zlib data", at)
     cmf := load8(p + 16)
@@ -981,12 +984,14 @@ fn compress_unzlib(data str, at str) str
         return cz_raise(st, 2, "zlib Adler-32 mismatch", at)
     out
 
+fn compress_unzlib(data str, at str) str
+    cz_unzlib(data, cz_words(8), at)
+
 ## `compress.gunzip(data)` (std.compress.2-4, 8): every member, header
 ## fields skipped, the CRC-32 and size of each checked.
-fn compress_gunzip(data str, at str) str
+fn cz_gunzip(data str, st int, at str) str
     p := str_addr(data)
     n := load64(p)
-    st := cz_words(8)
     mut acc := str_new(0, 0)
     mut alen := 0
     mut at_ := 0
@@ -1052,3 +1057,6 @@ fn compress_gunzip(data str, at str) str
             store64(acc + 8, alen)
             return str_at(acc)
     str_at(acc)
+
+fn compress_gunzip(data str, at str) str
+    cz_gunzip(data, cz_words(8), at)

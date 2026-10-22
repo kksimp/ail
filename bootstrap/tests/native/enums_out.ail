@@ -1,6 +1,6 @@
-# Enums and `match` at the edges of the native subset (native.subset.1):
-# generic enums, printing an enum, and a computed constant of a type
-# outside the subset (its uses stay quiet).
+# Enums and `match` once at the edges of the native subset (native.subset.1):
+# generic enums, `==` and printing an enum whose variant holds a list of
+# structs; all of it lowers now (default printing, ADR 0616).
 enum Maybe[T]
     Some(v T)
     Nothing

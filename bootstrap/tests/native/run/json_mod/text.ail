@@ -1,0 +1,10 @@
+## A string as JSON text, and a document's members counted, from a module.
+pub fn quote(s str) str
+    Json.Str(s).to_text()
+
+pub fn members(text str) int
+    doc := parse_json(text) else return -1
+    match doc
+        Obj(ms) => ms.len()
+        Arr(items) => items.len()
+        Null | Bool(_) | Num(_) | Str(_) => 1

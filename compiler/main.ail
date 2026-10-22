@@ -18,6 +18,7 @@
 use a64
 use ast
 use check
+use derive
 use mir
 use obj
 use syntax
@@ -226,8 +227,15 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
         k += 1
     derived := derived_sources()?
     srcs.extend(derived.sources)
+    srcs.extend(derive_builtin(srcs))
     lazy := srcs.len()
-    if text := derived.prelude
+    # Without the Rust front end's file, the prelude's JSON and `Default`
+    # modules come from the embedded copy, for the programs that name them
+    # (json.prelude.1, ADR 0808).
+    mut prelude := derived.prelude
+    if prelude == none and mentions_prelude(srcs)
+        prelude = mir.PRELUDE_EMBED
+    if text := prelude
         srcs.push(parse_text("", "<prelude>", mir.prelude_text(text)))
     m := mir.lower_package_with(srcs, rt, lazy) else err
         for i in 0..err.items.len()
@@ -248,6 +256,14 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
             file_lines: [],
         )
     m
+
+## Whether a source names a module of the prelude written in AIL: the test
+## `ail build` makes before it writes the prelude into the derived file.
+fn mentions_prelude(srcs List[mir.Source]) bool
+    for s in srcs
+        if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
+            return true
+    false
 
 ## The directory of dependency `name` in the manifest `ROOT/ail.pkg`:
 ## its `dep NAME path DIR` line (mod.pkg.2). `none` without one.
@@ -292,6 +308,22 @@ fn derived_sources() !Derived
             out.sources.push(derived_source(head[1], head[2], body))
         head = line.split(" ")
         body = []
+    out
+
+## The methods of the `impl`s the built-in generators derive (ADR 0850) that
+## `ail build`'s file doesn't carry, each as a source of its module.
+fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
+    mut have := Set[str]()
+    for s in srcs
+        have.add(s.path)
+    mut out := List[mir.Source]()
+    for e in derive.expand([s.module for s in srcs], [s.prog for s in srcs])
+        if have.contains("gen:impl:{e.label}")
+            continue
+        if e.problem != ""
+            io.eprint("{srcs[e.file].path}:{e.pos.line}:{e.pos.col}: error[ct.derive.4]: `{e.label}` can't be derived: {e.problem}")
+            io.exit(1)
+        out.push(derived_source(if e.module == "" then "-" else e.module, e.label, e.text.lines()))
     out
 
 ## What `ail build` passes besides the program's files.

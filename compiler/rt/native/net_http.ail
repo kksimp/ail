@@ -8,10 +8,10 @@
 ## (301, 302, 303, 307, 308 with a `Location`) of a `GET` are followed, at most
 ## five. `net.request` takes the options of std.net.6 and std.net.19:
 ## `headers`, `query`, `body`, `timeout_ms`, `max_redirects` and `connect_ms`.
-## Not built yet: `https` (it fails with kind `tls`), `Accept-Encoding` and the
-## undoing of `gzip` and `deflate` (std.net.26), `data` (`bytes` isn't in the
-## native subset), `total_ms` (accepted and checked, not enforced),
-## keep-alive connection pooling (std.net.19), streaming bodies.
+## `Accept-Encoding: gzip, deflate` is sent, and the final response's body is
+## undone (std.net.26, `http_decode`). Not built yet: `https` (it fails with
+## kind `tls`), `data` on the options, `total_ms` (accepted and checked, not
+## enforced), keep-alive connection pooling (std.net.19), streaming bodies.
 ##
 ## A `net.Response` is a struct (kind 4) of four words: `status`, `headers`
 ## (a `Map[str, str]`, names in lowercase, repeated values joined with `, `),
@@ -579,6 +579,8 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
         sb_text("User-Agent: ail\r\n")
     if not http_given(hdrs, "accept")
         sb_text("Accept: */*\r\n")
+    if not http_given(hdrs, "accept-encoding")
+        sb_text("Accept-Encoding: gzip, deflate\r\n")
     sb_text("Connection: close\r\n")
     http_head_lines(hdrs, strip)
     if load64(str_addr(ctype)) > 0 and not http_given(hdrs, "content-type")
@@ -726,6 +728,50 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
         store64(next, 0)
     resp
 
+## Undo a `Content-Encoding` of `gzip`, `x-gzip` or `deflate` on the final
+## response `r` (std.net.26), unless the program set `Accept-Encoding`; the
+## header and `Content-Length` go, since they described the encoded bytes.
+fn http_decode(r int, url str, spec int, at str) int
+    hdrs := if spec == 0 then 0 else load64(spec)
+    if http_given(hdrs, "accept-encoding")
+        return r
+    ce := http_get_header(load64(r + 8), "content-encoding")
+    enc := str_trim(http_lower(str_addr(ce) + 16, load64(str_addr(ce))))
+    if enc != "gzip" and enc != "x-gzip" and enc != "deflate"
+        return r
+    raw := str_at(load64(r + 32))
+    if load64(str_addr(raw)) == 0
+        return r
+    st := cz_words(8)
+    mut out := ""
+    if enc == "deflate"
+        out = cz_unzlib(raw, st, "")
+        if cz_rd(st, 3) != 0
+            cz_wr(st, 3, 0)
+            cz_wr(st, 0, 0)
+            cz_wr(st, 1, 0)
+            cz_wr(st, 2, 0)
+            out = cz_inflate_data(raw, st, "")
+    else
+        out = cz_gunzip(raw, st, "")
+    if cz_rd(st, 3) != 0
+        return net_fail(
+            url,
+            "protocol",
+            "a body that says it is {enc} is not: {str_at(cz_rd(st, 4))}",
+            at,
+        )
+    if load64(str_addr(out)) > 268435456
+        return net_fail(url, "protocol", "a body that says it is {enc} is not: too big", at)
+    op := str_addr(out)
+    text := net_text(op + 16, load64(op))
+    store64(r + 16, str_addr(text))
+    store64(r + 32, op)
+    for gone in ["content-encoding", "content-length"]
+        map_remove(load64(r + 8), str_addr(gone))
+        map_remove(load64(r + 24), str_addr(gone))
+    r
+
 ## A request with its redirects: follows up to `redirects` of a `GET` or
 ## `HEAD`. `spec` is 0, or four words: the headers map, the idle timeout, the
 ## connect timeout, and whether to drop `Authorization` and `Cookie`.
@@ -740,7 +786,7 @@ fn http_request(method str, url str, body str, ctype str, spec int, redirects in
             return 0
         t := load64(next)
         if t == 0 or not follows or redirects == 0
-            return r
+            return http_decode(r, cur, spec, at)
         if left == 0
             return net_fail(cur, "protocol", "more than {redirects} redirects", at)
         left -= 1
