@@ -37,6 +37,9 @@ TS_MLEN := 288
 TS_ANCHOR := 296
 TS_BYTES := 304
 
+# Global slot 42: the cache of trusted roots (tc_cached_roots).
+TLS_ROOTS := 42
+
 TC_ERR := -1000000
 TC_REC_MAX := 16640
 TC_HS_MAX := 140000
@@ -427,8 +430,11 @@ fn tc_certs(text str, mut out List[List[int]], anchor int) int
     ders := der_pem(text)
     for d in ders
         c := x_parse(d[0], d[1])
-        if c[X_ERR] == 0
-            store64(anchor + 8 * out.len(), d[0])
+        if c[X_ERR] == 0 and out.len() < 1000
+            k := out.len()
+            store64(anchor + 8 + 16 * k, d[0])
+            store64(anchor + 16 + 16 * k, d[1])
+            store64(anchor, k + 1)
             out.push(c)
     out.len()
 
@@ -463,6 +469,25 @@ fn tc_roots(st int, anchor int) List[List[int]]
         1,
         "no trusted root certificates found; set SSL_CERT_FILE to a PEM bundle of root certificates",
     )
+    out
+
+## The roots, loaded on the first handshake and kept in global slot 42 as the
+## DER bytes of each certificate: `[count, address, length, ...]` in a
+## scanned object, which also keeps the bytes alive. A failed load is not cached.
+fn tc_cached_roots(st int) List[List[int]]
+    mut cache := load64(global(TLS_ROOTS))
+    mut out := List[List[int]]()
+    if cache == 0
+        cache = obj_new(8 + 16 * 1000, 4)
+        for i in 0..1 + 2 * 1000
+            store64(cache + 8 * i, 0)
+        loaded := tc_roots(st, cache)
+        if load64(st + TS_MSG) != 0
+            return loaded
+        store64(global(TLS_ROOTS), cache)
+        return loaded
+    for i in 0..load64(cache)
+        out.push(x_parse(load64(cache + 8 + 16 * i), load64(cache + 16 + 16 * i)))
     out
 
 # ---- the handshake ----
@@ -816,7 +841,7 @@ fn tc_connect(o int, host str) int
     copy_bytes(signed + 64, str_addr("TLS 1.3, server CertificateVerify") + 16, 33)
     store8(signed + 97, 0)
     tc_tr_hash(st, signed + 98)
-    roots := tc_roots(st, anchor)
+    roots := tc_cached_roots(st)
     if load64(st + TS_MSG) != 0
         return TC_ERR - 1
     verdict := tv_chain(chain, roots, host, time_now_ms() / 1000)

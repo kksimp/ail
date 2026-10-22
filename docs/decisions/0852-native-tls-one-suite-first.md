@@ -39,8 +39,7 @@ ChaCha20-Poly1305 and X25519 (slices 1-2a); HKDF is slice 2b.
    and the post-handshake messages, wired into `net_fill`/`net_write` through
    the socket object's `NET_TLS` word. Known gaps against the Rust client:
    a HelloRetryRequest fails with a clear message; no `close_notify` on
-   close; the roots are parsed on every handshake (a cache needs a global
-   slot); macOS reads `/etc/ssl/cert.pem` and does not run `security`.
+   close; the roots are cached in global slot 42 after the first handshake; macOS reads `/etc/ssl/cert.pem` and does not run `security`.
 
 ## Rejected alternatives
 
