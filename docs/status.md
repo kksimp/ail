@@ -43,6 +43,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native `join("")` on characters in one pass (ADR 0816 item 15): fasta 36.1M → 33.4M instructions.
 - Native register holes for values idle in a loop, and checked `mul` products in their own register (ADR 0848): matmul 116.0M → 100.2M instructions.
 - Native `mut` struct, list, map, set and tuple parameters take a whole assignment (`p = q`) in the caller's object, and a struct copy copies its map and set fields (own.param.2, own.val.1): the native compiler's `build` output now equals the interpreted compiler's.
+- Native lowering drops the copy of an owned local's last use (`b := a`, `S(f: a)` when `a` is not read again): the native compiler builds compiler/main.ail's front end 21.7% faster (5.25 s to 4.11 s user).
 - Native `/` and `%` by a power of two on non-negative values (ADR 0816 item 16): shift and mask; spectralnorm 52.9M → 45.4M instructions.
 - Native BCE guards skip tests that the enclosing counted loops answer (ADR 0816 item 17): nbody 38.0M → 35.5M instructions.
 - Native code generation (ADR 0816): parameters stay in their arrival registers (no swap moves at entry); wordfreq 254.6M → 240.9M instructions, binarytrees 412.2M → 399.5M, fannkuch 284.6M → 274.8M.

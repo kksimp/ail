@@ -1,0 +1,139 @@
+## Copies of a local's last use (own.val.1, own.val.2): `b := a` copies the
+## object `a` holds so the two stay independent, but when `a` is never read
+## again the copy only costs time. `copy_if_place` notes each copy it makes
+## of an owned local (not a parameter or a `for` variable, which belong to
+## someone else); `elide_moves` then drops the ones whose source has no other
+## use and is not read again by a later turn of a loop.
+
+use ast
+
+## Whether `e` makes a value nobody else holds: a place (copied on binding),
+## a list or map literal, or a call of a function or constructor.
+fn owns_fresh(e ast.Expr) bool
+    match e
+        Name | Index | Member | ListLit | MapLit | Call => true
+        _ => false
+
+## A plain `name := value` makes the local owned when `value` is fresh.
+fn Lower.note_owned(mut self, name str, value ast.Expr)
+    key := lookup(name) else return
+    if owns_fresh(value)
+        facts.owned.add("{fname}|{key}")
+
+## An assignment of a value that isn't fresh ends the local's ownership.
+fn Lower.note_assigned(mut self, key str, value ast.Expr)
+    if not owns_fresh(value)
+        facts.owned.remove("{fname}|{key}")
+
+## Note the copy `copied` of the place `e` when `e` is an owned local.
+fn Lower.note_move(mut self, e ast.Expr, v Val, copied int) int
+    if copied == v.id
+        return copied
+    match e
+        Name(n, _) =>
+            key := lookup(n) else return copied
+            if not borrowed.contains(key) and facts.owned.contains("{fname}|{key}")
+                facts.moves.push(copied)
+        _ => return copied
+    copied
+
+## `f` without the noted copies after which the source is not read again.
+fn elide_moves(f Func, moves List[int]) Func
+    if moves.len() == 0
+        return f
+    n := f.vals.len()
+    nb := f.blocks.len()
+    mut noted := [false for _ in 0..n]
+    for m in moves
+        noted[m] = true
+    mut cand := [false for _ in 0..n]
+    for blk in f.blocks
+        for i in blk.insts
+            if i.dst >= 0 and noted[i.dst] and i.op == "call" and i.args.len() > 0
+                cand[i.args[0]] = true
+    mut def_block := [0 for _ in 0..n]
+    # The blocks that read each candidate, in any position.
+    mut readers := [List[int]() for _ in 0..n]
+    for b in 0..nb
+        blk := f.blocks[b]
+        for p in blk.params
+            def_block[p] = b
+        for i in blk.insts
+            if i.dst >= 0
+                def_block[i.dst] = b
+            for a in i.args
+                if cand[a] and not readers[a].contains(b)
+                    readers[a].push(b)
+        for u in blk.term.uses()
+            if cand[u] and not readers[u].contains(b)
+                readers[u].push(b)
+        for e in blk.term.args
+            for a in e
+                if cand[a] and not readers[a].contains(b)
+                    readers[a].push(b)
+    mut repl := [v for v in 0..n]
+    mut gone := [[false for _ in blk.insts] for blk in f.blocks]
+    mut touched := false
+    for b in 0..nb
+        for at in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[at]
+            if i.dst < 0 or not noted[i.dst] or i.op != "call" or i.args.len() == 0
+                continue
+            x := i.args[0]
+            if f.vals[x] != f.vals[i.dst] or read_later(f, readers[x], def_block[x], x, b, at)
+                continue
+            repl[i.dst] = x
+            gone[b][at] = true
+            touched = true
+    if not touched
+        return f
+    mut g := f
+    for b in 0..nb
+        for at in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[at].args = [moved(repl, a) for a in g.blocks[b].insts[at].args]
+        g.blocks[b].insts = [
+            g.blocks[b].insts[at]
+            for at in 0..g.blocks[b].insts.len() if not gone[b][at]
+        ]
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = moved(repl, t.cond)
+        if t.value >= 0
+            t.value = moved(repl, t.value)
+        t.args = [[moved(repl, a) for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    g
+
+## Whether `x` is read after instruction `at` of block `b`: later in the
+## block, in its terminator, or in a block reachable from it before `x`'s own
+## definition block starts over (a loop-carried value is defined anew there).
+fn read_later(f Func, readers List[int], def int, x int, b int, at int) bool
+    blk := f.blocks[b]
+    for k in at + 1..blk.insts.len()
+        if blk.insts[k].args.contains(x)
+            return true
+    if blk.term.uses().contains(x)
+        return true
+    for e in blk.term.args
+        if e.contains(x)
+            return true
+    mut seen := [false for _ in f.blocks]
+    mut stack := List[int]()
+    for t in blk.term.targets
+        stack.push(t)
+    while stack.len() > 0
+        s := stack.pop() else break
+        if seen[s] or s == def
+            continue
+        seen[s] = true
+        if readers.contains(s)
+            return true
+        for t in f.blocks[s].term.targets
+            stack.push(t)
+    false
+
+fn moved(repl List[int], v int) int
+    mut x := v
+    while repl[x] != x
+        x = repl[x]
+    x
