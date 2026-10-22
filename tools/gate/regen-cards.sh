@@ -7,7 +7,9 @@ for pair in tools/edit:edit bootstrap/src/std:std tools/garlic:garlic tools/garl
   $A api --card $d > docs/design/cards/$n.md
   if [ -d docs/design/cards/$n ]; then
     $A api --card --index $d > docs/design/cards/$n/index.md
-    for f in docs/design/cards/$n/*.md; do m=$(basename $f .md); [ $m = index ] && continue; mm=$m; [ $m = root ] && mm="(root)"
+    # One card per module in the index, so a new module gets its file (api.card.5).
+    for m in $(tail -n +2 docs/design/cards/$n/index.md | awk '{print $1}'); do
+      mm=$m; f=docs/design/cards/$n/$m.md; [ $m = "(root)" ] && { mm="(root)"; f=docs/design/cards/$n/root.md; }
       $A api --card --budget 2000 --module "$mm" $d > $f
     done
   fi

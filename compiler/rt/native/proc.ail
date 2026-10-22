@@ -368,7 +368,7 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
                 w := syscall(os_pick(1, 64, 4), ifd, input + 16 + inpos, want, 0, 0, 0)
                 if w > 0
                     inpos += w
-                if inpos >= ilen or (w < 0 and w != -4 and w != -11)
+                if inpos >= ilen or (w < 0 and w != -4 and w != 0 - os_pick(11, 11, 35))
                     os_close(ifd)
                     ifd = -1
         ro := load64(pfd + 8).shr(48).bit_and(65535)
@@ -377,7 +377,7 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
                 ob = proc_widen(ob, on, oc)
                 oc = oc * 2
             n := os_read(ofd, ob + 16 + on, oc - on)
-            if n == 0 or (n < 0 and n != -4 and n != -11)
+            if n == 0 or (n < 0 and n != -4 and n != 0 - os_pick(11, 11, 35))
                 os_close(ofd)
                 ofd = -1
             elif n > 0
@@ -388,7 +388,7 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
                 eb = proc_widen(eb, en, ec)
                 ec = ec * 2
             n := os_read(efd, eb + 16 + en, ec - en)
-            if n == 0 or (n < 0 and n != -4 and n != -11)
+            if n == 0 or (n < 0 and n != -4 and n != 0 - os_pick(11, 11, 35))
                 os_close(efd)
                 efd = -1
             elif n > 0
@@ -503,7 +503,7 @@ fn ps_read(ps int, k int) int
         store64(ps + PS_ON + 16 * k, n + r)
         ps_lines(ps, k, false)
         return 1
-    if r == -4 or r == -11
+    if r == -4 or r == 0 - os_pick(11, 11, 35)
         return 0
     ps_eof(ps, k)
     -1
@@ -612,7 +612,7 @@ fn chan_source_send(ch int, s int)
         w := syscall(os_pick(1, 64, 4), fd, p + 16 + off, n - off, 0, 0, 0)
         if w > 0
             off += w
-        elif w == -11
+        elif w == 0 - os_pick(11, 11, 35)
             ps_round(ps, true, 100)
         elif w != -4
             os_close(fd)
