@@ -32,7 +32,6 @@ fn edit_text(str, str) str?  ## `text` after a key typed into a prompt: Backspac
 fn form_fields(html.Doc, int, int) str  ## The form's fields, URL-encoded (`application/x-www-form-urlencoded`):
 fn urlencode(str) str  ## `s` encoded for a form: letters, digits and `*-._` as they are, space as
 fn utf8(int) List[int]  ## The UTF-8 bytes of code point `k`.
-fn window_main(mut Browser) ! [clock env fail fs io mutates net ui]
 struct Gui  ## The native window's side of the browser: the host's cell size in points
 fn address(str) str [fs io]  ## What a typed address means: a URL as it is, a path to a file that exists
 struct Garlic  ## The native window as a `std.app` app (docs/design/garlic-browser.md,
@@ -45,7 +44,7 @@ GUI_CELL_H := 16.0
 fn app_main(Browser, bool) ! [app clock env fail fs io net proc]
 fn flag(List[str], str) str?  ## The value after flag `name` (`--width 60`), or none.
 fn usage() [io]
-fn main() ! [app clock env fail fs io net proc ui]
+fn main() ! [app clock env fail fs io net proc]
 fn tree(str) str  ## The tree of `src` in the html5lib-tests format.
 fn lay(str, int) page.Page
 fn testdata() str [env fs io]  ## `tools/garlic/testdata`, from the repository root or `bootstrap/`.
@@ -57,4 +56,4 @@ fn pixel_text(List[draw.Op]) List[str]  ## The text of the proportional `Str` op
 fn pixels(str, float) gfx.Scene
 ```
 
-trimmed to fit 2000 tokens (~1418); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1395); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

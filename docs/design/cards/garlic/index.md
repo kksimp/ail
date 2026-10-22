@@ -1,5 +1,5 @@
 # garlic
-(root)  48 items
+(root)  47 items
 css  31 items
 draw  16 items
 garlicjs.syntax  89 items
