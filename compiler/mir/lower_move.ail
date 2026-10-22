@@ -35,7 +35,10 @@ fn Lower.note_stable_param(mut self, name str, mutable bool)
 ## while the binding lives, and the binding isn't owned, so no later copy of
 ## it is dropped and a returned or stored one is still copied.
 fn Lower.bind_let(mut self, name str, mutable bool, value ast.Expr, v Val)
-    if not mutable and is_place(value) and (v.ty.is_coll() or needs_copy(v.ty)) and stable_place(value)
+    if not mutable
+        and is_place(value)
+        and (v.ty.is_coll() or needs_copy(v.ty))
+        and stable_place(value)
         declare(name, v.ty, v.id)
         key := lookup(name) else return
         borrowed.add(key)
