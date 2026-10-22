@@ -35,6 +35,13 @@ ChaCha20-Poly1305 and X25519 (slices 1-2a); HKDF is slice 2b.
    `hash.hmac_sha256` is a real module function now (it had silently run the
    real HMAC and failed every vector).
 
+5. **Landed (slice 4):** `tls_client.ail` is the record layer, the handshake
+   and the post-handshake messages, wired into `net_fill`/`net_write` through
+   the socket object's `NET_TLS` word. Known gaps against the Rust client:
+   a HelloRetryRequest fails with a clear message; no `close_notify` on
+   close; the roots are parsed on every handshake (a cache needs a global
+   slot); macOS reads `/etc/ssl/cert.pem` and does not run `security`.
+
 ## Rejected alternatives
 
 - **All three suites at once:** about 400 lines of AES-GCM and SHA-384 for
@@ -43,6 +50,11 @@ ChaCha20-Poly1305 and X25519 (slices 1-2a); HKDF is slice 2b.
   that checks nothing is worse than a clear failure.
 
 ## Evidence
+
+`tools/native-tls/https-check.sh`: a live `openssl s_server` with a throwaway
+CA, EC and RSA leaves, an IP SAN, a wrong host, an unknown CA and a bad
+`SSL_CERT_FILE`; the native client and `ail run` print the same on x86-64 and
+aarch64 under qemu.
 
 `prim-check.sh`: 97 vectors (SHA-256, HMAC-SHA-256, HKDF, ChaCha20-Poly1305,
 Poly1305, X25519 and the RFC 8448 early/derived secrets) pass natively on
