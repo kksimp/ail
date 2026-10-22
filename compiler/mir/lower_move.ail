@@ -14,6 +14,36 @@ fn owns_fresh(e ast.Expr) bool
         Name | Index | Member | ListLit | MapLit | Call => true
         _ => false
 
+## Whether `e` lies inside a stable binding (an unchanging parameter).
+fn Lower.stable_place(self, e ast.Expr) bool
+    match e
+        Name(n, _) =>
+            key := lookup(n) else return false
+            facts.stable.contains("{fname}|{key}")
+        Index(r, _, _) => stable_place(r)
+        Member(r, _, _) => stable_place(r)
+        _ => false
+
+## A parameter without `mut` can't change while the function runs.
+fn Lower.note_stable_param(mut self, name str, mutable bool)
+    key := lookup(name) else return
+    if not mutable
+        facts.stable.add("{fname}|{key}")
+
+## `name := value`. An immutable binding of a place inside a stable
+## parameter reads it in place instead of copying: neither side can change
+## while the binding lives, and the binding isn't owned, so no later copy of
+## it is dropped and a returned or stored one is still copied.
+fn Lower.bind_let(mut self, name str, mutable bool, value ast.Expr, v Val)
+    if not mutable and is_place(value) and (v.ty.is_coll() or needs_copy(v.ty)) and stable_place(value)
+        declare(name, v.ty, v.id)
+        key := lookup(name) else return
+        borrowed.add(key)
+        facts.stable.add("{fname}|{key}")
+        return
+    declare(name, v.ty, copy_if_place(value, v))
+    note_owned(name, value)
+
 ## A plain `name := value` makes the local owned when `value` is fresh.
 fn Lower.note_owned(mut self, name str, value ast.Expr)
     key := lookup(name) else return
