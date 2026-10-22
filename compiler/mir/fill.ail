@@ -1,0 +1,232 @@
+## Fill loops (ADR 0816): a counted loop whose only work is to store one
+## unchanging value into consecutive elements (`for _ in 0..n: xs.push(true)`
+## once the push loop keeps its length, or `xs[i] = 0` once the checks are
+## gone) becomes one call to `rt.fill`, which the x86-64 code generator
+## assembles as `rep stos` and ARM64 runs as a word loop. gcc -O2 does the
+## same with `memset`. The loop and its zero-trip path are replaced by a test
+## of the trip count; what the loop left in its two counters is computed.
+
+## Replace each fill loop, when the program has `rt.fill` (`on`).
+pub fn fill_loops(f Func, on bool) Func
+    if not on
+        return f
+    mut g := f
+    mut tries := 0
+    while tries < 8
+        tries += 1
+        next := fill_next(g) else break
+        g = next
+    g
+
+fn fill_next(f Func) Func?
+    loops := find_loops(f)
+    defs := defs_of(f)
+    for lp in loops
+        if lp.blocks.len() != 2 or not is_innermost(loops, lp)
+            continue
+        c := counted(f, defs, lp) else continue
+        done := fill_one(f, defs, lp, c) else continue
+        return done
+    none
+
+fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
+    if not lp.member[c.body] or c.step >= 0 or c.q >= 0
+        return none
+    h := lp.header
+    hb := f.blocks[h]
+    bb := f.blocks[c.body]
+    if bb.params.len() > 0 or bb.term.kind != "jump" or bb.term.targets[0] != h
+        return none
+    if hb.insts.len() != 1 or hb.params.len() > 2 or hb.term.args[0].len() > 0
+        return none
+    if f.blocks[lp.pre].term.kind != "jump"
+        return none
+    # The other counter, if any: it must step by 1 as well.
+    mut r := -1
+    mut rk := -1
+    for j in 0..hb.params.len()
+        if j != c.k
+            r = hb.params[j]
+            rk = j
+    latch := bb.term.args[0]
+    sp := inst_of(f, defs, latch[c.k]) else return none
+    if sp.site >= 0 or defs[latch[c.k]].block != c.body
+        return none
+    if r >= 0
+        sr := inst_of(f, defs, latch[rk]) else return none
+        if sr.op != "add" or sr.args[0] != r or sr.site >= 0 or const_of(f, defs, sr.args[1]) != 1
+            return none
+        if defs[latch[rk]].block != c.body
+            return none
+    # The body: constants, the two steps and one store.
+    mut at := -1
+    for k in 0..bb.insts.len()
+        i := bb.insts[k]
+        if i.op == "stx"
+            if at >= 0
+                return none
+            at = k
+        elif i.op != "const"
+            and i.op != "fconst"
+            and i.dst != latch[c.k]
+            and (r < 0 or i.dst != latch[rk])
+            return none
+    if at < 0
+        return none
+    s := bb.insts[at]
+    base := s.args[0]
+    ix := s.args[1]
+    v := s.args[2]
+    if lp.member[defs[base].block] or (ix != c.p and ix != r) or s.elem_off() != 0
+        return none
+    if s.imm != 1 and s.imm != 8
+        return none
+    mut again := -1
+    if lp.member[defs[v].block]
+        d := inst_of(f, defs, v) else return none
+        if d.op != "const" and d.op != "fconst"
+            return none
+        again = defs[v].at
+    # Nothing but the latch reads what the body defines.
+    for b in 0..f.blocks.len()
+        if b == c.body
+            continue
+        for i in f.blocks[b].insts
+            for a in i.args
+                if defs[a].block == c.body
+                    return none
+        for u in f.blocks[b].term.uses()
+            if defs[u].block == c.body
+                return none
+    ex := c.exit
+    ht := hb.term
+    exit_args := ht.args[1]
+    mut preds := 0
+    for blk in f.blocks
+        for t in blk.term.targets
+            if t == ex
+                preds += 1
+    mut p_out := false
+    mut r_out := false
+    for b in 0..f.blocks.len()
+        if lp.member[b]
+            continue
+        for i in f.blocks[b].insts
+            for a in i.args
+                if a == c.p
+                    p_out = true
+                if a == r and r >= 0
+                    r_out = true
+        for u in f.blocks[b].term.uses()
+            if u == c.p
+                p_out = true
+            if u == r and r >= 0
+                r_out = true
+    if (p_out or r_out) and preds != 1
+        return none
+    # The rewrite.
+    mut g := f
+    pre := lp.pre
+    lo := c.lo
+    hi := c.hi
+    r0 := if r >= 0 then f.blocks[pre].term.args[0][rk] else -1
+    mut ep := -1
+    mut er := -1
+    if p_out
+        ep = new_val(mut g, Ty.Int)
+        g.blocks[ex].params.push(ep)
+    if r_out
+        er = new_val(mut g, Ty.Int)
+        g.blocks[ex].params.push(er)
+    # Uses after the loop read what the exit passes.
+    for b in 0..f.blocks.len()
+        if lp.member[b]
+            continue
+        for k in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[k].args = [swap(a, c.p, ep, r, er) for a in g.blocks[b].insts[k].args]
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = swap(t.cond, c.p, ep, r, er)
+        if t.value >= 0
+            t.value = swap(t.value, c.p, ep, r, er)
+        t.args = [[swap(a, c.p, ep, r, er) for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    # The header's own exit edge stays consistent until the loop is dropped.
+    if p_out
+        g.blocks[h].term.args[1].push(c.p)
+    if r_out
+        g.blocks[h].term.args[1].push(r)
+    # The test of the trip count, in the block before the loop.
+    cond := new_val(mut g, Ty.Bool)
+    g.blocks[pre].insts.push(inst(cond, "lt", [lo, hi]))
+    # The fill.
+    mut body := List[Inst]()
+    n := new_val(mut g, Ty.Int)
+    body.push(inst(n, "sub", [hi, lo]))
+    size := new_val(mut g, Ty.Int)
+    mut sz := inst(size, "const", [])
+    sz.imm = s.imm
+    body.push(sz)
+    start := if ix == c.p then lo else r0
+    off := new_val(mut g, Ty.Int)
+    body.push(inst(off, "mul", [start, size]))
+    ptr := new_val(mut g, Ty.Int)
+    body.push(inst(ptr, "add", [base, off]))
+    mut value := v
+    if again >= 0
+        value = new_val(mut g, f.vals[v])
+        mut copy := f.blocks[c.body].insts[again]
+        copy.dst = value
+        body.push(copy)
+    if f.vals[v] == Ty.Float
+        bits := new_val(mut g, Ty.Int)
+        mut fb := inst(bits, "prim", [value])
+        fb.name = "float_bits"
+        body.push(fb)
+        value = bits
+    mut call := inst(-1, "call", [ptr, n, value, size])
+    call.name = "rt.fill"
+    body.push(call)
+    mut r1 := -1
+    if r >= 0
+        r1 = new_val(mut g, Ty.Int)
+        body.push(inst(r1, "add", [r0, n]))
+    done := mapped(exit_args, c.p, hi, r, r1)
+    mut fargs := done
+    if p_out
+        fargs.push(hi)
+    if r_out
+        fargs.push(r1)
+    g.blocks.push(Block(params: [], insts: body, term: jump_to(ex, fargs)))
+    fill := g.blocks.len() - 1
+    mut skip := mapped(exit_args, c.p, lo, r, r0)
+    if p_out
+        skip.push(lo)
+    if r_out
+        skip.push(r0)
+    g.blocks[pre].term = Term(
+        kind: "branch",
+        cond: cond,
+        targets: [fill, ex],
+        args: [[], skip],
+        value: -1,
+    )
+    some := simplify(g)
+    some
+
+fn new_val(mut g Func, t Ty) int
+    g.vals.push(t)
+    g.names.push("")
+    g.vals.len() - 1
+
+fn swap(a int, p int, ep int, r int, er int) int
+    if a == p and ep >= 0
+        return ep
+    if a == r and er >= 0
+        return er
+    a
+
+## The exit edge's arguments, with the loop's counters replaced by their
+## final values.
+fn mapped(args List[int], p int, pv int, r int, rv int) List[int]
+    [if a == p then pv else (if a == r and r >= 0 then rv else a) for a in args]

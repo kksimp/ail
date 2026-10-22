@@ -1,0 +1,24 @@
+# ADR 0599: channels of strings under collection with several tasks.
+fn pump(out Channel[str], seed int, n int)
+    for i in 0..n
+        out.send("item {seed}-{i}")
+    out.close()
+
+fn main() !
+    ca := Channel[str](8)
+    cb := Channel[str](8)
+    cc := Channel[str](8)
+    a := spawn pump(ca, 1, 20000)
+    b := spawn pump(cb, 2, 20000)
+    c := spawn pump(cc, 3, 20000)
+    mut total := 0
+    for v in ca
+        total += v.len()
+    for v in cb
+        total += v.len()
+    for v in cc
+        total += v.len()
+    print(total)
+    a.wait()?
+    b.wait()?
+    c.wait()?

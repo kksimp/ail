@@ -149,3 +149,11 @@ fn text_sep(i int) str
     if i == 0
         return ""
     ", "
+
+## Key comparers for `sorted(by:)` with a `str` or `float` key, as function
+## values for `sort_perm_by` (type.num.11: NaN last).
+fn word_lt_str(a int, b int) bool
+    list_word_lt(1, a, b)
+
+fn word_lt_float(a int, b int) bool
+    list_word_lt(2, a, b)

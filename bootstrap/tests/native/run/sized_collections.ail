@@ -1,0 +1,55 @@
+# Sized integers in lists, optionals, tuples, maps, structs and match (type.num.13).
+struct Pixel
+    r u8
+    g u8
+    b u8
+    a u32
+
+fn first_big(xs List[u16]) u16?
+    for x in xs
+        if x > 300.to_u16()
+            return x
+    none
+
+fn pair(a u8, b i32)(u8, i32)
+    (a, b)
+
+fn name(c u8) str
+    match c
+        0 => "zero"
+        255 => "max"
+        _ => "other"
+
+fn main()
+    mut xs := [3.to_u16(), 500.to_u16(), 70.to_u16()]
+    xs.push(400.to_u16())
+    print(xs)
+    print(xs.len())
+    print(xs[1])
+    xs[0] = 9.to_u16()
+    print(xs.contains(70.to_u16()))
+    print(xs.index_of(70.to_u16()) else 99)
+    ys := xs.sorted()
+    print(ys)
+    print(ys.max() else 0.to_u16())
+    mut total := 0
+    for x in xs
+        total += x.to_int()
+    print(total)
+    print(first_big(xs) else 0.to_u16())
+    print(first_big([1.to_u16()]) else 7.to_u16())
+    t := pair(200.to_u8(), (0 - 5).to_i32())
+    print(t)
+    print(t.0)
+    m := {1.to_u8(): 10, 2.to_u8(): 20}
+    print(m[2.to_u8()])
+    print(m.len())
+    n := {"a": 5.to_i8(), "b": (0 - 6).to_i8()}
+    print(n["b"])
+    p := Pixel(r: 1.to_u8(), g: 2.to_u8(), b: 3.to_u8(), a: 4000000000.to_u32())
+    print(p.a)
+    print(name(0.to_u8()))
+    print(name(255.to_u8()))
+    print(name(7.to_u8()))
+    b := [1.to_u8(), 2.to_u8()]
+    print("{b} {t}")
