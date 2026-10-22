@@ -1,9 +1,9 @@
 #!/bin/bash
 # usage: BASE=REF tools/gate/merge-prs.sh "N:title" ...  merges refs/pull/N/head in order onto a trial branch; docs conflicts are unioned, code conflicts stop the run
 set -u
+S=$(cd "$(dirname "$0")" && pwd)
 export RUSTUP_HOME=${RUSTUP_HOME:-$PWD/.toolchain/rustup} CARGO_HOME=${CARGO_HOME:-$PWD/.toolchain/cargo}
 cd "$(git rev-parse --show-toplevel)"
-S=$(dirname "$0")
 git fetch -q origin claude/project-thread-ipafhh
 git checkout -q -B trial ${BASE:-origin/claude/project-thread-ipafhh}
 for spec in "$@"; do
