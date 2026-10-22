@@ -60,10 +60,19 @@ pub fn add_str(mut img Image, sym str, s str)
     push64(mut img.data, s.chars().len())
     img.data.extend(bytes)
 
+## The symbol of a float constant in the read-only data (`add_f64`).
+pub fn f64_sym(x float) str
+    "d:f{f64_bits(x)}"
+
+## The module's sites, shared by reference: a code generator keeps one per
+## function without copying the list each time.
+pub struct Sites
+    pub list List[mir.Site]
+
 ## A float constant in the read-only data; gives its symbol.
 pub fn add_f64(mut img Image, x float) str
     bits := f64_bits(x)
-    sym := "d:f{bits}"
+    sym := f64_sym(x)
     if not img.data_syms.contains(sym)
         align(mut img.data, 8)
         img.data_syms[sym] = img.data.len()

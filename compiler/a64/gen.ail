@@ -76,8 +76,13 @@ STACK_LIMIT := 15
 
 struct Gen
     a Asm
-    img codegen.Image
-    m mir.Module
+    ## What the function needs from the image and the module, without a copy
+    ## of either per function: the sites (shared), the globals' size, and the
+    ## requests `gen_func` replays on the image afterwards, in order.
+    sites ref codegen.Sites
+    nglobals int
+    calls List[codegen.CallRow]
+    imports List[str]
     f mir.Func
     os int
     loc List[int]
@@ -107,6 +112,7 @@ pub fn generate(m mir.Module, os int) codegen.Image
     img.globals = m.globals_used()
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
+    sites := ref codegen.Sites(list: m.sites)
     mut a := new_asm()
     # The entry: pass argc and argv to `rt.init`, run `main`, exit 0. The
     # stack is 16-byte aligned on entry. Linux leaves argc at `sp` and argv
@@ -125,7 +131,7 @@ pub fn generate(m mir.Module, os int) codegen.Image
         if is_kernel(f.name)
             gen_kernel(mut img, f.name)
         else
-            gen_func(mut img, m, f, os)
+            gen_func(mut img, m, sites, f, os)
     codegen.add_call_table(mut img, m)
     img
 
@@ -137,7 +143,7 @@ fn add_code(mut img codegen.Image, a Asm, name str)
     for fx in a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: fx.kind, sym: fx.sym, tail: 0))
 
-fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
+fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, os int)
     f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
@@ -150,11 +156,12 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
-    first := img.calls.len()
     mut g := Gen(
         a: new_asm(),
-        img: img,
-        m: m,
+        sites: sites,
+        nglobals: img.globals,
+        calls: [],
+        imports: [],
         f: f,
         os: os,
         loc: al.loc,
@@ -182,9 +189,12 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, os int)
         g.gen_block(b)
     g.gen_stubs()
     g.a.resolve_labels()
-    img = g.img
-    for k in first..img.calls.len()
-        img.calls[k].off += img.code.len()
+    for sym in g.imports
+        codegen.import_slot(mut img, sym)
+    for s in g.stubs
+        codegen.add_trap_texts(mut img, m, s.site, s.op)
+    for c in g.calls
+        img.calls.push(codegen.CallRow(off: c.off + img.code.len(), pos: c.pos, func: c.func))
     add_code(mut img, g.a, f.name)
 
 # ---- frame ----
@@ -550,7 +560,7 @@ fn Gen.compare(mut self, i mir.Inst) int
 fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
     l := a.label()
     # An atomic add's overflow has its own message (conc.atomic.5).
-    k := if kind == 0 and m.sites[site].rule == "conc.atomic.5" then 16 else kind
+    k := if kind == 0 and sites.list[site].rule == "conc.atomic.5" then 16 else kind
     stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op))
     l
 
@@ -592,7 +602,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             d := out_checked(i.dst, i)
             if i.site >= 0
                 a.negs(d, r)
-                kind := if m.sites[i.site].op == "abs" then 5 else 2
+                kind := if sites.list[i.site].op == "abs" then 5 else 2
                 a.b_cond(VS, stub(kind, i.args[0], i.args[0], i.site, "-"))
             else
                 a.neg(d, r)
@@ -875,7 +885,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.adr_sym(S0, "globals")
         a.ldr(S0, S0, 8 * STACK_LIMIT)
         a.cmp_sp(S0)
-        a.b_cond(LO, stub(11, -1, -1, i.site, m.sites[i.site].op))
+        a.b_cond(LO, stub(11, -1, -1, i.site, sites.list[i.site].op))
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -914,7 +924,7 @@ fn Gen.call_out(mut self, i mir.Inst)
             a.brk()
         else
             sym := i.name.replace("libsys.", "")
-            codegen.import_slot(mut img, sym)
+            imports.push(sym)
             a.adr_sym(S0, "imp:{sym}")
             a.ldr(S0, S0, 0)
             a.blr(S0)
@@ -922,7 +932,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.bl(i.name)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
-        img.calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: f.name))
+        calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: f.name))
     if room > 0
         adjust_sp("add", room)
         sp_shift = 0
@@ -1059,7 +1069,7 @@ fn Gen.prim(mut self, i mir.Inst)
         "globals_end" =>
             d := out_gpr(i.dst, S1)
             a.adr_sym(d, "globals")
-            a.alu_ri("add", d, d, 8 * m.globals_used())
+            a.alu_ri("add", d, d, 8 * nglobals)
             put_gpr(i.dst, d)
         "gc_regs" =>
             b := gpr(i.args[0], S0)
@@ -1285,7 +1295,6 @@ fn Gen.indexed_store(mut self, i mir.Inst)
 fn Gen.gen_stubs(mut self)
     for s in stubs
         a.bind(s.label)
-        codegen.add_trap_texts(mut img, m, s.site, s.op)
         mut moves := List[Move]()
         moves.push(Move(dst: 0, src: -1, imm: s.kind, sym: "", float: false))
         if s.kind == 4

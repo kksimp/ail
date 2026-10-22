@@ -55,6 +55,7 @@ pub fn generate_windows(m mir.Module) codegen.Image
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
     mut a := new_asm()
+    sites := ref codegen.Sites(list: m.sites)
     rt := has_fn(m, "rt.init")
     # No frame above `main`: the trap stack's walk ends here (trace.frame.1).
     a.alu_rr("xor", RBP, RBP)
@@ -85,7 +86,7 @@ pub fn generate_windows(m mir.Module) codegen.Image
         if is_kernel(f.name)
             gen_kernel(mut img, f.name)
         else
-            gen_func(mut img, m, f, true)
+            gen_func(mut img, m, sites, f, true)
     codegen.add_call_table(mut img, m)
     img
 

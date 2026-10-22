@@ -9,7 +9,7 @@ entry: main in main.ail
 
 ## check (305 items)
 
-## codegen (52 items)
+## codegen (54 items)
 
 ## derive (25 items)
 

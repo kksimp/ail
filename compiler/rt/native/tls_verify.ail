@@ -1,0 +1,413 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Certificate chain verification for the native TLS client (ADR 0836 slice 3,
+## ADR 0368-0369), ported from bootstrap/src/net/x509/verify.rs with its rules
+## and its messages: dates, key usage, the host name, a path to a trusted root
+## found by issuer name and checked by signature, CA flags, path lengths and
+## name constraints. A certificate is a `List[int]` of tls_x509.ail.
+
+TV_MAX_DEPTH := 8
+TV_DIGITAL_SIGNATURE := 1
+TV_KEY_CERT_SIGN := 32
+
+## Whether the EKU list of `c` has the server-auth or any-usage OID.
+fn tv_eku_ok(c List[int]) bool
+    if c[X_EKU] < 0
+        return true
+    p := c[X_DER]
+    end := c[X_EKU] + c[X_EKUN]
+    mut i := c[X_EKU]
+    while i < end
+        o := der_expect(p, i, end, DER_OID)
+        if o.len() == 0
+            return false
+        if der_is(p, o[1], o[2], "2b06010505070301") or der_is(p, o[1], o[2], "551d2500")
+            return true
+        i = o[3]
+    false
+
+fn tv_dates(c List[int], now int) str
+    if now < c[X_NB]
+        return "the certificate for `{x_name(c)}` isn't valid until {der_date(c[X_NB])}"
+    if now > c[X_NA]
+        return "the certificate for `{x_name(c)}` expired on {der_date(c[X_NA])}"
+    ""
+
+## The subject alternative names of `c` with tag `tag` (130 DNS, 135 IP), each
+## as `[address, length]`.
+fn tv_sans(c List[int], tag int) List[List[int]]
+    mut out := List[List[int]]()
+    if c[X_SAN] < 0
+        return out
+    p := c[X_DER]
+    end := c[X_SAN] + c[X_SANN]
+    mut i := c[X_SAN]
+    while i < end
+        e := der_any(p, i, end)
+        if e[0] == tag
+            out.push([p + e[1], e[2]])
+        i = e[3]
+    out
+
+fn tv_ip_text(a int, n int) str
+    sb_reset()
+    if n == 4
+        for i in 0..4
+            if i > 0
+                sb_byte(46)
+            put_int(load8(a + i))
+        return sb_str()
+    # The longest run of zero groups (two or more, the first on a tie) is "::".
+    mut bs := -1
+    mut bl := 0
+    mut cs := -1
+    mut cl := 0
+    for i in 0..8
+        if load8(a + 2 * i) == 0 and load8(a + 2 * i + 1) == 0
+            if cs < 0
+                cs = i
+                cl = 0
+            cl += 1
+            if cl > bl
+                bs = cs
+                bl = cl
+        else
+            cs = -1
+    if bl < 2
+        bs = -1
+    mut i := 0
+    while i < 8
+        if i == bs
+            sb_byte(58)
+            sb_byte(58)
+            i += bl
+            continue
+        if i > 0 and i != bs + bl
+            sb_byte(58)
+        v := load8(a + 2 * i) * 256 + load8(a + 2 * i + 1)
+        mut started := false
+        for sh in [12, 8, 4, 0]
+            d := v.shr(sh).bit_and(15)
+            if d > 0 or started or sh == 0
+                started = true
+                sb_byte(if d < 10 then 48 + d else 87 + d)
+        i += 1
+    sb_str()
+
+## Parse the IPv6 literal `h` (no brackets) into 16 bytes at `out`.
+fn tv_ipv6(h str, out int) bool
+    n := h.len()
+    for i in 0..16
+        store8(out + i, 0)
+    mut groups := List[int]()
+    mut after := List[int]()
+    mut gap := false
+    mut cur := -1
+    mut i := 0
+    while i <= n
+        c := if i < n then load8(str_addr(h) + 16 + i) else 58
+        if c == 58
+            if cur >= 0
+                if gap then after.push(cur) else groups.push(cur)
+                cur = -1
+            elif i < n and i + 1 < n and load8(str_addr(h) + 16 + i + 1) == 58
+                if gap
+                    return false
+                gap = true
+                i += 1
+            elif i < n or i == 0
+                if not (i == 0 and i + 1 < n and load8(str_addr(h) + 16 + 1) == 58)
+                    return false
+        else
+            d := if c >= 48
+                and c <= 57 then c - 48 else if c >= 97
+                and c <= 102 then c - 87 else if c >= 65
+                and c <= 70 then c - 55 else -1
+            if d < 0
+                return false
+            cur = (if cur < 0 then 0 else cur) * 16 + d
+            if cur > 65535
+                return false
+        i += 1
+    total := groups.len() + after.len()
+    if total > 8 or (not gap and total != 8) or (gap and total > 7)
+        return false
+    for k in 0..groups.len()
+        store8(out + 2 * k, groups[k].shr(8))
+        store8(out + 2 * k + 1, groups[k].bit_and(255))
+    for k in 0..after.len()
+        at := 8 - after.len() + k
+        store8(out + 2 * at, after[k].shr(8))
+        store8(out + 2 * at + 1, after[k].bit_and(255))
+    true
+
+## `san` (a certificate DNS name, lower case) against the host `host`.
+fn tv_dns_matches(san0 str, host str) bool
+    mut san := san0
+    while san.ends_with(".")
+        san = san.slice(0, san.len() - 1)
+    if san.starts_with("*.")
+        rest := san.slice(2, san.len())
+        if not rest.contains(".")
+            return false
+        mut dot := 0
+        while dot < host.len() and host.slice(dot, dot + 1) != "."
+            dot += 1
+        return dot > 0 and dot < host.len() and host.slice(dot + 1, host.len()) == rest
+    not san.contains("*") and san == host
+
+## "" if the leaf is valid for `host`, else the message.
+fn tv_host(c List[int], host0 str) str
+    mut host := host0
+    if host.starts_with("[")
+        host = host.slice(1, host.len())
+    if host.ends_with("]")
+        host = host.slice(0, host.len() - 1)
+    ip := net_ipv4(host)
+    names := tv_sans(c, 130)
+    ips := tv_sans(c, 135)
+    mut ok := false
+    v6 := alloc_raw(16, KIND_BYTES)
+    if ip < 0 and host.contains(":") and tv_ipv6(host, v6)
+        for a in ips
+            if a[1] == 16
+                mut same := true
+                for k in 0..16
+                    if load8(a[0] + k) != load8(v6 + k)
+                        same = false
+                if same
+                    ok = true
+    elif ip >= 0
+        for a in ips
+            if a[1] == 4
+                and load8(a[0]) == ip.bit_and(255)
+                and load8(a[0] + 1) == ip.shr(8).bit_and(255)
+                and load8(a[0] + 2) == ip.shr(16).bit_and(255)
+                and load8(a[0] + 3) == ip.shr(24).bit_and(255)
+                ok = true
+    else
+        mut h := http_lower(str_addr(host) + 16, load64(str_addr(host)))
+        while h.ends_with(".")
+            h = h.slice(0, h.len() - 1)
+        for a in names
+            if tv_dns_matches(http_lower(a[0], a[1]), h)
+                ok = true
+    if ok
+        return ""
+    mut covers := List[str]()
+    for a in names
+        covers.push(net_text(a[0], a[1]))
+    for a in ips
+        covers.push(tv_ip_text(a[0], a[1]))
+    mut shown := if covers.len() == 0 then "no host names" else covers[0]
+    for i in 1..covers.len()
+        if i < 4
+            shown = "{shown}, {covers[i]}"
+    if covers.len() > 4
+        shown = "{shown} and {covers.len() - 4} more"
+    "the server's certificate isn't valid for `{host}`; it covers {shown}"
+
+# ---- name constraints ----
+
+fn tv_dns_within(name0 str, base str) bool
+    mut name := http_lower(str_addr(name0) + 16, load64(str_addr(name0)))
+    while name.ends_with(".")
+        name = name.slice(0, name.len() - 1)
+    if base == ""
+        return true
+    if base.starts_with(".")
+        return name.ends_with(base)
+    name == base or name.ends_with(".{base}")
+
+## 1 if the subtree `[ta, ta + tn)` (a GeneralName) covers the name (kind 130
+## DNS or 135 IP, bytes `na`/`nn`), 0 if it applies and does not, -1 if it is
+## of another form.
+fn tv_subtree(p int, e List[int], kind int, na int, nn int) int
+    if e[0] == 130 and kind == 130
+        base := http_lower(p + e[1], e[2])
+        return if tv_dns_within(net_text(na, nn), base) then 1 else 0
+    if e[0] == 135 and kind == 135 and (e[2] == 8 or e[2] == 32)
+        half := e[2] / 2
+        if half != nn
+            return 0
+        for i in 0..nn
+            if load8(na + i).bit_and(load8(p + e[1] + half + i))
+                != load8(p + e[1] + i).bit_and(load8(p + e[1] + half + i))
+                return 0
+        return 1
+    -1
+
+## "" if `ca`'s name constraints allow the name, else the message.
+fn tv_allowed(ca List[int], kind int, na int, nn int) str
+    p := ca[X_DER]
+    shown := if kind == 130 then net_text(na, nn) else tv_ip_text(na, nn)
+    msg := "`{x_name(ca)}` may not issue certificates for `{shown}` (name constraints)"
+    if ca[X_NCX] >= 0
+        end := ca[X_NCX] + ca[X_NCXN]
+        mut i := ca[X_NCX]
+        while i < end
+            st := der_expect(p, i, end, DER_SEQUENCE)
+            base := der_any(p, st[1], st[1] + st[2])
+            if tv_subtree(p, base, kind, na, nn) == 1
+                return msg
+            i = st[3]
+    if ca[X_NCP] >= 0
+        end := ca[X_NCP] + ca[X_NCPN]
+        mut applicable := false
+        mut hit := false
+        mut i := ca[X_NCP]
+        while i < end
+            st := der_expect(p, i, end, DER_SEQUENCE)
+            base := der_any(p, st[1], st[1] + st[2])
+            m := tv_subtree(p, base, kind, na, nn)
+            if m >= 0
+                applicable = true
+            if m == 1
+                hit = true
+            i = st[3]
+        if applicable and not hit
+            return msg
+    ""
+
+# ---- the path search ----
+
+fn tv_note(mut best List[int], msg str)
+    if best[0] == 0
+        best[0] = str_addr(msg)
+
+## Whether every name of the leaf `path[0]` is allowed by the other certificates
+## of the path and by `root` (an empty list for nobody).
+fn tv_constraints(path List[List[int]], root List[List[int]], mut best List[int]) bool
+    leaf := path[0]
+    mut cas := List[List[int]]()
+    for i in 1..path.len()
+        cas.push(path[i])
+    for r in root
+        cas.push(r)
+    for ca in cas
+        for a in tv_sans(leaf, 130)
+            e := tv_allowed(ca, 130, a[0], a[1])
+            if e != ""
+                tv_note(mut best, e)
+                return false
+        for a in tv_sans(leaf, 135)
+            e := tv_allowed(ca, 135, a[0], a[1])
+            if e != ""
+                tv_note(mut best, e)
+                return false
+    true
+
+## "" if `ca` may issue the next certificate of `path`, else the message.
+fn tv_usable_ca(ca List[int], path List[List[int]], now int) str
+    name := x_name(ca)
+    if ca[X_CA] == 0
+        return "`{name}` issued a certificate but isn't a certificate authority"
+    if ca[X_KU] >= 0 and ca[X_KU].bit_and(TV_KEY_CERT_SIGN) == 0
+        return "`{name}` isn't allowed to sign certificates (key usage)"
+    if not tv_eku_ok(ca)
+        return "`{name}` isn't allowed to issue server certificates (extended key usage)"
+    d := tv_dates(ca, now)
+    if d != ""
+        return d
+    mut below := 0
+    for i in 1..path.len()
+        if not x_self_issued(path[i])
+            below += 1
+    if ca[X_PATHLEN] >= 0 and below > ca[X_PATHLEN]
+        return "`{name}` allows {ca[X_PATHLEN]} intermediate certificate(s) below it, and the chain has more"
+    ""
+
+fn tv_extend(
+    mut path List[List[int]],
+    pool List[List[int]],
+    roots List[List[int]],
+    now int,
+    mut used List[int],
+    mut best List[int],
+) bool
+    c := path[path.len() - 1]
+    nobody := List[List[int]]()
+    if path.len() > 1
+        for r in roots
+            if x_same_cert(r, c)
+                return tv_constraints(path, nobody, mut best)
+    for r in roots
+        if not x_same_name(r[X_DER], r[X_SUB], r[X_SUBN], c[X_DER], c[X_ISS], c[X_ISSN])
+            continue
+        e := x_signed_by(c, r)
+        if e == ""
+            if tv_constraints(path, [r], mut best)
+                return true
+        else
+            tv_note(mut best, e)
+    if path.len() >= TV_MAX_DEPTH
+        tv_note(mut best, "the certificate chain for `{x_name(path[0])}` is too long")
+        return false
+    for i in 0..pool.len()
+        cand := pool[i]
+        if used[i] != 0 or not x_same_name(
+            cand[X_DER],
+            cand[X_SUB],
+            cand[X_SUBN],
+            c[X_DER],
+            c[X_ISS],
+            c[X_ISSN],
+        )
+            continue
+        mut seen := false
+        for q in path
+            if x_same_cert(q, cand)
+                seen = true
+        if seen
+            continue
+        u := tv_usable_ca(cand, path, now)
+        if u != ""
+            tv_note(mut best, u)
+            continue
+        e := x_signed_by(c, cand)
+        if e != ""
+            tv_note(mut best, e)
+            continue
+        used[i] = 1
+        path.push(cand)
+        if tv_extend(mut path, pool, roots, now, mut used, mut best)
+            return true
+        path.pop()
+        used[i] = 0
+    false
+
+## Verify the chain of DER certificates `chain` (each `[address, length]`, the
+## leaf first) against the trusted `roots` (certificates) for `host` at `now`
+## (Unix seconds). "" if it is good, else the message.
+fn tv_chain(chain List[List[int]], roots List[List[int]], host str, now int) str
+    if chain.len() == 0
+        return "the server sent no certificate"
+    leaf := x_parse(chain[0][0], chain[0][1])
+    if leaf[X_ERR] != 0
+        return str_at(leaf[X_ERR])
+    mut pool := List[List[int]]()
+    for i in 1..chain.len()
+        c := x_parse(chain[i][0], chain[i][1])
+        if c[X_ERR] == 0
+            pool.push(c)
+    d := tv_dates(leaf, now)
+    if d != ""
+        return d
+    if not tv_eku_ok(leaf)
+        return "the certificate for `{x_name(leaf)}` isn't for servers (extended key usage)"
+    if leaf[X_KU] >= 0 and leaf[X_KU].bit_and(TV_DIGITAL_SIGNATURE) == 0
+        return "the certificate for `{x_name(leaf)}` doesn't allow signing (key usage)"
+    h := tv_host(leaf, host)
+    if h != ""
+        return h
+    mut used := List[int]()
+    for i in 0..pool.len()
+        used.push(0)
+    mut path := [leaf]
+    mut best := [0]
+    if tv_extend(mut path, pool, roots, now, mut used, mut best)
+        return ""
+    if best[0] != 0
+        return str_at(best[0])
+    "the certificate for `{x_name(leaf)}` doesn't lead to a trusted root: it was issued by `{x_issuer_name(leaf)}`, which isn't in the system's root store"

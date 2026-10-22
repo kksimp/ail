@@ -316,8 +316,10 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
             for name in fs.list_dir(dir)?.sorted()
                 if name.ends_with(".ail")
                     files.push("{dir}/{name}")
+            before := srcs.len()
             srcs.extend(parse_module(imp, files)?)
-            roots.push(mroot)
+            for _ in before..srcs.len()
+                roots.push(mroot)
         k += 1
     derived := derived_sources()?
     srcs.extend(derived.sources)

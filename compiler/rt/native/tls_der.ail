@@ -1,0 +1,245 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Strict DER reading, ASN.1 times, PEM and base64 for the native TLS client's
+## certificate checks (ADR 0836 slice 3, ADR 0368), over raw addresses like
+## bootstrap/src/net/x509/der.rs, whose rules it keeps: minimal lengths, no
+## indefinite lengths, no high tag numbers, minimal non-negative integers.
+
+DER_BOOLEAN := 1
+DER_INTEGER := 2
+DER_BIT_STRING := 3
+DER_OCTET_STRING := 4
+DER_NULL := 5
+DER_OID := 6
+DER_UTC := 23
+DER_GENERALIZED := 24
+DER_SEQUENCE := 48
+DER_SET := 49
+
+## The element at `off` inside `[off, end)` of the bytes at `p`, as
+## `[tag, body offset, body length, next offset]`, or `[]` if it is malformed.
+fn der_any(p int, off int, end int) List[int]
+    if off + 2 > end
+        return List[int]()
+    tag := load8(p + off)
+    if tag.bit_and(31) == 31
+        return List[int]()
+    first := load8(p + off + 1)
+    mut len := 0
+    mut head := 2
+    if first < 128
+        len = first
+    else
+        n := first.bit_and(127)
+        if n == 0 or n > 4 or off + 2 + n > end or load8(p + off + 2) == 0
+            return List[int]()
+        for i in 0..n
+            len = len * 256 + load8(p + off + 2 + i)
+        if len < 128
+            return List[int]()
+        head = 2 + n
+    if off + head + len > end
+        return List[int]()
+    [tag, off + head, len, off + head + len]
+
+## The element at `off` if it has `tag`, else `[]`.
+fn der_expect(p int, off int, end int, tag int) List[int]
+    e := der_any(p, off, end)
+    if e.len() == 0 or e[0] != tag
+        return List[int]()
+    e
+
+## Whether the bytes `[a, a + n)` equal the bytes of the hex text `hex`.
+fn der_is(p int, a int, n int, hex str) bool
+    h := str_addr(hex)
+    if load64(h) != 2 * n
+        return false
+    for i in 0..n
+        if load8(p + a + i)
+            != sig_nibble(load8(h + 16 + 2 * i)) * 16 + sig_nibble(load8(h + 17 + 2 * i))
+            return false
+    true
+
+## The unsigned integer element `e` (from `der_expect`) as `[offset, length]`
+## of its significant bytes, or `[]` if it is empty, negative or not minimal.
+fn der_uint(p int, e List[int]) List[int]
+    off := e[1]
+    n := e[2]
+    if n == 0
+        return List[int]()
+    first := load8(p + off)
+    if n == 1 and first == 0
+        return [off, 1]
+    if first == 0
+        if load8(p + off + 1) < 128
+            return List[int]()
+        return [off + 1, n - 1]
+    if first >= 128
+        return List[int]()
+    [off, n]
+
+## Days since 1970-01-01 of a civil date.
+fn der_days(y0 int, m int, d int) int
+    y := if m <= 2 then y0 - 1 else y0
+    era := (if y >= 0 then y else y - 399) / 400
+    yoe := y - era * 400
+    doy := (153 * (if m > 2 then m - 3 else m + 9) + 2) / 5 + d - 1
+    doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
+    era * 146097 + doe - 719468
+
+fn der_digits(p int, a int, n int) int
+    mut v := 0
+    for i in 0..n
+        c := load8(p + a + i)
+        if c < 48 or c > 57
+            return -1
+        v = v * 10 + c - 48
+    v
+
+## An ASN.1 `UTCTime` or `GeneralizedTime` of the element `e` as Unix seconds,
+## or -1 if malformed (not UTC, out of range).
+fn der_time(p int, tag int, a int, n int) int
+    mut year := 0
+    mut r := a
+    if tag == DER_UTC and n == 13
+        yy := der_digits(p, a, 2)
+        if yy < 0
+            return -1
+        year = if yy >= 50 then 1900 + yy else 2000 + yy
+        r = a + 2
+    elif tag == DER_GENERALIZED and n == 15
+        year = der_digits(p, a, 4)
+        if year < 0
+            return -1
+        r = a + 4
+    else
+        return -1
+    if load8(p + r + 10) != 90
+        return -1
+    mo := der_digits(p, r, 2)
+    d := der_digits(p, r + 2, 2)
+    h := der_digits(p, r + 4, 2)
+    mi := der_digits(p, r + 6, 2)
+    s := der_digits(p, r + 8, 2)
+    if mo < 1
+        or mo > 12
+        or d < 1
+        or d > 31
+        or h < 0
+        or h > 23
+        or mi < 0
+        or mi > 59
+        or s < 0
+        or s > 60
+        return -1
+    der_days(year, mo, d) * 86400 + h * 3600 + mi * 60 + s
+
+## `YYYY-MM-DD` of Unix seconds.
+fn der_date(secs int) str
+    z := (if secs >= 0 then secs else secs - 86399) / 86400 + 719468
+    era := (if z >= 0 then z else z - 146096) / 146097
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    d := doy - (153 * mp + 2) / 5 + 1
+    m := if mp < 10 then mp + 3 else mp - 9
+    y := yoe + era * 400 + (if m <= 2 then 1 else 0)
+    sb_reset()
+    for t in [1000, 100, 10, 1]
+        sb_byte(48 + y / t % 10)
+    sb_byte(45)
+    sb_byte(48 + m / 10)
+    sb_byte(48 + m % 10)
+    sb_byte(45)
+    sb_byte(48 + d / 10)
+    sb_byte(48 + d % 10)
+    sb_str()
+
+fn der_b64(c int) int
+    if c >= 65 and c <= 90
+        return c - 65
+    if c >= 97 and c <= 122
+        return c - 71
+    if c >= 48 and c <= 57
+        return c + 4
+    if c == 43
+        return 62
+    if c == 47
+        return 63
+    if c == 61
+        return -2
+    if c == 32 or c == 9 or c == 13 or c == 10
+        return -3
+    -1
+
+## The base64 text of `n` bytes at `p` decoded to a new byte string object's
+## data (`[address, length]`), or `[]` for a bad character.
+fn der_base64(p int, n int) List[int]
+    out := alloc_raw(n * 3 / 4 + 8, KIND_BYTES)
+    mut len := 0
+    mut acc := 0
+    mut bits := 0
+    for i in 0..n
+        v := der_b64(load8(p + i))
+        if v == -2
+            return [out, len]
+        if v == -3
+            continue
+        if v < 0
+            return List[int]()
+        acc = acc.shl(6).bit_or(v).bit_and(16777215)
+        bits += 6
+        if bits >= 8
+            bits -= 8
+            store8(out + len, acc.shr(bits).bit_and(255))
+            len += 1
+    [out, len]
+
+## The certificates of a PEM text (`str`) as a list of `[address, length]` of
+## their DER bytes.
+fn der_pem(text str) List[List[int]]
+    mut out := List[List[int]]()
+    mut inside := false
+    mut start := 0
+    t := str_addr(text)
+    n := load64(t)
+    p := t + 16
+    buf := alloc_raw(n + 8, KIND_BYTES)
+    mut blen := 0
+    mut i := 0
+    while i < n
+        mut j := i
+        while j < n and load8(p + j) != 10
+            j += 1
+        # The line [i, j) without surrounding blanks.
+        mut a := i
+        mut b := j
+        while a < b and (load8(p + a) == 32 or load8(p + a) == 9 or load8(p + a) == 13)
+            a += 1
+        while b > a and (load8(p + b - 1) == 32 or load8(p + b - 1) == 9 or load8(p + b - 1) == 13)
+            b -= 1
+        if der_is_line(p, a, b, "-----BEGIN CERTIFICATE-----")
+            inside = true
+            blen = 0
+        elif der_is_line(p, a, b, "-----END CERTIFICATE-----")
+            if inside
+                d := der_base64(buf, blen)
+                if d.len() > 0
+                    out.push(d)
+            inside = false
+        elif inside
+            copy_bytes(buf + blen, p + a, b - a)
+            blen += b - a
+        i = j + 1
+    out
+
+fn der_is_line(p int, a int, b int, text str) bool
+    t := str_addr(text)
+    if b - a != load64(t)
+        return false
+    for k in 0..b - a
+        if load8(p + a + k) != load8(t + 16 + k)
+            return false
+    true

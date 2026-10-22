@@ -1,0 +1,645 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## X.509 certificate parsing for the native TLS client (ADR 0836 slice 3, ADR
+## 0368), ported from bootstrap/src/net/x509/mod.rs with its rules and its
+## messages. A certificate is a `List[int]` of X_SIZE words (the X_* indexes)
+## that point into its DER bytes, which stay where they are; `x[X_ERR]` is the
+## address of a message string if the certificate is malformed, else 0.
+
+X_DER := 0
+X_LEN := 1
+X_TBS := 2
+X_TBSN := 3
+X_ALG := 4
+X_SIG := 5
+X_SIGN := 6
+X_ISS := 7
+X_ISSN := 8
+X_SUB := 9
+X_SUBN := 10
+X_NB := 11
+X_NA := 12
+X_KT := 13
+X_CURVE := 14
+X_K1 := 15
+X_K1N := 16
+X_K2 := 17
+X_K2N := 18
+X_CA := 19
+X_PATHLEN := 20
+X_KU := 21
+X_EKU := 22
+X_EKUN := 23
+X_SAN := 24
+X_SANN := 25
+X_NCP := 26
+X_NCPN := 27
+X_NCX := 28
+X_NCXN := 29
+X_ALGOID := 30
+X_ALGOIDN := 31
+X_ERR := 32
+X_SIZE := 33
+
+# Signature algorithms: PKCS#1 v1.5 with SHA-256/384/512 (1-3), PSS (4-6),
+# ECDSA (7-9). 0 is one AIL's TLS doesn't support.
+XA_NONE := 0
+
+fn x_bad(x List[int], why str) List[int]
+    mut y := x
+    y[X_ERR] = str_addr("a certificate is malformed ({why})")
+    y
+
+## The DER bytes of OID `[a, a + n)` as dotted text.
+fn x_oid_text(p int, a int, n int) str
+    sb_reset()
+    if n > 0
+        first := load8(p + a)
+        top := if first / 40 > 2 then 2 else first / 40
+        put_int(top)
+        sb_byte(46)
+        put_int(first - 40 * top)
+    mut v := 0
+    for i in 1..n
+        b := load8(p + a + i)
+        v = v.shl(7).bit_or(b.bit_and(127))
+        if b < 128
+            sb_byte(46)
+            put_int(v)
+            v = 0
+    sb_str()
+
+## The lower-case hex text of `[a, a + n)`.
+fn x_hex(p int, a int, n int) str
+    sb_reset()
+    for i in 0..n
+        b := load8(p + a + i)
+        sb_byte(if b / 16 < 10 then 48 + b / 16 else 87 + b / 16)
+        sb_byte(if b % 16 < 10 then 48 + b % 16 else 87 + b % 16)
+    sb_str()
+
+## The hash of an OID body (0 SHA-256, 1 SHA-384, 2 SHA-512) or -1.
+fn x_hash_oid(p int, a int, n int) int
+    if der_is(p, a, n, "608648016503040201")
+        return 0
+    if der_is(p, a, n, "608648016503040202")
+        return 1
+    if der_is(p, a, n, "608648016503040203")
+        return 2
+    -1
+
+## RSA-PSS parameters (hash and mask hash equal, salt as long as the hash) as
+## the hash, or -1 for anything else; -2 if malformed.
+fn x_pss_params(p int, off int, end int) int
+    s := der_expect(p, off, end, DER_SEQUENCE)
+    if s.len() == 0
+        return -2
+    mut i := s[1]
+    stop := s[1] + s[2]
+    mut hash := -1
+    mut mgf := -1
+    mut salt := 20
+    if i < stop and load8(p + i) == 160
+        e := der_any(p, i, stop)
+        if e.len() == 0
+            return -2
+        a := der_expect(p, e[1], e[1] + e[2], DER_SEQUENCE)
+        if a.len() == 0
+            return -2
+        o := der_expect(p, a[1], a[1] + a[2], DER_OID)
+        if o.len() == 0
+            return -2
+        hash = x_hash_oid(p, o[1], o[2])
+        i = e[3]
+    if i < stop and load8(p + i) == 161
+        e := der_any(p, i, stop)
+        if e.len() == 0
+            return -2
+        a := der_expect(p, e[1], e[1] + e[2], DER_SEQUENCE)
+        if a.len() == 0
+            return -2
+        o := der_expect(p, a[1], a[1] + a[2], DER_OID)
+        if o.len() == 0
+            return -2
+        if not der_is(p, o[1], o[2], "2a864886f70d010108")
+            return -1
+        inner := der_expect(p, o[3], a[1] + a[2], DER_SEQUENCE)
+        if inner.len() == 0
+            return -2
+        io := der_expect(p, inner[1], inner[1] + inner[2], DER_OID)
+        if io.len() == 0
+            return -2
+        mgf = x_hash_oid(p, io[1], io[2])
+        i = e[3]
+    if i < stop and load8(p + i) == 162
+        e := der_any(p, i, stop)
+        if e.len() == 0
+            return -2
+        ie := der_expect(p, e[1], e[1] + e[2], DER_INTEGER)
+        if ie.len() == 0
+            return -2
+        v := der_uint(p, ie)
+        if v.len() == 0
+            return -2
+        if v[1] > 2
+            return -1
+        salt = 0
+        for k in 0..v[1]
+            salt = salt * 256 + load8(p + v[0] + k)
+    if hash >= 0 and hash == mgf and salt == sig_hlen(hash)
+        return hash
+    -1
+
+## The signature algorithm of the AlgorithmIdentifier body `[a, a + n)`: a code
+## of XA_*, 0 if unsupported, -1 if malformed.
+fn x_sig_alg(p int, a int, n int) int
+    end := a + n
+    o := der_expect(p, a, end, DER_OID)
+    if o.len() == 0
+        return -1
+    ob := o[1]
+    on := o[2]
+    mut alg := 0
+    if der_is(p, ob, on, "2a864886f70d01010b")
+        alg = 1
+    elif der_is(p, ob, on, "2a864886f70d01010c")
+        alg = 2
+    elif der_is(p, ob, on, "2a864886f70d01010d")
+        alg = 3
+    if alg > 0
+        if o[3] < end
+            nl := der_expect(p, o[3], end, DER_NULL)
+            if nl.len() == 0 or nl[3] != end
+                return -1
+        elif o[3] != end
+            return -1
+        return alg
+    if der_is(p, ob, on, "2a8648ce3d040302")
+        alg = 7
+    elif der_is(p, ob, on, "2a8648ce3d040303")
+        alg = 8
+    elif der_is(p, ob, on, "2a8648ce3d040304")
+        alg = 9
+    if alg > 0
+        return if o[3] == end then alg else -1
+    if der_is(p, ob, on, "2a864886f70d01010a")
+        h := x_pss_params(p, o[3], end)
+        if h == -2
+            return -1
+        return if h >= 0 then 4 + h else 0
+    0
+
+## The name of an unsupported signature algorithm, for the message.
+fn x_alg_name(p int, a int, n int) str
+    t := x_oid_text(p, a, n)
+    if t == "1.2.840.113549.1.1.5"
+        return "SHA-1 with RSA"
+    if t == "1.2.840.113549.1.1.4"
+        return "MD5 with RSA"
+    if t == "1.2.840.10045.4.1"
+        return "ECDSA with SHA-1"
+    if t == "1.3.101.112"
+        return "Ed25519"
+    "the algorithm {t}"
+
+## The common name of the Name `[a, a + n)`, or "(unnamed)".
+fn x_cn(p int, a int, n int) str
+    end := a + n
+    mut i := a
+    while i < end
+        set := der_expect(p, i, end, DER_SET)
+        if set.len() == 0
+            return "(unnamed)"
+        mut j := set[1]
+        sstop := set[1] + set[2]
+        while j < sstop
+            atv := der_expect(p, j, sstop, DER_SEQUENCE)
+            if atv.len() == 0
+                return "(unnamed)"
+            o := der_expect(p, atv[1], atv[1] + atv[2], DER_OID)
+            if o.len() == 0
+                return "(unnamed)"
+            if der_is(p, o[1], o[2], "550403")
+                v := der_any(p, o[3], atv[1] + atv[2])
+                if v.len() == 0
+                    return "(unnamed)"
+                return net_text(p + v[1], v[2])
+            j = atv[3]
+        i = set[3]
+    "(unnamed)"
+
+fn x_name(x List[int]) str
+    x_cn(x[X_DER], x[X_SUB], x[X_SUBN])
+
+fn x_issuer_name(x List[int]) str
+    x_cn(x[X_DER], x[X_ISS], x[X_ISSN])
+
+## Whether the Names (DER bytes) of `a` and `b` are the same bytes.
+fn x_same_name(pa int, aa int, an int, pb int, ba int, bn int) bool
+    if an != bn
+        return false
+    for i in 0..an
+        if load8(pa + aa + i) != load8(pb + ba + i)
+            return false
+    true
+
+fn x_self_issued(x List[int]) bool
+    x_same_name(x[X_DER], x[X_ISS], x[X_ISSN], x[X_DER], x[X_SUB], x[X_SUBN])
+
+## Whether two certificates have the same DER bytes.
+fn x_same_cert(a List[int], b List[int]) bool
+    x_same_name(a[X_DER], 0, a[X_LEN], b[X_DER], 0, b[X_LEN])
+
+## Validate the GeneralSubtrees at `[a, a + n)`; false if malformed.
+fn x_subtrees_ok(p int, a int, n int) bool
+    end := a + n
+    mut i := a
+    while i < end
+        st := der_expect(p, i, end, DER_SEQUENCE)
+        if st.len() == 0
+            return false
+        base := der_any(p, st[1], st[1] + st[2])
+        if base.len() == 0
+            return false
+        i = st[3]
+    true
+
+## Fill the extension `oid` of `x`; false if it is malformed.
+fn x_extension(mut x List[int], p int, oa int, on int, critical bool, va int, vn int) bool
+    end := va + vn
+    if der_is(p, oa, on, "551d13")
+        s := der_expect(p, va, end, DER_SEQUENCE)
+        if s.len() == 0 or s[3] != end
+            return false
+        mut i := s[1]
+        stop := s[1] + s[2]
+        if i < stop and load8(p + i) == DER_BOOLEAN
+            b := der_expect(p, i, stop, DER_BOOLEAN)
+            if b.len() == 0 or b[2] != 1 or (load8(p + b[1]) != 0 and load8(p + b[1]) != 255)
+                return false
+            x[X_CA] = if load8(p + b[1]) == 255 then 1 else 0
+            i = b[3]
+        if i < stop
+            ie := der_expect(p, i, stop, DER_INTEGER)
+            if ie.len() == 0 or ie[3] != stop
+                return false
+            v := der_uint(p, ie)
+            if v.len() == 0 or v[1] > 4
+                return false
+            mut pl := 0
+            for k in 0..v[1]
+                pl = pl * 256 + load8(p + v[0] + k)
+            x[X_PATHLEN] = pl
+        return true
+    if der_is(p, oa, on, "551d0f")
+        b := der_expect(p, va, end, DER_BIT_STRING)
+        if b.len() == 0 or b[3] != end or b[2] < 1
+            return false
+        unused := load8(p + b[1])
+        if unused > 7 or b[2] - 1 > 2
+            return false
+        mut ku := 0
+        for i in 0..b[2] - 1
+            byte := load8(p + b[1] + 1 + i)
+            for j in 0..8
+                if byte.bit_and(128.shr(j)) != 0
+                    ku = ku.bit_or(1.shl(8 * i + j))
+        x[X_KU] = ku
+        return true
+    if der_is(p, oa, on, "551d25")
+        s := der_expect(p, va, end, DER_SEQUENCE)
+        if s.len() == 0 or s[3] != end
+            return false
+        mut i := s[1]
+        while i < s[1] + s[2]
+            o := der_expect(p, i, s[1] + s[2], DER_OID)
+            if o.len() == 0
+                return false
+            i = o[3]
+        x[X_EKU] = s[1]
+        x[X_EKUN] = s[2]
+        return true
+    if der_is(p, oa, on, "551d11")
+        s := der_expect(p, va, end, DER_SEQUENCE)
+        if s.len() == 0 or s[3] != end
+            return false
+        mut i := s[1]
+        while i < s[1] + s[2]
+            e := der_any(p, i, s[1] + s[2])
+            if e.len() == 0
+                return false
+            if e[0] == 130
+                for k in 0..e[2]
+                    if load8(p + e[1] + k) >= 128
+                        return false
+            elif e[0] == 135 and e[2] != 4 and e[2] != 16
+                return false
+            i = e[3]
+        x[X_SAN] = s[1]
+        x[X_SANN] = s[2]
+        return true
+    if der_is(p, oa, on, "551d1e")
+        s := der_expect(p, va, end, DER_SEQUENCE)
+        if s.len() == 0 or s[3] != end
+            return false
+        mut i := s[1]
+        stop := s[1] + s[2]
+        if i < stop and load8(p + i) == 160
+            e := der_any(p, i, stop)
+            if e.len() == 0 or not x_subtrees_ok(p, e[1], e[2])
+                return false
+            x[X_NCP] = e[1]
+            x[X_NCPN] = e[2]
+            i = e[3]
+        if i < stop and load8(p + i) == 161
+            e := der_any(p, i, stop)
+            if e.len() == 0 or not x_subtrees_ok(p, e[1], e[2])
+                return false
+            x[X_NCX] = e[1]
+            x[X_NCXN] = e[2]
+            i = e[3]
+        return i == stop
+    if der_is(p, oa, on, "551d20") or der_is(p, oa, on, "551d24") or der_is(p, oa, on, "551d36")
+        return true
+    not critical
+
+## The error message for an unknown critical extension.
+fn x_critical_msg() str
+    "an unknown critical extension"
+
+## Parse the `n` DER bytes at `p`.
+fn x_parse(p int, n int) List[int]
+    mut x := List[int]()
+    for i in 0..X_SIZE
+        x.push(0)
+    x[X_DER] = p
+    x[X_LEN] = n
+    x[X_PATHLEN] = -1
+    x[X_KU] = -1
+    x[X_EKU] = -1
+    x[X_SAN] = -1
+    x[X_NCP] = -1
+    x[X_NCX] = -1
+    outer := der_expect(p, 0, n, DER_SEQUENCE)
+    if outer.len() == 0 or outer[3] != n
+        return x_bad(x, "truncated element")
+    cs := outer[1]
+    ce := outer[1] + outer[2]
+    tbs := der_expect(p, cs, ce, DER_SEQUENCE)
+    if tbs.len() == 0
+        return x_bad(x, "unexpected element")
+    oalg := der_expect(p, tbs[3], ce, DER_SEQUENCE)
+    if oalg.len() == 0
+        return x_bad(x, "unexpected element")
+    sg := der_expect(p, oalg[3], ce, DER_BIT_STRING)
+    if sg.len() == 0 or sg[3] != ce or sg[2] < 1 or load8(p + sg[1]) != 0
+        return x_bad(x, "bit string with unused bits")
+    x[X_TBS] = cs
+    x[X_TBSN] = tbs[3] - cs
+    x[X_SIG] = sg[1] + 1
+    x[X_SIGN] = sg[2] - 1
+    ts := tbs[1]
+    te := tbs[1] + tbs[2]
+    mut i := ts
+    if i < te and load8(p + i) == 160
+        v := der_any(p, i, te)
+        if v.len() == 0
+            return x_bad(x, "truncated element")
+        vi := der_expect(p, v[1], v[1] + v[2], DER_INTEGER)
+        if vi.len() == 0 or vi[3] != v[1] + v[2]
+            return x_bad(x, "unexpected element")
+        vu := der_uint(p, vi)
+        if vu.len() == 0
+            return x_bad(x, "empty integer")
+        if vu[1] != 1 or load8(p + vu[0]) > 2
+            return x_bad(x, "unknown certificate version")
+        i = v[3]
+    serial := der_expect(p, i, te, DER_INTEGER)
+    if serial.len() == 0 or der_uint(p, serial).len() == 0
+        return x_bad(x, "unexpected element")
+    ialg := der_expect(p, serial[3], te, DER_SEQUENCE)
+    if ialg.len() == 0 or not x_same_name(p, ialg[1], ialg[2], p, oalg[1], oalg[2])
+        return x_bad(x, "the two signature algorithms differ")
+    iss := der_expect(p, ialg[3], te, DER_SEQUENCE)
+    if iss.len() == 0
+        return x_bad(x, "unexpected element")
+    x[X_ISS] = iss[1]
+    x[X_ISSN] = iss[2]
+    val := der_expect(p, iss[3], te, DER_SEQUENCE)
+    if val.len() == 0
+        return x_bad(x, "unexpected element")
+    nb := der_any(p, val[1], val[1] + val[2])
+    if nb.len() == 0
+        return x_bad(x, "truncated element")
+    na := der_any(p, nb[3], val[1] + val[2])
+    if na.len() == 0 or na[3] != val[1] + val[2]
+        return x_bad(x, "truncated element")
+    x[X_NB] = der_time(p, nb[0], nb[1], nb[2])
+    x[X_NA] = der_time(p, na[0], na[1], na[2])
+    if x[X_NB] < 0 or x[X_NA] < 0
+        return x_bad(x, "bad time")
+    sub := der_expect(p, val[3], te, DER_SEQUENCE)
+    if sub.len() == 0
+        return x_bad(x, "unexpected element")
+    x[X_SUB] = sub[1]
+    x[X_SUBN] = sub[2]
+    spki := der_expect(p, sub[3], te, DER_SEQUENCE)
+    if spki.len() == 0
+        return x_bad(x, "unexpected element")
+    if not x_public_key(mut x, p, spki[1], spki[2])
+        return x_bad(x, "bad public key")
+    i = spki[3]
+    if i < te and load8(p + i) == 129
+        u := der_any(p, i, te)
+        if u.len() == 0
+            return x_bad(x, "truncated element")
+        i = u[3]
+    if i < te and load8(p + i) == 130
+        u := der_any(p, i, te)
+        if u.len() == 0
+            return x_bad(x, "truncated element")
+        i = u[3]
+    alg := x_sig_alg(p, oalg[1], oalg[2])
+    if alg < 0
+        return x_bad(x, "unexpected element")
+    x[X_ALG] = alg
+    ao := der_expect(p, oalg[1], oalg[1] + oalg[2], DER_OID)
+    x[X_ALGOID] = ao[1]
+    x[X_ALGOIDN] = ao[2]
+    if i < te and load8(p + i) == 163
+        ex := der_any(p, i, te)
+        if ex.len() == 0
+            return x_bad(x, "truncated element")
+        list := der_expect(p, ex[1], ex[1] + ex[2], DER_SEQUENCE)
+        if list.len() == 0 or list[3] != ex[1] + ex[2]
+            return x_bad(x, "unexpected element")
+        i = ex[3]
+        mut j := list[1]
+        lend := list[1] + list[2]
+        mut seen := List[str]()
+        while j < lend
+            e := der_expect(p, j, lend, DER_SEQUENCE)
+            if e.len() == 0
+                return x_bad(x, "unexpected element")
+            eo := der_expect(p, e[1], e[1] + e[2], DER_OID)
+            if eo.len() == 0
+                return x_bad(x, "unexpected element")
+            mut k := eo[3]
+            mut critical := false
+            if k < e[1] + e[2] and load8(p + k) == DER_BOOLEAN
+                cb := der_expect(p, k, e[1] + e[2], DER_BOOLEAN)
+                if cb.len() == 0
+                    or cb[2] != 1
+                    or (load8(p + cb[1]) != 0 and load8(p + cb[1]) != 255)
+                    return x_bad(x, "bad boolean")
+                critical = load8(p + cb[1]) == 255
+                k = cb[3]
+            ev := der_expect(p, k, e[1] + e[2], DER_OCTET_STRING)
+            if ev.len() == 0 or ev[3] != e[1] + e[2]
+                return x_bad(x, "unexpected element")
+            name := x_hex(p, eo[1], eo[2])
+            for s in seen
+                if s == name
+                    return x_bad(x, "an extension appears twice")
+            seen.push(name)
+            if not x_extension(mut x, p, eo[1], eo[2], critical, ev[1], ev[2])
+                if critical
+                    and not (der_is(p, eo[1], eo[2], "551d13") or der_is(p, eo[1], eo[2], "551d0f") or der_is(p, eo[1], eo[2], "551d25") or der_is(p, eo[1], eo[2], "551d11") or der_is(p, eo[1], eo[2], "551d1e"))
+                    return x_bad(x, x_critical_msg())
+                return x_bad(x, "bad extension")
+            j = e[3]
+    if i != te
+        return x_bad(x, "trailing data")
+    x
+
+## Fill the key fields from a SubjectPublicKeyInfo body; false if malformed.
+fn x_public_key(mut x List[int], p int, a int, n int) bool
+    end := a + n
+    alg := der_expect(p, a, end, DER_SEQUENCE)
+    if alg.len() == 0
+        return false
+    bits := der_expect(p, alg[3], end, DER_BIT_STRING)
+    if bits.len() == 0 or bits[3] != end or bits[2] < 1 or load8(p + bits[1]) != 0
+        return false
+    kb := bits[1] + 1
+    kn := bits[2] - 1
+    o := der_expect(p, alg[1], alg[1] + alg[2], DER_OID)
+    if o.len() == 0
+        return false
+    if der_is(p, o[1], o[2], "2a864886f70d010101")
+        k := der_expect(p, kb, kb + kn, DER_SEQUENCE)
+        if k.len() == 0 or k[3] != kb + kn
+            return false
+        ne := der_expect(p, k[1], k[1] + k[2], DER_INTEGER)
+        if ne.len() == 0
+            return false
+        nv := der_uint(p, ne)
+        ee := der_expect(p, ne[3], k[1] + k[2], DER_INTEGER)
+        if nv.len() == 0 or ee.len() == 0 or ee[3] != k[1] + k[2]
+            return false
+        ev := der_uint(p, ee)
+        if ev.len() == 0
+            return false
+        x[X_KT] = 1
+        x[X_K1] = nv[0]
+        x[X_K1N] = nv[1]
+        x[X_K2] = ev[0]
+        x[X_K2N] = ev[1]
+        return true
+    if der_is(p, o[1], o[2], "2a8648ce3d0201")
+        c := der_expect(p, o[3], alg[1] + alg[2], DER_OID)
+        if c.len() == 0
+            return false
+        if der_is(p, c[1], c[2], "2a8648ce3d030107")
+            x[X_KT] = 2
+            x[X_CURVE] = 0
+        elif der_is(p, c[1], c[2], "2b81040022")
+            x[X_KT] = 2
+            x[X_CURVE] = 1
+        else
+            x[X_KT] = 0
+            return true
+        x[X_K1] = kb
+        x[X_K1N] = kn
+        return true
+    x[X_KT] = 0
+    true
+
+# ---- signatures ----
+
+## DER `ECDSA-Sig-Value` at `[a, a + n)` as `[r, rn, s, sn]`, or `[]`.
+fn x_ecdsa_sig(p int, a int, n int) List[int]
+    outer := der_expect(p, a, a + n, DER_SEQUENCE)
+    if outer.len() == 0 or outer[3] != a + n
+        return List[int]()
+    re := der_expect(p, outer[1], outer[1] + outer[2], DER_INTEGER)
+    if re.len() == 0
+        return List[int]()
+    se := der_expect(p, re[3], outer[1] + outer[2], DER_INTEGER)
+    if se.len() == 0 or se[3] != outer[1] + outer[2]
+        return List[int]()
+    r := der_uint(p, re)
+    s := der_uint(p, se)
+    if r.len() == 0 or s.len() == 0
+        return List[int]()
+    [r[0], r[1], s[0], s[1]]
+
+## Whether `sig` (`sn` bytes at `sp`) is a signature by the key of `key` (a
+## certificate) over `msg` with algorithm code `alg` (XA_*).
+fn x_verify(key List[int], alg int, msg int, mn int, sp int, sn int) bool
+    p := key[X_DER]
+    if key[X_KT] == 1 and alg >= 1 and alg <= 6
+        hash := (alg - 1) % 3
+        if alg <= 3
+            return rsa_verify_pkcs1(
+                hash,
+                p + key[X_K1],
+                key[X_K1N],
+                p + key[X_K2],
+                key[X_K2N],
+                msg,
+                mn,
+                sp,
+                sn,
+            )
+        return rsa_verify_pss(
+            hash,
+            p + key[X_K1],
+            key[X_K1N],
+            p + key[X_K2],
+            key[X_K2N],
+            msg,
+            mn,
+            sp,
+            sn,
+        )
+    if key[X_KT] == 2 and alg >= 7 and alg <= 9
+        hash := alg - 7
+        rs := x_ecdsa_sig(sp, 0, sn)
+        if rs.len() == 0
+            return false
+        digest := alloc_raw(64, KIND_BYTES)
+        sig_hash(hash, msg, mn, digest)
+        return ecdsa_verify(
+            key[X_CURVE],
+            p + key[X_K1],
+            key[X_K1N],
+            digest,
+            sig_hlen(hash),
+            sp + rs[0],
+            rs[1],
+            sp + rs[2],
+            rs[3],
+        )
+    false
+
+## `x` signed by `issuer`'s key: "" or the failure message.
+fn x_signed_by(x List[int], issuer List[int]) str
+    if x[X_ALG] == 0
+        name := x_alg_name(x[X_DER], x[X_ALGOID], x[X_ALGOIDN])
+        return "`{x_name(x)}` is signed with {name}, which AIL's TLS doesn't support"
+    p := x[X_DER]
+    if x_verify(issuer, x[X_ALG], p + x[X_TBS], x[X_TBSN], p + x[X_SIG], x[X_SIGN])
+        return ""
+    "the signature on `{x_name(x)}` doesn't verify"
