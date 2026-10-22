@@ -14,22 +14,22 @@
 BIG_BITS := 28
 BIG_MASK := 268435455
 
-fn big_zero(k int) List[int]
+fn tbig_zero(k int) List[int]
     mut a := List[int]()
     for i in 0..k
         a.push(0)
     a
 
 ## `[1, 0, ..., 0]`.
-fn big_one(k int) List[int]
-    mut a := big_zero(k)
+fn tbig_one(k int) List[int]
+    mut a := tbig_zero(k)
     a[0] = 1
     a
 
 ## The number in the `n` bytes at `p` (big-endian) as `k` limbs; its value
 ## must fit.
-fn big_from_be(p int, n int, k int) List[int]
-    mut out := big_zero(k)
+fn tbig_from_be(p int, n int, k int) List[int]
+    mut out := tbig_zero(k)
     mut acc := 0
     mut bits := 0
     mut li := 0
@@ -47,7 +47,7 @@ fn big_from_be(p int, n int, k int) List[int]
     out
 
 ## The low `n` bytes of `a` to `dst`, big-endian.
-fn big_to_be(a List[int], dst int, n int)
+fn tbig_to_be(a List[int], dst int, n int)
     mut acc := 0
     mut bits := 0
     mut li := 0
@@ -61,17 +61,17 @@ fn big_to_be(a List[int], dst int, n int)
         bits = if bits >= 8 then bits - 8 else 0
 
 ## The limbs `k` needed for `n` bytes.
-fn big_limbs(n int) int
+fn tbig_limbs(n int) int
     (n * 8 + BIG_BITS - 1) / BIG_BITS
 
-fn big_is_zero(a List[int]) bool
+fn tbig_is_zero(a List[int]) bool
     for i in 0..a.len()
         if a[i] != 0
             return false
     true
 
 ## -1, 0 or 1 as `a` is below, equal to or above `b` (same length).
-fn big_cmp(a List[int], b List[int]) int
+fn tbig_cmp(a List[int], b List[int]) int
     mut i := a.len() - 1
     while i >= 0
         if a[i] != b[i]
@@ -80,7 +80,7 @@ fn big_cmp(a List[int], b List[int]) int
     0
 
 ## The number of significant bits of `a`.
-fn big_bits(a List[int]) int
+fn tbig_bits(a List[int]) int
     mut i := a.len() - 1
     while i >= 0
         if a[i] != 0
@@ -93,15 +93,15 @@ fn big_bits(a List[int]) int
         i -= 1
     0
 
-fn big_bit(a List[int], i int) bool
+fn tbig_bit(a List[int], i int) bool
     a[i / BIG_BITS].shr(i % BIG_BITS).bit_and(1) == 1
 
-fn big_is_odd(a List[int]) bool
+fn tbig_is_odd(a List[int]) bool
     a[0].bit_and(1) == 1
 
 ## `a - b` modulo 2^(28k); `borrow` is not reported, callers know the order.
-fn big_sub(a List[int], b List[int]) List[int]
-    mut out := big_zero(a.len())
+fn tbig_sub(a List[int], b List[int]) List[int]
+    mut out := tbig_zero(a.len())
     mut borrow := 0
     for i in 0..a.len()
         v := a[i] - b[i] - borrow
@@ -114,24 +114,24 @@ fn big_sub(a List[int], b List[int]) List[int]
     out
 
 ## `(a + b) mod m` for `a, b < m`.
-fn big_modadd(a List[int], b List[int], m List[int]) List[int]
-    mut s := big_zero(a.len())
+fn tbig_modadd(a List[int], b List[int], m List[int]) List[int]
+    mut s := tbig_zero(a.len())
     mut carry := 0
     for i in 0..a.len()
         v := a[i] + b[i] + carry
         s[i] = v.bit_and(BIG_MASK)
         carry = v.shr(BIG_BITS)
-    if carry > 0 or big_cmp(s, m) >= 0
-        return big_sub(s, m)
+    if carry > 0 or tbig_cmp(s, m) >= 0
+        return tbig_sub(s, m)
     s
 
 ## `(a - b) mod m` for `a, b < m`.
-fn big_modsub(a List[int], b List[int], m List[int]) List[int]
-    if big_cmp(a, b) >= 0
-        return big_sub(a, b)
+fn tbig_modsub(a List[int], b List[int], m List[int]) List[int]
+    if tbig_cmp(a, b) >= 0
+        return tbig_sub(a, b)
     # a - b + m, the borrow of the first subtraction cancelling the carry out.
-    d := big_sub(a, b)
-    mut out := big_zero(a.len())
+    d := tbig_sub(a, b)
+    mut out := tbig_zero(a.len())
     mut carry := 0
     for i in 0..a.len()
         v := d[i] + m[i] + carry
@@ -147,15 +147,15 @@ fn mont_new(m List[int]) List[List[int]]
     for i in 0..5
         inv = (inv * (2 - m0 * inv).bit_and(BIG_MASK)).bit_and(BIG_MASK)
     minv := (268435456 - inv).bit_and(BIG_MASK)
-    mut x := big_one(k)
+    mut x := tbig_one(k)
     for i in 0..2 * BIG_BITS * k
-        x = big_modadd(x, x, m)
+        x = tbig_modadd(x, x, m)
     mut ctx := List[List[int]]()
     ctx.push(m)
     ctx.push(x)
     ctx.push([minv])
-    ctx.push(big_zero(k))
-    ctx[3] = mont_mul(ctx, big_one(k), x)
+    ctx.push(tbig_zero(k))
+    ctx[3] = mont_mul(ctx, tbig_one(k), x)
     ctx
 
 ## `a * b / R mod m` for Montgomery residues (CIOS).
@@ -163,7 +163,7 @@ fn mont_mul(ctx List[List[int]], a List[int], b List[int]) List[int]
     m := ctx[0]
     minv := ctx[2][0]
     k := m.len()
-    mut t := big_zero(k + 2)
+    mut t := tbig_zero(k + 2)
     for i in 0..k
         ai := a[i]
         mut carry := 0
@@ -183,32 +183,32 @@ fn mont_mul(ctx List[List[int]], a List[int], b List[int]) List[int]
         w2 := t[k] + carry
         t[k - 1] = w2.bit_and(BIG_MASK)
         t[k] = t[k + 1] + w2.shr(BIG_BITS)
-    mut out := big_zero(k)
+    mut out := tbig_zero(k)
     for j in 0..k
         out[j] = t[j]
-    if t[k] > 0 or big_cmp(out, m) >= 0
-        return big_sub(out, m)
+    if t[k] > 0 or tbig_cmp(out, m) >= 0
+        return tbig_sub(out, m)
     out
 
 fn mont_to(ctx List[List[int]], x List[int]) List[int]
     mont_mul(ctx, x, ctx[1])
 
 fn mont_from(ctx List[List[int]], a List[int]) List[int]
-    mont_mul(ctx, a, big_one(ctx[0].len()))
+    mont_mul(ctx, a, tbig_one(ctx[0].len()))
 
 fn mont_add(ctx List[List[int]], a List[int], b List[int]) List[int]
-    big_modadd(a, b, ctx[0])
+    tbig_modadd(a, b, ctx[0])
 
 fn mont_sub(ctx List[List[int]], a List[int], b List[int]) List[int]
-    big_modsub(a, b, ctx[0])
+    tbig_modsub(a, b, ctx[0])
 
 ## `base ^ e` for a residue `base` and an exponent `e` (plain limbs).
 fn mont_pow(ctx List[List[int]], base List[int], e List[int]) List[int]
     mut r := ctx[3]
-    mut i := big_bits(e) - 1
+    mut i := tbig_bits(e) - 1
     while i >= 0
         r = mont_mul(ctx, r, r)
-        if big_bit(e, i)
+        if tbig_bit(e, i)
             r = mont_mul(ctx, r, base)
         i -= 1
     r
@@ -216,11 +216,11 @@ fn mont_pow(ctx List[List[int]], base List[int], e List[int]) List[int]
 ## `a ^ (m - 2)`: the inverse of a nonzero residue modulo a prime `m`.
 fn mont_inv(ctx List[List[int]], a List[int]) List[int]
     k := ctx[0].len()
-    mut two := big_zero(k)
+    mut two := tbig_zero(k)
     two[0] = 2
-    mont_pow(ctx, a, big_sub(ctx[0], two))
+    mont_pow(ctx, a, tbig_sub(ctx[0], two))
 
 ## `x ^ e mod m` for plain limbs `x < m`.
-fn big_modpow(m List[int], x List[int], e List[int]) List[int]
+fn tbig_modpow(m List[int], x List[int], e List[int]) List[int]
     ctx := mont_new(m)
     mont_from(ctx, mont_pow(ctx, mont_to(ctx, x), e))
