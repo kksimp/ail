@@ -129,7 +129,13 @@ fn ec_add(f List[List[int]], p List[List[int]], q List[List[int]]) List[List[int
     [x3, y3, z3]
 
 ## `u1 * g + u2 * q` by interleaved double-and-add.
-fn ec_double_mul(f List[List[int]], g List[List[int]], u1 List[int], u2 List[int], q List[List[int]]) List[List[int]]
+fn ec_double_mul(
+    f List[List[int]],
+    g List[List[int]],
+    u1 List[int],
+    u2 List[int],
+    q List[List[int]],
+) List[List[int]]
     gq := ec_add(f, g, q)
     mut acc := ec_inf(f)
     b1 := big_bits(u1)
@@ -157,7 +163,17 @@ fn sig_skip_zeros(p int, n int) int
 
 ## ECDSA verification (SEC 1 4.1.4): `public` is `04 || x || y`, `hash` the
 ## digest, `r` and `s` the signature's integers (big-endian, any leading zeros).
-fn ecdsa_verify(curve int, public int, publen int, hash int, hn int, r int, rn int, s int, sn int) bool
+fn ecdsa_verify(
+    curve int,
+    public int,
+    publen int,
+    hash int,
+    hn int,
+    r int,
+    rn int,
+    s int,
+    sn int,
+) bool
     size := sig_curve_size(curve)
     k := big_limbs(size)
     if publen != 1 + 2 * size or load8(public) != 4
@@ -194,7 +210,11 @@ fn ecdsa_verify(curve int, public int, publen int, hash int, hn int, r int, rn i
         e = big_sub(e, n)
     u1 := mont_from(nm, mont_mul(nm, mont_to(nm, e), w))
     u2 := mont_from(nm, mont_mul(nm, mont_to(nm, rv), w))
-    g := [mont_to(f, sig_big_hex(sig_curve_gx(curve), k)), mont_to(f, sig_big_hex(sig_curve_gy(curve), k)), f[3]]
+    g := [
+        mont_to(f, sig_big_hex(sig_curve_gx(curve), k)),
+        mont_to(f, sig_big_hex(sig_curve_gy(curve), k)),
+        f[3],
+    ]
     pt := ec_double_mul(f, g, u1, u2, q)
     if big_is_zero(pt[2])
         return false
