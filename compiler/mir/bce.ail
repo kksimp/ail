@@ -871,7 +871,11 @@ fn version(
         mut hi_is_len := false
         if d := hd
             hi_is_len = d.op == "len" and d.args[0] == nd.x
-        idx := if nd.kind == "inv" or nd.kind == "invoff" then fresh_of(hoists, hidx, nd.arg) else nd.arg
+        idx := if nd.kind == "inv" or nd.kind == "invoff" then fresh_of(
+            hoists,
+            hidx,
+            nd.arg,
+        ) else nd.arg
         gd.emit_need(nd, fresh_of(hoists, hidx, nd.x), idx, c.bound, hi_is_len)
     if roomy.len() > 0
         # Room for every push of the loop: `(hi - lo) * per` more elements.

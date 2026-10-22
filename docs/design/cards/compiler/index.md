@@ -4,8 +4,7 @@ a64  60 items
 ast  129 items
 check  305 items
 codegen  46 items
-mir  348 items
-mir  343 items
+mir  356 items
 obj  58 items
 syntax  100 items
 x64  75 items

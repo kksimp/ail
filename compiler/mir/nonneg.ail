@@ -51,7 +51,9 @@ pub fn mark_nonneg(f Func) Func
                         nn[p] = false
                         changed = true
         for p in 0..nv
-            if counter[p] >= 0 and nn[p] and not (nn[counter[p]] and (step_of[p] < 0 or nn[step_of[p]]))
+            if counter[p] >= 0
+                and nn[p]
+                and not (nn[counter[p]] and (step_of[p] < 0 or nn[step_of[p]]))
                 nn[p] = false
                 changed = true
     mut g := f

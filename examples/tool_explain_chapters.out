@@ -17,7 +17,7 @@ http 3 0
 json 22 0
 lex 24 7
 mod 29 2
-native 28 0
+native 29 0
 own 39 2
 plat 8 0
 refl 4 0
@@ -30,4 +30,4 @@ trace 19 0
 trait 43 4
 type 117 10
 unsafe 21 0
-all 969 53
+all 970 53

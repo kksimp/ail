@@ -2,26 +2,26 @@
 
 ## mir
 ```
-pub fn mir.fold_addresses(f mir.Func) mir.Func
-pub fn mir.fold_prim_addresses(f mir.Func) mir.Func
+pub fn mir.fold_addresses(mir.Func) mir.Func
+pub fn mir.fold_prim_addresses(mir.Func) mir.Func
 pub struct mir.Versioned
     pub f mir.Func
     pub header int
     pub floors Map[str, int]
-pub fn mir.bce(f mir.Func, reserve bool, grow_only bool) mir.Func
-pub fn mir.lists_only_grow(m mir.Module) bool
-pub fn mir.fill_loops(f mir.Func, on bool) mir.Func
-pub fn mir.fold(f mir.Func) mir.Func
-pub fn mir.rpo(f mir.Func) List[int]
-pub fn mir.forward_loads(f mir.Func) mir.Func
-pub fn mir.inline_module(m mir.Module) mir.Module
-pub fn mir.merge_blocks(f mir.Func) mir.Func
+pub fn mir.bce(mir.Func, bool, bool) mir.Func
+pub fn mir.lists_only_grow(mir.Module) bool
+pub fn mir.fill_loops(mir.Func, bool) mir.Func
+pub fn mir.fold(mir.Func) mir.Func
+pub fn mir.rpo(mir.Func) List[int]
+pub fn mir.forward_loads(mir.Func) mir.Func
+pub fn mir.inline_module(mir.Module) mir.Module
+pub fn mir.merge_blocks(mir.Func) mir.Func
 pub struct mir.Def
     pub block int
     pub at int
-pub fn mir.defs_of(f mir.Func) List[mir.Def]
-pub fn mir.inst_of(f mir.Func, defs List[mir.Def], v int) mir.Inst?
-pub fn mir.const_of(f mir.Func, defs List[mir.Def], v int) int?
+pub fn mir.defs_of(mir.Func) List[mir.Def]
+pub fn mir.inst_of(mir.Func, List[mir.Def], int) mir.Inst?
+pub fn mir.const_of(mir.Func, List[mir.Def], int) int?
 pub struct mir.LoopInfo
     pub header int
     pub member List[bool]
@@ -29,8 +29,8 @@ pub struct mir.LoopInfo
     pub pre int
     pub latches List[int]
     pub exits int
-pub fn mir.find_loops(f mir.Func) List[mir.LoopInfo]
-pub fn mir.is_innermost(loops List[mir.LoopInfo], lp mir.LoopInfo) bool
+pub fn mir.find_loops(mir.Func) List[mir.LoopInfo]
+pub fn mir.is_innermost(List[mir.LoopInfo], mir.LoopInfo) bool
 pub struct mir.Counted
     pub p int
     pub k int
@@ -42,7 +42,7 @@ pub struct mir.Counted
     pub exit int
     pub exit_edge int
     pub step int
-pub fn mir.counted(f mir.Func, defs List[mir.Def], lp mir.LoopInfo) mir.Counted?
+pub fn mir.counted(mir.Func, List[mir.Def], mir.LoopInfo) mir.Counted?
 pub struct mir.Sig
     pub params List[mir.Ty]
     pub ret mir.Ty
@@ -56,19 +56,19 @@ pub error struct mir.Problems
     pub files List[str]
 pub impl ToStr for mir.Problems
     pub fn to_str(self) str
-pub fn mir.lower_module(path str, text str, prog ast.Program, rt ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_module(str, str, ast.Program, ast.Program?) mir.Module ! mir.Problems [fail]
 pub struct mir.Source
     pub module str
     pub path str
     pub text str
     pub prog ast.Program
-pub fn mir.lower_package(input List[mir.Source], rt ast.Program?) mir.Module ! mir.Problems [fail]
-pub fn mir.lower_package_with(input List[mir.Source], rt ast.Program?, lazy int) mir.Module ! mir.Problems [fail]
-pub fn mir.expr_pos(e ast.Expr) ast.Pos
+pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package_with(List[mir.Source], ast.Program?, int) mir.Module ! mir.Problems [fail]
+pub fn mir.expr_pos(ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
-pub fn mir.aliases_of(prog ast.Program) Map[str, str]
-pub fn mir.imports_of(prog ast.Program) List[str]
-pub fn mir.prelude_text(text str) str
+pub fn mir.aliases_of(ast.Program) Map[str, str]
+pub fn mir.imports_of(ast.Program) List[str]
+pub fn mir.prelude_text(str) str
 pub struct mir.TaskState
     on bool
     sites List[mir.TaskSite]
@@ -78,8 +78,8 @@ pub struct mir.TaskState
     owner str
     accs Set[str]
 pub fn mir.new_task_state() mir.TaskState
-pub fn mir.uses_tasks(text str) bool
-pub fn mir.is_wait_call(e ast.Expr) bool
+pub fn mir.uses_tasks(str) bool
+pub fn mir.is_wait_call(ast.Expr) bool
 pub struct mir.Traits
     impls Map[str, List[str]]
     dispatch Map[str, List[str]]
@@ -133,7 +133,7 @@ pub struct mir.Inst
     pub site int
     pub fn mir.Inst.elem_off(self) int
     pub fn mir.Inst.is_pure(self) bool
-pub fn mir.inst(dst int, op str, args List[int]) mir.Inst
+pub fn mir.inst(int, str, List[int]) mir.Inst
 pub struct mir.Term
     pub kind str
     pub cond int
@@ -141,9 +141,9 @@ pub struct mir.Term
     pub args List[List[int]]
     pub value int
     pub fn mir.Term.uses(self) List[int]
-pub fn mir.jump_to(target int, args List[int]) mir.Term
-pub fn mir.branch_on(cond int, yes int, no int) mir.Term
-pub fn mir.return_of(value int) mir.Term
+pub fn mir.jump_to(int, List[int]) mir.Term
+pub fn mir.branch_on(int, int, int) mir.Term
+pub fn mir.return_of(int) mir.Term
 pub fn mir.unreachable_term() mir.Term
 pub struct mir.Block
     pub params List[int]
@@ -165,7 +165,7 @@ pub struct mir.Site
     pub func str
     pub file int
     pub from int
-pub fn mir.excerpt(line str, n int, col int) str
+pub fn mir.excerpt(str, int, int) str
 pub struct mir.Module
     pub path str
     pub funcs List[mir.Func]
@@ -175,29 +175,28 @@ pub struct mir.Module
     pub files List[str]
     pub file_lines List[List[str]]
     pub fn mir.Module.globals_used(self) int
-pub fn mir.call_pos(file int, line int, col int) int
-pub fn mir.call_file(pos int) int
-pub fn mir.call_line(pos int) int
-pub fn mir.call_col(pos int) int
-pub fn mir.mark_nonneg(f mir.Func) mir.Func
-pub fn mir.rewrite_nonneg(f mir.Func) mir.Func
-pub fn mir.keep_lengths(f mir.Func) mir.Func
+pub fn mir.call_pos(int, int, int) int
+pub fn mir.call_file(int) int
+pub fn mir.call_line(int) int
+pub fn mir.call_col(int) int
+pub fn mir.mark_nonneg(mir.Func) mir.Func
+pub fn mir.rewrite_nonneg(mir.Func) mir.Func
+pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
     pub sites Set[str]
     pub limited List[int]
     pub lows Map[int, int]
     pub highs Map[int, int]
-pub fn mir.prove(f mir.Func, defs List[mir.Def], lp mir.LoopInfo, c mir.Counted, order List[int], held List[bool]) mir.Proven
-pub fn mir.mark_recursion(m mir.Module) mir.Module
-pub fn mir.reuse_lists(m mir.Module) mir.Module
-pub fn mir.simplify(f mir.Func) mir.Func
-pub fn mir.subset_help(message str) str
-pub fn mir.module_text(m mir.Module) str
-pub fn mir.func_text(f mir.Func) str
-pub fn mir.verify(f mir.Func) List[str]
-pub fn mir.dominators(f mir.Func) List[List[bool]]
+pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
+pub fn mir.mark_recursion(mir.Module) mir.Module
+pub fn mir.reuse_lists(mir.Module) mir.Module
+pub fn mir.simplify(mir.Func) mir.Func
+pub fn mir.subset_help(str) str
+pub fn mir.module_text(mir.Module) str
+pub fn mir.func_text(mir.Func) str
+pub fn mir.verify(mir.Func) List[str]
+pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1974); dropped: private items, doc comments
-trimmed to fit 2000 tokens (~1962); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1928); dropped: private items, doc comments, parameter names
