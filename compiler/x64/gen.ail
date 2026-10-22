@@ -759,7 +759,14 @@ fn Gen.arith(mut self, i mir.Inst)
     ky := imm32(y)
     # In place when the result shares `x`'s register: an overflow stub
     # recovers `x` from the result (add and sub only).
-    if d == loc[x] and i.op != "mul" and (ky != none or loc[y] != d)
+    # An unchecked `mul` has no stub to recover from, so it works in place too.
+    if d == loc[x] and (i.op != "mul" or i.site < 0) and (ky != none or loc[y] != d)
+        if i.op == "mul"
+            if k := ky
+                a.imul_rri(d, d, k)
+            else
+                a.imul_rr(d, gpr(y, S0))
+            return
         if k := ky
             a.alu_ri(i.op, d, k)
         else

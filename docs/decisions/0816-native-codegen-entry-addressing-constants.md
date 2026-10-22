@@ -259,3 +259,9 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     `y < len - k` for the largest `k` per (list, `y`) (native.bce.10); the
     in-loop `y + k` additions lose their overflow check because the guard
     bounds `y`. nbody 49.3M to 38.0M instructions (-22.9%; C 28.3M).
+14. **An unchecked `mul` works in place.** `d = x * y` with `d` in `x`'s
+    register and no overflow check (proved away, or a constant) emitted a
+    copy to a scratch register, the `imul`, and a copy back. It is now one
+    `imul d, y` (or `imul d, d, k`); a checked `mul` still needs the stub's
+    recovery and is unchanged. spectralnorm 52.9M to 47.9M instructions
+    (-9.5%; C 36.6M).
