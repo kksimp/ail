@@ -1,0 +1,11 @@
+struct Tag
+    name str?
+
+fn named(t Tag, want str) bool
+    (t.name?.len() > 0 and t.name? == want else false)
+
+fn main()
+    print(named(Tag(name: "a"), "a"))
+    print(named(Tag(name: "b"), "a"))
+    print(named(Tag(name: none), "a"))
+    print(named(Tag(name: "x"), "x"))

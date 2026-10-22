@@ -35,7 +35,16 @@ fn main()
     show(root, "{base}/none.ail")
     show(root, "{base}//sub///c.ail")
     show(root, "{base}/*.t?t")
-    for d in ["{base}/sub/deep/d.ail", "{base}/sub/c.ail", "{base}/.hid/e.ail", "{base}/é/f.ail", "{base}/a.ail", "{base}/b.ail", "{base}/b.txt", "{base}/.dot.ail"]
+    for d in [
+        "{base}/sub/deep/d.ail",
+        "{base}/sub/c.ail",
+        "{base}/.hid/e.ail",
+        "{base}/é/f.ail",
+        "{base}/a.ail",
+        "{base}/b.ail",
+        "{base}/b.txt",
+        "{base}/.dot.ail",
+    ]
         fs.remove(d) else return
     for d in ["{base}/sub/deep", "{base}/sub", "{base}/.hid", "{base}/é", base]
         fs.remove(d) else return

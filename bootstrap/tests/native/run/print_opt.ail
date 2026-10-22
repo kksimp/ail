@@ -1,0 +1,30 @@
+fn f(n int) int?
+    if n > 0
+        return n
+    none
+
+fn g(n int) float?
+    if n > 0
+        return 1.5
+    none
+
+fn h(n int) bool?
+    if n > 0
+        return true
+    none
+
+fn s(n int) str?
+    if n > 0
+        return "hi"
+    none
+
+fn main()
+    print(f(5))
+    print(f(0))
+    print(g(1))
+    print(g(0))
+    print(h(1))
+    print(h(0))
+    print(s(1))
+    print(s(0))
+    print("x {f(2)} {g(0)} {h(1)} {s(1)}")
