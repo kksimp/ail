@@ -1,3 +1,2 @@
 bootstrap/tests/native/generics_out.ail:16:11: error[native.subset.1]: `Box.swap`: generic methods of generic types aren't in the native subset yet
 bootstrap/tests/native/generics_out.ail:19:8: error[native.subset.1]: `Tag.pair`: generic methods aren't in the native subset yet
-bootstrap/tests/native/generics_out.ail:22:9: error[native.subset.1]: parameter `x`: its type isn't in the native subset yet

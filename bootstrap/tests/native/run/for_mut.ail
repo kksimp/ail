@@ -1,0 +1,29 @@
+struct Cell
+    name str
+    n int
+    tags List[str]
+
+fn Cell.bump(mut self, by int)
+    self.n += by
+
+fn main()
+    mut cells := [
+        Cell(name: "a", n: 1, tags: []),
+        Cell(name: "b", n: 2, tags: ["x"]),
+        Cell(name: "c", n: 3, tags: []),
+    ]
+    for mut c in cells
+        if c.name == "b"
+            continue
+        c.n *= 10
+        c.tags.push("t{c.n}")
+    for mut c in cells
+        c.bump(5)
+        if c.n > 30
+            break
+    for c in cells
+        print("{c.name} {c.n} {c.tags}")
+    copy := cells
+    for mut c in cells
+        c.n = 0
+    print("{copy[0].n} {cells[0].n}")

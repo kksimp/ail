@@ -1,0 +1,42 @@
+# `impl` blocks (ADR 0615): methods of the implementing type, the trait's
+# default methods inherited unless overridden, `Self` as the type, and
+# bare names resolving to the receiver.
+trait Shape
+    fn area(self) int
+    fn name(self) str
+    fn twice(self) int
+        2 * self.area()
+    fn bigger(self, other Self) bool
+        area() > other.area()
+
+struct Circle
+    r int
+
+struct Rect
+    w int
+    h int
+
+impl Shape for Circle
+    fn area(self) int
+        3 * r * r
+    fn name(self) str
+        "circle"
+
+impl Shape for Rect
+    fn area(self) int
+        self.w * self.h
+    fn name(self) str
+        "rect"
+    fn twice(self) int
+        self.area() + self.area() + 1
+
+fn Rect.square(n int) Rect
+    Rect(w: n, h: n)
+
+fn main()
+    c := Circle(r: 2)
+    r := Rect.square(3)
+    print("{c.name()} {c.area()} {c.twice()}")
+    print("{r.name()} {r.area()} {r.twice()}")
+    print(c.bigger(Circle(r: 1)))
+    print(r.bigger(Rect(w: 5, h: 5)))

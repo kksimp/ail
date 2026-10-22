@@ -18,19 +18,19 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Char | Str | Bytes | List | Map | Set | Struct | Enum | Tuple => Ty.Opt(t)
+        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
     match t
-        Int | Float | Bool | Char => true
+        Int | Float | F32 | Bool | Char | Sized(_) => true
         _ => false
 
 ## The zero of a type: the value a failing function returns, and `none`.
 fn Lower.zero_of(mut self, t Ty) int
     match t
         Unit => -1
-        Float => fconst(0.0)
+        Float | F32 => fconst(0.0)
         _ => konst(0, t)
 
 fn written_name(t ast.TypeRef) str?
@@ -61,8 +61,8 @@ fn Lower.ok_type(mut self, t ast.TypeRef) Ty?
 fn Lower.some(mut self, v Val) Val
     t := opt_of(v.ty) else return v
     match v.ty
-        Int | Char => Val(id: call("rt.box", [v.id], t), ty: t)
-        Float => Val(id: call("rt.boxf", [v.id], t), ty: t)
+        Int | Char | Sized(_) => Val(id: call("rt.box", [v.id], t), ty: t)
+        Float | F32 => Val(id: call("rt.boxf", [v.id], t), ty: t)
         Bool => Val(id: call("rt.box_bool", [v.id], t), ty: t)
         Enum(n) =>
             # A fieldless enum is an `int` tag, and tag 0 is a value: box it.
@@ -75,8 +75,8 @@ fn Lower.some(mut self, v Val) Val
 fn Lower.unwrap(mut self, o Val) Val
     t := o.ty.opt_inner() else return o
     match t
-        Int | Char => Val(id: call("rt.unbox", [o.id], t), ty: t)
-        Float => Val(id: call("rt.unboxf", [o.id], t), ty: t)
+        Int | Char | Sized(_) => Val(id: call("rt.unbox", [o.id], t), ty: t)
+        Float | F32 => Val(id: call("rt.unboxf", [o.id], t), ty: t)
         Bool => Val(id: call("rt.unbox_bool", [o.id], t), ty: t)
         Enum(n) =>
             if is_flat(n)
@@ -128,6 +128,27 @@ fn opt_comparable(a Ty, b Ty) bool
     x := a.opt_inner() else a
     y := b.opt_inner() else b
     same_ty(x, y)
+
+## Printing a `T?`: `none`, or the value as a plain `T`.
+fn Lower.out_opt(mut self, v Val, pos ast.Pos) Val?
+    inner := v.ty.opt_inner() else return unsupported(pos, "printing a `{v.ty.name()}`")
+    if inner.is_unknown()
+        return unsupported(pos, "printing a `{v.ty.name()}`")
+    absent := new_block()
+    present := new_block()
+    join := new_block()
+    branch(op("eq", [v.id, konst(0, Ty.Int)], Ty.Bool), absent, [], present, [])
+    seal(absent)
+    cur = absent
+    call("rt.out_str", [str_value("none")], Ty.Unit)
+    jump(join, [])
+    seal(present)
+    cur = present
+    out(unwrap(v), pos)?
+    jump(join, [])
+    seal(join)
+    cur = join
+    Val(id: -1, ty: Ty.Unit)
 
 ## `a == b` (`negate` false) or `a != b` where one side or both are optionals:
 ## a `none` equals only a `none`, and two present values compare as plain ones.
@@ -721,19 +742,19 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
             fn_errs.get(key) else Ty.Unknown
         _ => Ty.Unknown
 
-## The text of a struct or enum value that defines a message (`to_str`, the
-## display text of an error type, err.msg.1), as a `str` value.
+## The text of a struct or enum value (its `to_str`, the display text of an
+## error type, err.msg.1, or the default form), as a `str` value.
 fn Lower.display_call(mut self, v Val) int?
     key := match v.ty
         Struct(k) => k
         Enum(k) => k
         Tuple => return tuple_text(v)
+        Any(t) => return any_text(t, v)
         List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
-    if not err_msgs.contains(key)
-        return none
+    # No `to_str` and no message: the default text of trait.auto.2.
     default_error_text(key, v)
 
 ## The text of an error type with no message: its default form,
@@ -754,15 +775,24 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, piece], Ty.Str)
         f := load(obj, k + skip, slots[k].ty)
         text := match slots[k].ty
-            Int => call("rt.fmt_int", [f], Ty.Str)
+            Int | Sized(_) => call("rt.fmt_int", [f], Ty.Str)
             Float => call("rt.fmt_float", [f], Ty.Str)
+            F32 => call("rt.fmt_f32", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
+            Struct(nk) => nested_text(nk, f)
             _ => -1
         if text < 0
             return none
         acc = call("rt.str_cat", [acc, text], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
+
+## A plain struct field's `Name(field: value, ...)`, else -1.
+fn Lower.nested_text(mut self, key str, obj int) int
+    slots := structs.get(key) else return -1
+    if err_msgs.contains(key) or sigs.contains("{key}.to_str")
+        return -1
+    fields_text("{key}(", slots, obj, 0) else -1
 
 ## The default text of an enum value: a chain of tests on the variant index.
 fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
