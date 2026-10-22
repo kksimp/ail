@@ -1,0 +1,1134 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The native TLS 1.3 client (ADR 0836, ADR 0852), a port of
+## bootstrap/src/net/tls/{record,client}.rs with its messages: the record
+## layer, the handshake with the certificate checks of tls_verify.ail, and the
+## post-handshake messages. One suite (TLS_CHACHA20_POLY1305_SHA256), X25519
+## only, no HelloRetryRequest, no resumption. A connection's state hangs off
+## its socket object (`NET_TLS`); net.ail reads and writes through
+## `tc_read` and `tc_write` when it is set. Errors are codes: 0 is good, a
+## negative `errno` is an I/O failure, and `TC_ERR - kind` (kind 0 protocol,
+## 1 certificate) has its message in the state.
+
+TS_RKEY := 0
+TS_RIV := 32
+TS_RSEC := 48
+TS_WKEY := 80
+TS_WIV := 112
+TS_WSEC := 128
+TS_RSEQ := 160
+TS_WSEQ := 168
+TS_RON := 176
+TS_WON := 184
+TS_PLAIN := 192
+TS_PLEN := 200
+TS_PPOS := 208
+TS_CLOSED := 216
+TS_MSG := 224
+TS_HS := 232
+TS_HSN := 240
+TS_REC := 248
+TS_TYPE := 256
+TS_TR := 264
+TS_TRN := 272
+TS_PBUF := 280
+TS_MLEN := 288
+TS_ANCHOR := 296
+TS_BYTES := 304
+
+# Global slot 42: the cache of trusted roots (tc_cached_roots).
+TLS_ROOTS := 42
+
+TC_ERR := -1000000
+TC_REC_MAX := 16640
+TC_HS_MAX := 140000
+TC_TR_MAX := 262144
+
+fn tc_w8(b int, o int, v int) int
+    store8(b + o, v.bit_and(255))
+    o + 1
+
+fn tc_w16(b int, o int, v int) int
+    store8(b + o, v.shr(8).bit_and(255))
+    store8(b + o + 1, v.bit_and(255))
+    o + 2
+
+fn tc_r16(p int) int
+    load8(p) * 256 + load8(p + 1)
+
+fn tc_r24(p int) int
+    load8(p) * 65536 + load8(p + 1) * 256 + load8(p + 2)
+
+fn tc_hex(v int, digits int) str
+    sb_reset()
+    sb_byte(48)
+    sb_byte(120)
+    mut sh := 4 * (digits - 1)
+    while sh >= 0
+        d := v.shr(sh).bit_and(15)
+        sb_byte(if d < 10 then 48 + d else 87 + d)
+        sh -= 4
+    sb_str()
+
+## Fail with `msg`: kind 0 is a protocol failure, 1 a certificate failure.
+fn tc_err(st int, kind int, msg str) int
+    store64(st + TS_MSG, str_addr(msg))
+    TC_ERR - kind
+
+fn tc_bad(st int, what str) int
+    tc_err(st, 0, "the server sent a malformed {what} (decode_error)")
+
+fn tc_alert_name(code int) str
+    if code == 0
+        return "close_notify"
+    if code == 10
+        return "unexpected_message"
+    if code == 20
+        return "bad_record_mac"
+    if code == 22
+        return "record_overflow"
+    if code == 40
+        return "handshake_failure"
+    if code == 42
+        return "bad_certificate"
+    if code == 43
+        return "unsupported_certificate"
+    if code == 44
+        return "certificate_revoked"
+    if code == 45
+        return "certificate_expired"
+    if code == 46
+        return "certificate_unknown"
+    if code == 47
+        return "illegal_parameter"
+    if code == 48
+        return "unknown_ca"
+    if code == 49
+        return "access_denied"
+    if code == 50
+        return "decode_error"
+    if code == 51
+        return "decrypt_error"
+    if code == 70
+        return "protocol_version"
+    if code == 71
+        return "insufficient_security"
+    if code == 80
+        return "internal_error"
+    if code == 86
+        return "inappropriate_fallback"
+    if code == 90
+        return "user_canceled"
+    if code == 109
+        return "missing_extension"
+    if code == 110
+        return "unsupported_extension"
+    if code == 112
+        return "unrecognized_name"
+    if code == 113
+        return "bad_certificate_status_response"
+    if code == 115
+        return "unknown_psk_identity"
+    if code == 116
+        return "certificate_required"
+    if code == 120
+        return "no_application_protocol"
+    "unknown alert"
+
+## The error for an alert record body `[level, code]` during the handshake.
+fn tc_alert(st int, p int, n int) int
+    if n != 2
+        return tc_err(st, 0, "the server sent a malformed alert")
+    code := load8(p + 1)
+    name := tc_alert_name(code)
+    if code == 0
+        return tc_err(st, 0, "the server closed the connection during the handshake")
+    if code == 70
+        return tc_err(
+            st,
+            0,
+            "the server doesn't support TLS 1.3 (alert protocol_version); AIL supports TLS 1.3 only (ADR 0360)",
+        )
+    if code == 40
+        return tc_err(
+            st,
+            0,
+            "the server refused the handshake (alert handshake_failure); it may need a key exchange group or cipher suite AIL's TLS lacks",
+        )
+    if (code >= 42 and code <= 46) or code == 48
+        return tc_err(st, 1, "the server rejected the connection: {name}")
+    tc_err(st, 0, "the server sent the alert {name} ({code})")
+
+# ---- the wire ----
+
+## Read exactly `n` bytes: 0, 1 for the end of the stream before the first
+## byte, 2 for the end of it inside, or a negative `errno` (-110 for a timeout).
+fn tc_raw_read(o int, p int, n int) int
+    fd := load64(o + NET_FD)
+    mut got := 0
+    while got < n
+        r := os_read(fd, p + got, n - got)
+        if r > 0
+            got += r
+            continue
+        if r == 0
+            return if got == 0 then 1 else 2
+        if r == -4
+            continue
+        if r != -11 and r != -35
+            return r
+        w := net_wait(fd, 1, load64(o + NET_TIMEOUT))
+        if w == 0
+            return -110
+        if w < 0
+            return w
+    0
+
+fn tc_raw_write(o int, p int, n int) int
+    fd := load64(o + NET_FD)
+    mut done := 0
+    while done < n
+        r := net_sys_send(fd, p + done, n - done)
+        if r > 0
+            done += r
+            continue
+        if r == -4
+            continue
+        if r != -11 and r != -35 and r != 0
+            return r
+        w := net_wait(fd, 4, load64(o + NET_TIMEOUT))
+        if w == 0
+            return -110
+        if w < 0
+            return w
+    0
+
+# ---- keys and records ----
+
+## Set the keys of one direction from the traffic secret at `secret`.
+fn tc_set_keys(st int, read bool, secret int)
+    sec := st + (if read then TS_RSEC else TS_WSEC)
+    key := st + (if read then TS_RKEY else TS_WKEY)
+    iv := st + (if read then TS_RIV else TS_WIV)
+    if sec != secret
+        copy_bytes(sec, secret, 32)
+    kdf_expand_label(sec, "key", 0, 0, 32, key)
+    kdf_expand_label(sec, "iv", 0, 0, 12, iv)
+    store64(st + (if read then TS_RSEQ else TS_WSEQ), 0)
+    store64(st + (if read then TS_RON else TS_WON), 1)
+
+## The 12-byte nonce for sequence number `seq`: the IV with `seq` in its last 8 bytes.
+fn tc_nonce(iv int, seq int, out int)
+    for i in 0..12
+        store8(out + i, load8(iv + i))
+    for i in 0..8
+        at := out + 4 + i
+        store8(at, load8(at).bit_xor(seq.shr(8 * (7 - i)).bit_and(255)))
+
+## Read one record: its type in `TS_TYPE`, its plaintext at `TS_PLAIN` for
+## `TS_PLEN` bytes. 0, 1 (the stream ended between records), or an error.
+fn tc_read_record(o int) int
+    st := load64(o + NET_TLS)
+    rec := load64(st + TS_REC)
+    hdr := alloc_raw(8, KIND_BYTES)
+    r := tc_raw_read(o, hdr, 5)
+    if r == 1
+        return 1
+    if r == 2
+        return tc_err(st, 0, "the server closed the connection during the TLS exchange")
+    if r < 0
+        return r
+    ty := load8(hdr)
+    len := tc_r16(hdr + 3)
+    if load8(hdr + 1) != 3
+        return tc_err(
+            st,
+            0,
+            "the server didn't answer with TLS (its first bytes were {tc_hex2(load8(hdr))} {tc_hex2(load8(hdr + 1))} {tc_hex2(load8(hdr + 2))}); is this an `http` port?",
+        )
+    protected := load64(st + TS_RON) != 0
+    limit := if protected and ty == 23 then TC_REC_MAX else 16384
+    if len > limit
+        return tc_err(st, 0, "the server sent a {len}-byte record (record_overflow)")
+    if len > 0
+        r2 := tc_raw_read(o, rec, len)
+        if r2 == 1 or r2 == 2
+            return tc_err(st, 0, "the server closed the connection during the TLS exchange")
+        if r2 < 0
+            return r2
+    store64(st + TS_TYPE, ty)
+    store64(st + TS_PPOS, 0)
+    if not protected
+        if ty == 23
+            return tc_err(st, 0, "the server sent encrypted data before the keys were agreed")
+        store64(st + TS_PLAIN, rec)
+        store64(st + TS_PLEN, len)
+        return 0
+    if ty == 20
+        store64(st + TS_PLAIN, rec)
+        store64(st + TS_PLEN, len)
+        return 0
+    if ty != 23
+        return tc_err(
+            st,
+            0,
+            "the server sent an unprotected record of type {ty} after the keys were agreed (unexpected_message)",
+        )
+    nonce := alloc_raw(16, KIND_BYTES)
+    seq := load64(st + TS_RSEQ)
+    tc_nonce(st + TS_RIV, seq, nonce)
+    pbuf := load64(st + TS_PBUF)
+    if chacha_open(st + TS_RKEY, nonce, hdr, 5, rec, len, pbuf) != 0
+        return tc_err(st, 0, "a record from the server failed authentication (bad_record_mac)")
+    store64(st + TS_RSEQ, seq + 1)
+    mut end := len - 16
+    while end > 0 and load8(pbuf + end - 1) == 0
+        end -= 1
+    if end == 0
+        return tc_err(st, 0, "the server sent a record with no content type (unexpected_message)")
+    if end - 1 > 16384
+        return tc_err(st, 0, "the server sent an oversized record (record_overflow)")
+    store64(st + TS_TYPE, load8(pbuf + end - 1))
+    store64(st + TS_PLAIN, pbuf)
+    store64(st + TS_PLEN, end - 1)
+    0
+
+fn tc_hex2(v int) str
+    s := tc_hex(v, 2)
+    s.slice(2, 4)
+
+## Write `n` bytes at `p` as records of type `ty`.
+fn tc_write_record(o int, ty int, p int, n int) int
+    st := load64(o + NET_TLS)
+    mut done := 0
+    mut first := true
+    while first or done < n
+        first = false
+        k := if n - done > 16384 then 16384 else n - done
+        out := alloc_raw(k + 64, KIND_BYTES)
+        if load64(st + TS_WON) == 0
+            version := if ty == 22 and k > 0 and load8(p + done) == 1 then 1 else 3
+            store8(out, ty)
+            store8(out + 1, 3)
+            store8(out + 2, version)
+            tc_w16(out, 3, k)
+            copy_bytes(out + 5, p + done, k)
+            r := tc_raw_write(o, out, k + 5)
+            if r < 0
+                return r
+        else
+            inner := alloc_raw(k + 8, KIND_BYTES)
+            copy_bytes(inner, p + done, k)
+            store8(inner + k, ty)
+            store8(out, 23)
+            store8(out + 1, 3)
+            store8(out + 2, 3)
+            tc_w16(out, 3, k + 17)
+            nonce := alloc_raw(16, KIND_BYTES)
+            seq := load64(st + TS_WSEQ)
+            tc_nonce(st + TS_WIV, seq, nonce)
+            chacha_seal(st + TS_WKEY, nonce, out, 5, inner, k + 1, out + 5)
+            store64(st + TS_WSEQ, seq + 1)
+            r := tc_raw_write(o, out, k + 22)
+            if r < 0
+                return r
+        done += k
+    0
+
+# ---- handshake messages ----
+
+## Make the next handshake message available at `TS_HS`, `TS_MLEN` bytes with
+## its header. `ccs` allows unprotected change_cipher_spec records between.
+fn tc_msg(o int, ccs bool) int
+    st := load64(o + NET_TLS)
+    hs := load64(st + TS_HS)
+    while true
+        n := load64(st + TS_HSN)
+        if n >= 4
+            len := tc_r24(hs + 1)
+            if len > 131072
+                return tc_err(st, 0, "the server sent a {len}-byte handshake message")
+            if n >= 4 + len
+                store64(st + TS_MLEN, 4 + len)
+                return 0
+        r := tc_read_record(o)
+        if r == 1
+            return tc_err(st, 0, "the server closed the connection during the TLS exchange")
+        if r != 0
+            return r
+        ty := load64(st + TS_TYPE)
+        pl := load64(st + TS_PLEN)
+        pp := load64(st + TS_PLAIN)
+        if ty == 22 and pl > 0
+            if n + pl > TC_HS_MAX
+                return tc_err(st, 0, "the server sent too much handshake data")
+            copy_bytes(hs + n, pp, pl)
+            store64(st + TS_HSN, n + pl)
+        elif ty == 20 and ccs and pl == 1 and load8(pp) == 1
+            continue
+        elif ty == 21
+            return tc_alert(st, pp, pl)
+        else
+            return tc_err(
+                st,
+                0,
+                "the server sent a record of type {ty} in the middle of the handshake (unexpected_message)",
+            )
+    0
+
+fn tc_drop(st int)
+    hs := load64(st + TS_HS)
+    m := load64(st + TS_MLEN)
+    n := load64(st + TS_HSN)
+    copy_bytes(hs, hs + m, n - m)
+    store64(st + TS_HSN, n - m)
+    store64(st + TS_MLEN, 0)
+
+fn tc_tr_add(st int, p int, n int) int
+    t := load64(st + TS_TRN)
+    if t + n > TC_TR_MAX
+        return tc_err(st, 0, "the server's handshake is too long")
+    copy_bytes(load64(st + TS_TR) + t, p, n)
+    store64(st + TS_TRN, t + n)
+    0
+
+fn tc_tr_hash(st int, out int)
+    hash_sha256_raw(load64(st + TS_TR), load64(st + TS_TRN), out)
+
+## `expect`: the message at `TS_HS` must have type `ty`.
+fn tc_expect(st int, ty int, what str) int
+    got := load8(load64(st + TS_HS))
+    if got == ty
+        return 0
+    tc_err(
+        st,
+        0,
+        "the server sent handshake message {got} where {what} belongs (unexpected_message)",
+    )
+
+fn tc_finished(base int, th int, out int)
+    fk := alloc_raw(32, KIND_BYTES)
+    kdf_expand_label(base, "finished", 0, 0, 32, fk)
+    kdf_hmac(fk, 32, th, 32, out)
+
+fn tc_random(p int, n int) int
+    path := os_cstr(OS_PATH_A, "/dev/urandom")
+    fd := os_open(path, 0, 0)
+    if fd < 0
+        return fd
+    mut got := 0
+    while got < n
+        r := os_read(fd, p + got, n - got)
+        if r > 0
+            got += r
+        elif r != -4
+            os_close(fd)
+            return if r == 0 then -5 else r
+    os_close(fd)
+    0
+
+# ---- roots ----
+
+fn tc_certs(text str, mut out List[List[int]], anchor int) int
+    ders := der_pem(text)
+    for d in ders
+        c := x_parse(d[0], d[1])
+        if c[X_ERR] == 0 and out.len() < 1000
+            k := out.len()
+            store64(anchor + 8 + 16 * k, d[0])
+            store64(anchor + 16 + 16 * k, d[1])
+            store64(anchor, k + 1)
+            out.push(c)
+    out.len()
+
+fn tc_load_file(path str, mut out List[List[int]], anchor int) bool
+    t := os_fs_read_text(path)
+    if not os_ok()
+        return false
+    tc_certs(t, mut out, anchor) > 0
+
+## The trusted roots: `SSL_CERT_FILE`, else the platform's bundle. The
+## certificates' bytes are kept alive from `anchor` (room for 1024 words).
+fn tc_roots(st int, anchor int) List[List[int]]
+    mut out := List[List[int]]()
+    custom := os_env_get("SSL_CERT_FILE")
+    if load64(str_addr(custom)) > 0
+        if not tc_load_file(custom, mut out, anchor)
+            tc_err(st, 1, "SSL_CERT_FILE names `{custom}`, which holds no certificates")
+        return out
+    paths := if target() == 2 then ["/etc/ssl/cert.pem"] else [
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/ca-bundle.pem",
+        "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+        "/etc/ssl/cert.pem",
+        "/usr/local/share/certs/ca-root-nss.crt",
+    ]
+    for p in paths
+        if tc_load_file(p, mut out, anchor)
+            return out
+    tc_err(
+        st,
+        1,
+        "no trusted root certificates found; set SSL_CERT_FILE to a PEM bundle of root certificates",
+    )
+    out
+
+## The roots, loaded on the first handshake and kept in global slot 42 as the
+## DER bytes of each certificate: `[count, address, length, ...]` in a
+## scanned object, which also keeps the bytes alive. A failed load is not cached.
+fn tc_cached_roots(st int) List[List[int]]
+    mut cache := load64(global(TLS_ROOTS))
+    mut out := List[List[int]]()
+    if cache == 0
+        cache = obj_new(8 + 16 * 1000, 4)
+        for i in 0..1 + 2 * 1000
+            store64(cache + 8 * i, 0)
+        loaded := tc_roots(st, cache)
+        if load64(st + TS_MSG) != 0
+            return loaded
+        store64(global(TLS_ROOTS), cache)
+        return loaded
+    for i in 0..load64(cache)
+        out.push(x_parse(load64(cache + 8 + 16 * i), load64(cache + 16 + 16 * i)))
+    out
+
+# ---- the handshake ----
+
+fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien int) int
+    mut b := 4
+    b = tc_w16(ch, b, 771)
+    copy_bytes(ch + b, rnd, 32)
+    b += 32
+    b = tc_w8(ch, b, 32)
+    copy_bytes(ch + b, rnd + 32, 32)
+    b += 32
+    b = tc_w16(ch, b, 2)
+    b = tc_w16(ch, b, 4867)
+    b = tc_w8(ch, b, 1)
+    b = tc_w8(ch, b, 0)
+    ext := b
+    b += 2
+    hn := load64(str_addr(host))
+    if net_ipv4(host) < 0 and not host.contains(":")
+        b = tc_w16(ch, b, 0)
+        b = tc_w16(ch, b, hn + 5)
+        b = tc_w16(ch, b, hn + 3)
+        b = tc_w8(ch, b, 0)
+        b = tc_w16(ch, b, hn)
+        copy_bytes(ch + b, str_addr(host) + 16, hn)
+        b += hn
+    b = tc_w16(ch, b, 43)
+    b = tc_w16(ch, b, 3)
+    b = tc_w8(ch, b, 2)
+    b = tc_w16(ch, b, 772)
+    b = tc_w16(ch, b, 10)
+    b = tc_w16(ch, b, 4)
+    b = tc_w16(ch, b, 2)
+    b = tc_w16(ch, b, 29)
+    b = tc_w16(ch, b, 13)
+    b = tc_w16(ch, b, 18)
+    b = tc_w16(ch, b, 16)
+    for s in [1027, 1283, 2052, 2053, 2054, 1025, 1281, 1537]
+        b = tc_w16(ch, b, s)
+    b = tc_w16(ch, b, 51)
+    b = tc_w16(ch, b, 38)
+    b = tc_w16(ch, b, 36)
+    b = tc_w16(ch, b, 29)
+    b = tc_w16(ch, b, 32)
+    copy_bytes(ch + b, pubkey, 32)
+    b += 32
+    if cookien > 0
+        b = tc_w16(ch, b, 44)
+        b = tc_w16(ch, b, cookien + 2)
+        b = tc_w16(ch, b, cookien)
+        copy_bytes(ch + b, cookie, cookien)
+        b += cookien
+    tc_w16(ch, ext, b - ext - 2)
+    store8(ch, 1)
+    store8(ch + 1, 0)
+    tc_w16(ch, 2, b - 4)
+    b
+
+fn tc_retry_random(p int) bool
+    want := "cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c"
+    for i in 0..32
+        v := tc_nib(load8(str_addr(want) + 16 + 2 * i)) * 16
+            + tc_nib(load8(str_addr(want) + 17 + 2 * i))
+        if load8(p + i) != v
+            return false
+    true
+
+fn tc_nib(c int) int
+    if c >= 97 then c - 87 else c - 48
+
+## The ServerHello at `p` (`n` bytes): 0 and its 32-byte key share copied to
+## `share`, or an error.
+## A HelloRetryRequest returns 1 with its cookie (address, length) and asked
+## group stored in the three words at `ck`.
+fn tc_server_hello(st int, p int, n int, sid int, share int, ck int) int
+    what := "ServerHello"
+    if n < 38
+        return tc_bad(st, what)
+    legacy := tc_r16(p)
+    retry := tc_retry_random(p + 2)
+    sl := load8(p + 34)
+    mut off := 35 + sl
+    if off + 5 > n
+        return tc_bad(st, what)
+    echoed := p + 35
+    suite := tc_r16(p + off)
+    comp := load8(p + off + 2)
+    off += 3
+    mut version := -1
+    mut have_share := false
+    mut seen_v := false
+    mut seen_k := false
+    if off < n
+        if off + 2 > n
+            return tc_bad(st, what)
+        el := tc_r16(p + off)
+        off += 2
+        if off + el != n
+            return tc_bad(st, "ServerHello extensions")
+        while off < n
+            if off + 4 > n
+                return tc_bad(st, "ServerHello extensions")
+            ty := tc_r16(p + off)
+            dl := tc_r16(p + off + 2)
+            off += 4
+            if off + dl > n
+                return tc_bad(st, "ServerHello extensions")
+            if (ty == 43 and seen_v) or (ty == 51 and seen_k)
+                return tc_err(st, 0, "the server repeated extension {ty} (illegal_parameter)")
+            if ty == 43
+                seen_v = true
+                if dl != 2
+                    return tc_bad(st, "ServerHello extension")
+                version = tc_r16(p + off)
+            elif ty == 44 and retry
+                if dl < 2 or tc_r16(p + off) + 2 != dl
+                    return tc_bad(st, "ServerHello extension")
+                cn := dl - 2
+                cb := alloc_raw(cn + 8, KIND_BYTES)
+                copy_bytes(cb, p + off + 2, cn)
+                store64(ck, cb)
+                store64(ck + 8, cn)
+            elif ty == 51 and retry
+                seen_k = true
+                if dl != 2
+                    return tc_bad(st, "ServerHello extension")
+                store64(ck + 16, tc_r16(p + off))
+            elif ty == 51
+                seen_k = true
+                if dl < 4
+                    return tc_bad(st, "ServerHello extension")
+                group := tc_r16(p + off)
+                if group != 29
+                    return tc_err(
+                        st,
+                        0,
+                        "the server chose key exchange group {tc_hex(group, 4)}, which wasn't offered (illegal_parameter)",
+                    )
+                kl := tc_r16(p + off + 2)
+                if kl + 4 != dl
+                    return tc_bad(st, "ServerHello extension")
+                if kl != 32
+                    return tc_err(
+                        st,
+                        0,
+                        "the server's X25519 key share has the wrong length (illegal_parameter)",
+                    )
+                copy_bytes(share, p + off + 4, 32)
+                have_share = true
+            else
+                return tc_err(
+                    st,
+                    0,
+                    "the server sent extension {ty} in its ServerHello, which wasn't offered (unsupported_extension)",
+                )
+            off += dl
+    if version != 772
+        if version == -1 and legacy <= 771
+            return tc_err(
+                st,
+                0,
+                "the server only speaks TLS 1.2 or older; AIL supports TLS 1.3 only (ADR 0360)",
+            )
+        return tc_err(
+            st,
+            0,
+            "the server chose TLS version {tc_hex(if version == -1 then legacy else version, 4)}, not 1.3 (protocol_version)",
+        )
+    mut same := sl == 32
+    if same
+        for i in 0..32
+            if load8(echoed + i) != load8(sid + i)
+                same = false
+    if not same
+        return tc_err(st, 0, "the server didn't echo the session id (illegal_parameter)")
+    if comp != 0
+        return tc_err(st, 0, "the server chose compression (illegal_parameter)")
+    if suite != 4867
+        return tc_err(
+            st,
+            0,
+            "the server chose cipher suite {tc_hex(suite, 4)}, which wasn't offered (illegal_parameter)",
+        )
+    if retry
+        return 1
+    if not have_share
+        return tc_err(st, 0, "the server sent no key share (missing_extension)")
+    0
+
+## The scheme's certificate-signature code (XA_*), or 0 for one not offered.
+fn tc_scheme_alg(scheme int) int
+    if scheme == 1027
+        return 7
+    if scheme == 1283
+        return 8
+    if scheme == 2052
+        return 4
+    if scheme == 2053
+        return 5
+    if scheme == 2054
+        return 6
+    0
+
+## Handshake over the connected socket object `o` for `host`: 0 or an error.
+fn tc_connect(o int, host str) int
+    st := obj_new(TS_BYTES, 4)
+    for i in 0..TS_BYTES / 8
+        store64(st + 8 * i, 0)
+    store64(o + NET_TLS, st)
+    store64(st + TS_REC, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
+    store64(st + TS_PBUF, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
+    store64(st + TS_HS, alloc_raw(TC_HS_MAX + 16, KIND_BYTES))
+    store64(st + TS_TR, alloc_raw(TC_TR_MAX + 16, KIND_BYTES))
+    anchor := obj_new(8 * 4096, 4)
+    for i in 0..4096
+        store64(anchor + 8 * i, 0)
+    store64(st + TS_ANCHOR, anchor)
+    rnd := alloc_raw(96, KIND_BYTES)
+    rr := tc_random(rnd, 96)
+    if rr < 0
+        return tc_err(st, 0, "no secure random numbers")
+    pubkey := alloc_raw(32, KIND_BYTES)
+    x25519_base(pubkey, rnd + 64)
+    ch := alloc_raw(900, KIND_BYTES)
+    chn := tc_client_hello(ch, host, rnd, pubkey, 0, 0)
+    w := tc_write_record(o, 22, ch, chn)
+    if w < 0
+        return w
+    mut e := tc_tr_add(st, ch, chn)
+    if e != 0
+        return e
+    hs := load64(st + TS_HS)
+    e = tc_msg(o, false)
+    if e != 0
+        return e
+    e = tc_expect(st, 2, "ServerHello")
+    if e != 0
+        return e
+    peer := alloc_raw(32, KIND_BYTES)
+    ck := alloc_raw(32, KIND_BYTES)
+    for i in 0..4
+        store64(ck + 8 * i, 0)
+    e = tc_server_hello(st, hs + 4, load64(st + TS_MLEN) - 4, rnd + 32, peer, ck)
+    if e < 0
+        return e
+    if e == 1
+        # HelloRetryRequest (RFC 8446 section 4.1.4): the only thing we can
+        # answer is a cookie; the transcript restarts from a message_hash.
+        asked := load64(ck + 16)
+        if asked == 29
+            return tc_err(
+                st,
+                0,
+                "the server asked again for X25519, which was already offered (illegal_parameter)",
+            )
+        if asked != 0
+            return tc_err(
+                st,
+                0,
+                "the server requires key exchange group {tc_hex(asked, 4)}; AIL's TLS supports only X25519",
+            )
+        if load64(ck + 8) == 0
+            return tc_err(
+                st,
+                0,
+                "the server's HelloRetryRequest asked for nothing (illegal_parameter)",
+            )
+        th1 := alloc_raw(40, KIND_BYTES)
+        tc_tr_hash(st, th1 + 4)
+        store8(th1, 254)
+        store8(th1 + 1, 0)
+        store8(th1 + 2, 0)
+        store8(th1 + 3, 32)
+        store64(st + TS_TRN, 0)
+        e = tc_tr_add(st, th1, 36)
+        if e != 0
+            return e
+        e = tc_tr_add(st, hs, load64(st + TS_MLEN))
+        if e != 0
+            return e
+        tc_drop(st)
+        ch2 := alloc_raw(900 + load64(ck + 8), KIND_BYTES)
+        ch2n := tc_client_hello(ch2, host, rnd, pubkey, load64(ck), load64(ck + 8))
+        w = tc_write_record(o, 22, ch2, ch2n)
+        if w < 0
+            return w
+        e = tc_tr_add(st, ch2, ch2n)
+        if e != 0
+            return e
+        e = tc_msg(o, true)
+        if e != 0
+            return e
+        e = tc_expect(st, 2, "ServerHello")
+        if e != 0
+            return e
+        e = tc_server_hello(st, hs + 4, load64(st + TS_MLEN) - 4, rnd + 32, peer, ck)
+        if e < 0
+            return e
+        if e == 1
+            return tc_err(st, 0, "the server sent a second HelloRetryRequest (unexpected_message)")
+    e = tc_tr_add(st, hs, load64(st + TS_MLEN))
+    if e != 0
+        return e
+    tc_drop(st)
+    shared := alloc_raw(32, KIND_BYTES)
+    x25519_raw(shared, rnd + 64, peer)
+    mut zero := true
+    for i in 0..32
+        if load8(shared + i) != 0
+            zero = false
+    if zero
+        return tc_err(st, 0, "the server's X25519 key share is invalid (illegal_parameter)")
+    if load64(st + TS_HSN) != 0
+        return tc_err(
+            st,
+            0,
+            "the server's handshake message spanned a key change (unexpected_message)",
+        )
+    # The key schedule (RFC 8446 section 7.1).
+    sec := alloc_raw(256, KIND_BYTES)
+    zeros := sec + 224
+    for i in 0..4
+        store64(zeros + 8 * i, 0)
+    eh := sec + 192
+    hash_sha256_raw(zeros, 0, eh)
+    early := sec
+    kdf_extract(zeros, 0, zeros, 32, early)
+    derived := sec + 32
+    kdf_derive_secret(early, "derived", eh, derived)
+    hsec := sec + 64
+    kdf_extract(derived, 32, shared, 32, hsec)
+    th := alloc_raw(32, KIND_BYTES)
+    tc_tr_hash(st, th)
+    c_hs := sec + 96
+    s_hs := sec + 128
+    kdf_derive_secret(hsec, "c hs traffic", th, c_hs)
+    kdf_derive_secret(hsec, "s hs traffic", th, s_hs)
+    tc_set_keys(st, true, s_hs)
+
+    e = tc_msg(o, true)
+    if e != 0
+        return e
+    e = tc_expect(st, 8, "EncryptedExtensions")
+    if e != 0
+        return e
+    m := load64(st + TS_MLEN)
+    if m < 6 or tc_r16(hs + 4) + 6 != m
+        return tc_bad(st, "EncryptedExtensions")
+    e = tc_tr_add(st, hs, m)
+    if e != 0
+        return e
+    tc_drop(st)
+
+    e = tc_msg(o, true)
+    if e != 0
+        return e
+    mut ctxn := -1
+    ctx := alloc_raw(264, KIND_BYTES)
+    if load8(hs) == 13
+        m = load64(st + TS_MLEN)
+        ctxn = load8(hs + 4)
+        if m < 5 or 5 + ctxn > m
+            return tc_bad(st, "CertificateRequest")
+        copy_bytes(ctx, hs + 5, ctxn)
+        e = tc_tr_add(st, hs, m)
+        if e != 0
+            return e
+        tc_drop(st)
+        e = tc_msg(o, true)
+        if e != 0
+            return e
+    e = tc_expect(st, 11, "Certificate")
+    if e != 0
+        return e
+    m = load64(st + TS_MLEN)
+    # Certificate: context, then a list of (cert, extensions).
+    if m < 8
+        return tc_bad(st, "Certificate")
+    cl := load8(hs + 4)
+    if cl != 0
+        return tc_err(st, 0, "the server's Certificate has a request context (illegal_parameter)")
+    if m < 8 or tc_r24(hs + 5) + 8 != m
+        return tc_bad(st, "Certificate")
+    copy := alloc_raw(m + 8, KIND_BYTES)
+    copy_bytes(copy, hs, m)
+    store64(anchor + 8 * 4095, copy)
+    mut chain := List[List[int]]()
+    mut off := 8
+    while off < m
+        if off + 3 > m
+            return tc_bad(st, "Certificate")
+        dn := tc_r24(copy + off)
+        off += 3
+        if off + dn + 2 > m
+            return tc_bad(st, "Certificate")
+        if dn == 0
+            return tc_err(st, 0, "the server sent an empty certificate (decode_error)")
+        xl := tc_r16(copy + off + dn)
+        chain.push([copy + off, dn])
+        off += dn + 2 + xl
+        if off > m
+            return tc_bad(st, "Certificate")
+    if chain.len() == 0
+        return tc_err(st, 1, "the server sent no certificate")
+    e = tc_tr_add(st, hs, m)
+    if e != 0
+        return e
+    tc_drop(st)
+
+    e = tc_msg(o, true)
+    if e != 0
+        return e
+    e = tc_expect(st, 15, "CertificateVerify")
+    if e != 0
+        return e
+    m = load64(st + TS_MLEN)
+    if m < 8
+        return tc_bad(st, "CertificateVerify")
+    scheme := tc_r16(hs + 4)
+    sl := tc_r16(hs + 6)
+    if sl + 8 != m
+        return tc_bad(st, "CertificateVerify")
+    sig := alloc_raw(sl + 8, KIND_BYTES)
+    copy_bytes(sig, hs + 8, sl)
+    alg := tc_scheme_alg(scheme)
+    if alg == 0
+        return tc_err(
+            st,
+            0,
+            "the server signed with scheme {tc_hex(scheme, 4)}, which wasn't offered (illegal_parameter)",
+        )
+    signed := alloc_raw(160, KIND_BYTES)
+    for i in 0..64
+        store8(signed + i, 32)
+    copy_bytes(signed + 64, str_addr("TLS 1.3, server CertificateVerify") + 16, 33)
+    store8(signed + 97, 0)
+    tc_tr_hash(st, signed + 98)
+    roots := tc_cached_roots(st)
+    if load64(st + TS_MSG) != 0
+        return TC_ERR - 1
+    verdict := tv_chain(chain, roots, host, time_now_ms() / 1000)
+    if verdict != ""
+        return tc_err(st, 1, verdict)
+    leaf := x_parse(chain[0][0], chain[0][1])
+    if alg >= 7
+        want := if alg == 7 then 0 else 1
+        if leaf[X_KT] != 2 or leaf[X_CURVE] != want
+            return tc_err(
+                st,
+                1,
+                "the server signed with scheme {tc_hex(scheme, 4)}, which doesn't match its certificate's key",
+            )
+    if not x_verify(leaf, alg, signed, 130, sig, sl)
+        return tc_err(
+            st,
+            1,
+            "the server's handshake signature doesn't match its certificate (decrypt_error)",
+        )
+    e = tc_tr_add(st, hs, m)
+    if e != 0
+        return e
+    tc_drop(st)
+
+    e = tc_msg(o, true)
+    if e != 0
+        return e
+    e = tc_expect(st, 20, "Finished")
+    if e != 0
+        return e
+    m = load64(st + TS_MLEN)
+    tc_tr_hash(st, th)
+    want := alloc_raw(32, KIND_BYTES)
+    tc_finished(s_hs, th, want)
+    if m != 36 or not tls_ct_eq(hs + 4, want, 32)
+        return tc_err(st, 0, "the server's Finished didn't verify (decrypt_error)")
+    e = tc_tr_add(st, hs, m)
+    if e != 0
+        return e
+    if load64(st + TS_HSN) != m
+        return tc_err(
+            st,
+            0,
+            "the server's handshake message spanned a key change (unexpected_message)",
+        )
+    tc_drop(st)
+    tc_tr_hash(st, th)
+    derived2 := sec + 160
+    kdf_derive_secret(hsec, "derived", eh, derived2)
+    master := alloc_raw(32, KIND_BYTES)
+    kdf_extract(derived2, 32, zeros, 32, master)
+    c_ap := alloc_raw(32, KIND_BYTES)
+    s_ap := alloc_raw(32, KIND_BYTES)
+    kdf_derive_secret(master, "c ap traffic", th, c_ap)
+    kdf_derive_secret(master, "s ap traffic", th, s_ap)
+
+    # Our flight: change_cipher_spec for middleboxes, then Finished.
+    ccs := alloc_raw(8, KIND_BYTES)
+    store8(ccs, 20)
+    store8(ccs + 1, 3)
+    store8(ccs + 2, 3)
+    store8(ccs + 3, 0)
+    store8(ccs + 4, 1)
+    store8(ccs + 5, 1)
+    w = tc_raw_write(o, ccs, 6)
+    if w < 0
+        return w
+    tc_set_keys(st, false, c_hs)
+    if ctxn >= 0
+        cm := alloc_raw(ctxn + 16, KIND_BYTES)
+        store8(cm, 11)
+        tc_w16(cm, 1, 0)
+        store8(cm + 3, ctxn + 4)
+        store8(cm + 4, ctxn)
+        copy_bytes(cm + 5, ctx, ctxn)
+        store8(cm + 5 + ctxn, 0)
+        store8(cm + 6 + ctxn, 0)
+        store8(cm + 7 + ctxn, 0)
+        w = tc_write_record(o, 22, cm, ctxn + 8)
+        if w < 0
+            return w
+        e = tc_tr_add(st, cm, ctxn + 8)
+        if e != 0
+            return e
+    tc_tr_hash(st, th)
+    fin := alloc_raw(48, KIND_BYTES)
+    store8(fin, 20)
+    tc_w16(fin, 1, 0)
+    store8(fin + 3, 32)
+    tc_finished(c_hs, th, fin + 4)
+    w = tc_write_record(o, 22, fin, 36)
+    if w < 0
+        return w
+    tc_set_keys(st, true, s_ap)
+    tc_set_keys(st, false, c_ap)
+    # Keep the certificate bytes, roots and secrets alive to here.
+    if load8(copy) + load8(sec) + load8(anchor) < 0
+        return -1
+    0
+
+# ---- application data ----
+
+## Like `os_read` on the decrypted stream: the bytes, 0 at the end, or an error.
+fn tc_read(o int, p int, n int) int
+    st := load64(o + NET_TLS)
+    while true
+        if load64(st + TS_CLOSED) != 0
+            return 0
+        pp := load64(st + TS_PPOS)
+        pl := load64(st + TS_PLEN)
+        if pp < pl and load64(st + TS_TYPE) == 23
+            k := if pl - pp < n then pl - pp else n
+            copy_bytes(p, load64(st + TS_PLAIN) + pp, k)
+            store64(st + TS_PPOS, pp + k)
+            return k
+        r := tc_read_record(o)
+        if r == 1
+            store64(st + TS_CLOSED, 1)
+            return 0
+        if r != 0
+            return r
+        ty := load64(st + TS_TYPE)
+        if ty == 23
+            continue
+        if ty == 21
+            if load64(st + TS_PLEN) != 2
+                return tc_err(st, 0, "the server sent a malformed alert")
+            return tc_alert_app(st, load64(st + TS_PLAIN))
+        if ty == 22
+            e := tc_post(o)
+            store64(st + TS_PLEN, 0)
+            if e != 0
+                return e
+            continue
+        return tc_err(
+            st,
+            0,
+            "the server sent a record of type {ty} after the handshake (unexpected_message)",
+        )
+    0
+
+## An alert received after the handshake: close_notify ends the stream.
+fn tc_alert_app(st int, p int) int
+    code := load8(p + 1)
+    if code == 0
+        store64(st + TS_CLOSED, 1)
+        return 0
+    tc_err(st, 0, "the server sent the alert {tc_alert_name(code)} ({code})")
+
+## Process the handshake data of the record just read: tickets are ignored,
+## a KeyUpdate rolls the read keys (and ours when asked).
+fn tc_post(o int) int
+    st := load64(o + NET_TLS)
+    hs := load64(st + TS_HS)
+    n0 := load64(st + TS_HSN)
+    pl := load64(st + TS_PLEN)
+    if n0 + pl > TC_HS_MAX
+        return tc_err(st, 0, "the server sent an oversized post-handshake message")
+    copy_bytes(hs + n0, load64(st + TS_PLAIN), pl)
+    store64(st + TS_HSN, n0 + pl)
+    while load64(st + TS_HSN) >= 4
+        len := tc_r24(hs + 1)
+        if len > 131072
+            return tc_err(st, 0, "the server sent an oversized post-handshake message")
+        if load64(st + TS_HSN) < 4 + len
+            return 0
+        store64(st + TS_MLEN, 4 + len)
+        ty := load8(hs)
+        if ty == 24
+            if load64(st + TS_HSN) != 4 + len
+                return tc_err(st, 0, "a KeyUpdate spanned a key change (unexpected_message)")
+            if len != 1 or load8(hs + 4) > 1
+                return tc_err(st, 0, "the server sent a malformed KeyUpdate (decode_error)")
+            asked := load8(hs + 4) == 1
+            nx := alloc_raw(32, KIND_BYTES)
+            kdf_expand_label(st + TS_RSEC, "traffic upd", 0, 0, 32, nx)
+            tc_set_keys(st, true, nx)
+            if asked
+                ku := alloc_raw(8, KIND_BYTES)
+                store8(ku, 24)
+                store8(ku + 1, 0)
+                store8(ku + 2, 0)
+                store8(ku + 3, 1)
+                store8(ku + 4, 0)
+                w := tc_write_record(o, 22, ku, 5)
+                if w < 0
+                    return w
+                kdf_expand_label(st + TS_WSEC, "traffic upd", 0, 0, 32, nx)
+                tc_set_keys(st, false, nx)
+        elif ty != 4
+            return tc_err(
+                st,
+                0,
+                "the server sent handshake message {ty} after the handshake (unexpected_message)",
+            )
+        tc_drop(st)
+    0
+
+fn tc_write(o int, p int, n int) int
+    tc_write_record(o, 23, p, n)
