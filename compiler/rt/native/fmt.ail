@@ -809,3 +809,21 @@ fn fmt_trim_last_digit(ds List[int]) List[int]
     for i in 0..ds.len() - 1
         out.push(ds[i])
     out
+
+## `xs.join(sep)` for a list of `int` (`kind` 0), `float` (1) or `bool` (2):
+## each element in its text form (type.coll.9).
+fn list_join_text(xs List[int], sep str, kind int) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sb_reset()
+    for i in 0..k
+        if i > 0
+            sb_text(sep)
+        if kind == 2
+            put_bool(load8(items + i) != 0)
+        elif kind == 1
+            put_float(bits_float(load64(items + 8 * i)))
+        else
+            put_int(load64(items + 8 * i))
+    sb_str()

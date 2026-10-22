@@ -1,0 +1,9 @@
+## join on lists of int, float and bool (type.coll.9).
+fn main()
+    print([1, -20, 3].join(", "))
+    print([2.5, 1.0, -0.5].join("|"))
+    print([true, false].join("-"))
+    print([7].join("x"))
+    xs := [1, 2, 3]
+    print(xs.take(0).join(","))
+    print("[{xs.join(" ")}]")
