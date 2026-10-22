@@ -45,6 +45,19 @@ pub struct Alloc
     ## them (shrink-wrapping, ADR 0625).
     pub wrap int
     pub region List[bool]
+    ## Moves around loops a value is idle in (ADR 0848).
+    pub holes List[Hole]
+
+## A value kept in a stack slot across a loop that never touches it, so the
+## loop's registers go to the values it does use. At the end of block
+## `block` (`store`) its register is written to `slot`; at the start of
+## `block` (not `store`) the register is loaded back.
+pub struct Hole
+    pub block int
+    pub store bool
+    pub reg int
+    pub slot int
+    pub float bool
 
 ## The operations the x86-64 code generator does in the operand's register.
 IN_PLACE := ["add", "sub", "band", "bor", "bxor"]
@@ -77,6 +90,35 @@ pub fn caller_used(al Alloc, t Target) List[int]
     out.sorted()
 
 pub fn allocate(f mir.Func, t Target) Alloc
+    first := allocate_with(f, t, [])
+    # Holes cost a store and a load per entry to a loop, so only the loops
+    # that spilled a value they use get them (ADR 0848).
+    heads := spilled_loops(f, first.loc)
+    if heads.len() == 0
+        return first
+    allocate_with(f, t, heads)
+
+## The headers of the loops that use a value held in a stack slot.
+fn spilled_loops(f mir.Func, loc List[int]) List[int]
+    mut out := List[int]()
+    for lp in mir.find_loops(f)
+        mut found := false
+        for b in lp.blocks
+            blk := f.blocks[b]
+            for i in blk.insts
+                for a in i.args
+                    if loc[a] >= SLOT_BASE
+                        found = true
+                if i.dst >= 0 and loc[i.dst] >= SLOT_BASE
+                    found = true
+            for a in blk.term.uses()
+                if loc[a] >= SLOT_BASE
+                    found = true
+        if found
+            out.push(lp.header)
+    out
+
+fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
     n := f.vals.len()
     order := block_order(f)
     nb := f.blocks.len()
@@ -131,6 +173,7 @@ pub fn allocate(f mir.Func, t Target) Alloc
         for v in 0..n
             if first[v] >= 0
                 add_range(mut ranges[v], first[v], last[v])
+    cuts := carve_holes(f, order, bstart, bend, live_in, mut ranges, remat, t, heads)
     mut start := [-1 for _ in 0..n]
     mut end := [-1 for _ in 0..n]
     for v in 0..n
@@ -156,6 +199,11 @@ pub fn allocate(f mir.Func, t Target) Alloc
                 if COMMUTES.contains(i.op)
                     hints[i.dst].push(i.args[1])
                     hints[i.args[1]].push(i.dst)
+    mut apart := [List[int]() for _ in 0..n]
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "mul" and i.site >= 0 and i.dst >= 0
+                apart[i.dst] = i.args
     # A parameter that no hint places stays in the register it arrived in,
     # which saves the moves at the function's entry.
     mut arrive := [-1 for _ in 0..n]
@@ -216,6 +264,7 @@ pub fn allocate(f mir.Func, t Target) Alloc
         ranges: ranges,
         calls: calls,
         hints: hints,
+        apart: apart,
         arrive: arrive,
         weight: [],
         weighed: false,
@@ -223,6 +272,22 @@ pub fn allocate(f mir.Func, t Target) Alloc
     )
     for v in queue
         s.assign(v, f.vals[v].is_float(), t)
+    mut holes := List[Hole]()
+    mut hole_slot := Map[int, int]()
+    for c in cuts
+        r := s.loc[c.v]
+        if r < 0 or r >= SLOT_BASE
+            continue
+        mut at := 0
+        if seen := hole_slot.get(c.v)
+            at = seen
+        else
+            at = s.new_slot()
+            hole_slot[c.v] = at
+        fl := f.vals[c.v].is_float()
+        holes.push(Hole(block: c.pre, store: true, reg: r, slot: at, float: fl))
+        for e in c.exits
+            holes.push(Hole(block: e, store: false, reg: r, slot: at, float: fl))
     shrink := shrink_wrap(f, order, s, bstart, bend, t)
     Alloc(
         loc: s.loc,
@@ -231,7 +296,124 @@ pub fn allocate(f mir.Func, t Target) Alloc
         saved: s.saved.sorted(),
         wrap: shrink.wrap,
         region: shrink.region,
+        holes: holes,
     )
+
+## A value to keep in memory across one loop: the block that ends before the
+## loop and the blocks that start after it.
+struct Cut
+    v int
+    pre int
+    exits List[int]
+
+## Cuts the live range of every value that is live through a loop without
+## touching it, when the loop needs more registers than the target has: the
+## value waits in a stack slot and its register is free inside the loop
+## (ADR 0848). The loop needs one block before it that only jumps in, blocks
+## that follow each other in layout, and exits whose every predecessor is in
+## the loop. A value that ends up in a slot anyway loses nothing.
+fn carve_holes(
+    f mir.Func,
+    order List[int],
+    bstart List[int],
+    bend List[int],
+    live_in List[List[bool]],
+    mut ranges List[List[int]],
+    remat List[bool],
+    t Target,
+    heads List[int],
+) List[Cut]
+    nb := f.blocks.len()
+    n := f.vals.len()
+    mut cuts := List[Cut]()
+    mut idx := [0 for _ in 0..nb]
+    for k in 0..order.len()
+        idx[order[k]] = k
+    mut preds := [List[int]() for _ in 0..nb]
+    for b in 0..nb
+        for x in f.blocks[b].term.targets
+            preds[x].push(b)
+    for lp in mir.find_loops(f)
+        if lp.pre < 0 or lp.blocks.len() == 0 or not heads.contains(lp.header)
+            continue
+        mut lo := nb
+        mut hi := -1
+        for b in lp.blocks
+            if idx[b] < lo
+                lo = idx[b]
+            if idx[b] > hi
+                hi = idx[b]
+        if hi - lo + 1 != lp.blocks.len()
+            continue
+        cs := bstart[order[lo]]
+        ce := bend[order[hi]]
+        mut exits := List[int]()
+        mut ok := true
+        for b in lp.blocks
+            for x in f.blocks[b].term.targets
+                if lp.member[x] or exits.contains(x)
+                    continue
+                for p in preds[x]
+                    if not lp.member[p]
+                        ok = false
+                exits.push(x)
+        if not ok or exits.len() == 0
+            continue
+        mut hot := [false for _ in 0..n]
+        for b in lp.blocks
+            blk := f.blocks[b]
+            for p in blk.params
+                hot[p] = true
+            for i in blk.insts
+                if i.dst >= 0
+                    hot[i.dst] = true
+                for a in i.args
+                    hot[a] = true
+            for a in blk.term.uses()
+                hot[a] = true
+            for e in blk.term.args
+                for a in e
+                    hot[a] = true
+        for fl in [false, true]
+            mut live := 0
+            for v in 0..n
+                if live_in[lp.header][v] and not remat[v] and f.vals[v].is_float() == fl
+                    live += 1
+            regs := if fl then t.float_caller.len()
+                + t.float_callee.len() else t.int_caller.len()
+                + t.int_callee.len()
+            # The loop's own temporaries need a few more.
+            if live + 3 <= regs
+                continue
+            for v in 0..n
+                if not live_in[lp.header][v] or remat[v] or hot[v] or f.vals[v].is_float() != fl
+                    continue
+                if not spans(ranges[v], cs, ce)
+                    continue
+                mut cut := List[int]()
+                mut k := 0
+                while k < ranges[v].len()
+                    from := ranges[v][k]
+                    to := ranges[v][k + 1]
+                    if from < cs
+                        cut.push(from)
+                        cut.push(if to < cs then to else cs - 1)
+                    if to > ce
+                        cut.push(if from > ce then from else ce + 1)
+                        cut.push(to)
+                    k += 2
+                ranges[v] = cut
+                cuts.push(Cut(v: v, pre: lp.pre, exits: exits))
+    cuts
+
+## Whether one range covers `from..=to`.
+fn spans(r List[int], from int, to int) bool
+    mut k := 0
+    while k < r.len()
+        if r[k] <= from and r[k + 1] >= to
+            return true
+        k += 2
+    false
 
 ## Whether `v` dies at position `at` and was defined within a few
 ## instructions before it.
@@ -378,6 +560,9 @@ struct Scan
     ranges List[List[int]]
     calls List[int]
     hints List[List[int]]
+    ## The operands of the checked `mul` that defines a value. Its overflow
+    ## stub reports both, so the product wants a register of its own.
+    apart List[List[int]]
     ## The register a parameter arrived in, else -1.
     arrive List[int]
     ## How much a value costs to keep in memory: its definitions and uses,
@@ -404,6 +589,13 @@ fn Scan.crosses(self, v int) bool
 fn Scan.partner_crosses(self, v int) bool
     for h in hints[v]
         if loc[h] == NOWHERE and start[h] > end[v] and crosses(h)
+            return true
+    false
+
+## Whether register `r` is the one of any of `vs`.
+fn Scan.shares(self, r int, vs List[int]) bool
+    for x in vs
+        if loc[x] == r
             return true
     false
 
@@ -442,6 +634,11 @@ fn Scan.assign(mut self, v int, float bool, t Target)
             break
     if pick < 0 and arrive[v] >= 0 and pool.contains(arrive[v]) and free(arrive[v], v)
         pick = arrive[v]
+    if pick < 0 and apart[v].len() > 0
+        for r in pool
+            if free(r, v) and not shares(r, apart[v])
+                pick = r
+                break
     if pick < 0
         for r in pool
             if free(r, v)
