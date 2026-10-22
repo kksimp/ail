@@ -22,6 +22,7 @@ fn manifest_dep(root str, name str) str? [fs io]  ## The directory of dependency
 fn std_file(std str, imp str) str  ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
 fn derived_sources() !Derived [env fail fs io]  ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
     fails with fs.IoError
+fn derive_builtin(srcs List[mir.Source]) List[mir.Source] [io]  ## The methods of the `impl`s the built-in generators derive (ADR 0850) that
 struct Derived  ## What `ail build` passes besides the program's files.
     sources List[mir.Source]
     prelude str?

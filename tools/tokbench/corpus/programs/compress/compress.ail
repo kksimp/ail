@@ -1,4 +1,5 @@
 use std.compress
+
 fn main() ! compress.CompressError
     mut log := ""
     for i in 0..200

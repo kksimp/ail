@@ -4,18 +4,21 @@ extern c fn abs(x i32) i32
 extern c fn toupper(c i32) i32
 extern c fn strlen(s *u8) int
 extern c fn atoi(s *u8) i32
+
 fn c_length(text str) int
     unsafe
         p := mem.cstr(text)
         n := strlen(p)
         mem.free(p)
         n
+
 fn c_atoi(text str) int
     unsafe
         p := mem.cstr(text)
         n := atoi(p)
         mem.free(p)
         n.to_int()
+
 fn main()
     unsafe
         print(hypot(3.0, 4.0))

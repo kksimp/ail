@@ -1,4 +1,5 @@
 use std.time.date
+
 fn main() ! date.DateError
     print("2024 leap: {date.is_leap(2024)}, 2100 leap: {date.is_leap(2100)}")
     print("February 2024 has {date.days_in_month(2024, 2)} days")

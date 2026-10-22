@@ -1,14 +1,7 @@
-
 fn main() !
     here := path.dir(env.program())
     ail := proc.which("ail") else "{here}/../../../../../ail"
     pkg := "{here}/../../../../../tools/tokbench/corpus/agent-r5/data/pkg"
     for budget in [60, 120, 240, 480]
-        r := proc.run(ail, [
-            "api",
-            "--card",
-            "--budget",
-            "{budget}",
-            pkg,
-        ])? "carding at {budget}"
+        r := proc.run(ail, ["api", "--card", "--budget", "{budget}", pkg])? "carding at {budget}"
         print("budget {budget}: {r.out.lines().len()} lines, {r.out.len()} chars")

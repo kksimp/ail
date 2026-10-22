@@ -2,9 +2,14 @@
 use std.args
 
 fn main() !
-    a := args.parse("tool", "demo", [
-        args.flag("verbose", "v", "more output"),
-        args.opt("out", "o", "output file", "a.txt"),
-        args.pos("input", "file to read"),
-    ], env.args())?
+    a := args.parse(
+        "tool",
+        "demo",
+        [
+            args.flag("verbose", "v", "more output"),
+            args.opt("out", "o", "output file", "a.txt"),
+            args.pos("input", "file to read"),
+        ],
+        env.args(),
+    )?
     print("{a.flag("verbose")} {a.get("out")} {a.get("input")}")

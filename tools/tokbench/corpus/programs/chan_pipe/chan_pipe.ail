@@ -1,4 +1,3 @@
-
 fn produce(ch Channel[int], n int)
     for i in 0..n
         ch.send(i * i)
