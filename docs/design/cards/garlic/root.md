@@ -1,9 +1,10 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 61 (`ail test` lists them)
+tests: 63 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
+    dep image path ../pdf/image caps fs
 
 ## (root)
 ```
@@ -11,6 +12,7 @@ KEYS := ...  ## The keys, as `--keys` prints them.
 enum Prompt  ## What the bottom row is doing: showing the status, or reading a URL, a
 struct Browser  ## The browser: the page shown (its tree and layout), where it is scrolled,
 fn options() net.Options [io net]  ## The headers Garlic sends: who it is, and that it wants HTML.
+fn image_options() net.Options [io net]  ## The headers for a picture: any image type.
 fn fetch(str, str, str) str [clock fs io net]  ## The text of `url`: `http` and `https` through `net.request` (which
 fn fetch_with(str, str, str, mut std.net.jar.Jar) str [clock fs io mutates net]  ## `fetch`, sending `cj`'s cookies for the site and keeping the ones the
 WINDOWS_1252 := ...  ## The labels that name windows-1252, which HTML reads `iso-8859-1` and
@@ -36,7 +38,7 @@ struct Gui  ## The native window's side of the browser: the host's cell size in 
 fn address(str) str [fs io]  ## What a typed address means: a URL as it is, a path to a file that exists
 struct Garlic  ## The native window as a `std.app` app (docs/design/garlic-browser.md,
 impl std.app.App for Garlic
-fn to_app(draw.Op) std.app.Op  ## A drawing operation of the page, as a `std.app` canvas operation.
+fn to_app(draw.Op, Gui) std.app.Op  ## A drawing operation of the page, as a `std.app` canvas operation.
 GUI_W := 960.0  ## The native window: the page area starts at `GUI_W` by `GUI_H` points with
 GUI_H := 600.0
 GUI_CELL_W := 7.8
@@ -56,6 +58,7 @@ fn pixel_text(List[draw.Op]) List[str]  ## The text of the proportional `Str` op
 fn pixels(str, float) gfx.Scene
 fn bench_run(int, str, html.Doc, css.Sheet) int
 fn bench(List[str]) [clock fs io]  ## `garlic --bench FILE [ROUNDS]`: `args` are the words after `--bench`.
+fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 ```
 
-trimmed to fit 2000 tokens (~1455); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1521); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
