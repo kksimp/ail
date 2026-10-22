@@ -4,61 +4,70 @@
 ## HMAC-SHA-256 (RFC 2104), HKDF (RFC 5869) and TLS 1.3's HKDF-Expand-Label
 ## (RFC 8446 section 7.1) for the native TLS client (ADR 0836), over raw
 ## addresses like tls_chacha.ail. The same algorithms and vectors as
-## bootstrap/src/net/crypto/hkdf.rs (ADR 0366). Only the SHA-256 suites are
-## here: the native client offers TLS_CHACHA20_POLY1305_SHA256.
+## bootstrap/src/net/crypto/hkdf.rs (ADR 0366). The `kdh_*` forms take the hash
+## length (32 for SHA-256, 48 for SHA-384); `kdf_*` are the SHA-256 forms.
 
 KDF_OUT := 32
 
-## HMAC-SHA-256 of the `mn` bytes at `msg` under the `kn` bytes at `key`: the
-## 32-byte tag goes to `out`.
-fn kdf_hmac(key int, kn int, msg int, mn int, out int)
-    block := alloc_raw(64, KIND_BYTES)
-    for i in 0..8
+## SHA-256 (`hl` 32) or SHA-384 (`hl` 48) of `n` bytes at `src` into `out`.
+fn kdh_hash(hl int, src int, n int, out int)
+    if hl == 32
+        hash_sha256_raw(src, n, out)
+    else
+        # hash_sha512_raw writes all eight words; keep the 48 bytes of SHA-384.
+        full := alloc_raw(64, KIND_BYTES)
+        hash_sha512_raw(src, n, full, false)
+        copy_bytes(out, full, 48)
+
+## HMAC (RFC 2104) with the hash of output length `hl` (block 64 or 128).
+fn kdh_hmac(hl int, key int, kn int, msg int, mn int, out int)
+    bs := if hl == 32 then 64 else 128
+    block := alloc_raw(bs, KIND_BYTES)
+    for i in 0..bs / 8
         store64(block + 8 * i, 0)
-    if kn > 64
-        hash_sha256_raw(key, kn, block)
+    if kn > bs
+        kdh_hash(hl, key, kn, block)
     else
         copy_bytes(block, key, kn)
-    inner := alloc_raw(64 + mn, KIND_BYTES)
-    for i in 0..64
+    inner := alloc_raw(bs + mn, KIND_BYTES)
+    for i in 0..bs
         store8(inner + i, load8(block + i).bit_xor(54))
-    copy_bytes(inner + 64, msg, mn)
-    digest := alloc_raw(32, KIND_BYTES)
-    hash_sha256_raw(inner, 64 + mn, digest)
-    outer := alloc_raw(96, KIND_BYTES)
-    for i in 0..64
+    copy_bytes(inner + bs, msg, mn)
+    digest := alloc_raw(hl, KIND_BYTES)
+    kdh_hash(hl, inner, bs + mn, digest)
+    outer := alloc_raw(bs + hl, KIND_BYTES)
+    for i in 0..bs
         store8(outer + i, load8(block + i).bit_xor(92))
-    copy_bytes(outer + 64, digest, 32)
-    hash_sha256_raw(outer, 96, out)
+    copy_bytes(outer + bs, digest, hl)
+    kdh_hash(hl, outer, bs + hl, out)
 
-## HKDF-Extract: the 32-byte pseudorandom key from `salt` and `ikm`; an empty
-## salt is 32 zero bytes.
-fn kdf_extract(salt int, sn int, ikm int, ikn int, out int)
+## HKDF-Extract: the `hl`-byte pseudorandom key; an empty salt is `hl` zero bytes.
+fn kdh_extract(hl int, salt int, sn int, ikm int, ikn int, out int)
     if sn == 0
-        zeros := alloc_raw(32, KIND_BYTES)
-        for i in 0..4
+        zeros := alloc_raw(hl, KIND_BYTES)
+        for i in 0..hl / 8
             store64(zeros + 8 * i, 0)
-        kdf_hmac(zeros, 32, ikm, ikn, out)
+        kdh_hmac(hl, zeros, hl, ikm, ikn, out)
         return
-    kdf_hmac(salt, sn, ikm, ikn, out)
+    kdh_hmac(hl, salt, sn, ikm, ikn, out)
 
-## HKDF-Expand: `len` (at most 8160) bytes from `prk` (32 bytes) and `info`.
-fn kdf_expand(prk int, info int, infon int, len int, out int)
-    blocks := (len + 31) / 32
-    buf := alloc_raw(32 + infon + 1, KIND_BYTES)
-    t := alloc_raw(32, KIND_BYTES)
+## HKDF-Expand: `len` (at most 255 blocks) bytes from `prk` (`hl` bytes) and `info`.
+fn kdh_expand(hl int, prk int, info int, infon int, len int, out int)
+    blocks := (len + hl - 1) / hl
+    buf := alloc_raw(hl + infon + 1, KIND_BYTES)
+    t := alloc_raw(hl, KIND_BYTES)
     mut tn := 0
     for i in 1..blocks + 1
         copy_bytes(buf, t, tn)
         copy_bytes(buf + tn, info, infon)
         store8(buf + tn + infon, i)
-        kdf_hmac(prk, 32, buf, tn + infon + 1, t)
-        tn = 32
-        k := if i * 32 > len then len - (i - 1) * 32 else 32
-        copy_bytes(out + (i - 1) * 32, t, k)
+        kdh_hmac(hl, prk, hl, buf, tn + infon + 1, t)
+        tn = hl
+        k := if i * hl > len then len - (i - 1) * hl else hl
+        copy_bytes(out + (i - 1) * hl, t, k)
 
 ## HKDF-Expand-Label: the label `label` gets the prefix `tls13 `.
-fn kdf_expand_label(secret int, label str, ctx int, ctxn int, len int, out int)
+fn kdh_expand_label(hl int, secret int, label str, ctx int, ctxn int, len int, out int)
     ln := load64(str_addr(label))
     info := alloc_raw(10 + ln + ctxn, KIND_BYTES)
     store8(info, len.shr(8).bit_and(255))
@@ -68,8 +77,25 @@ fn kdf_expand_label(secret int, label str, ctx int, ctxn int, len int, out int)
     copy_bytes(info + 9, str_addr(label) + 16, ln)
     store8(info + 9 + ln, ctxn)
     copy_bytes(info + 10 + ln, ctx, ctxn)
-    kdf_expand(secret, info, 10 + ln + ctxn, len, out)
+    kdh_expand(hl, secret, info, 10 + ln + ctxn, len, out)
 
-## Derive-Secret: the 32-byte expand-label of a transcript hash.
+## Derive-Secret: the `hl`-byte expand-label of a transcript hash.
+fn kdh_derive_secret(hl int, secret int, label str, transcript_hash int, out int)
+    kdh_expand_label(hl, secret, label, transcript_hash, hl, hl, out)
+
+# The SHA-256 forms.
+
+fn kdf_hmac(key int, kn int, msg int, mn int, out int)
+    kdh_hmac(32, key, kn, msg, mn, out)
+
+fn kdf_extract(salt int, sn int, ikm int, ikn int, out int)
+    kdh_extract(32, salt, sn, ikm, ikn, out)
+
+fn kdf_expand(prk int, info int, infon int, len int, out int)
+    kdh_expand(32, prk, info, infon, len, out)
+
+fn kdf_expand_label(secret int, label str, ctx int, ctxn int, len int, out int)
+    kdh_expand_label(32, secret, label, ctx, ctxn, len, out)
+
 fn kdf_derive_secret(secret int, label str, transcript_hash int, out int)
-    kdf_expand_label(secret, label, transcript_hash, 32, 32, out)
+    kdh_derive_secret(32, secret, label, transcript_hash, out)

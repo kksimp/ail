@@ -1,0 +1,313 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## AES-128/256 and GCM (NIST SP 800-38D) for the native TLS client (ADR 0836,
+## ADR 0852). Constant time: no table is indexed by a secret and no branch
+## depends on one. AES is bit-sliced, 64 bytes (four blocks) at a time: eight
+## 64-bit words, word `i` holding bit `i` of each of the 64 byte lanes (lane
+## `16 * block + 4 * column + row`). SubBytes is the GF(2^8) inverse as
+## x^254 by bit-sliced multiplication, then the affine map. GHASH multiplies
+## bit by bit under masks. Vectors: bootstrap/src/net/crypto/testdata.
+##
+## A key schedule `ak`: the round count at 0, H as two big-endian words at 8
+## and 16, then eight mask words per round key from 24.
+
+AK_NR := 0
+AK_HHI := 8
+AK_HLO := 16
+AK_RK := 24
+
+# Scratch for one SubBytes (aes_sbox): five field elements and a product area.
+AS_A := 0
+AS_B := 64
+AS_C := 128
+AS_D := 192
+AS_E := 256
+AS_T := 320
+AS_SIZE := 464
+
+fn aes_rep(m int) int
+    m.bit_or(m.shl(16)).bit_or(m.shl(32)).bit_or(m.shl(48))
+
+## Reduce the 15-word product at `t` modulo x^8 + x^4 + x^3 + x + 1 into `o`.
+fn aes_reduce(t int, o int)
+    mut k := 14
+    while k >= 8
+        v := load64(t + 8 * k)
+        store64(t + 8 * (k - 4), load64(t + 8 * (k - 4)).bit_xor(v))
+        store64(t + 8 * (k - 5), load64(t + 8 * (k - 5)).bit_xor(v))
+        store64(t + 8 * (k - 7), load64(t + 8 * (k - 7)).bit_xor(v))
+        store64(t + 8 * (k - 8), load64(t + 8 * (k - 8)).bit_xor(v))
+        k -= 1
+    for i in 0..8
+        store64(o + 8 * i, load64(t + 8 * i))
+
+## `o = a * b` in the bit-sliced field; `t` has 15 words of scratch.
+fn aes_mul(o int, a int, b int, t int)
+    for i in 0..15
+        store64(t + 8 * i, 0)
+    for i in 0..8
+        ai := load64(a + 8 * i)
+        for j in 0..8
+            at := t + 8 * (i + j)
+            store64(at, load64(at).bit_xor(ai.bit_and(load64(b + 8 * j))))
+    aes_reduce(t, o)
+
+fn aes_sq(o int, a int, t int)
+    for i in 0..15
+        store64(t + 8 * i, 0)
+    for i in 0..8
+        store64(t + 16 * i, load64(a + 8 * i))
+    aes_reduce(t, o)
+
+## SubBytes on the eight words at `s`, in place.
+fn aes_sbox(s int, sc int)
+    t := sc + AS_T
+    aes_sq(sc + AS_A, s, t)
+    aes_mul(sc + AS_B, sc + AS_A, s, t)
+    aes_sq(sc + AS_C, sc + AS_B, t)
+    aes_sq(sc + AS_C, sc + AS_C, t)
+    aes_mul(sc + AS_D, sc + AS_C, sc + AS_A, t)
+    aes_mul(sc + AS_E, sc + AS_C, sc + AS_B, t)
+    for k in 0..4
+        aes_sq(sc + AS_E, sc + AS_E, t)
+    aes_mul(sc + AS_E, sc + AS_E, sc + AS_D, t)
+    e := sc + AS_E
+    for i in 0..8
+        mut v := load64(e + 8 * i)
+            .bit_xor(load64(e + 8 * ((i + 4) % 8)))
+            .bit_xor(load64(e + 8 * ((i + 5) % 8)))
+            .bit_xor(load64(e + 8 * ((i + 6) % 8)))
+            .bit_xor(load64(e + 8 * ((i + 7) % 8)))
+        if i == 0 or i == 1 or i == 5 or i == 6
+            v = v.bit_xor(-1)
+        store64(s + 8 * i, v)
+
+fn aes_add_key(s int, rk int)
+    for i in 0..8
+        store64(s + 8 * i, load64(s + 8 * i).bit_xor(load64(rk + 8 * i)))
+
+fn aes_shift_rows(s int)
+    m0 := aes_rep(4369)
+    m1a := aes_rep(546)
+    m1b := aes_rep(8192)
+    m2a := aes_rep(68)
+    m2b := aes_rep(17408)
+    m3a := aes_rep(8)
+    m3b := aes_rep(34944)
+    for i in 0..8
+        w := load64(s + 8 * i)
+        store64(
+            s + 8 * i,
+            w.bit_and(m0)
+                .bit_or(w.shr(4).bit_and(m1a))
+                .bit_or(w.shl(12).bit_and(m1b))
+                .bit_or(w.shr(8).bit_and(m2a))
+                .bit_or(w.shl(8).bit_and(m2b))
+                .bit_or(w.shr(12).bit_and(m3a))
+                .bit_or(w.shl(4).bit_and(m3b)),
+        )
+
+fn aes_rot1(x int, lo int, hi int) int
+    x.shr(1).bit_and(lo).bit_or(x.shl(3).bit_and(hi))
+
+fn aes_rot2(x int, lo int, hi int) int
+    x.shr(2).bit_and(lo).bit_or(x.shl(2).bit_and(hi))
+
+## MixColumns: b_r = a_r ^ (a_0 ^ a_1 ^ a_2 ^ a_3) ^ xtime(a_r ^ a_(r+1)).
+fn aes_mix_columns(s int, u int)
+    r1lo := aes_rep(30583)
+    r1hi := aes_rep(34952)
+    r2lo := aes_rep(13107)
+    r2hi := aes_rep(52428)
+    for i in 0..8
+        a := load64(s + 8 * i)
+        store64(u + 8 * i, a.bit_xor(aes_rot1(a, r1lo, r1hi)))
+    # u holds a_r ^ a_(r+1); the column sum is u ^ rot2(u).
+    for i in 0..8
+        a := load64(s + 8 * i)
+        ui := load64(u + 8 * i)
+        store64(u + 64 + 8 * i, a.bit_xor(ui).bit_xor(aes_rot2(ui, r2lo, r2hi)))
+    u7 := load64(u + 56)
+    for i in 0..8
+        mut xt := if i == 0 then u7 else load64(u + 8 * (i - 1))
+        if i == 1 or i == 3 or i == 4
+            xt = xt.bit_xor(u7)
+        store64(s + 8 * i, load64(u + 64 + 8 * i).bit_xor(xt))
+
+## `n` (at most 64) bytes at `src` into eight slice words at `s`.
+fn aes_pack(src int, n int, s int)
+    for i in 0..8
+        mut w := 0
+        for j in 0..n
+            w = w.bit_or(load8(src + j).shr(i).bit_and(1).shl(j))
+        store64(s + 8 * i, w)
+
+fn aes_unpack(s int, n int, dst int)
+    for j in 0..n
+        mut b := 0
+        for i in 0..8
+            b = b.bit_or(load64(s + 8 * i).shr(j).bit_and(1).shl(i))
+        store8(dst + j, b)
+
+## Encrypt the `n` (at most 64) bytes at `src` as independent blocks into
+## `dst`. `sc` is scratch of at least AS_SIZE + 288 bytes.
+fn aes_blocks(ak int, src int, n int, dst int, sc int)
+    s := sc + AS_SIZE
+    u := s + 64
+    aes_pack(src, n, s)
+    nr := load64(ak + AK_NR)
+    aes_add_key(s, ak + AK_RK)
+    for r in 1..nr
+        aes_sbox(s, sc)
+        aes_shift_rows(s)
+        aes_mix_columns(s, u)
+        aes_add_key(s, ak + AK_RK + 64 * r)
+    aes_sbox(s, sc)
+    aes_shift_rows(s)
+    aes_add_key(s, ak + AK_RK + 64 * nr)
+    aes_unpack(s, n, dst)
+
+## The S-box of the four bytes of `w` (little-endian in the word).
+fn aes_sub4(w int, sc int) int
+    buf := alloc_raw(8, KIND_BYTES)
+    for i in 0..4
+        store8(buf + i, w.shr(8 * i).bit_and(255))
+    s := sc + AS_SIZE
+    aes_pack(buf, 4, s)
+    aes_sbox(s, sc)
+    aes_unpack(s, 4, buf)
+    load8(buf).bit_or(load8(buf + 1).shl(8)).bit_or(load8(buf + 2).shl(16)).bit_or(load8(buf + 3).shl(24))
+
+## Set up `ak` (room for 24 + 64 * (rounds + 1) bytes) for the `klen`-byte
+## key (16 or 32) at `key`.
+fn aes_setup(ak int, key int, klen int)
+    sc := alloc_raw(AS_SIZE + 288, KIND_BYTES)
+    nk := klen / 4
+    nr := nk + 6
+    store64(ak + AK_NR, nr)
+    ks := alloc_raw(16 * (nr + 1) + 16, KIND_BYTES)
+    copy_bytes(ks, key, klen)
+    mut rcon := 1
+    for i in nk..4 * (nr + 1)
+        mut t := load8(ks + 4 * i - 4)
+            .bit_or(load8(ks + 4 * i - 3).shl(8))
+            .bit_or(load8(ks + 4 * i - 2).shl(16))
+            .bit_or(load8(ks + 4 * i - 1).shl(24))
+        if i % nk == 0
+            t = t.shr(8).bit_and(16777215).bit_or(t.bit_and(255).shl(24))
+            t = aes_sub4(t, sc).bit_xor(rcon)
+            rcon = rcon.shl(1).bit_and(255).bit_xor(if rcon >= 128 then 27 else 0)
+        elif nk == 8 and i % nk == 4
+            t = aes_sub4(t, sc)
+        for j in 0..4
+            store8(ks + 4 * i + j, load8(ks + 4 * (i - nk) + j).bit_xor(t.shr(8 * j).bit_and(255)))
+    for r in 0..nr + 1
+        for i in 0..8
+            mut w := 0
+            for j in 0..16
+                w = w.bit_or(load8(ks + 16 * r + j).shr(i).bit_and(1).shl(j))
+            store64(ak + AK_RK + 64 * r + 8 * i, aes_rep(w.bit_and(65535)))
+    # H = E_K(0^128).
+    zero := alloc_raw(80, KIND_BYTES)
+    for i in 0..10
+        store64(zero + 8 * i, 0)
+    aes_blocks(ak, zero, 16, zero + 16, sc)
+    store64(ak + AK_HHI, hash_be(zero + 16, 8))
+    store64(ak + AK_HLO, hash_be(zero + 24, 8))
+
+fn aes_lsr1(x int) int
+    x.shr(1).bit_and(9223372036854775807)
+
+## `y = (y ^ block) * H` in GF(2^128), `y` two words at `yp`, `block` 16
+## bytes at `b` (bit by bit under masks, so nothing depends on the data).
+fn aes_ghash_block(ak int, yp int, b int)
+    xh := load64(yp).bit_xor(hash_be(b, 8))
+    xl := load64(yp + 8).bit_xor(hash_be(b + 8, 8))
+    mut vh := load64(ak + AK_HHI)
+    mut vl := load64(ak + AK_HLO)
+    mut zh := 0
+    mut zl := 0
+    for i in 0..128
+        bit := if i < 64 then xh.shr(63 - i).bit_and(1) else xl.shr(127 - i).bit_and(1)
+        m := 0 - bit
+        zh = zh.bit_xor(vh.bit_and(m))
+        zl = zl.bit_xor(vl.bit_and(m))
+        lsb := vl.bit_and(1)
+        vl = aes_lsr1(vl).bit_or(vh.shl(63))
+        vh = aes_lsr1(vh).bit_xor((0 - lsb).bit_and(-2233785415175766016))
+    store64(yp, zh)
+    store64(yp + 8, zl)
+
+## GHASH of the `n` bytes at `p`, zero-padded to blocks, into `yp`.
+fn aes_ghash_data(ak int, yp int, p int, n int)
+    mut i := 0
+    pad := alloc_raw(24, KIND_BYTES)
+    while i + 16 <= n
+        aes_ghash_block(ak, yp, p + i)
+        i += 16
+    if i < n
+        store64(pad, 0)
+        store64(pad + 8, 0)
+        copy_bytes(pad, p + i, n - i)
+        aes_ghash_block(ak, yp, pad)
+
+## CTR keystream from counter `ctr0` for the 12-byte `nonce`, XORed over
+## `n` bytes of `src` into `dst`.
+fn aes_ctr(ak int, nonce int, ctr0 int, src int, n int, dst int, sc int)
+    ks := alloc_raw(128, KIND_BYTES)
+    cb := ks + 64
+    mut done := 0
+    mut ctr := ctr0
+    while done < n
+        k := if n - done > 64 then 64 else n - done
+        blocks := (k + 15) / 16
+        for b in 0..blocks
+            copy_bytes(cb + 16 * b, nonce, 12)
+            hash_put_be(cb + 16 * b + 12, ctr.bit_and(4294967295), 4)
+            ctr += 1
+        aes_blocks(ak, cb, 16 * blocks, ks, sc)
+        for i in 0..k
+            store8(dst + done + i, load8(src + done + i).bit_xor(load8(ks + i)))
+        done += k
+
+## The GCM tag over `aad` and the ciphertext `ct` into `out` (16 bytes).
+fn aes_gcm_tag(ak int, nonce int, aad int, an int, ct int, cn int, out int, sc int)
+    yp := alloc_raw(16, KIND_BYTES)
+    store64(yp, 0)
+    store64(yp + 8, 0)
+    aes_ghash_data(ak, yp, aad, an)
+    aes_ghash_data(ak, yp, ct, cn)
+    lens := alloc_raw(16, KIND_BYTES)
+    hash_put_be(lens, an * 8, 8)
+    hash_put_be(lens + 8, cn * 8, 8)
+    aes_ghash_block(ak, yp, lens)
+    mask := alloc_raw(16, KIND_BYTES)
+    zero := alloc_raw(16, KIND_BYTES)
+    store64(zero, 0)
+    store64(zero + 8, 0)
+    aes_ctr(ak, nonce, 1, zero, 16, mask, sc)
+    hash_put_be(out, load64(yp), 8)
+    hash_put_be(out + 8, load64(yp + 8), 8)
+    for i in 0..16
+        store8(out + i, load8(out + i).bit_xor(load8(mask + i)))
+
+## Encrypt the `n` bytes at `pt` to `out` (`n + 16` bytes: ciphertext, tag).
+fn aes_gcm_seal(ak int, nonce int, aad int, an int, pt int, n int, out int)
+    sc := alloc_raw(AS_SIZE + 288, KIND_BYTES)
+    aes_ctr(ak, nonce, 2, pt, n, out, sc)
+    aes_gcm_tag(ak, nonce, aad, an, out, n, out + n, sc)
+
+## Decrypt the `n` sealed bytes at `sealed` to `out` (`n - 16` bytes): 0 when
+## the tag is good, -1 when not. The tag is checked before anything is decrypted.
+fn aes_gcm_open(ak int, nonce int, aad int, an int, sealed int, n int, out int) int
+    if n < 16
+        return -1
+    cn := n - 16
+    sc := alloc_raw(AS_SIZE + 288, KIND_BYTES)
+    want := alloc_raw(16, KIND_BYTES)
+    aes_gcm_tag(ak, nonce, aad, an, sealed, cn, want, sc)
+    if not tls_ct_eq(want, sealed + cn, 16)
+        return -1
+    aes_ctr(ak, nonce, 2, sealed, cn, out, sc)
+    0

@@ -5,8 +5,9 @@
 # and signatures.txt.
 use std.hash
 
-fn main()
-    text := fs.read_text(env.args()[0]) else ""
+## Run the crosscheck-format file `path`: `[ok, failed]`.
+fn run_file(path str) List[int]
+    text := fs.read_text(path) else ""
     mut ok := 0
     mut bad := 0
     for line in text.lines()
@@ -14,15 +15,21 @@ fn main()
             continue
         f := line.split(" ")
         op := f[0]
-        if op != "chacha20poly1305" and op != "poly1305" and op != "x25519" and op != "sha256" and op != "hmac256" and op != "hkdf256"
-            continue
-        want := f[f.len() - 1]
-        got := hash.hmac_sha256(op, f[1..f.len() - 1].join(" "))
-        if got == want
-            ok += 1
-        else
-            bad += 1
-            print("FAIL {op}: want {want} got {got}")
+        if op == "x25519" or op == "poly1305" or op == "chacha20poly1305" or op == "aesgcm" or op == "sha256" or op == "sha384" or op == "sha512" or op == "hmac256" or op == "hkdf256" or op == "hmac384" or op == "hkdf384"
+            want := f[f.len() - 1]
+            got := hash.hmac_sha256(op, f[1..f.len() - 1].join(" "))
+            if got == want
+                ok += 1
+            else
+                bad += 1
+                print("FAIL {op}: want {want} got {got}")
+    [ok, bad]
+
+fn main()
+    a := run_file(env.args()[0])
+    b := run_file(env.args()[3])
+    mut ok := a[0] + b[0]
+    mut bad := a[1] + b[1]
     sched := hash.hmac_sha256("rfc8448", "")
     if sched == "33ad0a1c607ec03b09e6cd9893680ce210adf300aa1f2660e1b22e10f170f92a 6f2615a108c702c5678f54fc9dbab69716c076189c48250cebeac3576c3611ba"
         ok += 1
