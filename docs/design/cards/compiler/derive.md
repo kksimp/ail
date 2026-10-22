@@ -50,4 +50,18 @@ fn derive.unqualify(text str, module str) str  ## `text` with the module's own p
 fn derive.type_info(modules List[str], progs List[ast.Program], name str, module str) derive.TypeInfo?  ## The `TypeInfo` of the struct or enum `name`, preferring one declared in
 fn derive.field_infos(prog ast.Program, fields List[ast.Field], module str) List[derive.FieldInfo]
 fn derive.show_type(t ast.TypeRef) str  ## A type as written, as `ail api` prints it.
+pub struct derive.Job  ## One deriving `impl` of a trait the program declares with `@derive(f)`
+    pub module str  ## The `impl`'s module, empty for the root.
+    pub label str  ## `TYPE.TRAIT`
+    pub file int  ## The file of the `impl` and where it is, for a message.
+    pub pos ast.Pos
+    pub generator str
+    pub trait_module str  ## The module of the trait, where the generator is called from.
+    pub info str  ## The `TypeInfo(...)` expression for the type (refl.info.1).
+pub fn derive.user_jobs(modules List[str], progs List[ast.Program]) List[derive.Job]  ## The deriving `impl`s of user traits. An `impl` whose trait has no
+fn derive.declares_fn(modules List[str], progs List[ast.Program], module str, name str) bool
+fn derive.quote(s str) str  ## An AIL string literal holding `s` exactly.
+fn derive.list_of(items List[str], elem str) str
+fn derive.field_expr(f derive.FieldInfo) str
+fn derive.info_expr(t derive.TypeInfo) str  ## The `TypeInfo(...)` expression for `t`, as the bootstrap writes it.
 ```

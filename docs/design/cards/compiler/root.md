@@ -11,6 +11,7 @@ fn host_target() str [io proc]  ## The target `ail build` makes by default: the 
 fn build_cli(rest List[str]) [env fs io proc]  ## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
 fn compiler_dir() str [env io]  ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
 fn compile_to(file str, out_arg str, target_arg str, ms str, mb str) [env fs io proc]  ## Build `file` for `target` (the host's when empty) into `out` (by default
+fn build_cli(rest List[str]) [clock env fs io proc]  ## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
 fn check_dump(path str, many bool) ! [env fail fs io]  ## The checker's diagnostics for one dump, sorted by position as `ail check`
     fails with JsonError | fs.IoError
 fn runtime(dir str, path str) !ast.Program [fail fs io]  ## The native runtime in directory `dir`, parsed as one program.
@@ -21,7 +22,7 @@ fn source_text(path str) !str [fail fs io]  ## The text of a program: a file, or
     fails with fs.IoError
 fn executable_hex(m mir.Module, path str, target str) str [io]  ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 fn runtime_syntax(path str, text str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
-fn lower_file(path str, rt ast.Program?, std str) !mir.Module [env fail fs io]  ## Parse a program and the modules it imports, and lower them to MIR
+fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]  ## Parse a program and the modules it imports, and lower them to MIR
     fails with fs.IoError
 fn mentions_prelude(srcs List[mir.Source]) bool  ## Whether a source names a module of the prelude written in AIL: the test
 fn manifest_dep(root str, name str) str? [fs io]  ## The directory of dependency `name` in the manifest `ROOT/ail.pkg`:
@@ -29,6 +30,11 @@ fn std_file(std str, imp str) str  ## The file of standard module `imp` (`std.cs
 fn derived_sources() !Derived [env fail fs io]  ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
     fails with fs.IoError
 fn derive_builtin(srcs List[mir.Source]) List[mir.Source] [io]  ## The methods of the `impl`s the built-in generators derive (ADR 0850) that
+fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source] [clock env fs io proc]  ## The methods of the `impl`s of traits with a user-written `@derive(f)`
+fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?) List[str] [clock env fs io proc]  ## The text each job's generator wrote, in order, or `@@err MESSAGE`.
+fn derive_failure(label str) str  ## "`Trait` can't be derived for `Type`" for the label `Type.Trait`.
+fn remove_quietly(path str) [fs io]
+fn user_main_renamed(s mir.Source) mir.Source  ## `s` with its function `main` of the root module renamed, so the generator
 struct Derived  ## What `ail build` passes besides the program's files.
     sources List[mir.Source]
     prelude str?

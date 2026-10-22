@@ -2,6 +2,7 @@
 entry: main in main.ail
 
 ## (root) (35 items)
+## (root) (29 items)
 
 ## a64 (60 items)
 
@@ -11,7 +12,7 @@ entry: main in main.ail
 
 ## codegen (54 items)
 
-## derive (25 items)
+## derive (32 items)
 
 ## fmt (63 items)
 
