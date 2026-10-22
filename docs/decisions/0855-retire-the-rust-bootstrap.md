@@ -31,11 +31,11 @@ removal every program, including the tools, runs natively.
    moves one command (`check`, `explain`, `api`, `test`, `fmt`, ...) and the Rust code
    is deleted only after a whole chain is green without it.
 4. The first native `ail` comes from a **seed**: a release asset of the private
-   repository (`ail-seed-OS-ARCH`), built by `tools/release/seed.sh` on the
-   designer's Mac after the fixed point holds. `tools/release/fetch-seed.sh`
+   repository (`ail-seed-ARCH-OS`; first release `seed-2026.10.22`), built by `tools/release/seed.sh` on the
+   designer's Mac (macOS, Linux x86-64 and ARM64, Windows x86-64) after the fixed point holds. `tools/release/fetch-seed.sh`
    downloads it with `gh release download` (the signed-in `gh`) or `GITHUB_TOKEN`,
    checks its SHA-256 against `tools/release/seeds.sha256` (committed), and
-   installs it as `.native/ail`. Nothing is published by an agent or automatically.
+   installs it as `.native/seed`, which builds `compiler/main.ail` into `.native/ail`. Nothing is published by an agent or automatically.
 5. Until the Rust `check` is ported, `./ail run` under the switch runs the Rust
    `check` first; with no Rust toolchain it relies on the native backend's own
    diagnostics.
@@ -52,4 +52,4 @@ removal every program, including the tools, runs natively.
 
 - The native `run` has no stdin passthrough when run directly (relay at exit); the script path has it.
 - Every run hashes the backend's and std's sources (a few MB); `fs.metadata` is not native yet, which a size-and-time key would need. Trimming the cache uses `ls -t`, so on Windows the cache is not trimmed.
-- `tools/release/seeds.sha256` is empty until the designer publishes the first seeds.
+- The seed's hashes are pinned in `tools/release/seeds.sha256`; the Linux x86-64 seed was run on Linux and builds `examples/hello.ail`.

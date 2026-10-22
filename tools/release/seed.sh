@@ -16,7 +16,7 @@ echo "seed: self-host fixed point ..." >&2
 ONLY=none tools/self-host/run.sh "$out/sh" >&2 || { echo "seed: the fixed point isn't reached; no seeds built" >&2; exit 1; }
 stage2="$out/sh/stage2"
 sums="$out/seeds.sha256"; : > "$sums"
-for pair in macos-aarch64:aarch64-macos linux-x86_64:x86_64-linux linux-aarch64:aarch64-linux; do
+for pair in aarch64-macos:aarch64-macos x86_64-linux:x86_64-linux aarch64-linux:aarch64-linux x86_64-windows.exe:x86_64-windows; do
     name="ail-seed-${pair%%:*}"; target="${pair##*:}"
     echo "seed: building $name ..." >&2
     "$stage2" build compiler/main.ail compiler/rt/native "$target" 0 0 bootstrap/src/std > "$out/$name.hex"
@@ -32,7 +32,7 @@ cat tools/release/seeds.sha256 >&2
 if [ "$upload" = --upload ]; then
     gh repo view kksimp/ail --json isPrivate -q .isPrivate | grep -qx true || { echo "seed: the repository isn't private; not uploading" >&2; exit 1; }
     gh release create "$tag" --repo kksimp/ail --title "Native ail seeds $tag" --notes "ADR 0855 seeds; verified by tools/release/seeds.sha256." \
-        "$out"/ail-seed-macos-aarch64 "$out"/ail-seed-linux-x86_64 "$out"/ail-seed-linux-aarch64
+        "$out"/ail-seed-aarch64-macos "$out"/ail-seed-x86_64-linux "$out"/ail-seed-aarch64-linux "$out"/ail-seed-x86_64-windows.exe
     echo "seed: uploaded $tag. Commit tools/release/seeds.sha256 and SEED_TAG." >&2
 else
     echo "seed: built in $out; rerun with --upload to publish (private release)" >&2

@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Download the native `ail` seed for this host from the private repository's
-# release and install it as .native/ail (ADR 0855). The SHA-256 in
+# Download the native compiler seed for this host from the private repository's
+# release and install it as .native/seed (ADR 0855). The SHA-256 in
 # tools/release/seeds.sha256 must match; nothing unverified is installed.
+# The seed builds compiler/main.ail into the current .native/ail (see ./ail).
+# Uses the REST API only (`gh release download` needs GraphQL, which some hosts block).
 #   tools/release/fetch-seed.sh [TAG]     TAG defaults to the first line of tools/release/SEED_TAG
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 case "$(uname -s)-$(uname -m)" in
-    Darwin-arm64) asset=ail-seed-macos-aarch64 ;;
-    Linux-x86_64) asset=ail-seed-linux-x86_64 ;;
-    Linux-aarch64 | Linux-arm64) asset=ail-seed-linux-aarch64 ;;
+    Darwin-arm64) asset=ail-seed-aarch64-macos ;;
+    Linux-x86_64) asset=ail-seed-x86_64-linux ;;
+    Linux-aarch64 | Linux-arm64) asset=ail-seed-aarch64-linux ;;
     *) echo "fetch-seed: unsupported host $(uname -s) $(uname -m)" >&2; exit 2 ;;
 esac
 tag="${1:-$(head -n 1 "$root/tools/release/SEED_TAG" 2>/dev/null || true)}"
@@ -17,7 +19,9 @@ want="$(awk -v a="$asset" '$2 == a { print $1 }' "$root/tools/release/seeds.sha2
 repo="kksimp/ail"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    gh release download "$tag" --repo "$repo" --pattern "$asset" --dir "$tmp"
+    id="$(gh api "repos/$repo/releases/tags/$tag" --jq ".assets[] | select(.name == \"$asset\") | .id")"
+    [ -n "$id" ] || { echo "fetch-seed: release $tag has no asset $asset" >&2; exit 2; }
+    gh api -H "Accept: application/octet-stream" "repos/$repo/releases/assets/$id" > "$tmp/$asset"
 elif [ -n "${GITHUB_TOKEN:-}" ]; then
     api="https://api.github.com/repos/$repo/releases/tags/$tag"
     id="$(curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" "$api" |
@@ -31,5 +35,5 @@ if command -v sha256sum >/dev/null 2>&1; then got="$(sha256sum "$tmp/$asset" | c
 else got="$(shasum -a 256 "$tmp/$asset" | cut -d' ' -f1)"; fi
 [ "$got" = "$want" ] || { echo "fetch-seed: SHA-256 mismatch for $asset (got $got, want $want); not installing" >&2; exit 1; }
 mkdir -p "$root/.native"
-install -m 755 "$tmp/$asset" "$root/.native/ail"
-echo "fetch-seed: installed $asset ($tag) as .native/ail" >&2
+install -m 755 "$tmp/$asset" "$root/.native/seed"
+echo "fetch-seed: installed $asset ($tag) as .native/seed" >&2
