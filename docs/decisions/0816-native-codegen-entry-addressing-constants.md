@@ -250,3 +250,12 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     method arm in `lower_const.ail`, one dispatch line in `lower.ail`) but
     saved 1.0M of 167M instructions and no wall time I could measure on
     wordfreq, so it is not worth a slot in the lower.ail queue.
+13. **`xs[y + k]` with `y` fixed in the loop loses its check.** nbody's
+    `advance` indexes `s[bi + 1]` ... `s[bi + 6]` in an inner loop where
+    `bi` belongs to the outer one. The existing versioning handled `xs[bi]`
+    and `xs[j*7 + k]` but not a constant offset on a value computed outside
+    the loop, so each of those accesses kept its check and re-read the list
+    header after every store. The guard now tests `0 <= y` once and
+    `y < len - k` for the largest `k` per (list, `y`) (native.bce.10); the
+    in-loop `y + k` additions lose their overflow check because the guard
+    bounds `y`. nbody 49.3M to 38.0M instructions (-22.9%; C 28.3M).

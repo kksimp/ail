@@ -389,6 +389,23 @@ fn main()
     print(total)
 ```
 
+**native.bce.10** — The check on `xs[y + k]` may be removed where `y` does not
+change in the loop, `k` is a constant from 0 to 64, and `xs` is a list that
+the loop does not resize or whose elements it does not replace through
+another name: the loop is versioned on `0 <= y` and `y < len - k`, and the
+original loop, which traps at the same access with the same message, runs
+when they do not hold. *(ADR 0816)*
+
+```ail rules=native.bce.10
+fn main()
+    xs := [1, 2, 3, 4, 5, 6]
+    mut total := 0
+    y := 1
+    for j in 0..3
+        total += xs[y + 2] * j + xs[y + 4]
+    print(total)
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is
