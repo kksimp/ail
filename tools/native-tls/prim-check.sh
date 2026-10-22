@@ -23,14 +23,14 @@ s = s.replace(old, 'fn hash_hmac_sha256(op str, args str) str\n    tlsprim_call(
 open(p, 'w').write(s)
 PY
 export AIL_COMPILER="$tmp/compiler"
-vectors=bootstrap/src/net/crypto/testdata/crosscheck.txt
+vectors="bootstrap/src/net/crypto/testdata/crosscheck.txt bootstrap/src/net/crypto/testdata/signatures.txt"
 prog=tools/native-tls/prim.ail
 ./ail build "$prog" -o "$tmp/x64" > /dev/null
-"$tmp/x64" "$vectors" | tee "$tmp/out"
+"$tmp/x64" $vectors | tee "$tmp/out"
 grep -q ' 0 failed' "$tmp/out"
 qemu=$(command -v qemu-aarch64-static || command -v qemu-aarch64 || true)
 if [ -n "$qemu" ]; then
   ./ail build "$prog" --target aarch64-linux -o "$tmp/a64" > /dev/null
-  "$qemu" "$tmp/a64" "$vectors" | tee "$tmp/out64"
+  "$qemu" "$tmp/a64" $vectors | tee "$tmp/out64"
   grep -q ' 0 failed' "$tmp/out64"
 fi

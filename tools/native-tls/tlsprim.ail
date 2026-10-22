@@ -42,6 +42,29 @@ fn tlsprim_fields(s str) List[List[int]]
             start = i + 1
     out
 
+## One line of signatures.txt: `ecdsa_CURVE_HASH` with `public msg sig`, or
+## `rsa_pkcs1_HASH` / `rsa_pss_HASH` with `n e msg sig`; "1" if it verifies.
+fn tlsprim_verify(op str, f List[List[int]]) str
+    alg := if op.ends_with("sha256") then 0 else if op.ends_with("sha384") then 1 else 2
+    digest := alloc_raw(64, KIND_BYTES)
+    ok := false
+    if op.starts_with("ecdsa_")
+        curve := if op.starts_with("ecdsa_p256") then 0 else 1
+        sig := f[2][0]
+        sig_hash(alg, f[1][0], f[1][1], digest)
+        if load8(sig) != 48 or load8(sig + 2) != 2
+            return "0"
+        rl := load8(sig + 3)
+        if load8(sig + 4 + rl) != 2
+            return "0"
+        sl := load8(sig + 5 + rl)
+        ok = ecdsa_verify(curve, f[0][0], f[0][1], digest, sig_hlen(alg), sig + 4, rl, sig + 6 + rl, sl)
+    elif op.starts_with("rsa_pss")
+        ok = rsa_verify_pss(alg, f[0][0], f[0][1], f[1][0], f[1][1], f[2][0], f[2][1], f[3][0], f[3][1])
+    else
+        ok = rsa_verify_pkcs1(alg, f[0][0], f[0][1], f[1][0], f[1][1], f[2][0], f[2][1], f[3][0], f[3][1])
+    if ok then "1" else "0"
+
 fn tlsprim_call(op str, args str) str
     f := tlsprim_fields(args)
     if op == "poly1305"
@@ -94,4 +117,6 @@ fn tlsprim_call(op str, args str) str
         out := alloc_raw(32, KIND_BYTES)
         kdf_derive_secret(early, "derived", empty, out)
         return "{tlsprim_hex(early, 32)} {tlsprim_hex(out, 32)}"
+    if op.starts_with("ecdsa_") or op.starts_with("rsa_")
+        return tlsprim_verify(op, f)
     "unknown op"

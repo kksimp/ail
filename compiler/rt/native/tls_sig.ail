@@ -1,0 +1,327 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Signature verification for certificates and TLS 1.3 CertificateVerify in the
+## native TLS client (ADR 0836 slice 3, ADR 0368): ECDSA over P-256 and P-384
+## (FIPS 186-4, SEC 1), RSA PKCS#1 v1.5 and RSASSA-PSS (RFC 8017). Verification
+## only, over the numbers of tls_big.ail; the same checks and the same answers
+## as bootstrap/src/net/crypto/sig.rs. Hashes are named by `alg`: 0 SHA-256,
+## 1 SHA-384, 2 SHA-512. Curves by `curve`: 0 P-256, 1 P-384.
+
+fn sig_hlen(alg int) int
+    if alg == 0
+        return 32
+    if alg == 1
+        return 48
+    64
+
+## The digest of the `n` bytes at `src`, `sig_hlen(alg)` bytes at `out` (which
+## has room for 64).
+fn sig_hash(alg int, src int, n int, out int)
+    if alg == 0
+        hash_sha256_raw(src, n, out)
+    elif alg == 1
+        hash_sha512_raw(src, n, out, false)
+    else
+        hash_sha512_raw(src, n, out, true)
+
+fn sig_nibble(c int) int
+    if c >= 97
+        return c - 87
+    c - 48
+
+## The bytes of the hex text `s`, as `[address, length]`.
+fn sig_unhex(s str) List[int]
+    p := str_addr(s)
+    n := load64(p) / 2
+    out := alloc_raw(n + 8, KIND_BYTES)
+    for i in 0..n
+        store8(out + i, sig_nibble(load8(p + 16 + 2 * i)) * 16 + sig_nibble(load8(p + 17 + 2 * i)))
+    [out, n]
+
+fn sig_big_hex(s str, k int) List[int]
+    b := sig_unhex(s)
+    big_from_be(b[0], b[1], k)
+
+fn sig_curve_size(curve int) int
+    if curve == 0 then 32 else 48
+
+fn sig_curve_p(curve int) str
+    if curve == 0
+        return "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff"
+
+fn sig_curve_b(curve int) str
+    if curve == 0
+        return "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b"
+    "b3312fa7e23ee7e4988e056be3f82d19181d9c6efe8141120314088f5013875ac656398d8a2ed19d2a85c8edd3ec2aef"
+
+fn sig_curve_gx(curve int) str
+    if curve == 0
+        return "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
+    "aa87ca22be8b05378eb1c71ef320ad746e1d3b628ba79b9859f741e082542a385502f25dbf55296c3a545e3872760ab7"
+
+fn sig_curve_gy(curve int) str
+    if curve == 0
+        return "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"
+    "3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f"
+
+fn sig_curve_n(curve int) str
+    if curve == 0
+        return "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+    "ffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973"
+
+# ---- points: [x, y, z] residues in Jacobian coordinates, z = 0 at infinity ----
+
+fn ec_inf(f List[List[int]]) List[List[int]]
+    [f[3], f[3], big_zero(f[0].len())]
+
+fn ec_double(f List[List[int]], p List[List[int]]) List[List[int]]
+    if big_is_zero(p[2])
+        return p
+    x := p[0]
+    y := p[1]
+    z := p[2]
+    delta := mont_mul(f, z, z)
+    gamma := mont_mul(f, y, y)
+    beta := mont_mul(f, x, gamma)
+    t := mont_mul(f, mont_sub(f, x, delta), mont_add(f, x, delta))
+    alpha := mont_add(f, mont_add(f, t, t), t)
+    beta2 := mont_add(f, beta, beta)
+    beta4 := mont_add(f, beta2, beta2)
+    beta8 := mont_add(f, beta4, beta4)
+    x3 := mont_sub(f, mont_mul(f, alpha, alpha), beta8)
+    yz := mont_add(f, y, z)
+    z3 := mont_sub(f, mont_sub(f, mont_mul(f, yz, yz), gamma), delta)
+    g2 := mont_mul(f, gamma, gamma)
+    g4 := mont_add(f, g2, g2)
+    g8 := mont_add(f, mont_add(f, g4, g4), mont_add(f, g4, g4))
+    y3 := mont_sub(f, mont_mul(f, alpha, mont_sub(f, beta4, x3)), g8)
+    [x3, y3, z3]
+
+fn ec_add(f List[List[int]], p List[List[int]], q List[List[int]]) List[List[int]]
+    if big_is_zero(p[2])
+        return q
+    if big_is_zero(q[2])
+        return p
+    z1z1 := mont_mul(f, p[2], p[2])
+    z2z2 := mont_mul(f, q[2], q[2])
+    u1 := mont_mul(f, p[0], z2z2)
+    u2 := mont_mul(f, q[0], z1z1)
+    s1 := mont_mul(f, mont_mul(f, p[1], q[2]), z2z2)
+    s2 := mont_mul(f, mont_mul(f, q[1], p[2]), z1z1)
+    h := mont_sub(f, u2, u1)
+    r0 := mont_sub(f, s2, s1)
+    if big_is_zero(h)
+        if big_is_zero(r0)
+            return ec_double(f, p)
+        return ec_inf(f)
+    h2 := mont_add(f, h, h)
+    i := mont_mul(f, h2, h2)
+    j := mont_mul(f, h, i)
+    r := mont_add(f, r0, r0)
+    v := mont_mul(f, u1, i)
+    x3 := mont_sub(f, mont_sub(f, mont_mul(f, r, r), j), mont_add(f, v, v))
+    s1j := mont_mul(f, s1, j)
+    y3 := mont_sub(f, mont_mul(f, r, mont_sub(f, v, x3)), mont_add(f, s1j, s1j))
+    zz := mont_add(f, p[2], q[2])
+    z3 := mont_mul(f, mont_sub(f, mont_sub(f, mont_mul(f, zz, zz), z1z1), z2z2), h)
+    [x3, y3, z3]
+
+## `u1 * g + u2 * q` by interleaved double-and-add.
+fn ec_double_mul(f List[List[int]], g List[List[int]], u1 List[int], u2 List[int], q List[List[int]]) List[List[int]]
+    gq := ec_add(f, g, q)
+    mut acc := ec_inf(f)
+    b1 := big_bits(u1)
+    b2 := big_bits(u2)
+    mut i := (if b1 > b2 then b1 else b2) - 1
+    while i >= 0
+        acc = ec_double(f, acc)
+        a := big_bit(u1, i)
+        b := big_bit(u2, i)
+        if a and b
+            acc = ec_add(f, acc, gq)
+        elif a
+            acc = ec_add(f, acc, g)
+        elif b
+            acc = ec_add(f, acc, q)
+        i -= 1
+    acc
+
+## The first byte of the `n` bytes at `p` that is not zero (or `n`).
+fn sig_skip_zeros(p int, n int) int
+    mut i := 0
+    while i < n and load8(p + i) == 0
+        i += 1
+    i
+
+## ECDSA verification (SEC 1 4.1.4): `public` is `04 || x || y`, `hash` the
+## digest, `r` and `s` the signature's integers (big-endian, any leading zeros).
+fn ecdsa_verify(curve int, public int, publen int, hash int, hn int, r int, rn int, s int, sn int) bool
+    size := sig_curve_size(curve)
+    k := big_limbs(size)
+    if publen != 1 + 2 * size or load8(public) != 4
+        return false
+    ro := sig_skip_zeros(r, rn)
+    so := sig_skip_zeros(s, sn)
+    if rn - ro > size or sn - so > size or rn == ro or sn == so
+        return false
+    p := sig_big_hex(sig_curve_p(curve), k)
+    n := sig_big_hex(sig_curve_n(curve), k)
+    x := big_from_be(public + 1, size, k)
+    y := big_from_be(public + 1 + size, size, k)
+    if big_cmp(x, p) >= 0 or big_cmp(y, p) >= 0
+        return false
+    f := mont_new(p)
+    b := mont_to(f, sig_big_hex(sig_curve_b(curve), k))
+    qx := mont_to(f, x)
+    qy := mont_to(f, y)
+    # y^2 = x^3 - 3x + b
+    x3 := mont_mul(f, mont_mul(f, qx, qx), qx)
+    three_x := mont_add(f, mont_add(f, qx, qx), qx)
+    rhs := mont_add(f, mont_sub(f, x3, three_x), b)
+    if big_cmp(mont_mul(f, qy, qy), rhs) != 0
+        return false
+    q := [qx, qy, f[3]]
+    rv := big_from_be(r + ro, rn - ro, k)
+    sv := big_from_be(s + so, sn - so, k)
+    if big_cmp(rv, n) >= 0 or big_cmp(sv, n) >= 0
+        return false
+    nm := mont_new(n)
+    w := mont_inv(nm, mont_to(nm, sv))
+    mut e := big_from_be(hash, if hn < size then hn else size, k)
+    if big_cmp(e, n) >= 0
+        e = big_sub(e, n)
+    u1 := mont_from(nm, mont_mul(nm, mont_to(nm, e), w))
+    u2 := mont_from(nm, mont_mul(nm, mont_to(nm, rv), w))
+    g := [mont_to(f, sig_big_hex(sig_curve_gx(curve), k)), mont_to(f, sig_big_hex(sig_curve_gy(curve), k)), f[3]]
+    pt := ec_double_mul(f, g, u1, u2, q)
+    if big_is_zero(pt[2])
+        return false
+    zi := mont_inv(f, pt[2])
+    mut px := mont_from(f, mont_mul(f, pt[0], mont_mul(f, zi, zi)))
+    if big_cmp(px, n) >= 0
+        px = big_sub(px, n)
+    big_cmp(px, rv) == 0
+
+# ---- RSA ----
+
+## The DER `DigestInfo` prefix of PKCS#1 v1.5 for `alg`, as `[address, length]`.
+fn rsa_digest_info(alg int) List[int]
+    if alg == 0
+        return sig_unhex("3031300d060960864801650304020105000420")
+    if alg == 1
+        return sig_unhex("3041300d060960864801650304020205000430")
+    sig_unhex("3051300d060960864801650304020305000440")
+
+## `sig ^ e mod n` as `kb` bytes at the returned address, or 0 for a malformed
+## signature or key. `n` and `e` are big-endian byte strings.
+fn rsa_public_op(np int, nn int, ep int, en int, sig int, sn int) int
+    no := sig_skip_zeros(np, nn)
+    nb := nn - no
+    k := big_limbs(nb)
+    m := big_from_be(np + no, nb, k)
+    bits := big_bits(m)
+    kb := (bits + 7) / 8
+    if bits < 2048 or bits > 8192 or not big_is_odd(m) or sn != kb
+        return 0
+    s := big_from_be(sig, sn, k)
+    if big_cmp(s, m) >= 0
+        return 0
+    eo := sig_skip_zeros(ep, en)
+    e := big_from_be(ep + eo, en - eo, k)
+    if big_is_zero(e)
+        return 0
+    out := alloc_raw(kb + 8, KIND_BYTES)
+    big_to_be(big_modpow(m, s, e), out, kb)
+    out
+
+## The byte length of the modulus `n` (without leading zeros).
+fn rsa_size(np int, nn int) int
+    no := sig_skip_zeros(np, nn)
+    (big_bits(big_from_be(np + no, nn - no, big_limbs(nn - no))) + 7) / 8
+
+fn rsa_verify_pkcs1(alg int, np int, nn int, ep int, en int, msg int, mn int, sig int, sn int) bool
+    em := rsa_public_op(np, nn, ep, en, sig, sn)
+    if em == 0
+        return false
+    kb := sn
+    di := rsa_digest_info(alg)
+    hl := sig_hlen(alg)
+    tn := di[1] + hl
+    if kb < tn + 11
+        return false
+    want := alloc_raw(kb + 8, KIND_BYTES)
+    store8(want, 0)
+    store8(want + 1, 1)
+    for i in 2..kb - tn - 1
+        store8(want + i, 255)
+    store8(want + kb - tn - 1, 0)
+    copy_bytes(want + kb - tn, di[0], di[1])
+    digest := alloc_raw(64, KIND_BYTES)
+    sig_hash(alg, msg, mn, digest)
+    copy_bytes(want + kb - hl, digest, hl)
+    tls_ct_eq(em, want, kb)
+
+## MGF1 (RFC 8017 B.2.1) of the `sn` bytes at `seed`: `len` bytes at the result.
+fn rsa_mgf1(alg int, seed int, sn int, len int) int
+    hl := sig_hlen(alg)
+    out := alloc_raw(len + 64, KIND_BYTES)
+    buf := alloc_raw(sn + 4, KIND_BYTES)
+    copy_bytes(buf, seed, sn)
+    digest := alloc_raw(64, KIND_BYTES)
+    mut done := 0
+    mut counter := 0
+    while done < len
+        store8(buf + sn, counter.shr(24).bit_and(255))
+        store8(buf + sn + 1, counter.shr(16).bit_and(255))
+        store8(buf + sn + 2, counter.shr(8).bit_and(255))
+        store8(buf + sn + 3, counter.bit_and(255))
+        sig_hash(alg, buf, sn + 4, digest)
+        copy_bytes(out + done, digest, hl)
+        done += hl
+        counter += 1
+    out
+
+fn rsa_verify_pss(alg int, np int, nn int, ep int, en int, msg int, mn int, sig int, sn int) bool
+    emf := rsa_public_op(np, nn, ep, en, sig, sn)
+    if emf == 0
+        return false
+    no := sig_skip_zeros(np, nn)
+    nbits := big_bits(big_from_be(np + no, nn - no, big_limbs(nn - no)))
+    hl := sig_hlen(alg)
+    em_bits := nbits - 1
+    em_len := (em_bits + 7) / 8
+    lead := sn - em_len
+    for i in 0..lead
+        if load8(emf + i) != 0
+            return false
+    em := emf + lead
+    if em_len < 2 * hl + 2 or load8(em + em_len - 1) != 188
+        return false
+    dbn := em_len - hl - 1
+    h := em + dbn
+    top_mask := 255.shr(8 * em_len - em_bits)
+    if load8(em).bit_and(255 - top_mask) != 0
+        return false
+    mask := rsa_mgf1(alg, h, hl, dbn)
+    db := alloc_raw(dbn + 8, KIND_BYTES)
+    for i in 0..dbn
+        store8(db + i, load8(mask + i).bit_xor(load8(em + i)))
+    store8(db, load8(db).bit_and(top_mask))
+    ps_len := em_len - 2 * hl - 2
+    for i in 0..ps_len
+        if load8(db + i) != 0
+            return false
+    if load8(db + ps_len) != 1
+        return false
+    saltn := dbn - ps_len - 1
+    mp := alloc_raw(8 + hl + saltn + 8, KIND_BYTES)
+    for i in 0..8
+        store8(mp + i, 0)
+    digest := alloc_raw(64, KIND_BYTES)
+    sig_hash(alg, msg, mn, digest)
+    copy_bytes(mp + 8, digest, hl)
+    copy_bytes(mp + 8 + hl, db + ps_len + 1, saltn)
+    sig_hash(alg, mp, 8 + hl + saltn, digest)
+    tls_ct_eq(digest, h, hl)
