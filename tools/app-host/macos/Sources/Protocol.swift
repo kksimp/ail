@@ -2,7 +2,7 @@
 // newline-delimited JSON. Views arrive on standard input; events leave on
 // standard output. The first line each way carries "v": 1.
 
-import Foundation
+import AppKit
 
 /// A drawing step of a canvas (std.app.3).
 enum Op {
@@ -10,6 +10,7 @@ enum Op {
     case fill(x: Double, y: Double, w: Double, h: Double, color: Int)
     case stroke(x1: Double, y1: Double, x2: Double, y2: Double, color: Int, width: Double)
     case pic(x: Double, y: Double, w: Double, h: Double, src: String)
+    case bitmap(x: Double, y: Double, w: Double, h: Double, id: String)
     case clip(x: Double, y: Double, w: Double, h: Double)
     case unclip
 }
@@ -58,9 +59,42 @@ func decodeOp(_ any: Any) -> Op? {
     case "Stroke":
         return .stroke(x1: num(d, "x1"), y1: num(d, "y1"), x2: num(d, "x2"), y2: num(d, "y2"), color: int(d, "color"), width: num(d, "width"))
     case "Pic": return .pic(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), src: text(d, "src"))
+    case "Bitmap":
+        let id = text(d, "id")
+        Bitmaps.store(id, w: int(d, "pw"), h: int(d, "ph"), base64: text(d, "data"))
+        return .bitmap(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"), id: id)
     case "Clip": return .clip(x: num(d, "x"), y: num(d, "y"), w: num(d, "w"), h: num(d, "h"))
     case "Unclip": return .unclip
     default: return nil
+    }
+}
+
+/// Images sent as `Bitmap` ops, kept by id so a later view can omit the data (std.app.3).
+enum Bitmaps {
+    private static var images: [String: NSImage] = [:]
+    private static let lock = NSLock()
+
+    static func image(_ id: String) -> NSImage? {
+        lock.lock(); defer { lock.unlock() }
+        return images[id]
+    }
+
+    /// Decodes `R, G, B, A` bytes (non-premultiplied) to an image; empty data keeps what `id` has.
+    static func store(_ id: String, w: Int, h: Int, base64: String) {
+        guard !base64.isEmpty, w > 0, h > 0, let data = Data(base64Encoded: base64), data.count == w * h * 4 else { return }
+        var px = [UInt8](data)
+        for i in stride(from: 0, to: px.count, by: 4) {
+            let a = UInt16(px[i + 3])
+            for c in 0..<3 { px[i + c] = UInt8((UInt16(px[i + c]) * a + 127) / 255) }
+        }
+        guard let provider = CGDataProvider(data: Data(px) as CFData),
+              let cg = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+                               space: CGColorSpaceCreateDeviceRGB(),
+                               bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                               provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+        else { return }
+        lock.lock(); defer { lock.unlock() }
+        images[id] = NSImage(cgImage: cg, size: NSSize(width: w, height: h))
     }
 }
 
