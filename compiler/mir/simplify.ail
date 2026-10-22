@@ -6,50 +6,51 @@
 pub fn simplify(f Func) Func
     remove_dead(drop_unreachable(thread_bools(branch_on_inner(remove_trivial_params(f)))))
 
-## The argument each edge into `b` passes for parameter `k`.
-fn incoming(f Func, b int, k int) List[int]
-    mut out := List[int]()
-    for q in f.blocks
-        for e in 0..q.term.targets.len()
-            if q.term.targets[e] == b
-                out.push(q.term.args[e][k])
-    out
-
 fn resolve(repl List[int], v int) int
     mut x := v
     while repl[x] != x
         x = repl[x]
     x
 
+## Parameters that receive one value on every edge are replaced by it. The
+## edges into each block are listed once (`from_block`, `from_edge`): only
+## their arguments are removed, never the edges.
 fn remove_trivial_params(f Func) Func
     mut g := f
+    n := g.blocks.len()
+    mut from_block := [List[int]() for _ in 0..n]
+    mut from_edge := [List[int]() for _ in 0..n]
+    for q in 0..n
+        for e in 0..g.blocks[q].term.targets.len()
+            t := g.blocks[q].term.targets[e]
+            from_block[t].push(q)
+            from_edge[t].push(e)
     mut repl := [i for i in 0..g.vals.len()]
     mut changed := true
     while changed
         changed = false
-        for b in 1..g.blocks.len()
+        for b in 1..n
             mut k := 0
             while k < g.blocks[b].params.len()
                 p := g.blocks[b].params[k]
                 mut only := -1
                 mut many := false
-                for a in incoming(g, b, k)
-                    x := resolve(repl, a)
+                for j in 0..from_block[b].len()
+                    x := resolve(repl, g.blocks[from_block[b][j]].term.args[from_edge[b][j]][k])
                     if x == p or x == only
                         continue
                     if only < 0
                         only = x
                     else
                         many = true
+                        break
                 if many or only < 0
                     k += 1
                     continue
                 repl[p] = only
                 g.blocks[b].params.remove_at(k)
-                for q in 0..g.blocks.len()
-                    for e in 0..g.blocks[q].term.targets.len()
-                        if g.blocks[q].term.targets[e] == b
-                            g.blocks[q].term.args[e].remove_at(k)
+                for j in 0..from_block[b].len()
+                    g.blocks[from_block[b][j]].term.args[from_edge[b][j]].remove_at(k)
                 changed = true
     final := [resolve(repl, v) for v in 0..repl.len()]
     for b in 0..g.blocks.len()
@@ -85,7 +86,7 @@ fn branch_on_inner(f Func) Func
 
 ## A block that only branches on its one `bool` parameter (what `a or b` and
 ## `a and b` lower to) is bypassed (ADR 0623): an edge that passes a constant
-## goes straight to the matching target, and a jump that passes any other
+## goes straight to the matching target, and a jump that passes removed other
 ## value branches on it, so a comparison feeds a branch and not a flag that
 ## is made, tested and thrown away.
 fn thread_bools(f Func) Func
@@ -164,24 +165,53 @@ fn drop_unreachable(f Func) Func
     g.blocks = blocks
     g
 
+## Pure instructions whose value nobody reads are removed, and so, in turn,
+## those that only fed them: a use count per value and a stack of the values
+## that reached zero, instead of a pass over the function per layer.
 fn remove_dead(f Func) Func
     mut g := f
-    mut changed := true
-    while changed
-        changed = false
-        mut used := [false for _ in 0..g.vals.len()]
-        for blk in g.blocks
-            for i in blk.insts
-                for u in i.args
-                    used[u] = true
-            for u in blk.term.uses()
-                used[u] = true
-        for b in 0..g.blocks.len()
-            mut keep := List[Inst]()
-            for i in g.blocks[b].insts
-                if i.dst >= 0 and not used[i.dst] and i.is_pure()
-                    changed = true
-                    continue
-                keep.push(i)
-            g.blocks[b].insts = keep
+    nb := g.blocks.len()
+    mut uses := [0 for _ in 0..g.vals.len()]
+    mut def_block := [-1 for _ in 0..g.vals.len()]
+    mut def_inst := [-1 for _ in 0..g.vals.len()]
+    mut work := List[int]()
+    for b in 0..nb
+        blk := g.blocks[b]
+        for i in 0..blk.insts.len()
+            for u in blk.insts[i].args
+                uses[u] += 1
+            d := blk.insts[i].dst
+            if d >= 0
+                def_block[d] = b
+                def_inst[d] = i
+        for u in blk.term.uses()
+            uses[u] += 1
+    for v in 0..uses.len()
+        if uses[v] == 0 and def_block[v] >= 0
+            work.push(v)
+    mut dead := [[false for _ in g.blocks[b].insts] for b in 0..nb]
+    mut removed := false
+    while work.len() > 0
+        v := work.pop() else 0
+        b := def_block[v]
+        i := def_inst[v]
+        if dead[b][i] or uses[v] != 0
+            continue
+        ins := g.blocks[b].insts[i]
+        if not ins.is_pure()
+            continue
+        dead[b][i] = true
+        removed = true
+        for u in ins.args
+            uses[u] -= 1
+            if uses[u] == 0 and def_block[u] >= 0
+                work.push(u)
+    if not removed
+        return g
+    for b in 0..nb
+        mut keep := List[Inst]()
+        for i in 0..g.blocks[b].insts.len()
+            if not dead[b][i]
+                keep.push(g.blocks[b].insts[i])
+        g.blocks[b].insts = keep
     g

@@ -13,7 +13,7 @@ srv=$!
 while [ ! -s "$tmp/port" ]; do sleep 0.1; done
 url="http://127.0.0.1:$(head -1 "$tmp/port")"
 qemu=$(command -v qemu-aarch64-static || command -v qemu-aarch64 || true)
-for prog in tools/native-net/http_client.ail tools/native-net/http_request.ail tools/native-net/http_bytes.ail tools/native-net/http_jar.ail; do
+for prog in tools/native-net/http_client.ail tools/native-net/http_request.ail tools/native-net/http_bytes.ail tools/native-net/http_jar.ail tools/native-net/http_keepalive.ail; do
   ./ail run "$prog" "$url" > "$tmp/want" 2>&1
   ./ail build "$prog" -o "$tmp/x64" > /dev/null
   "$tmp/x64" "$url" > "$tmp/got" 2>&1

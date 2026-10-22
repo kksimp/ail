@@ -1,0 +1,53 @@
+# A local's last use is not copied, but a copy that something else still sees is (own.val.1).
+struct Bag
+    xs List[int]
+    m Map[str, int]
+
+fn build() Bag
+    xs := [1, 2, 3]
+    mut m := Map[str, int]()
+    m["a"] = 1
+    Bag(xs: xs, m: m)
+
+fn twice(n int) int
+    mut total := 0
+    xs := [1, 2, 3]
+    for i in 0..n
+        ys := xs
+        mut zs := ys
+        zs.push(i)
+        total += zs.len()
+    total
+
+fn main()
+    b := build()
+    print("{b.xs} {b.m.len()}")
+    mut a := [1]
+    c := a
+    a.push(2)
+    print("{a} {c}")
+    mut d := [5]
+    e := d
+    print("{e}")
+    print("{twice(3)}")
+    mut s := Bag(xs: [1], m: Map[str, int]())
+    mut t := s
+    t.xs.push(9)
+    print("{s.xs} {t.xs}")
+    rows := [[1, 2], [3, 4]]
+    for r in rows
+        mut q := r
+        q.push(0)
+        print("{q} {r}")
+    print("{rows}")
+    pool := {"k": [7]}
+    if v := pool.get("k")
+        mut w := v
+        w.push(8)
+        print("{w} {pool["k"]}")
+    mut acc := [0]
+    mut keep := List[List[int]]()
+    for i in 0..3
+        acc.push(i)
+        keep.push(acc)
+    print("{keep}")

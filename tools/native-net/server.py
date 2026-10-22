@@ -117,14 +117,36 @@ def respond(conn, method, target, headers, body):
     return b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
 
 
+def closes(head):
+    """Whether a canned response ends its connection: it says so, or has no
+    length to end the body by."""
+    head = head.split(b"\r\n\r\n", 1)[0].lower()
+    return b"connection: close" in head or (b"content-length" not in head and b"transfer-encoding" not in head)
+
+
+CONNS = [0]
+
+
 def serve(conn):
+    CONNS[0] += 1
+    mine = CONNS[0]
+    count = 0
     try:
-        req = read_request(conn)
-        if req is None:
-            return
-        line, headers, body = req
-        method, target, _ = line.split(" ", 2)
-        conn.sendall(respond(conn, method, target, headers, body))
+        while True:
+            req = read_request(conn)
+            if req is None:
+                return
+            line, headers, body = req
+            method, target, _ = line.split(" ", 2)
+            count += 1
+            if target == "/which":
+                data = ("conn %d request %d" % (mine, count)).encode()
+                out = b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(data) + data
+            else:
+                out = respond(conn, method, target, headers, body)
+            conn.sendall(out)
+            if closes(out) or any(h.lower() == "connection: close" for h in headers):
+                return
     finally:
         conn.close()
 

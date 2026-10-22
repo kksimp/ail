@@ -1,0 +1,21 @@
+# A struct copy copies its map and set fields (own.val.1): changing the copy leaves the original alone.
+struct K
+    xs List[int]
+    m Map[str, int]
+    s Set[int]
+
+fn bump(mut k K)
+    k.xs.push(9)
+    k.m["a"] = 1
+    k.s.add(5)
+
+fn main()
+    base := K(xs: [1], m: Map[str, int](), s: Set[int]())
+    mut k := base
+    bump(mut k)
+    print("list base={base.xs.len()} k={k.xs.len()}")
+    print("map base={base.m.len()} k={k.m.len()}")
+    print("set base={base.s.len()} k={k.s.len()}")
+    mut m2 := base.m
+    m2["z"] = 2
+    print("map2 base={base.m.len()} m2={m2.len()}")

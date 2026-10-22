@@ -1,0 +1,59 @@
+# Persistent connections (std.net.19) against the scripted server: requests to
+# one origin share a connection, `Connection: close` and a body that ends at
+# end of stream do not, and a closed idle connection is replaced. The base
+# URL is the first argument.
+use std.net
+
+## The body "conn N request M" with N renumbered by first appearance, since
+## the server counts connections across programs.
+fn show(mut ids List[str], label str, r net.Response)
+    parts := r.body.split(" ")
+    if parts.len() != 4
+        print("{label}: {r.status} {r.body}")
+        return
+    mut at := -1
+    for i in 0..ids.len()
+        if ids[i] == parts[1]
+            at = i
+    if at < 0
+        ids.push(parts[1])
+        at = ids.len() - 1
+    print("{label}: {r.status} connection {at} request {parts[3]}")
+
+fn main()
+    base := env.args()[0]
+    mut ids := ["-"]
+    a := net.get("{base}/which") else err
+        print("a error {err.kind}")
+        return
+    show(mut ids, "first", a)
+    b := net.get("{base}/which") else err
+        print("b error {err.kind}")
+        return
+    show(mut ids, "second", b)
+    c := net.post("{base}/which", "x", "text/plain") else err
+        print("c error {err.kind}")
+        return
+    show(mut ids, "post", c)
+    mut o := net.options()
+    o.headers["Connection"] = "close"
+    d := net.request("GET", "{base}/which", o) else err
+        print("d error {err.kind}")
+        return
+    show(mut ids, "close", d)
+    e := net.get("{base}/which") else err
+        print("e error {err.kind}")
+        return
+    show(mut ids, "after close", e)
+    f := net.get("{base}/close") else err
+        print("f error {err.kind}")
+        return
+    print("until end: {f.status} {f.body}")
+    g := net.get("{base}/which") else err
+        print("g error {err.kind}")
+        return
+    show(mut ids, "after until end", g)
+    h := net.get("{base}/redirect") else err
+        print("h error {err.kind}")
+        return
+    print("redirect: {h.status} {h.body}")

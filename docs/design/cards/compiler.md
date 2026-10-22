@@ -1,7 +1,7 @@
 # compiler
 entry: main in main.ail
 
-## (root) (20 items)
+## (root) (24 items)
 
 ## a64 (60 items)
 
@@ -13,7 +13,7 @@ entry: main in main.ail
 
 ## derive (25 items)
 
-## mir (363 items)
+## mir (368 items)
 
 ## obj (58 items)
 

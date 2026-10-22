@@ -1,0 +1,52 @@
+# Assigning a whole `mut` parameter changes the caller's argument (own.param.2).
+
+struct Img
+    code List[int]
+    funcs Map[str, int]
+
+fn reset_img(mut img Img)
+    mut other := img
+    other.code.push(7)
+    other.funcs["x"] = 1
+    img = other
+    img.funcs["y"] = 2
+
+fn reset_list(mut xs List[int])
+    ys := [1, 2, 3]
+    xs = ys
+    xs.push(4)
+
+fn reset_map(mut m Map[str, int])
+    mut n := Map[str, int]()
+    n["a"] = 1
+    n["b"] = 2
+    m = n
+    m["c"] = 3
+
+fn reset_set(mut s Set[int])
+    mut t := Set[int]()
+    t.add(5)
+    s = t
+    s.add(6)
+
+fn reset_pair(mut p (int, int))
+    p = (3, 4)
+
+fn main()
+    mut img := Img(code: [1], funcs: Map[str, int]())
+    reset_img(mut img)
+    print("img {img.code} {img.funcs.len()} {img.funcs.contains("y")}")
+    mut xs := [9]
+    reset_list(mut xs)
+    print("list {xs}")
+    mut m := Map[str, int]()
+    m["old"] = 0
+    reset_map(mut m)
+    print("map {m.len()} {m.contains("old")} {m.contains("c")}")
+    mut s := Set[int]()
+    s.add(1)
+    reset_set(mut s)
+    print("set {s.len()} {s.contains(1)} {s.contains(6)}")
+    mut p := (1, 2)
+    reset_pair(mut p)
+    print("pair {p.0} {p.1}")
