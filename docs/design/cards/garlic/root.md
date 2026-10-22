@@ -88,7 +88,9 @@ struct Gui
     top float
     sent Set[str]
     fresh Set[str]
+    meas Map[str, float]
 fn address(text str) str [fs io]
+MEASURE_RUNS := 5000
 struct Garlic
     g Gui
     tabs List[Gui]
@@ -124,4 +126,4 @@ fn bitmap_data_lens(ops List[std.app.Op]) List[List[int]]
 fn flat(s gfx.Scene) List[str]
 ```
 
-trimmed to fit 2000 tokens (~1735); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1750); dropped: private items, doc comments

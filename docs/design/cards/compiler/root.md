@@ -3,12 +3,14 @@ entry: main in main.ail
 
 ## (root)
 ```
-fn main() ! [env fail fs io proc]
+fn main() ! [clock env fail fs io proc]
     fails with JsonError | fs.IoError
 BUILD_USAGE := ...
 fn positive(v str) bool  ## A positive whole number (run.limit.4).
 fn host_target() str [io proc]  ## The target `ail build` makes by default: the host's, from `uname`.
 fn build_cli(rest List[str]) [env fs io proc]  ## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
+fn compiler_dir() str [env io]  ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str) [env fs io proc]  ## Build `file` for `target` (the host's when empty) into `out` (by default
 fn check_dump(path str, many bool) ! [env fail fs io]  ## The checker's diagnostics for one dump, sorted by position as `ail check`
     fails with JsonError | fs.IoError
 fn runtime(dir str, path str) !ast.Program [fail fs io]  ## The native runtime in directory `dir`, parsed as one program.
@@ -38,4 +40,13 @@ fn parse_module(module str, paths List[str]) !List[mir.Source] [fail fs io]  ## 
     fails with fs.IoError
 fn parse_text(module str, path str, text str) mir.Source [io]  ## Text from `path`, parsed; syntax errors are printed and the run fails.
 fn parse_with(module str, path str, text str, names Set[str]) mir.Source [io]
+CACHE_KEEP := 64  ## Entries the cache keeps; the least recently used go first (native.build.5).
+fn cache_dir() str [env]  ## The build cache directory: `AIL_CACHE_DIR`, `$XDG_CACHE_HOME/ail/build`,
+fn tree_stamp(tag str, root str) str [fs io]  ## One line per `.ail` file under `root` (path and the SHA-256 of its text),
+fn cache_key(file str, target str) str [env fs io]  ## The key of building `file` for `target`: everything that decides the
+fn cache_trim(dir str) [fs io proc]  ## Keep the newest `CACHE_KEEP` executables of `dir` (`ls -t` lists newest first;
+fn cli_prepare(file str) str [clock env fs io proc]  ## The cached executable of `file` for the host, built first when missing.
+fn cli_prepare_cmd(rest List[str]) [clock env fs io proc]
+fn cli_run(rest List[str]) [clock env fs io proc]  ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
+fn chop(s str) str  ## `s` without one final newline.
 ```
