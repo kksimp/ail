@@ -568,7 +568,7 @@ fn embedded_derive_generators_are_current() {
 fn derives_build_without_the_derived_file() {
     let tmp = std::env::temp_dir().join(format!("ail-derive-embed-{}", std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
-    for name in ["json_prelude", "json_native", "derive_default", "derive_json_args"] {
+    for name in ["json_prelude", "json_native", "derive_default", "derive_json_args", "derive_user"] {
         let rel = format!("bootstrap/tests/native/run/{name}.ail");
         let out = Command::new(env!("CARGO_BIN_EXE_ail"))
             .current_dir(root())
@@ -645,6 +645,27 @@ fn ail_script_routes_build_to_the_native_compiler() {
     assert!(!go("bootstrap/tests/native/run/no_such_file.ail").status.success());
     assert!(!log.exists());
     let _ = fs::remove_dir_all(&tmp);
+}
+
+/// ct.derive.4, ADR 0856: a user generator that refuses a type stops the native
+/// build with the interpreter's message.
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn user_generator_refusal_stops_the_native_build() {
+    let rel = "bootstrap/tests/cases/derive_generator_fails.ail";
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .env_remove("AIL_DERIVED")
+        .args(["run", "compiler", "build", rel, "compiler/rt/native", host_target(), "0", "0"])
+        .arg(root().join("bootstrap/src/std"))
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("error[ct.derive.4]: `Size` can't be derived for `Light`: `Size` needs a struct; `Light` is an enum"),
+        "{err}"
+    );
 }
 
 /// run.limit.5, run.limit.6: a native program stops at the limits of
