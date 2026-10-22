@@ -1,0 +1,7 @@
+use std.net
+
+fn main()
+    r := net.get("http://{env.args()[0]}:{env.args()[1]}/") else err
+        print("error: {err}")
+        return
+    print("status {r.status}")

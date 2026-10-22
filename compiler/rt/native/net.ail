@@ -298,8 +298,8 @@ fn net_hosts(host str) int
     -1
 
 ## The IPv4 address of `host`, or -1 (a name that isn't `localhost` or in
-## `/etc/hosts` is not found on Linux, which has no DNS client yet; macOS
-## asks the system resolver).
+## `/etc/hosts` goes to the DNS servers of `/etc/resolv.conf` on Linux
+## (net_dns.ail) and to the system resolver on macOS).
 fn net_resolve(host str) int
     ip := net_ipv4(host)
     if ip >= 0
@@ -309,6 +309,8 @@ fn net_resolve(host str) int
     found := net_hosts(host)
     if found < 0 and target() == 2
         return net_getaddrinfo(host)
+    if found < 0
+        return net_dns(host)
     found
 
 ## The IPv4 address of `host` from libSystem's `getaddrinfo` (macOS: the
