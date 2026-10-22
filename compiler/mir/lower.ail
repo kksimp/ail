@@ -73,6 +73,8 @@ struct Lower
     is_rt bool
     ## The function being lowered.
     fname str
+    ## Each `mut` parameter's object (lower_param.ail).
+    mut_ptr Map[str, int]
     ret Ty
     blocks List[Block]
     vals List[Ty]
@@ -233,6 +235,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         prefix: "",
         is_rt: false,
         fname: "",
+        mut_ptr: {},
         ret: Ty.Unit,
         blocks: [],
         vals: [],
@@ -836,6 +839,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     for i in 0..f.params.len()
         p := f.params[i]
         declare(p.name, sig.params[k + i], params[k + i])
+        note_mut_param(p, lookup(p.name) else "", params[k + i])
         borrowed.add(lookup(p.name) else "")
     body := f.body else
         lower_extern(f, name, params)
@@ -1171,7 +1175,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
                 r := lower_value(value, ty) else return
                 ty2 := settle_var(target, ty, r)
                 v = copy_if_place(value, Val(id: convert(r, ty2, pos), ty: ty2))
-            write_var(key, cur, v)
+            write_var(key, cur, assign_param(key, ty, v))
         Index(recv, index, ipos) =>
             l := lower_value(recv, none) else return
             if l.ty.is_coll()

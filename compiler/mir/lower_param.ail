@@ -1,0 +1,38 @@
+## Assigning a whole `mut` parameter (own.param.2): the caller's argument is
+## the object the parameter points to, so `p = other` writes the new value
+## into that object instead of rebinding the name. A struct or tuple is
+## stored slot by slot, a list by its three header words, a map or set by its
+## table header (the entries and index come with the new table). The name
+## then stays the parameter, so later changes reach the caller too.
+
+use ast
+
+## A `mut` parameter's object, as `FUNCTION|KEY`.
+fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
+    if p.mutable and v >= 0
+        mut_ptr["{fname}|{key}"] = v
+
+## The value to bind to `key` after `key = v` of type `ty`.
+fn Lower.assign_param(mut self, key str, ty Ty, v int) int
+    p := mut_ptr.get("{fname}|{key}") else return v
+    if p == v
+        return v
+    if xs := tuple_elems(ty)
+        for k in 0..xs.len()
+            store(p, k, load(v, k, xs[k]))
+        return p
+    match ty
+        Struct(n) =>
+            slots := structs[n]
+            for k in 0..slots.len()
+                store(p, k, load(v, k, slots[k].ty))
+        List(_) =>
+            for k in 0..3
+                store(p, k, load(v, k, Ty.Int))
+        Map(_, _) | Set(_) =>
+            for k in 0..11
+                store(p, k, load(v, k, Ty.Int))
+            # The remembered entry belongs to the old table.
+            store(p, 10, konst(0, Ty.Int))
+        _ => return v
+    p
