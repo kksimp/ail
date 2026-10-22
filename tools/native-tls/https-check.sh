@@ -57,7 +57,8 @@ check "RSA leaf, self-signed root" "$tmp/rsa.pem" "$tmp/rsa.key" "$tmp/rsa.pem" 
 check "IP address in the SAN" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" 127.0.0.1
 suite=TLS_AES_128_GCM_SHA256 check "AES-128-GCM-SHA256" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" localhost
 suite=TLS_AES_256_GCM_SHA384 check "AES-256-GCM-SHA384" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" localhost
-check "wrong host name" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/ca.pem" 127.0.0.2
+# 127.0.0.2 is not routed on macOS: a certificate for localhost only, reached by 127.0.0.1.
+check "wrong host name" "$tmp/rsa.pem" "$tmp/rsa.key" "$tmp/rsa.pem" 127.0.0.1
 check "unknown CA" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/rsa.pem" localhost
 check "bad SSL_CERT_FILE" "$tmp/leaf.pem" "$tmp/leaf.key" /etc/hostname localhost
 echo "https-check: all passed"

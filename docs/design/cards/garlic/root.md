@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 64 (`ail test` lists them)
+tests: 66 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -49,6 +49,10 @@ GUI_CELL_H := 16.0
 fn app_main(Browser, bool) ! [app clock env fail fs io net proc]
 fn flag(List[str], str) str?  ## The value after flag `name` (`--width 60`), or none.
 fn usage() [io]
+VALUE_FLAGS := ...  ## Flags that take a value, so the address is the first argument that is
+fn target_of(List[str]) str
+fn op_line(draw.Op) str  ## One drawing operation as a line a person or the Mac gate can check:
+fn pixels_dump(Browser, float) [io]  ## `--pixels-dump`: the pixel layout of the page, one operation per line,
 fn main() ! [app clock env fail fs io net proc]
 fn tree(str) str  ## The tree of `src` in the html5lib-tests format.
 fn lay(str, int) page.Page
@@ -64,4 +68,4 @@ fn bench(List[str]) [clock fs io]  ## `garlic --bench FILE [ROUNDS]`: `args` are
 fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 ```
 
-trimmed to fit 2000 tokens (~1586); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1694); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
