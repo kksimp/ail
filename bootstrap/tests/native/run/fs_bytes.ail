@@ -1,0 +1,16 @@
+fn main()
+    fs.write_bytes("/tmp/ail_fs_bytes.bin", b"ab\x00cd") else err
+        print("write {err.kind}")
+        return
+    b := fs.read_bytes("/tmp/ail_fs_bytes.bin") else err
+        print("read {err.kind}")
+        return
+    print(b.len())
+    print(b.hex())
+    l := b.to_list()
+    print(l.len())
+    print(l[2])
+    m := fs.read_bytes("/tmp/ail_fs_bytes_none.bin") else err
+        print("missing {err.kind}")
+        return
+    print(m.len())
