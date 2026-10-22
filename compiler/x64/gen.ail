@@ -54,8 +54,13 @@ struct Gen
     a Asm
     ## The Windows target (ADR 0608): `target()` is 3.
     win bool
-    img codegen.Image
-    m mir.Module
+    ## What the function needs from the image and the module, without a copy
+    ## of either per function: the sites (shared), the globals' size, and the
+    ## requests `gen_func` replays on the image afterwards, in order.
+    sites ref codegen.Sites
+    nglobals int
+    calls List[codegen.CallRow]
+    f64s List[float]
     f mir.Func
     loc List[int]
     blabels List[int]
@@ -85,6 +90,7 @@ pub fn generate(m mir.Module) codegen.Image
     img.globals = m.globals_used()
     for i in 0..m.strs.len()
         codegen.add_str(mut img, "d:s{i}", m.strs[i])
+    sites := ref codegen.Sites(list: m.sites)
     mut a := new_asm()
     # _start: pass argc and argv to `rt.init`, align the stack, run `main`,
     # exit 0.
@@ -104,12 +110,12 @@ pub fn generate(m mir.Module) codegen.Image
         if is_kernel(f.name)
             gen_kernel(mut img, f.name)
         else
-            gen_func(mut img, m, f, false)
+            gen_func(mut img, m, sites, f, false)
     codegen.add_call_table(mut img, m)
     img
 
 ## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
-fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
+fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, win bool)
     f := codegen.split_for_calls(codegen.split_edges(f0))
     al := codegen.allocate(f, registers())
     mut remat := [mir.inst(-1, "", []) for _ in 0..f.vals.len()]
@@ -122,7 +128,6 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
-    first := img.calls.len()
     mut globs := Map[int, int]()
     mut addr_uses := [0 for _ in 0..f.vals.len()]
     for blk in f.blocks
@@ -138,8 +143,10 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
     mut g := Gen(
         a: new_asm(),
         win: win,
-        img: img,
-        m: m,
+        sites: sites,
+        nglobals: img.globals,
+        calls: [],
+        f64s: [],
         f: f,
         loc: al.loc,
         blabels: [],
@@ -173,10 +180,13 @@ fn gen_func(mut img codegen.Image, m mir.Module, f0 mir.Func, win bool)
         g.gen_block(b)
     g.gen_stubs()
     g.a.resolve_labels()
-    img = g.img
+    for x in g.f64s
+        codegen.add_f64(mut img, x)
+    for s in g.stubs
+        codegen.add_trap_texts(mut img, m, s.site, s.op)
     base := img.code.len()
-    for k in first..img.calls.len()
-        img.calls[k].off += base
+    for c in g.calls
+        img.calls.push(codegen.CallRow(off: c.off + base, pos: c.pos, func: c.func))
     img.funcs[f.name] = base
     img.code.extend(g.a.code)
     for fx in g.a.fixups
@@ -283,6 +293,11 @@ fn Gen.gpr(mut self, v int, scratch int) int
     scratch
 
 ## `v` in a vector register: its own, or `scratch` loaded with it.
+## The symbol of float constant `x`; `gen_func` adds its data to the image.
+fn Gen.f64_const(mut self, x float) str
+    f64s.push(x)
+    codegen.f64_sym(x)
+
 fn Gen.xmm(mut self, v int, scratch int) int
     l := loc[v]
     if is_reg(l)
@@ -291,7 +306,7 @@ fn Gen.xmm(mut self, v int, scratch int) int
         a.vmovsd_rm(scratch, slot(l))
         return scratch
     i := remat[v]
-    sym := codegen.add_f64(mut img, i.fimm)
+    sym := f64_const(i.fimm)
     a.vmovsd_rm(scratch, at_sym(sym, 0))
     scratch
 
@@ -329,7 +344,7 @@ fn Gen.move_of(mut self, dst int, v int) Move
     if i.op == "fnaddr"
         return Move(dst: dst, src: -1, imm: 0, sym: i.name, float: fl)
     if i.op == "fconst"
-        return Move(dst: dst, src: -1, imm: 0, sym: codegen.add_f64(mut img, i.fimm), float: fl)
+        return Move(dst: dst, src: -1, imm: 0, sym: f64_const(i.fimm), float: fl)
     Move(dst: dst, src: loc[v], imm: 0, sym: "", float: fl)
 
 ## Perform moves as if all at once: a move waits while its destination is
@@ -602,7 +617,7 @@ fn Gen.compare(mut self, i mir.Inst) int
 fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
     l := a.label()
     # An atomic add's overflow has its own message (conc.atomic.5).
-    k := if kind == 0 and m.sites[site].rule == "conc.atomic.5" then 16 else kind
+    k := if kind == 0 and sites.list[site].rule == "conc.atomic.5" then 16 else kind
     stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op, undo: 0))
     l
 
@@ -642,7 +657,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.mov_rr(S1, gpr(i.args[0], S1))
             a.neg(S1)
             if i.site >= 0
-                kind := if m.sites[i.site].op == "abs" then 5 else 2
+                kind := if sites.list[i.site].op == "abs" then 5 else 2
                 a.jcc(CC_O, stub(kind, i.args[0], i.args[0], i.site, "-"))
             put_gpr(i.dst, S1)
         "not" =>
@@ -704,7 +719,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.alu_rr("cmp", S1, S0)
             a.jcc(CC_NE, ok)
             # The smallest `int` is the only value that converts to it.
-            a.vmovsd_rm(X1, at_sym(codegen.add_f64(mut img, -9223372036854775807.0 - 1.0), 0))
+            a.vmovsd_rm(X1, at_sym(f64_const(-9223372036854775807.0 - 1.0), 0))
             a.vucomisd(xa, X1)
             bad := stub(4, i.args[0], i.args[0], i.site, "")
             a.jcc(CC_P, bad)
@@ -1064,7 +1079,7 @@ fn Gen.call_out(mut self, i mir.Inst)
     if i.site >= 0
         # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
         a.alu_rm("cmp", RSP, at_sym("globals", 8 * STACK_LIMIT))
-        a.jcc(CC_B, stub(11, -1, -1, i.site, m.sites[i.site].op))
+        a.jcc(CC_B, stub(11, -1, -1, i.site, sites.list[i.site].op))
     mut moves := List[Move]()
     mut ni := 0
     mut nf := 0
@@ -1101,7 +1116,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.call_sym(i.name)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
-        img.calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
+        calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
     if room > 0
         a.alu_ri("add", RSP, room)
     if i.dst >= 0
@@ -1255,7 +1270,7 @@ fn Gen.prim(mut self, i mir.Inst)
             a.ud2()
         "globals_end" =>
             d := out_gpr(i.dst, S1)
-            a.lea(d, at_sym("globals", 8 * m.globals_used()))
+            a.lea(d, at_sym("globals", 8 * nglobals))
             put_gpr(i.dst, d)
         "gc_regs" =>
             b := gpr(i.args[0], S0)
@@ -1394,7 +1409,6 @@ fn Gen.store_byte(mut self, mem Mem, v int)
 fn Gen.gen_stubs(mut self)
     for s in stubs
         a.bind(s.label)
-        codegen.add_trap_texts(mut img, m, s.site, s.op)
         mut moves := List[Move]()
         moves.push(Move(dst: RDI, src: -1, imm: s.kind, sym: "", float: false))
         if s.kind == 4
