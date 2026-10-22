@@ -1,0 +1,28 @@
+# `/` and `%` by a power of two on values that are never negative are a shift
+# and a mask (ADR 0816); on values that may be negative they stay signed.
+fn counters(n int) int
+    mut t := 0
+    for i in 0..n
+        t += i / 2 + i % 2 + i / 8 + i % 8
+        for j in i..n
+            t += (i + j) * (i + j + 1) / 2
+    t
+
+fn signed(lo int, hi int) int
+    mut t := 0
+    for i in lo..hi
+        t += i / 2 * 3 + i % 2 + i / 4 + i % 4
+    t
+
+fn mixed(xs List[int]) int
+    mut t := 0
+    for i in 0..xs.len()
+        t += xs[i] / 2 + xs[i] % 2 + (xs.len() - i) / 2 + (i - 3) / 2 + (i - 3) % 2
+    t
+
+fn main()
+    print(counters(20))
+    print(counters(0))
+    print(signed(-9, 9))
+    print(signed(3, 11))
+    print(mixed([5, -5, 7, -7, 0, 1, -1, 100, -100]))

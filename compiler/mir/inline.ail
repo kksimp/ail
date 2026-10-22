@@ -41,10 +41,15 @@ pub fn inline_module(m Module) Module
             f = simplify(fold(simplify(f)))
         out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(forward_loads(merge_blocks(f))) else fold_prim_addresses(
             fold_addresses(forward_loads(fill_loops(
-                kept_lengths(bce(merge_blocks(f), reserve, grow_only), reserve and grow_only),
+                kept_lengths(
+                    bce(mark_nonneg(merge_blocks(f)), reserve, grow_only),
+                    reserve and grow_only,
+                ),
                 fills,
             ))),
         )
+        if not f.name.starts_with("rt.")
+            out.funcs[k] = rewrite_nonneg(out.funcs[k])
     reuse_lists(out)
 
 ## Small, calls nothing, and nothing jumps back to its entry.
