@@ -457,7 +457,7 @@ fn net_dial_ms(host str, port int, url str, ms int, at str) int
         w := net_wait(fd, 4, ms)
         if w == 0
             os_close(fd)
-            return net_fail(url, "timed_out", "can't connect to {url}: timed out", at)
+            return net_fail(url, "timed_out", "can't connect to {host}:{port}: connection timed out", at)
         if w < 0
             os_close(fd)
             return net_fail(url, net_errno_kind(-w), "can't connect to {url}", at)
