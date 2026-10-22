@@ -70,6 +70,7 @@ pub fn uses_tasks(text str) bool
         or text.contains("par for")
         or text.contains("Atomic")
         or text.contains("Channel")
+        or text.contains("proc.start")
 
 ## `fn main() !`: no result and no error type of its own. The only `?` the
 ## subset knows is `t.wait()?`, which ends the program on a trap.

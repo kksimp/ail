@@ -1,0 +1,31 @@
+use std.proc
+use std.task
+
+fn main() !
+    # More text than a pipe holds, written before any is read: the child's
+    # output must not block it.
+    c := proc.start("cat", [])?
+    mut total := 0
+    for i in 0..20000
+        c.stdin.send("line number {i} of the flood\n")
+    c.stdin.close()
+    mut n := 0
+    for line in c.out
+        n += 1
+        total += line.len()
+    print("{n} {total}")
+    print(proc.wait(move c)?)
+    # Both streams read through select.
+    d := proc.start("sh", ["-c", "echo a; echo b >&2; echo c; echo d >&2"])?
+    mut outs := 0
+    mut errs := 0
+    while true
+        k := task.select([d.out, d.err]) else break
+        if k == 0
+            if d.out.recv() != none
+                outs += 1
+        else
+            if d.err.recv() != none
+                errs += 1
+    print("{outs} {errs}")
+    print(proc.wait(move d)?)

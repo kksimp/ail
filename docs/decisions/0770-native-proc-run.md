@@ -1,6 +1,6 @@
 # 0770. Native `proc.run` and `proc.which` on Linux
 
-- **Status:** Accepted
+- **Status:** Accepted (macOS and `start` amended by [ADR 0846](0846-native-proc-start-and-macos-proc.md))
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 23 — native backend
