@@ -662,6 +662,19 @@ fn fmt_float_with(neg bool, bits int) float
 ## The nearest `float` to `digits * 10^e10`, `digits` not empty.
 fn fmt_decimal_to_float(neg bool, digits List[int], e10 int) float
     nd := digits.len()
+    # Clinger's fast path: at most 15 digits fit a double exactly, and so does
+    # 10^k up to k = 22, so one multiplication or division rounds correctly.
+    if nd <= 15 and e10 >= -22 and e10 <= 22
+        mut m := 0
+        for d in digits
+            m = m * 10 + d
+        if m == 0
+            return fmt_float_with(neg, 0)
+        mut p := 1.0
+        for _ in 0..(if e10 < 0 then 0 - e10 else e10)
+            p *= 10.0
+        v := if e10 < 0 then m.to_float() / p else m.to_float() * p
+        return if neg then 0.0 - v else v
     if nd + e10 > 309
         return fmt_float_with(neg, 9218868437227405312)
     if nd + e10 < -326
