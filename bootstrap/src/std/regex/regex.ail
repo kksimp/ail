@@ -46,6 +46,13 @@ pub struct Match
     pub end int
     pub text str
 
+## The first match with its groups (std.regex.9).
+pub struct Captures
+    pub start int
+    pub end int
+    pub groups List[str?]
+    pub named Map[str, str]
+
 # ---- character sets ----
 
 # Property ids: 0-13 the ASCII and POSIX sets, 14-26 the Unicode ones, 27-36 scripts.
@@ -2055,6 +2062,23 @@ fn m_find(re Regex, text str) Match?
         return none
     Match(start: vm.res[0], end: vm.res[1], text: cut(text, cs, vm.res[0], vm.res[1]))
 
+fn m_captures(re Regex, text str) Captures?
+    cs := text.chars()
+    mut vm := new_vm(re, 2 * re.groups)
+    if not exec(re, cs, 0, false, mut vm)
+        return none
+    mut groups := List[str?]()
+    for g in 0..re.groups
+        if vm.res[2 * g] >= 0
+            groups.push(cut(text, cs, vm.res[2 * g], vm.res[2 * g + 1]))
+        else
+            groups.push(none)
+    mut named := Map[str, str]()
+    for k in 0..re.names.len()
+        if t := groups[re.name_ix[k]]
+            named[re.names[k]] = t
+    Captures(start: vm.res[0], end: vm.res[1], groups: groups, named: named)
+
 fn m_find_all(re Regex, text str) List[Match]
     cs := text.chars()
     mut vm := new_vm(re, 2)
@@ -2239,6 +2263,9 @@ pub fn find(re Regex, text str) Match?
 pub fn find_all(re Regex, text str) List[Match]
     m_find_all(re, text)
 
+pub fn captures(re Regex, text str) Captures?
+    m_captures(re, text)
+
 pub fn group_all(re Regex, text str, group int) List[str]
     m_group_all(re, text, group)
 
@@ -2256,6 +2283,9 @@ pub fn Regex.is_match(self, text str) bool
 
 pub fn Regex.find(self, text str) Match?
     m_find(self, text)
+
+pub fn Regex.captures(self, text str) Captures?
+    m_captures(self, text)
 
 pub fn Regex.find_all(self, text str) List[Match]
     m_find_all(self, text)

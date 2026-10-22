@@ -326,7 +326,7 @@ fn Lower.gen_tuple_lt(mut self, fkey str, t Ty, xs List[Ty])
 
 ## Whether `t` has a text form here (type.tuple.8): `int`, `float`, `bool`,
 ## `str`, and tuples and lists of those.
-fn text_ok(t Ty) bool
+fn Lower.text_ok(mut self, t Ty) bool
     if xs := tuple_elems(t)
         for x in xs
             if not text_ok(x)
@@ -336,7 +336,35 @@ fn text_ok(t Ty) bool
         return text_ok(e)
     match t
         Int | Sized(_) | Float | F32 | Bool | Str => true
+        Struct | Enum =>
+            mut seen := Set[str]()
+            displayable(t, mut seen)
         _ => false
+
+## Whether a struct or enum has a text form `fields_text` can build: its
+## `to_str`, or fields of scalars, `List[int]` and displayable records.
+fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
+    key := match t
+        Struct(k) => k
+        Enum(k) => k
+        _ => return match t
+            Int | Sized(_) | Float | F32 | Bool | Str => true
+            List(e) => displayable(e, mut seen)
+            _ => false
+    if sigs.contains("{key}.to_str") or seen.contains(key)
+        return true
+    seen.add(key)
+    if cases := enums.get(key)
+        for c in cases
+            for f in c.fields
+                if not displayable(f.ty, mut seen)
+                    return false
+        return true
+    slots := structs.get(key) else return false
+    for s in slots
+        if not displayable(s.ty, mut seen)
+            return false
+    true
 
 ## Whether a list type holds a tuple somewhere, so that its text is made here
 ## (lists of plain numbers and strings print through the runtime).
@@ -345,7 +373,9 @@ fn has_tuple(t Ty) bool
         return true
     if e := t.elem()
         return has_tuple(e)
-    false
+    match t
+        Struct | Enum => true
+        _ => false
 
 ## The text of a value of a type `text_ok` accepts, as inside a tuple or a
 ## list: strings in quotes, `(1, "a")`, `[(1, "a")]`.
@@ -358,6 +388,7 @@ fn Lower.value_text(mut self, t Ty, x int) int
         Str => call("rt.str_quoted", [x], Ty.Str)
         Tuple(xs) => tuple_text_of(xs, x)
         List(e) => list_text(x, e)
+        Struct | Enum => display_call(Val(id: x, ty: t)) else str_value("")
         _ => str_value("")
 
 ## `(a, b)` of the elements of tuple object `obj`.
