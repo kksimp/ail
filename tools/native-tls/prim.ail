@@ -40,4 +40,44 @@ fn main()
         else
             bad += 1
             print("FAIL {f[0]}: want {f[4]} got {got} for {f[1].slice(0, 20)}")
+    pki := fs.read_text(env.args()[2]) else ""
+    mut certs := Map[str, str]()
+    for line in pki.lines()
+        if line.starts_with("#") or line == ""
+            continue
+        kv := line.split(" ")
+        certs[kv[0]] = kv[1]
+    # NAMES|HOST|WANT: WANT is "ok", a message, or "~part" for a substring.
+    # Mirrors bootstrap/src/net/x509/tests.rs (NOW is 2027-01-01).
+    cases := [
+        "leaf,inter|example.test|ok", "leaf,inter|EXAMPLE.test.|ok", "leaf,inter|a.wild.test|ok",
+        "leaf,inter|127.0.0.1|ok", "leaf,inter|::1|ok", "leaf,inter|[::1]|ok",
+        "rsa_leaf,inter|rsa.test|ok", "pss_signed,inter|pss.test|ok", "sha512_leaf,inter|example.test|ok",
+        "leaf,inter,root|example.test|ok", "leaf,self_signed,constrained,inter|example.test|ok",
+        "constrained_ok,constrained|x.allowed.test|ok",
+        "leaf,inter|other.test|the server's certificate isn't valid for `other.test`; it covers example.test, *.wild.test, 127.0.0.1, ::1",
+        "leaf,inter|a.b.wild.test|~isn't valid for", "leaf,inter|wild.test|~isn't valid for",
+        "leaf,inter|example.test.evil|~isn't valid for", "leaf,inter|127.0.0.2|~isn't valid for",
+        "expired,inter|example.test|the certificate for `example.test` expired on 2026-06-01",
+        "future,inter|example.test|the certificate for `example.test` isn't valid until 2030-01-01",
+        "client_eku,inter|example.test|~isn't for servers",
+        "unknown_critical,inter|example.test|~unknown critical extension",
+        "self_signed|example.test|~doesn't lead to a trusted root",
+        "leaf|example.test|the certificate for `example.test` doesn't lead to a trusted root: it was issued by `AIL Test Intermediate`, which isn't in the system's root store",
+        "under_not_ca,not_ca|example.test|~isn't a certificate authority",
+        "under_sub_ca,sub_ca,inter|example.test|~intermediate certificate(s) below it",
+        "constrained_bad,constrained|x.other.test|~name constraints"]
+    for c in cases
+        part := c.split("|")
+        mut args := "{part[1]} 1798761600 {certs["root"]}"
+        for n in part[0].split(",")
+            args = "{args} {certs[n]}"
+        got := hash.hmac_sha256("chain", args)
+        want := part[2]
+        good := if want.starts_with("~") then got.contains(want.slice(1, want.len())) else got == want
+        if good
+            ok += 1
+        else
+            bad += 1
+            print("FAIL chain {c}: got {got}")
     print("{ok} ok, {bad} failed")

@@ -23,7 +23,7 @@ s = s.replace(old, 'fn hash_hmac_sha256(op str, args str) str\n    tlsprim_call(
 open(p, 'w').write(s)
 PY
 export AIL_COMPILER="$tmp/compiler"
-vectors="bootstrap/src/net/crypto/testdata/crosscheck.txt bootstrap/src/net/crypto/testdata/signatures.txt"
+vectors="bootstrap/src/net/crypto/testdata/crosscheck.txt bootstrap/src/net/crypto/testdata/signatures.txt bootstrap/src/net/x509/testdata/chain.txt"
 prog=tools/native-tls/prim.ail
 ./ail build "$prog" -o "$tmp/x64" > /dev/null
 "$tmp/x64" $vectors | tee "$tmp/out"

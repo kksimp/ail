@@ -65,7 +65,26 @@ fn tlsprim_verify(op str, f List[List[int]]) str
         ok = rsa_verify_pkcs1(alg, f[0][0], f[0][1], f[1][0], f[1][1], f[2][0], f[2][1], f[3][0], f[3][1])
     if ok then "1" else "0"
 
+## `chain`: `HOST NOW ROOT CERT...` (HOST text, NOW decimal seconds, ROOT and
+## the certificates hex; ROOT `-` for none). "ok" or the verifier's message.
+fn tlsprim_chain(args str) str
+    w := args.split(" ")
+    mut rest := w[2]
+    for i in 3..w.len()
+        rest = "{rest} {w[i]}"
+    f := tlsprim_fields(rest)
+    mut roots := List[List[int]]()
+    if f[0][1] > 0
+        roots.push(x_parse(f[0][0], f[0][1]))
+    mut chain := List[List[int]]()
+    for i in 1..f.len()
+        chain.push(f[i])
+    e := tv_chain(chain, roots, w[0], str_to_int(w[1]))
+    if e == "" then "ok" else e
+
 fn tlsprim_call(op str, args str) str
+    if op == "chain"
+        return tlsprim_chain(args)
     f := tlsprim_fields(args)
     if op == "poly1305"
         out := alloc_raw(16, KIND_BYTES)
