@@ -940,22 +940,25 @@ fn same_ty(a Ty, b Ty) bool
 fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
     tail := tail_want
     tail_want = none
+    top_unit_fails := scopes.len() == 1 and unit_fails()
     scopes.push(Map[str, str]())
     mut result := Val(id: -2, ty: Ty.Unit)
     for i in 0..body.len()
         s := body[i]
         if done()
             dead_block()
-        if want and i == body.len() - 1
+        if (want or top_unit_fails) and i == body.len() - 1
             if e := final_expr(s)
                 if tail_error(e)
                     continue
-                result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
-                continue
+                if want
+                    result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
+                    continue
             # An `unsafe` block gives its last expression's value.
-            if inner := unsafe_body(s)
-                result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
-                continue
+            if want
+                if inner := unsafe_body(s)
+                    result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
+                    continue
         lower_stmt(s)
     scopes.pop()
     if result.id == -2

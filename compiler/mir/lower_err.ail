@@ -235,6 +235,9 @@ fn Lower.is_error_ty(self, t Ty) bool
 fn Lower.callee_key(self, n str) str
     if self_ty != "" and sigs.contains("{self_ty}.{n}")
         return "{self_ty}.{n}"
+    if not sigs.contains("{prefix}{n}")
+        if k := prelude_key(n)
+            return k
     "{prefix}{n}"
 
 fn Lower.callee_sig(self, n str) Sig?
@@ -262,7 +265,7 @@ fn Lower.fallible_call(self, e ast.Expr) bool
         Call(callee, _, _) =>
             match callee
                 Name(n, _) =>
-                    s := callee_sig(n) else return false
+                    s := callee_sig(n) else return generic_fails(callee_key(n))
                     s.fails
                 _ => false
         Method(
@@ -327,11 +330,16 @@ fn Lower.net_fails(self, recv ast.Expr, name str) bool
 
 fn Lower.method_fails(self, recv ast.Expr, name str) bool
     if m := module_name(recv)
-        s := sigs.get("{m}.{name}") else return false
+        s := sigs.get("{m}.{name}") else return generic_fails("{m}.{name}")
         return s.fails
     key := method_key(recv, name) else return false
     s := sigs.get(key) else return false
     s.fails
+
+## Whether the function being lowered can fail and has no success value: its
+## last expression may still be an error value (err.decl.3).
+fn Lower.unit_fails(self) bool
+    fails and ret.is_unit()
 
 ## An error value as the last expression of a function that can fail is its
 ## error (err.decl.3): leave with it. False when `e` isn't one.
@@ -342,6 +350,8 @@ fn Lower.tail_error(mut self, e ast.Expr) bool
 ## display text and the value, and leave (ADR 0804).
 fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
     e := value else return false
+    if fails and fallible_call(e)
+        return return_fallible_call(e, pos)
     if not is_error_expr(e)
         return false
     if not fails
@@ -356,6 +366,16 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
     call("rt.err_set", [msg, trace_line(pos)], Ty.Unit)
     call("rt.err_value", [v.id], Ty.Unit)
     finish(return_of(zero_of(ret)))
+    true
+
+## `return f(...)` where `f` can fail, in a function that can: the callee's
+## failure (left in the error slot) or its value is this function's result.
+fn Lower.return_fallible_call(mut self, e ast.Expr, pos ast.Pos) bool
+    v := lower_expr(e, ret) else return true
+    if ret.is_unit()
+        finish(return_of(-1))
+    else
+        finish(return_of(convert(v, ret, pos)))
     true
 
 ## After a call of a function that can fail: leave with the failure.
@@ -657,7 +677,7 @@ fn with_error_owners(srcs List[Source]) List[Source]
                 fns[k].owner = im.target
         prog.fns = fns
         out.push(Source(module: src.module, path: src.path, text: src.text, prog: prog))
-    out
+    share_trait_defaults(out)
 
 ## The error type a function that can fail names, when it names one: `E` in
 ## `T ! E` and `! E`. Unions and inferred sets give `Unknown`.
