@@ -1,0 +1,31 @@
+## sorted(by:) with int, float, str, bool and tuple keys, on scalars and structs.
+struct Row
+    name str
+    score float
+    n int
+
+enum Kind
+    A
+    B(v int)
+
+fn main()
+    rows := [
+        Row(name: "b", score: 2.5, n: 3),
+        Row(name: "a", score: 2.5, n: 1),
+        Row(name: "c", score: -1.0, n: 2),
+    ]
+    for r in rows.sorted(by: |r| r.score)
+        print("{r.name} {r.score}")
+    for r in rows.sorted(by: |r| r.name)
+        print(r.name)
+    for r in rows.sorted(by: |r| (r.score, r.name))
+        print(r.name)
+    for r in rows.sorted(by: |r| -r.score)
+        print(r.name)
+    xs := [3.5, 1.25, 2.0]
+    print(xs.sorted(by: |x| -x))
+    print(["bb", "a", "ccc"].sorted(by: |s| s.len()))
+    ks := [Kind.B(v: 2), Kind.A, Kind.B(v: 1)]
+    print(ks.contains(Kind.A))
+    print(ks.contains(Kind.B(v: 3)))
+    print(rows.sorted(by: |r| r.n).len())

@@ -1,0 +1,18 @@
+# saturating_add, saturating_sub and saturating_mul on int clamp at the ends (type.num.12).
+fn main()
+    most := 9223372036854775807
+    least := -9223372036854775807 - 1
+    print(most.saturating_add(1))
+    print(least.saturating_add(-1))
+    print(5.saturating_add(7))
+    print(least.saturating_sub(1))
+    print(most.saturating_sub(-1))
+    print(5.saturating_sub(7))
+    print(most.saturating_mul(2))
+    print(most.saturating_mul(-2))
+    print(least.saturating_mul(-1))
+    print(least.saturating_mul(1))
+    print(3.saturating_mul(-4))
+    print(0.saturating_mul(most))
+    print((most - 1).saturating_add(1))
+    print((least + 1).saturating_sub(1))

@@ -1,0 +1,4 @@
+# conc.task.7: a receive nobody can ever satisfy traps instead of hanging.
+fn main()
+    c := Channel[str](1)
+    print(c.recv() else "none")

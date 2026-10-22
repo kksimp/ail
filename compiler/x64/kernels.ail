@@ -10,7 +10,7 @@ use codegen
 
 ## The kernels this file assembles.
 pub fn is_kernel(name str) bool
-    name == "rt.vec_axpy" or name == "rt.vec_zip" or name == "rt.vec_scal"
+    name == "rt.vec_axpy" or name == "rt.vec_zip" or name == "rt.vec_scal" or name == "rt.fill"
 
 ## Add the kernel `name` to `img`.
 pub fn gen_kernel(mut img codegen.Image, name str)
@@ -18,11 +18,58 @@ pub fn gen_kernel(mut img codegen.Image, name str)
     match name
         "rt.vec_axpy" => kernel_axpy(mut a)
         "rt.vec_zip" => kernel_zip(mut a)
+        "rt.fill" => kernel_fill(mut a)
         _ => kernel_scal(mut a)
     a.resolve_labels()
     base := img.code.len()
     img.funcs[name] = base
     img.code.extend(a.code)
+
+## `rt.fill(p, n, v, size)`: store the low `size` bytes (1 or 8) of `v` in `n`
+## consecutive elements from `p`. rdi = p, rsi = n, rdx = v, rcx = size. A
+## long fill is `rep stosb`/`stosq`; a short one a loop, since the string
+## instructions take a few dozen cycles to start.
+fn kernel_fill(mut a Asm)
+    words := a.label()
+    small_bytes := a.label()
+    small_words := a.label()
+    done := a.label()
+    bytes_loop := a.label()
+    words_loop := a.label()
+    a.alu_ri("cmp", RCX, 8)
+    a.jcc(CC_E, words)
+    a.alu_ri("cmp", RSI, 64)
+    a.jcc(CC_B, small_bytes)
+    a.mov_rr(RCX, RSI)
+    a.mov_rr(RAX, RDX)
+    a.rep_stosb()
+    a.ret()
+    a.bind(small_bytes)
+    a.alu_ri("cmp", RSI, 0)
+    a.jcc(CC_E, done)
+    a.bind(bytes_loop)
+    a.mov8_mr(at(RDI, 0), RDX)
+    a.alu_ri("add", RDI, 1)
+    a.alu_ri("sub", RSI, 1)
+    a.jcc(CC_NE, bytes_loop)
+    a.ret()
+    a.bind(words)
+    a.alu_ri("cmp", RSI, 16)
+    a.jcc(CC_B, small_words)
+    a.mov_rr(RCX, RSI)
+    a.mov_rr(RAX, RDX)
+    a.rep_stosq()
+    a.ret()
+    a.bind(small_words)
+    a.alu_ri("cmp", RSI, 0)
+    a.jcc(CC_E, done)
+    a.bind(words_loop)
+    a.mov_mr(at(RDI, 0), RDX)
+    a.alu_ri("add", RDI, 8)
+    a.alu_ri("sub", RSI, 1)
+    a.jcc(CC_NE, words_loop)
+    a.bind(done)
+    a.ret()
 
 ## Round the four doubles of ymm`x` to `f32` and back, through xmm3.
 fn round_ymm(mut a Asm, x int)

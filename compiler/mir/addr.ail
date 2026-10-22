@@ -61,6 +61,13 @@ pub fn fold_prim_addresses(f Func) Func
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
+    # How many of a value's uses are the address of a load or store primitive:
+    # a sum used only so can be folded into each of them and then dies.
+    mut addressed := [0 for _ in 0..f.vals.len()]
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "prim" and prim_kind(i.name) != 0
+                addressed[i.args[0]] += 1
     mut g := f
     mut changed := false
     for b in 0..g.blocks.len()
@@ -103,7 +110,7 @@ pub fn fold_prim_addresses(f Func) Func
             while more
                 more = false
                 x := d else break
-                if (x.op != "add" and x.op != "sub") or x.site >= 0 or uses[base] != 1
+                if (x.op != "add" and x.op != "sub") or x.site >= 0 or uses[base] != addressed[base]
                     break
                 mut c := const_of(f, defs, x.args[1])
                 mut next := x.args[0]

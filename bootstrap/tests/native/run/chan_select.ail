@@ -1,0 +1,22 @@
+# conc.select.1: the lowest ready index; none once every channel is closed and empty.
+use std.task
+
+fn feed(c Channel[str], tag str, n int)
+    for i in 0..n
+        c.send("{tag}{i}")
+    c.close()
+
+fn main() !
+    a := Channel[str](1)
+    b := Channel[str](1)
+    pa := spawn feed(a, "a", 3)
+    pb := spawn feed(b, "b", 3)
+    mut got := 0
+    while true
+        i := task.select([a, b]) else break
+        ch := if i == 0 then a else b
+        v := ch.recv() else continue
+        got += v.len()
+    print(got)
+    pa.wait()?
+    pb.wait()?

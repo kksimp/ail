@@ -28,6 +28,7 @@ fn is_list_edit(name str) bool
         or name == "first"
         or name == "last"
         or name == "index_of"
+        or is_list_build(name)
         or is_set_op(name)
 
 ## Bytes of one element of a list of `e`.
@@ -38,9 +39,9 @@ fn elem_bytes(e Ty) int
 ## the element type has no native equality yet.
 fn eq_kind(e Ty) int
     match e
-        Int | Bool | Char => 0
+        Int | Bool | Char | Sized(_) => 0
         Str => 1
-        Float => 2
+        Float | F32 => 2
         _ => -1
 
 ## `xs.NAME(args)` for the methods above. `vs` are the lowered arguments.
@@ -55,6 +56,8 @@ fn Lower.lower_list_edit(
 ) Val?
     size := konst(elem_bytes(e), Ty.Int)
     unit := Val(id: -1, ty: Ty.Unit)
+    if is_list_build(name)
+        return lower_list_build(r, e, name, npos, vs)
     if structural(e) and tuple_list_method(name)
         return tuple_list_edit(r, e, name, npos, vs)
     if name == "extend" and vs.len() == 1
@@ -124,9 +127,9 @@ fn Lower.lower_list_edit(
         )
     if (name == "sort" or name == "sorted") and vs.len() == 0
         k := match e
-            Int => 0
+            Int | Sized(_) => 0
             Str => 1
-            Float => 2
+            Float | F32 => 2
             _ => -1
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
@@ -152,6 +155,8 @@ fn Lower.lower_list_edit(
     if name == "sum" and vs.len() == 0
         if e == Ty.Float
             return Val(id: call("rt.list_sum_float", [r.id], Ty.Float), ty: Ty.Float)
+        if e == Ty.F32
+            return Val(id: call("rt.list_sum_f32", [r.id], Ty.Float), ty: Ty.F32)
         if e != Ty.Int
             return unsupported(npos, "`.sum()` on `{r.ty.name()}`")
         texts := trap_texts("expr.arith.1", npos)
@@ -165,9 +170,9 @@ fn Lower.lower_list_edit(
         return opt_at(r, nonempty, last, e, false, npos)
     if (name == "min" or name == "max") and vs.len() == 0
         k := match e
-            Int => 0
+            Int | Sized(_) => 0
             Str => 1
-            Float => 2
+            Float | F32 => 2
             _ => -1
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
