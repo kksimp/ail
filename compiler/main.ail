@@ -65,6 +65,11 @@ fn main() !
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
         "build" =>
+            # `build FILE [-o OUT] ...` is `ail build` itself; the
+            # positional form below is what the bootstrap calls.
+            if args.len() == 2 or args[1].starts_with("-") or args[2].starts_with("-")
+                build_cli(args[1..])
+                return
             # Optional defaults for the run limits (run.limit.5): `0` for none.
             ms := if args.len() > 4 then args[4] else "0"
             mb := if args.len() > 5 then args[5] else "0"
@@ -85,6 +90,95 @@ fn main() !
                 print(executable_hex(lower_file(path, rt, args[5])?, path, args[2]))
         _ =>
             io.eprint("unknown command {args[0]}")
+            io.exit(2)
+
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]"
+
+## A positive whole number (run.limit.4).
+fn positive(v str) bool
+    n := v.to_int() else return false
+    n > 0
+
+## The target `ail build` makes by default: the host's, from `uname`.
+fn host_target() str
+    out := proc.run("uname", ["-sm"]) else
+        return "x86_64-linux"
+    match out.out.trim()
+        "Darwin arm64" => "aarch64-macos"
+        "Linux aarch64" | "Linux arm64" => "aarch64-linux"
+        _ => "x86_64-linux"
+
+## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
+## [--no-cache]` (native.build.3), the bootstrap's command line: the checked
+## program's executable, written to OUT (by default FILE's name in the
+## current directory). The repository is `AIL_COMPILER`, the `compiler/`
+## directory, or `AIL_ROOT`, the directory holding it. `ail` runs `ail check` first.
+fn build_cli(rest List[str])
+    mut file := ""
+    mut out := ""
+    mut target := ""
+    mut ms := "0"
+    mut mb := "0"
+    mut i := 0
+    while i < rest.len()
+        a := rest[i]
+        has := i + 1 < rest.len()
+        if a == "-o" and has
+            out = rest[i + 1]
+            i += 1
+        elif a == "--target" and has
+            target = rest[i + 1]
+            i += 1
+        elif a == "--timeout" and has and positive(rest[i + 1])
+            ms = rest[i + 1]
+            i += 1
+        elif a == "--max-memory" and has and positive(rest[i + 1])
+            mb = rest[i + 1]
+            i += 1
+        elif a == "--no-cache"
+            i += 1
+            continue
+        elif file == "" and not a.starts_with("-")
+            file = a
+        else
+            io.eprint(BUILD_USAGE)
+            io.exit(2)
+        i += 1
+    if file == ""
+        io.eprint(BUILD_USAGE)
+        io.exit(2)
+    mut dir := env.get("AIL_COMPILER") else ""
+    if dir == ""
+        root := env.get("AIL_ROOT") else
+            io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
+            io.exit(2)
+            ""
+        dir = path.join(root, "compiler")
+    if target == ""
+        target = host_target()
+    if out == ""
+        out = path.stem(file)
+    rt := runtime_with(path.join(dir, "rt/native"), file, ms, mb) else err
+        io.eprint("error[native.build.3]: can't read the runtime: {err}")
+        io.exit(2)
+        return
+    std := path.join(path.dir(dir), "bootstrap/src/std")
+    m := lower_file(file, rt, std) else err
+        io.eprint("error[native.build.3]: {err}")
+        io.exit(1)
+        return
+    hex := executable_hex(m, file, target)
+    exe := bytes.from_hex(hex.replace("\n", "")) else
+        io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
+        io.exit(2)
+        return
+    fs.write_bytes(out, exe) else err
+        io.eprint("error[native.build.3]: can't write {out}: {err}")
+        io.exit(2)
+        return
+    if not target.ends_with("windows")
+        _ := proc.run("chmod", ["755", out]) else err
+            io.eprint("error[native.build.3]: can't make {out} executable: {err}")
             io.exit(2)
 
 ## The checker's diagnostics for one dump, sorted by position as `ail check`

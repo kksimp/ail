@@ -897,6 +897,13 @@ fn fs_write_text(path str, text str, at str)
     if not os_ok()
         os_error(path, os_kind(), at)
 
+## `fs.write_bytes(path, data)` (std.fs.14): a `bytes` object has a `str`'s
+## layout, so the text writer takes it as it is.
+fn fs_write_bytes(path str, data str, at str)
+    os_fs_write_text(path, data)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+
 fn fs_append_text(path str, text str, at str)
     os_fs_append_text(path, text)
     if not os_ok()
