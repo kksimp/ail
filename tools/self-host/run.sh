@@ -54,9 +54,12 @@ blocked() { say ""; say "BLOCKED at $1: $2"; say "Report: $report"; exit 1; }
 unhex() { perl -ne 'chomp; print pack("H*", $_)' > "$1" && chmod +x "$1"; }
 
 # build SRC with compiler CMD into OUT; the compiler prints hex
+# The derive output (ADR 0807) of SRC, as the Rust-hosted `ail build` makes it;
+# the native compiler reads it through AIL_DERIVED.
 build_with() { # compiler src out
     local cc="$1" src="$2" dst="$3"
-    "$cc" build "$src" "$rt" ${TARGET:+"$TARGET"} > "$dst.hex" 2> "$dst.err" || return 1
+    ./ail build "$src" --derived-out "$dst.derived" > /dev/null 2>&1 || : > "$dst.derived"
+    AIL_DERIVED="$dst.derived" "$cc" build "$src" "$rt" ${TARGET:+"$TARGET"} > "$dst.hex" 2> "$dst.err" || return 1
     unhex "$dst" < "$dst.hex"
 }
 
