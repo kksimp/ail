@@ -41,7 +41,7 @@ fn sig_unhex(s str) List[int]
 
 fn sig_big_hex(s str, k int) List[int]
     b := sig_unhex(s)
-    big_from_be(b[0], b[1], k)
+    tbig_from_be(b[0], b[1], k)
 
 fn sig_curve_size(curve int) int
     if curve == 0 then 32 else 48
@@ -74,10 +74,10 @@ fn sig_curve_n(curve int) str
 # ---- points: [x, y, z] residues in Jacobian coordinates, z = 0 at infinity ----
 
 fn ec_inf(f List[List[int]]) List[List[int]]
-    [f[3], f[3], big_zero(f[0].len())]
+    [f[3], f[3], tbig_zero(f[0].len())]
 
 fn ec_double(f List[List[int]], p List[List[int]]) List[List[int]]
-    if big_is_zero(p[2])
+    if tbig_is_zero(p[2])
         return p
     x := p[0]
     y := p[1]
@@ -100,9 +100,9 @@ fn ec_double(f List[List[int]], p List[List[int]]) List[List[int]]
     [x3, y3, z3]
 
 fn ec_add(f List[List[int]], p List[List[int]], q List[List[int]]) List[List[int]]
-    if big_is_zero(p[2])
+    if tbig_is_zero(p[2])
         return q
-    if big_is_zero(q[2])
+    if tbig_is_zero(q[2])
         return p
     z1z1 := mont_mul(f, p[2], p[2])
     z2z2 := mont_mul(f, q[2], q[2])
@@ -112,8 +112,8 @@ fn ec_add(f List[List[int]], p List[List[int]], q List[List[int]]) List[List[int
     s2 := mont_mul(f, mont_mul(f, q[1], p[2]), z1z1)
     h := mont_sub(f, u2, u1)
     r0 := mont_sub(f, s2, s1)
-    if big_is_zero(h)
-        if big_is_zero(r0)
+    if tbig_is_zero(h)
+        if tbig_is_zero(r0)
             return ec_double(f, p)
         return ec_inf(f)
     h2 := mont_add(f, h, h)
@@ -138,13 +138,13 @@ fn ec_double_mul(
 ) List[List[int]]
     gq := ec_add(f, g, q)
     mut acc := ec_inf(f)
-    b1 := big_bits(u1)
-    b2 := big_bits(u2)
+    b1 := tbig_bits(u1)
+    b2 := tbig_bits(u2)
     mut i := (if b1 > b2 then b1 else b2) - 1
     while i >= 0
         acc = ec_double(f, acc)
-        a := big_bit(u1, i)
-        b := big_bit(u2, i)
+        a := tbig_bit(u1, i)
+        b := tbig_bit(u2, i)
         if a and b
             acc = ec_add(f, acc, gq)
         elif a
@@ -175,7 +175,7 @@ fn ecdsa_verify(
     sn int,
 ) bool
     size := sig_curve_size(curve)
-    k := big_limbs(size)
+    k := tbig_limbs(size)
     if publen != 1 + 2 * size or load8(public) != 4
         return false
     ro := sig_skip_zeros(r, rn)
@@ -184,9 +184,9 @@ fn ecdsa_verify(
         return false
     p := sig_big_hex(sig_curve_p(curve), k)
     n := sig_big_hex(sig_curve_n(curve), k)
-    x := big_from_be(public + 1, size, k)
-    y := big_from_be(public + 1 + size, size, k)
-    if big_cmp(x, p) >= 0 or big_cmp(y, p) >= 0
+    x := tbig_from_be(public + 1, size, k)
+    y := tbig_from_be(public + 1 + size, size, k)
+    if tbig_cmp(x, p) >= 0 or tbig_cmp(y, p) >= 0
         return false
     f := mont_new(p)
     b := mont_to(f, sig_big_hex(sig_curve_b(curve), k))
@@ -196,18 +196,18 @@ fn ecdsa_verify(
     x3 := mont_mul(f, mont_mul(f, qx, qx), qx)
     three_x := mont_add(f, mont_add(f, qx, qx), qx)
     rhs := mont_add(f, mont_sub(f, x3, three_x), b)
-    if big_cmp(mont_mul(f, qy, qy), rhs) != 0
+    if tbig_cmp(mont_mul(f, qy, qy), rhs) != 0
         return false
     q := [qx, qy, f[3]]
-    rv := big_from_be(r + ro, rn - ro, k)
-    sv := big_from_be(s + so, sn - so, k)
-    if big_cmp(rv, n) >= 0 or big_cmp(sv, n) >= 0
+    rv := tbig_from_be(r + ro, rn - ro, k)
+    sv := tbig_from_be(s + so, sn - so, k)
+    if tbig_cmp(rv, n) >= 0 or tbig_cmp(sv, n) >= 0
         return false
     nm := mont_new(n)
     w := mont_inv(nm, mont_to(nm, sv))
-    mut e := big_from_be(hash, if hn < size then hn else size, k)
-    if big_cmp(e, n) >= 0
-        e = big_sub(e, n)
+    mut e := tbig_from_be(hash, if hn < size then hn else size, k)
+    if tbig_cmp(e, n) >= 0
+        e = tbig_sub(e, n)
     u1 := mont_from(nm, mont_mul(nm, mont_to(nm, e), w))
     u2 := mont_from(nm, mont_mul(nm, mont_to(nm, rv), w))
     g := [
@@ -216,13 +216,13 @@ fn ecdsa_verify(
         f[3],
     ]
     pt := ec_double_mul(f, g, u1, u2, q)
-    if big_is_zero(pt[2])
+    if tbig_is_zero(pt[2])
         return false
     zi := mont_inv(f, pt[2])
     mut px := mont_from(f, mont_mul(f, pt[0], mont_mul(f, zi, zi)))
-    if big_cmp(px, n) >= 0
-        px = big_sub(px, n)
-    big_cmp(px, rv) == 0
+    if tbig_cmp(px, n) >= 0
+        px = tbig_sub(px, n)
+    tbig_cmp(px, rv) == 0
 
 # ---- RSA ----
 
@@ -239,27 +239,27 @@ fn rsa_digest_info(alg int) List[int]
 fn rsa_public_op(np int, nn int, ep int, en int, sig int, sn int) int
     no := sig_skip_zeros(np, nn)
     nb := nn - no
-    k := big_limbs(nb)
-    m := big_from_be(np + no, nb, k)
-    bits := big_bits(m)
+    k := tbig_limbs(nb)
+    m := tbig_from_be(np + no, nb, k)
+    bits := tbig_bits(m)
     kb := (bits + 7) / 8
-    if bits < 2048 or bits > 8192 or not big_is_odd(m) or sn != kb
+    if bits < 2048 or bits > 8192 or not tbig_is_odd(m) or sn != kb
         return 0
-    s := big_from_be(sig, sn, k)
-    if big_cmp(s, m) >= 0
+    s := tbig_from_be(sig, sn, k)
+    if tbig_cmp(s, m) >= 0
         return 0
     eo := sig_skip_zeros(ep, en)
-    e := big_from_be(ep + eo, en - eo, k)
-    if big_is_zero(e)
+    e := tbig_from_be(ep + eo, en - eo, k)
+    if tbig_is_zero(e)
         return 0
     out := alloc_raw(kb + 8, KIND_BYTES)
-    big_to_be(big_modpow(m, s, e), out, kb)
+    tbig_to_be(tbig_modpow(m, s, e), out, kb)
     out
 
 ## The byte length of the modulus `n` (without leading zeros).
 fn rsa_size(np int, nn int) int
     no := sig_skip_zeros(np, nn)
-    (big_bits(big_from_be(np + no, nn - no, big_limbs(nn - no))) + 7) / 8
+    (tbig_bits(tbig_from_be(np + no, nn - no, tbig_limbs(nn - no))) + 7) / 8
 
 fn rsa_verify_pkcs1(alg int, np int, nn int, ep int, en int, msg int, mn int, sig int, sn int) bool
     em := rsa_public_op(np, nn, ep, en, sig, sn)
@@ -308,7 +308,7 @@ fn rsa_verify_pss(alg int, np int, nn int, ep int, en int, msg int, mn int, sig 
     if emf == 0
         return false
     no := sig_skip_zeros(np, nn)
-    nbits := big_bits(big_from_be(np + no, nn - no, big_limbs(nn - no)))
+    nbits := tbig_bits(tbig_from_be(np + no, nn - no, tbig_limbs(nn - no)))
     hl := sig_hlen(alg)
     em_bits := nbits - 1
     em_len := (em_bits + 7) / 8
