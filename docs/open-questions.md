@@ -465,7 +465,7 @@ adding anything to the card.
 Run a language model's inference in AIL itself, since native AIL may reach C
 speed. Not for now: it follows two milestones, `matmul` at C speed (it is 2.0x
 C in instructions today, from layout and register spills) and a GPU path
-([ADR 0381](decisions/0381-ail-generated-spirv-msl.md), AIL-generated SPIR-V
+([ADR 0381](decisions/0381-driver-compilers-are-platform.md), AIL-generated SPIR-V
 and MSL).
 
 - **a.** A CPU-only runner first: load quantised weights (`bytes` and sized
