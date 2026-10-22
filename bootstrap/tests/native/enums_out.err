@@ -1,1 +1,0 @@
-bootstrap/tests/native/enums_out.ail:20:10: error[native.subset.1]: not in the native subset yet: printing a `Bag`

@@ -848,14 +848,14 @@ pub(crate) fn type_text(t: &TypeRef) -> String {
 }
 
 /// A constant's value when it is a literal, else `...`: the outline
-/// leaves out bodies (api.out.3).
+/// leaves out bodies (api.out.3). A string over 60 bytes is a body too.
 fn const_value(e: &Expr) -> String {
     match e {
         Expr::Int(n, _) => n.to_string(),
         Expr::Float(x, _) => format!("{x:?}"),
         Expr::Bool(b, _) => b.to_string(),
         Expr::Char(c, _) => format!("{c:?}"),
-        Expr::Str(s, _) => diag::json_str(s),
+        Expr::Str(s, _) if s.len() <= 60 => diag::json_str(s),
         Expr::Unary { op: UnOp::Neg, operand, .. } if matches!(**operand, Expr::Int(..) | Expr::Float(..)) => {
             format!("-{}", const_value(operand))
         }

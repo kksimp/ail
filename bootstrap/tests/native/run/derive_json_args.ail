@@ -1,0 +1,27 @@
+# Derived ToJson/FromJson of a struct with a documented field, an optional, a
+# list and an enum (json.derive.1-2, ADR 0850).
+struct Item
+    ## the name
+    name str
+    qty int
+    note str?
+    tags List[str]
+
+enum Kind
+    Plain
+    Boxed(items List[Item], label str)
+
+impl ToJson for Item
+impl FromJson for Item
+impl ToJson for Kind
+impl FromJson for Kind
+
+fn main()
+    a := Item(name: "pen", qty: 2, note: none, tags: ["x"])
+    k := Kind.Boxed([a], "b")
+    print(k.to_json().to_text())
+    back := Kind.from_json(k.to_json()) else
+        print("bad")
+        return
+    print(back.to_json().to_text())
+    print(Kind.Plain.to_json().to_text())

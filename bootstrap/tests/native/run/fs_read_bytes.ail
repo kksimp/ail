@@ -1,0 +1,9 @@
+fn main()
+    path := "/tmp/ail_fs_read_bytes_test.bin"
+    fs.write_text(path, "héllo") else return
+    b := fs.read_bytes(path) else return
+    print(b.len())
+    print(b.to_list())
+    print(b.hex())
+    print((fs.read_bytes("/nonexistent/x") else "missing".to_bytes()).hex())
+    fs.remove(path) else return

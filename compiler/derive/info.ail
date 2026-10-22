@@ -1,0 +1,162 @@
+## The built-in derive generators run by the native compiler (ct.derive.1-4,
+## refl.info.1-3, ADR 0850): for each `impl Trait for T` with no methods, of
+## a prelude trait with a generator, the `TypeInfo` of `T` is built from the
+## syntax tree and the generator of `gens.ail` writes the methods, as the
+## bootstrap's `derive.rs` does through the interpreter.
+use ast
+
+## The text a generator wrote for one `impl`.
+pub struct Expansion
+    ## The `impl`'s module, empty for the root.
+    pub module str
+    ## `TYPE.TRAIT`
+    pub label str
+    ## The file of the `impl` and where it is, for a message.
+    pub file int
+    pub pos ast.Pos
+    pub text str
+    ## Why the generator refused the type; empty when `text` is the methods.
+    pub problem str
+
+## The prelude traits whose generators are built in.
+fn generator_of(trait_name str) str
+    match trait_name
+        "ToJson" => "derive_to_json"
+        "FromJson" => "derive_from_json"
+        "Default" => "derive_default"
+        "FromArgs" => "derive_from_args"
+        _ => ""
+
+fn last(name str) str
+    name.split(".").last() else name
+
+## Every deriving `impl` of the program: `modules[k]` is the module of
+## `progs[k]`, one file each. An `impl` of a trait the program declares
+## itself, or of a type it doesn't declare, is left to the checker.
+pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
+    mut declared := Set[str]()
+    for p in progs
+        for t in p.traits
+            declared.add(t.name)
+    mut out := List[Expansion]()
+    for k in 0..progs.len()
+        for imp in progs[k].impls
+            trait_name := last(imp.trait_name)
+            gen := generator_of(trait_name)
+            if gen == "" or imp.methods.len() > 0 or declared.contains(trait_name)
+                continue
+            type_name := last(imp.target.name)
+            info := type_info(modules, progs, type_name, modules[k]) else continue
+            mut e := Expansion(
+                module: modules[k],
+                label: "{type_name}.{trait_name}",
+                file: k,
+                pos: imp.pos,
+                text: "",
+                problem: "",
+            )
+            text := run(gen, info) else err
+                e.problem = err.message
+                out.push(e)
+                continue
+            e.text = text
+            out.push(e)
+    out
+
+fn run(gen str, info TypeInfo) str ! DeriveError
+    match gen
+        "derive_to_json" => derive_to_json(info)
+        "derive_from_json" => derive_from_json(info)
+        "derive_default" => derive_default(info)
+        _ => derive_from_args(info)
+
+## `text` with the module's own prefix `a.b.` removed from its names: the
+## generated code is read inside that module (mod.unit.2).
+fn unqualify(text str, module str) str
+    if module == ""
+        return text
+    text.replace("{module}.", "")
+
+## The `TypeInfo` of the struct or enum `name`, preferring one declared in
+## `module` (refl.info.1, refl.info.3).
+fn type_info(modules List[str], progs List[ast.Program], name str, module str) TypeInfo?
+    # The file and index of the declaration, the module's own first.
+    mut sk := -1
+    mut si := -1
+    mut ek := -1
+    mut ei := -1
+    for k in 0..progs.len()
+        for i in 0..progs[k].structs.len()
+            if last(progs[k].structs[i].name) == name
+                and (sk < 0 or modules[k] == module and modules[sk] != module)
+                sk = k
+                si = i
+        for i in 0..progs[k].enums.len()
+            if last(progs[k].enums[i].name) == name
+                and (ek < 0 or modules[k] == module and modules[ek] != module)
+                ek = k
+                ei = i
+    if sk >= 0
+        d := progs[sk].structs[si]
+        return TypeInfo(
+            name: name,
+            id: "type:{name}",
+            module: modules[sk],
+            kind: TypeKind.Struct,
+            is_error: d.is_error,
+            params: [g.name for g in d.generics],
+            fields: field_infos(progs[sk], d.fields, modules[sk]),
+            variants: [],
+        )
+    if ek < 0
+        return none
+    d := progs[ek].enums[ei]
+    TypeInfo(
+        name: name,
+        id: "type:{name}",
+        module: modules[ek],
+        kind: TypeKind.Enum,
+        is_error: d.is_error,
+        params: [g.name for g in d.generics],
+        fields: [],
+        variants: [
+            VariantInfo(name: v.name, fields: field_infos(progs[ek], v.fields, modules[ek]))
+            for v in d.variants
+        ],
+    )
+
+fn field_infos(prog ast.Program, fields List[ast.Field], module str) List[FieldInfo]
+    [
+        FieldInfo(
+            name: f.name,
+            type_text: unqualify(show_type(f.ty), module),
+            public: prog.public.contains(f.pos.line),
+            doc: f.doc else "",
+        )
+        for f in fields
+    ]
+
+## A type as written, as `ail api` prints it.
+fn show_type(t ast.TypeRef) str
+    match t.shape
+        Named(name, args) =>
+            if args.len() == 0
+                return name
+            "{name}[{[show_type(a) for a in args].join(", ")}]"
+        Optional(inner) => "{show_type(inner)}?"
+        AnyTrait(name) => "any {name}"
+        RefTo(inner) => "ref {show_type(inner)}"
+        PtrTo(inner) => "*{show_type(inner)}"
+        FnType(params, ret) =>
+            ps := [show_type(p) for p in params].join(", ")
+            if r := ret
+                return "fn({ps}) {show_type(r)}"
+            "fn({ps})"
+        TupleType(elems) => "({[show_type(x) for x in elems].join(", ")})"
+        Fallible(ok, errors) =>
+            errs := if es := errors then [show_type(x) for x in es].join(" | ") else ""
+            if o := ok
+                if errors != none
+                    return "{show_type(o)} ! {errs}"
+                return "!{show_type(o)}"
+            if errors != none then "! {errs}" else "!"

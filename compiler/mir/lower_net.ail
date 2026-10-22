@@ -75,6 +75,8 @@ fn net_module_fails(name str) bool
 
 ## `net.NAME(...)`, from `lower_os_method`. `none` after a report.
 fn Lower.lower_net_module(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    if structs.contains("net.{name}")
+        return new_struct("net.{name}", args, npos)
     f := net_module_lookup(name) else
         return unsupported(npos, "`net.{name}`")
     if name == "request" or name == "request_bytes"

@@ -488,6 +488,105 @@ fn unicode_tables_are_current() {
     );
 }
 
+/// `compiler/mir/prelude_embed.ail` is `bootstrap/src/prelude.ail` as
+/// `tools/native/gen_prelude.ail` writes it (json.prelude.1, ADR 0808).
+#[test]
+fn embedded_prelude_is_current() {
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "tools/native/gen_prelude.ail"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let have = fs::read_to_string(root().join("compiler/mir/prelude_embed.ail")).unwrap();
+    assert!(
+        String::from_utf8(out.stdout).unwrap() == have,
+        "compiler/mir/prelude_embed.ail is stale: run `./ail run tools/native/gen_prelude.ail > compiler/mir/prelude_embed.ail`"
+    );
+}
+
+/// json.print.1, json.parse.1: the native compiler run without `ail build`'s
+/// `AIL_DERIVED` file, as a natively built compiler is, gets the prelude's
+/// `Json` from its embedded copy and builds the same bytes `ail build` does.
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn json_builds_without_the_derived_file() {
+    let rel = "bootstrap/tests/native/run/json_modules.ail";
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .env_remove("AIL_DERIVED")
+        .args(["run", "compiler", "build", rel, "compiler/rt/native", host_target(), "0", "0"])
+        .arg(root().join("bootstrap/src/std"))
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let exe = unhex(&String::from_utf8(out.stdout).unwrap()).expect("hex text");
+    let tmp = std::env::temp_dir().join(format!("ail-json-embed-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let path = tmp.join("viaembed");
+    write_exe(&path, &exe);
+    let built = tmp.join("viabuild");
+    let b = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["build", rel, "-o"]).arg(&built).output().unwrap();
+    assert!(b.status.success(), "`ail build` failed");
+    assert!(fs::read(&built).unwrap() == exe, "the embedded prelude builds different bytes than `ail build`");
+    let native = Command::new(&path).output().unwrap();
+    let interp = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["run", rel]).output().unwrap();
+    assert!(native.stdout == interp.stdout, "native output differs from `ail run`");
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+/// `compiler/derive/gens.ail` is the prelude's generators as
+/// `tools/native/gen_derive.ail` writes them, formatted (ADR 0850).
+#[test]
+fn embedded_derive_generators_are_current() {
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "tools/native/gen_derive.ail"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let tmp = std::env::temp_dir().join(format!("ail-gens-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let file = tmp.join("gens.ail");
+    fs::write(&file, &out.stdout).unwrap();
+    let fmt = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).arg("fmt").arg(&file).output().unwrap();
+    assert!(fmt.status.success(), "{}", String::from_utf8_lossy(&fmt.stderr));
+    let want = fs::read_to_string(&file).unwrap();
+    let _ = fs::remove_dir_all(&tmp);
+    let have = fs::read_to_string(root().join("compiler/derive/gens.ail")).unwrap();
+    assert!(
+        want == have,
+        "compiler/derive/gens.ail is stale: run `./ail run tools/native/gen_derive.ail > compiler/derive/gens.ail && ./ail fmt compiler/derive`"
+    );
+}
+
+/// ct.derive.2, ADR 0850: the native compiler run without `ail build`'s
+/// `AIL_DERIVED` file writes the derived methods itself, and builds the same
+/// bytes `ail build` does.
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn derives_build_without_the_derived_file() {
+    let tmp = std::env::temp_dir().join(format!("ail-derive-embed-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    for name in ["json_prelude", "json_native", "derive_default", "derive_json_args"] {
+        let rel = format!("bootstrap/tests/native/run/{name}.ail");
+        let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .env_remove("AIL_DERIVED")
+            .args(["run", "compiler", "build", &rel, "compiler/rt/native", host_target(), "0", "0"])
+            .arg(root().join("bootstrap/src/std"))
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
+        let exe = unhex(&String::from_utf8(out.stdout).unwrap()).expect("hex text");
+        let built = tmp.join(name);
+        let b = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["build", &rel, "-o"]).arg(&built).output().unwrap();
+        assert!(b.status.success(), "{name}: `ail build` failed");
+        assert!(fs::read(&built).unwrap() == exe, "{name}: the built-in generators differ from `ail build`'s");
+    }
+    let _ = fs::remove_dir_all(&tmp);
+}
+
 /// run.limit.5, run.limit.6: a native program stops at the limits of
 /// `AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB` and the defaults `ail build` bakes,
 /// with the trap line `ail run` prints (less its position), after its output

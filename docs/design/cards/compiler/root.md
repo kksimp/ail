@@ -17,10 +17,12 @@ fn executable_hex(m mir.Module, path str, target str) str [io]  ## The executabl
 fn runtime_syntax(path str, text str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [env fail fs io]  ## Parse a program and the modules it imports, and lower them to MIR
     fails with fs.IoError
+fn mentions_prelude(srcs List[mir.Source]) bool  ## Whether a source names a module of the prelude written in AIL: the test
 fn manifest_dep(root str, name str) str? [fs io]  ## The directory of dependency `name` in the manifest `ROOT/ail.pkg`:
 fn std_file(std str, imp str) str  ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
 fn derived_sources() !Derived [env fail fs io]  ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
     fails with fs.IoError
+fn derive_builtin(srcs List[mir.Source]) List[mir.Source] [io]  ## The methods of the `impl`s the built-in generators derive (ADR 0850) that
 struct Derived  ## What `ail build` passes besides the program's files.
     sources List[mir.Source]
     prelude str?
