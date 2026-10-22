@@ -15,7 +15,18 @@ fn show(words List[str])
         return
     print("{a.flag("verbose")} {a.get("out")} {a.get("input")} {a.rest}")
 
+## std.args.8: typed options, when given and a number.
+fn numbers(words List[str])
+    specs := [args.opt("n", "n", "a count", "7"), args.opt("f", "f", "a ratio", "2.5")]
+    a := args.parse("tool", "does things", specs, words) else err
+        print("error: {err.why}")
+        return
+    print("{a.opt_int("n")} {a.opt_int("f")} {a.opt_float("f")} {a.opt_float("n")}")
+
 fn main()
+    numbers(["--n", "5", "--f", "0.25"])
+    numbers(["--n", "x"])
+    numbers([])
     show(["in.txt"])
     show(["-v", "--out", "b.txt", "in.txt", "x", "y"])
     show(["--out=c.txt", "--", "-weird", "z"])

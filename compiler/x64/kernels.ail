@@ -1,0 +1,255 @@
+## Vector kernels for the tensor runtime (ADR 0815): hand-assembled AVX loops
+## that replace the functions of `compiler/rt/native/tensor.ail` named
+## `rt.vec_*` (their AIL bodies are the scalar definitions and the
+## reference). Each works four doubles at a time and then element by element,
+## with an IEEE operation per element and no fused multiply-add, so the result
+## is bit for bit the scalar one; a non-zero `r` rounds every result to `f32`
+## (`Tensor[f32]` keeps its elements rounded). They use rax, rcx..r11 and
+## xmm0..xmm4 only, which are not preserved by calls (native-abi.md §1).
+use codegen
+
+## The kernels this file assembles.
+pub fn is_kernel(name str) bool
+    name == "rt.vec_axpy" or name == "rt.vec_zip" or name == "rt.vec_scal" or name == "rt.fill"
+
+## Add the kernel `name` to `img`.
+pub fn gen_kernel(mut img codegen.Image, name str)
+    mut a := new_asm()
+    match name
+        "rt.vec_axpy" => kernel_axpy(mut a)
+        "rt.vec_zip" => kernel_zip(mut a)
+        "rt.fill" => kernel_fill(mut a)
+        _ => kernel_scal(mut a)
+    a.resolve_labels()
+    base := img.code.len()
+    img.funcs[name] = base
+    img.code.extend(a.code)
+
+## `rt.fill(p, n, v, size)`: store the low `size` bytes (1 or 8) of `v` in `n`
+## consecutive elements from `p`. rdi = p, rsi = n, rdx = v, rcx = size. A
+## long fill is `rep stosb`/`stosq`; a short one a loop, since the string
+## instructions take a few dozen cycles to start.
+fn kernel_fill(mut a Asm)
+    words := a.label()
+    small_bytes := a.label()
+    small_words := a.label()
+    done := a.label()
+    bytes_loop := a.label()
+    words_loop := a.label()
+    a.alu_ri("cmp", RCX, 8)
+    a.jcc(CC_E, words)
+    a.alu_ri("cmp", RSI, 64)
+    a.jcc(CC_B, small_bytes)
+    a.mov_rr(RCX, RSI)
+    a.mov_rr(RAX, RDX)
+    a.rep_stosb()
+    a.ret()
+    a.bind(small_bytes)
+    a.alu_ri("cmp", RSI, 0)
+    a.jcc(CC_E, done)
+    a.bind(bytes_loop)
+    a.mov8_mr(at(RDI, 0), RDX)
+    a.alu_ri("add", RDI, 1)
+    a.alu_ri("sub", RSI, 1)
+    a.jcc(CC_NE, bytes_loop)
+    a.ret()
+    a.bind(words)
+    a.alu_ri("cmp", RSI, 16)
+    a.jcc(CC_B, small_words)
+    a.mov_rr(RCX, RSI)
+    a.mov_rr(RAX, RDX)
+    a.rep_stosq()
+    a.ret()
+    a.bind(small_words)
+    a.alu_ri("cmp", RSI, 0)
+    a.jcc(CC_E, done)
+    a.bind(words_loop)
+    a.mov_mr(at(RDI, 0), RDX)
+    a.alu_ri("add", RDI, 8)
+    a.alu_ri("sub", RSI, 1)
+    a.jcc(CC_NE, words_loop)
+    a.bind(done)
+    a.ret()
+
+## Round the four doubles of ymm`x` to `f32` and back, through xmm3.
+fn round_ymm(mut a Asm, x int)
+    a.vcvtpd2ps(3, x)
+    a.vcvtps2pd(x, 3)
+
+## Round the double of xmm`x` to `f32` and back, through xmm3.
+fn round_sd(mut a Asm, x int)
+    a.vcvtsd2ss(3, 3, x)
+    a.vcvtss2sd(x, 3, 3)
+
+## `if flag != 0 { round }` around `emit`.
+fn maybe_round(mut a Asm, flag int, wide bool, x int)
+    skip := a.label()
+    a.test_rr(flag, flag)
+    a.jcc(CC_E, skip)
+    if wide
+        round_ymm(mut a, x)
+    else
+        round_sd(mut a, x)
+    a.bind(skip)
+
+## `rt.vec_axpy(c, b, n, r; x)`: `c[i] = c[i] + x * b[i]` for `i < n`, the
+## product and the sum each rounded. rdi = c, rsi = b, rdx = n, rcx = r,
+## xmm0 = x.
+fn kernel_axpy(mut a Asm)
+    a.vbroadcastsd(0, 0)
+    a.mov_rr(R10, RDX)
+    a.alu_ri("and", R10, -4)
+    a.mov_rr(R11, RDX)
+    a.alu_ri("and", R11, 3)
+    vloop := a.label()
+    tail := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.alu_ri("cmp", R10, 0)
+    a.jcc(CC_E, tail)
+    a.vmovupd_rm(1, at(RSI, 0))
+    a.vpd256_rrr("fmul", 1, 1, 0)
+    maybe_round(mut a, RCX, true, 1)
+    a.vmovupd_rm(2, at(RDI, 0))
+    a.vpd256_rrr("fadd", 2, 2, 1)
+    maybe_round(mut a, RCX, true, 2)
+    a.vmovupd_mr(at(RDI, 0), 2)
+    a.alu_ri("add", RSI, 32)
+    a.alu_ri("add", RDI, 32)
+    a.alu_ri("sub", R10, 4)
+    a.jmp(vloop)
+    a.bind(tail)
+    a.bind(scalar)
+    a.alu_ri("cmp", R11, 0)
+    a.jcc(CC_E, done)
+    a.vmovsd_rm(1, at(RSI, 0))
+    a.vsd_rrr("fmul", 1, 1, 0)
+    maybe_round(mut a, RCX, false, 1)
+    a.vmovsd_rm(2, at(RDI, 0))
+    a.vsd_rrr("fadd", 2, 2, 1)
+    maybe_round(mut a, RCX, false, 2)
+    a.vmovsd_mr(at(RDI, 0), 2)
+    a.alu_ri("add", RSI, 8)
+    a.alu_ri("add", RDI, 8)
+    a.alu_ri("sub", R11, 1)
+    a.jmp(scalar)
+    a.bind(done)
+    a.vzeroupper()
+    a.ret()
+
+## The four elementwise operations by code, as MIR names them.
+fn zip_op(k int) str
+    match k
+        0 => "fadd"
+        1 => "fsub"
+        2 => "fmul"
+        _ => "fdiv"
+
+## One loop of `rt.vec_zip`: `out[i] = a[i] op b[i]`. rsi = out, rdx = a,
+## rcx = b, r9 = r; r8 holds n.
+fn zip_loop(mut a Asm, op str)
+    a.mov_rr(RAX, R8)
+    a.alu_ri("and", RAX, -4)
+    a.mov_rr(R11, R8)
+    a.alu_ri("and", R11, 3)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.alu_ri("cmp", RAX, 0)
+    a.jcc(CC_E, scalar)
+    a.vmovupd_rm(1, at(RDX, 0))
+    a.vmovupd_rm(2, at(RCX, 0))
+    a.vpd256_rrr(op, 1, 1, 2)
+    maybe_round(mut a, R9, true, 1)
+    a.vmovupd_mr(at(RSI, 0), 1)
+    a.alu_ri("add", RDX, 32)
+    a.alu_ri("add", RCX, 32)
+    a.alu_ri("add", RSI, 32)
+    a.alu_ri("sub", RAX, 4)
+    a.jmp(vloop)
+    a.bind(scalar)
+    a.alu_ri("cmp", R11, 0)
+    a.jcc(CC_E, done)
+    a.vmovsd_rm(1, at(RDX, 0))
+    a.vmovsd_rm(2, at(RCX, 0))
+    a.vsd_rrr(op, 1, 1, 2)
+    maybe_round(mut a, R9, false, 1)
+    a.vmovsd_mr(at(RSI, 0), 1)
+    a.alu_ri("add", RDX, 8)
+    a.alu_ri("add", RCX, 8)
+    a.alu_ri("add", RSI, 8)
+    a.alu_ri("sub", R11, 1)
+    a.jmp(scalar)
+    a.bind(done)
+    a.vzeroupper()
+    a.ret()
+
+## `rt.vec_zip(op, out, a, b, n, r)`: rdi = op (0 `+`, 1 `-`, 2 `*`, 3 `/`).
+fn kernel_zip(mut a Asm)
+    mut next := a.label()
+    for k in 0..4
+        next = a.label()
+        a.alu_ri("cmp", RDI, k)
+        a.jcc(CC_NE, next)
+        zip_loop(mut a, zip_op(k))
+        a.bind(next)
+    a.ud2()
+
+## One loop of `rt.vec_scal`: `out[i] = a[i] op s`, or `s op a[i]` when
+## `left`. rsi = out, rdx = a, rcx = n, r8 = r; ymm0 / xmm0 hold s.
+fn scal_loop(mut a Asm, op str, left bool)
+    a.vbroadcastsd(4, 0)
+    a.mov_rr(RAX, RCX)
+    a.alu_ri("and", RAX, -4)
+    a.mov_rr(R11, RCX)
+    a.alu_ri("and", R11, 3)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.alu_ri("cmp", RAX, 0)
+    a.jcc(CC_E, scalar)
+    a.vmovupd_rm(1, at(RDX, 0))
+    if left
+        a.vpd256_rrr(op, 1, 4, 1)
+    else
+        a.vpd256_rrr(op, 1, 1, 4)
+    maybe_round(mut a, R8, true, 1)
+    a.vmovupd_mr(at(RSI, 0), 1)
+    a.alu_ri("add", RDX, 32)
+    a.alu_ri("add", RSI, 32)
+    a.alu_ri("sub", RAX, 4)
+    a.jmp(vloop)
+    a.bind(scalar)
+    a.alu_ri("cmp", R11, 0)
+    a.jcc(CC_E, done)
+    a.vmovsd_rm(1, at(RDX, 0))
+    if left
+        a.vsd_rrr(op, 1, 0, 1)
+    else
+        a.vsd_rrr(op, 1, 1, 0)
+    maybe_round(mut a, R8, false, 1)
+    a.vmovsd_mr(at(RSI, 0), 1)
+    a.alu_ri("add", RDX, 8)
+    a.alu_ri("add", RSI, 8)
+    a.alu_ri("sub", R11, 1)
+    a.jmp(scalar)
+    a.bind(done)
+    a.vzeroupper()
+    a.ret()
+
+## `rt.vec_scal(op, out, a, n, r, left; s)`: rdi = op, r9 = left.
+fn kernel_scal(mut a Asm)
+    mut next := a.label()
+    for k in 0..4
+        for l in 0..2
+            next = a.label()
+            a.alu_ri("cmp", RDI, k)
+            a.jcc(CC_NE, next)
+            a.alu_ri("cmp", R9, l)
+            a.jcc(CC_NE, next)
+            scal_loop(mut a, zip_op(k), l == 1)
+            a.bind(next)
+    a.ud2()

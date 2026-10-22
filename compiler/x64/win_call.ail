@@ -1,0 +1,156 @@
+## Win64 calls to system DLL functions (ADR 0606): `libsys.NAME` calls on
+## the x86-64 target. Each argument goes in the register its position names
+## (rcx rdx r8 r9, or xmm0-3 for a float), the caller reserves 32 bytes of
+## shadow space, and arguments beyond four go on the stack above it. The call
+## is indirect through the import's slot in the PE import table (ADR 0598).
+use mir
+use codegen
+
+WIN_INT_ARGS := [RCX, RDX, R8, R9]
+
+## `call qword ptr [rip + slot]` for the import NAME: FF 15 and a rel32 to
+## the symbol `imp:NAME`, which `compiler/obj/pe.ail` resolves.
+pub fn Asm.call_import(mut self, name str)
+    byte(255)
+    byte(21)
+    fixups.push(Fixup(at: code.len(), label: -1, sym: "imp:{name}", tail: 0))
+    u32(0)
+
+## The `libsys.NAME` call `i`: stack room for the shadow space and the
+## stack arguments, the arguments in place, the indirect call, and the
+## room given back. The result is rax, or xmm0 for a float (ADR 0606).
+fn Gen.libsys_call(mut self, i mir.Inst)
+    n := i.args.len()
+    extra := if n > 4 then n - 4 else 0
+    room := (32 + 8 * extra + 15) / 16 * 16
+    a.alu_ri("sub", RSP, room)
+    mut moves := List[Move]()
+    for k in 0..n
+        v := i.args[k]
+        if k >= 4
+            if f.vals[v].is_float()
+                a.vmovsd_mr(at(RSP, 32 + 8 * (k - 4)), xmm(v, X0))
+            else
+                a.mov_mr(at(RSP, 32 + 8 * (k - 4)), gpr(v, S0))
+        elif f.vals[v].is_float()
+            moves.push(move_of(codegen.FLOAT_BASE + k, v))
+        else
+            moves.push(move_of(WIN_INT_ARGS[k], v))
+    parallel(moves)
+    a.call_import(i.name.replace("libsys.", ""))
+    a.alu_ri("add", RSP, room)
+    if i.dst >= 0
+        if f.vals[i.dst].is_float()
+            put_xmm(i.dst, 0)
+        else
+            put_gpr(i.dst, RAX)
+
+## The Windows entry (ADR 0606): `_start` calls `main` and passes its result
+## to kernel32's `ExitProcess`. The loader enters with rsp 8 mod 16, so
+## `sub rsp, 56` aligns the stack for the calls and makes room for an empty `argv`. Unlike `generate`, it calls
+## no runtime start-up or exit (`rt.init`, `rt.exit`), which use Linux system calls.
+pub fn generate_windows(m mir.Module) codegen.Image
+    mut img := codegen.new_image()
+    img.globals = m.globals_used()
+    for i in 0..m.strs.len()
+        codegen.add_str(mut img, "d:s{i}", m.strs[i])
+    mut a := new_asm()
+    rt := has_fn(m, "rt.init")
+    # No frame above `main`: the trap stack's walk ends here (trace.frame.1).
+    a.alu_rr("xor", RBP, RBP)
+    # 40 bytes for the callee's shadow space and alignment, then two zero
+    # words: `argv` (an empty vector) and the `envp` that follows it. Its
+    # address is above every frame of the program, so it is also the stack
+    # top the collector scans up to (`heap_init(top)`).
+    a.alu_ri("sub", RSP, 56)
+    a.alu_rr("xor", RAX, RAX)
+    a.mov_mr(at(RSP, 40), RAX)
+    a.mov_mr(at(RSP, 48), RAX)
+    if rt
+        a.mov_ri(RDI, 0)
+        a.lea(RSI, at(RSP, 40))
+        a.call_sym("rt.init")
+    a.call_sym("main")
+    if rt
+        # rt.exit flushes the output, then calls sys_exit, which ends in ExitProcess.
+        a.mov_ri(RDI, 0)
+        a.call_sym("rt.exit")
+    a.mov_rr(RCX, RAX)
+    a.call_import("ExitProcess")
+    a.ud2()
+    img.code = a.code
+    for fx in a.fixups
+        img.relocs.push(codegen.Reloc(at: fx.at, kind: "rel32", sym: fx.sym, tail: fx.tail))
+    for f in m.funcs
+        if is_kernel(f.name)
+            gen_kernel(mut img, f.name)
+        else
+            gen_func(mut img, m, f, true)
+    codegen.add_call_table(mut img, m)
+    img
+
+fn has_fn(m mir.Module, name str) bool
+    for f in m.funcs
+        if f.name == name
+            return true
+    false
+
+## A module with one function, `main`, that writes a line with kernel32's
+## `GetStdHandle(-11)` and `WriteFile(h, buf, len, &written, 0)`, then returns
+## `written`. The fifth argument goes on the stack, so the call exercises
+## the stack-argument path too. A string object's bytes start 16 bytes after
+## its pointer (native-abi.md §2), and `written` is the first word of `globals`.
+pub fn win_sample() mir.Module
+    msg := "hello from AIL on Windows\n"
+    mut h := mir.inst(0, "const", [])
+    h.imm = -11
+    mut get := mir.inst(1, "call", [0])
+    get.name = "libsys.GetStdHandle"
+    mut s := mir.inst(2, "str", [])
+    s.imm = 0
+    mut sixteen := mir.inst(3, "const", [])
+    sixteen.imm = 16
+    mut buf := mir.inst(4, "add", [2, 3])
+    mut len := mir.inst(5, "const", [])
+    len.imm = msg.chars().len()
+    mut one := mir.inst(6, "const", [])
+    one.imm = 1
+    mut written := mir.inst(7, "prim", [6])
+    written.name = "global"
+    mut zero := mir.inst(8, "const", [])
+    zero.imm = 0
+    mut write := mir.inst(9, "call", [1, 4, 5, 7, 8])
+    write.name = "libsys.WriteFile"
+    mut load := mir.inst(10, "prim", [7])
+    load.name = "load64"
+    insts := [h, get, s, sixteen, buf, len, one, written, zero, write, load]
+    block := mir.Block(params: List[int](), insts: insts, term: mir.return_of(10))
+    main := mir.Func(
+        name: "main",
+        params: [],
+        ret: mir.Ty.Int,
+        blocks: [block],
+        vals: [
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+            mir.Ty.Int,
+        ],
+        names: ["", "", "", "", "", "", "", "", "", "", ""],
+    )
+    mir.Module(
+        path: "win_sample.ail",
+        funcs: [main],
+        strs: [msg],
+        sites: [],
+        lines: [],
+        files: ["win_sample.ail"],
+        file_lines: [[]],
+    )

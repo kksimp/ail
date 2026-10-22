@@ -25,59 +25,123 @@ BASE := 1000000000
 
 # ---- the builder ----
 
+## This thread's builder: three words (0 pointer, 1 length, 2 capacity) at
+## the address returned, which the global slots hold while there is one
+## thread, else the thread's own words in the pool block, so tasks format
+## text at once (ADR 0599). The address does not change while the builder
+## grows.
+fn sb_base() int
+    if load64(global(MULTI)) == 0
+        return global(SB_PTR)
+    sb_threaded()
+
+fn sb_threaded() int
+    load64(global(TASKS)) + P_SB + 24 * thread_slot()
+
 fn sb_reset()
-    store64(global(SB_LEN), 0)
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    store64(c + 8, 0)
 
 fn sb_grow()
-    cap := load64(global(SB_CAP))
+    c := sb_base()
+    cap := load64(c + 16)
     ncap := if cap == 0 then 256 else cap * 2
     p := alloc_raw(ncap, KIND_BYTES)
-    n := load64(global(SB_LEN))
+    n := load64(c + 8)
     if n > 0
-        copy_bytes(p, load64(global(SB_PTR)), n)
-    store64(global(SB_PTR), p)
-    store64(global(SB_CAP), ncap)
+        copy_bytes(p, load64(c), n)
+    store64(c, p)
+    store64(c + 16, ncap)
 
 fn sb_byte(b int)
-    n := load64(global(SB_LEN))
-    if n == load64(global(SB_CAP))
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    n := load64(c + 8)
+    if n == load64(c + 16)
         sb_grow()
-    store8(load64(global(SB_PTR)) + n, b)
-    store64(global(SB_LEN), n + 1)
+    store8(load64(c) + n, b)
+    store64(c + 8, n + 1)
+
+## Room for `n` more bytes.
+fn sb_room(n int)
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    while load64(c + 8) + n > load64(c + 16)
+        sb_grow()
 
 fn sb_bytes(p int, n int)
-    for i in 0..n
-        sb_byte(load8(p + i))
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    while load64(c + 8) + n > load64(c + 16)
+        sb_grow()
+    len := load64(c + 8)
+    copy_bytes(load64(c) + len, p, n)
+    store64(c + 8, len + n)
 
 fn sb_text(s str)
     p := str_addr(s)
     sb_bytes(p + 16, load64(p))
 
-## The builder's text as a string object (its characters counted).
-fn sb_str() str
-    n := load64(global(SB_LEN))
-    p := load64(global(SB_PTR))
+## The characters of `n` bytes of UTF-8 at `p`: the bytes that are not
+## continuation bytes (10xxxxxx), eight at a time. A word is a continuation
+## byte where its bit 7 is set and its bit 6 is clear.
+fn utf8_chars(p int, n int) int
     mut chars := 0
-    for i in 0..n
+    mut i := 0
+    while i + 8 <= n
+        w := load64(p + i)
+        if w.bit_and(-9187201950435737472) == 0
+            chars += 8
+        else
+            cont := w
+                .bit_and(w.shl(1).bit_xor(-1))
+                .bit_and(-9187201950435737472)
+                .shr(7)
+                .bit_and(72340172838076673)
+            chars += 8 - (cont * 72340172838076673).shr(56).bit_and(255)
+        i += 8
+    while i < n
         if load8(p + i).bit_and(192) != 128
             chars += 1
-    s := str_new(n, chars)
+        i += 1
+    chars
+
+## The builder's text as a string object (its characters counted).
+fn sb_str() str
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    n := load64(c + 8)
+    p := load64(c)
+    s := str_new(n, utf8_chars(p, n))
     if n > 0
         copy_bytes(s + 16, p, n)
     str_at(s)
 
+# The interpolation `"a{x}b"` with a number, `char` or `bool` hole builds in
+# the builder and allocates once (lowering: lower_str.ail). The holes are all
+# evaluated before `sb_begin`, so no hole's own text can use the builder
+# in between.
+
+fn sb_begin()
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    store64(c + 8, 0)
+
+fn sb_add_char(ch int)
+    sb_room(4)
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    len := load64(c + 8)
+    store64(c + 8, len + u8_put(load64(c) + len, ch))
+
 ## The builder's text to standard output.
 fn sb_out()
-    out_bytes(load64(global(SB_PTR)), load64(global(SB_LEN)))
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    out_bytes(load64(c), load64(c + 8))
 
 # ---- integers ----
 
 ## Decimal, through `write_int`.
 fn put_int(n int)
-    while load64(global(SB_LEN)) + 48 > load64(global(SB_CAP))
+    c := if load64(global(MULTI)) == 0 then global(SB_PTR) else sb_threaded()
+    while load64(c + 8) + 48 > load64(c + 16)
         sb_grow()
-    len := load64(global(SB_LEN))
-    store64(global(SB_LEN), len + write_int(load64(global(SB_PTR)) + len, n))
+    len := load64(c + 8)
+    store64(c + 8, len + write_int(load64(c) + len, n))
 
 ## Lowercase hexadecimal without `0x`, `-` first for a negative `n`
 ## (type.str.11).
@@ -108,6 +172,20 @@ fn fmt_int(n int) str
     put_int(n)
     sb_str()
 
+## The text of a `List[int]`: `[1, -2, 3]` (type.str.3).
+fn fmt_int_list(xs List[int]) str
+    q := list_addr(xs)
+    k := load64(q)
+    items := load64(q + 16)
+    sb_reset()
+    sb_byte(91)
+    for i in 0..k
+        if i > 0
+            sb_text(", ")
+        put_int(load64(items + 8 * i))
+    sb_byte(93)
+    sb_str()
+
 fn fmt_hex(n int) str
     sb_reset()
     put_hex(n)
@@ -121,6 +199,11 @@ fn fmt_bool(b bool) str
 fn fmt_float(x float) str
     sb_reset()
     put_float(x)
+    sb_str()
+
+fn fmt_f32(x float) str
+    sb_reset()
+    put_float32(x)
     sb_str()
 
 fn fmt_float_fixed(x float, n int) str
@@ -154,6 +237,12 @@ fn out_float(x float)
     put_float(x)
     sb_out()
 
+## An `f32` as the interpreter prints it.
+fn out_f32(x float)
+    sb_reset()
+    put_float32(x)
+    sb_out()
+
 ## `{x:.n}` (lex.str.7, type.str.11).
 fn out_float_fixed(x float, n int)
     sb_reset()
@@ -164,6 +253,14 @@ fn out_float_fixed(x float, n int)
 
 ## A float as the interpreter prints it (type.num.7).
 fn put_float(x float)
+    put_float_gen(x, false)
+
+## An `f32` (held in a float, already rounded) as the interpreter prints it:
+## the shortest digits that read back as an `f32`, in the same shape.
+fn put_float32(x float)
+    put_float_gen(x, true)
+
+fn put_float_gen(x float, single bool)
     if x != x
         sb_text("nan")
         return
@@ -181,7 +278,8 @@ fn put_float(x float)
     neg := x < 0.0
     if neg
         sb_byte(45)
-    ds := digits_of(if neg then 0.0 - x else x)
+    m := if neg then 0.0 - x else x
+    ds := if single then digits_of_f32(m) else digits_of(m)
     # The last element is the decimal point's position `p`: x = 0.DIGITS * 10^p.
     n := ds.len() - 1
     p := ds[n]
@@ -420,12 +518,31 @@ fn digits_of(x float) List[int]
     if be > 0
         f += 4503599627370496
         e = be - 1075
+    digits_core(f, e, f == 4503599627370496 and be > 1, 53)
+
+## The shortest digits of the positive finite `x`, an `f32` held in a float,
+## that read back as the same `f32`: the digit generator on `x = f * 2^e` with
+## `f` below 2^24, `p` = 24 bits of precision.
+fn digits_of_f32(x float) List[int]
+    bits := float_bits(x)
+    be := bits.shr(52).bit_and(2047)
+    fd := bits.bit_and(4503599627370495) + 4503599627370496
+    ed := be - 1075
+    # A normal `f32` has an unbiased exponent of -126 or more.
+    if be - 1023 >= -126
+        f := fd.shr(29)
+        return digits_core(f, ed + 29, f == 8388608 and be - 1023 > -126, 24)
+    # A subnormal `f32` is f * 2^-149.
+    digits_core(fd.shr(-149 - ed), -149, false, 24)
+
+## The digits of x = f * 2^e (`wide`: the gap below is half the gap above),
+## for a mantissa of `p` bits.
+fn digits_core(f int, e int, wide bool, p int) List[int]
     # r/s = x; mp/s and mm/s are half the gaps above and below x.
     mut r := List[int]()
     mut s := List[int]()
     mut mp := List[int]()
     mut mm := List[int]()
-    wide := f == 4503599627370496 and be > 1
     if e >= 0
         if wide
             r = big_pow2(big_of(f), e + 2)
@@ -449,7 +566,7 @@ fn digits_of(x float) List[int]
         mm = big_of(1)
     even := f % 2 == 0
     # Estimate k = ceil(log10 x), then fix it up exactly.
-    mut k := (53 + e) * 30103 / 100000
+    mut k := (p + e) * 30103 / 100000
     if k >= 0
         s = big_pow10(s, k)
     else

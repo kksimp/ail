@@ -1,0 +1,56 @@
+enum Shape
+    Dot(at(int, int))
+    Line(from(int, int), to(int, int))
+
+struct Seg
+    a(int, int)
+    b(int, int)
+
+fn bump(mut p(int, int))
+    p.0 += 1
+    p.1 += 10
+
+fn len2(s Shape) int
+    match s
+        Dot(p) => p.0 + p.1
+        Line(p, q) => (q.0 - p.0) + (q.1 - p.1)
+
+fn first_big(xs List[(int, str)])(int, str)?
+    for x in xs
+        if x.0 > 1
+            return x
+    none
+
+fn main()
+    mut p := (1, 2)
+    bump(mut p)
+    print(p)
+    print(len2(Shape.Dot((3, 4))))
+    print(len2(Shape.Line(from: (1, 1), to: (4, 5))))
+    a := Seg(a: (1, 2), b: (3, 4))
+    mut b := Seg(a: (1, 2), b: (3, 4))
+    print(a == b)
+    b.b.1 = 9
+    print(a == b)
+    print(a.b)
+    m := {"k": (1, 2)}
+    mut n := m
+    n["k"] = (5, 6)
+    print(m["k"])
+    print(n["k"])
+    r := first_big([(1, "a"), (2, "b")])
+    if x := r
+        print(x)
+    s := first_big([(0, "z")])
+    print(s == none)
+    print((first_big([(3, "q")]) else (0, "d")).1)
+    z := (1, "a")
+    w := z
+    print(z == w)
+    t3 := ((1, 2), (3, (4, 5)))
+    print(t3.1.1.0)
+    print(t3)
+    mut acc := 0
+    for i, j in [(1, 2), (3, 4)]
+        acc += i * j
+    print(acc)

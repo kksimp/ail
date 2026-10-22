@@ -26,6 +26,9 @@ H_MARKN := 10
 H_NOFIT := 13
 H_REUSED := 12
 H_REGS := 14
+## The limit the allocation fast path tests against: `H_THRESH`, or 0 once the
+## process has threads, so every allocation takes the locked path (ADR 0599).
+H_FASTLIM := 24
 H_HEADS := 32
 H_BUMP := 72
 H_BEND := 112
@@ -52,6 +55,12 @@ KIND_ATOMIC := 11
 ## memory until touched. A negative result is the error.
 fn heap_reserve(n int) int
     t := target()
+    # Windows has no overcommit: MEM_COMMIT | MEM_RESERVE counts against the
+    # commit limit, and a refusal (0) is the error the size loop halves on
+    # (ADR 0608).
+    if t == 3
+        p := import_call("VirtualAlloc", 0, n, 12288, 4)
+        return if p == 0 then -1 else p
     k := if t == 0 then 9 else if t == 1 then 222 else 197
     flags := if t == 2 then 4162 else 16418
     syscall(k, 0, n, 3, flags, -1, 0)
@@ -97,6 +106,7 @@ fn heap_init(top int)
     hset(H_MARKS, marks)
     hset(H_MARKCAP, cap / 8)
     hset(H_THRESH, MIN_THRESH)
+    hset(H_FASTLIM, MIN_THRESH)
 
 # ---- size classes ----
 #
@@ -234,7 +244,26 @@ fn alloc(n int, kind int) int
 ## can only keep a dead block alive a little longer, and a list's scan stops
 ## at its length (ADR 0564).
 fn alloc_raw(n int, kind int) int
-    alloc_z(n, kind, 0)
+    if n <= 232 and load64(global(LIM_TICK)) == 0
+        idx := (n + 23).shr(4)
+        csz := idx.shl(4)
+        m := load64(global(HEAP))
+        a := load64(m + 8 * H_ALLOCD) + csz
+        if a <= load64(m + 8 * H_FASTLIM)
+            s := m + idx.shl(3)
+            b := load64(s + 8 * H_HEADS)
+            if b != 0
+                store64(s + 8 * H_HEADS, load64(b + 8))
+                store64(m + 8 * H_ALLOCD, a)
+                store64(b, kind + n.shl(16))
+                return b + 8
+            c := load64(s + 8 * H_BUMP)
+            if c != 0 and c + csz <= load64(s + 8 * H_BEND)
+                store64(s + 8 * H_BUMP, c + csz)
+                store64(m + 8 * H_ALLOCD, a)
+                store64(c, kind + n.shl(16))
+                return c + 8
+    alloc_slow(n, kind, 0)
 
 ## The common case, a small object served from a free list or the page being
 ## filled while no collection or time check is due, is straight-line code
@@ -245,7 +274,7 @@ fn alloc_z(n int, kind int, zero int) int
         csz := idx.shl(4)
         m := load64(global(HEAP))
         a := load64(m + 8 * H_ALLOCD) + csz
-        if a <= load64(m + 8 * H_THRESH)
+        if a <= load64(m + 8 * H_FASTLIM)
             # This class's slots, 8 bytes apart in each table.
             s := m + idx.shl(3)
             b := load64(s + 8 * H_HEADS)
@@ -269,6 +298,18 @@ fn alloc_z(n int, kind int, zero int) int
 ## `alloc_z` for everything the fast path does not take: large objects, a
 ## class with no block ready, a collection or time check due.
 fn alloc_slow(n int, kind int, zero int) int
+    # With threads, the heap's state is guarded by one lock; the fast path
+    # above is only for a single thread (ADR 0599).
+    if load64(global(MULTI)) == 0
+        return alloc_locked(n, kind, zero)
+    lock(global(ALLOC_LOCK))
+    atomic_store(global(ALLOC_OWNER), thread_id())
+    p := alloc_locked(n, kind, zero)
+    atomic_store(global(ALLOC_OWNER), 0)
+    unlock(global(ALLOC_LOCK))
+    p
+
+fn alloc_locked(n int, kind int, zero int) int
     tick := load64(global(LIM_TICK))
     if tick != 0
         limits_tick(tick)

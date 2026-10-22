@@ -18,6 +18,10 @@ fn run(args: &[&str]) -> (i32, String) {
 // native.test.1, native.test.2, native.test.3
 #[test]
 fn passing_and_failing_tests_match_the_interpreter() {
+    if cfg!(windows) {
+        eprintln!("skipped: the native test program reads `env.args()`, which the Windows native runtime does not have yet (ADR 0608)");
+        return;
+    }
     let (code, out) = run(&["bootstrap/tests/native_test/mixed.ail"]);
     assert_eq!(code, 0, "{out}");
     assert!(out.contains("match bootstrap/tests/native_test/mixed.ail::adds (native pass, interpreter pass)"), "{out}");
@@ -30,6 +34,10 @@ fn passing_and_failing_tests_match_the_interpreter() {
 // native.test.4
 #[test]
 fn json_lines_end_with_a_summary() {
+    if cfg!(windows) {
+        eprintln!("skipped: the native test program reads `env.args()`, which the Windows native runtime does not have yet (ADR 0608)");
+        return;
+    }
     let (code, out) = run(&["--json", "bootstrap/tests/native_test/mixed.ail"]);
     assert_eq!(code, 0, "{out}");
     let last = out.lines().last().unwrap();

@@ -17,21 +17,69 @@ struct Slot
 ## that no source declares; its key can't clash with a program's own name.
 PROC_OUTPUT := "proc.Output"
 
+## The errors of the OS layer (std.err.1): `fs.IoError` and `proc.ProcError`,
+## error structs of the standard library that no source declares. The
+## runtime builds them where a call fails (ADR 0804).
+IO_ERROR := "fs.IoError"
+PROC_ERROR := "proc.ProcError"
+
+## The raw TCP types of `std.net` (std.net.12) and its error (std.net.4):
+## structs of the standard library that no source declares.
+NET_ERROR := "net.NetError"
+NET_CONN := "net.Conn"
+NET_LISTENER := "net.Listener"
+NET_RESPONSE := "net.Response"
+NET_OPTIONS := "net.Options"
+
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
+    structs[IO_ERROR] = []
+    structs[PROC_ERROR] = []
+    structs[NET_ERROR] = []
+    structs[NET_CONN] = []
+    structs[NET_LISTENER] = []
+    structs[NET_RESPONSE] = []
+    structs[NET_OPTIONS] = []
     for s in prog.structs
         if s.generics.len() > 0
-            problem(s.pos, "generic struct `{s.name}` isn't in the native subset yet")
-        elif s.invariants.len() > 0
-            problem(s.pos, "struct `{s.name}`: invariants aren't in the native subset yet")
+            declare_generic_struct(s)
         elif s.is_unique
             problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
         else
             structs["{prefix}{s.name}"] = []
+            if s.invariants.len() > 0
+                invariants["{prefix}{s.name}"] = s.invariants
+                inv_file["{prefix}{s.name}"] = file
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
+    structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[NET_ERROR] = [
+        Slot(name: "url", ty: Ty.Str),
+        Slot(name: "kind", ty: Ty.Str),
+        Slot(name: "message", ty: Ty.Str),
+    ]
+    structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_RESPONSE] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "body", ty: Ty.Str),
+        Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
+    ]
+    # `data` is a `bytes`, which the native subset doesn't have: a placeholder.
+    structs[NET_OPTIONS] = [
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "query", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "body", ty: Ty.Str),
+        Slot(name: "timeout_ms", ty: Ty.Int),
+        Slot(name: "max_redirects", ty: Ty.Int),
+        Slot(name: "data", ty: Ty.Int),
+        Slot(name: "connect_ms", ty: Ty.Int),
+        Slot(name: "total_ms", ty: Ty.Int),
+    ]
     structs[PROC_OUTPUT] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "out", ty: Ty.Str),
@@ -77,6 +125,7 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..vs.len()
         store(obj, k, vs[k])
+    check_invariants(n, obj, pos, "", pos)
     Val(id: obj, ty: t)
 
 ## The heap object kinds (native-abi.md §2).
@@ -95,6 +144,8 @@ fn Lower.store(mut self, obj int, k int, v int)
 ## `x.f` on a struct.
 fn Lower.lower_member(mut self, recv ast.Expr, name str, pos ast.Pos) Val?
     r := lower_value(recv, none)?
+    if xs := tuple_elems(r.ty)
+        return tuple_member(r, xs, name, pos)
     n := struct_name(r.ty) else return unsupported(pos, "`.{name}` on `{r.ty.name()}`")
     k := slot_of(n, name)
     if k < 0
@@ -118,6 +169,9 @@ fn Lower.assign_member(
     at ast.Pos,
 )
     r := lower_value(recv, none) else return
+    if xs := tuple_elems(r.ty)
+        assign_tuple_elem(r, xs, name, op, value, pos, at)
+        return
     n := struct_name(r.ty) else
         problem(pos, "assigning `.{name}` on `{r.ty.name()}` isn't in the native subset yet")
         return
@@ -149,31 +203,42 @@ fn Lower.self_value(mut self) int
 
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    if not sigs.contains(key)
+        instance_method(key)
     if bad.contains(key)
+        release(key)
         fn_failed = true
         return none
+    if gen.fns.contains(key) and recv == none
+        return generic_call(key, key, [], args, pos, none)
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
         return proc_output_method(key, recv, args, pos)
+    if key.starts_with("net.")
+        return lower_net_method(key, recv, args, pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
     if r := recv
         vs.push(r.id)
     if args.len() + vs.len() != sig.params.len()
-        return unsupported(pos, "this call")
+        return unsupported(
+            pos,
+            "calling `{key}` with {args.len() + vs.len()} arguments instead of {sig.params.len()}",
+        )
     for a in args
         if a.label != none
-            return unsupported(pos, "labelled arguments")
+            return unsupported(pos, "calling `{key}` with a labelled argument")
         t := sig.params[vs.len()]
         v := lower_value(a.value, t)?
         vs.push(convert(v, t, expr_pos(a.value)))
-    Val(id: call(key, vs, sig.ret), ty: sig.ret)
+    check_requires(key, vs, pos)
+    Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
 
 ## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
 ## status is zero; the standard output followed by the standard error.
 fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
     r := recv else return unsupported(pos, "calling `{key}`")
     if args.len() > 0
-        return unsupported(pos, "this call")
+        return unsupported(pos, "`{key}` takes no arguments")
     if key == "{PROC_OUTPUT}.ok"
         status := load(r.id, 0, Ty.Int)
         return Val(id: op("eq", [status, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
@@ -185,14 +250,14 @@ fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], po
 ## independent (own.val.1).
 fn needs_copy(t Ty) bool
     match t
-        List(_) | Struct(_) => true
+        List(_) | Struct(_) | Tuple(_) | Any(_) => true
         _ => false
 
 ## Whether copying `t` needs a generated function: it holds a struct.
 fn holds_struct(t Ty) bool
     match t
-        Struct(_) => true
-        List(e) => holds_struct(e)
+        Struct(_) | Tuple(_) | Any(_) => true
+        List(e) => e.is_coll() or holds_struct(e)
         Map(_, v) => holds_struct(v)
         _ => false
 
@@ -224,6 +289,7 @@ fn Lower.gen_copies(mut self)
 fn Lower.gen_copy(mut self, name str, t Ty)
     x := begin_fn(name, t, [t])[0]
     match t
+        Any(tr) => gen_any_copy(x, tr)
         Struct(n) =>
             slots := structs[n]
             obj := call(
@@ -236,6 +302,14 @@ fn Lower.gen_copy(mut self, name str, t Ty)
                 mut v := load(x, k, st)
                 if needs_copy(st)
                     v = copy_value(Val(id: v, ty: st))
+                store(obj, k, v)
+            finish(return_of(obj))
+        Tuple(xs) =>
+            obj := call("rt.obj_new", [konst(8 * xs.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
+            for k in 0..xs.len()
+                mut v := load(x, k, xs[k])
+                if needs_copy(xs[k])
+                    v = copy_value(Val(id: v, ty: xs[k]))
                 store(obj, k, v)
             finish(return_of(obj))
         List(e) =>
@@ -296,6 +370,8 @@ fn Lower.lower_member_expr(
     e ast.Expr,
     want Ty?,
 ) Val?
+    if g := generic_enum_ref(recv)
+        return generic_variant(g, name, none, pos, want)
     if en := enum_ref(recv)
         return variant_member(en, name, pos)
     if key := qualified(e)

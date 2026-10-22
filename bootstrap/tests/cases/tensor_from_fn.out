@@ -1,0 +1,8 @@
+tensor.from([0.0, 0.5, 1.0, 1.5])
+tensor.from([0, 1, 4, 9, 16, 25], [2, 3])
+tensor.from([0.0, 2.0])
+tensor.from([0.0, 1.0, 2.0]).to_f32()
+0
+[2, 0]
+10
+true

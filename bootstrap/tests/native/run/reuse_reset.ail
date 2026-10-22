@@ -1,0 +1,58 @@
+# `buf = []` empties the same list when the old one is dead and nothing keeps
+# either (native.reuse.2); a list that is kept, read after, or the caller's
+# stays its own object.
+fn flush(mut out List[str], line List[char])
+    out.push(line.join(""))
+
+fn main()
+    # Reset after use: the old line is only read.
+    mut line := []
+    mut lines := List[str]()
+    for i in 0..10
+        line.push("abc".chars()[i % 3])
+        if line.len() == 4
+            lines.push(line.join(""))
+            line = []
+    lines.push(line.join(""))
+    print(lines)
+    # The old list is kept by a copy into a list of lists.
+    mut rows := List[List[int]]()
+    mut cur := List[int]()
+    for i in 0..7
+        cur.push(i)
+        if cur.len() == 3
+            rows.push(cur)
+            cur = []
+    rows.push(cur)
+    print(rows)
+    # The old list is read after the reset point on another path.
+    mut a := [1]
+    mut seen := 0
+    for i in 0..4
+        b := a
+        a = []
+        a.push(i)
+        seen += b.len() + b[0]
+    print(seen)
+    # A parameter overwritten: the caller's list is untouched.
+    base := [9, 9]
+    print(shadow(base))
+    print(base)
+    # Passed to a function that reads it, then reset.
+    mut out := List[str]()
+    mut buf := []
+    for i in 0..5
+        buf.push("xyz".chars()[i % 3])
+        if i % 2 == 1
+            flush(mut out, buf)
+            buf = []
+    print(out)
+
+fn shadow(xs List[int]) int
+    mut ys := xs
+    mut t := 0
+    for i in 0..3
+        ys.push(i)
+        t += ys.len()
+        ys = []
+    t

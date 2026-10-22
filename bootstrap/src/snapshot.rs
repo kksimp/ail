@@ -114,7 +114,7 @@ pub fn write(path: &str, src: &str, found: Vec<Located>, docs: Vec<(Vec<usize>, 
         let old = std::fs::read_to_string(&expected).unwrap_or_default();
         let new = String::from_utf8_lossy(&run.stdout).into_owned();
         if old != new {
-            let file = expected.display().to_string();
+            let file = crate::shown::shown(&expected);
             let change = Change { kind: "out", line: 1, col: 1, old: old.clone(), new: new.clone() };
             out.push_str(&report(&file, &old, &new, std::slice::from_ref(&change), json));
             count += 1;

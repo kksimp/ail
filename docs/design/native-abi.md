@@ -55,6 +55,7 @@ shortens a list must be added to the optimiser's decision first.
 | `str` | pointer to a **string object** |
 | `List[int]`, `List[float]`, `List[bool]` | pointer to a **list object** |
 | `Map[K, V]`, `Set[T]` | pointer to a **table object** (kind 7, 8) |
+| `(A, B, ...)` | pointer to a struct object (kind 4), one 8-byte slot per element in order (ADR 0829) |
 
 **String object** (immutable, 16-byte aligned):
 
@@ -63,6 +64,9 @@ shortens a list must be added to the optimiser's decision first.
 +8   u64  chars    length in characters  (str.len(), ADR 0208, O(1))
 +16  u8[] data     UTF-8, `bytes` long, no terminator
 ```
+
+A `bytes` object has the same layout with `chars` equal to `bytes`
+(ADR 0702).
 
 A literal is a string object in read-only data. `chars` is computed once when
 the object is built, which makes `s.len()` free and byte indexing impossible.
@@ -76,7 +80,8 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 ```
 
 `data` is separate so `push` can grow without moving the header the caller
-holds. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
+holds. A full list grows to 16 elements if it has fewer than 8, else doubles
+(ADR 0562); blocks of 256 bytes or more are copied 64 bytes per round. Out-of-range reads and writes trap `type.coll.4` (the interpreter's rule
 for list indexing).
 
 **Optionals** (ADR 0574). `T?` is one register: 0 is `none`. A `str` or list
@@ -147,6 +152,23 @@ The entry array is in insertion order, which is iteration order
 (type.map.1). A value is one word: a `float` as its bits, a `bool` as 0 or
 A set uses the same layout and ignores the value word.
 
+**Socket object** (`net.Conn`, `net.Listener`; ADR 0830; `compiler/rt/native/net.ail`).
+A `Conn` or `Listener` value is a struct (kind 4) of one `int` field: an index
+into a list of socket objects that global slot 40 keeps alive.
+
+```text
++0   i64  fd       descriptor, -1 once closed
++8   u64  timeout  milliseconds a read, write or connect may wait
++16  ptr  buf      read buffer (pointer-free), or 0
++24  u64  pos      first unread byte in buf
++32  u64  len      bytes in buf
++40  u64  flags    1 end of stream seen
++48  ptr  peer     string: peer address of a Conn
++56  u64  kind     0 connection, 1 listener
++64  ptr  addr     string: bound address of a Listener
++72  u64  cap      size of buf
+```
+
 **Enum values** (ADR 0602, lane 179). An enum none of whose variants has
 fields is an `i64`, the variant's index in declaration order. Any other enum
 is a pointer to an **enum object** (heap kind 5, immutable, shared, never
@@ -164,6 +186,13 @@ first `RT_GLOBALS` (16) slots, and the image's global area is sized from the
 slots the MIR uses. `==` on an enum with fields compares the index when one
 side is a variant without fields, the index and that variant's fields when
 one side is built in place, else calls the generated `eq.E`.
+
+**Generic instances** (ADR 0536). Each generic function, struct or enum is
+compiled once per set of type arguments, as a plain function or type named
+with them: `first[int]`, `Box[str]`, `Box[str].get`, `Pair[int, str]`.
+An instance has the layout of the same struct or enum written out by hand;
+there is no boxing and no type information at run time. The methods of an
+`impl Trait for T` block are the symbols `T.m`, like any method of `T`.
 
 ## 3. Entry and exit
 
@@ -258,7 +287,7 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 56-62). Each slot is a
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 16-24, channels 25-30). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
@@ -282,11 +311,40 @@ text is the oracle: integers in decimal with a leading `-`; floats per
 end of its function, which calls
 `rt.trap(kind, a, b, head, op, tail)`: `kind` picks the message (0 overflow,
 1 division by zero, 2 negation, 3 index, 4 float to `int`, 5 `abs`, 6 shift
-count; 15 prints a runtime-built message string, `a`), `a` and `b` are the operands (for 4, the float's bits), `head` is the
+count, 7 slice, 11 stack exhausted, 14 `unreachable`; 15 prints a runtime-built message string, `a`), `a` and `b` are the operands (for 4, the float's bits), `head` is the
 constant `PATH:LINE:COL: trap[RULE]: `, `op` the operator, and `tail` the
 constant source excerpt (`  L | line` and the caret line). The output is the
 interpreter's first line and excerpt, byte for byte; the snapshot lines
 after them are not printed. Runtime code has no checks: its arithmetic wraps.
+
+**Stack check (ADR 0535).** `rt.init` stores a limit in global slot 15: the
+argument vector's address (the top of the main stack) less the stack's size
+limit (`RLIMIT_STACK`; 8 MiB when unknown or unlimited, at most 1 GiB) less a
+1 MiB reserve for the trap itself. A call that can recurse, one whose callee
+is in its caller's strongly connected component of the call graph, first
+compares the stack pointer with it (`cmp rsp, [globals+96]; jb stub` on
+x86-64; `adrp`, `add`, `ldr`, `cmp sp, x16`, `b.lo` on ARM64) and traps with
+kind 11 at the call: `call depth exceeded the native stack in `NAME``. Other
+calls are unchecked: their chains are bounded by the program's functions.
+Threads other than the main one need their own limit (lane 178).
+**Stack (lane 195, ADR 0641).** The stub's `tail` text also holds the
+trapping function's frame line (and, for a check inlined from a callee, the
+frames it was inlined through, ADR 0643). `rt.trap` then calls
+`trace_frames(tail)` (`rt/native/trap.ail`), which walks the frame pointers
+(`[fp]` is the caller's frame, `[fp + 8]` the return address; `_start` and
+thread entries clear the frame pointer) and prints a line for each return
+address found in the **call table**. The table is the symbol `trace.tab`, in
+the code (8-aligned), in 8-byte words: `count`, the table's own offset in
+the code, the number of functions; then `count` rows of two words, in
+address order, `return offset | line << 32` and `col | function << 32`;
+then two words per function, the offsets from `trace.tab` of its
+`NAME(..)` string object and of its `FILE:` string object (0: the first
+file); then those string objects. Primitives `code_tab()` and `frame_ptr()`
+(runtime only) give the table's address and the frame pointer. A user
+`call` instruction carries its position in `imm` (`mir.call_pos`); runtime
+calls carry 0 and get no row. A runtime path with its own trap text calls
+`trace_frames` after printing it. Code-size cost: 16 bytes per user call and
+about 1.5 KB of runtime (ADR 0644).
 
 The trap-record design below was the first draft; a record can't hold the
 operands the interpreter's messages contain.
@@ -308,8 +366,8 @@ Output, byte for byte the first line the interpreter prints:
 FILE:LINE:COL: trap[RULE]: MESSAGE
 ```
 
-The interpreter then adds a source excerpt and a stack trace. The native
-version doesn't yet (frame metadata is a later ABI addition, ADR 0405). The
+The interpreter then adds a source excerpt and a stack trace. Native code
+prints the excerpt and the stack too (trace.frame.1, ADR 0641; see below). The
 differential harness compares exit status, the rule ID and the first line;
 `.trap` files hold the rule ID.
 
@@ -330,7 +388,7 @@ the buffer instead of building a string. List indexing and `len` are inline.
 The runtime is written over the primitives of `compiler/rt/native/prim.ail`
 (`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
-`target`), which the code generator expands inline and only runtime code may
+`f32_round`, `target`), which the code generator expands inline and only runtime code may
 call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
 
 **OS layer and number text (lane 177, ADRs 0580-0582).** `os.ail` provides
@@ -340,7 +398,10 @@ and `kind_name`; `fmt.ail` provides the byte builder (`sb_*`), `put_*`,
 `out_float`, `out_float_fixed` and `str_to_float`. A fallible function returns
 its value and, on failure, sets the error slot (global 8) to the display text
 of an `fs.IoError` and returns zero (ADR 0580); `env_get`, `env_home` and
-`io_read_line` return a string or 0.
+`io_read_line` return a string or 0. Runtime code that needs a deadline calls
+`time_mono_ns()` or `time_mono_ms()` (`CLOCK_MONOTONIC` on Linux; on macOS it is NOT
+monotonic yet, it reads the wall clock, until the libSystem switch moves it to
+`clock_gettime_nsec_np` or `mach_continuous_time`: a follow-up for the Mac gate); `time_now_ms()` is the wall clock of `time.now_ms`.
 
 **Strings and characters (lane 172, ADRs 0565-0567).** `compiler/rt/native/str.ail`
 adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
@@ -348,7 +409,8 @@ adds: `str_cat`, `str_eq`, `str_cmp`, `str_int`, `str_hex`, `str_bool`,
 `str_slice`, `str_contains`, `str_starts_with`, `str_ends_with`, `str_find`
 (character index or -1), `str_find_opt`, `str_char_at`, `str_strip_prefix`, `str_strip_suffix`,
 `char_to_digit`, `char_from_code` (optional results), `str_replace`, `str_split`,
-`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`,
+`str_lines`, `str_chars` (scalar values), `str_repeat`, `str_trim`, `str_trim_start`,
+`str_trim_end`, `str_words`, `str_count`, `str_rfind_opt`,
 `str_to_upper`, `str_to_lower`, the `char_*` predicates and mappings,
 `out_char`, `out_list_char`, and `str_trap`. A function that
 can trap takes the constant head and excerpt as its last arguments (`str`
@@ -439,6 +501,104 @@ follows in lockstep (ADR 0008); (4) `ail build` drops `ffi.native.1` and the
 selftest diffs `examples/ffi_libc.ail` and `examples/ffi_buffers.ail` between
 the interpreter and the native executable on both platforms.
 
+## 10. Threads, tasks and atomics
+
+**As built (lane 178, ADRs 0599–0601).** `compiler/rt/native/task.ail` is part
+of the runtime of a program whose source mentions `spawn `, `par for` or
+`Atomic`; `notask.ail` otherwise. Linux x86-64 and ARM64, and macOS ARM64 through §11.
+
+- **Threads.** `clone` with `CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM` (flags
+  `0x50F00`; syscall 56 on x86-64, 220 on ARM64), no TLS. Worker `k` has the
+  stack `STACKS + k * 8 MiB` (a lazily committed region of 64, `PROT_NONE`
+  guard page at the low end); `STACKS` is global slot 46, and a thread is a
+  worker exactly when its stack pointer lies in that region. The child starts
+  in `rt.worker_main(k)` with the stack top (16-byte aligned) in `rsp`/`sp`;
+  the argument rides in `r8` (x86-64) or `x4` (ARM64), which `clone` ignores
+  without `CLONE_SETTLS`. The `restart` primitive re-enters `rt.worker_main`
+  on a fresh stack after a trap.
+- **Sleeping.** `futex` wait and wake with `FUTEX_PRIVATE` (`128`, `129`) on
+  the low 32 bits of an 8-byte word (syscall 202 on x86-64, 98 on ARM64).
+  Locks are three-state futex mutexes (0 free, 1 held, 2 held and waited
+  for) over `atomic_cas`, `atomic_add` and `atomic_store`.
+- **Atomics.** x86-64: `mov`, `xchg`, `lock xadd`, `lock cmpxchg`. ARM64:
+  `ldar`, `stlr`, `swpal`, `ldaddal`, `casal` (LSE). Always sequentially
+  consistent.
+- **Globals** 16–24: `TASKS` (the pool block), `MULTI` (1 once the pool
+  exists: `alloc` then takes `ALLOC_LOCK`), `ALLOC_LOCK`, `OUT_LOCK`,
+  `OUT_OWNER` and `OUT_DEPTH` (the reentrant output lock), `STACKS`. The image
+  has 64 slots.
+- **Task record** (8-byte words): 0 state (0 queued or running, 2 done,
+  3 trapped), 1 function id, 2 result, 3 next in the queue, 4–6 the trap's
+  kind and operands, 7 its head string, 8 its operator, 9 its source
+  excerpt, 10–23 arguments (a chunk function: environment, `lo`, `hi`, then
+  sum, lowest and highest running sum per accumulator). The compiler writes
+  `task.K(rec)` for each `spawn` and `par for` site, and `rt.dispatch(id,
+  rec)` to call it.
+- **Pool block** (one `mmap` page): lock, queue head and tail, the sequence
+  word idle workers sleep on, live, blocked and idle counts, the target, and
+  the task each worker runs.
+- **Atomic cell:** 8 bytes, heap kind 11.
+- **Allocation fast path under threads:** the fast path tests against heap state word 24 (`H_FASTLIM`), which equals the collection threshold while there is one thread and is 0 once the pool exists, so every allocation then takes the locked path with no extra test.
+- **Channel record** (`chan.ail`, heap kind 13; a `Channel[str]` is its
+  address): 0 lock word, 1 capacity, 2 count, 3 head, 4 closed, 5 ring
+  pointer (string pointers), 6 source (nonzero for a channel fed from outside:
+  `chan_pump`, `chan_source_send` and `chan_source_close` then take over),
+  7 wake word (futex), 8 ring capacity, 9 id (`Channel#N`). Globals 25–27:
+  the change counter `select` sleeps on (task ends bump it too), how many sleep, channels made. 28–30: the deadlock message the main task found, the unfinished tasks, and the threads sleeping on a program-made change; `prog_wait` counts a sleeper, and the main task in 25 ms slices reports a deadlock after 4 idle slices when the sleepers number the unfinished tasks plus main.
+
+**With the collector (lane 171).** The collector is conservative and assumes
+every other thread is at a call; a worker in a loop that never allocates is
+not. As built, a threaded program works like this:
+
+1. Once the pool exists (`MULTI`), the allocator's fast path is off and
+   `alloc_slow` runs under `ALLOC_LOCK`. A collection starts inside it, so the
+   collector holds the lock and no other thread can allocate.
+2. `gc_stop_world` sets `GC_REQ` and waits until every other live thread has
+   published a stack pointer (`P_PARK`). A thread publishes at each safe point:
+   before any futex sleep (`futex_wait`, which saves the callee-saved registers
+   with `gc_regs` first), when it finds `GC_REQ` set in `lock`, and between
+   tasks. After waking it stays published while `GC_REQ` is set, and clears its
+   mark first and re-checks, so the collector never scans a thread that runs.
+3. The collector scans its own stack, then each other thread's registers and
+   stack (published pointer up to the main stack's top or the worker's slice of
+   `STACKS`), the pool block (queued and running task records), each thread's
+   text builder, and the globals. A thread that computes without reaching the
+   runtime delays a collection, nothing else.
+4. `gc_start_world` clears `GC_REQ` and wakes the parked threads.
+   `notask.ail` stubs all of it.
+
+Heap kinds: 11 (`KIND_ATOMIC`, no pointers) is an atomic cell; 12 is a task
+record and 13 an environment or group record (every word may be a pointer).
+`str` formatting keeps one text builder per thread in the pool block
+(`fmt.ail`, `sb_base`). A trap inside the allocator (a run limit) releases its
+lock before the task ends. What is still shared and not thread-safe: the error
+slot (`rt.err_set`), `PARSE_OK` and the OS layer's result slots (`os.ail`), so
+tasks must not use fallible calls or the file and environment functions at
+the same time.
+
+## 11. Imports from libSystem (macOS)
+
+A runtime file calls a libSystem function with the primitive
+`import_call("_name", a, b, c, d)` (the name is a string literal with its
+leading underscore; the arguments are integers, any number the target's
+calls support, so the declaration in `prim.ail` doesn't limit a call site). It lowers
+to an ordinary MIR `call` named `libsys._name`, so it clobbers the caller-saved
+registers like any call. The ARM64 generator passes the arguments as for any
+call, then `adrp x16, slot; add; ldr x16, [x16]; blr x16`. Slot `k`, for the
+`k`th distinct name in `Image.imports`, is the 8 bytes after the runtime's
+globals (`globals + k`), so the images grow by one word per import and
+nothing else moves.
+
+The Mach-O writer adds `LC_DYLD_INFO_ONLY` with a bind table only when the
+image imports something: ordinal 1 (libSystem), one `SET_SYMBOL`,
+`SET_TYPE_IMM pointer`, `SET_SEGMENT_AND_OFFSET_ULEB` (segment 2, `__DATA`) and
+`DO_BIND` per name. dyld fills the slots before `main` runs. On Linux a
+`libsys.` call is `ud2`/`brk`: the runtime guards each with `target() == 2`.
+`fn_addr("rt.name")` gives a function's address (for `pthread_create`).
+
+Used by `task.ail` (`pthread_attr_init`, `pthread_attr_setstack`,
+`pthread_create`, `sysconf`) and `core.ail` (`__ulock_wait`, `__ulock_wake`).
+
 ## Licensing
 
 [ADR 0510](../decisions/0510-licence-apache-2-with-runtime-exception.md): the
@@ -475,3 +635,47 @@ overflow an `int` (std.tensor.6) returns 0, and `sum`/`dot` of `int` return a
 one-element tensor read with `rt.tensor_first_i`; the lowering traps with the
 constant message when it sees 0. A float `sum`, `dot` and axis sum follow
 std.tensor.5's 16 partial sums.
+
+Step 3 (matmul, activations): `rt.tensor_matmul_fault` and `rt.tensor_matmul`
+(the plain triple loop of std.tensor.7, each product and sum rounded, no fused
+multiply-add; 0 on `int` overflow, as above), and `rt.tensor_activate` (`kind`
+0 `relu`, 1 `sigmoid` through `rt.float_exp`, 2 `tanh` through `rt.float_tanh`,
+fdlibm's, which uses `rt.float_expm1`).
+
+Step 4 (`Tensor[f32]`): element kind 2. An element is still a `float` word, but
+it always holds a value already rounded to `f32`; `f32_round` (a primitive:
+round to single precision and widen back, `vcvtsd2ss` and `vcvtss2sd` on
+x86-64, `fcvt s,d` and `fcvt d,s` on ARM64) is applied after every operation.
+One rounding of the double-precision result is the correctly rounded
+single-precision result for `+ - * /` (a double has more than twice an `f32`'s
+precision), so the values are the interpreter's `f32` kernels'.
+`rt.tensor_to_f32` and `rt.tensor_to_float` convert. A `Tensor[f32]` has type
+`Ty.Tensor(Ty.F32)`. A scalar `f32` (ADR 0834) is a `Ty.F32` value in a float
+register, rounded after every operation, but `sum`, `dot`, `max`, `mean`,
+`item`, printing and the text form of a `Tensor[f32]` are still
+`native.subset.1` problems, and `to_list` gives a `List[float]`.
+
+Step 5 (vector kernels, x86-64): `rt.vec_axpy` (matmul's inner loop), `rt.vec_zip`
+and `rt.vec_scal` (elementwise operators) are declared in `tensor.ail` with
+scalar bodies, and `compiler/x64/kernels.ail` assembles AVX loops in their
+place (four doubles at a time, then element by element; a multiply and an add,
+never a fused one, so every result is the scalar one bit for bit; a non-zero
+`r` rounds each result to `f32` through `vcvtpd2ps`/`vcvtps2pd`). They are
+leaf code using only rax, rcx-r11 and xmm0-xmm4, and `inline.ail` never inlines
+an `rt.vec_*` function. On ARM64 `compiler/a64/kernels.ail` assembles NEON
+loops in the same place (two doubles at a time, `fcvtn`/`fcvtl` for the `f32`
+rounding, x0-x9 and v0-v5 only), with the same results bit for bit.
+
+Step 5b (ARM64 `matmul`): `rt.vec_mm(c, a, b, n, k, r)` computes one row of
+the product, `compiler/a64/kernels.ail` assembles it with eight columns' sums
+held in registers across the whole `p` loop (`f32` as four singles per register,
+which rounds like the `float` operation rounded to `f32`; doubles otherwise),
+and the remaining columns one at a time. The order of the sums is the same as
+`k` calls of `rt.vec_axpy` on a zeroed row, which is the body on other targets.
+
+Step 6 (`softmax`, std.tensor.24): `rt.tensor_softmax_fault(a)` returns the
+fault message (no axis, empty last axis) or 0, and the lowering traps with
+imm 15 like the other tensor faults. `rt.tensor_softmax(a)` writes `exp(x - top)`
+per row of the last axis (top skips NaN), sums them in element order and
+divides, in `float` and rounded once for `f32`. `exp` is the runtime's own
+(ADR 0592), so a result may differ from `ail run` in the last bit.

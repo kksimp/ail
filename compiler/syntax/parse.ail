@@ -112,7 +112,7 @@ fn comparison(s str) ast.BinOp?
 
 ## Names declared generic (`fn f[`, `struct S[`, `enum E[`): after one of
 ## these, `[` starts type arguments rather than an index (gen.infer.2).
-fn generic_names(tokens List[Token]) Set[str]
+pub fn generic_names(tokens List[Token]) Set[str]
     mut names := {"List", "Map", "Set", "Channel", "Mutex", "Atomic"}
     for k in 2..tokens.len()
         a := tok_text(tokens[k - 2].tok)
@@ -146,8 +146,15 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
 pub fn parse(tokens List[Token]) Parsed
+    parse_with(tokens, Set[str]())
+
+## `parse` of a file whose module's other files declare generic names too:
+## `extra` are theirs (`absent[int]()` in a file that doesn't declare `absent`).
+pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
     mut p := new_parser(tokens, [])
     p.generic_names = generic_names(tokens)
+    for n in extra.sorted()
+        p.generic_names.add(n)
     p.top_level()
     public := p.public.sorted()
     program := ast.Program(
@@ -162,6 +169,7 @@ pub fn parse(tokens List[Token]) Parsed
         files: [],
         grants: [],
         unsafe_allowed: none,
+        driver_allowed: [],
         generated: [],
     )
     Parsed(program: program, diags: p.diags)
@@ -248,12 +256,25 @@ fn Parser.top_level(mut self)
                 unexpected("`struct` or `enum` after `error`", "err.decl.1")
                 skip_statement()
         elif tag == "kw" and text == "mut" and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            error_text(
+                "mod.const.1",
+                here(),
+                "there are no mutable top-level variables",
+                "declare a constant `NAME := value`, or pass the value to the functions that change it",
+                "",
+            )
             skip_statement()
         elif tag == "id"
             and (text == "const" or text == "let" or text == "var")
             and tag_at(1) == "id"
-            diag("mod.const.1", here())
+            fix := if sym_at(2) == "=" then "declare the constant with `:=`" else ""
+            error_text(
+                "mod.const.1",
+                here(),
+                "AIL has no `{text}`; a constant is declared `NAME := value`",
+                "remove the keyword and write `NAME := value`",
+                fix,
+            )
             skip_statement()
         elif tag == "id" and foreign_decl(text)
             i += 0
@@ -372,6 +393,10 @@ fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str)
             return
     diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: "", fix: ""))
 
+## A diagnostic with the bootstrap's message, help line and fix title.
+fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: fix))
+
 fn Parser.int_too_big(mut self, pos ast.Pos)
     diag("lex.num.3", pos)
 
@@ -424,7 +449,13 @@ fn Parser.take_name(mut self, expected str, rule str) ast.Ident?
         pos := bump().pos
         return ast.Ident(name: n, pos: pos)
     if tag_at(0) == "kw" and not not_yet(kw_at(0))
-        diag("lex.kw.1", here())
+        error_text(
+            "lex.kw.1",
+            here(),
+            "`{kw_at(0)}` is a keyword and can't be used as a name",
+            "choose a different name",
+            "",
+        )
         return none
     unexpected(expected, rule)
     none
@@ -1062,10 +1093,23 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         e := otherwise()?
         return ast.Stmt.Let(name: text, pos: pos, mutable: false, value: value, otherwise: e.part)
     if tag == "id" and (text == "let" or text == "var" or text == "const") and tag_at(1) == "id"
-        diag("expr.bind.1", pos)
+        fix := if sym_at(2) == "=" then "declare it with `:=`" else ""
+        error_text(
+            "expr.bind.1",
+            pos,
+            "AIL has no `{text}`; bindings are declared with `:=`",
+            "write `name := value`, or `mut name := value` to allow reassignment",
+            fix,
+        )
         return none
     if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
-        diag("lex.kw.1", pos)
+        error_text(
+            "lex.kw.1",
+            pos,
+            "`{text}` is a keyword and can't be used as a name",
+            "choose a different name",
+            "",
+        )
         return none
     if tag == "kw" and text == "while"
         bump()
@@ -1123,7 +1167,7 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         value := expression()?
         return ast.Stmt.Assign(target: target, op: assign_op(s), value: value, pos: apos)
     if s == ":="
-        diag("expr.bind.1", here())
+        error_text("expr.bind.1", here(), "only a plain name can be declared with `:=`", "", "")
         return none
     ast.Stmt.Eval(target)
 
@@ -1132,7 +1176,13 @@ fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
     bump()
     mutable := eat_kw("mut")
     if at_sym("(")
-        diag("expr.loop.1", here())
+        error_text(
+            "expr.loop.1",
+            here(),
+            "AIL has no C-style `for`",
+            "loop over a range: `for i in 0..n` (excludes `n`) or `for i in 1..=n` (includes it); use `while` for other conditions",
+            "write the range loop",
+        )
         return none
     v := take_name("a loop variable after `for`", "expr.loop.1")?
     mut var := v.name

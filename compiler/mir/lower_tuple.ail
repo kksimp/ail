@@ -1,0 +1,586 @@
+## Tuples in the native subset (ADR 0829, type.tuple.1-8). A tuple value is
+## a pointer to a struct object (kind 4) with one 8-byte slot per element,
+## in order, so `t.k` is a struct field read (native-abi.md §2). Tuples are
+## values (own.val.1): reading one from a place to bind, store, push or
+## return it copies it, deeply, with the generated `copy.T` of structs.
+## `==` and `!=` use a generated `eq.T`, `<` and its kin a generated
+## `lt.T`; both are registered in `eq_tys` and made with the `eq.E` family.
+## Tuples as map keys and set elements stay out of the subset, because the
+## native tables key only `int`, `bool`, `str` and `char` (ADR 0568).
+use ast
+
+## The element types of a tuple type.
+fn tuple_elems(t Ty) List[Ty]?
+    match t
+        Tuple(xs) => xs
+        _ => none
+
+## Whether a value of type `t` can be an element of a native tuple: a
+## table or a function value is not (its copy would share state).
+fn tuple_elem_ok(t Ty) bool
+    match t
+        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | Unit | Unknown => false
+        _ => true
+
+## `(A, B)` written as a type, if it is in the subset.
+fn Lower.tuple_type_of(mut self, elems List[ast.TypeRef]) Ty?
+    mut out := List[Ty]()
+    for e in elems
+        t := type_of(e)?
+        if not tuple_elem_ok(t)
+            return none
+        out.push(t)
+    Ty.Tuple(out)
+
+fn nth_want(wants List[Ty], k int) Ty?
+    if k < wants.len()
+        return wants[k]
+    none
+
+## `(a, b, ...)` (type.tuple.2): a new object with every element set. A
+## tuple type that is expected types the elements, so `(1, none)` can be
+## an `(int, str?)`.
+fn Lower.lower_tuple_lit(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
+    mut wants := List[Ty]()
+    if w := want
+        if xs := tuple_elems(w)
+            if xs.len() == items.len()
+                wants = xs
+    mut elems := List[Ty]()
+    mut vs := List[int]()
+    for k in 0..items.len()
+        e := items[k]
+        v := lower_value(e, nth_want(wants, k))?
+        mut t := v.ty
+        if w := nth_want(wants, k)
+            if not w.is_unknown()
+                t = w
+        if not tuple_elem_ok(t)
+            return unsupported(expr_pos(e), "a `{t.name()}` in a tuple")
+        vs.push(copy_if_place(e, Val(id: convert(v, t, expr_pos(e)), ty: t)))
+        elems.push(t)
+    ty := Ty.Tuple(elems)
+    obj := call("rt.obj_new", [konst(8 * vs.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], ty)
+    for k in 0..vs.len()
+        store(obj, k, vs[k])
+    Val(id: obj, ty: ty)
+
+fn is_index_name(n str) bool
+    if n.len() == 0
+        return false
+    for c in n.chars()
+        if not c.is_digit()
+            return false
+    true
+
+## The element `t.k` names (type.tuple.3), after a problem if it names none.
+fn Lower.tuple_index(mut self, xs List[Ty], name str, pos ast.Pos) int
+    if not is_index_name(name)
+        problem(pos, "a tuple has no field `{name}`")
+        return -1
+    k := name.to_int() else -1
+    if k < 0 or k >= xs.len()
+        problem(pos, "a tuple of {xs.len()} has no element {name}")
+        return -1
+    k
+
+## `t.k` (type.tuple.3).
+fn Lower.tuple_member(mut self, r Val, xs List[Ty], name str, pos ast.Pos) Val?
+    k := tuple_index(xs, name, pos)
+    if k < 0
+        return none
+    Val(id: load(r.id, k, xs[k]), ty: xs[k])
+
+## `t.k = v` or `t.k op= v`: the object is changed in place, which is safe
+## because every place holds its own object.
+fn Lower.assign_tuple_elem(
+    mut self,
+    r Val,
+    xs List[Ty],
+    name str,
+    op ast.BinOp?,
+    value ast.Expr,
+    pos ast.Pos,
+    at ast.Pos,
+)
+    k := tuple_index(xs, name, pos)
+    if k < 0
+        return
+    t := xs[k]
+    if o := op
+        old := Val(id: load(r.id, k, t), ty: t)
+        v := lower_value(value, t) else return
+        store(r.id, k, binary(o, old, v, at).id)
+    else
+        v := lower_value(value, t) else return
+        store(r.id, k, copy_if_place(value, Val(id: convert(v, t, at), ty: t)))
+
+## `a, b := e` (type.tuple.4), and the first statement of the body of
+## `for a, b in xs` (type.tuple.5): each name takes its element, copied when
+## `e` is a place that stays alive.
+fn Lower.lower_let_tuple(mut self, binders List[ast.Binder], value ast.Expr, pos ast.Pos)
+    v := lower_value(value, none) else
+        # Reported; uses of the names stay quiet.
+        for b in binders
+            declare(b.name, Ty.Unknown, -1)
+        return
+    xs := tuple_elems(v.ty) else
+        problem(pos, "taking apart a `{v.ty.name()}` isn't in the native subset yet")
+        return
+    if xs.len() != binders.len()
+        problem(pos, "{binders.len()} names, but the value is a `{v.ty.name()}`")
+        return
+    place := is_place(value)
+    for k in 0..binders.len()
+        b := binders[k]
+        if b.name == "_"
+            continue
+        mut x := load(v.id, k, xs[k])
+        if place and needs_copy(xs[k])
+            x = copy_value(Val(id: x, ty: xs[k]))
+        declare(b.name, xs[k], x)
+
+## `(a, b)` against a tuple (type.tuple.6): end the current block with a
+## branch to `yes` when every element matches, else to `no`. False after a
+## problem.
+fn Lower.tuple_test(mut self, p ast.Pattern, s Val, yes int, no int) bool
+    match p
+        TuplePat(ps, tpos) =>
+            xs := tuple_elems(s.ty) else
+                problem(tpos, "a tuple pattern on `{s.ty.name()}`")
+                return false
+            if xs.len() != ps.len()
+                problem(tpos, "a pattern of {ps.len()} elements on a `{s.ty.name()}`")
+                return false
+            for k in 0..ps.len()
+                e := Val(id: load(s.id, k, xs[k]), ty: xs[k])
+                last := k == ps.len() - 1
+                next := if last then yes else new_block()
+                if not elem_test(ps[k], e, next, no)
+                    return false
+                if not last
+                    seal(next)
+                    cur = next
+            true
+        _ => false
+
+## One element's pattern: a name or `_` matches anything.
+fn Lower.elem_test(mut self, p ast.Pattern, e Val, yes int, no int) bool
+    match p
+        Wildcard | BindName =>
+            jump(yes, [])
+            true
+        TuplePat => tuple_test(p, e, yes, no)
+        _ =>
+            tag := if is_enum(e.ty) then tag_of(enum_name(e.ty) else "", e.id) else e.id
+            test_pattern(p, e, tag, yes, no)
+
+## Declare the names a tuple pattern binds (expr.match.6), to the elements.
+fn Lower.tuple_bind(mut self, p ast.Pattern, s Val)
+    match p
+        TuplePat(ps, _) =>
+            xs := tuple_elems(s.ty) else return
+            for k in 0..ps.len()
+                if k < xs.len()
+                    bind_elem(ps[k], Val(id: load(s.id, k, xs[k]), ty: xs[k]))
+        _ => return
+
+fn Lower.bind_elem(mut self, p ast.Pattern, e Val)
+    match p
+        BindName(n, _) =>
+            declare(n, e.ty, e.id)
+            borrowed.add(lookup(n) else "")
+        TuplePat => tuple_bind(p, e)
+        Variant => bind_fields(p, e)
+        _ => return
+
+## `a OP b` on tuples: `==` and `!=` through `eq.T`, the orderings through
+## `lt.T`, which compares the elements in order.
+fn Lower.tuple_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
+    quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
+    name := op_name(o)
+    if name == "eq" or name == "ne"
+        mut seen := Set[str]()
+        if not comparable(a.ty, pos, a.ty.name(), mut seen)
+            return quiet
+        eq := call(eq_fn(a.ty), [a.id, b.id], Ty.Bool)
+        if name == "ne"
+            return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
+        return Val(id: eq, ty: Ty.Bool)
+    if not can_order(a.ty)
+        problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
+        return quiet
+    f := lt_fn(a.ty)
+    match name
+        "lt" => Val(id: call(f, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+        "gt" => Val(id: call(f, [b.id, a.id], Ty.Bool), ty: Ty.Bool)
+        "le" => Val(id: op("not", [call(f, [b.id, a.id], Ty.Bool)], Ty.Bool), ty: Ty.Bool)
+        _ => Val(id: op("not", [call(f, [a.id, b.id], Ty.Bool)], Ty.Bool), ty: Ty.Bool)
+
+## Whether `<` on `t` is in the subset: numbers, booleans, characters,
+## strings, and tuples, structs and enums of those. A float orders as in the
+## interpreter's `cmp` (type.num.7): NaN after every number, equal to itself.
+fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
+    if xs := tuple_elems(t)
+        for x in xs
+            if not orderable(x, mut seen)
+                return false
+        return true
+    if s := struct_name(t)
+        if seen.contains(s)
+            return true
+        seen.add(s)
+        for sl in structs[s]
+            if not orderable(sl.ty, mut seen)
+                return false
+        return true
+    if n := enum_name(t)
+        if seen.contains(n)
+            return true
+        seen.add(n)
+        for c in enums[n]
+            for fd in c.fields
+                if not orderable(fd.ty, mut seen)
+                    return false
+        return true
+    match t
+        Int | Bool | Char | Sized(_) | Str | Float => true
+        _ => false
+
+fn Lower.can_order(self, t Ty) bool
+    mut seen := Set[str]()
+    orderable(t, mut seen)
+
+## Whether `t` is compared and ordered field by field with generated
+## functions: a tuple, a struct, or an enum whose variants have fields.
+fn Lower.structural(self, t Ty) bool
+    if tuple_elems(t) != none or struct_name(t) != none
+        return true
+    n := enum_name(t) else return false
+    not is_flat(n)
+
+fn Lower.lt_fn(mut self, t Ty) str
+    name := "lt.{t.name()}"
+    if not sigs.contains(name)
+        sigs[name] = Sig(params: [t, t], ret: Ty.Bool, fails: false)
+        eq_tys[name] = t
+    name
+
+## `eq.(A, B)(a, b)`: every element equal.
+fn Lower.gen_tuple_eq(mut self, fkey str, t Ty, xs List[Ty])
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    yes := new_block()
+    no := new_block()
+    for k in 0..xs.len()
+        e := field_eq(xs[k], load(ps[0], k, xs[k]), load(ps[1], k, xs[k]))
+        next := new_block()
+        branch(e, next, [], no, [])
+        cur = next
+    jump(yes, [])
+    end_eq(fkey, yes, no)
+
+fn Lower.elem_lt(mut self, t Ty, x int, y int) int
+    if t == Ty.Str
+        c := call("rt.str_cmp", [x, y], Ty.Int)
+        return op("lt", [c, konst(0, Ty.Int)], Ty.Bool)
+    if structural(t)
+        return call(lt_fn(t), [x, y], Ty.Bool)
+    if t == Ty.Float
+        # `x < y`, or `y` is NaN and `x` is not.
+        below := op("flt", [x, y], Ty.Bool)
+        x_nan := op("fne", [x, x], Ty.Bool)
+        y_nan := op("fne", [y, y], Ty.Bool)
+        join := new_block()
+        r := new_value(Ty.Bool, "")
+        blocks[join].params.push(r)
+        second := new_block()
+        third := new_block()
+        branch(below, join, [konst(1, Ty.Bool)], second, [])
+        seal(second)
+        cur = second
+        branch(y_nan, third, [], join, [konst(0, Ty.Bool)])
+        seal(third)
+        cur = third
+        jump(join, [op("not", [x_nan], Ty.Bool)])
+        seal(join)
+        cur = join
+        return r
+    op("lt", [x, y], Ty.Bool)
+
+## `lt.(A, B)(a, b)`: the first element that differs decides.
+fn Lower.gen_tuple_lt(mut self, fkey str, t Ty, xs List[Ty])
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    yes := new_block()
+    no := new_block()
+    for k in 0..xs.len()
+        x := load(ps[0], k, xs[k])
+        y := load(ps[1], k, xs[k])
+        later := new_block()
+        branch(elem_lt(xs[k], x, y), yes, [], later, [])
+        cur = later
+        same := new_block()
+        branch(elem_lt(xs[k], y, x), no, [], same, [])
+        cur = same
+    jump(no, [])
+    end_eq(fkey, yes, no)
+
+## Whether `t` has a text form here (type.tuple.8): `int`, `float`, `bool`,
+## `str`, and tuples and lists of those.
+fn text_ok(t Ty) bool
+    if xs := tuple_elems(t)
+        for x in xs
+            if not text_ok(x)
+                return false
+        return true
+    if e := t.elem()
+        return text_ok(e)
+    match t
+        Int | Sized(_) | Float | F32 | Bool | Str => true
+        _ => false
+
+## Whether a list type holds a tuple somewhere, so that its text is made here
+## (lists of plain numbers and strings print through the runtime).
+fn has_tuple(t Ty) bool
+    if tuple_elems(t) != none
+        return true
+    if e := t.elem()
+        return has_tuple(e)
+    false
+
+## The text of a value of a type `text_ok` accepts, as inside a tuple or a
+## list: strings in quotes, `(1, "a")`, `[(1, "a")]`.
+fn Lower.value_text(mut self, t Ty, x int) int
+    match t
+        Int | Sized(_) => call("rt.fmt_int", [x], Ty.Str)
+        Float => call("rt.fmt_float", [x], Ty.Str)
+        F32 => call("rt.fmt_f32", [x], Ty.Str)
+        Bool => call("rt.fmt_bool", [x], Ty.Str)
+        Str => call("rt.str_quoted", [x], Ty.Str)
+        Tuple(xs) => tuple_text_of(xs, x)
+        List(e) => list_text(x, e)
+        _ => str_value("")
+
+## `(a, b)` of the elements of tuple object `obj`.
+fn Lower.tuple_text_of(mut self, xs List[Ty], obj int) int
+    mut acc := str_value("(")
+    for k in 0..xs.len()
+        if k > 0
+            acc = call("rt.str_cat", [acc, str_value(", ")], Ty.Str)
+        piece := value_text(xs[k], load(obj, k, xs[k]))
+        acc = call("rt.str_cat", [acc, piece], Ty.Str)
+    call("rt.str_cat", [acc, str_value(")")], Ty.Str)
+
+## `[a, b]` of the elements of list `l`: a loop that grows the text.
+fn Lower.list_text(mut self, l int, e Ty) int
+    n := op("len", [l], Ty.Int)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    acc := new_value(Ty.Str, "")
+    blocks[head].params.push(i)
+    blocks[head].params.push(acc)
+    jump(head, [konst(0, Ty.Int), str_value("[")])
+    cur = head
+    body := new_block()
+    exit := new_block()
+    branch(op("lt", [i, n], Ty.Bool), body, [], exit, [])
+    seal(body)
+    cur = body
+    sep := call("rt.text_sep", [i], Ty.Str)
+    piece := value_text(e, op("get", [l, i], e))
+    next := call("rt.str_cat", [call("rt.str_cat", [acc, sep], Ty.Str), piece], Ty.Str)
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int), next])
+    seal(head)
+    seal(exit)
+    cur = exit
+    call("rt.str_cat", [acc, str_value("]")], Ty.Str)
+
+## The text of a tuple or of a list that holds tuples (type.tuple.8).
+fn Lower.tuple_text(mut self, v Val) int?
+    if not text_ok(v.ty)
+        return none
+    value_text(v.ty, v.id)
+
+## One pair of `zip` or `enumerate`: a new tuple object of `a` and `b`.
+fn Lower.pair_of(mut self, t Ty, a int, b int) int
+    obj := call("rt.obj_new", [konst(16, Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
+    store(obj, 0, a)
+    store(obj, 1, b)
+    obj
+
+## The element `i` of list `l`, independent of the list (own.val.1).
+fn Lower.element_copy(mut self, l Val, e Ty, i int) int
+    x := op("get", [l.id, i], e)
+    if needs_copy(e)
+        return copy_value(Val(id: x, ty: e))
+    x
+
+## `xs.enumerate()` (type.tuple.9): the list of `(index, element)` pairs.
+fn Lower.lower_enumerate(mut self, l Val) Val?
+    e := l.ty.elem()?
+    pair := Ty.Tuple([Ty.Int, e])
+    t := Ty.List(pair)
+    n := op("len", [l.id], Ty.Int)
+    out := call("rt.list_new", [n], t)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    jump(head, [konst(0, Ty.Int)])
+    cur = head
+    body := new_block()
+    exit := new_block()
+    branch(op("lt", [i, n], Ty.Bool), body, [], exit, [])
+    seal(body)
+    cur = body
+    call("rt.list_push", [out, pair_of(pair, i, element_copy(l, e, i))], Ty.Unit)
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    seal(head)
+    seal(exit)
+    cur = exit
+    Val(id: out, ty: t)
+
+## `zip(a, b)` (type.tuple.9): the pairs of two lists, as many as the
+## shorter has.
+fn Lower.lower_zip(mut self, args List[ast.Arg], pos ast.Pos) Val?
+    if args.len() != 2
+        return unsupported(pos, "this `zip`")
+    a := lower_value(args[0].value, none)?
+    b := lower_value(args[1].value, none)?
+    ea := a.ty.elem() else return unsupported(pos, "`zip` of a `{a.ty.name()}`")
+    eb := b.ty.elem() else return unsupported(pos, "`zip` of a `{b.ty.name()}`")
+    pair := Ty.Tuple([ea, eb])
+    t := Ty.List(pair)
+    la := op("len", [a.id], Ty.Int)
+    lb := op("len", [b.id], Ty.Int)
+    out := call("rt.list_new", [la], t)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    jump(head, [konst(0, Ty.Int)])
+    cur = head
+    second := new_block()
+    body := new_block()
+    exit := new_block()
+    branch(op("lt", [i, la], Ty.Bool), second, [], exit, [])
+    seal(second)
+    cur = second
+    branch(op("lt", [i, lb], Ty.Bool), body, [], exit, [])
+    seal(body)
+    cur = body
+    x := element_copy(a, ea, i)
+    y := element_copy(b, eb, i)
+    call("rt.list_push", [out, pair_of(pair, x, y)], Ty.Unit)
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    seal(head)
+    seal(exit)
+    cur = exit
+    Val(id: out, ty: t)
+
+## A function value for the runtime's comparing helpers: the address of the
+## generated `eq.T` or `lt.T` called `name`.
+fn Lower.compare_fn(mut self, name str) int
+    mut i := inst(-1, "fnaddr", [])
+    i.name = name
+    emit(i, Ty.Fn(params: [Ty.Int, Ty.Int], ret: Ty.Bool))
+
+## The indices of `keys` in order (a list of tuples): `rt.sort_perm_by`.
+fn Lower.tuple_sort_perm(mut self, keys int, kt Ty) int
+    call("rt.sort_perm_by", [keys, compare_fn(lt_fn(kt))], Ty.List(Ty.Int))
+
+## `contains`, `index_of`, `min`, `max`, `sort` and `sorted` on a list of
+## tuples (type.tuple.7), element by element as `==` and `<` compare them.
+fn Lower.tuple_list_edit(mut self, r Val, e Ty, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "contains" or name == "index_of"
+        if vs.len() != 1
+            return unsupported(npos, "`.{name}()` with these arguments")
+        mut seen := Set[str]()
+        if not comparable(e, npos, e.name(), mut seen)
+            return none
+        x := convert(vs[0], e, npos)
+        idx := call("rt.list_find_by", [r.id, x, compare_fn(eq_fn(e))], Ty.Int)
+        found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+        if name == "contains"
+            return Val(id: found, ty: Ty.Bool)
+        return opt_at(r, found, idx, Ty.Int, true, npos)
+    if not can_order(e) or vs.len() != 0
+        return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    if name == "min" or name == "max"
+        greatest := konst(if name == "max" then 1 else 0, Ty.Int)
+        idx := call("rt.list_extreme_by", [r.id, compare_fn(lt_fn(e)), greatest], Ty.Int)
+        found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+        return opt_at(r, found, idx, e, false, npos)
+    perm := tuple_sort_perm(r.id, e)
+    n := op("len", [r.id], Ty.Int)
+    out := call("rt.list_new", [n], r.ty)
+    c := count_open(n)
+    mut x := op("get", [r.id, op("get", [perm, c.i], Ty.Int)], e)
+    if name == "sorted" and needs_copy(e)
+        x = copy_value(Val(id: x, ty: e))
+    call("rt.list_push", [out, x], Ty.Unit)
+    count_close(c)
+    if name == "sorted"
+        return Val(id: out, ty: r.ty)
+    # `sort` puts the sorted elements back into the list itself.
+    c2 := count_open(n)
+    emit_void(inst(-1, "set", [r.id, c2.i, op("get", [out, c2.i], e)]))
+    count_close(c2)
+    Val(id: -1, ty: Ty.Unit)
+
+fn tuple_list_method(name str) bool
+    name == "contains"
+        or name == "index_of"
+        or name == "min"
+        or name == "max"
+        or name == "sort"
+        or name == "sorted"
+
+fn Lower.orderable_record(self, t Ty) bool
+    structural(t) and can_order(t)
+
+## `lt.E(a, b)` for an enum with fields: the earlier variant is less; the
+## same variant compares its fields in order, as `ail run` does.
+fn Lower.gen_enum_lt(mut self, fkey str, t Ty, n str)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    a := ps[0]
+    b := ps[1]
+    yes := new_block()
+    no := new_block()
+    ta := load(a, 0, Ty.Int)
+    tb := load(b, 0, Ty.Int)
+    later := new_block()
+    branch(op("lt", [ta, tb], Ty.Bool), yes, [], later, [])
+    cur = later
+    same := new_block()
+    branch(op("lt", [tb, ta], Ty.Bool), no, [], same, [])
+    cur = same
+    cases := enums[n]
+    for k in 0..cases.len()
+        c := cases[k]
+        if c.fields.len() == 0
+            continue
+        this := new_block()
+        other := new_block()
+        branch(op("eq", [ta, konst(k, Ty.Int)], Ty.Bool), this, [], other, [])
+        cur = this
+        for j in 0..c.fields.len()
+            ft := c.fields[j].ty
+            x := load(a, j + 1, ft)
+            y := load(b, j + 1, ft)
+            l1 := new_block()
+            branch(elem_lt(ft, x, y), yes, [], l1, [])
+            cur = l1
+            l2 := new_block()
+            branch(elem_lt(ft, y, x), no, [], l2, [])
+            cur = l2
+        jump(no, [])
+        cur = other
+    jump(no, [])
+    end_eq(fkey, yes, no)
+
+## Generate `lt.T` for a tuple, a struct or an enum.
+fn Lower.gen_lt(mut self, fkey str, t Ty)
+    if xs := tuple_elems(t)
+        gen_tuple_lt(fkey, t, xs)
+    elif s := struct_name(t)
+        gen_tuple_lt(fkey, t, [sl.ty for sl in structs[s]])
+    else
+        gen_enum_lt(fkey, t, enum_name(t) else "")

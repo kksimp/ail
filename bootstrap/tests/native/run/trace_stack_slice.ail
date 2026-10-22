@@ -1,0 +1,7 @@
+# A slice out of range in a callee (type.coll.4).
+fn head(xs List[int], n int) List[int]
+    xs[0..n]
+
+fn main()
+    print(head([1, 2, 3], 2).len())
+    print(head([1, 2, 3], 9).len())

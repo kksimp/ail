@@ -6,12 +6,35 @@ use ast
 
 ## The standard modules, which `use` doesn't load from the package
 ## (std.use.1); the lowering knows their functions by name.
-STD_MODULES := ["env", "fs", "io", "net", "path", "proc", "random", "regex", "tensor", "time", "ui"]
+STD_MODULES := [
+    "compress",
+    "env",
+    "fs",
+    "io",
+    "net",
+    "path",
+    "proc",
+    "random",
+    "regex",
+    "tensor",
+    "time",
+    "tz",
+    "ui",
+]
 
 ## The standard modules written in AIL (std.ui.19), compiled like a user's
 ## own: their source is in `bootstrap/src/std`, and each is a module of the
 ## program under its dotted path (`std.csv`).
-STD_AIL := ["std.app", "std.args", "std.csv", "std.log", "std.net.http", "std.net.jar", "std.time.date"]
+STD_AIL := [
+    "std.app",
+    "std.args",
+    "std.csv",
+    "std.log",
+    "std.net.http",
+    "std.net.jar",
+    "std.regex",
+    "std.time.date",
+]
 
 ## The imports of a file: the name each makes available, to the module's
 ## import path. The standard modules the runtime implements are left out.
@@ -63,11 +86,19 @@ fn path_of(e ast.Expr) str?
 fn Lower.type_key(self, name str) str?
     parts := name.split(".")
     if parts.len() > 1
+        # A type of a standard module the runtime implements (`net.Options`).
+        if STD_MODULES.contains(parts[0])
+            and aliases.get(parts[0]) == none
+            and structs.contains(name)
+            return name
         m := aliases.get(parts[0])?
         key := "{m}.{parts[1..].join(".")}"
         return if structs.contains(key) then key else none
     key := "{prefix}{name}"
-    if structs.contains(key) then key else none
+    if structs.contains(key)
+        return key
+    k := prelude_key(name)?
+    if structs.contains(k) then k else none
 
 ## The key a qualified name `m.x` has, when `m` is an import here.
 fn Lower.qualified(self, e ast.Expr) str?

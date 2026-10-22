@@ -13,7 +13,7 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
     s := lower_value(scrutinee, none)?
     mut en := ""
     match s.ty
-        Int | Bool | Str | Char => en = ""
+        Int | Sized(_) | Bool | Str | Char | Tuple => en = ""
         Enum(n) => en = n
         _ => return unsupported(pos, "`match` on `{s.ty.name()}`")
     tag := if en == "" then s.id else tag_of(en, s.id)
@@ -122,11 +122,9 @@ fn Lower.test_pattern(mut self, p ast.Pattern, s Val, tag int, yes int, no int) 
                 problem(vpos, "`{n}` has no variant `{name}`")
                 return false
             branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
-        TuplePat(_, tpos) =>
-            problem(tpos, "tuples aren't in the native subset yet")
-            return false
+        TuplePat => return tuple_test(p, s, yes, no)
         BindName(_, bpos) =>
-            problem(bpos, "tuples aren't in the native subset yet")
+            problem(bpos, "a name pattern outside a tuple isn't in the native subset yet")
             return false
     true
 
@@ -161,7 +159,7 @@ fn Lower.literal_int(mut self, lit ast.Literal, s Val, pos ast.Pos) int?
         _ =>
             problem(pos, "only `int` and `char` ranges are in the native subset yet")
             return none
-    if not (s.ty == Ty.Int)
+    if not (s.ty == Ty.Int or s.ty.is_sized())
         problem(pos, "an `int` pattern on `{s.ty.name()}`")
         return none
     n := text.to_int() else
@@ -186,4 +184,5 @@ fn Lower.bind_fields(mut self, p ast.Pattern, s Val)
                 ft := fields[j].ty
                 declare(binds[j].name, ft, load(s.id, j + 1, ft))
                 borrowed.add(lookup(binds[j].name) else "")
+        TuplePat => tuple_bind(p, s)
         _ => return

@@ -1,0 +1,10 @@
+# conc.par.11: a trap in a chunk makes the loop run in order, so the trap is
+# the sequential one: the lowest failing iteration (ADR 0601).
+fn main()
+    mut out := List[int]()
+    for _ in 0..100
+        out.push(0)
+    print("before")
+    par for i in 0..100
+        out[i] = 1000 / (i - 60)
+    print(out[0])

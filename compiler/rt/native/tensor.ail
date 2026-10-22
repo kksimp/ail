@@ -4,7 +4,8 @@
 ## `tensor.Tensor[T]` (ADR 0815, std.tensor.1-21). A tensor is an object of
 ## kind 4 (every word is scanned) with the layout
 ##
-##   +0 element kind (0 int, 1 float)  +8 rank  +16 element count
+##   +0 element kind (0 int, 1 float, 2 f32: a float holding a value rounded
+##      to f32, as the interpreter's packed 4-byte elements read back)  +8 rank  +16 element count
 ##   +24 pointer to the elements (8 bytes each, kind 11: no pointers)
 ##   +32 the sizes of the axes, one word each
 ##
@@ -122,7 +123,7 @@ fn tensor_eq(a int, b int) bool
             return false
     da := tensor_data(a)
     db := tensor_data(b)
-    if load64(a) == 1
+    if load64(a) >= 1
         for i in 0..n
             if loadf(da + 8 * i) != loadf(db + 8 * i)
                 return false
@@ -156,6 +157,54 @@ fn tensor_text(t int) str
 fn out_tensor(t int)
     out_str(tensor_text(t))
 
+# ---- vector kernels ----
+#
+# The backend replaces these three with assembled vector loops on targets that
+# have them (compiler/x64/kernels.ail); the bodies are the scalar definitions
+# and the reference. `r` non-zero rounds every result to `f32`.
+
+## `c[i] = c[i] + x * b[i]` for `i < n`; the product and the sum each rounded.
+fn vec_axpy(c int, b int, n int, r int, x float)
+    for i in 0..n
+        mut q := x * loadf(b + 8 * i)
+        if r != 0
+            q = f32_round(q)
+        mut s := loadf(c + 8 * i) + q
+        if r != 0
+            s = f32_round(s)
+        storef(c + 8 * i, s)
+
+## One row of a matrix product (std.tensor.7): `c[j]` is the sum over `p < k`,
+## in order from 0.0, of `a[p] * b[p * n + j]`, each product and sum rounded
+## (`r` non-zero: to `f32`). ARM64 assembles it (`compiler/a64/kernels.ail`);
+## elsewhere this is `k` calls of `vec_axpy` on a zeroed row.
+fn vec_mm(c int, a int, b int, n int, k int, r int)
+    for j in 0..n
+        storef(c + 8 * j, 0.0)
+    for p in 0..k
+        vec_axpy(c, b + 8 * p * n, n, r, loadf(a + 8 * p))
+
+## `out[i] = a[i] op b[i]` for `i < n` (`op` 0 `+`, 1 `-`, 2 `*`, 3 `/`).
+fn vec_zip(op int, out int, a int, b int, n int, r int)
+    for i in 0..n
+        mut y := float_op(op, loadf(a + 8 * i), loadf(b + 8 * i))
+        if r != 0
+            y = f32_round(y)
+        storef(out + 8 * i, y)
+
+## `out[i] = a[i] op s`, or `s op a[i]` when `left` is 1.
+fn vec_scal(op int, out int, a int, n int, r int, left int, s float)
+    for i in 0..n
+        x := loadf(a + 8 * i)
+        mut y := 0.0
+        if left == 1
+            y = float_op(op, s, x)
+        else
+            y = float_op(op, x, s)
+        if r != 0
+            y = f32_round(y)
+        storef(out + 8 * i, y)
+
 # ---- step 2: elementwise operators, reductions, transpose ----
 
 # Operators (std.tensor.4): 0 `+` (add), 1 `-`, 2 `*` (mul), 3 `/`.
@@ -184,6 +233,12 @@ fn int_op(op int, x int, y int, box int) bool
                 return false
     store64(box, r)
     true
+
+## `x` as an element of a tensor of `kind`: rounded to `f32` for kind 2.
+fn elem_round(kind int, x float) float
+    if kind == 2
+        return f32_round(x)
+    x
 
 fn float_op(op int, x float, y float) float
     if op == 0
@@ -322,9 +377,8 @@ fn tensor_zip(a int, b int, op int) int
     t := tensor_new(kind, rank, n)
     tensor_copy_words(t + 32, dims, rank)
     out := tensor_data(t)
-    if kind == 1
-        for i in 0..n
-            storef(out + 8 * i, float_op(op, loadf(da + 8 * i), loadf(db + 8 * i)))
+    if kind >= 1
+        vec_zip(op, out, da, db, n, if kind == 2 then 1 else 0)
         return t
     for i in 0..n
         if not int_op(op, load64(da + 8 * i), load64(db + 8 * i), out + 8 * i)
@@ -333,15 +387,14 @@ fn tensor_zip(a int, b int, op int) int
 
 ## `t op s`, or `s op t` when `left` (std.tensor.10), for a `float` scalar.
 fn tensor_scalar_f(a int, s float, op int, left bool) int
+    kind := load64(a)
     n := load64(a + 16)
     rank := load64(a + 8)
-    t := tensor_new(1, rank, n)
+    t := tensor_new(kind, rank, n)
     tensor_copy_words(t + 32, a + 32, rank)
     da := tensor_data(a)
     out := tensor_data(t)
-    for i in 0..n
-        x := loadf(da + 8 * i)
-        storef(out + 8 * i, if left then float_op(op, s, x) else float_op(op, x, s))
+    vec_scal(op, out, da, n, if kind == 2 then 1 else 0, if left then 1 else 0, elem_round(kind, s))
     t
 
 ## The same for an `int` scalar; 0 on overflow.
@@ -369,7 +422,7 @@ fn tensor_neg(a int) int
     da := tensor_data(a)
     out := tensor_data(t)
     for i in 0..n
-        if kind == 1
+        if kind >= 1
             storef(out + 8 * i, -loadf(da + 8 * i))
         else
             x := load64(da + 8 * i)
@@ -463,6 +516,160 @@ fn tensor_transpose(a int) int
     for i in 0..m
         for j in 0..n
             store64(out + 8 * (j * m + i), load64(da + 8 * (i * n + j)))
+    t
+
+## `a.matmul(b)` (std.tensor.7) needs two 2-D tensors with equal inner sizes:
+## the message, or 0.
+fn tensor_matmul_fault(a int, b int) int
+    if load64(a + 8) != 2 or load64(b + 8) != 2
+        sb_reset()
+        sb_text("`matmul` needs two 2-D tensors, but the shapes are ")
+        put_sizes(a + 32, load64(a + 8))
+        sb_text(" and ")
+        put_sizes(b + 32, load64(b + 8))
+        return str_addr(sb_str())
+    k := load64(a + 40)
+    k2 := load64(b + 32)
+    if k == k2
+        return 0
+    sb_reset()
+    sb_text("`matmul` of ")
+    put_int(load64(a + 32))
+    sb_text("x")
+    put_int(k)
+    sb_text(" and ")
+    put_int(k2)
+    sb_text("x")
+    put_int(load64(b + 40))
+    sb_text(": the inner sizes ")
+    put_int(k)
+    sb_text(" and ")
+    put_int(k2)
+    sb_text(" differ")
+    str_addr(sb_str())
+
+## The plain triple loop of std.tensor.7: element `(i, j)` adds `a(i, p) * b(p, j)`
+## for `p` in order from zero, each product and sum rounded (no fused
+## multiply-add). 0 when an `int` product or sum overflows (std.tensor.6).
+fn tensor_matmul(a int, b int) int
+    m := load64(a + 32)
+    k := load64(a + 40)
+    n := load64(b + 40)
+    kind := load64(a)
+    t := tensor_new(kind, 2, m * n)
+    store64(t + 32, m)
+    store64(t + 40, n)
+    da := tensor_data(a)
+    db := tensor_data(b)
+    out := tensor_data(t)
+    if kind >= 1
+        r := if kind == 2 then 1 else 0
+        for i in 0..m
+            vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, r)
+        return t
+    box := alloc(8, KIND_ATOMIC)
+    for i in 0..m
+        for p in 0..k
+            x := load64(da + 8 * (i * k + p))
+            for j in 0..n
+                c := out + 8 * (i * n + j)
+                if not int_op(2, x, load64(db + 8 * (p * n + j)), box)
+                    return 0
+                if not int_op(0, load64(c), load64(box), c)
+                    return 0
+    t
+
+# Activations (std.tensor.13): kind 0 `relu`, 1 `sigmoid`, 2 `tanh`.
+
+## `relu` keeps a positive element and makes the rest `0.0`, but a NaN stays
+## NaN; `sigmoid` is `1 / (1 + exp(-x))`; `tanh` is fdlibm's.
+fn tensor_activate(a int, kind int) int
+    ek := load64(a)
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(ek, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    r := ek == 2
+    if kind == 1
+        for i in 0..n
+            y := 1.0 / (1.0 + float_exp(0.0 - loadf(da + 8 * i)))
+            storef(out + 8 * i, if r then f32_round(y) else y)
+        return t
+    for i in 0..n
+        x := loadf(da + 8 * i)
+        mut y := 0.0
+        if kind == 0
+            if x != x
+                y = x
+            elif x > 0.0
+                y = x
+        else
+            y = float_tanh(x)
+        storef(out + 8 * i, if r then f32_round(y) else y)
+    t
+
+## The message of the fault `softmax` raises (std.tensor.24), or 0.
+fn tensor_softmax_fault(a int) int
+    if load64(a + 8) == 0
+        sb_reset()
+        sb_text("`softmax` needs a tensor with at least one axis")
+        return str_addr(sb_str())
+    if load64(a + 32 + 8 * (load64(a + 8) - 1)) == 0
+        sb_reset()
+        sb_text("`softmax` over an empty last axis")
+        return str_addr(sb_str())
+    0
+
+## `t.softmax()` (std.tensor.24): per row of the last axis, `exp(x - top)`
+## (top: the largest element, a NaN skipped) over their sum in element order,
+## computed in `float` and rounded once for `f32`.
+fn tensor_softmax(a int) int
+    ek := load64(a)
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    w := load64(a + 32 + 8 * (rank - 1))
+    t := tensor_new(ek, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    mut base := 0
+    while base < n
+        mut top := 0.0 - fm_inf()
+        for j in 0..w
+            x := loadf(da + 8 * (base + j))
+            if x > top
+                top = x
+        mut total := 0.0
+        for j in 0..w
+            e := float_exp(loadf(da + 8 * (base + j)) - top)
+            storef(out + 8 * (base + j), e)
+            total += e
+        for j in 0..w
+            storef(out + 8 * (base + j), elem_round(ek, loadf(out + 8 * (base + j)) / total))
+        base += w
+    t
+
+## `t.to_f32()` (std.tensor.22): each element rounded to `f32`.
+fn tensor_to_f32(a int) int
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(2, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for i in 0..n
+        storef(out + 8 * i, f32_round(loadf(da + 8 * i)))
+    t
+
+## `t.to_float()` on a `Tensor[f32]`: the elements, widened exactly.
+fn tensor_to_float(a int) int
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(1, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    tensor_copy_words(tensor_data(t), tensor_data(a), n)
     t
 
 # Reductions (std.tensor.11): kind 0 `sum`, 1 `max`, 2 `mean`.

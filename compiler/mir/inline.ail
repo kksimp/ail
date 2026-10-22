@@ -22,6 +22,7 @@ pub fn inline_module(m Module) Module
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
     grow_only := lists_only_grow(m)
+    fills := by_name.contains("rt.fill")
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
         mut budget := INLINE_BUDGET
@@ -32,24 +33,32 @@ pub fn inline_module(m Module) Module
                 at := first_call(f.blocks[b], leaves, f.name)
                 if at >= 0
                     callee := m.funcs[by_name[f.blocks[b].insts[at].name]]
-                    f = inline_call(f, b, at, callee)
+                    f = inline_call(f, b, at, callee, mut out.sites)
                     budget -= 1
                     changed = true
                     break
         if budget < INLINE_BUDGET
             f = simplify(fold(simplify(f)))
-        out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(merge_blocks(f)) else fold_prim_addresses(
-            fold_addresses(bce(merge_blocks(f), reserve, grow_only)),
+        out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(forward_loads(merge_blocks(f))) else fold_prim_addresses(
+            fold_addresses(forward_loads(fill_loops(
+                kept_lengths(bce(merge_blocks(f), reserve, grow_only), reserve and grow_only),
+                fills,
+            ))),
         )
-    out
+    reuse_lists(out)
 
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
+    # `rt.vec_*` are replaced by assembled kernels where the target has them.
+    if f.name.starts_with("rt.vec_") or f.name == "rt.fill"
+        return false
     mut n := 0
     for blk in f.blocks
         n += blk.insts.len()
         for i in blk.insts
-            if i.op == "call" or i.op == "icall" or i.op == "prim" and i.name == "syscall"
+            if i.op == "call"
+                or i.op == "icall"
+                or i.op == "prim" and (i.name == "syscall" or i.name == "clone")
                 return false
         for t in blk.term.targets
             if t == 0
@@ -66,8 +75,9 @@ fn first_call(blk Block, leaves Set[str], self_name str) int
 ## `f` with the call at `blocks[b].insts[at]` replaced by `callee`'s blocks:
 ## the block jumps to the copy of the callee's entry with the arguments, and
 ## each `return` jumps to a new block, holding the rest of `b`, whose
-## parameter is the call's value.
-fn inline_call(f Func, b int, at int, callee Func) Func
+## parameter is the call's value. The callee's checks are copied with a
+## link to the call, a frame of the stack a trap prints (trace.frame.2).
+fn inline_call(f Func, b int, at int, callee Func, mut sites List[Site]) Func
     mut g := f
     nv := g.vals.len()
     nb := g.blocks.len()
@@ -76,6 +86,20 @@ fn inline_call(f Func, b int, at int, callee Func) Func
         g.vals.push(callee.vals[k])
         g.names.push(callee.names[k])
     call := g.blocks[b].insts[at]
+    mut frame := -1
+    if call.imm != 0
+        frame = sites.len()
+        sites.push(Site(
+            rule: "",
+            kind: "call",
+            op: "",
+            line: call_line(call.imm),
+            col: call_col(call.imm),
+            func: f.name,
+            file: call_file(call.imm),
+            from: -1,
+        ))
+    mut cloned := Map[int, int]()
     mut tail := List[Inst]()
     for k in at + 1..g.blocks[b].insts.len()
         tail.push(g.blocks[b].insts[k])
@@ -95,6 +119,13 @@ fn inline_call(f Func, b int, at int, callee Func) Func
             mut c := i
             c.dst = if i.dst >= 0 then i.dst + nv else -1
             c.args = [a + nv for a in i.args]
+            if frame >= 0 and i.site >= 0
+                if not cloned.contains(i.site)
+                    mut s := sites[i.site]
+                    s.from = frame
+                    cloned[i.site] = sites.len()
+                    sites.push(s)
+                c.site = cloned[i.site]
             insts.push(c)
         t := blk.term
         mut nt := t
@@ -159,3 +190,6 @@ fn rename(f Func, repl List[int]) Func
         t.args = [[repl[a] for a in edge] for edge in t.args]
         g.blocks[b].term = t
     g
+
+fn kept_lengths(f Func, on bool) Func
+    if on then keep_lengths(f) else f

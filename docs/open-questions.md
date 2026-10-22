@@ -459,3 +459,26 @@ packages CPU intrinsics (`hw.x64.*`, `hw.a64.*`) but no free-form assembly.
 Recommendation: **a** now. Revisit **c** when a driver needs an instruction
 sequence that intrinsics can't express. Measure tokens on a real driver before
 adding anything to the card.
+
+## OQ-138 — An LLM runner written in AIL (Kaleb's idea, 2026-10-22)
+
+Run a language model's inference in AIL itself, since native AIL may reach C
+speed. Not for now: it follows two milestones, `matmul` at C speed (it is 2.0x
+C in instructions today, from layout and register spills) and a GPU path
+([ADR 0381](decisions/0381-driver-compilers-are-platform.md), AIL-generated SPIR-V
+and MSL).
+
+- **a.** A CPU-only runner first: load quantised weights (`bytes` and sized
+  integers, [ADR 0834](decisions/0834-native-sized-numbers.md)), tensor kernels
+  on `Tensor[f32]`, tokeniser and sampler in AIL. Pro: a real benchmark of the
+  claim "faster than C" on a workload people care about, and a stress test of
+  tensors, sized numbers and mmap. Con: CPU inference is memory-bound, so the
+  win over C is small until kernels are vectorised.
+- **b.** Wait for the GPU path, then write the runner against it. Pro: where
+  the speed is. Con: no early feedback on missing tensor or I/O features.
+- **c.** Do not do it; leave inference to existing runners and call them
+  through FFI. Con: gives up the showcase.
+
+Recommendation: **a**, as a small tool in `tools/` once `matmul` is within
+1.2x of C and sized numbers and `mem` are native, then **b** when the GPU path
+exists. Measure with `tools/perfbench` (tokens per second against a C twin).

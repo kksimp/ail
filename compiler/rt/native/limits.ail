@@ -3,11 +3,11 @@
 ##
 ## Run limits for native programs (run.limit.5, run.limit.6, ADR 0726): the
 ## memory cap is checked when the heap takes a new chunk, the time limit
-## when the allocator has run 256 times and when the heap takes a chunk.
+## when the allocator or a `while` loop has run 256 times (counting both) and when the heap takes a chunk. Loops check only in a build made with `--timeout` (ADR 0727).
 ## Both read their settings from the environment (`AIL_MAX_MEMORY_MB`,
 ## `AIL_TIMEOUT_MS`) at start, else from the defaults `ail build --timeout`
-## and `--max-memory` baked in below. A program that never allocates is not
-## stopped by the timeout (it has no safepoint to check at).
+## and `--max-memory` baked in below. A `for` loop is not a safepoint, and
+## neither is recursion that never allocates.
 ##
 ## Global slots 45-47, 50 and 55 are this file's.
 
@@ -82,6 +82,10 @@ fn limits_tick(tick int)
         return
     store64(global(LIM_TICK), 256)
     limits_check()
+
+## Called by a `while` loop's turn while a time limit is on.
+fn limits_poll()
+    limits_tick(load64(global(LIM_TICK)))
 
 fn limits_check()
     d := load64(global(LIM_DEADLINE))

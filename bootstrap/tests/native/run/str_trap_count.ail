@@ -1,0 +1,4 @@
+# type.str.18: `count` with an empty text traps at the call, as `ail run` does.
+fn main()
+    print("abc".count("b"))
+    print("abc".count(""))

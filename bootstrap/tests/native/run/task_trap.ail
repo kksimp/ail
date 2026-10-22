@@ -1,0 +1,16 @@
+# conc.task.6: a trapped task's `wait()?` ends `main` with `Trapped`
+# (err.trace.1); the output before it stays, and the pool survives traps in
+# tasks that nothing waits for first (ADR 0599).
+fn divide(a int, b int) int
+    a / b
+
+fn pick(xs List[int], i int) int
+    xs[i]
+
+fn main() !
+    ok := spawn divide(10, 2)
+    print(ok.wait()?)
+    xs := [1, 2, 3]
+    bad := spawn pick(xs, 7)
+    print("before")
+    print(bad.wait()?)

@@ -160,6 +160,9 @@ fn batch_builds_match_separate_builds() {
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|x| x == "ail"))
+        // A program with derive generators needs `ail build`'s `AIL_DERIVED` file (ADR 0807),
+        // which a batch run doesn't take; `executables_match` builds those one by one.
+        .filter(|p| !fs::read_to_string(p).unwrap().contains("derive"))
         .collect();
     all.sort();
     // Five programs spread over the directory.
@@ -181,6 +184,28 @@ fn batch_builds_match_separate_builds() {
     let _ = fs::remove_dir_all(&tmp);
 }
 
+/// The interpreter's report line as the native one prints it (trace.frame.1,
+/// ADR 0641): a frame's values and locals are left out, `f(a = 1)` being
+/// `f(..)`, and the elision line has no `--verbose` hint. The interpreter's
+/// `note:` and `help:` lines have no native counterpart.
+fn interp_line(l: &str) -> Option<String> {
+    if l.starts_with("note:") || l.starts_with("help:") || l.starts_with("  values:") {
+        return None;
+    }
+    if l.starts_with("  at ") {
+        if let Some(i) = l.find(" in ") {
+            let name = &l[i + 4..];
+            let open = name.find('(')?;
+            let args = if name[open..].starts_with("()") { "()" } else { "(..)" };
+            return Some(format!("{}{}{}", &l[..i + 4], &name[..open], args));
+        }
+    }
+    if l.starts_with("  \u{2026} ") {
+        return Some(l.split(" (--verbose").next().unwrap().to_string());
+    }
+    Some(l.to_string())
+}
+
 /// `ail build` on each `tests/native/run/NAME.ail`, then the executable's
 /// output against `ail run`'s: stdout, the exit code, and a trap's message
 /// and excerpt (the interpreter's snapshot lines aside, trace.snap.1).
@@ -190,7 +215,16 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
     let dir = root().join("bootstrap/tests/native/run");
     let mut cases: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
     cases.sort();
-    let cases: Vec<PathBuf> = cases.into_iter().filter(|p| p.extension().is_some_and(|x| x == "ail")).collect();
+    let mut cases: Vec<PathBuf> = cases.into_iter().filter(|p| p.extension().is_some_and(|x| x == "ail")).collect();
+    // On macOS two groups of programs differ from `ail run` for known reasons:
+    // `proc.run` is not built there yet (native.subset.1), and the native tanh
+    // (fdlibm) is within 1 ulp of the macOS libm tanh that the interpreter calls
+    // (ADR 0592). They run in the Linux pass.
+    if cfg!(target_os = "macos") || target.is_some_and(|t| t.contains("macos")) {
+        const MACOS_KNOWN: &[&str] =
+            &["os_err_fields", "os_error_values", "proc_output_methods", "proc_run", "tensor_tanh"];
+        cases.retain(|p| !MACOS_KNOWN.contains(&p.file_stem().unwrap().to_string_lossy().as_ref()));
+    }
     let tmp = std::env::temp_dir().join(format!("ail-native-{}-{}", target.unwrap_or("host"), std::process::id()));
     fs::create_dir_all(&tmp).unwrap();
     // Four workers take programs in turn. Each failure is kept with its index,
@@ -294,10 +328,8 @@ fn executable_matches(
         }
         None => Command::new(&exe).current_dir(root()).envs(scratch_env.clone()).stdin(input()).output().unwrap(),
     };
-    let snapshot =
-        |l: &&str| !(l.starts_with("  at ") && l.contains(" in ") || l.starts_with("note:") || l.starts_with("help:"));
-    let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(snapshot).collect();
-    let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().collect();
+    let want_err: Vec<String> = std::str::from_utf8(&want.stderr).unwrap().lines().filter_map(interp_line).collect();
+    let got_err: Vec<String> = std::str::from_utf8(&got.stderr).unwrap().lines().map(str::to_string).collect();
     if want.stdout == got.stdout && want.status.code() == got.status.code() && want_err == got_err {
         return None;
     }
@@ -333,6 +365,72 @@ fn arm64_executables_match_the_interpreter_under_qemu() {
     }
 }
 
+/// Each `tests/native/stack/NAME.ail` against `NAME.out` and the first line
+/// of `NAME.err`: recursion bounded by the stack rather than the
+/// interpreter's call count (err.trap.1, ADR 0535).
+fn stack_cases(target: Option<&str>, runner: Option<&str>) {
+    let dir = root().join("bootstrap/tests/native/stack");
+    let tmp = std::env::temp_dir().join(format!("ail-native-stack-{}-{}", target.unwrap_or("host"), std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let mut failures = Vec::new();
+    let mut cases: Vec<PathBuf> = fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).collect();
+    cases.sort();
+    for case in cases.iter().filter(|p| p.extension().is_some_and(|x| x == "ail")) {
+        let rel = case.strip_prefix(root()).unwrap().to_string_lossy().replace('\\', "/");
+        let exe = tmp.join(case.file_stem().unwrap());
+        let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
+        build.current_dir(root()).args(["build", &rel, "-o"]).arg(&exe);
+        if let Some(t) = target {
+            build.args(["--target", t]);
+        }
+        let built = build.output().unwrap();
+        if !built.status.success() {
+            failures.push(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
+            continue;
+        }
+        let got = match runner {
+            Some(r) => Command::new(r).arg(&exe).current_dir(root()).output().unwrap(),
+            None => Command::new(&exe).current_dir(root()).output().unwrap(),
+        };
+        let want_out = fs::read_to_string(case.with_extension("out")).unwrap();
+        let want_err = fs::read_to_string(case.with_extension("err")).unwrap();
+        let got_err = String::from_utf8_lossy(&got.stderr);
+        if String::from_utf8_lossy(&got.stdout) != want_out
+            || got.status.code() != Some(1)
+            || got_err.lines().next() != want_err.lines().next()
+        {
+            failures.push(format!(
+                "{rel}: (exit {:?})\n{}{}",
+                got.status.code(),
+                String::from_utf8_lossy(&got.stdout),
+                got_err
+            ));
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+// err.trap.1
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn native_recursion_traps_when_the_stack_runs_out() {
+    stack_cases(None, None);
+}
+
+/// The same under qemu for Linux ARM64, when an emulator is installed.
+#[test]
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn arm64_recursion_traps_when_the_stack_runs_out_under_qemu() {
+    let runner = ["qemu-aarch64-static", "qemu-aarch64"]
+        .into_iter()
+        .find(|q| Command::new(q).arg("--version").output().is_ok_and(|o| o.status.success()));
+    match runner {
+        Some(q) => stack_cases(Some("aarch64-linux"), Some(q)),
+        None => eprintln!("skipped: no qemu-aarch64 emulator"),
+    }
+}
+
 /// A program outside the native subset builds nothing (native.subset.1).
 #[test]
 fn build_refuses_programs_outside_the_subset() {
@@ -348,6 +446,30 @@ fn build_refuses_programs_outside_the_subset() {
     assert!(err.contains("error[native.subset.1]"), "{err}");
 }
 
+/// A task program builds for macOS: its threads come from libSystem, so the
+/// Mach-O file carries a bind table naming `pthread_create` (native.task.1,
+/// ADR 0599); a program with no threads imports nothing.
+#[test]
+fn tasks_build_for_macos_with_imports() {
+    let tmp = std::env::temp_dir().join(format!("ail-native-macos-{}", std::process::id()));
+    let build = |name: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["build", &format!("bootstrap/tests/native/run/{name}.ail"), "--target", "aarch64-macos", "-o"])
+            .arg(&tmp)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        fs::read(&tmp).unwrap()
+    };
+    let has = |bytes: &[u8], needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+    assert!(has(&build("task_basic"), b"_pthread_create\0"));
+    let arith = build("arith");
+    assert!(!has(&arith, b"_pthread_create\0"));
+    // The Windows arms of the runtime import kernel32 names; dyld can't bind those.
+    assert!(!has(&arith, b"GetStdHandle\0") && !has(&arith, b"ExitProcess\0"));
+    let _ = fs::remove_file(&tmp);
+}
 /// `compiler/rt/native/unicode.ail` is what `tools/native/gen_unicode.ail`
 /// writes from the interpreter's tables (native.str.1, ADR 0567), so a
 /// toolchain with newer Unicode data fails here until the file is regenerated.
@@ -383,6 +505,8 @@ fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
     for (name, option, value, var, flag) in [
         ("grow", "--max-memory", "16", "AIL_MAX_MEMORY_MB", "--max-memory"),
         ("spin", "--timeout", "300", "AIL_TIMEOUT_MS", "--timeout"),
+        // run.limit.6: a `while` loop that never allocates is a safepoint in a build with `--timeout`.
+        ("loop", "--timeout", "300", "AIL_TIMEOUT_MS", "--timeout"),
     ] {
         let src = format!("bootstrap/tests/native/limits/{name}.ail");
         let want = Command::new(env!("CARGO_BIN_EXE_ail"))
@@ -390,7 +514,11 @@ fn limits_stop_native_programs(target: Option<&str>, runner: Option<&str>) {
             .args(["run", option, value, &src])
             .output()
             .unwrap();
+        // A `while` loop is a safepoint only in a build that baked a time limit (ADR 0727).
         for baked in [false, true] {
+            if name == "loop" && !baked {
+                continue;
+            }
             let exe = tmp.join(format!("{name}{}", if baked { "-baked" } else { "" }));
             let mut build = Command::new(env!("CARGO_BIN_EXE_ail"));
             build.current_dir(root()).args(["build", &src, "-o"]).arg(&exe);

@@ -1,0 +1,78 @@
+## Recursion (ADR 0535): a call needs the stack check of err.trap.1 only
+## when its callee can call back into its caller, that is when both are in
+## one strongly connected component of the call graph. Other call chains
+## are bounded by the program's functions and fit in the stack's reserve.
+
+## Tarjan's algorithm over function indices.
+struct Tarjan
+    edges List[List[int]]
+    index List[int]
+    low List[int]
+    on List[bool]
+    stack List[int]
+    comp List[int]
+    next int
+    comps int
+
+fn Tarjan.visit(mut self, v int)
+    index[v] = next
+    low[v] = next
+    next += 1
+    stack.push(v)
+    on[v] = true
+    for w in edges[v]
+        if index[w] < 0
+            visit(w)
+            low[v] = low[v].min(low[w])
+        elif on[w]
+            low[v] = low[v].min(index[w])
+    if low[v] == index[v]
+        mut done := false
+        while not done
+            w := stack.pop() else v
+            on[w] = false
+            comp[w] = comps
+            done = w == v
+        comps += 1
+
+## Clear the trap site of every call that can't recurse, so it gets no
+## stack check.
+pub fn mark_recursion(m Module) Module
+    n := m.funcs.len()
+    mut by_name := Map[str, int]()
+    for k in 0..n
+        by_name[m.funcs[k].name] = k
+    mut edges := List[List[int]]()
+    for f in m.funcs
+        mut out := List[int]()
+        for b in f.blocks
+            for i in b.insts
+                if i.op == "call"
+                    if k := by_name.get(i.name)
+                        out.push(k)
+        edges.push(out)
+    mut t := Tarjan(
+        edges: edges,
+        index: [-1 for _ in 0..n],
+        low: [0 for _ in 0..n],
+        on: [false for _ in 0..n],
+        stack: [],
+        comp: [0 for _ in 0..n],
+        next: 0,
+        comps: 0,
+    )
+    for v in 0..n
+        if t.index[v] < 0
+            t.visit(v)
+    mut out := m
+    for k in 0..n
+        mut f := out.funcs[k]
+        for b in 0..f.blocks.len()
+            for j in 0..f.blocks[b].insts.len()
+                i := f.blocks[b].insts[j]
+                if i.op == "call" and i.site >= 0
+                    callee := by_name.get(i.name) else -1
+                    if callee < 0 or t.comp[callee] != t.comp[k]
+                        f.blocks[b].insts[j].site = -1
+        out.funcs[k] = f
+    out

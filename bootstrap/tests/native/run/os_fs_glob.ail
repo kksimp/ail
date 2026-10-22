@@ -1,0 +1,50 @@
+## `fs.glob` (std.fs.9): `*`, `?`, `**`, trailing `**`, dot names, absolute
+## patterns, sorted and without duplicates; nothing matching gives an empty list.
+fn show(root str, pattern str)
+    found := fs.glob(pattern)
+    print("{pattern.replace(root, "R")}: {found.len()}")
+    for f in found
+        print("  {f.replace(root, "R")}")
+
+fn put(path str)
+    fs.write_text(path, "x") else return
+
+fn main()
+    root := env.get("AIL_TEST_DIR") else return
+    base := "{root}/glob"
+    fs.make_dir("{base}/sub/deep") else return
+    fs.make_dir("{base}/.hid") else return
+    fs.make_dir("{base}/é") else return
+    put("{base}/a.ail")
+    put("{base}/b.ail")
+    put("{base}/b.txt")
+    put("{base}/.dot.ail")
+    put("{base}/sub/c.ail")
+    put("{base}/sub/deep/d.ail")
+    put("{base}/.hid/e.ail")
+    put("{base}/é/f.ail")
+    show(root, "{base}/*.ail")
+    show(root, "{base}/?.ail")
+    show(root, "{base}/.*.ail")
+    show(root, "{base}/**/*.ail")
+    show(root, "{base}/sub/**")
+    show(root, "{base}/*/*.ail")
+    show(root, "{base}/?/*.ail")
+    show(root, "{base}/nope/*.ail")
+    show(root, "{base}/a.ail")
+    show(root, "{base}/none.ail")
+    show(root, "{base}//sub///c.ail")
+    show(root, "{base}/*.t?t")
+    for d in [
+        "{base}/sub/deep/d.ail",
+        "{base}/sub/c.ail",
+        "{base}/.hid/e.ail",
+        "{base}/é/f.ail",
+        "{base}/a.ail",
+        "{base}/b.ail",
+        "{base}/b.txt",
+        "{base}/.dot.ail",
+    ]
+        fs.remove(d) else return
+    for d in ["{base}/sub/deep", "{base}/sub", "{base}/.hid", "{base}/é", base]
+        fs.remove(d) else return

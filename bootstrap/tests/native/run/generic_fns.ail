@@ -1,0 +1,56 @@
+# Generic functions (ADR 0536): type arguments from the arguments, written
+# out, or expected; instances over numbers, strings, lists and structs;
+# generics calling generics; recursion.
+struct Point
+    x int
+    y int
+
+fn Point.score(self) int
+    x * 10 + y
+
+fn first[T](xs List[T]) T
+    xs[0]
+
+fn last[T](xs List[T]) T
+    xs[xs.len() - 1]
+
+fn ends[T](xs List[T]) List[T]
+    [first(xs), last(xs)]
+
+fn repeat[T](x T, n int) List[T]
+    mut out := List[T]()
+    for _ in 0..n
+        out.push(x)
+    out
+
+fn count_down[T](x T, n int) int
+    if n == 0
+        return 0
+    1 + count_down(x, n - 1)
+
+fn pick[T](a T, b T, take_a bool) T
+    if take_a then a else b
+
+fn make[T]() List[T]
+    List[T]()
+
+fn main()
+    print(first([3, 4, 5]))
+    print(last(["a", "b"]))
+    print(first([1.5, 2.5]))
+    print(ends([[1], [2, 3], [4, 5, 6]]))
+    print(repeat("ab", 3))
+    print(repeat(7, 2))
+    print(count_down(1.0, 5))
+    print(pick(1, 2, false))
+    print(pick[str]("x", "y", true))
+    p := pick(Point(x: 1, y: 2), Point(x: 3, y: 4), true)
+    print(p.x)
+    print(p.score())
+    mut xs := make[int]()
+    xs.push(4)
+    print(xs)
+    ps := repeat(Point(x: 5, y: 5), 2)
+    mut q := first(ps)
+    q.x = 0
+    print(ps[0].x)

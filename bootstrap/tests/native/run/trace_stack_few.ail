@@ -1,0 +1,8 @@
+# Exactly seven frames all show (trace.snap.3).
+fn down(n int) int
+    if n == 0
+        return 10 / n
+    down(n - 1) + 1
+
+fn main()
+    print(down(5))

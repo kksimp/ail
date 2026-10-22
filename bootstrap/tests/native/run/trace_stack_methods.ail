@@ -1,0 +1,16 @@
+# Methods and nested calls show their qualified names (trace.frame.1).
+struct Box
+    n int
+
+fn Box.at(self, i int) int
+    xs := [1, 2]
+    xs[i] + self.n
+
+fn Box.twice(self, i int) int
+    self.at(i) + self.at(i)
+
+fn run(b Box) int
+    b.twice(9)
+
+fn main()
+    print(run(Box(n: 1)))

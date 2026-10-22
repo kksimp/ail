@@ -1,0 +1,38 @@
+# contract.req.1, contract.ens.1-2: contracts that hold change nothing.
+struct Account
+    owner str
+    balance int
+
+fn Account.withdraw(self, amount int) Account
+    requires amount > 0
+    requires amount <= balance
+    ensures result.balance == balance - amount
+    Account(owner: owner, balance: balance - amount)
+
+fn isqrt(n int) int
+    requires n >= 0
+    ensures result * result <= n and (result + 1) * (result + 1) > n
+    mut r := 0
+    while (r + 1) * (r + 1) <= n
+        r += 1
+    r
+
+fn fact(n int) int
+    requires n >= 0
+    ensures n == 0 or result == n * fact(n - 1)
+    if n == 0
+        return 1
+    n * fact(n - 1)
+
+fn log(mut lines List[str], line str)
+    ensures lines.len() > 0
+    lines.push(line)
+
+fn main()
+    a := Account(owner: "ana", balance: 10).withdraw(4)
+    print("{a.owner}: {a.balance}")
+    print(isqrt(17))
+    print(fact(5))
+    mut lines := List[str]()
+    log(mut lines, "hi")
+    print(lines.len())

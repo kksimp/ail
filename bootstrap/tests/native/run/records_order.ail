@@ -1,0 +1,52 @@
+struct P
+    age int
+    name str
+
+struct W
+    score float
+    tag(int, str)
+
+enum Tok
+    Num(n int)
+    Word(s str)
+    Pair(a int, b str)
+    End
+
+impl Ord for P
+impl Ord for W
+impl Ord for Tok
+
+enum Color
+    Red
+    Blue
+
+fn main()
+    ps := [P(age: 3, name: "c"), P(age: 1, name: "z"), P(age: 1, name: "b")]
+    print(ps.contains(P(age: 1, name: "z")))
+    print(ps.contains(P(age: 9, name: "z")))
+    s := ps.sorted()
+    for p in s
+        print("{p.age}{p.name}")
+    print(ps.sorted(by: |p| (p.name, p.age)).len())
+    m := ps.max() else P(age: 0, name: "")
+    print(m.name)
+    print(ps.index_of(P(age: 1, name: "b")) else 99)
+    print(P(age: 1, name: "a") < P(age: 1, name: "b"))
+    print(P(age: 2, name: "a") >= P(age: 1, name: "b"))
+    ts := [Tok.Word("b"), Tok.Num(5), Tok.End, Tok.Pair(1, "x"), Tok.Num(2), Tok.Word("a")]
+    print(ts.contains(Tok.Num(5)))
+    print(ts.contains(Tok.Num(6)))
+    print(ts.contains(Tok.End))
+    u := ts.sorted()
+    for t in u
+        match t
+            Num(n) => print("num {n}")
+            Word(w2) => print("word {w2}")
+            Pair(a, b) => print("pair {a}{b}")
+            End => print("end")
+    ws := [W(score: 2.5, tag: (1, "a")), W(score: 0.5, tag: (2, "b")), W(score: 0.5, tag: (1, "c"))]
+    for w in ws.sorted()
+        print("{w.score}{w.tag.1}")
+    cs := [Color.Blue, Color.Red, Color.Blue]
+    print(cs.len())
+    print(ts.contains(ts.min() else Tok.End))

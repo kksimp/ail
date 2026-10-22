@@ -1,0 +1,12 @@
+fn main()
+    mut by_len := {}
+    for w in ["a", "bb", "cc", "d", "eee"]
+        by_len.push(w.len(), w)
+    for k in by_len.keys().sorted()
+        print("{k}: {by_len[k]}")
+    mut groups := {}
+    groups.push("odd", 1)
+    groups.push("even", 2)
+    groups.push("odd", 3)
+    for k in groups.keys().sorted()
+        print("{k} {groups[k].len()} {groups[k]}")

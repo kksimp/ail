@@ -53,6 +53,7 @@ pub STD_MODULES := [
     "env",
     "fs",
     "hash",
+    "hw",
     "io",
     "mem",
     "net",

@@ -1,0 +1,20 @@
+enum Kind
+    A
+    B(n int)
+
+fn pick(k Kind, skip bool) Kind?
+    want := if skip then none else k
+    want
+
+fn show(k Kind?) str
+    if v := k
+        match v
+            A => "A"
+            B(n) => "B{n}"
+    else
+        "none"
+
+fn main()
+    print(show(pick(A, false)))
+    print(show(pick(B(2), false)))
+    print(show(pick(A, true)))

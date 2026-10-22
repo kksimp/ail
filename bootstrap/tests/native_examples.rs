@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Examples without a `native_` name that the native backend builds today.
-const NATIVE_EXTRA: [&str; 8] = ["bits", "gradebook", "hello", "parallel", "perms", "route", "std_args", "std_math"];
+const NATIVE_EXTRA: [&str; 9] = ["bits", "gradebook", "hello", "parallel", "perms", "route", "shapes", "std_args", "std_math"];
 
 // native.build.1, native.build.3
 #[test]

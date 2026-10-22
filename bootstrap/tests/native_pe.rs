@@ -45,9 +45,10 @@ fn pe_headers_describe_a_windows_x64_executable() {
     // The import directory and the address table are in .idata at 0x3000.
     let dirs = pe + 24 + 112;
     assert_eq!(u32_at(&b, dirs + 8), 0x3000);
-    assert_eq!(u32_at(&b, dirs + 12), 40, "two descriptors: KERNEL32.dll and the null entry");
-    assert_eq!(u32_at(&b, dirs + 96), 0x3048);
-    assert_eq!(u32_at(&b, dirs + 100), 32, "three entries and a null, eight bytes each");
+    assert_eq!(u32_at(&b, dirs + 12), 60, "three descriptors: KERNEL32.dll, WS2_32.dll and the null entry");
+    let iat = u32_at(&b, dirs + 96);
+    assert_eq!(iat, 0x305c, "address table starts after the descriptors and KERNEL32 lookup table");
+    assert_eq!(u32_at(&b, dirs + 100), 48, "KERNEL32: three entries and a null; WS2_32: one and a null; eight bytes each");
 }
 
 // ADR 0598: each call goes through an import slot, and the slots name the three functions.
@@ -63,12 +64,13 @@ fn pe_imports_name_kernel32_functions_the_codegen_calls() {
         hint_name.push(0);
         assert!(idata.windows(hint_name.len()).any(|w| w == hint_name.as_slice()), "{name} hint/name entry");
     }
-    // The call to GetStdHandle is FF 15 with a displacement to its slot, 0x3048.
+    // The call to GetStdHandle is FF 15 with a displacement to its slot.
     let text = &b[0x400..0x600];
+    let iat = u32_at(&b, 0x80 + 24 + 112 + 96);
     let call = text.windows(2).position(|w| w == [0xff, 0x15]).unwrap();
     let next = 0x1000 + call as u32 + 6;
     let disp = i32::from_le_bytes(text[call + 2..call + 6].try_into().unwrap());
-    assert_eq!((next as i64 + disp as i64) as u32, 0x3048);
+    assert_eq!((next as i64 + disp as i64) as u32, iat);
 }
 
 // ADR 0597: `objdump` and `llvm-readobj` agree on the file, when installed.
@@ -88,4 +90,90 @@ fn pe_sample_reads_back_in_an_external_tool() {
     assert!(text.contains("pei-x86-64") || text.contains("coff-x86-64"), "{text}");
     assert!(text.contains("DLL Name: KERNEL32.dll"), "{text}");
     assert!(text.contains("ExitProcess"), "{text}");
+    assert!(text.contains("DLL Name: WS2_32.dll"), "{text}");
+    assert!(text.contains("closesocket"), "{text}");
+}
+
+// ADR 0597, ADR 0598: the sample runs under Wine when it is installed: it
+// prints its line, and exits 0. Without Wine the test passes without checking.
+#[test]
+fn pe_sample_runs_under_wine_when_installed() {
+    if Command::new("wine").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
+        return;
+    }
+    let b = sample();
+    let dir = std::env::temp_dir().join(format!("ail-pe-run-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("sample.exe");
+    std::fs::write(&exe, &b).unwrap();
+    let out = Command::new("wine")
+        .arg(&exe)
+        .env("WINEDEBUG", "-all")
+        .env("WINEPREFIX", dir.join("prefix"))
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(out.status.success(), "wine exited with {:?}", out.status);
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "hello from AIL on Windows\n");
+}
+
+// ADR 0606: a MIR module that calls `libsys.WriteFile` with five arguments
+// (the fifth on the stack) runs under Wine: it prints its line, and it exits
+// with `written`, which must equal the line's length.
+#[test]
+fn libsys_write_file_runs_under_wine_when_installed() {
+    if Command::new("wine").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
+        return;
+    }
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["run", "compiler", "pe-mir-sample", "x"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "pe-mir-sample failed:\n{}", String::from_utf8_lossy(&out.stderr));
+    let hex: String = String::from_utf8(out.stdout).unwrap().split_whitespace().collect();
+    let b: Vec<u8> = (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
+    let dir = std::env::temp_dir().join(format!("ail-pe-libsys-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("libsys.exe");
+    std::fs::write(&exe, &b).unwrap();
+    let run = Command::new("wine")
+        .arg(&exe)
+        .env("WINEDEBUG", "-all")
+        .env("WINEPREFIX", dir.join("prefix"))
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let line = "hello from AIL on Windows\n";
+    assert_eq!(String::from_utf8_lossy(&run.stdout), line, "the printed text");
+    assert_eq!(run.status.code(), Some(line.len() as i32), "written, which must equal the length");
+}
+
+// ADR 0608: `ail build --target x86_64-windows` builds the hello example, and
+// under Wine it prints the same text as the interpreter and exits 0.
+#[test]
+fn hello_builds_for_windows_and_runs_under_wine_when_installed() {
+    if Command::new("wine").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("ail-pe-hello-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("hello.exe");
+    let build = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["build", "examples/hello.ail", "--target", "x86_64-windows", "-o"])
+        .arg(&exe)
+        .output()
+        .unwrap();
+    assert!(build.status.success(), "{}", String::from_utf8_lossy(&build.stderr));
+    let run = Command::new("wine")
+        .arg(&exe)
+        .env("WINEDEBUG", "-all")
+        .env("WINEPREFIX", dir.join("prefix"))
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let want = std::fs::read_to_string(root().join("examples/hello.out")).unwrap();
+    assert_eq!(String::from_utf8_lossy(&run.stdout), want, "the printed text");
+    assert_eq!(run.status.code(), Some(0), "the exit code");
 }

@@ -14,9 +14,10 @@ fn compiler_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("AIL_COMPILER") {
         return Some(PathBuf::from(dir));
     }
+    // `bootstrap/target/PROFILE/ail`, or `bootstrap/target/TRIPLE/PROFILE/ail`
+    // for a cross build: the first ancestor with a `compiler/` directory.
     let exe = std::env::current_exe().ok()?;
-    let dir = exe.ancestors().nth(4)?.join("compiler");
-    dir.join("main.ail").exists().then_some(dir)
+    exe.ancestors().skip(1).take(6).map(|a| a.join("compiler")).find(|d| d.join("main.ail").exists())
 }
 
 /// The repository root, beside `compiler/` (or the current directory).
@@ -26,15 +27,57 @@ pub fn repo_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+/// The methods derive generators wrote for the program at `file`
+/// (ct.gen.1), in a file for the native backend (ADR 0807): for each
+/// deriving `impl`, `@@derive MODULE TYPE.TRAIT` (`-` for the root module)
+/// and the generated text. When the program's text names JSON or
+/// `Default`, a last block `@@prelude` holds the prelude, whose `json`,
+/// `jsonderive` and `default` modules the backend lowers as the program
+/// reaches them (ADR 0808). `None` when there is neither.
+fn derived_file(file: &str) -> Option<PathBuf> {
+    let (prog, _) = crate::modules::load(file).ok()?;
+    let prelude = prog.files.iter().any(|f| ["json", "Json", "Default"].iter().any(|w| f.src.contains(w)));
+    if prog.generated.is_empty() && !prelude {
+        return None;
+    }
+    let mut text = String::new();
+    for g in &prog.generated {
+        let f = &prog.files[g.file];
+        let module = if f.module.is_empty() { "-" } else { &f.module };
+        text.push_str(&format!("@@derive {module} {}\n{}\n", g.label, f.src.trim_end()));
+    }
+    if prelude {
+        text.push_str("@@prelude\n");
+        text.push_str(crate::parser::PRELUDE);
+    }
+    let path = std::env::temp_dir().join(format!("ail-derived-{}.txt", std::process::id()));
+    std::fs::write(&path, text).ok()?;
+    Some(path)
+}
+
 /// Run `ail run compiler ARGS`; stdout on success. The compiler's own
 /// warnings are dropped; its errors are about the user's program.
 fn run_compiler(args: &[&str]) -> Result<String, ExitCode> {
+    let derived = args.get(1).and_then(|f| derived_file(f));
+    let out = run_compiler_with(args, derived.as_deref());
+    if let Some(p) = derived {
+        let _ = std::fs::remove_file(p);
+    }
+    out
+}
+
+fn run_compiler_with(args: &[&str], derived: Option<&Path>) -> Result<String, ExitCode> {
     let Some(dir) = compiler_dir() else {
         eprintln!("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER");
         return Err(ExitCode::from(2));
     };
     let exe = std::env::current_exe().map_err(|_| ExitCode::from(2))?;
-    let out = Command::new(exe).arg("run").arg(&dir).args(args).output().map_err(|e| {
+    let mut cmd = Command::new(exe);
+    cmd.arg("run").arg(&dir).args(args).env_remove("AIL_DERIVED");
+    if let Some(p) = derived {
+        cmd.env("AIL_DERIVED", p);
+    }
+    let out = cmd.output().map_err(|e| {
         eprintln!("error[native.build.3]: can't run the native backend: {e}");
         ExitCode::from(2)
     })?;
@@ -72,6 +115,7 @@ fn host_target() -> Option<&'static str> {
         ("linux", "x86_64") => Some("x86_64-linux"),
         ("linux", "aarch64") => Some("aarch64-linux"),
         ("macos", "aarch64") => Some("aarch64-macos"),
+        ("windows", "x86_64") => Some("x86_64-windows"),
         _ => None,
     }
 }
@@ -127,7 +171,7 @@ pub fn command(args: &[&str]) -> ExitCode {
         return match write_executable(&out, &bytes) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("error[native.build.3]: can't write {}: {e}", out.display());
+                eprintln!("error[native.build.3]: can't write {}: {e}", crate::shown::shown(&out));
                 ExitCode::from(2)
             }
         };
@@ -148,7 +192,7 @@ pub fn command(args: &[&str]) -> ExitCode {
         build_cache::store(key, &bytes);
     }
     if let Err(e) = write_executable(&out, &bytes) {
-        eprintln!("error[native.build.3]: can't write {}: {e}", out.display());
+        eprintln!("error[native.build.3]: can't write {}: {e}", crate::shown::shown(&out));
         return ExitCode::from(2);
     }
     ExitCode::SUCCESS

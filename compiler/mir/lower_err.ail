@@ -18,19 +18,19 @@ pub fn Ty.opt_inner(self) Ty?
 ## `T?` for a type the subset can hold in an optional: no `T??`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | Bool | Char | Str | List | Struct | Enum => Ty.Opt(t)
+        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
     match t
-        Int | Float | Bool | Char => true
+        Int | Float | F32 | Bool | Char | Sized(_) => true
         _ => false
 
 ## The zero of a type: the value a failing function returns, and `none`.
 fn Lower.zero_of(mut self, t Ty) int
     match t
         Unit => -1
-        Float => fconst(0.0)
+        Float | F32 => fconst(0.0)
         _ => konst(0, t)
 
 fn written_name(t ast.TypeRef) str?
@@ -61,8 +61,8 @@ fn Lower.ok_type(mut self, t ast.TypeRef) Ty?
 fn Lower.some(mut self, v Val) Val
     t := opt_of(v.ty) else return v
     match v.ty
-        Int | Char => Val(id: call("rt.box", [v.id], t), ty: t)
-        Float => Val(id: call("rt.boxf", [v.id], t), ty: t)
+        Int | Char | Sized(_) => Val(id: call("rt.box", [v.id], t), ty: t)
+        Float | F32 => Val(id: call("rt.boxf", [v.id], t), ty: t)
         Bool => Val(id: call("rt.box_bool", [v.id], t), ty: t)
         Enum(n) =>
             # A fieldless enum is an `int` tag, and tag 0 is a value: box it.
@@ -75,8 +75,8 @@ fn Lower.some(mut self, v Val) Val
 fn Lower.unwrap(mut self, o Val) Val
     t := o.ty.opt_inner() else return o
     match t
-        Int | Char => Val(id: call("rt.unbox", [o.id], t), ty: t)
-        Float => Val(id: call("rt.unboxf", [o.id], t), ty: t)
+        Int | Char | Sized(_) => Val(id: call("rt.unbox", [o.id], t), ty: t)
+        Float | F32 => Val(id: call("rt.unboxf", [o.id], t), ty: t)
         Bool => Val(id: call("rt.unbox_bool", [o.id], t), ty: t)
         Enum(n) =>
             if is_flat(n)
@@ -128,6 +128,27 @@ fn opt_comparable(a Ty, b Ty) bool
     x := a.opt_inner() else a
     y := b.opt_inner() else b
     same_ty(x, y)
+
+## Printing a `T?`: `none`, or the value as a plain `T`.
+fn Lower.out_opt(mut self, v Val, pos ast.Pos) Val?
+    inner := v.ty.opt_inner() else return unsupported(pos, "printing a `{v.ty.name()}`")
+    if inner.is_unknown()
+        return unsupported(pos, "printing a `{v.ty.name()}`")
+    absent := new_block()
+    present := new_block()
+    join := new_block()
+    branch(op("eq", [v.id, konst(0, Ty.Int)], Ty.Bool), absent, [], present, [])
+    seal(absent)
+    cur = absent
+    call("rt.out_str", [str_value("none")], Ty.Unit)
+    jump(join, [])
+    seal(present)
+    cur = present
+    out(unwrap(v), pos)?
+    jump(join, [])
+    seal(join)
+    cur = join
+    Val(id: -1, ty: Ty.Unit)
 
 ## `a == b` (`negate` false) or `a != b` where one side or both are optionals:
 ## a `none` equals only a `none`, and two present values compare as plain ones.
@@ -244,7 +265,12 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                     s := callee_sig(n) else return false
                     s.fails
                 _ => false
-        Method(recv, name, _, _) => os_fails(recv, name) or method_fails(recv, name)
+        Method(
+            recv,
+            name,
+            _,
+            _,
+        ) => os_fails(recv, name) or method_fails(recv, name) or net_fails(recv, name)
         _ => false
 
 ## The signature key of `x.name(...)` when `x` is an imported module or a local
@@ -252,12 +278,34 @@ fn Lower.fallible_call(self, e ast.Expr) bool
 fn Lower.method_key(self, recv ast.Expr, name str) str?
     if m := module_name(recv)
         return "{m}.{name}"
-    match recv
+    # `Type.f(...)`, a function of a type (an associated one such as `from_json`).
+    if a := assoc_owner(recv)
+        return "{a}.{name}"
+    if t := type_name(recv)
+        return "{t}.{name}"
+    if en := enum_ref(recv)
+        return "{en}.{name}"
+    match recv_ty(recv)?
+        Struct(s) => "{s}.{name}"
+        Enum(s) => "{s}.{name}"
+        _ => none
+
+## The type of a receiver written as a local, an element `xs[i]` of a list
+## local, or a field `x.f` of one, without lowering it.
+fn Lower.recv_ty(self, e ast.Expr) Ty?
+    match e
         Name(n, _) =>
-            k := lookup(n) else return none
-            match var_ty[k]
-                Struct(s) => "{s}.{name}"
-                Enum(s) => "{s}.{name}"
+            k := lookup(n)?
+            t := var_ty[k]
+            if t.is_unknown() then none else t
+        Index(r, _, _) => recv_ty(r)?.elem()
+        Member(r, f, _) =>
+            match recv_ty(r)?
+                Struct(s) =>
+                    for slot in structs.get(s)?
+                        if slot.name == f
+                            return slot.ty
+                    none
                 _ => none
         _ => none
 
@@ -266,7 +314,16 @@ fn Lower.method_returns_error(self, recv ast.Expr, name str) bool
     s := sigs.get(key) else return false
     returns_error(s)
 
+## Whether `x.name(...)` is a method of a `net.Conn` or `net.Listener` that
+## can fail.
+fn Lower.net_fails(self, recv ast.Expr, name str) bool
+    key := method_key(recv, name) else return false
+    net_method_fails(key)
+
 fn Lower.method_fails(self, recv ast.Expr, name str) bool
+    if m := module_name(recv)
+        s := sigs.get("{m}.{name}") else return false
+        return s.fails
     key := method_key(recv, name) else return false
     s := sigs.get(key) else return false
     s.fails
@@ -321,6 +378,9 @@ fn Lower.add_context(mut self, context ast.Expr?)
 
 ## `e?` (err.prop.1, err.prop.2, err.prop.5).
 fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
+    # `t.wait()?` on a task: a trapped task ends the program (lower_task.ail).
+    if tk.on and is_wait_call(e)
+        return lower_wait(e, pos)
     if fallible_call(e)
         v := lower_expr(e, none)?
         return propagate_result(v, context, pos)
@@ -328,6 +388,13 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     if o.ty.opt_inner() == none
         return unsupported(pos, "`?` on a `{o.ty.name()}`")
     absent := op("eq", [o.id, konst(0, Ty.Int)], Ty.Bool)
+    if else_targets.len() > 0
+        # Inside an `else` value: an absent value runs the `else` (err.prop.4).
+        present := new_block()
+        branch(absent, else_targets[else_targets.len() - 1], [], present, [])
+        seal(present)
+        cur = present
+        return unwrap(o)
     leave := new_block()
     good := new_block()
     branch(absent, leave, [], good, [])
@@ -374,11 +441,22 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
         return none
     Maybe(val: o, present: op("ne", [o.id, konst(0, Ty.Int)], Ty.Bool), opt: true, err: Ty.Unknown)
 
+## Bind `name` to the error being handled: its typed value when the call names
+## one, else its display text.
+fn Lower.bind_taken_error(mut self, name str, ty Ty)
+    if ty == Ty.Unknown
+        declare(name, Ty.Str, call("rt.err_take", [], Ty.Str))
+    else
+        raw := call("rt.err_take_value", [], Ty.Int)
+        declare(name, ty, op("copy", [raw], ty))
+
 ## `e else ...` (err.else.1-6): the success value, or the `else` part.
 ## A value of type `Unit` when `e` has no success value.
 fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
     if r := str_to_int_recv(e)
         return lower_str_to_int_else(r, other, pos)
+    if chain_try(e)
+        return lower_else_chain(e, other, pos)
     m := lower_maybe(e)?
     mut t := m.val.ty
     if m.opt
@@ -400,9 +478,23 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
     else
         jump(join, [])
     cur = failure
+    else_part(other, m.opt, m.err, join, r, t, pos)
+
+## The `else` part of `e else ...`, lowered in the failure block: it jumps
+## to `join` with a value when `r` (of type `t`) is one, or leaves.
+fn Lower.else_part(
+    mut self,
+    other ast.Else,
+    opt bool,
+    err Ty,
+    join int,
+    r int,
+    t Ty,
+    pos ast.Pos,
+) Val?
     match other
         Fallback(x) =>
-            if not m.opt
+            if not opt
                 call("rt.err_clear", [], Ty.Unit)
             if r < 0
                 problem(pos, "`else` with a value, but there is no value to replace")
@@ -410,7 +502,7 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
             else
                 fallback_jump(x, t, join, pos)
         Leave(st) =>
-            if not m.opt
+            if not opt
                 call("rt.err_clear", [], Ty.Unit)
             lower_stmt(st)
             if not done()
@@ -421,14 +513,14 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
         Handler(name, body, hpos) =>
             scopes.push(Map[str, str]())
             if n := name
-                if m.opt
+                if opt
                     problem(n.pos, "an absent value has no error to bind")
-                elif m.err == Ty.Unknown
+                elif err == Ty.Unknown
                     declare(n.name, Ty.Str, call("rt.err_take", [], Ty.Str))
                 else
                     raw := call("rt.err_take_value", [], Ty.Int)
-                    declare(n.name, m.err, op("copy", [raw], m.err))
-            elif not m.opt
+                    declare(n.name, err, op("copy", [raw], err))
+            elif not opt
                 call("rt.err_clear", [], Ty.Unit)
             v := lower_block(body, r >= 0)
             if not done()
@@ -445,6 +537,63 @@ fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
     cur = join
     Val(id: r, ty: t)
 
+## Whether a `?` on a value inside `e`'s receivers can send `e` to its
+## `else` (err.prop.4): `a?.b`, `a?.m()`, `a?[i]`.
+fn Lower.chain_try(self, e ast.Expr) bool
+    match e
+        Member(r, _, _) => receiver_try(r)
+        Method(r, _, _, args) => receiver_try(r) or args_try(args)
+        Index(r, i, _) => receiver_try(r) or receiver_try(i)
+        Call(_, args, _) => args_try(args)
+        Binary(_, l, r, _) => receiver_try(l) or receiver_try(r)
+        Unary(_, x, _) => receiver_try(x)
+        _ => false
+
+fn Lower.receiver_try(self, e ast.Expr) bool
+    match e
+        Try(x, _, _) => not fallible_call(x) or receiver_try(x)
+        _ => chain_try(e)
+
+fn Lower.args_try(self, args List[ast.Arg]) bool
+    for a in args
+        if receiver_try(a.value)
+            return true
+    false
+
+## `e else ...` where a `?` inside `e` meets an absent value: that `?`
+## jumps to the `else` part, and `e` has type `T?` if it isn't optional
+## already (err.prop.4).
+fn Lower.lower_else_chain(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
+    failure := new_block()
+    else_targets.push(failure)
+    got := lower_value(e, none)
+    else_targets.pop()
+    v := got else return none
+    mut t := v.ty
+    opt := v.ty.opt_inner() != none
+    if opt
+        t = v.ty.opt_inner() else Ty.Unknown
+    join := new_block()
+    mut r := -1
+    if not t.is_unit()
+        r = new_value(t, "")
+        blocks[join].params.push(r)
+    good := new_block()
+    if opt
+        branch(op("ne", [v.id, konst(0, Ty.Int)], Ty.Bool), good, [], failure, [])
+    else
+        jump(good, [])
+    seal(good)
+    seal(failure)
+    cur = good
+    if r >= 0
+        s := if opt then unwrap(v) else v
+        jump(join, [s.id])
+    else
+        jump(join, [])
+    cur = failure
+    else_part(other, true, Ty.Unknown, join, r, t, pos)
+
 ## `x := e else ...`
 fn Lower.lower_bind_else(mut self, name str, pos ast.Pos, value ast.Expr, other ast.Else)
     v := lower_else(value, other, pos) else
@@ -459,6 +608,9 @@ fn Lower.lower_handle(mut self, value ast.Expr, other ast.Else)
 ## Record the names of the error structs and enums (err.decl.1). They are
 ## ordinary structs and enums; `err_msgs` marks them as error types.
 fn Lower.declare_errors(mut self, prog ast.Program)
+    err_msgs[IO_ERROR] = ""
+    err_msgs[PROC_ERROR] = ""
+    err_msgs[NET_ERROR] = ""
     for s in prog.structs
         if s.is_error
             err_msgs[s.name] = ""
@@ -504,7 +656,7 @@ fn with_error_owners(srcs List[Source]) List[Source]
 
 ## The error type a function that can fail names, when it names one: `E` in
 ## `T ! E` and `! E`. Unions and inferred sets give `Unknown`.
-fn Lower.error_ty_of(self, t ast.TypeRef) Ty
+fn Lower.error_ty_of(mut self, t ast.TypeRef) Ty
     match t.shape
         Fallible(ok, errors) =>
             if es := errors
@@ -577,21 +729,32 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                 Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
+            if os_fails(recv, name)
+                m := os_module(recv)
+                if m == "net"
+                    return Ty.Struct(NET_ERROR)
+                return Ty.Struct(if m == "proc" then PROC_ERROR else IO_ERROR)
+            if m := module_name(recv)
+                return fn_errs.get("{m}.{name}") else Ty.Unknown
             key := method_key(recv, name) else return Ty.Unknown
+            if net_method_fails(key)
+                return Ty.Struct(NET_ERROR)
             fn_errs.get(key) else Ty.Unknown
         _ => Ty.Unknown
 
-## The text of a struct or enum value that defines a message (`to_str`, the
-## display text of an error type, err.msg.1), as a `str` value.
+## The text of a struct or enum value (its `to_str`, the display text of an
+## error type, err.msg.1, or the default form), as a `str` value.
 fn Lower.display_call(mut self, v Val) int?
     key := match v.ty
         Struct(k) => k
         Enum(k) => k
+        Tuple => return tuple_text(v)
+        Any(t) => return any_text(t, v)
+        List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
-    if not err_msgs.contains(key)
-        return none
+    # No `to_str` and no message: the default text of trait.auto.2.
     default_error_text(key, v)
 
 ## The text of an error type with no message: its default form,
@@ -612,15 +775,24 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, piece], Ty.Str)
         f := load(obj, k + skip, slots[k].ty)
         text := match slots[k].ty
-            Int => call("rt.fmt_int", [f], Ty.Str)
+            Int | Sized(_) => call("rt.fmt_int", [f], Ty.Str)
             Float => call("rt.fmt_float", [f], Ty.Str)
+            F32 => call("rt.fmt_f32", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
+            Struct(nk) => nested_text(nk, f)
             _ => -1
         if text < 0
             return none
         acc = call("rt.str_cat", [acc, text], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
+
+## A plain struct field's `Name(field: value, ...)`, else -1.
+fn Lower.nested_text(mut self, key str, obj int) int
+    slots := structs.get(key) else return -1
+    if err_msgs.contains(key) or sigs.contains("{key}.to_str")
+        return -1
+    fields_text("{key}(", slots, obj, 0) else -1
 
 ## The default text of an enum value: a chain of tests on the variant index.
 fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?

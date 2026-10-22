@@ -59,10 +59,17 @@ fn gc_mark_list_data(w int, len int)
             if kind == KIND_LDATA
                 gc_scan_range(bs + 8, bs + 8 + 8 * len)
 
+## Most words are not heap addresses (integers, characters, small values), so
+## the range test is done here once per word, with the heap bounds read once,
+## and only a word inside the heap is looked up.
 fn gc_scan_range(from int, to int)
+    base := hs(H_BASE)
+    top := hs(H_TOP)
     mut p := from
     while p < to
-        gc_mark(load64(p))
+        w := load64(p)
+        if w >= base and w < top
+            gc_mark(w)
         p += 8
 
 ## Scan the queued objects until none is left.
@@ -141,14 +148,20 @@ fn gc_sweep()
     hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
     hset(H_THRESH, if live * 2 > MIN_THRESH then live * 2 else MIN_THRESH)
+    hset(H_FASTLIM, if load64(global(MULTI)) == 0 then hs(H_THRESH) else 0)
 
 ## Collect garbage. Called by `alloc` when enough has been allocated.
 fn gc_collect()
+    # With threads, every other one parks first (native-abi.md §10); the
+    # collector holds the allocation lock, so none can allocate meanwhile.
+    gc_stop_world()
     m := heap_state()
     sp := gc_regs(m + 8 * H_REGS)
     hset(H_MARKN, 0)
     gc_scan_range(m + 8 * H_REGS, m + 8 * (H_REGS + 10))
-    gc_scan_range(sp, load64(global(STACK_TOP)))
+    gc_scan_range(sp, stack_end_self())
+    gc_scan_threads()
     gc_scan_range(global(OUT_BUF), globals_end())
     gc_drain()
     gc_sweep()
+    gc_start_world()

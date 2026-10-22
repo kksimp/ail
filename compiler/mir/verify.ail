@@ -55,8 +55,13 @@ pub fn verify(f Func) List[str]
 
 ## The kind of register a value lives in: a `char` is an `int` (type.char.1).
 fn register_kind(t Ty) str
-    if t == Ty.Char
+    if t == Ty.Char or t.is_sized()
         return "int"
+    # Every `T?` is one pointer-or-0 register; a `none` still typed `??` passes to any of them.
+    if t.opt_inner() != none
+        return "opt"
+    if t == Ty.F32
+        return "float"
     t.name()
 
 fn check_use(
@@ -91,7 +96,7 @@ fn check_types(f Func, i Inst, mut errs List[str])
         return
     for a in i.args
         # A `char` is an `int` in a register (type.char.1).
-        have := if f.vals[a] == Ty.Char then "int" else f.vals[a].name()
+        have := register_kind(f.vals[a])
         if have != want
             errs.push("{f.name}: `{i.op}` on a {f.vals[a].name()} (v{a})")
 

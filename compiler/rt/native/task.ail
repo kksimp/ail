@@ -1,0 +1,537 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Tasks (conc.task.*, native.task.1, ADRs 0599-0601): a pool of worker threads sized to the
+## cores (at most 8, conc.par.9) that take tasks from one queue; `spawn` puts
+## a task record on the queue and `wait` sleeps on the record's state word.
+## On Linux a thread is a `clone` with a stack from `mmap` and every sleep is
+## a futex; on macOS it is a libSystem pthread and a `__ulock_wait`. Only linked into a program that spawns tasks or runs `par for`
+## (`notask.ail` stands in otherwise). The locks, thread identity and the
+## allocator's lock are in `core.ail`.
+##
+## A task record (heap, 8-byte words):
+##   +0 state (0 queued or running, 2 done, 3 trapped)   +8 task id (picks
+##   the function in `dispatch`)   +16 result   +24 next in the queue
+##   +32 trap kind   +40 a   +48 b   +56 head string   +64 operator string   +72 source excerpt
+##   +80 arguments, 8 bytes each
+## The pool block (mmap'd, 8-byte words):
+##   +0 lock   +8 head   +16 tail   +24 seq (idle workers sleep on it)
+##   +32 live workers   +40 workers blocked in `wait`   +48 idle workers
+##   +56 target workers   +128 the task each worker runs, by worker index
+##   +1024 macOS restart stack pointers   +2048 each thread's published stack
+##   pointer (0 while it runs), +4096 each thread's saved registers (10 words)
+## Thread slot 0 is the main thread, worker `k` is slot `k + 1`.
+
+P_LOCK := 0
+P_HEAD := 8
+P_TAIL := 16
+P_SEQ := 24
+P_LIVE := 32
+P_BLOCKED := 40
+P_IDLE := 48
+P_TARGET := 56
+P_CUR := 128
+# macOS: each worker's restart stack pointer (workers run on pthreads there).
+P_TOP := 1024
+# A thread parked for the collector publishes its stack pointer here, with
+# the callee-saved registers it had (native-abi.md §10).
+P_PARK := 2048
+P_REGS := 4096
+POOL_SZ := 16384
+# Heap kinds of the blocks tasks use: every word may be a pointer, except an
+# atomic cell, which is `KIND_ATOMIC` (heap.ail).
+KIND_TASK := 12
+KIND_ENV := 13
+
+T_STATE := 0
+T_ID := 8
+T_RESULT := 16
+T_NEXT := 24
+T_KIND := 32
+T_A := 40
+T_B := 48
+T_HEAD := 56
+T_OP := 64
+T_TAIL := 72
+T_ARGS := 80
+
+## The cores this process may run on, 1 to 8 (`sched_getaffinity`).
+fn cores() int
+    n := env_threads()
+    if n > 0
+        return n
+    hw_cores()
+
+## `AIL_THREADS` as a whole number of 1 to `MAXW` (conc.par.9, ADR 0272); 0 when it is
+## unset or not a number, as in the interpreter, which then uses the hardware.
+fn env_threads() int
+    s := os_env_get("AIL_THREADS")
+    if not os_ok()
+        return 0
+    p := str_addr(s)
+    n := load64(p)
+    mut v := 0
+    mut i := 0
+    while i < n
+        c := load8(p + 16 + i)
+        if c < 48 or c > 57
+            return 0
+        if v < 1000
+            v = v * 10 + c - 48
+        i += 1
+    if n == 0
+        return 0
+    if v < 1
+        return 1
+    if v > MAXW
+        return MAXW
+    v
+
+fn hw_cores() int
+    if target() == 2
+        c := import_call("_sysconf", 58, 0, 0, 0)
+        return if c < 1 then 1 else if c > 8 then 8 else c
+    buf := alloc(128, KIND_BYTES)
+    k := if target() == 0 then 204 else 123
+    r := syscall(k, 0, 128, buf, 0, 0, 0)
+    mut n := 0
+    if r > 0
+        for i in 0..r
+            mut b := load8(buf + i)
+            while b != 0
+                n += b.bit_and(1)
+                b = b.shr(1)
+    if n < 1
+        n = 1
+    if n > 8
+        n = 8
+    n
+
+## The pool block, made on first use. From then on the process has more
+## than one thread, so allocation takes its lock (`MULTI`).
+fn pool() int
+    p := load64(global(TASKS))
+    if p != 0
+        return p
+    q := sys_mmap(POOL_SZ)
+    if q < 0
+        fail(1, 0, 0)
+    store64(q + P_TARGET, cores())
+    stacks := sys_mmap_lazy(MAXW * STACK_SZ)
+    if stacks < 0
+        fail(1, 0, 0)
+    store64(global(STACKS), stacks)
+    store64(global(TASKS), q)
+    hset(H_FASTLIM, 0)
+    store64(global(MULTI), 1)
+    q
+
+## A task record for function `id` of `dispatch`; the caller stores the
+## arguments from `T_ARGS` and calls `task_start`.
+fn task_new(id int) int
+    rec := alloc(T_ARGS + 8 * 14, KIND_TASK)
+    store64(rec + T_ID, id)
+    rec
+
+## Queue the task and make sure a worker will take it: wake an idle one, or
+## start one while fewer than the target are running.
+fn task_start(rec int)
+    p := pool()
+    lock(p + P_LOCK)
+    tail := load64(p + P_TAIL)
+    if tail == 0
+        store64(p + P_HEAD, rec)
+    else
+        store64(tail + T_NEXT, rec)
+    store64(p + P_TAIL, rec)
+    store64(p + P_SEQ, load64(p + P_SEQ) + 1)
+    atomic_add(global(TASKS_LIVE), 1)
+    idle := load64(p + P_IDLE)
+    live := load64(p + P_LIVE)
+    mut fresh := -1
+    if idle == 0 and live - load64(p + P_BLOCKED) < load64(p + P_TARGET) and live < MAXW
+        store64(p + P_LIVE, live + 1)
+        fresh = live
+    unlock(p + P_LOCK)
+    if idle > 0
+        futex_wake(p + P_SEQ, 1)
+    if fresh >= 0
+        start_thread(p, fresh)
+
+## Worker `idx`: its stack's low page is a guard, then a new thread.
+fn start_thread(p int, idx int)
+    base := load64(global(STACKS)) + idx * STACK_SZ
+    k := if target() == 0 then 10 else if target() == 1 then 226 else 74
+    guard := if target() == 2 then 16384 else 4096
+    syscall(k, base, guard, 0, 0, 0, 0)
+    if target() == 2
+        start_pthread(base + guard, idx)
+        return
+    if clone(base + STACK_SZ - 64, idx) < 0
+        fail(1, 0, 0)
+
+## macOS: threads come from libSystem's pthreads (ADR 0599), on the same
+## stack region; the guard is the stack's lowest page (16 KiB here).
+## `low` is the first byte above the guard; macOS pages are 16 KiB, and
+## `pthread_attr_setstack` refuses an address or size that isn't aligned.
+fn start_pthread(low int, idx int)
+    attr := alloc(80, KIND_BYTES)
+    import_call("_pthread_attr_init", attr, 0, 0, 0)
+    size := (load64(global(STACKS)) + (idx + 1) * STACK_SZ) - low
+    if import_call("_pthread_attr_setstack", attr, low, size, 0) != 0
+        fail(1, 0, 0)
+    r := import_call("_pthread_create", attr + 64, attr, fn_addr("rt.thread_entry"), idx)
+    if r != 0
+        fail(1, 0, 0)
+
+## The start routine of a pthread: note where `restart` may reuse the stack
+## (the pthread keeps its own record at the top), then run as a worker.
+fn thread_entry(idx int) int
+    p := load64(global(TASKS))
+    store64(p + P_TOP + 8 * idx, sp())
+    worker_main(idx)
+    0
+
+## Where `restart` puts worker `k`'s stack pointer.
+fn stack_top(p int, k int) int
+    if target() == 2
+        return load64(p + P_TOP + 8 * k)
+    load64(global(STACKS)) + (k + 1) * STACK_SZ - 64
+
+## The loop of worker `idx`: run queued tasks, sleep on `seq` when there are
+## none. Entered by `clone` and by `restart` after a trap.
+fn worker_main(idx int)
+    p := load64(global(TASKS))
+    while true
+        # Between tasks is a safe point: park if a collection wants the world.
+        if atomic_load(global(GC_REQ)) != 0
+            gc_park()
+        lock(p + P_LOCK)
+        rec := load64(p + P_HEAD)
+        if rec != 0
+            next := load64(rec + T_NEXT)
+            store64(p + P_HEAD, next)
+            if next == 0
+                store64(p + P_TAIL, 0)
+            unlock(p + P_LOCK)
+            store64(p + P_CUR + 8 * idx, rec)
+            dispatch(load64(rec + T_ID), rec)
+            store64(p + P_CUR + 8 * idx, 0)
+            finish_task(rec, 2)
+        else
+            s := load64(p + P_SEQ)
+            store64(p + P_IDLE, load64(p + P_IDLE) + 1)
+            unlock(p + P_LOCK)
+            futex_wait(p + P_SEQ, s.bit_and(4294967295))
+            lock(p + P_LOCK)
+            store64(p + P_IDLE, load64(p + P_IDLE) - 1)
+            unlock(p + P_LOCK)
+
+## Publish a task's end (its result is already stored) and wake its waiters.
+fn finish_task(rec int, state int)
+    atomic_xchg(rec + T_STATE, state)
+    futex_wake(rec + T_STATE, 2147483647)
+    atomic_add(global(TASKS_LIVE), -1)
+    atomic_add(global(CHAN_EPOCH), 1)
+
+## Called first by `trap`: on a worker, the trap ends the task and the
+## worker goes on with the next one; on the main thread it returns and the
+## process ends as usual.
+fn on_trap(kind int, a int, b int, head str, op str, tail str)
+    k := worker_index()
+    if k < 0
+        return
+    p := load64(global(TASKS))
+    rec := load64(p + P_CUR + 8 * k)
+    store64(rec + T_KIND, kind)
+    store64(rec + T_A, a)
+    store64(rec + T_B, b)
+    store64(rec + T_HEAD, str_addr(head))
+    store64(rec + T_OP, str_addr(op))
+    store64(rec + T_TAIL, str_addr(tail))
+    # A trap inside the allocator (a run limit) still holds its lock.
+    if atomic_load(global(ALLOC_OWNER)) == k + 2
+        atomic_store(global(ALLOC_OWNER), 0)
+        unlock(global(ALLOC_LOCK))
+    # A trap in the middle of a `print` still holds the output lock.
+    if atomic_load(global(OUT_OWNER)) == k + 2
+        store64(global(OUT_DEPTH), 0)
+        atomic_store(global(OUT_OWNER), 0)
+        unlock(global(OUT_LOCK))
+    store64(p + P_CUR + 8 * k, 0)
+    finish_task(rec, 3)
+    restart(stack_top(p, k), k)
+
+## `t.wait()?` in `main`: sleep until the task ends, then its result word; a
+## trapped task ends the program as the interpreter's uncaught `Trapped`
+## does (conc.task.6, native.task.1).
+fn task_wait(rec int, at1 str, at2 str) int
+    wait_done(rec)
+    if atomic_load(rec + T_STATE) == 3
+        report_trapped(rec, at1, at2)
+    load64(rec + T_RESULT)
+
+## Sleep until the task has ended, trapped or not.
+fn wait_done(rec int)
+    if atomic_load(rec + T_STATE) == 0
+        k := worker_index()
+        if k >= 0
+            wait_enter()
+        while atomic_load(rec + T_STATE) == 0
+            prog_wait(rec + T_STATE, 0, "a task to finish", false)
+        if k >= 0
+            wait_leave()
+
+## A worker is about to sleep in `wait`: it stops counting as running, and
+## a replacement starts if work is queued and nobody could take it.
+fn wait_enter()
+    p := load64(global(TASKS))
+    lock(p + P_LOCK)
+    store64(p + P_BLOCKED, load64(p + P_BLOCKED) + 1)
+    live := load64(p + P_LIVE)
+    mut fresh := -1
+    if load64(p + P_HEAD) != 0 and load64(p + P_IDLE) == 0
+        if live - load64(p + P_BLOCKED) < load64(p + P_TARGET) and live < MAXW
+            store64(p + P_LIVE, live + 1)
+            fresh = live
+    unlock(p + P_LOCK)
+    if fresh >= 0
+        start_thread(p, fresh)
+
+fn wait_leave()
+    p := load64(global(TASKS))
+    lock(p + P_LOCK)
+    store64(p + P_BLOCKED, load64(p + P_BLOCKED) - 1)
+    unlock(p + P_LOCK)
+
+## `error: Trapped(rule: "RULE", message: "LINE:COL: MESSAGE")` on standard
+## error, then exit 1. The trap's head is `PATH:LINE:COL: trap[RULE]: `.
+fn report_trapped(rec int, at1 str, at2 str)
+    h := load64(rec + T_HEAD)
+    n := load64(h)
+    d := h + 16
+    # `trap[`
+    mut t := 0
+    while t + 5 <= n and not is_trap_mark(d + t)
+        t += 1
+    # The location: the digits and colon before `: trap[`.
+    mut j := t - 3
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    j -= 1
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    flush()
+    out_str("error: Trapped(rule: \"")
+    mut e := t + 5
+    while e < n and load8(d + e) != 93
+        e += 1
+    out_bytes(d + t + 5, e - t - 5)
+    out_str("\", message: \"")
+    out_bytes(d + j + 1, t - j - 2)
+    out_byte(32)
+    trap_body(
+        load64(rec + T_KIND),
+        load64(rec + T_A),
+        load64(rec + T_B),
+        str_at(load64(rec + T_OP)),
+    )
+    out_str("\")\n")
+    # The trace: the `wait` and the `?` that passed the trap on (err.ctx.1).
+    out_str(at1)
+    out_byte(10)
+    out_str(at2)
+    out_byte(10)
+    flush_to(2)
+    sys_exit(1)
+
+fn is_trap_mark(a int) bool
+    load8(a) == 116
+        and load8(a + 1) == 114
+        and load8(a + 2) == 97
+        and load8(a + 3) == 112
+        and load8(a + 4) == 91
+
+## The function of task `id`: written by the compiler, one case per `spawn`
+## site and parallel loop.
+fn dispatch(id int, rec int)
+    todo
+
+# ---- parallel loops (ADR 0601) ----
+
+## Whether `par for lo..hi` goes to the pool: at least twice as many
+## iterations as workers (conc.par.8). A chunk function takes the environment
+## record, `lo` and `hi` from its task record's arguments 0 to 2, then
+## 3 words (sum, lowest and highest running sum) per accumulator.
+fn par_worth(lo int, hi int) bool
+    t := load64(pool() + P_TARGET)
+    hi > lo and hi - lo > 0 and hi - lo >= 2 * t
+
+## `n` zeroed words: the values a loop body reads and the accumulators.
+fn env_new(n int) int
+    alloc(8 * n + 8, KIND_ENV)
+
+## Split `lo..hi` into chunks, four per worker, queue them, and give back
+## the group: word 0 the chunk count, then the task records in order.
+fn par_start(id int, env int, lo int, hi int) int
+    t := load64(pool() + P_TARGET)
+    n := hi - lo
+    mut chunks := 4 * t
+    if chunks > n
+        chunks = n
+    size := (n + chunks - 1) / chunks
+    chunks = (n + size - 1) / size
+    grp := alloc(8 * chunks + 8, KIND_ENV)
+    store64(grp, chunks)
+    for c in 0..chunks
+        off := c * size
+        len := if size < n - off then size else n - off
+        rec := task_new(id)
+        store64(rec + T_ARGS, env)
+        store64(rec + T_ARGS + 8, lo + off)
+        store64(rec + T_ARGS + 16, lo + off + len)
+        store64(grp + 8 + 8 * c, rec)
+        task_start(rec)
+    grp
+
+## Wait for every chunk; whether none trapped.
+fn par_wait(grp int) bool
+    mut ok := true
+    for c in 0..load64(grp)
+        rec := load64(grp + 8 + 8 * c)
+        wait_done(rec)
+        if atomic_load(rec + T_STATE) != 2
+            ok = false
+    ok
+
+## A chunk of a loop that can't be run again trapped: report the first
+## such trap as `trap` does, and end the process (conc.atomic.6).
+fn par_fail(grp int)
+    for c in 0..load64(grp)
+        rec := load64(grp + 8 + 8 * c)
+        if atomic_load(rec + T_STATE) == 3
+            flush()
+            out_str(str_at(load64(rec + T_HEAD)))
+            trap_body(
+                load64(rec + T_KIND),
+                load64(rec + T_A),
+                load64(rec + T_B),
+                str_at(load64(rec + T_OP)),
+            )
+            out_byte(10)
+            out_str(str_at(load64(rec + T_TAIL)))
+            flush_to(2)
+            sys_exit(1)
+
+## Combine the accumulators in chunk order, checking as the sequential sum
+## would: a running sum that would leave `int` anywhere makes the loop run
+## in order instead (conc.par.11). The totals go back into the environment.
+fn par_combine(grp int, env int, nacc int, first int) bool
+    least := -9223372036854775807 - 1
+    most := 9223372036854775807
+    for a in 0..nacc
+        mut total := load64(env + 8 * (first + a))
+        for c in 0..load64(grp)
+            rec := load64(grp + 8 + 8 * c)
+            w := rec + T_ARGS + 8 * (3 + 3 * a)
+            if total < least - load64(w + 8) or total > most - load64(w + 16)
+                return false
+            total += load64(w)
+        store64(env + 8 * (first + a), total)
+    true
+
+# ---- atomics (ADR 0600) ----
+
+## `print` of an atomic: `Atomic(7)`, `Atomic(true)`.
+fn out_atomic_int(cell int)
+    out_str("Atomic(")
+    out_int(atomic_load(cell))
+    out_byte(41)
+
+fn out_atomic_bool(cell int)
+    out_str("Atomic(")
+    out_bool(atomic_load(cell) != 0)
+    out_byte(41)
+
+# ---- stopping the world for the collector (native-abi.md §10) ----
+
+## Give the CPU away while waiting for another thread.
+fn yield_cpu()
+    t := target()
+    if t == 2
+        import_call("_sched_yield", 0, 0, 0, 0)
+        return
+    syscall(if t == 0 then 24 else 124, 0, 0, 0, 0, 0, 0)
+
+## Publish this thread's stack pointer and callee-saved registers, so the
+## collector may scan the thread while it sleeps. Gives the stack pointer.
+fn blocked_enter() int
+    p := load64(global(TASKS))
+    t := thread_slot()
+    s := gc_regs(p + P_REGS + 80 * t)
+    atomic_store(p + P_PARK + 8 * t, s)
+    s
+
+## Leave the parked state. While a collection runs the thread stays parked;
+## it clears its mark first and looks again, so the collector never scans a
+## thread that has started to run.
+fn blocked_leave(s int)
+    p := load64(global(TASKS))
+    t := thread_slot()
+    while true
+        while atomic_load(global(GC_REQ)) != 0
+            futex_wait_raw(global(GC_REQ), 1)
+        atomic_store(p + P_PARK + 8 * t, 0)
+        if atomic_load(global(GC_REQ)) == 0
+            return
+        atomic_store(p + P_PARK + 8 * t, s)
+
+## Park here until the collection that was asked for is over.
+fn gc_park()
+    blocked_leave(blocked_enter())
+
+## Ask every other thread to park and wait until each has. A thread that
+## computes without reaching the runtime delays the collection, nothing else.
+fn gc_stop_world()
+    if load64(global(MULTI)) == 0
+        return
+    p := load64(global(TASKS))
+    me := thread_slot()
+    atomic_store(global(GC_REQ), 1)
+    n := 1 + load64(p + P_LIVE)
+    for t in 0..n
+        if t != me
+            while atomic_load(p + P_PARK + 8 * t) == 0
+                yield_cpu()
+
+fn gc_start_world()
+    if load64(global(MULTI)) == 0
+        return
+    atomic_store(global(GC_REQ), 0)
+    futex_wake(global(GC_REQ), 2147483647)
+
+## The end of this thread's stack: the main thread's top (`rt.init`), or the
+## top of the worker's slice of the stack region.
+fn stack_end_self() int
+    if load64(global(MULTI)) == 0 or worker_index() < 0
+        return load64(global(STACK_TOP))
+    load64(global(STACKS)) + (worker_index() + 1) * STACK_SZ
+
+## Mark from the other threads' published stacks and registers, and from
+## the pool block (the queue and the running tasks' records).
+fn gc_scan_threads()
+    if load64(global(MULTI)) == 0
+        return
+    p := load64(global(TASKS))
+    me := thread_slot()
+    n := 1 + load64(p + P_LIVE)
+    gc_scan_range(p, p + P_PARK)
+    # Each thread's text builder (fmt.ail) points at a heap buffer.
+    gc_scan_range(p + P_SB, p + P_SB + 24 * (n + 1))
+    for t in 0..n
+        if t != me
+            s := load64(p + P_PARK + 8 * t)
+            top := if t
+                == 0 then load64(global(STACK_TOP)) else load64(global(STACKS)) + t * STACK_SZ
+            gc_scan_range(p + P_REGS + 80 * t, p + P_REGS + 80 * t + 80)
+            gc_scan_range(s, top)

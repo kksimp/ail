@@ -10,28 +10,58 @@ use ast
 fn Lower.lower_char(mut self, text str) Val
     Val(id: konst(text.chars()[0].code(), Ty.Char), ty: Ty.Char)
 
-## `"a{x}b"` as a value (lex.str.5): the pieces' text, joined. Up to six
-## pieces become one `rt.str_catN` call (one allocation); more are joined
-## five at a time onto what is built so far (ADR 0768).
+## `"a{x}b"` as a value (lex.str.5): the pieces' text, joined. With only
+## string pieces, up to six become one `rt.str_catN` call (one allocation);
+## more are joined five at a time onto what is built so far (ADR 0768). With
+## a number, `char` or `bool` hole, every hole is evaluated first (a hole may
+## itself interpolate), then the pieces are written into the runtime's
+## builder and the result is allocated once, with no string made for the
+## number (ADR 0837).
 fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) Val?
     mut pieces := List[int]()
+    # How each piece is written: 0 a string, 1 an `int`, 2 a `char`, 3 a `bool`.
+    mut kinds := List[int]()
+    mut scalars := 0
     for p in parts
         mut piece := -1
+        mut kind := 0
         match p
             Lit(text) =>
                 if text != ""
                     piece = str_value(text)
             Hole(x) =>
                 v := lower_value(x, none)?
-                piece = text_of(v, expr_pos(x))?
+                match v.ty
+                    Int =>
+                        piece = v.id
+                        kind = 1
+                    Char =>
+                        piece = v.id
+                        kind = 2
+                    Bool =>
+                        piece = v.id
+                        kind = 3
+                    _ => piece = text_of(v, expr_pos(x))?
             Fmt(x, spec) =>
                 v := lower_value(x, none)?
                 f := fmt_text(v, spec, expr_pos(x))?
                 piece = f.id
         if piece >= 0
             pieces.push(piece)
+            kinds.push(kind)
+            if kind != 0
+                scalars += 1
     if pieces.len() == 0
         return Val(id: str_value(""), ty: Ty.Str)
+    if scalars > 0
+        call("rt.sb_begin", [], Ty.Unit)
+        for k in 0..pieces.len()
+            name := if kinds[k]
+                == 0 then "rt.sb_text" else if kinds[k]
+                == 1 then "rt.put_int" else if kinds[k]
+                == 2 then "rt.sb_add_char" else "rt.put_bool"
+            call(name, [pieces[k]], Ty.Unit)
+        return Val(id: call("rt.sb_str", [], Ty.Str), ty: Ty.Str)
     mut acc := pieces[0]
     mut at := 1
     while at < pieces.len()
@@ -48,11 +78,23 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
 fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
     match v.ty
         Str => v.id
-        Int => call("rt.fmt_int", [v.id], Ty.Str)
+        Int | Sized(_) => call("rt.fmt_int", [v.id], Ty.Str)
         Float => call("rt.fmt_float", [v.id], Ty.Str)
+        F32 => call("rt.fmt_f32", [v.id], Ty.Str)
         Bool => call("rt.fmt_bool", [v.id], Ty.Str)
         Char => call("rt.str_char", [v.id], Ty.Str)
-        Tensor(_) => call("rt.tensor_text", [v.id], Ty.Str)
+        Tensor(e) =>
+            if e == Ty.F32
+                problem(pos, "not in the native subset yet: the text of a `Tensor[f32]`")
+                return none
+            call("rt.tensor_text", [v.id], Ty.Str)
+        List(e) =>
+            if e == Ty.Int
+                return call("rt.fmt_int_list", [v.id], Ty.Str)
+            if s := display_call(v)
+                return s
+            problem(pos, "not in the native subset yet: the text of a `{v.ty.name()}`")
+            none
         _ =>
             if s := display_call(v)
                 return s
@@ -73,7 +115,7 @@ fn Lower.trap_tail(mut self, pos ast.Pos) int
     chars := line.chars()
     for c in 0..pos.col - 1
         pad.push(if c < chars.len() and chars[c] == '\t' then "\t" else " ")
-    str_value("  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n")
+    str_value("  {gutter} | {line}\n  {" ".repeat(gutter.chars().len())} | {pad.join("")}^\n{trap_frame(pos)}")
 
 ## A `str` or `char` argument of a search method (type.str.6) as a `str` value.
 fn Lower.text_arg(mut self, v Val, name str, pos ast.Pos) int?
@@ -113,9 +155,9 @@ fn Lower.str_to_int_opt(mut self, r Val) Val
     Val(id: res, ty: t)
 
 ## The methods whose result is an optional that the subset lacks: `to_float`
-## has its own `else` form (lane 177), and `to_bytes` waits for `bytes`.
+## has its own `else` form (lane 177).
 fn Lower.str_unsupported(mut self, name str, npos ast.Pos) Val?
-    if name == "to_float" or name == "to_bytes"
+    if name == "to_float"
         return unsupported(npos, "`.{name}()` on `str` (its result is an optional)")
     unsupported(npos, "`.{name}()` on `str`")
 
@@ -126,15 +168,23 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
         match name
             "len" => return Val(id: call("rt.str_len", [r.id], Ty.Int), ty: Ty.Int)
             "byte_len" => return Val(id: call("rt.str_byte_len", [r.id], Ty.Int), ty: Ty.Int)
+            "is_empty" =>
+                n0 := call("rt.str_byte_len", [r.id], Ty.Int)
+                return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             "to_str" => return r
             "to_int" => return str_to_int_opt(r)
+            "to_bytes" => return Val(id: call("rt.str_to_bytes", [r.id], Ty.Bytes), ty: Ty.Bytes)
             "chars" =>
                 t := Ty.List(Ty.Char)
                 return Val(id: call("rt.str_chars", [r.id], t), ty: t)
             "lines" =>
                 t := Ty.List(Ty.Str)
                 return Val(id: call("rt.str_lines", [r.id], t), ty: t)
-            "trim" => return Val(id: call("rt.str_trim", [r.id], Ty.Str), ty: Ty.Str)
+            "trim" | "trim_start" | "trim_end" =>
+                return Val(id: call("rt.str_{name}", [r.id], Ty.Str), ty: Ty.Str)
+            "words" =>
+                t := Ty.List(Ty.Str)
+                return Val(id: call("rt.str_words", [r.id], t), ty: t)
             "to_upper" => return Val(id: call("rt.str_to_upper", [r.id], Ty.Str), ty: Ty.Str)
             "to_lower" => return Val(id: call("rt.str_to_lower", [r.id], Ty.Str), ty: Ty.Str)
             _ => return str_unsupported(name, npos)
@@ -162,6 +212,21 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     return none
                 t := Ty.Opt(Ty.Int)
                 return Val(id: call("rt.str_find_opt", [r.id, vs[0].id], t), ty: t)
+            "rfind" =>
+                if not (vs[0].ty == Ty.Str)
+                    problem(npos, "`.rfind()` needs a `str`, found `{vs[0].ty.name()}`")
+                    return none
+                t := Ty.Opt(Ty.Int)
+                return Val(id: call("rt.str_rfind_opt", [r.id, vs[0].id], t), ty: t)
+            "count" =>
+                if not (vs[0].ty == Ty.Str)
+                    problem(npos, "`.count()` needs a `str`, found `{vs[0].ty.name()}`")
+                    return none
+                h := trap_head("type.str.18", npos)
+                return Val(
+                    id: call("rt.str_count", [r.id, vs[0].id, h, trap_tail(npos)], Ty.Int),
+                    ty: Ty.Int,
+                )
             "char_at" =>
                 i := int_arg(vs[0], name, npos)?
                 t := Ty.Opt(Ty.Char)
@@ -196,12 +261,12 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
                     ),
                     ty: Ty.Str,
                 )
-            "pad_left" | "pad_right" =>
+            "pad_left" | "pad_right" | "center" =>
                 w := int_arg(vs[0], name, npos)?
                 if not (vs[1].ty == Ty.Char)
                     problem(npos, "`.{name}()` needs a `char` fill, found `{vs[1].ty.name()}`")
                     return none
-                align := if name == "pad_left" then 1 else 0
+                align := if name == "pad_left" then 1 else if name == "center" then 2 else 0
                 h := trap_head("type.str.15", npos)
                 return Val(
                     id: call(
@@ -216,6 +281,8 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
 
 ## `c.NAME(...)` on a `char` (type.char.2-4).
 fn Lower.lower_char_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "cmp" and vs.len() == 1
+        return lower_cmp(r, vs[0], npos)
     if vs.len() == 1 and name == "to_digit"
         radix := int_arg(vs[0], name, npos)?
         h := trap_head("type.char.3", npos)
@@ -254,7 +321,7 @@ fn Lower.char_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val?
 ## `char.from_code(n)` (type.char.4): a `char?`.
 fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
     if args.len() != 1
-        return unsupported(npos, "this `char.from_code`")
+        return unsupported(npos, "`char.from_code` with {args.len()} arguments instead of 1")
     n := lower_value(args[0].value, Ty.Int)?
     k := int_arg(n, "from_code", npos)?
     t := Ty.Opt(Ty.Char)
@@ -262,6 +329,8 @@ fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
 
 ## A method of a `str`.
 fn Lower.str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "cmp" and vs.len() == 1
+        return lower_cmp(r, vs[0], npos)
     if name == "to_float" and vs.len() == 0
         return lower_to_float(r)
     return lower_str_method(r, name, npos, vs)

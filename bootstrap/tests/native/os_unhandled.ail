@@ -1,6 +1,5 @@
 # The edges of the OS calls in the native subset (ADR 0580): the error
-# of a failing call is its text, `?` needs a function that can fail, and an
-# optional is not printed.
+# of a failing call is a typed value, and `?` needs a function that can fail.
 fn plain() str
     text := fs.read_text("x")?
     text
