@@ -1,0 +1,40 @@
+## std.app.6-10 natively: `run_host` speaks the protocol to a host (here a
+## shell script) through `proc.start` and its channels.
+use std.app
+
+struct Todo
+    items List[str]
+    draft str
+    log List[str]
+
+impl app.App for Todo
+    fn update(mut self, ev app.Event)
+        log.push(ev.kind)
+        if ev.kind == "edit"
+            draft = ev.text
+        if ev.kind == "press" and ev.id == "add"
+            items.push(draft)
+            draft = ""
+
+    fn view(self) app.Node
+        mut kids := [app.field("draft", draft, "new item"), app.button("add", "Add")]
+        for item in items
+            kids.push(app.label(item))
+        app.column(kids)
+
+    fn title(self) str
+        "Todo ({items.len()})"
+
+fn main() !
+    mut t := Todo(items: [], draft: "", log: [])
+    script := "read l; echo '\{\"v\":1,\"kind\":\"start\"}'; echo '\{\"kind\":\"edit\",\"id\":\"draft\",\"text\":\"milk\"}'; echo '\{\"kind\":\"press\",\"id\":\"add\"}'; echo 'not json'; echo '\{\"kind\":\"close\"}'; cat > /dev/null"
+    app.run_host(mut t, "sh", ["-c", script])?
+    print(t.log.join(","))
+    print(app.outline(t.view()))
+    print(app.frame(t))
+    bad := Todo(items: [], draft: "", log: [])
+    mut b := bad
+    app.run_host(mut b, "sh", ["-c", "exit 3"]) else err
+        print("{err.kind}: {err.message}")
+    app.run_host(mut b, "nonexistent_host_zzz", []) else err
+        print("{err.kind}")

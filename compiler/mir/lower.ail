@@ -506,6 +506,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             Ty.Unknown
         rty = t
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
+    note_mut_self(f, fn_key(f, pre))
     if can_fail
         if r := f.ret
             fn_errs[fn_key(f, pre)] = error_ty_of(r)
@@ -533,6 +534,7 @@ fn fn_key(f ast.FnDecl, pre str) str
 fn Lower.type_of(mut self, t ast.TypeRef) Ty?
     match t.shape
         Optional(inner) => opt_of(type_of(inner)?)
+        PtrTo(inner) => ptr_type_of(inner)
         Named(name, args) =>
             match name
                 "int" => Ty.Int
@@ -547,11 +549,13 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         return none
                     e := type_of(args[0])?
                     if is_number(e)
+                        or e.is_sized()
                         or e == Ty.Str
                         or needs_copy(e)
                         or is_enum(e)
                         or is_shared_opt(e)
                         or e.is_coll()
+                        or e.is_ref()
                         return Ty.List(e)
                     none
                 "Atomic" =>
@@ -578,6 +582,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                             return Ty.Enum(k)
                     none
         AnyTrait(name) => any_type(name)
+        RefTo(inner) => ref_type(inner)
         TupleType(elems) => tuple_type_of(elems)
         FnType(fparams, fret) =>
             mut ps := List[Ty]()
@@ -937,22 +942,25 @@ fn same_ty(a Ty, b Ty) bool
 fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
     tail := tail_want
     tail_want = none
+    top_unit_fails := scopes.len() == 1 and unit_fails()
     scopes.push(Map[str, str]())
     mut result := Val(id: -2, ty: Ty.Unit)
     for i in 0..body.len()
         s := body[i]
         if done()
             dead_block()
-        if want and i == body.len() - 1
+        if (want or top_unit_fails) and i == body.len() - 1
             if e := final_expr(s)
                 if tail_error(e)
                     continue
-                result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
-                continue
+                if want
+                    result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
+                    continue
             # An `unsafe` block gives its last expression's value.
-            if inner := unsafe_body(s)
-                result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
-                continue
+            if want
+                if inner := unsafe_body(s)
+                    result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
+                    continue
         lower_stmt(s)
     scopes.pop()
     if result.id == -2
@@ -1079,6 +1087,13 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             if lower_fail_return(value, pos)
                 return
             if e := value
+                if ret.is_unit()
+                    # `return f()` of a call that fails, in a function with no result:
+                    # the failure travels in the error slot.
+                    lower_expr(e, Ty.Unit)
+                    check_ensures(-1, pos)
+                    finish(return_of(-1))
+                    return
                 v := lower_value(e, ret) else return
                 rv := copy_if_borrowed(e, Val(id: convert(v, ret, pos), ty: v.ty))
                 check_ensures(rv, pos)
@@ -1087,6 +1102,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 check_ensures(-1, pos)
                 finish(return_of(-1))
         Eval(e) =>
+            note_statement(e)
             lower_expr(e, Ty.Unit)
         Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
@@ -1448,7 +1464,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
             want,
         )
         OrElse(x, other, pos) => lower_or_else(x, other, pos)
-        NewRef(_, pos) => unsupported(pos, "`ref`")
+        NewRef(x, pos) => lower_new_ref(x, pos, want)
         TupleLit(items, pos) => lower_tuple_lit(items, pos, want)
 
 ## A name: a local, a constant, a field of `self`, a function, a global or a bare variant.
@@ -1614,12 +1630,14 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             # A `none` among the items makes the element type optional.
             elem = if has_none and v.ty.opt_inner() == none then (opt_of(v.ty) else v.ty) else v.ty
         if not is_number(elem)
+            and not elem.is_sized()
             and elem != Ty.Str
             and not needs_copy(elem)
             and not is_enum(elem)
             and not is_shared_opt(elem)
             and not is_pending_opt(elem)
             and not elem.is_coll()
+            and not elem.is_ref()
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
@@ -1682,7 +1700,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 if a.label != none
                     return unsupported(pos, "labelled arguments")
                 v := lower_value(a.value, sig.params[i])?
-                vs.push(convert(v, sig.params[i], expr_pos(a.value)))
+                vs.push(shield_arg(args, i, Val(
+                    id: convert(v, sig.params[i], expr_pos(a.value)),
+                    ty: v.ty,
+                )))
             check_requires(key, vs, npos)
             Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
         Member =>
@@ -1847,7 +1868,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, expr_pos(recv))
-    r := lower_value(recv, none)?
+    r := deref(lower_value(recv, none)?)
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
     if chan_elem(r.ty) != none
@@ -1863,8 +1884,10 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     if r.ty.is_tensor()
         return lower_tensor_method(r, name, npos, args)
     if s := struct_name(r.ty)
+        set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
     if s := enum_name(r.ty)
+        set_receiver(recv, "{s}.{name}")
         return struct_call("{s}.{name}", r, args, npos)
     if t := any_of(r.ty)
         return any_call(t, r, name, args, npos)
@@ -1887,6 +1910,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         Int | Sized(_) => return int_method(r, name, npos, vs)
         Float | F32 => return float_method(r, name, npos, vs)
         Str => return str_method(r, name, npos, vs)
+        Ptr(_) => return ptr_method(r, name, npos, vs)
         Char => return lower_char_method(r, name, npos, vs)
         List(e) => return list_method(e, r, name, npos, vs, args, recv)
         _ => return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")

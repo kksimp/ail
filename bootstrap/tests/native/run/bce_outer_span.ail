@@ -1,0 +1,25 @@
+# An inner loop that starts at `i + 1` for an outer counter `i` over constant
+# bounds needs no test that its start is small and non-negative (native.bce.10).
+fn pairs(s List[float]) float
+    mut t := 0.0
+    for i in 0..5
+        bi := i * 7
+        for j in i + 1..5
+            bj := j * 7
+            t += s[bi + 1] * s[bj + 2] - s[bi] + s[bj + 6]
+    t
+
+fn tri(xs List[int]) int
+    mut t := 0
+    for i in 2..6
+        for j in i * 2..9
+            t += xs[j] * i - xs[i + j - 4]
+    t
+
+fn main()
+    mut s := List[float]()
+    for i in 0..40
+        s.push(i.to_float() * 0.5)
+    print(pairs(s))
+    xs := [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
+    print(tri(xs))

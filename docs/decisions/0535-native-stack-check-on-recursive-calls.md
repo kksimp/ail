@@ -41,7 +41,9 @@ far deeper.
   than under `ail run`.
 - Cost, in instructions measured with callgrind: binarytrees +3.3%
   (recursive calls are its work), the other eight drag-race programs
-  +0.00%.
+  +0.00%. After #219 (the stack check on recursive calls, `recurse.ail`) it
+  measured +5.0% on binarytrees (247.0M to 259.5M); that is the accepted
+  cost of a guaranteed clean stack-overflow trap.
 - Threads (lane 178) need their own limit; the global is the main thread's.
 - Indirect calls (lane 174) can't be placed in the call graph, so they
   should be checked.

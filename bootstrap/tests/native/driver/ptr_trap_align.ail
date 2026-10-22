@@ -1,0 +1,7 @@
+# A volatile access at an address that is not a multiple of its width traps (unsafe.hw.3).
+use std.hw
+
+fn main()
+    unsafe
+        p := hw.at(4098, 0.to_u32())
+        print(p.read_volatile())

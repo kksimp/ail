@@ -250,3 +250,43 @@ and fannkuch (1,247,171 → 1,247,781) are unchanged.
     method arm in `lower_const.ail`, one dispatch line in `lower.ail`) but
     saved 1.0M of 167M instructions and no wall time I could measure on
     wordfreq, so it is not worth a slot in the lower.ail queue.
+13. **`xs[y + k]` with `y` fixed in the loop loses its check.** nbody's
+    `advance` indexes `s[bi + 1]` ... `s[bi + 6]` in an inner loop where
+    `bi` belongs to the outer one. The existing versioning handled `xs[bi]`
+    and `xs[j*7 + k]` but not a constant offset on a value computed outside
+    the loop, so each of those accesses kept its check and re-read the list
+    header after every store. The guard now tests `0 <= y` once and
+    `y < len - k` for the largest `k` per (list, `y`) (native.bce.10); the
+    in-loop `y + k` additions lose their overflow check because the guard
+    bounds `y`. nbody 49.3M to 38.0M instructions (-22.9%; C 28.3M).
+14. **An unchecked `mul` works in place.** `d = x * y` with `d` in `x`'s
+    register and no overflow check (proved away, or a constant) emitted a
+    copy to a scratch register, the `imul`, and a copy back. It is now one
+    `imul d, y` (or `imul d, d, k`); a checked `mul` still needs the stub's
+    recovery and is unchanged. spectralnorm 52.9M to 47.9M instructions
+    (-9.5%; C 36.6M).
+15. **`join("")` on characters is one pass.** `rt.list_join_chars` made one
+    pass to OR the characters (to learn they are ASCII) and a second to store
+    them. With no separator it now allocates `k` bytes, stores while it ORs,
+    and returns if every character is below 128, else builds the string as
+    before. fasta 36.1M to 33.4M instructions (-7.6%; matched C 29.1M).
+16. **`/` and `%` by a power of two on a value that is not negative are a
+    shift and a mask.** spectralnorm's `(i + j) * (i + j + 1) / 2` paid the
+    four-instruction sign correction that a signed halving needs, though `i`
+    and `j` are counters from 0. `mir/nonneg.ail` finds the values that cannot
+    be negative: non-negative constants, `len`, a counted loop's variable when
+    its start is, a checked `add` or `mul` of two such values (it is not
+    negative or it traps; an unchecked one in the runtime wraps, so it proves
+    nothing), `/`, `%`, `>>` and `&` of them. It runs before the bounds-check
+    pass, while arithmetic still carries its trap sites, marks the `div` and
+    `rem` by 2, 4, 8, ... and rewrites them last to `shr` and `band`, which
+    both back ends already take. spectralnorm 52.9M to 45.4M instructions
+    (-14.2%), before the in-place `imul` of item 14.
+17. **A guard does not test what the loops around it already bound.** The
+    inner loop of nbody's `advance` starts at `i + 1` for an outer counter
+    over constants, and its guard still tested on every entry that the start
+    was not negative and within +-2^30, eight compares per outer iteration.
+    `iv_of` in `bce.ail` takes the range of a value from constants,
+    `+ - *` of such ranges and counted loops (step 1, `p < hi`) whose bounds
+    have ranges, and the guard leaves out the tests the range answers.
+    nbody 38.0M to 35.5M instructions (-6.6%, on top of item 13).

@@ -1,0 +1,7 @@
+# hw.at of a negative address traps (unsafe.hw.2).
+use std.hw
+
+fn main()
+    unsafe
+        p := hw.at(0 - 8, 0)
+        print(p.is_null())

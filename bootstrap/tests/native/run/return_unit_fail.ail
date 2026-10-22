@@ -1,0 +1,23 @@
+error struct Bad
+    msg str
+
+fn write(n int) ! Bad
+    if n > 1
+        return Bad("too big {n}")
+
+fn store(n int, plain bool) ! Bad
+    if plain
+        return
+    if n == 0
+        return write(5)
+    return write(n)
+
+fn try_store(n int, plain bool) bool
+    store(n, plain) else return false
+    true
+
+fn main()
+    print(try_store(1, false))
+    print(try_store(0, false))
+    print(try_store(2, true))
+    print("done")

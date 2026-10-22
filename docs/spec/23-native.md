@@ -26,6 +26,20 @@ with no `to_str`, and an `any Trait` value, print as the interpreter prints
 them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`.
 *(ADRs 0536, 0616)*
 
+**native.subset.3** — A read-only argument or receiver of a struct, list or `any Trait` type that
+may overlap a `mut` argument of the same call (the same variable, with fields
+that agree and any index counting as equal) is copied before the call, as
+own.excl.4 says, so the callee doesn't see its own changes through it.
+*(ADR 0119)*
+
+**native.subset.4** — `ref S` of a struct `S` is in the native subset (own.ref.1-6):
+`ref e` makes a new object from a copy of `e`, a copy of the reference
+shares the object, field access, assignment and method calls apply to it
+(own.ref.3-4), `==` compares identity (own.ref.6), and a `ref` can be a
+field, a list element or an optional. A `ref` of anything but a struct, the
+text of a `ref`, and the trap of own.ref.7 are not in the subset yet.
+*(ADRs 0067, 0192)*
+
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators
@@ -106,9 +120,9 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
 (std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
-`Output` has `status`, `out`, `err` and the methods `ok()` and `text()`
+`Output` has `status`, `out`, `err` and the methods `ok()` and `text()`; `proc.start`, `proc.wait` and `proc.kill` with a `Child`'s `pid` and `Channel[str]` streams (std.proc.4-7, ADR 0846; `run` and `start` also on macOS); `std.app` (`app.run`, `run_host`, `script`, `outline`) with generic functions that can fail, `return f()` of a failing call, and a trait's default methods for an `impl` in another file
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
-readable yet, and on macOS the program traps at `proc.run`); `t := spawn f(args)`
+readable yet); `t := spawn f(args)`
 and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
 `store`, `cas` and `add` (`native.task.1`); `Channel[str]` with `send`, `recv`, `close`, `for v in ch`
 and `task.select` of channels written out in a list (`native.chan.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
@@ -372,6 +386,23 @@ fn main()
     mut s := 2
     for i in 0..4
         total += i + s
+    print(total)
+```
+
+**native.bce.10** — The check on `xs[y + k]` may be removed where `y` does not
+change in the loop, `k` is a constant from 0 to 64, and `xs` is a list that
+the loop does not resize or whose elements it does not replace through
+another name: the loop is versioned on `0 <= y` and `y < len - k`, and the
+original loop, which traps at the same access with the same message, runs
+when they do not hold. *(ADR 0816)*
+
+```ail rules=native.bce.10
+fn main()
+    xs := [1, 2, 3, 4, 5, 6]
+    mut total := 0
+    y := 1
+    for j in 0..3
+        total += xs[y + 2] * j + xs[y + 4]
     print(total)
 ```
 

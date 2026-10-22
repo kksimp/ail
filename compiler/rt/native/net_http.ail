@@ -707,11 +707,16 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
         return http_read_fail(o, err, url, at)
     net_close(h)
     text := net_text(load64(b), load64(b + 8))
-    resp := obj_new(32, 4)
+    # The body as it arrived, for `*_bytes` (std.net.16), after the four
+    # fields of a `Response`.
+    raw := str_new(load64(b + 8), load64(b + 8))
+    copy_bytes(raw + 16, load64(b), load64(b + 8))
+    resp := obj_new(40, 4)
     store64(resp, status)
     store64(resp + 8, headers)
     store64(resp + 16, str_addr(text))
     store64(resp + 24, all)
+    store64(resp + 32, raw)
     # A redirect, for the caller to follow.
     loc := http_get_header(headers, "location")
     if (status == 301 or status == 302 or status == 303 or status == 307 or status == 308)
@@ -802,3 +807,25 @@ fn net_request(method str, url str, o int, head6 str, head19 str, tail str, at s
     store64(spec + 16, cms)
     store64(spec + 24, 0)
     http_request(m, full, str_at(load64(o + 16)), "", spec, redirects, at)
+
+## A `RawResponse` (status, headers, data, all_headers) for a response object.
+fn net_raw(r int) int
+    if r == 0
+        return 0
+    x := obj_new(32, 4)
+    store64(x, load64(r))
+    store64(x + 8, load64(r + 8))
+    store64(x + 16, load64(r + 32))
+    store64(x + 24, load64(r + 24))
+    x
+
+## `net.get_bytes(url)`, `net.post_bytes(url, data, content_type)` and
+## `net.request_bytes(method, url, opts)` (std.net.16).
+fn net_get_bytes(url str, at str) int
+    net_raw(net_get(url, at))
+
+fn net_post_bytes(url str, data str, ctype str, at str) int
+    net_raw(net_post(url, data, ctype, at))
+
+fn net_request_bytes(method str, url str, o int, head6 str, head19 str, tail str, at str) int
+    net_raw(net_request(method, url, o, head6, head19, tail, at))

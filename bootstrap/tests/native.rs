@@ -222,7 +222,7 @@ fn executables_match(target: Option<&str>, runner: Option<&str>) {
     // (ADR 0592). They run in the Linux pass.
     if cfg!(target_os = "macos") || target.is_some_and(|t| t.contains("macos")) {
         const MACOS_KNOWN: &[&str] =
-            &["os_err_fields", "os_error_values", "proc_output_methods", "proc_run", "tensor_tanh"];
+            &["tensor_tanh"];
         cases.retain(|p| !MACOS_KNOWN.contains(&p.file_stem().unwrap().to_string_lossy().as_ref()));
     }
     let tmp = std::env::temp_dir().join(format!("ail-native-{}-{}", target.unwrap_or("host"), std::process::id()));
@@ -601,4 +601,77 @@ fn runtime_sources_parse() {
         }
     }
     assert!(bad.is_empty(), "runtime sources with syntax errors:\n{}", bad.join("\n"));
+}
+
+/// Driver programs (`tests/native/driver`, `--unsafe driver`, unsafe.ptr.*,
+/// unsafe.hw.*). Those named `mem_*` touch real memory, which `ail run` does
+/// not map at the same addresses, so they are checked against `NAME.out` and
+/// only on Linux x86-64; the others must match `ail run --unsafe driver`.
+// unsafe.ptr.2, unsafe.ptr.4, unsafe.hw.2, unsafe.hw.3
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn driver_programs_run_natively() {
+    let dir = root().join("bootstrap/tests/native/driver");
+    let tmp = std::env::temp_dir().join(format!("ail-driver-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let mut failures = Vec::new();
+    let mut files: Vec<PathBuf> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "ail"))
+        .collect();
+    files.sort();
+    for case in files {
+        let rel = rel_path(&case);
+        let stem = case.file_stem().unwrap().to_string_lossy().to_string();
+        let mem_only = stem.starts_with("mem_");
+        if mem_only && !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            continue;
+        }
+        let exe = tmp.join(&stem);
+        let built = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["build", "--unsafe", "driver", &rel, "-o"])
+            .arg(&exe)
+            .output()
+            .unwrap();
+        if !built.status.success() {
+            failures.push(format!("{rel}: `ail build` failed:\n{}", String::from_utf8_lossy(&built.stderr)));
+            continue;
+        }
+        let got = Command::new(&exe).current_dir(root()).output().unwrap();
+        if mem_only {
+            let want = fs::read(case.with_extension("out")).unwrap();
+            if got.stdout != want || got.status.code() != Some(0) {
+                failures.push(format!(
+                    "{rel}: expected\n{}got (exit {:?})\n{}",
+                    String::from_utf8_lossy(&want),
+                    got.status.code(),
+                    String::from_utf8_lossy(&got.stdout)
+                ));
+            }
+            continue;
+        }
+        let want = Command::new(env!("CARGO_BIN_EXE_ail"))
+            .current_dir(root())
+            .args(["run", "--unsafe", "driver", &rel])
+            .output()
+            .unwrap();
+        let keep = |l: &&str| !(l.starts_with("  at ") || l.starts_with("note:") || l.starts_with("help:"));
+        let want_err: Vec<&str> = std::str::from_utf8(&want.stderr).unwrap().lines().filter(keep).collect();
+        let got_err: Vec<&str> = std::str::from_utf8(&got.stderr).unwrap().lines().filter(keep).collect();
+        if want.stdout != got.stdout || want.status.code() != got.status.code() || want_err != got_err {
+            failures.push(format!(
+                "{rel}: differs from `ail run`\n--- run (exit {:?}):\n{}{}\n--- native (exit {:?}):\n{}{}",
+                want.status.code(),
+                String::from_utf8_lossy(&want.stdout),
+                want_err.join("\n"),
+                got.status.code(),
+                String::from_utf8_lossy(&got.stdout),
+                got_err.join("\n"),
+            ));
+        }
+    }
+    let _ = fs::remove_dir_all(&tmp);
+    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }

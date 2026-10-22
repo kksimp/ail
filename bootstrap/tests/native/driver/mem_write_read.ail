@@ -1,0 +1,36 @@
+# Writes and reads back through every width and type in unused runtime global slots (0x410000 + 56..61 slots).
+# Native only: `ail run` has nothing mapped there.
+use std.hw
+
+fn main()
+    base := 4260304
+    unsafe
+        q := hw.at(base, 0)
+        q.write(0)
+        hw.at(base, 0.to_u8()).write(171.to_u8())
+        hw.at(base + 2, 0.to_u16()).write_volatile(52719.to_u16())
+        hw.at(base + 4, 0.to_u32()).write_volatile(4294967295.to_u32())
+        print(q.read())
+        n8 := hw.at(base + 8, 0.to_i8())
+        n8.write((0 - 5).to_i8())
+        print(n8.read())
+        n32 := hw.at(base + 8, 0.to_i32())
+        n32.write((0 - 70000).to_i32())
+        print(n32.read_volatile())
+        print(q.offset(1).read())
+        f := hw.at(base + 16, 0.5)
+        f.write(2.25)
+        print(f.read())
+        b := hw.at(base + 24, true)
+        b.write(true)
+        print(b.read())
+        b.write(false)
+        print(b.read())
+        pp := hw.at(base + 32, q)
+        pp.write(q)
+        print(pp.read() == q)
+        q.write(0)
+        q.offset(1).write(0)
+        q.offset(2).write(0)
+        q.offset(3).write(0)
+        q.offset(4).write(0)

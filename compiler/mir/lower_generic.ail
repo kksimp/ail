@@ -336,7 +336,7 @@ fn Lower.generic_call(
         pt := f.params[k].ty
         v := lower_value(a.value, decl_type(pt, binds, params, gf.file))?
         unify(pt, v.ty, params, mut binds)
-        vs.push(Val(id: v.id, ty: v.ty))
+        vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
     if r := f.ret
         if w := want
             if not w.is_unit()
@@ -345,6 +345,8 @@ fn Lower.generic_call(
         return none
     key := "{g}[{[binds[n].name() for n in params].join(", ")}]"
     sig := instance(key, f, binds, "", gf.file)?
+    if e := fn_errs.get(key)
+        fn_errs[g] = e
     mut ids := List[int]()
     for k in 0..vs.len()
         ids.push(convert(vs[k], sig.params[k], expr_pos(args[k].value)))
@@ -369,16 +371,46 @@ fn Lower.instance(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner str
             return none
         ps.push(t)
     mut rty := Ty.Unit
+    mut can_fail := false
     if r := f.ret
-        t := decl_type(r, binds, no, k) else
+        can_fail = is_fallible(r)
+        # `AppError` means the declaring file's: look it up from there.
+        here := prefix
+        here_aliases := aliases
+        prefix = file_prefix[k]
+        aliases = file_aliases[k]
+        t := (if can_fail then instance_ok(r, binds, k) else decl_type(r, binds, no, k)) else
+            prefix = here
+            aliases = here_aliases
             problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
             bad.add(key)
             return none
         rty = t
-    sig := Sig(params: ps, ret: rty, fails: false)
+        if can_fail
+            fn_errs[key] = error_ty_of(r)
+        prefix = here
+        aliases = here_aliases
+    sig := Sig(params: ps, ret: rty, fails: can_fail)
     sigs[key] = sig
     gen.queue.push(Instance(key: key, decl: f, binds: binds, owner: owner, file: k))
     sig
+
+## The success type of a written `T ! E` in an instance: `Unit` for `! E`.
+fn Lower.instance_ok(mut self, t ast.TypeRef, binds Map[str, Ty], k int) Ty?
+    match t.shape
+        Fallible(ok, _) =>
+            o := ok else return Ty.Unit
+            if n := written_name(o)
+                if names_error(n)
+                    return Ty.Unit
+            decl_type(o, binds, List[str](), k)
+        _ => none
+
+## Whether the generic function `key` can fail (its declaration says so).
+fn Lower.generic_fails(self, key str) bool
+    gf := gen.fns.get(key) else return false
+    r := gf.decl.ret else return false
+    is_fallible(r)
 
 ## Declare method instance `key` (`Box[int].get`) of a generic type's
 ## instance, if it is one.
@@ -543,6 +575,49 @@ fn program_fns(prog ast.Program) List[ast.FnDecl]
                 if f.body != none and not defined.contains(f.name)
                     f.owner = im.target
                     out.push(f)
+    out
+
+## The default methods of a trait declared in another file (`impl app.App
+## for Todo`) become methods of the impl's own program, so `program_fns`
+## finds them (trait.decl.2). A default is lowered in the impl's file, so it
+## sees the names of that file.
+fn share_trait_defaults(srcs List[Source]) List[Source]
+    mut out := List[Source]()
+    for k in 0..srcs.len()
+        mut prog := srcs[k].prog
+        mut fns := prog.fns
+        mut impls := prog.impls
+        for ii in 0..impls.len()
+            im := impls[ii]
+            tname := im.trait_name.split(".").last() else im.trait_name
+            mut local := false
+            for t in prog.traits
+                if t.name == tname
+                    local = true
+            if local
+                continue
+            mut defined := Set[str]()
+            for m in im.methods
+                defined.add(fns[m].name)
+            mut methods := im.methods
+            for j in 0..srcs.len()
+                if j == k
+                    continue
+                for t in srcs[j].prog.traits
+                    if t.name != tname
+                        continue
+                    for m in t.methods
+                        f := srcs[j].prog.fns[m]
+                        if f.body != none and not defined.contains(f.name)
+                            defined.add(f.name)
+                            fns.push(f)
+                            methods.push(fns.len() - 1)
+            mut im2 := im
+            im2.methods = methods
+            impls[ii] = im2
+        prog.fns = fns
+        prog.impls = impls
+        out.push(Source(module: srcs[k].module, path: srcs[k].path, text: srcs[k].text, prog: prog))
     out
 
 ## The built-in types an `impl` may be for (trait.impl.1): their methods

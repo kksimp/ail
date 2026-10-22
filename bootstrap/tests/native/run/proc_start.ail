@@ -1,0 +1,20 @@
+use std.proc
+
+fn main() !
+    c := proc.start("sort", [])?
+    c.stdin.send("b\na\r\nc")
+    c.stdin.send("\n")
+    c.stdin.close()
+    for line in c.out
+        print("out {line}")
+    print(proc.wait(move c)?)
+    d := proc.start("sh", ["-c", "echo one; echo two >&2; echo three; exit 4"])?
+    for line in d.out
+        print("d.out {line}")
+    for line in d.err
+        print("d.err {line}")
+    print(proc.wait(move d)?)
+    e := proc.start("sleep", ["30"])?
+    print(proc.kill(move e))
+    f := proc.start("sleep", ["30"], 100)?
+    print(proc.wait(move f) else 999)

@@ -1,0 +1,61 @@
+struct Counter
+    n int
+    label str
+
+fn Counter.bump(mut self)
+    n += 1
+
+fn Counter.show(self) str
+    "{label}={n}"
+
+struct Node
+    value int
+    parent Node?
+    children List[ref Node]
+
+struct Scope
+    vars Map[str, int]
+    up ref Scope?
+
+fn touch(c ref Counter, by int)
+    c.n += by
+
+fn read(c ref Counter) int
+    c.n
+
+fn depth(s ref Scope) int
+    if up := s.up
+        return 1 + depth(up)
+    0
+
+fn main()
+    a := ref Counter(n: 0, label: "a")
+    b := a
+    b.bump()
+    touch(a, 10)
+    print(a.n)
+    print(read(b))
+    print(a == b)
+    c := ref Counter(n: 11, label: "a")
+    print(a == c)
+    print(a.show())
+    plain := Counter(n: 5, label: "p")
+    d := ref plain
+    d.n = 6
+    print(plain.n)
+    print(d.n)
+    kids := [ref Node(value: 1, parent: none, children: []), ref Node(value: 2, parent: none, children: [])]
+    root := ref Node(value: 0, parent: none, children: kids)
+    root.children[0].value = 7
+    print(kids[0].value)
+    print(root.children.len())
+    top := ref Scope(vars: {}, up: none)
+    mid := ref Scope(vars: {}, up: top)
+    low := ref Scope(vars: {}, up: mid)
+    low.vars["x"] = 3
+    print(depth(low))
+    print(low.vars["x"])
+    maybe := if depth(low) > 5 then none else a
+    if m := maybe
+        m.bump()
+    print(a.n)

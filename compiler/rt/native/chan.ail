@@ -13,8 +13,7 @@
 ## A channel with a nonzero `source` is fed from outside, as a child's output
 ## streams are (std.proc.5): an empty, open one calls `chan_pump`, `send`
 ## calls `chan_source_send` and `close` calls `chan_source_close`. The runtime
-## of the child process defines those three; the stubs here are for programs
-## without one.
+## of the child process (`proc.ail`) defines those three.
 
 C_LOCK := 0
 C_CAP := 8
@@ -280,19 +279,3 @@ fn chan_select_index(chans int, n int) int
             if dead
                 return -1
     -1
-
-# ---- hooks for fed channels (a child's streams) ----
-
-fn chan_pump(ch int)
-    lock(ch + C_LOCK)
-    if load64(ch + C_COUNT) == 0 and load64(ch + C_CLOSED) == 0
-        chan_sleep(ch, "a value from a channel")
-    unlock(ch + C_LOCK)
-
-fn chan_source_send(ch int, s int)
-    lock(ch + C_LOCK)
-    chan_put(ch, s)
-    unlock(ch + C_LOCK)
-
-fn chan_source_close(ch int)
-    chan_mark_closed(ch)

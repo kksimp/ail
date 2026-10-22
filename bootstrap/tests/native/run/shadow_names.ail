@@ -1,0 +1,103 @@
+struct Pos
+    line int
+
+error struct Bad
+    pos Pos
+    msg str
+
+ESC := {'n': '\n', 'q': '"'}
+
+struct Lx
+    i int
+    env List[int]
+
+fn Lx.pos(self) Pos
+    Pos(line: self.i)
+
+fn Lx.look(self, pos Pos) int
+    p := pos()
+    p.line + pos.line
+
+fn Lx.find(self, n int) int?
+    for k in 0..self.env.len()
+        if self.env[k] == n
+            return k
+    none
+
+fn Lx.get(self, n int) int ! Bad
+    k := self.find(n) else return Bad(self.pos(), "missing {n}")
+    k
+
+fn Lx.get2(self, n int) int ! Bad
+    k := env_find(self, n) else return Bad(self.pos(), "missing {n}")
+    k
+
+fn env_find(l Lx, n int) int?
+    l.find(n)
+
+fn decode(c char, p Pos) char ! Bad
+    d := ESC.get(c) else return Bad(
+        p,
+        "unknown escape {c}",
+    )
+    d
+
+fn main()
+    l := Lx(i: 3, env: [5, 6])
+    print(l.look(Pos(line: 10)))
+    print(l.get(6) else 99)
+    print(l.get(7) else 98)
+    print(l.get2(6) else 99)
+    print(decode('n', Pos(line: 1)) else '?')
+    print(decode('z', Pos(line: 1)) else '?')
+    m := Machine(env: Scopes(names: ["a", "b"]))
+    print(m.where_is("b"))
+    print(m.where_is("z"))
+    print(m.size())
+    h := Holder(table: Table(keys: ["x", "y"]))
+    print(h.slot("y"))
+    print(h.slot("q"))
+
+struct Scopes
+    names List[str]
+
+fn Scopes.find(self, n str) int?
+    for k in 0..self.names.len()
+        if self.names[k] == n
+            return k
+    none
+
+struct Machine
+    env Scopes
+
+fn Machine.where_is(self, n str) int
+    env.find(n) else -1
+
+fn Machine.size(self) int
+    env.names.len()
+
+@test fn field_named_like_a_module()
+    m := Machine(env: Scopes(names: ["a", "b"]))
+    assert_eq(m.where_is("b"), 1)
+    assert_eq(m.where_is("z"), -1)
+    assert_eq(m.size(), 2)
+
+struct Table
+    keys List[str]
+
+fn Table.get(self, k str) int?
+    for i in 0..self.keys.len()
+        if self.keys[i] == k
+            return i
+    none
+
+struct Holder
+    table Table
+
+fn Holder.slot(self, k str) int
+    table.get(k) else -1
+
+@test fn user_get_else_on_a_field()
+    h := Holder(table: Table(keys: ["x", "y"]))
+    assert_eq(h.slot("y"), 1)
+    assert_eq(h.slot("q"), -1)

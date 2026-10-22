@@ -983,6 +983,35 @@ fn Gen.prim(mut self, i mir.Inst)
                 a.strb_idx(v, pl.base, pl.index)
             else
                 a.strb_off(v, pl.base, pl.off)
+        "pload8" | "pload16" | "pload32" | "pload64" =>
+            # A raw pointer's read (ADR 0835): the width in the name, the
+            # result zero-extended. Never moved, merged or dropped.
+            base := gpr(i.args[0], S0)
+            d := out_gpr(i.dst, S1)
+            if i.name == "pload8"
+                a.ldrb(d, base)
+            elif i.name == "pload16"
+                a.ldrh(d, base)
+            elif i.name == "pload32"
+                a.ldr_w(d, base)
+            else
+                a.ldr(d, base, 0)
+            put_gpr(i.dst, d)
+        "pstore8" | "pstore16" | "pstore32" | "pstore64" =>
+            base := gpr(i.args[0], S0)
+            v := gpr(i.args[1], S1)
+            if i.name == "pstore8"
+                a.strb(v, base)
+            elif i.name == "pstore16"
+                a.strh(v, base)
+            elif i.name == "pstore32"
+                a.str_w(v, base)
+            else
+                a.str(v, base, 0)
+        "pfence" =>
+            a.dmb_ish()
+        "pfence_io" =>
+            a.dsb_sy()
         "storef" =>
             pl := address(i)
             v := fpr(i.args[i.args.len() - 1], X0)

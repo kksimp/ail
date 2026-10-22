@@ -488,6 +488,8 @@ a guard page and a signal handler the runtime installs, reporting
 `unsafe.ptr.4`; out-of-block and freed accesses are undefined behaviour, as in
 C, and the differential harness runs them under the interpreter only.
 
+**Hardware access (ADR 0835).** `*T` is an address in an integer register. `read`, `write`, `read_volatile` and `write_volatile` are the prims `pload8/16/32/64` and `pstore8/16/32/64`, which the optimiser treats as barriers; `hw.fence` and `hw.fence_io` are `pfence` and `pfence_io` (`mfence`; `dmb ish` and `dsb sy`). The null check is a compare against 4096, not a signal.
+
 **Runtime Code.** The call stubs, the GOT slots and `rt_exit`'s flush belong
 to the executable and fall under the Runtime Exception (ADR 0510); the
 interpreter's `dlopen` glue (`bootstrap/src/interp/ffi.rs`) is toolchain code

@@ -256,6 +256,27 @@ pub fn Asm.ldrb(mut self, t int, n int)
 pub fn Asm.strb(mut self, t int, n int)
     word(956301312 + n * 32 + t)
 
+## `ldrh wt, [xn]`, `strh wt, [xn]`, `ldr wt, [xn]` and `str wt, [xn]` (the
+## 32-bit forms, zero-extending on a load).
+pub fn Asm.ldrh(mut self, t int, n int)
+    word(2034237440 + n * 32 + t)
+
+pub fn Asm.strh(mut self, t int, n int)
+    word(2030043136 + n * 32 + t)
+
+pub fn Asm.ldr_w(mut self, t int, n int)
+    word(3107979264 + n * 32 + t)
+
+pub fn Asm.str_w(mut self, t int, n int)
+    word(3103784960 + n * 32 + t)
+
+## `dmb ish` and `dsb sy`.
+pub fn Asm.dmb_ish(mut self)
+    word(3573758911)
+
+pub fn Asm.dsb_sy(mut self)
+    word(3573759903)
+
 ## `ldrb`/`strb wt, [xn, #k]` (k < 4096) and `[xn, xm]`.
 pub fn Asm.ldrb_off(mut self, t int, n int, k int)
     word(960495616 + k * 1024 + n * 32 + t)

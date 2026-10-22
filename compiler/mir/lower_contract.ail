@@ -100,8 +100,7 @@ fn Lower.describe(mut self, v Val, pos ast.Pos)
         Str => call("rt.out_quoted", [v.id], Ty.Unit)
         Struct(n) =>
             slots := structs[n]
-            parts := n.split(".")
-            say("{parts[parts.len() - 1]}(")
+            say("{n}(")
             for k in 0..slots.len()
                 if k > 0
                     say(", ")
@@ -158,12 +157,8 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
             reqs.push(c)
     if reqs.len() == 0
         return
-    if fn_file[key] != file
-        problem(
-            pos,
-            "`{key}`: contracts of a function in another module aren't in the native subset yet",
-        )
-        return
+    callee_file := fn_file[key]
+    caller_file := file
     sig := sigs[key]
     saved := scopes
     saved_self := self_ty
@@ -181,12 +176,19 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
         args.push(NameKey(name: f.params[i].name, key: lookup(f.params[i].name) else ""))
     unchecked = true
     for c in reqs
-        v := lower_value(c.cond, Ty.Bool) else break
+        # The condition's names mean what they do in the callee's module.
+        if callee_file != caller_file
+            enter_file(callee_file)
+        cond := lower_value(c.cond, Ty.Bool)
+        if callee_file != caller_file
+            enter_file(caller_file)
+        v := cond else break
         ok := check_branch(v.id)
         trap_open("contract.req.1", pos)
         say("`{key}` requires `{c.text}`, but it was called with ")
         describe_args(args, pos)
-        say(" (contract at {c.pos.line}:{c.pos.col})")
+        where := if callee_file != caller_file then "{src_paths[callee_file]}:" else ""
+        say(" (contract at {where}{c.pos.line}:{c.pos.col})")
         trap_close(pos)
         cur = ok
     unchecked = false

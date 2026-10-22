@@ -1,0 +1,24 @@
+# net.get_bytes, net.post_bytes and net.request_bytes (std.net.16) against the
+# scripted server: the body arrives as bytes. The base URL is the first argument.
+use std.net
+
+fn main()
+    base := env.args()[0]
+    g := net.get_bytes("{base}/echo") else err
+        print("get error {err.kind}")
+        return
+    print("get {g.status} {g.data.len()} {g.headers.len() > 0}")
+    p := net.post_bytes("{base}/hdrs", b"payload", "text/plain") else err
+        print("post error {err.kind}")
+        return
+    print("post {p.status} {p.data.len()}")
+    mut o := net.options()
+    o.body = "abc"
+    r := net.request_bytes("PUT", "{base}/hdrs", o) else err
+        print("request error {err.kind}")
+        return
+    print("request {r.status} {r.data.len()} {r.all_headers.len() > 0}")
+    mut sum := 0
+    for c in r.data
+        sum += c.to_int()
+    print("sum {sum}")

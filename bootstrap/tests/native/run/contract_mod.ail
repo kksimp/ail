@@ -1,0 +1,9 @@
+use contract_mod
+
+fn main()
+    mut d := contract_mod.Doc(items: [])
+    d.append(1)
+    d.append(2)
+    print(d.items.len())
+    print(contract_mod.scale(10, 5))
+    d.append(7)

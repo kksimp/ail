@@ -20,9 +20,23 @@ pub struct Traits
     impls Map[str, List[str]]
     ## The `any.T.m` dispatchers asked for: their trait and method.
     dispatch Map[str, List[str]]
+    ## The methods that take `mut self` (own.excl.4, lower_excl.ail).
+    mut_self Set[str]
+    ## The receiver of the method call being lowered, noted for `struct_call`.
+    recv_path List[str]
+    recv_mut bool
+    ## The position of the method call that is a whole statement, if any.
+    stmt_pos ast.Pos?
 
 pub fn new_traits() Traits
-    Traits(impls: {}, dispatch: {})
+    Traits(
+        impls: {},
+        dispatch: {},
+        mut_self: Set[str](),
+        recv_path: [],
+        recv_mut: false,
+        stmt_pos: none,
+    )
 
 ## Record the traits of a file and the structs implementing them, in order;
 ## a struct's tag is its index.

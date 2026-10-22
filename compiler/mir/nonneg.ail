@@ -1,0 +1,120 @@
+## Division and remainder of a value that cannot be negative by a power of two
+## (ADR 0816): `i / 2` and `i % 2` on a loop counter are a shift and a mask, not
+## the sign-corrected sequence that signed values need. gcc -O2 does the same
+## once it knows the counter is not negative.
+##
+## `mark_nonneg` runs before the bounds-check pass, while checked arithmetic
+## still carries its trap site: a checked `add` or `mul` of two values that
+## are not negative is not negative, or it traps. An unchecked one in the
+## runtime wraps, so it proves nothing. `rewrite_nonneg` runs last and turns
+## each marked instruction into `shr` or `band`, which both back ends already
+## have.
+
+## Mark each `div` and `rem` by a constant power of two (at least 2) of a
+## value that is never negative.
+pub fn mark_nonneg(f Func) Func
+    nv := f.vals.len()
+    defs := defs_of(f)
+    mut nn := [true for _ in 0..nv]
+    for p in f.params
+        nn[p] = false
+    for p in f.blocks[0].params
+        nn[p] = false
+    # The counter of a loop `while p < hi` that starts at a value that is not
+    # negative and steps up is not negative: it is below `hi` in the body, so
+    # its increment does not wrap, whatever that increment is checked or not.
+    mut counter := [-1 for _ in 0..nv]
+    mut step_of := [-1 for _ in 0..nv]
+    for lp in find_loops(f)
+        c := counted(f, defs, lp) else continue
+        cmp := inst_of(f, defs, f.blocks[lp.header].term.cond) else continue
+        if cmp.op == "lt" and cmp.args[0] == c.p
+            counter[c.p] = c.lo
+            step_of[c.p] = c.step
+    mut changed := true
+    mut rounds := 0
+    while changed and rounds < 32
+        changed = false
+        rounds += 1
+        for blk in f.blocks
+            for i in blk.insts
+                if i.dst >= 0 and nn[i.dst] and not holds(i, nn)
+                    nn[i.dst] = false
+                    changed = true
+            for e in 0..blk.term.targets.len()
+                t := blk.term.targets[e]
+                for j in 0..blk.term.args[e].len()
+                    p := f.blocks[t].params[j]
+                    if counter[p] >= 0
+                        continue
+                    if nn[p] and not nn[blk.term.args[e][j]]
+                        nn[p] = false
+                        changed = true
+        for p in 0..nv
+            if counter[p] >= 0
+                and nn[p]
+                and not (nn[counter[p]] and (step_of[p] < 0 or nn[step_of[p]]))
+                nn[p] = false
+                changed = true
+    mut g := f
+    mut touched := false
+    for b in 0..f.blocks.len()
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
+            if (i.op != "div" and i.op != "rem") or not nn[i.args[0]]
+                continue
+            d := const_of(f, defs, i.args[1]) else continue
+            if d >= 2 and d.bit_and(d - 1) == 0
+                g.blocks[b].insts[k].name = "nn"
+                touched = true
+    if touched then g else f
+
+## Whether `i`'s result is not negative, given the values known to be.
+fn holds(i Inst, nn List[bool]) bool
+    match i.op
+        "const" => i.imm >= 0
+        "len" | "cap" => true
+        "copy" => nn[i.args[0]]
+        "add" | "mul" => i.site >= 0 and nn[i.args[0]] and nn[i.args[1]]
+        "div" | "rem" => nn[i.args[0]] and nn[i.args[1]]
+        "shr" => nn[i.args[0]]
+        "band" => nn[i.args[0]] or nn[i.args[1]]
+        _ => false
+
+## Replace the marked instructions: `x / 2^k` becomes `x >> k` and `x % 2^k`
+## becomes `x & (2^k - 1)`.
+pub fn rewrite_nonneg(f Func) Func
+    defs := defs_of(f)
+    mut g := f
+    mut touched := false
+    for b in 0..f.blocks.len()
+        mut out := List[Inst]()
+        for i in f.blocks[b].insts
+            if i.name != "nn" or (i.op != "div" and i.op != "rem")
+                out.push(i)
+                continue
+            d := const_of(f, defs, i.args[1]) else
+                out.push(i)
+                continue
+            c := g.vals.len()
+            g.vals.push(Ty.Int)
+            g.names.push("")
+            mut k := inst(c, "const", [])
+            mut r := i
+            r.name = ""
+            r.site = -1
+            if i.op == "div"
+                mut s := 0
+                while 1.shl(s) < d
+                    s += 1
+                k.imm = s
+                r.op = "shr"
+            else
+                k.imm = d - 1
+                r.op = "band"
+            r.args = [i.args[0], c]
+            out.push(k)
+            out.push(r)
+            touched = true
+        g.blocks[b].insts = out
+    if touched then g else f

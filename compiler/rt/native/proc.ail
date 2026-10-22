@@ -1,14 +1,14 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## `std.proc.run` and `std.proc.which` on Linux x86-64 and ARM64 by direct
-## system calls (std.proc.1-3, ADR 0770): the program is found on `PATH`, run
-## by `clone` and `execve` with its three standard streams on pipes, and fed
-## and drained with `ppoll` so a full pipe can't deadlock. A close-on-exec
+## `std.proc.run`, `which` and `start` (std.proc.1-7, ADR 0770): the program is
+## found on `PATH`, run by `clone` (Linux) or libSystem's `fork` (macOS) and
+## `execve` with its three standard streams on pipes, and fed and drained with
+## `ppoll` (`poll` on macOS) so a full pipe can't deadlock. A close-on-exec
 ## pipe tells the parent that the `execve` failed (only that case is a
 ## `ProcError`, std.proc.1). No global slots: the state is locals and one
-## scratch block. macOS needs the libSystem switch (ADR 0534) and traps with
-## `native.subset.1` until then.
+## scratch block. macOS uses `fork`, `pipe` and `signal` from libSystem
+## (ADR 0534) and BSD system calls for the rest.
 
 # Kinds of the heap objects used here: a struct's words are scanned.
 PROC_STRUCT := 4
@@ -30,7 +30,15 @@ fn proc_cstr(s str) int
 
 ## Whether the C string `p` is an executable file.
 fn proc_exec_ok(p int) bool
-    r := syscall(os_pick(269, 48, 0), -100, p, 1, 0, 0, 0)
+    r := if target() == 2 then syscall(33, p, 1, 0, 0, 0, 0) else syscall(
+        os_pick(269, 48, 0),
+        -100,
+        p,
+        1,
+        0,
+        0,
+        0,
+    )
     r == 0 and not os_is_dir_at(p)
 
 ## `DIR/NAME` as a C string: `n` bytes of `dir` at `d`, a `/` unless `dir`
@@ -122,7 +130,46 @@ fn proc_fail(cmd str, kind str, at str) int
     0
 
 fn proc_pipe(at int) int
+    if target() == 2
+        # No `pipe2`: `pipe`, then close-on-exec on both ends.
+        r := import_call("_pipe", at, 0, 0, 0)
+        if r < 0
+            return -1
+        w := load64(at)
+        syscall(92, w.bit_and(4294967295), 2, 1, 0, 0, 0)
+        syscall(92, w.shr(32), 2, 1, 0, 0, 0)
+        return 0
     syscall(os_pick(293, 59, 0), at, 524288, 0, 0, 0, 0)
+
+## Ignore SIGPIPE (a write to a gone reader is an error, not a signal); the
+## old action.
+fn proc_sigpipe_ignore(st int) int
+    if target() == 2
+        return import_call("_signal", 13, 1, 0, 0)
+    store64(st + 96, 1)
+    store64(st + 104, 0)
+    store64(st + 112, 0)
+    store64(st + 120, 0)
+    syscall(os_pick(13, 134, 0), 13, st + 96, st + 128, 8, 0, 0)
+    0
+
+fn proc_sigpipe_restore(st int, old int)
+    if target() == 2
+        import_call("_signal", 13, old, 0, 0)
+        return
+    syscall(os_pick(13, 134, 0), 13, st + 128, 0, 8, 0, 0)
+
+## Poll the three descriptors at `pfd` for `ms` milliseconds (negative: no
+## limit). `ts` is 16 bytes of scratch for the timeout.
+fn proc_poll(pfd int, ms int, ts int) int
+    if target() == 2
+        return syscall(230, pfd, 3, ms, 0, 0, 0)
+    mut tp := 0
+    if ms >= 0
+        store64(ts, ms / 1000)
+        store64(ts + 8, ms % 1000 * 1000000)
+        tp = ts
+    syscall(os_pick(271, 73, 0), pfd, 3, tp, 0, 8, 0)
 
 fn proc_close(fd int)
     if fd >= 0
@@ -140,13 +187,13 @@ fn proc_wait(pid int, st int, deadline int) int
     store64(st, 0)
     if deadline < 0
         while true
-            r := syscall(os_pick(61, 260, 0), pid, st, 0, 0, 0, 0)
+            r := syscall(os_pick(61, 260, 7), pid, st, 0, 0, 0, 0)
             if r != -4
                 break
         return load64(st)
     mut nap := 1
     while true
-        r := syscall(os_pick(61, 260, 0), pid, st, 1, 0, 0, 0)
+        r := syscall(os_pick(61, 260, 7), pid, st, 1, 0, 0, 0)
         if r == pid or r < -4 or r == -10
             return load64(st)
         if r == 0 and time_now_ms() >= deadline
@@ -157,20 +204,11 @@ fn proc_wait(pid int, st int, deadline int) int
                 nap += 1
     0
 
-## `run(cmd, args, input, timeout_ms)` (std.proc.1-2): the `Output` object,
-## or 0 with the error slot set. `input` is a string or 0, `timeout` a boxed
-## integer or 0.
-fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
-    if target() == 2
-        os_usage_trap("native.subset.1", "`proc.run` isn't built for macOS yet")
-    mut limit := -1
-    if timeout != 0
-        limit = unbox(timeout)
-        if limit < 0
-            os_usage_trap("std.proc.2", str_cat(
-                str_cat("can't time out after ", fmt_int(limit)),
-                " milliseconds",
-            ))
+## Start `cmd` with `args` on three pipes (std.proc.1, ADR 0770): the child's
+## process id, with the parent's ends of its standard input, output and error
+## at `st + 32`, `+ 40` and `+ 48` (`st` is a 256-byte scratch block). 0 with
+## the error slot set when it can't start.
+fn proc_launch(cmd str, args List[int], at str, st int) int
     exe := proc_find(cmd)
     if exe <= 0
         return proc_fail(cmd, if exe < 0 then "permission" else "not_found", at)
@@ -191,7 +229,6 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
     store64(argv + 8 * (nargs + 1), 0)
     # st: pipes at 0 (stdin), 8 (stdout), 16 (stderr), 24 (exec status); the
     # rest is scratch for the loop.
-    st := alloc(256, KIND_BYTES)
     for k in 0..4
         if proc_pipe(st + 8 * k) < 0
             for j in 0..k
@@ -208,15 +245,26 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
     sta_r := load64(st + 24).bit_and(4294967295)
     sta_w := load64(st + 24).shr(32)
     flush()
-    pid := syscall(os_pick(56, 220, 0), 17, 0, 0, 0, 0, 0)
+    pid := if target() == 2 then import_call("_fork", 0, 0, 0, 0) else syscall(
+        os_pick(56, 220, 0),
+        17,
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
     if pid == 0
-        syscall(os_pick(292, 24, 0), in_r, 0, 0, 0, 0, 0)
-        syscall(os_pick(292, 24, 0), out_w, 1, 0, 0, 0)
-        syscall(os_pick(292, 24, 0), err_w, 2, 0, 0, 0)
-        r := syscall(os_pick(59, 221, 0), exe, argv, os_envp(), 0, 0, 0)
+        # PR_SET_PDEATHSIG, SIGKILL: no child outlives its parent (std.proc.7).
+        if target() != 2
+            syscall(os_pick(157, 167, 0), 1, 9, 0, 0, 0, 0)
+        syscall(os_pick(292, 24, 90), in_r, 0, 0, 0, 0, 0)
+        syscall(os_pick(292, 24, 90), out_w, 1, 0, 0, 0)
+        syscall(os_pick(292, 24, 90), err_w, 2, 0, 0, 0)
+        r := syscall(os_pick(59, 221, 59), exe, argv, os_envp(), 0, 0, 0)
         store64(st + 64, 0 - r)
-        syscall(os_pick(1, 64, 0), sta_w, st + 64, 8, 0, 0, 0)
-        syscall(os_pick(231, 94, 0), 127, 0, 0, 0, 0, 0)
+        syscall(os_pick(1, 64, 4), sta_w, st + 64, 8, 0, 0, 0)
+        syscall(os_pick(231, 94, 1), 127, 0, 0, 0, 0, 0)
     os_close(in_r)
     os_close(out_w)
     os_close(err_w)
@@ -241,13 +289,33 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
         os_close(out_r)
         os_close(err_r)
         return proc_fail(cmd, kind_name(os_errno_kind(load64(st + 72))), at)
+    store64(st + 32, in_w)
+    store64(st + 40, out_r)
+    store64(st + 48, err_r)
+    pid
+
+## `run(cmd, args, input, timeout_ms)` (std.proc.1-2): the `Output` object,
+## or 0 with the error slot set. `input` is a string or 0, `timeout` a boxed
+## integer or 0.
+fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
+    mut limit := -1
+    if timeout != 0
+        limit = unbox(timeout)
+        if limit < 0
+            os_usage_trap("std.proc.2", str_cat(
+                str_cat("can't time out after ", fmt_int(limit)),
+                " milliseconds",
+            ))
+    st := alloc(256, KIND_BYTES)
+    pid := proc_launch(cmd, args, at, st)
+    if pid == 0
+        return 0
+    in_w := load64(st + 32)
+    out_r := load64(st + 40)
+    err_r := load64(st + 48)
     # Writing to a pipe whose reader is gone must be an error, not SIGPIPE;
     # the old action comes back at the end.
-    store64(st + 96, 1)
-    store64(st + 104, 0)
-    store64(st + 112, 0)
-    store64(st + 120, 0)
-    syscall(os_pick(13, 134, 0), 13, st + 96, st + 128, 8, 0, 0)
+    old_pipe := proc_sigpipe_ignore(st)
     mut ifd := in_w
     mut ofd := out_r
     mut efd := err_r
@@ -260,7 +328,7 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
         ifd = -1
     else
         # F_SETFL, O_NONBLOCK
-        syscall(os_pick(72, 25, 0), ifd, 4, 2048, 0, 0, 0)
+        syscall(os_pick(72, 25, 92), ifd, 4, os_pick(2048, 2048, 4), 0, 0, 0)
     mut ob := str_new(PROC_CHUNK, 0)
     mut oc := PROC_CHUNK
     mut on := 0
@@ -277,16 +345,13 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
         store64(pfd, ifd.bit_and(4294967295).bit_or(17179869184))
         store64(pfd + 8, ofd.bit_and(4294967295).bit_or(4294967296))
         store64(pfd + 16, efd.bit_and(4294967295).bit_or(4294967296))
-        mut tp := 0
+        mut left := -1
         if deadline >= 0
-            left := deadline - time_now_ms()
+            left = deadline - time_now_ms()
             if left <= 0
                 timed_out = true
                 break
-            store64(ts, left / 1000)
-            store64(ts + 8, left % 1000 * 1000000)
-            tp = ts
-        r := syscall(os_pick(271, 73, 0), pfd, 3, tp, 0, 8, 0)
+        r := proc_poll(pfd, left, ts)
         if r == -4 or r == 0
             continue
         if r < 0
@@ -300,10 +365,10 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
                 mut want := ilen - inpos
                 if want > PROC_CHUNK
                     want = PROC_CHUNK
-                w := syscall(os_pick(1, 64, 0), ifd, input + 16 + inpos, want, 0, 0, 0)
+                w := syscall(os_pick(1, 64, 4), ifd, input + 16 + inpos, want, 0, 0, 0)
                 if w > 0
                     inpos += w
-                if inpos >= ilen or (w < 0 and w != -4 and w != -11)
+                if inpos >= ilen or (w < 0 and w != -4 and w != 0 - os_pick(11, 11, 35))
                     os_close(ifd)
                     ifd = -1
         ro := load64(pfd + 8).shr(48).bit_and(65535)
@@ -312,7 +377,7 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
                 ob = proc_widen(ob, on, oc)
                 oc = oc * 2
             n := os_read(ofd, ob + 16 + on, oc - on)
-            if n == 0 or (n < 0 and n != -4 and n != -11)
+            if n == 0 or (n < 0 and n != -4 and n != 0 - os_pick(11, 11, 35))
                 os_close(ofd)
                 ofd = -1
             elif n > 0
@@ -323,7 +388,7 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
                 eb = proc_widen(eb, en, ec)
                 ec = ec * 2
             n := os_read(efd, eb + 16 + en, ec - en)
-            if n == 0 or (n < 0 and n != -4 and n != -11)
+            if n == 0 or (n < 0 and n != -4 and n != 0 - os_pick(11, 11, 35))
                 os_close(efd)
                 efd = -1
             elif n > 0
@@ -331,12 +396,12 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
     proc_close(ifd)
     proc_close(ofd)
     proc_close(efd)
-    syscall(os_pick(13, 134, 0), 13, st + 128, 0, 8, 0, 0)
+    proc_sigpipe_restore(st, old_pipe)
     mut status := 0
     if not timed_out
         status = proc_wait(pid, st + 200, deadline)
     if timed_out or status < 0
-        syscall(os_pick(62, 129, 0), pid, 9, 0, 0, 0, 0)
+        syscall(os_pick(62, 129, 37), pid, 9, 0, 0, 0, 0)
         proc_wait(pid, st + 200, -1)
         return proc_fail(cmd, "timed_out", at)
     mut code := 128 + status.bit_and(127)
@@ -351,3 +416,298 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
     store64(r + 8, str_addr(out))
     store64(r + 16, str_addr(err))
     r
+
+# ---- a started child (std.proc.4-7) ----
+#
+# `start` gives a child whose three streams are `Channel[str]`s whose `source`
+# word points at one state object, so a receiver that finds its queue empty
+# calls `chan_pump` (chan.ail), which polls the child's pipes and queues what
+# arrives on both streams: a child is never blocked by a stream nobody reads,
+# and no thread is needed for it. The state object's words:
+PS_LOCK := 0
+PS_PID := 8
+PS_IN := 16
+PS_OUT := 24
+PS_ERR := 32
+PS_INCH := 40
+PS_OUTCH := 48
+PS_ERRCH := 56
+PS_OBUF := 64
+PS_ON := 72
+PS_EBUF := 80
+PS_EN := 88
+PS_DEAD := 96
+PS_TIMED := 104
+PS_DONE := 112
+PS_STATUS := 120
+PS_PROG := 128
+PS_CMD := 136
+PS_INLOCK := 144
+PS_RAW := 152
+PS_SIZE := 184
+# The `source` word of a channel record (chan.ail).
+CH_SOURCE := 48
+
+## Queue the `n` bytes at `p` as a line of channel `ch`.
+fn ps_push(ps int, ch int, p int, n int)
+    s := str_new(n, 0)
+    copy_bytes(s + 16, p, n)
+    chan_push(ch, os_lossy(s))
+    store64(ps + PS_PROG, load64(ps + PS_PROG) + 1)
+
+## Queue the complete lines of stream `k` (0 output, 1 error), and with `last`
+## a final one with no end too. A line ends at `\n` or `\r\n` (std.proc.5).
+fn ps_lines(ps int, k int, last bool)
+    buf := load64(ps + PS_OBUF + 16 * k)
+    n := load64(ps + PS_ON + 16 * k)
+    ch := load64(ps + PS_OUTCH + 8 * k)
+    mut from := 0
+    mut i := 0
+    while i < n
+        if load8(buf + 16 + i) == 10
+            mut end := i
+            if end > from and load8(buf + 16 + end - 1) == 13
+                end -= 1
+            ps_push(ps, ch, buf + 16 + from, end - from)
+            from = i + 1
+        i += 1
+    if last and from < n
+        ps_push(ps, ch, buf + 16 + from, n - from)
+        from = n
+    if from > 0
+        copy_bytes(buf + 16, buf + 16 + from, n - from)
+        store64(ps + PS_ON + 16 * k, n - from)
+
+## The end of stream `k`: its last line, then the channel is closed.
+fn ps_eof(ps int, k int)
+    ps_lines(ps, k, true)
+    store64(ps + PS_OUT + 8 * k, -1)
+    chan_mark_closed(load64(ps + PS_OUTCH + 8 * k))
+    store64(ps + PS_PROG, load64(ps + PS_PROG) + 1)
+
+## One nonblocking read of stream `k`, under the lock: 1 when it read, 0 when
+## nothing is there yet, -1 at the end of the stream.
+fn ps_read(ps int, k int) int
+    fd := load64(ps + PS_OUT + 8 * k)
+    if fd < 0
+        return -1
+    mut buf := load64(ps + PS_OBUF + 16 * k)
+    n := load64(ps + PS_ON + 16 * k)
+    mut cap := load64(buf)
+    if n == cap
+        buf = proc_widen(buf, n, cap)
+        store64(ps + PS_OBUF + 16 * k, buf)
+        cap = cap * 2
+    r := os_read(fd, buf + 16 + n, cap - n)
+    if r > 0
+        store64(ps + PS_ON + 16 * k, n + r)
+        ps_lines(ps, k, false)
+        return 1
+    if r == -4 or r == 0 - os_pick(11, 11, 35)
+        return 0
+    ps_eof(ps, k)
+    -1
+
+## Read what is there on both streams until nothing more is, then end any
+## stream still open: the child has been reaped, so no more comes.
+fn ps_drain(ps int)
+    lock(ps + PS_LOCK)
+    for k in 0..2
+        while ps_read(ps, k) == 1
+            continue
+        if load64(ps + PS_OUT + 8 * k) >= 0
+            ps_eof(ps, k)
+    unlock(ps + PS_LOCK)
+
+## One poll of the child's streams (and of its input with `want_in`), for at
+## most `ms` milliseconds (negative: until something is ready), then a read
+## of each stream that is ready.
+fn ps_round(ps int, want_in bool, ms int)
+    pf := alloc(48, KIND_BYTES)
+    mut ifd := -1
+    if want_in
+        ifd = load64(ps + PS_IN)
+    store64(pf, ifd.bit_and(4294967295).bit_or(17179869184))
+    store64(pf + 8, load64(ps + PS_OUT).bit_and(4294967295).bit_or(4294967296))
+    store64(pf + 16, load64(ps + PS_ERR).bit_and(4294967295).bit_or(4294967296))
+    multi := load64(global(MULTI)) != 0
+    mut parked := 0
+    if multi
+        parked = blocked_enter()
+    r := proc_poll(pf, ms, pf + 24)
+    if multi
+        blocked_leave(parked)
+    if r <= 0
+        return
+    ro := load64(pf + 8).shr(48)
+    re := load64(pf + 16).shr(48)
+    if ro != 0 or re != 0
+        lock(ps + PS_LOCK)
+        if ro != 0
+            ps_read(ps, 0)
+        if re != 0
+            ps_read(ps, 1)
+        unlock(ps + PS_LOCK)
+
+## Reap the child if it has exited, without waiting; true once it is reaped.
+fn ps_reap(ps int) bool
+    lock(ps + PS_LOCK)
+    if load64(ps + PS_DONE) == 0
+        w := alloc(8, KIND_BYTES)
+        r := syscall(os_pick(61, 260, 7), load64(ps + PS_PID), w, 1, 0, 0, 0)
+        if r == load64(ps + PS_PID) or r < -4
+            store64(ps + PS_STATUS, if r < 0 then 0 else load64(w))
+            store64(ps + PS_DONE, 1)
+    done := load64(ps + PS_DONE) != 0
+    unlock(ps + PS_LOCK)
+    if done
+        ps_drain(ps)
+    done
+
+## Kill the child once its time limit has passed (std.proc.4).
+fn ps_check_deadline(ps int)
+    d := load64(ps + PS_DEAD)
+    if d >= 0 and load64(ps + PS_TIMED) == 0 and load64(ps + PS_DONE) == 0
+        if time_now_ms() >= d
+            store64(ps + PS_TIMED, 1)
+            syscall(os_pick(62, 129, 37), load64(ps + PS_PID), 9, 0, 0, 0, 0)
+
+## How long one poll may last: until the time limit, and at most 100 ms so a
+## child that exited with its pipes still held open is noticed.
+fn ps_poll_ms(ps int) int
+    d := load64(ps + PS_DEAD)
+    if d < 0 or load64(ps + PS_TIMED) != 0
+        return 100
+    left := d - time_now_ms()
+    if left < 0
+        return 0
+    if left > 100
+        return 100
+    left
+
+## `chan_pump` (chan.ail): block until a line has been queued on or a stream
+## has ended on either stream of the child that channel `ch` belongs to.
+fn chan_pump(ch int)
+    ps := load64(ch + CH_SOURCE)
+    seen := load64(ps + PS_PROG)
+    while load64(ps + PS_PROG) == seen
+        if ps_reap(ps)
+            return
+        ps_check_deadline(ps)
+        ps_round(ps, false, ps_poll_ms(ps))
+
+## `c.stdin.send(text)` (std.proc.5): write it all, polling the output
+## meanwhile so a child that writes as it reads is never stuck. A child that
+## has gone is not an error.
+fn chan_source_send(ch int, s int)
+    ps := load64(ch + CH_SOURCE)
+    p := s
+    n := load64(p)
+    lock(ps + PS_INLOCK)
+    mut off := 0
+    while off < n
+        fd := load64(ps + PS_IN)
+        if fd < 0
+            break
+        w := syscall(os_pick(1, 64, 4), fd, p + 16 + off, n - off, 0, 0, 0)
+        if w > 0
+            off += w
+        elif w == 0 - os_pick(11, 11, 35)
+            ps_round(ps, true, 100)
+        elif w != -4
+            os_close(fd)
+            store64(ps + PS_IN, -1)
+    unlock(ps + PS_INLOCK)
+
+## `c.stdin.close()`: end the child's input.
+fn chan_source_close(ch int)
+    ps := load64(ch + CH_SOURCE)
+    if ch != load64(ps + PS_INCH)
+        return
+    lock(ps + PS_INLOCK)
+    fd := load64(ps + PS_IN)
+    if fd >= 0
+        os_close(fd)
+        store64(ps + PS_IN, -1)
+    unlock(ps + PS_INLOCK)
+
+## `start(cmd, args, timeout_ms)` (std.proc.4): the `Child` object (pid, then
+## the channels `stdin`, `out` and `err`), or 0 with the error slot set.
+## `timeout` is a boxed integer or 0.
+fn proc_start(cmd str, args List[int], timeout int, at str) int
+    mut limit := -1
+    if timeout != 0
+        limit = unbox(timeout)
+        if limit < 0
+            os_usage_trap("std.proc.4", str_cat(
+                str_cat("can't time out after ", fmt_int(limit)),
+                " milliseconds",
+            ))
+    st := alloc(256, KIND_BYTES)
+    pid := proc_launch(cmd, args, at, st)
+    if pid == 0
+        return 0
+    # A write to a child that has gone is an error, not SIGPIPE; every end
+    # of ours is nonblocking.
+    proc_sigpipe_ignore(st)
+    for k in 0..3
+        syscall(os_pick(72, 25, 92), load64(st + 32 + 8 * k), 4, os_pick(2048, 2048, 4), 0, 0, 0)
+    ps := alloc(PS_SIZE, PROC_STRUCT)
+    store64(ps + PS_PID, pid)
+    store64(ps + PS_IN, load64(st + 32))
+    store64(ps + PS_OUT, load64(st + 40))
+    store64(ps + PS_ERR, load64(st + 48))
+    store64(ps + PS_RAW, load64(st + 40))
+    store64(ps + PS_RAW + 8, load64(st + 48))
+    store64(ps + PS_OBUF, str_new(4096, 0))
+    store64(ps + PS_EBUF, str_new(4096, 0))
+    store64(ps + PS_DEAD, if limit >= 0 then time_now_ms() + limit else -1)
+    store64(ps + PS_CMD, str_addr(cmd))
+    c := alloc(32, PROC_STRUCT)
+    store64(c, pid)
+    for k in 0..3
+        ch := chan_new()
+        store64(ch + CH_SOURCE, ps)
+        store64(c + 8 + 8 * k, ch)
+        store64(ps + PS_INCH + 8 * k, ch)
+    c
+
+## The status of a reaped child as `run` reports it (std.proc.1).
+fn ps_code(raw int) int
+    if raw.bit_and(127) == 0
+        return raw.shr(8).bit_and(255)
+    128 + raw.bit_and(127)
+
+## Close the child's pipes once it is reaped.
+fn ps_close(ps int)
+    for k in 0..2
+        os_close(load64(ps + PS_RAW + 8 * k))
+        store64(ps + PS_RAW + 8 * k, -1)
+    fd := load64(ps + PS_IN)
+    if fd >= 0
+        os_close(fd)
+        store64(ps + PS_IN, -1)
+
+## `wait(move c)` (std.proc.6): the status, or 0 with the error slot set when
+## the time limit killed the child. Other tasks run while it waits, and what
+## the child wrote stays readable from `out` and `err`.
+fn proc_wait_child(c int, at str) int
+    ps := load64(load64(c + 8) + CH_SOURCE)
+    while not ps_reap(ps)
+        ps_check_deadline(ps)
+        ps_round(ps, false, ps_poll_ms(ps))
+    ps_close(ps)
+    if load64(ps + PS_TIMED) != 0
+        return proc_fail(str_at(load64(ps + PS_CMD)), "timed_out", at)
+    ps_code(load64(ps + PS_STATUS))
+
+## `kill(move c)` (std.proc.7): end the child at once, reap it, and give its
+## status (137 on Unix).
+fn proc_kill_child(c int) int
+    ps := load64(load64(c + 8) + CH_SOURCE)
+    if load64(ps + PS_DONE) == 0
+        syscall(os_pick(62, 129, 37), load64(ps + PS_PID), 9, 0, 0, 0, 0)
+    while not ps_reap(ps)
+        ps_round(ps, false, 10)
+    ps_close(ps)
+    ps_code(load64(ps + PS_STATUS))

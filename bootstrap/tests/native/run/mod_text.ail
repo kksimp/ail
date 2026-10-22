@@ -1,0 +1,6 @@
+use contract_mod
+
+fn main()
+    d := contract_mod.Doc(items: [1])
+    print(d)
+    print("{d}")

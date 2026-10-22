@@ -57,6 +57,8 @@ fn os_lookup(mod str, name str) OsFn?
         "compress.inflate" => os_fn("rt.compress_inflate", [Ty.Bytes], Ty.Bytes, true)
         "compress.gunzip" => os_fn("rt.compress_gunzip", [Ty.Bytes], Ty.Bytes, true)
         "compress.unzlib" => os_fn("rt.compress_unzlib", [Ty.Bytes], Ty.Bytes, true)
+        "bytes.from_list" =>
+            os_fn("rt.bytes_from_list", [Ty.List(Ty.Sized("u8"))], Ty.Bytes, false)
         "bytes.from_hex" => os_fn("rt.bytes_parse_hex", [s], Ty.Opt(Ty.Bytes), false)
         "bytes.from_base64" => os_fn("rt.bytes_parse_base64", [s], Ty.Opt(Ty.Bytes), false)
         "proc.run" =>
@@ -67,6 +69,16 @@ fn os_lookup(mod str, name str) OsFn?
                 fails: true,
                 optional: 2,
             )
+        "proc.start" =>
+            OsFn(
+                rt: "rt.proc_start",
+                params: [s, Ty.List(s), Ty.Opt(Ty.Int)],
+                ret: Ty.Struct(PROC_CHILD),
+                fails: true,
+                optional: 1,
+            )
+        "proc.wait" => os_fn("rt.proc_wait_child", [Ty.Struct(PROC_CHILD)], Ty.Int, true)
+        "proc.kill" => os_fn("rt.proc_kill_child", [Ty.Struct(PROC_CHILD)], Ty.Int, false)
         "proc.which" => os_fn("rt.proc_which", [s], maybe, false)
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
@@ -79,7 +91,7 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz"]
+    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz", "hw"]
         if is_module(recv, m)
             return m
     ""
@@ -148,6 +160,8 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
         return lower_eprint(args, npos)
     if m == "net"
         return lower_net_module(name, npos, args)
+    if m == "hw"
+        return lower_hw_call(name, npos, args)
     f := os_lookup(m, name) else
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"

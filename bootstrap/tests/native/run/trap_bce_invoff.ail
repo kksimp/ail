@@ -1,0 +1,16 @@
+# The list is long enough for `bi + 1` but not for `bi + 5`: the trap names
+# the access that fails first, as the loop without the guard would (type.coll.4).
+fn mix(s List[float], n int) float
+    mut t := 0.0
+    for i in 0..n
+        bi := i * 7
+        for j in 0..3
+            t += s[bi + 1] * s[bi + 5] + j.to_float()
+    t
+
+fn main()
+    mut s := List[float]()
+    for i in 0..17
+        s.push(i.to_float())
+    print(mix(s, 2))
+    print(mix(s, 3))
