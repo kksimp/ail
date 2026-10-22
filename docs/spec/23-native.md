@@ -118,7 +118,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (`fs.walk` and the others can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`), printing a `T?` (`none` or the value),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
-(std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
+(std.fs including `write_bytes`, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`; `proc.start`, `proc.wait` and `proc.kill` with a `Child`'s `pid` and `Channel[str]` streams (std.proc.4-7, ADR 0846; `run` and `start` also on macOS); `std.app` (`app.run`, `run_host`, `script`, `outline`) with generic functions that can fail, `return f()` of a failing call, and a trait's default methods for an `impl` in another file
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
@@ -233,7 +233,10 @@ native.subset.1 problems, then writes an executable to OUT (default: FILE's
 name without `.ail`, in the current directory). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
-write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
+write the file, is reported under this rule. A natively built compiler takes the
+same command line (`NATIVE build FILE [-o OUT] [--target T] [--timeout MS]
+[--max-memory MB]`) and writes OUT itself; `AIL_NATIVE_COMPILER=PATH ail build ...`
+checks the program, then runs PATH with the same arguments. *(ADRs 0387, 0388, 0389)*
 
 ```ail rules=native.build.3
 fn main()
