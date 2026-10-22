@@ -217,11 +217,14 @@ module lays the document out in CSS pixels, with no cells:
   (so drift between fonts never accumulates).
 - **Blocks**: lists with markers, tables (column widths from content),
   flexbox rows (`gap`, `flex-grow`, `justify-content`, `flex-wrap`), grid
-  tracks (`repeat`, `fr`, `minmax`), images with `width`/`height`
-  attributes, buttons and fields drawn as boxes (not yet interactive).
+  tracks (`repeat`, `fr`, `minmax`), images with `width`/`height` attributes (an unsized one takes the size its
+  header gives: `images.prefetch` fetches each over the keep-alive pool and
+  `image.dims` reads PNG, JPEG or GIF headers; `image.decode` returns RGBA pixels
+  for a host that can take a bitmap, and the current host still draws `Pic` from the URL),
+  buttons and fields drawn as boxes (not yet interactive).
 - **Output**: `draw.Op.Str`/`Pic`/`Rect` in page pixels plus a rectangle for
   each link (`Scene.link_at`); the window scrolls by points.
-- **Not yet**: floats, positioning, images without sizes, web fonts,
+- **Not yet**: floats, positioning, web fonts,
   interactive form controls in pixel mode, page-model boxes with pixel
   rectangles, a host text-measuring call. Unverified on a real window.
 
