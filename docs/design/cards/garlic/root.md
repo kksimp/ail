@@ -38,6 +38,7 @@ fn urlencode(str) str  ## `s` encoded for a form: letters, digits and `*-._` as 
 fn utf8(int) List[int]  ## The UTF-8 bytes of code point `k`.
 struct Gui  ## The native window's side of the browser: the host's cell size in points
 fn address(str) str [fs io]  ## What a typed address means: a URL as it is, a path to a file that exists
+MEASURE_RUNS := 5000  ## The text runs the layout estimated, for the host to measure, at most
 struct Garlic  ## The native window as a `std.app` app (docs/design/garlic-browser.md,
 impl std.app.App for Garlic
 fn to_app(draw.Op, Gui) std.app.Op  ## A drawing operation of the page, as a `std.app` canvas operation.
@@ -63,4 +64,4 @@ fn bench(List[str]) [clock fs io]  ## `garlic --bench FILE [ROUNDS]`: `args` are
 fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 ```
 
-trimmed to fit 2000 tokens (~1559); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1586); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

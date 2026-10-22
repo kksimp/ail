@@ -6,7 +6,7 @@ ail.pkg:
     dep garlicjs path js
     dep image path ../pdf/image caps fs
 
-## (root) (53 items)
+## (root) (54 items)
 
 ## css (31 items)
 
@@ -16,7 +16,7 @@ ail.pkg:
 
 ## garlicjs.vm (237 items)
 
-## gfx (34 items)
+## gfx (37 items)
 
 ## html (32 items)
 
@@ -28,7 +28,7 @@ ail.pkg:
 
 ## page (41 items)
 
-## std.app (39 items)
+## std.app (41 items)
 
 ## std.net.jar (14 items)
 

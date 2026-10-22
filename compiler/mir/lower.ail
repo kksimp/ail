@@ -1903,7 +1903,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "this method call")
-        mut arg_want := r.ty
+        mut arg_want := str_arg_want(r.ty, name)
         if e := r.ty.elem()
             arg_want = if name == "push" then e else Ty.Int
             if name == "join"
