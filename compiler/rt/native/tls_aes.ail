@@ -99,7 +99,8 @@ fn aes_shift_rows(s int)
         w := load64(s + 8 * i)
         store64(
             s + 8 * i,
-            w.bit_and(m0)
+            w
+                .bit_and(m0)
                 .bit_or(w.shr(4).bit_and(m1a))
                 .bit_or(w.shl(12).bit_and(m1b))
                 .bit_or(w.shr(8).bit_and(m2a))
@@ -177,7 +178,10 @@ fn aes_sub4(w int, sc int) int
     aes_pack(buf, 4, s)
     aes_sbox(s, sc)
     aes_unpack(s, 4, buf)
-    load8(buf).bit_or(load8(buf + 1).shl(8)).bit_or(load8(buf + 2).shl(16)).bit_or(load8(buf + 3).shl(24))
+    load8(buf)
+        .bit_or(load8(buf + 1).shl(8))
+        .bit_or(load8(buf + 2).shl(16))
+        .bit_or(load8(buf + 3).shl(24))
 
 ## Set up `ak` (room for 24 + 64 * (rounds + 1) bytes) for the `klen`-byte
 ## key (16 or 32) at `key`.

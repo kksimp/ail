@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 63 (`ail test` lists them)
+tests: 64 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -11,6 +11,8 @@ ail.pkg:
 KEYS := ...  ## The keys, as `--keys` prints them.
 enum Prompt  ## What the bottom row is doing: showing the status, or reading a URL, a
 struct Browser  ## The browser: the page shown (its tree and layout), where it is scrolled,
+struct Kept  ## A page as it was left: its tree, style sheets and place.
+MAX_KEPT := 16  ## Pages kept for Back and Forward.
 fn options() net.Options [io net]  ## The headers Garlic sends: who it is, and that it wants HTML.
 fn image_options() net.Options [io net]  ## The headers for a picture: any image type.
 fn fetch(str, str, str) str [clock fs io net]  ## The text of `url`: `http` and `https` through `net.request` (which
@@ -61,4 +63,4 @@ fn bench(List[str]) [clock fs io]  ## `garlic --bench FILE [ROUNDS]`: `args` are
 fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 ```
 
-trimmed to fit 2000 tokens (~1521); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1559); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
