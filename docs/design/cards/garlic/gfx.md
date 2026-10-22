@@ -19,8 +19,9 @@ pub struct gfx.Scene  ## A laid-out page: its drawing operations, links and size
 pub fn gfx.text_width(text str, size float, bold bool, mono bool) float  ## The width in pixels of `text` at `size`, in a proportional or (`mono`)
 pub fn gfx.length(v str, size float, rel float) float?  ## A length in pixels: `px`, `em`, `rem`, `pt`, `%` (of `rel`) or `0`.
 pub fn gfx.color(v str) int?  ## A color: `#rgb`, `#rrggbb`, `rgb()`, `rgba()` or a name. `none` for
+pub fn gfx.color_over(v str, under int) int?  ## A color as `color` reads it, with `rgba()` and `#rrggbbaa` mixed into the
 pub fn gfx.layout(d html.Doc, url str, width float, sheet css.Sheet) gfx.Scene  ## Lays `d` out in a column `width` pixels wide with `sheet` (the linked
 pub fn gfx.layout_with(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]]) gfx.Scene  ## `layout` with the pictures' sizes (`images.prefetch`), so an `<img>`
 ```
 
-trimmed to fit 2000 tokens (~522); dropped: private items
+trimmed to fit 2000 tokens (~564); dropped: private items
