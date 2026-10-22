@@ -8,10 +8,9 @@ fn main() ! [clock env fail fs io proc]
 BUILD_USAGE := ...
 fn positive(v str) bool  ## A positive whole number (run.limit.4).
 fn host_target() str [io proc]  ## The target `ail build` makes by default: the host's, from `uname`.
-fn build_cli(rest List[str]) [env fs io proc]  ## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
-fn compiler_dir() str [env io]  ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
-fn compile_to(file str, out_arg str, target_arg str, ms str, mb str) [env fs io proc]  ## Build `file` for `target` (the host's when empty) into `out` (by default
 fn build_cli(rest List[str]) [clock env fs io proc]  ## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
+fn compiler_dir() str [env io]  ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str) [clock env fs io proc]  ## Build `file` for `target` (the host's when empty) into `out` (by default
 fn check_dump(path str, many bool) ! [env fail fs io]  ## The checker's diagnostics for one dump, sorted by position as `ail check`
     fails with JsonError | fs.IoError
 fn runtime(dir str, path str) !ast.Program [fail fs io]  ## The native runtime in directory `dir`, parsed as one program.

@@ -1,8 +1,7 @@
 # compiler
 entry: main in main.ail
 
-## (root) (35 items)
-## (root) (29 items)
+## (root) (40 items)
 
 ## a64 (60 items)
 
