@@ -641,6 +641,16 @@ fn ail_script_routes_build_to_the_native_compiler() {
     assert!(go("examples/hello.ail").status.success());
     assert_eq!(fs::read_to_string(&log).unwrap().trim(), "build -o x --target x86_64-linux examples/hello.ail");
     fs::remove_file(&log).unwrap();
+    // `--unsafe driver` goes to the check and on to the native compiler.
+    let o = Command::new(root().join("ail"))
+        .current_dir(root())
+        .env("AIL_NATIVE_COMPILER", &stub)
+        .args(["build", "--unsafe", "driver", "-o", "x", "bootstrap/tests/native/unsafe/hw_volatile.ail"])
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(fs::read_to_string(&log).unwrap().trim(), "build --unsafe driver -o x bootstrap/tests/native/unsafe/hw_volatile.ail");
+    fs::remove_file(&log).unwrap();
     // A program that doesn't check never reaches the native compiler.
     assert!(!go("bootstrap/tests/native/run/no_such_file.ail").status.success());
     assert!(!log.exists());
@@ -666,6 +676,28 @@ fn user_generator_refusal_stops_the_native_build() {
         err.contains("error[ct.derive.4]: `Size` can't be derived for `Light`: `Size` needs a struct; `Light` is an enum"),
         "{err}"
     );
+}
+
+/// unsafe.hw.1-4, ADR 0820: `build FILE --unsafe driver` on the native compiler's
+/// command line builds a program that reaches hardware; the checker, run first
+/// by `ail`, is what allows it.
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn native_build_takes_unsafe_driver() {
+    let tmp = std::env::temp_dir().join(format!("ail-unsafe-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let exe = tmp.join("hw");
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .env("AIL_ROOT", root())
+        .args(["run", "compiler", "build", "bootstrap/tests/native/unsafe/hw_volatile.ail", "--unsafe", "driver", "-o"])
+        .arg(&exe)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let run = Command::new(&exe).output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&run.stdout).trim(), "7");
+    let _ = fs::remove_dir_all(&tmp);
 }
 
 /// run.limit.5, run.limit.6: a native program stops at the limits of

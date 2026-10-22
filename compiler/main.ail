@@ -144,6 +144,9 @@ fn build_cli(rest List[str])
         elif a == "--max-memory" and has and positive(rest[i + 1])
             mb = rest[i + 1]
             i += 1
+        elif a == "--unsafe" and has and rest[i + 1] == "driver"
+            # unsafe.hw.1: the checker, run first, took it; the lowering needs nothing.
+            i += 1
         elif a == "--no-cache"
             i += 1
             continue
