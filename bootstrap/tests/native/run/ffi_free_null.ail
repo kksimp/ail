@@ -1,0 +1,7 @@
+# mem.free of a null pointer traps (unsafe.mem.2).
+use std.mem
+
+fn main()
+    print("before")
+    unsafe
+        mem.free(mem.null())

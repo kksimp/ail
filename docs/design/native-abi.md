@@ -440,9 +440,10 @@ algorithms don't change (ADR 0404).
 ## 9. FFI hook (lane 126, ADRs 0431–0436)
 
 The interpreter already calls C (`extern c fn`, `docs/spec/14-ffi.md`). This
-section is the plan for compiled programs. Nothing here is built yet; until it
-is, `ail build` rejects a program that declares an `extern c fn` or uses
-`std.mem` allocation with `ffi.native.1` (spec `ffi.native.1`).
+section is the plan for compiled programs. Dynamic linking is not built.
+Instead (ADR 0844) `ail build` provides `std.mem` over the runtime's own page
+blocks and a fixed libc subset (`hypot abs toupper strlen atoi memset memcpy
+strtod`) as runtime functions; any other `extern c fn` is `ffi.native.1`.
 
 **Source of truth for the call shape.** The checker already limits a C call to
 six integer-like and eight float arguments (`ffi.decl.3`) and types it with

@@ -1,0 +1,8 @@
+# mem.alloc of a negative count traps (unsafe.mem.3).
+use std.mem
+
+fn main()
+    n := 0 - 1
+    unsafe
+        xs := mem.alloc(n, 0)
+        print(xs.is_null())
