@@ -895,7 +895,8 @@ fn Gen.call_out(mut self, i mir.Inst)
     elif i.name.starts_with("libsys.")
         # An import: through the pointer slot dyld binds (native-abi.md §11).
         # Other targets have no libSystem: the call traps if ever reached.
-        if os != MACOS
+        # The Windows runtime arms import kernel32 names (no leading `_`).
+        if os != MACOS or not i.name.starts_with("libsys._")
             a.brk()
         else
             sym := i.name.replace("libsys.", "")

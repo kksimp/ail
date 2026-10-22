@@ -464,7 +464,10 @@ fn tasks_build_for_macos_with_imports() {
     };
     let has = |bytes: &[u8], needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
     assert!(has(&build("task_basic"), b"_pthread_create\0"));
-    assert!(!has(&build("arith"), b"_pthread_create\0"));
+    let arith = build("arith");
+    assert!(!has(&arith, b"_pthread_create\0"));
+    // The Windows arms of the runtime import kernel32 names; dyld can't bind those.
+    assert!(!has(&arith, b"GetStdHandle\0") && !has(&arith, b"ExitProcess\0"));
     let _ = fs::remove_file(&tmp);
 }
 /// `compiler/rt/native/unicode.ail` is what `tools/native/gen_unicode.ail`
