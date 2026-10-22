@@ -24,6 +24,11 @@ fn gc_find(w int) int
         bs := pb + ((w - pb) * t.shr(32)).shr(32) * csz
         if bs + csz > pb + PAGE
             return 0
+        # Blocks of the page being filled that are not yet handed out may hold
+        # an old object's words (a reused page is not zeroed): not objects.
+        idx := t.shr(8).bit_and(255)
+        if bs >= hs(H_BUMP + idx) and bs < hs(H_BEND + idx)
+            return 0
         return bs
     if tag == 2
         return pb
