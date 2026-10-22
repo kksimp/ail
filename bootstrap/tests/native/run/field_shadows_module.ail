@@ -1,0 +1,22 @@
+struct Env
+    names List[str]
+
+fn Env.find(self, name str) int?
+    mut k := 0
+    while k < names.len()
+        if names[k] == name
+            return k
+        k += 1
+    none
+
+struct Interp
+    env Env
+
+fn Interp.lookup(self, name str) int
+    k := env.find(name) else return -1
+    k
+
+fn main()
+    it := Interp(env: Env(names: ["a", "b", "c"]))
+    print(it.lookup("b"))
+    print(it.lookup("z"))

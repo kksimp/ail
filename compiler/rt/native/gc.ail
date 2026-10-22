@@ -148,6 +148,7 @@ fn gc_sweep()
     hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
     hset(H_THRESH, if live * 2 > MIN_THRESH then live * 2 else MIN_THRESH)
+    hset(H_FASTLIM, if load64(global(MULTI)) == 0 then hs(H_THRESH) else 0)
 
 ## Collect garbage. Called by `alloc` when enough has been allocated.
 fn gc_collect()

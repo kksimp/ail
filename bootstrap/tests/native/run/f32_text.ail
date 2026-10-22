@@ -1,0 +1,23 @@
+# The text of an f32 is the shortest digits that read back as an f32 (type.num.7).
+fn step(x f32) f32
+    x * 1.7 + 0.3
+
+fn main()
+    mut x := 1.0.to_f32()
+    for i in 0..60
+        print(x)
+        x = step(x)
+    mut y := 3.0e-39.to_f32()
+    for i in 0..8
+        print(y)
+        y = y * 10.to_f32()
+    print(1.1754944e-38.to_f32())
+    print(0.5.to_f32())
+    print(8388608.to_f32())
+    print(1.0e15.to_f32())
+    print(1.0e16.to_f32())
+    print(1.0e17.to_f32())
+    print(0.001.to_f32())
+    print(0.0001.to_f32())
+    print(0.0.to_f32())
+    print(-0.0.to_f32())

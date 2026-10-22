@@ -118,19 +118,36 @@ fn map_find(m int, k int) int
         return load64(m + 80)
     kind := load64(m + 32)
     h := if kind == 1 then map_hash_str(k) else map_hash_int(k)
-    mask := load64(m + 24)
-    idx := load64(m + 48)
-    ents := load64(m + 40)
-    mut j := h.bit_and(mask)
-    mut s := load64(idx + 8 * j)
+    map_probe(m, k, h)
+
+## The probe of `map_find`, apart from the hash so that only `m` and `k` live
+## across the hash call. A hit in the first slot, the usual case, makes no
+## call, so it saves no registers (ADR 0625); a collision or a key that is
+## equal but not the same string goes on in `map_probe_from`.
+fn map_probe(m int, k int, h int) int
+    j := h.bit_and(load64(m + 24))
+    s := load64(load64(m + 48) + 8 * j)
+    if s == 0
+        return 0
+    e := load64(m + 40) + 24 * (s - 1)
+    if load64(e) == h and load64(e + 8) == k
+        store64(m + 72, k)
+        store64(m + 80, e)
+        return e
+    map_probe_from(m, k, h, j)
+
+## The probe from slot `j` on. What a step needs of `m` is read again, not kept.
+fn map_probe_from(m int, k int, h int, from int) int
+    mut j := from
+    mut s := load64(load64(m + 48) + 8 * j)
     while s != 0
-        e := ents + 24 * (s - 1)
-        if load64(e) == h and (load64(e + 8) == k or map_key_eq(kind, load64(e + 8), k))
+        e := load64(m + 40) + 24 * (s - 1)
+        if load64(e) == h and (load64(e + 8) == k or map_key_eq(load64(m + 32), load64(e + 8), k))
             store64(m + 72, k)
             store64(m + 80, e)
             return e
-        j = (j + 1).bit_and(mask)
-        s = load64(idx + 8 * j)
+        j = (j + 1).bit_and(load64(m + 24))
+        s = load64(load64(m + 48) + 8 * j)
     0
 
 fn map_index_put(m int, h int, number int)
@@ -182,6 +199,11 @@ fn map_append(m int, h int, k int, v int) int
 
 ## `m[k] = v`: replace in place, or insert last (type.map.1, type.map.3).
 fn map_set(m int, k int, v int)
+    # The key just found by `get` is remembered: store without a call.
+    c := load64(m + 80)
+    if c != 0 and load64(m + 72) == k
+        store64(c + 16, v)
+        return
     e := map_find(m, k)
     if e != 0
         store64(e + 16, v)
@@ -489,3 +511,18 @@ fn map_live(m int, i int) int
     if load64(e) >= 0
         return e
     0
+
+## `xs.counts()` (type.coll.18): how often each element of a list of `int`,
+## `str` or `char` occurs, keys in order of first appearance.
+fn map_counts(kind int, xs List[int]) int
+    m := map_new(kind, 0, 0)
+    q := list_addr(xs)
+    data := load64(q + 16)
+    for i in 0..load64(q)
+        k := load64(data + 8 * i)
+        e := map_find(m, k)
+        if e != 0
+            store64(e + 16, load64(e + 16) + 1)
+        else
+            map_append(m, map_hash(kind, k), k, 1)
+    m

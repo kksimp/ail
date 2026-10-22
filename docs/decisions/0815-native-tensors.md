@@ -55,7 +55,7 @@ native kernels were *slower* than the interpreter's AVX2 and threaded ones
 AVX kernels of `compiler/x64/kernels.ail` (`matmul`'s inner loop and the
 elementwise operators, general loops that any tensor program uses) bring them to
 0.05 s and 0.26-0.30 s on x86-64, against 0.05 s and 0.34-0.42 s for `ail run`
-and 0.10-0.15 s and 0.24-0.37 s for NumPy. The NEON kernels of `compiler/a64/kernels.ail` are the ARM64 half (two doubles at a time, the same operations and roundings).
+and 0.10-0.15 s and 0.24-0.37 s for NumPy. A Mac run showed the first NEON kernels behind `ail run` on `f32_matmul`, `softmax_sum` and `sigmoid`, so `matmul` became a register-blocked row kernel (`rt.vec_mm`: eight columns of sums stay in registers across the inner loop, `f32` as four singles per register) and `exp` lost its tail argument and most of its branches, with the same results bit for bit. The NEON kernels of `compiler/a64/kernels.ail` are the ARM64 half (two doubles at a time, the same operations and roundings).
 
 ## Rejected alternatives
 

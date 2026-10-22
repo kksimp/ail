@@ -17,6 +17,15 @@ with its own encoders and object writers (ADR 0010).
 
 ## The native subset
 
+**native.subset.2** — `any Trait` is in the native subset for traits whose
+implementations are structs: a struct converts to `any Trait` where one is
+expected (trait.any.3), and a method call on an `any Trait` value runs the
+method of the value's type (trait.any.1). Impls for other types, generic
+impls in an `any` are reported under native.subset.1. A struct or enum
+with no `to_str`, and an `any Trait` value, print as the interpreter prints
+them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`.
+*(ADRs 0536, 0616)*
+
 **native.subset.1** — The native backend compiles programs whose every
 function is a free function or a method of a struct (no generics), in the root module or a module it imports (mod.unit.1-5), over `int`, `float`, `bool`, `str`, structs without generics, and lists of those and of lists, using
 locals, constants whose values are literals, other constants and operators
@@ -46,7 +55,7 @@ fallback value, a statement that leaves, or a block without a binding
 reported at its position under this rule, all of them at once, and nothing
 is built. *(ADRs 0384, 0390, 0392, 0393, 0571-0573, 0580, 0582)*
 function is a free function, a method of a struct or enum, or a method of
-an `impl` block (no generic methods, `any Trait` values or contracts), in
+an `impl` block (no generic methods or contracts), in
 the root module or a module it imports (mod.unit.1-5), over `int`, `float`,
 `bool`, `char`, `str`, structs and enums without invariants, generic or not,
 optionals of those and of `char`s (`T?`), and lists of those and of lists,
@@ -78,7 +87,7 @@ include structs and enums, and lists of maps and sets (`Map[K, V]()`,
 any type in the subset, enums included (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k)` (a `V?`, type.map.6) and `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
-`Map[K, List[T]]`, `s.add(x)`, `for x in s`, printing a table; a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, `for mut x in xs` over a list of structs, an empty `{}` where a `Set` is expected, printing a table; an error type with no message, whose fields may be structs (trait.auto.2); a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `m.push(k, x)`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
@@ -89,9 +98,10 @@ whose type is expected (a function result, argument or field), in functions with
 `float` parameters (any number of others). Also: the attributes `@inline`, `@pure` and `@allow` (gram.attr.1-3); the methods derive generators write (ct.gen.1, ADR 0807); the prelude's `Json` and `Default`, as far as the program reaches them (ADR 0808); format specifications on
 numbers, `bool`, `char` and `str` (lex.str.7, type.str.11: width, fill,
 alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression), and `else` followed by a block on `s.to_int()`, `xs.pop()` and `m.get(k)` (the block leaves or ends in the replacement value, err.else.1-3) and `s.to_float()` (a `float?`, type.num.8);
+alignment, `.N`, `x`); `s.to_int() else ...` (as a binding or inside any expression), `?` on an optional inside an `else` value across operators (err.prop.4) and `s.to_float()` (a `float?`, type.num.8);
 and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `fs.append_text`, `fs.list_dir`, `fs.walk`, `fs.glob`, `fs.copy`, `fs.remove`, `fs.make_dir`, `fs.rename`
-(`fs.walk` and the others can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`),
+(`fs.walk` and the others can fail with `fs.IoError`, std.err.1), `env.get`, `env.home`, `env.cwd`, `env.program`, `io.read_line` (a `str?`), printing a `T?` (`none` or the value),
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
 (std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
@@ -100,7 +110,8 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
 readable yet, and on macOS the program traps at `proc.run`); `t := spawn f(args)`
 and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
-`store`, `cas` and `add` (`native.task.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
+`store`, `cas` and `add` (`native.task.1`); `Channel[str]` with `send`, `recv`, `close`, `for v in ch`
+and `task.select` of channels written out in a list (`native.chan.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
 `net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
 `close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
 per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
@@ -147,9 +158,26 @@ tables generated from it (a capital sigma becomes the final form by the
 Unicode rule, with its case-ignorable set approximated by the apostrophes,
 dots, accents and combining marks). *(ADRs 0565, 0566, 0567)*
 
+**native.chan.1** — `Channel[str](capacity)` is a bounded channel the runtime
+builds (conc.share.3, conc.share.4): `send` waits while it is full, `recv`
+returns `str?`, `close` ends it, `for v in ch` receives until it is closed
+and empty (conc.share.7), and `task.select([a, b, ...])` returns the lowest
+ready index or `none` (conc.select.1); a handle and its copies are the same
+channel. A trap (`Channel(0)`, `send` on a closed channel, closing twice)
+names the channel `Channel#N` in the order the program made them, as the
+interpreter does. Other element types, a `select` over a list that isn't
+written out, and cancellation (conc.cancel.2, conc.cancel.4) are not built.
+A deadlock (conc.task.7) is found by the main task: when it waits in `send`,
+`recv`, `for` or `select`, every unfinished task is waiting too, and nothing
+has changed for 100 ms, it traps with the interpreter's message. A
+deadlock the main task is not part of, or one reached through `t.wait()`,
+hangs as before. *(ADR 0599, ADR 0186)*
+
 **native.task.1** — Native code runs tasks and `par for` iterations in
 parallel on a pool of threads, at most 8 and no more than the cores the
-process may use (`conc.par.9`, `conc.par.7`). `spawn f(args)` takes a free
+process may use, unless the environment variable `AIL_THREADS` (a whole
+number, 1 to 64; anything else is ignored) sets the size (`conc.par.9`,
+`conc.par.7`). `spawn f(args)` takes a free
 function of the subset's types and copies a list argument (`conc.share.1`);
 `t.wait()?` is the task's result, and if the task trapped it ends the
 program as an uncaught `Trapped` does: `error: Trapped(rule: "R", message:
@@ -198,7 +226,7 @@ fn main()
     print("built")
 ```
 
-**native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). The writer is in `compiler/obj/pe.ail`; `ail build` does not yet select it.
+**native.build.4** — A Windows x86-64 executable is a PE32+ image with a fixed base, four sections (`.text`, `.rdata`, `.idata`, `.bss`) and an import directory naming each imported function from its DLL. Calls to an import go through its address-table slot (ADR 0597, ADR 0598). A `libsys.NAME` call passes its arguments in Win64 positions and calls the import through its slot (ADR 0606). The writer is in `compiler/obj/pe.ail`; `ail build --target x86_64-windows` selects it, and the runtime reaches the OS through kernel32 imports (ADR 0608).
 
 **native.build.5** — `ail build` keeps the executables it makes, under a
 SHA-256 key of everything that decides their bytes: the path as given, the
