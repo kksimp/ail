@@ -298,5 +298,4 @@ or reason.
 | `native.bce.4` | unowned | overflow-check removal in loops; not located in `compiler/mir/bce.ail` |
 | `own.borrow.1` | unowned | a parameter's access lasts for the call; the site is not located |
 | `type.num.3` | unowned | literal default typing (`int`, `float`); the site is not located |
-| `unsafe.op.2` | unowned | creating a raw pointer is not unsafe; the site is not located |
 
