@@ -5,7 +5,7 @@ ail.pkg:
     package garlic
     dep garlicjs path js
 
-## (root) (47 items)
+## (root) (49 items)
 
 ## css (31 items)
 
@@ -15,7 +15,7 @@ ail.pkg:
 
 ## garlicjs.vm (237 items)
 
-## gfx (32 items)
+## gfx (33 items)
 
 ## html (32 items)
 

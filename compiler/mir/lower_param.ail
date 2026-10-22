@@ -17,9 +17,13 @@ struct Facts
     ## whose `e` is a place (copied), a literal or a call, and dropped by an
     ## assignment of anything else (lower_move.ail).
     owned Set[str]
+    ## The bindings that read straight from a parameter nobody can change
+    ## during the call: a parameter without `mut`, and the immutable locals
+    ## bound to a place inside one (lower_move.ail).
+    stable Set[str]
 
 fn new_facts() Facts
-    Facts(mut_ptr: {}, moves: [], owned: Set[str]())
+    Facts(mut_ptr: {}, moves: [], owned: Set[str](), stable: Set[str]())
 
 ## A `mut` parameter's object, as `FUNCTION|KEY`.
 fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)

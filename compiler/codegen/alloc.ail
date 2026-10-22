@@ -143,17 +143,20 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
     # value may use its register.
     mut ranges := [List[int]() for _ in 0..n]
     mut calls := List[int]()
+    mut first := [-1 for _ in 0..n]
+    mut last := [-1 for _ in 0..n]
     for b in order
         blk := f.blocks[b]
-        mut first := [-1 for _ in 0..n]
-        mut last := [-1 for _ in 0..n]
-        for v in 0..n
-            if live_in[b][v]
-                first[v] = bstart[b]
-                last[v] = bstart[b]
+        # Only the values this block touches have a range in it.
+        mut touched := List[int]()
+        for v in live_in[b]
+            first[v] = bstart[b]
+            last[v] = bstart[b]
+            touched.push(v)
         for p in blk.params
             first[p] = bstart[b] + 1
             last[p] = bstart[b] + 1
+            touched.push(p)
         mut k := bstart[b] + 2
         for i in blk.insts
             for a in i.args
@@ -161,18 +164,19 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
             if i.dst >= 0
                 first[i.dst] = k + 1
                 last[i.dst] = k + 1
+                touched.push(i.dst)
             if is_call(i)
                 calls.push(k)
             k += 2
         for a in blk.term.uses()
             last[a] = bend[b]
         for succ in blk.term.targets
-            for v in 0..n
-                if live_in[succ][v]
-                    last[v] = bend[b]
-        for v in 0..n
+            for v in live_in[succ]
+                last[v] = bend[b]
+        for v in touched
             if first[v] >= 0
                 add_range(mut ranges[v], first[v], last[v])
+                first[v] = -1
     cuts := carve_holes(f, order, bstart, bend, live_in, mut ranges, remat, t, heads)
     mut start := [-1 for _ in 0..n]
     mut end := [-1 for _ in 0..n]
@@ -317,7 +321,7 @@ fn carve_holes(
     order List[int],
     bstart List[int],
     bend List[int],
-    live_in List[List[bool]],
+    live_in List[List[int]],
     mut ranges List[List[int]],
     remat List[bool],
     t Target,
@@ -376,8 +380,8 @@ fn carve_holes(
                     hot[a] = true
         for fl in [false, true]
             mut live := 0
-            for v in 0..n
-                if live_in[lp.header][v] and not remat[v] and f.vals[v].is_float() == fl
+            for v in live_in[lp.header]
+                if not remat[v] and f.vals[v].is_float() == fl
                     live += 1
             regs := if fl then t.float_caller.len()
                 + t.float_callee.len() else t.int_caller.len()
@@ -385,8 +389,8 @@ fn carve_holes(
             # The loop's own temporaries need a few more.
             if live + 3 <= regs
                 continue
-            for v in 0..n
-                if not live_in[lp.header][v] or remat[v] or hot[v] or f.vals[v].is_float() != fl
+            for v in live_in[lp.header]
+                if remat[v] or hot[v] or f.vals[v].is_float() != fl
                     continue
                 if not spans(ranges[v], cs, ce)
                     continue
@@ -513,12 +517,39 @@ fn overlaps(a List[int], b List[int]) bool
             return true
     false
 
-## Which values are live on entry to each block (the block's parameters
-## are defined there, so they are not).
-fn liveness(f mir.Func, order List[int]) List[List[bool]]
+## Which values are live on entry to each block, in ascending order (the
+## block's parameters are defined there, so they are not). Each block is
+## summarised once by the values it reads before defining them and the ones
+## it defines; the rounds then touch only the live values.
+fn liveness(f mir.Func, order List[int]) List[List[int]]
     n := f.vals.len()
     nb := f.blocks.len()
-    mut live_in := [[false for _v in 0..n] for _b in 0..nb]
+    mut reads := [List[int]() for _ in 0..nb]
+    mut defs := [List[int]() for _ in 0..nb]
+    mut def_at := [-1 for _ in 0..n]
+    mut read_at := [-1 for _ in 0..n]
+    for b in order
+        blk := f.blocks[b]
+        for p in blk.params
+            if def_at[p] != b
+                def_at[p] = b
+                defs[b].push(p)
+        for inst in blk.insts
+            for a in inst.args
+                if def_at[a] != b and read_at[a] != b
+                    read_at[a] = b
+                    reads[b].push(a)
+            if inst.dst >= 0 and def_at[inst.dst] != b
+                def_at[inst.dst] = b
+                defs[b].push(inst.dst)
+        for a in blk.term.uses()
+            if def_at[a] != b and read_at[a] != b
+                read_at[a] = b
+                reads[b].push(a)
+    mut live_in := [List[int]() for _ in 0..nb]
+    mut killed := [0 for _ in 0..n]
+    mut seen := [0 for _ in 0..n]
+    mut tick := 0
     mut changed := true
     while changed
         changed = false
@@ -526,24 +557,20 @@ fn liveness(f mir.Func, order List[int]) List[List[bool]]
         while k >= 0
             b := order[k]
             k -= 1
-            blk := f.blocks[b]
-            mut live := [false for _ in 0..n]
-            for s in blk.term.targets
-                for v in 0..n
-                    if live_in[s][v]
-                        live[v] = true
-            for a in blk.term.uses()
-                live[a] = true
-            mut i := blk.insts.len() - 1
-            while i >= 0
-                inst := blk.insts[i]
-                if inst.dst >= 0
-                    live[inst.dst] = false
-                for a in inst.args
-                    live[a] = true
-                i -= 1
-            for p in blk.params
-                live[p] = false
+            tick += 1
+            for v in defs[b]
+                killed[v] = tick
+            mut live := List[int]()
+            for s in f.blocks[b].term.targets
+                for v in live_in[s]
+                    if killed[v] != tick and seen[v] != tick
+                        seen[v] = tick
+                        live.push(v)
+            for v in reads[b]
+                if seen[v] != tick
+                    seen[v] = tick
+                    live.push(v)
+            live = live.sorted()
             if live != live_in[b]
                 live_in[b] = live
                 changed = true
