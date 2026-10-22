@@ -180,9 +180,16 @@ say ""
 # ---- stage T: the native tests through the newest compiler ----
 say "## Stage T: native test programs built by the stage-2 compiler"
 pass=0; fail=0; failed=()
+# The programs tests/native.rs skips on macOS (MACOS_KNOWN there: they differ
+# from the interpreter by design), read from that list so the two agree.
+macos_known=""
+if [[ "$TARGET" == *macos* ]]; then
+    macos_known=$(sed -n '/MACOS_KNOWN: &\[&str\]/,/\];/p' bootstrap/tests/native.rs | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ',')
+fi
 for f in "$tests"/*.ail; do
     name=$(basename "$f" .ail)
     if [ -n "${ONLY:-}" ] && [[ ",$ONLY," != *",$name,"* ]]; then continue; fi
+    if [[ ",$macos_known" == *",$name,"* ]]; then continue; fi
     exe="$out/t_$name"
     if ! build_with "$out/stage2" "$f" "$exe"; then
         fail=$((fail + 1)); failed+=("$name (build)"); continue
