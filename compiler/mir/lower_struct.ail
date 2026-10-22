@@ -270,7 +270,7 @@ fn Lower.proc_output_method(mut self, key str, recv Val?, args List[ast.Arg], po
 ## independent (own.val.1).
 fn needs_copy(t Ty) bool
     match t
-        List(_) | Struct(_) | Tuple(_) | Any(_) => true
+        List(_) | Struct(_) | Tuple(_) | Any(_) | Map(_, _) | Set(_) => true
         _ => false
 
 ## Whether copying `t` needs a generated function: it holds a struct.

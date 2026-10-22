@@ -587,6 +587,66 @@ fn derives_build_without_the_derived_file() {
     let _ = fs::remove_dir_all(&tmp);
 }
 
+/// native.build.3: the native compiler's own command line is `ail build`'s: it
+/// writes the executable itself, byte for byte what `ail build` writes, and
+/// refuses a bad command line with status 2. It runs here on the interpreter;
+/// the self-built one takes the same arguments.
+#[test]
+#[cfg(any(all(target_os = "linux", target_arch = "x86_64"), all(target_os = "macos", target_arch = "aarch64")))]
+fn compiler_command_line_is_ail_build() {
+    let tmp = std::env::temp_dir().join(format!("ail-cli-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let (a, b) = (tmp.join("a"), tmp.join("b"));
+    let out = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .env("AIL_ROOT", root())
+        .args(["run", "compiler", "build", "examples/hello.ail", "-o"])
+        .arg(&a)
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let built = Command::new(env!("CARGO_BIN_EXE_ail")).current_dir(root()).args(["build", "examples/hello.ail", "-o"]).arg(&b).output().unwrap();
+    assert!(built.status.success());
+    assert!(fs::read(&a).unwrap() == fs::read(&b).unwrap(), "the compiler's own `build` writes different bytes than `ail build`");
+    let run = Command::new(&a).output().unwrap();
+    assert!(String::from_utf8_lossy(&run.stdout).contains("Hello"), "the executable doesn't run");
+    let bad = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .env("AIL_ROOT", root())
+        .args(["run", "compiler", "build", "examples/hello.ail", "--bogus"])
+        .output()
+        .unwrap();
+    assert_eq!(bad.status.code(), Some(2));
+    let _ = fs::remove_dir_all(&tmp);
+}
+
+/// `AIL_NATIVE_COMPILER=PATH ail build ARGS` checks the program, then runs PATH with the same arguments.
+#[test]
+#[cfg(unix)]
+fn ail_script_routes_build_to_the_native_compiler() {
+    let tmp = std::env::temp_dir().join(format!("ail-route-{}", std::process::id()));
+    fs::create_dir_all(&tmp).unwrap();
+    let stub = tmp.join("stub");
+    let log = tmp.join("log");
+    fs::write(&stub, format!("#!/bin/sh\necho \"$@\" > {}\n", log.display())).unwrap();
+    write_exe(&stub, &fs::read(&stub).unwrap());
+    let go = |file: &str| {
+        Command::new(root().join("ail"))
+            .current_dir(root())
+            .env("AIL_NATIVE_COMPILER", &stub)
+            .args(["build", "-o", "x", "--target", "x86_64-linux", file])
+            .output()
+            .unwrap()
+    };
+    assert!(go("examples/hello.ail").status.success());
+    assert_eq!(fs::read_to_string(&log).unwrap().trim(), "build -o x --target x86_64-linux examples/hello.ail");
+    fs::remove_file(&log).unwrap();
+    // A program that doesn't check never reaches the native compiler.
+    assert!(!go("bootstrap/tests/native/run/no_such_file.ail").status.success());
+    assert!(!log.exists());
+    let _ = fs::remove_dir_all(&tmp);
+}
+
 /// run.limit.5, run.limit.6: a native program stops at the limits of
 /// `AIL_TIMEOUT_MS`, `AIL_MAX_MEMORY_MB` and the defaults `ail build` bakes,
 /// with the trap line `ail run` prints (less its position), after its output

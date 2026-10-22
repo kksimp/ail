@@ -119,6 +119,7 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 `io.read_all`, `io.eprint`, `io.exit`, `time.now_ms`, `time.sleep_ms`, and `path.dir`,
 `path.base`, `path.ext`, `path.stem` and `path.join`
 (std.fs, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `fs.read_bytes`, `fs.write_bytes` and `bytes.to_list()` (std.fs.1-2, type.bytes.1), `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
+(std.fs including `write_bytes`, std.env, std.io, std.time, std.path); `tz.offset` and `tz.system` (std.tz.1-3, from the TZif files `ail run` reads, so a zone gives the same offset in both); `compress.gzip`, `zlib` and `deflate` on a `str` or `bytes`, and `compress.gunzip`, `unzlib` and `inflate` on `bytes` (std.compress.1-4, 7-8: the output is the interpreter's byte for byte, and a failure carries its message); on `bytes`, `+` and `concat`, `to_str`, `find`, `contains`, `starts_with`, `ends_with`, `base64`, `bytes.from_hex`, `bytes.from_base64` and `s.to_bytes()` (type.bytes.6, 8-13); on Linux, `proc.run` (with
 `input` and `timeout_ms` left off or given, std.proc.2) and `proc.which`, whose
 `Output` has `status`, `out`, `err` and the methods `ok()` and `text()`; `proc.start`, `proc.wait` and `proc.kill` with a `Child`'s `pid` and `Channel[str]` streams (std.proc.4-7, ADR 0846; `run` and `start` also on macOS); `std.app` (`app.run`, `run_host`, `script`, `outline`) with generic functions that can fail, `return f()` of a failing call, and a trait's default methods for an `impl` in another file
 (std.proc.1-3, std.proc.9-10; `ProcError.kind` is not
@@ -129,8 +130,8 @@ and `task.select` of channels written out in a list (`native.chan.1`); raw TCP (
 `net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
 `close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
 per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
-fails with kind `tls`; connection pooling is not built; `Accept-Encoding: gzip, deflate` is sent and a `gzip`, `x-gzip` or `deflate` body is undone as in std.net.26), `std.net.jar` cookie jars (std.net.20-22), `net.get_bytes`, `net.post_bytes` and `net.request_bytes` (std.net.16), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
-other host fails with kind `not_found`, as there is no DNS client yet), no TLS, a wait does not let other tasks run, the
+fails with kind `tls`; an idle connection a response leaves open is kept for the next request to its origin (std.net.19); `Accept-Encoding: gzip, deflate` is sent and a `gzip`, `x-gzip` or `deflate` body is undone as in std.net.26), `std.net.jar` cookie jars (std.net.20-22), `net.get_bytes`, `net.post_bytes` and `net.request_bytes` (std.net.16), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any
+other host fails with kind `not_found` on Linux, which has no DNS client yet; macOS asks `getaddrinfo`), no TLS, a wait does not let other tasks run, the
 message's wording may differ from the interpreter's (the `kind` is the same); and the standard
 modules written in AIL (`std.app`, `std.args`, `std.csv`, `std.log`, `std.net.http`,
 `std.net.jar`, `std.regex`, `std.time.date`), which build like a module of the program when
@@ -233,7 +234,10 @@ native.subset.1 problems, then writes an executable to OUT (default: FILE's
 name without `.ail`, in the current directory). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
-write the file, is reported under this rule. *(ADRs 0387, 0388, 0389)*
+write the file, is reported under this rule. A natively built compiler takes the
+same command line (`NATIVE build FILE [-o OUT] [--target T] [--timeout MS]
+[--max-memory MB]`) and writes OUT itself; `AIL_NATIVE_COMPILER=PATH ail build ...`
+checks the program, then runs PATH with the same arguments. *(ADRs 0387, 0388, 0389)*
 
 ```ail rules=native.build.3
 fn main()
