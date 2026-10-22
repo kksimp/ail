@@ -13,7 +13,7 @@ fn main()
             continue
         f := line.split(" ")
         op := f[0]
-        if op != "chacha20poly1305" and op != "poly1305" and op != "x25519"
+        if op != "chacha20poly1305" and op != "poly1305" and op != "x25519" and op != "sha256" and op != "hmac256" and op != "hkdf256"
             continue
         want := f[f.len() - 1]
         got := hash.hmac_sha256(op, f[1..f.len() - 1].join(" "))
@@ -22,4 +22,10 @@ fn main()
         else
             bad += 1
             print("FAIL {op}: want {want} got {got}")
+    sched := hash.hmac_sha256("rfc8448", "")
+    if sched == "33ad0a1c607ec03b09e6cd9893680ce210adf300aa1f2660e1b22e10f170f92a 6f2615a108c702c5678f54fc9dbab69716c076189c48250cebeac3576c3611ba"
+        ok += 1
+    else
+        bad += 1
+        print("FAIL rfc8448: got {sched}")
     print("{ok} ok, {bad} failed")

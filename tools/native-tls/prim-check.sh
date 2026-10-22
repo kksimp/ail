@@ -13,18 +13,13 @@ cp -r compiler "$tmp/compiler"
 mkdir -p "$tmp/bootstrap"
 cp -r bootstrap/src "$tmp/bootstrap/src"
 cp tools/native-tls/tlsprim.ail "$tmp/compiler/rt/native/tlsprim.ail"
-python3 - "$tmp/compiler/mir/lower_os.ail" <<'PY'
+python3 - "$tmp/compiler/rt/native/hash.ail" <<'PY'
 import sys
 p = sys.argv[1]
 s = open(p).read()
-if '"hash"' not in s:
-    s = s.replace('"proc"', '"proc", "hash"', 1)
-hook = '''    if m == "hash" and name == "hmac_sha256"
-        return os_call(os_fn("rt.tlsprim_call", [Ty.Str, Ty.Str], Ty.Str, false), args, npos)
-'''
-anchor = '    f := os_lookup(m, name) else\n        return unsupported'
-assert anchor in s
-s = s.replace(anchor, hook + anchor, 1)
+old = 'fn hash_hmac_sha256(key str, s str) str\n'
+assert old in s
+s = s.replace(old, 'fn hash_hmac_sha256(op str, args str) str\n    tlsprim_call(op, args)\n\nfn hash_hmac_sha256_real(key str, s str) str\n', 1)
 open(p, 'w').write(s)
 PY
 export AIL_COMPILER="$tmp/compiler"

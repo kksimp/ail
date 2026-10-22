@@ -67,4 +67,31 @@ fn tlsprim_call(op str, args str) str
         out := alloc_raw(32, KIND_BYTES)
         x25519_raw(out, f[0][0], f[1][0])
         return tlsprim_hex(out, 32)
+    if op == "sha256"
+        out := alloc_raw(32, KIND_BYTES)
+        hash_sha256_raw(f[0][0], f[0][1], out)
+        return tlsprim_hex(out, 32)
+    if op == "hmac256"
+        out := alloc_raw(32, KIND_BYTES)
+        kdf_hmac(f[0][0], f[0][1], f[1][0], f[1][1], out)
+        return tlsprim_hex(out, 32)
+    if op == "hkdf256"
+        len := load8(f[3][0]) * 256 + load8(f[3][0] + 1)
+        prk := alloc_raw(32, KIND_BYTES)
+        kdf_extract(f[0][0], f[0][1], f[1][0], f[1][1], prk)
+        out := alloc_raw(len + 8, KIND_BYTES)
+        kdf_expand(prk, f[2][0], f[2][1], len, out)
+        return tlsprim_hex(out, len)
+    if op == "rfc8448"
+        # RFC 8448 section 3: the early secret, then its `derived` secret.
+        zeros := alloc_raw(32, KIND_BYTES)
+        for i in 0..4
+            store64(zeros + 8 * i, 0)
+        early := alloc_raw(32, KIND_BYTES)
+        kdf_extract(zeros, 0, zeros, 32, early)
+        empty := alloc_raw(32, KIND_BYTES)
+        hash_sha256_raw(zeros, 0, empty)
+        out := alloc_raw(32, KIND_BYTES)
+        kdf_derive_secret(early, "derived", empty, out)
+        return "{tlsprim_hex(early, 32)} {tlsprim_hex(out, 32)}"
     "unknown op"
