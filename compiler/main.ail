@@ -20,6 +20,7 @@
 use a64
 use ast
 use check
+use fmt
 use derive
 use mir
 use obj
@@ -35,6 +36,8 @@ fn main() !
         "check" =>
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
+        "fmt" =>
+            io.exit(fmt.command(args[1..]))
         "tokens" =>
             for path in args[1..]
                 if args.len() > 2

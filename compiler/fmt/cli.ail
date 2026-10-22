@@ -1,0 +1,191 @@
+## `ail fmt [--check | --stdout] PATH...` (ADR 0170). Exit status: 0 done (or
+## already canonical), 1 `--check` found a file that would change, 2 a file
+## couldn't be read or formatted.
+use syntax
+
+pub fn command(args List[str]) int
+    check := args.contains("--check")
+    to_stdout := args.contains("--stdout")
+    mut paths := List[str]()
+    for a in args
+        if a.starts_with("--")
+            if a != "--check" and a != "--stdout"
+                io.eprint("error: unknown option {a} for `ail fmt`")
+                return 2
+        else
+            paths.push(a)
+    if paths.len() == 0 or (check and to_stdout)
+        io.eprint("usage: ail fmt [--check | --stdout] PATH...")
+        return 2
+    mut files := List[Target]()
+    for p in paths
+        if is_dir(p)
+            for f in collect(p)
+                files.push(Target(path: f, named: false))
+        else
+            files.push(Target(path: p, named: true))
+    mut failed := false
+    mut changed := false
+    mut skipped := 0
+    for t in files
+        file := t.path
+        src := fs.read_text(file) else err
+            io.eprint("error: can't read {file}: {err.kind}")
+            failed = true
+            continue
+        done := format(src)
+        if done.status == 1
+            # A file found in a directory that doesn't parse is skipped when it is a
+            # negative test (it has an expectation file). In check mode any other one
+            # fails the check, so a broken source file can't pass unnoticed.
+            if t.named or (check and not is_negative_test(file))
+                io.eprint("error: {file} wasn't formatted because it has errors (fmt.safe)")
+                io.eprint(syntax.report_text(file, src, done.diags))
+                failed = true
+            else
+                skipped += 1
+            continue
+        if done.status == 2
+            io.eprint("{file}: internal error in the formatter (fmt.safe): {done.why}; the file is unchanged")
+            failed = true
+            continue
+        out := done.text
+        if to_stdout
+            emit(out)
+        elif out != src
+            changed = true
+            if check
+                emit(diff(file, src, out))
+            else
+                fs.write_text(file, out) else err
+                    io.eprint("error: can't write {file}: {err.kind}")
+                    failed = true
+    if skipped > 0
+        io.eprint("note: skipped {skipped} negative test file(s) that have lexical or syntax errors")
+    if failed
+        return 2
+    if check and changed
+        io.eprint("help: run `ail fmt` on these files to rewrite them in canonical layout")
+        return 1
+    0
+
+## `print!`: the text as it is, which `print` would end with one more newline.
+fn emit(text str)
+    if text.ends_with("\n")
+        print(text.slice(0, text.chars().len() - 1))
+    elif text != ""
+        io.eprint("internal: output without a final newline")
+
+struct Target
+    path str
+    named bool
+
+fn is_dir(path str) bool
+    _ := fs.list_dir(path) else err
+        return false
+    true
+
+## Every `.ail` file under `dir`, sorted, skipping `target` and hidden directories.
+fn collect(dir str) List[str]
+    all := fs.walk(dir) else err
+        io.eprint("error: can't read {err.path}: {err.kind}")
+        return []
+    pre := if dir.ends_with("/") then dir else "{dir}/"
+    mut out := List[str]()
+    for f in all
+        if not f.ends_with(".ail")
+            continue
+        rel := f.strip_prefix(pre) else f
+        mut skip := false
+        parts := rel.split("/")
+        for k in 0..parts.len() - 1
+            if parts[k].starts_with(".") or parts[k] == "target"
+                skip = true
+        if not skip
+            out.push(f)
+    out
+
+## A negative test: the file has an expectation beside it (`NAME.err`,
+## `NAME.rules` or `NAME.trap`), or it is in a package case whose directory,
+## or one of the two above it, has an `expected.*` file (a syntax error in
+## it is what the test checks).
+fn is_negative_test(file str) bool
+    stem := if file.ends_with(".ail") then file.slice(0, file.chars().len() - 4) else file
+    for ext in ["err", "rules", "trap"]
+        if fs.exists("{stem}.{ext}")
+            return true
+    mut dir := file
+    for _ in 0..3
+        cut := dir.rfind("/") else -1
+        if cut < 0
+            dir = "."
+        else
+            dir = dir.slice(0, cut)
+        for ext in ["err", "rules", "trap"]
+            if fs.exists("{dir}/expected.{ext}")
+                return true
+    false
+
+## A unified diff of `old` against `new`, labelled with `path`; empty when equal.
+pub fn diff(path str, old str, new str) str
+    a := old.lines()
+    b := new.lines()
+    if a == b and old.ends_with("\n") == new.ends_with("\n")
+        return ""
+    # Longest common subsequence, then hunks with three lines of context.
+    n := a.len()
+    m := b.len()
+    mut lcs := [[0 for c in 0..m + 1] for r in 0..n + 1]
+    mut i := n - 1
+    while i >= 0
+        mut j := m - 1
+        while j >= 0
+            lcs[i][j] = if a[i]
+                == b[j] then lcs[i + 1][j + 1] + 1 else lcs[i + 1][j].max(lcs[i][j + 1])
+            j -= 1
+        i -= 1
+    # (' ' | '-' | '+', index in a, index in b)
+    mut ops := List[Op]()
+    i = 0
+    mut j := 0
+    while i < n or j < m
+        if i < n and j < m and a[i] == b[j]
+            ops.push(Op(kind: ' ', i: i, j: j))
+            i += 1
+            j += 1
+        elif i < n and (j == m or lcs[i + 1][j] >= lcs[i][j + 1])
+            ops.push(Op(kind: '-', i: i, j: j))
+            i += 1
+        else
+            ops.push(Op(kind: '+', i: i, j: j))
+            j += 1
+    mut out := ["--- {path}", "+++ {path} (formatted)"]
+    changed := [k for k in 0..ops.len() if ops[k].kind != ' ']
+    if changed.len() == 0
+        out.push("\\ the files differ only in the final newline")
+        return "{out.join("\n")}\n"
+    mut k := 0
+    while k < changed.len()
+        start := if changed[k] > 3 then changed[k] - 3 else 0
+        mut end := changed[k] + 1
+        while k < changed.len() and changed[k] <= end + 5
+            end = (changed[k] + 4).min(ops.len())
+            k += 1
+        hunk := ops[start..end]
+        mut a_len := 0
+        mut b_len := 0
+        for o in hunk
+            if o.kind != '+'
+                a_len += 1
+            if o.kind != '-'
+                b_len += 1
+        out.push("@@ -{hunk[0].i + 1},{a_len} +{hunk[0].j + 1},{b_len} @@")
+        for o in hunk
+            text := if o.kind == '+' then b[o.j] else a[o.i]
+            out.push("{o.kind}{text}")
+    "{out.join("\n")}\n"
+
+struct Op
+    kind char
+    i int
+    j int
