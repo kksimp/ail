@@ -670,3 +670,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0842](0842-mac-first-gate.md) | Gate on the designer's Mac with `tools/gate/mac-gate.sh`; no Linux VM *(designer)* | Accepted | 2026-10-22 |
 | [0846](0846-native-proc-start-and-macos-proc.md) | Native `proc.start` with streams fed by a poll through the channels' `source` word; `std.proc` on macOS by libSystem `fork` *(delegated)* | Accepted | 2026-10-21 |
 | [0848](0848-idle-values-leave-registers-in-loops.md) | Values idle in a loop leave their registers; a checked `mul` result avoids its operands' registers *(delegated)* | Accepted | 2026-10-22 |
+| [0850](0850-native-compiler-runs-builtin-derive-generators.md) | The native compiler runs the prelude's derive generators itself, so it needs no `AIL_DERIVED` file *(delegated)* | Accepted | 2026-10-22 |
