@@ -755,7 +755,12 @@ fn http_decode(r int, url str, spec int, at str) int
     else
         out = cz_gunzip(raw, st, "")
     if cz_rd(st, 3) != 0
-        return net_fail(url, "protocol", "a body that says it is {enc} is not: {str_at(cz_rd(st, 4))}", at)
+        return net_fail(
+            url,
+            "protocol",
+            "a body that says it is {enc} is not: {str_at(cz_rd(st, 4))}",
+            at,
+        )
     if load64(str_addr(out)) > 268435456
         return net_fail(url, "protocol", "a body that says it is {enc} is not: too big", at)
     op := str_addr(out)

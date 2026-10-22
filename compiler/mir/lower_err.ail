@@ -205,13 +205,9 @@ fn Lower.is_error_expr(self, e ast.Expr) bool
     match e
         Call(callee, _, _) => is_error_callee(callee)
         Member(recv, _, _) => is_error_type_name(recv)
-<<<<<<< HEAD
         Method(recv, name, _, _) => is_error_type_name(recv)
             or is_net_error(recv, name)
             or method_returns_error(recv, name)
-=======
-        Method(recv, name, _, _) => is_error_type_name(recv) or net_error_ctor(recv, name) or method_returns_error(recv, name)
->>>>>>> pr574
         Name(n, _) => is_error_variant(n) or local_is_error(n)
         _ => false
 
