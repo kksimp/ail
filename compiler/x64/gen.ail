@@ -1034,7 +1034,8 @@ fn Gen.call_out(mut self, i mir.Inst)
     if i.name.starts_with("libsys.")
         # System DLL calls exist only on Windows (ADR 0606). Elsewhere the
         # call traps if it is ever run.
-        if self.win
+        # macOS names start with `_` and are never imported on Windows.
+        if self.win and not i.name.starts_with("libsys._")
             self.libsys_call(i)
         else
             a.ud2()

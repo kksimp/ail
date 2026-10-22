@@ -249,6 +249,16 @@ pub fn Asm.mfence(mut self)
     byte(174)
     byte(240)
 
+## `rep stosb` and `rep stosq`: store `al` or `rax` at `[rdi]`, `rcx` times.
+pub fn Asm.rep_stosb(mut self)
+    byte(243)
+    byte(170)
+
+pub fn Asm.rep_stosq(mut self)
+    byte(243)
+    byte(72)
+    byte(171)
+
 pub fn Asm.lea(mut self, dst int, m Mem)
     op_rm(false, 141, dst, m)
 

@@ -1,0 +1,60 @@
+# A loop that stores one unchanging value into consecutive elements is one
+# fill (ADR 0816): every size around the string-instruction threshold, empty
+# and negative counts, a list that already has elements, floats, bools,
+# fills by index, and what the counters hold afterwards.
+fn pushed(n int) List[int]
+    mut xs := [7, 8]
+    for _ in 0..n
+        xs.push(-3)
+    xs
+
+fn bools(n int) List[bool]
+    mut xs := [false]
+    for _ in 0..n
+        xs.push(true)
+    xs
+
+fn floats(n int) List[float]
+    mut xs := [1.5]
+    for _ in 0..n
+        xs.push(0.25)
+    xs
+
+fn by_index(n int, v int) List[int]
+    mut xs := [1 for _ in 0..n + 4]
+    for i in 2..n + 2
+        xs[i] = v
+    xs
+
+fn by_index_bools(n int) List[bool]
+    mut xs := [true for _ in 0..n + 3]
+    for i in 1..n + 1
+        xs[i] = false
+    xs
+
+fn counters(n int) int
+    mut xs := List[int]()
+    mut i := 0
+    while i < n
+        xs.push(9)
+        i += 1
+    i * 1000 + xs.len()
+
+fn total(xs List[int]) int
+    mut t := 0
+    for x in xs
+        t = (t * 3 + x) % 1000000007
+    t
+
+fn flags(xs List[bool]) int
+    mut t := 0
+    for x in xs
+        t = (t * 2 + (if x then 1 else 0)) % 1000003
+    t
+
+fn main()
+    for n in [0, 1, 2, 7, 8, 9, 15, 16, 17, 31, 63, 64, 65, 100, 1000, 4097]
+        print("{n} {total(pushed(n))} {pushed(n).len()} {flags(bools(n))} {floats(n).len()} {total(by_index(n, 5))} {flags(by_index_bools(n))} {counters(n)}")
+    print(pushed(-4))
+    print(floats(3))
+    print(bools(70).len())

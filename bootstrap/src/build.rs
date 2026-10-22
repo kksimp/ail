@@ -115,6 +115,7 @@ fn host_target() -> Option<&'static str> {
         ("linux", "x86_64") => Some("x86_64-linux"),
         ("linux", "aarch64") => Some("aarch64-linux"),
         ("macos", "aarch64") => Some("aarch64-macos"),
+        ("windows", "x86_64") => Some("x86_64-windows"),
         _ => None,
     }
 }

@@ -29,12 +29,6 @@ fn ptr_size(t Ty) int
         Sized(k) => sized_bits(k) / 8
         _ => 8
 
-fn sized_bits(k str) int
-    match k
-        "i8" | "u8" => 8
-        "i16" | "u16" => 16
-        _ => 32
-
 fn ptr_target(t Ty) Ty
     match t
         Ptr(e) => e

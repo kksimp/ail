@@ -148,3 +148,32 @@ fn libsys_write_file_runs_under_wine_when_installed() {
     assert_eq!(String::from_utf8_lossy(&run.stdout), line, "the printed text");
     assert_eq!(run.status.code(), Some(line.len() as i32), "written, which must equal the length");
 }
+
+// ADR 0608: `ail build --target x86_64-windows` builds the hello example, and
+// under Wine it prints the same text as the interpreter and exits 0.
+#[test]
+fn hello_builds_for_windows_and_runs_under_wine_when_installed() {
+    if Command::new("wine").arg("--version").output().map(|o| !o.status.success()).unwrap_or(true) {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("ail-pe-hello-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("hello.exe");
+    let build = Command::new(env!("CARGO_BIN_EXE_ail"))
+        .current_dir(root())
+        .args(["build", "examples/hello.ail", "--target", "x86_64-windows", "-o"])
+        .arg(&exe)
+        .output()
+        .unwrap();
+    assert!(build.status.success(), "{}", String::from_utf8_lossy(&build.stderr));
+    let run = Command::new("wine")
+        .arg(&exe)
+        .env("WINEDEBUG", "-all")
+        .env("WINEPREFIX", dir.join("prefix"))
+        .output()
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let want = std::fs::read_to_string(root().join("examples/hello.out")).unwrap();
+    assert_eq!(String::from_utf8_lossy(&run.stdout), want, "the printed text");
+    assert_eq!(run.status.code(), Some(0), "the exit code");
+}

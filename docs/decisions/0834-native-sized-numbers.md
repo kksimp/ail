@@ -48,6 +48,34 @@ interpreter behaviour is the spec (`type.num.13-15`).
 
 ## Consequences
 
-Programs that use sized numbers start to build natively. Arithmetic on them
-is still `native.subset.1` until PR 2. Tests `sized_basics` and `sized_trap`
+Programs that use sized numbers start to build natively. Part 2 adds checked
+`+ - * / %`, negation, `abs`, `wrapping_*` and `saturating_*` (not
+`saturating_mul` on `u32`, which needs a 128-bit product), with the
+interpreter's trap texts; `checked_*` waits for `Opt` of a sized integer
+(part 4). Tests `sized_basics` and `sized_trap`
 in `bootstrap/tests/native/run/` check the executable against `ail run`.
+
+Part 4 lets the sized integers (not `f32` yet) be list elements, `Opt`
+payloads, tuple elements, map keys and values, set elements and `match`
+subjects. They are stored as 8-byte integer slots like an `int`, so sorting,
+`contains`, `min`, `max`, equality and printing use the `int` paths of the
+runtime, and the runtime needs no change. `sum` on a list of a sized integer
+and `op=` on a map entry of one stay `native.subset.1`, because both need the
+type's overflow check. `f32` in these places follows once scalar `f32` has
+merged.
+
+Part 3 adds scalar `f32` as `Ty.F32` in a float register (`is_float` is true
+for it), in `lower_f32.ail`. `+ - * /` are the `float` operation followed by
+the `f32_round` primitive, `to_f32` rounds once (an `int` through
+`rt.int_to_f32`, which folds the bits below a `float`'s 53 into a sticky bit so
+no value rounds twice), and the text is the shortest digits that read back as an
+`f32` (`digits_of_f32` in `rt/native/fmt.ail`), in the interpreter's shape.
+`cmp` and the transcendental methods on `f32` stay `native.subset.1`.
+
+Part 4a puts `f32` in lists, `Opt`, tuples, struct fields and map values. The
+element is the rounded `float` in its 8-byte slot, so storage, equality,
+`sorted`, `min`, `max` and `contains` reuse the `float` paths (`F32` joins
+`Float` in their arms). Text goes through `rt.fmt_f32` (leaf kind 5 of
+`rt.out_list_deep` for lists). `List[f32].sum()` adds in `f32` one element
+after another (`rt.list_sum_f32`), as the interpreter does. Sized lists, `Opt`
+and map keys (4b) follow.

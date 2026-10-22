@@ -60,6 +60,8 @@ fn register_kind(t Ty) str
     # Every `T?` is one pointer-or-0 register; a `none` still typed `??` passes to any of them.
     if t.opt_inner() != none
         return "opt"
+    if t == Ty.F32
+        return "float"
     t.name()
 
 fn check_use(
