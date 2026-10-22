@@ -10,7 +10,7 @@ pub enum html.Kind  ## A node's kind.
 pub struct html.Attr  ## One attribute; names are lowercase.
     pub name str
     pub value str
-pub struct html.Node  ## One node of the tree: `tag` is the lowercase element name, `text` the
+pub struct html.TreeNode  ## One node of the tree: `tag` is the lowercase element name, `text` the
     pub kind html.Kind
     pub tag str
     pub attrs List[html.Attr]
@@ -24,7 +24,7 @@ pub enum html.Token  ## A token, as the tokenizer emits it (13.2.5).
     Note(text str)
     Doctype(name str)
 pub struct html.Doc  ## A parsed document.
-    pub nodes List[html.Node]
+    pub nodes List[html.TreeNode]
     pub doctype str
     pub changed List[int]  ## Nodes changed since parsing (by scripts or form input), in order,
     pub fn html.Doc.attr(self, id int, name str) str?  ## The value of attribute `name` of node `id`, or none.
@@ -57,4 +57,4 @@ pub fn html.parse(src str) html.Doc  ## Parses an HTML document.
 pub fn html.collapse(s str) str  ## `s` with each run of whitespace made one space, trimmed.
 ```
 
-trimmed to fit 2000 tokens (~1282); dropped: private items
+trimmed to fit 2000 tokens (~1284); dropped: private items

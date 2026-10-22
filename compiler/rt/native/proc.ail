@@ -30,7 +30,15 @@ fn proc_cstr(s str) int
 
 ## Whether the C string `p` is an executable file.
 fn proc_exec_ok(p int) bool
-    r := if target() == 2 then syscall(33, p, 1, 0, 0, 0, 0) else syscall(os_pick(269, 48, 0), -100, p, 1, 0, 0, 0)
+    r := if target() == 2 then syscall(33, p, 1, 0, 0, 0, 0) else syscall(
+        os_pick(269, 48, 0),
+        -100,
+        p,
+        1,
+        0,
+        0,
+        0,
+    )
     r == 0 and not os_is_dir_at(p)
 
 ## `DIR/NAME` as a C string: `n` bytes of `dir` at `d`, a `/` unless `dir`
@@ -237,7 +245,15 @@ fn proc_launch(cmd str, args List[int], at str, st int) int
     sta_r := load64(st + 24).bit_and(4294967295)
     sta_w := load64(st + 24).shr(32)
     flush()
-    pid := if target() == 2 then import_call("_fork", 0, 0, 0, 0) else syscall(os_pick(56, 220, 0), 17, 0, 0, 0, 0, 0)
+    pid := if target() == 2 then import_call("_fork", 0, 0, 0, 0) else syscall(
+        os_pick(56, 220, 0),
+        17,
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
     if pid == 0
         # PR_SET_PDEATHSIG, SIGKILL: no child outlives its parent (std.proc.7).
         if target() != 2

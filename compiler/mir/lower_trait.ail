@@ -29,7 +29,14 @@ pub struct Traits
     stmt_pos ast.Pos?
 
 pub fn new_traits() Traits
-    Traits(impls: {}, dispatch: {}, mut_self: Set[str](), recv_path: [], recv_mut: false, stmt_pos: none)
+    Traits(
+        impls: {},
+        dispatch: {},
+        mut_self: Set[str](),
+        recv_path: [],
+        recv_mut: false,
+        stmt_pos: none,
+    )
 
 ## Record the traits of a file and the structs implementing them, in order;
 ## a struct's tag is its index.

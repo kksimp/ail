@@ -15,7 +15,13 @@ fn is_key_ty(t Ty) bool
     t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char or t.is_sized()
 
 fn is_value_ty(t Ty) bool
-    is_number(t) or t == Ty.Char or t == Ty.Str or needs_copy(t) or t.is_coll() or is_enum(t) or t.is_ref()
+    is_number(t)
+        or t == Ty.Char
+        or t == Ty.Str
+        or needs_copy(t)
+        or t.is_coll()
+        or is_enum(t)
+        or t.is_ref()
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
 fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?

@@ -1699,7 +1699,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 if a.label != none
                     return unsupported(pos, "labelled arguments")
                 v := lower_value(a.value, sig.params[i])?
-                vs.push(shield_arg(args, i, Val(id: convert(v, sig.params[i], expr_pos(a.value)), ty: v.ty)))
+                vs.push(shield_arg(args, i, Val(
+                    id: convert(v, sig.params[i], expr_pos(a.value)),
+                    ty: v.ty,
+                )))
             check_requires(key, vs, npos)
             Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
         Member =>
