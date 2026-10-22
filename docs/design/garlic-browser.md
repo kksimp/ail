@@ -199,11 +199,11 @@ a display list.
 - **Events**: click, scroll (points, accumulated into lines), keys with the
   `std.ui` names, field edit and submit, and resize with the cell size.
 - **Entry**: `--app` starts it (cell mode, verified on macOS 2026-10-21:
-  address bar, links, back, reload, wheel and key scrolling). `--app
-  --pixels` uses the pixel layout below. The `std.ui` window stays the
+  address bar, links, back, reload, wheel and key scrolling). `--app`
+  uses the pixel layout below (default since 2026-10-22); `--cells` keeps the grid. The `std.ui` window stays the
   default.
 
-### Pixel layout (`gfx`, first cut, behind `--pixels`)
+### Pixel layout (`gfx`, the `--app` default)
 
 Kaleb chose a full pixel layout with sans fonts (2026-10-21). The `gfx`
 module lays the document out in CSS pixels, with no cells:

@@ -34,7 +34,8 @@ NET_PEER := 48
 NET_KIND := 56
 NET_ADDR := 64
 NET_CAP := 72
-NET_BYTES := 80
+NET_TLS := 80
+NET_BYTES := 88
 
 # `NET_FLAGS` bits.
 NET_EOF := 1
@@ -155,6 +156,7 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_KIND, kind)
     store64(o + NET_ADDR, str_addr(addr))
     store64(o + NET_CAP, 0)
+    store64(o + NET_TLS, 0)
     mut t := load64(global(NET_TAB))
     if t == 0
         xs := list_new(8)
@@ -296,8 +298,8 @@ fn net_hosts(host str) int
     -1
 
 ## The IPv4 address of `host`, or -1 (a name that isn't `localhost` or in
-## `/etc/hosts` is not found on Linux, which has no DNS client yet; macOS
-## asks the system resolver).
+## `/etc/hosts` goes to the DNS servers of `/etc/resolv.conf` on Linux
+## (net_dns.ail) and to the system resolver on macOS).
 fn net_resolve(host str) int
     ip := net_ipv4(host)
     if ip >= 0
@@ -307,6 +309,8 @@ fn net_resolve(host str) int
     found := net_hosts(host)
     if found < 0 and target() == 2
         return net_getaddrinfo(host)
+    if found < 0
+        return net_dns(host)
     found
 
 ## The IPv4 address of `host` from libSystem's `getaddrinfo` (macOS: the
@@ -571,7 +575,9 @@ fn net_fill(o int) int
     fd := load64(o + NET_FD)
     while true
         len := load64(o + NET_LEN)
-        r := os_read(fd, load64(o + NET_BUF) + len, load64(o + NET_CAP) - len)
+        dst := load64(o + NET_BUF) + len
+        room := load64(o + NET_CAP) - len
+        r := if load64(o + NET_TLS) != 0 then tc_read(o, dst, room) else os_read(fd, dst, room)
         if r > 0
             store64(o + NET_LEN, len + r)
             return 0
@@ -592,6 +598,8 @@ fn net_fill(o int) int
 ## A `net.NetError` for a failed read or write on `o`.
 fn net_io_fail(o int, e int, at str) int
     peer := str_at(load64(o + NET_PEER))
+    if e <= -1000000
+        return net_fail(peer, "tls", str_at(load64(load64(o + NET_TLS) + TS_MSG)), at)
     if e == -110
         return net_fail(
             peer,
@@ -757,6 +765,11 @@ fn net_write(h int, text str, at str)
     t := str_addr(text)
     n := load64(t)
     fd := load64(o + NET_FD)
+    if load64(o + NET_TLS) != 0
+        e := tc_write(o, t + 16, n)
+        if e < 0
+            net_io_fail(o, e, at)
+        return
     mut done := 0
     while done < n
         r := net_sys_send(fd, t + 16 + done, n - done)
