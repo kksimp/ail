@@ -650,7 +650,16 @@ fn http_exchange(method str, url str, body str, ctype str, spec int, next int, a
         return http_exchange_on(method, url, body, ctype, spec, next, true, at)
     r
 
-fn http_exchange_on(method str, url str, body str, ctype str, spec int, next int, fresh bool, at str) int
+fn http_exchange_on(
+    method str,
+    url str,
+    body str,
+    ctype str,
+    spec int,
+    next int,
+    fresh bool,
+    at str,
+) int
     u := http_parse(url, at)
     if u == 0
         return 0
@@ -849,14 +858,15 @@ fn http_exchange_on(method str, url str, body str, ctype str, spec int, next int
     # connection open: HTTP/1.1, no `Connection: close`, a body framed by
     # length or chunks, and nothing buffered beyond it (std.net.19).
     ka := http_get_header(headers, "connection")
-    framed := nobody
-        or net_has(http_lower(str_addr(te) + 16, load64(str_addr(te))), "chunked")
-        or load64(str_addr(cl)) > 0
+    framed := nobody or net_has(
+        http_lower(str_addr(te) + 16, load64(str_addr(te))),
+        "chunked",
+    ) or load64(str_addr(cl)) > 0
     keep := http_keep_ms(http_get_header(headers, "keep-alive"))
-    if http11 and not closes and framed and keep > 0
-        and not net_has(http_lower(str_addr(ka) + 16, load64(str_addr(ka))), "close")
-        and load64(o + NET_POS) == load64(o + NET_LEN)
-        and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+    if http11 and not closes and framed and keep > 0 and not net_has(
+        http_lower(str_addr(ka) + 16, load64(str_addr(ka))),
+        "close",
+    ) and load64(o + NET_POS) == load64(o + NET_LEN) and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
         pool_put(key, h, keep)
     else
         net_close(h)
