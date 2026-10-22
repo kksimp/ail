@@ -1,2 +1,1 @@
 bootstrap/tests/native/structs_out.ail:5:15: error[native.subset.1]: unique struct `Checked` isn't in the native subset yet
-bootstrap/tests/native/structs_out.ail:13:10: error[native.subset.1]: not in the native subset yet: printing a `Point`

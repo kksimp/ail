@@ -1,0 +1,6 @@
+# A sized integer add_overflow traps.
+fn f(a u8, b u8) u8
+    a + b
+
+fn main()
+    print(f(200.to_u8(), 100.to_u8()))

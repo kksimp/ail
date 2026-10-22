@@ -115,8 +115,9 @@ pub fn f64_bits(x float) int
 ## A path that returns before it (`if n < 0: return 1` in a recursive
 ## function) then holds nothing in callee-saved registers, so the
 ## allocator can leave them to the code after it and save them there.
-pub fn split_for_calls(f mir.Func) mir.Func
-    order := block_order(f)
+pub fn split_for_calls(f0 mir.Func) mir.Func
+    mut f := f0
+    mut order := block_order(f)
     mut calling := List[int]()
     for b in order
         for i in f.blocks[b].insts
@@ -125,10 +126,20 @@ pub fn split_for_calls(f mir.Func) mir.Func
                 break
     if calling.len() == 0 or f.blocks.len() < 3
         return f
-    dom := mir.dominators(f)
-    x := wrap_block(f, order, dom, calling)
+    mut dom := mir.dominators(f)
+    mut x := wrap_block(f, order, dom, calling)
     if x <= 0
-        return f
+        # A block that only returns, shared by a path that calls and one that
+        # doesn't, keeps the region open: give each path its own.
+        g := duplicate_returns(f)
+        if g.blocks.len() == f.blocks.len()
+            return f
+        order = block_order(g)
+        dom = mir.dominators(g)
+        x = wrap_block(g, order, dom, calling)
+        if x <= 0
+            return f
+        f = g
     n := f.blocks.len()
     mut region := [false for _ in 0..n]
     for b in order
@@ -188,6 +199,35 @@ pub fn split_for_calls(f mir.Func) mir.Func
         tm.args = [[renamed(copies, a) for a in edge] for edge in tm.args]
         blk.term = tm
         g.blocks[b] = blk
+    g
+
+## Each edge into a block that only returns (a value it got as an argument,
+## or one defined before) goes to a return of its own, when the block has
+## two to four edges into it; the old block is left with no way in.
+fn duplicate_returns(f mir.Func) mir.Func
+    mut g := f
+    n := f.blocks.len()
+    mut incoming := [0 for _ in 0..n]
+    for blk in f.blocks
+        for t in blk.term.targets
+            incoming[t] += 1
+    for r in 1..n
+        blk := f.blocks[r]
+        if blk.insts.len() > 0 or blk.term.kind != "return" or incoming[r] < 2 or incoming[r] > 4
+            continue
+        mut slot := -1
+        for k in 0..blk.params.len()
+            if blk.params[k] == blk.term.value
+                slot = k
+        for p in 0..n
+            for e in 0..g.blocks[p].term.targets.len()
+                if g.blocks[p].term.targets[e] != r
+                    continue
+                v := if slot >= 0 then g.blocks[p].term.args[e][slot] else blk.term.value
+                g.blocks.push(mir.Block(params: [], insts: [], term: mir.return_of(v)))
+                g.blocks[p].term.targets[e] = g.blocks.len() - 1
+                g.blocks[p].term.args[e] = []
+        g.blocks[r] = mir.Block(params: [], insts: [], term: mir.unreachable_term())
     g
 
 fn renamed(m Map[int, int], v int) int
