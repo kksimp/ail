@@ -1,0 +1,58 @@
+# Sized integer arithmetic (expr.arith.1, type.num.14): checked, wrapping, saturating.
+fn add(a u8, b u8) u8
+    a + b
+
+fn sub(a i16, b i16) i16
+    a - b
+
+fn mul(a u32, b u32) u32
+    a * b
+
+fn div(a i8, b i8) i8
+    a / b
+
+fn rem(a i32, b i32) i32
+    a % b
+
+fn neg(a i8) i8
+    -a
+
+fn wrap(a u8, b u8) u8
+    a.wrapping_add(b)
+
+fn wrap_sub(a u8, b u8) u8
+    a.wrapping_sub(b)
+
+fn wrap_mul(a i16, b i16) i16
+    a.wrapping_mul(b)
+
+fn sat(a u8, b u8) u8
+    a.saturating_add(b)
+
+fn sat_sub(a i8, b i8) i8
+    a.saturating_sub(b)
+
+fn sat_mul(a i16, b i16) i16
+    a.saturating_mul(b)
+
+fn absolute(a i8) i8
+    a.abs()
+
+fn main()
+    print(add(100.to_u8(), 155.to_u8()))
+    print(sub((0 - 30000).to_i16(), 2767.to_i16()))
+    print(mul(65535.to_u32(), 65537.to_u32()))
+    print(div((0 - 100).to_i8(), 7.to_i8()))
+    print(rem((0 - 17).to_i32(), 5.to_i32()))
+    print(rem((0 - 128).to_i32(), (0 - 1).to_i32()))
+    print(neg(127.to_i8()))
+    print(wrap(250.to_u8(), 10.to_u8()))
+    print(wrap_sub(3.to_u8(), 5.to_u8()))
+    print(wrap_mul(300.to_i16(), 300.to_i16()))
+    print(sat(250.to_u8(), 10.to_u8()))
+    print(sat_sub((0 - 100).to_i8(), 100.to_i8()))
+    print(sat_mul(300.to_i16(), 300.to_i16()))
+    print(absolute((0 - 127).to_i8()))
+    print((9223372036854775807).wrapping_add(1))
+    print((0 - 5).wrapping_neg())
+    print(add(1.to_u8(), 2.to_u8()) < add(2.to_u8(), 2.to_u8()))

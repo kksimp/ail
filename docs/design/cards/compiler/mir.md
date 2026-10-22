@@ -10,6 +10,7 @@ pub struct mir.Versioned
     pub floors Map[str, int]
 pub fn mir.bce(f mir.Func, reserve bool, grow_only bool) mir.Func
 pub fn mir.lists_only_grow(m mir.Module) bool
+pub fn mir.fill_loops(f mir.Func, on bool) mir.Func
 pub fn mir.fold(f mir.Func) mir.Func
 pub fn mir.rpo(f mir.Func) List[int]
 pub fn mir.forward_loads(f mir.Func) mir.Func
@@ -79,6 +80,10 @@ pub struct mir.TaskState
 pub fn mir.new_task_state() mir.TaskState
 pub fn mir.uses_tasks(text str) bool
 pub fn mir.is_wait_call(e ast.Expr) bool
+pub struct mir.Traits
+    impls Map[str, List[str]]
+    dispatch Map[str, List[str]]
+pub fn mir.new_traits() mir.Traits
 pub enum mir.Ty
     Int
     Float
@@ -96,9 +101,11 @@ pub enum mir.Ty
     Tensor(elem mir.Ty)
     F32
     Tuple(elems List[mir.Ty])
+    Any(trait_name str)
     Unknown
     Unit
     Atomic(elem mir.Ty)
+    Chan(elem mir.Ty)
     Fn(params List[mir.Ty], ret mir.Ty)
     Sized(kind str)
     pub fn mir.Ty.opt_inner(self) mir.Ty?
@@ -186,4 +193,4 @@ pub fn mir.verify(f mir.Func) List[str]
 pub fn mir.dominators(f mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1884); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1962); dropped: private items, doc comments

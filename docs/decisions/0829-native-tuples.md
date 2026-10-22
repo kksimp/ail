@@ -44,6 +44,13 @@ tuple needs.
   `ail run`). The runtime orders indices with `rt.sort_perm_by`, a stable
   merge sort that calls the `lt.T` function value; `rt.list_find_by` and
   `rt.list_extreme_by` do the same for `==` and `min`/`max`.
+- **List builders (`lower_listops.ail`, type.coll.17-19).** `chunks(n)`,
+  `windows(n)`, `flatten()` and `counts()` on lists of `int`, `float`, `bool`,
+  `str` and `char` (`counts` only `int`, `str`, `char`; `flatten` of lists of
+  those) are runtime calls (`rt.list_runs`, `rt.list_flatten`,
+  `rt.map_counts`); `n < 1` traps with `type.coll.17`. Elements that are
+  lists, structs or tuples are outside the subset (the pieces would share
+  them).
 - **Out of the subset, each a `native.subset.1` report and never a wrong
   program:** tuples as map keys and set elements (native tables key `int`,
   `bool`, `str` and `char`: ADR 0568), `counts` on a list of tuples, the text

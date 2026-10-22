@@ -23,9 +23,13 @@ backend fixes at build time.
 3. **Runtime arms (`compiler/rt/native/core.ail`).** `sys_write` on target 3
    is `win_write`: `GetStdHandle` (-11 for standard output, -12 for standard
    error), then `WriteFile` in a loop. The byte count comes back through
-   global slot `WIN_WRITTEN` (9, outside the ranges native-abi.md §6 reserves).
-   `sys_exit` is `ExitProcess`. `sys_mmap` is `VirtualAlloc` with
-   MEM_COMMIT | MEM_RESERVE and PAGE_READWRITE.
+   global slot `WIN_WRITTEN` (13, a free slot of the core range, native-abi.md §6).
+   `sys_exit` is `ExitProcess`. `sys_mmap` and the heap's `heap_reserve`
+   are `VirtualAlloc` with MEM_COMMIT | MEM_RESERVE and PAGE_READWRITE; a
+   refusal (0) becomes -1, which the heap's size loop halves on. Windows has no
+   overcommit, so the heap commits what it reserves.
+   `os_env_get` returns "unset" on target 3: the entry passes no `argv` and
+   `envp`, and the run limits read the environment at start.
 4. **macOS-only names stay out of the Windows table.** A libSystem call (a name
    starting with `_`, such as the ulock calls under `target() == 2`) becomes a
    trap on Windows, because kernel32 does not export it.
@@ -47,5 +51,7 @@ backend fixes at build time.
 
 ## Consequences
 
-- Windows programs run only the runtime paths above so far. File-system,
-  environment and time calls, and threads, have no Windows arms yet.
+- Windows programs run only the runtime paths above so far. File-system and
+  time calls, and threads, have no Windows arms yet, and `env.get` always
+  reports a variable as unset, so the run limits fall back to their baked
+  defaults.
