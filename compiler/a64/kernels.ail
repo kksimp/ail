@@ -10,7 +10,7 @@ use codegen
 
 ## The kernels this file assembles.
 pub fn is_kernel(name str) bool
-    name == "rt.vec_axpy" or name == "rt.vec_zip" or name == "rt.vec_scal"
+    name == "rt.vec_axpy" or name == "rt.vec_zip" or name == "rt.vec_scal" or name == "rt.vec_mm"
 
 ## Add the kernel `name` to `img`.
 pub fn gen_kernel(mut img codegen.Image, name str)
@@ -18,6 +18,7 @@ pub fn gen_kernel(mut img codegen.Image, name str)
     match name
         "rt.vec_axpy" => kernel_axpy(mut a)
         "rt.vec_zip" => kernel_zip(mut a)
+        "rt.vec_mm" => kernel_mm(mut a)
         _ => kernel_scal(mut a)
     a.resolve_labels()
     base := img.code.len()
@@ -167,3 +168,113 @@ fn kernel_scal(mut a Asm)
             scal_loop(mut a, zip_op(k), l == 1)
             a.bind(next)
     a.brk()
+
+## `rt.vec_mm(c, a, b, n, k, r)`: one row of a matrix product. `c[j]` for
+## `j < n` is the sum over `p < k`, in order from 0.0, of `a[p] * b[p * n + j]`,
+## each product and sum rounded to `f32` when `r` is not 0 (no fused
+## multiply-add), which is what `k` calls of `rt.vec_axpy` on a zeroed row give.
+## Eight columns at a time keep their sums in registers across the `p` loop;
+## the rest go one by one. x0 = c, x1 = a, x2 = b, x3 = n, x4 = k, x5 = r.
+fn kernel_mm(mut a Asm)
+    a.shift_ri("lsl", 12, 3, 3)
+    a.mov_rr(7, 0)
+    a.mov_rr(6, 3)
+    a.mov_rr(10, 2)
+    wide := a.label()
+    a.cbz(5, wide)
+    mm_body(mut a, true)
+    a.bind(wide)
+    mm_body(mut a, false)
+
+## The column loops of `kernel_mm` for `f32` (`single`, sums as four singles
+## per register) or `float` (two doubles per register).
+fn mm_body(mut a Asm, single bool)
+    blocks := a.label()
+    tail := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(blocks)
+    a.cmp_ri(6, 8)
+    a.b_cond(LT, tail)
+    a.mov_rr(8, 1)
+    a.mov_rr(9, 4)
+    a.mov_rr(11, 10)
+    ploop := a.label()
+    pdone := a.label()
+    for k in 0..4
+        a.vzero(k)
+    a.bind(ploop)
+    a.cbz(9, pdone)
+    a.ldr_d(16, 8, 0)
+    a.alu_ri("add", 8, 8, 8)
+    for k in 0..4
+        a.ldr_q(4 + k, 11, 16 * k)
+    if single
+        a.fop1("fcvt_sd", 16, 16)
+        a.vdup4(16, 16)
+        a.vcvtn(4, 4)
+        a.vcvtn2(4, 5)
+        a.vcvtn(6, 6)
+        a.vcvtn2(6, 7)
+        a.vop4("fmul", 4, 4, 16)
+        a.vop4("fmul", 6, 6, 16)
+        a.vop4("fadd", 0, 0, 4)
+        a.vop4("fadd", 1, 1, 6)
+    else
+        a.vdup(16, 16)
+        for k in 0..4
+            a.vop("fmul", 4 + k, 4 + k, 16)
+        for k in 0..4
+            a.vop("fadd", k, k, 4 + k)
+    a.alu_rr("add", 11, 11, 12)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(ploop)
+    a.bind(pdone)
+    if single
+        a.vcvtl(4, 0)
+        a.vcvtl2(5, 0)
+        a.vcvtl(6, 1)
+        a.vcvtl2(7, 1)
+        for k in 0..4
+            a.str_q(4 + k, 7, 16 * k)
+    else
+        for k in 0..4
+            a.str_q(k, 7, 16 * k)
+    a.alu_ri("add", 7, 7, 64)
+    a.alu_ri("add", 10, 10, 64)
+    a.alu_ri("sub", 6, 6, 8)
+    a.b(blocks)
+    a.bind(tail)
+    a.cbz(6, done)
+    a.mov_rr(8, 1)
+    a.mov_rr(9, 4)
+    a.mov_rr(11, 10)
+    a.vzero(0)
+    sloop := a.label()
+    sdone := a.label()
+    a.bind(sloop)
+    a.cbz(9, sdone)
+    a.ldr_d(1, 8, 0)
+    a.alu_ri("add", 8, 8, 8)
+    a.ldr_d(2, 11, 0)
+    if single
+        a.fop1("fcvt_sd", 1, 1)
+        a.fop1("fcvt_sd", 2, 2)
+        a.fop_s("fmul", 1, 1, 2)
+        a.fop_s("fadd", 0, 0, 1)
+    else
+        a.fop("fmul", 1, 1, 2)
+        a.fop("fadd", 0, 0, 1)
+    a.alu_rr("add", 11, 11, 12)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(sloop)
+    a.bind(sdone)
+    if single
+        a.fop1("fcvt_ds", 0, 0)
+    a.str_d(0, 7, 0)
+    a.alu_ri("add", 7, 7, 8)
+    a.alu_ri("add", 10, 10, 8)
+    a.alu_ri("sub", 6, 6, 1)
+    a.b(tail)
+    a.bind(done)
+    a.ret()

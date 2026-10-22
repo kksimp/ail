@@ -97,6 +97,18 @@ fn Lower.settle_set_add(mut self, s Val, args List[ast.Arg], npos ast.Pos) Val?
     settle_pending(s.id, t)
     Val(id: call("rt.map_add", [s.id, convert(x, x.ty, npos)], Ty.Bool), ty: Ty.Bool)
 
+## `m.push(k, x)` on a pending table: it is a `Map` of `k`'s type to a
+## list of `x`'s type.
+fn Lower.settle_map_push(mut self, m Val, args List[ast.Arg], npos ast.Pos) Val?
+    k := lower_value(args[0].value, none)?
+    x := lower_value(args[1].value, none)?
+    vt := Ty.List(x.ty)
+    if not is_key_ty(k.ty) or not is_value_ty(vt)
+        return unsupported(npos, "a map of `{k.ty.name()}` to `{vt.name()}`")
+    t := Ty.Map(key: k.ty, val: vt)
+    settle_pending(m.id, t)
+    map_push_vals(Val(id: m.id, ty: t), vt, convert(k, k.ty, npos), x, args[1].value, npos)
+
 ## `x = e` on a pending `[]` or `{}`: `e`'s type, when it gives one.
 fn Lower.settle_coll(mut self, target ast.Expr, ty Ty, r Val) Ty
     if not is_pending_coll(ty) or is_pending_coll(r.ty) or not same_shape(ty, r.ty)

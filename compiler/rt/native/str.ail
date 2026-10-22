@@ -466,6 +466,13 @@ fn str_lines(s str) List[int]
     mut last := 0
     mut i := 0
     while i < n
+        # Eight bytes at a time: a word xored with `\n` repeated has a zero byte
+        # where a newline is (the test of `bytes_find`).
+        if i + 8 <= n
+            x := load64(p + 16 + i).bit_xor(723401728380766730)
+            if (x - 72340172838076673).bit_and(x.bit_xor(-1)).bit_and(-9187201950435737472) == 0
+                i += 8
+                continue
         if load8(p + 16 + i) == 10
             mut end := i
             if end > last and load8(p + 16 + end - 1) == 13

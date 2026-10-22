@@ -61,6 +61,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Deadlock** | Every unfinished task is blocked, so none can continue. The program traps with `conc.task.7` instead of hanging (ADR 0186). |
 | **`defer`** | `defer S` runs statement `S` when the enclosing block exits by any path, including a trap; with the block's cleanups, last first (ADR 0066, ADR 0191). |
 | **Date, DateTime** | `std.time.date` types: a calendar day, and an instant with its zone and calendar fields. A duration is an `int` of milliseconds; a zone is a `str` (`"UTC"`, `"+05:30"` or an IANA name) (`std.date.1–15`, ADRs 0447–0451). |
+| **Dispatcher** | A function the native backend generates for a method called on `any Trait` values, `any.T.m`, which branches on the box's tag to the implementing type's method (ADR 0616). |
 | **Definitional rule** | A spec rule marked `[definitional]`: it describes the language rather than a behaviour the code must implement, so the rules audit does not require a citation ([ADR 0673](decisions/0673-definitional-rule-marker.md)). |
 | **DEFLATE** | The compressed format of RFC 1951 inside gzip and zip, written and read in-house by `std.compress` (ADR 0445). |
 | **Delegated decision** | A routine design decision made by the AI using the designer's priority order (ADR 0076). |

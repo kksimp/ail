@@ -1,0 +1,42 @@
+## List methods that build new lists or tables from a list (type.coll.17-19,
+## ADR 0629): `chunks(n)`, `windows(n)`, `flatten()` and `counts()`. Each is a
+## runtime call (`compiler/rt/native/list.ail`, `map.ail`).
+##
+## Reported as outside the subset: elements that are lists, structs or tuples
+## (the pieces would share them), `flatten` of such inner lists, and `counts`
+## of anything but `int`, `str` and `char`.
+use ast
+
+## The methods this file lowers.
+fn is_list_build(name str) bool
+    name == "chunks" or name == "windows" or name == "flatten" or name == "counts"
+
+## `xs.NAME(args)` for the methods above. `e` is the element type of `r`.
+fn Lower.lower_list_build(mut self, r Val, e Ty, name str, npos ast.Pos, vs List[Val]) Val?
+    if name == "chunks" or name == "windows"
+        if vs.len() != 1
+            return unsupported(npos, "`.{name}()` with these arguments")
+        if needs_copy(e)
+            return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+        n := convert(vs[0], Ty.Int, npos)
+        texts := trap_texts("type.coll.17", npos)
+        want := Ty.List(r.ty)
+        win := konst(if name == "windows" then 1 else 0, Ty.Int)
+        size := konst(elem_bytes(e), Ty.Int)
+        return Val(
+            id: call("rt.list_runs", [r.id, n, win, size, texts[0], texts[1]], want),
+            ty: want,
+        )
+    if vs.len() != 0
+        return unsupported(npos, "`.{name}()` with these arguments")
+    if name == "flatten"
+        inner := e.elem() else return unsupported(npos, "`.flatten()` on `{r.ty.name()}`")
+        if needs_copy(inner)
+            return unsupported(npos, "`.flatten()` on `{r.ty.name()}`")
+        size := konst(elem_bytes(inner), Ty.Int)
+        return Val(id: call("rt.list_flatten", [r.id, size], e), ty: e)
+    if e != Ty.Int and e != Ty.Str and e != Ty.Char
+        return unsupported(npos, "`.counts()` on `{r.ty.name()}`")
+    want := Ty.Map(key: e, val: Ty.Int)
+    kind := konst(key_kind(e), Ty.Int)
+    Val(id: call("rt.map_counts", [kind, r.id], want), ty: want)
