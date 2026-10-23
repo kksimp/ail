@@ -1,0 +1,5 @@
+Mark(kind: Kind.At(pos: Pos(line: 1, col: 2)), pos: Pos(line: 3, col: 4))
+Mark(kind: Kind.Plain, pos: Pos(line: 0, col: 0))
+Oops(pos: Pos(line: 5, col: 6), msg: "m")
+0
+1

@@ -1,1 +1,0 @@
-bootstrap/tests/native/recursive_text.ail:8:10: error[native.subset.1]: not in the native subset yet: printing a `Tree`
