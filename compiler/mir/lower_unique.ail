@@ -1,0 +1,238 @@
+## Unique types (own.uniq.1-9, own.move.1-6): a unique value is never copied;
+## it moves, and its cleanup runs exactly once, where its last owner leaves
+## scope. A unique struct is an ordinary struct object. Each owned local has a
+## hidden `live` flag: set when it is bound, cleared when the value moves out,
+## so the release at the end of the block runs only when the value is still
+## held. The releases ride the `defer` machinery (lower_defer.ail): a marker
+## statement in the block's list runs last-bound first at the block's end, at a
+## `return` or a failing `?`, and at `break` or `continue`. The cleanup itself
+## is a generated `drop.T` (lower_drop.ail).
+use ast
+
+struct UniqState
+    ## The keys of the unique structs.
+    types Set[str]
+    ## The `Drop.drop` method of each unique struct that has one.
+    drops Map[str, str]
+    ## The `live` flag variable of each owned local, as `FUNCTION|KEY` (keys
+    ## repeat across functions).
+    flags Map[str, str]
+    ## The `move` parameters of the function being started: the body's first
+    ## block releases them last.
+    pending List[str]
+    ## The generated `drop.T` functions asked for, by name.
+    wanted Map[str, Ty]
+    ## The `move self` methods of the unique structs.
+    moves_self Set[str]
+    ## How many scopes were open when each open block began.
+    depths List[int]
+
+fn new_uniq() UniqState
+    UniqState(
+        types: Set[str](),
+        drops: {},
+        flags: {},
+        pending: [],
+        wanted: {},
+        moves_self: Set[str](),
+        depths: [],
+    )
+
+## A unique struct is declared like any struct, plus its `Drop` impl.
+fn Lower.declare_unique(mut self, s ast.StructDecl, prog ast.Program, key str)
+    structs[key] = []
+    uniq.types.add(key)
+    for im in prog.impls
+        if im.trait_name == "Drop" and im.target.name == s.name
+            uniq.drops[key] = "{key}.drop"
+    for f in prog.fns
+        if o := f.owner
+            if o.name == s.name and (f.receiver?.moved else false)
+                uniq.moves_self.add("{key}.{f.name}")
+    if s.invariants.len() > 0
+        invariants[key] = s.invariants
+        inv_file[key] = file
+
+## A unique enum is declared like any enum, plus its `Drop` impl and
+## `move self` methods.
+fn Lower.declare_unique_enum(mut self, e ast.EnumDecl, prog ast.Program, key str)
+    if not e.is_unique
+        return
+    uniq.types.add(key)
+    for im in prog.impls
+        if im.trait_name == "Drop" and im.target.name == e.name
+            uniq.drops[key] = "{key}.drop"
+    for f in prog.fns
+        if o := f.owner
+            if o.name == e.name and (f.receiver?.moved else false)
+                uniq.moves_self.add("{key}.{f.name}")
+
+## Whether a value of type `t` is unique (own.uniq.1, own.uniq.5, own.uniq.8).
+fn Lower.is_uniq(self, t Ty) bool
+    match t
+        Struct(n) => uniq.types.contains(n)
+        Enum(n) => uniq.types.contains(n)
+        Opt(inner) => is_uniq(inner)
+        List(e) => is_uniq(e)
+        Map(_, v) => is_uniq(v)
+        _ => false
+
+## Whether any type is unique: when none is, nothing here costs anything.
+fn Lower.uniq_on(self) bool
+    uniq.types.len() > 0
+
+# ---- ownership flags ----
+
+## The local `key` owns its value from here on.
+fn Lower.uniq_flag(mut self, key str)
+    nvars += 1
+    fk := "live#{nvars}"
+    var_ty[fk] = Ty.Bool
+    uniq.flags["{fname}|{key}"] = fk
+    write_var(fk, cur, konst(1, Ty.Bool))
+
+## `name` was just declared: when it holds a unique value it owns, it is
+## released where its block ends. A borrowed binding (a parameter, a `for`
+## variable) never is.
+fn Lower.uniq_declared(mut self, name str)
+    if not uniq_on() or facts.defers.len() == 0
+        return
+    key := lookup(name) else return
+    ty := var_ty[key]
+    if not is_uniq(ty)
+        return
+    uniq_flag(key)
+    # Declared in a scope whose block hasn't begun (`if x := e`): the block
+    # about to begin releases it.
+    if scopes.len() != uniq.depths[uniq.depths.len() - 1]
+        uniq.pending.push(key)
+        return
+    facts.defers[facts.defers.len() - 1].push(drop_marker(key))
+    unwind_own(key)
+
+## The `move` parameters and `move self` of `f` are released when it returns
+## (own.uniq.7).
+fn Lower.uniq_params(mut self, f ast.FnDecl)
+    uniq.pending = []
+    if not uniq_on()
+        return
+    if recv := f.receiver
+        if recv.moved
+            uniq_own_param("self")
+    for p in f.params
+        if p.moved
+            uniq_own_param(p.name)
+
+fn Lower.uniq_own_param(mut self, name str)
+    key := lookup(name) else return
+    if not is_uniq(var_ty[key])
+        return
+    uniq_flag(key)
+    uniq.pending.push(key)
+    # A moved parameter is not borrowed: the callee owns it.
+    borrowed.remove(key)
+
+## The value of `e` moves away (own.uniq.2): its owner no longer releases it.
+fn Lower.uniq_take(mut self, e ast.Expr)
+    match e
+        Name(n, _) =>
+            key := lookup(n) else return
+            fk := uniq.flags.get("{fname}|{key}") else return
+            write_var(fk, cur, konst(0, Ty.Bool))
+            unwind_disarm(key)
+        _ => return
+
+## `recv.m(...)` on a `move self` method `key` moves the receiver away
+## (own.move.6).
+fn Lower.uniq_recv(mut self, key str, recv ast.Expr?)
+    if uniq.moves_self.contains(key)
+        if e := recv
+            uniq_take(e)
+
+## `xs[i] = v` releases the element it replaces (own.uniq.8).
+fn Lower.uniq_drop_elem(mut self, l int, i int, elem Ty, pos ast.Pos)
+    if is_uniq(elem)
+        drop_call(checked("get", [l, i], bounds_site(pos), elem), elem)
+
+## `x.f = v` releases the value the field held (own.uniq.7).
+fn Lower.uniq_drop_field(mut self, obj int, k int, t Ty)
+    if is_uniq(t)
+        drop_call(load(obj, k, t), t)
+
+## `m[k] = v` releases the value it replaces (own.uniq.8).
+fn Lower.uniq_drop_entry(mut self, m int, k int, vt Ty)
+    if not is_uniq(vt)
+        return
+    e := call("rt.map_find", [m, k], Ty.Int)
+    yes := new_block()
+    rest := new_block()
+    branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), yes, [], rest, [])
+    seal(yes)
+    cur = yes
+    drop_call(entry_value(e, vt), vt)
+    jump(rest, [])
+    seal(rest)
+    cur = rest
+
+## `xs.clear()` releases the elements it removes, last first (own.uniq.8).
+fn Lower.uniq_clear(mut self, l Val)
+    if is_uniq(l.ty)
+        drop_call(l.id, l.ty)
+
+## A unique value read from `e` where a copy would be made moves instead.
+fn Lower.uniq_move(mut self, e ast.Expr, v Val) int
+    uniq_take(e)
+    v.id
+
+## A `move` argument gives its value away (own.move.2).
+fn Lower.uniq_arg(mut self, a ast.Arg)
+    if a.moved
+        uniq_take(a.value)
+
+## The result of a statement that nothing uses is released at its end
+## (own.uniq.7).
+fn Lower.uniq_discard(mut self, e ast.Expr, v Val?)
+    x := v else return
+    if not is_uniq(x.ty) or x.id < 0 or is_place(e)
+        return
+    drop_call(x.id, x.ty)
+
+## `key` is assigned a new value of type `ty`: the value it held is released
+## first, and it owns the new one (own.uniq.7).
+fn Lower.uniq_replace(mut self, key str)
+    if uniq.flags.contains("{fname}|{key}")
+        unwind_disarm(key)
+        uniq_release(key)
+        uniq_flag(key)
+
+# ---- release ----
+
+## The marker that makes the block release `key` where it ends.
+fn drop_marker(key str) ast.Stmt
+    ast.Stmt.Eval(ast.Expr.Name("$drop:{key}", ast.Pos(line: 0, col: 0)))
+
+## The local a marker statement releases.
+fn marker_key(st ast.Stmt) str?
+    match st
+        Eval(e) =>
+            match e
+                Name(n, _) => n.strip_prefix("$drop:")
+                _ => none
+        _ => none
+
+## Release the local `key` if it still owns its value.
+fn Lower.uniq_release(mut self, key str)
+    fk := uniq.flags.get("{fname}|{key}") else return
+    if borrowed.contains(key)
+        return
+    live := read_var(fk, cur)
+    held := read_var(key, cur)
+    yes := new_block()
+    rest := new_block()
+    branch(live, yes, [], rest, [])
+    seal(yes)
+    cur = yes
+    drop_call(held, var_ty[key])
+    jump(rest, [])
+    seal(rest)
+    cur = rest

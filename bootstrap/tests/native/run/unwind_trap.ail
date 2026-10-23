@@ -1,0 +1,33 @@
+# own.uniq.3, own.defer.1: on a trap, the defers and releases of the open
+# blocks run, innermost first; a moved value and a finished block don't.
+unique struct Res
+    id int
+
+impl Drop for Res
+    fn drop(mut self)
+        print("drop {id}")
+
+fn take(move r Res)
+    print("took {r.id}")
+
+fn work(n int) int
+    a := Res(id: 1)
+    b := Res(id: 2)
+    take(move b)
+    for i in 0..3
+        defer print("loop {i}")
+        if i == 1
+            break
+    label := "w{n}"
+    defer print("defer {label}")
+    if n > 0
+        c := Res(id: 3)
+        defer print("inner")
+        xs := [1]
+        return xs[n]
+    0
+
+fn main()
+    keep := Res(id: 9)
+    print(work(0))
+    print(work(4))
