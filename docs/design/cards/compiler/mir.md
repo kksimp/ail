@@ -2,8 +2,8 @@
 
 ## mir
 ```
-pub fn mir.fold_addresses(mir.Func) mir.Func
-pub fn mir.fold_prim_addresses(mir.Func) mir.Func
+pub fn mir.fold_addresses(mut mir.Func) [mutates]
+pub fn mir.fold_prim_addresses(mut mir.Func) [mutates]
 pub struct mir.Versioned
 pub fn mir.bce(mir.Func, bool, bool) mir.Func
 pub fn mir.lists_only_grow(mir.Module) bool
@@ -12,7 +12,7 @@ pub fn mir.fold(mir.Func) mir.Func
 pub fn mir.fold_in(mut mir.Func) [mutates]
 pub fn mir.rpo(mir.Func) List[int]
 pub fn mir.forward_loads(mir.Func) mir.Func
-pub fn mir.inline_module(mir.Module) mir.Module
+pub fn mir.inline_module(mut mir.Module) [mutates]
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub fn mir.merge_blocks_in(mut mir.Func) [mutates]
 pub struct mir.Def
@@ -67,8 +67,8 @@ pub fn mir.keep_lengths(mir.Func) mir.Func
 pub mir.LIMIT := 1073741824
 pub struct mir.Proven
 pub fn mir.prove(mir.Func, List[mir.Def], mir.LoopInfo, mir.Counted, List[int], List[bool]) mir.Proven
-pub fn mir.mark_recursion(mir.Module) mir.Module
-pub fn mir.reuse_lists(mir.Module) mir.Module
+pub fn mir.mark_recursion(mut mir.Module) [mutates]
+pub fn mir.reuse_lists(mut mir.Module) [mutates]
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.simplify_in(mut mir.Func) [mutates]
 pub fn mir.subset_help(str) str
@@ -78,4 +78,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1130); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1137); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

@@ -1,0 +1,2 @@
+# Programs whose native output differs from the interpreter's on macOS by design; `goldens check` skips them there.
+tensor_tanh
