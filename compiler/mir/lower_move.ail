@@ -170,3 +170,38 @@ fn moved(repl List[int], v int) int
     while repl[x] != x
         x = repl[x]
     x
+
+## Whether the value of `e`, an `if` or `match`, may be a place somebody else
+## holds (a field, an element, a parameter, or a name bound in an arm): the
+## merged result is then copied where it is returned (own.val.1).
+fn Lower.place_tail(self, e ast.Expr, any_name bool) bool
+    match e
+        Member | Index => true
+        Name(n, _) =>
+            key := lookup(n) else return true
+            any_name or borrowed.contains(key)
+        If(branches, els, _, _) =>
+            for br in branches
+                if body_place_tail(br.body, any_name)
+                    return true
+            if b := els
+                return body_place_tail(b, any_name)
+            false
+        Match(_, arms, _) =>
+            for a in arms
+                if body_place_tail(a.body, any_name)
+                    return true
+            false
+        _ => false
+
+fn Lower.body_place_tail(self, body List[ast.Stmt], any_name bool) bool
+    if body.len() == 0
+        return false
+    match body[body.len() - 1]
+        Eval(x) => place_tail(x, any_name)
+        _ => false
+
+fn is_branchy(e ast.Expr) bool
+    match e
+        If | Match => true
+        _ => false

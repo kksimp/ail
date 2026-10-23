@@ -15,6 +15,7 @@
 #                                         `ail build`)
 #   ail run compiler load FILE...         the program of `ail api --ast --program FILE` (ADR 0855)
 #   ail run compiler check-program [--json] FILE|DIR   `ail check` (ADR 0855)
+#   ail run compiler api [--outline] FILE [--text | --pretty]   `ail api` (ADR 0855)
 #   ail run compiler run FILE [ARGS...]   the native CLI's `ail run` (ADR 0855)
 #   ail run compiler prepare FILE         builds FILE into the cache and prints the executable's path
 #   ail run compiler build-many RT TARGET MS MB STD FILE...
@@ -22,6 +23,7 @@
 #                                         used by the selftest), each under a line `== PATH`
 # With several files, each output starts with a line `== PATH`.
 use a64
+use api
 use ast
 use budget
 use check
@@ -129,6 +131,8 @@ fn main() !
             load_dump(args[1..])
         "check-program" =>
             check_cmd(args[1..])
+        "api" =>
+            api_cmd(args[1..])
         "run" =>
             cli_run(args[1..])
         "prepare" =>
@@ -188,6 +192,7 @@ fn build_cli(rest List[str])
     mut target := ""
     mut ms := "0"
     mut mb := "0"
+    mut cached := true
     mut i := 0
     while i < rest.len()
         a := rest[i]
@@ -208,8 +213,7 @@ fn build_cli(rest List[str])
             # unsafe.hw.1: the checker, run first, took it; the lowering needs nothing.
             i += 1
         elif a == "--no-cache"
-            i += 1
-            continue
+            cached = false
         elif file == "" and not a.starts_with("-")
             file = a
         else
@@ -219,7 +223,16 @@ fn build_cli(rest List[str])
     if file == ""
         io.eprint(BUILD_USAGE)
         io.exit(2)
-    compile_to(file, out, target, ms, mb)
+    if cached
+        compile_to(file, out, target, ms, mb)
+    else
+        compile_fresh(
+            file,
+            if out == "" then path.stem(file) else out,
+            if target == "" then host_target() else target,
+            ms,
+            mb,
+        )
 
 ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
 fn compiler_dir() str
@@ -235,13 +248,36 @@ fn compiler_dir() str
 ## Build `file` for `target` (the host's when empty) into `out` (by default
 ## the file's name in the current directory) with the run limits `ms` and `mb`.
 fn compile_to(file str, out_arg str, target_arg str, ms str, mb str)
-    mut out := out_arg
-    mut target := target_arg
+    target := if target_arg == "" then host_target() else target_arg
+    out := if out_arg == "" then path.stem(file) else out_arg
+    dir := cache_dir()
+    exe := path.join(dir, cache_key(file, target, ms, mb))
+    if cached_copy(exe, out, target)
+        return
+    fs.make_dir(dir) else err
+        io.eprint("error[native.build.5]: can't make {dir}")
+    tmp := "{exe}.{time.now_ms()}.tmp"
+    compile_fresh(file, tmp, target, ms, mb)
+    fs.rename(tmp, exe) else err
+        io.eprint("error[native.build.5]: can't store {exe}")
+        io.exit(2)
+    cache_trim(dir)
+    if not cached_copy(exe, out, target)
+        io.eprint("error[native.build.5]: can't write {out}")
+        io.exit(2)
+
+## Copy the cached executable `exe` to `out`; false when there is none
+## (native.build.5).
+fn cached_copy(exe str, out str, target str) bool
+    data := fs.read_bytes(exe) else return false
+    fs.write_bytes(out, data) else return false
+    if not target.ends_with("windows")
+        _ := proc.run("chmod", ["755", out]) else return false
+    true
+
+## `compile_to` without the cache.
+fn compile_fresh(file str, out str, target str, ms str, mb str)
     dir := compiler_dir()
-    if target == ""
-        target = host_target()
-    if out == ""
-        out = path.stem(file)
     rt := runtime_with(path.join(dir, "rt/native"), file, ms, mb) else err
         io.eprint("error[native.build.3]: can't read the runtime: {err}")
         io.exit(2)
@@ -552,7 +588,11 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
         if e.problem != ""
             io.eprint("{srcs[e.file].path}:{e.pos.line}:{e.pos.col}: error[ct.derive.4]: {derive_failure(e.label)}: {e.problem}")
             io.exit(1)
-        out.push(derived_source(if e.module == "" then "-" else e.module, e.label, e.text.lines()))
+        out.push(derived_source(
+            if e.module == "" then "-" else e.module,
+            e.label,
+            derive.tidy(e.text).lines(),
+        ))
     out
 
 ## The methods of the `impl`s of traits with a user-written `@derive(f)`
@@ -581,7 +621,7 @@ fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
         out.push(derived_source(
             if j.module == "" then "-" else j.module,
             j.label,
-            texts[k].lines(),
+            derive.tidy(texts[k]).lines(),
         ))
     out
 
@@ -806,12 +846,12 @@ fn tree_stamp(tag str, root str) str
 
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
-fn cache_key(file str, target str) str
+fn cache_key(file str, target str, ms str, mb str) str
     dir := compiler_dir()
     root := path.dir(file)
     std := path.join(path.dir(dir), "bootstrap/src/std")
     parts := [
-        "ail-native-cache-1 {target} {file}",
+        "ail-native-cache-2 {target} {ms} {mb} {file}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         tree_stamp("std", std),
@@ -834,13 +874,13 @@ fn cache_trim(dir str)
 fn cli_prepare(file str) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target))
+    exe := path.join(dir, cache_key(file, target, "0", "0"))
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_to(file, tmp, target, "0", "0")
+    compile_fresh(file, tmp, target, "0", "0")
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -911,3 +951,46 @@ fn check_cmd(rest List[str])
     for d in found
         if not d.warning
             io.exit(2)
+
+## `api [--outline] FILE [--text | --pretty]`: the outline of one file
+## (api.out.1-5). `--symbols`, `--expanded`, packages and the queries stay
+## with the Rust `ail api` for now.
+fn api_cmd(rest List[str])
+    usage := "usage: ail api [--outline] FILE [--text | --pretty]"
+    mut form := api.Form.Plain
+    mut files := List[str]()
+    for a in rest
+        match a
+            "--outline" => continue
+            "--text" => form = api.Form.Text
+            "--pretty" => form = api.Form.Pretty
+            _ =>
+                if a.starts_with("--") or files.len() > 0
+                    io.eprint(usage)
+                    io.exit(2)
+                files.push(a)
+    if files.len() != 1
+        io.eprint(usage)
+        io.exit(2)
+    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
+    loaded := load.load(files[0], std) else err
+        io.eprint("error: {err.message}")
+        io.exit(2)
+        return
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    mut analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            io.exit(2)
+    prog := doc.attach(loaded.program, loaded.texts[0])
+    out := api.outline(
+        prog,
+        api.Facts(effects: analysis.effects, errors: analysis.errors),
+        files[0],
+        form,
+    )
+    if out != ""
+        print(out.strip_suffix("\n") else out)
