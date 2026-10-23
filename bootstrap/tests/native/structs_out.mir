@@ -1,0 +1,20 @@
+# MIR (unstable) of bootstrap/tests/native/structs_out.ail
+
+fn main() unit
+  b0:
+    v0 int = const 1
+    v1 int = const 8
+    v2 int = const 4
+    v3:p Point = call rt.obj_new(v1, v2)
+    store v3:p, v0 +0
+    v4 str = str #0
+    v5 str = str #1
+    v6 str = call rt.str_cat(v4, v5)
+    v7 int = load v3:p +0
+    v8 str = call rt.fmt_int(v7)
+    v9 str = call rt.str_cat(v6, v8)
+    v10 str = str #2
+    v11 str = call rt.str_cat(v9, v10)
+    call rt.out_str(v11)
+    call rt.out_nl()
+    return
