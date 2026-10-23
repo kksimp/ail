@@ -59,6 +59,8 @@ fn main() !
     show("both", ask(a, "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\n"))
     show("fold", ask(a, "GET / HTTP/1.1\r\nHost: h\r\n x: y\r\n\r\n"))
     show("chunked", ask(a, "POST /up?k=v HTTP/1.1\r\nHost: h\r\nX-A: 1\r\nx-a: 2\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\nabc\r\n2;ext=1\r\nde\r\n0\r\n\r\n"))
-    show("second", ask(a, "GET /two HTTP/1.0\r\n\r\n"))
+    # The server task prints while it answers this one, so print after it ends.
+    second := ask(a, "GET /two HTTP/1.0\r\n\r\n")
     t.wait()?
+    show("second", second)
     srv.close()
