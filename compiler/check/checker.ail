@@ -88,7 +88,7 @@ pub struct Checker
     pub const_busy List[bool]
     ## Checking a `requires` condition, where `result` doesn't exist yet.
     pub in_requires bool
-    ## Where the condition being checked starts, for the `requires` fix (fix.edit.5).
+    ## Where the condition being checked starts, for the `requires` fix (fix.edit.1).
     pub requires_pos ast.Pos?
     ## The function being checked: its locals (innermost last), the locals
     ## typed by their first use, its return type, loop depth, and how many

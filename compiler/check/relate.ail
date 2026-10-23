@@ -132,7 +132,7 @@ fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
     try_fix_at(t, at)
     true
 
-## err.fix.3: offer `?` after the failure when this function's error type
+## fix.edit.3: offer `?` after the failure when this function's error type
 ## admits its errors; err.fix.1: or make the function fail.
 @allow("expr.match.3") fn Checker.try_fix_at(mut self, t Ty, at ast.Pos)
     mut errors := List[Ty]()
