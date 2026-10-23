@@ -23,7 +23,13 @@ expected (trait.any.3), and a method call on an `any Trait` value runs the
 method of the value's type (trait.any.1). Impls for other types, generic
 impls in an `any` are reported under native.subset.1. A struct or enum
 with no `to_str`, and an `any Trait` value, print as the interpreter prints
-them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`.
+them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`,
+or lists, maps, sets, options or other such values of them, including types
+that hold themselves. Generic types have methods (`Stack[int].new()`,
+`Pair[A, B].with_first[C]`, `Tree[T].Leaf`), `Self` names the implementing
+type in a trait's signatures (trait.res.1), a trait's functions can be called
+through the trait name (`Shape.area(x)`), and a user `impl Eq` or `impl Ord`
+with its own `eq` or `cmp` is what `==` and `<` use (trait.derive.1, expr.cmp.1).
 *(ADRs 0536, 0616)*
 
 **native.subset.3** — A read-only argument or receiver of a struct, list or `any Trait` type that

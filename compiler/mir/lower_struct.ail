@@ -230,6 +230,13 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         return none
     if gen.fns.contains(key) and recv == none
         return generic_call(key, key, [], args, pos, none)
+    if r := recv
+        if is_generic_method(key)
+            return generic_method_call(key, r, args, pos)
+        if key.ends_with(".cmp") and args.len() == 1 and not sigs.contains(key)
+            # The derived `cmp` of `impl Ord for T` with no body (trait.std.2).
+            other := lower_value(args[0].value, r.ty)?
+            return lower_cmp(r, other, pos)
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
         return proc_output_method(key, recv, args, pos)
     if key.starts_with("net.")
@@ -390,8 +397,8 @@ fn Lower.lower_member_expr(
     e ast.Expr,
     want Ty?,
 ) Val?
-    if g := generic_enum_ref(recv)
-        return generic_variant(g, name, none, pos, want)
+    if g := generic_member_ref(recv)
+        return generic_member(g, recv, name, none, pos, want)
     if en := enum_ref(recv)
         return variant_member(en, name, pos)
     if key := qualified(e)

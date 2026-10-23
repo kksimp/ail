@@ -794,16 +794,26 @@ fn Lower.display_call(mut self, v Val) int?
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
     # No `to_str` and no message: the default text of trait.auto.2.
-    default_error_text(key, v)
+    mut seen := Set[str]()
+    if not displayable(v.ty, mut seen)
+        return none
+    text_fn_call(key, v)
 
 ## The text of an error type with no message: its default form,
 ## `Name(field: value, ...)` for a struct and `Enum.Variant(field: value)`
 ## for an enum (trait.auto.2), for fields of `int`, `float`, `bool`, `str`, and structs and enums of those.
+## The name a default text shows for type `key`: a generic instance as its
+## generic's name (`Pair[int, str]` shows `Pair`), a standard module's type
+## without `std.`.
+fn shown_type(key str) str
+    base := key.split("[")[0]
+    base.strip_prefix("std.") else base
+
 fn Lower.default_error_text(mut self, key str, v Val) int?
     if cases := enums.get(key)
         return default_enum_text(key, cases, v)
     slots := structs.get(key) else return none
-    fields_text("{key}(", slots, v.id, 0)
+    fields_text("{shown_type(key)}(", slots, v.id, 0)
 
 ## `head` then each of `slots` read from `obj` (the first at slot `skip`),
 ## as `name: value` pairs, then `)`.
@@ -831,7 +841,7 @@ fn Lower.nested_text(mut self, key str, obj int) int
     slots := structs.get(key) else return -1
     if err_msgs.contains(key) or sigs.contains("{key}.to_str")
         return -1
-    fields_text("{key}(", slots, obj, 0) else -1
+    fields_text("{shown_type(key)}(", slots, obj, 0) else -1
 
 ## The default text of an enum value: a chain of tests on the variant index.
 fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
@@ -849,7 +859,7 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
             seal(no)
             cur = yes
         text := if cases[k].fields.len()
-            == 0 then str_value("{key}.{cases[k].name}") else (fields_text("{key}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
+            == 0 then str_value("{shown_type(key)}.{cases[k].name}") else (fields_text("{shown_type(key)}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
         jump(join, [text])
         if no >= 0
             cur = no

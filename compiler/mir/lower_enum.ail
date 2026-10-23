@@ -30,7 +30,7 @@ fn Lower.declare_enum_names(mut self, prog ast.Program)
         else
             enums["{prefix}{e.name}"] = []
 
-## The prelude's `enum Ordering` (trait.std.2), registered once per program
+## The prelude's `enum Ordering` (trait.std.1). registered once per program
 ## unless the program declares an `Ordering` of its own: the Rust front end
 ## adds it to the program it runs, but the native compiler reads only source.
 fn Lower.declare_prelude_enums(mut self)
@@ -225,8 +225,10 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     n := enum_name(a.ty) else return quiet
     name := op_name(o)
     if name != "eq" and name != "ne"
-        problem(pos, "`{op_symbol(o)}` on `{n}` isn't in the native subset yet")
-        return quiet
+        if is_flat(n)
+            # Derived order: the variants in declaration order.
+            return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+        return tuple_compare(o, a, b, pos)
     if is_flat(n)
         return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
     if k := singleton_tag(b.id)
@@ -262,6 +264,8 @@ fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     name := op_name(o)
     if name != "eq" and name != "ne"
+        if a.ty.elem() != none
+            return tuple_compare(o, a, b, pos)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
         return quiet
     mut seen := Set[str]()
@@ -349,6 +353,10 @@ fn Lower.variant_eq(mut self, name str, a int, b int, v VariantRef, pos ast.Pos)
     Val(id: r, ty: Ty.Bool)
 
 fn Lower.eq_fn(mut self, t Ty) str
+    # A user's `impl Eq` decides `==` for its type (trait.std.1).
+    owner := if s := struct_name(t) then s else (enum_name(t) else "")
+    if owner != "" and sigs.contains("{owner}.eq")
+        return "{owner}.eq"
     name := "eq.{t.name()}"
     if not sigs.contains(name)
         sigs[name] = Sig(params: [t, t], ret: Ty.Bool, fails: false)
@@ -415,6 +423,8 @@ fn Lower.gen_enum_eqs(mut self)
             t := eq_tys[name]
             if name.starts_with("lt.")
                 gen_lt(name, t)
+            elif name.starts_with("cmp.")
+                gen_cmp(name, t)
             elif inner := t.opt_inner()
                 gen_opt_eq(name, t, inner)
             elif t.is_coll()

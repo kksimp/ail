@@ -73,13 +73,7 @@ fn Lower.declare_generic_enum(mut self, e ast.EnumDecl)
 ## is one (it is declared per instance, not now).
 fn Lower.declare_generic_fn(mut self, f ast.FnDecl, pre str) bool
     if o := f.owner
-        if o.params != none and gen.types.contains("{pre}{o.name}")
-            if f.generics.len() > 0
-                problem(
-                    f.pos,
-                    "`{o.name}.{f.name}`: generic methods of generic types aren't in the native subset yet",
-                )
-                return true
+        if gen.types.contains("{pre}{o.name}")
             gen.fns[fn_key(f, pre)] = GenFn(decl: f, file: file)
             return true
         if f.generics.len() > 0
@@ -119,7 +113,10 @@ fn Lower.generic_fn_key(self, name str) str?
 ## parameter's type, or `G[A, B]` instantiated.
 fn Lower.generic_type(mut self, name str, args List[ast.TypeRef]) Ty?
     if args.len() == 0
-        return gen.tsubst.get(name)
+        if t := gen.tsubst.get(name)
+            return t
+        # A trait written as a type means `any Trait` (trait.any.1).
+        return any_type(name)
     g := generic_type_key(name)?
     mut tys := List[Ty]()
     for a in args
@@ -355,6 +352,15 @@ fn Lower.generic_call(
 ## The signature of function instance `key`, declared and queued on first
 ## use.
 fn Lower.instance(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner str, k int) Sig?
+    # `Self` in the signature of a method of an instance is the instance.
+    saved := self_ty
+    if owner != ""
+        self_ty = owner
+    sig := instance_sig(key, f, binds, owner, k)
+    self_ty = saved
+    sig
+
+fn Lower.instance_sig(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner str, k int) Sig?
     if s := sigs.get(key)
         return s
     if bad.contains(key)
@@ -426,9 +432,11 @@ fn Lower.instance_method(mut self, key str)
         bad.add(key)
         return
     gf := gen.fns.get("{base}.{m}") else return
+    if gf.decl.generics.len() > 0
+        # Instantiated per call, with the method's own type arguments.
+        return
     o := gf.decl.owner else return
-    ops := o.params else return
-    pnames := generic_names(ops)
+    pnames := if ops := o.params then generic_names(ops) else gen.types[base].params
     tys := gen.targs[tkey]
     if pnames.len() != tys.len()
         return
@@ -436,6 +444,60 @@ fn Lower.instance_method(mut self, key str)
     for k in 0..pnames.len()
         binds[pnames[k]] = tys[k]
     instance(key, gf.decl, binds, tkey, gf.file)
+
+## Whether `key` (`Pair[int, str].with_first`) is a method of a generic
+## type's instance that has type parameters of its own.
+fn Lower.is_generic_method(self, key str) bool
+    cut := key.split("].")
+    if cut.len() < 2
+        return false
+    tkey := "{cut[..cut.len() - 1].join("].")}]"
+    base := gen.bases.get(tkey) else return false
+    gf := gen.fns.get("{base}.{cut[cut.len() - 1]}") else return false
+    gf.decl.generics.len() > 0
+
+## `r.m(...)` where method `m` of the instance `tkey` has its own type
+## parameters: bind them from the arguments (gen.method.3) and call the
+## instance of the method for those types.
+fn Lower.generic_method_call(
+    mut self,
+    key str,
+    recv Val,
+    args List[ast.Arg],
+    pos ast.Pos,
+) Val?
+    cut := key.split("].")
+    tkey := "{cut[..cut.len() - 1].join("].")}]"
+    m := cut[cut.len() - 1]
+    base := gen.bases[tkey]
+    gf := gen.fns["{base}.{m}"]
+    f := gf.decl
+    o := f.owner else return unsupported(pos, "calling `{key}`")
+    tnames := if ops := o.params then generic_names(ops) else gen.types[base].params
+    tys := gen.targs[tkey]
+    mut binds := Map[str, Ty]()
+    for k in 0..tnames.len()
+        binds[tnames[k]] = tys[k]
+    mnames := generic_names(f.generics)
+    if args.len() != f.params.len()
+        return unsupported(pos, "calling `{key}` with {args.len()} arguments instead of {f.params.len()}")
+    mut vs := List[Val]()
+    for k in 0..args.len()
+        a := args[k]
+        if a.label != none
+            return unsupported(pos, "calling `{key}` with a labelled argument")
+        pt := f.params[k].ty
+        v := lower_value(a.value, decl_type(pt, binds, mnames, gf.file))?
+        unify(pt, v.ty, mnames, mut binds)
+        vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
+    if not all_bound(mnames, binds, m, pos)
+        return none
+    full := "{key}[{[binds[n].name() for n in mnames].join(", ")}]"
+    sig := instance(full, f, binds, tkey, gf.file)?
+    mut ids := [recv.id]
+    for k in 0..vs.len()
+        ids.push(convert(vs[k], sig.params[k + 1], expr_pos(args[k].value)))
+    Val(id: user_call(full, ids, sig.ret, pos, full), ty: sig.ret)
 
 ## `G(...)` or `G[T](...)` of a generic struct: bind its type parameters
 ## from the written types, the expected type or the fields' values.
@@ -490,6 +552,62 @@ fn Lower.generic_enum_ref(self, e ast.Expr) str?
         return none
     g := generic_type_key(p)?
     if gen.types[g].edecl != none then g else none
+
+## The generic type a `E`, `E.V` receiver or a written `G[A]` names: an enum
+## written bare, or a struct or enum with its type arguments written.
+fn Lower.generic_member_ref(self, e ast.Expr) str?
+    match e
+        TypeArgs(n, _, _) =>
+            if lookup(n) != none
+                return none
+            generic_type_key(n)
+        Name(n, _) =>
+            if lookup(n) == none and traits.impls.contains(trait_key(n))
+                return trait_key(n)
+            generic_enum_ref(e)
+        _ => generic_enum_ref(e)
+
+## `E.V(...)`, `E.V`, `G[A].f(...)` or `G[A].V`: a variant of a generic enum
+## (its type arguments from the expected type, or written), or a function of
+## a generic struct's instance.
+fn Lower.generic_member(
+    mut self,
+    g str,
+    recv ast.Expr,
+    name str,
+    args List[ast.Arg]?,
+    pos ast.Pos,
+    want Ty?,
+) Val?
+    if traits.impls.contains(g) and gen.types.get(g) == none
+        # `Trait.method(x, ...)` (trait.res.1): the method of `x`'s type.
+        call_args := args else return unsupported(pos, "`{g}.{name}` without a call")
+        if call_args.len() == 0
+            return unsupported(pos, "`{g}.{name}` without a receiver")
+        first := lower_value(call_args[0].value, none)?
+        rest := call_args[1..]
+        if t := any_of(first.ty)
+            return any_call(t, first, name, rest, pos)
+        s := struct_name(first.ty) else return unsupported(pos, "`{g}.{name}` on `{first.ty.name()}`")
+        return struct_call("{s}.{name}", first, rest, pos)
+    match recv
+        TypeArgs(_, targs, _) =>
+            gt := gen.types[g]
+            binds := explicit_binds(gt.params, targs, pos)?
+            if not all_bound(gt.params, binds, gt.params.join(", "), pos)
+                return none
+            t := instance_type(g, [binds[n] for n in gt.params]) else
+                return unsupported(pos, "`{g}` with these type arguments")
+            if gt.edecl != none
+                return generic_variant(g, name, args, pos, some_ty(t))
+            key := struct_name(t) else return unsupported(pos, "`{g}.{name}`")
+            call_args := args else return unsupported(pos, "`{g}.{name}` without a call")
+            instance_method("{key}.{name}")
+            struct_call("{key}.{name}", none, call_args, pos)
+        _ => generic_variant(g, name, args, pos, want)
+
+fn some_ty(t Ty) Ty?
+    t
 
 ## `E.V(...)` or `E.V` of a generic enum: bind its type parameters from the
 ## expected type or the variant's field values.
@@ -658,6 +776,8 @@ fn Lower.assoc_owner(self, e ast.Expr) str?
         Name(n, _) =>
             if lookup(n) != none
                 return none
+            if n == "Self" and self_ty != ""
+                return self_ty
             t := gen.tsubst.get(n)?
             match t
                 Struct(k) => k

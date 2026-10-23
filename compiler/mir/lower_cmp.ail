@@ -10,4 +10,54 @@ fn Lower.lower_cmp(mut self, a Val, b Val, pos ast.Pos) Val?
     if a.ty == Ty.Str
         c := call("rt.str_cmp", [a.id, b.id], Ty.Int)
         return ordering(op("add", [c, konst(1, Ty.Int)], Ty.Int))
+    if structural(a.ty) or a.ty.elem() != none
+        # A derived `cmp` on a struct, an enum, a tuple or a list (trait.std.2).
+        if not can_order(a.ty)
+            return unsupported(pos, "`.cmp()` on `{a.ty.name()}`")
+        t := Ty.Enum("Ordering")
+        return Val(id: call(cmp_fn(a.ty), [a.id, b.id], t), ty: t)
     ordering(call("rt.int_cmp", [a.id, b.id], Ty.Int))
+
+## `cmp.T`: the generated derived `cmp` of `T`, from `lt.T`.
+fn Lower.cmp_fn(mut self, t Ty) str
+    name := "cmp.{t.name()}"
+    if not sigs.contains(name)
+        sigs[name] = Sig(params: [t, t], ret: Ty.Enum("Ordering"), fails: false)
+        eq_tys[name] = t
+    name
+
+fn Lower.gen_cmp(mut self, fkey str, t Ty)
+    o := Ty.Enum("Ordering")
+    ps := begin_fn(fkey, o, [t, t])
+    less := new_block()
+    rest := new_block()
+    greater := new_block()
+    equal := new_block()
+    branch(call(lt_fn(t), [ps[0], ps[1]], Ty.Bool), less, [], rest, [])
+    cur = rest
+    branch(call(lt_fn(t), [ps[1], ps[0]], Ty.Bool), greater, [], equal, [])
+    cur = less
+    finish(return_of(konst(0, o)))
+    cur = greater
+    finish(return_of(konst(2, o)))
+    cur = equal
+    finish(return_of(konst(1, o)))
+    for blk in 0..blocks.len()
+        sealed[blk] = true
+    end_fn(fkey, ast.Pos(line: 1, col: 1))
+
+## `a < b` and the other orderings on a type whose own `cmp` decides them
+## (trait.std.2): the method's `Ordering` against `Less` and `Greater`.
+fn Lower.cmp_order(mut self, name str, key str, a Val, b Val) Val
+    r := call("{key}.cmp", [a.id, b.id], Ty.Enum("Ordering"))
+    t := Ty.Bool
+    match name
+        "lt" => Val(id: op("eq", [r, konst(0, Ty.Int)], t), ty: t)
+        "gt" => Val(id: op("eq", [r, konst(2, Ty.Int)], t), ty: t)
+        "le" => Val(id: op("ne", [r, konst(2, Ty.Int)], t), ty: t)
+        _ => Val(id: op("ne", [r, konst(0, Ty.Int)], t), ty: t)
+
+## The key of the type of `t` when it has a `cmp` of its own.
+fn Lower.own_cmp(self, t Ty) str?
+    k := if s := struct_name(t) then s else (enum_name(t) else return none)
+    if sigs.contains("{k}.cmp") then k else none

@@ -97,8 +97,22 @@ fn Lower.type_key(self, name str) str?
     key := "{prefix}{name}"
     if structs.contains(key)
         return key
-    k := prelude_key(name)?
-    if structs.contains(k) then k else none
+    if k := prelude_key(name)
+        if structs.contains(k)
+            return k
+    shared_type_key(name)
+
+## The one struct of another module that a name means in a trait default
+## shared into this file (trait.decl.2): the default names its own module's
+## types, which a plain lookup here doesn't see.
+fn Lower.shared_type_key(self, name str) str?
+    mut found := ""
+    for k in structs.keys()
+        if k.ends_with(".{name}")
+            if found != ""
+                return none
+            found = k
+    if found == "" then none else found
 
 ## The key a qualified name `m.x` has, when `m` is an import here.
 fn Lower.qualified(self, e ast.Expr) str?

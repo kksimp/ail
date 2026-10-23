@@ -831,8 +831,8 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     self_ty = ""
     mut k := 0
     if f.owner != none
+        self_ty = owner
         if recv := f.receiver
-            self_ty = owner
             declare("self", sig.params[0], params[0])
             borrowed.add(lookup("self") else "")
             note_stable_param("self", recv.mutable)
@@ -908,6 +908,7 @@ fn Lower.failing(self) bool
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
     # After a problem the MIR may be inconsistent; it is never built.
     if problems.len() > fn_problems or fn_failed
+        facts.moves = []
         return
     func := simplify(fold(simplify(elide_moves(
         Func(
@@ -1863,8 +1864,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_chan_select(args, npos)
     if is_module(recv, "mem")
         return lower_mem_call(name, npos, args)
-    if g := generic_enum_ref(recv)
-        return generic_variant(g, name, args, npos, none)
+    if g := generic_member_ref(recv)
+        return generic_member(g, recv, name, args, npos, none)
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
