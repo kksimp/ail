@@ -204,7 +204,8 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
     res := tk.rets.get(key)?
     h := read_var(key, cur)
     own := tk.fails.contains(key)
-    w := call("rt.task_try", [h, trace_line(npos), konst(if own then 1 else 0, Ty.Int)], Ty.Int)
+    wt := if res.is_unit() or res.is_float() then Ty.Int else res
+    w := call("rt.task_try", [h, trace_line(npos), konst(if own then 1 else 0, Ty.Int)], wt)
     failure := call("rt.failed", [], Ty.Bool)
     mut v := Val(id: w, ty: res)
     if res.is_unit()
