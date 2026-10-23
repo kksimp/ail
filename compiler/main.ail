@@ -64,7 +64,10 @@ fn main() !
         "fmt" =>
             io.exit(fmt.command(args[1..]))
         "edit" =>
-            io.exit(edit.command(args[1..], path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
+            io.exit(edit.command(args[1..], path.join(
+                path.dir(compiler_dir()),
+                "bootstrap/src/std",
+            )))
         "budget" =>
             # `budget [--budget [N]] [--from K] [--json] -- EXE ARGS...`: EXE under a budget (budget.out.1-6).
             cut := args.index_of("--") else args.len()

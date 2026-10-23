@@ -78,7 +78,7 @@ fn Lower.overlap_check(mut self, a ast.Expr, b ast.Expr, pos ast.Pos)
     cur = ok
 
 ## The arguments of a generic call once its instance's signature is known:
-## a `mut` scalar goes in a cell (own.mut.2), like `cell_arg` for a plain
+## a `mut` scalar goes in a cell (own.param.2), like `cell_arg` for a plain
 ## call, and `cells_back` writes it back after the call. `params[skip + k]`
 ## is argument `k`'s parameter.
 fn Lower.generic_arg_ids(

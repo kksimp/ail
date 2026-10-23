@@ -501,4 +501,3 @@ fn Lower.lower_member_expr(
             return global_const(key)
         return unsupported(pos, "`{key}` as a value")
     lower_member(recv, name, pos)
-
