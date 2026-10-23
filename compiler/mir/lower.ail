@@ -1058,7 +1058,12 @@ fn str_to_int_recv(e ast.Expr) ast.Expr?
 ## `s.to_int() else ...` (err.else.1-2) in any position: the parse, then the
 ## `else` when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.Pos) Val?
-    s := lower_value(recv, Ty.Str)?
+    # A `?` in `recv` (`env.get("PORT")?.to_int()`) also runs the `else` (err.prop.4).
+    fail := new_block()
+    else_targets.push(fail)
+    got := lower_value(recv, Ty.Str)
+    else_targets.pop()
+    s := got?
     if not (s.ty == Ty.Str)
         problem(pos, "`.to_int()` on `{s.ty.name()}`")
         return none
@@ -1067,7 +1072,6 @@ fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.
     join := new_block()
     r := new_value(Ty.Int, "")
     blocks[join].params.push(r)
-    fail := new_block()
     branch(ok, join, [n], fail, [])
     seal(fail)
     cur = fail
