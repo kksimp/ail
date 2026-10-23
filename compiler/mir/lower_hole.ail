@@ -1,0 +1,14 @@
+## `todo` (expr.hole.1): a typed hole. Evaluating it traps (expr.hole.2) and
+## leaves the function. The value after the trap is a zero of the expected type
+## in a block nothing reaches.
+use ast
+
+fn Lower.lower_hole(mut self, pos ast.Pos, want Ty?) Val?
+    trap_open("expr.hole.2", pos)
+    call("rt.out_str", [str_value("reached a `todo` hole")], Ty.Unit)
+    trap_close(pos)
+    dead_block()
+    t := want else Ty.Int
+    if t.is_unit()
+        return Val(id: -1, ty: t)
+    Val(id: zero_of(t), ty: t)

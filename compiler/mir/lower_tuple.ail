@@ -344,7 +344,8 @@ fn Lower.text_ok(mut self, t Ty) bool
         _ => false
 
 ## Whether a struct or enum has a text form `fields_text` can build: its
-## `to_str`, or fields of scalars, `List[int]` and displayable records.
+## `to_str`, or fields of scalars, `List[int]` and displayable records (not
+## itself recursive).
 fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
     key := match t
         Struct(k) => k
@@ -353,9 +354,18 @@ fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
             Int | Sized(_) | Float | F32 | Bool | Str => true
             List(e) => displayable(e, mut seen)
             _ => text_ext_ok(t) else false
-    if sigs.contains("{key}.to_str") or seen.contains(key)
+    if sigs.contains("{key}.to_str")
         return true
+    # `seen` is the path of types being checked: a type that holds itself has
+    # no finite inline text, so it needs a `to_str`.
+    if seen.contains(key)
+        return false
     seen.add(key)
+    ok := displayable_fields(key, mut seen)
+    seen.remove(key)
+    ok
+
+fn Lower.displayable_fields(mut self, key str, mut seen Set[str]) bool
     if cases := enums.get(key)
         for c in cases
             for f in c.fields

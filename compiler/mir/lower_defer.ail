@@ -1,0 +1,46 @@
+## `defer S` (own.defer.1-3): `S` runs when the enclosing block is left, last
+## deferred first. Lowering keeps the deferred statements of each open block
+## (`Facts.defers`) and emits them where the block is left: at its end, at a
+## `return` or a failing `?` (every open block), and at `break` or `continue`
+## (the blocks inside the loop).
+use ast
+
+## A block begins.
+fn Lower.defer_enter(mut self)
+    facts.defers.push([])
+    facts.defer_loops.push(loops.len())
+
+## `defer st` in the current block.
+fn Lower.defer_note(mut self, st ast.Stmt)
+    facts.defers[facts.defers.len() - 1].push(st)
+
+## The block ends: its deferred statements run unless the block already left.
+fn Lower.defer_exit(mut self)
+    if not done()
+        defer_run_from(facts.defers.len() - 1)
+    facts.defers.pop()
+    facts.defer_loops.pop()
+
+## Run the deferred statements of the blocks from index `first` outwards-in,
+## innermost block first and each block's last `defer` first.
+fn Lower.defer_run_from(mut self, first int)
+    mut i := facts.defers.len() - 1
+    while i >= first and i >= 0
+        sts := facts.defers[i]
+        mut k := sts.len() - 1
+        while k >= 0
+            lower_stmt(sts[k])
+            k -= 1
+        i -= 1
+
+## A `return` or a failure leaves the function: every open block's `defer`s run.
+fn Lower.defer_all(mut self)
+    if facts.defers.len() > 0
+        defer_run_from(0)
+
+## `break` or `continue` leaves the blocks of the innermost loop.
+fn Lower.defer_loop_exit(mut self)
+    mut first := facts.defers.len()
+    while first > 0 and facts.defer_loops[first - 1] >= loops.len()
+        first -= 1
+    defer_run_from(first)

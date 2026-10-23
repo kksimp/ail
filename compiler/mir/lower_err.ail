@@ -405,6 +405,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
         return true
     call("rt.err_set", [msg, trace_line(pos)], Ty.Unit)
     call("rt.err_value", [v.id], Ty.Unit)
+    defer_all()
     finish(return_of(zero_of(ret)))
     true
 
@@ -412,6 +413,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
 ## failure (left in the error slot) or its value is this function's result.
 fn Lower.return_fallible_call(mut self, e ast.Expr, pos ast.Pos) bool
     v := lower_expr(e, ret) else return true
+    defer_all()
     if ret.is_unit()
         finish(return_of(-1))
     else
@@ -431,6 +433,7 @@ fn Lower.propagate_result(mut self, v Val, context ast.Expr?, pos ast.Pos) Val
         problem(pos, "`?` in a function that can't fail")
     add_context(context)
     call("rt.err_trace", [trace_line(pos)], Ty.Unit)
+    defer_all()
     finish(return_of(zero_of(ret)))
     cur = good
     v
@@ -467,10 +470,12 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     seal(good)
     cur = leave
     if ret.opt_inner() != none
+        defer_all()
         finish(return_of(konst(0, ret)))
     elif fails
         call("rt.err_set", [str_value("a value is absent"), trace_line(pos)], Ty.Unit)
         add_context(context)
+        defer_all()
         finish(return_of(zero_of(ret)))
     else
         problem(
@@ -607,6 +612,7 @@ fn Lower.else_part(
 ## `else` (err.prop.4): `a?.b`, `a?.m()`, `a?[i]`.
 fn Lower.chain_try(self, e ast.Expr) bool
     match e
+        Try(x, _, _) => receiver_try(x)
         Member(r, _, _) => receiver_try(r)
         Method(r, _, _, args) => receiver_try(r) or args_try(args)
         Index(r, i, _) => receiver_try(r) or receiver_try(i)

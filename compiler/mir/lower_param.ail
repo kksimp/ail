@@ -24,6 +24,10 @@ struct Facts
     ## The loop variable of each `for mut` over scalar elements, as
     ## `FUNCTION|KEY` (keys repeat across functions): the list and the index of the element it stands for (lower_formut.ail).
     elem_ref Map[str, ElemRef]
+    ## The `defer`red statements of each open block, innermost last, and how many
+    ## loops were open when each block began (lower_defer.ail).
+    defers List[List[ast.Stmt]]
+    defer_loops List[int]
 
 ## A `for mut` variable's element: assigning the variable sets it.
 struct ElemRef
@@ -32,7 +36,15 @@ struct ElemRef
     pos ast.Pos
 
 fn new_facts() Facts
-    Facts(mut_ptr: {}, moves: [], owned: Set[str](), stable: Set[str](), elem_ref: {})
+    Facts(
+        mut_ptr: {},
+        moves: [],
+        owned: Set[str](),
+        stable: Set[str](),
+        elem_ref: {},
+        defers: [],
+        defer_loops: [],
+    )
 
 ## A `mut` parameter's object, as `FUNCTION|KEY`.
 fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
