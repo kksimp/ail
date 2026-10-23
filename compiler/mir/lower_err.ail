@@ -880,7 +880,8 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, piece], Ty.Str)
         f := load(obj, k + skip, slots[k].ty)
         text := match slots[k].ty
-            Int | Sized(_) => call("rt.fmt_int", [f], Ty.Str)
+            Sized(kk) => call(if kk == "u64" then "rt.fmt_u64" else "rt.fmt_int", [f], Ty.Str)
+            Int => call("rt.fmt_int", [f], Ty.Str)
             Float => call("rt.fmt_float", [f], Ty.Str)
             F32 => call("rt.fmt_f32", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)

@@ -76,6 +76,10 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
 
 ## The text form of a value (type.str.3), as a `str` value.
 fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
+    if v.ty == Ty.Sized("u64")
+        return call("rt.fmt_u64", [v.id], Ty.Str)
+    if v.ty == Ty.List(Ty.Sized("u64"))
+        return value_text(v.ty, v.id)
     match v.ty
         Str => v.id
         Bytes => call("rt.bytes_show", [v.id], Ty.Str)

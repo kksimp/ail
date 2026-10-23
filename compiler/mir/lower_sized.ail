@@ -3,13 +3,15 @@
 ## `int`, sign- or zero-extended from its width, so it is always inside its
 ## type's range; comparison and printing are the `int` ones. This file has
 ## literals, the conversions, comparison and arithmetic (checked `+ - * / %`,
-## negation, `abs`, `wrapping_*` and `saturating_*`). `checked_*` (needs
-## `Opt` of a sized integer), `u64` and `f32` come later (not yet:
-## `native.subset.1` problems, never a wrong answer).
+## negation, `abs`, `wrapping_*` and `saturating_*`). `u64` is the same with the
+## 64 bits as they are: comparison flips the top bit first, division and text are
+## in `rt/native/u64.ail`, and every check is its own (`u64_arith`, `u64_checked`).
 use ast
 
 ## The kinds, in the order of the codes `rt.sized_msg` knows.
-SIZED_KINDS := ["i8", "i16", "i32", "u8", "u16", "u32"]
+SIZED_KINDS := ["i8", "i16", "i32", "u8", "u16", "u32", "u64"]
+
+U64_TOP := -9223372036854775807 - 1
 
 fn sized_lo(kind str) int
     match kind
@@ -25,6 +27,7 @@ fn sized_hi(kind str) int
         "i32" => 2147483647
         "u8" => 255
         "u16" => 65535
+        "u64" => -1
         _ => 4294967295
 
 fn sized_code(kind str) int
@@ -53,7 +56,7 @@ fn Lower.lower_int_lit(mut self, text str, pos ast.Pos, want Ty?) Val?
         return float_lit(n.to_float(), want)
     k := want_sized(want)
     if k != ""
-        if n > sized_hi(k)
+        if k != "u64" and n > sized_hi(k)
             problem(pos, "integer literal `{text}` doesn't fit in `{k}`")
             return none
         return Val(id: konst(n, Ty.Sized(k)), ty: Ty.Sized(k))
@@ -81,14 +84,39 @@ fn Lower.negative_sized_lit(mut self, operand ast.Expr, want Ty?) Val?
 ## result is outside the type (type.num.14); `/` and `%` by zero and
 ## `MIN / -1` trap with `expr.arith.3`.
 fn Lower.sized_binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val?
+    k := sized_kind(a.ty)
     if is_comparison(o)
+        if k == "u64" and op_name(o) != "eq" and op_name(o) != "ne"
+            return Val(id: op(op_name(o), [flip_top(a.id), flip_top(b.id)], Ty.Bool), ty: Ty.Bool)
         return Val(id: op(op_name(o), [a.id, b.id], Ty.Bool), ty: Ty.Bool)
     name := op_name(o)
-    k := sized_kind(a.ty)
     if arith_code(name) < 0
         return unsupported(pos, "`{op_symbol(o)}` on `{a.ty.name()}`")
     r := self.sized_arith(name, k, a.id, b.id, pos)
     Val(id: r, ty: a.ty)
+
+## `v` with its top bit flipped: signed order on the result is unsigned order on `v`.
+fn Lower.flip_top(mut self, v int) int
+    op("bxor", [v, konst(U64_TOP, Ty.Int)], Ty.Int)
+
+## `a < b` (`strict`) or `a <= b` of two `u64`.
+fn Lower.u64_le(mut self, a int, b int) int
+    op("le", [flip_top(a), flip_top(b)], Ty.Bool)
+
+## The checked result of `a OP b` on `u64`: 64 bits wrap, so each operation checks its own way.
+fn Lower.u64_arith(mut self, name str, a int, b int, args List[int], pos ast.Pos) int
+    divides := name == "div" or name == "rem"
+    if divides
+        nz := op("ne", [b, konst(0, Ty.Int)], Ty.Bool)
+        sized_trap_unless(nz, "expr.arith.3", "rt.sized_zero_msg", args, pos)
+        return call(if name == "div" then "rt.u64_div" else "rt.u64_rem", [a, b], Ty.Int)
+    r := op(name, [a, b], Ty.Int)
+    ok := match name
+        "add" => u64_le(a, r)
+        "sub" => u64_le(b, a)
+        _ => call("rt.u64_mul_ok", [a, b], Ty.Bool)
+    sized_trap_unless(ok, "expr.arith.1", "rt.sized_over_msg", args, pos)
+    r
 
 fn arith_code(name str) int
     match name
@@ -104,6 +132,8 @@ fn Lower.sized_arith(mut self, name str, k str, a int, b int, pos ast.Pos) int
     code := arith_code(name)
     kc := konst(sized_code(k), Ty.Int)
     args := [a, b, konst(code, Ty.Int), kc]
+    if k == "u64"
+        return u64_arith(name, a, b, args, pos)
     divides := name == "div" or name == "rem"
     if divides
         nz := op("ne", [b, konst(0, Ty.Int)], Ty.Bool)
@@ -155,6 +185,8 @@ fn Lower.sized_neg(mut self, a Val, pos ast.Pos) Val?
 
 ## The value `v` wrapped into kind `k`: sign- or zero-extended from its width.
 fn Lower.sized_wrap(mut self, k str, v int) int
+    if k == "u64"
+        return v
     if sized_lo(k) < 0
         sh := konst(64 - sized_bits(k), Ty.Int)
         return op("shr", [op("shl", [v, sh], Ty.Int), sh], Ty.Int)
@@ -164,6 +196,7 @@ fn sized_bits(k str) int
     match k
         "i8" | "u8" => 8
         "i16" | "u16" => 16
+        "u64" => 64
         _ => 32
 
 ## `wrapping_*` (on `int` too, where 64-bit arithmetic already wraps),
@@ -222,12 +255,35 @@ fn Lower.sized_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val
         k := sized_kind(r.ty)
         if base != "add" and base != "sub" and base != "mul"
             return none
+        if k == "u64"
+            return u64_saturating(base, r, vs[0])
         if base == "mul" and k == "u32"
             return unsupported(npos, "`.saturating_mul()` on `u32`")
         v := op(base, [r.id, vs[0].id], Ty.Int)
         capped := int_minmax("min", v, konst(sized_hi(k), Ty.Int))
         return Val(id: int_minmax("max", capped, konst(sized_lo(k), Ty.Int)), ty: r.ty)
     none
+
+## `saturating_add`, `saturating_sub` and `saturating_mul` on `u64`: the result, or the
+## type's limit (0 below, all ones above) when it doesn't fit.
+fn Lower.u64_saturating(mut self, base str, r Val, b Val) Val?
+    s := op(base, [r.id, b.id], Ty.Int)
+    ok := match base
+        "add" => u64_le(r.id, s)
+        "sub" => u64_le(b.id, r.id)
+        _ => call("rt.u64_mul_ok", [r.id, b.id], Ty.Bool)
+    limit := konst(if base == "sub" then 0 else -1, Ty.Int)
+    join := new_block()
+    res := new_value(Ty.Int, "")
+    blocks[join].params.push(res)
+    over := new_block()
+    branch(ok, join, [s], over, [])
+    seal(over)
+    cur = over
+    jump(join, [limit])
+    seal(join)
+    cur = join
+    Val(id: res, ty: r.ty)
 
 ## The conversions of type.num.15 between `int` and the sized integers:
 ## `to_i8` ... `to_u32` on any of them, and `to_int` back. A conversion that
@@ -236,18 +292,62 @@ fn Lower.sized_conversion(mut self, r Val, name str, npos ast.Pos, vs List[Val])
     if vs.len() != 0 or not name.starts_with("to_")
         return none
     target := name.slice(3, name.len())
+    from_u64 := r.ty == Ty.Sized("u64")
+    if from_u64 and (target == "float" or target == "hex")
+        if target == "float"
+            return Val(id: call("rt.u64_float", [r.id], Ty.Float), ty: Ty.Float)
+        return Val(id: call("rt.fmt_hex_u", [r.id], Ty.Str), ty: Ty.Str)
     if target == "int"
+        if from_u64
+            sized_trap_unless(
+                op("ge", [r.id, konst(0, Ty.Int)], Ty.Bool),
+                "type.num.15",
+                "rt.sized_msg",
+                [r.id, konst(16 + 7, Ty.Int)],
+                npos,
+            )
+            return Val(id: r.id, ty: Ty.Int)
         if r.ty.is_sized()
             return Val(id: r.id, ty: Ty.Int)
         return none
     if target == "f32"
+        if from_u64
+            return unsupported(npos, "`.to_f32()` on `u64`")
         return int_to_f32(r)
-    if target == "u64"
-        return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     code := sized_code(target)
     if code < 0
         return none
     t := Ty.Sized(target)
+    if target == "u64"
+        # Every value of an unsigned type fits; a signed one must not be negative.
+        if r.ty.is_sized() and sized_lo(sized_kind(r.ty)) == 0
+            return Val(id: r.id, ty: t)
+        sized_trap_unless(
+            op("ge", [r.id, konst(0, Ty.Int)], Ty.Bool),
+            "type.num.15",
+            "rt.sized_msg",
+            [r.id, konst(code, Ty.Int)],
+            npos,
+        )
+        return Val(id: r.id, ty: t)
+    if from_u64
+        # Above the top bit the register is negative: the value is too large.
+        msg := [r.id, konst(16 + code, Ty.Int)]
+        sized_trap_unless(
+            op("ge", [r.id, konst(0, Ty.Int)], Ty.Bool),
+            "type.num.15",
+            "rt.sized_msg",
+            msg,
+            npos,
+        )
+        sized_trap_unless(
+            op("le", [r.id, konst(sized_hi(target), Ty.Int)], Ty.Bool),
+            "type.num.15",
+            "rt.sized_msg",
+            msg,
+            npos,
+        )
+        return Val(id: r.id, ty: t)
     if r.ty.is_sized()
         and sized_lo(sized_kind(r.ty)) >= sized_lo(target)
         and sized_hi(sized_kind(r.ty)) <= sized_hi(target)
@@ -284,3 +384,53 @@ fn Lower.sized_trap_unless(mut self, ok int, rule str, msg_fn str, args List[int
     emit_void(t)
     finish(unreachable_term())
     cur = good
+
+## `checked_add` ... `checked_neg` on `u64` (codes as in lower_checked.ail): `none` when the
+## result doesn't fit or the divisor is zero.
+fn Lower.u64_checked(mut self, r Val, code int, vs List[Val]) Val?
+    a := r.id
+    b := if vs.len() == 1 then vs[0].id else a
+    t := Ty.Opt(r.ty)
+    join := new_block()
+    res := new_value(t, "")
+    blocks[join].params.push(res)
+    yes := new_block()
+    no := new_block()
+    if code == 3 or code == 4
+        branch(op("ne", [b, konst(0, Ty.Int)], Ty.Bool), yes, [], no, [])
+    elif code == 5
+        branch(op("eq", [a, konst(0, Ty.Int)], Ty.Bool), yes, [], no, [])
+    else
+        jump(yes, [])
+    seal(yes)
+    seal(no)
+    cur = yes
+    mut s := a
+    mut ok := -1
+    match code
+        0 =>
+            s = op("add", [a, b], Ty.Int)
+            ok = u64_le(a, s)
+        1 =>
+            s = op("sub", [a, b], Ty.Int)
+            ok = u64_le(b, a)
+        2 =>
+            s = op("mul", [a, b], Ty.Int)
+            ok = call("rt.u64_mul_ok", [a, b], Ty.Bool)
+        3 =>
+            s = call("rt.u64_div", [a, b], Ty.Int)
+            ok = konst(1, Ty.Bool)
+        4 =>
+            s = call("rt.u64_rem", [a, b], Ty.Int)
+            ok = konst(1, Ty.Bool)
+        _ => ok = konst(1, Ty.Bool)
+    good := new_block()
+    branch(ok, good, [], no, [])
+    seal(good)
+    cur = good
+    jump(join, [some(Val(id: s, ty: r.ty)).id])
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: res, ty: t)
