@@ -290,6 +290,8 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         release(key)
         fn_failed = true
         return none
+    if gen.mowner.contains(key)
+        return generic_method_call(key, recv, args, pos)
     if gen.fns.contains(key) and recv == none
         return generic_call(key, key, [], args, pos, none)
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
@@ -472,6 +474,8 @@ fn Lower.lower_member_expr(
     e ast.Expr,
     want Ty?,
 ) Val?
+    if t := typeargs_inst(recv)
+        return generic_variant(gen.bases[t.name()], name, none, pos, t)
     if g := generic_enum_ref(recv)
         return generic_variant(g, name, none, pos, want)
     if en := enum_ref(recv)

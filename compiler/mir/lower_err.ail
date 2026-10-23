@@ -896,6 +896,10 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
 ## The name a type is shown by: `std.ui` is written in AIL here but is the
 ## runtime's `ui` module under `ail run`, so its types print as `ui.Event`.
 fn shown_key(key str) str
+    # An instance of a generic type shows as its type's name (`Pair`).
+    cut := key.split("[")[0]
+    if cut != key
+        return shown_key(cut)
     if key.starts_with("std.ui.") and key.slice(7, key.len()).contains(".") == false
         return key.slice(4, key.len())
     key

@@ -1708,12 +1708,18 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             and not elem.is_coll()
             and not elem.is_ref()
             and not elem.is_tensor()
+            and not is_fn_ty(elem)
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
     for v in vs
         call(push_fn(elem), [l, v], Ty.Unit)
     Val(id: l, ty: Ty.List(elem))
+
+fn is_fn_ty(t Ty) bool
+    match t
+        Fn(_, _) => true
+        _ => false
 
 fn push_fn(elem Ty) str
     match elem
@@ -1794,7 +1800,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
-            unsupported(pos, "this call")
+            # A function held in a field: `(op.run)(a, b)`.
+            f := lower_value(callee, none)?
+            call_value(f, args, expr_pos(callee))
         TypeArgs(name, targs, tpos) =>
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(targs, args, pos)
@@ -1946,6 +1954,8 @@ fn Lower.lower_method(
         return lower_chan_select(args, npos)
     if is_module(recv, "mem")
         return lower_mem_call(name, npos, args)
+    if t := typeargs_inst(recv)
+        return typeargs_call(t, name, args, npos)
     if g := generic_enum_ref(recv)
         return generic_variant(g, name, args, npos, none)
     if en := enum_ref(recv)
