@@ -1,0 +1,654 @@
+## `ail api --card [--budget N] [--json] [--module NAME | --index] DIR|FILE`
+## (api.card.1-7, ADR 0310), as `bootstrap/src/api/card.rs`: a program's own
+## card, the whole program in one read under a token budget. The card is the
+## outline of `ail api` per module, plus the entry point, the tests, the
+## manifest and the examples. Over budget it drops, in this order: private
+## items, doc comments, parameter names, member lists, then everything but
+## module names (api.card.3), and its last line says what it dropped.
+use ast
+use check
+use doc
+use load
+
+CARD_USAGE := "usage: ail api --card [--budget N] [--json] [--module NAME | --index] DIR|FILE"
+
+## The default budget in estimated tokens (api.card.3, ADR 0311).
+DEFAULT_BUDGET := 4000
+
+## How the root module (named "" internally) is written on the command line
+## and in cards.
+ROOT_TITLE := "(root)"
+
+## How much of the card is left, from everything (0) to module names (6).
+LEVELS := 6
+
+## What each level drops, for the card's last line (api.card.3).
+DROPPED := [
+    "private items",
+    "doc comments",
+    "parameter names",
+    "members, contracts and examples (docs past their first sentence)",
+    "fields, variants and test names",
+    "signatures (names only)",
+]
+
+error struct CardError
+    message str
+    ## The rendered diagnostics when the program doesn't check.
+    report str
+
+## One declaration of the card.
+struct Entry
+    public bool
+    ## `struct`, `enum`, `fn`, `method`, `field`, ...
+    kind str
+    name str
+    ## The signature as `ail api` writes it, parameter names included.
+    signature str
+    ## The same without parameter names; `none` unless it has parameters.
+    bare str?
+    doc str?
+    pre List[str]
+    post List[str]
+    fails List[str]
+    effects List[str]
+    members List[Entry]
+    ## Where it is declared: the file as loaded and the line and column in
+    ## it (api.card.2); only the JSON form shows it.
+    file str
+    line int
+    col int
+
+struct CardModule
+    name str
+    entries List[Entry]
+
+struct Card
+    name str
+    entry str?
+    tests List[str]
+    ## The module of each test, parallel to `tests` (api.card.6).
+    test_modules List[str]
+    manifest List[str]
+    examples List[(str, str)]
+    modules List[CardModule]
+
+## A cheap token estimate (api.card.3): a run of letters or digits costs one
+## token per five characters (at least one), any other non-space character
+## one token, a newline one (ADR 0311).
+pub fn estimate_tokens(s str) int
+    mut tokens := 0
+    mut run := 0
+    for c in s.chars()
+        if c.is_alpha() or c.is_digit() or c == '_'
+            run += 1
+            continue
+        if run > 0
+            tokens += (run + 4) / 5
+            run = 0
+        if c == '\n' or not c.is_space()
+            tokens += 1
+    tokens + (run + 4) / 5
+
+## The first line of the file's number-from-`base` position: the module the
+## declaration at `line` is in (the last file starting before it).
+fn card_module_at(p ast.Program, line int) str
+    if line >= 1073741824
+        return ""
+    mut out := ""
+    for f in p.files
+        if f.base < line
+            out = f.module
+    out
+
+## The file at `line` and the line in it, as `modules::locate`.
+fn card_locate(p ast.Program, line int)(str, int)
+    if line >= 1073741824
+        return ("", line)
+    mut at := -1
+    for i in 0..p.files.len()
+        if p.files[i].base < line
+            at = i
+    if at < 0
+        return ("", line)
+    (p.files[at].path, line - p.files[at].base)
+
+fn Item.card_strings(self, key str) List[str]
+    for p in extra
+        if p.key == key
+            match p.val
+                Arr(xs) =>
+                    mut out := List[str]()
+                    for x in xs
+                        match x
+                            Str(s) => out.push(s)
+                            Null | Bool(_) | Int(_) | Arr(_) | Obj(_) => continue
+                    return out
+                Null | Bool(_) | Int(_) | Str(_) | Obj(_) => return []
+    []
+
+fn Item.card_params(self) List[J]
+    for p in extra
+        if p.key == "params"
+            match p.val
+                Arr(xs) => return xs
+                Null | Bool(_) | Int(_) | Str(_) | Obj(_) => return []
+    []
+
+fn card_obj_get(kvs List[Kv], key str) J?
+    for p in kvs
+        if p.key == key
+            return p.val
+    none
+
+fn card_is_true(j J?) bool
+    if v := j
+        match v
+            Bool(b) => return b
+            Null | Int(_) | Str(_) | Arr(_) | Obj(_) => return false
+    false
+
+## `fn name(int, str) T`: the signature with each parameter's name removed
+## (`mut` and `move` kept). The parameter list is the first balanced `(...)`.
+fn card_bare_signature(sig str, params List[J]) str
+    cs := sig.chars()
+    mut open := -1
+    for i in 0..cs.len()
+        if open < 0 and cs[i] == '('
+            open = i
+    if open < 0
+        return sig
+    mut depth := 0
+    mut close := cs.len()
+    mut i := open
+    while i < cs.len()
+        if cs[i] == '('
+            depth += 1
+        elif cs[i] == ')'
+            depth -= 1
+            if depth == 0
+                close = i
+                break
+        i += 1
+    mut parts := List[str]()
+    # A receiver is written first and isn't among `params`.
+    inner := sig.slice(open + 1, close)
+    if inner.starts_with("mut self")
+        parts.push("mut self")
+    elif inner.starts_with("self")
+        parts.push("self")
+    for p in params
+        match p
+            Obj(kvs) =>
+                mut ty := ""
+                if t := card_obj_get(kvs, "type")
+                    match t
+                        Str(s) => ty = s
+                        Null | Bool(_) | Int(_) | Arr(_) | Obj(_) => ty = ""
+                mode := if card_is_true(card_obj_get(kvs, "mut")) then "mut " else if card_is_true(
+                    card_obj_get(kvs, "move"),
+                ) then "move " else ""
+                parts.push("{mode}{ty}")
+            Null | Bool(_) | Int(_) | Str(_) | Arr(_) => continue
+    after := sig.slice(close + 1, cs.len())
+    "{sig.slice(0, open)}({parts.join(", ")}){after}"
+
+fn card_entry_of(prog ast.Program, item Item) Entry
+    mut bare := none
+    ps := item.card_params()
+    if ps.len() > 0
+        bare = card_bare_signature(item.signature, ps)
+    public := item.line >= 1073741824 or prog.public.contains(item.line)
+    at := card_locate(prog, item.line)
+    mut members := List[Entry]()
+    for g in item.members
+        for m in g.items
+            members.push(card_entry_of(prog, m))
+    Entry(
+        public: public,
+        kind: item.kind,
+        name: item.name,
+        signature: item.signature,
+        bare: bare,
+        doc: item.doc,
+        pre: item.card_strings("requires"),
+        post: item.card_strings("ensures"),
+        fails: item.card_strings("fails_with"),
+        effects: item.card_strings("effects"),
+        members: members,
+        file: at.0,
+        line: at.1,
+        col: item.col,
+    )
+
+## `edit.ail`, or `geo/shapes.ail`: the file's path below the package root.
+fn card_file_label(root str, file str) str
+    prefix := if root == "." then "" else "{root}/"
+    if prefix != "" and file.starts_with(prefix)
+        return file.slice(prefix.len(), file.len())
+    file
+
+## The `.ail` files of `root/examples` with the first line of each file's
+## leading doc comment (api.card.1), sorted by name.
+fn card_examples_of(root str) List[(str, str)]
+    dir := path.join(root, "examples")
+    names := fs.list_dir(dir) else return []
+    mut out := List[(str, str)]()
+    for n in names.sorted()
+        if not n.ends_with(".ail")
+            continue
+        src := fs.read_text(path.join(dir, n)) else ""
+        mut first := ""
+        for l in src.lines()
+            if rest := l.trim_start().strip_prefix("##")
+                first = rest.trim()
+                break
+        out.push((n, first))
+    out
+
+fn card_has_test(f ast.FnDecl) bool
+    for a in f.attrs
+        if a.name == "test"
+            return true
+    false
+
+fn card_build(target str, std str, json bool) Card ! CardError
+    is_file := target.ends_with(".ail")
+    parts := target.split("/")
+    root := if not is_file then target else if parts.len() > 1 then parts[..parts.len() - 1].join("/") else "."
+    trimmed := [s for s in root.split("/") if s != ""]
+    name := if root == "."
+        or root == ".."
+        or trimmed.len() == 0 then target else trimmed[trimmed.len() - 1]
+    loaded := load.load(target, std) else err
+        return CardError(message: err.message, report: "")
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    mut analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags]
+    # A library has no `main` (api.out.5).
+    found = [d for d in found if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            return CardError(message: "", report: load.report(
+                loaded.program.files,
+                loaded.texts,
+                found,
+                json,
+            ))
+    # Doc comments, file by file: a position's line is its file's base plus
+    # the line in the file (api.card.1).
+    mut by_line := Map[int, str]()
+    for i in 0..loaded.program.files.len()
+        f := loaded.program.files[i]
+        if f.path.ends_with(".ail")
+            lines := doc.by_line(loaded.texts[i])
+            for l in lines.keys()
+                by_line[f.base + l] = lines[l]
+    prog := doc.attach_lines(loaded.program, by_line)
+    api := new_whole_api(prog, Facts(effects: analysis.effects, errors: analysis.errors))
+    mut tests := List[int]()
+    mut test_lines := Set[int]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if card_has_test(f) and f.pos.line < 1073741824
+            tests.push(i)
+            test_lines.add(f.pos.line)
+    mut modules := List[CardModule]()
+    for item in api.items()
+        if test_lines.contains(item.line)
+            continue
+        module := card_module_at(prog, item.line)
+        entry := card_entry_of(prog, item)
+        mut placed := false
+        for i in 0..modules.len()
+            if modules[i].name == module
+                modules[i].entries.push(entry)
+                placed = true
+        if not placed
+            modules.push(CardModule(name: module, entries: [entry]))
+    # Deterministic: the root module first, then by import path (api.card.1).
+    modules = modules.sorted(by: |m| "{if m.name == "" then "0" else "1"}{m.name}")
+    mut main_entry := none
+    for f in prog.fns
+        if f.name == "main" and f.owner == none and f.pos.line < 1073741824 and card_module_at(
+            prog,
+            f.pos.line,
+        ) == ""
+            at := card_locate(prog, f.pos.line)
+            main_entry = "main in {card_file_label(root, at.0)}"
+            break
+    mut named := List[(str, str)]()
+    for i in tests
+        f := prog.fns[i]
+        m := card_module_at(prog, f.pos.line)
+        named.push((if m == "" then f.name else "{m}.{f.name}", m))
+    named = named.sorted(by: |t| t.0)
+    mut manifest := List[str]()
+    text := fs.read_text(path.join(root, "ail.pkg")) else ""
+    for l in text.lines()
+        t := l.trim()
+        if t != "" and not t.starts_with("#")
+            manifest.push(t)
+    Card(
+        name: name,
+        entry: main_entry,
+        tests: [t.0 for t in named],
+        test_modules: [t.1 for t in named],
+        manifest: manifest,
+        examples: card_examples_of(root),
+        modules: modules,
+    )
+
+## Whether `e` is dropped at `level` for being private: not `pub`, in a
+## module that exports something or isn't the root (api.card.3). A root
+## module without any `pub` has no importers, so all of it is its surface.
+fn card_private(module CardModule, e Entry) bool
+    if e.public
+        return false
+    if module.name != ""
+        return true
+    for x in module.entries
+        if x.public
+            return true
+    false
+
+fn card_shown(module CardModule, level int) List[Entry]
+    [e for e in module.entries if level == 0 or not card_private(module, e)]
+
+fn card_signature(e Entry, level int) str
+    if level >= 3
+        return e.bare else e.signature
+    e.signature
+
+fn card_first_line(d str) str
+    ls := d.lines()
+    if ls.len() == 0
+        return ""
+    ls[0].trim()
+
+## The first sentence of a doc comment: its first line, cut after the first
+## `. ` (api.card.3, ADR 0703).
+fn card_first_sentence(d str) str
+    l := card_first_line(d)
+    if i := l.find(". ")
+        return l.slice(0, i + 1)
+    l
+
+fn card_entry_line(e Entry, level int, pad str, mut out List[str])
+    vis := if e.public then "pub " else ""
+    if level >= 6
+        out.push("{pad}{e.kind} {e.name}\n")
+        return
+    mut s := "{pad}{vis}{card_signature(e, level)}"
+    if e.effects.len() > 0
+        s = "{s} [{e.effects.join(" ")}]"
+    if level < 2 and e.doc != none
+        s = "{s}  ## {card_first_line(e.doc else "")}"
+    elif level == 4 and e.doc != none
+        s = "{s}  ## {card_first_sentence(e.doc else "")}"
+    out.push("{s}\n")
+    if level < 4
+        for c in e.pre
+            out.push("{pad}    requires {c}\n")
+        for c in e.post
+            out.push("{pad}    ensures {c}\n")
+        if e.fails.len() > 0 and e.signature.contains(") !")
+            out.push("{pad}    fails with {e.fails.join(" | ")}\n")
+
+## A method of a type that isn't `pub` (a field or variant has no
+## visibility of its own here).
+fn card_private_member(m Entry) bool
+    (m.kind == "method" or m.kind == "fn") and not m.public
+
+fn card_module_title(name str) str
+    if name == "" then ROOT_TITLE else name
+
+fn card_render_md(card Card, level int, dropped List[str], budget int, trailer bool) str
+    mut out := List[str]()
+    out.push("# {card.name}\n")
+    if e := card.entry
+        out.push("entry: {e}\n")
+    if level >= 4 and card.tests.len() > 0
+        out.push("tests: {card.tests.len()} (`ail test` lists them)\n")
+    elif card.tests.len() > 0
+        out.push("tests: {card.tests.join(", ")}\n")
+    if card.manifest.len() > 0
+        out.push("ail.pkg:\n")
+        for l in card.manifest
+            out.push("    {l}\n")
+    if card.examples.len() > 0 and level < 4
+        out.push("examples:\n")
+        for ex in card.examples
+            if ex.1 == "" or level >= 2
+                out.push("    {ex.0}\n")
+            else
+                out.push("    {ex.0}  ## {ex.1}\n")
+    for m in card.modules
+        es := card_shown(m, level)
+        if level >= 6
+            out.push("\n## {card_module_title(m.name)} ({m.entries.len()} items)\n")
+            continue
+        if es.len() == 0
+            continue
+        out.push("\n## {card_module_title(m.name)}\n")
+        out.push("```\n")
+        for e in es
+            card_entry_line(e, level, "", mut out)
+            if level < 4
+                for mem in e.members
+                    if level > 0 and card_private_member(mem)
+                        continue
+                    card_entry_line(mem, level, "    ", mut out)
+        out.push("```\n")
+    mut text := out.join("")
+    if level > 0 and trailer
+        text = "{text}\ntrimmed to fit {budget} tokens (~{estimate_tokens(text)}); dropped: {dropped.join(", ")}\n"
+    text
+
+fn card_strs_json(xs List[str]) J
+    J.Arr([J.Str(x) for x in xs])
+
+fn card_entry_json(e Entry, level int) J
+    mut kvs := [
+        kv("kind", J.Str(e.kind)),
+        kv("name", J.Str(e.name)),
+        kv("pub", J.Bool(e.public)),
+        # api.card.2: the declaration's position, so a tool can jump to it.
+        kv("file", J.Str(e.file)),
+        kv("line", J.Int(e.line)),
+        kv("col", J.Int(e.col)),
+    ]
+    if level < 6
+        kvs.push(kv("signature", J.Str(card_signature(e, level))))
+        if level < 2
+            kvs.push(kv("doc", card_doc_json(e.doc, false)))
+        elif level == 4
+            kvs.push(kv("doc", card_doc_json(e.doc, true)))
+        if e.effects.len() > 0
+            kvs.push(kv("effects", card_strs_json(e.effects)))
+        if level < 4
+            if e.pre.len() > 0
+                kvs.push(kv("requires", card_strs_json(e.pre)))
+            if e.post.len() > 0
+                kvs.push(kv("ensures", card_strs_json(e.post)))
+            if e.fails.len() > 0
+                kvs.push(kv("fails_with", card_strs_json(e.fails)))
+            members := [
+                card_entry_json(m, level)
+                for m in e.members if level == 0 or not card_private_member(m)
+            ]
+            if members.len() > 0
+                kvs.push(kv("members", J.Arr(members)))
+    J.Obj(kvs)
+
+fn card_doc_json(d str?, sentence bool) J
+    if v := d
+        return J.Str(if sentence then card_first_sentence(v) else card_first_line(v))
+    J.Null
+
+fn card_render_json(card Card, level int, dropped List[str], budget int, trailer bool) str
+    mut modules := List[J]()
+    for m in card.modules
+        items := if level >= 6 then List[J]() else [
+            card_entry_json(e, level)
+            for e in card_shown(m, level)
+        ]
+        modules.push(J.Obj([
+            kv("module", J.Str(m.name)),
+            kv("count", J.Int(m.entries.len())),
+            kv("items", J.Arr(items)),
+        ]))
+    mut examples := List[J]()
+    if level < 4
+        for ex in card.examples
+            examples.push(J.Obj([kv("file", J.Str(ex.0)), kv(
+                "doc",
+                J.Str(if level >= 2 then "" else ex.1),
+            )]))
+    mut top := [
+        kv("api", J.Int(API_VERSION)),
+        kv("card", J.Str(card.name)),
+        kv("entry", opt_str(card.entry)),
+        kv("tests", if level >= 4 then J.Arr([]) else card_strs_json(card.tests)),
+        kv("test_count", J.Int(card.tests.len())),
+        kv("manifest", card_strs_json(card.manifest)),
+        kv("examples", J.Arr(examples)),
+        kv("modules", J.Arr(modules)),
+    ]
+    if trailer
+        top.push(kv("budget", J.Int(budget)))
+        top.push(kv("dropped", card_strs_json(dropped)))
+    "{write_json(J.Obj(top), false, 0)}\n"
+
+## The card at `level`; `trailer` says whether it ends with what it dropped
+## (and the budget), which `fit` leaves out when it ranks the levels.
+fn card_render(card Card, level int, json bool, budget int, trailer bool) str
+    dropped := if trailer then DROPPED[..level] else List[str]()
+    if json
+        return card_render_json(card, level, dropped, budget, trailer)
+    card_render_md(card, level, dropped, budget, trailer)
+
+## The richest card of `built` within `budget` (api.card.3).
+fn card_fit(built Card, budget int, json bool) str
+    # api.card.3 (ADR 0703): the richest level within the budget. The levels
+    # are not nested (the first-sentence level keeps docs that a level after
+    # it drops), so the first level that fits is not always the fullest one.
+    # "Richest" counts the card's content, not its trailer (ADR 0719): a
+    # deeper level's trailer lists more dropped items, so counting it would
+    # let a trimmed card outrank a fuller one.
+    mut best_tokens := -1
+    mut best_level := LEVELS
+    mut found := false
+    for level in 0..LEVELS + 1
+        content := estimate_tokens(card_render(built, level, json, budget, false))
+        full := estimate_tokens(card_render(built, level, json, budget, true))
+        if full <= budget and (not found or content > best_tokens)
+            best_tokens = content
+            best_level = level
+            found = true
+    card_render(built, best_level, json, budget, true)
+
+fn card_module_card(built Card, module str, target str, budget int, json bool) str ! CardError
+    name := if module == ROOT_TITLE then "" else module
+    mut known := false
+    for m in built.modules
+        if m.name == name
+            known = true
+    if not known
+        return CardError(
+            message: "no module `{module}` in {target}; `ail api --card --index {target}` lists the modules",
+            report: "",
+        )
+    mut c := built
+    c.modules = [m for m in built.modules if m.name == name]
+    c.name = "{built.name}: {card_module_title(name)}"
+    if name != ""
+        c.entry = none
+        c.manifest = []
+        c.examples = []
+    mut tests := List[str]()
+    mut test_modules := List[str]()
+    for i in 0..built.tests.len()
+        if built.test_modules[i] == name
+            tests.push(built.tests[i])
+            test_modules.push(name)
+    c.tests = tests
+    c.test_modules = test_modules
+    card_fit(c, budget, json)
+
+## `--index`: one line per module with its item count (api.card.7).
+fn card_index_card(built Card, json bool) str
+    if json
+        mods := [
+            J.Obj([kv("module", J.Str(m.name)), kv("count", J.Int(m.entries.len()))])
+            for m in built.modules
+        ]
+        top := J.Obj([
+            kv("api", J.Int(API_VERSION)),
+            kv("card", J.Str(built.name)),
+            kv("modules", J.Arr(mods)),
+        ])
+        return "{write_json(top, false, 0)}\n"
+    mut out := ["# {built.name}\n"]
+    for m in built.modules
+        out.push("{card_module_title(m.name)}  {m.entries.len()} items\n")
+    out.join("")
+
+## `ail api --card ...`; the exit status. `rest` holds the arguments, `--card`
+## among them. A diagnostic of the program is written as `check` writes it.
+pub fn card_command(rest List[str], std str) int
+    mut budget := DEFAULT_BUDGET
+    mut json := false
+    mut target := ""
+    mut module := ""
+    mut has_module := false
+    mut index := false
+    mut i := 0
+    while i < rest.len()
+        a := rest[i]
+        i += 1
+        match a
+            "--card" => continue
+            "--json" => json = true
+            "--index" => index = true
+            "--module" =>
+                if i >= rest.len()
+                    io.eprint(CARD_USAGE)
+                    return 2
+                module = rest[i]
+                has_module = true
+                i += 1
+            "--budget" =>
+                n := if i < rest.len() then rest[i].to_int() else none
+                if n == none or (n else 0) <= 0
+                    io.eprint(CARD_USAGE)
+                    return 2
+                budget = n else 0
+                i += 1
+            _ =>
+                if a.starts_with("--") or target != ""
+                    io.eprint(CARD_USAGE)
+                    return 2
+                target = a
+    if target == "" or (index and has_module)
+        io.eprint(CARD_USAGE)
+        return 2
+    built := card_build(target, std, json) else err
+        if err.report != ""
+            io.eprint(err.report)
+        else
+            io.eprint("error: {err.message}")
+        return 2
+    mut out := ""
+    if index
+        out = card_index_card(built, json)
+    elif has_module
+        got := card_module_card(built, module, target, budget, json) else err
+            io.eprint("error: {err.message}")
+            return 2
+        out = got
+    else
+        out = card_fit(built, budget, json)
+    print(out.strip_suffix("\n") else out)
+    0
