@@ -533,7 +533,7 @@ fn net_options() int
     store64(o + 16, str_addr(""))
     store64(o + 24, NET_DEFAULT_MS)
     store64(o + 32, HTTP_MAX_REDIRECTS)
-    store64(o + 40, 0)
+    store64(o + 40, str_addr(""))
     store64(o + 48, 0)
     store64(o + 56, 0)
     o
@@ -1063,7 +1063,10 @@ fn net_request_with(
     store64(spec + 24, 0)
     store64(spec + 32, if stream then 1 else 0)
     store64(spec + 40, if stream and (m == "GET" or m == "HEAD") and redirects > 0 then 1 else 0)
-    http_request(m, full, str_at(load64(o + 16)), "", spec, redirects, at)
+    # `data` is sent when it isn't empty, `body` otherwise (std.net.16).
+    data := str_at(load64(o + 40))
+    body := if load64(str_addr(data)) > 0 then data else str_at(load64(o + 16))
+    http_request(m, full, body, "", spec, redirects, at)
 
 ## A `RawResponse` (status, headers, data, all_headers) for a response object.
 fn net_raw(r int) int
