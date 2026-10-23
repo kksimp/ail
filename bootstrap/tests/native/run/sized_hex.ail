@@ -1,0 +1,8 @@
+# type.str.8, type.num.14: `{x:x}` on sized integers, signed ones with a leading `-`.
+fn main()
+    a := 255.to_u8()
+    b := (-1).to_i8()
+    c := (-128).to_i8()
+    d := 4000000000.to_u32()
+    print("{a:x} {b:x} {c:x} {d:x}")
+    print("{a:>6x}|{b:0>6x}|{d:<10x}|")

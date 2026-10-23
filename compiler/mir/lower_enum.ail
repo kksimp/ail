@@ -225,8 +225,10 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     n := enum_name(a.ty) else return quiet
     name := op_name(o)
     if name != "eq" and name != "ne"
-        problem(pos, "`{op_symbol(o)}` on `{n}` isn't in the native subset yet")
-        return quiet
+        # expr.cmp.1: variants order by their position, then by their fields.
+        if is_flat(n)
+            return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+        return tuple_compare(o, a, b, pos)
     if k := user_eq(a.ty)
         eq := call(k, [a.id, b.id], Ty.Bool)
         if name == "ne"

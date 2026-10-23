@@ -238,8 +238,6 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
 fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     n := spec.precision else -1
     mut text := -1
-    if v.ty.is_sized() and spec.hex
-        return unsupported(pos, "a hex format on `{v.ty.name()}`")
     match v.ty
         Int | Sized(_) =>
             text = call(if spec.hex then "rt.fmt_hex" else "rt.fmt_int", [v.id], Ty.Str)
