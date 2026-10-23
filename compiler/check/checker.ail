@@ -91,6 +91,15 @@ pub struct Checker
     ## typed by their first use, its return type, loop depth, and how many
     ## `else` values enclose the expression and caught an optional `?`.
     pub locals List[Local]
+    ## `ail api --locals/--type` facts (api.loc.1, api.type.1): recorded only
+    ## by the last pass of `analyze(p, true)`. `anchors` and `bound` are by
+    ## local index; locals below `anchored` have an anchor.
+    pub record bool
+    pub anchored int
+    pub anchors Map[int, ast.Pos]
+    pub bound Map[int, ast.Pos]
+    pub fact_locals List[LocalFact]
+    pub fact_exprs List[(ast.Pos, str)]
     pub pending List[Pending]
     pub fn_ret Ty
     pub loop_depth int
@@ -203,6 +212,12 @@ pub fn new_checker(p ast.Program) Checker
         const_busy: [false for _ in p.consts],
         in_requires: false,
         locals: [],
+        record: false,
+        anchored: 0,
+        anchors: Map[int, ast.Pos](),
+        bound: Map[int, ast.Pos](),
+        fact_locals: [],
+        fact_exprs: [],
         pending: [],
         fn_ret: Ty.Unit,
         loop_depth: 0,
