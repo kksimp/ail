@@ -672,3 +672,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0852](0852-native-tls-one-suite-first.md) | Native TLS 1.3 offers ChaCha20-Poly1305 first and lands in checked slices; verification ships with the handshake *(delegated)* | Accepted | 2026-10-22 |
 | [0848](0848-idle-values-leave-registers-in-loops.md) | Values idle in a loop leave their registers; a checked `mul` result avoids its operands' registers *(delegated)* | Accepted | 2026-10-22 |
 | [0850](0850-native-compiler-runs-builtin-derive-generators.md) | The native compiler runs the prelude's derive generators itself, so it needs no `AIL_DERIVED` file *(delegated)* | Accepted | 2026-10-22 |
+| [0859](0859-ail-edit-in-ail.md) | `ail edit` is ported to AIL (`compiler/edit/`), byte-identical to the Rust tool; syntax-only check until the loader lands *(delegated)* | Accepted | 2026-10-23 |
