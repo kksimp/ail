@@ -51,8 +51,13 @@ done
 # Clean merges that touch the same code file: look there for duplicate arms and functions.
 awk '{print $2}' "$files" | sort | uniq -d | while read -r f; do
   case $f in *.ail|*.rs|*.sh|*.py) ;; *) continue;; esac
-  echo "WATCH $f: $(awk -v f="$f" '$2==f {print "#"$1}' "$files" | sort -u | xargs)"
-  case $f in *.ail) [ -f "$f" ] && grep -oE '^(pub )?fn [A-Za-z0-9_]+' "$f" | sort | uniq -d | sed "s|^|WATCH $f duplicate |";; esac
+  w=($(awk -v f="$f" '$2==f {print $1}' "$files" | sort -un))
+  # One stack (each PR built on the next) edits a file in turns: nothing to look at.
+  top=${w[${#w[@]}-1]} stack=1
+  for a in "${w[@]}"; do git merge-base --is-ancestor origin/pr$a origin/pr$top || stack=0; done
+  [ $stack = 1 ] && continue
+  echo "WATCH $f: $(printf '#%s ' "${w[@]}")"
+  case $f in *.ail) [ -f "$f" ] && grep -oE '^(pub )?fn [A-Za-z0-9_.]+' "$f" | sort | uniq -d | sed "s|^|WATCH $f duplicate |";; esac
 done
 rm -f "$files"
 git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!bootstrap/tests" | head -3
