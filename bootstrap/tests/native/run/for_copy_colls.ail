@@ -1,0 +1,53 @@
+struct Bag
+    items List[int]
+    seen Set[int]
+    tab Map[str, int]
+
+fn Bag.add(mut self, x int)
+    self.items.push(x)
+    self.seen.add(x)
+    self.tab["k{x}"] = x
+
+fn Bag.get(self) List[int]
+    self.items
+
+fn Bag.run(mut self)
+    for x in self.items
+        self.add(x + 10)
+    print(self.items)
+    for x in self.seen
+        self.add(x + 100)
+    print(self.items.len())
+    for k in self.tab.keys()
+        self.add(self.tab[k] + 1000)
+    print(self.items.len())
+    for k, v in self.tab
+        self.add(v + 5000)
+    print(self.items.len())
+    for x in self.get()
+        self.add(x + 7000)
+    print(self.items.len())
+    for v in self.tab.values()
+        self.add(v + 9000)
+    print("{self.items.len()} {self.tab.len()}")
+
+fn main()
+    mut b := Bag(items: [1, 2], seen: {1, 2}, tab: {"a": 1})
+    b.run()
+    mut m := {"a": 1, "b": 2}
+    for k, v in m
+        m["z{k}"] = v
+    print(m)
+    mut s := {1, 2, 3}
+    for x in s
+        s.add(x + 10)
+        s.remove(1)
+    print(s.sorted())
+    mut xs := [1, 2, 3]
+    for x in xs
+        xs.push(x)
+    print(xs)
+    mut ys := [[1], [2]]
+    for row in ys[0]
+        ys[0].push(row)
+    print(ys)
