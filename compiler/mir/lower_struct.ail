@@ -283,6 +283,8 @@ fn Lower.self_value(mut self) int
 
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    if ordered := label_ordered_method(key, args)
+        return struct_call(key, recv, ordered, pos)
     rcv := take_receiver()
     if not sigs.contains(key)
         instance_method(key)
