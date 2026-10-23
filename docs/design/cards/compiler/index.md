@@ -14,6 +14,7 @@ fmt  63 items
 load  90 items
 mir  380 items
 mir  377 items
+mir  383 items
 obj  58 items
 syntax  105 items
 x64  75 items

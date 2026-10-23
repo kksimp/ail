@@ -1,0 +1,32 @@
+# compress.unzip (std.compress.5): extraction, and the failures that write nothing.
+fn main()
+    src := "/tmp/ail_unzip_src"
+    out := "/tmp/ail_unzip_out"
+    fs.make_dir("{src}/sub") else err
+        print("make {err.kind}")
+        return
+    fs.make_dir("{src}/empty") else err
+        print("make {err.kind}")
+        return
+    fs.write_text("{src}/a.txt", "hello hello hello hello") else err
+        print("write {err.kind}")
+        return
+    fs.write_text("{src}/sub/b.txt", "x") else err
+        print("write {err.kind}")
+        return
+    compress.zip_dir(src, "/tmp/ail_unzip.zip") else err
+        print("zip {err.kind}")
+        return
+    compress.unzip("/tmp/ail_unzip.zip", out) else err
+        print("unzip {err.kind} {err.message}")
+        return
+    print(fs.read_text("{out}/a.txt") else "")
+    print(fs.read_text("{out}/sub/b.txt") else "")
+    print(fs.exists("{out}/empty"))
+    compress.unzip("/tmp/ail_unzip_none.zip", out) else err
+        print("missing {err.kind}")
+    fs.write_text("/tmp/ail_unzip_bad.zip", "not a zip archive at all, no") else err
+        print("write {err.kind}")
+        return
+    compress.unzip("/tmp/ail_unzip_bad.zip", out) else err
+        print("bad {err.kind} {err.message}")

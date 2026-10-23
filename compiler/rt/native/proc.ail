@@ -298,6 +298,14 @@ fn proc_launch(cmd str, args List[int], at str, st int) int
 ## or 0 with the error slot set. `input` is a string or 0, `timeout` a boxed
 ## integer or 0.
 fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
+    proc_run_with(cmd, args, input, timeout, at, false)
+
+## `run_bytes(cmd, args, input, timeout_ms)` (std.proc.8): `run` with `bytes`
+## in and out, a `RawOutput` with the streams undecoded.
+fn proc_run_bytes(cmd str, args List[int], input int, timeout int, at str) int
+    proc_run_with(cmd, args, input, timeout, at, true)
+
+fn proc_run_with(cmd str, args List[int], input int, timeout int, at str, raw bool) int
     mut limit := -1
     if timeout != 0
         limit = unbox(timeout)
@@ -409,8 +417,11 @@ fn proc_run(cmd str, args List[int], input int, timeout int, at str) int
         code = status.shr(8).bit_and(255)
     store64(ob, on)
     store64(eb, en)
-    out := os_lossy(ob)
-    err := os_lossy(eb)
+    if raw
+        store64(ob + 8, on)
+        store64(eb + 8, en)
+    out := if raw then str_at(ob) else os_lossy(ob)
+    err := if raw then str_at(eb) else os_lossy(eb)
     r := obj_new(24, PROC_STRUCT)
     store64(r, code)
     store64(r + 8, str_addr(out))

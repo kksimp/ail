@@ -1,0 +1,32 @@
+# Request.stop and Server.shutdown (std.net.24): the requests that have arrived
+# are answered, then accept fails with `closed`. The handler form of http.serve
+# written out over spawn.
+fn hello(r net.Request) net.Response
+    if r.path == "/stop"
+        r.stop()
+    net.Response(status: 200, headers: {"x-path": r.path}, body: "hi {r.query.get("n") else "?"}")
+
+fn worker(srv net.Server, handler fn(net.Request) net.Response)
+    while true
+        ex := srv.accept() else err
+            return
+        ex.respond(handler(ex.request)) else err
+            continue
+
+fn client(addr str)
+    a := net.get("http://{addr}/a?n=7") else err
+        print("get {err.kind}")
+        return
+    print("{a.status} {a.body} {a.headers.get("x-path")}")
+    b := net.get("http://{addr}/stop") else err
+        print("stop {err.kind}")
+        return
+    print("{b.status} {b.body}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    w := spawn worker(srv, hello)
+    c := spawn client(srv.addr())
+    c.wait()?
+    w.wait()?
+    srv.close()

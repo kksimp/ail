@@ -1,0 +1,26 @@
+# compress.zip_dir (std.compress.5): a deterministic archive, files sorted by name.
+fn main()
+    root := "/tmp/ail_zip_dir_src"
+    fs.make_dir("{root}/sub") else err
+        print("make {err.kind}")
+        return
+    fs.make_dir("{root}/empty") else err
+        print("make {err.kind}")
+        return
+    fs.write_text("{root}/a.txt", "hello hello hello hello") else err
+        print("write {err.kind}")
+        return
+    fs.write_text("{root}/sub/b.txt", "x") else err
+        print("write {err.kind}")
+        return
+    fs.write_text("{root}/sub/c.txt", "") else err
+        print("write {err.kind}")
+        return
+    compress.zip_dir(root, "/tmp/ail_zip_dir.zip") else err
+        print("zip {err.kind}")
+        return
+    z := fs.read_bytes("/tmp/ail_zip_dir.zip") else b""
+    print(z.len())
+    print(z.hex())
+    compress.zip_dir("/tmp/ail_zip_no_such", "/tmp/ail_zip_none.zip") else err
+        print("missing {err.kind}")

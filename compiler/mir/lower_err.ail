@@ -683,6 +683,9 @@ fn Lower.declare_errors(mut self, prog ast.Program)
     err_msgs[IO_ERROR] = ""
     err_msgs[PROC_ERROR] = ""
     err_msgs[NET_ERROR] = ""
+    err_msgs[COMPRESS_ERROR] = ""
+    # What `Task.wait()` fails with (conc.task.6), named in `! Trapped`.
+    err_msgs["Trapped"] = ""
     for s in prog.structs
         if s.is_error
             err_msgs[s.name] = ""
@@ -805,6 +808,8 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                 m := os_module(recv)
                 if m == "net"
                     return Ty.Struct(NET_ERROR)
+                if m == "compress"
+                    return Ty.Struct(COMPRESS_ERROR)
                 return Ty.Struct(if m == "proc" then PROC_ERROR else IO_ERROR)
             if m := module_name(recv)
                 return fn_errs.get("{m}.{name}") else Ty.Unknown

@@ -916,17 +916,26 @@ fn cz_inflate(src int, n int, limit int, st int) bool
 ## Fail with `compress.CompressError(kind: "K", message: "M")`; `at` is the
 ## call's trace line.
 fn cz_error(kind int, msg int, at str)
-    sb_reset()
-    sb_text("compress.CompressError(kind: ")
     k := if kind
         == 1 then "corrupt" else if kind
         == 2 then "checksum" else if kind
         == 3 then "too_big" else "unsupported"
+    cz_error_text(k, str_at(msg), at)
+
+## The error with the text `k` as its kind: an `E` struct (`kind`, `message`)
+## as the failure's value, so `else err` reads its fields (std.compress.2).
+fn cz_error_text(k str, msg str, at str)
+    sb_reset()
+    sb_text("compress.CompressError(kind: ")
     os_put_quoted(k)
     sb_text(", message: ")
-    os_put_quoted(str_at(msg))
+    os_put_quoted(msg)
     sb_byte(41)
     err_set(sb_str(), at)
+    e := obj_new(16, 4)
+    store64(e, str_addr(k))
+    store64(e + 8, str_addr(msg))
+    err_value(e)
 
 ## Fail with `kind` and `msg` and return the empty bytes object.
 fn cz_raise(st int, kind int, msg str, at str) str
@@ -1060,3 +1069,34 @@ fn cz_gunzip(data str, st int, at str) str
 
 fn compress_gunzip(data str, at str) str
     cz_gunzip(data, cz_words(8), at)
+
+## A file function's I/O failure `k` on `path`, as a `CompressError` of the
+## I/O kind (std.compress.2, std.err.1).
+fn cz_io_fail(path str, k int, at str)
+    why := if k
+        == K_NOT_FOUND then "No such file or directory (os error 2)" else if k
+        == K_PERMISSION then "Permission denied (os error 13)" else kind_name(k)
+    cz_error_text(kind_name(k), "{path}: {why}", at)
+
+## `compress.gzip_file(src, dst)` (std.compress.5).
+fn compress_gzip_file(src str, dst str, at str)
+    data := os_fs_read_bytes(src)
+    if not os_ok()
+        cz_io_fail(src, os_kind(), at)
+        return
+    os_fs_write_text(dst, compress_gzip(data))
+    if not os_ok()
+        cz_io_fail(dst, os_kind(), at)
+
+## `compress.gunzip_file(src, dst)` (std.compress.5).
+fn compress_gunzip_file(src str, dst str, at str)
+    data := os_fs_read_bytes(src)
+    if not os_ok()
+        cz_io_fail(src, os_kind(), at)
+        return
+    out := compress_gunzip(data, at)
+    if failed()
+        return
+    os_fs_write_text(dst, out)
+    if not os_ok()
+        cz_io_fail(dst, os_kind(), at)

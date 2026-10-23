@@ -35,7 +35,8 @@ NET_KIND := 56
 NET_ADDR := 64
 NET_CAP := 72
 NET_TLS := 80
-NET_BYTES := 88
+NET_STREAM := 88
+NET_BYTES := 96
 
 # `NET_FLAGS` bits.
 NET_EOF := 1
@@ -157,6 +158,7 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_ADDR, str_addr(addr))
     store64(o + NET_CAP, 0)
     store64(o + NET_TLS, 0)
+    store64(o + NET_STREAM, 0)
     mut t := load64(global(NET_TAB))
     if t == 0
         xs := list_new(8)
