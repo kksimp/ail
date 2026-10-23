@@ -872,15 +872,19 @@ fn cache_trim(dir str)
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str
+    cli_prepare_with(file, "0", "0")
+
+## `cli_prepare` with the run limits baked in (`--timeout MS`, `--max-memory MB`).
+fn cli_prepare_with(file str, ms str, mb str) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, "0", "0"))
+    exe := path.join(dir, cache_key(file, target, ms, mb))
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, "0", "0")
+    compile_fresh(file, tmp, target, ms, mb)
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -888,10 +892,30 @@ fn cli_prepare(file str) str
     exe
 
 fn cli_prepare_cmd(rest List[str])
-    if rest.len() != 1
-        io.eprint("usage: ail prepare FILE")
+    usage := "usage: ail prepare [--timeout MS] [--max-memory MB] FILE"
+    mut ms := "0"
+    mut mb := "0"
+    mut file := ""
+    mut i := 0
+    while i < rest.len()
+        a := rest[i]
+        has := i + 1 < rest.len()
+        if a == "--timeout" and has and positive(rest[i + 1])
+            ms = rest[i + 1]
+            i += 1
+        elif a == "--max-memory" and has and positive(rest[i + 1])
+            mb = rest[i + 1]
+            i += 1
+        elif file == "" and not a.starts_with("-")
+            file = a
+        else
+            io.eprint(usage)
+            io.exit(2)
+        i += 1
+    if file == ""
+        io.eprint(usage)
         io.exit(2)
-    print(cli_prepare(rest[0]))
+    print(cli_prepare_with(file, ms, mb))
 
 ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn cli_run(rest List[str])

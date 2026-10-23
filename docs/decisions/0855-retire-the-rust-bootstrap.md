@@ -25,13 +25,13 @@ removal every program, including the tools, runs natively.
 2. `ail prepare FILE` is `run` without the start and prints the executable's path.
    `./ail` execs that path, so the program keeps the terminal; the native std has
    no process-replacing call yet, and `ail run` run directly relays the output at exit.
-3. `./ail run FILE ARGS` uses the native CLI by default (item 252). `AIL_INTERP=1` or `AIL_NATIVE_CLI=0`
-   keeps the interpreter, and a program outside the native subset (`native.subset.1`) falls back to it.
-   The other commands use the native CLI when `AIL_NATIVE_CLI=1`
-   (the default flips once the Mac gate runs through it, then `AIL_RUST=1` selects the
-   Rust one). Commands the native CLI lacks still go to the Rust `ail`; each later change
-   moves one command (`check`, `explain`, `api`, `test`, `fmt`, ...) and the Rust code
-   is deleted only after a whole chain is green without it.
+3. The native CLI is the default for `./ail` (item 252): `run [--timeout MS] [--max-memory MB] FILE ARGS`,
+   `check`, `test`, `api` (outline, `--text`, `--pretty`, `--symbols`), `build` and `fmt`. `AIL_RUST=1` or
+   `AIL_NATIVE_CLI=0` keeps the Rust `ail`; `AIL_INTERP=1` keeps the interpreter for `run`; a pinned `AIL_BINARY`
+   keeps the Rust `ail`. A program outside the native subset (`native.subset.1`) falls back to the interpreter.
+   Commands and options the native CLI lacks (`run` with `--deterministic --record --replay --budget --max-steps
+   --parallel --deny --unsafe --seed --from`, `effects`, `diff`, `pkg`, `fix`, `explain`, `selftest`) still go to
+   the Rust `ail`; each later change moves one and the Rust code is deleted only after a whole chain is green without it.
 4. The first native `ail` comes from a **seed**: a release asset of the private
    repository (`ail-seed-ARCH-OS`; first release `seed-2026.10.22`), built by `tools/release/seed.sh` on the
    designer's Mac (macOS, Linux x86-64 and ARM64, Windows x86-64) after the fixed point holds. `tools/release/fetch-seed.sh`
