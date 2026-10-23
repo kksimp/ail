@@ -1227,9 +1227,11 @@ fn report(vs List[Verdict], json bool) int
         else
             print("skip {v.name}: {v.message}")
     if json
-        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed},\"skipped\":{skipped}}")
+        more := if skipped > 0 then ",\"skipped\":{skipped}" else ""
+        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}}")
     else
-        print("{passed} passed, {failed} failed, {skipped} skipped")
+        more := if skipped > 0 then ", {skipped} skipped" else ""
+        print("{passed} passed, {failed} failed{more}")
     if failed > 0 then 1 else 0
 
 fn seed_for(name str, has_seed bool, given int) int
