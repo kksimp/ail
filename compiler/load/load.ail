@@ -7,6 +7,7 @@
 ## Spec rules: mod.unit.1-5, mod.use.1-6, mod.vis.1, json.prelude.1.
 use ast
 use mir
+use pkg
 use syntax
 
 ## Each file's lines are numbered from a multiple of this (modules.rs).
@@ -102,6 +103,8 @@ fn ail_files(dir str) List[str]
     [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail")]
 
 fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
+    # The manifests come first: they say where each package is (mod.pkg.1-3).
+    packages := pkg.read(root)
     mut files := List[ast.SourceFile]()
     mut tokens := List[syntax.Token]()
     mut sources := List[str]()
@@ -131,13 +134,13 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
                             seen.add(dotted)
                             queue.push((dotted, [path.join(std, sf)]))
                     continue
-                target_module := imp.join(".")
-                if seen.contains(target_module)
+                t := packages.target(module, imp)
+                if t.undeclared or seen.contains(t.module)
                     continue
-                seen.add(target_module)
-                found := ail_files(path.join(root, imp.join("/")))
+                seen.add(t.module)
+                found := ail_files(t.dir)
                 if found.len() > 0
-                    queue.push((target_module, found))
+                    queue.push((t.module, found))
             tokens.extend(toks)
             sources.push(src)
             files.push(ast.SourceFile(path: shown, module: module, base: base))
@@ -145,11 +148,13 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
         tok: syntax.Tok.Eof,
         pos: ast.Pos(line: files.len() * FILE_LINES, col: 1),
     ))
-    mut first := assemble(tokens, files, diags, std)?
+    mut first := assemble(tokens, files, diags, std, packages)?
     first.texts = sources
+    mut done := first
     if diags.len() == 0 and first.diags.len() == 0 and wanted(tokens)
-        return expand_derives(first, tokens, files, std)
-    first
+        done = expand_derives(first, tokens, files, std, packages)?
+    packages.finish(mut done.program, mut done.diags, mut done.texts)
+    done
 
 ## The standard module `dotted` written in AIL: its file under the std directory.
 fn std_file(dotted str) str?
@@ -232,6 +237,7 @@ fn assemble(
     files List[ast.SourceFile],
     diags List[syntax.Diag],
     std str,
+    packages pkg.Packages,
 ) Loaded ! LoadError
     mut all := prelude_tokens(tokens)
     all.extend(tokens)
@@ -241,7 +247,7 @@ fn assemble(
     prog.files = files
     mut found := diags
     found.extend(parsed.diags)
-    resolve(prog, one_per_line(found))
+    resolve(prog, one_per_line(found), packages)
 
 ## contract.inh.1: an implementation's method inherits the contracts of the
 ## trait's method of the same name.

@@ -1,5 +1,7 @@
 ## The native backend's integration tests (bootstrap/tests/native.rs, ported), driven
-## through `ail run compiler` and `ail build`. Run from the repository root:
+## through the native compiler (`NATIVE_COMPILER=PATH`, else built first; `NATIVEX_INTERP=1`
+## keeps `ail run compiler`) and `ail build`. `NX_JOBS=N` sets the processes (default: one per
+## core). Run from the repository root:
 ##   ail run tools/gate/nativex.ail [TEST...]
 ## Prints only failures; the last line is `NATIVEX GREEN (N checks)` or
 ## `NATIVEX RED (N failures)`. With no argument every test runs. qemu cases run when
@@ -41,6 +43,14 @@ fn Run.red(mut self, name str, why str)
 ## `ail ARGS` from the repository root; `env` is a prefix such as `AIL_ROOT=x` (or empty).
 fn ail(env_prefix str, args str) proc.Output
     sh("{env_prefix} {BIN} {args}")
+
+## `compiler ARGS`: the native compiler binary named by `NATIVE_COMPILER` when it is
+## set (a stage-2 build, so no interpreter in the way), else `ail run compiler ARGS`.
+fn comp(args str) proc.Output
+    nc := env.get("NATIVE_COMPILER") else ""
+    if nc.is_empty()
+        return ail("", "run compiler {args}")
+    sh("AIL_ROOT=$PWD {nc} {args}")
 
 fn host_target() str
     u := sh("uname -s").out.trim()
@@ -96,7 +106,7 @@ fn interp_line(l str) str?
 fn Run.mir(mut self)
     for case in list_ext("bootstrap/tests/native", ".ail")
         checks += 1
-        r := ail("", "run compiler mir {case}")
+        r := comp("mir {case}")
         stem := case.slice(0, case.len() - 4)
         if fs.exists("{stem}.mir")
             if r.status != 0
@@ -115,7 +125,7 @@ fn Run.mir(mut self)
     # ADR 0722: each `native.subset.1` problem of subset_help.ail is followed by its `help:` line.
     checks += 1
     case := "bootstrap/tests/native/subset_help.ail"
-    r := ail("", "run compiler mir {case}")
+    r := comp("mir {case}")
     mut lines := List[str]()
     mut prev := false
     for l in r.err.lines()
@@ -143,10 +153,7 @@ fn Run.batch(mut self)
     while i < all.len()
         sample.push(all[i])
         i += step
-    r := ail(
-        "",
-        "run compiler build-many compiler/rt/native {host_target()} 0 0 {self.root}/bootstrap/src/std {sample.join(" ")}",
-    )
+    r := comp("build-many compiler/rt/native {host_target()} 0 0 {self.root}/bootstrap/src/std {sample.join(" ")}")
     if r.status != 0
         red("batch build", r.err)
         return
@@ -201,10 +208,7 @@ fn nx_batch(chunk List[str], target str, root str, tmp str, tag str) bool
         if ail("", "check {f}").status != 0
             return false
     tgt := if target.is_empty() then host_target() else target
-    r := ail(
-        "",
-        "run compiler build-many compiler/rt/native {tgt} 0 0 {root}/bootstrap/src/std {chunk.join(" ")}",
-    )
+    r := comp("build-many compiler/rt/native {tgt} 0 0 {root}/bootstrap/src/std {chunk.join(" ")}")
     if r.status != 0
         return false
     parts := r.out.split("== ")
@@ -241,6 +245,26 @@ fn nx_worker(chunk List[str], k int, target str, runner str, root str, tmp str) 
             fails.push(why)
     fails
 
+fn cores() int
+    n := sh("nproc 2>/dev/null || sysctl -n hw.ncpu").out.trim().to_int() else 4
+    if n < 1
+        return 1
+    n
+
+## One chunk of the executables suite as its own process (`--chunk`): it builds the chunk
+## with one `build-many`, matches each program against `ail run`, and prints each failure
+## after a line `@@FAIL`.
+fn chunk_main(args List[str])
+    target := if args[1] == "-" then "" else args[1]
+    runner := if args[2] == "-" then "" else args[2]
+    k := args[3].to_int() else 0
+    tmp := args[4]
+    root := args[5]
+    chunk := args[6..]
+    for why in nx_worker(chunk, k, target, runner, root, tmp)
+        print("@@FAIL")
+        print(why)
+
 fn Run.executables(mut self, target str, runner str)
     mut cases := list_ext("bootstrap/tests/native/run", ".ail")
     if host_target() == "aarch64-macos" or target.contains("macos")
@@ -258,30 +282,40 @@ fn Run.executables(mut self, target str, runner str)
             n += stride
         cases = sampled
     checks += cases.len()
-    q := (cases.len() + 3) / 4
+    # One process per core, each with every n-th program so the chunks cost about the same.
+    n := (env.get("NX_JOBS") else "0").to_int() else 0
+    jobs := if n > 0 then n else cores()
     mut chunks := List[List[str]]()
-    mut i := 0
-    while i < cases.len()
-        mut chunk := List[str]()
-        for j in i..i + q
-            if j < cases.len()
-                chunk.push(cases[j])
-        chunks.push(chunk)
-        i += q
-    while chunks.len() < 4
+    for _ in 0..jobs
         chunks.push(List[str]())
-    t0 := spawn nx_worker(chunks[0], 0, target, runner, root, tmp)
-    t1 := spawn nx_worker(chunks[1], 1, target, runner, root, tmp)
-    t2 := spawn nx_worker(chunks[2], 2, target, runner, root, tmp)
-    t3 := spawn nx_worker(chunks[3], 3, target, runner, root, tmp)
-    for f in t0.wait() else List[str]()
-        red("native executables", f)
-    for f in t1.wait() else List[str]()
-        red("native executables", f)
-    for f in t2.wait() else List[str]()
-        red("native executables", f)
-    for f in t3.wait() else List[str]()
-        red("native executables", f)
+    for i in 0..cases.len()
+        chunks[i % jobs].push(cases[i])
+    mut kids := List[proc.Child]()
+    mut k := 0
+    for chunk in chunks
+        if chunk.len() > 0
+            argv := cat(
+                ["run", "tools/gate/nativex.ail", "--chunk", if target.is_empty() then "-" else target, if runner.is_empty() then "-" else runner, "{k}", tmp, root],
+                chunk,
+            )
+            c := proc.start(BIN, argv) else err
+                red("native executables", "can't start a chunk: {err}")
+                continue
+            kids.push(move c)
+        k += 1
+    while kids.len() > 0
+        kid := kids.pop() else break
+        mut why := List[str]()
+        for line in kid.out
+            if line == "@@FAIL"
+                if why.len() > 0
+                    red("native executables", why.join("\n"))
+                why = List[str]()
+            else
+                why.push(line)
+        if why.len() > 0
+            red("native executables", why.join("\n"))
+        proc.wait(move kid) else 0
 
 ## Each tests/native/stack/NAME.ail against NAME.out and the first line of NAME.err (err.trap.1, ADR 0535).
 fn Run.stack(mut self, target str, runner str)
@@ -539,6 +573,24 @@ fn Run.drivers(mut self)
 
 fn main() !
     args := env.args()
+    if args.len() > 0 and args[0] == "--chunk"
+        chunk_main(args)
+        return
+    # The suites build with a native compiler binary, not the interpreter: the one named by
+    # `NATIVE_COMPILER`, else a fresh `ail build compiler/main.ail` (run again with it set).
+    if (env.get("NATIVE_COMPILER") else "").is_empty() and (env.get("NATIVEX_INTERP") else "").is_empty()
+        built := "{env.get("TMPDIR") else "/tmp"}/ail-nativex-compiler"
+        b := sh("{BIN} build compiler/main.ail -o {built}")
+        if b.status == 0
+            again := proc.run("sh", ["-c", "NATIVE_COMPILER={built} {BIN} run tools/gate/nativex.ail {args.join(" ")}"]) else
+                io.eprint("could not start the gate suite")
+                io.exit(2)
+                return
+            print(again.out.trim_end())
+            io.eprint(again.err.trim_end())
+            io.exit(again.status)
+            return
+        io.eprint("nativex: no native compiler ({b.err.lines().last() else ""}); using the interpreter")
     all := [
         "mir",
         "batch",

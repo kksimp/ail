@@ -1,0 +1,581 @@
+## `ail api FILE [--text | --pretty]` (api.out.1-5, api.id.1-3, api.text.1,
+## ADR 0150): a program's outline without its bodies, as `bootstrap/src/api.rs`
+## writes it. Not yet here: `--symbols`, `--expanded`, packages, queries.
+use ast
+
+## The version of the output shape (api.out.1).
+pub API_VERSION := 1
+
+## How the outline is written.
+pub enum Form
+    ## JSON on one line, the default.
+    Plain
+    ## JSON with a two-space indent (`--pretty`).
+    Pretty
+    ## The compact outline (`--text`).
+    Text
+
+## A JSON value whose objects keep their keys in the order given (api.out.2).
+enum J
+    Null
+    Bool(b bool)
+    Int(n int)
+    Str(s str)
+    Arr(items List[J])
+    Obj(kvs List[Kv])
+
+struct Kv
+    key str
+    val J
+
+fn kv(key str, val J) Kv
+    Kv(key: key, val: val)
+
+fn opt_str(s str?) J
+    if v := s
+        return J.Str(v)
+    J.Null
+
+fn strs(xs List[str]) J
+    J.Arr([J.Str(x) for x in xs])
+
+fn quote(s str) str
+    Json.Str(s).to_text()
+
+fn indent(depth int) str
+    mut out := ""
+    for _ in 0..depth
+        out = "{out}  "
+    out
+
+fn write_json(j J, pretty bool, depth int) str
+    nl := if pretty then "\n{indent(depth + 1)}" else ""
+    close := if pretty then "\n{indent(depth)}" else ""
+    match j
+        Null => "null"
+        Bool(b) => if b then "true" else "false"
+        Int(n) => "{n}"
+        Str(s) => quote(s)
+        Arr(items) =>
+            if items.len() == 0
+                return "[]"
+            parts := [write_json(x, pretty, depth + 1) for x in items]
+            "[{nl}{parts.join(",{nl}")}{close}]"
+        Obj(kvs) =>
+            sep := if pretty then " " else ""
+            parts := ["{quote(p.key)}:{sep}{write_json(p.val, pretty, depth + 1)}" for p in kvs]
+            "\{{nl}{parts.join(",{nl}")}{close}}"
+
+## A declaration in the outline, before it is written as JSON or text.
+struct Item
+    line int
+    col int
+    kind str
+    name str
+    id str
+    doc str?
+    signature str
+    ## Keys after `signature`, in order.
+    extra List[Kv]
+    ## Fields, variants or methods, each list under its key.
+    members List[Group]
+
+struct Group
+    key str
+    items List[Item]
+
+fn Item.json(self) J
+    mut kvs := [
+        kv("kind", J.Str(kind)),
+        kv("name", J.Str(name)),
+        kv("id", J.Str(id)),
+        kv("line", J.Int(line)),
+        kv("col", J.Int(col)),
+        kv("doc", opt_str(doc)),
+        kv("signature", J.Str(signature)),
+    ]
+    kvs.extend(extra)
+    for g in members
+        kvs.push(kv(g.key, J.Arr([m.json() for m in g.items])))
+    J.Obj(kvs)
+
+fn pad_left(n int, width int) str
+    s := "{n}"
+    mut out := s
+    for _ in s.len()..width
+        out = " {out}"
+    out
+
+fn spaces(n int) str
+    mut out := ""
+    for _ in 0..n
+        out = "{out} "
+    out
+
+## The strings of the array under `key` in `extra`.
+fn Item.extra_strs(self, key str) List[str]
+    mut out := List[str]()
+    for p in extra
+        if p.key == key
+            match p.val
+                Arr(items) =>
+                    for x in items
+                        match x
+                            Str(s) => out.push(s)
+                            Null | Bool(_) | Int(_) | Arr(_) | Obj(_) => out.push("")
+                Null | Bool(_) | Int(_) | Str(_) | Obj(_) => out.push("")
+    out
+
+fn Item.has_extra(self, key str) bool
+    for p in extra
+        if p.key == key
+            return true
+    false
+
+fn Item.text(self, depth int, mut out List[str])
+    pad := spaces(depth * 4)
+    out.push("{pad_left(line, 5)}  {pad}{signature}")
+    # Contracts are part of the signature (contract.api.1).
+    for p in extra
+        word := match p.key
+            "requires" => "requires"
+            "ensures" => "ensures"
+            "inherited_requires" => "requires"
+            "inherited_ensures" => "ensures"
+            "invariants" => "invariant"
+            _ => ""
+        from := if p.key.starts_with("inherited") then " (inherited)" else ""
+        if word != ""
+            for c in extra_strs(p.key)
+                out.push("       {pad}    {word} {c}{from}")
+    # err.api.1: an inferred error set is spelled out.
+    if signature.contains(") !") and has_extra("fails_with")
+        out.push("       {pad}    fails with {extra_strs("fails_with").join(" | ")}")
+    if d := doc
+        for l in d.split("\n")
+            out.push("       {pad}    ## {l}")
+    # A variant's signature already shows its fields.
+    if kind != "variant"
+        for g in members
+            for m in g.items
+                m.text(depth + 1, mut out)
+
+fn Item.pos_key(self) int
+    line * 100000 + col
+
+## What the checker knows about the program, besides its declarations.
+pub struct Facts
+    pub effects List[List[str]]
+    pub errors Map[int, List[str]]
+
+struct Api
+    prog ast.Program
+    facts Facts
+    ## The id of each function, by index (api.id.1-2).
+    fn_ids List[str]
+
+fn owner_name(prog ast.Program, f ast.FnDecl) str?
+    match f.within
+        TopLevel =>
+            if o := f.owner
+                return o.name
+            none
+        InTrait(t) => prog.traits[t].name
+        InImpl(i) => prog.impls[i].target.name
+
+## `fn:name`, `method:Type.name`, `method:Trait.name`, or with `qualified`,
+## `method:Type.Trait.name` for an `impl` method (api.id.1-2).
+fn fn_id(prog ast.Program, f ast.FnDecl, qualified bool) str
+    o := owner_name(prog, f) else return "fn:{f.name}"
+    match f.within
+        InImpl(i) =>
+            if qualified
+                return "method:{o}.{prog.impls[i].trait_name}.{f.name}"
+            "method:{o}.{f.name}"
+        TopLevel | InTrait(_) => "method:{o}.{f.name}"
+
+fn is_top(f ast.FnDecl) bool
+    f.within == ast.Within.TopLevel
+
+fn is_impl(f ast.FnDecl) bool
+    match f.within
+        InImpl(_) => true
+        TopLevel | InTrait(_) => false
+
+fn new_api(prog ast.Program, facts Facts) Api
+    mut ids := [fn_id(prog, f, false) for f in prog.fns]
+    mut seen := Map[str, int]()
+    for id in ids
+        seen[id] = (seen.get(id) else 0) + 1
+    for i in 0..prog.fns.len()
+        if is_impl(prog.fns[i]) and (seen.get(ids[i]) else 0) > 1
+            ids[i] = fn_id(prog, prog.fns[i], true)
+    Api(prog: prog, facts: facts, fn_ids: ids)
+
+fn outside(pos ast.Pos) bool
+    pos.line > 1048576
+
+fn receiver_text(r ast.Receiver) str
+    if r.mutable
+        return "mut self"
+    if r.moved
+        return "move self"
+    "self"
+
+fn generics_text(gs List[ast.GenericParam]) str
+    if gs.len() == 0
+        return ""
+    parts := [
+        if g.bounds.len() == 0 then g.name else "{g.name} {[b.name for b in g.bounds].join(" + ")}"
+        for g in gs
+    ]
+    "[{parts.join(", ")}]"
+
+fn owner_text(o ast.Owner) str
+    if ps := o.params
+        return "{o.name}{generics_text(ps)}"
+    o.name
+
+## A type as written in source (type.opt.2, err.type.1-2, err.type.5, trait.any.1).
+fn type_text(t ast.TypeRef) str
+    match t.shape
+        Named(name, args) =>
+            if args.len() == 0
+                return name
+            "{name}[{[type_text(a) for a in args].join(", ")}]"
+        Optional(inner) => "{type_text(inner)}?"
+        AnyTrait(name) => "any {name}"
+        RefTo(inner) => "ref {type_text(inner)}"
+        PtrTo(inner) => "*{type_text(inner)}"
+        FnType(params, ret) =>
+            ps := [type_text(p) for p in params].join(", ")
+            if r := ret
+                return "fn({ps}) {type_text(r)}"
+            "fn({ps})"
+        TupleType(elems) => "({[type_text(e) for e in elems].join(", ")})"
+        Fallible(ok, errors) =>
+            mut errs := none
+            if es := errors
+                errs = [type_text(e) for e in es].join(" | ")
+            if o := ok
+                if e := errs
+                    return "{type_text(o)} ! {e}"
+                return "!{type_text(o)}"
+            if e := errs
+                return "! {e}"
+            "!"
+
+## `fn name[T Ord](a int, mut b List[T]) T ! E`, as written; a top-level
+## method keeps its `Type.` (api.out.3).
+fn fn_signature(f ast.FnDecl) str
+    mut s := "fn "
+    if o := f.owner
+        if is_top(f)
+            s = "{s}{owner_text(o)}."
+    s = "{s}{f.name}{generics_text(f.generics)}"
+    mut parts := List[str]()
+    if r := f.receiver
+        parts.push(receiver_text(r))
+    for p in f.params
+        mode := if p.mutable then "mut " else if p.moved then "move " else ""
+        parts.push("{mode}{p.name} {type_text(p.ty)}")
+    s = "{s}({parts.join(", ")})"
+    if t := f.ret
+        s = "{s} {type_text(t)}"
+    s
+
+fn char_text(c str) str
+    match c
+        "'" => "'\\''"
+        "\\" => "'\\\\'"
+        "\n" => "'\\n'"
+        "\t" => "'\\t'"
+        "\r" => "'\\r'"
+        "\0" => "'\\0'"
+        _ => "'{c}'"
+
+## A constant's value when it is a literal, else `...`: the outline leaves
+## out bodies (api.out.3). A string over 60 bytes is a body too.
+fn const_value(e ast.Expr) str
+    match e
+        Int(v, _) => v
+        Float(x, _) => float_debug(x)
+        Bool(b, _) => if b then "true" else "false"
+        Char(c, _) => char_text(c)
+        Str(s, _) =>
+            if s.len() <= 60
+                return quote(s)
+            "..."
+        Unary(op, operand, _) =>
+            match op
+                Neg =>
+                    match operand
+                        Int(_, _) | Float(_, _) => "-{const_value(operand)}"
+                        _ => "..."
+                Not | Spawn => "..."
+        _ => "..."
+
+## A float as Rust's `{:?}` writes it: `1.0`, `0.5`, `1e21`, `1e-7`.
+fn float_debug(x float) str
+    s := "{x}"
+    if s.contains(".") or s.contains("e") or s.contains("n") or s.contains("i")
+        return s
+    "{s}.0"
+
+fn field_item(owner str, f ast.Field) Item
+    ty := type_text(f.ty)
+    Item(
+        line: f.pos.line,
+        col: f.pos.col,
+        kind: "field",
+        name: f.name,
+        id: "field:{owner}.{f.name}",
+        doc: f.doc,
+        signature: "{f.name} {ty}",
+        extra: [kv("type", J.Str(ty))],
+        members: [],
+    )
+
+fn variant_item(owner str, v ast.Variant) Item
+    fields := ["{f.name} {type_text(f.ty)}" for f in v.fields]
+    signature := if fields.len() == 0 then v.name else "{v.name}({fields.join(", ")})"
+    path := "{owner}.{v.name}"
+    Item(
+        line: v.pos.line,
+        col: v.pos.col,
+        kind: "variant",
+        name: v.name,
+        id: "variant:{path}",
+        doc: v.doc,
+        signature: signature,
+        extra: [],
+        members: [Group(key: "fields", items: [field_item(path, f) for f in v.fields])],
+    )
+
+fn type_extra(is_error bool, uniq bool) List[Kv]
+    mut extra := [kv("error", J.Bool(is_error))]
+    if uniq
+        extra.push(kv("unique", J.Bool(true)))
+    extra
+
+fn type_prefix(is_error bool, uniq bool) str
+    e := if is_error then "error " else ""
+    u := if uniq then "unique " else ""
+    "{e}{u}"
+
+fn cond_texts(cs List[ast.Contract], post bool) List[str]
+    [c.text for c in cs if c.is_ensures == post]
+
+fn trait_index(f ast.FnDecl) int?
+    match f.within
+        InTrait(k) => k
+        TopLevel | InImpl(_) => none
+
+fn receiver_of(f ast.FnDecl) str?
+    if r := f.receiver
+        return receiver_text(r)
+    none
+
+fn param_fields(p ast.Param) List[Kv]
+    mut fields := [
+        kv("name", J.Str(p.name)),
+        kv("type", J.Str(type_text(p.ty))),
+        kv("mut", J.Bool(p.mutable)),
+    ]
+    # Only a `move` parameter says so (own.move.1), to keep the common case short.
+    if p.moved
+        fields.push(kv("move", J.Bool(true)))
+    fields
+
+fn Api.fn_item(self, i int) Item
+    f := prog.fns[i]
+    method := owner_name(prog, f) != none
+    mut extra := List[Kv]()
+    if method
+        extra.push(kv("receiver", opt_str(receiver_of(f))))
+    extra.push(kv("params", J.Arr([J.Obj(param_fields(p)) for p in f.params])))
+    mut returns := none
+    if t := f.ret
+        returns = type_text(t)
+    extra.push(kv("returns", opt_str(returns)))
+    # err.api.1: the error types a fallible function can fail with.
+    if errs := facts.errors.get(i)
+        extra.push(kv("fails_with", strs(errs)))
+    extra.push(kv("effects", strs(if i < facts.effects.len() then facts.effects[i] else [])))
+    # contract.api.1: the conditions as written, when there are any.
+    for post in [false, true]
+        conds := cond_texts(f.contracts, post)
+        if conds.len() > 0
+            extra.push(kv(if post then "ensures" else "requires", strs(conds)))
+    # contract.api.2: what an implementation inherits from its trait's method.
+    if m := f.inherits
+        t := prog.fns[m]
+        if k := trait_index(t)
+            extra.push(kv("inherits", J.Str("{prog.traits[k].name}.{t.name}")))
+        for post in [false, true]
+            conds := cond_texts(t.contracts, post)
+            if conds.len() > 0
+                extra.push(kv(
+                    if post then "inherited_ensures" else "inherited_requires",
+                    strs(conds),
+                ))
+    if trait_index(f) != none
+        extra.push(kv("default", J.Bool(f.body != none)))
+    Item(
+        line: f.pos.line,
+        col: f.pos.col,
+        kind: if method then "method" else "fn",
+        name: f.name,
+        id: fn_ids[i],
+        doc: f.doc,
+        signature: fn_signature(f),
+        extra: extra,
+        members: [],
+    )
+
+## Whether `pos` is in the code a generator wrote into `im`.
+fn Api.in_generated(self, im ast.ImplDecl, pos ast.Pos) bool
+    for g in prog.generated
+        if g.impl_pos == im.pos
+            base := prog.files[g.file].base
+            return pos.line > base and pos.line <= base + 1048576
+    false
+
+fn Api.impl_methods(self, im ast.ImplDecl) List[Item]
+    [fn_item(m) for m in im.methods if not in_generated(im, prog.fns[m].pos)]
+
+fn take(mut methods Map[str, List[Item]], name str) List[Item]
+    ms := methods.get(name) else []
+    methods.remove(name)
+    ms.sorted(by: |m| m.pos_key())
+
+## Every declaration of the program (not the prelude), nested: fields,
+## variants and inherent methods under their type, methods under their trait
+## or `impl` (api.out.3). Sorted by position.
+fn Api.items(self) List[Item]
+    mut methods := Map[str, List[Item]]()
+    mut items := List[Item]()
+    mut local_types := Set[str]()
+    for s in prog.structs
+        local_types.add(s.name)
+    for e in prog.enums
+        local_types.add(e.name)
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if outside(f.pos) or not is_top(f)
+            continue
+        if o := f.owner
+            if local_types.contains(o.name)
+                mut list := methods.get(o.name) else []
+                list.push(fn_item(i))
+                methods[o.name] = list
+                continue
+        items.push(fn_item(i))
+    for s in prog.structs
+        if outside(s.pos)
+            continue
+        mut extra := type_extra(s.is_error, s.is_unique)
+        # contract.api.2: the invariants as written.
+        if s.invariants.len() > 0
+            extra.push(kv("invariants", strs([c.text for c in s.invariants])))
+        items.push(Item(
+            line: s.pos.line,
+            col: s.pos.col,
+            kind: "struct",
+            name: s.name,
+            id: "type:{s.name}",
+            doc: s.doc,
+            signature: "{type_prefix(s.is_error, s.is_unique)}struct {s.name}{generics_text(s.generics)}",
+            extra: extra,
+            members: [
+                Group(key: "fields", items: [field_item(s.name, f) for f in s.fields]),
+                Group(key: "methods", items: take(mut methods, s.name)),
+            ],
+        ))
+    for e in prog.enums
+        if outside(e.pos)
+            continue
+        items.push(Item(
+            line: e.pos.line,
+            col: e.pos.col,
+            kind: "enum",
+            name: e.name,
+            id: "type:{e.name}",
+            doc: e.doc,
+            signature: "{type_prefix(e.is_error, e.is_unique)}enum {e.name}{generics_text(e.generics)}",
+            extra: type_extra(e.is_error, e.is_unique),
+            members: [
+                Group(key: "variants", items: [variant_item(e.name, v) for v in e.variants]),
+                Group(key: "methods", items: take(mut methods, e.name)),
+            ],
+        ))
+    for t in prog.traits
+        if outside(t.pos)
+            continue
+        items.push(Item(
+            line: t.pos.line,
+            col: t.pos.col,
+            kind: "trait",
+            name: t.name,
+            id: "trait:{t.name}",
+            doc: t.doc,
+            signature: "trait {t.name}",
+            extra: [],
+            members: [Group(key: "methods", items: [fn_item(m) for m in t.methods])],
+        ))
+    for im in prog.impls
+        if outside(im.pos)
+            continue
+        items.push(Item(
+            line: im.pos.line,
+            col: im.pos.col,
+            kind: "impl",
+            name: "{im.trait_name} for {im.target.name}",
+            id: "impl:{im.target.name}.{im.trait_name}",
+            doc: none,
+            signature: "impl {im.trait_name} for {owner_text(im.target)}",
+            extra: [
+                kv("trait", J.Str("trait:{im.trait_name}")),
+                kv("type", J.Str("type:{im.target.name}")),
+            ],
+            members: [Group(key: "methods", items: impl_methods(im))],
+        ))
+    for c in prog.consts
+        if outside(c.pos)
+            continue
+        items.push(Item(
+            line: c.pos.line,
+            col: c.pos.col,
+            kind: "const",
+            name: c.name,
+            id: "const:{c.name}",
+            doc: c.doc,
+            signature: "{c.name} := {const_value(c.value)}",
+            extra: [],
+            members: [],
+        ))
+    # Methods of a type this file doesn't declare stay at the top level.
+    for name in methods.keys().sorted()
+        items.extend(methods[name])
+    items.sorted(by: |x| x.pos_key())
+
+## The outline of `prog` for the file `path`, in `form`; `symbols` and
+## `expanded` are not supported yet.
+pub fn outline(prog ast.Program, facts Facts, path str, form Form) str
+    api := new_api(prog, facts)
+    items := api.items()
+    match form
+        Text =>
+            mut lines := List[str]()
+            for it in items
+                it.text(0, mut lines)
+            if lines.len() == 0
+                return ""
+            "{lines.join("\n")}\n"
+        Plain | Pretty =>
+            top := J.Obj([
+                kv("api", J.Int(API_VERSION)),
+                kv("file", J.Str(path)),
+                kv("items", J.Arr([it.json() for it in items])),
+            ])
+            "{write_json(top, form == Form.Pretty, 0)}\n"

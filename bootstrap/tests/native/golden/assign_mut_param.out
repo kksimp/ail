@@ -1,0 +1,5 @@
+img [1, 7] 2 true
+list [1, 2, 3, 4]
+map 3 false true
+set 2 false true
+pair 3 4

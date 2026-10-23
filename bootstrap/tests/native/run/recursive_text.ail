@@ -1,0 +1,15 @@
+enum Tree
+    Leaf(n int)
+    Node(kids List[Tree])
+
+struct Item
+    name str
+    sub List[Item]
+
+fn main() !
+    t := Tree.Node([Tree.Leaf(1), Tree.Node([Tree.Leaf(2)])])
+    print(t)
+    print(Item(name: "a", sub: [Item(name: "b", sub: [])]))
+    j := parse_json("\{\"a\": [1, \"x\"]}")? "parse"
+    print(j)
+    print(j.get("a") else Json.Null)
