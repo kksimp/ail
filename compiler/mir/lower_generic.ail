@@ -223,6 +223,18 @@ fn Lower.unify(self, t ast.TypeRef, ty Ty, params List[str], mut binds Map[str, 
                 e := ty.elem() else return
                 unify(args[0], e, params, mut binds)
                 return
+            if n == "Map" and args.len() == 2
+                match ty
+                    Map(kt, vt) =>
+                        unify(args[0], kt, params, mut binds)
+                        unify(args[1], vt, params, mut binds)
+                    _ => return
+                return
+            if n == "Set" and args.len() == 1
+                match ty
+                    Set(et) => unify(args[0], et, params, mut binds)
+                    _ => return
+                return
             key := match ty
                 Struct(k) => k
                 Enum(k) => k
@@ -232,6 +244,25 @@ fn Lower.unify(self, t ast.TypeRef, ty Ty, params List[str], mut binds Map[str, 
                 return
             for k in 0..args.len()
                 unify(args[k], tys[k], params, mut binds)
+        Optional(inner) =>
+            i := ty.opt_inner() else return
+            unify(inner, i, params, mut binds)
+        FnType(ps, r) =>
+            match ty
+                Fn(tps, tr) =>
+                    if tps.len() != ps.len()
+                        return
+                    for k in 0..ps.len()
+                        unify(ps[k], tps[k], params, mut binds)
+                    if rt := r
+                        unify(rt, tr, params, mut binds)
+                _ => return
+        TupleType(elems) =>
+            xs := tuple_elems(ty) else return
+            if xs.len() != elems.len()
+                return
+            for k in 0..elems.len()
+                unify(elems[k], xs[k], params, mut binds)
         _ => return
 
 ## Whether a call's callee is a generic function or a generic struct.
@@ -569,6 +600,9 @@ fn Lower.generic_member_ref(self, e ast.Expr) str?
                     if t.elem() != none and not t.is_coll()
                         # A type parameter bound to a list (`T.default()`, T = `List[str]`).
                         return "#tparam:{n}"
+            if lookup(n) == none
+                if g := generic_type_key(n)
+                    return g
             generic_enum_ref(e)
         _ => generic_enum_ref(e)
 
@@ -614,7 +648,43 @@ fn Lower.generic_member(
             call_args := args else return unsupported(pos, "`{g}.{name}` without a call")
             instance_method("{key}.{name}")
             struct_call("{key}.{name}", none, call_args, pos)
-        _ => generic_variant(g, name, args, pos, want)
+        _ =>
+            if gen.fns.contains("{g}.{name}")
+                return generic_static(g, name, args, pos, want)
+            generic_variant(g, name, args, pos, want)
+
+## `G.f(args)` of a generic type written with no type arguments: a function of
+## the type without `self`. The type arguments come from the arguments and the
+## expected type (gen.infer.1).
+fn Lower.generic_static(mut self, g str, name str, args List[ast.Arg]?, pos ast.Pos, want Ty?) Val?
+    gf := gen.fns["{g}.{name}"]
+    f := gf.decl
+    gt := gen.types[g]
+    given := args else return unsupported(pos, "`{g}.{name}` without a call")
+    if f.receiver != none or f.generics.len() > 0 or given.len() != f.params.len()
+        return unsupported(pos, "`{g}.{name}`")
+    mut binds := Map[str, Ty]()
+    mut vs := List[Val]()
+    for k in 0..given.len()
+        a := given[k]
+        if a.label != none
+            return unsupported(pos, "labelled arguments")
+        pt := f.params[k].ty
+        v := lower_value(a.value, decl_type(pt, binds, gt.params, gf.file))?
+        unify(pt, v.ty, gt.params, mut binds)
+        vs.push(Val(id: shield_arg(given, k, v), ty: v.ty))
+    binds_from_want(g, gt.params, want, mut binds)
+    if not all_bound(gt.params, binds, g, pos)
+        return none
+    t := instance_type(g, [binds[n] for n in gt.params]) else return unsupported(pos, "`{g}` with these type arguments")
+    key := "{t.name()}.{name}"
+    instance_method(key)
+    sig := sigs.get(key) else return unsupported(pos, "`{g}.{name}`")
+    mut ids := List[int]()
+    for k in 0..vs.len()
+        ids.push(convert(vs[k], sig.params[k], expr_pos(given[k].value)))
+    check_requires(key, ids, pos)
+    Val(id: user_call(key, ids, sig.ret, pos, key), ty: sig.ret)
 
 fn some_ty(t Ty) Ty?
     t

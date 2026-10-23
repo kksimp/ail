@@ -15,7 +15,7 @@ entry: main in main.ail
 
 ## fmt (63 items)
 
-## mir (382 items)
+## mir (383 items)
 
 ## obj (58 items)
 
