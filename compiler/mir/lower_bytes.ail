@@ -1,5 +1,5 @@
 ## Lowering `bytes` (type.bytes.*, ADR 0702): literals, `b[i]`, `b[lo..hi]`,
-## `==`, and the methods `len`, `text` and `hex`. The runtime is
+## `==`, the orderings, and the methods `len`, `text` and `hex`. The runtime is
 ## `compiler/rt/native/bytes.ail`. A byte read from a `bytes` has the type
 ## `Byte`, which only `.to_int()` accepts: `u8` arithmetic (it traps past 255)
 ## isn't in the native subset yet.
@@ -64,7 +64,7 @@ fn Lower.bytes_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool
     cur = good
     Val(id: call("rt.bytes_slice", [l.id, a, end], Ty.Bytes), ty: Ty.Bytes)
 
-## `a == b` and `a != b` on `bytes` (type.bytes.2).
+## `a == b`, `a != b` and the orderings on `bytes` (type.bytes.2).
 fn Lower.bytes_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
     if name == "add"

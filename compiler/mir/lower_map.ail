@@ -18,6 +18,7 @@ fn is_value_ty(t Ty) bool
     is_number(t)
         or t == Ty.Char
         or t == Ty.Str
+        or t == Ty.Bytes
         or needs_copy(t)
         or t.is_coll()
         or is_enum(t)
@@ -38,7 +39,8 @@ fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
             return Ty.Set(e)
     none
 
-## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`, 4 `char`.
+## How the runtime prints and hashes a key: 0 `int`, 1 `str` (and `bytes`, which has a
+## string object's layout), 2 `bool`, 4 `char`.
 fn key_kind(t Ty) int
     match t
         Str | Bytes => 1
@@ -47,7 +49,7 @@ fn key_kind(t Ty) int
         _ => 0
 
 ## How the runtime prints a scalar: 0 `int`, 1 `str`, 2 `bool`, 3 `float`,
-## -1 for anything else.
+## 4 `char`, 5 `bytes`, -1 for anything else.
 fn scalar_kind(t Ty) int
     match t
         Int | Sized(_) => 0
@@ -55,6 +57,7 @@ fn scalar_kind(t Ty) int
         Bool => 2
         Float => 3
         Char => 4
+        Bytes => 5
         _ => -1
 
 ## How a copy of a table treats its values: `[mode, info]`, with mode 1 for

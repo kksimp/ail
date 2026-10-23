@@ -1,0 +1,48 @@
+# bytes: printing and interpolation, hex(sep), orderings, u8 from b[i], List/Map/Set of bytes,
+# bytes in tuples and structs (type.bytes.2-3, 11, type.coll.*)
+struct Frame
+    tag str
+    data bytes
+
+fn main()
+    b := b"ab\x01\"\\\n\xff"
+    print(b)
+    print("[{b}] {b[0]} {b[1] + b[0]}")
+    print(b < b"b")
+    print(b"a" < b"ab")
+    print(b >= b"ab")
+    print(b"b" > b"abc")
+    print(b"abc" <= b"abc")
+    print(b[0..2])
+    print("hi".to_bytes())
+    print(bytes.from_hex("0a0b") else b"")
+    print(b[0] == 97)
+
+    xs := [b"b", b"a\x00"]
+    print(xs)
+    print("{xs}")
+    print(Frame(tag: "t", data: b"\xde\xad"))
+    print((1, b"z"))
+    print([Frame(tag: "u", data: b"")])
+    print((1, b"a") < (1, b"b"))
+    mut ys := [b"b", b"a", b"ab"]
+    print(ys.sorted())
+    ys.sort()
+    print(ys)
+    print(ys.contains(b"a"))
+    print(ys.index_of(b"ab") else -1)
+    print(ys.min())
+    print(ys == [b"a", b"ab", b"b"])
+    mut m := {b"k": 1, b"\x00z": 2}
+    m[b"new"] = 3
+    m[b"k"] += 10
+    print(m[b"k"])
+    print(m)
+    m.remove(b"new")
+    for k, v in m
+        print("{k.hex()} {v}")
+    mut s := {b"a"}
+    s.add(b"a")
+    s.add(b"b")
+    print(s)
+    print(s.contains(b"b"))
