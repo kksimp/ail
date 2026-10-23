@@ -236,9 +236,24 @@ fn nx_batch(chunk List[str], target str, root str, tmp str, tag str) bool
             return false
     true
 
+## Builds `chunk` with `nx_batch`; when one program breaks the batch, splits it in halves so
+## the rest still build together. Returns the programs that have no executable (built singly later).
+fn nx_build(chunk List[str], target str, root str, tmp str, tag str) List[str]
+    if chunk.is_empty()
+        return []
+    if nx_batch(chunk, target, root, tmp, tag)
+        return []
+    if chunk.len() == 1
+        return chunk
+    mid := chunk.len() / 2
+    cat(
+        nx_build(chunk[..mid], target, root, tmp, "{tag}a"),
+        nx_build(chunk[mid..], target, root, tmp, "{tag}b"),
+    )
+
 fn nx_worker(chunk List[str], k int, target str, runner str, root str, tmp str) List[str]
     mut fails := List[str]()
-    prebuilt := nx_batch(chunk, target, root, tmp, "w{k}-{target}")
+    unbuilt := nx_build(chunk, target, root, tmp, "w{k}-{target}")
     for case in chunk
         stem := stem_of(case)
         if why := nx_match(
@@ -249,7 +264,7 @@ fn nx_worker(chunk List[str], k int, target str, runner str, root str, tmp str) 
             runner,
             root,
             tmp,
-            prebuilt,
+            not unbuilt.contains(case),
         )
             fails.push(why)
     fails
