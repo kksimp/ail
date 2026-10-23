@@ -36,7 +36,8 @@ NET_ADDR := 64
 NET_CAP := 72
 NET_TLS := 80
 NET_STREAM := 88
-NET_BYTES := 96
+NET_DEADLINE := 96
+NET_BYTES := 104
 
 # `NET_FLAGS` bits.
 NET_EOF := 1
@@ -159,6 +160,7 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_CAP, 0)
     store64(o + NET_TLS, 0)
     store64(o + NET_STREAM, 0)
+    store64(o + NET_DEADLINE, 0)
     # The table is shared by every thread: entry 0 holds the lock word that
     # serialises additions.
     mut t := load64(global(NET_TAB))
@@ -619,12 +621,24 @@ fn net_fill(o int) int
             continue
         if r != -11 and r != -35
             return r
-        w := net_wait(fd, 1, load64(o + NET_TIMEOUT))
+        w := net_wait(fd, 1, net_budget(o))
         if w == 0
             return -110
         if w < 0
             return w
     0
+
+## How long a read on `o` may wait: its timeout, less what is left of the
+## request's total time (`total_ms`, 0 for no deadline).
+fn net_budget(o int) int
+    t := load64(o + NET_TIMEOUT)
+    dl := load64(o + NET_DEADLINE)
+    if dl == 0
+        return t
+    left := dl - time_mono_ms()
+    if left < 0
+        return 0
+    if left < t then left else t
 
 ## A `net.NetError` for a failed read or write on `o`.
 fn net_io_fail(o int, e int, at str) int
@@ -632,6 +646,9 @@ fn net_io_fail(o int, e int, at str) int
     if e <= -1000000
         return net_fail(peer, "tls", str_at(load64(load64(o + NET_TLS) + TS_MSG)), at)
     if e == -110
+        dl := load64(o + NET_DEADLINE)
+        if dl != 0 and time_mono_ms() >= dl
+            return net_fail(peer, "timed_out", "the request's total time ran out", at)
         return net_fail(
             peer,
             "timed_out",

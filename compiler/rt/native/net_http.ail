@@ -10,8 +10,8 @@
 ## five. `net.request` takes the options of std.net.6 and std.net.19:
 ## `headers`, `query`, `body`, `timeout_ms`, `max_redirects` and `connect_ms`.
 ## `Accept-Encoding: gzip, deflate` is sent, and the final response's body is
-## undone (std.net.26, `http_decode`). Not built yet: `data` on the options, `total_ms` (accepted and checked, not
-## enforced), streaming bodies.
+## undone (std.net.26, `http_decode`). Not built yet: `data` on the options, streaming bodies
+## (see net_open.ail). `total_ms` spans one request (`NET_DEADLINE`), not its redirects.
 ##
 ## A `net.Response` is a struct (kind 4) of four words: `status`, `headers`
 ## (a `Map[str, str]`, names in lowercase, repeated values joined with `, `),
@@ -227,6 +227,9 @@ fn http_status(line str) int
         v = v * 10 + c - 48
     if v < 100 or v > 599
         return -1
+    # Exactly three digits (std.net.4).
+    if i + 4 < n and load8(p + 16 + i + 4) != 32
+        return -1
     v
 
 ## Add the header `name: value` to the maps of a response.
@@ -318,6 +321,9 @@ fn http_read_fail(o int, e int, url str, at str) int
             at,
         )
     if e == -110
+        dl := load64(o + NET_DEADLINE)
+        if dl != 0 and time_mono_ms() >= dl
+            return net_fail(url, "timed_out", "the request's total time ran out", at)
         return net_fail(
             url,
             "timed_out",
@@ -683,6 +689,8 @@ fn http_exchange_on(
         return 0
     o := net_obj(h)
     store64(o + NET_TIMEOUT, timeout)
+    tms := if spec == 0 then 0 else load64(spec + 48)
+    store64(o + NET_DEADLINE, if tms > 0 then time_mono_ms() + tms else 0)
     if scheme == "https" and not reused
         te := tc_connect(o, host)
         if te != 0
@@ -890,6 +898,7 @@ fn http_exchange_on(
         http_lower(str_addr(ka) + 16, load64(str_addr(ka))),
         "close",
     ) and load64(o + NET_POS) == load64(o + NET_LEN) and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+        store64(o + NET_DEADLINE, 0)
         pool_put(key, h, keep)
     else
         net_close(h)
@@ -1046,7 +1055,8 @@ fn net_request_with(
     if not http_check_headers(hdrs, url, at)
         return 0
     full := http_with_query(url, load64(o + 8))
-    spec := obj_new(48, 4)
+    spec := obj_new(56, 4)
+    store64(spec + 48, tms)
     store64(spec, hdrs)
     store64(spec + 8, timeout)
     store64(spec + 16, cms)
