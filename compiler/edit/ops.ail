@@ -1,0 +1,419 @@
+## The edit operations (edit.op.1-7) and the compact input form (edit.in.3).
+## A port of the second half of `bootstrap/src/edit.rs`. An operation that
+## fails leaves `Work.err` set; the caller stops at the first one.
+
+## The working copy: each file's text, keyed by path (in path order).
+pub struct Work
+    pub root str
+    pub package bool
+    pub paths List[str]
+    pub texts List[str]
+    pub err str
+
+fn Work.index(self, file str) int
+    for i in 0..paths.len()
+        if paths[i] == file
+            return i
+    -1
+
+pub fn Work.module(self, file str) str
+    if package then module_of(root, file) else ""
+
+## One declaration found by `find`: where, and which.
+struct Hit
+    file int
+    decl Decl
+
+fn Work.fail(mut self, msg str)
+    if err == ""
+        err = msg
+
+## The file and declaration an id names (edit.id.1-2); `file` is -1 when none.
+fn Work.find(mut self, id str) Hit
+    mut hits := List[Hit]()
+    for f in 0..paths.len()
+        module := self.module(paths[f])
+        for d in decls(texts[f])
+            # edit.id.3: a bare name stands for `kind:name`.
+            bare := not id.contains(":") and bare_name(d.id) == id
+            qual := qualified(d.id, module)
+            qbare := not id.contains(":") and bare_name(qual) == id
+            if d.id == id or bare or (module != "" and (qual == id or qbare))
+                hits.push(Hit(file: f, decl: d))
+    if hits.len() == 1
+        return hits[0]
+    if hits.len() == 0
+        fail("no declaration has the id `{id}` (edit.id.1)")
+    else
+        fail("`{id}` names {hits.len()} declarations; qualify it with its module, e.g. `fn:geo.origin` (edit.id.2)")
+    Hit(file: -1, decl: Decl(id: "", name: "", start: 0, head: 0, sig_end: 0, end: 0))
+
+fn bare_name(id str) str
+    if c := id.find(":")
+        return id.slice(c + 1, id.chars().len())
+    ""
+
+## The file an insert or import goes to (edit.op.3, edit.op.6); -1 on failure.
+fn Work.target(mut self, op J) int
+    if f := op.str_of("file")
+        p := if package then "{root}/{f}" else f
+        i := index(p)
+        if i < 0
+            fail("`{f}` is not a file of the program (edit.op.3)")
+        return i
+    if not package
+        return 0
+    # A package's root module: its first file at the top.
+    for i in 0..paths.len()
+        if parent_of(paths[i]) == root
+            return i
+    fail("say which file with \"file\" (edit.op.3)")
+    -1
+
+fn parent_of(path str) str
+    parts := path.split("/")
+    if parts.len() <= 1
+        return ""
+    parts[0..parts.len() - 1].join("/")
+
+fn str_op(op J, key str) str
+    op.str_of(key) else ""
+
+## Apply a hunk (edit.op.7) to lines `from..to` of `src`: the `-` and context
+## lines are found by their trimmed text, and `+` lines are indented like the
+## first line found. One `-` and one `+` line that match no whole line
+## replace a unique part of one. Gives the new text, or sets `err`.
+pub struct Hunked
+    pub text str
+    pub err str
+
+fn text_of(l str) str
+    l.chars()[1..].join("")
+
+pub fn hunk(src str, from int, to int, lines List[str]) Hunked
+    file := src.split("\n")
+    stop := if to < file.len() then to else file.len()
+    scope := file[from..stop]
+    mut minus := List[str]()
+    mut plus := List[str]()
+    mut old := List[str]()
+    for l in lines
+        if l.starts_with("-")
+            minus.push(l)
+        if l.starts_with("+")
+            plus.push(l)
+        else
+            old.push(text_of(l).trim())
+    if old.len() == 0
+        return Hunked(text: "", err: "a hunk needs a `-` or context line to find its place")
+    if minus.len() == 1 and plus.len() == 1 and lines.len() == 2
+        mut whole := false
+        for l in scope
+            if l.trim() == old[0]
+                whole = true
+        if not whole
+            part := text_of(minus[0]).trim()
+            new := text_of(plus[0]).trim()
+            pc := part.chars()
+            mut hit_line := List[int]()
+            mut hit_at := List[int]()
+            for i in 0..scope.len()
+                lc := scope[i].chars()
+                # Non-overlapping matches, as `match_indices` finds them.
+                mut at := 0
+                while pc.len() > 0 and at + pc.len() <= lc.len()
+                    if lc[at..at + pc.len()].join("") == part
+                        hit_line.push(i)
+                        hit_at.push(at)
+                        at += pc.len()
+                    else
+                        at += 1
+            if hit_line.len() == 1
+                lc := scope[hit_line[0]].chars()
+                changed := "{lc[0..hit_at[0]].join("")}{new}{lc[hit_at[0] + pc.len()..].join("")}"
+                return Hunked(
+                    text: splice(src, from + hit_line[0], from + hit_line[0] + 1, [changed]),
+                    err: "",
+                )
+            if hit_line.len() == 0
+                return Hunked(text: "", err: "`{part}` is not found")
+            return Hunked(
+                text: "",
+                err: "`{part}` occurs {hit_line.len()} times; quote more of its line",
+            )
+    mut at := List[int]()
+    if scope.len() >= old.len()
+        for i in 0..scope.len() - old.len() + 1
+            mut all := true
+            for k in 0..old.len()
+                if scope[i + k].trim() != old[k]
+                    all = false
+                    break
+            if all
+                at.push(i)
+    if at.len() == 0
+        return Hunked(text: "", err: "the lines `{old.join("` / `")}` are not found")
+    if at.len() > 1
+        return Hunked(
+            text: "",
+            err: "the `-` and context lines match {at.len()} places; add a context line",
+        )
+    i := at[0]
+    mut first_old := ""
+    for l in lines
+        if not l.starts_with("+")
+            first_old = text_of(l)
+            break
+    shift := indent_of(scope[i]) - indent_of(first_old)
+    mut new := List[str]()
+    mut k := i
+    for l in lines
+        t := text_of(l)
+        if l.starts_with("+")
+            if t.trim() == ""
+                new.push("")
+            else
+                mut ind := indent_of(t) + shift
+                if ind < 0
+                    ind = 0
+                new.push("{" ".repeat(ind)}{t.trim_start()}")
+        elif l.starts_with("-")
+            k += 1
+        else
+            new.push(scope[k])
+            k += 1
+    Hunked(text: splice(src, from + i, from + k, new), err: "")
+
+## The compact form of the edits (edit.in.3): hunks under an id line, and
+## `rename OLD NEW` lines. `err` is set when the input is malformed.
+pub struct Compact
+    pub ops List[J]
+    pub err str
+
+pub fn parse_compact(input str) Compact
+    mut ops := List[J]()
+    mut cur_id := ""
+    mut has_id := false
+    mut cur_lines := List[str]()
+    mut open := false
+    mut n := 0
+    for line in input.lines()
+        n += 1
+        if line == ""
+            continue
+        c := line.chars()[0]
+        if c == '-' or c == '+' or c == ' '
+            open = true
+            cur_lines.push(line)
+            continue
+        # Flush the hunk being built.
+        if open
+            if cur_lines.len() == 0
+                return Compact(
+                    ops: [],
+                    err: "`{cur_id}` has no `-`, `+` or context lines (edit.in.3)",
+                )
+            ops.push(hunk_op(has_id, cur_id, cur_lines))
+        open = false
+        has_id = false
+        cur_id = ""
+        cur_lines = []
+        words := line.words()
+        if words.len() == 3 and words[0] == "rename"
+            ops.push(J.Obj(["op", "id", "to"], [J.Str("rename"), J.Str(words[1]), J.Str(words[2])]))
+        elif words.len() == 1
+            cur_id = words[0]
+            while cur_id.ends_with(":")
+                cur_id = cur_id.slice(0, cur_id.chars().len() - 1)
+            has_id = true
+            open = true
+        else
+            return Compact(
+                ops: [],
+                err: "line {n}: expected an id, `rename OLD NEW`, or a line starting with `-`, `+` or a space (edit.in.3)",
+            )
+    if open
+        if cur_lines.len() == 0
+            return Compact(ops: [], err: "`{cur_id}` has no `-`, `+` or context lines (edit.in.3)")
+        ops.push(hunk_op(has_id, cur_id, cur_lines))
+    if ops.len() == 0
+        return Compact(ops: [], err: "no edits (edit.in.3)")
+    Compact(ops: ops, err: "")
+
+fn hunk_op(has_id bool, id str, lines List[str]) J
+    mut keys := ["op"]
+    mut vals := [J.Str("hunk")]
+    if has_id
+        keys.push("id")
+        vals.push(J.Str(id))
+    keys.push("lines")
+    vals.push(J.Arr([J.Str(l) for l in lines]))
+    J.Obj(keys, vals)
+
+fn starts_directive(s str) bool
+    s == "requires" or s == "ensures"
+
+fn first_word(l str) str
+    t := l.trim_start()
+    t.split(" ")[0]
+
+## Apply one operation (edit.op.1-7); sets `work.err` on failure.
+pub fn apply(mut work Work, op J, path str)
+    kind := op.str_of("op") else
+        work.fail("each edit needs an \"op\" (edit.in.1)")
+        return
+    if kind == "replace_body"
+        id := need(mut work, op, kind, "id")
+        body := need(mut work, op, kind, "body")
+        if work.err != ""
+            return
+        h := work.find(id)
+        if work.err != ""
+            return
+        src := work.texts[h.file]
+        lines := src.split("\n")
+        mut keep := h.decl.sig_end + 1
+        mut new_has := false
+        for l in body.lines()
+            if starts_directive(first_word(l))
+                new_has = true
+        if not new_has
+            while keep < h.decl.end and starts_directive(first_word(lines[keep]))
+                keep += 1
+        work.texts[h.file] = splice(src, keep, h.decl.end, reindent(body, 4))
+    elif kind == "replace"
+        id := need(mut work, op, kind, "id")
+        text := need(mut work, op, kind, "text")
+        if work.err != ""
+            return
+        h := work.find(id)
+        if work.err != ""
+            return
+        work.texts[h.file] = splice(work.texts[h.file], h.decl.start, h.decl.end, reindent(text, 0))
+    elif kind == "insert"
+        text := reindent(need(mut work, op, kind, "text"), 0)
+        if work.err != ""
+            return
+        mut f := -1
+        mut at := 0
+        mut pad_before := true
+        if after := op.str_of("after")
+            h := work.find(after)
+            if work.err != ""
+                return
+            f = h.file
+            at = h.decl.end
+        elif before := op.str_of("before")
+            h := work.find(before)
+            if work.err != ""
+                return
+            f = h.file
+            at = h.decl.start
+            pad_before = false
+        else
+            f = work.target(op)
+            if work.err != ""
+                return
+            mut t := work.texts[f]
+            while t.ends_with("\n")
+                t = t.slice(0, t.chars().len() - 1)
+            at = t.split("\n").len()
+        mut block := List[str]()
+        if pad_before
+            block.push("")
+        block.extend(text)
+        if not pad_before
+            block.push("")
+        work.texts[f] = splice(work.texts[f], at, at, block)
+    elif kind == "delete"
+        id := need(mut work, op, kind, "id")
+        if work.err != ""
+            return
+        h := work.find(id)
+        if work.err != ""
+            return
+        work.texts[h.file] = splice(work.texts[h.file], h.decl.start, h.decl.end, [])
+    elif kind == "hunk"
+        mut lines := List[str]()
+        if lv := op.get("lines")
+            match lv
+                Arr(xs) =>
+                    for x in xs
+                        match x
+                            Str(s) => lines.push(s)
+                            _ => lines = lines
+                _ => work.fail("`hunk` needs \"lines\" (edit.in.1)")
+        else
+            work.fail("`hunk` needs \"lines\" (edit.in.1)")
+        if work.err != ""
+            return
+        mut f := -1
+        mut from := 0
+        mut to := 0
+        mut place := ""
+        if id := op.str_of("id")
+            h := work.find(id)
+            if work.err != ""
+                return
+            f = h.file
+            from = h.decl.start
+            to = h.decl.end
+            place = "`{h.decl.id}`"
+        else
+            f = work.target(op)
+            if work.err != ""
+                return
+            to = work.texts[f].split("\n").len()
+            place = work.paths[f]
+        r := hunk(work.texts[f], from, to, lines)
+        if r.err != ""
+            work.fail("{r.err} in {place} (edit.op.7)")
+            return
+        work.texts[f] = r.text
+    elif kind == "rename"
+        id := need(mut work, op, kind, "id")
+        to := need(mut work, op, kind, "to")
+        if work.err != ""
+            return
+        work.fail("rename needs the references of the checker, which the native `ail` doesn't have yet (edit.op.5)")
+    elif kind == "import"
+        module := need(mut work, op, kind, "module")
+        if work.err != ""
+            return
+        f := work.target(op)
+        if work.err != ""
+            return
+        src := work.texts[f]
+        line := "use {module}"
+        lines := src.split("\n")
+        for l in lines
+            if l.trim_end() == line
+                return
+        mut last_use := -1
+        mut any_use := false
+        for i in 0..lines.len()
+            if lines[i].starts_with("use ")
+                last_use = i
+                any_use = true
+        mut at := 0
+        if any_use
+            at = last_use + 1
+        else
+            mut first_code := 0
+            for i in 0..lines.len()
+                if not lines[i].starts_with("#")
+                    first_code = i
+                    break
+            at = first_code
+        mut block := [line]
+        if not any_use and at < lines.len() and lines[at].trim() != ""
+            block.push("")
+        work.texts[f] = splice(src, at, at, block)
+    else
+        work.fail("unknown op `{kind}`; the ops are replace_body, replace, insert, delete, rename and import (edit.in.1)")
+
+fn need(mut work Work, op J, kind str, key str) str
+    v := op.str_of(key) else
+        work.fail("`{kind}` needs \"{key}\" (edit.in.1)")
+        return ""
+    v

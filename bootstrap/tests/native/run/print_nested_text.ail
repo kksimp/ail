@@ -1,0 +1,43 @@
+struct P
+    a int
+    b str
+    c List[int?]
+
+enum Shape
+    Dot
+    Circle(r float)
+
+fn o(n int) int?
+    if n > 0
+        return n
+    none
+
+fn s(n int) str?
+    if n > 0
+        return "a"
+    none
+
+fn main()
+    print([o(1), o(0)])
+    print([s(1), s(0)])
+    print({"a": [1, 2], "b": List[int]()})
+    print({"a": {"x": 1}})
+    print({1: {"x"}})
+    print(P(a: 1, b: "s", c: [o(1), o(0)]))
+    print([P(a: 1, b: "s", c: List[int?]())])
+    print([Shape.Dot, Shape.Circle(r: 1.5)])
+    print(Shape.Circle(r: 2.0))
+    print([{"a": 1}])
+    print(['a', 'b'])
+    print([1.5, 2.0])
+    print({"k": Shape.Dot})
+    print([["a"], ["b", "c"]])
+    print({'a': 1})
+    print([[o(1)], [o(0)]])
+    print({true: [1], false: List[int]()})
+    print([Set[char]()])
+    print({"k": ['a', '\n', '\'']})
+    print([s(1), s(0)].len())
+    print({"q": ["a\"b", "c\\d"]})
+    print({1: [o(2), o(0)]})
+    print([{1: 2}, Map[int, int]()])

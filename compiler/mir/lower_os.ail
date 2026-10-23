@@ -37,6 +37,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.write_text" => os_fn("rt.fs_write_text", [s, s], Ty.Unit, true)
         "fs.write_bytes" => os_fn("rt.fs_write_bytes", [s, Ty.Bytes], Ty.Unit, true)
         "fs.append_text" => os_fn("rt.fs_append_text", [s, s], Ty.Unit, true)
+        "fs.append_bytes" => os_fn("rt.fs_append_bytes", [s, Ty.Bytes], Ty.Unit, true)
         "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)
         "fs.copy" => os_fn("rt.fs_copy", [s, s], Ty.Unit, true)
         "fs.glob" => os_fn("rt.fs_glob", [s], Ty.List(s), false)
@@ -164,6 +165,8 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
         return lower_net_module(name, npos, args)
     if m == "hw"
         return lower_hw_call(name, npos, args)
+    if m == "bytes" and name == "zeros"
+        return lower_bytes_zeros(args, npos)
     f := os_lookup(m, name) else
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"
