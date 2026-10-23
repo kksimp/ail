@@ -159,14 +159,20 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_CAP, 0)
     store64(o + NET_TLS, 0)
     store64(o + NET_STREAM, 0)
+    # The table is shared by every thread: entry 0 holds the lock word that
+    # serialises additions.
     mut t := load64(global(NET_TAB))
     if t == 0
         xs := list_new(8)
-        store64(global(NET_TAB), list_addr(xs))
-        list_push(xs, 0)
-        t = list_addr(xs)
+        list_push(xs, alloc_raw(8, KIND_BYTES))
+        atomic_cas(global(NET_TAB), 0, list_addr(xs))
+        t = load64(global(NET_TAB))
+    lk := load64(load64(t + 16))
+    lock(lk)
     list_push(list_at(t), o)
-    load64(t) - 1
+    n := load64(t) - 1
+    unlock(lk)
+    n
 
 ## The socket object of a handle, or 0 when it is closed or not a handle.
 fn net_obj(h int) int
