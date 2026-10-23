@@ -211,7 +211,12 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
         v = Val(id: -1, ty: Ty.Unit)
     elif res.is_float()
         v = Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
-    Maybe(val: v, present: op("not", [failure], Ty.Bool), opt: false, err: if own then (tk.errs.get(key) else Ty.Unknown) else Ty.Struct(TRAPPED))
+    Maybe(
+        val: v,
+        present: op("not", [failure], Ty.Bool),
+        opt: false,
+        err: if own then (tk.errs.get(key) else Ty.Unknown) else Ty.Struct(TRAPPED),
+    )
 
 ## `print` holds the output buffer's lock while a program runs tasks, so a
 ## line from one task isn't split by another's.

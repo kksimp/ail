@@ -111,7 +111,20 @@ fn os_lookup(mod str, name str) OsFn?
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz", "hw", "task"]
+    for m in [
+        "fs",
+        "env",
+        "io",
+        "time",
+        "path",
+        "proc",
+        "net",
+        "compress",
+        "bytes",
+        "tz",
+        "hw",
+        "task",
+    ]
         if is_module(recv, m)
             return m
     ""

@@ -1701,7 +1701,10 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if k := lookup(name)
                 if var_ty[k].is_fn()
                     return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, npos)
-            if (name == "TaskGroup" or name == "Mutex") and tk.on and not is_rt and lookup(name) == none
+            if (name == "TaskGroup" or name == "Mutex")
+                and tk.on
+                and not is_rt
+                and lookup(name) == none
                 return lower_sync_new(name, args, pos)
             if lookup(name) == none
                 if k := type_key(name)

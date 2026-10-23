@@ -230,6 +230,14 @@ fn main()
         print("no window: {err.kind}: {err.message}")
 ```
 
+```ail rules=std.app.14
+use std.app
+
+fn main()
+    ev := app.external("timer", "tick")
+    print("{ev.kind} {ev.id} {ev.text}")
+```
+
 ```ail tool=effects,--json,FILE expect="fn:main":["app" rules=std.app.12
 use std.app
 

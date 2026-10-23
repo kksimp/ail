@@ -184,7 +184,14 @@ fn Lower.lower_with(mut self, mex ast.Expr, var str, body List[ast.Stmt], pos as
     key := lookup(var) else
         scopes.pop()
         return
-    act := ExitAct(group: false, depth: scopes.len(), loopn: loops.len(), obj: m.id, var: key, elem: elem)
+    act := ExitAct(
+        group: false,
+        depth: scopes.len(),
+        loopn: loops.len(),
+        obj: m.id,
+        var: key,
+        elem: elem,
+    )
     tk.exits.push(act)
     lower_block(body, false)
     if not done()

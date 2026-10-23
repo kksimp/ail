@@ -66,14 +66,14 @@ GUI_W := 960.0
 GUI_H := 600.0
 GUI_CELL_W := 7.8
 GUI_CELL_H := 16.0
-fn app_main(Browser, bool) ! [app clock env fail fs io net proc]
+fn app_main(Browser, bool) ! [app clock env fail fs io net proc spawn]
 fn flag(List[str], str) str?
 fn usage() [io]
 VALUE_FLAGS := ...
 fn target_of(List[str]) str
 fn op_line(draw.Op) str
 fn pixels_dump(mut Browser, float) [clock fs io mutates net]
-fn main() ! [app clock env fail fs io net proc]
+fn main() ! [app clock env fail fs io net proc spawn]
 fn tree(str) str
 fn lay(str, int) page.Page
 fn testdata() str [env fs io]
@@ -89,4 +89,4 @@ fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 fn flat(gfx.Scene) List[str]
 ```
 
-trimmed to fit 2000 tokens (~1067); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1069); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
