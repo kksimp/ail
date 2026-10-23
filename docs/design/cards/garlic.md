@@ -1,6 +1,6 @@
 # garlic
 entry: main in garlic.ail
-tests: 88 (`ail test` lists them)
+tests: 90 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -16,7 +16,7 @@ ail.pkg:
 
 ## garlicjs.vm (237 items)
 
-## gfx (44 items)
+## gfx (45 items)
 
 ## html (32 items)
 
