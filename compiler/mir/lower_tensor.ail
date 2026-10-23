@@ -71,6 +71,18 @@ fn Lower.lower_tensor_from(mut self, args List[ast.Arg], npos ast.Pos) Val?
     tensor_trap_if(msg, "std.tensor.2", npos)
     Val(id: call("rt.tensor_from_shape", [xs.id, kind, shape.id], t), ty: t)
 
+## `tensor.zeros(shape)`: all zeros, a `Tensor[float]` (std.tensor.2).
+fn Lower.lower_tensor_zeros(mut self, args List[ast.Arg], npos ast.Pos) Val?
+    if args.len() != 1 or args[0].label != none or args[0].mutable
+        return unsupported(npos, "`tensor.zeros` with these arguments")
+    shape := lower_value(args[0].value, Ty.List(Ty.Int))?
+    if not same_ty(shape.ty, Ty.List(Ty.Int))
+        return unsupported(npos, "`tensor.zeros` with a shape of `{shape.ty.name()}`")
+    msg := call("rt.tensor_zeros_fault", [shape.id], Ty.Int)
+    tensor_trap_if(msg, "std.tensor.2", npos)
+    t := Ty.Tensor(Ty.Float)
+    Val(id: call("rt.tensor_zeros", [shape.id, konst(1, Ty.Int)], t), ty: t)
+
 ## The methods of a `Tensor[f32]` the native subset has.
 F32_METHODS := [
     "len",

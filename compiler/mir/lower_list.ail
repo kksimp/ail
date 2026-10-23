@@ -100,20 +100,28 @@ fn Lower.lower_list_edit(
         call("rt.list_insert", [r.id, i, w, size], Ty.Unit)
         return unit
     if name == "pop" and vs.len() == 0
-        # The removed element is an optional: only the statement form here;
-        # `pop() else ...` is `lower_pop_else`.
+        # As a value: the removed last element as a `T?`. The statement form
+        # is `lower_pop_stmt`; `pop() else ...` is `lower_pop_else`.
+        t := opt_of(e) else return unsupported(npos, "an optional `{e.name()}`")
         n := op("len", [r.id], Ty.Int)
         has := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
-        yes := new_block()
         join := new_block()
-        branch(has, yes, [], join, [])
+        got := new_value(t, "")
+        blocks[join].params.push(got)
+        yes := new_block()
+        no := new_block()
+        branch(has, yes, [], no, [])
         seal(yes)
         cur = yes
+        v := op("get", [r.id, op("sub", [n, konst(1, Ty.Int)], Ty.Int)], e)
         call("rt.list_drop_last", [r.id], Ty.Unit)
-        jump(join, [])
+        jump(join, [some(Val(id: v, ty: e)).id])
+        seal(no)
+        cur = no
+        jump(join, [konst(0, t)])
         seal(join)
         cur = join
-        return unit
+        return Val(id: got, ty: t)
     if name == "contains" and vs.len() == 1
         k := eq_kind(e)
         if k < 0
@@ -255,6 +263,27 @@ fn Lower.lower_pop_else(mut self, value ast.Expr, other ast.Else, pos ast.Pos) V
     seal(join)
     cur = join
     Val(id: r, ty: e)
+
+## `xs.pop()` as a statement: the last element is dropped, nothing is boxed.
+fn Lower.lower_pop_stmt(mut self, e ast.Expr) Val?
+    recv := match e
+        Method(r, _, _, _) => r
+        _ => return none
+    l := lower_value(recv, none)?
+    if l.ty.elem() == none
+        return none
+    n := op("len", [l.id], Ty.Int)
+    has := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
+    yes := new_block()
+    join := new_block()
+    branch(has, yes, [], join, [])
+    seal(yes)
+    cur = yes
+    call("rt.list_drop_last", [l.id], Ty.Unit)
+    jump(join, [])
+    seal(join)
+    cur = join
+    Val(id: -1, ty: Ty.Unit)
 
 fn is_pop_call(e ast.Expr) bool
     match e

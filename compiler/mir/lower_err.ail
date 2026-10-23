@@ -266,6 +266,13 @@ fn Lower.returns_error(self, s Sig) bool
 fn Lower.is_error_type_name(self, e ast.Expr) bool
     match e
         Name(n, _) => err_msgs.contains(n)
+        Member(recv, n, _) => is_module_error(recv, n)
+        _ => false
+
+## `m.E`: an error type of imported module `m`.
+fn Lower.is_module_error(self, recv ast.Expr, n str) bool
+    match recv
+        Name(m, _) => module_of(m) != none and names_error("{m}.{n}")
         _ => false
 
 ## A bare variant name that only error enums have (it names an error enum's variant).

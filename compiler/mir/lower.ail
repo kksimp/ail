@@ -1118,6 +1118,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             note_statement(e)
+            if is_pop_call(e) and lower_pop_stmt(e) != none
+                return
             lower_expr(e, Ty.Unit)
         Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
@@ -1862,6 +1864,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_char_from_code(args, npos)
     if name == "from" and is_module(recv, "tensor")
         return lower_tensor_from(args, npos)
+    if name == "zeros" and is_module(recv, "tensor")
+        return lower_tensor_zeros(args, npos)
     if name == "select" and tk.on and is_module(recv, "task")
         return lower_chan_select(args, npos)
     if is_module(recv, "mem")
