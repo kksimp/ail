@@ -7,6 +7,9 @@
 # $TMPDIR/ail-gate/*.log for a look when a failure needs more.
 set -u
 cd "$(git rev-parse --show-toplevel)"
+# A std.app program (examples/app_todo.ail) would open the host's window and wait for ever on this Mac:
+# a host path that doesn't exist makes `app.run` fail at once instead.
+export AIL_APP_HOST="${AIL_APP_HOST:-/nonexistent/ail-app-host}"
 out="${TMPDIR:-/tmp}/ail-gate"; mkdir -p "$out"; fails=0
 run() { # run NAME CMD...
   name=$1; shift
