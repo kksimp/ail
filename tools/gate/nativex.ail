@@ -319,7 +319,16 @@ fn Run.executables(mut self, target str, runner str)
     for chunk in chunks
         if chunk.len() > 0
             argv := cat(
-                ["run", "tools/gate/nativex.ail", "--chunk", if target.is_empty() then "-" else target, if runner.is_empty() then "-" else runner, "{k}", tmp, root],
+                [
+                    "run",
+                    "tools/gate/nativex.ail",
+                    "--chunk",
+                    if target.is_empty() then "-" else target,
+                    if runner.is_empty() then "-" else runner,
+                    "{k}",
+                    tmp,
+                    root,
+                ],
                 chunk,
             )
             c := proc.start(BIN, argv) else err
@@ -365,7 +374,11 @@ fn Run.misc_builds(mut self)
     checks += 1
     out := "{tmp}/refused"
     sh("rm -f {out}")
-    r := ail("", "build bootstrap/tests/native/subset.ail -o {out}")
+    # Any program with an expected-problems golden (`.err`) is still outside the subset.
+    names := fs.list_dir("bootstrap/tests/native") else []
+    refused := [n for n in names if n.ends_with(".err")].sorted()
+    src := "bootstrap/tests/native/{(refused.first() else "subset_ext.err").replace(".err", ".ail")}"
+    r := ail("", "build {src} -o {out}")
     if r.status == 0 or fs.exists(out) or not r.err.contains("error[native.subset.1]")
         red("build refuses programs outside the subset", r.err)
     # native.task.1, ADR 0599: a task program builds for macOS with a bind table naming pthread_create.
@@ -602,11 +615,15 @@ fn main() !
         return
     # The suites build with a native compiler binary, not the interpreter: the one named by
     # `NATIVE_COMPILER`, else a fresh `ail build compiler/main.ail` (run again with it set).
-    if (env.get("NATIVE_COMPILER") else "").is_empty() and (env.get("NATIVEX_INTERP") else "").is_empty()
+    if (env.get("NATIVE_COMPILER") else "").is_empty()
+        and (env.get("NATIVEX_INTERP") else "").is_empty()
         built := "{env.get("TMPDIR") else "/tmp"}/ail-nativex-compiler"
         b := sh("{BIN} build compiler/main.ail -o {built}")
         if b.status == 0
-            again := proc.run("sh", ["-c", "NATIVE_COMPILER={built} {BIN} run tools/gate/nativex.ail {args.join(" ")}"]) else
+            again := proc.run("sh", [
+                "-c",
+                "NATIVE_COMPILER={built} {BIN} run tools/gate/nativex.ail {args.join(" ")}",
+            ]) else
                 io.eprint("could not start the gate suite")
                 io.exit(2)
                 return

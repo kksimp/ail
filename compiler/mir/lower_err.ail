@@ -386,6 +386,10 @@ fn Lower.recv_ty(self, e ast.Expr) Ty?
                             return slot.ty
                     none
                 _ => none
+        Try(x, _, _) => recv_ty(x)?.opt_inner()
+        Method(r, n, _, _) =>
+            key := method_key(r, n)?
+            sigs.get(key)?.ret
         _ => none
 
 fn Lower.method_returns_error(self, recv ast.Expr, name str) bool

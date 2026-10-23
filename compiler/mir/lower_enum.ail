@@ -29,6 +29,7 @@ fn Lower.declare_enum_names(mut self, prog ast.Program)
             declare_generic_enum(e)
         else
             enums["{prefix}{e.name}"] = []
+            declare_unique_enum(e, prog, "{prefix}{e.name}")
 
 ## The prelude's `enum Ordering` (trait.std.1). registered once per program
 ## unless the program declares an `Ordering` of its own: the Rust front end

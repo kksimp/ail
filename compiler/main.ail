@@ -131,6 +131,11 @@ fn main() !
             load_dump(args[1..])
         "check-program" =>
             check_cmd(args[1..])
+        "effects" =>
+            io.exit(load.effects_command(args[1..], path.join(
+                path.dir(compiler_dir()),
+                "bootstrap/src/std",
+            )))
         "api" =>
             api_cmd(args[1..])
         "run" =>
@@ -702,7 +707,7 @@ fn user_derive_texts(loaded load.Loaded, path_arg str) Map[str, str]
     mut srcs := List[mir.Source]()
     for k in 0..loaded.program.files.len()
         f := loaded.program.files[k]
-        if k < loaded.texts.len() and not f.path.starts_with("gen:")
+        if k < loaded.texts.len() and f.path.ends_with(".ail")
             srcs.push(parse_text(f.module, f.path, loaded.texts[k]))
     mut out := Map[str, str]()
     if srcs.len() == 0

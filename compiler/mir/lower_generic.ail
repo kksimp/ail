@@ -286,14 +286,19 @@ fn Lower.lower_generic_callee(
 ) Val?
     mut name := ""
     mut targs := List[ast.TypeRef]()
+    # A call's frame is at the function's name, as for other calls (trace.frame.1).
+    mut at := pos
     match callee
-        Name(n, _) => name = n
-        TypeArgs(n, ts, _) =>
+        Name(n, p) =>
+            name = n
+            at = p
+        TypeArgs(n, ts, p) =>
             name = n
             targs = ts
+            at = p
         _ => return unsupported(pos, "this call")
     if g := generic_fn_key(name)
-        return generic_call(g, name, targs, args, pos, want)
+        return generic_call(g, name, targs, args, at, want)
     g := generic_type_key(name) else return unsupported(pos, "this call")
     generic_struct(g, targs, args, pos, want)
 

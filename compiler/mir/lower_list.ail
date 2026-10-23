@@ -68,6 +68,7 @@ fn Lower.lower_list_edit(
         call("rt.list_extend", [r.id, ys, size], Ty.Unit)
         return unit
     if name == "clear" and vs.len() == 0
+        uniq_clear(r)
         call("rt.list_clear", [r.id], Ty.Unit)
         return unit
     if name == "reverse" and vs.len() == 0

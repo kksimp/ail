@@ -327,6 +327,7 @@ fn Lower.lower_map_assign(
                 stored = binary(o, Val(id: old, ty: vt), r, pos).id
             else
                 stored = copy_if_place(value, Val(id: convert(r, vt, pos), ty: vt))
+            uniq_drop_entry(m.id, kid, vt)
             call("rt.map_set", [m.id, kid, to_word(stored, vt)], Ty.Unit)
         _ => problem(ipos, "assigning into a `{m.ty.name()}`")
 

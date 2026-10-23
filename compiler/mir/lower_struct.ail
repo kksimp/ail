@@ -86,7 +86,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
         if s.generics.len() > 0
             declare_generic_struct(s)
         elif s.is_unique
-            problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
+            declare_unique(s, prog, "{prefix}{s.name}")
         else
             structs["{prefix}{s.name}"] = []
             if s.invariants.len() > 0
@@ -271,6 +271,7 @@ fn Lower.assign_slot(mut self, obj int, n str, k int, op ast.BinOp?, value ast.E
         store(obj, k, binary(o, old, v, pos).id)
     else
         v := lower_value(value, t) else return
+        uniq_drop_field(obj, k, t)
         store(obj, k, copy_if_place(value, Val(id: convert(v, t, pos), ty: t)))
 
 ## Inside a method, a field of `self` named without `self.`.
@@ -316,6 +317,7 @@ fn Lower.struct_call_in(mut self, key str, recv Val?, args List[ast.Arg], pos as
         if r := recv
             return derived_cmp(r, args[0], pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
+    uniq_recv(key, rcv.expr)
     mut vs := List[int]()
     mut cells := List[Cell]()
     if r := recv

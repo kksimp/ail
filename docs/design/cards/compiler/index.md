@@ -4,7 +4,7 @@ a64  60 items
 api  121 items
 ast  129 items
 budget  24 items
-check  328 items
+check  329 items
 codegen  54 items
 derive  35 items
 doc  18 items
@@ -12,8 +12,8 @@ edit  45 items
 explain  37 items
 fix  80 items
 fmt  63 items
-load  88 items
-mir  403 items
+load  89 items
+mir  410 items
 obj  58 items
 pkg  42 items
 syntax  105 items
