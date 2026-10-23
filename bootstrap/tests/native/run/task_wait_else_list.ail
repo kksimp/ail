@@ -1,0 +1,23 @@
+## `t.wait() else DEFAULT` on a task that returns a list, string or struct
+## (conc.task.6): the result and the default meet in one value.
+struct Pair
+    a int
+    b int
+
+fn nums(n int) List[int] ! fs.IoError
+    [n, n + 1]
+
+fn word(n int) str
+    "w{n}"
+
+fn pair(n int) Pair
+    Pair(a: n, b: n * 2)
+
+fn main()
+    t := spawn nums(3)
+    print(t.wait() else [])
+    u := spawn word(4)
+    print(u.wait() else "none")
+    v := spawn pair(5)
+    p := v.wait() else Pair(a: 0, b: 0)
+    print("{p.a} {p.b}")
