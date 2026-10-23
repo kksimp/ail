@@ -26,6 +26,9 @@ PROC_CHILD := "proc.Child"
 IO_ERROR := "fs.IoError"
 PROC_ERROR := "proc.ProcError"
 
+## What `Task.wait()` fails with when the task trapped (conc.task.6).
+TRAPPED := "Trapped"
+
 ## The raw TCP types of `std.net` (std.net.12) and its error (std.net.4):
 ## structs of the standard library that no source declares.
 NET_ERROR := "net.NetError"
@@ -42,6 +45,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_CHILD] = []
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []
+    structs[TRAPPED] = []
     structs[NET_ERROR] = []
     structs[NET_CONN] = []
     structs[NET_LISTENER] = []
@@ -66,6 +70,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
 
 fn Lower.declare_struct_fields(mut self, prog ast.Program)
     structs[IO_ERROR] = [Slot(name: "path", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
+    structs[TRAPPED] = [Slot(name: "rule", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
     structs[PROC_ERROR] = [Slot(name: "cmd", ty: Ty.Str), Slot(name: "kind", ty: Ty.Str)]
     structs[NET_ERROR] = [
         Slot(name: "url", ty: Ty.Str),

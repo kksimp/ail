@@ -45,6 +45,9 @@ pub struct TaskState
     pars List[ParSite]
     ## The result type of the task a handle variable holds, by variable key.
     rets Map[str, Ty]
+    ## The error type of the task a handle variable holds, when its function can fail.
+    errs Map[str, Ty]
+    fails Set[str]
     ## While lowering a chunk function: no loop inside it goes parallel again,
     ## and `+=` on these names also tracks the running sum's extremes.
     in_chunk bool
@@ -58,6 +61,8 @@ pub fn new_task_state() TaskState
         sites: [],
         pars: [],
         rets: {},
+        errs: {},
+        fails: Set[str](),
         in_chunk: false,
         owner: "",
         accs: Set[str](),
@@ -108,7 +113,12 @@ fn Lower.lower_spawn_let(mut self, name str, pos ast.Pos, value ast.Expr)
         return
     declare(name, Ty.Int, h.id)
     key := lookup(name) else return
-    tk.rets[key] = tk.sites[tk.sites.len() - 1].ret
+    site := tk.sites[tk.sites.len() - 1]
+    tk.rets[key] = site.ret
+    if s := sigs.get(site.func)
+        if s.fails
+            tk.fails.add(key)
+            tk.errs[key] = fn_errs.get(site.func) else Ty.Unknown
 
 fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
     match e
@@ -161,16 +171,42 @@ fn Lower.lower_wait(mut self, inner ast.Expr, pos ast.Pos) Val?
                         h := read_var(key, cur)
                         at1 := trace_line(npos)
                         at2 := trace_line(pos)
+                        w := call("rt.task_wait", [h, at1, at2], Ty.Int)
+                        mut v := Val(id: w, ty: res)
                         if res.is_unit()
-                            call("rt.task_wait", [h, at1, at2], Ty.Int)
-                            return Val(id: -1, ty: Ty.Unit)
-                        if res.is_float()
-                            w := call("rt.task_wait", [h, at1, at2], Ty.Int)
-                            return Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
-                        return Val(id: call("rt.task_wait", [h, at1, at2], res), ty: res)
+                            v = Val(id: -1, ty: Ty.Unit)
+                        elif res.is_float()
+                            v = Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
+                        # The task's own error passes through `?` (conc.task.6).
+                        if fails
+                            return propagate_result(v, none, pos)
+                        return v
                     _ => return unsupported(pos, "`wait` on anything but a task variable")
             unsupported(pos, "`?`")
         _ => unsupported(pos, "`?`")
+
+## `t.wait() else ...`: the result, or the failure `Trapped` (conc.task.6).
+fn Lower.lower_wait_try(mut self, e ast.Expr) Maybe?
+    match e
+        Method(recv, _, npos, _) =>
+            match recv
+                Name(tname, _) => wait_try_var(tname, npos)
+                _ => none
+        _ => none
+
+fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
+    key := lookup(tname)?
+    res := tk.rets.get(key)?
+    h := read_var(key, cur)
+    own := tk.fails.contains(key)
+    w := call("rt.task_try", [h, trace_line(npos), konst(if own then 1 else 0, Ty.Int)], Ty.Int)
+    failure := call("rt.failed", [], Ty.Bool)
+    mut v := Val(id: w, ty: res)
+    if res.is_unit()
+        v = Val(id: -1, ty: Ty.Unit)
+    elif res.is_float()
+        v = Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
+    Maybe(val: v, present: op("not", [failure], Ty.Bool), opt: false, err: if own then (tk.errs.get(key) else Ty.Unknown) else Ty.Struct(TRAPPED))
 
 ## `print` holds the output buffer's lock while a program runs tasks, so a
 ## line from one task isn't split by another's.

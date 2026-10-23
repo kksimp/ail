@@ -10,7 +10,7 @@
 ## allocator's lock are in `core.ail`.
 ##
 ## A task record (heap, 8-byte words):
-##   +0 state (0 queued or running, 2 done, 3 trapped)   +8 task id (picks
+##   +0 state (0 queued or running, 2 done, 3 trapped, 4 failed with an error)   +8 task id (picks
 ##   the function in `dispatch`)   +16 result   +24 next in the queue
 ##   +32 trap kind   +40 a   +48 b   +56 head string   +64 operator string   +72 source excerpt
 ##   +80 arguments, 8 bytes each
@@ -217,7 +217,12 @@ fn worker_main(idx int)
             store64(p + P_CUR + 8 * idx, rec)
             dispatch(load64(rec + T_ID), rec)
             store64(p + P_CUR + 8 * idx, 0)
-            finish_task(rec, 2)
+            if failed()
+                # The task's own error (conc.task.6) waits for `wait`.
+                store64(rec + T_RESULT, err_box())
+                finish_task(rec, 4)
+            else
+                finish_task(rec, 2)
         else
             s := load64(p + P_SEQ)
             store64(p + P_IDLE, load64(p + P_IDLE) + 1)
@@ -269,7 +274,65 @@ fn task_wait(rec int, at1 str, at2 str) int
     wait_done(rec)
     if atomic_load(rec + T_STATE) == 3
         report_trapped(rec, at1, at2)
+    if atomic_load(rec + T_STATE) == 4
+        err_restore(load64(rec + T_RESULT))
+        return 0
     load64(rec + T_RESULT)
+
+## `t.wait() else ...`: the result, or, when the task trapped, the failure
+## `Trapped(rule, message)` in the error slot (conc.task.6) and 0.
+fn task_try(rec int, at str, own int) int
+    wait_done(rec)
+    if atomic_load(rec + T_STATE) == 4
+        err_restore(load64(rec + T_RESULT))
+        return 0
+    if atomic_load(rec + T_STATE) != 3
+        return load64(rec + T_RESULT)
+    # A function with an error type of its own can't hold a `Trapped`.
+    if own != 0
+        report_trapped(rec, at, at)
+    h := load64(rec + T_HEAD)
+    n := load64(h)
+    d := h + 16
+    mut t := 0
+    while t + 5 <= n and not is_trap_mark(d + t)
+        t += 1
+    mut j := t - 3
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    j -= 1
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    mut e := t + 5
+    while e < n and load8(d + e) != 93
+        e += 1
+    rule := os_str_from(d + t + 5, e - t - 5)
+    # The message is written to the output buffer, then taken back out of it.
+    out_lock()
+    flush()
+    out_bytes(d + j + 1, t - j - 2)
+    out_byte(32)
+    trap_body(
+        load64(rec + T_KIND),
+        load64(rec + T_A),
+        load64(rec + T_B),
+        str_at(load64(rec + T_OP)),
+    )
+    msg := os_str_from(load64(global(OUT_BUF)), load64(global(OUT_LEN)))
+    store64(global(OUT_LEN), 0)
+    out_unlock()
+    sb_reset()
+    sb_text("Trapped(rule: ")
+    os_put_quoted(rule)
+    sb_text(", message: ")
+    os_put_quoted(msg)
+    sb_byte(41)
+    err_set(sb_str(), at)
+    v := obj_new(16, 4)
+    store64(v, str_addr(rule))
+    store64(v + 8, str_addr(msg))
+    err_value(v)
+    0
 
 ## Sleep until the task has ended, trapped or not.
 fn wait_done(rec int)
