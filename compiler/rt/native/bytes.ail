@@ -154,3 +154,96 @@ fn bytes_text(b str) str
             o += 3
             i -= k
     str_at(s)
+
+## `a <=> b` on `bytes`, byte by byte, a shorter prefix first (type.bytes.2): -1, 0 or 1.
+fn bytes_cmp(a str, b str) int
+    p := str_addr(a)
+    q := str_addr(b)
+    n := load64(p)
+    m := load64(q)
+    mut i := 0
+    while i < n and i < m
+        x := load8(p + 16 + i)
+        y := load8(q + 16 + i)
+        if x != y
+            return if x < y then -1 else 1
+        i += 1
+    if n == m
+        return 0
+    if n < m then -1 else 1
+
+## `b.hex(sep)` (type.bytes.11): the pairs separated by `sep`.
+fn bytes_hex_sep(b str, sep str) str
+    p := str_addr(b)
+    n := load64(p)
+    k := load64(str_addr(sep))
+    if n == 0
+        return str_at(str_new(0, 0))
+    total := 2 * n + k * (n - 1)
+    s := str_new(total, total)
+    mut at := s + 16
+    mut i := 0
+    while i < n
+        if i > 0
+            copy_bytes(at, str_addr(sep) + 16, k)
+            at += k
+        c := load8(p + 16 + i)
+        store8(at, hex_digit(c / 16))
+        store8(at + 1, hex_digit(c % 16))
+        at += 2
+        i += 1
+    str_at(s)
+
+## The literal form `b"..."` of `b` (type.bytes.2): printable ASCII as itself, `\" \\ \n \t \r`
+## as escapes, every other byte as `\xHH`.
+fn bytes_show(b str) str
+    p := str_addr(b)
+    n := load64(p)
+    mut size := 3
+    mut i := 0
+    while i < n
+        size += bytes_show_width(load8(p + 16 + i))
+        i += 1
+    s := str_new(size, size)
+    store8(s + 16, 98)
+    store8(s + 17, 34)
+    mut at := s + 18
+    i = 0
+    while i < n
+        c := load8(p + 16 + i)
+        w := bytes_show_width(c)
+        if w == 1
+            store8(at, c)
+        elif w == 2
+            store8(at, 92)
+            store8(at + 1, bytes_show_escape(c))
+        else
+            store8(at, 92)
+            store8(at + 1, 120)
+            store8(at + 2, hex_digit(c / 16))
+            store8(at + 3, hex_digit(c % 16))
+        at += w
+        i += 1
+    store8(at, 34)
+    str_at(s)
+
+## Characters one byte takes in the literal form: 1, 2 (an escape) or 4 (`\xHH`).
+fn bytes_show_width(c int) int
+    if c == 34 or c == 92 or c == 10 or c == 9 or c == 13
+        return 2
+    if c >= 32 and c <= 126
+        return 1
+    4
+
+fn bytes_show_escape(c int) int
+    if c == 10
+        return 110
+    if c == 9
+        return 116
+    if c == 13
+        return 114
+    c
+
+## `a < b` on `bytes` (type.bytes.2), for sorting and `min`.
+fn bytes_lt(a str, b str) bool
+    bytes_cmp(a, b) < 0

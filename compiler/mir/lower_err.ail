@@ -788,6 +788,7 @@ fn Lower.display_call(mut self, v Val) int?
         Struct(k) => k
         Enum(k) => k
         Tuple => return tuple_text(v)
+        Bytes => return call("rt.bytes_show", [v.id], Ty.Str)
         Any(t) => return any_text(t, v)
         List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
@@ -819,6 +820,7 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
             F32 => call("rt.fmt_f32", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
+            Bytes => call("rt.bytes_show", [f], Ty.Str)
             Struct | Enum => display_call(Val(id: f, ty: slots[k].ty)) else -1
             List => if text_ok(slots[k].ty) then value_text(slots[k].ty, f) else -1
             _ => -1

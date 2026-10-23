@@ -12,12 +12,13 @@ use ast
 # ---- types ----
 
 fn is_key_ty(t Ty) bool
-    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char or t.is_sized()
+    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Bytes or t == Ty.Char or t.is_sized()
 
 fn is_value_ty(t Ty) bool
     is_number(t)
         or t == Ty.Char
         or t == Ty.Str
+        or t == Ty.Bytes
         or needs_copy(t)
         or t.is_coll()
         or is_enum(t)
@@ -37,16 +38,17 @@ fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
             return Ty.Set(e)
     none
 
-## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`, 4 `char`.
+## How the runtime prints and hashes a key: 0 `int`, 1 `str` (and `bytes`, which has a
+## string object's layout), 2 `bool`, 4 `char`.
 fn key_kind(t Ty) int
     match t
-        Str => 1
+        Str | Bytes => 1
         Bool => 2
         Char => 4
         _ => 0
 
 ## How the runtime prints a scalar: 0 `int`, 1 `str`, 2 `bool`, 3 `float`,
-## -1 for anything else.
+## 4 `char`, 5 `bytes`, -1 for anything else.
 fn scalar_kind(t Ty) int
     match t
         Int | Sized(_) => 0
@@ -54,6 +56,7 @@ fn scalar_kind(t Ty) int
         Bool => 2
         Float => 3
         Char => 4
+        Bytes => 5
         _ => -1
 
 ## How a copy of a table treats its values: `[mode, info]`, with mode 1 for
@@ -545,10 +548,13 @@ fn Lower.out_coll(mut self, v Val, pos ast.Pos) Val?
         Map(k, x) =>
             kk := scalar_kind(k)
             vk := scalar_kind(x)
-            if vk < 0
+            if vk < 0 or kk < 0
                 return unsupported(pos, "printing a `{v.ty.name()}`")
             call("rt.out_map", [v.id, konst(kk, Ty.Int), konst(vk, Ty.Int)], Ty.Unit)
-        Set(e) => call("rt.out_set", [v.id, konst(scalar_kind(e), Ty.Int)], Ty.Unit)
+        Set(e) =>
+            if scalar_kind(e) < 0
+                return unsupported(pos, "printing a `{v.ty.name()}`")
+            call("rt.out_set", [v.id, konst(scalar_kind(e), Ty.Int)], Ty.Unit)
         _ => return unsupported(pos, "printing a `{v.ty.name()}`")
     Val(id: -1, ty: Ty.Unit)
 

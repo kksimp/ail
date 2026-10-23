@@ -78,6 +78,7 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
 fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
     match v.ty
         Str => v.id
+        Bytes => call("rt.bytes_show", [v.id], Ty.Str)
         Int | Sized(_) => call("rt.fmt_int", [v.id], Ty.Str)
         Float => call("rt.fmt_float", [v.id], Ty.Str)
         F32 => call("rt.fmt_f32", [v.id], Ty.Str)

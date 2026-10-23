@@ -1646,6 +1646,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
         if not is_number(elem)
             and not elem.is_sized()
             and elem != Ty.Str
+            and elem != Ty.Bytes
             and not needs_copy(elem)
             and not is_enum(elem)
             and not is_shared_opt(elem)

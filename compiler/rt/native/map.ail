@@ -344,10 +344,12 @@ fn map_out_quoted(s int)
     out_byte(34)
 
 ## A key or value for the text form: `kind` 0 int, 1 str, 2 bool, 3 float,
-## 4 char.
+## 4 char, 5 bytes.
 fn out_scalar(kind int, v int)
     if kind == 1
         map_out_quoted(v)
+    elif kind == 5
+        out_str(bytes_show(str_at(v)))
     elif kind == 4
         out_byte(39)
         out_escaped(v, 39)

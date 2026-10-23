@@ -1,5 +1,5 @@
 ## Lowering `bytes` (type.bytes.*, ADR 0702): literals, `b[i]`, `b[lo..hi]`,
-## `==`, and the methods `len`, `text` and `hex`. The runtime is
+## `==`, the orderings, and the methods `len`, `text` and `hex`. The runtime is
 ## `compiler/rt/native/bytes.ail`. A byte read from a `bytes` has the type
 ## `Byte`, which only `.to_int()` accepts: `u8` arithmetic (it traps past 255)
 ## isn't in the native subset yet.
@@ -29,7 +29,7 @@ fn Lower.bytes_index(mut self, l Val, index ast.Expr, pos ast.Pos) Val?
     emit_void(t)
     finish(unreachable_term())
     cur = good
-    Val(id: call("rt.bytes_at", [l.id, i.id], Ty.Int), ty: Ty.Byte)
+    Val(id: call("rt.bytes_at", [l.id, i.id], Ty.Int), ty: Ty.Sized("u8"))
 
 fn Lower.bytes_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool, rpos ast.Pos) Val?
     n := op("len", [l.id], Ty.Int)
@@ -64,11 +64,14 @@ fn Lower.bytes_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool
     cur = good
     Val(id: call("rt.bytes_slice", [l.id, a, end], Ty.Bytes), ty: Ty.Bytes)
 
-## `a == b` and `a != b` on `bytes` (type.bytes.2).
+## `a == b`, `a != b` and the orderings on `bytes` (type.bytes.2).
 fn Lower.bytes_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
     if name == "add"
         return bytes_concat(a, b)
+    if name == "lt" or name == "le" or name == "gt" or name == "ge"
+        c := call("rt.bytes_cmp", [a.id, b.id], Ty.Int)
+        return Val(id: op(name, [c, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
     if name != "eq" and name != "ne"
         problem(pos, "`{op_symbol(o)}` on `bytes` isn't in the native subset yet")
         return a
@@ -108,6 +111,8 @@ fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val
         if name == "to_str"
             t := Ty.Opt(Ty.Str)
             return Val(id: call("rt.bytes_to_str", [r.id], t), ty: t)
+    if nargs == 1 and name == "hex" and vs[0].ty == Ty.Str
+        return Val(id: call("rt.bytes_hex_sep", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
     if nargs == 1 and vs[0].ty == Ty.Bytes
         if name == "concat"
             return bytes_concat(r, vs[0])
