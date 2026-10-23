@@ -496,6 +496,9 @@ struct Maybe
     err Ty
 
 fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
+    if tk.on and is_wait_call(e)
+        if m := lower_wait_try(e)
+            return m
     if fallible_call(e)
         v := lower_expr(e, none)?
         failure := call("rt.failed", [], Ty.Bool)
@@ -682,6 +685,7 @@ fn Lower.lower_handle(mut self, value ast.Expr, other ast.Else)
 fn Lower.declare_errors(mut self, prog ast.Program)
     err_msgs[IO_ERROR] = ""
     err_msgs[PROC_ERROR] = ""
+    err_msgs[TRAPPED] = ""
     err_msgs[NET_ERROR] = ""
     err_msgs[COMPRESS_ERROR] = ""
     # What `Task.wait()` fails with (conc.task.6), named in `! Trapped`.
