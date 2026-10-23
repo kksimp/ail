@@ -50,12 +50,13 @@ TOOLS_RS=(editor_checks_clean_and_passes_its_tests garlic_checks_clean_and_rende
   native_recursion_traps_when_the_stack_runs_out arm64_recursion_traps_when_the_stack_runs_out_under_qemu build_refuses_programs_outside_the_subset tasks_build_for_macos_with_imports unicode_tables_are_current
   embedded_prelude_is_current json_builds_without_the_derived_file embedded_derive_generators_are_current derives_build_without_the_derived_file compiler_command_line_is_ail_build
   ail_script_routes_build_to_the_native_compiler user_generator_refusal_stops_the_native_build native_build_takes_unsafe_driver run_limits_stop_native_programs run_limits_stop_arm64_programs_under_qemu
-  runtime_sources_parse driver_programs_run_natively runtime_function_names_are_unique)
+  runtime_sources_parse driver_programs_run_natively runtime_function_names_are_unique
+  runtime_global_slots_are_distinct)
 skips=(); for t in "${TOOLS_RS[@]}"; do skips+=(--skip "$t"); done
 run selftest ./ail selftest --no-fail-fast -- --exact "${skips[@]}"
-run native_suites bash -c 'cd bootstrap && cargo test --release --no-fail-fast --test native_asm --test native_globals'
+run native_suites bash -c 'cd bootstrap && cargo test --release --no-fail-fast --test native_asm'
 # The gate in AIL (RR-4): the same program suites without cargo. AIL_GATE=ail skips the cargo run above.
-run gate_ail ./ail run tools/gate/gate.ail examples native tools cases explain fix cli mistakes contracts snapshot misc docs fmt budget limits diff build_cache parallel api_queries replay api_card edit git_deps net bytecode spec native_misc nativex
+run gate_ail ./ail run tools/gate/gate.ail examples native tools cases explain fix cli mistakes contracts snapshot misc docs fmt budget limits diff build_cache parallel api_queries replay api_card edit git_deps net bytecode spec native_misc nativex globals
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build bootstrap/tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }
