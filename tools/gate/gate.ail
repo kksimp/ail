@@ -2518,6 +2518,14 @@ fn Gate.globals(mut self)
     if r.status != 0 or not r.out.contains("GLOBALS GREEN")
         red("globals", "{r.out}{r.err}")
 
+## bootstrap/tests/native_pe.rs, ported to tools/gate/pe.ail (B6).
+fn Gate.pe(mut self)
+    r := ail_run(["run", "tools/gate/pe.ail"]) else
+        red("pe", "could not start tools/gate/pe.ail")
+        return
+    if r.status != 0 or not r.out.contains("PE GREEN")
+        red("pe", "{r.out}{r.err}")
+
 fn Gate.native_misc(mut self)
     for flags in [List[str](), ["--no-bytecode"]]
         r := ail_run(cat(cat(["test"], flags), ["compiler/rt/rt.ail"])) else return
@@ -2575,6 +2583,7 @@ fn main() !
         "snapshot",
         "nativex",
         "globals",
+        "pe",
         "selfhost",
     ]
     suites := if args.len() == 0 then all else args
@@ -2611,6 +2620,7 @@ fn main() !
             "spec" => g.spec()
             "nativex" => g.nativex()
             "globals" => g.globals()
+            "pe" => g.pe()
             "native_misc" => g.native_misc()
             "selfhost" => g.selfhost()
             _ =>
