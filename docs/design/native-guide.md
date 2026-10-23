@@ -42,7 +42,7 @@ In short:
   `ceil`, and the bit operations.
 
 Examples that build and print what `ail run` prints (checked by
-`bootstrap/tests/native_examples.rs`):
+`tools/gate/goldens.ail`):
 
 | File | Shows |
 |---|---|
