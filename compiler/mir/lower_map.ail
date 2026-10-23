@@ -155,16 +155,8 @@ fn Lower.new_table(mut self, ty Ty) int
     match ty
         Map(k, v) =>
             m := value_mode(v)
-            call(
-                "rt.map_new",
-                [kind_val(k), konst(m[0], Ty.Int), konst(m[1], Ty.Int)],
-                ty,
-            )
-        Set(e) => call(
-            "rt.map_new",
-            [kind_val(e), konst(0, Ty.Int), konst(0, Ty.Int)],
-            ty,
-        )
+            call("rt.map_new", [kind_val(k), konst(m[0], Ty.Int), konst(m[1], Ty.Int)], ty)
+        Set(e) => call("rt.map_new", [kind_val(e), konst(0, Ty.Int), konst(0, Ty.Int)], ty)
         _ => -1
 
 ## A copy of the table `v` (own.val.1).
@@ -483,7 +475,11 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "add" and vs.len() == 1
                 return Val(
-                    id: call("rt.map_add", [r.id, stored_key(args[0].value, vs[0], et, npos)], Ty.Bool),
+                    id: call(
+                        "rt.map_add",
+                        [r.id, stored_key(args[0].value, vs[0], et, npos)],
+                        Ty.Bool,
+                    ),
                     ty: Ty.Bool,
                 )
             if name == "sorted"
