@@ -1,0 +1,309 @@
+## `ail api --diff OLD NEW [--json]` (api.diff.1-5, ADR 0729), as
+## `bootstrap/src/api/apidiff.rs`: what changed in the public API between two
+## versions of a file or package. Declarations are matched by id (api.id.1);
+## only the public ones count, and a change that can break a caller is marked
+## `breaking:`.
+use ast
+use check
+use load
+
+DIFF_USAGE := "usage: ail api --diff OLD NEW [--json]   (two files, or two package directories)\n       ail api --diff --rev REV PATH [--json]   (PATH as of git revision REV against now)"
+
+## The compared keys of a public declaration (api.diff.2); a body is not part of an API.
+DIFF_KEYS := ["signature", "effects", "fails_with", "requires", "ensures", "default"]
+
+## The first line of a declaration that is part of every program (the prelude).
+PRELUDE_FIRST := 1073741824
+
+## One public declaration: its id, kind and the compared properties as text.
+struct Decl
+    id str
+    kind str
+    props List[(str, str)]
+
+fn Decl.get(self, key str) str
+    for p in props
+        if p.0 == key
+            return p.1
+    ""
+
+error struct DiffError
+    message str
+
+fn diff_join(xs List[str], sep str) str
+    xs.join(sep)
+
+struct DiffFlat
+    public bool
+    decl Decl
+
+## Adds `item` and its members, each with whether it is public: written `pub`,
+## or the variant of a public enum, a field of such a variant, or a method of
+## a public trait.
+fn flatten(prog ast.Program, item Item, inherited bool, mut out List[DiffFlat])
+    public := item.line >= PRELUDE_FIRST or prog.public.contains(item.line) or inherited
+    mut props := [("signature", item.signature)]
+    for p in item.extra
+        if DIFF_KEYS.contains(p.key)
+            props.push((p.key, write_json(p.val, false, 0)))
+    out.push(DiffFlat(
+        public: public and item.kind != "impl",
+        decl: Decl(id: item.id, kind: item.kind, props: props),
+    ))
+    # An impl is decided afterwards, by its type; its methods repeat the trait's.
+    if item.kind == "impl"
+        return
+    for g in item.members
+        inherit := public
+            and ((item.kind == "enum" and g.key == "variants") or (item.kind == "variant" and g.key == "fields") or (item.kind == "trait" and g.key == "methods"))
+        for m in g.items
+            flatten(prog, m, inherit, mut out)
+
+## The public declarations of `prog` (api.diff.2).
+pub fn public_decls(prog ast.Program, facts Facts, whole bool) List[Decl]
+    api := if whole then new_whole_api(prog, facts) else new_api(prog, facts)
+    mut all := List[DiffFlat]()
+    for item in api.items()
+        flatten(prog, item, false, mut all)
+    mut public := Set[str]()
+    for f in all
+        if f.public
+            public.add(f.decl.id)
+    mut out := List[Decl]()
+    for f in all
+        if f.decl.kind == "impl"
+            parts := f.decl.id.strip_prefix("impl:") else ""
+            ty := parts.split(".")[0]
+            if public.contains("type:{ty}")
+                out.push(f.decl)
+        elif f.public
+            out.push(f.decl)
+    out
+
+## The quoted strings of a JSON array written as text: `["a","b"]`.
+fn set_of(v str) Set[str]
+    parts := v.split("\"")
+    mut out := Set[str]()
+    mut i := 1
+    while i < parts.len()
+        out.add(parts[i])
+        i += 2
+    out
+
+fn subset(a Set[str], b Set[str]) bool
+    for x in a
+        if not b.contains(x)
+            return false
+    true
+
+## Why `new` may break a caller of `old`, for one compared key (api.diff.3).
+fn breaks(key str, old str, new str) bool
+    match key
+        "signature" => true
+        # A new effect or error type is something a caller must now allow for.
+        "effects" | "fails_with" => not subset(set_of(new), set_of(old))
+        # A new or changed precondition is stricter; dropping one is not.
+        "requires" => set_of(new).len() > 0 and set_of(new) != set_of(old)
+        # A guarantee that went away was relied on.
+        "ensures" => not subset(set_of(old), set_of(new))
+        # A trait method that lost its default breaks implementers that relied on it.
+        "default" => old == "true" and new != "true"
+        _ => false
+
+## Why adding `d` can break existing code (api.diff.3), if it can.
+fn added_breaks(d Decl) str
+    if d.kind == "variant"
+        return "new variant"
+    if d.kind == "method" and d.get("default") == "false"
+        return "new required trait method"
+    ""
+
+fn diff_shown(v str) str
+    if v == "" then "(none)" else v
+
+fn why_json(why List[str]) str
+    if why.len() == 0
+        return ""
+    ",\"breaking\":[{diff_join([quote(x) for x in why], ",")}]"
+
+fn decl_line(op str, d Decl, why List[str], json bool) str
+    sig := d.get("signature")
+    if json
+        return "\{\"change\":\"api\",\"op\":\"{op}\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"signature\":{quote(sig)}{why_json(why)}}"
+    marker := if why.len() == 0 then "" else "  breaking: {diff_join(why, ", ")}"
+    sign := if op == "added" then "+" else "-"
+    "{sign} {d.id} {sig}{marker}"
+
+struct DiffChange
+    key str
+    old str
+    new str
+
+fn changed_line(d Decl, diffs List[DiffChange], why List[str], json bool) str
+    if json
+        keys := ["{quote(c.key)}:\{\"old\":{quote(c.old)},\"new\":{quote(c.new)}}" for c in diffs]
+        return "\{\"change\":\"api\",\"op\":\"changed\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"keys\":\{{diff_join(keys, ",")}}{why_json(why)}}"
+    mut s := "~ {d.id}"
+    if why.len() > 0
+        s = "{s}  breaking: {diff_join(why, ", ")}"
+    for c in diffs
+        s = "{s}\n    {c.key}: {diff_shown(c.old)} -> {diff_shown(c.new)}"
+    s
+
+## The report of `a` (OLD) against `b` (NEW), and how many declarations
+## changed (api.diff.1-5).
+pub fn render_diff(old str, new str, a List[Decl], b List[Decl], json bool)(str, int)
+    mut old_by := Map[str, Decl]()
+    for d in a
+        old_by[d.id] = d
+    mut new_ids := Set[str]()
+    for d in b
+        new_ids.add(d.id)
+    mut added := 0
+    mut removed := 0
+    mut changed := 0
+    mut breaking := 0
+    mut lines := List[str]()
+    for d in b
+        if o := old_by.get(d.id)
+            mut diffs := List[DiffChange]()
+            mut why := List[str]()
+            for k in DIFF_KEYS
+                if o.get(k) != d.get(k)
+                    diffs.push(DiffChange(key: k, old: o.get(k), new: d.get(k)))
+                    if breaks(k, o.get(k), d.get(k))
+                        why.push(k)
+            if diffs.len() > 0
+                changed += 1
+                if why.len() > 0
+                    breaking += 1
+                lines.push(changed_line(d, diffs, why, json))
+        else
+            added += 1
+            w := added_breaks(d)
+            mut why := List[str]()
+            if w != ""
+                breaking += 1
+                why.push(w)
+            lines.push(decl_line("added", d, why, json))
+    for d in a
+        if not new_ids.contains(d.id)
+            removed += 1
+            breaking += 1
+            lines.push(decl_line("removed", d, ["removed"], json))
+    mut out := ""
+    for l in lines
+        out = "{out}{l}\n"
+    if json
+        out = "{out}\{\"summary\":true,\"old\":{quote(old)},\"new\":{quote(new)},\"added\":{added},\"removed\":{removed},\"changed\":{changed},\"breaking\":{breaking}}\n"
+    else
+        out = "{out}{added} added, {removed} removed, {changed} changed; {breaking} breaking\n"
+    (out, added + removed + changed)
+
+## Load and check `path` and list its public declarations. A version that
+## does not check cannot be compared (api.diff.4).
+fn public_api(path str, std str) List[Decl] ! DiffError
+    is_dir := not path.ends_with(".ail")
+    loaded := load.load(path, std) else err
+        return DiffError(message: err.message)
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    mut analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags]
+    # A single file may lack `main`: it is a library when compared (api.diff.4).
+    found = [d for d in found if is_dir or d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            return DiffError(message: "{path} has errors, so its API can't be compared; fix them first (api.diff.4)")
+    public_decls(loaded.program, Facts(effects: analysis.effects, errors: analysis.errors), is_dir)
+
+fn sh_quote(s str) str
+    "'{s.replace("'", "'\\''")}'"
+
+## `path` as git has it at `rev`, copied under a new temporary directory
+## (diff.out.5); the copy's path and the directory to remove.
+fn at_revision(rev str, from_path str)(str, str) ! DiffError
+    is_dir := not from_path.ends_with(".ail")
+    parts := from_path.split("/")
+    dir := if is_dir then from_path else if parts.len() > 1 then parts[..parts.len() - 1].join("/") else "."
+    made := proc.run("mktemp", ["-d"]) else err
+        return DiffError(message: "can't create a temporary directory: {err}")
+    tmp := made.out.trim()
+    tar := "{tmp}.tar"
+    args := ["-C", dir, "archive", "--format=tar", "-o", tar, rev, "."]
+    cut := proc.run("git", args) else err
+        remove_scrap(tmp)
+        return DiffError(message: "can't run git: {err}")
+    if cut.status != 0
+        remove_scrap(tmp)
+        return DiffError(message: "git archive --format=tar {rev} .: {cut.err.trim()}")
+    unpacked := proc.run("tar", ["-x", "-f", tar, "-C", tmp]) else err
+        remove_scrap(tmp)
+        return DiffError(message: "can't run tar: {err}")
+    remove_scrap(tar)
+    if unpacked.status != 0
+        remove_scrap(tmp)
+        return DiffError(message: "can't unpack {rev}: {unpacked.err.trim()}")
+    target := if is_dir then tmp else path.join(tmp, parts[parts.len() - 1])
+    if not fs.exists(target)
+        remove_scrap(tmp)
+        return DiffError(message: "{from_path} does not exist at {rev}")
+    (target, tmp)
+
+## `ail api --diff ...` with its arguments after `--diff`; the exit status:
+## 0 when the API is the same, 1 when it changed, 2 for an error.
+pub fn diff_command(args List[str], std str) int
+    mut paths := List[str]()
+    mut rev := ""
+    mut json := false
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        i += 1
+        match a
+            "--diff" => continue
+            "--rev" =>
+                if i >= args.len()
+                    io.eprint("error: `--rev` needs a git revision, e.g. `--rev HEAD` (api.diff.1)\n{DIFF_USAGE}")
+                    return 2
+                rev = args[i]
+                i += 1
+            "--json" => json = true
+            _ =>
+                if a.starts_with("--")
+                    io.eprint("error: unknown option `{a}`\n{DIFF_USAGE}")
+                    return 2
+                paths.push(a)
+    mut old := ""
+    mut new := ""
+    mut scrap := ""
+    if rev == "" and paths.len() == 2
+        old = paths[0]
+        new = paths[1]
+    elif rev != "" and paths.len() == 1
+        new = paths[0]
+        got := at_revision(rev, new) else err
+            io.eprint("error: {err.message} (api.diff.1)")
+            return 2
+        old = got.0
+        scrap = got.1
+    else
+        io.eprint(DIFF_USAGE)
+        return 2
+    before := public_api(old, std) else err
+        remove_scrap(scrap)
+        io.eprint("error: {err.message}")
+        return 2
+    after := public_api(new, std) else err
+        remove_scrap(scrap)
+        io.eprint("error: {err.message}")
+        return 2
+    remove_scrap(scrap)
+    shown_old := old
+    result := render_diff(shown_old, new, before, after, json)
+    print(result.0.strip_suffix("\n") else result.0)
+    if result.1 == 0 then 0 else 1
+
+fn remove_scrap(dir str)
+    if dir != ""
+        _ := proc.run("rm", ["-rf", dir]) else return

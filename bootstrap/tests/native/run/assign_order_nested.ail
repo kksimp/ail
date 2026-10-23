@@ -1,0 +1,25 @@
+## A nested store reaches its containers after the right-hand side runs (type.map.3):
+## the index is fixed before it, the list it selects from is read after it.
+fn bump(mut xs List[Map[str, int]]) int
+    xs = xs[..1]
+    xs.push({})
+    5
+
+struct S
+    xs List[Map[str, int]]
+
+fn S.run(mut self) int
+    self.xs[self.xs.len() - 1]["a"] = go(mut self)
+    self.xs[0].len()
+
+fn go(mut s S) int
+    s.xs = s.xs[..1]
+    s.xs.push({})
+    s.xs.push({})
+    7
+
+fn main()
+    mut s := S([{}, {}])
+    print(s.run())
+    print(s.xs.len())
+    print(s.xs)

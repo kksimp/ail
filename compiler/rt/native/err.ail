@@ -12,6 +12,21 @@ TRACE := 9
 ## The error value of a failure whose type is a struct or an enum (ADR 0804).
 ERRV := 12
 
+## Where the pending failure's words are: 0 the display text, 1 the error
+## value, 2 the trace. The main thread keeps them in the global slots; a
+## worker has its own in the pool block (`P_ERR`), so tasks that fail at the
+## same time don't take each other's failure.
+fn err_addr(k int) int
+    if load64(global(MULTI)) != 0
+        w := worker_index()
+        if w >= 0
+            return load64(global(TASKS)) + P_ERR + 24 * (w + 1) + 8 * k
+    if k == 0
+        return global(ERR)
+    if k == 1
+        return global(ERRV)
+    global(TRACE)
+
 # ---- optionals ----
 
 fn box(v int) int
@@ -47,72 +62,72 @@ fn unboxf(p int) float
 
 ## Fail with `msg` (the error's display text); `at` is the first trace line.
 fn err_set(msg str, at str)
-    store64(global(ERR), str_addr(msg))
+    store64(err_addr(0), str_addr(msg))
     xs := list_new(8)
     list_push(xs, list_addr(list_new(8)))
     list_push(xs, str_addr(at))
-    store64(global(TRACE), list_addr(xs))
+    store64(err_addr(2), list_addr(xs))
 
 ## A `?` passes the failure on: add its location to the trace.
 fn err_trace(at str)
-    list_push(list_at(load64(global(TRACE))), str_addr(at))
+    list_push(list_at(load64(err_addr(2))), str_addr(at))
 
 ## `e? "msg"` passes the failure on with a context message (err.ctx.2).
 fn err_context(msg str)
-    xs := list_at(load64(global(TRACE)))
+    xs := list_at(load64(err_addr(2)))
     list_push(list_at(load64(load64(list_addr(xs) + 16))), str_addr(msg))
 
 ## The error as a value, for a failure that has one.
 fn err_value(v int)
-    store64(global(ERRV), v)
+    store64(err_addr(1), v)
 
 ## Handle the failure: the error value, and the slot is clear.
 fn err_take_value() int
-    v := load64(global(ERRV))
-    store64(global(ERR), 0)
-    store64(global(ERRV), 0)
+    v := load64(err_addr(1))
+    store64(err_addr(0), 0)
+    store64(err_addr(1), 0)
     v
 
 fn failed() bool
-    load64(global(ERR)) != 0
+    load64(err_addr(0)) != 0
 
 ## Handle the failure: the error's display text, and the slot is clear.
 fn err_take() str
-    p := load64(global(ERR))
-    store64(global(ERR), 0)
-    store64(global(ERRV), 0)
+    p := load64(err_addr(0))
+    store64(err_addr(0), 0)
+    store64(err_addr(1), 0)
     str_at(p)
 
 ## A task that failed keeps its error in a box until `wait` takes it.
 fn err_box() int
     b := obj_new(24, 4)
-    store64(b, load64(global(ERR)))
-    store64(b + 8, load64(global(ERRV)))
-    store64(b + 16, load64(global(TRACE)))
-    store64(global(ERR), 0)
-    store64(global(ERRV), 0)
+    store64(b, load64(err_addr(0)))
+    store64(b + 8, load64(err_addr(1)))
+    store64(b + 16, load64(err_addr(2)))
+    store64(err_addr(0), 0)
+    store64(err_addr(1), 0)
     b
 
 fn err_restore(b int)
-    store64(global(ERR), load64(b))
-    store64(global(ERRV), load64(b + 8))
-    store64(global(TRACE), load64(b + 16))
+    store64(err_addr(0), load64(b))
+    store64(err_addr(1), load64(b + 8))
+    store64(err_addr(2), load64(b + 16))
 
 fn err_clear()
-    store64(global(ERR), 0)
-    store64(global(ERRV), 0)
+    store64(err_addr(0), 0)
+    store64(err_addr(1), 0)
 
 ## The entry's last step: a failure that reached `main` is reported
 ## (err.text.1, err.ctx.3) and ends the process with status 1.
 fn err_report()
-    p := load64(global(ERR))
+    p := load64(err_addr(0))
     if p == 0
         return
     flush()
     out_str("error: ")
     out_str(str_at(p))
     out_byte(10)
-    xs := list_at(load64(global(TRACE)))
+    xs := list_at(load64(err_addr(2)))
     n := load64(list_addr(xs))
     cs := list_at(load64(load64(list_addr(xs) + 16)))
     mut j := 0

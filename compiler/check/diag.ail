@@ -75,7 +75,7 @@ pub fn Diag.to_json(self, files List[ast.SourceFile], sources Map[str, List[List
     "{out}}"
 
 ## `e` with its lines made local to its file.
-fn shifted(e fix.Edit, base int) fix.Edit
+pub fn shifted(e fix.Edit, base int) fix.Edit
     fix.Edit(
         pos: ast.Pos(line: e.pos.line - base, col: e.pos.col),
         end: ast.Pos(line: e.end.line - base, col: e.end.col),
@@ -84,7 +84,7 @@ fn shifted(e fix.Edit, base int) fix.Edit
         text: e.text,
     )
 
-fn fix_json(f fix.Fix) str
+pub fn fix_json(f fix.Fix) str
     edits := [
         "\{\"line\":{e.pos.line},\"col\":{e.pos.col},\"end_line\":{e.end.line},\"end_col\":{e.end.col},\"text\":{quote(e.text)}}"
         for e in f.edits

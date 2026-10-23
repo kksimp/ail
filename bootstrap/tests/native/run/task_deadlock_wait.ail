@@ -1,0 +1,9 @@
+# conc.task.7: the main task waits on a task that waits for a value nobody sends.
+fn stuck(c Channel[int]) int
+    c.recv() else 0
+
+fn main() !
+    c := Channel[int](1)
+    t := spawn stuck(c)
+    print("waiting")
+    print(t.wait()?)
