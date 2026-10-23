@@ -30,7 +30,22 @@ struct Gate
 
 fn temp_dir() str
     base := env.get("TMPDIR") else "/tmp"
-    "{base}/ail-gate"
+    # Not `ail-gate`: mac-gate.sh keeps its logs there.
+    "{base}/ail-gate-ail"
+
+## The programs tests/native.rs skips on macOS (its MACOS_KNOWN list: they
+## differ from the interpreter by design), read from that list.
+fn macos_known() List[str]
+    u := proc.run("uname", []) else return []
+    if not u.out.starts_with("Darwin")
+        return []
+    text := fs.read_text("bootstrap/tests/native.rs") else return []
+    at := text.find("MACOS_KNOWN: &[&str]") else return []
+    rest := text.slice(at, text.len())
+    end := rest.find("];") else return []
+    parts := rest.slice(0, end).split("\"")
+    # The names are the quoted parts: every second one.
+    [parts[i] for i in 0..parts.len() if i % 2 == 1]
 
 ## Build `src` natively into `exe`; false (with the reason) if it can't.
 fn build(src str, exe str) str?
@@ -72,10 +87,13 @@ fn Gate.examples(mut self, tmp str)
 
 ## A native program must behave like the interpreter: same stdout, same exit.
 fn Gate.native(mut self, tmp str)
+    skip := macos_known()
     for name in fs.list_dir("bootstrap/tests/native/run") else []
         if not name.ends_with(".ail")
             continue
         stem := name.replace(".ail", "")
+        if skip.contains(stem)
+            continue
         src := "bootstrap/tests/native/run/{name}"
         exe := "{tmp}/nt_{stem}"
         if why := build(src, exe)

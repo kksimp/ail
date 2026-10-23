@@ -908,6 +908,7 @@ fn Lower.failing(self) bool
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
     # After a problem the MIR may be inconsistent; it is never built.
     if problems.len() > fn_problems or fn_failed
+        facts.moves = []
         return
     func := simplify(fold(simplify(elide_moves(
         Func(
