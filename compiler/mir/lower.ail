@@ -1126,6 +1126,10 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
+    if is_branchy(e) and place_tail(e, true)
+        if v.ty.is_coll()
+            return copy_coll(v)
+        return if needs_copy(v.ty) then copy_value(v) else v.id
     if v.ty.is_coll() and is_place(e)
         return note_move(e, v, copy_coll(v))
     if not needs_copy(v.ty) or not is_place(e)
@@ -1142,6 +1146,7 @@ fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
         Name(n, _) =>
             key := lookup(n) else return copy_value(v)
             if borrowed.contains(key) then copy_value(v) else v.id
+        If | Match => if place_tail(e, false) then copy_value(v) else v.id
         _ => v.id
 
 ## A copy of the list `v`, deep through nested lists (own.val.1).
