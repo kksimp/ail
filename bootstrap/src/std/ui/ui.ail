@@ -1,0 +1,104 @@
+## std.ui for the native backend (spec std.ui.1-18): the types and the
+## `Window` methods without a window host. The native runtime can't show a
+## window yet, so `open` fails with `no_display` (std.ui.1), and a window
+## that is not open is closed (std.ui.8): 0 by 0, drawing does nothing, and
+## the next event is `Close`. Programs that build `ui.Event` values by hand
+## and draw nothing, like widget tests, behave as they do under `ail run`.
+
+## A handle; at most one window is open.
+pub struct Window
+    pub handle int
+
+pub struct Size
+    pub cols int
+    pub rows int
+
+pub struct Modifiers
+    pub ctrl bool
+    pub alt bool
+    pub shift bool
+
+## How a cell is drawn (std.ui.16).
+pub struct Style
+    pub bold bool
+    pub italic bool
+    pub underline bool
+
+pub enum Event
+    Key(key str, ctrl bool, alt bool, shift bool)
+    Resize(cols int, rows int)
+    Close
+    Mouse(col int, row int, button str, kind str)
+    Scroll(lines int)
+
+## How the caret is drawn (std.ui.18).
+pub enum Cursor
+    Bar
+    Block
+    Underline
+
+## Why a window couldn't open: `no_display`, `closed` or `other`.
+pub error struct UiError
+    pub kind str
+    pub message str
+
+## std.ui.17
+pub BLACK := 0x000000
+pub BLUE := 0x2472C8
+pub CYAN := 0x11A8CD
+pub GRAY := 0x808080
+pub GREEN := 0x0DBC79
+pub MAGENTA := 0xBC3FBC
+pub ORANGE := 0xCE9178
+pub RED := 0xCD3131
+pub WHITE := 0xFFFFFF
+pub YELLOW := 0xE5E510
+
+## std.ui.1: a window needs a host, and this run has none.
+pub fn open(title str, cols int, rows int) Window ! UiError
+    if cols < 1 or cols > 1000 or rows < 1 or rows > 1000
+        return UiError(kind: "other", message: "a window is 1 to 1000 cells each way")
+    UiError(kind: "no_display", message: "no window host in this run")
+
+pub fn Window.size(self) Size
+    Size(cols: 0, rows: 0)
+
+pub fn Window.clear(mut self, bg int)
+    return
+
+pub fn Window.put(mut self, col int, row int, text str, fg int, bg int)
+    return
+
+pub fn Window.put_styled(mut self, col int, row int, text str, fg int, bg int, style Style)
+    return
+
+pub fn Window.cursor(mut self, col int, row int)
+    return
+
+pub fn Window.set_cursor(mut self, col int, row int, shape Cursor)
+    return
+
+pub fn Window.present(mut self)
+    return
+
+pub fn Window.next_event(mut self) Event
+    Close
+
+pub fn Window.poll_event(mut self) Event?
+    Close
+
+pub fn Window.modifiers(self) Modifiers
+    Modifiers(ctrl: false, alt: false, shift: false)
+
+pub fn Window.set_title(mut self, text str)
+    return
+
+pub fn Window.set_font_size(mut self, px int)
+    return
+
+## std.ui.15: a window opens at 20.
+pub fn Window.font_size(self) int
+    20
+
+pub fn Window.close(mut self)
+    return

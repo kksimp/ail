@@ -803,7 +803,7 @@ fn Lower.default_error_text(mut self, key str, v Val) int?
     if cases := enums.get(key)
         return default_enum_text(key, cases, v)
     slots := structs.get(key) else return none
-    fields_text("{key}(", slots, v.id, 0)
+    fields_text("{shown_key(key)}(", slots, v.id, 0)
 
 ## `head` then each of `slots` read from `obj` (the first at slot `skip`),
 ## as `name: value` pairs, then `)`.
@@ -827,12 +827,19 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, text], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
 
+## The name a type is shown by: `std.ui` is written in AIL here but is the
+## runtime's `ui` module under `ail run`, so its types print as `ui.Event`.
+fn shown_key(key str) str
+    if key.starts_with("std.ui.") and key.slice(7, key.len()).contains(".") == false
+        return key.slice(4, key.len())
+    key
+
 ## A plain struct field's `Name(field: value, ...)`, else -1.
 fn Lower.nested_text(mut self, key str, obj int) int
     slots := structs.get(key) else return -1
     if err_msgs.contains(key) or sigs.contains("{key}.to_str")
         return -1
-    fields_text("{key}(", slots, obj, 0) else -1
+    fields_text("{shown_key(key)}(", slots, obj, 0) else -1
 
 ## The default text of an enum value: a chain of tests on the variant index.
 fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
@@ -850,7 +857,7 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
             seal(no)
             cur = yes
         text := if cases[k].fields.len()
-            == 0 then str_value("{key}.{cases[k].name}") else (fields_text("{key}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
+            == 0 then str_value("{shown_key(key)}.{cases[k].name}") else (fields_text("{shown_key(key)}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
         jump(join, [text])
         if no >= 0
             cur = no

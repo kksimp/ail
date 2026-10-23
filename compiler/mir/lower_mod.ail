@@ -34,6 +34,8 @@ STD_AIL := [
     "std.net.jar",
     "std.regex",
     "std.time.date",
+    "std.ui",
+    "std.ui.widgets",
 ]
 
 ## The imports of a file: the name each makes available, to the module's
