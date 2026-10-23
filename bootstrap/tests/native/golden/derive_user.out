@@ -1,0 +1,2 @@
+struct Version (type:Version) []: major int, minor int, tags List[str]?
+error enum Fault (type:Fault) []: Lost/0, Bad/1
