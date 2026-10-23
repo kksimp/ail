@@ -10,6 +10,8 @@ use ast
 ## the variable back), or wait for the tasks of a group.
 struct ExitAct
     group bool
+    ## Where a group was made: a deadlock at its end traps here (conc.task.7).
+    pos ast.Pos
     ## `scopes.len()` and `loops.len()` where it was opened.
     depth int
     loopn int
@@ -46,6 +48,7 @@ fn Lower.lower_sync_new(mut self, name str, args List[ast.Arg], pos ast.Pos) Val
     g := call("rt.group_new", [], Ty.Group)
     tk.exits.push(ExitAct(
         group: true,
+        pos: pos,
         depth: scopes.len(),
         loopn: loops.len(),
         obj: g,
@@ -159,6 +162,7 @@ fn Lower.wait_all_maybe(mut self, e ast.Expr) Maybe?
             if g.ty != Ty.Group
                 return none
             call("rt.group_wait", [g.id, trace_line(npos)], Ty.Unit)
+            chan_deadlock_trap(npos)
             failure := call("rt.failed", [], Ty.Bool)
             Maybe(
                 val: Val(id: -1, ty: Ty.Unit),
@@ -186,6 +190,7 @@ fn Lower.lower_with(mut self, mex ast.Expr, var str, body List[ast.Stmt], pos as
         return
     act := ExitAct(
         group: false,
+        pos: pos,
         depth: scopes.len(),
         loopn: loops.len(),
         obj: m.id,
@@ -202,6 +207,7 @@ fn Lower.lower_with(mut self, mex ast.Expr, var str, body List[ast.Stmt], pos as
 fn Lower.run_exit(mut self, a ExitAct)
     if a.group
         call("rt.group_end", [a.obj], Ty.Unit)
+        chan_deadlock_trap(a.pos)
         return
     v := Val(id: read_var(a.var, cur), ty: a.elem)
     w := some(v)

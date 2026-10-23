@@ -1,0 +1,74 @@
+## std.net.20-22: a cookie jar: domain, path, expiry, Secure and HttpOnly
+## rules, and requests that carry cookies through redirects.
+use std.net
+use std.net.http
+use std.net.jar
+
+fn site(r net.Request) net.Response
+    seen := r.headers.get("cookie") else "-"
+    if r.path == "/start" or r.path == "/"
+        return net.Response(status: 302, headers: {"location": "login"}, body: "")
+    if r.path == "/login"
+        return net.Response(status: 302, headers: {"location": "/home"}, body: "", all_headers: {
+            "set-cookie": ["sid=abc; Path=/; HttpOnly", "theme=dark; Path=/prefs; Max-Age=3600"],
+        })
+    net.Response(status: 200, headers: {}, body: "{r.path} cookie={seen}")
+
+fn rules()
+    mut j := jar.new()
+    # Host-only cookie: not sent to subdomains. Domain cookie: sent to them.
+    j.set_cookie("http://www.shop.test/", "h=1")
+    j.set_cookie("http://www.shop.test/", "d=2; Domain=.shop.test")
+    print(j.header("http://www.shop.test/a/c"))
+    # The default path is the directory of the request: /a for /a/b.
+    j.set_cookie("http://www.shop.test/a/b", "dir=0")
+    print("[{j.header("http://www.shop.test/z")}] [{j.header("http://www.shop.test/a/z")}]")
+    print(j.header("http://api.shop.test/"))
+    print(j.header("http://other.test/"))
+    # A cookie cannot name a domain the host is not in.
+    print(j.set_cookie("http://www.shop.test/", "e=3; Domain=other.test"))
+    # Default path is the request's directory; Path limits where it goes.
+    print("[{j.header("http://www.shop.test/z")}]")
+    j.set_cookie("http://www.shop.test/", "p=4; Path=/x")
+    print("[{j.header("http://www.shop.test/y")}] [{j.header("http://www.shop.test/x/y")}]")
+    # Secure goes only over https.
+    j.set_cookie("https://www.shop.test/", "s=5; Secure")
+    print("[{j.header("http://www.shop.test/")}] [{j.header("https://www.shop.test/")}]")
+    # Max-Age wins over Expires; zero or a past date removes.
+    j.set_cookie("http://www.shop.test/", "m=6; Max-Age=0; Expires=Wed, 21 Oct 2099 07:28:00 GMT")
+    j.set_cookie("http://www.shop.test/", "old=7; Expires=Thu, 01 Jan 1970 00:00:00 GMT")
+    j.set_cookie("http://www.shop.test/", "far=8; Expires=Wed, 21 Oct 2099 07:28:00 GMT")
+    print(j.value("http://www.shop.test/", "far") else "-")
+    print(j.value("http://www.shop.test/", "m") else "-")
+    print(j.value("http://www.shop.test/", "old") else "-")
+    # A later cookie of the same name replaces the earlier one.
+    j.set_cookie("http://www.shop.test/", "far=9")
+    print(j.value("http://www.shop.test/", "far") else "-")
+    # HttpOnly is hidden from scripts, and scripts cannot set it.
+    j.set_cookie("http://www.shop.test/", "hid=1; HttpOnly")
+    print(j.for_script("http://www.shop.test/").get("hid") else "hidden")
+    print(j.set_from_script("http://www.shop.test/", "x=1; HttpOnly"))
+    # Longer paths come first.
+    mut k := jar.new()
+    k.set_cookie("http://a.test/", "short=1; Path=/")
+    k.set_cookie("http://a.test/", "long=2; Path=/a/b")
+    print(k.header("http://a.test/a/b/c"))
+
+fn main() !
+    rules()
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, site)
+    base := "http://{srv.addr()}"
+    mut j := jar.new()
+    first := j.get("{base}/login")?
+    print("{first.status} {first.body}")
+    print("jar holds {j.len()} cookies")
+    print(j.get("{base}/prefs/x")?.body)
+    # A relative redirect from the root path resolves against it.
+    mut fresh := jar.new()
+    print(fresh.get("{base}/")?.body)
+    mut o := net.options()
+    o.headers["Cookie"] = "mine=1"
+    print(j.request("GET", "{base}/other", o)?.body)
+    srv.close()
+    t.wait()?
