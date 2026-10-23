@@ -1,0 +1,10 @@
+# Volatile access and a fence (unsafe.hw.2-4, ADR 0820): built with --unsafe driver.
+use std.mem
+
+fn main()
+    unsafe
+        xs := mem.alloc(4, 0.to_u32())
+        xs.offset(1).write_volatile(7.to_u32())
+        hw.fence()
+        print(xs.offset(1).read_volatile())
+        mem.free(xs)

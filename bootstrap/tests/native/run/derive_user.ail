@@ -1,0 +1,46 @@
+## A library trait with its own generator (ct.derive.1-2, refl.info.1).
+@derive(derive_describe) trait Describe
+    fn describe(self) str
+
+fn derive_describe(t TypeInfo) str ! DeriveError
+    mut parts := List[str]()
+    for f in t.fields
+        parts.push("{f.name} {f.type_text}")
+    for v in t.variants
+        parts.push("{v.name}/{v.fields.len()}")
+    kind := if t.kind == TypeKind.Struct then "struct" else "enum"
+    prefix := if t.is_error then "error " else ""
+    summary := "{prefix}{kind} {t.name} ({t.id}) [{t.params.join(", ")}]: {parts.join(", ")}"
+    "fn describe(self) str\n    \"{summary}\"\n"
+
+struct Version
+    major int
+    minor int
+    tags List[str]?
+
+error enum Fault
+    Lost
+    Bad(code int)
+
+impl Describe for Version
+impl Describe for Fault
+
+@test fn generators_are_plain_functions()
+    info := TypeInfo(
+        name: "P",
+        id: "type:P",
+        module: "",
+        kind: TypeKind.Struct,
+        is_error: false,
+        params: List[str](),
+        fields: [FieldInfo(name: "x", type_text: "int", public: false, doc: "")],
+        variants: List[VariantInfo](),
+    )
+    assert_eq(
+        derive_describe(info) else "",
+        "fn describe(self) str\n    \"struct P (type:P) []: x int\"\n",
+    )
+
+fn main()
+    print(Version(major: 1, minor: 2, tags: none).describe())
+    print(Fault.Lost.describe())

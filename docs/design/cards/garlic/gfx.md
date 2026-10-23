@@ -29,7 +29,7 @@ pub fn gfx.color(v str) int?  ## A color: `#rgb`, `#rrggbb`, `rgb()`, `rgba()` o
 pub fn gfx.color_over(v str, under int) int?  ## A color as `color` reads it, with `rgba()` and `#rrggbbaa` mixed into the
 pub fn gfx.layout(d html.Doc, url str, width float, sheet css.Sheet) gfx.Scene  ## Lays `d` out in a column `width` pixels wide with `sheet` (the linked
 pub fn gfx.layout_with(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]]) gfx.Scene  ## `layout` with the pictures' sizes (`images.prefetch`), so an `<img>`
-pub fn gfx.layout_measured(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]], meas Map[str, float]) gfx.Scene  ## `layout_with` using the run widths in `meas` (`probe_key`); the scene's
+pub fn gfx.layout_measured(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]], meas Map[str, float], editing int) gfx.Scene  ## `layout_with` using the run widths in `meas` (`probe_key`), drawing text
 ```
 
-trimmed to fit 2000 tokens (~744); dropped: private items
+trimmed to fit 2000 tokens (~747); dropped: private items

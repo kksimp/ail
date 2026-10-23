@@ -160,3 +160,96 @@ fn show_type(t ast.TypeRef) str
                     return "{show_type(o)} ! {errs}"
                 return "!{show_type(o)}"
             if errors != none then "! {errs}" else "!"
+
+## One deriving `impl` of a trait the program declares with `@derive(f)`
+## (ct.derive.1-2): the generator `f` runs on the type's `TypeInfo` in a
+## program of its own, because `f` is the program's code (ADR 0856).
+pub struct Job
+    ## The `impl`'s module, empty for the root.
+    pub module str
+    ## `TYPE.TRAIT`
+    pub label str
+    ## The file of the `impl` and where it is, for a message.
+    pub file int
+    pub pos ast.Pos
+    pub generator str
+    ## The module of the trait, where the generator is called from.
+    pub trait_module str
+    ## The `TypeInfo(...)` expression for the type (refl.info.1).
+    pub info str
+
+## The deriving `impl`s of user traits. An `impl` whose trait has no
+## generator, whose generator isn't declared, or whose type isn't a struct or
+## enum of the program is left to the checker.
+pub fn user_jobs(modules List[str], progs List[ast.Program]) List[Job]
+    mut out := List[Job]()
+    for k in 0..progs.len()
+        for imp in progs[k].impls
+            if imp.methods.len() > 0
+                continue
+            trait_name := last(imp.trait_name)
+            mut gen := ""
+            mut tm := ""
+            for j in 0..progs.len()
+                for t in progs[j].traits
+                    if t.name == trait_name and gen == ""
+                        if g := t.derive
+                            gen = g.name
+                            tm = modules[j]
+            if gen == "" or not declares_fn(modules, progs, tm, gen)
+                continue
+            type_name := last(imp.target.name)
+            info := type_info(modules, progs, type_name, modules[k]) else continue
+            out.push(Job(
+                module: modules[k],
+                label: "{type_name}.{trait_name}",
+                file: k,
+                pos: imp.pos,
+                generator: gen,
+                trait_module: tm,
+                info: info_expr(info),
+            ))
+    out
+
+fn declares_fn(modules List[str], progs List[ast.Program], module str, name str) bool
+    for k in 0..progs.len()
+        if modules[k] == module
+            for f in progs[k].fns
+                if f.name == name and f.owner == none
+                    return true
+    false
+
+## An AIL string literal holding `s` exactly.
+fn quote(s str) str
+    mut out := List[str]()
+    for c in s.chars()
+        if c == '"' or c == '\\' or c == '{'
+            out.push("\\")
+            out.push("{c}")
+        elif c == '\n'
+            out.push("\\n")
+        else
+            out.push("{c}")
+    "\"{out.join("")}\""
+
+fn list_of(items List[str], elem str) str
+    if items.len() == 0
+        return "List[{elem}]()"
+    "[{items.join(", ")}]"
+
+fn field_expr(f FieldInfo) str
+    "FieldInfo(name: {quote(f.name)}, type_text: {quote(f.type_text)}, public: {f.public}, doc: {quote(f.doc)})"
+
+## The `TypeInfo(...)` expression for `t`, as the bootstrap writes it.
+fn info_expr(t TypeInfo) str
+    kind := if t.kind == TypeKind.Struct then "Struct" else "Enum"
+    params := list_of([quote(p) for p in t.params], "str")
+    fields := list_of([field_expr(f) for f in t.fields], "FieldInfo")
+    variants := list_of(
+        [
+            "VariantInfo(name: {quote(v.name)}, fields: {list_of([field_expr(f) for f in v.fields], "FieldInfo")})"
+            for v in t.variants
+        ],
+        "VariantInfo",
+    )
+    "TypeInfo(name: {quote(t.name)}, id: {quote(t.id)}, module: {quote(t.module)}, kind: TypeKind.{kind}, is_error: {t.is_error}, params: {params}, fields: {fields}, variants: {variants})"

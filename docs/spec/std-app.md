@@ -194,6 +194,9 @@ impl app.App for Ruler
 
     fn measured(mut self, runs List[app.Measure], ws List[float])
         widths[runs[0].text] = ws[0]
+
+fn main()
+    print(Ruler(widths: {}).measures().len())
 ```
 
 ```ail norun rules=std.app.9,std.app.10

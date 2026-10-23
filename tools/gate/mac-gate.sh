@@ -17,6 +17,8 @@ run() { # run NAME CMD...
 }
 run selftest ./ail selftest --no-fail-fast
 run native_suites bash -c 'cd bootstrap && cargo test --release --no-fail-fast --test native --test native_subset_table --test native_asm --test native_globals --test native_test'
+# The gate in AIL (RR-4): the same program suites without cargo. AIL_GATE=ail skips the cargo run above.
+run gate_ail ./ail run tools/gate/gate.ail examples native
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build bootstrap/tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }

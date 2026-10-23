@@ -1,0 +1,962 @@
+## `ail fmt` in AIL (ADR 0169): the canonical layout of AIL source, ported
+## from the Rust formatter (`bootstrap/src/fmt.rs`) and byte-identical to it
+## on the whole repository. The style is described, rule by rule, in
+## `docs/design/formatting.md`; the `fmt.*` IDs cited here are that file's.
+##
+## The formatter works on the lexer's token stream with the comment side
+## table. It only changes whitespace, line breaks and trailing commas, and
+## refuses to write output whose token stream differs from the input's
+## (fmt.safe). The spelling of a type is kept as written (type.num.4).
+use ast
+use syntax
+
+## The line-length limit (fmt.wrap).
+WIDTH := 100
+UNIT := 4
+## A comment line before the first statement that keeps the file as written (fmt.off).
+OFF := "# ail fmt: off"
+
+## The result of `format`: `status` 0 is done and `text` is the canonical
+## form; 1 is a file that doesn't lex or parse (`diags`); 2 is a formatter
+## bug, the output wouldn't mean the same as the input (`why`, fmt.safe).
+pub struct Formatted
+    pub status int
+    pub text str
+    pub diags List[syntax.Diag]
+    pub why str
+
+## The kinds of a formatter token.
+WORD := 0
+KW := 1
+SYM := 2
+LIT := 3
+
+## A token with its exact source text.
+struct FTok
+    text str
+    kind int
+    line int
+    end_line int
+    ## Whitespace followed it in the source (decides prefix `!`, fmt.space).
+    space_after bool
+
+fn FTok.sym(self, s str) bool
+    kind == SYM and text == s
+
+fn FTok.opens(self) bool
+    kind == SYM and (text == "(" or text == "[" or text == "\{")
+
+fn FTok.closes(self) bool
+    kind == SYM and (text == ")" or text == "]" or text == "}")
+
+## Ends an operand, so a following `(` or `[` is a call or an index. `then` is a
+## contextual keyword lexed as a word (expr.if.*): `then (a + b)` stays spaced.
+fn FTok.ends_operand(self) bool
+    if kind == WORD and text == "then"
+        return false
+    kind == WORD
+        or kind == LIT
+        or (kind == KW and text == "self")
+        or (kind == SYM and (text == ")" or text == "]" or text == "}" or text == "?"))
+
+fn comma_tok() FTok
+    FTok(text: ",", kind: SYM, line: 0, end_line: 0, space_after: true)
+
+## A statement: the tokens between two `Newline`s (lex.stmt.1-2).
+struct Logical
+    depth int
+    toks List[FTok]
+    opens_block bool
+    start int
+    end int
+
+## A range of token indexes.
+struct Span
+    from int
+    to int
+
+## A bracket pair holding a list that may be split (see `list_bracket`).
+struct Group
+    open int
+    close int
+    ## The length of its contents.
+    len int
+
+## An event in source order: a statement (`code`) or a comment line on its own.
+struct Ev
+    code bool
+    idx int
+    line int
+    note syntax.Comment
+
+struct Formatter
+    lines List[str]
+    logicals List[Logical]
+    comments List[syntax.Comment]
+    out List[str]
+
+## The canonical form of `src`.
+pub fn format(src str) Formatted
+    lexed := syntax.lex(src)
+    mut diags := lexed.diags
+    if diags.len() == 0
+        diags = syntax.parse(lexed.tokens).diags
+    if diags.len() > 0
+        return Formatted(status: 1, text: "", diags: diags, why: "")
+    # fmt.off: a lexer test whose layout is the point opts out on its first lines.
+    mut first_code := 1073741824
+    for t in lexed.tokens
+        if real(t.tok)
+            first_code = t.pos.line
+            break
+    for c in lexed.comments
+        if c.pos.line < first_code and c.text.starts_with(OFF)
+            return Formatted(status: 0, text: src, diags: [], why: "")
+    out := run(new_formatter(src, lexed.tokens, lexed.comments))
+    # fmt.safe: the same tokens, apart from trailing commas, and the same comments.
+    again := syntax.lex(out)
+    if again.diags.len() > 0
+        return Formatted(
+            status: 2,
+            text: "",
+            diags: [],
+            why: "the output doesn't lex: {again.diags[0].rule}",
+        )
+    if significant(lexed.tokens) != significant(again.tokens)
+        return Formatted(
+            status: 2,
+            text: "",
+            diags: [],
+            why: "the output's tokens differ from the input's",
+        )
+    if comment_texts(lexed.comments) != comment_texts(again.comments)
+        return Formatted(
+            status: 2,
+            text: "",
+            diags: [],
+            why: "the output's comments differ from the input's",
+        )
+    Formatted(status: 0, text: out, diags: [], why: "")
+
+fn comment_texts(cs List[syntax.Comment]) List[str]
+    [c.text for c in cs]
+
+fn real(t syntax.Tok) bool
+    match t
+        Newline | Indent | Dedent | Eof => false
+        _ => true
+
+# ---- the safety check ----
+
+## The tokens that carry meaning: everything but a comma before a closing bracket (ADR 0118).
+## Positions are left out, including those inside interpolated strings.
+fn significant(tokens List[syntax.Token]) List[str]
+    attributes_canonical(significant_raw(tokens))
+
+fn is_closer(t syntax.Tok) bool
+    match t
+        Sym(s) => s == ")" or s == "]" or s == "}"
+        _ => false
+
+fn significant_raw(tokens List[syntax.Token]) List[str]
+    mut out := List[str]()
+    for i in 0..tokens.len()
+        t := tokens[i]
+        closes := i + 1 < tokens.len() and is_closer(tokens[i + 1].tok)
+        is_comma := match t.tok
+            Sym(s) => s == ","
+            _ => false
+        if is_comma and closes
+            continue
+        out.push(tok_key(t.tok))
+    out
+
+fn tok_key(t syntax.Tok) str
+    match t
+        Interp(parts) =>
+            mut ps := List[str]()
+            for p in parts
+                ps.push(part_key(p))
+            "interp({ps.join(",")})"
+        Ident(n) => "id:{n}"
+        Kw(w) => "kw:{w}"
+        Sym(s) => "sym:{s}"
+        Str(v) => "str:{syntax.quote(v)}"
+        Bytes(h) => "bytes:{h}"
+        Char(c) => "char:{c.code()}"
+        Int(v) => "int:{v}"
+        IntMin => "intmin"
+        Float(v) => "float:{v}"
+        Newline => "nl"
+        Indent => "indent"
+        Dedent => "dedent"
+        Eof => "eof"
+
+fn part_key(p syntax.Part) str
+    match p
+        Lit(s) => "L{syntax.quote(s)}"
+        Code(code) => "\{{significant(code).join(" ")}}"
+        Fmt(code, spec) => "\{{significant(code).join(" ")}:{spec_key(spec)}}"
+
+fn spec_key(f syntax.FormatSpec) str
+    fill := if c := f.fill then "{c.code()}" else "-"
+    align := if c := f.align then "{c.code()}" else "-"
+    width := if w := f.width then "{w}" else "-"
+    precision := if p := f.precision then "{p}" else "-"
+    "{fill}/{align}/{width}/{precision}/{f.hex}"
+
+## Attributes in a fixed order, on one line (fmt.attr): a run of `@name(...)`
+## groups at the start of a statement is sorted by name, and a newline between
+## the run and the item is dropped, so layout and order don't count as a change.
+fn attributes_canonical(toks List[str]) List[str]
+    at := "sym:@"
+    mut out := List[str]()
+    mut i := 0
+    mut starts := true
+    while i < toks.len()
+        if starts and toks[i] == at
+            mut runs := List[List[str]]()
+            while i < toks.len() and toks[i] == at
+                from := i
+                i += 2
+                if i < toks.len() and toks[i] == "sym:("
+                    mut depth := 0
+                    while i < toks.len()
+                        if toks[i] == "sym:("
+                            depth += 1
+                        elif toks[i] == "sym:)"
+                            depth -= 1
+                        i += 1
+                        if depth == 0
+                            break
+                end := if i < toks.len() then i else toks.len()
+                runs.push(toks[from..end])
+                if i < toks.len()
+                    and toks[i] == "nl"
+                    and i + 1 < toks.len()
+                    and (toks[i + 1] == at or toks[i + 1] == "kw:fn")
+                    i += 1
+            # A stable sort by the name token.
+            mut sorted_groups := List[List[str]]()
+            for g in runs
+                mut at_pos := sorted_groups.len()
+                while at_pos > 0 and group_name(sorted_groups[at_pos - 1]) > group_name(g)
+                    at_pos -= 1
+                sorted_groups.insert(at_pos, g)
+            for g in sorted_groups
+                out.extend(g)
+            starts = false
+            continue
+        starts = toks[i] == "nl" or toks[i] == "indent" or toks[i] == "dedent"
+        out.push(toks[i])
+        i += 1
+    out
+
+fn group_name(g List[str]) str
+    if g.len() > 1 then g[1] else ""
+
+# ---- building the statements ----
+
+fn new_formatter(src str, tokens List[syntax.Token], comments List[syntax.Comment]) Formatter
+    mut lines := List[str]()
+    mut chars := List[List[char]]()
+    for raw in src.split("\n")
+        l := if raw.ends_with("\r") then raw.slice(0, raw.chars().len() - 1) else raw
+        lines.push(l)
+        chars.push(l.chars())
+    # Every token and comment start, in source order, bounds the text before it.
+    mut starts := List[ast.Pos]()
+    for t in tokens
+        if real(t.tok)
+            starts.push(t.pos)
+    for c in comments
+        starts.push(c.pos)
+    starts = starts.sorted(by: |p| p.line * 1000000 + p.col)
+    mut logicals := List[Logical]()
+    mut depth := 0
+    mut current := List[FTok]()
+    mut cur_depth := 0
+    for i in 0..tokens.len()
+        t := tokens[i]
+        match t.tok
+            Indent => depth += 1
+            Dedent => depth -= 1
+            Eof => cur_depth = cur_depth
+            Newline =>
+                if current.len() > 0
+                    toks := current
+                    current = []
+                    opens_block := i + 1 < tokens.len() and is_indent(tokens[i + 1].tok)
+                    logicals.push(Logical(
+                        depth: cur_depth,
+                        toks: toks,
+                        opens_block: opens_block,
+                        start: toks[0].line,
+                        end: toks[toks.len() - 1].end_line,
+                    ))
+            _ =>
+                if current.len() == 0
+                    cur_depth = depth
+                next := partition_point(starts, t.pos)
+                bound := if next < starts.len() then starts[next] else ast.Pos(line: 0, col: 0)
+                sl := slice(chars, t.pos, bound, next < starts.len())
+                kind := match t.tok
+                    Ident(_) => WORD
+                    Kw(_) => KW
+                    Sym(_) => SYM
+                    _ => LIT
+                current.push(FTok(
+                    text: sl.text,
+                    kind: kind,
+                    line: t.pos.line,
+                    end_line: sl.end_line,
+                    space_after: sl.space_after,
+                ))
+    # fmt.attr: an attributes-only line joins the item below it, unless a comment sits between.
+    mut merged := List[Logical]()
+    for l in logicals
+        if merged.len() > 0
+            prev := merged[merged.len() - 1]
+            if attributes_only(prev.toks) and prev.depth == l.depth and not comment_between(
+                comments,
+                prev.end,
+                l.start,
+            )
+                merged[merged.len() - 1].toks.extend(l.toks)
+                merged[merged.len() - 1].end = l.end
+                merged[merged.len() - 1].opens_block = l.opens_block
+                continue
+        merged.push(l)
+    Formatter(lines: lines, logicals: merged, comments: comments, out: [])
+
+fn is_indent(t syntax.Tok) bool
+    match t
+        Indent => true
+        _ => false
+
+fn comment_between(comments List[syntax.Comment], from int, to int) bool
+    for c in comments
+        if c.pos.line >= from and c.pos.line < to
+            return true
+    false
+
+## The number of positions in `starts` that are at or before `p`.
+fn partition_point(starts List[ast.Pos], p ast.Pos) int
+    mut lo := 0
+    mut hi := starts.len()
+    while lo < hi
+        mid := (lo + hi) / 2
+        s := starts[mid]
+        if s.line < p.line or (s.line == p.line and s.col <= p.col)
+            lo = mid + 1
+        else
+            hi = mid
+    lo
+
+struct Sliced
+    text str
+    end_line int
+    space_after bool
+
+## The source text from `from` up to `to` (or the end of the source), without
+## trailing whitespace; the line it ends on; and whether whitespace followed it.
+fn slice(lines List[List[char]], from ast.Pos, to ast.Pos, bounded bool) Sliced
+    mut text := List[char]()
+    mut line := from.line
+    mut col := from.col
+    while true
+        if bounded and (line > to.line or (line == to.line and col >= to.col))
+            break
+        if line > lines.len()
+            break
+        row := lines[line - 1]
+        if col - 1 < row.len()
+            text.push(row[col - 1])
+            col += 1
+        else
+            text.push('\n')
+            line += 1
+            col = 1
+    mut end := text.len()
+    while end > 0 and text[end - 1].is_space()
+        end -= 1
+    mut newlines := 0
+    for k in 0..end
+        if text[k] == '\n'
+            newlines += 1
+    Sliced(
+        text: text[0..end].join(""),
+        end_line: from.line + newlines,
+        space_after: end < text.len(),
+    )
+
+# ---- running ----
+
+fn run(fm Formatter) str
+    mut st := fm
+    logicals := st.logicals
+    # Sort comments into each statement's own (inside or after it) and the rest.
+    mut owned := [List[syntax.Comment]() for _ in logicals]
+    mut free := List[syntax.Comment]()
+    for c in st.comments
+        mut found := -1
+        for i in 0..logicals.len()
+            if logicals[i].start <= c.pos.line and c.pos.line <= logicals[i].end
+                found = i
+                break
+        if found >= 0
+            owned[found].push(c)
+        else
+            free.push(c)
+    # Events in source order: statements and free comment lines.
+    mut events := List[Ev]()
+    for i in 0..logicals.len()
+        events.push(Ev(
+            code: true,
+            idx: i,
+            line: logicals[i].start,
+            note: syntax.Comment(pos: ast.Pos(line: 0, col: 0), text: ""),
+        ))
+    for c in free
+        events.push(Ev(code: false, idx: 0, line: c.pos.line, note: c))
+    events = events.sorted(by: |e| e.line)
+    n := events.len()
+    mut first_line := List[int]()
+    mut last_line := List[int]()
+    for e in events
+        first_line.push(e.line)
+        last_line.push(if e.code then logicals[e.idx].end else e.line)
+    # For each event: the statement before it, and the statement it leads
+    # up to through adjacent comment lines.
+    mut gap := List[bool]()
+    for k in 0..n
+        gap.push(k > 0 and first_line[k] > last_line[k - 1] + 1)
+    mut prev := [-1 for _ in 0..n]
+    mut last := -1
+    for k in 0..n
+        prev[k] = last
+        if events[k].code
+            last = events[k].idx
+    mut lead := [-1 for _ in 0..n]
+    mut next := -1
+    mut kk := n - 1
+    while kk >= 0
+        if events[kk].code
+            next = events[kk].idx
+        lead[kk] = next
+        if gap[kk]
+            next = -1
+        kk -= 1
+    # fmt.comment: a comment line keeps its own depth, clamped to the
+    # blocks around it; at the depth of the statement after it, it
+    # belongs to that statement.
+    mut note_depth := [0 for _ in 0..n]
+    mut attached := [false for _ in 0..n]
+    for k in 0..n
+        if not events[k].code
+            mut hi := 0
+            if prev[k] >= 0
+                hi = logicals[prev[k]].depth + (if logicals[prev[k]].opens_block then 1 else 0)
+            mut lo := 0
+            if lead[k] >= 0
+                lo = logicals[lead[k]].depth
+            if lo > hi
+                lo = hi
+            mut d := (events[k].note.pos.col - 1) / UNIT
+            if d < lo
+                d = lo
+            if d > hi
+                d = hi
+            note_depth[k] = d
+            attached[k] = lead[k] >= 0 and logicals[lead[k]].depth == d
+    mut last_top_multi := false
+    mut seen_top := false
+    for k in 0..n
+        ev := events[k]
+        starts_group := k == 0 or gap[k] or not attached[k - 1]
+        group_lead := if not ev.code and not attached[k] then -1 else lead[k]
+        mut blank := gap[k]
+        if starts_group and group_lead >= 0
+            l := logicals[group_lead]
+            first_in_block := prev[k] >= 0 and logicals[prev[k]].depth < l.depth
+            if first_in_block
+                blank = false
+            elif l.depth == 0 and seen_top
+                multi := l.opens_block or render(st, l, owned[group_lead]).len() > 1
+                blank = gap[k] or multi or last_top_multi
+        if blank and st.out.len() > 0
+            st.out.push("")
+        if not ev.code
+            st.out.push("{indent(note_depth[k])}{ev.note.text}")
+        else
+            l := logicals[ev.idx]
+            before := st.out.len()
+            st.out.extend(render(st, l, owned[ev.idx]))
+            multi := l.opens_block or st.out.len() - before > 1
+            if l.depth == 0
+                seen_top = true
+                last_top_multi = multi
+            else
+                last_top_multi = true
+    text := "{st.out.join("\n")}\n"
+    if text.trim() == ""
+        return ""
+    text
+
+## The lines of one statement.
+fn render(fm Formatter, l Logical, comments List[syntax.Comment]) List[str]
+    # A multi-line string's lines are its content: leave the statement as written.
+    if l.start != l.end
+        for t in l.toks
+            if t.line != t.end_line
+                return fm.lines[l.start - 1..l.end]
+    mut trailing := -1
+    for i in 0..comments.len()
+        if comments[i].pos.line == l.end
+            trailing = i
+            break
+    for c in comments
+        if c.pos.line < l.end
+            return render_as_broken(l, comments)
+    mut lines := layout_item(l.toks, l.depth)
+    if trailing >= 0
+        lines[lines.len() - 1] = "{lines[lines.len() - 1]} {comments[trailing].text}"
+    lines
+
+## fmt.wrap: a statement with comments inside keeps its line breaks; each
+## line is indented by its bracket depth, and a closing bracket on its own
+## line gets a trailing comma before it (fmt.comma).
+fn render_as_broken(l Logical, comments List[syntax.Comment]) List[str]
+    toks := with_trailing_commas(l.toks)
+    mut lines := List[str]()
+    mut open := 0
+    mut i := 0
+    mut ci := 0
+    for line_no in l.start..=l.end
+        from := i
+        while i < toks.len() and (toks[i].line == line_no or (toks[i].line == 0 and i > from))
+            i += 1
+        row := toks[from..i]
+        mut depth := 0
+        if line_no == l.start
+            depth = l.depth
+        elif row.len() > 0 and row[0].closes()
+            depth = l.depth + (if open > 0 then open - 1 else 0)
+        else
+            depth = l.depth + (if open > 1 then open else 1)
+        mut text := ""
+        if row.len() > 0
+            text = "{indent(depth)}{flat(row)}"
+        for t in row
+            if t.opens()
+                open += 1
+            elif t.closes()
+                open = if open > 0 then open - 1 else 0
+        while ci < comments.len() and comments[ci].pos.line < line_no
+            ci += 1
+        if ci < comments.len() and comments[ci].pos.line == line_no
+            c := comments[ci]
+            if text == ""
+                text = "{indent(l.depth + (if open > 1 then open else 1))}{c.text}"
+            else
+                text = "{text} {c.text}"
+        if text != ""
+            lines.push(text)
+    lines
+
+fn indent(depth int) str
+    " ".repeat(depth * UNIT)
+
+# ---- spacing ----
+
+## Whether a space separates `a` and `b`; `before` precedes `a` (fmt.space).
+fn spaced(before FTok?, a FTok, b FTok) bool
+    if b.kind == SYM
+        and (b.text == "," or b.text == ")" or b.text == "]" or b.text == "}" or b.text == "." or b.text == "?" or b.text == ":")
+        return false
+    if a.kind == SYM
+        and (a.text == "(" or a.text == "[" or a.text == "\{" or a.text == "." or a.text == "@")
+        return false
+    if a.sym("..") or a.sym("..=") or b.sym("..") or b.sym("..=")
+        return false
+    # `|x| key` (expr.key.1): a `|` after `(`, `,` or `:` opens the parameter.
+    if a.sym("|")
+        if bt := before
+            if opens_key(bt)
+                return false
+    if prefix(before, a)
+        return false
+    # `fn(int) int`, a function type (type.fn.1).
+    if a.kind == KW and a.text == "fn" and b.sym("(")
+        return false
+    if b.sym("(") or b.sym("[")
+        return not a.ends_operand()
+    true
+
+## A `|` after this token opens a key function's parameter (expr.key.1).
+fn opens_key(t FTok) bool
+    t.sym("(") or t.sym(",") or t.sym(":")
+
+## `a` is a prefix operator: `-x`, `!T`.
+fn prefix(before FTok?, a FTok) bool
+    if a.kind != SYM
+        return false
+    if a.text == "-"
+        if bt := before
+            return not bt.ends_operand()
+        return true
+    # `!T` and `T ! E` differ only by position in a type; the source's spacing says which.
+    if a.text == "!"
+        if a.space_after
+            return false
+        if bt := before
+            return not bt.ends_operand() or bt.sym(")")
+        return true
+    # `*T`, a raw pointer type (unsafe.ptr.1): `s *u8`, `) *u8`, `**u8`. A product is
+    # written `a * b`, with a space on both sides, so a `*` touching its operand is a type.
+    if a.text == "*"
+        if a.space_after
+            return false
+        if bt := before
+            return not bt.ends_operand() or bt.space_after
+        return true
+    false
+
+## Tokens on one line, without trailing commas (fmt.comma).
+fn flat(toks List[FTok]) str
+    mut out := List[str]()
+    mut prev := -1
+    mut before := -1
+    # The opening `|` of a key function `|x|` (expr.key.1), whose closing `|` is unspaced.
+    mut open_bar := -1
+    for i in 0..toks.len()
+        t := toks[i]
+        if t.sym(",") and i + 1 < toks.len() and toks[i + 1].closes()
+            continue
+        closing_bar := t.sym("|") and i >= 2 and open_bar == i - 2
+        if prev >= 0 and not closing_bar
+            b := if before >= 0 then toks[before] else none
+            if spaced(b, toks[prev], t)
+                out.push(" ")
+        if t.sym("|") and prev >= 0 and opens_key(toks[prev])
+            open_bar = i
+        out.push(t.text)
+        before = prev
+        prev = i
+    out.join("")
+
+# ---- brackets ----
+
+## A bracket whose contents are a comma-separated list that may be split
+## one element per line: arguments, parameters, list and map literals.
+## A parenthesised expression, an index and type arguments are not.
+fn list_bracket(toks List[FTok], i int) bool
+    after_operand := i > 0 and toks[i - 1].ends_operand()
+    t := toks[i]
+    if t.sym("(")
+        return after_operand
+    if t.sym("[")
+        return not after_operand
+    t.sym("\{")
+
+struct Open
+    list bool
+    comp bool
+
+## Insert `,` before each closing list bracket that starts a line (fmt.comma).
+fn with_trailing_commas(toks List[FTok]) List[FTok]
+    mut out := List[FTok]()
+    # Per open bracket: whether it holds a list, and whether a comprehension
+    # (no trailing comma, fmt.comp).
+    mut stack := List[Open]()
+    for i in 0..toks.len()
+        t := toks[i]
+        if t.kind == KW and t.text == "for" and stack.len() > 0
+            stack[stack.len() - 1].comp = true
+        if t.closes()
+            mut top := Open(list: false, comp: false)
+            if stack.len() > 0
+                top = stack.pop() else top
+            list := top.list and not top.comp
+            starts_line := i > 0 and toks[i - 1].end_line < t.line
+            if list and starts_line and out.len() > 0
+                p := out[out.len() - 1]
+                if not p.sym(",") and not p.opens()
+                    mut comma := comma_tok()
+                    comma.line = p.end_line
+                    comma.end_line = comma.line
+                    out.push(comma)
+        if t.opens()
+            stack.push(Open(list: list_bracket(toks, i), comp: false))
+        out.push(t)
+    out
+
+## The end of the attribute starting at `toks[i]` (`@name` or `@name(...)`).
+fn attribute_end(toks List[FTok], i int) int
+    mut j := i + 2
+    if j < toks.len() and toks[j].sym("(")
+        mut level := 0
+        while j < toks.len()
+            if toks[j].opens()
+                level += 1
+            elif toks[j].closes()
+                level -= 1
+            j += 1
+            if level == 0
+                break
+    if j < toks.len() then j else toks.len()
+
+## The statement is only attributes: the item they apply to is on a later line.
+fn attributes_only(toks List[FTok]) bool
+    mut i := 0
+    while i < toks.len() and toks[i].sym("@")
+        i = attribute_end(toks, i)
+    i == toks.len() and toks.len() > 0
+
+## fmt.attr: attributes sorted by name; on the item's line if it all fits,
+## otherwise one per line above the item.
+fn layout_item(toks List[FTok], depth int) List[str]
+    mut attrs := List[Span]()
+    mut i := 0
+    while i < toks.len() and toks[i].sym("@")
+        end := attribute_end(toks, i)
+        attrs.push(Span(from: i, to: end))
+        i = end
+    if attrs.len() == 0 or i == toks.len()
+        return layout(toks, depth)
+    # A stable sort by the attribute's name.
+    mut ordered := List[Span]()
+    for g in attrs
+        mut at_pos := ordered.len()
+        while at_pos > 0 and attr_name(toks, ordered[at_pos - 1]) > attr_name(toks, g)
+            at_pos -= 1
+        ordered.insert(at_pos, g)
+    rest := toks[i..]
+    mut all := List[FTok]()
+    for g in ordered
+        all.extend(toks[g.from..g.to])
+    all.extend(rest)
+    one := "{indent(depth)}{flat(all)}"
+    if one.chars().len() <= WIDTH
+        return [one]
+    mut lines := List[str]()
+    for g in ordered
+        lines.push("{indent(depth)}{flat(toks[g.from..g.to])}")
+    lines.extend(layout(rest, depth))
+    lines
+
+fn attr_name(toks List[FTok], g Span) str
+    if g.from + 1 < g.to then toks[g.from + 1].text else ""
+
+# ---- wrapping ----
+
+## The start of each `.method(` call at the top level: a chained call.
+fn chain_dots(toks List[FTok]) List[int]
+    mut level := 0
+    mut out := List[int]()
+    for i in 0..toks.len()
+        t := toks[i]
+        # An operator after the first call ends the chain's shape: `a.b() or c.d()` isn't a chain.
+        if level == 0
+            and out.len() > 0
+            and not (t.sym(".") or t.sym("?") or t.kind == WORD or t.opens() or t.closes())
+            return []
+        if t.opens()
+            level += 1
+        elif t.closes()
+            level -= 1
+        elif level == 0
+            and t.sym(".")
+            and i > 0
+            and i + 2 < toks.len()
+            and toks[i + 1].kind == WORD
+            and toks[i + 2].sym("(")
+            out.push(i)
+    out
+
+## fmt.wrap: one line if it fits in `WIDTH`. Otherwise the longest
+## top-level list is split one element per line, each with a trailing comma
+## (fmt.comma). When that list's last element ends in a list that holds most
+## of its text, the split moves into that inner list ("hugging":
+## `f(a, [` ... `])`). Elements that are still too long split the same way.
+fn layout(toks List[FTok], depth int) List[str]
+    one := "{indent(depth)}{flat(toks)}"
+    if one.chars().len() <= WIDTH
+        return [one]
+    # fmt.chain: two or more chained calls split one `.method(...)` per line.
+    dots := chain_dots(toks)
+    if dots.len() >= 2
+        mut lines := layout(toks[..dots[0]], depth)
+        for k in 0..dots.len()
+            from := dots[k]
+            to := if k + 1 < dots.len() then dots[k + 1] else toks.len()
+            lines.extend(layout(toks[from..to], depth + 1))
+        return lines
+    lines := layout_lists(toks, depth, one)
+    for l in lines
+        if l.chars().len() > WIDTH
+            split := layout_operators(toks, depth)
+            if split.len() > 0
+                return split
+            break
+    lines
+
+## The binary-operator precedence of `toks[i]` for splitting, or 0 (fmt.op).
+## `<` and `>` are left out: they also bracket type arguments.
+fn split_prec(toks List[FTok], i int) int
+    t := toks[i]
+    binary := i > 0 and toks[i - 1].ends_operand()
+    if t.kind == KW and t.text == "or"
+        return 1
+    if t.kind == KW and t.text == "and"
+        return 2
+    if t.kind == SYM
+        if t.text == "==" or t.text == "!=" or t.text == "<=" or t.text == ">="
+            return 3
+        if binary and (t.text == "+" or t.text == "-")
+            return 4
+        if binary and (t.text == "*" or t.text == "/" or t.text == "%")
+            return 5
+    0
+
+## fmt.op: a line still too long is split before each top-level operator of the
+## lowest precedence, the operator first on the continuation line and one indent
+## deeper (lex.stmt.2 (5)). `-` ends its line instead, because a line may not start with it.
+## An empty list means there is no split.
+fn layout_operators(toks List[FTok], depth int) List[str]
+    mut level := 0
+    mut points := List[Span]()
+    for i in 0..toks.len()
+        t := toks[i]
+        if t.opens()
+            level += 1
+        elif t.closes()
+            level -= 1
+        elif level == 0
+            if t.sym("|")
+                return [] # a closure body runs to the end of the expression
+            p := split_prec(toks, i)
+            if p > 0
+                points.push(Span(from: i, to: p))
+    if points.len() == 0
+        return []
+    mut lowest := points[0].to
+    for p in points
+        if p.to < lowest
+            lowest = p.to
+    mut cuts := List[int]()
+    for p in points
+        if p.to == lowest and p.from > 0 and p.from + 1 < toks.len()
+            cuts.push(p.from)
+    if cuts.len() == 0
+        return []
+    mut lines := List[str]()
+    mut from := 0
+    for cut in cuts
+        end := if toks[cut].sym("-") then cut + 1 else cut
+        lines.extend(layout(toks[from..end], if from == 0 then depth else depth + 1))
+        from = end
+    lines.extend(layout(toks[from..], depth + 1))
+    lines
+
+## fmt.wrap's list splitting, for a line that has no chain (see `layout`).
+fn layout_lists(toks List[FTok], depth int, one str) List[str]
+    gs := groups(toks, 0, toks.len())
+    if gs.len() == 0
+        return [one] # nothing to split: leave it long
+    # The longest group; the first of equals.
+    mut group := gs[gs.len() - 1]
+    mut gi := gs.len() - 2
+    while gi >= 0
+        if gs[gi].len >= group.len
+            group = gs[gi]
+        gi -= 1
+    while true
+        els := elements(toks, group.open, group.close)
+        if els.len() == 0
+            break
+        lastel := els[els.len() - 1]
+        mut inner := Group(open: -1, close: -1, len: 0)
+        for g in groups(toks, lastel.from, lastel.to)
+            if g.close + 1 == lastel.to
+                inner = g
+                break
+        if inner.open < 0
+            break
+        head := "{indent(depth)}{flat(toks[..=inner.open])}"
+        if inner.len * 2 < group.len or head.chars().len() > WIDTH
+            break
+        group = inner
+    mut lines := ["{indent(depth)}{flat(toks[..=group.open])}"]
+    comp := comprehension(toks, group.open, group.close)
+    for e in elements(toks, group.open, group.close)
+        mut rendered := layout(toks[e.from..e.to], depth + 1)
+        if not comp
+            rendered[rendered.len() - 1] = "{rendered[rendered.len() - 1]},"
+        lines.extend(rendered)
+    lines.push("{indent(depth)}{flat(toks[group.close..])}")
+    lines
+
+## The splittable groups at the top level of `toks[from..to]`. A group of
+## one element with no list inside it gains nothing from a split and is left out.
+fn groups(toks List[FTok], from int, to int) List[Group]
+    mut out := List[Group]()
+    mut level := 0
+    mut open := 0
+    for i in from..to
+        if toks[i].opens()
+            if level == 0
+                open = i
+            level += 1
+        elif toks[i].closes()
+            level -= 1
+            if level == 0 and i > open + 1 and list_bracket(toks, open)
+                parts := elements(toks, open, i)
+                mut nested := false
+                for p in parts
+                    if groups(toks, p.from, p.to).len() > 0
+                        nested = true
+                        break
+                if parts.len() > 1 or nested
+                    mut len := 0
+                    for t in toks[open + 1..i]
+                        len += t.text.chars().len() + 1
+                    out.push(Group(open: open, close: i, len: len))
+    out
+
+## Whether the brackets `toks[open]` and `toks[close]` hold a comprehension:
+## a `for` at their top level (expr.comp.1).
+fn comprehension(toks List[FTok], open int, close int) bool
+    mut level := 0
+    for t in toks[open + 1..close]
+        if t.opens()
+            level += 1
+        elif t.closes()
+            level -= 1
+        elif level == 0 and t.kind == KW and t.text == "for"
+            return true
+    false
+
+## The comma-separated elements between `toks[open]` and `toks[close]`, as
+## ranges. A comprehension's parts are its element and each `for` clause
+## (fmt.comp).
+fn elements(toks List[FTok], open int, close int) List[Span]
+    split_at_for := comprehension(toks, open, close)
+    mut out := List[Span]()
+    mut level := 0
+    mut start := open + 1
+    for i in open + 1..close
+        t := toks[i]
+        if t.opens()
+            level += 1
+        elif t.closes()
+            level -= 1
+        elif level == 0 and split_at_for and t.kind == KW and t.text == "for"
+            out.push(Span(from: start, to: i))
+            start = i
+        elif level == 0 and not split_at_for and t.sym(",")
+            out.push(Span(from: start, to: i))
+            start = i + 1
+    if start < close
+        out.push(Span(from: start, to: close))
+    out
