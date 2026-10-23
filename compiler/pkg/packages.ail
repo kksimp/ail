@@ -70,13 +70,11 @@ fn canonical(dir str) str
 
 ## Read the manifest at `root`, if any, and every path dependency's.
 pub fn read(root str) Packages
-    mut p := Packages(
-        roots: {"": root},
-        deps: {},
-        manifests: [],
-        lock: read_lock(root),
-        opts: options(),
-    )
+    read_with(root, options())
+
+## `read` with explicit fetch and lock options (`ail pkg update`).
+pub fn read_with(root str, opts Options) Packages
+    mut p := Packages(roots: {"": root}, deps: {}, manifests: [], lock: read_lock(root), opts: opts)
     mut declared := Map[str, Seen]()
     mut stack := [(canonical(root), root)]
     p.visit("", root, none, mut stack, mut declared)
