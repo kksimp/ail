@@ -95,6 +95,7 @@ if [ "${AIL_RUST:-}" = 1 ] || [ "${AIL_NATIVE_CLI:-}" = 0 ]; then native_on=0
 elif [ -n "${AIL_BINARY:-}" ] && [ "${AIL_NATIVE_CLI:-}" != 1 ]; then native_on=0; fi
 native_run=
 run_opts=
+budget_opts=
 run_skip=0
 if [ "${1:-}" = run ] && [ "$native_on" = 1 ] && [ "${AIL_INTERP:-}" != 1 ]; then
     run_args=("$@")
@@ -106,11 +107,20 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ] && [ "${AIL_INTERP:-}" != 1 ]; the
                 v="${run_args[$((k + 1))]-}"
                 case "$v" in "" | *[!0-9]*) break ;; esac
                 run_opts="$run_opts $a $v"; k=$((k + 2)) ;;
+            --budget)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]*) budget_opts="$budget_opts --budget"; k=$((k + 1)) ;; *) budget_opts="$budget_opts --budget $v"; k=$((k + 2)) ;; esac ;;
+            --from)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]*) break ;; esac
+                budget_opts="$budget_opts --from $v"; k=$((k + 2)) ;;
+            --json) budget_opts="$budget_opts --json"; k=$((k + 1)) ;;
             "" | -*) break ;;
             *) native_run=1; run_file="$a"; k=$((k + 1)); break ;;
         esac
     done
     run_skip=$k
+    case "$budget_opts" in "" | *--budget*) ;; *) native_run= ;; esac
 fi
 native_build=
 if [ "${1:-}" = build ]; then
@@ -169,6 +179,8 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [
     if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then
         rm -f "$prep_err"
         shift "$run_skip"
+        # shellcheck disable=SC2086
+        if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget $budget_opts -- "$exe" "$@"; fi
         exec "$exe" "$@"
     fi
     if grep -q 'native.subset.1' "$prep_err" && { [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; }; then
