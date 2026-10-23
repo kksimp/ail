@@ -1,6 +1,7 @@
 ## A diagnostic, as `bootstrap/src/diag.rs` builds it: a rule, a position,
 ## a message, and an optional help and notes.
 use ast
+use fix
 
 pub struct Note
     pub pos ast.Pos
@@ -12,10 +13,11 @@ pub struct Diag
     pub message str
     pub help str?
     pub notes List[Note]
+    pub fixes List[fix.Fix]
     pub warning bool
 
 pub fn new_diag(rule str, pos ast.Pos, message str) Diag
-    Diag(rule: rule, pos: pos, message: message, help: none, notes: [], warning: false)
+    Diag(rule: rule, pos: pos, message: message, help: none, notes: [], fixes: [], warning: false)
 
 fn Diag.with_note(self, at ast.Pos, text str) Diag
     mut d := self
@@ -27,9 +29,14 @@ fn Diag.with_help(self, text str) Diag
     d.help = text
     d
 
-## `did you mean `s`?` (diag.rs `did_you_mean`).
-fn Diag.did_you_mean(self, s str) Diag
-    with_help("did you mean `{s}`?")
+fn Diag.with_fix(self, title str, edits List[fix.Edit]) Diag
+    mut d := self
+    d.fixes.push(fix.Fix(title: title, edits: edits))
+    d
+
+## `did you mean `s`?` and the fix that replaces `name` by `s` (diag.rs `did_you_mean`).
+fn Diag.did_you_mean(self, name str, s str) Diag
+    with_help("did you mean `{s}`?").with_fix("replace `{name}` with `{s}`", [fix.replace(pos, name, s)])
 
 ## One line of JSON: severity, rule, file, local line and column, message
 ## and help, in the order `ail check --json` writes them.

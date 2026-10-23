@@ -1,6 +1,7 @@
 ## Expressions (ADR 0377): literals, names, `?`, `else`, operators, `if`
 ## and `match`, as `expr_of` onward in `bootstrap/src/check.rs`.
 use ast
+use fix
 
 ## The type of `e`. `expect` is the type the context wants, if known; it
 ## resolves bare variants, empty lists and type arguments. `need` says
@@ -537,6 +538,7 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
                         "`?` passes the error on, but this function can't fail",
                         hint,
                     )
+                    sig_fix_last(errors)
             ok
         Unknown => Ty.Unknown
         _ =>
@@ -1273,7 +1275,7 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                 names := [x.name for x in decl.variants]
                 mut d := new_diag("expr.name.1", at, "`{decl.name}` has no variant `{n}`")
                 if s := suggest(n, names)
-                    d = d.did_you_mean(s)
+                    d = d.did_you_mean(n, s)
                 diags.push(d)
                 return []
             if cov.wildcard or cov.variants[v]
@@ -1329,7 +1331,7 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
         candidates.push(t)
     mut d := new_diag("expr.name.1", at, "unknown name `{n}`")
     if s := suggest(n, candidates)
-        d = d.did_you_mean(s)
+        d = d.did_you_mean(n, s)
     else
         d = d.with_help("no variable, function or type named `{n}` is in scope here; declare it first, e.g. `{n} := value`")
     diags.push(d)

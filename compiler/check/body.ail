@@ -1,6 +1,7 @@
 ## Function bodies (ADR 0377): blocks, statements, bindings, `else`,
 ## loops and assignment, as `check_fn` onward in `bootstrap/src/check.rs`.
 use ast
+use fix
 
 ## What the checker found, and the functions it couldn't type yet.
 pub struct Report
@@ -435,6 +436,9 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
             err("expr.bind.1", expr_pos(value), text)
     if declare(n, at)
         locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
+    elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
+        # `mut x := e` again becomes `x = e`, so the `mut` goes too.
+        diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(ast.Pos(line: at.line, col: 1), "mut ", ""))
 
 @allow("expr.match.3") fn method_name(e ast.Expr) str
     match e
@@ -508,6 +512,7 @@ fn Checker.return_error_in_infallible(mut self, v ast.Expr, t Ty)
         "`{ty_name(t)}` is an error, but this function can't fail",
         "declare the failure in the return type (`T ! E`), or return a value instead",
     )
+    sig_fix_last([t])
 
 ## The value of `e else ...`. An optional `?` inside it goes to the `else`
 ## (err.prop.4), which makes the value optional if it wasn't.
@@ -629,6 +634,10 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
                         "only a failure has an error to bind; an optional is just absent",
                         "write `else` without a name",
                     )
+                    fix_last("remove `{nm.name}` from the `else`", [fix.delete(
+                        ast.Pos(line: nm.pos.line, col: (nm.pos.col - 1).max(1)),
+                        ast.Pos(line: nm.pos.line, col: nm.pos.col + nm.name.len()),
+                    )])
                 elif declare(nm.name, nm.pos)
                     # The value already failed to check: bind the name as unknown,
                     # so its uses in the block don't cascade.
@@ -660,6 +669,7 @@ fn Checker.declare(mut self, n str, at ast.Pos) bool
             d = d.with_note(first, "`{n}` is first declared here")
         if l.mutable
             d = d.with_help("`{n}` is a `mut` variable; to change it, write `{n} = ...`")
+            d = d.with_fix("assign to `{n}` with `=`", [fix.replace(at, ":=", "=")])
         else
             d = d.with_help("choose a different name; names can't be shadowed")
         diags.push(d)
@@ -774,7 +784,29 @@ fn Checker.condition(mut self, cond ast.Expr)
     if accepts(Ty.Bool, t)
         return
     hint := truthiness_help(t)
-    err_help("expr.if.2", expr_pos(cond), "a condition must be `bool`, found {show(t)}", hint)
+    suffix := truthiness_suffix(t)
+    d := new_diag("expr.if.2", expr_pos(cond), "a condition must be `bool`, found {show(t)}").with_help(hint)
+    if is_simple_cond(cond) and suffix != ""
+        diags.push(d.with_fix("test `{suffix.trim()}`", [fix.at_line_end(expr_pos(cond), suffix)]))
+    else
+        diags.push(d)
+
+## The text that completes the test that `truthiness_help` suggests.
+@allow("expr.match.3") fn truthiness_suffix(t Ty) str
+    match t
+        Int => " != 0"
+        Str => " != \"\""
+        ListOf => ".len() > 0"
+        MapOf => ".len() > 0"
+        SetOf => ".len() > 0"
+        Opt => " != none"
+        _ => ""
+
+## A condition whose end an appended test attaches to.
+@allow("expr.match.3") fn is_simple_cond(e ast.Expr) bool
+    match e
+        Name | Member | Method | Index | Call => true
+        _ => false
 
 ## The test that the other languages' truthiness stands for.
 @allow("expr.match.3") fn truthiness_help(t Ty) str
@@ -803,7 +835,7 @@ fn Checker.condition(mut self, cond ast.Expr)
                 # conc.share.7: the loop synchronises with other tasks (conc.par.2).
                 handle_calls.add(pos_key(at))
                 return e
-            iterate_error(t, at)
+            iterate_error(t, at, iter)
         Unknown => Ty.Unknown
         Res =>
             reject_unhandled(t, at)
@@ -812,17 +844,20 @@ fn Checker.condition(mut self, cond ast.Expr)
             # type.tuple.5: `for k, v in m` takes each entry apart.
             if pairs
                 return Ty.Tuple([k, v])
-            err_help(
+            mut d := new_diag(
                 "type.map.5",
                 at,
                 "`for` iterates a map's entries as `k, v`, or its keys or values",
-                "write `for k, v in m`, `for k in m.keys()`, or `m.values()`",
-            )
+            ).with_help("write `for k, v in m`, `for k in m.keys()`, or `m.values()`")
+            match iter
+                Name(n, p) => d = d.with_fix("iterate the keys", [fix.replace(p, n, "{n}.keys()")])
+                _ => d = d
+            diags.push(d)
             Ty.Unknown
         Str =>
             err_help("expr.loop.4", at, "`for` can't iterate over a `str`", "iterate `s.chars()`")
             Ty.Unknown
-        _ => iterate_error(t, at)
+        _ => iterate_error(t, at, iter)
 
 @allow("expr.match.3") fn Checker.range_loop(mut self, iter ast.Expr) Ty
     match iter
@@ -830,17 +865,28 @@ fn Checker.condition(mut self, cond ast.Expr)
         _ => return Ty.Int
     Ty.Int
 
-fn Checker.iterate_error(mut self, t Ty, at ast.Pos) Ty
+@allow("expr.match.3") fn Checker.iterate_error(mut self, t Ty, at ast.Pos, iter ast.Expr) Ty
     text := "`for` can't iterate over {show(t)}"
     if t == Ty.Int
         err_help("expr.loop.4", at, text, "iterate over a range, e.g. `0..n`")
     elif is_opt(t)
-        err_help(
+        mut d := new_diag(
             "expr.loop.4",
             at,
             text,
-            "`recv()` gives one value or `none`; to receive until the channel is closed, write `for v in ch`",
-        )
+        ).with_help("`recv()` gives one value or `none`; to receive until the channel is closed, write `for v in ch`")
+        # `for v in ch.recv()` on a channel name: the loop is the receive.
+        match iter
+            Method(r, mname, _, args) =>
+                if mname == "recv" and args.len() == 0
+                    match r
+                        Name(n, p) =>
+                            if l := local(n)
+                                if is_channel(l.ty)
+                                    d = d.with_fix("receive until the channel is closed", [fix.replace(p, "{n}.recv()", n)])
+                        _ => d = d
+            _ => d = d
+        diags.push(d)
     else
         err_help(
             "expr.loop.4",
@@ -920,12 +966,10 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             if n == "self"
                 expr(target, none, true)
             else
-                err_help(
-                    "expr.bind.3",
-                    expr_pos(target),
-                    "`{n}` isn't declared",
-                    "declare it with `mut {n} := ...`",
-                )
+                mut d := new_diag("expr.bind.3", expr_pos(target), "`{n}` isn't declared").with_help("declare it with `mut {n} := ...`")
+                if op == none
+                    d = d.with_fix("declare `{n}` with `mut {n} :=`", [fix.insert(expr_pos(target), "mut "), fix.replace(at, "=", ":=")])
+                diags.push(d)
                 # Later uses don't report the same name again (gram.rec.2).
                 locals.push(Local(
                     name: n,
@@ -1077,6 +1121,7 @@ fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
     ).with_help(hint)
     # The binding's own position: where an agent changes the declaration.
     if decl := l.decl
+        d = d.with_fix("declare `{root}` with `mut`", [fix.insert(decl, "mut ")])
         d = d.with_note(decl, "`{root}` is declared here")
     diags.push(d)
 
@@ -1448,3 +1493,8 @@ fn Checker.check_contracts(mut self, f ast.FnDecl, result_ty Ty)
         if not accepts(Ty.Bool, got)
             mismatch("contract.decl.2", expr_pos(c.cond), Ty.Bool, got)
         locals = locals[..mark]
+
+@allow("expr.match.3") fn is_channel(t Ty) bool
+    match t
+        Conc(k, _) => k == "Channel"
+        _ => false

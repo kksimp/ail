@@ -3,6 +3,7 @@
 ## order `check_with` in `bootstrap/src/check.rs` runs them, so the
 ## diagnostics come out in the same order.
 use ast
+use fix
 
 ## A type parameter: its name and the traits it must implement (gen.bound.1).
 pub struct TParam
@@ -238,6 +239,15 @@ fn Checker.err(mut self, rule str, at ast.Pos, text str)
 fn Checker.err_help(mut self, rule str, at ast.Pos, text str, hint str)
     diags.push(new_diag(rule, at, text).with_help(hint))
 
+## `err_help` with a fix.
+fn Checker.err_fix(mut self, rule str, at ast.Pos, text str, hint str, title str, edits List[fix.Edit])
+    diags.push(new_diag(rule, at, text).with_help(hint).with_fix(title, edits))
+
+## Add a fix to the diagnostic just reported.
+fn Checker.fix_last(mut self, title str, edits List[fix.Edit])
+    if diags.len() > 0
+        diags[diags.len() - 1].fixes.push(fix.Fix(title: title, edits: edits))
+
 fn Checker.unsupported(mut self, at ast.Pos, text str)
     diags.push(new_diag("bootstrap.unsupported", at, text))
 
@@ -386,7 +396,7 @@ fn Checker.trait_named(mut self, n str, at ast.Pos, rule str) int?
         return none
     mut d := new_diag("expr.name.1", at, "unknown trait `{n}`")
     if s := suggest(n, traits.keys())
-        d = d.did_you_mean(s)
+        d = d.did_you_mean(n, s)
     diags.push(d)
     none
 

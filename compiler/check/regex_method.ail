@@ -21,7 +21,7 @@ fn Checker.regex_method(
         args_only(args)
         mut d := new_diag("std.regex.25", at, "`regex.Regex` has no method `{n}`")
         if s := suggest(n, REGEX_METHODS)
-            d = d.did_you_mean(s)
+            d = d.did_you_mean(n, s)
         else
             d = d.with_help("its methods are {list_names(REGEX_METHODS)}")
         diags.push(d)

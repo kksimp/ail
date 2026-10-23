@@ -2,6 +2,7 @@
 ## parameter inference (`bind`, `subst_unknown`), as `bootstrap/src/check.rs`
 ## and `check/traits.rs` define them.
 use ast
+use fix
 
 ## Admit the errors `got` into the set `want`: an inferred set grows, and a
 ## written set must already contain them. Returns the missing ones.
@@ -128,7 +129,58 @@ fn Checker.reject_unhandled(mut self, t Ty, at ast.Pos) bool
         return false
     hint := if is_res(fn_ret) then "pass the error on with `?`, or handle it with `x := ... else ...`" else "handle it with `x := ... else d`, or declare this function's return type with `! E` and pass the error on with `?`"
     err_help("err.use.1", at, "this can fail, and the failure isn't handled", hint)
+    try_fix_at(t, at)
     true
+
+## err.fix.3: offer `?` after the failure when this function's error type
+## admits its errors; err.fix.1: or make the function fail.
+@allow("expr.match.3") fn Checker.try_fix_at(mut self, t Ty, at ast.Pos)
+    mut errors := List[Ty]()
+    match t
+        Res(_, errs) => errors = errs_of(errs)
+        _ => return
+    mut admits := false
+    match fn_ret
+        Res(_, we) =>
+            match we
+                Inferred => admits = true
+                ErrSet(want) => admits = [g for g in errors if not want.contains(g)].len() == 0
+        _ => admits = false
+    sig := if admits then none else signature_fix(errors)
+    if diags.len() == 0
+        return
+    last := diags[diags.len() - 1]
+    if last.rule != "err.use.1" or last.fixes.len() > 0
+        return
+    if admits
+        fix_last("pass the error on with `?`", [fix.after_expr(at, "?")])
+    elif s := sig
+        fix_last("{s.title} and pass the error on with `?`", [s.edit, fix.after_expr(at, "?")])
+
+pub struct SigFix
+    pub title str
+    pub edit fix.Edit
+
+## err.fix.1: give the current function the return type `! errors`, appended
+## to its signature line; only when its return type is absent or a plain value.
+@allow("expr.match.3") fn Checker.signature_fix(self, extra List[Ty]) SigFix?
+    if is_res(fn_ret) or is_opt(fn_ret)
+        return none
+    names := error_names(extra)
+    # A module's error type is written with the module's alias, which isn't
+    # the name it has here: offer the fix only for names as written.
+    if [n for n in names if n.contains(".")].len() > 0
+        return none
+    joined := names.join(" | ")
+    SigFix(
+        title: "make `{prog.fns[cur_fn].name}` fail with {joined}",
+        edit: fix.at_line_end(prog.fns[cur_fn].pos, " ! {joined}"),
+    )
+
+## Add the signature fix, if any, to the diagnostic just reported.
+fn Checker.sig_fix_last(mut self, errors List[Ty])
+    if s := signature_fix(errors)
+        fix_last(s.title, [s.edit])
 
 ## Sorted, distinct display names of error types.
 fn Checker.error_names(self, errors List[Ty]) List[str]
