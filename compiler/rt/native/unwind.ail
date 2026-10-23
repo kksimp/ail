@@ -1,0 +1,59 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Cleanups on a trap (own.uniq.3, own.defer.1): a block's `defer`s and the
+## releases of its unique locals run where it is left, and also when a trap
+## ends the program. For the trap, the lowering registers each cleanup here as
+## it is set up: a function and its one argument (the unique value, or the
+## captured locals of a `defer`). A block left normally pops its entries; a
+## release that ran or a value that moved disarms its entry. A trap runs what
+## is left, last first, before its message.
+
+## Global slot 48 (requested from the integrator, 2026-10-23): the stack, a
+## struct object (so the collector scans its words): count, capacity, then a
+## function and an argument per entry.
+UNWIND := 48
+
+## Register cleanup `f(x)`; its index.
+fn unwind_push(f int, x int) int
+    mut s := load64(global(UNWIND))
+    if s == 0 or load64(s) == load64(s + 8)
+        cap := if s == 0 then 16 else 2 * load64(s + 8)
+        t := obj_new(16 + 16 * cap, 4)
+        store64(t, 0)
+        if s != 0
+            copy_bytes(t + 16, s + 16, 16 * load64(s))
+            store64(t, load64(s))
+        store64(t + 8, cap)
+        store64(global(UNWIND), t)
+        s = t
+    n := load64(s)
+    store64(s + 16 + 16 * n, f)
+    store64(s + 24 + 16 * n, x)
+    store64(s, n + 1)
+    n
+
+## Entry `i` won't run: its value moved or was released.
+fn unwind_disarm(i int)
+    store64(load64(global(UNWIND)) + 16 + 16 * i, 0)
+
+## The block left normally: drop its `n` entries.
+fn unwind_pop(n int)
+    s := load64(global(UNWIND))
+    store64(s, load64(s) - n)
+
+fn unwind_call(f fn(int), x int)
+    f(x)
+
+## A trap: run the armed entries, last first. Each is popped before it runs,
+## so a trap inside a cleanup goes on with the rest.
+fn unwind_run()
+    s := load64(global(UNWIND))
+    if s == 0
+        return
+    while load64(s) > 0
+        n := load64(s) - 1
+        store64(s, n)
+        f := load64(s + 16 + 16 * n)
+        if f != 0
+            unwind_call(f, load64(s + 24 + 16 * n))

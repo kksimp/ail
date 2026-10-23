@@ -1,5 +1,5 @@
-# Constructs outside the native subset are all reported, with positions
-# (native.subset.1).
+# Constructs once outside the native subset (native.subset.1); the last of them,
+# a unique struct, lowers now (ADR 0867).
 struct Point
     x int
     y int

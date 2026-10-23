@@ -1,1 +1,0 @@
-bootstrap/tests/native/structs_out.ail:5:15: error[native.subset.1]: unique struct `Checked` isn't in the native subset yet

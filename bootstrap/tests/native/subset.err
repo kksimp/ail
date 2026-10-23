@@ -1,1 +1,0 @@
-bootstrap/tests/native/subset.ail:16:15: error[native.subset.1]: unique struct `Lock` isn't in the native subset yet
