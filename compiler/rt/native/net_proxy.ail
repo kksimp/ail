@@ -1,0 +1,131 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## HTTP proxies for the native client (std.net.30): `HTTP_PROXY` and
+## `HTTPS_PROXY` (either case, lowercase first) name an `http://[user:pass@]host[:port]`
+## proxy for `http://` and `https://` requests; `NO_PROXY` lists hosts that
+## are reached directly. Loopback hosts never use a proxy. An `http://` request
+## goes to the proxy in absolute form; an `https://` request opens a tunnel
+## with `CONNECT` first, and TLS runs inside it.
+
+## The first non-empty variable of `a` and `b`.
+fn proxy_env(a str, b str) str
+    v := env_get(a)
+    if str_addr(v) != 0 and load64(str_addr(v)) > 0
+        return v
+    w := env_get(b)
+    if str_addr(w) != 0 and load64(str_addr(w)) > 0
+        return w
+    ""
+
+## Whether `host:port` must be reached directly: a loopback name, or an entry
+## of `NO_PROXY` (`*`, or a host or domain, with an optional `:port`; a
+## leading dot is optional).
+fn proxy_direct(host str, port int) bool
+    h := host.to_lower()
+    if h == "localhost"
+        or h.ends_with(".localhost")
+        or h == "::1"
+        or h == "[::1]"
+        or h.starts_with("127.")
+        return true
+    no := proxy_env("no_proxy", "NO_PROXY")
+    if load64(str_addr(no)) == 0
+        return false
+    for raw in no.split(",")
+        mut e := raw.trim().to_lower()
+        if e == ""
+            continue
+        if e == "*"
+            return true
+        mut eport := 0
+        c := e.find(":")
+        if c != none and not e.starts_with("[")
+            at := c else 0
+            eport = str_sub(str_addr(e), at + 1, load64(str_addr(e))).to_int() else 0
+            e = str_sub(str_addr(e), 0, at)
+        while e.starts_with(".")
+            e = str_sub(str_addr(e), 1, load64(str_addr(e)))
+        if eport != 0 and eport != port
+            continue
+        if h == e or h.ends_with(".{e}")
+            return true
+    false
+
+## The proxy for a request to `host:port` over `scheme`, or 0 for a direct
+## connection: an object of three words (host, port, `Proxy-Authorization`
+## value or ""). 0 after a `bad_url` failure for a variable that isn't a proxy
+## URL.
+fn proxy_find(scheme str, host str, port int, url str, at str) int
+    mut v := proxy_env("http_proxy", "HTTP_PROXY")
+    if scheme == "https"
+        v = proxy_env("https_proxy", "HTTPS_PROXY")
+    if load64(str_addr(v)) == 0 or proxy_direct(host, port)
+        return 0
+    var := if scheme == "https" then "HTTPS_PROXY" else "HTTP_PROXY"
+    mut text := v.trim()
+    if not text.starts_with("http://") and not text.contains("://")
+        text = "http://{text}"
+    if not text.starts_with("http://")
+        net_fail(url, "bad_url", "`{var}` must be an `http://` proxy URL", at)
+        return 0
+    u := http_parse(text, at)
+    if u == 0
+        net_fail(url, "bad_url", "`{var}` is not a proxy URL", at)
+        return 0
+    rest := str_sub(str_addr(text), 7, load64(str_addr(text)))
+    mut auth := rest
+    if slash := rest.find("/")
+        auth = str_sub(str_addr(rest), 0, slash)
+    mut authz := ""
+    if at_sign := auth.rfind("@")
+        authz = "Basic {bytes_base64(str_sub(str_addr(auth), 0, at_sign))}"
+    p := obj_new(24, 4)
+    store64(p, load64(u + 8))
+    store64(p + 8, load64(u + 16))
+    store64(p + 16, str_addr(authz))
+    p
+
+## Open the tunnel to `host:port` through the proxy connection `h`
+## (`CONNECT`, RFC 9110 section 9.3.6): true when the proxy answers 2xx. On
+## any other answer the connection is closed and the failure is `protocol`.
+fn proxy_tunnel(h int, host str, port int, px int, url str, at str) bool
+    authority := "{host}:{port}"
+    sb_reset()
+    sb_text("CONNECT ")
+    sb_text(authority)
+    sb_text(" HTTP/1.1\r\nHost: ")
+    sb_text(authority)
+    sb_text("\r\n")
+    authz := str_at(load64(px + 16))
+    if load64(str_addr(authz)) > 0
+        sb_text("Proxy-Authorization: ")
+        sb_text(authz)
+        sb_text("\r\n")
+    sb_text("\r\n")
+    net_write(h, sb_str(), at)
+    if failed()
+        net_close(h)
+        return false
+    line := net_read_line(h, at)
+    if failed()
+        net_close(h)
+        return false
+    if str_addr(line) == 0
+        net_close(h)
+        net_fail(url, "protocol", "the proxy closed the connection before answering CONNECT", at)
+        return false
+    status := http_status(line)
+    # The rest of the answer's headers, up to the blank line.
+    while true
+        hl := net_read_line(h, at)
+        if failed()
+            net_close(h)
+            return false
+        if str_addr(hl) == 0 or load64(str_addr(hl)) == 0
+            break
+    if status < 200 or status > 299
+        net_close(h)
+        net_fail(url, "protocol", "the proxy refused the tunnel: {line}", at)
+        return false
+    true
