@@ -2501,6 +2501,15 @@ fn owner_ok(owner str) bool
                 return false
     true
 
+## bootstrap/tests/native.rs, ported to tools/gate/nativex.ail (B6). It prints only
+## failures and ends with `NATIVEX GREEN` or `NATIVEX RED`.
+fn Gate.nativex(mut self)
+    r := ail_run(["run", "tools/gate/nativex.ail"]) else
+        red("nativex", "could not start tools/gate/nativex.ail")
+        return
+    if r.status != 0 or not r.out.contains("NATIVEX GREEN")
+        red("nativex", "{r.out}{r.err}")
+
 fn Gate.native_misc(mut self)
     for flags in [List[str](), ["--no-bytecode"]]
         r := ail_run(cat(cat(["test"], flags), ["compiler/rt/rt.ail"])) else return
@@ -2556,6 +2565,7 @@ fn main() !
         "mistakes",
         "contracts",
         "snapshot",
+        "nativex",
         "selfhost",
     ]
     suites := if args.len() == 0 then all else args
@@ -2590,6 +2600,7 @@ fn main() !
             "net" => g.net()
             "bytecode" => g.bytecode()
             "spec" => g.spec()
+            "nativex" => g.nativex()
             "native_misc" => g.native_misc()
             "selfhost" => g.selfhost()
             _ =>
