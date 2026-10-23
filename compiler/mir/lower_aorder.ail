@@ -15,7 +15,9 @@ fn Lower.rhs_touches(self, e ast.Expr, target List[str]) bool
             # `f(..)` inside a method may be a `mut self` method of the same type.
             match callee
                 Name(n, _) =>
-                    if self_ty != "" and traits.mut_self.contains("{self_ty}.{n}") and self_slot(target[0]) >= 0
+                    if self_ty != ""
+                        and traits.mut_self.contains("{self_ty}.{n}")
+                        and self_slot(target[0]) >= 0
                         return true
                 _ => return mut_arg_overlaps(args, target)
             mut_arg_overlaps(args, target)
@@ -57,7 +59,13 @@ fn is_nested(e ast.Expr) bool
         _ => false
 
 ## `target = value` with the order above, when it applies; whether it did.
-fn Lower.assign_after_rhs(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, pos ast.Pos) bool
+fn Lower.assign_after_rhs(
+    mut self,
+    target ast.Expr,
+    op ast.BinOp?,
+    value ast.Expr,
+    pos ast.Pos,
+) bool
     if op != none
         return false
     match target
@@ -72,6 +80,11 @@ fn Lower.assign_after_rhs(mut self, target ast.Expr, op ast.BinOp?, value ast.Ex
             v := lower_value(value, none) else return true
             name := "~r{nvars}"
             declare(name, v.ty, v.id)
-            lower_assign_body(ast.Expr.Index(recv: recv2, index: index2, pos: ipos), none, Name(name, expr_pos(value)), pos)
+            lower_assign_body(
+                ast.Expr.Index(recv: recv2, index: index2, pos: ipos),
+                none,
+                Name(name, expr_pos(value)),
+                pos,
+            )
             true
         _ => false

@@ -13,7 +13,7 @@ run() { # run NAME CMD...
 # ./ail rebuilds the bootstrap binary (it embeds the compiler) when its sources changed.
 run build ./ail --version
 [ $fails = 0 ] || { echo "CHECKS RED ($fails)"; exit 1; }
-run check ./ail check compiler tools/garlic
+for d in compiler tools/garlic; do run check-${d##*/} ./ail check $d; done
 run fmt ./ail fmt --check compiler examples tools/garlic
 run rules tools/rules-audit.sh
 for p in links dupes snippets; do run doc-$p python3 tools/check-doc-$p.py; done
