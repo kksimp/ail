@@ -802,11 +802,32 @@ fn http_exchange_on(
         if status >= 200 or status == 101
             break
     # The body.
-    b := hb_new()
-    mut err := 0
     nobody := method == "HEAD" or status < 200 or status == 204 or status == 304
     te := http_get_header(headers, "transfer-encoding")
     cl := http_get_header(headers, "content-length")
+    loc := http_get_header(headers, "location")
+    followed := spec != 0
+        and load64(spec + 40) != 0
+        and (status == 301 or status == 302 or status == 303 or status == 307 or status == 308)
+        and load64(str_addr(loc)) > 0
+    if spec != 0 and load64(spec + 32) != 0 and not followed
+        # `net.open` (std.net.25): the body stays on the connection.
+        store64(next, 0)
+        return open_begin(
+            h,
+            key,
+            status,
+            headers,
+            all,
+            http11 and not closes,
+            nobody,
+            te,
+            cl,
+            url,
+            at,
+        )
+    b := hb_new()
+    mut err := 0
     if nobody
         err = 0
     elif net_has(http_lower(str_addr(te) + 16, load64(str_addr(te))), "chunked")
@@ -884,7 +905,6 @@ fn http_exchange_on(
     store64(resp + 24, all)
     store64(resp + 32, raw)
     # A redirect, for the caller to follow.
-    loc := http_get_header(headers, "location")
     if (status == 301 or status == 302 or status == 303 or status == 307 or status == 308)
         and load64(str_addr(loc)) > 0
         store64(next, str_addr(http_resolve(url, loc)))
@@ -938,7 +958,8 @@ fn http_decode(r int, url str, spec int, at str) int
 
 ## A request with its redirects: follows up to `redirects` of a `GET` or
 ## `HEAD`. `spec` is 0, or four words: the headers map, the idle timeout, the
-## connect timeout, and whether to drop `Authorization` and `Cookie`.
+## connect timeout, and whether to drop `Authorization` and `Cookie`; for
+## `net.open` two more: streaming, and whether redirects are followed.
 fn http_request(method str, url str, body str, ctype str, spec int, redirects int, at str) int
     follows := method == "GET" or method == "HEAD"
     next := alloc_raw(8, KIND_BYTES)
@@ -950,6 +971,8 @@ fn http_request(method str, url str, body str, ctype str, spec int, redirects in
             return 0
         t := load64(next)
         if t == 0 or not follows or redirects == 0
+            if spec != 0 and load64(spec + 32) != 0
+                return r
             return http_decode(r, cur, spec, at)
         if left == 0
             return net_fail(cur, "protocol", "more than {redirects} redirects", at)
@@ -977,6 +1000,18 @@ fn net_post(url str, body str, ctype str, at str) int
 ## the caller's traps: `head6` and `head19` are the first lines of the
 ## `std.net.6` and `std.net.19` traps and `tail` the source excerpt.
 fn net_request(method str, url str, o int, head6 str, head19 str, tail str, at str) int
+    net_request_with(method, url, o, head6, head19, tail, false, at)
+
+fn net_request_with(
+    method str,
+    url str,
+    o int,
+    head6 str,
+    head19 str,
+    tail str,
+    stream bool,
+    at str,
+) int
     timeout := load64(o + 24)
     redirects := load64(o + 32)
     if timeout <= 0 or redirects < 0
@@ -1011,11 +1046,13 @@ fn net_request(method str, url str, o int, head6 str, head19 str, tail str, at s
     if not http_check_headers(hdrs, url, at)
         return 0
     full := http_with_query(url, load64(o + 8))
-    spec := obj_new(32, 4)
+    spec := obj_new(48, 4)
     store64(spec, hdrs)
     store64(spec + 8, timeout)
     store64(spec + 16, cms)
     store64(spec + 24, 0)
+    store64(spec + 32, if stream then 1 else 0)
+    store64(spec + 40, if stream and (m == "GET" or m == "HEAD") and redirects > 0 then 1 else 0)
     http_request(m, full, str_at(load64(o + 16)), "", spec, redirects, at)
 
 ## A `RawResponse` (status, headers, data, all_headers) for a response object.

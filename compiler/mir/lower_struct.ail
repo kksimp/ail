@@ -42,6 +42,7 @@ NET_SERVER := "net.Server"
 NET_EXCHANGE := "net.Exchange"
 NET_REQUEST := "net.Request"
 NET_RAW := "net.RawResponse"
+NET_BODY := "net.Body"
 NET_OPTIONS := "net.Options"
 
 ## The error of `std.compress` (std.compress.2).
@@ -68,6 +69,12 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
         Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
         Slot(name: "data", ty: Ty.Bytes),
         Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
+    ]
+    structs[NET_BODY] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
+        Slot(name: "handle", ty: Ty.Int),
     ]
     structs[NET_RESPONSE] = []
     structs[NET_OPTIONS] = []
