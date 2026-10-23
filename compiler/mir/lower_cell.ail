@@ -19,7 +19,7 @@ struct Cell
 ## The sig type of a `mut` parameter of scalar type `t`; none for others.
 fn cell_param(t Ty) Ty?
     match t
-        Int | Bool | Char | Str | Enum(_) | Opt(_) => Ty.Ptr(Ty.Tuple([t]))
+        Int | Bool | Char | Float | Str | Enum(_) | Opt(_) => Ty.Ptr(Ty.Tuple([t]))
         _ => none
 
 ## The scalar a cell parameter holds.

@@ -11,8 +11,8 @@ fn first(xs List[int]) int ! Empty
 fn labelled(xs List[int]) int ! Empty
     first(xs)? "while reading"
 
-fn nested(n int) int??
-    n
+fn nested(n int) Map[List[int], int]
+    Map[List[int], int]()
 
 fn main()
     print(labelled([1]) else 0)
