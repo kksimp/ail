@@ -19,6 +19,7 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [fail fs io]  ##
     fails with fs.IoError
 fn source_text(path str) !str [fail fs io]  ## The text of a program: a file, or all the files of a package directory.
     fails with fs.IoError
+fn imported_text(file str, text str, std str) str [fs io]  ## `text` (the program's own source) followed by the text of every module it
 fn executable_hex(m mir.Module, path str, target str) str [io]  ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 fn runtime_syntax(path str, text str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]  ## Parse a program and the modules it imports, and lower them to MIR
@@ -39,6 +40,8 @@ struct Derived  ## What `ail build` passes besides the program's files.
     prelude str?
 fn derived_source(module str, label str, body List[str]) mir.Source [io]  ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
 fn uses_regex(prog ast.Program) bool  ## Whether the program has a `use` that ends in `regex` (`use std.regex`, `use app.regex`).
+fn uses_ui(prog ast.Program) bool  ## Whether the program has a `use` that ends in `ui` (`use std.ui`).
+fn mentions_ui(text str) bool  ## Whether `text` names `ui.` as a word: not the end of a longer name
 fn parse_source(module str, path str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
     fails with fs.IoError
 fn parse_module(module str, paths List[str]) !List[mir.Source] [fail fs io]  ## The files of one module, parsed together: a generic name declared in one

@@ -1,3 +1,4 @@
+# Was a cascade check while `.sorted()` on `List[char]` was outside the subset; it lowers now.
 fn main()
     cs := ['b', 'a'].sorted()
     xs := [i for i in 0..cs.len() if cs[i] != 'z']

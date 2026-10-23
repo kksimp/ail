@@ -1,0 +1,102 @@
+# type.num.11: cmp is a total order (NaN greatest and equal to itself, -0.0 equal to 0.0);
+# sort, sorted, min, max are stable and deterministic.
+struct R
+    k float
+    tag str
+
+impl Ord for R
+
+struct W
+    k float
+    tag str
+
+impl Ord for W
+    fn cmp(self, other W) Ordering
+        self.k.cmp(other.k)
+
+fn main()
+    inf := 1.0 / 0.0
+    nan := inf - inf
+    print(nan.cmp(nan))
+    print(nan.cmp(inf))
+    print(inf.cmp(nan))
+    print(nan.cmp(-inf))
+    print((-inf).cmp(nan))
+    print((-0.0).cmp(0.0))
+    print(0.0.cmp(-0.0))
+    print(1.0.cmp(2.0))
+    print(2.0.cmp(1.0))
+    print(1.5.cmp(1.5))
+    print((-1.0).cmp(1.0))
+    print(5e-324.cmp(0.0))
+    print((-5e-324).cmp(-0.0))
+    xs := [3.0, nan, -inf, 0.0, -0.0, inf, 1.5, -1.5, nan]
+    print(xs.sorted())
+    mut ys := xs
+    ys.sort()
+    print(ys)
+    print(xs)
+    print(xs.min())
+    print(xs.max())
+    print([nan, 1.0].min())
+    print([nan, 1.0].max())
+    print([nan].min())
+    print([nan, nan].max())
+    print([1.0].max())
+    # stable: equal elements keep their order
+    zs := [0.0, -0.0, 0.0, -0.0, -0.0, 0.0]
+    print(zs.sorted())
+    print([0.0, -0.0].min())
+    print([-0.0, 0.0].min())
+    print([0.0, -0.0].max())
+    print([-0.0, 0.0].max())
+    es := List[float]()
+    print(es.min())
+    print(es.max())
+    print(es.sorted())
+    # composite orderings use cmp
+    print([[1.0, nan], [1.0, 2.0], [0.5, nan], [1.0]].sorted())
+    print([[1.0, nan], [1.0, 2.0], [0.5, nan]].max())
+    print([[1.0, nan], [1.0, 2.0], [0.5, nan]].min())
+    print([1.0, nan].cmp([1.0, nan]))
+    print([1.0, nan] < [1.0, nan])
+    print([1.0, nan] <= [1.0, nan])
+    print([1.0, nan] >= [1.0, nan])
+    print([1.0, nan] > [1.0, 2.0])
+    print([1.0, nan] < [1.0, 2.0])
+    print([nan] < [1.0])
+    print([1.0] < [1.0, nan])
+    print([-0.0] <= [0.0])
+    print([0.0] < [-0.0])
+    rs := [
+        R(k: nan, tag: "a"),
+        R(k: 1.0, tag: "b"),
+        R(k: nan, tag: "c"),
+        R(k: -0.0, tag: "d"),
+        R(k: 0.0, tag: "e"),
+        R(k: -inf, tag: "f"),
+        R(k: 0.0, tag: "a"),
+    ]
+    print(rs.sorted())
+    print(rs.min())
+    print(rs.max())
+    print(R(k: nan, tag: "x") < R(k: nan, tag: "y"))
+    print(R(k: nan, tag: "x") < R(k: 1.0, tag: "y"))
+    print(R(k: nan, tag: "x") > R(k: 1.0, tag: "y"))
+    print(R(k: -0.0, tag: "x") == R(k: 0.0, tag: "x"))
+    print(R(k: -0.0, tag: "x") <= R(k: 0.0, tag: "x"))
+    print(R(k: nan, tag: "x") <= R(k: nan, tag: "x"))
+    print(R(k: nan, tag: "x") == R(k: nan, tag: "x"))
+    print(R(k: nan, tag: "x").cmp(R(k: nan, tag: "x")))
+    # a custom cmp on a float field: equal keys keep their order, min/max take the first
+    ws := [
+        W(k: nan, tag: "a"),
+        W(k: 1.0, tag: "b"),
+        W(k: nan, tag: "c"),
+        W(k: -0.0, tag: "d"),
+        W(k: 0.0, tag: "e"),
+        W(k: -0.0, tag: "f"),
+    ]
+    print(ws.sorted())
+    print(ws.max())
+    print(ws.min())

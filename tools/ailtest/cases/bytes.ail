@@ -1,0 +1,14 @@
+@test fn short(b bytes)
+    assert(b.len() < 3)
+
+@test fn no_ff(b bytes, n int)
+    assert(b.hex().len() < 40 and n < 50)
+
+@test fn first_small(b bytes)
+    assert(b.len() == 0 or b[0].to_int() < 200)
+
+@test fn fine(b bytes)
+    assert(b + b"" == b)
+
+fn main()
+    print("ok")

@@ -1,6 +1,7 @@
 # 0740. The self-hosted checker must match `ail check` with nothing skipped
 
 - **Status:** Accepted
+- **Amended by:** [ADR 0865](0865-no-double-work.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture (Stage 3, ADR 0022); 28 — Testing strategy

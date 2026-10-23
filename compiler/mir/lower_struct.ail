@@ -17,6 +17,12 @@ struct Slot
 ## that no source declares; its key can't clash with a program's own name.
 PROC_OUTPUT := "proc.Output"
 
+## The result of `proc.run_bytes` (std.proc.8): the streams undecoded.
+PROC_RAW := "proc.RawOutput"
+
+## The result of `fs.metadata` (std.fs.10).
+FS_METADATA := "fs.Metadata"
+
 ## The child of `proc.start` (std.proc.4): pid and the three streams.
 PROC_CHILD := "proc.Child"
 
@@ -35,25 +41,44 @@ NET_ERROR := "net.NetError"
 NET_CONN := "net.Conn"
 NET_LISTENER := "net.Listener"
 NET_RESPONSE := "net.Response"
+NET_SERVER := "net.Server"
+NET_EXCHANGE := "net.Exchange"
+NET_REQUEST := "net.Request"
 NET_RAW := "net.RawResponse"
+NET_BODY := "net.Body"
 NET_OPTIONS := "net.Options"
+
+## The error of `std.compress` (std.compress.2).
+COMPRESS_ERROR := "compress.CompressError"
 
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
+    structs[PROC_RAW] = []
+    structs[FS_METADATA] = []
     structs[PROC_CHILD] = []
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []
     structs[TRAPPED] = []
     structs[NET_ERROR] = []
+    structs[COMPRESS_ERROR] = []
     structs[NET_CONN] = []
+    structs[NET_SERVER] = []
+    structs[NET_EXCHANGE] = []
+    structs[NET_REQUEST] = []
     structs[NET_LISTENER] = []
     structs[NET_RAW] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
         Slot(name: "data", ty: Ty.Bytes),
         Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
+    ]
+    structs[NET_BODY] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
+        Slot(name: "handle", ty: Ty.Int),
     ]
     structs[NET_RESPONSE] = []
     structs[NET_OPTIONS] = []
@@ -77,7 +102,23 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "kind", ty: Ty.Str),
         Slot(name: "message", ty: Ty.Str),
     ]
+    structs[COMPRESS_ERROR] = [Slot(name: "kind", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
     structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_SERVER] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_REQUEST] = [
+        Slot(name: "method", ty: Ty.Str),
+        Slot(name: "path", ty: Ty.Str),
+        Slot(name: "query", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "body", ty: Ty.Str),
+        Slot(name: "peer", ty: Ty.Str),
+        Slot(name: "data", ty: Ty.Bytes),
+        Slot(name: "server", ty: Ty.Int),
+    ]
+    structs[NET_EXCHANGE] = [
+        Slot(name: "request", ty: Ty.Struct(NET_REQUEST)),
+        Slot(name: "handle", ty: Ty.Int),
+    ]
     structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_RESPONSE] = [
         Slot(name: "status", ty: Ty.Int),
@@ -101,6 +142,16 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "stdin", ty: Ty.Chan(Ty.Str)),
         Slot(name: "out", ty: Ty.Chan(Ty.Str)),
         Slot(name: "err", ty: Ty.Chan(Ty.Str)),
+    ]
+    structs[FS_METADATA] = [
+        Slot(name: "size", ty: Ty.Int),
+        Slot(name: "modified_ms", ty: Ty.Int),
+        Slot(name: "is_dir", ty: Ty.Bool),
+    ]
+    structs[PROC_RAW] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "out", ty: Ty.Bytes),
+        Slot(name: "err", ty: Ty.Bytes),
     ]
     structs[PROC_OUTPUT] = [
         Slot(name: "status", ty: Ty.Int),
@@ -130,7 +181,9 @@ fn Lower.slot_of(self, n str, name str) int
 ## `T(a: x, b: y)` or `T(x, y)`: a new object with every field set.
 fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     slots := structs[n]
-    if args.len() != slots.len()
+    # std.net.17: `net.Response(...)` may leave `all_headers` out; it is empty.
+    left_out := n == NET_RESPONSE and args.len() + 1 == slots.len()
+    if args.len() != slots.len() and not left_out
         return unsupported(pos, "`{n}(...)` without every field")
     mut vs := [-1 for _ in slots]
     for k in 0..args.len()
@@ -143,6 +196,10 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
         t := slots[at].ty
         v := lower_value(a.value, t)?
         vs[at] = copy_if_place(a.value, Val(id: convert(v, t, expr_pos(a.value)), ty: t))
+    if left_out
+        for k in 0..vs.len()
+            if vs[k] < 0
+                vs[k] = new_table(slots[k].ty)
     t := Ty.Struct(n)
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..vs.len()
@@ -239,10 +296,24 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         return proc_output_method(key, recv, args, pos)
     if key.starts_with("net.")
         return lower_net_method(key, recv, args, pos)
+    if key.ends_with(".cmp") and args.len() == 1 and not sigs.contains(key)
+        if r := recv
+            return derived_cmp(r, args[0], pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
+    mut cells := List[Cell]()
     if r := recv
-        vs.push(shield_recv(rcv, args, r))
+        if ct := cell_ty(sig.params[0])
+            e := rcv.expr else
+                problem(pos, "this `mut self` receiver isn't a variable, field or element")
+                return none
+            if rcv.path.len() == 0
+                problem(pos, "this `mut self` receiver isn't a variable, field or element")
+                return none
+            vs.push(new_cell(r.id))
+            cells.push(Cell(key: "", place: e, cell: vs[0], ty: ct, pos: pos))
+        else
+            vs.push(shield_recv(rcv, args, r))
     if args.len() + vs.len() != sig.params.len()
         return unsupported(
             pos,
@@ -253,10 +324,15 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         t := sig.params[vs.len()]
+        if ct := cell_ty(t)
+            vs.push(cell_arg(a, ct, mut cells)?)
+            continue
         v := lower_value(a.value, t)?
         vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
-    Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    res := Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    cells_back(cells)
+    res
 
 ## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
 ## status is zero; the standard output followed by the standard error.

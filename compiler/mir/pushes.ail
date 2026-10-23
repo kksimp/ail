@@ -36,7 +36,8 @@ pub fn keep_lengths(f Func) Func
                     lists.push(i.args[0])
         for x in lists
             g = keep_length(g, defs, dom, loops, lp, latch, x)
-    simplify(g)
+    simplify_in(mut g)
+    g
 
 fn is_room_push(i Inst) bool
     i.op == "call"

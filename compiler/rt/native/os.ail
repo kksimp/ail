@@ -529,6 +529,44 @@ fn os_env_get(name str) str
     os_fail_kind(K_NOT_FOUND)
     ""
 
+## `env.vars()` (std.env.5): the variables whose names and values are UTF-8,
+## as a `Map[str, str]` in name order (byte order). Windows has no `envp`
+## here yet, so the map is empty there (ADR 0608).
+fn env_vars() int
+    m := map_new(1, 0, 0)
+    if target() == 3
+        os_succeed()
+        return m
+    names := list_new(16)
+    mut e := os_envp()
+    while load64(e) != 0
+        c := load64(e)
+        len := os_c_len(c)
+        mut eq := 0
+        while eq < len and load8(c + eq) != 61
+            eq += 1
+        if eq < len and os_utf8_chars(c, eq) >= 0 and os_utf8_chars(c + eq + 1, len - eq - 1) >= 0
+            list_push(names, str_addr(os_str_from(c, eq)))
+        e += 8
+    q := list_addr(names)
+    data := load64(q + 16)
+    n := load64(q)
+    mut i := 1
+    while i < n
+        x := load64(data + 8 * i)
+        mut j := i
+        while j > 0 and str_cmp(str_at(load64(data + 8 * (j - 1))), str_at(x)) > 0
+            store64(data + 8 * j, load64(data + 8 * (j - 1)))
+            j -= 1
+        store64(data + 8 * j, x)
+        i += 1
+    for k in 0..n
+        name := str_at(load64(data + 8 * k))
+        v := os_env_get(name)
+        map_set(m, str_addr(name), str_addr(v))
+    os_succeed()
+    m
+
 ## `env.home()` (std.env.6): `HOME`, else `USERPROFILE`, when not empty.
 fn os_env_home() str
     h := os_env_get("HOME")
@@ -607,7 +645,7 @@ fn time_mono_ms() int
 fn time_sleep_ms(ms int)
     if ms < 0
         os_usage_trap("std.time.2", "a negative sleep")
-    if ms == 0
+    if ms == 0 or task_cancelled()
         return
     ts := os_scratch(OS_TMP)
     if target() == 2
@@ -800,6 +838,10 @@ fn os_io_read_line() str
 
 ## `io.read_all()` (std.io.2): the rest of standard input.
 fn io_read_all() str
+    os_lossy(str_addr(io_read_bytes()))
+
+## `io.read_bytes()`: the rest of standard input, undecoded (std.io.1).
+fn io_read_bytes() str
     mut cap := 4096
     mut s := str_new(cap, 0)
     mut n := 0
@@ -821,7 +863,7 @@ fn io_read_all() str
         store64(global(IN_POS), pos + take)
     store64(s, n)
     os_succeed()
-    os_lossy(s)
+    str_at(s)
 
 # ---- the lowering's entry points (lower_os.ail) ----
 
@@ -957,6 +999,42 @@ fn fs_walk(dir str, at str) List[int]
     q := list_addr(out)
     os_sort_names(load64(q + 16), load64(q))
     out
+
+# ---- fs.metadata (std.fs.10) ----
+
+## `fs.metadata(path)`: an `fs.Metadata` of `size`, `modified_ms` and
+## `is_dir`; links are followed. The `fstat` layout of each target: size at 48
+## (macOS 72), modification seconds at 88 (macOS 40) with nanoseconds 8 after.
+fn fs_metadata(path str, at str) int
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, os_kind(), at)
+        return 0
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        os_error(path, os_kind(), at)
+        return 0
+    buf := os_scratch(OS_TMP)
+    r := syscall(os_pick(5, 80, 189), fd, buf, 0, 0, 0, 0)
+    os_close(fd)
+    if r < 0
+        os_fail_errno(r)
+        os_error(path, os_kind(), at)
+        return 0
+    moff := os_pick(24, 16, 8)
+    mode := (load8(buf + moff) + load8(buf + moff + 1) * 256).bit_and(61440)
+    is_dir := mode == 16384
+    size := load64(buf + os_pick(48, 48, 72))
+    secs := load64(buf + os_pick(88, 88, 40))
+    nanos := load64(buf + os_pick(96, 96, 48))
+    m := obj_new(24, 4)
+    store64(m, if is_dir then 0 else size)
+    store64(m + 8, secs * 1000 + nanos / 1000000)
+    store64(m + 16, if is_dir then 1 else 0)
+    os_succeed()
+    m
 
 # ---- fs.copy (std.fs.12) ----
 

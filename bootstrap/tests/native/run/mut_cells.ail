@@ -1,0 +1,58 @@
+enum Light
+    Off
+    On(v int)
+
+fn Light.flip(mut self)
+    self = match self
+        Off => On(1)
+        On(_) => Off
+
+fn Light.show(self) str
+    match self
+        Off => "off"
+        On(v) => "on {v}"
+
+struct W
+    l Light
+    n int
+
+struct P
+    x int
+    y int
+
+fn P.reset(mut self)
+    self = P(x: 0, y: 0)
+
+fn setn(mut n int)
+    n = 99
+
+fn name_it(mut s str)
+    s = "{s}!"
+
+fn main()
+    mut a := Light.Off
+    a.flip()
+    print(a.show())
+    mut ls := [Light.Off, Light.On(5)]
+    ls[0].flip()
+    ls[1].flip()
+    print(ls[0].show())
+    print(ls[1].show())
+    mut w := W(l: Light.Off, n: 1)
+    w.l.flip()
+    print(w.l.show())
+    mut m := {1: Light.Off}
+    m[1].flip()
+    print(m[1].show())
+    mut p := P(x: 3, y: 4)
+    p.reset()
+    print(p.x)
+    mut q := W(l: Light.Off, n: 5)
+    setn(mut q.n)
+    print(q.n)
+    mut arr := [1, 2]
+    setn(mut arr[1])
+    print(arr)
+    mut s := "hi"
+    name_it(mut s)
+    print(s)

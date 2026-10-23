@@ -211,7 +211,12 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
         v = Val(id: -1, ty: Ty.Unit)
     elif res.is_float()
         v = Val(id: prim_op("bits_float", [w], Ty.Float), ty: Ty.Float)
-    Maybe(val: v, present: op("not", [failure], Ty.Bool), opt: false, err: if own then (tk.errs.get(key) else Ty.Unknown) else Ty.Struct(TRAPPED))
+    Maybe(
+        val: v,
+        present: op("not", [failure], Ty.Bool),
+        opt: false,
+        err: if own then (tk.errs.get(key) else Ty.Unknown) else Ty.Struct(TRAPPED),
+    )
 
 ## `print` holds the output buffer's lock while a program runs tasks, so a
 ## line from one task isn't split by another's.
@@ -252,14 +257,17 @@ fn Lower.synth_begin(mut self, name str, params List[Ty]) List[int]
     ps
 
 fn Lower.synth_end(mut self, params List[int])
-    func := simplify(fold(simplify(Func(
+    mut func := Func(
         name: fname,
         params: params,
         ret: Ty.Unit,
         blocks: blocks,
         vals: vals,
         names: names,
-    ))))
+    )
+    simplify_in(mut func)
+    fold_in(mut func)
+    simplify_in(mut func)
     for err in verify(func)
         problems.push(Problem(
             rule: "native.build.2",

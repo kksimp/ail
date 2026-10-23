@@ -40,10 +40,12 @@ fn Lower.count_close(mut self, c KeyLoop)
 ## Whether `name` with these arguments is `sorted` or `sort` with a key
 ## function; the plain forms are in lower_list.ail.
 fn is_sorting(name str, args List[ast.Arg]) bool
-    (name == "sorted" or name == "sort") and args.len() > 0
+    (name == "sorted" or name == "sort" or name == "min" or name == "max") and args.len() > 0
 
 ## `r.sorted()`, `r.sorted(by: |x| e)`, `r.sort()`, `r.sort(by: |x| e)`.
 fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
+    if name == "min" or name == "max"
+        return lower_extreme_by(r, name, args, npos)
     e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str or structural(e))
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
@@ -103,6 +105,44 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
     emit_void(inst(-1, "set", [r.id, c2.i, op("get", [out, c2.i], e)]))
     count_close(c2)
     Val(id: -1, ty: Ty.Unit)
+
+## `xs.min(by: |x| e)` and `xs.max(by: |x| e)` (expr.key.1-4): the first element
+## with the least or greatest key, as a `T?`. The keys are lowered inline as for
+## `sorted(by:)`, and `rt.list_extreme` picks the index.
+fn Lower.lower_extreme_by(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
+    e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    if args.len() != 1 or e.is_unknown()
+        return unsupported(npos, "`.{name}()` with these arguments")
+    a := args[0]
+    by := a.label else return unsupported(npos, "`.{name}()` with this argument")
+    x := a.param else return unsupported(npos, "`.{name}()` with this argument")
+    if by.name != "by" or a.mutable or a.moved
+        return unsupported(npos, "`.{name}()` with this argument")
+    n := op("len", [r.id], Ty.Int)
+    keys := call("rt.list_new", [n], Ty.List(Ty.Int))
+    mut kt := Ty.Unknown
+    c := count_open(n)
+    scopes.push(Map[str, str]())
+    declare(x.name, e, op("get", [r.id, c.i], e))
+    k := lower_value(a.value, Ty.Int)
+    scopes.pop()
+    if kv := k
+        if kv.ty == Ty.Int or kv.ty == Ty.Float or kv.ty == Ty.Str
+            kt = kv.ty
+            call(push_fn(kt), [keys, kv.id], Ty.Unit)
+        else
+            problem(
+                expr_pos(a.value),
+                "not in the native subset yet: a key of type `{kv.ty.name()}`",
+            )
+    count_close(c)
+    if kt == Ty.Unknown
+        return none
+    kind := if kt == Ty.Int then 0 else if kt == Ty.Str then 1 else 2
+    greatest := konst(if name == "max" then 1 else 0, Ty.Int)
+    idx := call("rt.list_extreme", [keys, konst(kind, Ty.Int), greatest], Ty.Int)
+    found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+    opt_at(r, found, idx, e, false, npos)
 
 ## A declared function used as a value (type.fn.2): its address. `none` if
 ## `name` isn't a function of the program.

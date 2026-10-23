@@ -9,19 +9,22 @@ INLINE_LIMIT := 40
 ## How many calls one function may have inlined into it.
 INLINE_BUDGET := 64
 
-pub fn inline_module(m Module) Module
+pub fn inline_module(mut out Module)
     mut by_name := Map[str, int]()
-    for k in 0..m.funcs.len()
-        by_name[m.funcs[k].name] = k
+    for k in 0..out.funcs.len()
+        by_name[out.funcs[k].name] = k
+    # The small functions as they are before any pass edits them: the body a
+    # call gets is the original, whichever function was finished first.
     mut leaves := Set[str]()
-    for f in m.funcs
+    mut bodies := Map[str, Func]()
+    for f in out.funcs
         if inlinable(f)
             leaves.add(f.name)
-    mut out := m
+            bodies[f.name] = f
     reserve := by_name.contains("rt.list_reserve")
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
-    grow_only := lists_only_grow(m)
+    grow_only := lists_only_grow(out)
     fills := by_name.contains("rt.fill")
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
@@ -32,7 +35,7 @@ pub fn inline_module(m Module) Module
             for b in 0..f.blocks.len()
                 at := first_call(f.blocks[b], leaves, f.name)
                 if at >= 0
-                    callee := m.funcs[by_name[f.blocks[b].insts[at].name]]
+                    callee := bodies[f.blocks[b].insts[at].name]
                     inline_call(mut f, b, at, callee, mut out.sites)
                     budget -= 1
                     changed = true
@@ -41,18 +44,20 @@ pub fn inline_module(m Module) Module
             simplify_in(mut f)
             fold_in(mut f)
             simplify_in(mut f)
-        out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(forward_loads(merge_blocks(f))) else fold_prim_addresses(
-            fold_addresses(forward_loads(fill_loops(
-                kept_lengths(
-                    bce(mark_nonneg(merge_blocks(f)), reserve, grow_only),
-                    reserve and grow_only,
-                ),
+        merge_blocks_in(mut f)
+        if f.name.starts_with("rt.")
+            f = forward_loads(f)
+        else
+            f = forward_loads(fill_loops(
+                kept_lengths(bce(mark_nonneg(f), reserve, grow_only), reserve and grow_only),
                 fills,
-            ))),
-        )
+            ))
+            fold_addresses(mut f)
+        fold_prim_addresses(mut f)
+        out.funcs[k] = f
         if not f.name.starts_with("rt.")
             out.funcs[k] = rewrite_nonneg(out.funcs[k])
-    reuse_lists(out)
+    reuse_lists(mut out)
 
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool

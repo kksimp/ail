@@ -482,3 +482,30 @@ and MSL).
 Recommendation: **a**, as a small tool in `tools/` once `matmul` is within
 1.2x of C and sized numbers and `mem` are native, then **b** when the GPU path
 exists. Measure with `tools/perfbench` (tokens per second against a C twin).
+
+## OQ-139 — Copy-on-write or last-use moves for whole-value copies (day-4 profile)
+
+Value semantics make the native compiler copy a `Func`, `Block` or `Module`
+whenever a pass binds one to a new name or takes it as a value argument.
+Stage 1 compiling `tools/garlic/garlic.ail` (callgrind, 2026-10-23, after
+making the MIR passes edit in place): about 12% of instructions are
+`copy.mir.*` and `rt.list_copy` (still `bce`, `fill_loops`, `reserve_lists`,
+`duplicate_returns`, and `Module(funcs: l.funcs)`), and the collector is about
+30% (`gc_find`, `gc_sweep`, `gc_mark`). Raising the collection threshold from
+3x to 8x live cut user time 7.1 to 5.7 s but added 2.3 s of system time and
+doubled memory, so it was reverted.
+
+- **a.** Keep rewriting passes to take `mut` and edit in place. Pro: no
+  compiler change, byte-identical output, about -13% so far. Con: each pass is
+  hand work, and a pass that reads the old value while editing needs care.
+- **b.** Last-use moves for fields and call arguments (`Module(funcs: l.funcs)`
+  where `l` is not used again; `f = pass(f)`): extend `elide_moves` beyond
+  owned locals. Pro: removes copies everywhere, including user code. Con: the
+  analysis must prove no alias or later read; a miss is a wrong result.
+- **c.** Copy-on-write lists (a reference count in the header). Pro: copies
+  become free until a write. Con: a count update on every share and write, and
+  every list store checks it; slower for the common unshared case.
+
+Recommendation: **a** for the compiler now, then **b**, which helps user
+programs too. Do **c** only if measurement shows shared-then-read lists
+dominating. Measure with callgrind on stage 1 and `tools/perfbench`.

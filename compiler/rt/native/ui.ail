@@ -1,0 +1,20 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `std.ui` clipboard (std.ui.12): without a window host the clipboard is the
+## program's own, a string kept in global slot 43 (a GC root, like the
+## others). Empty text is the same as no text.
+
+UI_CLIP := 43
+
+fn ui_clip_set(s str)
+    store64(global(UI_CLIP), str_addr(s))
+
+## The text, or 0 when there is none.
+fn ui_clip_get() int
+    p := load64(global(UI_CLIP))
+    if p == 0
+        return 0
+    if str_at(p).byte_len() == 0
+        return 0
+    p
