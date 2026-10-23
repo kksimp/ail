@@ -54,7 +54,10 @@ fn main() !
             # Test support: the unsettled edits in args[2] settled against args[1].
             print(fixrun.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
         "fix" =>
-            io.exit(load.fix_command(args[1..], path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
+            io.exit(load.fix_command(args[1..], path.join(
+                path.dir(compiler_dir()),
+                "bootstrap/src/std",
+            )))
         "fixrun" =>
             # Test support: `ail fix` with the Rust tool as the checker (tools/fix/parity.py).
             io.exit(fixrun.run_with_rust(args[1..]))

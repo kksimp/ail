@@ -34,7 +34,12 @@ fn fields_owner(id str) str?
 
 ## Every reference in `prog`, by position then id, without the prelude and
 ## the other files' (api.ref.1-2). `own_file` keeps only the first file's.
-pub fn references(prog ast.Program, symbols Map[int, str], weak Map[int, str], own_file bool) List[Ref]
+pub fn references(
+    prog ast.Program,
+    symbols Map[int, str],
+    weak Map[int, str],
+    own_file bool,
+) List[Ref]
     mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [])
     r.program()
     limit := if own_file then 1048576 else 1073741824

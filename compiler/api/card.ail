@@ -286,7 +286,12 @@ fn card_build(target str, std str, json bool) Card ! CardError
             for l in lines.keys()
                 by_line[f.base + l] = lines[l]
     prog := doc.attach_lines(loaded.program, by_line)
-    api := new_whole_api(prog, Facts(effects: analysis.effects, errors: analysis.errors, symbols: Map[int, str](), weak_symbols: Map[int, str]()))
+    api := new_whole_api(prog, Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: Map[int, str](),
+        weak_symbols: Map[int, str](),
+    ))
     mut tests := List[int]()
     mut test_lines := Set[int]()
     for i in 0..prog.fns.len()

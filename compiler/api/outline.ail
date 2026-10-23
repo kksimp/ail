@@ -168,11 +168,7 @@ fn Item.pos_key(self) int
     line * 100000 + col
 
 fn ref_json(r Ref) J
-    J.Obj([
-        kv("id", J.Str(r.id)),
-        kv("line", J.Int(r.pos.line)),
-        kv("col", J.Int(r.pos.col)),
-    ])
+    J.Obj([kv("id", J.Str(r.id)), kv("line", J.Int(r.pos.line)), kv("col", J.Int(r.pos.col))])
 
 ## What the checker knows about the program, besides its declarations.
 pub struct Facts
@@ -605,7 +601,14 @@ pub fn outline(prog ast.Program, facts Facts, path str, form Form, symbols bool)
     outline_with(new_api(prog, facts), path, form, symbols)
 
 ## `outline` with `--expanded` (ct.gen.4); `texts` are the program's file sources.
-pub fn outline_expanded(prog ast.Program, facts Facts, texts List[str], path str, form Form, symbols bool) str
+pub fn outline_expanded(
+    prog ast.Program,
+    facts Facts,
+    texts List[str],
+    path str,
+    form Form,
+    symbols bool,
+) str
     outline_with(new_expanded_api(prog, facts, texts), path, form, symbols)
 
 fn outline_with(api Api, path str, form Form, symbols bool) str
