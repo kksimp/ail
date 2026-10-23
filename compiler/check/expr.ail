@@ -1104,20 +1104,29 @@ fn Checker.match_expr(
         vs := prog.enums[enum_index].variants
         missing := [vs[k].name for k in 0..vs.len() if not cov.variants[k]]
         if missing.len() > 0
-            err_help(
-                "expr.match.2",
-                at,
-                "this `match` doesn't cover {list_names(missing)}",
-                "add an arm for each, or a `_` arm",
-            )
+            mut d := new_diag("expr.match.2", at, "this `match` doesn't cover {list_names(missing)}")
+                .with_help("add an arm for each, or a `_` arm")
+            # fix.edit.4: one arm per missing variant, each a typed hole.
+            if arms.len() > 0
+                last := arms[arms.len() - 1].pat
+                indent := " ".repeat(pattern_pos(last).col - 1)
+                mut text := ""
+                for k in 0..vs.len()
+                    if not cov.variants[k]
+                        holes := ["_" for _ in vs[k].fields].join(", ")
+                        binds := if vs[k].fields.len() == 0 then "" else "({holes})"
+                        text = "{text}{indent}{vs[k].name}{binds} => todo\n"
+                d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(pattern_pos(last), text)])
+            diags.push(d)
     # type.tuple.6: a tuple match needs an arm that takes any tuple.
     if tuple_elems(st) != none and not cov.wildcard
-        err_help(
-            "expr.match.2",
-            at,
-            "this `match` on {show(st)} doesn't cover every value",
-            "add a `_` arm, or an arm of names and `_` such as `(a, _)`",
-        )
+        mut d := new_diag("expr.match.2", at, "this `match` on {show(st)} doesn't cover every value")
+            .with_help("add a `_` arm, or an arm of names and `_` such as `(a, _)`")
+        if arms.len() > 0
+            last := arms[arms.len() - 1].pat
+            indent := " ".repeat(pattern_pos(last).col - 1)
+            d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(pattern_pos(last), "{indent}_ => todo\n")])
+        diags.push(d)
     if literal and not cov.wildcard
         both_bools := st == Ty.Bool
             and cov.literals.contains(ast.Literal.BoolLit(true))
@@ -1125,12 +1134,18 @@ fn Checker.match_expr(
         if not both_bools
             hint := if st
                 == Ty.Bool then "add the missing `true` or `false` arm" else "add a `_` arm for the other values"
-            err_help(
-                "expr.match.2",
-                at,
-                "this `match` on {show(st)} doesn't cover every value",
-                hint,
-            )
+            mut d := new_diag("expr.match.2", at, "this `match` on {show(st)} doesn't cover every value").with_help(hint)
+            if arms.len() > 0
+                last := arms[arms.len() - 1].pat
+                indent := " ".repeat(pattern_pos(last).col - 1)
+                mut text := "{indent}_ => todo\n"
+                if st == Ty.Bool
+                    text = ""
+                    for b in [true, false]
+                        if not cov.literals.contains(ast.Literal.BoolLit(b))
+                            text = "{text}{indent}{b} => todo\n"
+                d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(pattern_pos(last), text)])
+            diags.push(d)
     agree_result(agree)
 
 ## Check a pattern on a value of type `t` with literal patterns
