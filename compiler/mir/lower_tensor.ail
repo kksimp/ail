@@ -133,7 +133,7 @@ fn Lower.lower_tensor_from_fn(mut self, args List[ast.Arg], npos ast.Pos) Val?
     scopes.pop()
     mut et := Ty.Unknown
     if rv := r
-        if rv.ty == Ty.Int or rv.ty == Ty.Float
+        if rv.ty == Ty.Int or rv.ty == Ty.Float or rv.ty == Ty.F32
             et = rv.ty
             call(push_fn(et), [out, rv.id], Ty.Unit)
         else
