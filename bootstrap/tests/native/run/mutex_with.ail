@@ -1,0 +1,62 @@
+# conc.share.5, conc.share.6: Mutex methods, `with` on every way out of its
+# block, and a group that waits when its scope ends.
+fn add(m Mutex[int], n int)
+    with m as mut x
+        x += n
+
+fn first_over(m Mutex[List[int]], limit int) int
+    with m as mut xs
+        for i in 0..xs.len()
+            if xs[i] > limit
+                xs[i] = 0
+                return i
+    -1
+
+fn stop_early(m Mutex[int])
+    for i in 0..10
+        with m as mut x
+            x += 1
+            if i == 2
+                break
+
+fn bump_then_fail(m Mutex[int])
+    with m as mut x
+        x += 100
+        xs := [1]
+        print(xs[x])
+
+fn work(m Mutex[str], tag str)
+    x := m.lock()
+    m.unlock("{x}{tag}")
+
+fn scoped(out Mutex[int])
+    g := TaskGroup()
+    for i in 1..=3
+        g.add(spawn add(out, i))
+
+fn main() !
+    m := Mutex(0)
+    g := TaskGroup()
+    for i in 1..=4
+        g.add(spawn add(m, i))
+    g.wait_all()?
+    print(m.get())
+    m.set(100)
+    print(m.swap(7))
+    print(m.get())
+    stop_early(m)
+    print(m.get())
+    t := spawn bump_then_fail(m)
+    t.wait() else
+        print("trapped; value kept")
+    print(m.get())
+    l := Mutex([1, 5, 9])
+    print(first_over(l, 4))
+    print(l.get())
+    s := Mutex("")
+    work(s, "a")
+    work(s, "b")
+    print(s.get())
+    n := Mutex(0)
+    scoped(n)
+    print(n.get())

@@ -569,6 +569,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         return Ty.Atomic(e)
                     none
                 "Channel" => chan_type_of(args)
+                "Mutex" => mutex_type_of(args)
                 "Map" | "Set" => coll_type_of(name, args)
                 "tensor.Tensor" | "Tensor" => tensor_type_of(args)
                 _ =>
@@ -710,6 +711,8 @@ fn Lower.done(self) bool
 fn Lower.finish(mut self, term Term)
     if done()
         return
+    if term.kind == "return" and tk.exits.len() > 0
+        unwind_exits()
     for s in term.targets
         preds[s].push(cur)
     blocks[cur].term = term
@@ -975,6 +978,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
         lower_stmt(s)
+    end_scope_exits()
     scopes.pop()
     if result.id == -2
         return none
@@ -1090,11 +1094,13 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             if loops.len() == 0
                 problem(pos, "`break` outside a loop")
                 return
+            unwind_loop()
             jump(loops[loops.len() - 1].exit, [])
         Continue(pos) =>
             if loops.len() == 0
                 problem(pos, "`continue` outside a loop")
                 return
+            unwind_loop()
             jump(loops[loops.len() - 1].cont, [])
         Return(value, pos) =>
             if lower_fail_return(value, pos)
@@ -1119,7 +1125,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             lower_expr(e, Ty.Unit)
         Handle(value, other) => lower_handle(value, other)
         Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
-        With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
+        With(m, var, _, body, pos) => lower_with(m, var, body, pos)
         Unsafe(body, _) => lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)
 
@@ -1680,6 +1686,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if k := lookup(name)
                 if var_ty[k].is_fn()
                     return call_value(Val(id: read_var(k, cur), ty: var_ty[k]), args, npos)
+            if (name == "TaskGroup" or name == "Mutex") and tk.on and not is_rt and lookup(name) == none
+                return lower_sync_new(name, args, pos)
             if lookup(name) == none
                 if k := type_key(name)
                     return new_struct(k, args, pos)
@@ -1729,6 +1737,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 return lower_atomic_new(targs, args, pos)
             if name == "Channel" and tk.on and not is_rt
                 return lower_chan_new(targs, args, pos)
+            if name == "Mutex" and tk.on and not is_rt
+                return lower_mutex_new(targs, args, pos)
             if (name == "Map" or name == "Set") and args.len() == 0
                 return coll_ctor(name, targs, tpos)
             if name == "List" and targs.len() == 1 and args.len() == 0
@@ -1883,6 +1893,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_atomic_method(r.id, e, name, npos, args)
     if chan_elem(r.ty) != none
         return lower_chan_method(r, name, npos, args)
+    if is_sync(r.ty)
+        return lower_sync_method(r, name, npos, args)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)
     if is_sorting(name, args) and r.ty.elem() != none

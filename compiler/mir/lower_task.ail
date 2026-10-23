@@ -54,6 +54,8 @@ pub struct TaskState
     ## While a chunk function is built, its `par for`'s enclosing function.
     owner str
     accs Set[str]
+    ## The `with` blocks and task groups whose scope is open (lower_sync.ail).
+    exits List[ExitAct]
 
 pub fn new_task_state() TaskState
     TaskState(
@@ -66,6 +68,7 @@ pub fn new_task_state() TaskState
         in_chunk: false,
         owner: "",
         accs: Set[str](),
+        exits: [],
     )
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
@@ -75,6 +78,8 @@ pub fn uses_tasks(text str) bool
         or text.contains("par for")
         or text.contains("Atomic")
         or text.contains("Channel")
+        or text.contains("Mutex")
+        or text.contains("TaskGroup")
         or text.contains("proc.start")
         or text.contains("std.app")
 

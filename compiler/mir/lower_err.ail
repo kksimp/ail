@@ -420,6 +420,9 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     # `t.wait()?` on a task: a trapped task ends the program (lower_task.ail).
     if tk.on and is_wait_call(e)
         return lower_wait(e, pos)
+    if tk.on and is_wait_all(e)
+        m := wait_all_maybe(e)?
+        return propagate_result(m.val, context, pos)
     if fallible_call(e)
         v := lower_expr(e, none)?
         return propagate_result(v, context, pos)
@@ -468,6 +471,8 @@ fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
     if tk.on and is_wait_call(e)
         if m := lower_wait_try(e)
             return m
+    if tk.on and is_wait_all(e)
+        return wait_all_maybe(e)
     if fallible_call(e)
         v := lower_expr(e, none)?
         failure := call("rt.failed", [], Ty.Bool)
