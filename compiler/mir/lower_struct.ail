@@ -17,6 +17,9 @@ struct Slot
 ## that no source declares; its key can't clash with a program's own name.
 PROC_OUTPUT := "proc.Output"
 
+## The result of `proc.run_bytes` (std.proc.8): the streams undecoded.
+PROC_RAW := "proc.RawOutput"
+
 ## The child of `proc.start` (std.proc.4): pid and the three streams.
 PROC_CHILD := "proc.Child"
 
@@ -42,6 +45,7 @@ COMPRESS_ERROR := "compress.CompressError"
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
+    structs[PROC_RAW] = []
     structs[PROC_CHILD] = []
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []
@@ -101,6 +105,11 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "stdin", ty: Ty.Chan(Ty.Str)),
         Slot(name: "out", ty: Ty.Chan(Ty.Str)),
         Slot(name: "err", ty: Ty.Chan(Ty.Str)),
+    ]
+    structs[PROC_RAW] = [
+        Slot(name: "status", ty: Ty.Int),
+        Slot(name: "out", ty: Ty.Bytes),
+        Slot(name: "err", ty: Ty.Bytes),
     ]
     structs[PROC_OUTPUT] = [
         Slot(name: "status", ty: Ty.Int),

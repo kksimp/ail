@@ -75,6 +75,14 @@ fn os_lookup(mod str, name str) OsFn?
                 fails: true,
                 optional: 2,
             )
+        "proc.run_bytes" =>
+            OsFn(
+                rt: "rt.proc_run_bytes",
+                params: [s, Ty.List(s), Ty.Opt(Ty.Bytes), Ty.Opt(Ty.Int)],
+                ret: Ty.Struct(PROC_RAW),
+                fails: true,
+                optional: 2,
+            )
         "proc.start" =>
             OsFn(
                 rt: "rt.proc_start",
