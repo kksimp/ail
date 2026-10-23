@@ -7,6 +7,7 @@
 ## itself needs the interpreter and is not run yet (RR-2).
 use ast
 use derive
+use pkg
 use syntax
 
 ## One deriving `impl` to fill in.
@@ -64,6 +65,7 @@ fn expand_derives(
     tokens List[syntax.Token],
     files List[ast.SourceFile],
     std str,
+    packages pkg.Packages,
 ) Loaded ! LoadError
     prog := first.program
     mut errors := List[syntax.Diag]()
@@ -87,7 +89,7 @@ fn expand_derives(
         if not BUILTIN_GENERATORS.contains(job.generator)
             continue
         imp := prog.impls[job.imp]
-        text := run_generator(job) else err
+        written := run_generator(job) else err
             errors.push(diag(
                 "ct.derive.4",
                 imp.pos,
@@ -95,6 +97,8 @@ fn expand_derives(
                 "define the methods in this `impl`, or change `{job.generator}`",
             ))
             continue
+        # The bootstrap formats the generated text (derive.rs); `tidy` does what generators need of it.
+        text := derive.tidy(written)
         index := files.len() + gen_files.len()
         base := index * FILE_LINES
         lexed := syntax.lex(text)
@@ -148,7 +152,7 @@ fn expand_derives(
         all = next
     mut all_files := files
     all_files.extend(gen_files)
-    again := assemble(all, all_files, [], std)?
+    again := assemble(all, all_files, [], std, packages)?
     mut out := again.program
     out.generated = generated
     mut diags := remap(out, again.diags)

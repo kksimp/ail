@@ -356,17 +356,25 @@ fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
         _ => return match t
             Int | Sized(_) | Float | F32 | Bool | Str | Bytes => true
             List(e) => displayable(e, mut seen)
-            _ => text_ext_ok(t) else false
+            Map(k, v) => displayable(k, mut seen) and displayable(v, mut seen)
+            Set(e) => displayable(e, mut seen)
+            _ => displayable_other(t, mut seen)
     if sigs.contains("{key}.to_str")
         return true
     # `seen` is the path of types being checked: a type that holds itself has
-    # no finite inline text, so it needs a `to_str`.
+    # no finite inline text, so its use inside itself calls `text.T` (ADR 0864).
     if seen.contains(key)
-        return false
+        return true
     seen.add(key)
     ok := displayable_fields(key, mut seen)
     seen.remove(key)
     ok
+
+## An optional keeps `seen` (its inner type may be the one being checked); the rest ask `text_ext_ok`.
+fn Lower.displayable_other(mut self, t Ty, mut seen Set[str]) bool
+    if inner := t.opt_inner()
+        return displayable(inner, mut seen)
+    text_ext_ok(t) else false
 
 fn Lower.displayable_fields(mut self, key str, mut seen Set[str]) bool
     if cases := enums.get(key)

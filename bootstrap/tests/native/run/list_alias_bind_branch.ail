@@ -1,0 +1,20 @@
+struct S
+    sets List[List[int]]
+
+fn main()
+    s := S(sets: [[1], [2]])
+    c := s.sets.len() > 1
+    mut a := if c then s.sets[0] else [0]
+    a.push(9)
+    mut b := match s.sets.len()
+        2 => s.sets[1]
+        _ => [0]
+    b.push(8)
+    mut d := List[int]()
+    d = if c then s.sets[0] else [0]
+    d.push(7)
+    mut e := [[0]]
+    e.push(if c then s.sets[1] else [0])
+    e[1].push(6)
+    print(s.sets)
+    print("{a} {b} {d} {e}")
