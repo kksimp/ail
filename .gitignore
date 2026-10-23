@@ -9,3 +9,4 @@ __pycache__/
 bootstrap/target/
 tools/fuzz/failures/
 *.whl
+.native/

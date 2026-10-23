@@ -235,7 +235,7 @@ name without `.ail`, in the current directory). T is `x86_64-linux`,
 `aarch64-linux` or `aarch64-macos` (a signed Mach-O); the default is the
 host's. A host with no target of its own and no `--target`, or a failure to
 write the file, is reported under this rule. A natively built compiler takes the
-same command line (`NATIVE build FILE [-o OUT] [--target T] [--timeout MS]
+same command line (`NATIVE build FILE [-o OUT] [--target T] [--unsafe driver] [--timeout MS]
 [--max-memory MB]`) and writes OUT itself; `AIL_NATIVE_COMPILER=PATH ail build ...`
 checks the program, then runs PATH with the same arguments. *(ADRs 0387, 0388, 0389)*
 

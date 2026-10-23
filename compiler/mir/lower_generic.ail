@@ -606,10 +606,17 @@ fn share_trait_defaults(srcs List[Source]) List[Source]
                 for t in srcs[j].prog.traits
                     if t.name != tname
                         continue
+                    alias := use_alias(prog, srcs[j].module)
+                    tys := decl_type_names(srcs[j].prog)
                     for m in t.methods
-                        f := srcs[j].prog.fns[m]
+                        mut f := srcs[j].prog.fns[m]
                         if f.body != none and not defined.contains(f.name)
                             defined.add(f.name)
+                            # Its signature names the trait file's types
+                            # (`List[Measure]`): qualify them for this file.
+                            f.params = [qualify_param(p, tys, alias) for p in f.params]
+                            if r := f.ret
+                                f.ret = qualify_ty(r, tys, alias)
                             fns.push(f)
                             methods.push(fns.len() - 1)
             mut im2 := im
@@ -619,6 +626,42 @@ fn share_trait_defaults(srcs List[Source]) List[Source]
         prog.impls = impls
         out.push(Source(module: srcs[k].module, path: srcs[k].path, text: srcs[k].text, prog: prog))
     out
+
+## The name `prog` calls module `module` by: its `use` alias, else the
+## last part of its path.
+fn use_alias(prog ast.Program, module str) str
+    last := module.split(".").last() else module
+    for u in prog.uses
+        tail := u.path.last() else continue
+        if tail.name == last
+            if a := u.alias
+                return a.name
+    last
+
+## The structs and enums `prog` declares.
+fn decl_type_names(prog ast.Program) Set[str]
+    mut out := Set[str]()
+    for d in prog.structs
+        out.add(d.name)
+    for d in prog.enums
+        out.add(d.name)
+    out
+
+fn qualify_param(p ast.Param, tys Set[str], alias str) ast.Param
+    mut q := p
+    q.ty = qualify_ty(p.ty, tys, alias)
+    q
+
+## `t` with each type of `tys` it names written `alias.Name`.
+fn qualify_ty(t ast.TypeRef, tys Set[str], alias str) ast.TypeRef
+    mut q := t
+    match t.shape
+        Named(n, args) =>
+            name := if tys.contains(n) then "{alias}.{n}" else n
+            q.shape = ast.TypeShape.Named(name, [qualify_ty(a, tys, alias) for a in args])
+        Optional(inner) => q.shape = ast.TypeShape.Optional(qualify_ty(inner, tys, alias))
+        _ => return t
+    q
 
 ## The built-in types an `impl` may be for (trait.impl.1): their methods
 ## are keyed `int.m`, `List.m`, without a module prefix.

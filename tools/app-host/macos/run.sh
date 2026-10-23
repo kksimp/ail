@@ -46,7 +46,12 @@ if [ "${1:-}" = "--native" ]; then
     [ "$#" -ge 2 ] || { echo "usage: run.sh --native PROGRAM.ail [ARGS...]" >&2; exit 2; }
     prog="$2"; shift 2
     bin="$here/build/native-$(basename "$prog" .ail)"
-    (cd "$(dirname "$prog")" && "$root/ail" build "$(basename "$prog")" -o "$bin")
+    # Never run an older build: drop it first, and stop if this one fails.
+    rm -f "$bin"
+    if ! (cd "$(dirname "$prog")" && "$root/ail" build "$(basename "$prog")" -o "$bin") || [ ! -x "$bin" ]; then
+        echo "app-host: the native build of $prog FAILED (see the errors above); nothing was run" >&2
+        exit 1
+    fi
     AIL_APP_HOST="$exe" exec "$bin" "$@"
 fi
 

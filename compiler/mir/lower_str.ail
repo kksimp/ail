@@ -327,6 +327,14 @@ fn Lower.lower_char_from_code(mut self, args List[ast.Arg], npos ast.Pos) Val?
     t := Ty.Opt(Ty.Char)
     Val(id: call("rt.char_from_code", [k], t), ty: t)
 
+## The type an argument of `r.name(...)` is lowered against: a `str` takes
+## `str` arguments, except where the method's arguments are counts and
+## positions (`s.slice(a, if c then 3 else 2)`).
+fn str_arg_want(t Ty, name str) Ty
+    if t == Ty.Str and (name == "slice" or name == "char_at" or name == "repeat")
+        return Ty.Int
+    t
+
 ## A method of a `str`.
 fn Lower.str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     if name == "cmp" and vs.len() == 1

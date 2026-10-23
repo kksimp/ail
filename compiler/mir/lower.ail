@@ -908,6 +908,7 @@ fn Lower.failing(self) bool
 fn Lower.end_fn(mut self, name str, pos ast.Pos)
     # After a problem the MIR may be inconsistent; it is never built.
     if problems.len() > fn_problems or fn_failed
+        facts.moves = []
         return
     func := simplify(fold(simplify(elide_moves(
         Func(
@@ -1903,7 +1904,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "this method call")
-        mut arg_want := r.ty
+        mut arg_want := str_arg_want(r.ty, name)
         if e := r.ty.elem()
             arg_want = if name == "push" then e else Ty.Int
             if name == "join"
