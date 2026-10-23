@@ -1,7 +1,8 @@
 #!/bin/bash
 # The batch builder (item 253): merges every open PR that doesn't clash onto BASE, in one branch.
 #   tools/gate/batch.sh [--base REF] [--branch NAME] [--checks] [--push] [N ...]
-# With no N it takes the open PRs from `gh pr list` (oldest first). Per PR it prints one line:
+# With no N it takes the open PRs updated in the last AGE hours (default 24) from `gh pr list`,
+# oldest first; name older PRs to include them. Per PR it prints one line:
 #   IN N      merged (docs conflicts unioned, as merge-prs.sh does)
 #   HAVE N    its changes are already on BASE: close it
 #   CLASH N   a code conflict with BASE or an earlier PR in the batch; it waits for the next batch
@@ -19,7 +20,10 @@ while [ $# -gt 0 ]; do
     *) prs+=("${1%%:*}");;
   esac; shift
 done
-[ ${#prs[@]} -eq 0 ] && prs=($(gh pr list --state open --limit 200 --json number -q '.[].number' | sort -n))
+# Default: open PRs updated in the last $AGE hours (24), so stale lane PRs need naming.
+since=$(date -u -d "-${AGE:-24} hours" +%FT%TZ 2>/dev/null || date -u -v-${AGE:-24}H +%FT%TZ)
+[ ${#prs[@]} -eq 0 ] && prs=($(gh pr list --state open --limit 200 --json number,updatedAt \
+  -q ".[] | select(.updatedAt >= \"$since\") | .number" | sort -n))
 [ ${#prs[@]} -eq 0 ] && { echo "no PRs (pass numbers, or log gh in)"; exit 2; }
 git fetch -q origin "${base#origin/}" $(for n in "${prs[@]}"; do echo "+refs/pull/$n/head:refs/remotes/origin/pr$n"; done) || exit 2
 git checkout -q -B "$branch" "$base"
@@ -35,18 +39,19 @@ for n in "${prs[@]}"; do
     for f in $c; do docs "$f" || code="$code $f"; done
     if [ -n "$code" ]; then
       git merge --abort
-      who=$(for f in $code; do awk -v f="$f" '$2==f {print "#"$1}' "$files"; done | sort -u | tr '\n' ' ')
-      echo "CLASH $n:$code ${who:+(with ${who% })}${who:-(with $base)}"; continue
+      who=$(for f in $code; do awk -v f="$f" '$2==f {print "#"$1}' "$files"; done | sort -u | xargs)
+      echo "CLASH $n:$code (with ${who:-$base})"; continue
     fi
     python3 "$S/union-docs.py" $c; git add -A; git commit -q -m "Merge #$n"
   fi
-  git diff --name-only "$(git merge-base "$base" $r)" $r | sed "s|^|$n |" >> "$files"
+  # What this merge brought, so a stacked PR counts only its own increment.
+  git diff --name-only HEAD^1 HEAD | sed "s|^|$n |" >> "$files"
   in+=($n); echo "IN $n"
 done
 # Clean merges that touch the same code file: look there for duplicate arms and functions.
 awk '{print $2}' "$files" | sort | uniq -d | while read -r f; do
-  docs "$f" && continue
-  echo "WATCH $f: $(awk -v f="$f" '$2==f {print "#"$1}' "$files" | sort -u | tr '\n' ' ')"
+  case $f in *.ail|*.rs|*.sh|*.py) ;; *) continue;; esac
+  echo "WATCH $f: $(awk -v f="$f" '$2==f {print "#"$1}' "$files" | sort -u | xargs)"
   case $f in *.ail) [ -f "$f" ] && grep -oE '^(pub )?fn [A-Za-z0-9_]+' "$f" | sort | uniq -d | sed "s|^|WATCH $f duplicate |";; esac
 done
 rm -f "$files"
