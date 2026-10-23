@@ -998,7 +998,7 @@ fn api_cmd(rest List[str])
     usage := "usage: ail api [--outline] FILE [--text | --pretty] [--symbols]"
     if rest.contains("--diff")
         io.exit(api.diff_command(rest, path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
-    if rest.contains("--locals")
+    if rest.contains("--locals") or rest.contains("--type") or rest.contains("--refs")
         io.exit(api.query_command(rest, path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
     if rest.contains("--card")
         io.exit(api.card_command(rest, path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
