@@ -173,6 +173,8 @@ struct Api
     facts Facts
     ## The id of each function, by index (api.id.1-2).
     fn_ids List[str]
+    ## A package outlined whole: files after the first are not left out (api.pkg.1).
+    whole bool
 
 fn owner_name(prog ast.Program, f ast.FnDecl) str?
     match f.within
@@ -210,10 +212,21 @@ fn new_api(prog ast.Program, facts Facts) Api
     for i in 0..prog.fns.len()
         if is_impl(prog.fns[i]) and (seen.get(ids[i]) else 0) > 1
             ids[i] = fn_id(prog, prog.fns[i], true)
-    Api(prog: prog, facts: facts, fn_ids: ids)
+    Api(prog: prog, facts: facts, fn_ids: ids, whole: false)
 
 fn outside(pos ast.Pos) bool
     pos.line > 1048576
+
+## `new_api` for a package directory, outlined whole (api.pkg.1).
+fn new_whole_api(prog ast.Program, facts Facts) Api
+    mut api := new_api(prog, facts)
+    api.whole = true
+    api
+
+fn Api.hidden(self, pos ast.Pos) bool
+    if whole
+        return pos.line >= 1073741824
+    outside(pos)
 
 fn receiver_text(r ast.Receiver) str
     if r.mutable
@@ -462,7 +475,7 @@ fn Api.items(self) List[Item]
         local_types.add(e.name)
     for i in 0..prog.fns.len()
         f := prog.fns[i]
-        if outside(f.pos) or not is_top(f)
+        if hidden(f.pos) or not is_top(f)
             continue
         if o := f.owner
             if local_types.contains(o.name)
@@ -472,7 +485,7 @@ fn Api.items(self) List[Item]
                 continue
         items.push(fn_item(i))
     for s in prog.structs
-        if outside(s.pos)
+        if hidden(s.pos)
             continue
         mut extra := type_extra(s.is_error, s.is_unique)
         # contract.api.2: the invariants as written.
@@ -493,7 +506,7 @@ fn Api.items(self) List[Item]
             ],
         ))
     for e in prog.enums
-        if outside(e.pos)
+        if hidden(e.pos)
             continue
         items.push(Item(
             line: e.pos.line,
@@ -510,7 +523,7 @@ fn Api.items(self) List[Item]
             ],
         ))
     for t in prog.traits
-        if outside(t.pos)
+        if hidden(t.pos)
             continue
         items.push(Item(
             line: t.pos.line,
@@ -524,7 +537,7 @@ fn Api.items(self) List[Item]
             members: [Group(key: "methods", items: [fn_item(m) for m in t.methods])],
         ))
     for im in prog.impls
-        if outside(im.pos)
+        if hidden(im.pos)
             continue
         items.push(Item(
             line: im.pos.line,
@@ -541,7 +554,7 @@ fn Api.items(self) List[Item]
             members: [Group(key: "methods", items: impl_methods(im))],
         ))
     for c in prog.consts
-        if outside(c.pos)
+        if hidden(c.pos)
             continue
         items.push(Item(
             line: c.pos.line,

@@ -30,23 +30,23 @@ fn Decl.get(self, key str) str
 error struct DiffError
     message str
 
-fn join(xs List[str], sep str) str
+fn diff_join(xs List[str], sep str) str
     xs.join(sep)
 
-struct Flat
+struct DiffFlat
     public bool
     decl Decl
 
 ## Adds `item` and its members, each with whether it is public: written `pub`,
 ## or the variant of a public enum, a field of such a variant, or a method of
 ## a public trait.
-fn flatten(prog ast.Program, item Item, inherited bool, mut out List[Flat])
+fn flatten(prog ast.Program, item Item, inherited bool, mut out List[DiffFlat])
     public := item.line >= PRELUDE_FIRST or prog.public.contains(item.line) or inherited
     mut props := [("signature", item.signature)]
     for p in item.extra
         if DIFF_KEYS.contains(p.key)
             props.push((p.key, write_json(p.val, false, 0)))
-    out.push(Flat(
+    out.push(DiffFlat(
         public: public and item.kind != "impl",
         decl: Decl(id: item.id, kind: item.kind, props: props),
     ))
@@ -60,9 +60,9 @@ fn flatten(prog ast.Program, item Item, inherited bool, mut out List[Flat])
             flatten(prog, m, inherit, mut out)
 
 ## The public declarations of `prog` (api.diff.2).
-pub fn public_decls(prog ast.Program, facts Facts) List[Decl]
-    api := new_api(prog, facts)
-    mut all := List[Flat]()
+pub fn public_decls(prog ast.Program, facts Facts, whole bool) List[Decl]
+    api := if whole then new_whole_api(prog, facts) else new_api(prog, facts)
+    mut all := List[DiffFlat]()
     for item in api.items()
         flatten(prog, item, false, mut all)
     mut public := Set[str]()
@@ -118,36 +118,36 @@ fn added_breaks(d Decl) str
         return "new required trait method"
     ""
 
-fn shown(v str) str
+fn diff_shown(v str) str
     if v == "" then "(none)" else v
 
 fn why_json(why List[str]) str
     if why.len() == 0
         return ""
-    ",\"breaking\":[{join([quote(x) for x in why], ",")}]"
+    ",\"breaking\":[{diff_join([quote(x) for x in why], ",")}]"
 
 fn decl_line(op str, d Decl, why List[str], json bool) str
     sig := d.get("signature")
     if json
         return "\{\"change\":\"api\",\"op\":\"{op}\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"signature\":{quote(sig)}{why_json(why)}}"
-    marker := if why.len() == 0 then "" else "  breaking: {join(why, ", ")}"
+    marker := if why.len() == 0 then "" else "  breaking: {diff_join(why, ", ")}"
     sign := if op == "added" then "+" else "-"
     "{sign} {d.id} {sig}{marker}"
 
-struct Change
+struct DiffChange
     key str
     old str
     new str
 
-fn changed_line(d Decl, diffs List[Change], why List[str], json bool) str
+fn changed_line(d Decl, diffs List[DiffChange], why List[str], json bool) str
     if json
         keys := ["{quote(c.key)}:\{\"old\":{quote(c.old)},\"new\":{quote(c.new)}}" for c in diffs]
-        return "\{\"change\":\"api\",\"op\":\"changed\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"keys\":\{{join(keys, ",")}}{why_json(why)}}"
+        return "\{\"change\":\"api\",\"op\":\"changed\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"keys\":\{{diff_join(keys, ",")}}{why_json(why)}}"
     mut s := "~ {d.id}"
     if why.len() > 0
-        s = "{s}  breaking: {join(why, ", ")}"
+        s = "{s}  breaking: {diff_join(why, ", ")}"
     for c in diffs
-        s = "{s}\n    {c.key}: {shown(c.old)} -> {shown(c.new)}"
+        s = "{s}\n    {c.key}: {diff_shown(c.old)} -> {diff_shown(c.new)}"
     s
 
 ## The report of `a` (OLD) against `b` (NEW), and how many declarations
@@ -166,11 +166,11 @@ pub fn render_diff(old str, new str, a List[Decl], b List[Decl], json bool)(str,
     mut lines := List[str]()
     for d in b
         if o := old_by.get(d.id)
-            mut diffs := List[Change]()
+            mut diffs := List[DiffChange]()
             mut why := List[str]()
             for k in DIFF_KEYS
                 if o.get(k) != d.get(k)
-                    diffs.push(Change(key: k, old: o.get(k), new: d.get(k)))
+                    diffs.push(DiffChange(key: k, old: o.get(k), new: d.get(k)))
                     if breaks(k, o.get(k), d.get(k))
                         why.push(k)
             if diffs.len() > 0
@@ -215,7 +215,7 @@ fn public_api(path str, std str) List[Decl] ! DiffError
     for d in found
         if not d.warning
             return DiffError(message: "{path} has errors, so its API can't be compared; fix them first (api.diff.4)")
-    public_decls(loaded.program, Facts(effects: analysis.effects, errors: analysis.errors))
+    public_decls(loaded.program, Facts(effects: analysis.effects, errors: analysis.errors), is_dir)
 
 fn sh_quote(s str) str
     "'{s.replace("'", "'\\''")}'"
