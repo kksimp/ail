@@ -1,0 +1,6 @@
+# The client of proxy-check.sh: one GET of the URL in the first argument.
+fn main() !
+    r := net.get(env.args()[0]) else err
+        print("{err.kind}: {err.message}")
+        return
+    print("{r.status} {r.body}")
