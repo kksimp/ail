@@ -1,6 +1,7 @@
 ## Calls to the standard modules (ADR 0377), as `check/stdlib.rs`:
 ## `m.f(...)` and `m.Type(...)` (std.use.2), with each function's signature.
 use ast
+use fix
 
 ## The functions of each standard module, as `stdlib::MODULES`.
 STD_FUNCTIONS := [
@@ -91,12 +92,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
     module := std_module(head) else
         if std_like(head)
             args_only(args)
-            err_help(
-                "std.use.2",
-                at,
-                "the standard module `{head}` is not imported",
-                "add `use std.{head}` at the top of the file",
-            )
+            not_imported(head, at)
             return Ty.Unknown
         return none
     if module == "tensor" and n == "Tensor"
@@ -118,7 +114,7 @@ fn Checker.std_call(mut self, head str, n str, at ast.Pos, args List[ast.Arg], e
         # Another library's name for the same function, with the same arguments.
         renamed := other_name(module, n)
         if renamed != ""
-            diags.push(d.with_help("write `{head}.{renamed}`"))
+            diags.push(d.with_help("write `{head}.{renamed}`").with_fix("write `{renamed}`", [fix.replace(at, n, renamed)]))
             return Ty.Unknown
         if s := suggest(n, fns_of)
             d = d.with_help("did you mean `{head}.{s}`?")
@@ -456,6 +452,14 @@ fn Checker.eprint_call(mut self, args List[ast.Arg], at ast.Pos) Ty
     Ty.Unit
 
 ## Another library's name for a standard function (empty when there is none).
+## std.use.2: a standard module's name used without its import.
+fn Checker.not_imported(mut self, module str, at ast.Pos)
+    diags.push(
+        new_diag("std.use.2", at, "the standard module `{module}` is not imported")
+            .with_help("add `use std.{module}` at the top of the file")
+            .with_fix("add `use std.{module}`", [fix.insert(ast.Pos(line: 1, col: 1), "use std.{module}\n")]),
+    )
+
 fn other_name(module str, n str) str
     if module == "regex" and n == "matches"
         return "is_match"

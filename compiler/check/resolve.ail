@@ -348,13 +348,7 @@ fn Checker.std_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty?
     if types.contains(n) and not STD_MODULES.contains(head)
         return none
     if STD_MODULES.contains(head)
-        diags.push(
-            new_diag(
-                "std.use.2",
-                at,
-                "the standard module `{head}` is not imported",
-            ).with_help("add `use std.{head}` at the top of the file"),
-        )
+        not_imported(head, at)
     else
         err_help(
             "std.use.2",
