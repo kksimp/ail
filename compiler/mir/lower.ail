@@ -435,6 +435,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             global_consts.push(GlobalConst(key: "{pre}{c.name}", decl: c, file: file))
         else
             problem(c.pos, "runtime constant `{c.name}` must be a constant expression")
+    declare_inherited(prog, pre)
     for f in program_fns(prog)
         if is_test(f)
             continue

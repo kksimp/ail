@@ -177,6 +177,7 @@ fn Lower.any_tail(mut self, m str, target Sig, ps List[int])
     mut vs := [load(ps[0], 1, target.params[0])]
     for k in 1..ps.len()
         vs.push(ps[k])
+    check_requires(m, vs, ast.Pos(line: 1, col: 1))
     r := call(m, vs, target.ret)
     finish(return_of(r))
 
