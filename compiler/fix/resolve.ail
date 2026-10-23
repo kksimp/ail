@@ -1,0 +1,405 @@
+## Settling anchored edits against the source (fix.edit.2), a port of
+## `Edit::resolve` and its helpers in `bootstrap/src/diag.rs`. An edit that
+## doesn't match its anchor resolves to `none` and its fix is dropped.
+use ast
+
+## The source as lines of characters, as `settle` splits it (a final empty
+## element when the text ends with a newline, `\r` stripped).
+pub fn split_lines(src str) List[List[char]]
+    mut out := List[List[char]]()
+    for l in src.split("\n")
+        cs := l.chars()
+        if cs.len() > 0 and cs[cs.len() - 1] == '\r'
+            out.push(cs[0..cs.len() - 1])
+        else
+            out.push(cs)
+    out
+
+SYMBOLS := [
+    "..=",
+    "..",
+    "->",
+    "=>",
+    ":=",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&&",
+    "||",
+    ".",
+    ":",
+    ",",
+    "(",
+    ")",
+    "[",
+    "]",
+    "\{",
+    "}",
+    "=",
+    "<",
+    ">",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "!",
+    "?",
+    "@",
+    "|",
+]
+
+## The exclusive end of the token starting at `pos`: a word, a number, a
+## string literal or a symbol. Past the end of the line, the start itself.
+pub fn token_end(lines List[List[char]], pos ast.Pos) ast.Pos
+    if pos.line < 1 or pos.line > lines.len()
+        return pos
+    line := lines[pos.line - 1]
+    i := pos.col - 1
+    if i < 0 or i >= line.len()
+        return pos
+    c := line[i]
+    mut len := 1
+    if is_word(c)
+        len = 0
+        while i + len < line.len() and is_word(line[i + len])
+            len += 1
+    elif c == '"' or c == '\''
+        mut j := i + 1
+        while j < line.len() and line[j] != c
+            j += if line[j] == '\\' then 2 else 1
+        len = (if j + 1 < line.len() then j + 1 else line.len()) - i
+    else
+        for s in SYMBOLS
+            cs := s.chars()
+            if len == 1 and starts_at(line, i, cs)
+                len = cs.len()
+                break
+    ast.Pos(line: pos.line, col: pos.col + len)
+
+## Settle one edit.
+pub fn resolve(e Edit, lines List[List[char]]) Edit?
+    match e.anchor
+        "after_block" => resolve_after_block(e, lines)
+        "line_end" => resolve_line_end(e, lines)
+        "after_expr" => resolve_after_expr(e, lines)
+        "call" => resolve_call(e, lines)
+        "call_named" => resolve_call(e, lines)
+        "brackets" => resolve_call(e, lines)
+        "chain" => resolve_chain(e, lines)
+        "trim_before" => resolve_trim(e, lines)
+        "operands" => resolve_operands(e, lines)
+        "c_for" => resolve_c_for(e, lines)
+        "empty_decl" => resolve_empty_decl(e, lines)
+        _ => resolve_exact(e, lines)
+
+## The fixes whose edits all settle, with the settled edits.
+pub fn settle_fixes(fixes List[Fix], lines List[List[char]]) List[Fix]
+    mut out := List[Fix]()
+    for f in fixes
+        mut edits := List[Edit]()
+        mut ok := true
+        for e in f.edits
+            if r := resolve(e, lines)
+                edits.push(r)
+            else
+                ok = false
+        if ok
+            out.push(Fix(title: f.title, edits: edits))
+    out
+
+fn exact(e Edit, pos ast.Pos, end ast.Pos, text str) Edit
+    Edit(pos: pos, end: end, old: none, anchor: "exact", text: text)
+
+fn resolve_exact(e Edit, lines List[List[char]]) Edit?
+    old := e.old else return Edit(pos: e.pos, end: e.end, old: none, anchor: "exact", text: e.text)
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    pat := old.chars()
+    word_start := pat.len() > 0 and is_word(pat[0])
+    word_end := pat.len() > 0 and is_word(pat[pat.len() - 1])
+    mut i := if e.pos.col > 1 then e.pos.col - 1 else 0
+    while i < line.len()
+        if starts_at(line, i, pat)
+            before := word_start and i > 0 and is_word(line[i - 1])
+            after := word_end and i + pat.len() < line.len() and is_word(line[i + pat.len()])
+            if not before and not after
+                return exact(
+                    e,
+                    ast.Pos(line: e.pos.line, col: i + 1),
+                    ast.Pos(line: e.pos.line, col: i + pat.len() + 1),
+                    e.text,
+                )
+        i += 1
+    none
+
+struct CallArgs
+    args List[str]
+    close int
+
+## The arguments of the call whose `(` is at `open` in `line`, as written,
+## and the index of its `)`. `none` when the call doesn't close on the line.
+fn call_args(line List[char], open int) CallArgs?
+    mut depth := 0
+    mut start := open + 1
+    mut i := open
+    mut args := List[str]()
+    while i < line.len()
+        c := line[i]
+        if c == '"' or c == '\''
+            i += 1
+            while i < line.len() and line[i] != c
+                i += if line[i] == '\\' then 2 else 1
+        elif c == '(' or c == '[' or c == '{'
+            depth += 1
+        elif c == ')' or c == ']' or c == '}'
+            if depth == 0
+                return none
+            depth -= 1
+            if depth == 0
+                last := text_of(line, start, i)
+                if last.trim() != "" or args.len() > 0
+                    args.push(last.trim())
+                return CallArgs(args: args, close: i)
+        elif c == ',' and depth == 1
+            args.push(text_of(line, start, i).trim())
+            start = i + 1
+        i += 1
+    none
+
+## `a` as a method receiver: parenthesised unless it is a name, a literal
+## or a postfix chain.
+fn receiver(a str) str
+    cs := a.chars()
+    mut plain := cs.len() > 0 and not cs[0].is_digit()
+    for c in cs
+        if not (is_word(c) or c == '.' or c == '(' or c == ')' or c == '[' or c == ']' or c == '"')
+            plain = false
+    if plain then a else "({a})"
+
+fn resolve_call(e Edit, lines List[List[char]]) Edit?
+    callee0 := e.old else return none
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    start := if e.pos.col > 1 then e.pos.col - 1 else 0
+    # A qualified constructor (`date.Date(...)`) is written with its module's
+    # alias: the callee is the dotted name at `pos` whose last part is `callee`.
+    mut callee := callee0
+    if e.anchor == "call_named"
+        mut len := 0
+        while start + len < line.len() and (is_word(line[start + len]) or line[start + len] == '.')
+            len += 1
+        written := text_of(line, if start < line.len() then start else line.len(), start + len)
+        parts := written.split(".")
+        if parts[parts.len() - 1] == callee0
+            callee = written
+    name := callee.chars()
+    open := if e.anchor == "brackets" then '[' else '('
+    if not starts_at(
+        line,
+        start,
+        name,
+    ) or start + name.len() >= line.len() or line[start + name.len()] != open
+        return none
+    found := call_args(line, start + name.len()) else return none
+    args := found.args
+    mut text := ""
+    if e.anchor == "call_named"
+        names := e.text.split(",")
+        if names.len() != args.len()
+            return none
+        mut named := List[str]()
+        for k in 0..args.len()
+            named.push("{names[k]}: {args[k]}")
+        text = "{callee}({named.join(", ")})"
+    else
+        t := e.text.chars()
+        mut k := 0
+        while k < t.len()
+            c := t[k]
+            k += 1
+            if c != '$'
+                text = "{text}{c}"
+                continue
+            mut recv := false
+            if k < t.len() and t[k] == 'r'
+                recv = true
+                k += 1
+            if k >= t.len()
+                return none
+            d := t[k]
+            k += 1
+            if d == 'a'
+                text = "{text}{args.join(", ")}"
+            elif d == 'p'
+                if args.len() != 1
+                    return none
+                a := args[0]
+                cs := a.chars()
+                whole := atom_after(cs, 0)
+                if w := whole
+                    if w == cs.len()
+                        text = "{text}{a}"
+                    else
+                        text = "{text}({a})"
+                else
+                    text = "{text}({a})"
+            elif d == '%'
+                p := printf_text(args) else return none
+                text = "{text}{p}"
+            elif d == '*'
+                mut s := ""
+                for j in 0..args.len()
+                    a := args[j]
+                    if j > 0
+                        s = "{s} "
+                    n := a.chars().len()
+                    if n >= 2 and a.starts_with("\"") and a.ends_with("\"") and not a.slice(
+                        1,
+                        n - 1,
+                    ).contains("\"")
+                        s = "{s}{a.slice(1, n - 1)}"
+                    elif a.contains("\"")
+                        return none
+                    else
+                        s = "{s}\{{a}}"
+                text = "{text}\"{s}\""
+            elif d.is_digit()
+                idx := d.code() - '1'.code()
+                if idx < 0 or idx >= args.len()
+                    return none
+                a := args[idx]
+                if e.text.contains("\"\{$") and a.contains("\"")
+                    return none
+                text = "{text}{if recv then receiver(a) else a}"
+            else
+                return none
+    exact(e, e.pos, ast.Pos(line: e.pos.line, col: found.close + 2), text)
+
+fn resolve_trim(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    here := e.pos.col - 1
+    if here < 0 or here >= line.len()
+        return none
+    mut blanks := 0
+    while here - 1 - blanks >= 0
+        and (line[here - 1 - blanks] == ' ' or line[here - 1 - blanks] == '\t')
+        blanks += 1
+    exact(
+        e,
+        ast.Pos(line: e.pos.line, col: here + 1 - blanks),
+        ast.Pos(line: e.pos.line, col: here + 2),
+        e.text,
+    )
+
+fn resolve_chain(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    if e.end.line != e.pos.line
+        return none
+    mut op_len := 0
+    while e.pos.col - 1 + op_len < line.len()
+        and (line[e.pos.col - 1 + op_len] == '<' or line[e.pos.col - 1 + op_len] == '>' or line[e.pos.col - 1 + op_len] == '=' or line[e.pos.col - 1 + op_len] == '!')
+        op_len += 1
+    from := e.pos.col - 1 + op_len
+    to := e.end.col - 1
+    if to <= from or to > line.len()
+        return none
+    mid := text_of(line, from, to).trim()
+    if mid == ""
+        return none
+    exact(e, e.end, e.end, "and {mid} ")
+
+fn resolve_after_expr(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    mut depth := 0
+    mut in_str := false
+    mut i := if e.pos.col > 1 then e.pos.col - 1 else 0
+    # An operand starts with a name, a bracket or a quote, not an operator.
+    if i >= line.len()
+        return none
+    c0 := line[i]
+    if not (is_word(c0) or c0 == '(' or c0 == '[' or c0 == '"')
+        return none
+    while i < line.len()
+        c := line[i]
+        if in_str
+            if c == '\\'
+                i += 1
+            elif c == '"'
+                in_str = false
+        elif c == '"'
+            in_str = true
+        elif c == '(' or c == '[' or c == '{'
+            depth += 1
+        elif (c == ')' or c == ']' or c == '}' or c == ',') and depth == 0
+            break
+        elif c == ')' or c == ']' or c == '}'
+            depth -= 1
+        elif c == '#'
+            break
+        elif c.is_space() and depth == 0
+            break
+        i += 1
+    if depth != 0 or in_str or i == 0
+        return none
+    p := ast.Pos(line: e.pos.line, col: i + 1)
+    exact(e, p, p, e.text)
+
+fn resolve_line_end(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    mut code := line.len()
+    while code > 0 and line[code - 1].is_space()
+        code -= 1
+    if code == 0
+        return none
+    last := line[code - 1]
+    if line.contains('#') or not (last == ')' or last == ']' or is_word(last))
+        return none
+    p := ast.Pos(line: e.pos.line, col: code + 1)
+    exact(e, p, p, e.text)
+
+fn resolve_after_block(e Edit, lines List[List[char]]) Edit?
+    start := e.pos.line - 1
+    if start < 0 or start >= lines.len()
+        return none
+    indent := e.pos.col - 1
+    mut last := start
+    mut i := start + 1
+    while i < lines.len()
+        l := lines[i]
+        mut blank := true
+        for c in l
+            if not c.is_space()
+                blank = false
+        mut lead := 0
+        while lead < l.len() and l[lead] == ' '
+            lead += 1
+        if not blank and lead <= indent
+            break
+        if not blank
+            last = i
+        i += 1
+    # A final line with no newline after it is the last element of
+    # `split('\n')`: its successor doesn't exist.
+    if last + 1 < lines.len()
+        p := ast.Pos(line: last + 2, col: 1)
+        return exact(e, p, p, e.text)
+    p := ast.Pos(line: last + 1, col: lines[last].len() + 1)
+    t := e.text
+    exact(e, p, p, "\n{t.slice(0, t.chars().len() - 1)}")

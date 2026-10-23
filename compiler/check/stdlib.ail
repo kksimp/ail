@@ -497,3 +497,7 @@ fn Checker.bytes_like_call(mut self, module str, f str, args List[ast.Arg], at a
     if f == "deflate" or f == "gzip" or f == "zlib"
         return Ty.Bytes
     Ty.Str
+
+## The names of the standard modules (std.use.1), for the loader's messages.
+pub fn std_module_names() List[str]
+    [m[0] for m in STD_FUNCTIONS]

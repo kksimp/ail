@@ -923,7 +923,7 @@ fn Checker.check_prop_params(mut self, f ast.FnDecl)
                 "test.prop.2",
                 p.pos,
                 why,
-                "use `int`, `float`, `bool`, `char`, `str`, `List`, `Map`, `Set`, optionals, or structs and enums made of those",
+                "use `int`, `float`, `bool`, `char`, `str`, `bytes`, `List`, `Map`, `Set`, optionals, or structs and enums made of those",
             )
 
 ## The first part of `t` that can't be generated (test.prop.2), as written.

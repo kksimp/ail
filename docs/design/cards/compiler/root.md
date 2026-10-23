@@ -54,4 +54,6 @@ fn cli_prepare(file str) str [clock env fs io proc]  ## The cached executable of
 fn cli_prepare_cmd(rest List[str]) [clock env fs io proc]
 fn cli_run(rest List[str]) [clock env fs io proc]  ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn chop(s str) str  ## `s` without one final newline.
+fn load_dump(files List[str]) [env fs io]  ## `load FILE...`: the loaded program as `ail api --ast --program` prints it.
+fn check_cmd(rest List[str]) [env fs io]  ## `check-program [--json] FILE|DIR`: `ail check` on the native front end. The
 ```

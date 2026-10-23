@@ -2,6 +2,8 @@
 # bootstrap and compared with it by the selftest:
 #   ail run compiler check PROGRAM.json   the checker's diagnostics for a program dumped by
 #                                         `ail api --ast --program` (first line), one JSON line each
+#   ail run compiler explain [RULE] [--json]
+#                                         `ail explain`, the rule text read from docs/spec (ADR 0146)
 #   ail run compiler tokens FILE...       the AIL lexer's tokens, as `ail api --tokens FILE` (ADR 0371)
 #   ail run compiler parse FILE...        the AIL parser's tree, as `ail api --ast FILE`
 #   ail run compiler mir FILE [RT]        the native backend's MIR of a program (ADR 0384), with
@@ -11,6 +13,8 @@
 #                                         in directory RT, for x86_64-linux (the default) or
 #                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
 #                                         `ail build`)
+#   ail run compiler load FILE...         the program of `ail api --ast --program FILE` (ADR 0855)
+#   ail run compiler check-program [--json] FILE|DIR   `ail check` (ADR 0855)
 #   ail run compiler run FILE [ARGS...]   the native CLI's `ail run` (ADR 0855)
 #   ail run compiler prepare FILE         builds FILE into the cache and prints the executable's path
 #   ail run compiler build-many RT TARGET MS MB STD FILE...
@@ -19,9 +23,15 @@
 # With several files, each output starts with a line `== PATH`.
 use a64
 use ast
+use budget
 use check
+use doc
+use edit
+use fix
 use fmt
 use derive
+use explain
+use load
 use mir
 use obj
 use syntax
@@ -29,15 +39,61 @@ use x64
 
 fn main() !
     args := env.args()
-    if args.len() < 2
+    if args.len() == 0 or (args.len() < 2 and args[0] != "explain")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
         io.exit(2)
     match args[0]
         "check" =>
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
+        "fixes" =>
+            # Test support: the unsettled edits in args[2] settled against args[1].
+            print(fix.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
+        "fixrun" =>
+            # Test support: `ail fix` with the Rust tool as the checker (tools/fix/parity.py).
+            io.exit(fix.run_with_rust(args[1..]))
         "fmt" =>
             io.exit(fmt.command(args[1..]))
+        "edit" =>
+            io.exit(edit.command(args[1..]))
+        "budget" =>
+            # `budget [--budget [N]] [--from K] [--json] -- EXE ARGS...`: EXE under a budget (budget.out.1-6).
+            cut := args.index_of("--") else args.len()
+            mut opts := args[1..cut]
+            json := opts.contains("--json")
+            taken := budget.take(mut opts)
+            if taken.why != ""
+                io.eprint("error: {taken.why}")
+                io.exit(2)
+            if not taken.found or cut + 1 >= args.len()
+                io.eprint("usage: compiler budget --budget [N] [--from K] [--json] -- EXE ARGS...")
+                io.exit(2)
+            io.exit(budget.run(taken.budget, args[cut + 1], args[cut + 2..], json))
+        "docs" =>
+            # The doc comment attached to each line, as `LINE: text` (api.doc.1).
+            for path in args[1..]
+                if args.len() > 2
+                    print("== {path}")
+                docs := doc.by_line(fs.read_text(path)?)
+                for line in docs.keys().sorted()
+                    print("{line}: {syntax.quote(docs[line])}")
+        "doctests" =>
+            # The doc examples of each file as tests (test.doc.1-3): one line per example,
+            # then the source with them appended.
+            for path in args[1..]
+                text := fs.read_text(path)?
+                lexed := syntax.lex(text)
+                prog := syntax.parse(lexed.tokens).program
+                tests := doc.collect(text, prog)
+                if args.len() > 2
+                    print("== {path}")
+                for t in tests
+                    print("{t.name} {t.fn_name} fence={t.fence} expected=[{t.expected.join(", ")}]")
+                aug := doc.augment(text, tests)
+                print(aug.text)
+                print(aug.origin)
+        "explain" =>
+            io.exit(explain.command(args[1..]))
         "tokens" =>
             for path in args[1..]
                 if args.len() > 2
@@ -69,6 +125,10 @@ fn main() !
             print(obj.hex(obj.pe_image(x64.generate_windows(x64.win_sample()))))
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
+        "load" =>
+            load_dump(args[1..])
+        "check-program" =>
+            check_cmd(args[1..])
         "run" =>
             cli_run(args[1..])
         "prepare" =>
@@ -741,3 +801,39 @@ fn chop(s str) str
     if s.ends_with("\n")
         return s.chars()[..s.len() - 1].join("")
     s
+
+## `load FILE...`: the loaded program as `ail api --ast --program` prints it.
+fn load_dump(files List[str])
+    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
+    for f in files
+        if files.len() > 1
+            print("== {f}")
+        loaded := load.load(f, std) else err
+            io.eprint("{f}: error: {err.message}")
+            continue
+        print(loaded.program.to_json().to_text())
+        for d in loaded.diags
+            print("{d.pos.line}:{d.pos.col} diag {d.rule}")
+
+## `check-program [--json] FILE|DIR`: `ail check` on the native front end. The
+## diagnostics go to stderr as `ail check` prints them; the exit status is 2
+## when the program is rejected.
+fn check_cmd(rest List[str])
+    json := rest.contains("--json")
+    paths := [a for a in rest if not a.starts_with("--")]
+    if paths.len() != 1
+        io.eprint("usage: ail check [--json] FILE|DIR")
+        io.exit(2)
+    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
+    loaded := load.load(paths[0], std) else err
+        io.eprint("error: {err.message}")
+        io.exit(2)
+        return
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in check.check_program(loaded.program).diags]
+    if found.len() > 0
+        io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
+    for d in found
+        if not d.warning
+            io.exit(2)

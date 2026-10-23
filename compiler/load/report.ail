@@ -1,0 +1,230 @@
+## Reporting diagnostics (`bootstrap/src/diag.rs` `report`, `modules.rs` `report`):
+## each diagnostic against its own file, sorted by position, as text or as the
+## schema v1 JSON object of ADR 0145.
+use ast
+use check
+use syntax
+
+## SYMBOLS of the lexer, longest first: a diagnostic's span ends after one.
+SYMBOLS := [
+    "..=",
+    "..",
+    "->",
+    "=>",
+    ":=",
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "+=",
+    "-=",
+    "*=",
+    "/=",
+    "%=",
+    "&&",
+    "||",
+    ".",
+    ":",
+    ",",
+    "(",
+    ")",
+    "[",
+    "]",
+    "\{",
+    "}",
+    "=",
+    "<",
+    ">",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "!",
+    "?",
+    "@",
+    "|",
+]
+
+## One diagnostic ready to print, from the loader's or the checker's.
+pub struct Shown
+    pub rule str
+    pub pos ast.Pos
+    pub message str
+    pub help str?
+    pub notes List[check.Note]
+    pub warning bool
+    ## The titles of the fixes the diagnostic offers.
+    pub fixes List[str]
+
+## A syntax or loading diagnostic.
+pub fn shown_syntax(d syntax.Diag) Shown
+    mut help := none
+    if d.help != ""
+        help = d.help
+    mut fixes := List[str]()
+    if d.fixed and d.fix != ""
+        fixes.push(d.fix)
+    Shown(
+        rule: d.rule,
+        pos: d.pos,
+        message: d.msg,
+        help: help,
+        notes: [],
+        warning: false,
+        fixes: fixes,
+    )
+
+## A checker diagnostic.
+pub fn shown_check(d check.Diag) Shown
+    Shown(
+        rule: d.rule,
+        pos: d.pos,
+        message: d.message,
+        help: d.help,
+        notes: d.notes,
+        warning: d.warning,
+        fixes: [],
+    )
+
+## The file path and in-file position of `at`. Prelude positions stay as they
+## are, reported against the first file.
+pub fn locate(files List[ast.SourceFile], at ast.Pos)(str, ast.Pos)
+    first := if files.len() > 0 then files[0].path else ""
+    if at.line >= PRELUDE_LINE
+        return (first, at)
+    mut i := files.len()
+    while i > 0
+        i -= 1
+        if files[i].base < at.line
+            return (files[i].path, ast.Pos(line: at.line - files[i].base, col: at.col))
+    (first, at)
+
+fn index_of(files List[ast.SourceFile], at ast.Pos) int
+    if at.line >= PRELUDE_LINE
+        return 0
+    mut i := files.len()
+    while i > 0
+        i -= 1
+        if files[i].base < at.line
+            return i
+    0
+
+fn quote(s str) str
+    Json.Str(s).to_text()
+
+fn is_word(c char) bool
+    c.is_alnum() or c == '_'
+
+## The exclusive end of the token starting at `at`: a word, a number, a string
+## literal or a symbol. Past the end of the line, the start itself.
+fn token_end(lines List[str], at ast.Pos) ast.Pos
+    if at.line < 1 or at.line > lines.len()
+        return at
+    line := lines[at.line - 1].chars()
+    i := if at.col > 0 then at.col - 1 else 0
+    if i >= line.len()
+        return at
+    c := line[i]
+    mut len := 1
+    if is_word(c)
+        len = 0
+        while i + len < line.len() and is_word(line[i + len])
+            len += 1
+    elif c == '"' or c == '\''
+        mut j := i + 1
+        while j < line.len() and line[j] != c
+            j += if line[j] == '\\' then 2 else 1
+        len = (j + 1).min(line.len()) - i
+    else
+        rest := line[i..].join("")
+        for s in SYMBOLS
+            if rest.starts_with(s)
+                len = s.chars().len()
+                break
+    ast.Pos(line: at.line, col: at.col + len)
+
+## A diagnostic with its position local to a file, its span settled.
+struct Placed
+    d Shown
+    end ast.Pos
+
+## Report `diags` for the program `files` (sources `texts`, one per file):
+## text lines like `ail check`, or one JSON object per line.
+pub fn report(files List[ast.SourceFile], texts List[str], diags List[Shown], json bool) str
+    mut groups := [List[Shown]() for _ in files]
+    mut nodes := List[Shown]()
+    for d in diags
+        fi := index_of(files, d.pos)
+        mut nd := d
+        nd.pos = locate(files, d.pos).1
+        mut notes := List[check.Note]()
+        for n in d.notes
+            mut message := n.message
+            ni := index_of(files, n.pos)
+            if ni != fi and not files[ni].path.starts_with("gen:")
+                message = "{message} (in {files[ni].path})"
+            notes.push(check.Note(pos: locate(files, n.pos).1, message: message))
+        nd.notes = notes
+        groups[fi].push(nd)
+    mut out := List[str]()
+    for fi in 0..files.len()
+        if groups[fi].len() == 0
+            continue
+        sorted := groups[fi].sorted(by: |d| d.pos.line * 100000 + d.pos.col)
+        text := if fi < texts.len() then texts[fi] else ""
+        lines := [chop_cr(l) for l in text.split("\n")]
+        for d in sorted
+            mut shown := d
+            if shown.help == none and not shown.warning
+                shown.help = default_help(shown.rule)
+            end := token_end(lines, shown.pos)
+            if json
+                out.push(to_json(shown, end, files[fi].path))
+            else
+                out.push(to_text(shown, files[fi].path, text))
+    out.join("\n")
+
+fn severity(d Shown) str
+    if d.warning then "warning" else "error"
+
+fn to_text(d Shown, path str, text str) str
+    mut lines := ["{path}:{d.pos.line}:{d.pos.col}: {severity(d)}[{d.rule}]: {d.message}"]
+    src := text.lines()
+    if d.pos.line >= 1 and d.pos.line <= src.len()
+        lines.push("    {src[d.pos.line - 1]}")
+        pad := spaces(if d.pos.col > 1 then d.pos.col - 1 else 0)
+        lines.push("    {pad}^")
+    if h := d.help
+        lines.push("help: {h}")
+    for n in d.notes
+        lines.push("note: {path}:{n.pos.line}:{n.pos.col}: {n.message}")
+    for f in d.fixes
+        if d.help != f
+            lines.push("fix: {f}")
+    lines.join("\n")
+
+## One diagnostic as a schema v1 JSON object (ADR 0145), without fixes.
+fn to_json(d Shown, end ast.Pos, path str) str
+    mut s := "\{\"api\":1,\"severity\":{quote(severity(d))},\"rule\":{quote(d.rule)},\"file\":{quote(path)},\"line\":{d.pos.line},\"col\":{d.pos.col},\"message\":{quote(d.message)}"
+    if h := d.help
+        s = "{s},\"help\":{quote(h)}"
+    s = "{s},\"end_line\":{end.line},\"end_col\":{end.col}"
+    if d.notes.len() > 0
+        ns := [
+            "\{\"line\":{n.pos.line},\"col\":{n.pos.col},\"message\":{quote(n.message)}}"
+            for n in d.notes
+        ]
+        s = "{s},\"notes\":[{ns.join(",")}]"
+    "{s}}"
+
+fn chop_cr(l str) str
+    if r := l.strip_suffix("\r")
+        return r
+    l
+
+fn spaces(n int) str
+    mut out := ""
+    for _ in 0..n
+        out = "{out} "
+    out

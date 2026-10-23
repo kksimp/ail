@@ -208,6 +208,13 @@ regex engine is written.
   form submission can POST), external script fetches, `window.open`,
   cookies and dialogs are requests in `Vm.host_requests`; the engine does
   no I/O.
+- **`fetch` and XMLHttpRequest** are JavaScript over one native hook
+  (`vm/netapi.ail`). A request is a `fetch` host request with a number; the
+  browser makes it (cookies for the page's own origin only, CORS by
+  `Access-Control-Allow-Origin`, no preflight or custom headers) and hands
+  the JSON reply to the live engine (`Session.reply`), which runs the
+  page's callback. No script runs twice. Pages restored by Back have no
+  engine, so they make no requests.
 - **Virtual time.** Timers run on the fixed clock in order of due time,
   then of creation, until the page's time budget (a second by default) or
   a task cap; `performance.now()` counts from the page's start. A page with
@@ -238,6 +245,40 @@ regex engine is written.
 - `Function.prototype.toString` returns a function's source text
   (§20.2.3.5): the parser keeps each function's and class's text, so code
   that rebuilds functions from their source with `eval` works.
+- `MutationObserver` (DOM §4.3, `vm/mutation.ail`): every logged change is
+  offered to the observers; records for `childList`, `attributes` (with
+  `attributeFilter`) and `characterData`, with `subtree`, reach the callback
+  through a marker microtask queued at the first record, so they run in
+  queue order with promise jobs. `append(a, b)` makes one record. Not yet:
+  `oldValue`, sibling links, `attributeOldValue`. `el.style.cssText`,
+  `dataset` writes, `outerHTML=`, `replaceChildren`, `normalize`,
+  `template.content` and `defaultValue` follow the DOM and HTML specs; the
+  page tests `mutation` and `observer` match Chromium's output.
+- `WeakMap`, `WeakSet`, `WeakRef` and `FinalizationRegistry` (`vm/weak.ail`)
+  are a Map and Set that only take objects, a `deref` that always answers
+  and a registry that never calls back: nothing is collected while scripts
+  run. `IntersectionObserver` and `ResizeObserver` take a callback and never
+  fire, since Garlic has no scrolling or resizing the page can see.
+- `Proxy` and `Reflect` (`vm/proxy.ail`, ECMA-262 §10.5, §28.1): a proxy is
+  an object of class `Proxy` holding its target and handler; `get`, `set`,
+  `has` (the `in` operator), `deleteProperty`, `apply` and `construct`
+  traps run, and each falls through to the target without its trap. Own
+  keys, descriptors, the prototype and `Object.keys` read the target
+  without calling `ownKeys`, `getOwnPropertyDescriptor` or `getPrototypeOf`
+  traps. No `Proxy.revocable`, and no invariant checks on trap results.
+- `AbortController` and `AbortSignal` (`vm/abort.ail`): `abort()` sets
+  `aborted` and `reason` and runs the signal's `abort` listeners, then
+  `onabort`. No `AbortSignal.abort()`/`timeout()`/`any()`, and nothing
+  aborts a pending request yet (`fetch` belongs to lane 177).
+- Focus and keys (`vm/focus.ail`): `el.focus()`/`blur()` and Tab in Garlic
+  move `document.activeElement` and fire `focus`, `focusin`, `blur`,
+  `focusout`. Typing into a field fires `keydown` (cancellable: that
+  character is dropped), `input` and `keyup` per character, then `change`;
+  Enter fires `keydown`/`keyup` first, and a cancelled `keydown` stops the
+  form from submitting. A click in Garlic fires `mousedown`, focus on the
+  control pressed, `mouseup` and `click` (a cancelled `mousedown` only keeps
+  the focus). `KeyboardEvent` and `MouseEvent` start with empty
+  `key`/`code` and zero coordinates, as in Chromium.
 
 ## Generators and async functions
 
