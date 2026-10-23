@@ -328,3 +328,10 @@ fn Lower.list_method(
         call(push_fn(el), [r.id, convert(item, el, npos)], Ty.Unit)
         return Val(id: -1, ty: Ty.Unit)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+
+## An empty list passed to a typed parameter takes its element type (type.coll.6).
+fn Lower.retype_arg(mut self, arg ast.Expr, v Val, param Ty)
+    pe := param.elem() else return
+    ve := v.ty.elem() else return
+    if ve.is_unknown() and not pe.is_unknown()
+        retype(arg, param)
