@@ -221,7 +221,10 @@ fn Lower.tensor_map(mut self, r Val, a ast.Arg, npos ast.Pos) Val?
             rt = vv.ty
             call(push_fn(rt), [out, vv.id], Ty.Unit)
         else
-            problem(expr_pos(a.value), "`.map()` to a `{vv.ty.name()}` isn't in the native subset yet")
+            problem(
+                expr_pos(a.value),
+                "`.map()` to a `{vv.ty.name()}` isn't in the native subset yet",
+            )
     count_close(c)
     if rt == Ty.Unknown
         return none
