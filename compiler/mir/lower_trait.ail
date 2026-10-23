@@ -33,6 +33,10 @@ pub struct Traits
     ## The object of the `ref` the method call being lowered is on, or -1
     ## (own.ref.7, lower_gtd_refcell.ail).
     ref_obj int
+    ## The types whose `ref` text is being checked (`ref_text_ok`).
+    ref_seen Set[str]
+    ## How many of `texts` `gen_texts` has generated.
+    texts_done int
 
 pub fn new_traits() Traits
     Traits(
@@ -45,6 +49,8 @@ pub fn new_traits() Traits
         stmt_pos: none,
         texts: [],
         ref_obj: -1,
+        ref_seen: Set[str](),
+        texts_done: 0,
     )
 
 ## Record the traits of a file and the structs implementing them, in order;
@@ -150,7 +156,7 @@ fn Lower.gen_dispatch(mut self)
 ## type that holds itself (a tree, `Json`) calls itself, so a text is never
 ## expanded in place; a body can ask for more, so go until none is left.
 fn Lower.gen_texts(mut self)
-    mut k := 0
+    mut k := traits.texts_done
     while k < traits.texts.len()
         key := traits.texts[k]
         k += 1
@@ -163,6 +169,7 @@ fn Lower.gen_texts(mut self)
         for b in 0..blocks.len()
             sealed[b] = true
         end_fn("text.{key}", ast.Pos(line: 1, col: 1))
+    traits.texts_done = k
 
 ## The call of the default text function of `key`'s value `v`, asking for the
 ## function the first time.

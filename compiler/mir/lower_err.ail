@@ -879,6 +879,7 @@ fn Lower.display_call(mut self, v Val) int?
         Enum(k) => k
         Tuple => return tuple_text(v)
         Bytes => return call("rt.bytes_show", [v.id], Ty.Str)
+        Ref => return if text_ok(v.ty) then ref_text(v.ty, v.id) else none
         Any(t) => return any_text(t, v)
         List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none

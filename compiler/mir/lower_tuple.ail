@@ -455,7 +455,7 @@ fn has_tuple(t Ty) bool
     if t.opt_inner() != none or t.is_coll()
         return true
     match t
-        Struct | Enum | Bytes => true
+        Struct | Enum | Bytes | Ref => true
         _ => false
 
 ## The text of a value of a type `text_ok` accepts, as inside a tuple or a
