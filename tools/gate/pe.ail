@@ -60,8 +60,16 @@ fn headers(mut r Run, b bytes)
     r.same("sixteen data directories", u32_at(b, pe + 24 + 108), 16)
     dirs := pe + 24 + 112
     r.same("import directory is in .idata", u32_at(b, dirs + 8), 0x3000)
-    r.same("three descriptors: KERNEL32.dll, WS2_32.dll and the null entry", u32_at(b, dirs + 12), 60)
-    r.same("address table starts after the descriptors and KERNEL32 lookup table", u32_at(b, dirs + 96), 0x305c)
+    r.same(
+        "three descriptors: KERNEL32.dll, WS2_32.dll and the null entry",
+        u32_at(b, dirs + 12),
+        60,
+    )
+    r.same(
+        "address table starts after the descriptors and KERNEL32 lookup table",
+        u32_at(b, dirs + 96),
+        0x305c,
+    )
     r.same("KERNEL32: three entries and a null; WS2_32: one and a null", u32_at(b, dirs + 100), 48)
 
 fn imports(mut r Run, b bytes)

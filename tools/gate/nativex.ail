@@ -161,11 +161,23 @@ fn Run.batch(mut self)
             red("batch build", "{sample[k]}: the batch build differs from `ail build`")
 
 ## One program of tests/native/run against `ail run`: stdout, exit status, and the trap report.
-fn nx_match(case str, scratch_dir str, exe str, target str, runner str, root str, tmp str, prebuilt bool) str?
+fn nx_match(
+    case str,
+    scratch_dir str,
+    exe str,
+    target str,
+    runner str,
+    root str,
+    tmp str,
+    prebuilt bool,
+) str?
     stem := stem_of(case)
     sh("rm -rf {scratch_dir}; mkdir -p {scratch_dir}")
     if not prebuilt
-        b := ail("", "build {case} -o {exe}{if target.is_empty() then "" else " --target {target}"}")
+        b := ail(
+            "",
+            "build {case} -o {exe}{if target.is_empty() then "" else " --target {target}"}",
+        )
         if b.status != 0
             return "{case}: `ail build` failed:\n{b.err}"
     envs := "AIL_TEST_A={scratch_dir}/a.txt AIL_TEST_B={scratch_dir}/b.txt AIL_TEST_DIR={scratch_dir}/d1 AIL_TEST_MID={scratch_dir}/d1/d2 AIL_TEST_DEEP={scratch_dir}/d1/d2/d3 AIL_TEST_IN={scratch_dir}/d1/f.txt"
@@ -189,7 +201,10 @@ fn nx_batch(chunk List[str], target str, root str, tmp str, tag str) bool
         if ail("", "check {f}").status != 0
             return false
     tgt := if target.is_empty() then host_target() else target
-    r := ail("", "run compiler build-many compiler/rt/native {tgt} 0 0 {root}/bootstrap/src/std {chunk.join(" ")}")
+    r := ail(
+        "",
+        "run compiler build-many compiler/rt/native {tgt} 0 0 {root}/bootstrap/src/std {chunk.join(" ")}",
+    )
     if r.status != 0
         return false
     parts := r.out.split("== ")
@@ -198,7 +213,10 @@ fn nx_batch(chunk List[str], target str, root str, tmp str, tag str) bool
     for k in 0..chunk.len()
         sect := parts[k + 1]
         nl := sect.find("\n") else 0
-        fs.write_text("{tmp}/{tag}-{k}.hex", squeeze(sect.slice(nl + 1, sect.len()))) else return false
+        fs.write_text("{tmp}/{tag}-{k}.hex", squeeze(sect.slice(
+            nl + 1,
+            sect.len(),
+        ))) else return false
         exe := "{tmp}/exe-{target}-{stem_of(chunk[k])}"
         w := sh("python3 -I -c 'import sys; sys.stdout.buffer.write(bytes.fromhex(sys.stdin.read()))' < {tmp}/{tag}-{k}.hex > {exe} && chmod +x {exe}")
         if w.status != 0
@@ -210,7 +228,16 @@ fn nx_worker(chunk List[str], k int, target str, runner str, root str, tmp str) 
     prebuilt := nx_batch(chunk, target, root, tmp, "w{k}-{target}")
     for case in chunk
         stem := stem_of(case)
-        if why := nx_match(case, "{tmp}/scratch-{target}-{stem}", "{tmp}/exe-{target}-{stem}", target, runner, root, tmp, prebuilt)
+        if why := nx_match(
+            case,
+            "{tmp}/scratch-{target}-{stem}",
+            "{tmp}/exe-{target}-{stem}",
+            target,
+            runner,
+            root,
+            tmp,
+            prebuilt,
+        )
             fails.push(why)
     fails
 

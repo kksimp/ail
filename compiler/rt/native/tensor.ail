@@ -868,15 +868,6 @@ fn tensor_shape_of_len(n int) List[int]
     store64(load64(q + 16), n)
     xs
 
-## `tensor.zeros(shape)`: all zeros (the words of `0` and `0.0` are the same).
-fn tensor_zeros(shape List[int], kind int) int
-    sp := list_addr(shape)
-    rank := load64(sp)
-    n := tensor_dims_count(shape)
-    t := tensor_new(kind, rank, n)
-    tensor_copy_words(t + 32, load64(sp + 16), rank)
-    t
-
 ## `t.reshape(shape)` failing (std.tensor.3), or 0.
 fn tensor_reshape_fault(t int, shape List[int]) int
     shape_fault_n(load64(t + 16), shape)

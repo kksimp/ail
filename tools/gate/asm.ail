@@ -119,7 +119,12 @@ fn norm(text str) List[str]
     t = t.replace("-", " -")
     mut out := List[str]()
     for w in t.words()
-        if w == "qword" or w == "dword" or w == "word" or w == "byte" or w == "ptr" or w == "xmmword"
+        if w == "qword"
+            or w == "dword"
+            or w == "word"
+            or w == "byte"
+            or w == "ptr"
+            or w == "xmmword"
             continue
         v := parse_num(w) else
             out.push(w)
@@ -137,7 +142,10 @@ fn expected(intent str) List[str]
 
 ## The x86-64 instructions objdump prints for `bytes`, Intel syntax.
 fn objdump_x86(bs List[u8], file str) Lines
-    fs.write_bytes(file, bytes.from_list(bs)) else return Lines(items: [], err: "could not write {file}")
+    fs.write_bytes(file, bytes.from_list(bs)) else return Lines(
+        items: [],
+        err: "could not write {file}",
+    )
     r := sh("objdump -D -b binary -m i386:x86-64 -M intel {file}")
     if r.status != 0
         return Lines(items: [], err: r.err)
@@ -146,7 +154,9 @@ fn objdump_x86(bs List[u8], file str) Lines
         # `   0:\t48 89 c1 \tmov    rcx,rax`; long instructions continue their bytes on lines
         # with no text.
         fields := line.split("\t")
-        if fields.len() >= 3 and fields[0].trim_end().ends_with(":") and not fields[2].trim().is_empty()
+        if fields.len() >= 3
+            and fields[0].trim_end().ends_with(":")
+            and not fields[2].trim().is_empty()
             # A RIP-relative operand is followed by objdump's `# 0xADDR` comment.
             text := fields[2].split(" #")[0]
             insns.push(text.trim())
@@ -185,7 +195,9 @@ fn simulate_const(lines List[str], d int) Value
         imm := parse_imm(ops[1]) else return Value(v: 0, err: "bad immediate in {line}")
         mut shift := 0
         if ops.len() > 2
-            shift = parse_imm(ops[2].trim().replace("lsl ", "")) else return Value(v: 0, err: "bad shift in {line}")
+            shift = parse_imm(
+                ops[2].trim().replace("lsl ", ""),
+            ) else return Value(v: 0, err: "bad shift in {line}")
         part := imm.shl(shift)
         if mnemonic == "movz"
             reg = part
@@ -203,7 +215,12 @@ fn x86(tmp str) List[str]
     if not have("objdump")
         print("skipping x86-64: objdump is not installed")
         return []
-    driven := run_driver("x64", "compiler/x64/asm.ail", "bootstrap/tests/native/asm/x64_encoder.ail", "{tmp}/x64")
+    driven := run_driver(
+        "x64",
+        "compiler/x64/asm.ail",
+        "bootstrap/tests/native/asm/x64_encoder.ail",
+        "{tmp}/x64",
+    )
     if not driven.err.is_empty()
         return ["x86-64 driver: {driven.err}"]
     cases := driven.items
@@ -228,7 +245,12 @@ fn a64(tmp str) List[str]
     if not have("llvm-mc")
         print("skipping ARM64: llvm-mc is not installed")
         return []
-    driven := run_driver("a64", "compiler/a64/asm.ail", "bootstrap/tests/native/asm/a64_encoder.ail", "{tmp}/a64")
+    driven := run_driver(
+        "a64",
+        "compiler/a64/asm.ail",
+        "bootstrap/tests/native/asm/a64_encoder.ail",
+        "{tmp}/a64",
+    )
     if not driven.err.is_empty()
         return ["ARM64 driver: {driven.err}"]
     cases := driven.items
