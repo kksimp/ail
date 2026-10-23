@@ -266,6 +266,10 @@ regex engine is written.
   keys, descriptors, the prototype and `Object.keys` read the target
   without calling `ownKeys`, `getOwnPropertyDescriptor` or `getPrototypeOf`
   traps. No `Proxy.revocable`, and no invariant checks on trap results.
+- `AbortController` and `AbortSignal` (`vm/abort.ail`): `abort()` sets
+  `aborted` and `reason` and runs the signal's `abort` listeners, then
+  `onabort`. No `AbortSignal.abort()`/`timeout()`/`any()`, and nothing
+  aborts a pending request yet (`fetch` belongs to lane 177).
 
 ## Generators and async functions
 
