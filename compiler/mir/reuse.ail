@@ -49,7 +49,8 @@ pub fn reuse_lists(mut m Module)
                     changed = true
     for k in 0..m.funcs.len()
         if not m.funcs[k].name.starts_with("rt.")
-            m.funcs[k] = reuse_in(m.funcs[k], escaping(m.funcs[k], by_name, free))
+            esc := escaping(m.funcs[k], by_name, free)
+            reuse_in(mut m.funcs[k], esc)
 
 ## The values of a function grouped into lists that may be the same object,
 ## and whether each group escapes.
@@ -118,14 +119,13 @@ fn keeps_nothing(i Inst, a int, by_name Map[str, int], free List[List[bool]]) bo
 ## The pass on one function: each list made in a loop that no earlier
 ## iteration's list can still be reached through is made once in the
 ## preheader and emptied where it was made.
-fn reuse_in(f Func, e Escape) Func
-    loops := find_loops(f)
+fn reuse_in(mut g Func, e Escape)
+    loops := find_loops(g)
     mut carried := Set[int]()
     for lp in loops
-        for p in f.blocks[lp.header].params
+        for p in g.blocks[lp.header].params
             carried.add(e.root(p))
-    mut g := f
-    for b in 0..f.blocks.len()
+    for b in 0..g.blocks.len()
         mut k := 0
         while k < g.blocks[b].insts.len()
             i := g.blocks[b].insts[k]
@@ -192,7 +192,6 @@ fn reuse_in(f Func, e Escape) Func
                     insts.push(g.blocks[b].insts[x])
             g.blocks[b].insts = insts
             k += 2
-    g
 
 ## The innermost loop that holds block `b`.
 fn innermost(loops List[LoopInfo], b int) LoopInfo?
