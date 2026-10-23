@@ -1,0 +1,26 @@
+# == on structs, enums and lists holding optionals (native: eq.T compares a T? field).
+struct Scene
+    name str
+    tag str?
+    n int?
+    f float?
+
+enum Kind
+    A(x int?)
+    B(s str?)
+
+fn main()
+    a := Scene(name: "a", tag: "t", n: 1, f: 1.5)
+    b := Scene(name: "a", tag: "t", n: 1, f: 1.5)
+    c := Scene(name: "a", tag: none, n: 1, f: 1.5)
+    d := Scene(name: "a", tag: "t", n: none, f: 1.5)
+    print(a == b)
+    print(a == c)
+    print(c == c)
+    print(a != d)
+    print(Kind.A(x: 1) == Kind.A(x: 1))
+    print(Kind.A(x: 1) == Kind.A(x: none))
+    print(Kind.B(s: "q") == Kind.B(s: "q"))
+    print(Kind.B(s: none) == Kind.B(s: none))
+    print([a, c] == [b, c])
+    print([a, c] == [c, a])
