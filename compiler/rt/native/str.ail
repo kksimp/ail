@@ -148,6 +148,9 @@ fn str_trap(kind int, a int, b int, n int, head str, tail str)
     elif kind == 7
         out_str("the limit of `split` must be at least 1, not ")
         out_int(a)
+    elif kind == 8
+        out_str("`bytes.zeros` needs a length from 0 to 2^32, not ")
+        out_int(a)
     else
         out_byte(96)
         if a == 0
@@ -470,7 +473,7 @@ fn str_split_n(s str, sep str, limit int, head str, tail str) List[int]
     out := list_new(4)
     mut last := 0
     mut at := bytes_find(p, q, 0)
-    while at >= 0 and load64(out) + 1 < limit
+    while at >= 0 and out.len() + 1 < limit
         list_push(out, str_to_obj(str_sub(p, last, at)))
         last = at + m
         at = bytes_find(p, q, last)

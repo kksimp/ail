@@ -10,7 +10,7 @@ fn Lower.text_ext_ok(mut self, t Ty) bool?
     if inner := t.opt_inner()
         return text_ok(inner)
     match t
-        Char => true
+        Char | Bytes => true
         Map(k, v) => text_ok(k) and text_ok(v)
         Set(e) => text_ok(e)
         _ => none
@@ -21,6 +21,7 @@ fn Lower.text_ext(mut self, t Ty, x int) int
         return opt_text(inner, x)
     match t
         Char => call("rt.char_quoted", [x], Ty.Str)
+        Bytes => call("rt.bytes_quoted", [x], Ty.Str)
         Map(k, v) => table_text(x, k, v)
         Set(e) => table_text(x, e, none)
         _ => str_value("")
