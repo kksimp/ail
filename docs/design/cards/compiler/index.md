@@ -11,7 +11,7 @@ edit  45 items
 explain  37 items
 fix  80 items
 fmt  63 items
-mir  377 items
+mir  376 items
 obj  58 items
 syntax  100 items
 x64  75 items
