@@ -114,3 +114,28 @@ fn str_quoted(s str) str
     sb_reset()
     os_put_quoted(s)
     sb_str()
+
+## `c` as the interpreter shows a character inside a value: in single quotes,
+## escaped (`out_escaped` in str.ail, as text).
+fn char_quoted(c int) str
+    sb_reset()
+    sb_byte(39)
+    if c == 92 or c == 39
+        sb_byte(92)
+        sb_byte(c)
+    elif c == 10
+        sb_text("\\n")
+    elif c == 9
+        sb_text("\\t")
+    elif c == 13
+        sb_text("\\r")
+    elif c == 0
+        sb_text("\\0")
+    elif c < 32 or c >= 127 and c < 160
+        os_put_u()
+        put_hex(c)
+        sb_byte(125)
+    else
+        sb_add_char(c)
+    sb_byte(39)
+    sb_str()

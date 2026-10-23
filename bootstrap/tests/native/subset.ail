@@ -12,3 +12,6 @@ fn main()
     print(s)
     m := {"a": 1}
     print(m == {"a": 1})
+
+unique struct Lock
+    id int

@@ -1813,6 +1813,7 @@ fn out_fn(t Ty) str
         Atomic(e) => if e == Ty.Bool then "rt.out_atomic_bool" else "rt.out_atomic_int"
         Char => "rt.out_char"
         Tensor(_) => "rt.out_tensor"
+        Bytes => "rt.out_bytes_lit"
         List(e) =>
             match e
                 Int | Sized(_) => "rt.out_list_int"

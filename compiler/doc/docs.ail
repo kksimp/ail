@@ -1,0 +1,78 @@
+## Documentation comments (lex.comment.2, api.doc.1-2): each run of `##`
+## lines attaches to the declaration on the line right after it. A port of
+## `bootstrap/src/docs.rs`. The lexer drops comments, so this reads the source
+## text again rather than threading comments through the token stream.
+use ast
+
+## The source line without a trailing `\r` and leading blanks.
+pub fn trimmed_line(raw str) str
+    mut cs := raw.chars()
+    if cs.len() > 0 and cs[cs.len() - 1] == '\r'
+        cs.remove_at(cs.len() - 1)
+    mut at := 0
+    while at < cs.len() and (cs[at] == ' ' or cs[at] == '\t')
+        at += 1
+    cs[at..].join("")
+
+## The text of a `##` line after the marker: one space dropped, trailing blanks gone.
+pub fn doc_text(line str) str
+    rest := line.strip_prefix("##") else ""
+    after := rest.strip_prefix(" ") else rest
+    after.trim_end()
+
+## The doc comment ending on the line before each line, by that line's number.
+## A blank line or a plain `#` comment ends a run (api.doc.1).
+pub fn by_line(src str) Map[int, str]
+    mut docs := Map[int, str]()
+    mut run := List[str]()
+    mut i := 0
+    for raw in src.split("\n")
+        i += 1
+        line := trimmed_line(raw)
+        if line.starts_with("##")
+            run.push(doc_text(line))
+            continue
+        if run.len() > 0 and line != "" and not line.starts_with("#")
+            docs[i] = run.join("\n")
+        run.clear()
+    docs
+
+## The doc of the declaration at `pos`, unless it is in the prelude.
+fn doc_at(docs Map[int, str], pos ast.Pos) str?
+    if pos.line >= 1073741824
+        return none
+    docs.get(pos.line)
+
+## Fill the `doc` of every declaration in the program (not the prelude)
+## from the source text it was parsed from (api.doc.2).
+pub fn attach(prog ast.Program, src str) ast.Program
+    attach_lines(prog, by_line(src))
+
+## Like `attach` for docs already keyed by program line, as in a package of
+## several files (api.card.1).
+pub fn attach_lines(prog ast.Program, docs Map[int, str]) ast.Program
+    mut p := prog
+    for i in 0..p.fns.len()
+        p.fns[i].doc = doc_at(docs, p.fns[i].pos)
+    for i in 0..p.structs.len()
+        p.structs[i].doc = doc_at(docs, p.structs[i].pos)
+        for j in 0..p.structs[i].fields.len()
+            p.structs[i].fields[j].doc = doc_at(docs, p.structs[i].fields[j].pos)
+    for i in 0..p.enums.len()
+        p.enums[i].doc = doc_at(docs, p.enums[i].pos)
+        for j in 0..p.enums[i].variants.len()
+            p.enums[i].variants[j].doc = doc_at(docs, p.enums[i].variants[j].pos)
+            vline := p.enums[i].variants[j].pos.line
+            for k in 0..p.enums[i].variants[j].fields.len()
+                # A variant's fields share its line; only a field on a line
+                # of its own could carry a doc of its own.
+                if p.enums[i].variants[j].fields[k].pos.line != vline
+                    p.enums[i].variants[j].fields[k].doc = doc_at(
+                        docs,
+                        p.enums[i].variants[j].fields[k].pos,
+                    )
+    for i in 0..p.traits.len()
+        p.traits[i].doc = doc_at(docs, p.traits[i].pos)
+    for i in 0..p.consts.len()
+        p.consts[i].doc = doc_at(docs, p.consts[i].pos)
+    p
