@@ -634,6 +634,7 @@ fn Parser.header_tail(mut self, after str) Header
             fixed: true,
             help: "write the test as a method on the collection: `xs.contains(x)`, `m.contains(key)`, `s.contains(sub)`",
             fix: "",
+            edits: [],
         ))
         return Header.Reported
     if s == "\{" and (tag_at(1) == "nl" or line_ends_at(k0))

@@ -385,7 +385,7 @@ fn Parser.line_ends_at(self, k int) bool
 # ---- Diagnostics ----
 
 fn Parser.diag(mut self, rule str, pos ast.Pos)
-    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: ""))
+    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: "", edits: []))
 
 ## A diagnostic with a fix. The same mistake again on one line is one
 ## diagnostic with one fix (gram.rec.1): `msg` identifies the mistake.
@@ -394,11 +394,11 @@ fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str, help str, title st
         last := diags[diags.len() - 1]
         if last.rule == rule and last.pos.line == pos.line and last.msg == msg and last.fixed
             return
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title))
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title, edits: []))
 
 ## A diagnostic with the bootstrap's message, help line and fix title.
 fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: fix))
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: fix, edits: []))
 
 fn Parser.int_too_big(mut self, pos ast.Pos)
     error_text(
@@ -1632,6 +1632,7 @@ fn Parser.comparison_expr(mut self) ast.Expr?
             fixed: true,
             help: "combine them with `and`, e.g. `a < b and b < c`",
             fix: "",
+            edits: [],
         ))
         return none
     ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
@@ -2030,6 +2031,7 @@ fn Parser.interpolation(mut self, parts List[Part], pos ast.Pos) ast.Expr?
                         fixed: true,
                         help: "write `\\\{` for a literal `\{`, or use a raw string `r\"...\"`",
                         fix: "",
+                        edits: [],
                     ))
                     ok = false
                 elif e := sub_expression(code)
@@ -2097,6 +2099,7 @@ fn Parser.if_expr(mut self) ast.Expr?
                     fixed: true,
                     help: "write `elif`",
                     fix: "write `elif`",
+                    edits: [],
                 ))
                 return none
             # `else err` binds the error (expr.if.6).
