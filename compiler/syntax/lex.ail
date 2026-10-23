@@ -324,7 +324,12 @@ fn lex_scaled(src str, scale int) Scaled
             pos := ast.Pos(line: line_no, col: 1)
             if width > top
                 if width != top + UNIT
-                    lx.diag("lex.block.3", ast.Pos(line: line_no, col: width + 1))
+                    lx.diag_msg(
+                        "lex.block.3",
+                        ast.Pos(line: line_no, col: width + 1),
+                        "indentation increases by {width - top} spaces; a block is indented by exactly 4",
+                        "",
+                    )
                 indents.push(width)
                 lx.push(Indent, pos)
             else
@@ -332,7 +337,12 @@ fn lex_scaled(src str, scale int) Scaled
                     indents.remove_at(indents.len() - 1)
                     lx.push(Dedent, pos)
                 if width != indents[indents.len() - 1]
-                    lx.diag("lex.block.1", ast.Pos(line: line_no, col: width + 1))
+                    lx.diag_msg(
+                        "lex.block.1",
+                        ast.Pos(line: line_no, col: width + 1),
+                        "this line's indentation doesn't match any enclosing block",
+                        "",
+                    )
                     indents.push(width)
         # A multi-line string continues the line onto later lines (lex.str.3).
         before := lx.tokens.len()
@@ -362,7 +372,7 @@ fn lex_scaled(src str, scale int) Scaled
         li += 1
     end := ast.Pos(line: last_line, col: 1)
     if lx.open.len() > 0
-        lx.diag("lex.stmt.2", lx.open[lx.open.len() - 1].pos)
+        lx.unclosed()
         # Close them for the parser too, so one report isn't followed by another.
         mut k := lx.open.len() - 1
         while k >= 0
@@ -387,6 +397,31 @@ fn Lexer.diag(mut self, rule str, pos ast.Pos)
     diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: ""))
 
 ## A diagnostic with its message and a fix, as the Rust front end gives it.
+fn Lexer.diag_msg(mut self, rule str, pos ast.Pos, msg str, help str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: ""))
+
+## lex.stmt.2: the innermost bracket left open at the end of the file. The fix
+## closes them at the end of the line, when they all opened on it.
+fn Lexer.unclosed(mut self)
+    last := open[open.len() - 1]
+    mut one_line := true
+    for o in open
+        if o.pos.line != last.pos.line
+            one_line = false
+    diags.push(
+        Diag(
+            rule: "lex.stmt.2",
+            pos: last.pos,
+            msg: "this `{last.c}` is never closed",
+            fixed: one_line,
+            help: "",
+            fix: "close the brackets at the end of the line",
+        ),
+    )
+
+fn Lexer.diag_help_fix(mut self, rule str, pos ast.Pos, msg str, help str, fixed bool, fix str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: fixed, help: help, fix: fix))
+
 fn Lexer.diag_fix(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
     diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: fix))
 
@@ -423,7 +458,12 @@ fn Lexer.indent_width(mut self, line List[char], lead int, line_no int) int
     elif scale > 1
         return width / scale * UNIT
     if not tabbed and width % UNIT != 0 and scale == 1
-        diag("lex.block.2", ast.Pos(line: line_no, col: 1))
+        diag_msg(
+            "lex.block.2",
+            ast.Pos(line: line_no, col: 1),
+            "indentation of {width} spaces is not a multiple of 4",
+            "use {width / UNIT * UNIT} spaces",
+        )
     width / UNIT * UNIT
 
 ## The indentation unit of a file that doesn't use 4: the common divisor
@@ -446,12 +486,24 @@ fn Lexer.unit_guess(self) int
 ## indent by 4, or 0.
 fn Lexer.indent_diags(mut self) int
     if tabs.len() > 0
-        diag("lex.block.4", ast.Pos(line: tabs[0].line, col: 1))
+        diag_fix(
+            "lex.block.4",
+            ast.Pos(line: tabs[0].line, col: 1),
+            "tab character in indentation",
+            "indent with 4 spaces per level",
+            "replace the tabs with 4 spaces per level",
+        )
     if scale == 1
         return unit_guess()
     for l in logical
         if l.width > 0
-            diag("lex.block.2", ast.Pos(line: l.line, col: 1))
+            diag_fix(
+                "lex.block.2",
+                ast.Pos(line: l.line, col: 1),
+                "this file indents by {scale} spaces; a block is indented by exactly 4",
+                "use 4 spaces per level",
+                "re-indent the file from {scale} to 4 spaces per level",
+            )
             return 0
     0
 
@@ -466,7 +518,7 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
         if c == ' ' or c == '\t'
             i += 1
         elif c == '#' and in_interp > 0
-            diag("lex.str.2", pos)
+            diag_msg("lex.str.2", pos, "a comment can't appear inside `\{...}` in a string", "")
             i += 1
         elif c == '#'
             # Comment to the end of the line (lex.comment.1, lex.comment.2).
@@ -474,7 +526,7 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             break
         elif c == '"' and starts_triple(line, i)
             if in_interp > 0
-                diag("lex.str.3", pos)
+                diag_msg("lex.str.3", pos, "a multi-line string can't appear inside `\{...}` in a string", "")
                 return none
             return Opening(col: i, raw: false)
         elif c == '"'
@@ -490,7 +542,13 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
         elif c == '\''
             i = char_literal(line, i, line_no)
         elif c == ';'
-            diag("lex.stmt.3", pos)
+            diag_fix(
+                "lex.stmt.3",
+                pos,
+                "AIL has no `;`; a statement ends at the end of its line",
+                "remove the `;` and put the next statement on its own line",
+                "end the statement here, without the `;`",
+            )
             # Recover as if the line ended here, so the parser doesn't report it again.
             if open.len() == 0 and in_interp == 0
                 push(Newline, pos)
@@ -569,7 +627,7 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             )
             i += 1
         elif c == '~'
-            diag("gram.foreign.1", pos)
+            tilde(line, i, pos)
             i += 1
         elif c.is_digit()
             i = number(line, i, line_no)
@@ -581,19 +639,49 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             if KEYWORDS.contains(word)
                 push(Kw(word), pos)
             elif (word == "f" or word == "u") and at(line, end) == '"'
-                diag("gram.foreign.1", pos)
+                diag_fix(
+                    "gram.foreign.1",
+                    pos,
+                    "`{word}\"...\"` isn't a string prefix in AIL",
+                    "every string interpolates `\{expression}`; write the string without the prefix",
+                    "remove the `{word}`",
+                )
             else
                 push(Ident(word), pos)
             i = end
         else
             sym := symbol_at(line, i) else ""
             if sym == ""
-                diag("bootstrap.unsupported", pos)
+                diag_msg(
+                    "bootstrap.unsupported",
+                    pos,
+                    "the `{c}` symbol is not supported by the bootstrap yet (spec chapter 05)",
+                    "",
+                )
                 i += 1
             else
                 symbol(sym, pos)
                 i += sym.len()
     none
+
+## `~a` is `a.bit_not()` (expr.bit.1) when the operand is one name, not
+## followed by `.`, `(` or `[`, which would bind to the call instead.
+fn Lexer.tilde(mut self, line List[char], i int, pos ast.Pos)
+    mut end := i + 1
+    while end < line.len() and (ascii_alnum(line[end]) or line[end] == '_')
+        end += 1
+    after := if end < line.len() then line[end] else ' '
+    atom := end > i + 1 and not line[i + 1].is_digit() and after != '.' and after != '(' and after != '['
+    diags.push(
+        Diag(
+            rule: "gram.foreign.1",
+            pos: pos,
+            msg: "AIL has no `~`",
+            fixed: atom,
+            help: "bitwise not is a method: `a.bit_not()` (expr.bit.1)",
+            fix: "write `.bit_not()`",
+        ),
+    )
 
 ## True when only blanks come before `at` on the line.
 fn blank_before(line List[char], stop int) bool
@@ -639,7 +727,7 @@ fn Lexer.string(mut self, line List[char], start int, line_no int) int
     if close := content(line, start + 1, line.len(), line_no, true, mut value, mut parts)
         push(string_token(value, parts), pos)
         return close + 1
-    diag("lex.str.1", pos)
+    diag_msg("lex.str.1", pos, "unterminated string literal", "close the string with `\"`")
     forget_brackets(line_no)
     line.len()
 
@@ -674,15 +762,28 @@ fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
                 hex.push(hex_byte((hi else 0) * 16 + (lo else 0)))
                 i += 4
             else
-                diag("lex.bytes.1", here)
+                fixed := bytes_unicode(line, i)
+                diag_help_fix(
+                    "lex.bytes.1",
+                    here,
+                    "invalid escape in a `bytes` literal",
+                    "valid escapes: \\n \\t \\r \\0 \\\\ \\\" \\xHH",
+                    fixed,
+                    "write its UTF-8 bytes",
+                )
                 i += 2
         elif c.code() < 128
             hex.push(hex_byte(c.code()))
             i += 1
         else
-            diag("lex.bytes.1", here)
+            diag_msg(
+                "lex.bytes.1",
+                here,
+                "`{c}` is not ASCII, so it can't be in a `bytes` literal",
+                "write its UTF-8 bytes as `\\xHH` escapes, or use `\"...\".to_bytes()`",
+            )
             i += 1
-    diag("lex.bytes.1", pos)
+    diag_msg("lex.bytes.1", pos, "unterminated `bytes` literal", "close the literal with `\"`")
     forget_brackets(line_no)
     line.len()
 
@@ -703,7 +804,7 @@ fn Lexer.raw_string(mut self, line List[char], start int, line_no int) int
         if line[k] == '"'
             push(Str(text_of(line, start + 2, k)), pos)
             return k + 1
-    diag("lex.str.1", pos)
+    diag_msg("lex.str.1", pos, "unterminated string literal", "close the string with `\"`")
     forget_brackets(line_no)
     line.len()
 
@@ -735,7 +836,13 @@ fn Lexer.content(
             # lex.str.2: `{expression}` interpolates.
             close := find_close(line, to, i)
             if close < 0
-                diag("lex.str.2", here)
+                diag_fix(
+                    "lex.str.2",
+                    here,
+                    "this `\{` in a string is never closed",
+                    "close it with `}`, or write `\\\{` for a literal brace",
+                    "write `\\\{` for a literal brace",
+                )
                 forget_brackets(line_no)
                 if quoted
                     return to
@@ -744,9 +851,21 @@ fn Lexer.content(
             code := sub_lex(line, i + 1, if colon >= 0 then colon else close, line_no)
             spec := if colon >= 0 then parse_spec(line[colon + 1..close]) else none
             if colon >= 0 and spec == none
-                diag("lex.str.7", ast.Pos(line: line_no, col: colon + 2))
+                shown := line[colon + 1..close].join("")
+                diag_msg(
+                    "lex.str.7",
+                    ast.Pos(line: line_no, col: colon + 2),
+                    "invalid format specification `{shown}`: {spec_why(line[colon + 1..close])}",
+                    "a specification is `[[fill]align][width][.decimals][x]`, e.g. `\{n:>8}`, `\{r:.2}`, `\{n:0>4x}`",
+                )
             if code.len() == 1
-                diag("lex.str.2", here)
+                diag_fix(
+                    "lex.str.2",
+                    here,
+                    "empty `\{}` in a string",
+                    "put an expression inside, or write `\\\{` for a literal brace",
+                    "write `\\\{` for a literal brace",
+                )
             else
                 if value.len() > 0
                     parts.push(Lit(value.join("")))
@@ -781,14 +900,19 @@ fn Lexer.multiline(mut self, lines List[List[char]], first int, col int, raw boo
         return Resume(line: first, col: one + 3)
     for k in open_end..opening.len()
         if opening[k] != ' '
-            diag("lex.str.3", ast.Pos(line: first + 1, col: open_end + 1))
+            diag_msg(
+                "lex.str.3",
+                ast.Pos(line: first + 1, col: open_end + 1),
+                "text after the opening `\"\"\"`",
+                "start the string's text on the next line, or close it on this line",
+            )
             break
     # Find the closing `"""`.
     mut li := first + 1
     mut close := -1
     while close < 0
         if li >= lines.len()
-            diag("lex.str.3", pos)
+            diag_msg("lex.str.3", pos, "unterminated multi-line string", "close it with `\"\"\"`")
             push(Str(""), pos)
             return Resume(line: lines.len() - 1, col: lines[lines.len() - 1].len())
         close = find_triple(lines[li], 0, raw)
@@ -805,7 +929,12 @@ fn Lexer.multiline(mut self, lines List[List[char]], first int, col int, raw boo
         while lead < upto and (whole[lead] == ' ' or whole[lead] == '\t')
             lead += 1
         if (k == last or not blank(whole, 0, upto)) and has_tab(whole, lead)
-            diag("lex.str.3", ast.Pos(line: k + 1, col: 1))
+            diag_msg(
+                "lex.str.3",
+                ast.Pos(line: k + 1, col: 1),
+                "tab in a multi-line string's indentation",
+                "indent with spaces; write `\\t` for a tab in the text",
+            )
     # The common indentation of the text lines (and of the closing line when
     # it holds only the delimiter) is removed.
     mut common := if alone then close else spaces(closing, close)
@@ -876,7 +1005,7 @@ fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
             placeholder(pos)
         return next + 1
     if start + 2 < line.len() and line[start + 1] == '\'' and line[start + 2] == '\''
-        diag("lex.str.4", pos)
+        diag_msg("lex.str.4", pos, "a `'` in a character literal must be escaped", "write '\\''")
         placeholder(pos)
         return start + 3
     mut end := line.len()
@@ -884,7 +1013,17 @@ fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
         if line[k] == '\''
             end = k + 1
             break
-    diag("lex.str.4", pos)
+    body := line[(start + 1).min(end)..(end - 1).max(start + 1).min(end)]
+    closed := end <= line.len() and line[end - 1] == '\'' and end > start + 1
+    stringy := closed and not has_special(body)
+    diag_help_fix(
+        "lex.str.4",
+        pos,
+        "a character literal holds exactly one character",
+        "write a string in double quotes: \"...\"",
+        stringy,
+        "write it as a string",
+    )
     placeholder(pos)
     end
 
@@ -927,9 +1066,15 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
                 next := k + 1
                 ch := hex_char(line, i + 3, k)
                 if ch == none
-                    diag("lex.str.1", pos)
+                    diag_msg("lex.str.1", pos, "`\\u\{{text_of(line, i + 3, k)}}` is not a valid Unicode scalar value", "")
                 return Escaped(ch: ch, next: next)
-    diag("lex.str.1", pos)
+    shown := if i + 1 < line.len() then text_of(line, i + 1, i + 2) else ""
+    diag_msg(
+        "lex.str.1",
+        pos,
+        "unknown escape sequence `\\{shown}`",
+        "valid escapes: \\n \\t \\r \\0 \\\\ \\\" \\' \\\{ \\u\{hex}",
+    )
     Escaped(ch: none, next: (i + 2).min(line.len()))
 
 ## The character whose hexadecimal code is `line[from..to]`, if it is one.
@@ -956,7 +1101,12 @@ fn Lexer.number(mut self, line List[char], start int, line_no int) int
         match parse_int(line[start..end], 10)
             IntOk(v) => push(Int(v), pos)
             TooBig | Overflow | Invalid =>
-                diag("lex.num.3", pos)
+                diag_msg(
+                    "lex.num.3",
+                    pos,
+                    "integer literal `{text_of(line, start, end)}` doesn't fit in `int` (64-bit signed)",
+                    "",
+                )
                 placeholder(pos)
         return end
     fe := float_end(line, start)
@@ -966,7 +1116,12 @@ fn Lexer.number(mut self, line List[char], start int, line_no int) int
         if v - v == 0.0
             push(Float(v), pos)
         else
-            diag("lex.num.3", pos)
+            diag_msg(
+                "lex.num.3",
+                pos,
+                "floating-point literal `{text_of(line, start, fe)}` doesn't fit in `float`",
+                "",
+            )
             placeholder(pos)
         return fe
     mut radix := 10
@@ -987,10 +1142,15 @@ fn Lexer.number(mut self, line List[char], start int, line_no int) int
         IntOk(v) => push(Int(v), pos)
         TooBig => push(IntMin, pos)
         Overflow =>
-            diag("lex.num.3", pos)
+            diag_msg(
+                "lex.num.3",
+                pos,
+                "integer literal `{text_of(line, start, end)}` doesn't fit in `int` (64-bit signed)",
+                "",
+            )
             placeholder(pos)
         Invalid =>
-            diag("lex.num.1", pos)
+            diag_msg("lex.num.1", pos, "invalid integer literal `{text_of(line, start, end)}`", "")
             placeholder(pos)
     end
 
@@ -1231,3 +1391,65 @@ fn spec_number(c List[char], from int, to int) int?
         if v > MAX_FORMAT_WIDTH
             return none
     v
+
+## Whether the invalid `bytes` escape at `line[i]` is `\u{...}` naming a code
+## point, which has a fix: its UTF-8 bytes.
+fn bytes_unicode(line List[char], i int) bool
+    if at(line, i + 1) != 'u' or at(line, i + 2) != '{'
+        return false
+    for k in i + 3..line.len()
+        if line[k] == '}'
+            len := k - (i + 3)
+            return len >= 1 and len <= 6 and hex_char(line, i + 3, k) != none
+    false
+
+## Why the format specification `c` is invalid (lex.str.7), as `FormatSpec::parse`
+## words it in the Rust front end.
+fn spec_why(c List[char]) str
+    mut i := 0
+    if c.len() >= 2 and is_align(c[1])
+        i = 2
+    elif c.len() > 0 and is_align(c[0])
+        i = 1
+    if at(c, i) == '0' and at(c, i + 1).is_digit()
+        return "a width can't start with 0; write the fill and alignment, e.g. `0>4`"
+    start := i
+    while i < c.len() and c[i].is_digit()
+        i += 1
+    if i - start > 19
+        return "`{c[start..i].join("")}` is too large"
+    mut width := 0
+    if i > start
+        width = spec_number(c, start, i) else MAX_FORMAT_WIDTH + 1
+    mut precision := 0
+    mut has_precision := false
+    if at(c, i) == '.' and i < c.len()
+        i += 1
+        from := i
+        while i < c.len() and c[i].is_digit()
+            i += 1
+        if i == from
+            return "`.` needs the number of decimal places"
+        if i - from > 19
+            return "`{c[from..i].join("")}` is too large"
+        has_precision = true
+        precision = spec_number(c, from, i) else MAX_FORMAT_WIDTH + 1
+    mut hex := false
+    if at(c, i) == 'x' and i < c.len()
+        hex = true
+        i += 1
+    if i < c.len()
+        return "unexpected `{c[i..].join("")}`"
+    if width > MAX_FORMAT_WIDTH
+        return "a width is at most {MAX_FORMAT_WIDTH}"
+    if has_precision and precision > MAX_FORMAT_WIDTH
+        return "decimal places are at most {MAX_FORMAT_WIDTH}"
+    "`x` and `.N` can't be combined"
+
+## Whether a character literal's text holds a `"`, `\` or `{`, which a string
+## would need escaped (so no fix is offered).
+fn has_special(body List[char]) bool
+    for c in body
+        if c == '"' or c == '\\' or c == '\{'
+            return true
+    false
