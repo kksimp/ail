@@ -86,7 +86,7 @@ two lanes never edit the same area: the lanes run in parallel, and the items in
 one lane run in the order shown. A feature that changes the language or a public
 std API still needs its own ADR first.
 
-1. **Checker and diagnostics** (`compiler/check/`, `compiler/explain/`): ranked
+1. **Checker and diagnostics** (`compiler/check/`, `compiler/explain/`):
    `uhwhatnow?` (ranked typed holes); diagnostics in one-line and expanded forms chosen by `--budget`;
    then the open language questions OQ-029, OQ-042, OQ-050, OQ-094.
 2. **Compiler graph tools** (`compiler/api/`, `compiler/edit/`): `ail ask`; edit
