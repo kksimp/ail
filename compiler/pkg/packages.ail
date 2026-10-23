@@ -34,6 +34,8 @@ pub struct Packages
     ## Package name to the dependencies its manifest declares.
     deps Map[str, List[str]]
     manifests List[ManifestFile]
+    lock Lock
+    opts Options
 
 ## What an import path written in some module names.
 pub struct Target
@@ -61,14 +63,20 @@ fn canonical(dir str) str
         if seg == "" or seg == "."
             continue
         if seg == ".."
-            _ := parts.pop()
+            parts.pop()
         else
             parts.push(seg)
     "/{parts.join("/")}"
 
 ## Read the manifest at `root`, if any, and every path dependency's.
 pub fn read(root str) Packages
-    mut p := Packages(roots: {"": root}, deps: {}, manifests: [])
+    mut p := Packages(
+        roots: {"": root},
+        deps: {},
+        manifests: [],
+        lock: read_lock(root),
+        opts: options(),
+    )
     mut declared := Map[str, Seen]()
     mut stack := [(canonical(root), root)]
     p.visit("", root, none, mut stack, mut declared)
@@ -85,7 +93,32 @@ pub fn read(root str) Packages
             clashes.push((at.manifest, diag("mod.pkg.4", at.pos, "package `{name}` has the same name as the module directory `{dir}`", "rename the directory, or the dependency on this line and in its own `ail.pkg`")))
     for c in clashes
         p.manifests[c.0].diags.push(c.1)
+    p.settle_lock()
     p
+
+## mod.pkg.8: refuse a stale lock under `--deterministic`, else write it when
+## the command writes locks.
+fn Packages.settle_lock(mut self)
+    if self.manifests.len() == 0 or self.manifests[0].package != ""
+        return
+    at := ast.Pos(line: 1, col: 1)
+    if self.opts.frozen
+        extra := self.lock.extra()
+        if extra.len() > 0
+            names := ["`{n}`" for n in extra].join(", ")
+            self.manifests[0].diags.push(diag(
+                "mod.pkg.8",
+                at,
+                "`ail.lock` is stale: it locks {names}, which no `ail.pkg` declares",
+                "run `ail pkg update` and commit `ail.lock`, or run without `--deterministic`",
+            ))
+    elif self.opts.write_lock or self.opts.refresh != none
+        if problem := self.lock.save()
+            self.manifests[0].diags.push(diag("mod.pkg.8", at, problem, ""))
+
+## The git dependencies resolved, for `ail pkg update` (mod.pkg.9).
+pub fn Packages.locked(self) List[Entry]
+    self.lock.used
 
 ## Read package `pkg`'s manifest in `dir` and its dependencies. `from` is the
 ## manifest and position of the `dep` line that declared it.
@@ -192,18 +225,33 @@ fn Packages.visit(
             declared[dep.name] = Seen(manifest: me, pos: dep.pos)
             stack.push((canon, sub))
             self.visit(dep.name, sub, Seen(manifest: me, pos: dep.pos), mut stack, mut declared)
-            _ := stack.pop()
+            stack.pop()
 
 ## The directory of git dependency `dep`, fetched or from the cache (mod.pkg.7-8);
 ## none after a diagnostic in manifest `me`.
 fn Packages.git_dir(mut self, me int, dep Dep) str?
-    self.manifests[me].diags.push(diag(
-        "mod.pkg.7",
-        dep.pos,
-        "git dependencies aren't supported by the native loader yet",
-        "run with the Rust toolchain, or use a `path` dependency",
-    ))
-    none
+    source := dep.git else return none
+    for e in self.lock.used
+        # Declared again by another manifest of the graph.
+        if e.name == dep.name and same(e.source, source)
+            return path.join(deps_dir(), "{dep.name}-{e.commit}")
+    locked := self.lock.locked(dep.name, source, self.opts.refresh)
+    if locked == none and self.opts.frozen
+        self.manifests[me].diags.push(diag(
+            "mod.pkg.8",
+            dep.pos,
+            "`ail.lock` is stale: it doesn't lock dependency `{dep.name}` as this line names it",
+            "run `ail pkg update {dep.name}` and commit `ail.lock`, or run without `--deterministic`",
+        ))
+        self.lock.failed = true
+        return none
+    got := fetch(dep.name, source, locked, self.opts.offline)
+    if got.msg != ""
+        self.manifests[me].diags.push(diag("mod.pkg.7", dep.pos, got.msg, got.help))
+        self.lock.failed = true
+        return none
+    self.lock.used.push(Entry(name: dep.name, source: source, commit: got.commit))
+    got.dir
 
 ## The package that module `module` belongs to: `""` for the root package's modules.
 fn Packages.package_of(self, module str) str
