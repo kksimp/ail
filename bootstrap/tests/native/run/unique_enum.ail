@@ -1,0 +1,49 @@
+# own.uniq.1, own.uniq.7: a unique enum releases the unique fields of its
+# variant, and its own cleanup runs first.
+unique struct Lock
+    id int
+
+impl Drop for Lock
+    fn drop(mut self)
+        print("unlock {id}")
+
+unique enum Slot
+    Held(lock Lock, tag int)
+    Pair(a Lock, b Lock)
+    Idle(n int)
+
+impl Drop for Slot
+    fn drop(mut self)
+        print("slot gone")
+
+fn describe(s Slot) int
+    match s
+        Held(_, tag) => tag
+        Pair(_, _) => 2
+        Idle(n) => n
+
+fn make(n int) Slot
+    if n == 0
+        return Slot.Idle(n: 5)
+    if n == 1
+        return Slot.Held(lock: Lock(id: 10), tag: 7)
+    Slot.Pair(a: Lock(id: 20), b: Lock(id: 21))
+
+fn main()
+    a := make(1)
+    b := make(2)
+    c := make(0)
+    print(describe(a) + describe(b) + describe(c))
+    mut d := make(1)
+    d = make(0)
+    print("end")
+    h := Holder(first: Lock(id: 30), spare: none)
+    mut hh := h
+    hh.first = Lock(id: 31)
+    hh.spare = Lock(id: 32)
+    hh.spare = Lock(id: 33)
+    print("holder done")
+
+unique struct Holder
+    first Lock
+    spare Lock?

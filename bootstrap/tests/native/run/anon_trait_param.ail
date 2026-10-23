@@ -1,0 +1,36 @@
+# gen.anon.1: a parameter written as a trait name is an anonymous type parameter,
+# one instance per implementing type; the others stay ordinary parameters.
+trait Shape
+    fn area(self) int
+    fn name(self) str
+
+struct Sq
+    s int
+
+struct Rect
+    w int
+    h int
+
+impl Shape for Sq
+    fn area(self) int
+        self.s * self.s
+    fn name(self) str
+        "sq"
+
+impl Shape for Rect
+    fn area(self) int
+        self.w * self.h
+    fn name(self) str
+        "rect"
+
+fn show(label str, s Shape, k int) str
+    "{label} {s.name()} {s.area() * k}"
+
+fn bigger(a Shape, b Shape) bool
+    a.area() > b.area()
+
+fn main()
+    print(show("a", Sq(s: 3), 2))
+    print(show("b", Rect(w: 2, h: 5), 3))
+    print(bigger(Sq(s: 3), Rect(w: 2, h: 5)))
+    print(bigger(Sq(s: 4), Rect(w: 2, h: 5)))
