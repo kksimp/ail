@@ -45,25 +45,51 @@ fn Diag.did_you_mean(self, name str, s str) Diag
         [fix.replace(pos, name, s)],
     )
 
-## One line of JSON: severity, rule, file, local line and column, message
-## and help, in the order `ail check --json` writes them.
-pub fn Diag.to_json(self, files List[ast.SourceFile]) str
+## One line of JSON: severity, rule, file, local line and column, message,
+## help and fixes, in the order `ail check --json` writes them. `sources`
+## holds the lines of each file read from disk; a fix whose anchor doesn't
+## settle against them is left out, as `ail check` does (fix.edit.2).
+pub fn Diag.to_json(self, files List[ast.SourceFile], sources Map[str, List[List[char]]]) str
     mut file := ""
+    mut base := 0
     mut line := pos.line
     if line < 1073741824
         for f in files
             if f.base < pos.line
                 file = f.path
+                base = f.base
                 line = pos.line - f.base
     severity := if warning then "warning" else "error"
     mut out := "\{\"severity\":\"{severity}\",\"rule\":\"{rule}\",\"file\":{quote(file)},\"line\":{line},\"col\":{pos.col},\"message\":{quote(message)}"
     if h := help
         out = "{out},\"help\":{quote(h)}"
-    # The titles of the fixes, in order; their edits are resolved against the
-    # source by the `fix` module (ADR 0203, ADR 0204).
     if fixes.len() > 0
-        out = "{out},\"fix_titles\":[{[quote(f.title) for f in fixes].join(",")}]"
+        if lines := sources.get(file)
+            local := [
+                fix.Fix(title: f.title, edits: [shifted(e, base) for e in f.edits])
+                for f in fixes
+            ]
+            settled := fix.settle_fixes(local, lines)
+            if settled.len() > 0
+                out = "{out},\"fixes\":[{[fix_json(f) for f in settled].join(",")}]"
     "{out}}"
+
+## `e` with its lines made local to its file.
+fn shifted(e fix.Edit, base int) fix.Edit
+    fix.Edit(
+        pos: ast.Pos(line: e.pos.line - base, col: e.pos.col),
+        end: ast.Pos(line: e.end.line - base, col: e.end.col),
+        old: e.old,
+        anchor: e.anchor,
+        text: e.text,
+    )
+
+fn fix_json(f fix.Fix) str
+    edits := [
+        "\{\"line\":{e.pos.line},\"col\":{e.pos.col},\"end_line\":{e.end.line},\"end_col\":{e.end.col},\"text\":{quote(e.text)}}"
+        for e in f.edits
+    ]
+    "\{\"title\":{quote(f.title)},\"edits\":[{edits.join(",")}]}"
 
 ## `s` as a JSON string.
 fn quote(s str) str

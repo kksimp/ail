@@ -96,28 +96,16 @@ fn key(line: &str) -> Key {
     (str_field(line, "rule"), str_field(line, "file"), num_field(line, "line"), num_field(line, "col"))
 }
 
-/// The titles of a diagnostic's fixes, from `"fixes":[{"title":..}]` (`ail check`)
-/// or `"fix_titles":[..]` (the AIL checker).
-fn fix_titles(line: &str) -> Vec<String> {
-    if let Some(i) = line.find("\"fix_titles\":[") {
-        let rest = &line[i + "\"fix_titles\":[".len()..];
-        let end = rest.find(']').unwrap_or(rest.len());
-        return rest[..end].split("\",\"").map(|t| t.trim_matches('"').replace("\\\"", "\"")).collect();
-    }
-    let mut out = Vec::new();
-    let mut rest = line;
-    while let Some(i) = rest.find("{\"title\":\"") {
-        rest = &rest[i..];
-        out.push(str_field(rest, "title"));
-        rest = &rest[8..];
-    }
-    out
+/// A diagnostic's fixes, from `"fixes":[` to the end of its JSON line: the
+/// settled edits `ail check` and the AIL checker (through `fix/resolve.ail`) write.
+fn fixes_of(line: &str) -> String {
+    line.find("\"fixes\":[").map(|i| line[i..].to_string()).unwrap_or_default()
 }
 
 struct Section {
     diags: Vec<Key>,
-    /// Each diagnostic's fix titles, beside `diags`.
-    fixes: Vec<Vec<String>>,
+    /// Each diagnostic's fixes, beside `diags`.
+    fixes: Vec<String>,
     /// Each diagnostic's message, beside `diags`.
     messages: Vec<String>,
     rules: Vec<String>,
@@ -193,7 +181,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
             let sec = sections.get_mut(&current).unwrap();
             sec.diags.push(key(line));
             sec.messages.push(str_field(line, "message"));
-            sec.fixes.push(fix_titles(line));
+            sec.fixes.push(fixes_of(line));
         }
     }
     let mut agree = 0;
@@ -231,7 +219,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
             same_text += lines.iter().zip(&sec.messages).filter(|(l, m)| str_field(l, "message") == **m).count();
             for (l, got) in lines.iter().zip(&sec.fixes) {
                 fixes_total += usize::from(l.contains("\"fixes\":"));
-                let want = fix_titles(l);
+                let want = fixes_of(l);
                 if want == *got {
                     same_fixes += usize::from(!want.is_empty());
                 } else {
@@ -250,13 +238,8 @@ fn ail_checker_agrees_with_the_bootstrap() {
         dumps.len()
     );
     println!("{same_text} of those {total_diags} diagnostics have the same message");
-    println!("{same_fixes} of {fixes_total} diagnostics with fixes have the same fix titles");
-    // `ail check` drops a fix whose anchor doesn't match the source, which the
-    // AIL checker can't tell until the `fix` module resolves edits; until then
-    // the report lists the differences and gates only on a missing fix.
-    println!("{} fix differences:\n{}", fix_diffs.len(), fix_diffs.join("\n"));
-    let missing: Vec<&String> = fix_diffs.iter().filter(|d| d.contains("AIL:       []")).collect();
-    assert!(missing.is_empty(), "{} fixes missing from the AIL checker:\n{:?}", missing.len(), missing);
+    println!("{same_fixes} of {fixes_total} diagnostics with fixes have the same fixes");
+    assert!(fix_diffs.is_empty(), "{} fix disagreements:\n{}", fix_diffs.len(), fix_diffs.join("\n"));
     assert!(failures.is_empty(), "{} disagreements:\n{}", failures.len(), failures.join("\n"));
     assert!(
         differ_all.is_empty(),

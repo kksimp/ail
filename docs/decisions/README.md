@@ -677,3 +677,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0839](0839-std-app-text-measure.md) | `std.app` text measure: the host reports advance widths for the app's runs, Garlic lays out with them *(delegated)* | Accepted | 2026-10-22 |
 | [0856](0856-native-compiler-runs-user-derive-generators.md) | The native compiler runs user `@derive` generators as a native program, so it needs no interpreter *(delegated)* | Accepted | 2026-10-22 |
 | [0860](0860-ail-fix-machinery-in-ail.md) | The machinery of `ail fix` (edit types, anchor resolution, driver) is ported to AIL (`compiler/fix/`), same fixes and output as the Rust tool *(delegated)* | Accepted | 2026-10-23 |
+| [0862](0862-native-mut-cells-and-for-mut-write-through.md) | Native `mut` parameters and `mut self` of value types use cells; `for mut` over scalars writes through *(delegated)* | Accepted | 2026-10-23 |
