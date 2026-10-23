@@ -252,6 +252,13 @@ regex engine is written.
   and a registry that never calls back: nothing is collected while scripts
   run. `IntersectionObserver` and `ResizeObserver` take a callback and never
   fire, since Garlic has no scrolling or resizing the page can see.
+- Focus and keys (`vm/focus.ail`): `el.focus()`/`blur()` and Tab in Garlic
+  move `document.activeElement` and fire `focus`, `focusin`, `blur`,
+  `focusout`. Typing into a field fires `keydown` (cancellable: that
+  character is dropped), `input` and `keyup` per character, then `change`;
+  Enter fires `keydown`/`keyup` first, and a cancelled `keydown` stops the
+  form from submitting. `KeyboardEvent` and `MouseEvent` start with empty
+  `key`/`code` and zero coordinates, as in Chromium.
 
 ## Generators and async functions
 
