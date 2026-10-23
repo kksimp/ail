@@ -1,5 +1,8 @@
 # net.open and Body.read_bytes (std.net.25): a body read in pieces whatever its
-# framing, closing early, and reading after close.
+# framing, closing early, and reading after close. Every reply says
+# `Connection: close` (or is HTTP/1.0): the server closes after each, and a
+# client that pooled one would retry on a new connection and leave the server
+# one accept short, hanging `t.wait()`.
 use std.net
 
 fn port_of(addr str) int
@@ -58,9 +61,9 @@ fn main() !
     base := "http://127.0.0.1:{port_of(l.addr())}"
     replies := [
         "HTTP/1.1 200 OK\r\nx-n: len\r\nContent-Length: 10\r\nConnection: close\r\n\r\n0123456789",
-        "HTTP/1.1 200 OK\r\nx-n: chunk\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6;ext=1\r\n world\r\n0\r\nTrailer: x\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nx-n: chunk\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n6;ext=1\r\n world\r\n0\r\nTrailer: x\r\n\r\n",
         "HTTP/1.0 200 OK\r\nx-n: eof\r\n\r\nuntil the end",
-        "HTTP/1.1 204 No Content\r\nx-n: none\r\n\r\n",
+        "HTTP/1.1 204 No Content\r\nx-n: none\r\nConnection: close\r\n\r\n",
         "HTTP/1.1 200 OK\r\nx-n: cut\r\nContent-Length: 20\r\nConnection: close\r\n\r\nshort",
     ]
     t := spawn serve_raw(l, replies)
