@@ -1,0 +1,18 @@
+## Generated code sees the imports of its module's files (ct.gen.1, mod.unit.2,
+## as the bootstrap's `modules.rs`): a derive generator's text, such as
+## `FromArgs`'s calls of `args.flag`, has no `use` lines of its own.
+use ast
+
+## Give each generated source (`gen:...`) the imports of the written files
+## of its module.
+fn Lower.share_gen_aliases(mut self, srcs List[Source])
+    for k in 0..srcs.len()
+        if not srcs[k].path.starts_with("gen:")
+            continue
+        mut merged := file_aliases[k]
+        for j in 0..srcs.len()
+            if srcs[j].module == srcs[k].module and not srcs[j].path.starts_with("gen:")
+                for name in file_aliases[j].keys()
+                    if not merged.contains(name)
+                        merged[name] = file_aliases[j][name]
+        file_aliases[k] = merged

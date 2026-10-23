@@ -291,6 +291,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
         l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
+    l.share_gen_aliases(srcs)
     if r := rt
         l.declare_all(r, "rt.")
     l.tk.on = l.sigs.contains("rt.task_new")

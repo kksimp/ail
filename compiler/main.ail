@@ -490,7 +490,7 @@ fn mentions_prelude(srcs List[mir.Source]) bool
         if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
-        if s.text.contains("@derive") or s.text.contains("TypeInfo")
+        if s.text.contains("@derive") or s.text.contains("TypeInfo") or s.text.contains("FromArgs")
             return true
     false
 
