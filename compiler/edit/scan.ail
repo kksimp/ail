@@ -1,0 +1,185 @@
+## Finding declarations by their text (edit.id.1-3) and the text helpers the
+## edit operations share. A port of the first half of `bootstrap/src/edit.rs`.
+
+## A top-level declaration found in a file's text (edit.id.1).
+pub struct Decl
+    pub id str
+    ## The bare name a rename changes.
+    pub name str
+    ## 0-based: first line (doc comment and attributes included), the
+    ## declaration's own line, the last line of its signature, and the line
+    ## after its last.
+    pub start int
+    pub head int
+    pub sig_end int
+    pub end int
+
+fn word_char(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+## The leading identifier characters of `s`.
+pub fn word(s str) str
+    cs := s.chars()
+    mut n := 0
+    while n < cs.len() and word_char(cs[n])
+        n += 1
+    cs[0..n].join("")
+
+fn chars_len(s str) int
+    s.chars().len()
+
+## `s` without its first `n` characters.
+fn skip(s str, n int) str
+    s.chars()[n..].join("")
+
+## Leading spaces of a line.
+pub fn indent_of(line str) int
+    cs := line.chars()
+    mut n := 0
+    while n < cs.len() and cs[n] == ' '
+        n += 1
+    n
+
+fn starts_blank(line str) bool
+    line.starts_with(" ") or line.starts_with("#") or line.starts_with("\t")
+
+## The id and name a column-0 line declares, if any (edit.id.1); an empty id means none.
+pub struct Declared
+    pub id str
+    pub name str
+
+pub fn declares(line str) Declared
+    none_found := Declared(id: "", name: "")
+    mut rest := line
+    while rest.starts_with("@")
+        r := skip(rest, 1)
+        # `@test fn ...`: an attribute before the declaration on its line.
+        sp := r.find(" ") else return none_found
+        rest = skip(r, sp + 1).trim_start()
+    for w in ["pub ", "unsafe "]
+        if r := rest.strip_prefix(w)
+            rest = r
+    if r := rest.strip_prefix("fn ")
+        first := word(r)
+        after := skip(r, chars_len(first))
+        if m := after.strip_prefix(".")
+            mm := word(m)
+            return Declared(id: "method:{first}.{mm}", name: mm)
+        return Declared(id: "fn:{first}", name: first)
+    for w in ["error ", "unique "]
+        if r := rest.strip_prefix(w)
+            rest = r
+    for kw in ["struct ", "enum ", "trait "]
+        if r := rest.strip_prefix(kw)
+            n := word(r)
+            kind := if kw == "trait " then "trait" else "type"
+            return Declared(id: "{kind}:{n}", name: n)
+    n := word(rest)
+    if n != "" and skip(rest, chars_len(n)).trim_start().starts_with(":=")
+        return Declared(id: "const:{n}", name: n)
+    none_found
+
+## The declarations of `src`, in order.
+pub fn decls(src str) List[Decl]
+    lines := src.split("\n")
+    mut found := List[Decl]()
+    for i in 0..lines.len()
+        l := lines[i]
+        if starts_blank(l) or l.trim() == ""
+            continue
+        # A column-0 line ends the previous declaration either way.
+        d := declares(l)
+        if d.id == ""
+            continue
+        mut start := i
+        while start > 0 and (lines[start - 1].starts_with("##") or lines[start - 1].starts_with("@"))
+            start -= 1
+        found.push(Decl(id: d.id, name: d.name, start: start, head: i, sig_end: signature_end(lines, i), end: i + 1))
+    # Each runs to the next column-0 code line, without trailing blank and comment lines.
+    for k in 0..found.len()
+        mut j := found[k].sig_end + 1
+        while j < lines.len()
+            l := lines[j]
+            if not (starts_with_blank(l) or l.trim() == "" or (l.starts_with("#") and not l.starts_with("##")))
+                break
+            j += 1
+        while j > found[k].sig_end + 1 and trailing_blank(lines[j - 1])
+            j -= 1
+        found[k].end = j
+    found
+
+fn starts_with_blank(l str) bool
+    l.starts_with(" ") or l.starts_with("\t")
+
+fn trailing_blank(line str) bool
+    t := line.trim()
+    t == "" or (t.starts_with("#") and not line.starts_with(" "))
+
+## The last line of the signature that starts on line `i`: where its
+## brackets close (a long parameter list spans lines).
+pub fn signature_end(lines List[str], i int) int
+    mut depth := 0
+    mut j := i
+    while j < lines.len()
+        mut in_str := false
+        mut prev := ' '
+        for c in lines[j].chars()
+            if c == '"' and prev != '\\'
+                in_str = not in_str
+            elif c == '#' and not in_str
+                break
+            elif (c == '(' or c == '[' or c == '\{') and not in_str
+                depth += 1
+            elif (c == ')' or c == ']' or c == '}') and not in_str
+                depth -= 1
+            prev = c
+        if depth <= 0
+            return j
+        j += 1
+    i
+
+## `text` without its common indentation, indented by `by` spaces.
+pub fn reindent(text str, by int) List[str]
+    mut t := text
+    while t.ends_with("\n")
+        t = t.slice(0, chars_len(t) - 1)
+    lines := t.split("\n")
+    mut common := -1
+    for l in lines
+        if l.trim() != "" and (common < 0 or indent_of(l) < common)
+            common = indent_of(l)
+    if common < 0
+        common = 0
+    mut out := List[str]()
+    for l in lines
+        if l.trim() == ""
+            out.push("")
+        else
+            n := chars_len(l)
+            out.push("{" ".repeat(by)}{skip(l, if common < n then common else n)}")
+    out
+
+## `src` with lines `from..to` replaced by `new`.
+pub fn splice(src str, from int, to int, new List[str]) str
+    lines := src.split("\n")
+    end := if to < lines.len() then to else lines.len()
+    mut out := lines[0..from]
+    out.extend(new)
+    out.extend(lines[end..])
+    out.join("\n")
+
+## `module` is the module path of `file` inside package `root`: `geo` for `root/geo/a.ail`.
+pub fn module_of(root str, file str) str
+    pre := if root.ends_with("/") then root else "{root}/"
+    rel := file.strip_prefix(pre) else file
+    parts := rel.split("/")
+    if parts.len() <= 1
+        return ""
+    parts[0..parts.len() - 1].join(".")
+
+## `fn:origin` in module `geo` is `fn:geo.origin` (api.pkg.1).
+pub fn qualified(id str, module str) str
+    if module != "" and id.contains(":")
+        c := id.find(":") else 0
+        return "{id.slice(0, c)}:{module}.{skip(id, c + 1)}"
+    id

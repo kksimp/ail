@@ -1,0 +1,193 @@
+use fmt
+use syntax
+
+USAGE := [
+    "usage: ail edit PATH [--dry-run] [--diff] [--if-clean] [--test] [--json] < EDITS",
+    "EDITS are hunks: an id line, then lines starting with `-` (remove), `+` (add) or a space (keep):",
+    "average                                 one `-` and one `+` line: a whole line, or else a unique part of one",
+    "-total / xs.len()                       `+` lines are indented like the line they replace",
+    "+if xs.len() == 0 \{ 0 } else \{ total / xs.len() }",
+    "rename OLD NEW                          the declaration and every reference",
+    "or a JSON list; each item has an \"op\":",
+    "\{\"op\":\"replace_body\",\"id\":\"fn:f\",\"body\":\"x + 1\"}       the lines after the signature (contracts stay)",
+    "\{\"op\":\"replace\",\"id\":\"type:P\",\"text\":\"struct P\\n    x int\"} the whole declaration, doc comment included",
+    "\{\"op\":\"insert\",\"text\":\"fn g() int\\n    1\",\"after\":\"fn:f\"}  or \"before\":ID; neither: the end of the file",
+    "\{\"op\":\"delete\",\"id\":\"fn:old\"}",
+    "\{\"op\":\"rename\",\"id\":\"fn:f\",\"to\":\"g\"}                  the declaration and every reference",
+    "\{\"op\":\"import\",\"module\":\"std.fs\"}                    adds `use std.fs` if missing",
+    "In a package, ids may carry the module (fn:geo.origin) and \"file\" picks the file for insert and import.",
+    "A bare name (average, P.m) stands for the one declaration with that name. --test runs `ail test PATH` after a clean edit.",
+]
+
+## `ail edit PATH [--dry-run] [--diff] [--if-clean] [--test] [--json] < EDITS`
+## (edit.op.1-7, ADRs 0397, 0399): structured edits by declaration id. They
+## apply in order to the file or package at PATH, every changed file is
+## formatted, the program is checked, and the answer is the diagnostics of
+## the new state. A port of `command` in `bootstrap/src/edit.rs`.
+##
+## The check is still syntax only: the semantic checker's driver (loading a
+## package, the prelude) is not in AIL yet, so a note on standard error says
+## so and `--test` and `rename` are refused (RR-1, RR-4).
+pub fn command(args List[str]) int
+    mut dry := false
+    mut show_diff := false
+    mut if_clean := false
+    mut test := false
+    mut json := false
+    mut paths := List[str]()
+    for a in args
+        if a == "--dry-run"
+            dry = true
+        elif a == "--diff"
+            show_diff = true
+        elif a == "--if-clean"
+            if_clean = true
+        elif a == "--test"
+            test = true
+        elif a == "--json"
+            json = true
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}`")
+            io.eprint(USAGE.join("\n"))
+            return 2
+        else
+            paths.push(a)
+    if paths.len() != 1
+        io.eprint(USAGE.join("\n"))
+        return 2
+    path := paths[0]
+    input := io.read_all()
+    # edit.in.3: input that doesn't start with `[` or `{` is the compact form.
+    first := input.trim_start().chars().first() else ' '
+    compact := not (first == '[' or first == '\{')
+    mut ops := List[J]()
+    if compact
+        c := parse_compact(input)
+        if c.err != ""
+            io.eprint("error: {c.err}")
+            return 2
+        ops = c.ops
+    else
+        p := parse_json(input)
+        if p.err != ""
+            io.eprint("error: the edits aren't JSON: {p.err} (edit.in.1)")
+            return 2
+        match p.value
+            Arr(xs) => ops = xs
+            Obj(_, _) => ops = [p.value]
+            _ =>
+                io.eprint("error: the edits are a JSON list of objects (edit.in.1)")
+                return 2
+    package := is_dir(path)
+    mut work := Work(root: path, package: package, paths: [], texts: [], err: "")
+    for f in files_of(path)
+        text := fs.read_text(f) else err
+            io.eprint("error: can't read {f}: {err.kind}")
+            return 2
+        work.paths.push(f)
+        work.texts.push(text)
+    original := work.texts
+    # edit.in.2: all or nothing; the first failing edit stops the run and nothing is written.
+    for k in 0..ops.len()
+        apply(mut work, ops[k], path)
+        if work.err != ""
+            io.eprint("error: edit {k + 1} of {ops.len()}: {work.err}; nothing was written")
+            return 2
+    # edit.out.1: each changed file in canonical layout, when it parses.
+    mut changed := List[int]()
+    for i in 0..work.paths.len()
+        if original[i] == work.texts[i]
+            continue
+        if not work.texts[i].ends_with("\n")
+            work.texts[i] = "{work.texts[i]}\n"
+        done := fmt.format(work.texts[i])
+        if done.status == 0
+            work.texts[i] = done.text
+        if original[i] != work.texts[i]
+            changed.push(i)
+    # edit.out.2: the new state's diagnostics.
+    mut errors := 0
+    mut report := List[str]()
+    for i in 0..work.paths.len()
+        lexed := syntax.lex(work.texts[i])
+        mut diags := lexed.diags
+        diags.extend(syntax.parse(lexed.tokens).diags)
+        if diags.len() > 0
+            errors += syntax.one_per_line(diags).len()
+            report.push(syntax.report_text(work.paths[i], work.texts[i], diags))
+    warnings := 0
+    kept := not dry and not (if_clean and errors > 0)
+    if kept
+        for i in changed
+            write_file(work.paths[i], work.texts[i])
+    mut out := List[str]()
+    if show_diff or dry
+        for i in changed
+            d := fmt.diff(work.paths[i], original[i], work.texts[i])
+            cut := d.find(" (formatted)\n")
+            out.push(if cut == none then d else "{d.slice(0, cut else 0)} (edited)\n{d.slice((cut else 0) + 13, d.chars().len())}")
+    if out.len() > 0
+        joined := out.join("")
+        print(joined.slice(0, joined.chars().len() - 1))
+    for r in report
+        io.eprint(r)
+    if not json
+        io.eprint("note: the native `ail edit` checks syntax only; run `ail check` for the full check")
+    mut verb := "not written (--if-clean)"
+    if kept
+        verb = "edited"
+    elif dry
+        verb = "would edit"
+    if json
+        names := [syntax.quote(work.paths[i]) for i in changed]
+        print("\{\"summary\":true,\"edits\":{ops.len()},\"written\":{kept},\"files\":[{names.join(",")}],\"errors\":{errors},\"warnings\":{warnings}}")
+    else
+        warned := if warnings > 0 then ", {plural(warnings, "warning")}" else ""
+        print("{verb} {plural(changed.len(), "file")}; {plural(errors, "error")}{warned}")
+    if errors > 0
+        return 2
+    if test and kept
+        io.eprint("error: --test needs the native test runner (RR-4)")
+        return 2
+    0
+
+fn plural(n int, w str) str
+    "{n} {w}{if n == 1 then "" else "s"}"
+
+fn is_dir(path str) bool
+    _ := fs.list_dir(path) else err
+        return false
+    true
+
+## The files of the program at `path`: the file, or every `.ail` file of a package.
+fn files_of(path str) List[str]
+    if not is_dir(path)
+        return [path]
+    all := fs.walk(path) else err
+        return []
+    pre := if path.ends_with("/") then path else "{path}/"
+    mut out := List[str]()
+    for f in all
+        if not f.ends_with(".ail")
+            continue
+        rel := f.strip_prefix(pre) else f
+        parts := rel.split("/")
+        mut hidden := false
+        for k in 0..parts.len() - 1
+            if parts[k].starts_with(".") or parts[k] == "target"
+                hidden = true
+        if not hidden
+            out.push(f)
+    out
+
+## Write `text` to a temporary file beside `path` and rename it over, so a reader sees the old
+## text or the new, never a partial file.
+fn write_file(path str, text str)
+    tmp := "{path}.tmp"
+    fs.write_text(tmp, text) else err
+        io.eprint("error: can't write {path}: {err.kind}")
+        return
+    fs.rename(tmp, path) else err
+        io.eprint("error: can't write {path}: {err.kind}")
+        fs.remove(tmp) else e2
+            return
