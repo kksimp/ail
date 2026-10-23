@@ -1,13 +1,13 @@
 # compiler
 entry: main in main.ail
 
-## (root) (40 items)
+## (root) (42 items)
 
 ## a64 (60 items)
 
 ## ast (129 items)
 
-## check (305 items)
+## check (306 items)
 
 ## codegen (54 items)
 
@@ -15,12 +15,14 @@ entry: main in main.ail
 
 ## fmt (63 items)
 
+## load (90 items)
+
 ## mir (376 items)
 
 ## obj (58 items)
 
-## syntax (100 items)
+## syntax (105 items)
 
 ## x64 (75 items)
 
-trimmed to fit 4000 tokens (~116); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~125); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

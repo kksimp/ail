@@ -49,7 +49,7 @@ fn derive.run(gen str, info derive.TypeInfo) str ! derive.DeriveError [fail]
 fn derive.unqualify(text str, module str) str  ## `text` with the module's own prefix `a.b.` removed from its names: the
 fn derive.type_info(modules List[str], progs List[ast.Program], name str, module str) derive.TypeInfo?  ## The `TypeInfo` of the struct or enum `name`, preferring one declared in
 fn derive.field_infos(prog ast.Program, fields List[ast.Field], module str) List[derive.FieldInfo]
-fn derive.show_type(t ast.TypeRef) str  ## A type as written, as `ail api` prints it.
+pub fn derive.show_type(t ast.TypeRef) str  ## A type as written, as `ail api` prints it.
 pub struct derive.Job  ## One deriving `impl` of a trait the program declares with `@derive(f)`
     pub module str  ## The `impl`'s module, empty for the root.
     pub label str  ## `TYPE.TRAIT`
