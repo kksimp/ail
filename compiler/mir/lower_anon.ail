@@ -19,7 +19,11 @@ fn Lower.anon_generic(self, f ast.FnDecl) ast.FnDecl
             continue
         changed = true
         name := "Anon{params.len()}"
-        gens.push(ast.GenericParam(name: name, pos: p.pos, bounds: [ast.Ident(name: t, pos: p.pos)]))
+        gens.push(ast.GenericParam(
+            name: name,
+            pos: p.pos,
+            bounds: [ast.Ident(name: t, pos: p.pos)],
+        ))
         params.push(ast.Param(
             name: p.name,
             pos: p.pos,
