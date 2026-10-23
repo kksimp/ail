@@ -412,6 +412,12 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
         if et := set_elem(r.ty)
             keys := call("rt.map_keys", [r.id], Ty.List(et))
             return lower_sorted(Val(id: keys, ty: Ty.List(et)), name, args, npos)
+    # `s.sorted()` of composite elements: as a list of them, by their order.
+    if name == "sorted" and args.len() == 0 and not is_pending_table(r.ty)
+        if et := set_elem(r.ty)
+            if not is_key_ty(et)
+                keys := call("rt.map_keys", [r.id], Ty.List(et))
+                return tuple_list_edit(Val(id: keys, ty: Ty.List(et)), et, name, npos, [])
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "`.{name}()` with a labelled or `mut` argument")
