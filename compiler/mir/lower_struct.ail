@@ -269,6 +269,7 @@ fn Lower.assign_slot(mut self, obj int, n str, k int, op ast.BinOp?, value ast.E
         store(obj, k, binary(o, old, v, pos).id)
     else
         v := lower_value(value, t) else return
+        uniq_drop_field(obj, k, t)
         store(obj, k, copy_if_place(value, Val(id: convert(v, t, pos), ty: t)))
 
 ## Inside a method, a field of `self` named without `self.`.

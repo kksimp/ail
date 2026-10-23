@@ -53,10 +53,25 @@ fn Lower.declare_unique(mut self, s ast.StructDecl, prog ast.Program, key str)
         invariants[key] = s.invariants
         inv_file[key] = file
 
+## A unique enum is declared like any enum, plus its `Drop` impl and
+## `move self` methods.
+fn Lower.declare_unique_enum(mut self, e ast.EnumDecl, prog ast.Program, key str)
+    if not e.is_unique
+        return
+    uniq.types.add(key)
+    for im in prog.impls
+        if im.trait_name == "Drop" and im.target.name == e.name
+            uniq.drops[key] = "{key}.drop"
+    for f in prog.fns
+        if o := f.owner
+            if o.name == e.name and (f.receiver?.moved else false)
+                uniq.moves_self.add("{key}.{f.name}")
+
 ## Whether a value of type `t` is unique (own.uniq.1, own.uniq.5, own.uniq.8).
 fn Lower.is_uniq(self, t Ty) bool
     match t
         Struct(n) => uniq.types.contains(n)
+        Enum(n) => uniq.types.contains(n)
         Opt(inner) => is_uniq(inner)
         List(e) => is_uniq(e)
         Map(_, v) => is_uniq(v)
@@ -136,6 +151,11 @@ fn Lower.uniq_recv(mut self, key str, recv ast.Expr?)
 fn Lower.uniq_drop_elem(mut self, l int, i int, elem Ty, pos ast.Pos)
     if is_uniq(elem)
         drop_call(checked("get", [l, i], bounds_site(pos), elem), elem)
+
+## `x.f = v` releases the value the field held (own.uniq.7).
+fn Lower.uniq_drop_field(mut self, obj int, k int, t Ty)
+    if is_uniq(t)
+        drop_call(load(obj, k, t), t)
 
 ## `m[k] = v` releases the value it replaces (own.uniq.8).
 fn Lower.uniq_drop_entry(mut self, m int, k int, vt Ty)

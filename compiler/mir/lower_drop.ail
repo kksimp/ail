@@ -37,6 +37,30 @@ fn Lower.gen_drop(mut self, name str, t Ty)
                 if is_uniq(slots[k].ty)
                     drop_call(load(x, k, slots[k].ty), slots[k].ty)
                 k -= 1
+        Enum(n) =>
+            if m := uniq.drops.get(n)
+                call(m, [x], Ty.Unit)
+            if not is_flat(n)
+                tag := load(x, 0, Ty.Int)
+                cases := enums[n]
+                for c in 0..cases.len()
+                    fs := cases[c].fields
+                    mut any_unique := false
+                    for f in fs
+                        any_unique = any_unique or is_uniq(f.ty)
+                    if not any_unique
+                        continue
+                    yes := new_block()
+                    next := new_block()
+                    branch(op("eq", [tag, konst(c, Ty.Int)], Ty.Bool), yes, [], next, [])
+                    cur = yes
+                    mut j := fs.len() - 1
+                    while j >= 0
+                        if is_uniq(fs[j].ty)
+                            drop_call(load(x, j + 1, fs[j].ty), fs[j].ty)
+                        j -= 1
+                    jump(next, [])
+                    cur = next
         Opt(inner) =>
             some := new_block()
             none_ := new_block()
