@@ -21,9 +21,9 @@ use draw
 use gfx
 use jsdom
 use images
+use attach
 use ws
 use svg
-use attach
 
 ## The keys, as `--keys` prints them.
 KEYS := [
