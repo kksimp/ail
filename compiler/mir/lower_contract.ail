@@ -224,7 +224,7 @@ fn Lower.fail_requires(
 ## conditions (contract.inh.1) the call passes when all of them hold or all of
 ## the implementation's own do.
 fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
-    if unchecked
+    if unchecked or any_requires(key, args_v, pos)
         return
     own := contracted.get(key)
     inh := contracted.get("inh:{key}")
