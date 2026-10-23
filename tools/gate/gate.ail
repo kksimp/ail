@@ -3,13 +3,13 @@
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
 ## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
 ## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net`, `bytecode`, `spec` (the files of those names; `net` starts tools/gate/net_server.py, `spec` runs tools/gate/spec.ail), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
-## PDF reader), `selfhost` (tools/self-host/run.sh, only when named).
+## PDF reader), `std` (the AIL std sources check, format and are called), `selfhost` (tools/self-host/run.sh, only when named).
 ## The native run programs are tools/gate/goldens.ail and nativex. No argument runs
 ## every suite but `selfhost`. The last line is `GATE GREEN` or
 ## `GATE RED (N failures)`; the exit status is 0 only for green.
 
 ## Examples without a `native_` name that the native backend takes today
-## (the list bootstrap/tests/native_examples.rs keeps). The others find files
+## (the list tools/gate/goldens.ail keeps). The others find files
 ## beside `env.program()` or stop at a construct outside the native subset, so
 ## the selftest runs them with `ail run` only.
 NATIVE_EXTRA := [
@@ -2538,6 +2538,104 @@ fn Gate.native_misc(mut self)
         if not text.contains(row[1])
             red("native subset table", "wording `{row[1]}` for `{row[0]}` is in no diagnostic")
 
+## The `std` suite (ported from std_sources.rs and std_call_gate.rs): the AIL std sources check and format
+## cleanly, a program importing every module checks, and every public std
+## function is called by a test, a corpus program or an example (std.use.1).
+## (file, function, why no case calls it); an entry that is now called fails
+## too, so the list only shrinks.
+STD_UNTESTABLE := [["time/date.ail", "now_local", "its value is the clock in the machine's zone"], [
+    "net/http.ail",
+    "serve_dir",
+    "it serves until the program stops, so a case cannot end it",
+]]
+
+## Modules only `ail build` reads (ADR 0819).
+STD_NATIVE_ONLY := ["regex/regex.ail"]
+
+fn is_word(c char) bool
+    c.is_alnum() or c == '_'
+
+## Whether `text` holds `needle` not preceded by a word character.
+fn has_call(text str, needle str) bool
+    mut from := 0
+    while from <= text.len()
+        rest := text.slice(from, text.len())
+        at := rest.find(needle) else return false
+        i := from + at
+        if i == 0 or not is_word(text.char_at(i - 1) else ' ')
+            return true
+        from = i + 1
+    false
+
+fn Gate.std(mut self, tmp str)
+    root := "bootstrap/src/std"
+    listing := sh_run("cd {root} && find . -name '*.ail' | sed 's|^./||' | sort")
+    files := listing.out.lines()
+    for n in STD_NATIVE_ONLY
+        r := sh_run("./ail check {root}/{n} 2>&1 | grep 'error\\[' | grep -v 'mod.main.1'")
+        if not r.out.is_empty()
+            self.red("std native-only {n}", r.out)
+    mut uses := ""
+    for f in files
+        if f == "types.ail" or STD_NATIVE_ONLY.contains(f)
+            continue
+        parts := f.slice(0, f.len() - 4).split("/")
+        stem := parts[parts.len() - 1]
+        dotted := if parts.len() == 2 and parts[0] == stem then stem else parts.join(".")
+        uses = "{uses}use std.{dotted}\n"
+    dir := "{tmp}/std"
+    fs.make_dir(dir) else return
+    fs.write_text("{dir}/all_std.ail", "{uses}\nfn main()\n    print(1)\n") else return
+    chk := proc.run("./ail", ["check", "{dir}/all_std.ail"]) else return
+    if chk.status != 0 or "{chk.out}{chk.err}".contains("error[")
+        self.red("std modules import", "{chk.out}{chk.err}")
+    m := proc.run("./ail", ["fmt", "--check", root]) else return
+    if m.status != 0
+        self.red("std layout", "run `./ail fmt {root}`: {m.out}{m.err}")
+    # Callers: tests, the token corpus and the examples.
+    all := sh_run("cat $(find bootstrap/tests tools/tokbench/corpus examples \\( -name '*.ail' -o -name '*.rs' -o -name '*.test' \\) -type f | sort)")
+    callers := all.out
+    mut seen := 0
+    for f in files
+        stem := f.slice(0, f.len() - 4).split("/").last() else ""
+        parent := if f.contains("/") then (f.split("/").first() else "") else ""
+        for line in slurp("{root}/{f}").lines()
+            if not line.starts_with("pub fn ")
+                continue
+            rest := line.slice(7, line.len())
+            mut head := ""
+            for ch in rest.chars()
+                if is_word(ch) or ch == '.'
+                    head = "{head}{ch}"
+                else
+                    break
+            mut name := head
+            mut calls := ["{stem}.{head}(", "{parent}.{head}("]
+            if dot := head.find(".")
+                name = head.slice(dot + 1, head.len())
+                calls = [".{name}("]
+            seen += 1
+            mut called := false
+            for call in calls
+                if has_call(callers, call) or (call.starts_with(".") and callers.contains(call))
+                    called = true
+            mut listed := false
+            for u in STD_UNTESTABLE
+                if u[0] == f and u[1] == name
+                    listed = true
+            if not called and not listed
+                self.red(
+                    "std call gate",
+                    "{f}: {name} is called by no test (add a case, or a STD_UNTESTABLE entry)",
+                )
+            if called and listed
+                self.red(
+                    "std call gate",
+                    "{f}: {name} is called now; remove it from STD_UNTESTABLE",
+                )
+    if seen <= 50
+        self.red("std call gate", "found only {seen} public std functions: the scan is broken")
+
 fn main() !
     args := env.args()
     all := [
@@ -2554,6 +2652,7 @@ fn main() !
         "globals",
         "pe",
         "asm",
+        "std",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -2592,6 +2691,7 @@ fn main() !
             "asm" => g.asm()
             "native_misc" => g.native_misc()
             "selfhost" => g.selfhost()
+            "std" => g.std(tmp)
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)
