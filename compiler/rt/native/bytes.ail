@@ -159,29 +159,6 @@ fn bytes_hex(b str) str
         i += 1
     str_at(s)
 
-## `b.hex(sep)` (type.bytes.14): `sep` between the byte pairs.
-fn bytes_hex_sep(b str, sep str) str
-    p := str_addr(b)
-    q := str_addr(sep)
-    n := load64(p)
-    m := load64(q)
-    if n == 0
-        return bytes_hex(b)
-    len := 2 * n + m * (n - 1)
-    s := str_new(len, len)
-    mut at := s + 16
-    mut i := 0
-    while i < n
-        if i > 0
-            copy_bytes(at, q + 16, m)
-            at += m
-        c := load8(p + 16 + i)
-        store8(at, hex_digit(c / 16))
-        store8(at + 1, hex_digit(c % 16))
-        at += 2
-        i += 1
-    str_at(s)
-
 ## Whether byte `c` is a continuation byte between `lo` and `hi`.
 fn utf8_in(c int, lo int, hi int) bool
     c >= lo and c <= hi
