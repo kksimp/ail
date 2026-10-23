@@ -1,0 +1,61 @@
+## eff.cap.4-5, as `packages::check_grants`: the code of each package reaches
+## only the capabilities its grants allow. One diagnostic per grant and
+## capability, at the manifest line, naming a chain of calls from a function of
+## the package (a public one if any reaches it).
+use ast
+
+CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
+
+fn Checker.check_grants(self) List[Diag]
+    if prog.grants.len() == 0
+        return []
+    fx := infer_effects(prog, facts())
+    mut dep_names := Set[str]()
+    for g in prog.grants
+        if not g.own
+            dep_names.add(g.package)
+    mut owner := List[str?]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            owner.push(none)
+        else
+            head := module_at(prog, f.pos).split(".")[0]
+            owner.push(if dep_names.contains(head) then head else "")
+    mut out := List[Diag]()
+    for g in prog.grants
+        for cap in CAPABILITIES
+            if g.caps.contains(cap)
+                continue
+            mut reaching := List[int]()
+            for i in 0..prog.fns.len()
+                if owner[i] == g.package and fx.sets[i].contains(cap)
+                    reaching.push(i)
+            if reaching.len() == 0
+                continue
+            mut at := reaching[0]
+            for i in reaching
+                if prog.public.contains(prog.fns[i].pos.line)
+                    at = i
+                    break
+            chain := fx.chain(prog, at, cap)
+            mut rule := "eff.cap.4"
+            mut who := "dependency `{g.package}`"
+            mut line := "this `dep` line"
+            if g.own
+                rule = "eff.cap.5"
+                who = "this package"
+                line = "its `package` line"
+            mut help := "add `{cap}` to the `caps` of {line} if the package should reach it; otherwise remove the call"
+            if g.caps.len() == 0
+                help = "add `caps {cap}` to {line} if the package should reach `{cap}`; otherwise remove the call"
+            first := chain.split(" -> ")[0]
+            out.push(
+                new_diag(
+                    rule,
+                    g.pos,
+                    "{who} reaches the capability `{cap}`, which {line} doesn't grant: {chain}",
+                )
+                    .with_note(prog.fns[at].pos, "`{first}` reaches `{cap}`")
+                    .with_help(help),
+            )
+    out
