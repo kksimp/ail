@@ -1,0 +1,26 @@
+## `ail pkg update [NAME...]` (mod.pkg.9): resolve the named git dependencies
+## of the package in the current directory (all if none are named) again,
+## ignoring `ail.lock`, and rewrite the lock.
+
+## Run `ail pkg ARGS`; the exit status. Only `update` exists.
+pub fn command(args List[str]) int
+    if args.len() == 0 or args[0] != "update"
+        io.eprint("usage: ail pkg update [NAME...]")
+        return 2
+    names := args[1..]
+    base := options()
+    opts := Options(write_lock: true, frozen: false, offline: base.offline, refresh: names)
+    packages := read_with(".", opts)
+    got := update(packages, names)
+    mut shown := List[str]()
+    for m in packages.manifests
+        for d in m.diags
+            shown.push("{m.path}:{d.pos.line}: error[{d.rule}]: {d.msg}")
+    for d in got.1
+        shown.push("error[{d.rule}]: {d.msg}")
+    if shown.len() > 0
+        io.eprint(shown.join("\n"))
+        return 2
+    for l in got.0
+        print(l)
+    0

@@ -37,6 +37,7 @@ use explain
 use load
 use mir
 use obj
+use pkg
 use syntax
 use x64
 
@@ -134,6 +135,8 @@ fn main() !
             load_dump(args[1..])
         "check-program" =>
             check_cmd(args[1..])
+        "pkg" =>
+            io.exit(pkg.command(args[1..]))
         "effects" =>
             io.exit(load.effects_command(args[1..], path.join(
                 path.dir(compiler_dir()),
@@ -462,37 +465,49 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
                 files.push("{path}/{name}")
         srcs.extend(parse_module("", files)?)
     mut loaded := Set[str]()
-    # The package root each source was read from: a dependency's modules
-    # resolve against its own root and manifest (mod.pkg.3).
-    mut roots := [root for _ in srcs]
+    # Packages (mod.pkg.1-6): a dependency's modules load under its name and
+    # resolve their imports against its own root and manifest (mod.pkg.3).
+    packages := pkg.read(root)
     mut k := 0
     while k < srcs.len()
-        for imp in mir.imports_of(srcs[k].prog).sorted()
-            if loaded.contains(imp)
+        for ui in 0..srcs[k].prog.uses.len()
+            u := srcs[k].prog.uses[ui]
+            parts := [i.name for i in u.path]
+            if parts.len() == 0
                 continue
-            loaded.add(imp)
-            if imp.starts_with("std.")
+            imp := parts.join(".")
+            if parts[0] == "std"
+                if loaded.contains(imp)
+                    continue
+                loaded.add(imp)
                 # A standard module in AIL: one file under the std directory.
-                if std != ""
+                if std != "" and mir.STD_AIL.contains(imp)
                     srcs.push(parse_source(imp, std_file(std, imp))?)
-                    roots.push(root)
                 continue
-            from := roots[k]
-            parts := imp.split(".")
-            mut mroot := from
-            mut dir := "{from}/{imp.replace(".", "/")}"
-            if dep := manifest_dep(from, parts[0])
-                # `dep NAME path DIR`: `use NAME.m` is `DIR/m` (mod.pkg.2).
-                mroot = "{from}/{dep}"
-                dir = if parts.len() == 1 then mroot else "{mroot}/{parts[1..].join("/")}"
+            t := packages.target(srcs[k].module, parts)
+            if t.undeclared
+                continue
+            if t.module != imp
+                # The import names the module by its place in the program
+                # (`shapes` in package `geo` is `geo.shapes`), keeping the
+                # name the file uses for it.
+                segs := t.module.split(".")
+                mut alias := ast.Ident(name: parts[parts.len() - 1], pos: u.pos)
+                if given := u.alias
+                    alias = given
+                srcs[k].prog.uses[ui] = ast.Use(
+                    path: [ast.Ident(name: n, pos: u.pos) for n in segs],
+                    alias: alias,
+                    pos: u.pos,
+                )
+            if loaded.contains(t.module)
+                continue
+            loaded.add(t.module)
             mut files := List[str]()
-            for name in fs.list_dir(dir)?.sorted()
+            for name in fs.list_dir(t.dir)?.sorted()
                 if name.ends_with(".ail")
-                    files.push("{dir}/{name}")
-            before := srcs.len()
-            srcs.extend(parse_module(imp, files)?)
-            for _ in before..srcs.len()
-                roots.push(mroot)
+                    files.push("{t.dir}/{name}")
+            srcs.extend(parse_module(t.module, files)?)
         k += 1
     derived := derived_sources()?
     srcs.extend(derived.sources)
@@ -537,16 +552,6 @@ fn mentions_prelude(srcs List[mir.Source]) bool
         if s.text.contains("@derive") or s.text.contains("TypeInfo")
             return true
     false
-
-## The directory of dependency `name` in the manifest `ROOT/ail.pkg`:
-## its `dep NAME path DIR` line (mod.pkg.2). `none` without one.
-fn manifest_dep(root str, name str) str?
-    text := fs.read_text("{root}/ail.pkg") else return none
-    for line in text.lines()
-        w := line.split(" ")
-        if w.len() >= 4 and w[0] == "dep" and w[1] == name and w[2] == "path"
-            return w[3]
-    none
 
 ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
 fn std_file(std str, imp str) str
@@ -973,7 +978,8 @@ fn load_dump(files List[str])
 ## when the program is rejected.
 fn check_cmd(rest List[str])
     json := rest.contains("--json")
-    paths := [a for a in rest if not a.starts_with("--")]
+    driver := rest.contains("--unsafe") and rest.contains("driver")
+    paths := [a for a in rest if not a.starts_with("--") and (a != "driver" or not driver)]
     if paths.len() != 1
         io.eprint("usage: ail check [--json] FILE|DIR")
         io.exit(2)
@@ -984,7 +990,11 @@ fn check_cmd(rest List[str])
         return
     mut found := [load.shown_syntax(d) for d in loaded.diags]
     if loaded.diags.len() == 0
-        found = [load.shown_check(d) for d in check.check_program(loaded.program).diags]
+        mut program := loaded.program
+        if driver
+            # unsafe.hw.1: `--unsafe driver` lets the root package reach hardware.
+            program.driver_allowed.push("")
+        found = [load.shown_check(d) for d in check.check_program(program).diags]
     if found.len() > 0
         io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
     for d in found
