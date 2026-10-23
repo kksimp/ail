@@ -2,6 +2,7 @@
 (root)  40 items
 a64  60 items
 ast  129 items
+budget  24 items
 check  305 items
 codegen  54 items
 derive  32 items
