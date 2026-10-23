@@ -1,0 +1,8 @@
+## `proc.Output(...)` built by hand (std.proc.1): a program that fakes a
+## child's result, as the editor's tests do.
+fn show(o proc.Output) str
+    "{o.status} {o.ok()} [{o.out}] [{o.err}]"
+
+fn main()
+    print(show(proc.Output(status: 0, out: "a\nb\n", err: "")))
+    print(show(proc.Output(status: 2, out: "", err: "oops")))

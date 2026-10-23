@@ -1,0 +1,30 @@
+## `ail pkg update [NAME...]` (mod.pkg.9): resolve the named git dependencies
+## of the package in the current directory (all if none are named) again,
+## ignoring `ail.lock`, and rewrite the lock. The command reads the options
+## from the environment, so this sets `AIL_PKG_REFRESH` and
+## `AIL_PKG_WRITE_LOCK` before reading the graph.
+use ast
+use syntax
+
+## The lines `locked NAME COMMIT` of the dependencies resolved, or the
+## diagnostics, as `(lines, diags)`.
+pub fn update(packages Packages, names List[str])(List[str], List[syntax.Diag])
+    mut diags := List[syntax.Diag]()
+    mut lines := List[str]()
+    if packages.manifests.len() == 0
+        return (lines, [diag("mod.pkg.9", ast.Pos(line: 1, col: 1), "there is no `ail.pkg` in the current directory", "run `ail pkg update` in a package root")])
+    for n in names
+        mut found := false
+        for e in packages.locked()
+            if e.name == n
+                found = true
+        if not found
+            diags.push(diag(
+                "mod.pkg.9",
+                ast.Pos(line: 1, col: 1),
+                "no `ail.pkg` of this program has a git dependency `{n}`",
+                "name a `dep NAME git ...` line of `ail.pkg` or of a dependency's",
+            ))
+    for e in packages.locked().sorted(by: |e| e.name)
+        lines.push("locked {e.name} {e.commit}")
+    (lines, diags)
