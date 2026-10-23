@@ -69,7 +69,7 @@ fn map_hash(kind int, k int) int
         return shape_hash(kind, 0, k, 0).bit_and(4611686018427387903)
     map_hash_int(k)
 
-# ---- composite keys (ADR 0865) ----
+# ---- composite keys (ADR 0866) ----
 #
 # A key kind above 15 is a string object that says how a key is laid out:
 # `i` a word (int, char, bool), `f` a float, `s` a string, `L` and the shape
@@ -547,7 +547,7 @@ fn map_at(m int, k int, head str, tail str) int
     0
 
 ## The trap of `m[k]` on a missing key whose text `text` the program built
-## (composite keys, ADR 0865).
+## (composite keys, ADR 0866).
 fn map_gone(head str, text str, tail str)
     flush()
     out_str(head)

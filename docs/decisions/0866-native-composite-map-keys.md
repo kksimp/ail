@@ -1,4 +1,4 @@
-# 0865. Native maps and sets take struct, tuple, enum and list keys, hashed by the key's shape
+# 0866. Native maps and sets take struct, tuple, enum and list keys, hashed by the key's shape
 
 - **Status:** Accepted
 - **Date:** 2026-10-23

@@ -1,4 +1,4 @@
-## Composite map and set keys (ADR 0865): a struct, tuple, enum or list of
+## Composite map and set keys (ADR 0866): a struct, tuple, enum or list of
 ## keys. The table's key kind is then a string object, the key's shape, which
 ## `compiler/rt/native/map.ail` walks to hash and compare keys. `i` is a word
 ## (int, char, bool), `f` a float, `s` a string, `L` and the shape of its
