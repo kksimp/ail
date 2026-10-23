@@ -1,1 +1,4 @@
 # Programs whose native output is known wrong (the golden is the interpreter's); the checks skip them and name the owner.
+# native `ail test --coverage` and `--update` do not exist yet (item 275); these examples call them:
+tool_test_coverage
+tool_test_update_preview

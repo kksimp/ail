@@ -220,12 +220,12 @@ if [ "${1:-}" = selftest ] && [ "$#" = 1 ] && [ "$native_on" = 1 ] && [ "${AIL_S
 fi
 
 # `ail test` is native only (plan.md step B): the AIL runner (tools/ailtest/ailtest.ail) builds the tests natively and
-# runs each. A test it can't build is reported `skip` with the construct that blocks it. `--update`, `--trace` and
-# `--dry-run` belong to the interpreter and are refused until they are ported.
+# runs each. A test it can't build is reported `skip` with the construct that blocks it. `--update`, `--trace`, `--dry-run` and
+# `--coverage` belong to the interpreter and are refused until they are ported.
 if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     for test_arg in "${@:2}"; do
         case "$test_arg" in
-            --update | --dry-run | --trace | --trace=*)
+            --update | --dry-run | --trace | --trace=* | --coverage | --coverage=*)
                 echo "ail test: $test_arg is not native yet (interpreter only: AIL_RUST=1 ./ail test ...)" >&2
                 [ "${AIL_RUST:-}" = 1 ] || exit 2 ;;
         esac
