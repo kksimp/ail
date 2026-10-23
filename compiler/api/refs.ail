@@ -17,6 +17,8 @@ struct Refs
     found List[Ref]
     ## Type parameter names in scope: they shadow no declaration.
     generics List[str]
+    ## Value names that resolved to no declaration: locals, for `--refs`.
+    names List[(ast.Pos, str)]
 
 fn pk(p ast.Pos) int
     p.line * 65536 + p.col
@@ -32,8 +34,13 @@ fn fields_owner(id str) str?
 
 ## Every reference in `prog`, by position then id, without the prelude and
 ## the other files' (api.ref.1-2). `own_file` keeps only the first file's.
-pub fn references(prog ast.Program, symbols Map[int, str], weak Map[int, str], own_file bool) List[Ref]
-    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [])
+pub fn references(
+    prog ast.Program,
+    symbols Map[int, str],
+    weak Map[int, str],
+    own_file bool,
+) List[Ref]
+    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [])
     r.program()
     limit := if own_file then 1048576 else 1073741824
     kept := [x for x in r.found if x.pos.line <= limit]
@@ -46,6 +53,17 @@ pub fn references(prog ast.Program, symbols Map[int, str], weak Map[int, str], o
                 continue
         out.push(x)
     out
+
+## Every reference of `prog` unsorted, without the prelude, and the value
+## names that resolved to none (`--refs`, api.refs.1).
+pub struct Found
+    pub refs List[Ref]
+    pub names List[(ast.Pos, str)]
+
+pub fn collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) Found
+    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [])
+    r.program()
+    Found(refs: [x for x in r.found if x.pos.line < 1073741824], names: r.names)
 
 fn Refs.add(mut self, pos ast.Pos, id str)
     found.push(Ref(id: id, pos: pos))
@@ -262,9 +280,11 @@ fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
                     Hole(v) => expr(v)
                     Fmt(v, _) => expr(v)
                     Lit(_) => continue
-        Name(_, p) =>
+        Name(n, p) =>
             if id := resolved_at(p)
                 add(p, id)
+            else
+                names.push((p, n))
         TypeArgs(_, targs, p) =>
             if id := resolved_at(p)
                 add(p, id)

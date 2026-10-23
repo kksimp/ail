@@ -54,6 +54,16 @@ install_private_rust() {
     echo "ail: Rust $pin installed" >&2
 }
 
+# Package options for the native loader (mod.pkg.7-8, compiler/pkg/git.ail): `run` and `test` write
+# `ail.lock`, `--deterministic` refuses a stale one, `--deny net` fetches nothing.
+case "${1:-}" in run | test) export AIL_PKG_WRITE_LOCK=1 ;; esac
+prev=
+for a in "$@"; do
+    case "$a" in --deterministic) export AIL_PKG_FROZEN=1 ;; esac
+    if [ "$prev" = --deny ] && [ "${a#*net}" != "$a" ]; then export AIL_PKG_OFFLINE=1; fi
+    prev="$a"
+done
+
 # `AIL_NATIVE_COMPILER=PATH`: `ail build` is done by a natively built compiler (stage 1 of
 # tools/self-host/run.sh) in place of the Rust-hosted one. The program is checked first, as `ail build` does
 # (with `--unsafe driver`, unsafe.hw.1, when given); the native compiler takes the same arguments.
@@ -125,7 +135,7 @@ native_build=
 if [ "${1:-}" = build ]; then
     native_build=1
     for a in "${@:2}"; do
-        case "$a" in --derived-out | --unsafe) native_build= ;; esac
+        case "$a" in --derived-out) native_build= ;; esac
     done
 fi
 native_api=
@@ -145,7 +155,7 @@ if [ "${1:-}" = effects ]; then
     done
     [ "$files" = 1 ] || native_effects=
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
@@ -163,12 +173,15 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
             mv "$native.new" "$native"
         fi
     fi
+    if [ "$1" = pkg ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" pkg "$@"; fi
     if [ "$1" = fmt ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fmt "$@"; fi
     if [ "$1" = build ]; then
         # The native CLI's build doesn't check: check the file (the first operand) first.
         file=
         for a in "${@:2}"; do case "$a" in -*) ;; *) if [ -z "$file" ] && [ -f "$a" ]; then file="$a"; fi ;; esac; done
-        [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$file" || exit $?
+        unsafe_driver=
+        prev=; for a in "${@:2}"; do if [ "$prev" = --unsafe ] && [ "$a" = driver ]; then unsafe_driver="--unsafe driver"; fi; prev="$a"; done
+        [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $unsafe_driver "$file" || exit $?
         shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
     fi
     if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
