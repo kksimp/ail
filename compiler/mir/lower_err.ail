@@ -15,10 +15,11 @@ pub fn Ty.opt_inner(self) Ty?
         Opt(t) => t
         _ => none
 
-## `T?` for a type the subset can hold in an optional: no `T??`.
+## `T?` for a type the subset can hold in an optional. A `T??` boxes the inner
+## optional in a pointer-holding cell, so `some(none)` differs from `none`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple | Ref => Ty.Opt(t)
+        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple | Ref | Opt(_) => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -64,6 +65,9 @@ fn Lower.some(mut self, v Val) Val
         Int | Char | Sized(_) => Val(id: call("rt.box", [v.id], t), ty: t)
         Float | F32 => Val(id: call("rt.boxf", [v.id], t), ty: t)
         Bool => Val(id: call("rt.box_bool", [v.id], t), ty: t)
+        Opt(_) =>
+            raw := call("rt.box_opt", [v.id], Ty.Int)
+            Val(id: op("copy", [raw], t), ty: t)
         Enum(n) =>
             # A fieldless enum is an `int` tag, and tag 0 is a value: box it.
             if is_flat(n)
@@ -78,6 +82,9 @@ fn Lower.unwrap(mut self, o Val) Val
         Int | Char | Sized(_) => Val(id: call("rt.unbox", [o.id], t), ty: t)
         Float | F32 => Val(id: call("rt.unboxf", [o.id], t), ty: t)
         Bool => Val(id: call("rt.unbox_bool", [o.id], t), ty: t)
+        Opt(_) =>
+            raw := call("rt.unbox", [o.id], Ty.Int)
+            Val(id: op("copy", [raw], t), ty: t)
         Enum(n) =>
             if is_flat(n)
                 tag := call("rt.unbox", [o.id], Ty.Int)
@@ -89,9 +96,13 @@ fn Lower.unwrap(mut self, o Val) Val
 fn Lower.convert_opt(mut self, v Val, want Ty, pos ast.Pos) int
     inner := want.opt_inner() else return v.id
     if v.ty.opt_inner() != none
+        if inner.opt_inner() != none and same_ty(v.ty, inner)
+            return some(v).id
         if not same_ty(v.ty, want)
             problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
         return v.id
+    if inner.opt_inner() != none and same_ty(v.ty, inner.opt_inner() else Ty.Unknown)
+        return convert_opt(some(v), want, pos)
     if not same_ty(v.ty, inner)
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
         return v.id
@@ -144,8 +155,23 @@ fn Lower.out_opt(mut self, v Val, pos ast.Pos) Val?
     jump(join, [])
     seal(present)
     cur = present
-    out(unwrap(v), pos)?
-    jump(join, [])
+    u := unwrap(v)
+    if inner.opt_inner() != none
+        # `some(none)` of an `int??` prints as such; a present inner prints as itself.
+        hollow := new_block()
+        full := new_block()
+        branch(op("eq", [u.id, konst(0, Ty.Int)], Ty.Bool), hollow, [], full, [])
+        seal(hollow)
+        cur = hollow
+        call("rt.out_str", [str_value("some(none)")], Ty.Unit)
+        jump(join, [])
+        seal(full)
+        cur = full
+        out_opt(u, pos)?
+        jump(join, [])
+    else
+        out(u, pos)?
+        jump(join, [])
     seal(join)
     cur = join
     Val(id: -1, ty: Ty.Unit)

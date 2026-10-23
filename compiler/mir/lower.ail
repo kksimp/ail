@@ -624,7 +624,7 @@ fn is_const_expr(e ast.Expr) bool
 ## number, a string, an enum): it can be a list element or field.
 fn is_shared_opt(t Ty) bool
     inner := t.opt_inner() else return false
-    is_number(inner) or inner == Ty.Str or is_enum(inner)
+    is_number(inner) or inner == Ty.Str or is_enum(inner) or is_shared_opt(inner)
 
 fn is_number(t Ty) bool
     match t

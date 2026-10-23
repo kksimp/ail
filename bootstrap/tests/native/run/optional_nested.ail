@@ -1,0 +1,38 @@
+fn table() Map[str, int?]
+    {"a": 1, "b": none}
+
+fn describe(v int??) str
+    if inner := v
+        if n := inner
+            return "value {n}"
+        return "present, inner none"
+    "absent"
+
+fn flatten(v int??) int?
+    v else none
+
+fn last_of(xs List[int?]) int?
+    v := xs.last()?
+    v
+
+fn wrap(n int) int??
+    n
+
+fn main()
+    m := table()
+    print(describe(m.get("a")))
+    print(describe(m.get("b")))
+    print(describe(m.get("c")))
+    print(describe(wrap(9)))
+    print(describe(none))
+    print(m.get("b"))
+    print(m.get("c"))
+    print(m.get("a"))
+    print(flatten(m.get("b")) == flatten(m.get("c")))
+    print(m.get("b") == m.get("c"))
+    print(m.get("b") == m.get("b"))
+    print(last_of([1, none]))
+    print(last_of([none, 4]))
+    print(last_of([]))
+    d := m.get("b") else 99
+    print(d)
