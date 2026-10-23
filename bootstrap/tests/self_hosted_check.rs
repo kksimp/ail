@@ -6,6 +6,9 @@
 //! diagnostics. With nothing skipped (slice 4), the two must also agree on
 //! every diagnostic except the package manifest's capability checks, which
 //! `ail` makes before the checker runs and the AST dump doesn't carry.
+//!
+//! There is one checker, `compiler/check/` (ADR 0865): it may report MORE than
+//! this one, but only rules listed in `checker_known_new.txt`, and never LESS.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,6 +99,27 @@ fn key(line: &str) -> Key {
     (str_field(line, "rule"), str_field(line, "file"), num_field(line, "line"), num_field(line, "col"))
 }
 
+/// The rules the AIL checker may report beyond the Rust one: one per line,
+/// `#` starts a comment.
+fn known_new() -> Vec<String> {
+    let text = fs::read_to_string(root().join("bootstrap/tests/checker_known_new.txt")).unwrap_or_default();
+    text.lines().map(|l| l.split('#').next().unwrap().trim().to_string()).filter(|l| !l.is_empty()).collect()
+}
+
+/// Whether `got` holds every diagnostic of `want`, in order, and nothing else
+/// except diagnostics of the `known_new` rules.
+fn covers(want: &[Key], got: &[Key], known_new: &[String]) -> bool {
+    let mut next = 0;
+    for g in got {
+        if want.get(next) == Some(g) {
+            next += 1;
+        } else if !known_new.contains(&g.0) {
+            return false;
+        }
+    }
+    next == want.len()
+}
+
 struct Section {
     diags: Vec<Key>,
     /// Each diagnostic's message, beside `diags`.
@@ -175,6 +199,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
             sec.messages.push(str_field(line, "message"));
         }
     }
+    let known = known_new();
     let mut agree = 0;
     let mut failures = Vec::new();
     let (mut agree_all, mut total_diags, mut matched_diags, mut same_text) = (0usize, 0usize, 0usize, 0usize);
@@ -188,7 +213,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
         let want: Vec<Key> =
             String::from_utf8_lossy(&out.stderr).lines().filter(|l| l.starts_with('{')).map(key).filter(counted).collect();
         let got: Vec<Key> = sec.diags.iter().filter(|k| counted(k)).cloned().collect();
-        if want == got {
+        if covers(&want, &got, &known) {
             agree += 1;
         } else {
             failures.push(format!("{prog}\n  ail check: {want:?}\n  AIL:       {got:?}"));
@@ -202,7 +227,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
         let all: Vec<Key> = lines.iter().map(|l| key(l)).collect();
         total_diags += all.len();
         matched_diags += all.iter().filter(|k| sec.diags.contains(k)).count();
-        if all == sec.diags {
+        if covers(&all, &sec.diags, &known) {
             agree_all += 1;
             // Wording isn't gated: the report counts the messages that match.
             same_text += lines.iter().zip(&sec.messages).filter(|(l, m)| str_field(l, "message") == **m).count();
