@@ -106,6 +106,9 @@ struct Lower
     borrowed Set[str]
     ## The generated `copy.T` functions asked for, by name.
     copy_tys Map[str, Ty]
+    ## Unique types and their releases (lower_unique.ail).
+    uniq UniqState
+    unw Unwind
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -261,6 +264,8 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
+        uniq: new_uniq(),
+        unw: new_unwind(),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
@@ -340,6 +345,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     l.gen_unchecked()
     l.enter_file(0)
     l.gen_dispatch()
+    l.gen_drops()
     l.gen_copies()
     l.gen_enum_eqs()
     l.gen_init_enums()
@@ -462,7 +468,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             message: "`extern c fn {f.name}`: `ail build` links only a fixed libc subset (`ail run` can call any C function)",
         ))
         return
-    if declare_generic_fn(f, pre)
+    if declare_generic_fn(anon_generic(f), pre)
         return
     mut params := List[Ty]()
     self_ty = if o := f.owner then owner_key(o.name, pre) else ""
@@ -791,6 +797,7 @@ fn Lower.declare(mut self, name str, ty Ty, v int)
     if v >= 0 and names[v] == ""
         names[v] = name
     write_var(key, cur, v)
+    uniq_declared(name)
 
 fn Lower.lookup(self, name str) str?
     mut i := scopes.len() - 1
@@ -865,6 +872,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
         return
     if not unchecked
         enter_contracts(f, key)
+    uniq_params(f)
     want := not ret.is_unit()
     if want
         tail_want = ret
@@ -958,7 +966,8 @@ fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
-    elif not same_ty(v.ty, want)
+    elif not same_ty(v.ty, want) and not (is_rt and want.is_fn() and v.ty == Ty.Int)
+        # The runtime calls a function address it kept as an `int` (unwind.ail).
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
 
@@ -989,6 +998,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     continue
                 if want
                     result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
+                    uniq_take(e)
                     continue
             # An `unsafe` block gives its last expression's value.
             if want
@@ -1145,7 +1155,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             note_statement(e)
             if is_pop_call(e) and lower_pop_stmt(e) != none
                 return
-            lower_expr(e, Ty.Unit)
+            uniq_discard(e, lower_expr(e, Ty.Unit))
         Handle(value, other) => lower_handle(value, other)
         Defer(st, _) => defer_note(st)
         With(m, var, _, body, pos) => lower_with(m, var, body, pos)
@@ -1155,6 +1165,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
+    if is_uniq(v.ty)
+        return uniq_move(e, v)
     if is_branchy(e) and place_tail(e, true)
         if v.ty.is_coll()
             return copy_coll(v)
@@ -1168,6 +1180,8 @@ fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
 ## A returned list or struct is copied when it belongs to someone else: a
 ## field, an element, a parameter or a `for` variable (own.val.1).
 fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
+    if is_uniq(v.ty)
+        return uniq_move(e, v)
     if not needs_copy(v.ty)
         return v.id
     match e
@@ -1217,6 +1231,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
                 ty2 := settle_var(target, ty, r)
                 v = copy_if_place(value, Val(id: convert(r, ty2, pos), ty: ty2))
             note_assigned(key, value)
+            uniq_replace(key)
             write_var(key, cur, assign_param(key, ty, v, pos))
         Index(recv, index, ipos) =>
             if assign_after_rhs(target, op, value, pos)
@@ -1237,6 +1252,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             else
                 r := lower_value(value, elem) else return
                 v = copy_if_place(value, Val(id: convert(r, elem, pos), ty: elem))
+            uniq_drop_elem(l.id, i.id, elem, ipos)
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
@@ -1768,6 +1784,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     continue
                 v := lower_value(a.value, sig.params[i])?
                 retype_arg(a.value, v, sig.params[i])
+                uniq_arg(a)
                 vs.push(shield_arg(args, i, Val(
                     id: convert(v, sig.params[i], expr_pos(a.value)),
                     ty: v.ty,
@@ -1909,6 +1926,8 @@ fn Lower.lower_method(
     args List[ast.Arg],
     want Ty?,
 ) Val?
+    if rest := trait_call_args(recv, args)
+        return lower_method(args[0].value, name, npos, rest, want)
     # std.env.1
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)

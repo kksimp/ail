@@ -1,0 +1,14 @@
+# own.defer.1: a `defer` in a method sees `self` when a trap runs it.
+struct C
+    n int
+
+fn C.go(mut self, k int) int
+    defer print("n={n}")
+    n += 1
+    xs := [1]
+    xs[k]
+
+fn main()
+    mut c := C(n: 0)
+    print(c.go(0))
+    print(c.go(3))

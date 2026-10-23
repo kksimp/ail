@@ -1,0 +1,74 @@
+# own.uniq.3-4, own.uniq.7, own.move.1-2: a unique value is released once, by
+# its last owner, whichever way the scope is left.
+unique struct Res
+    id int
+
+impl Drop for Res
+    fn drop(mut self)
+        print("free {id}")
+
+unique struct Pool
+    first Res
+    second Res
+    spare Res?
+
+impl Drop for Pool
+    fn drop(mut self)
+        print("pool down")
+
+error struct Bad
+    why str
+
+fn give(move r Res)
+    print("gave {r.id}")
+
+fn maybe(flag bool) int
+    a := Res(id: 1)
+    b := Res(id: 2)
+    if flag
+        give(move a)
+    print("maybe end")
+    flag_value(flag)
+
+fn flag_value(flag bool) int
+    if flag then 1 else 0
+
+fn make(n int) Res ! Bad
+    if n < 0
+        return Bad(why: "neg")
+    Res(id: n)
+
+fn chain() int ! Bad
+    a := Res(id: 10)
+    b := make(11)?
+    c := make(-1)?
+    b.id
+
+fn loops()
+    for i in 0..4
+        r := Res(id: 20 + i)
+        if i == 1
+            continue
+        if i == 3
+            break
+        print("iter {i}")
+
+fn pick(n int) Res
+    a := Res(id: 30)
+    b := Res(id: 31)
+    if n > 0
+        return a
+    b
+
+fn main()
+    print(maybe(true))
+    print(maybe(false))
+    loops()
+    p := pick(1)
+    print("picked {p.id}")
+    q := pick(0)
+    print("picked {q.id}")
+    pool := Pool(first: Res(id: 40), second: Res(id: 41), spare: Res(id: 42))
+    print("pool {pool.first.id}")
+    v := chain() else 0 - 1
+    print(v)
