@@ -222,7 +222,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
 ## `lower_package` with the sources from `lazy` on the prelude's, lowered
 ## as the program reaches them (ADR 0808).
 pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
-    srcs := with_error_owners(input)
+    srcs := with_error_owners(shadow_free(input, lazy))
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
@@ -305,6 +305,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
         l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
+    l.share_gen_aliases(srcs)
     if r := rt
         l.declare_all(r, "rt.")
     l.tk.on = l.sigs.contains("rt.task_new")
@@ -335,6 +336,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         l.quiet_lazy(k, before)
     l.stamp_problems()
     l.gen_const_init()
+    l.settle_inferred(srcs, lazy)
     for k in 0..lazy.min(srcs.len())
         l.enter_file(k)
         l.path = srcs[k].path
@@ -581,6 +583,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         or is_shared_opt(e)
                         or e.is_coll()
                         or e.is_ref()
+                        or e.is_fn()
                         return Ty.List(e)
                     none
                 "Atomic" =>
@@ -857,6 +860,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     self_ty = ""
     mut k := 0
     if f.owner != none
+        self_ty = owner
         if recv := f.receiver
             self_ty = owner
             declare_self(recv, sig.params[0], params[0])
@@ -967,6 +971,8 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
 fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.opt_inner() != none and not v.ty.is_unknown()
         return convert_opt(v, want, pos)
+    if settle_by_want(v, want)
+        return v.id
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
@@ -1075,7 +1081,12 @@ fn str_to_int_recv(e ast.Expr) ast.Expr?
 ## `s.to_int() else ...` (err.else.1-2) in any position: the parse, then the
 ## `else` when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.Pos) Val?
-    s := lower_value(recv, Ty.Str)?
+    # A `?` in `recv` (`env.get("PORT")?.to_int()`) also runs the `else` (err.prop.4).
+    fail := new_block()
+    else_targets.push(fail)
+    got := lower_value(recv, Ty.Str)
+    else_targets.pop()
+    s := got?
     if not (s.ty == Ty.Str)
         problem(pos, "`.to_int()` on `{s.ty.name()}`")
         return none
@@ -1084,7 +1095,6 @@ fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.
     join := new_block()
     r := new_value(Ty.Int, "")
     blocks[join].params.push(r)
-    fail := new_block()
     branch(ok, join, [n], fail, [])
     seal(fail)
     cur = fail
@@ -1726,6 +1736,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             and not is_pending_opt(elem)
             and not elem.is_coll()
             and not elem.is_ref()
+            and not elem.is_fn()
             and not elem.is_tensor()
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
@@ -1806,6 +1817,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     id: convert(v, sig.params[i], expr_pos(a.value)),
                     ty: v.ty,
                 )))
+            check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
             res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
             cells_back(cells)
@@ -1813,7 +1825,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
-            unsupported(pos, "this call")
+            call_member_value(callee, args, pos)
         TypeArgs(name, targs, tpos) =>
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(targs, args, pos)
@@ -1949,6 +1961,8 @@ fn Lower.lower_method(
 ) Val?
     if rest := trait_call_args(recv, args)
         return lower_method(args[0].value, name, npos, rest, want)
+    if ta := module_type_args(recv)
+        return lower_method(ta, name, npos, args, want)
     # std.env.1
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)
@@ -1969,8 +1983,8 @@ fn Lower.lower_method(
         return lower_chan_select(args, npos)
     if is_module(recv, "mem")
         return lower_mem_call(name, npos, args)
-    if g := generic_enum_ref(recv)
-        return generic_variant(g, name, args, npos, none)
+    if g := generic_member_ref(recv)
+        return generic_member(g, recv, name, args, npos, none)
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
@@ -1984,7 +1998,7 @@ fn Lower.lower_method(
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, expr_pos(recv))
-    r := deref(lower_value(recv, none)?)
+    r := deref_use(lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
     if chan_elem(r.ty) != none
@@ -2052,7 +2066,7 @@ fn Lower.module_name(self, e ast.Expr) str?
 ## Whether `e` names module `m` (not a local or a field of that name).
 fn Lower.is_module(self, e ast.Expr, m str) bool
     match e
-        Name(n, _) => n == m and lookup(n) == none and self_slot(n) < 0
+        Name(n, _) => (n == m or std_alias(n) == m) and lookup(n) == none and self_slot(n) < 0
         _ => false
 
 ## An empty list typed by its first `push` (type.coll.6): the variable takes

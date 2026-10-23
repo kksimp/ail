@@ -358,6 +358,9 @@ fn Lower.list_method(
         and (e == Ty.Int or e == Ty.Float or e == Ty.Bool)
         kind := konst(if e == Ty.Bool then 2 else if e == Ty.Float then 1 else 0, Ty.Int)
         return Val(id: call("rt.list_join_text", [r.id, vs[0].id, kind], Ty.Str), ty: Ty.Str)
+    if name == "join" and vs.len() == 1 and vs[0].ty == Ty.Str
+        if j := join_shown(r, e, vs[0].id)
+            return j
     if name == "cmp" and vs.len() == 1
         return list_cmp_method(r, vs[0], npos)
     if is_list_edit(name)

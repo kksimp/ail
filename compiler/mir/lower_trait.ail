@@ -28,6 +28,15 @@ pub struct Traits
     recv_expr ast.Expr?
     ## The position of the method call that is a whole statement, if any.
     stmt_pos ast.Pos?
+    ## The types whose default text function `text.T` was asked for, in order.
+    texts List[str]
+    ## The object of the `ref` the method call being lowered is on, or -1
+    ## (own.ref.7, lower_gtd_refcell.ail).
+    ref_obj int
+    ## The types whose `ref` text is being checked (`ref_text_ok`).
+    ref_seen Set[str]
+    ## How many of `texts` `gen_texts` has generated.
+    texts_done int
 
 pub fn new_traits() Traits
     Traits(
@@ -38,6 +47,10 @@ pub fn new_traits() Traits
         recv_mut: false,
         recv_expr: none,
         stmt_pos: none,
+        texts: [],
+        ref_obj: -1,
+        ref_seen: Set[str](),
+        texts_done: 0,
     )
 
 ## Record the traits of a file and the structs implementing them, in order;
@@ -137,6 +150,40 @@ fn Lower.gen_dispatch(mut self)
         for b in 0..blocks.len()
             sealed[b] = true
         end_fn(key, ast.Pos(line: 1, col: 1))
+    gen_texts()
+
+## Generate each default text function `text.T` asked for. The function of a
+## type that holds itself (a tree, `Json`) calls itself, so a text is never
+## expanded in place; a body can ask for more, so go until none is left.
+fn Lower.gen_texts(mut self)
+    mut k := traits.texts_done
+    while k < traits.texts.len()
+        key := traits.texts[k]
+        k += 1
+        t := text_key_ty(key)
+        ps := begin_fn("text.{key}", Ty.Str, [t])
+        r := default_error_text(key, Val(id: ps[0], ty: t)) else
+            fn_failed = true
+            -1
+        finish(return_of(r))
+        for b in 0..blocks.len()
+            sealed[b] = true
+        end_fn("text.{key}", ast.Pos(line: 1, col: 1))
+    traits.texts_done = k
+
+## The call of the default text function of `key`'s value `v`, asking for the
+## function the first time.
+fn Lower.text_fn_call(mut self, key str, v Val) int
+    name := "text.{key}"
+    if not sigs.contains(name)
+        sigs[name] = Sig(params: [v.ty], ret: Ty.Str, fails: false)
+        traits.texts.push(key)
+    call(name, [v.id], Ty.Str)
+
+fn Lower.text_key_ty(self, key str) Ty
+    if enums.contains(key)
+        return Ty.Enum(key)
+    Ty.Struct(key)
 
 ## Call `m` on the box's value and return its result.
 fn Lower.any_tail(mut self, m str, target Sig, ps List[int])

@@ -1,0 +1,37 @@
+## Generated code sees the imports of its module's files (ct.gen.1, mod.unit.2,
+## as the bootstrap's `modules.rs`): a derive generator's text, such as
+## `FromArgs`'s calls of `args.flag`, has no `use` lines of its own.
+use ast
+
+## Record `use std.fs as files` for a standard module the runtime implements
+## (std.use.2): the alias `files` is kept as `std:files` -> `fs`, so
+## `is_module` and `type_key` read `files.x` as `fs.x`.
+fn Lower.share_std_aliases(mut self, srcs List[Source])
+    for k in 0..srcs.len()
+        for u in srcs[k].prog.uses
+            parts := [i.name for i in u.path]
+            a := u.alias else continue
+            if parts.len() == 2
+                and parts[0] == "std"
+                and STD_MODULES.contains(parts[1])
+                and not STD_AIL.contains(parts.join("."))
+                file_aliases[k]["std:{a.name}"] = parts[1]
+
+## Give each generated source (`gen:...`) the imports of the written files
+## of its module.
+fn Lower.share_gen_aliases(mut self, srcs List[Source])
+    share_std_aliases(srcs)
+    for k in 0..srcs.len()
+        if not srcs[k].path.starts_with("gen:")
+            continue
+        mut merged := file_aliases[k]
+        for j in 0..srcs.len()
+            if srcs[j].module == srcs[k].module and not srcs[j].path.starts_with("gen:")
+                for name in file_aliases[j].keys()
+                    if not merged.contains(name)
+                        merged[name] = file_aliases[j][name]
+        file_aliases[k] = merged
+
+## The standard module `n` stands for through `use std.m as n` in this file.
+fn Lower.std_alias(self, n str) str?
+    aliases.get("std:{n}")

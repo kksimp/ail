@@ -1,0 +1,4 @@
+ref Outer(inner: Inner(x: 1), tag: "a")
+got ref Outer(inner: Inner(x: 1), tag: "a")
+[ref Outer(inner: Inner(x: 1), tag: "a"), ref Outer(inner: Inner(x: 1), tag: "a")]
+ref Link(next: ref Link(next: ref ..., v: 1), v: 2)

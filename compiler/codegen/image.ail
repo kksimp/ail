@@ -179,7 +179,7 @@ pub fn add_call_table(mut img Image, m mir.Module)
         name := key.slice(cut + 1, key.chars().len())
         offs.push(base + strs.len())
         dots := if (takes.get(name) else false) then ".." else ""
-        add_text(mut strs, "{name}({dots})")
+        add_text(mut strs, "{mir.plain_name(name)}({dots})")
         if file == 0 or file >= m.files.len()
             offs.push(0)
         else
@@ -201,7 +201,7 @@ fn add_text(mut out List[int], s str)
 fn frame_line(m mir.Module, site mir.Site) str
     root := if site.file == 0 or site.file >= m.files.len() then "" else "{m.files[site.file]}:"
     dots := if params_of(m, site.func) then ".." else ""
-    "  at {root}{site.line}:{site.col} in {site.func}({dots})"
+    "  at {root}{site.line}:{site.col} in {mir.plain_name(site.func)}({dots})"
 
 ## Whether function `name` takes parameters (its frame prints `(..)`).
 fn params_of(m mir.Module, name str) bool

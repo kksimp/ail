@@ -215,7 +215,7 @@ fn Lower.req_trap(
 ## lines weaken the trait's (contract.inh.1): the call is fine when all of the
 ## trait's hold or all of its own do.
 fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
-    if unchecked
+    if unchecked or any_requires(key, args_v, pos)
         return
     f := contracted.get(key) else return
     mut reqs := List[ast.Contract]()

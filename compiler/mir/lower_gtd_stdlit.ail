@@ -1,0 +1,51 @@
+## A standard struct built outside its module from its `pub` fields alone,
+## as the interpreter allows (`regex.Regex(pat: "(")`, std.regex.2;
+## `ui.Window(handle: 0)`, std.ui.8): the private fields left out start at
+## zero, empty or `none`, and the module's functions treat the value as such.
+use ast
+
+## Whether `std.m.T(...)` names only some fields, each by its label.
+fn Lower.std_partial(self, n str, args List[ast.Arg]) bool
+    if not n.starts_with("std.") or args.len() >= structs[n].len()
+        return false
+    for a in args
+        if a.label == none
+            return false
+    true
+
+## Fill the fields `args` left out (`-1` in `vs`) with their zero value.
+fn Lower.fill_private(mut self, slots List[Slot], mut vs List[int], pos ast.Pos) bool
+    for k in 0..vs.len()
+        if vs[k] < 0
+            z := zero_field(slots[k].ty, 0) else
+                unsupported(pos, "leaving out field `{slots[k].name}`")
+                return false
+            vs[k] = z
+    true
+
+## The zero value of a field's type: a struct's is one of its fields' zeros,
+## a field-less enum's its first case.
+fn Lower.zero_field(mut self, t Ty, depth int) int?
+    match t
+        Str => str_value("")
+        List => call("rt.list_new", [konst(0, Ty.Int)], t)
+        Map | Set => new_table(t)
+        Chan => call("rt.chan_new_cap", [konst(1, Ty.Int)], t)
+        Int | Bool | Float | Char | Opt => zero_of(t)
+        Enum(n) => if is_flat(n) then konst(0, t) else none
+        Struct(n) =>
+            if depth > 8
+                return none
+            slots := structs.get(n)?
+            mut ids := List[int]()
+            for s in slots
+                ids.push(zero_field(s.ty, depth + 1)?)
+            obj := call(
+                "rt.obj_new",
+                [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)],
+                t,
+            )
+            for k in 0..ids.len()
+                store(obj, k, ids[k])
+            obj
+        _ => none

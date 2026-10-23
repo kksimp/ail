@@ -88,6 +88,22 @@ fn Lower.ptr_check(mut self, addr int, t Ty, volatile bool, name str, npos ast.P
         npos,
     )
     w := ptr_size(t)
+    # unsafe.ptr.5-6: within a live block of `std.mem`, when it is one.
+    st := call("rt.memtab_check", [addr, konst(w, Ty.Int)], Ty.Int)
+    ptr_trap_unless(
+        op("ne", [st, konst(1, Ty.Int)], Ty.Bool),
+        "unsafe.ptr.5",
+        "rt.memtab_oob_msg",
+        [addr, konst(w, Ty.Int)],
+        npos,
+    )
+    ptr_trap_unless(
+        op("ne", [st, konst(2, Ty.Int)], Ty.Bool),
+        "unsafe.ptr.6",
+        "rt.memtab_freed_msg",
+        [],
+        npos,
+    )
     if volatile and w > 1
         aligned := op(
             "eq",

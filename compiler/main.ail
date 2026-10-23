@@ -512,19 +512,13 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
                     files.push("{t.dir}/{name}")
             srcs.extend(parse_module(t.module, files)?)
         k += 1
-    derived := derived_sources()?
-    srcs.extend(derived.sources)
     srcs.extend(derive_builtin(srcs))
     srcs.extend(derive_user(srcs, rt, std))
     lazy := srcs.len()
-    # Without the Rust front end's file, the prelude's JSON and `Default`
-    # modules come from the embedded copy, for the programs that name them
-    # (json.prelude.1, ADR 0808).
-    mut prelude := derived.prelude
-    if prelude == none and mentions_prelude(srcs)
-        prelude = mir.PRELUDE_EMBED
-    if text := prelude
-        srcs.push(parse_text("", "<prelude>", mir.prelude_text(text)))
+    # The prelude's JSON and `Default` modules come from the embedded copy,
+    # for the programs that name them (json.prelude.1, ADR 0808).
+    if mentions_prelude(srcs)
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
     m := mir.lower_package_with(srcs, rt, lazy) else err
         for i in 0..err.items.len()
             p := err.items[i]
@@ -546,13 +540,13 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
     m
 
 ## Whether a source names a module of the prelude written in AIL: the test
-## `ail build` makes before it writes the prelude into the derived file.
+## `ail build` makes before it adds the embedded prelude.
 fn mentions_prelude(srcs List[mir.Source]) bool
     for s in srcs
         if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
-        if s.text.contains("@derive") or s.text.contains("TypeInfo")
+        if s.text.contains("@derive") or s.text.contains("TypeInfo") or s.text.contains("FromArgs")
             return true
     false
 
@@ -563,36 +557,8 @@ fn std_file(std str, imp str) str
         return "{std}/{parts[0]}/{parts[0]}.ail"
     "{std}/{parts.join("/")}.ail"
 
-## The methods derive generators wrote (ct.gen.1), which `ail build` puts
-## in the file named by `AIL_DERIVED` (ADR 0807): for each deriving `impl`,
-## a line `@@derive MODULE TYPE.TRAIT` (`-` for the root module), then the
-## generated text. Each text is a source `gen:impl:TYPE.TRAIT` of its
-## module whose functions are methods of `TYPE`. A last block `@@prelude`
-## is the prelude, for its JSON and `Default` modules (ADR 0808).
-fn derived_sources() !Derived
-    mut out := Derived(sources: [], prelude: none)
-    path := env.get("AIL_DERIVED") else return out
-    mut text := fs.read_text(path)?
-    parts := text.split("@@prelude\n")
-    if parts.len() > 1
-        out.prelude = parts[1]
-        text = parts[0]
-    mut lines := text.lines()
-    lines.push("@@derive")
-    mut head := List[str]()
-    mut body := List[str]()
-    for line in lines
-        if not line.starts_with("@@derive")
-            body.push(line)
-            continue
-        if head.len() == 3
-            out.sources.push(derived_source(head[1], head[2], body))
-        head = line.split(" ")
-        body = []
-    out
-
-## The methods of the `impl`s the built-in generators derive (ADR 0850) that
-## `ail build`'s file doesn't carry, each as a source of its module.
+## The methods of the `impl`s the built-in generators derive (ADR 0850),
+## each as a source of its module.
 fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
     mut have := Set[str]()
     for s in srcs
@@ -622,12 +588,12 @@ fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
     for s in srcs
         have.add(s.path)
     mut jobs := List[derive.Job]()
-    for j in derive.user_jobs([s.module for s in srcs], [s.prog for s in srcs])
+    for j in derive.user_jobs([s.module for s in srcs], documented(srcs))
         if not have.contains("gen:impl:{j.label}")
             jobs.push(j)
     if jobs.len() == 0
         return []
-    texts := run_generators(srcs, jobs, rt)
+    texts := run_generators(srcs, jobs, rt, false)
     mut out := List[mir.Source]()
     for k in 0..jobs.len()
         j := jobs[k]
@@ -642,7 +608,12 @@ fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
     out
 
 ## The text each job's generator wrote, in order, or `@@err MESSAGE`.
-fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?) List[str]
+fn run_generators(
+    srcs List[mir.Source],
+    jobs List[derive.Job],
+    rt ast.Program?,
+    quiet bool,
+) List[str]
     mut calls := List[str]()
     mut by_module := Map[str, List[str]]()
     for k in 0..jobs.len()
@@ -674,6 +645,9 @@ fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?)
     mut prelude := mir.prelude_text(mir.PRELUDE_EMBED)
     all.push(parse_text("", "<prelude>", prelude))
     m := mir.lower_package_with(all, rt, from) else err
+        if quiet
+            # `ail check` reports the generators' own problems itself.
+            return []
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -710,6 +684,11 @@ fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?)
             texts.push(body)
     texts
 
+## The sources' programs with their `##` docs, which a generator reads in
+## `FieldInfo.doc` (refl.info.1, ct.derive.5).
+fn documented(srcs List[mir.Source]) List[ast.Program]
+    [doc.attach(s.prog, s.text) for s in srcs]
+
 ## "`Trait` can't be derived for `Type`" for the label `Type.Trait`.
 fn derive_failure(label str) str
     parts := label.split(".")
@@ -730,10 +709,42 @@ fn user_main_renamed(s mir.Source) mir.Source
             prog.fns[i].name = "user_main"
     mir.Source(module: s.module, path: s.path, text: s.text, prog: prog)
 
-## What `ail build` passes besides the program's files.
-struct Derived
-    sources List[mir.Source]
-    prelude str?
+## `ail check`'s texts of the program's own derive generators, by
+## `TYPE.TRAIT`, for `load.load_derived`: `@@err MESSAGE` for a generator's
+## `DeriveError`, `@@fx REASONS` for one that isn't compile-time-safe
+## (ct.derive.3), which isn't run. Empty when the program has none, or when
+## the generators don't build (the checker reports why).
+fn user_derive_texts(loaded load.Loaded, path_arg str) Map[str, str]
+    mut srcs := List[mir.Source]()
+    for k in 0..loaded.program.files.len()
+        f := loaded.program.files[k]
+        if k < loaded.texts.len() and f.path.ends_with(".ail")
+            srcs.push(parse_text(f.module, f.path, loaded.texts[k]))
+    mut out := Map[str, str]()
+    if srcs.len() == 0
+        return out
+    jobs := derive.user_jobs([s.module for s in srcs], documented(srcs))
+    if jobs.len() == 0
+        return out
+    names := [
+        if j.trait_module == "" then j.generator else "{j.trait_module}.{j.generator}"
+        for j in jobs
+    ]
+    fx := check.generator_effects(loaded.program, names)
+    mut safe := List[derive.Job]()
+    for k in 0..jobs.len()
+        if fx[k] != ""
+            out[jobs[k].label] = "@@fx {fx[k]}"
+        else
+            safe.push(jobs[k])
+    if safe.len() == 0
+        return out
+    rt := runtime_with(path.join(compiler_dir(), "rt/native"), path_arg, "0", "0") else return out
+    texts := run_generators(srcs, safe, rt, true)
+    for k in 0..texts.len()
+        if k < safe.len()
+            out[safe[k].label] = texts[k]
+    out
 
 ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
 ## `module`, each `fn m` written `fn TYPE.m`, so lines stay where the
@@ -779,19 +790,25 @@ fn mentions_ui(text str) bool
 
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
-    parse_text(module, path, fs.read_text(path)?)
+    srcs := parse_module(module, [path])?
+    srcs[0]
 
 ## The files of one module, parsed together: a generic name declared in one
 ## file starts type arguments in the others (gen.infer.2).
 fn parse_module(module str, paths List[str]) !List[mir.Source]
     mut texts := List[str]()
-    mut names := Set[str]()
+    # The root module sees the prelude's generic functions too
+    # (`load_json[T](path)`, json.load.1).
+    mut names := if module == "" then prelude_generic_names() else Set[str]()
     for path in paths
         text := fs.read_text(path)?
         texts.push(text)
         for n in syntax.generic_names(syntax.lex(text).tokens).sorted()
             names.add(n)
     [parse_with(module, paths[k], texts[k], names) for k in 0..paths.len()]
+
+fn prelude_generic_names() Set[str]
+    syntax.generic_names(syntax.lex(mir.prelude_text(mir.PRELUDE_EMBED)).tokens)
 
 ## Text from `path`, parsed; syntax errors are printed and the run fails.
 fn parse_text(module str, path str, text str) mir.Source
@@ -987,10 +1004,14 @@ fn check_cmd(rest List[str])
         io.eprint("usage: ail check [--json] FILE|DIR")
         io.exit(2)
     std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
-    loaded := load.load(paths[0], std) else err
+    mut loaded := load.load(paths[0], std) else err
         io.eprint("error: {err.message}")
         io.exit(2)
         return
+    if [d for d in loaded.diags if not d.rule.starts_with("ct.")].len() == 0
+        user := user_derive_texts(loaded, paths[0])
+        if user.len() > 0
+            loaded = load.load_derived(paths[0], std, user) else loaded
     mut found := [load.shown_syntax(d) for d in loaded.diags]
     if loaded.diags.len() == 0
         mut program := loaded.program

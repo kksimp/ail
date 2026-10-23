@@ -1,0 +1,84 @@
+struct Box[T]
+    value T
+
+fn Box.new(v T) Self
+    Box(value: v)
+
+fn Box.map[U](self, f fn(T) U) Box[U]
+    Box(value: f(self.value))
+
+fn Box.get(self) T
+    self.value
+
+trait Describe
+    fn describe(self) str
+
+impl Describe for int
+    fn describe(self) str
+        "int {self}"
+
+impl Describe for str
+    fn describe(self) str
+        "str {self}"
+
+impl Describe for Box[T Describe]
+    fn describe(self) str
+        "box of {self.value.describe()}"
+
+fn show[T Describe](x T) str
+    x.describe()
+
+fn double(n int) int
+    n * 2
+
+fn name_of(n int) str
+    "n{n}"
+
+struct Registry[K Hash, V]
+    items Map[K, V]
+
+fn Registry.new() Self
+    Registry(items: {})
+
+fn Registry.put(mut self, k K, v V)
+    self.items[k] = v
+
+fn Registry.find(self, k K) V?
+    self.items.get(k)
+
+enum Maybe[T]
+    Nothing
+    Just(v T)
+
+fn Maybe.or_else(self, d T) T
+    match self
+        Nothing => d
+        Just(v) => v
+
+fn first_or[T](xs List[T], d T) T
+    if xs.len() == 0
+        return d
+    xs[0]
+
+fn pairs[A, B](a List[A], b List[B]) List[(A, B)]
+    [(a[i], b[i]) for i in 0..a.len().min(b.len())]
+
+fn main()
+    b := Box.new(21)
+    print(b.get())
+    print(b.map(double).get())
+    print(b.map(name_of).get())
+    print(show(b))
+    print(show(Box.new("s")))
+    print(show(5))
+    mut r := Registry[str, int].new()
+    r.put("a", 1)
+    print(r.find("a"))
+    print(r.find("z"))
+    m := Maybe.Just(v: 3)
+    print(m.or_else(9))
+    n := Maybe[int].Nothing
+    print(n.or_else(9))
+    print(first_or([1, 2], 0))
+    print(first_or(List[str](), "d"))
+    print(pairs([1, 2, 3], ["a", "b"]))

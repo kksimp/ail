@@ -1,0 +1,24 @@
+# type.tuple.8: a tuple-typed field is a JSON array, both ways.
+struct Edge
+    ends(str, str)
+    pts List[(int, float)]
+    w(int, (bool, str))?
+
+impl ToJson for Edge
+impl FromJson for Edge
+
+fn main()
+    e := Edge(ends: ("a", "b"), pts: [(1, 2.5), (3, 4.0)], w: (7, (true, "x")))
+    t := e.to_json().to_text()
+    print(t)
+    back := Edge.from_json(parse_json(t) else Json.Null) else err
+        print("error {err}")
+        return
+    print(back)
+    print(back == e)
+    none_w := Edge(ends: ("c", "d"), pts: [], w: none)
+    print(none_w.to_json().to_text())
+    bad := Edge.from_json(parse_json("\{\"ends\": [\"a\"], \"pts\": []}") else Json.Null) else err
+        print("error {err}")
+        return
+    print(bad)
