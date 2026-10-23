@@ -1,0 +1,64 @@
+# The server answers malformed requests itself and never shows them (std.net.10);
+# a chunked body and Expect: 100-continue are read.
+fn answer(srv net.Server)
+    ex := srv.accept() else err
+        print("accept {err.kind}")
+        return
+    r := ex.request
+    print("{r.method} {r.path} [{r.body}] {r.headers}")
+    ex.respond(net.Response(status: 200, headers: {"Set-Cookie": "a=1", "Content-Length": "99"}, body: "ok")) else err
+        print("respond {err.kind}")
+    ex2 := srv.accept() else err
+        return
+    ex2.respond(net.Response(status: 99, headers: {}, body: "x")) else err
+        print("bad status {err.kind} {err.message}")
+        ex2.respond(net.Response(status: 204, headers: {"a b": "c"}, body: "")) else err2
+            print("bad name {err2.message}")
+            ex2.respond(net.Response(status: 204, headers: {"x": "c"}, body: "ignored")) else err3
+                print("again {err3.kind}")
+    ex2.respond(net.Response(status: 200, headers: {}, body: "")) else err4
+        print("twice {err4.kind}")
+
+fn ask(addr str, text str) str
+    c := net.connect(host_of(addr), port_of(addr)) else err
+        return "connect {err.kind}"
+    c.write(text) else err
+        return "write {err.kind}"
+    mut out := ""
+    while true
+        piece := c.read(4096) else err
+            break
+        if piece == ""
+            break
+        out = "{out}{piece}"
+    c.close()
+    out
+
+fn host_of(addr str) str
+    addr.split(":")[0]
+
+fn port_of(addr str) int
+    (addr.split(":")[1].to_int()) else 0
+
+fn show(label str, text str)
+    print("{label}: {text.replace("\r\n", "|")}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0") else err
+        print("serve {err.kind}")
+        return
+    a := srv.addr()
+    t := spawn answer(srv)
+    show("no host", ask(a, "GET / HTTP/1.1\r\n\r\n"))
+    show("version", ask(a, "GET / HTTP/2\r\nHost: h\r\n\r\n"))
+    show("target", ask(a, "GET x HTTP/1.1\r\nHost: h\r\n\r\n"))
+    show("space colon", ask(a, "GET / HTTP/1.1\r\nHost : h\r\n\r\n"))
+    show("bad length", ask(a, "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 1x\r\n\r\n"))
+    show("big length", ask(a, "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 99999999999\r\n\r\n"))
+    show("coding", ask(a, "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: gzip\r\n\r\n"))
+    show("both", ask(a, "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\n"))
+    show("fold", ask(a, "GET / HTTP/1.1\r\nHost: h\r\n x: y\r\n\r\n"))
+    show("chunked", ask(a, "POST /up?k=v HTTP/1.1\r\nHost: h\r\nX-A: 1\r\nx-a: 2\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\nabc\r\n2;ext=1\r\nde\r\n0\r\n\r\n"))
+    show("second", ask(a, "GET /two HTTP/1.0\r\n\r\n"))
+    t.wait()?
+    srv.close()

@@ -1,0 +1,35 @@
+# std.tensor in structs, lists, loops and as parameters, beside the interpreter.
+struct Layer
+    w tensor.Tensor[float]
+    b tensor.Tensor[float]
+
+fn Layer.apply(self, x tensor.Tensor[float]) tensor.Tensor[float]
+    (x.matmul(w) + b).relu()
+
+fn norm(t tensor.Tensor[float]) tensor.Tensor[float]
+    t / t.sum()
+
+fn main()
+    l := Layer(w: tensor.from([1.0, -1.0, 0.5, 2.0], [2, 2]), b: tensor.from([0.1, 0.2]))
+    x := tensor.from([1.0, 2.0], [1, 2])
+    print(l.apply(x))
+    print(norm(tensor.from([1.0, 3.0])))
+    ts := [x, x * 2.0]
+    print(ts.len())
+    print(ts[1])
+    r := tensor.from_fn(3, |i| i.to_float().to_f32())
+    print(r)
+    print(-x)
+    print(x - x)
+    print(x.mean())
+    print(x.max())
+    z := tensor.from([1, 2, 3, 4], [2, 2])
+    print(z.transpose().to_list())
+    print(z * z + z)
+    print(x.shape()[1])
+    for row in 0..2
+        print(z[row].to_list())
+    q := tensor.from([1.5, 2.5], [2])
+    print(q == q)
+    print(q != q)
+    print(tensor.zeros([2, 2]).add(tensor.zeros([2, 2])))

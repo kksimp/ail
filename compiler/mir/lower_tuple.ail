@@ -244,7 +244,7 @@ fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
                     return false
         return true
     match t
-        Int | Bool | Char | Sized(_) | Str | Float => true
+        Int | Bool | Char | Sized(_) | Str | Bytes | Float => true
         List(e) => orderable(e, mut seen)
         _ => false
 
@@ -283,6 +283,9 @@ fn Lower.gen_tuple_eq(mut self, fkey str, t Ty, xs List[Ty])
 fn Lower.elem_lt(mut self, t Ty, x int, y int) int
     if t == Ty.Str
         c := call("rt.str_cmp", [x, y], Ty.Int)
+        return op("lt", [c, konst(0, Ty.Int)], Ty.Bool)
+    if t == Ty.Bytes
+        c := call("rt.bytes_cmp", [x, y], Ty.Int)
         return op("lt", [c, konst(0, Ty.Int)], Ty.Bool)
     if structural(t) or t.elem() != none
         return call(lt_fn(t), [x, y], Ty.Bool)
@@ -374,14 +377,15 @@ fn Lower.text_ok(mut self, t Ty) bool
     if ext := text_ext_ok(t)
         return ext
     match t
-        Int | Sized(_) | Float | F32 | Bool | Str => true
+        Int | Sized(_) | Float | F32 | Bool | Str | Bytes => true
         Struct | Enum | Any(_) =>
             mut seen := Set[str]()
             displayable(t, mut seen)
         _ => false
 
 ## Whether a struct or enum has a text form `fields_text` can build: its
-## `to_str`, or fields of scalars, `List[int]` and displayable records.
+## `to_str`, or fields of scalars, `List[int]` and displayable records (not
+## itself recursive).
 fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
     if inner := t.opt_inner()
         return displayable(inner, mut seen)
@@ -391,16 +395,25 @@ fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
         Struct(k) => k
         Enum(k) => k
         _ => return match t
-            Int | Sized(_) | Float | F32 | Bool | Str => true
+            Int | Sized(_) | Float | F32 | Bool | Str | Bytes => true
             List(e) => displayable(e, mut seen)
             Char => true
             Map(k, v) => displayable(k, mut seen) and displayable(v, mut seen)
             Set(e) => displayable(e, mut seen)
             Tuple(xs) => tuple_displayable(xs, mut seen)
-            _ => false
-    if sigs.contains("{key}.to_str") or seen.contains(key)
+            _ => text_ext_ok(t) else false
+    if sigs.contains("{key}.to_str")
         return true
+    # `seen` is the path of types being checked: a type that holds itself has
+    # no finite inline text, so it needs a `to_str`.
+    if seen.contains(key)
+        return false
     seen.add(key)
+    ok := displayable_fields(key, mut seen)
+    seen.remove(key)
+    ok
+
+fn Lower.displayable_fields(mut self, key str, mut seen Set[str]) bool
     if cases := enums.get(key)
         for c in cases
             for f in c.fields
@@ -436,7 +449,7 @@ fn has_tuple(t Ty) bool
     if t.opt_inner() != none or t.is_coll()
         return true
     match t
-        Struct | Enum => true
+        Struct | Enum | Bytes => true
         _ => false
 
 ## The text of a value of a type `text_ok` accepts, as inside a tuple or a
@@ -448,6 +461,7 @@ fn Lower.value_text(mut self, t Ty, x int) int
         F32 => call("rt.fmt_f32", [x], Ty.Str)
         Bool => call("rt.fmt_bool", [x], Ty.Str)
         Str => call("rt.str_quoted", [x], Ty.Str)
+        Bytes => call("rt.bytes_show", [x], Ty.Str)
         Tuple(xs) => tuple_text_of(xs, x)
         List(e) => list_text(x, e)
         Struct | Enum | Any(_) => display_call(Val(id: x, ty: t)) else str_value("")
@@ -575,9 +589,16 @@ fn Lower.compare_fn(mut self, name str) int
     i.name = name
     emit(i, Ty.Fn(params: [Ty.Int, Ty.Int], ret: Ty.Bool))
 
+## The comparison functions of a list element type: the runtime's for `bytes`.
+fn Lower.eq_name(mut self, e Ty) str
+    if e == Ty.Bytes then "rt.bytes_eq" else eq_fn(e)
+
+fn Lower.lt_name(mut self, e Ty) str
+    if e == Ty.Bytes then "rt.bytes_lt" else lt_fn(e)
+
 ## The indices of `keys` in order (a list of tuples): `rt.sort_perm_by`.
 fn Lower.tuple_sort_perm(mut self, keys int, kt Ty) int
-    call("rt.sort_perm_by", [keys, compare_fn(lt_fn(kt))], Ty.List(Ty.Int))
+    call("rt.sort_perm_by", [keys, compare_fn(lt_name(kt))], Ty.List(Ty.Int))
 
 ## `contains`, `index_of`, `min`, `max`, `sort` and `sorted` on a list of
 ## tuples (type.tuple.7), element by element as `==` and `<` compare them.
@@ -589,7 +610,7 @@ fn Lower.tuple_list_edit(mut self, r Val, e Ty, name str, npos ast.Pos, vs List[
         if not comparable(e, npos, e.name(), mut seen)
             return none
         x := convert(vs[0], e, npos)
-        idx := call("rt.list_find_by", [r.id, x, compare_fn(eq_fn(e))], Ty.Int)
+        idx := call("rt.list_find_by", [r.id, x, compare_fn(eq_name(e))], Ty.Int)
         found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
         if name == "contains"
             return Val(id: found, ty: Ty.Bool)
@@ -598,7 +619,7 @@ fn Lower.tuple_list_edit(mut self, r Val, e Ty, name str, npos ast.Pos, vs List[
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "min" or name == "max"
         greatest := konst(if name == "max" then 1 else 0, Ty.Int)
-        idx := call("rt.list_extreme_by", [r.id, compare_fn(lt_fn(e)), greatest], Ty.Int)
+        idx := call("rt.list_extreme_by", [r.id, compare_fn(lt_name(e)), greatest], Ty.Int)
         found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
         return opt_at(r, found, idx, e, false, npos)
     perm := tuple_sort_perm(r.id, e)
@@ -669,11 +690,31 @@ fn Lower.gen_enum_lt(mut self, fkey str, t Ty, n str)
     jump(no, [])
     end_eq(fkey, yes, no)
 
+## Whether struct `s` declares `fn cmp(self, other S) Ordering`.
+fn Lower.has_own_cmp(self, s str) bool
+    sig := sigs.get("{s}.cmp") else return false
+    sig.params.len() == 2 and sig.ret == Ty.Enum("Ordering")
+
 ## Generate `lt.T` for a tuple, a struct or an enum.
 fn Lower.gen_lt(mut self, fkey str, t Ty)
     if xs := tuple_elems(t)
         gen_tuple_lt(fkey, t, xs)
     elif s := struct_name(t)
+        if has_own_cmp(s)
+            # A `cmp` of the struct's own decides (trait.std.4): `a < b` is `a.cmp(b)` being `Less`.
+            ps := begin_fn(fkey, Ty.Bool, [t, t])
+            c := user_call(
+                "{s}.cmp",
+                [ps[0], ps[1]],
+                Ty.Enum("Ordering"),
+                ast.Pos(line: 1, col: 1),
+                "{s}.cmp",
+            )
+            finish(return_of(op("eq", [c, konst(0, Ty.Int)], Ty.Bool)))
+            for blk in 0..blocks.len()
+                sealed[blk] = true
+            end_fn(fkey, ast.Pos(line: 1, col: 1))
+            return
         gen_tuple_lt(fkey, t, [sl.ty for sl in structs[s]])
     elif e := t.elem()
         gen_list_lt(fkey, t, e)

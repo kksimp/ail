@@ -1,0 +1,33 @@
+# conc.cancel.3-4 (ADR 0351): a cancel reaches the tasks a task already
+# started, and a cancelled task's `send` on a full channel drops its value
+# and returns instead of waiting for room.
+
+fn child(gate Channel[int])
+    print("child got {gate.recv()}, cancelled {task.cancelled()}")
+
+fn parent(gate Channel[int], started Channel[int])
+    c := spawn child(gate)
+    started.send(1)
+    c.wait() else
+        return
+    print("parent done")
+
+fn flood(out Channel[int])
+    for i in 0..100
+        out.send(i)
+    print("flood ends, cancelled {task.cancelled()}")
+    out.close()
+
+fn main() !
+    gate := Channel[int](1)
+    started := Channel[int](1)
+    p := spawn parent(gate, started)
+    started.recv()
+    p.cancel()
+    p.wait()?
+    ch := Channel[int](2)
+    f := spawn flood(ch)
+    print("first {ch.recv()?}")
+    f.cancel()
+    f.wait()?
+    print("left {[v for v in ch]}")

@@ -1,0 +1,36 @@
+# net.serve, Server.accept and Exchange.respond (std.net.9-11): a client and a
+# server in one program, over a free local port.
+fn answer(srv net.Server)
+    for _ in 0..3
+        ex := srv.accept() else err
+            print("accept {err.kind}")
+            return
+        r := ex.request
+        print("{r.method} {r.path} {r.query} {r.headers.get("x-test")} [{r.body}]")
+        ex.respond(net.Response(status: 201, headers: {"x-reply": "yes"}, body: "got {r.path}")) else err
+            print("respond {err.kind}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0") else err
+        print("serve {err.kind}")
+        return
+    t := spawn answer(srv)
+    base := "http://{srv.addr()}"
+    a := net.get("{base}/a?x=1&y=two+words&z=%41") else err
+        print("get {err.kind}")
+        return
+    print("{a.status} {a.body} {a.headers.get("x-reply")}")
+    b := net.post("{base}/b", "payload", "text/plain") else err
+        print("post {err.kind}")
+        return
+    print("{b.status} {b.body}")
+    c := net.request("HEAD", "{base}/c", net.options()) else err
+        print("head {err.kind}")
+        return
+    print("{c.status} [{c.body}]")
+    t.wait()?
+    srv.close()
+    x := srv.accept() else err
+        print("after close {err.kind}")
+        return
+    print(x.handle)

@@ -53,6 +53,10 @@ pub enum Ty
     Atomic(elem Ty)
     ## `Channel[str]`: a pointer to the channel's record (ADR 0599).
     Chan(elem Ty)
+    ## `Mutex[T]`: a pointer to the mutex record (conc.share.5).
+    Mutex(elem Ty)
+    ## A `TaskGroup`: a pointer to the group record (conc.task.8).
+    Group
     ## A function value: the address of a declared function (ADR 0573).
     Fn(params List[Ty], ret Ty)
     ## A sized integer `i8 i16 i32 u8 u16 u32` (ADR 0834): in a register like
@@ -129,6 +133,8 @@ pub fn Ty.name(self) str
         Unit => "unit"
         Atomic(e) => "Atomic[{e.name()}]"
         Chan(e) => "Channel[{e.name()}]"
+        Mutex(e) => "Mutex[{e.name()}]"
+        Group => "TaskGroup"
         Fn(ps, r) =>
             mut names := List[str]()
             for p in ps

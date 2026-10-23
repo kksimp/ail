@@ -45,7 +45,7 @@ fn Checker.net_method(
         args_only(args)
         mut d := new_diag("std.net.9", at, "`net.{tn}` has no method `{n}`")
         if s := suggest(n, names)
-            d = d.did_you_mean(s)
+            d = d.did_you_mean_help(s)
         else
             d = d.with_help("its methods are {list_names(names)}")
         diags.push(d)

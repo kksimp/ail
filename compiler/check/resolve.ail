@@ -1,6 +1,7 @@
 ## Types as written, resolved to `Ty` (ADR 0377): `resolve_type`,
 ## `resolve_ret` and their diagnostics, as in `bootstrap/src/check.rs`.
 use ast
+use fix
 
 ## A function's return type, which may be fallible (err.type.1-2, err.decl.2-3).
 @allow("expr.match.3") fn Checker.resolve_ret(mut self, t ast.TypeRef, fn_index int) Ty
@@ -137,11 +138,13 @@ fn Checker.resolve_named(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty
     elif CONC_TYPES.contains(n)
         return conc_type(n, args, at)
     elif n == "Option" and args.len() == 1
-        err_help(
+        err_fix(
             "type.opt.3",
             at,
             "an optional type is written `T?`, not `Option[T]`",
             "write `int?` for `Option[int]`; the two mean the same and `T?` is the canonical form",
+            "write `T?`",
+            [fix.call_with(at, "Option", "$1?")],
         )
         return Ty.Unknown
     elif SPEC_TYPES_NOT_YET.contains(n)
@@ -228,9 +231,9 @@ fn Checker.unknown_type(mut self, n str, at ast.Pos)
     candidates.extend(types.keys())
     mut d := new_diag("expr.name.1", at, "unknown type `{n}`")
     if t := foreign_type_word(n)
-        d = d.with_help("write `{t}`")
+        d = d.with_help("write `{t}`").with_fix("write `{t}`", [fix.replace(at, n, t)])
     elif s := suggest(n, candidates)
-        d = d.did_you_mean(s)
+        d = d.did_you_mean(n, s)
     elif n.len() == 1 and n.chars()[0] >= 'A' and n.chars()[0] <= 'Z'
         d = d.with_help("to make it a type parameter, declare it after the name: `fn name[{n}](...)`")
     diags.push(d)
@@ -345,13 +348,7 @@ fn Checker.std_type(mut self, n str, args List[ast.TypeRef], at ast.Pos) Ty?
     if types.contains(n) and not STD_MODULES.contains(head)
         return none
     if STD_MODULES.contains(head)
-        diags.push(
-            new_diag(
-                "std.use.2",
-                at,
-                "the standard module `{head}` is not imported",
-            ).with_help("add `use std.{head}` at the top of the file"),
-        )
+        not_imported(head, at)
     else
         err_help(
             "std.use.2",

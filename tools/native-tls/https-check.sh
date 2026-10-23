@@ -61,4 +61,36 @@ suite=TLS_AES_256_GCM_SHA384 check "AES-256-GCM-SHA384" "$tmp/leaf.pem" "$tmp/le
 check "wrong host name" "$tmp/rsa.pem" "$tmp/rsa.key" "$tmp/rsa.pem" 127.0.0.1
 check "unknown CA" "$tmp/leaf.pem" "$tmp/leaf.key" "$tmp/rsa.pem" localhost
 check "bad SSL_CERT_FILE" "$tmp/leaf.pem" "$tmp/leaf.key" /etc/hostname localhost
+# Raw TLS: net.connect_tls with write_bytes and read_bytes (std.net.12, std.net.16).
+cat > "$tmp/raw.ail" <<'P'
+use std.net
+
+fn main()
+    c := net.connect_tls("localhost", env.args()[0].to_int() else 0) else err
+        print("error: {err.kind}")
+        return
+    c.write_bytes(b"GET / HTTP/1.0\r\n\r\n") else err
+        print("write failed")
+        return
+    mut total := 0
+    mut first := b""
+    while true
+        got := c.read_bytes(4096) else err
+            break
+        if got.len() == 0
+            break
+        if first.len() == 0
+            first = got[0..12]
+        total += got.len()
+    print("{first.text()} {total > 3000}")
+P
+openssl s_server -accept "$port" -cert "$tmp/leaf.pem" -key "$tmp/leaf.key" -www -tls1_3 > "$tmp/server.log" 2>&1 &
+srv=$!
+sleep 1
+./ail build "$tmp/raw.ail" -o "$tmp/rawx" > /dev/null
+want=$(SSL_CERT_FILE="$tmp/ca.pem" ./ail run "$tmp/raw.ail" "$port" 2>&1)
+got=$(SSL_CERT_FILE="$tmp/ca.pem" "$tmp/rawx" "$port" 2>&1)
+if [ "$want" != "$got" ] || [ "$got" != "HTTP/1.0 200 true" ]; then echo "FAIL raw TLS"; echo " want $want"; echo " got  $got"; exit 1; fi
+echo "ok raw TLS conn: $got"
+kill $srv 2>/dev/null || true
 echo "https-check: all passed"
