@@ -42,6 +42,7 @@ fn eq_kind(e Ty) int
         Int | Bool | Char | Sized(_) => 0
         Str => 1
         Float | F32 => 2
+        List(_) => ord_kind(e)
         _ => -1
 
 ## `xs.NAME(args)` for the methods above. `vs` are the lowered arguments.
@@ -128,11 +129,7 @@ fn Lower.lower_list_edit(
             ty: Ty.Bool,
         )
     if (name == "sort" or name == "sorted") and vs.len() == 0
-        k := match e
-            Int | Sized(_) | Char => 0
-            Str => 1
-            Float | F32 => 2
-            _ => -1
+        k := ord_kind(e)
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
         mut target := r.id
@@ -171,11 +168,7 @@ fn Lower.lower_list_edit(
         last := op("sub", [n, konst(1, Ty.Int)], Ty.Int)
         return opt_at(r, nonempty, last, e, false, npos)
     if (name == "min" or name == "max") and vs.len() == 0
-        k := match e
-            Int | Sized(_) | Char => 0
-            Str => 1
-            Float | F32 => 2
-            _ => -1
+        k := ord_kind(e)
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
         greatest := konst(if name == "max" then 1 else 0, Ty.Int)
@@ -321,6 +314,8 @@ fn Lower.list_method(
         and (e == Ty.Int or e == Ty.Float or e == Ty.Bool)
         kind := konst(if e == Ty.Bool then 2 else if e == Ty.Float then 1 else 0, Ty.Int)
         return Val(id: call("rt.list_join_text", [r.id, vs[0].id, kind], Ty.Str), ty: Ty.Str)
+    if name == "cmp" and vs.len() == 1
+        return list_cmp_method(r, vs[0], npos)
     if is_list_edit(name)
         return lower_list_edit(r, e, name, npos, args, vs)
     if name == "push" and vs.len() == 1
