@@ -88,6 +88,8 @@ pub struct Checker
     pub const_busy List[bool]
     ## Checking a `requires` condition, where `result` doesn't exist yet.
     pub in_requires bool
+    ## Where the condition being checked starts, for the `requires` fix (fix.edit.5).
+    pub requires_pos ast.Pos?
     ## The function being checked: its locals (innermost last), the locals
     ## typed by their first use, its return type, loop depth, and how many
     ## `else` values enclose the expression and caught an optional `?`.
@@ -203,6 +205,7 @@ pub fn new_checker(p ast.Program) Checker
         const_types: [no_ty() for _ in p.consts],
         const_busy: [false for _ in p.consts],
         in_requires: false,
+        requires_pos: none,
         locals: [],
         pending: [],
         fn_ret: Ty.Unit,

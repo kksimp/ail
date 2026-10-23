@@ -1488,6 +1488,7 @@ fn Checker.check_contracts(mut self, f ast.FnDecl, result_ty Ty)
         for l in olds
             locals.push(l)
         in_requires = not c.is_ensures
+        requires_pos = c.pos
         got := expr(c.cond, Ty.Bool, true)
         in_requires = false
         if not accepts(Ty.Bool, got)

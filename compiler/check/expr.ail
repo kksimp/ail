@@ -1336,20 +1336,17 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
 ## An unknown name; `nargs` is the argument count when it was called.
 fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
     if n == "old" and nargs != none
-        err_help(
-            "contract.ens.3",
-            at,
-            "`old(...)` is only available in an `ensures` condition",
-            "name the value in the body before it changes, or move the condition to an `ensures` line",
-        )
+        mut d := new_diag("contract.ens.3", at, "`old(...)` is only available in an `ensures` condition")
+            .with_help("name the value in the body before it changes, or move the condition to an `ensures` line")
+        # On entry `old(e)` is `e`, so in a `requires` the call can go.
+        if in_requires
+            d = d.with_fix("drop `old`: on entry it is the value itself", [fix.call(at, "old", "$p")])
+        diags.push(d)
         return
     if n == "result" and nargs == none and in_requires
-        err_help(
-            "contract.ens.2",
-            at,
-            "`result` is only available in an `ensures` condition",
-            "a `requires` condition can read only the parameters; move this check to an `ensures` line",
-        )
+        diags.push(new_diag("contract.ens.2", at, "`result` is only available in an `ensures` condition")
+            .with_help("a `requires` condition can read only the parameters; move this check to an `ensures` line")
+            .with_fix("write `ensures`: the condition is about the result", [fix.replace(requires_pos else at, "requires", "ensures")]))
         return
     mut candidates := [l.name for l in locals]
     for f in fns.keys()
@@ -1359,7 +1356,28 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
     for t in types.keys()
         candidates.push(t)
     mut d := new_diag("expr.name.1", at, "unknown name `{n}`")
-    if s := suggest(n, candidates)
+    f := prog.fns[cur_fn]
+    mut assoc_fields := List[str]()
+    mut in_assoc := false
+    if o := f.owner
+        if f.receiver == none
+            for st in prog.structs
+                if st.name == o.name and not in_assoc
+                    in_assoc = true
+                    assoc_fields = [x.name for x in st.fields]
+    if w := name_word(n)
+        d = d.with_help(w.help).with_fix("write `{w.new}`", [fix.replace(at, n, w.new)])
+    elif nargs != none and call_hint(n, nargs else 0) != none
+        c := call_hint(n, nargs else 0) else return
+        d = d.with_help(c.help).with_fix("write `{c.example}`", [fix.call(at, n, c.template)])
+    elif h := call_help(n)
+        d = d.with_help(h)
+    elif h := function_help(n)
+        d = d.with_help(h)
+    elif in_assoc and assoc_fields.contains(n)
+        d = d.with_help("this function has no `self`, so the field `{n}` isn't in scope; add `self` as its first parameter")
+        d = d.with_fix("add `self`", [fix.replace(f.pos, "(", if f.params.len() > 0 then "(self, " else "(self")])
+    elif s := suggest(n, candidates)
         d = d.did_you_mean(n, s)
     else
         d = d.with_help("no variable, function or type named `{n}` is in scope here; declare it first, e.g. `{n} := value`")
