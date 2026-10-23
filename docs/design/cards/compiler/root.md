@@ -48,9 +48,9 @@ fn cli_prepare(str) str [clock env fs io proc]  ## The cached executable of `fil
 fn cli_prepare_cmd(List[str]) [clock env fs io proc]
 fn cli_run(List[str]) [clock env fs io proc]  ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn chop(str) str  ## `s` without one final newline.
-fn load_dump(List[str]) [env fs io]  ## `load FILE...`: the loaded program as `ail api --ast --program` prints it.
-fn check_cmd(List[str]) [env fs io]  ## `check-program [--json] FILE|DIR`: `ail check` on the native front end.
-fn api_cmd(List[str]) [env fs io]  ## `api [--outline] FILE [--text | --pretty]`: the outline of one file
+fn load_dump(List[str]) [clock env fs io proc]  ## `load FILE...`: the loaded program as `ail api --ast --program` prints it.
+fn check_cmd(List[str]) [clock env fs io proc]  ## `check-program [--json] FILE|DIR`: `ail check` on the native front end.
+fn api_cmd(List[str]) [clock env fs io proc]  ## `api [--outline] FILE [--text | --pretty]`: the outline of one file
 ```
 
-trimmed to fit 2000 tokens (~1865); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1871); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

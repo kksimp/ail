@@ -22,6 +22,9 @@ pub struct Analysis
     ## What each use of a declared name refers to (api.ref.1), by `pos_key`.
     pub symbols Map[int, str]
     pub weak_symbols Map[int, str]
+    ## What `ail api --locals/--type` select from (api.loc.1, api.type.1).
+    pub locals List[LocalFact]
+    pub exprs List[(ast.Pos, str)]
 
 ## Every pass of `check_with` this checker has, in its order.
 pub fn check_program(p ast.Program) Report
@@ -60,11 +63,14 @@ pub fn analyze(p ast.Program, full bool) Analysis
             c.diags = c.diags[..saved]
             if c.inferred == before
                 break
+    c.record = full
     for i in 0..p.fns.len()
         c.check_fn(i)
+    c.record = false
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
     c.diags.extend(c.check_contract_effects())
     c.diags.extend(c.check_constants())
@@ -85,10 +91,13 @@ pub fn analyze(p ast.Program, full bool) Analysis
             errors: Map[int, List[str]](),
             symbols: Map[int, str](),
             weak_symbols: Map[int, str](),
+            locals: [],
+            exprs: [],
         )
     mut errors := Map[int, List[str]]()
     for i in 0..p.fns.len()
-        if p.fns[i].pos.line > 1048576
+        # Every file of a package, and generated code (`api --card`, `--expanded`), but not the prelude.
+        if p.fns[i].pos.line >= 1073741824
             continue
         match c.sigs[i].ret
             Res(_, errs) => errors[i] = c.error_names(c.errs_of(errs))
@@ -99,6 +108,8 @@ pub fn analyze(p ast.Program, full bool) Analysis
         errors: errors,
         symbols: c.symbols,
         weak_symbols: c.weak_symbols,
+        locals: c.fact_locals,
+        exprs: c.fact_exprs,
     )
 
 ## The diagnostics of the declaration passes only (slice 1).
@@ -218,6 +229,8 @@ fn Checker.check_fn(mut self, idx int)
     scope = fn_scopes[idx]
     self_ty = fn_self[idx]
     locals = []
+    anchored = 0
+    anchors = Map[int, ast.Pos]()
     pending = []
     loop_depth = 0
     unsafe_depth = 0
@@ -251,6 +264,7 @@ fn Checker.check_fn(mut self, idx int)
     end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)
+    record_locals(0)
     scope = []
     self_ty = none
     if gap_now
@@ -313,6 +327,7 @@ fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
 ## statement always leaves (expr.block.3).
 fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
     mark := locals.len()
+    anchor_locals(mark, stmts)
     mut ty := Ty.Unit
     mut leaves := false
     for i in 0..stmts.len()
@@ -718,6 +733,8 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
 ## Check a new local name against the no-shadowing rules; true if it can be
 ## added (expr.bind.4-5).
 fn Checker.declare(mut self, n str, at ast.Pos) bool
+    if record
+        bound[locals.len()] = at
     if l := local(n)
         mut d := new_diag("expr.bind.4", at, "`{n}` is already declared in this function")
         if first := l.decl
@@ -830,6 +847,7 @@ fn Checker.end_scope(mut self, mark int)
             )
         else
             k += 1
+    record_locals(mark)
     locals = locals[..mark]
 
 fn Checker.condition(mut self, cond ast.Expr)
