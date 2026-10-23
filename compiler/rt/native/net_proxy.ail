@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## HTTP proxies for the native client (std.net.30): `HTTP_PROXY` and
+## HTTP proxies for the native client (std.net.30, ADR 0869): `HTTP_PROXY` and
 ## `HTTPS_PROXY` (either case, lowercase first) name an `http://[user:pass@]host[:port]`
 ## proxy for `http://` and `https://` requests; `NO_PROXY` lists hosts that
 ## are reached directly. Loopback hosts never use a proxy. An `http://` request
