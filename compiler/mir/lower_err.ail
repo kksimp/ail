@@ -381,7 +381,9 @@ fn Lower.method_fails(self, recv ast.Expr, name str) bool
         s := sigs.get("{m}.{name}") else return generic_fails("{m}.{name}")
         return s.fails
     key := method_key(recv, name) else return false
-    s := sigs.get(key) else return false
+    s := sigs.get(key) else
+        # `T.from_json(x)` with `T` a list: the instance is declared when it is called.
+        return key.starts_with("List[") and generic_fails("List.{name}")
     s.fails
 
 ## Whether the function being lowered can fail and has no success value: its
@@ -823,6 +825,7 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
         Call(callee, _, _) =>
             match callee
                 Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
+                TypeArgs(n, _, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
             if os_fails(recv, name)

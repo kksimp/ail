@@ -784,9 +784,16 @@ fn parse_module(module str, paths List[str]) !List[mir.Source]
 fn parse_text(module str, path str, text str) mir.Source
     parse_with(module, path, text, Set[str]())
 
+## The generic functions of the prelude's `jsonderive` module (`mir/prelude_embed.ail`): the
+## prelude is not in the file's tokens here, so `load_json[T](...)` needs them named.
+PRELUDE_GENERIC := ["load_json", "print_json"]
+
 fn parse_with(module str, path str, text str, names Set[str]) mir.Source
     lexed := syntax.lex(text)
-    parsed := syntax.parse_with(lexed.tokens, names)
+    mut generic := names
+    for n in PRELUDE_GENERIC
+        generic.add(n)
+    parsed := syntax.parse_with(lexed.tokens, generic)
     mut diags := lexed.diags
     diags.extend(parsed.diags)
     report := syntax.report_text(path, text, diags)
