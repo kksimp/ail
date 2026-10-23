@@ -1,0 +1,35 @@
+## The default text of a recursive struct or enum (trait.auto.2, ADR 0864): a
+## type that reaches itself, such as `Json`, would expand without end if every
+## use were inlined. The first use inlines; a use met inside it calls
+## `text.T`, which `gen_text` builds once, in the same way.
+use ast
+
+fn Lower.text_fn(mut self, key str, t Ty) str
+    name := "text.{key}"
+    if not sigs.contains(name)
+        sigs[name] = Sig(params: [t], ret: Ty.Str, fails: false)
+        eq_tys[name] = t
+    name
+
+## `default_error_text` of `v`, or a call of `text.T` when `key` is being expanded already.
+fn Lower.nested_default(mut self, key str, v Val) int?
+    if text_open.contains(key)
+        return call(text_fn(key, v.ty), [v.id], Ty.Str)
+    text_open.push(key)
+    r := default_error_text(key, v)
+    text_open.pop()
+    r
+
+fn Lower.gen_text(mut self, fkey str, t Ty)
+    key := enum_name(t) else struct_name(t) else ""
+    ps := begin_fn(fkey, Ty.Str, [t])
+    text_open.push(key)
+    r := default_error_text(key, Val(id: ps[0], ty: t))
+    text_open.pop()
+    if x := r
+        finish(return_of(x))
+    else
+        finish(return_of(str_value("")))
+    for blk in 0..blocks.len()
+        sealed[blk] = true
+    end_fn(fkey, ast.Pos(line: 1, col: 1))

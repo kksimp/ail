@@ -25,15 +25,15 @@ pub struct std.app.Inbox  ## Where tasks post events into a running app (std.app
 pub fn std.app.external(str, str) std.app.Event  ## An `external` event from `source` with `data`, for `Inbox.post`.
 pub trait std.app.App
 pub fn std.app.outline(std.app.Node) str  ## The tree as indented text: what the headless renderer prints.
-pub fn std.app.step[T std.app.App](mut T, std.app.Event) str [clock env fs io mutates net]  ## Feeds `ev` to `app` and returns the new outline: one step of a test.
+pub fn std.app.step[T std.app.App](mut T, std.app.Event) str [clock env fs io mutates net random]  ## Feeds `ev` to `app` and returns the new outline: one step of a test.
 pub fn std.app.event_from_json(Json) std.app.Event  ## The event a JSON object describes (std.app.8): members that are missing
 pub fn std.app.frame[T std.app.App](T) str  ## The message that shows `a` (std.app.7): its title, focus and view tree.
-pub fn std.app.script[T std.app.App](mut T, List[std.app.Event]) List[str] [clock env fs io mutates net]  ## Feeds each event to `a` in order, with no host (std.app.11), and returns
+pub fn std.app.script[T std.app.App](mut T, List[std.app.Event]) List[str] [clock env fs io mutates net random]  ## Feeds each event to `a` in order, with no host (std.app.11), and returns
 pub fn std.app.host_path() str ! std.app.AppError [env fail fs io]  ## The host program (std.app.10): `AIL_APP_HOST`, else the one built under
-pub fn std.app.run[T std.app.App](mut T) !std.app.AppError [app clock env fail fs io mutates net proc spawn]  ## Runs `a` in a window (std.app.6-10): starts the host, sends the view
-pub fn std.app.run_host[T std.app.App](mut T, str, List[str]) !std.app.AppError [app clock env fail fs io mutates net proc spawn]  ## Runs `a` as `run` does with the host program `cmd` and its arguments
+pub fn std.app.run[T std.app.App](mut T) !std.app.AppError [app clock env fail fs io mutates net proc random spawn]  ## Runs `a` in a window (std.app.6-10): starts the host, sends the view
+pub fn std.app.run_host[T std.app.App](mut T, str, List[str]) !std.app.AppError [app clock env fail fs io mutates net proc random spawn]  ## Runs `a` as `run` does with the host program `cmd` and its arguments
 pub fn std.app.new_inbox() std.app.Inbox  ## A new inbox for `run_with`: the program starts its tasks that post to it
-pub fn std.app.run_with[T std.app.App](mut T, str, List[str], std.app.Inbox) !std.app.AppError [clock env fail fs io mutates net proc spawn]  ## Runs `a` as `run_host` does, with events from `inbox`, which the program
+pub fn std.app.run_with[T std.app.App](mut T, str, List[str], std.app.Inbox) !std.app.AppError [clock env fail fs io mutates net proc random spawn]  ## Runs `a` as `run_host` does, with events from `inbox`, which the program
 ```
 
-trimmed to fit 2000 tokens (~1237); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1247); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

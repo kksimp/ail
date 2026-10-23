@@ -665,8 +665,7 @@ fn std_fn_effects(fx Facts, key int, recv ast.Expr, n str) List[str]?
 ## stable id, `fn:NAME` or `method:Type.name`, the prelude's left out. Functions that
 ## share an id are merged.
 pub fn effects_report(p ast.Program, json bool) str
-    c := run_checker(p)
-    fx := infer_effects(p, c.facts())
+    sets := analyze(p, true).effects
     mut ids := Map[str, List[str]]()
     for i in 0..p.fns.len()
         f := p.fns[i]
@@ -675,7 +674,7 @@ pub fn effects_report(p ast.Program, json bool) str
         id := if f.owner == none
             and f.within == ast.Within.TopLevel then "fn:{f.name}" else "method:{display_name(p, f)}"
         mut set := ids.get(id) else []
-        for e in fx.sets[i]
+        for e in sets[i]
             if not set.contains(e)
                 set.push(e)
         ids[id] = set.sorted()
