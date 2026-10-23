@@ -2,7 +2,7 @@
 ## selftest checks for programs, without cargo, and prints only what failed.
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
 ## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
-## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net` (the files of those names; `net` starts tools/gate/net_server.py), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
+## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net`, `bytecode` (the files of those names; `net` starts tools/gate/net_server.py), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
 ## PDF reader), `native` (each bootstrap/tests/native/run program builds
 ## natively and behaves like `ail run`), `selfhost` (tools/self-host/run.sh).
 ## No argument runs them all. The last line is `GATE GREEN` or
@@ -2378,6 +2378,103 @@ fn Gate.net(mut self)
         "fn:worker \{fail, io, net}",
     ])
 
+## The bytecode tier against the tree walker (bytecode.rs, ported; ADRs 0359, 0361, 0362):
+## every program runs twice, once with `--no-bytecode`, and the stdout, stderr and exit
+## status must be the same. A job is one program's runs, made in turn; four tasks share the jobs.
+fn bc_ail_files(dir str, mut out List[str])
+    for name in fs.list_dir(dir) else []
+        if name.ends_with(".ail")
+            src := slurp("{dir}/{name}")
+            if not src.contains("ui.open(") and not src.contains("# bytecode.skip")
+                out.push("{dir}/{name}")
+
+## One side of a command line: `ail SUBCOMMAND [--no-bytecode] ARGS...`, killed after 60 s.
+fn bc_run(words List[str], walker bool) str
+    script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
+    mut args := ["-c", script, "sh", words[0]]
+    if walker
+        args.push("--no-bytecode")
+    for i in 1..words.len()
+        args.push(words[i])
+    r := proc.run("sh", args, "", 60000) else err
+        return "still running after 60s, or could not start: {err}"
+    "exit {r.status}\n--- stdout\n{r.out}--- stderr\n{r.err}"
+
+fn bc_worker(jobs List[str], k int, n int) List[str]
+    mut fails := List[str]()
+    for i in 0..jobs.len()
+        if i % n != k
+            continue
+        for line in jobs[i].split("\n")
+            words := line.words()
+            w := bc_run(words, true)
+            t := bc_run(words, false)
+            if w != t
+                fails.push("ail {line}\n=== walker\n{w}=== tier\n{t}")
+    fails
+
+fn Gate.bytecode(mut self)
+    mut files := List[str]()
+    for dir in ["examples", "bootstrap/tests/cases", "tools/perfbench/programs"]
+        bc_ail_files(dir, mut files)
+    for sub in fs.list_dir("tools/tokbench/corpus/programs") else []
+        bc_ail_files("tools/tokbench/corpus/programs/{sub}", mut files)
+    files.sort()
+    concurrent := [
+        "spawn",
+        "par ",
+        "TaskGroup",
+        "Atomic",
+        "Channel",
+        "Mutex",
+        "mem.cstr(",
+        "mem.alloc(",
+    ]
+    mut jobs := List[str]()
+    mut runs := 0
+    for f in files
+        args := slurp(f.replace(".ail", ".args"))
+        src := slurp(f)
+        mut steady := true
+        for w in concurrent
+            if src.contains(w)
+                steady = false
+        mut variants := [""]
+        if steady
+            variants = ["", "--max-steps 300 ", "--trace=all "]
+        mut cmds := List[str]()
+        for flags in variants
+            cmds.push("run {flags}{args.words().join(" ")} {f}")
+        if fs.exists(f.replace(".ail", ".test"))
+            cmds.push("test --json {f}")
+            if steady
+                cmds.push("test --coverage {f}")
+        runs += cmds.len()
+        jobs.push(cmds.join("\n"))
+    mut pkgs := fs.list_dir("bootstrap/tests/cases/packages") else []
+    pkgs.sort()
+    for p in pkgs
+        if fs.exists("bootstrap/tests/cases/packages/{p}/expected.out")
+            or fs.exists("bootstrap/tests/cases/packages/{p}/expected.rules")
+            or fs.exists("bootstrap/tests/cases/packages/{p}/expected.trap")
+            or fs.exists("bootstrap/tests/cases/packages/{p}/expected.err")
+            jobs.push("run bootstrap/tests/cases/packages/{p}")
+            runs += 1
+    if jobs.len() <= 400 or runs <= 1200
+        red("bytecode", "found only {jobs.len()} programs, {runs} runs")
+    t0 := spawn bc_worker(jobs, 0, 4)
+    t1 := spawn bc_worker(jobs, 1, 4)
+    t2 := spawn bc_worker(jobs, 2, 4)
+    t3 := spawn bc_worker(jobs, 3, 4)
+    for f in t0.wait() else List[str]()
+        red("bytecode", f)
+    for f in t1.wait() else List[str]()
+        red("bytecode", f)
+    for f in t2.wait() else List[str]()
+        red("bytecode", f)
+    for f in t3.wait() else List[str]()
+        red("bytecode", f)
+
 fn main() !
     args := env.args()
     all := [
@@ -2423,6 +2520,7 @@ fn main() !
             "edit" => g.edit(tmp)
             "git_deps" => g.git_deps(tmp)
             "net" => g.net()
+            "bytecode" => g.bytecode()
             "selfhost" => g.selfhost()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")}")
