@@ -247,6 +247,11 @@ regex engine is written.
   `dataset` writes, `outerHTML=`, `replaceChildren`, `normalize`,
   `template.content` and `defaultValue` follow the DOM and HTML specs; the
   page tests `mutation` and `observer` match Chromium's output.
+- `WeakMap`, `WeakSet`, `WeakRef` and `FinalizationRegistry` (`vm/weak.ail`)
+  are a Map and Set that only take objects, a `deref` that always answers
+  and a registry that never calls back: nothing is collected while scripts
+  run. `IntersectionObserver` and `ResizeObserver` take a callback and never
+  fire, since Garlic has no scrolling or resizing the page can see.
 
 ## Generators and async functions
 
