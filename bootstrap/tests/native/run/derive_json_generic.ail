@@ -1,0 +1,17 @@
+## ToJson is derived for a generic struct through bounds on the impl (json.derive.1).
+struct Pair[A, B]
+    first A
+    second B
+
+struct Tagged[T]
+    tag str
+    value T?
+    all Map[str, T]
+
+impl ToJson for Pair[A ToJson, B ToJson]
+impl ToJson for Tagged[T ToJson]
+
+fn main()
+    print(Pair(first: 1, second: ["x"]).to_json().to_text())
+    print(Pair(first: "a", second: Pair(first: true, second: 2.5)).to_json().to_text())
+    print(Tagged(tag: "t", value: none, all: {"a": 1}).to_json().to_text())

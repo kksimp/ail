@@ -591,6 +591,9 @@ fn Lower.generic_member_ref(self, e ast.Expr) str?
         TypeArgs(n, _, _) =>
             if lookup(n) != none
                 return none
+            if n == "List"
+                # `List[U].from_json(...)`: a function of a built-in type.
+                return "#list"
             generic_type_key(n)
         Name(n, _) =>
             if lookup(n) == none and traits.impls.contains(trait_key(n))
@@ -618,10 +621,23 @@ fn Lower.generic_member(
     pos ast.Pos,
     want Ty?,
 ) Val?
+    if g == "#list"
+        match recv
+            TypeArgs(_, targs, tpos) =>
+                t := type_of(ast.TypeRef(shape: Named("List", targs), pos: tpos)) else
+                    return unsupported(tpos, "this list type")
+                key := builtin_method(t, name) else return unsupported(pos, "`.{name}()` on `{t.name()}`")
+                call_args := args else return unsupported(pos, "`{name}` without a call")
+                if e := fn_errs.get(key)
+                    fn_errs["List.{name}"] = e
+                return struct_call(key, none, call_args, pos)
+            _ => return none
     if g.starts_with("#tparam:")
         t := gen.tsubst[g.slice(8, g.len())]
         key := builtin_method(t, name) else return unsupported(pos, "`.{name}()` on `{t.name()}`")
         call_args := args else return unsupported(pos, "`{name}` without a call")
+        if e := fn_errs.get(key)
+            fn_errs["List.{name}"] = e
         return struct_call(key, none, call_args, pos)
     if traits.impls.contains(g) and gen.types.get(g) == none
         # `Trait.method(x, ...)` (trait.res.1): the method of `x`'s type.
@@ -647,6 +663,8 @@ fn Lower.generic_member(
             key := struct_name(t) else return unsupported(pos, "`{g}.{name}`")
             call_args := args else return unsupported(pos, "`{g}.{name}` without a call")
             instance_method("{key}.{name}")
+            if e := fn_errs.get("{key}.{name}")
+                fn_errs["{g}.{name}"] = e
             struct_call("{key}.{name}", none, call_args, pos)
         _ =>
             if gen.fns.contains("{g}.{name}")

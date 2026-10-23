@@ -287,7 +287,25 @@ fn Lower.fallible_call(self, e ast.Expr) bool
             name,
             _,
             _,
-        ) => os_fails(recv, name) or method_fails(recv, name) or net_fails(recv, name)
+        ) => os_fails(recv, name)
+            or method_fails(recv, name)
+            or net_fails(recv, name)
+            or generic_member_fails(recv, name)
+        _ => false
+
+## `G[A].f(...)` of a generic type whose function `f` can fail.
+fn Lower.generic_member_fails(self, recv ast.Expr, name str) bool
+    match recv
+        TypeArgs(n, _, _) =>
+            if n == "List"
+                return generic_fails("List.{name}")
+            g := generic_type_key(n) else return false
+            generic_fails("{g}.{name}")
+        Name(n, _) =>
+            if lookup(n) != none
+                return false
+            t := gen.tsubst.get(n) else return false
+            t.elem() != none and generic_fails("List.{name}")
         _ => false
 
 ## The signature key of `x.name(...)` when `x` is an imported module or a local
@@ -302,6 +320,15 @@ fn Lower.method_key(self, recv ast.Expr, name str) str?
         return "{t}.{name}"
     if en := enum_ref(recv)
         return "{en}.{name}"
+    # `S(...).f(...)`: a method of the struct a constructor call builds.
+    match recv
+        Call(c, _, _) =>
+            match c
+                Name(n, _) =>
+                    if k := type_key(n)
+                        return "{k}.{name}"
+                _ => name
+        _ => name
     match recv_ty(recv)?
         Struct(s) => "{s}.{name}"
         Enum(s) => "{s}.{name}"
@@ -561,6 +588,7 @@ fn Lower.else_part(
                     declare(n.name, err, op("copy", [raw], err))
             elif not opt
                 call("rt.err_clear", [], Ty.Unit)
+            tail_want = if r >= 0 and not t.is_unknown() then t else none
             v := lower_block(body, r >= 0)
             if not done()
                 if r >= 0
@@ -768,6 +796,17 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                 Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
+            match recv
+                TypeArgs(n, _, _) =>
+                    if n == "List"
+                        return fn_errs.get("List.{name}") else Ty.Unknown
+                    if g := generic_type_key(n)
+                        return fn_errs.get("{g}.{name}") else Ty.Unknown
+                Name(n, _) =>
+                    if lookup(n) == none and gen.tsubst.get(n) != none
+                        if et := fn_errs.get("List.{name}")
+                            return et
+                _ => name
             if os_fails(recv, name)
                 m := os_module(recv)
                 if m == "net"

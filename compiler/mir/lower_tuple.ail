@@ -396,6 +396,7 @@ fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
             Char => true
             Map(k, v) => displayable(k, mut seen) and displayable(v, mut seen)
             Set(e) => displayable(e, mut seen)
+            Tuple(xs) => tuple_displayable(xs, mut seen)
             _ => false
     if sigs.contains("{key}.to_str") or seen.contains(key)
         return true
@@ -409,6 +410,12 @@ fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
     slots := structs.get(key) else return false
     for s in slots
         if not displayable(s.ty, mut seen)
+            return false
+    true
+
+fn Lower.tuple_displayable(mut self, xs List[Ty], mut seen Set[str]) bool
+    for x in xs
+        if not displayable(x, mut seen)
             return false
     true
 
