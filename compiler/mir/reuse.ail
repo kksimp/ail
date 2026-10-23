@@ -32,7 +32,7 @@ KEEPS_NOTHING := [
 ## The calls that make a new, empty list.
 MAKERS := ["rt.list_new", "rt.list_new_for"]
 
-pub fn reuse_lists(m Module) Module
+pub fn reuse_lists(mut m Module)
     mut by_name := Map[str, int]()
     for k in 0..m.funcs.len()
         by_name[m.funcs[k].name] = k
@@ -48,11 +48,9 @@ pub fn reuse_lists(m Module) Module
                 if free[k][j] and esc.escapes[esc.root(f.params[j])]
                     free[k][j] = false
                     changed = true
-    mut out := m
-    for k in 0..out.funcs.len()
-        if not out.funcs[k].name.starts_with("rt.")
-            out.funcs[k] = reuse_in(out.funcs[k], escaping(out.funcs[k], by_name, free))
-    out
+    for k in 0..m.funcs.len()
+        if not m.funcs[k].name.starts_with("rt.")
+            m.funcs[k] = reuse_in(m.funcs[k], escaping(m.funcs[k], by_name, free))
 
 ## The values of a function grouped into lists that may be the same object,
 ## and whether each group escapes.

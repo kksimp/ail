@@ -351,7 +351,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
             items: [l.problems[k] for k in order],
             files: [srcs[l.problem_files[k]].path for k in order],
         )
-    m := mark_recursion(inline_module(Module(
+    mut m := Module(
         path: srcs[0].path,
         funcs: l.funcs,
         strs: l.strs,
@@ -359,7 +359,9 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         lines: srcs[0].text.lines(),
         files: [src.path for src in srcs],
         file_lines: [src.text.lines() for src in srcs],
-    )))
+    )
+    inline_module(mut m)
+    mark_recursion(mut m)
     mut errs := List[Problem]()
     for f in m.funcs
         for err in verify(f)
