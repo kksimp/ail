@@ -588,7 +588,11 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
         if e.problem != ""
             io.eprint("{srcs[e.file].path}:{e.pos.line}:{e.pos.col}: error[ct.derive.4]: {derive_failure(e.label)}: {e.problem}")
             io.exit(1)
-        out.push(derived_source(if e.module == "" then "-" else e.module, e.label, e.text.lines()))
+        out.push(derived_source(
+            if e.module == "" then "-" else e.module,
+            e.label,
+            derive.tidy(e.text).lines(),
+        ))
     out
 
 ## The methods of the `impl`s of traits with a user-written `@derive(f)`
@@ -617,7 +621,7 @@ fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
         out.push(derived_source(
             if j.module == "" then "-" else j.module,
             j.label,
-            texts[k].lines(),
+            derive.tidy(texts[k]).lines(),
         ))
     out
 
