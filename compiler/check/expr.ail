@@ -675,11 +675,21 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
             if reject_unhandled(t, expr_pos(side))
                 continue
             if not accepts(Ty.Bool, t)
-                err(
-                    "type.bool.1",
-                    expr_pos(side),
-                    "`{op_symbol(op)}` needs `bool` operands, found {show(t)}",
-                )
+                text := "`{op_symbol(op)}` needs `bool` operands, found {show(t)}"
+                if is_opt(t) and op == ast.BinOp.Or
+                    # `x or d` on an optional is `x else d` (type.opt.4).
+                    diags.push(new_diag("type.bool.1", expr_pos(side), text)
+                        .with_help("a default for a value that may be `none` is `x else d`")
+                        .with_fix("write `else`", [fix.operands(at, "or", "$l else $r")]))
+                elif is_opt(t)
+                    err_help(
+                        "type.bool.1",
+                        expr_pos(side),
+                        text,
+                        "`{op_symbol(op)}` takes `bool`; a default for a value that may be `none` is `x else d`",
+                    )
+                else
+                    err("type.bool.1", expr_pos(side), text)
         return Ty.Bool
     # expr.cmp.1: the right operand's expected type is the left's.
     mut lt := expr(lhs, none, true)
@@ -735,17 +745,24 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
     # expr.cmp.1: the right operand converts to the left's type.
     if not same(lt, rt) and (arith or not accepts(lt, rt))
         text := "`{sym}` needs operands of one type, found {show(lt)} and {show(rt)}"
-        if op == ast.BinOp.Add and (lt == Ty.Str or rt == Ty.Str)
-            err_help("trait.op.3", at, text, "build text with interpolation: \"\{a}\{b}\"")
+        if arith and ((lt == Ty.Int and rt == Ty.Float) or (lt == Ty.Float and rt == Ty.Int))
+            # `n / 4.0` with an `int` variable `n`: convert it, as `n.to_float()` (type.num.10).
+            template := if lt == Ty.Int then "$l.to_float() {sym} $r" else "$l {sym} $r.to_float()"
+            diags.push(new_diag("trait.op.3", at, text)
+                .with_help("`int` and `float` don't mix: convert the integer with `n.to_float()`")
+                .with_fix("convert with `.to_float()`", [fix.operands(at, sym, template)]))
+        elif op == ast.BinOp.Add and (lt == Ty.Str or rt == Ty.Str)
+            diags.push(new_diag("trait.op.3", at, text)
+                .with_help("build text with interpolation: \"\{a}\{b}\"")
+                .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp\"")]))
         elif lt == Ty.Str and op == ast.BinOp.Rem
-            err_help(
-                "trait.op.3",
-                at,
-                text,
-                "AIL has no `%` formatting; interpolate the values: \"n is \{n}\"",
-            )
+            diags.push(new_diag("trait.op.3", at, text)
+                .with_help("AIL has no `%` formatting; interpolate the values: \"n is \{n}\"")
+                .with_fix("interpolate", [fix.operands(at, "%", "$f")]))
         elif lt == Ty.Str and op == ast.BinOp.Mul
-            err_help("trait.op.3", at, text, "repeat a string with `s.repeat(n)`")
+            diags.push(new_diag("trait.op.3", at, text)
+                .with_help("repeat a string with `s.repeat(n)`")
+                .with_fix("write `.repeat`", [fix.operands(at, "*", "$l.repeat($r)")]))
         else
             err("trait.op.3", at, text)
         return fail
@@ -761,12 +778,9 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
         if lt == Ty.Bytes and op == ast.BinOp.Add
             return Ty.Bytes
         if lt == Ty.Str and op == ast.BinOp.Add
-            err_help(
-                "trait.op.1",
-                at,
-                "`+` doesn't join strings",
-                "build text with interpolation: \"\{a}\{b}\"",
-            )
+            diags.push(new_diag("trait.op.1", at, "`+` doesn't join strings")
+                .with_help("build text with interpolation: \"\{a}\{b}\"")
+                .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]))
         else
             err("trait.op.1", at, "`{sym}` is not defined for {show(lt)}")
         return Ty.Unknown

@@ -1389,12 +1389,12 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             if is_negative_literal(index)
                 bad.push(expr_pos(index))
     if bad.len() > 0
-        err_help(
-            "type.coll.4",
-            bad[0],
-            "a list has no negative indexes",
-            "count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`",
-        )
+        mut d := new_diag("type.coll.4", bad[0], "a list has no negative indexes")
+            .with_help("count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`")
+        match recv
+            Name(rn, _) => d = d.with_fix("count from the end", [fix.replace(bad[0], "-", "{rn}.len() - ")])
+            _ => d = d
+        diags.push(d)
     slice := is_range(index)
     match index
         Range(lo, hi, _, _) => range_bounds(lo, hi)
@@ -1419,12 +1419,14 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
         Bytes => if slice then rt else Ty.Num("u8")
         Unknown => Ty.Unknown
         Str =>
-            err_help(
-                "type.str.2",
-                expr_pos(recv),
-                "a `str` can't be indexed",
-                "index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part",
-            )
+            mut d := new_diag("type.str.2", expr_pos(recv), "a `str` can't be indexed")
+                .with_help("index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part")
+            match recv
+                Name(rn, _) =>
+                    tail := if slice then ".join(\"\")" else ""
+                    d = d.with_fix("index the characters", [fix.call_with(expr_pos(recv), rn, "{rn}.chars()[$1]{tail}")])
+                _ => d = d
+            diags.push(d)
             Ty.Unknown
         _ =>
             err("type.coll.4", expr_pos(recv), "only lists and maps can be indexed, not {show(rt)}")
