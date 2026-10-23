@@ -189,8 +189,17 @@ fn nx_match(
             return "{case}: `ail build` failed:\n{b.err}"
     envs := "AIL_TEST_A={scratch_dir}/a.txt AIL_TEST_B={scratch_dir}/b.txt AIL_TEST_DIR={scratch_dir}/d1 AIL_TEST_MID={scratch_dir}/d1/d2 AIL_TEST_DEEP={scratch_dir}/d1/d2/d3 AIL_TEST_IN={scratch_dir}/d1/f.txt"
     input := if fs.exists("bootstrap/tests/native/run/{stem}.in") then "bootstrap/tests/native/run/{stem}.in" else "/dev/null"
-    want := sh("{envs} {BIN} run {case} < {input}")
     got := sh("{envs} {runner} {exe} < {input}")
+    ## The frozen golden (tools/gate/goldens.ail): stdout and exit status; no interpreter run.
+    gold := "bootstrap/tests/native/golden/{stem}"
+    if fs.exists("{gold}.out")
+        want_out := fs.read_text("{gold}.out") else ""
+        status := if fs.exists("{gold}.status") then (fs.read_text("{gold}.status") else "1") else "0"
+        want_status := status.trim().to_int() else 1
+        if want_out == got.out and want_status == got.status
+            return none
+        return "{case}: differs from its golden\n--- golden (exit {want_status}):\n{want_out}\n--- native (exit {got.status}):\n{got.out}{got.err}"
+    want := sh("{envs} {BIN} run {case} < {input}")
     mut want_err := List[str]()
     for l in want.err.lines()
         if m := interp_line(l)
@@ -227,9 +236,24 @@ fn nx_batch(chunk List[str], target str, root str, tmp str, tag str) bool
             return false
     true
 
+## Builds `chunk` with `nx_batch`; when one program breaks the batch, splits it in halves so
+## the rest still build together. Returns the programs that have no executable (built singly later).
+fn nx_build(chunk List[str], target str, root str, tmp str, tag str) List[str]
+    if chunk.is_empty()
+        return []
+    if nx_batch(chunk, target, root, tmp, tag)
+        return []
+    if chunk.len() == 1
+        return chunk
+    mid := chunk.len() / 2
+    cat(
+        nx_build(chunk[..mid], target, root, tmp, "{tag}a"),
+        nx_build(chunk[mid..], target, root, tmp, "{tag}b"),
+    )
+
 fn nx_worker(chunk List[str], k int, target str, runner str, root str, tmp str) List[str]
     mut fails := List[str]()
-    prebuilt := nx_batch(chunk, target, root, tmp, "w{k}-{target}")
+    unbuilt := nx_build(chunk, target, root, tmp, "w{k}-{target}")
     for case in chunk
         stem := stem_of(case)
         if why := nx_match(
@@ -240,7 +264,7 @@ fn nx_worker(chunk List[str], k int, target str, runner str, root str, tmp str) 
             runner,
             root,
             tmp,
-            prebuilt,
+            not unbuilt.contains(case),
         )
             fails.push(why)
     fails
