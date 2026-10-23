@@ -1841,7 +1841,7 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
         return Val(id: -1, ty: Ty.Unit)
     f := out_fn(v.ty)
     if f == ""
-        return out_shown(v, pos)
+        return unsupported(pos, "printing a `{v.ty.name()}`")
     call(f, [v.id], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 
