@@ -122,7 +122,7 @@ fn str_sub(p int, from int, to int) str
 ## 2 empty text to replace, 3 negative repeat count `a`, 5 bad radix `a`,
 ## 4 text over 2^30
 ## bytes (`a` names the method: 0 repeat, 1 pad_left, 2 pad_right, 3 center),
-## 6 empty text to count, 7 a `split` limit `a` under 1.
+## 6 empty text to count.
 fn str_trap(kind int, a int, b int, n int, head str, tail str)
     flush()
     out_str(head)
@@ -145,9 +145,6 @@ fn str_trap(kind int, a int, b int, n int, head str, tail str)
         out_int(a)
     elif kind == 6
         out_str("`count` needs a non-empty text to find")
-    elif kind == 7
-        out_str("the limit of `split` must be at least 1, not ")
-        out_int(a)
     else
         out_byte(96)
         if a == 0
@@ -452,27 +449,6 @@ fn str_split(s str, sep str, head str, tail str) List[int]
     mut at := bytes_find(p, q, 0)
     while at >= 0
         list_push(out, str_to_obj(str_sub(p, last, at)))
-        last = at + m
-        at = bytes_find(p, q, last)
-    list_push(out, str_to_obj(str_sub(p, last, load64(p))))
-    out
-
-## `s.split(sep, limit)` (type.str.4): at most `limit` pieces, the last keeping the rest.
-fn str_split_n(s str, sep str, limit int, head str, tail str) List[int]
-    p := str_addr(s)
-    q := str_addr(sep)
-    m := load64(q)
-    if m == 0
-        str_trap(1, 0, 0, 0, head, tail)
-    if limit < 1
-        str_trap(7, limit, 0, 0, head, tail)
-    out := list_new(4)
-    mut last := 0
-    mut at := bytes_find(p, q, 0)
-    mut pieces := 1
-    while at >= 0 and pieces < limit
-        list_push(out, str_to_obj(str_sub(p, last, at)))
-        pieces += 1
         last = at + m
         at = bytes_find(p, q, last)
     list_push(out, str_to_obj(str_sub(p, last, load64(p))))

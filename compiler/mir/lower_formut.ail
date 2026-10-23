@@ -1,16 +1,13 @@
 ## `for mut x in list` (own.excl.5). A struct element is a pointer to its
-## fields, so a write through `x` changes the list's element in place. Any
-## other element is written back by `assign_param` (lower_param.ail) on each
-## assignment to `x`, so `break`, `return` and `continue` need no write-back.
+## fields, so a write through `x` changes the list's element in place and
+## the loop lowers as a plain `for`. Other element types would need a
+## write-back on every way out of the loop.
 use ast
 
-## The loop variable `var` of a `for mut` over `list`, at index `i`. A struct
-## element is in place already; a tuple, list, map or set is stored into the
-## element's object (as for a `mut` parameter), and any other type is stored
-## back into the list on each assignment to the variable.
-fn Lower.note_mut_elem(mut self, var str, list int, i int, e Ty)
-    key := lookup(var) else return
-    if needs_copy(e) or e.is_coll()
-        facts.mut_ptr["{fname}|{key}"] = read_var(key, cur)
-    else
-        facts.mut_elem["{fname}|{key}"] = [list, i]
+## Whether `for mut` over elements of type `e` lowers; a problem after not.
+fn Lower.for_mut_ok(mut self, e Ty, pos ast.Pos) bool
+    match e
+        Struct(_) => true
+        _ =>
+            problem(pos, "`for mut` isn't in the native subset yet")
+            false

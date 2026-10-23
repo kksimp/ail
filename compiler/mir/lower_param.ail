@@ -12,10 +12,6 @@ use ast
 ## owned local's last use that `elide_moves` may drop.
 struct Facts
     mut_ptr Map[str, int]
-    ## The `for mut` variables over scalar elements, as `FUNCTION|KEY` to the
-    ## list and the index: an assignment to the variable stores the element
-    ## back (lower_formut.ail).
-    mut_elem Map[str, List[int]]
     moves List[int]
     ## The locals whose every value is their own: set by a plain `x := e`
     ## whose `e` is a place (copied), a literal or a call, and dropped by an
@@ -27,7 +23,7 @@ struct Facts
     stable Set[str]
 
 fn new_facts() Facts
-    Facts(mut_ptr: {}, mut_elem: {}, moves: [], owned: Set[str](), stable: Set[str]())
+    Facts(mut_ptr: {}, moves: [], owned: Set[str](), stable: Set[str]())
 
 ## A `mut` parameter's object, as `FUNCTION|KEY`.
 fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
@@ -36,11 +32,6 @@ fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
 
 ## The value to bind to `key` after `key = v` of type `ty`.
 fn Lower.assign_param(mut self, key str, ty Ty, v int) int
-    if at := facts.mut_elem.get("{fname}|{key}")
-        # No bounds check (site -1): the loop runs over the list's own length
-        # and its body can't touch the list (own.excl.5).
-        emit_void(inst(-1, "set", [at[0], at[1], v]))
-        return v
     p := facts.mut_ptr.get("{fname}|{key}") else return v
     if p == v
         return v

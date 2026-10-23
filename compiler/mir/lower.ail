@@ -1303,9 +1303,11 @@ fn Lower.lower_for(
                     "a `for` over a `{l.ty.name()}` isn't in the native subset yet",
                 )
                 return
+            if mutable and not for_mut_ok(e, fpos)
+                return
             elem = e
             list = l.id
-            if mutates(body, iter) and l.id == l0.id and not mutable
+            if mutates(body, iter) and l.id == l0.id
                 list = copy_list(l)
             lo = konst(0, Ty.Int)
             hi = op("len", [list], Ty.Int)
@@ -1327,8 +1329,6 @@ fn Lower.lower_for(
     if list >= 0
         declare(var, elem, op("get", [list, i], elem))
         borrowed.add(lookup(var) else "")
-        if mutable
-            note_mut_elem(var, list, i, elem)
     else
         declare(var, Ty.Int, i)
     loops.push(Loop(cont: latch, exit: exit))
