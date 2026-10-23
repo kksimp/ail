@@ -294,7 +294,8 @@ fn on_trap(kind int, a int, b int, head str, op str, tail str)
 ## trapped task ends the program as the interpreter's uncaught `Trapped`
 ## does (conc.task.6, native.task.1).
 fn task_wait(rec int, at1 str, at2 str) int
-    wait_done(rec)
+    if wait_done_dl(rec, true)
+        return 0
     if atomic_load(rec + T_STATE) == 3
         report_trapped(rec, at1, at2)
     if atomic_load(rec + T_STATE) == 4
@@ -305,7 +306,8 @@ fn task_wait(rec int, at1 str, at2 str) int
 ## `t.wait() else ...`: the result, or, when the task trapped, the failure
 ## `Trapped(rule, message)` in the error slot (conc.task.6) and 0.
 fn task_try(rec int, at str, own int) int
-    wait_done(rec)
+    if wait_done_dl(rec, true)
+        return 0
     if atomic_load(rec + T_STATE) == 4
         err_restore(load64(rec + T_RESULT))
         return 0
