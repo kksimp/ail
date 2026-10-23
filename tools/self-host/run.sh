@@ -184,7 +184,7 @@ pass=0; fail=0; failed=()
 # from the interpreter by design), read from that list so the two agree.
 macos_known=""
 if [[ "$TARGET" == *macos* ]]; then
-    macos_known=$(sed -n '/MACOS_KNOWN: &\[&str\]/,/\];/p' bootstrap/tests/native.rs | grep -o '"[^"]*"' | tr -d '"' | tr '\n' ',')
+    macos_known=$(grep -v '^#' bootstrap/tests/native/golden/macos_known.txt | tr '\n' ',')
 fi
 for f in "$tests"/*.ail; do
     name=$(basename "$f" .ail)

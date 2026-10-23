@@ -201,6 +201,8 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
     if structs.contains("{m}.{name}") and os_lookup(m, name) == none
         return new_struct("{m}.{name}", args, npos)
     f := os_lookup(m, name) else
+        if structs.contains("{m}.{name}")
+            return new_struct("{m}.{name}", args, npos)
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"
         v := os_call(f, args, npos)?

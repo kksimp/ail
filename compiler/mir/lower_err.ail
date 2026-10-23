@@ -484,6 +484,7 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
         return propagate_result(m.val, context, pos)
     if fallible_call(e)
         v := lower_expr(e, none)?
+        note_inferred_err(error_type_of_call(e))
         return propagate_result(v, context, pos)
     o := lower_value(e, none)?
     if o.ty.opt_inner() == none
@@ -738,6 +739,9 @@ fn Lower.declare_errors(mut self, prog ast.Program)
 fn Lower.names_error(self, name str) bool
     if err_msgs.contains("{prefix}{name}")
         return true
+    # The built-in `Trapped` is named the same in every module.
+    if name == "Trapped"
+        return true
     if k := type_key(name)
         return err_msgs.contains(k)
     if k := enum_key(name)
@@ -976,3 +980,41 @@ fn Lower.lower_or_else(mut self, x ast.Expr, other ast.Else, pos ast.Pos) Val?
     if self.is_get_call(x)
         return lower_get_else(x, other, pos)
     lower_else(x, other, pos)
+
+# ---- inferred error sets (`fn f() !`, err.type.6) ----
+
+## Record that function `key` has an inferred error set, when its return type says so.
+fn Lower.note_inferred_set(mut self, key str, r ast.TypeRef)
+    match r.shape
+        Fallible(ok, errors) =>
+            if errors != none
+                return
+            e := fn_errs.get(key) else return
+            if e.is_unknown()
+                infer_errs[key] = Ty.Unknown
+        _ => return
+
+## `?` on a call that gives error type `t` in the function being lowered: while all
+## of them agree, that is the function's error type, so `else err` can read its fields.
+fn Lower.note_inferred_err(mut self, t Ty)
+    cur_t := infer_errs.get(fname) else return
+    if cur_t == Ty.Unit
+        return
+    if t.is_unknown() or (not cur_t.is_unknown() and cur_t != t)
+        infer_errs[fname] = Ty.Unit
+        fn_errs[fname] = Ty.Unknown
+        return
+    infer_errs[fname] = t
+    fn_errs[fname] = t
+
+## The functions with an inferred error set first, so their callers lower knowing the type.
+fn inferred_first(l Lower, fns List[ast.FnDecl], pre str) List[ast.FnDecl]
+    mut first := List[ast.FnDecl]()
+    mut rest := List[ast.FnDecl]()
+    for f in fns
+        if l.infer_errs.contains(fn_key(f, pre))
+            first.push(f)
+        else
+            rest.push(f)
+    first.extend(rest)
+    first
