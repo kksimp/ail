@@ -270,6 +270,15 @@ regex engine is written.
   `aborted` and `reason` and runs the signal's `abort` listeners, then
   `onabort`. No `AbortSignal.abort()`/`timeout()`/`any()`, and nothing
   aborts a pending request yet (`fetch` belongs to lane 177).
+- Focus and keys (`vm/focus.ail`): `el.focus()`/`blur()` and Tab in Garlic
+  move `document.activeElement` and fire `focus`, `focusin`, `blur`,
+  `focusout`. Typing into a field fires `keydown` (cancellable: that
+  character is dropped), `input` and `keyup` per character, then `change`;
+  Enter fires `keydown`/`keyup` first, and a cancelled `keydown` stops the
+  form from submitting. A click in Garlic fires `mousedown`, focus on the
+  control pressed, `mouseup` and `click` (a cancelled `mousedown` only keeps
+  the focus). `KeyboardEvent` and `MouseEvent` start with empty
+  `key`/`code` and zero coordinates, as in Chromium.
 
 ## Generators and async functions
 
