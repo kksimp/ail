@@ -29,7 +29,7 @@ fn Lower.bytes_index(mut self, l Val, index ast.Expr, pos ast.Pos) Val?
     emit_void(t)
     finish(unreachable_term())
     cur = good
-    Val(id: call("rt.bytes_at", [l.id, i.id], Ty.Int), ty: Ty.Byte)
+    Val(id: call("rt.bytes_at", [l.id, i.id], Ty.Int), ty: Ty.Sized("u8"))
 
 fn Lower.bytes_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool, rpos ast.Pos) Val?
     n := op("len", [l.id], Ty.Int)
@@ -69,6 +69,10 @@ fn Lower.bytes_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     name := op_name(o)
     if name == "add"
         return bytes_concat(a, b)
+    if name == "lt" or name == "le" or name == "gt" or name == "ge"
+        # Byte-wise order, shorter first when one is a prefix (type.bytes.2).
+        c := call("rt.bytes_cmp", [a.id, b.id], Ty.Int)
+        return Val(id: op(name, [c, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
     if name != "eq" and name != "ne"
         problem(pos, "`{op_symbol(o)}` on `bytes` isn't in the native subset yet")
         return a
@@ -108,6 +112,8 @@ fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val
         if name == "to_str"
             t := Ty.Opt(Ty.Str)
             return Val(id: call("rt.bytes_to_str", [r.id], t), ty: t)
+    if nargs == 1 and name == "hex" and vs[0].ty == Ty.Str
+        return Val(id: call("rt.bytes_hex_sep", [r.id, vs[0].id], Ty.Str), ty: Ty.Str)
     if nargs == 1 and vs[0].ty == Ty.Bytes
         if name == "concat"
             return bytes_concat(r, vs[0])
@@ -117,3 +123,11 @@ fn Lower.bytes_method(mut self, r Val, name str, vs List[Val], npos ast.Pos) Val
             t := Ty.Opt(Ty.Int)
             return Val(id: call("rt.bytes_index_of", [r.id, vs[0].id], t), ty: t)
     unsupported(npos, "`.{name}()` on `bytes`")
+
+## `bytes.zeros(n)` (type.bytes.13).
+fn Lower.lower_bytes_zeros(mut self, args List[ast.Arg], npos ast.Pos) Val?
+    if args.len() != 1
+        return unsupported(npos, "`bytes.zeros` with these arguments")
+    n := lower_value(args[0].value, Ty.Int)?
+    h := trap_head("type.bytes.13", npos)
+    Val(id: call("rt.bytes_zeros", [n.id, h, trap_tail(npos)], Ty.Bytes), ty: Ty.Bytes)

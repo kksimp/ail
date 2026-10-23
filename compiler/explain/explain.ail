@@ -1,0 +1,568 @@
+## `ail explain [RULE] [--json]` in AIL (explain.list.1, explain.show.1,
+## explain.cover.4; ADRs 0146, 0336, 0670, 0746), ported from
+## `bootstrap/src/explain.rs` and byte-identical to it: a spec rule's text, the
+## ADRs it cites and the nearest example. The Rust one embeds the specification
+## at build time; this one reads `docs/spec/*.md`, the ADR index and the
+## fixable list from the repository, `AIL_ROOT` or the parent of `AIL_COMPILER`
+## (the same rule `ail build` uses for the runtime).
+## `tools/explain/parity.sh` compares the two.
+
+## The code for an implementation limit; not a rule ID (spec README, rule 6).
+UNSUPPORTED := "bootstrap.unsupported"
+UNSUPPORTED_TEXT := "Not a spec rule: the bootstrap doesn't implement this construct yet. The program may be valid AIL. The message names the construct and the spec rule that defines it; run `ail explain` on that rule for the full text. Rewrite the code without the construct, or wait for the bootstrap to support it. (spec README, Rule IDs, item 6; ADR 0023)"
+
+## The rule whose explanation lists the constructs outside the native subset (ADR 0746).
+SUBSET_RULE := "native.subset.1"
+
+## Longest rule text printed in the text form, in characters.
+TEXT_CHARS := 420
+
+## Longest example printed in the text form (explain.cover.4).
+EXAMPLE_LINES := 4
+
+struct Chapter
+    name str
+    text str
+
+struct RuleRow
+    rule str
+    chapter str
+    file str
+
+struct Adr
+    id str
+    title str
+
+struct Worked
+    rejected str
+    fixed str?
+
+struct Explanation
+    rule str
+    file str
+    line int
+    text str
+    adrs List[Adr]
+    example str?
+    rejected str?
+    fixed str?
+
+## The repository directory.
+fn root() str
+    r := env.get("AIL_ROOT") else ""
+    if r != ""
+        return r
+    c := env.get("AIL_COMPILER") else ""
+    if c != ""
+        d := path.dir(c)
+        if d == ""
+            return "."
+        return d
+    "."
+
+fn read_or_die(file str) str
+    text := fs.read_text(file) else err
+        io.eprint("error: can't read {file}: {err.kind}")
+        io.exit(2)
+        return ""
+    text
+
+## Every `docs/spec/*.md` chapter, sorted by name.
+fn chapters() List[Chapter]
+    dir := path.join(root(), "docs/spec")
+    names := fs.list_dir(dir) else err
+        io.eprint("error: can't read {dir}: {err.kind}")
+        io.exit(2)
+        return []
+    mut out := List[Chapter]()
+    for name in names.sorted()
+        if name.ends_with(".md")
+            out.push(Chapter(name: name, text: read_or_die(path.join(dir, name))))
+    out
+
+fn cat(a str, b str) str
+    "{a}{b}"
+
+fn clen(s str) int
+    s.chars().len()
+
+## Is `s` shaped like a rule ID, `chapter.section.n`?
+fn is_rule_id(s str) bool
+    parts := s.split(".")
+    if parts.len() != 3
+        return false
+    for k in 0..2
+        if parts[k] == ""
+            return false
+        for c in parts[k].chars()
+            code := c.code()
+            if not ((code >= 97 and code <= 122) or code == 95)
+                return false
+    if parts[2] == ""
+        return false
+    for c in parts[2].chars()
+        code := c.code()
+        if code < 48 or code > 57
+            return false
+    true
+
+## The rule ID that starts `line`, if it starts one (`**chapter.section.n** — ...`).
+fn rule_at(line str) str?
+    rest := line.strip_prefix("**") else
+        return none
+    end := rest.find("**") else
+        return none
+    id := rest.slice(0, end)
+    if is_rule_id(id)
+        return id
+    none
+
+fn all_rows(chs List[Chapter]) List[RuleRow]
+    mut rows := List[RuleRow]()
+    for ch in chs
+        for line in ch.text.lines()
+            r := rule_at(line) else ""
+            if r != ""
+                rows.push(RuleRow(rule: r, chapter: r.split(".")[0], file: ch.name))
+    rows
+
+fn all_rules(chs List[Chapter]) List[str]
+    mut out := List[str]()
+    for row in all_rows(chs)
+        out.push(row.rule)
+    out
+
+## Does `ail fix` repair diagnostics of `rule`?
+fn fixable(rule str) bool
+    file := path.join(root(), "bootstrap/src/fixable.txt")
+    text := fs.read_text(file) else ""
+    text.lines().contains(rule)
+
+fn hex_digit(n int) str
+    "0123456789abcdef".slice(n, n + 1)
+
+fn json_str(v str) str
+    mut s := "\""
+    for c in v.chars()
+        code := c.code()
+        if c == '"'
+            s = cat(s, "\\\"")
+        elif c == '\\'
+            s = "{s}\\\\"
+        elif c == '\n'
+            s = "{s}\\n"
+        elif code == 13
+            s = "{s}\\r"
+        elif code == 9
+            s = "{s}\\t"
+        elif code < 32
+            s = cat(s, "\\u00{hex_digit(code / 16)}{hex_digit(code % 16)}")
+        else
+            s = "{s}{c.to_str()}"
+    cat(s, "\"")
+
+## `text` with the last `ch` characters or fewer: `s` as `print!` would write it.
+fn emit(text str)
+    if text.ends_with("\n")
+        print(text.slice(0, clen(text) - 1))
+    elif text != ""
+        print(text)
+
+## `ail explain [--json]` (explain.list.1): every rule, its chapter key and
+## file, and whether a fix exists.
+fn list(json bool)
+    rows := all_rows(chapters())
+    mut fixes := 0
+    for row in rows
+        if fixable(row.rule)
+            fixes += 1
+    if json
+        mut s := "\{\"api\":1,\"count\":{rows.len()},\"fixable\":{fixes},\"rules\":["
+        mut i := 0
+        for row in rows
+            if i > 0
+                s = "{s},"
+            fix := if fixable(row.rule) then "true" else "false"
+            s = cat(
+                s,
+                "\{\"rule\":{json_str(row.rule)},\"chapter\":{json_str(row.chapter)},\"file\":{json_str(row.file)},\"fix\":{fix}}",
+            )
+            i += 1
+        print(cat(s, "]}"))
+    else
+        for row in rows
+            mark := if fixable(row.rule) then " fix" else ""
+            print("{row.rule} {row.file}{mark}")
+        print("{rows.len()} rules, {fixes} with a fix")
+
+## `text` cut after the last sentence within `TEXT_CHARS`.
+fn shorten(text str) str
+    if clen(text) <= TEXT_CHARS
+        return text
+    head := text.slice(0, TEXT_CHARS)
+    a := head.rfind(". ") else -1
+    b := head.rfind(".\n") else -1
+    mut cut := clen(head)
+    if a >= 0
+        cut = a + 1
+    elif b >= 0
+        cut = b + 1
+    "{head.slice(0, cut)} ... (cut; see the line above)"
+
+## `[label](target)` as `label`: a link target costs tokens and an agent can't
+## follow it from the terminal (explain.cover.4, ADR 0336).
+fn strip_links(text str) str
+    mut out := ""
+    mut rest := text
+    while true
+        open := rest.find("[") else -1
+        if open < 0
+            break
+        after := rest.slice(open + 1, clen(rest))
+        mut linked := false
+        c := after.find("](") else -1
+        if c >= 0
+            label := after.slice(0, c)
+            tail := after.slice(c, clen(after))
+            e := tail.find(")") else -1
+            if e >= 0 and not label.contains("[") and not label.contains("\n")
+                out = "{out}{rest.slice(0, open)}{label}"
+                rest = after.slice(c + e + 1, clen(after))
+                linked = true
+        if not linked
+            out = "{out}{rest.slice(0, open + 1)}"
+            rest = after
+    "{out}{rest}"
+
+## The ADRs cited in `text` (`ADR NNNN`), with titles from the ADR index.
+fn adrs_in(text str) List[Adr]
+    index := read_or_die(path.join(root(), "docs/decisions/README.md"))
+    mut out := List[Adr]()
+    parts := text.split("ADR ")
+    for k in 1..parts.len()
+        mut num := ""
+        for c in parts[k].chars()
+            code := c.code()
+            if code < 48 or code > 57
+                break
+            num = "{num}{c.to_str()}"
+        mut seen := false
+        for a in out
+            if a.id == num
+                seen = true
+        if clen(num) != 4 or seen
+            continue
+        row := "| [{num}]("
+        mut title := ""
+        for l in index.lines()
+            if l.starts_with(row)
+                cells := l.split(" | ")
+                if cells.len() > 1
+                    title = cells[1]
+                break
+        out.push(Adr(id: num, title: title))
+    out
+
+## The lines of a code block that opens at `at`, up to the closing fence.
+fn block(lines List[str], at int) str
+    mut body := List[str]()
+    mut i := at + 1
+    while i < lines.len() and not lines[i].starts_with("```")
+        body.push(lines[i])
+        i += 1
+    body.join("\n")
+
+## The first block tagged `error=RULE` anywhere in the specification, and the
+## plain block that directly follows it, if any (explain.show.1).
+fn worked_example(chs List[Chapter], rule str) Worked?
+    tag := "error={rule}"
+    for ch in chs
+        lines := ch.text.lines()
+        mut open := -1
+        for k in 0..lines.len()
+            t := lines[k].strip_prefix("```ail ") else ""
+            if t != "" and t.words().contains(tag)
+                open = k
+                break
+        if open < 0
+            continue
+        rejected := block(lines, open)
+        mut i := open + 1
+        while i < lines.len() and not lines[i].starts_with("```")
+            i += 1
+        # Past the closing fence, to the next block unless a heading or rule comes first.
+        mut fixed := none
+        mut k := i + 1
+        while k < lines.len()
+            l := lines[k]
+            r := rule_at(l) else ""
+            if l.starts_with("#") or r != "" or l.starts_with("```")
+                break
+            k += 1
+        if k < lines.len()
+            t := lines[k].trim_end()
+            if t == "```ail" or t == "```ail fragment"
+                fixed = block(lines, k)
+        return Worked(rejected: rejected, fixed: fixed)
+    none
+
+## The first block of the specification whose `rules=` tag names `rule`, when
+## the rule's own section has no example (ADR 0670).
+fn tagged_example(chs List[Chapter], rule str) str?
+    for ch in chs
+        lines := ch.text.lines()
+        for i in 0..lines.len()
+            tags := lines[i].strip_prefix("```ail ") else ""
+            if tags == ""
+                continue
+            words := tags.words()
+            mut named := false
+            for w in words
+                ids := w.strip_prefix("rules=") else ""
+                if ids != "" and ids.split(",").contains(rule)
+                    named = true
+            if not named
+                continue
+            body := block(lines, i).lines()
+            mut tool := ""
+            mut pkg := ""
+            mut stdin := ""
+            for w in words
+                tool = w.strip_prefix("tool=") else tool
+                pkg = w.strip_prefix("pkg=") else pkg
+                stdin = w.strip_prefix("stdin=") else stdin
+            mut blank := true
+            for l in body
+                if l.trim() != ""
+                    blank = false
+            # A block with no code (`pkg=` or `fixture=`) shows its command alone.
+            if blank and tool == ""
+                continue
+            mut out := ""
+            if pkg != ""
+                out = cat(out, "# package {pkg}\n")
+            if tool != ""
+                out = cat(out, "$ ail {tool.replace(",", " ")}")
+                if stdin != ""
+                    out = cat(out, " < {stdin}")
+                out = "{out}\n"
+            if not blank
+                # Three lines at most: a tagged block is often a whole program (ADR 0670).
+                out = cat(out, body.take(3).join("\n"))
+            return out.trim_end()
+    none
+
+fn explanation(chs List[Chapter], rule str) Explanation?
+    if rule == UNSUPPORTED
+        mut line := 1
+        for ch in chs
+            if ch.name == "README.md"
+                ls := ch.text.lines()
+                for k in 0..ls.len()
+                    if ls[k].contains(UNSUPPORTED)
+                        line = k + 1
+                        break
+        return Explanation(
+            rule: rule,
+            file: "docs/spec/README.md",
+            line: line,
+            text: UNSUPPORTED_TEXT,
+            adrs: adrs_in(UNSUPPORTED_TEXT),
+            example: none,
+            rejected: none,
+            fixed: none,
+        )
+    for ch in chs
+        lines := ch.text.lines()
+        mut start := -1
+        for k in 0..lines.len()
+            r := rule_at(lines[k]) else ""
+            if r == rule
+                start = k
+                break
+        if start < 0
+            continue
+        # The rule's text runs to the next rule, heading or code block.
+        mut end := start + 1
+        while end < lines.len()
+            l := lines[end]
+            r := rule_at(l) else ""
+            if r != "" or l.starts_with("#") or l.starts_with("```")
+                break
+            end += 1
+        mut first := lines[start]
+        cut := first.find("** ") else -1
+        if cut >= 0
+            first = first.slice(cut + 3, clen(first))
+        mut head := List[str]()
+        for c in first.chars()
+            if head.len() == 0 and (c == '—' or c == '-' or c == ' ')
+                continue
+            head.push(c.to_str())
+        mut parts := [head.join("")]
+        for k in start + 1..end
+            parts.push(lines[k])
+        text := strip_links(parts.join("\n").trim())
+        # The nearest `ail` example after the rule, within the same section.
+        mut example := none
+        mut i := end
+        while i < lines.len() and not lines[i].starts_with("#")
+            if lines[i].trim().starts_with("```ail")
+                example = block(lines, i)
+                break
+            i += 1
+        mut rejected := none
+        mut fixed := none
+        w := worked_example(chs, rule)
+        if ww := w
+            rejected = ww.rejected
+            fixed = ww.fixed
+        # A worked example replaces the nearest example, which may belong to another rule.
+        mut shown := none
+        if rejected == none
+            ex := example else ""
+            if ex.trim() != ""
+                shown = ex
+            else
+                shown = tagged_example(chs, rule)
+        return Explanation(
+            rule: rule,
+            file: "docs/spec/{ch.name}",
+            line: start + 1,
+            text: text,
+            adrs: adrs_in(text),
+            example: shown,
+            rejected: rejected,
+            fixed: fixed,
+        )
+    none
+
+## The rows of the constructs table: (construct, owner) (ADR 0746).
+fn subset_constructs() List[List[str]]
+    text := read_or_die(path.join(root(), "docs/design/native-subset-constructs.md"))
+    mut out := List[List[str]]()
+    for l in text.lines()
+        if not l.starts_with("|")
+            continue
+        mut cell := l.trim()
+        while cell.starts_with("|")
+            cell = cell.slice(1, clen(cell))
+        while cell.ends_with("|")
+            cell = cell.slice(0, clen(cell) - 1)
+        mut cells := List[str]()
+        for c in cell.split("|")
+            cells.push(c.trim())
+        if cells.len() == 3 and cells[0] != "Construct" and not cells[0].starts_with("---")
+            out.push([cells[0], cells[1], cells[2]])
+    out
+
+fn to_text(e Explanation) str
+    file := e.file.strip_prefix("docs/spec/") else e.file
+    mut s := "{e.rule} ({file}:{e.line})\n{shorten(e.text)}\n"
+    mut example := e.example
+    if e.rule == SUBSET_RULE
+        # ADR 0746: the constructs the native backend does not take yet, with the owner of each.
+        s = "{s}\noutside the subset:\n"
+        for row in subset_constructs()
+            s = cat(s, "  {row[0]}: {row[2]}\n")
+        example = none
+    mut labels := ["example", "rejected example", "repaired"]
+    mut codes := [example, e.rejected, e.fixed]
+    for k in 0..3
+        code := codes[k] else
+            continue
+        s = cat(s, "\n{labels[k]}:\n")
+        keep := if k == 0 then EXAMPLE_LINES else 1000000000
+        ls := code.lines()
+        for l in ls.take(keep)
+            s = cat(s, "  {l}\n")
+        if ls.len() > keep
+            s = "{s}  ...\n"
+    s
+
+fn to_json(e Explanation) str
+    mut s := "\{\"api\":1,\"rule\":{json_str(e.rule)}"
+    s = cat(s, ",\"file\":{json_str(e.file)},\"line\":{e.line}")
+    s = cat(s, ",\"text\":{json_str(e.text)}")
+    s = cat(s, ",\"adrs\":[")
+    mut i := 0
+    for a in e.adrs
+        if i > 0
+            s = "{s},"
+        s = cat(s, "\{\"id\":{json_str(a.id)},\"title\":{json_str(a.title)}}")
+        i += 1
+    s = "{s}]"
+    fix := if fixable(e.rule) then "true" else "false"
+    s = cat(s, ",\"fix\":{fix}")
+    x := e.example else ""
+    if e.example != none
+        s = cat(s, ",\"example\":{json_str(x)}")
+    r := e.rejected else ""
+    if e.rejected != none
+        s = cat(s, ",\"rejected\":{json_str(r)}")
+    f := e.fixed else ""
+    if e.fixed != none
+        s = cat(s, ",\"fixed\":{json_str(f)}")
+    cat(s, "}")
+
+## Closest known rule IDs to a mistyped one, for the "did you mean" help.
+fn near(chs List[Chapter], rule str) List[str]
+    mut prefix := rule
+    cut := rule.rfind(".") else -1
+    if cut >= 0
+        prefix = rule.slice(0, cut)
+    rules := all_rules(chs)
+    mut same := List[str]()
+    for r in rules
+        if r.starts_with("{prefix}.")
+            same.push(r)
+    if same.len() == 0
+        chapter := rule.split(".")[0]
+        # One rule per section of the same chapter.
+        mut sections := List[str]()
+        for r in rules
+            mut section := r
+            c := r.rfind(".") else -1
+            if c >= 0
+                section = r.slice(0, c)
+            if r.split(".")[0] == chapter and not sections.contains(section)
+                sections.push(section)
+                same.push(r)
+        same = same.sorted()
+    same.take(8)
+
+fn run(rule str, json bool) int
+    chs := chapters()
+    found := explanation(chs, rule)
+    if found != none
+        e := found else
+            return 2
+        if json
+            print(to_json(e))
+        else
+            emit(to_text(e))
+        return 0
+    close := near(chs, rule)
+    mut help := "rule IDs look like `expr.bind.4`; see docs/spec/"
+    if close.len() > 0
+        help = "known rules nearby: {close.join(", ")}"
+    if json
+        io.eprint("\{\"api\":1,\"severity\":\"error\",\"message\":{json_str("unknown rule `{rule}`")},\"help\":{json_str(help)}}")
+    else
+        io.eprint("error: unknown rule `{rule}`\nhelp: {help}")
+    2
+
+## `ail explain [RULE] [--json]`: the exit status.
+pub fn command(args List[str]) int
+    json := args.contains("--json")
+    mut rest := List[str]()
+    for a in args
+        if a != "--json"
+            rest.push(a)
+    if rest.len() == 0
+        list(json)
+        return 0
+    if rest.len() == 1
+        return run(rest[0], json)
+    io.eprint("usage: ail explain [RULE] [--json]")
+    2
