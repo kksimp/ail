@@ -1,0 +1,3 @@
+# std.tensor.11: an axis out of range traps.
+fn main()
+    print(tensor.from([1.0, 2.0]).argmax(1))

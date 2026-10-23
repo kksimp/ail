@@ -85,6 +85,12 @@ F32_METHODS := [
     "sigmoid",
     "tanh",
     "softmax",
+    "reshape",
+    "argmax",
+    "argmin",
+    "clamp",
+    "round",
+    "conv2d",
 ]
 
 fn tensor_elem(t Ty) Ty
@@ -190,6 +196,26 @@ fn Lower.tensor_reduce(mut self, r Val, kind int, axis_arg ast.Arg?, npos ast.Po
         return Val(id: out, ty: r.ty)
     tensor_first(out, e)
 
+## `t.argmax(axis)` and `argmin` (std.tensor.17): a `Tensor[int]`, or an `int`
+## with no axis.
+fn Lower.tensor_arg(mut self, r Val, name str, axis_arg ast.Arg?, npos ast.Pos) Val?
+    kind := konst(if name == "argmax" then 0 else 1, Ty.Int)
+    mut axis := konst(0, Ty.Int)
+    mut has := 0
+    if a := axis_arg
+        axis = lower_value(a.value, Ty.Int)?.id
+        has = 1
+    h := konst(has, Ty.Int)
+    bad_axis := call("rt.tensor_arg_fault", [r.id, kind, axis, h, konst(0, Ty.Int)], Ty.Int)
+    tensor_trap_if(bad_axis, "std.tensor.11", npos)
+    empty := call("rt.tensor_arg_fault", [r.id, kind, axis, h, konst(1, Ty.Int)], Ty.Int)
+    tensor_trap_if(empty, "std.tensor.17", npos)
+    t := Ty.Tensor(Ty.Int)
+    out := call("rt.tensor_arg", [r.id, kind, axis, h], t)
+    if has == 1
+        return Val(id: out, ty: t)
+    tensor_first(out, Ty.Int)
+
 fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable
@@ -222,6 +248,17 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
             msg := call("rt.tensor_softmax_fault", [r.id], Ty.Int)
             tensor_trap_if(msg, "std.tensor.24", npos)
             return Val(id: call("rt.tensor_softmax", [r.id], r.ty), ty: r.ty)
+        if name == "item" and e != Ty.F32
+            msg := call("rt.tensor_item_fault", [r.id], Ty.Int)
+            tensor_trap_if(msg, "std.tensor.15", npos)
+            return tensor_first(r.id, e)
+        if name == "argmax" or name == "argmin"
+            return tensor_arg(r, name, none, npos)
+        if name == "round" and e != Ty.Int
+            msg := call("rt.tensor_round_fault", [r.id], Ty.Int)
+            tensor_trap_if(msg, "std.tensor.19", npos)
+            t := Ty.Tensor(Ty.Int)
+            return Val(id: call("rt.tensor_round", [r.id], t), ty: t)
         if name == "transpose"
             msg := call("rt.tensor_transpose_fault", [r.id], Ty.Int)
             tensor_trap_if(msg, "std.tensor.12", npos)
@@ -237,13 +274,26 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
         if name == "mean"
             return tensor_reduce(r, 2, none, npos)
     if args.len() == 1
+        if name == "argmax" or name == "argmin"
+            return tensor_arg(r, name, args[0], npos)
+        if name == "reshape"
+            shape := lower_value(args[0].value, Ty.List(Ty.Int))?
+            if not same_ty(shape.ty, Ty.List(Ty.Int))
+                return unsupported(npos, "`.reshape()` with a `{shape.ty.name()}`")
+            msg := call("rt.tensor_reshape_fault", [r.id, shape.id], Ty.Int)
+            tensor_trap_if(msg, "std.tensor.2", npos)
+            return Val(id: call("rt.tensor_reshape", [r.id, shape.id], r.ty), ty: r.ty)
         if name == "sum" or name == "max" or name == "mean"
             kind := if name == "sum" then 0 else if name == "max" then 1 else 2
             return tensor_reduce(r, kind, args[0], npos)
-        if name == "add" or name == "mul" or name == "dot" or name == "matmul"
+        if name == "add" or name == "mul" or name == "dot" or name == "matmul" or name == "conv2d"
             b := lower_value(args[0].value, r.ty)?
             if not same_ty(b.ty, r.ty)
                 return unsupported(npos, "`.{name}()` with a `{b.ty.name()}`")
+            if name == "conv2d" and e != Ty.Int
+                msg := call("rt.tensor_conv2d_fault", [r.id, b.id], Ty.Int)
+                tensor_trap_if(msg, "std.tensor.16", npos)
+                return Val(id: call("rt.tensor_conv2d", [r.id, b.id], r.ty), ty: r.ty)
             if name == "matmul"
                 msg := call("rt.tensor_matmul_fault", [r.id, b.id], Ty.Int)
                 tensor_trap_if(msg, "std.tensor.7", npos)
@@ -260,4 +310,12 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
                 tensor_overflow_if_zero(t, npos)
                 return tensor_first(t, e)
             return tensor_zip(if name == "add" then 0 else 2, r, b, npos)
+    if args.len() == 2 and name == "clamp" and e != Ty.Int
+        lo := lower_value(args[0].value, Ty.Float)?
+        hi := lower_value(args[1].value, Ty.Float)?
+        if not (lo.ty == Ty.Float and hi.ty == Ty.Float)
+            return unsupported(npos, "`.clamp()` with a `{lo.ty.name()}` and a `{hi.ty.name()}`")
+        msg := call("rt.tensor_clamp_fault", [lo.id, hi.id], Ty.Int)
+        tensor_trap_if(msg, "std.tensor.18", npos)
+        return Val(id: call("rt.tensor_clamp", [r.id, lo.id, hi.id], r.ty), ty: r.ty)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")

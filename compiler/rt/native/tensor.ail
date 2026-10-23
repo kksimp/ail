@@ -775,3 +775,276 @@ fn tensor_first_i(t int) int
 
 fn tensor_first_f(t int) float
     loadf(tensor_data(t))
+
+# item, reshape, argmax/argmin, clamp and round (std.tensor.3, 15, 17-19).
+
+## The message of `t.item()` on a tensor without exactly one element, or 0.
+fn tensor_item_fault(a int) int
+    if load64(a + 16) == 1
+        return 0
+    sb_reset()
+    sb_text("`item` needs one element, but the shape is ")
+    put_sizes(a + 32, load64(a + 8))
+    str_addr(sb_str())
+
+## The message of `t.reshape(shape)` failing (std.tensor.2), or 0.
+fn tensor_reshape_fault(a int, shape List[int]) int
+    sp := list_addr(shape)
+    rank := load64(sp)
+    d := load64(sp + 16)
+    mut count := 1
+    for i in 0..rank
+        s := load64(d + 8 * i)
+        if s < 0
+            sb_reset()
+            sb_text("a tensor's sizes can't be negative, and the shape is ")
+            put_sizes(d, rank)
+            return str_addr(sb_str())
+        if s != 0 and count > 1099511627776 / s
+            sb_reset()
+            sb_text("the shape ")
+            put_sizes(d, rank)
+            sb_text(" has too many elements")
+            return str_addr(sb_str())
+        count = count * s
+    n := load64(a + 16)
+    if n != count
+        sb_reset()
+        put_int(n)
+        sb_text(" elements don't fill the shape ")
+        put_sizes(d, rank)
+        sb_text(", which holds ")
+        put_int(count)
+        return str_addr(sb_str())
+    0
+
+## `t.reshape(shape)`: the same elements under a new shape.
+fn tensor_reshape(a int, shape List[int]) int
+    sp := list_addr(shape)
+    rank := load64(sp)
+    n := load64(a + 16)
+    t := tensor_new(load64(a), rank, n)
+    tensor_copy_words(t + 32, load64(sp + 16), rank)
+    tensor_copy_words(tensor_data(t), tensor_data(a), n)
+    t
+
+fn arg_name(kind int) str
+    if kind == 0
+        return "argmax"
+    "argmin"
+
+## The faults of `t.argmax(axis)` and `argmin`: with `which` 0 an axis out of
+## range (std.tensor.11), with 1 an empty axis (std.tensor.17); `has` is 0 for
+## no axis.
+fn tensor_arg_fault(a int, kind int, axis int, has int, which int) int
+    rank := load64(a + 8)
+    mut before := 1
+    mut n := load64(a + 16)
+    mut after := 1
+    if has != 0
+        if axis < 0 or axis >= rank
+            if which != 0
+                return 0
+            sb_reset()
+            sb_byte(96)
+            sb_text(arg_name(kind))
+            sb_byte(40)
+            put_int(axis)
+            sb_text(")` on a tensor of shape ")
+            put_sizes(a + 32, rank)
+            sb_text(": the axis must be from 0 to ")
+            put_int(rank - 1)
+            return str_addr(sb_str())
+        n = load64(a + 32 + 8 * axis)
+        for i in 0..axis
+            before = before * load64(a + 32 + 8 * i)
+        for i in axis + 1..rank
+            after = after * load64(a + 32 + 8 * i)
+    if which == 0
+        return 0
+    if n == 0 and before * after > 0
+        sb_reset()
+        sb_text("`argmax` of an empty axis of a tensor of shape ")
+        put_sizes(a + 32, rank)
+        return str_addr(sb_str())
+    0
+
+## `t.argmax(axis)` (`kind` 0) or `argmin` (1): a `Tensor[int]` of the first
+## best index along the axis, or a tensor of shape `[]` over every element
+## when `has` is 0. A NaN never replaces the running best.
+fn tensor_arg(a int, kind int, axis int, has int) int
+    rank := load64(a + 8)
+    ek := load64(a)
+    mut before := 1
+    mut n := load64(a + 16)
+    mut after := 1
+    mut out_rank := 0
+    if has != 0
+        n = load64(a + 32 + 8 * axis)
+        for i in 0..axis
+            before = before * load64(a + 32 + 8 * i)
+        for i in axis + 1..rank
+            after = after * load64(a + 32 + 8 * i)
+        out_rank = rank - 1
+    t := tensor_new(0, out_rank, before * after)
+    if has != 0
+        mut at := 0
+        for i in 0..rank
+            if i != axis
+                store64(t + 32 + 8 * at, load64(a + 32 + 8 * i))
+                at += 1
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for b in 0..before
+        for c in 0..after
+            base := da + 8 * (b * n * after + c)
+            mut best := 0
+            for k in 1..n
+                p := base + 8 * k * after
+                q := base + 8 * best * after
+                mut better := false
+                if ek == 0
+                    better = if kind == 0 then load64(p) > load64(q) else load64(p) < load64(q)
+                else
+                    better = if kind == 0 then loadf(p) > loadf(q) else loadf(p) < loadf(q)
+                if better
+                    best = k
+            store64(out + 8 * (b * after + c), best)
+    t
+
+## `x` as Rust's `{}` prints a float in a fault message: whole numbers
+## without the `.0`, `NaN`, `inf` and `-inf`.
+fn put_float_plain(x float)
+    if x != x
+        sb_text("NaN")
+    elif x == fm_inf()
+        sb_text("inf")
+    elif x == 0.0 - fm_inf()
+        sb_text("-inf")
+    else
+        put_float(x)
+        c := sb_base()
+        n := load64(c + 8)
+        if n >= 2 and load8(load64(c) + n - 2) == 46 and load8(load64(c) + n - 1) == 48
+            store64(c + 8, n - 2)
+
+## The message of `t.clamp(lo, hi)` with bad bounds (std.tensor.18), or 0.
+fn tensor_clamp_fault(lo float, hi float) int
+    if lo != lo or hi != hi or lo > hi
+        sb_reset()
+        sb_text("`clamp(")
+        put_float_plain(lo)
+        sb_text(", ")
+        put_float_plain(hi)
+        sb_text(")`: the bounds must satisfy lo <= hi")
+        return str_addr(sb_str())
+    0
+
+## `t.clamp(lo, hi)`: each element limited to `[lo, hi]`, a NaN kept; an
+## `f32` tensor's bounds are rounded to `f32` first.
+fn tensor_clamp(a int, lo float, hi float) int
+    ek := load64(a)
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(ek, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    l := if ek == 2 then f32_round(lo) else lo
+    h := if ek == 2 then f32_round(hi) else hi
+    for i in 0..n
+        x := loadf(da + 8 * i)
+        mut y := x
+        if x < l
+            y = l
+        elif x > h
+            y = h
+        storef(out + 8 * i, y)
+    t
+
+## The message of `t.round()` on a NaN, an infinity or a value outside `int`
+## (std.tensor.19), or 0.
+fn tensor_round_fault(a int) int
+    n := load64(a + 16)
+    da := tensor_data(a)
+    for i in 0..n
+        x := loadf(da + 8 * i)
+        r := float_round(x)
+        if not (r >= -9223372036854775808.0 and r < 9223372036854775808.0)
+            sb_reset()
+            sb_text("`round` of ")
+            put_float_plain(x)
+            sb_text(", which isn't a finite `int` value")
+            return str_addr(sb_str())
+    0
+
+## `t.round()`: a `Tensor[int]` of each element rounded half away from zero.
+fn tensor_round(a int) int
+    n := load64(a + 16)
+    rank := load64(a + 8)
+    t := tensor_new(0, rank, n)
+    tensor_copy_words(t + 32, a + 32, rank)
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for i in 0..n
+        store64(out + 8 * i, float_round(loadf(da + 8 * i)).to_int())
+    t
+
+# conv2d (std.tensor.16).
+
+## The message of `img.conv2d(k)` failing (std.tensor.16), or 0.
+fn tensor_conv2d_fault(a int, k int) int
+    if load64(a + 8) != 2 or load64(k + 8) != 2
+        sb_reset()
+        sb_text("`conv2d` needs two 2-D tensors, but the shapes are ")
+        put_sizes(a + 32, load64(a + 8))
+        sb_text(" and ")
+        put_sizes(k + 32, load64(k + 8))
+        return str_addr(sb_str())
+    h := load64(a + 32)
+    w := load64(a + 40)
+    kh := load64(k + 32)
+    kw := load64(k + 40)
+    if kh > h or kw > w
+        sb_reset()
+        sb_text("`conv2d`: a ")
+        put_int(kh)
+        sb_byte(120)
+        put_int(kw)
+        sb_text(" kernel doesn't fit a ")
+        put_int(h)
+        sb_byte(120)
+        put_int(w)
+        sb_text(" image")
+        return str_addr(sb_str())
+    0
+
+## `img.conv2d(k)`: the valid convolution, stride 1; each output adds its
+## products in the kernel's row-major order (`f32` rounds every step).
+fn tensor_conv2d(a int, k int) int
+    ek := load64(a)
+    h := load64(a + 32)
+    w := load64(a + 40)
+    kh := load64(k + 32)
+    kw := load64(k + 40)
+    oh := h - kh + 1
+    ow := w - kw + 1
+    t := tensor_new(ek, 2, oh * ow)
+    store64(t + 32, oh)
+    store64(t + 40, ow)
+    da := tensor_data(a)
+    dk := tensor_data(k)
+    out := tensor_data(t)
+    for oy in 0..oh
+        for ox in 0..ow
+            mut s := 0.0
+            for ky in 0..kh
+                for kx in 0..kw
+                    x := loadf(da + 8 * ((oy + ky) * w + ox + kx))
+                    y := loadf(dk + 8 * (ky * kw + kx))
+                    if ek == 2
+                        s = f32_round(s + f32_round(x * y))
+                    else
+                        s = s + x * y
+            storef(out + 8 * (oy * ow + ox), s)
+    t
