@@ -114,6 +114,18 @@ and `view` without a window. *(ADR 0838)*
 (`eff.cap.1`). `script`, `outline` and the builders have no effects.
 *(ADR 0838)*
 
+**std.app.13** — `trait App` also has `measures(self) List[Measure]` (default
+empty) and `measured(mut self, runs List[Measure], widths List[float])`
+(default does nothing). `struct Measure` is `text`, `font` (`mono` or `sans`),
+`size`, `bold` and `italic`. After each `update`, while `measures()` is not
+empty (at most 4 rounds), `run` sends `{"v":1,"t":"measure","runs":[...]}` with
+the same fields per run, and waits for the host's `{"kind":"measured","text":W}`
+event, where `W` is each run's advance width in points in the font a `Str` op
+of that family, size and weight is drawn in, joined by commas; events that
+arrive meanwhile are handled afterwards. If the count is wrong the answer is
+dropped. `measured` gets the runs and widths, so the app lays out again. The
+headless `script` never measures. *(ADR 0839)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -160,6 +172,31 @@ fn main()
     print(ev.x)
     print(app.frame(p).starts_with("\{\"v\":1,\"t\":\"view\",\"title\":\"Pad\""))
     print(app.outline(p.view()))
+```
+
+```ail norun rules=std.app.13
+use std.app
+
+struct Ruler
+    widths Map[str, float]
+
+impl app.App for Ruler
+    fn update(mut self, ev app.Event)
+        return
+
+    fn view(self) app.Node
+        Label("{widths.get("hello") else 0.0}")
+
+    fn measures(self) List[app.Measure]
+        if widths.contains("hello")
+            return []
+        [app.Measure(text: "hello", font: "sans", size: 13.0, bold: false, italic: false)]
+
+    fn measured(mut self, runs List[app.Measure], ws List[float])
+        widths[runs[0].text] = ws[0]
+
+fn main()
+    print(Ruler(widths: {}).measures().len())
 ```
 
 ```ail norun rules=std.app.9,std.app.10

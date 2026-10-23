@@ -11,6 +11,8 @@
 #                                         in directory RT, for x86_64-linux (the default) or
 #                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
 #                                         `ail build`)
+#   ail run compiler run FILE [ARGS...]   the native CLI's `ail run` (ADR 0855)
+#   ail run compiler prepare FILE         builds FILE into the cache and prints the executable's path
 #   ail run compiler build-many RT TARGET MS MB STD FILE...
 #                                         the same for several programs in one run (ADR 0814,
 #                                         used by the selftest), each under a line `== PATH`
@@ -18,6 +20,7 @@
 use a64
 use ast
 use check
+use fmt
 use derive
 use mir
 use obj
@@ -33,6 +36,8 @@ fn main() !
         "check" =>
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
+        "fmt" =>
+            io.exit(fmt.command(args[1..]))
         "tokens" =>
             for path in args[1..]
                 if args.len() > 2
@@ -64,6 +69,10 @@ fn main() !
             print(obj.hex(obj.pe_image(x64.generate_windows(x64.win_sample()))))
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
+        "run" =>
+            cli_run(args[1..])
+        "prepare" =>
+            cli_prepare_cmd(args[1..])
         "build" =>
             # `build FILE [-o OUT] ...` is `ail build` itself; the
             # positional form below is what the bootstrap calls.
@@ -135,6 +144,9 @@ fn build_cli(rest List[str])
         elif a == "--max-memory" and has and positive(rest[i + 1])
             mb = rest[i + 1]
             i += 1
+        elif a == "--unsafe" and has and rest[i + 1] == "driver"
+            # unsafe.hw.1: the checker, run first, took it; the lowering needs nothing.
+            i += 1
         elif a == "--no-cache"
             i += 1
             continue
@@ -147,13 +159,25 @@ fn build_cli(rest List[str])
     if file == ""
         io.eprint(BUILD_USAGE)
         io.exit(2)
-    mut dir := env.get("AIL_COMPILER") else ""
-    if dir == ""
-        root := env.get("AIL_ROOT") else
-            io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
-            io.exit(2)
-            ""
-        dir = path.join(root, "compiler")
+    compile_to(file, out, target, ms, mb)
+
+## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
+fn compiler_dir() str
+    dir := env.get("AIL_COMPILER") else ""
+    if dir != ""
+        return dir
+    root := env.get("AIL_ROOT") else
+        io.eprint("error[native.build.3]: can't find the native backend's `compiler/` directory; set AIL_COMPILER")
+        io.exit(2)
+        ""
+    path.join(root, "compiler")
+
+## Build `file` for `target` (the host's when empty) into `out` (by default
+## the file's name in the current directory) with the run limits `ms` and `mb`.
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str)
+    mut out := out_arg
+    mut target := target_arg
+    dir := compiler_dir()
     if target == ""
         target = host_target()
     if out == ""
@@ -324,6 +348,7 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
     derived := derived_sources()?
     srcs.extend(derived.sources)
     srcs.extend(derive_builtin(srcs))
+    srcs.extend(derive_user(srcs, rt, std))
     lazy := srcs.len()
     # Without the Rust front end's file, the prelude's JSON and `Default`
     # modules come from the embedded copy, for the programs that name them
@@ -358,6 +383,9 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
 fn mentions_prelude(srcs List[mir.Source]) bool
     for s in srcs
         if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
+            return true
+        # A derive generator reads a `TypeInfo` (refl.info.1).
+        if s.text.contains("@derive") or s.text.contains("TypeInfo")
             return true
     false
 
@@ -417,10 +445,129 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
         if have.contains("gen:impl:{e.label}")
             continue
         if e.problem != ""
-            io.eprint("{srcs[e.file].path}:{e.pos.line}:{e.pos.col}: error[ct.derive.4]: `{e.label}` can't be derived: {e.problem}")
+            io.eprint("{srcs[e.file].path}:{e.pos.line}:{e.pos.col}: error[ct.derive.4]: {derive_failure(e.label)}: {e.problem}")
             io.exit(1)
         out.push(derived_source(if e.module == "" then "-" else e.module, e.label, e.text.lines()))
     out
+
+## The methods of the `impl`s of traits with a user-written `@derive(f)`
+## generator (ct.derive.1-4, ADR 0856), each as a source of its module. The
+## generators are the program's own code, so they run as a program of their
+## own: the sources, with every function quiet except the generator calls
+## (the program may call methods that don't exist yet), built for the host
+## and run; each generator's text comes back on its standard output.
+fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
+    mut have := Set[str]()
+    for s in srcs
+        have.add(s.path)
+    mut jobs := List[derive.Job]()
+    for j in derive.user_jobs([s.module for s in srcs], [s.prog for s in srcs])
+        if not have.contains("gen:impl:{j.label}")
+            jobs.push(j)
+    if jobs.len() == 0
+        return []
+    texts := run_generators(srcs, jobs, rt)
+    mut out := List[mir.Source]()
+    for k in 0..jobs.len()
+        j := jobs[k]
+        if texts[k].starts_with("@@err ")
+            io.eprint("{srcs[j.file].path}:{j.pos.line}:{j.pos.col}: error[ct.derive.4]: {derive_failure(j.label)}: {texts[k].slice(6, texts[k].len())}")
+            io.exit(1)
+        out.push(derived_source(
+            if j.module == "" then "-" else j.module,
+            j.label,
+            texts[k].lines(),
+        ))
+    out
+
+## The text each job's generator wrote, in order, or `@@err MESSAGE`.
+fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?) List[str]
+    mut calls := List[str]()
+    mut by_module := Map[str, List[str]]()
+    for k in 0..jobs.len()
+        j := jobs[k]
+        calls.push("    run_job_{k}()")
+        mut fns := by_module.get(j.trait_module) else []
+        fns.push("pub fn derive_job_{k}() str ! DeriveError\n    {j.generator}({j.info})?\n")
+        by_module[j.trait_module] = fns
+    mut head := List[str]()
+    for k in 0..jobs.len()
+        alias := if jobs[k].trait_module
+            == "" then "" else "{jobs[k].trait_module.split(".").last() else ""}."
+        head.push("fn run_job_{k}()\n    print(\"@@job {k}\")\n    t := {alias}derive_job_{k}() else err\n        print(\"@@err \{err.message}\")\n        print(\"@@end\")\n        return\n    print(t)\n    print(\"@@end\")\n")
+    mut gen := List[mir.Source]()
+    mut uses := List[str]()
+    for m in by_module.keys().sorted()
+        text := by_module[m].join("\n")
+        if m == ""
+            head.push(text)
+        else
+            gen.push(parse_text(m, "gen:derive", text))
+            uses.push("use {m}\n")
+    head.push("fn main()\n{calls.join("\n")}\n")
+    mut all := [parse_text("", "gen:derive:main", "{uses.join("")}{head.join("\n")}")]
+    all.extend(gen)
+    from := all.len()
+    for s in srcs
+        all.push(user_main_renamed(s))
+    mut prelude := mir.prelude_text(mir.PRELUDE_EMBED)
+    all.push(parse_text("", "<prelude>", prelude))
+    m := mir.lower_package_with(all, rt, from) else err
+        for i in 0..err.items.len()
+            p := err.items[i]
+            io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
+        io.exit(1)
+        return []
+    hex := executable_hex(m, "derive", host_target())
+    exe := bytes.from_hex(hex.replace("\n", "")) else
+        io.eprint("error[native.build.3]: the generator program isn't hexadecimal")
+        io.exit(2)
+        return []
+    tmp := env.get("TMPDIR") else "/tmp"
+    file := "{tmp}/ail-derive-{time.now_ms()}"
+    fs.write_bytes(file, exe) else err
+        io.eprint("error[native.build.3]: can't write {file}: {err}")
+        io.exit(2)
+        return []
+    _ := proc.run("chmod", ["755", file]) else err
+        io.eprint("error[native.build.3]: can't run the generators: {err}")
+        io.exit(2)
+        return []
+    ran := proc.run(file, []) else err
+        remove_quietly(file)
+        io.eprint("error[native.build.3]: can't run the generators: {err}")
+        io.exit(2)
+        return []
+    remove_quietly(file)
+    if ran.status != 0
+        io.eprint("error[ct.derive.4]: a derive generator stopped unexpectedly: {ran.err.trim()}")
+        io.exit(1)
+    mut texts := List[str]()
+    for part in ran.out.split("@@end\n")
+        if part.starts_with("@@job ")
+            body := part.lines()[1..].join("\n")
+            texts.push(body)
+    texts
+
+## "`Trait` can't be derived for `Type`" for the label `Type.Trait`.
+fn derive_failure(label str) str
+    parts := label.split(".")
+    "`{parts.last() else ""}` can't be derived for `{parts[0]}`"
+
+fn remove_quietly(path str)
+    fs.remove(path) else err
+        io.eprint("warning: can't remove {path}: {err}")
+
+## `s` with its function `main` of the root module renamed, so the generator
+## program has a `main` of its own.
+fn user_main_renamed(s mir.Source) mir.Source
+    if s.module != ""
+        return s
+    mut prog := s.prog
+    for i in 0..prog.fns.len()
+        if prog.fns[i].name == "main" and prog.fns[i].owner == none
+            prog.fns[i].name = "user_main"
+    mir.Source(module: s.module, path: s.path, text: s.text, prog: prog)
 
 ## What `ail build` passes besides the program's files.
 struct Derived
@@ -488,3 +635,109 @@ fn parse_with(module str, path str, text str, names Set[str]) mir.Source
             pos: pos,
         ))
     mir.Source(module: module, path: path, text: text, prog: prog)
+
+## The native `ail` command line (ADR 0855): `run` builds a program into the
+## build cache and starts it. `prepare FILE` is `run` without the start: it
+## prints the executable's path, which `./ail` execs so the program keeps the
+## terminal (the native std can't replace a process yet).
+
+## Entries the cache keeps; the least recently used go first (native.build.5).
+CACHE_KEEP := 64
+
+## The build cache directory: `AIL_CACHE_DIR`, `$XDG_CACHE_HOME/ail/build`,
+## `%LOCALAPPDATA%\ail\build` or `~/.cache/ail/build`.
+fn cache_dir() str
+    d := env.get("AIL_CACHE_DIR") else ""
+    if d != ""
+        return d
+    x := env.get("XDG_CACHE_HOME") else ""
+    if x != ""
+        return path.join(x, "ail/build")
+    w := env.get("LOCALAPPDATA") else ""
+    if w != ""
+        return path.join(w, "ail/build")
+    h := env.get("HOME") else "."
+    path.join(h, ".cache/ail/build")
+
+## One line per `.ail` file under `root` (path and the SHA-256 of its text),
+## sorted, for the cache key.
+fn tree_stamp(tag str, root str) str
+    mut lines := List[str]()
+    files := fs.walk(root) else []
+    for f in files.sorted()
+        if f.ends_with(".ail")
+            text := fs.read_text(f) else continue
+            lines.push("{tag} {f} {hash.sha256(text)}")
+    lines.join("\n")
+
+## The key of building `file` for `target`: everything that decides the
+## executable's bytes.
+fn cache_key(file str, target str) str
+    dir := compiler_dir()
+    root := path.dir(file)
+    std := path.join(path.dir(dir), "bootstrap/src/std")
+    parts := [
+        "ail-native-cache-1 {target} {file}",
+        tree_stamp("backend", dir),
+        tree_stamp("program", root),
+        tree_stamp("std", std),
+    ]
+    hash.sha256(parts.join("\n"))
+
+## Keep the newest `CACHE_KEEP` executables of `dir` (`ls -t` lists newest first;
+## without it, as on Windows, the cache just grows).
+fn cache_trim(dir str)
+    listed := proc.run("ls", ["-t", dir]) else return
+    mut n := 0
+    for name in listed.out.lines()
+        if name.len() != 64
+            continue
+        n += 1
+        if n > CACHE_KEEP
+            fs.remove(path.join(dir, name)) else continue
+
+## The cached executable of `file` for the host, built first when missing.
+fn cli_prepare(file str) str
+    target := host_target()
+    dir := cache_dir()
+    exe := path.join(dir, cache_key(file, target))
+    if fs.exists(exe)
+        return exe
+    fs.make_dir(dir) else err
+        io.eprint("error[native.build.5]: can't make {dir}")
+    tmp := "{exe}.{time.now_ms()}.tmp"
+    compile_to(file, tmp, target, "0", "0")
+    fs.rename(tmp, exe) else err
+        io.eprint("error[native.build.5]: can't store {exe}")
+        io.exit(2)
+    cache_trim(dir)
+    exe
+
+fn cli_prepare_cmd(rest List[str])
+    if rest.len() != 1
+        io.eprint("usage: ail prepare FILE")
+        io.exit(2)
+    print(cli_prepare(rest[0]))
+
+## `run FILE [ARGS...]`: the program's output and exit status are passed on.
+fn cli_run(rest List[str])
+    if rest.len() < 1
+        io.eprint("usage: ail run FILE [ARGS...]")
+        io.exit(2)
+    exe := cli_prepare(rest[0])
+    out := proc.run(exe, rest[1..]) else err
+        io.eprint("error[native.build.3]: can't start {exe}: {err}")
+        io.exit(2)
+        return
+    # `print` and `eprint` add a newline; the program's own text has its own.
+    if out.out != ""
+        print(chop(out.out))
+    if out.err != ""
+        io.eprint(chop(out.err))
+    io.exit(out.status)
+
+## `s` without one final newline.
+fn chop(s str) str
+    if s.ends_with("\n")
+        return s.chars()[..s.len() - 1].join("")
+    s

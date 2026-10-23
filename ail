@@ -55,24 +55,56 @@ install_private_rust() {
 }
 
 # `AIL_NATIVE_COMPILER=PATH`: `ail build` is done by a natively built compiler (stage 1 of
-# tools/self-host/run.sh) in place of the Rust-hosted one. The program is checked first, as `ail build` does;
-# `--unsafe driver` stays with the Rust build.
+# tools/self-host/run.sh) in place of the Rust-hosted one. The program is checked first, as `ail build` does
+# (with `--unsafe driver`, unsafe.hw.1, when given); the native compiler takes the same arguments.
 if [ "${1:-}" = build ] && [ -n "${AIL_NATIVE_COMPILER:-}" ]; then
     [ -x "$AIL_NATIVE_COMPILER" ] || die "AIL_NATIVE_COMPILER=$AIL_NATIVE_COMPILER isn't an executable"
-    native_file="" native_skip=0 native_unsafe=0
+    native_file="" native_skip=0 native_unsafe=""
     for native_arg in "${@:2}"; do
         if [ "$native_skip" = 1 ]; then native_skip=0; continue; fi
         case "$native_arg" in
-            -o | --target | --timeout | --max-memory) native_skip=1 ;;
-            --unsafe) native_unsafe=1 ;;
+            -o | --target | --timeout | --max-memory | --unsafe) native_skip=1 ;;
             -*) ;;
             *) [ -n "$native_file" ] || native_file="$native_arg" ;;
         esac
     done
-    if [ "$native_unsafe" = 0 ] && [ -n "$native_file" ]; then
-        AIL_NATIVE_COMPILER= "$root/ail" check "$native_file" || exit 1
+    native_prev=""
+    for native_arg in "$@"; do
+        if [ "$native_prev" = --unsafe ] && [ "$native_arg" = driver ]; then native_unsafe=driver; fi
+        native_prev="$native_arg"
+    done
+    if [ -n "$native_file" ]; then
+        if [ -n "$native_unsafe" ]; then
+            AIL_NATIVE_COMPILER= "$root/ail" check --unsafe driver "$native_file" || exit 1
+        else
+            AIL_NATIVE_COMPILER= "$root/ail" check "$native_file" || exit 1
+        fi
         exec "$AIL_NATIVE_COMPILER" "$@"
     fi
+fi
+
+# `AIL_NATIVE_CLI=1` (ADR 0855): `ail run FILE [ARGS]` is done by the native CLI (compiler/main.ail
+# built natively into .native/ail, by the Rust ail or by the published seed when there is no Rust): the Rust `check` first
+# (while it exists), then the program from the build cache, exec'd so it keeps the terminal. Anything
+# else, and `run` with options before the file, goes to the Rust `ail` below.
+if [ "${AIL_NATIVE_CLI:-}" = 1 ] && [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
+    native="$root/.native/ail"
+    if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
+        if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
+            mkdir -p "$root/.native"
+            AIL_NATIVE_CLI= "$root/ail" build "$root/compiler/main.ail" -o "$native.new" >&2 || die "building the native CLI failed"
+            mv "$native.new" "$native"
+        else
+            "$root/tools/release/fetch-seed.sh" || die "no Rust toolchain and no seed; see ADR 0855"
+            mkdir -p "$root/.native"
+            AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" >&2 || die "the seed couldn't build the native CLI"
+            mv "$native.new" "$native"
+        fi
+    fi
+    if [ -x "$binary" ]; then AIL_NATIVE_CLI= "$root/ail" check "$2" || exit $?; fi
+    exe="$(AIL_COMPILER="$root/compiler" "$native" prepare "$2")" || exit $?
+    shift 2
+    exec "$exe" "$@"
 fi
 
 # A test run pins the binary it is testing (AIL_BINARY), so a program that starts `ail` itself isn't

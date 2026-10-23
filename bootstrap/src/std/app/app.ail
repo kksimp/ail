@@ -184,6 +184,15 @@ pub struct Event
     pub shift bool
     pub meta bool
 
+## A run of text whose advance width the host measures (std.app.13); `font`
+## is `mono` or `sans`.
+pub struct Measure
+    pub text str
+    pub font str
+    pub size float
+    pub bold bool
+    pub italic bool
+
 ## Why an app couldn't run (std.app.9): `no_host`, `start`, `version` or
 ## `host_exited`.
 pub error struct AppError
@@ -292,6 +301,13 @@ pub trait App
     ## the value changes.
     fn focus(self) str
         ""
+    ## Text runs whose widths the app wants measured in the host's fonts;
+    ## empty when it has all it needs (std.app.13).
+    fn measures(self) List[Measure]
+        []
+    ## The widths of `runs`, in points, as the host measured them.
+    fn measured(mut self, runs List[Measure], widths List[float])
+        return
 
 fn indent(depth int) str
     "  ".repeat(depth)
@@ -418,22 +434,62 @@ pub fn run_host[T App](mut a T, cmd str, args List[str]) ! AppError
     if (j.num("v") else 0.0) != 1.0
         return mismatch(move c, hello)
     mut ev := event_from_json(j)
+    mut queued := List[Event]()
     while true
         # std.app.8: a line that isn't an event is skipped.
         if ev.kind != ""
             a.update(ev)
         if ev.kind == "close"
             break
+        # std.app.13: ask the host for the widths the app wants, a few rounds
+        # at most; events that arrive meanwhile are handled afterwards.
+        mut rounds := 0
+        while rounds < 4
+            want := a.measures()
+            if want.len() == 0
+                break
+            c.stdin.send("{measure_line(want)}\n")
+            mut widths := List[float]()
+            while true
+                reply := c.out.recv() else return gone(move c)
+                got := event_from_json(parse_json(reply) else Json.Null)
+                if got.kind == "measured"
+                    widths = [w.to_float() else 0.0 for w in got.text.split(",")]
+                    break
+                if got.kind != ""
+                    queued.push(got)
+            if widths.len() != want.len()
+                break
+            a.measured(want, widths)
+            rounds += 1
         now := frame(a)
         if now != sent
             c.stdin.send("{now}\n")
             sent = now
-        line := c.out.recv() else return gone(move c)
-        ev = event_from_json(parse_json(line) else Json.Null)
+        if queued.len() > 0
+            ev = queued[0]
+            queued = queued[1..]
+        else
+            line := c.out.recv() else return gone(move c)
+            ev = event_from_json(parse_json(line) else Json.Null)
     c.stdin.close()
     for line in c.err
         io.eprint(line)
     proc.wait(move c) else 0
+
+## The request for the widths of `runs` (std.app.13).
+fn measure_line(runs List[Measure]) str
+    items := [
+        Json.Obj([
+            member("text", txt(r.text)),
+            member("font", txt(r.font)),
+            member("size", num(r.size)),
+            member("bold", Json.Bool(r.bold)),
+            member("italic", Json.Bool(r.italic)),
+        ])
+        for r in runs
+    ]
+    "\{\"v\":1,\"t\":\"measure\",\"runs\":{Json.Arr(items).to_text()}}"
 
 fn gone(move c proc.Child) ! AppError
     status := proc.kill(move c)
