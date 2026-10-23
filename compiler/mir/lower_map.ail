@@ -12,15 +12,17 @@ use ast
 # ---- types ----
 
 fn is_key_ty(t Ty) bool
-    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char or t.is_sized()
+    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Bytes or t == Ty.Char or t.is_sized()
 
 fn is_value_ty(t Ty) bool
     is_number(t)
         or t == Ty.Char
         or t == Ty.Str
+        or t == Ty.Bytes
         or needs_copy(t)
         or t.is_coll()
         or is_enum(t)
+        or is_shared_opt(t)
         or t.is_ref()
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
@@ -37,16 +39,17 @@ fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
             return Ty.Set(e)
     none
 
-## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`, 4 `char`.
+## How the runtime prints and hashes a key: 0 `int`, 1 `str` (and `bytes`, which has a
+## string object's layout), 2 `bool`, 4 `char`.
 fn key_kind(t Ty) int
     match t
-        Str => 1
+        Str | Bytes => 1
         Bool => 2
         Char => 4
         _ => 0
 
 ## How the runtime prints a scalar: 0 `int`, 1 `str`, 2 `bool`, 3 `float`,
-## -1 for anything else.
+## 4 `char`, 5 `bytes`, -1 for anything else.
 fn scalar_kind(t Ty) int
     match t
         Int | Sized(_) => 0
@@ -54,6 +57,7 @@ fn scalar_kind(t Ty) int
         Bool => 2
         Float => 3
         Char => 4
+        Bytes => 5
         _ => -1
 
 ## How a copy of a table treats its values: `[mode, info]`, with mode 1 for
@@ -400,7 +404,18 @@ fn Lower.is_get_call(self, e ast.Expr) bool
 
 # ---- methods ----
 
+## The element type of a set that `sorted(by:)` takes natively.
+fn key_set_elem(t Ty) Ty?
+    match t
+        Set(et) => if et == Ty.Int or et == Ty.Str or et == Ty.Char then et else none
+        _ => none
+
 fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    # `s.sorted(by: |x| e)` (expr.key.1): the elements in insertion order, then as a list.
+    if name == "sorted" and args.len() == 1 and args[0].label != none
+        if et := key_set_elem(r.ty)
+            items := Val(id: call("rt.map_keys", [r.id], Ty.List(et)), ty: Ty.List(et))
+            return lower_sorted(items, name, args, npos)
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "`.{name}()` with a labelled or `mut` argument")

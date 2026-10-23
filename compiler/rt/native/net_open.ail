@@ -1,0 +1,232 @@
+# Streaming response bodies (std.net.25): `net.open` returns after the
+# response head, and `Body.read_bytes` pulls the body from the connection
+# whatever its framing. A `Body`'s handle is a socket-table entry of kind
+# `NET_BODY` whose `NET_STREAM` word holds the state below.
+
+# `NET_KIND` of a body entry.
+NET_BODY := 3
+
+# Words of the state: the connection's handle (0 once the body is over), the
+# framing, the bytes left in the current length or chunk, the milliseconds to
+# keep the connection when it is over (0 to close it), and the pool key.
+OPEN_CONN := 0
+OPEN_MODE := 8
+OPEN_LEFT := 16
+OPEN_KEEP := 24
+OPEN_KEY := 32
+
+# `OPEN_MODE`: 0 over, 1 by length, 2 in chunks, 3 up to the end of the stream.
+OPEN_LEN := 1
+OPEN_CHUNKS := 2
+OPEN_EOF := 3
+
+## The body is over: the connection returns to the pool if it can carry
+## another request, and is closed otherwise.
+fn open_finish(st int)
+    c := load64(st + OPEN_CONN)
+    if c == 0
+        return
+    co := net_obj(c)
+    if co != 0
+        if load64(st + OPEN_KEEP) > 0
+            and load64(co + NET_POS) == load64(co + NET_LEN)
+            and load64(co + NET_FLAGS).bit_and(NET_EOF) == 0
+            pool_put(str_at(load64(st + OPEN_KEY)), c, load64(st + OPEN_KEEP))
+        else
+            net_close(c)
+    store64(st + OPEN_CONN, 0)
+    store64(st + OPEN_MODE, 0)
+
+## The response head is read: the response object for `net.open`, whose
+## sixth word is the handle of the body. `keeps` says the connection may be
+## kept for another request once the body is read.
+fn open_begin(
+    h int,
+    key str,
+    status int,
+    headers int,
+    all int,
+    keeps bool,
+    nobody bool,
+    te str,
+    cl str,
+    url str,
+    at str,
+) int
+    ka := http_get_header(headers, "connection")
+    chunked := net_has(http_lower(str_addr(te) + 16, load64(str_addr(te))), "chunked")
+    mut mode := OPEN_EOF
+    mut left := 0
+    if nobody
+        mode = 0
+    elif chunked
+        mode = OPEN_CHUNKS
+    elif load64(str_addr(cl)) > 0
+        left = http_number(cl, false)
+        if left < 0
+            net_close(h)
+            return net_fail(url, "protocol", "a bad Content-Length", at)
+        mode = if left == 0 then 0 else OPEN_LEN
+    keep := http_keep_ms(http_get_header(headers, "keep-alive"))
+    st := obj_new(48, 4)
+    store64(st + OPEN_CONN, h)
+    store64(st + OPEN_MODE, mode)
+    store64(st + OPEN_LEFT, left)
+    store64(st + OPEN_KEY, str_addr(key))
+    store64(st + OPEN_KEEP, 0)
+    if keeps and mode != OPEN_EOF and keep > 0 and not net_has(
+        http_lower(str_addr(ka) + 16, load64(str_addr(ka))),
+        "close",
+    )
+        store64(st + OPEN_KEEP, keep)
+    if mode == 0
+        open_finish(st)
+    bh := net_add(0, NET_BODY, "", "")
+    store64(net_obj(bh) + NET_STREAM, st)
+    resp := obj_new(48, 4)
+    store64(resp, status)
+    store64(resp + 8, headers)
+    store64(resp + 16, str_addr(""))
+    store64(resp + 24, all)
+    store64(resp + 32, str_addr(""))
+    store64(resp + 40, bh)
+    resp
+
+## `net.open(method, url, opts)` (std.net.25): a `Body` (status, headers,
+## all_headers, handle).
+fn net_open(method str, url str, o int, head6 str, head19 str, tail str, at str) int
+    r := net_request_with(method, url, o, head6, head19, tail, true, at)
+    if r == 0
+        return 0
+    b := obj_new(32, 4)
+    store64(b, load64(r))
+    store64(b + 8, load64(r + 8))
+    store64(b + 16, load64(r + 24))
+    store64(b + 24, load64(r + 40))
+    b
+
+## Wait for data on the connection `co` and take up to `want` bytes of it as
+## a `bytes`; a negative `errno` (-110 for a timeout), or -1000 when the
+## stream ends first.
+fn open_take(co int, want int) int
+    if load64(co + NET_POS) == load64(co + NET_LEN)
+        if load64(co + NET_FLAGS).bit_and(NET_EOF) != 0
+            return -1000
+        e := net_fill(co)
+        if e < 0
+            return e
+        if load64(co + NET_POS) == load64(co + NET_LEN)
+            return -1000
+    pos := load64(co + NET_POS)
+    avail := load64(co + NET_LEN) - pos
+    n := if want < avail then want else avail
+    s := str_new(n, n)
+    copy_bytes(s + 16, load64(co + NET_BUF) + pos, n)
+    store64(co + NET_POS, pos + n)
+    s
+
+## A failed wait or a stream that ended early, as a `NetError`.
+fn open_fail(co int, e int, why str, at str) int
+    net_close_conn(co)
+    if e == -1000
+        return net_fail("", "closed", why, at)
+    net_io_fail(co, e, at)
+
+fn net_close_conn(co int)
+    os_close(load64(co + NET_FD))
+    store64(co + NET_FD, -1)
+
+## `b.read_bytes(max)`: the next 1 to `max` bytes of the body, none at its end.
+fn open_read(h int, max int, at str) str
+    o := net_obj(h)
+    if o == 0
+        net_closed("body", at)
+        return str_at(0)
+    if max <= 0
+        net_fail("", "other", "`read_bytes` needs a size of at least 1, not {max}", at)
+        return str_at(0)
+    st := load64(o + NET_STREAM)
+    c := load64(st + OPEN_CONN)
+    mode := load64(st + OPEN_MODE)
+    if c == 0 or mode == 0
+        return str_at(str_new(0, 0))
+    co := net_obj(c)
+    if co == 0
+        net_closed("body", at)
+        return str_at(0)
+    if mode == OPEN_LEN
+        left := load64(st + OPEN_LEFT)
+        got := open_take(co, if max < left then max else left)
+        if got < 0
+            open_fail(co, got, "the connection ended before the whole body arrived", at)
+            return str_at(0)
+        n := load64(got)
+        store64(st + OPEN_LEFT, left - n)
+        if n == left
+            open_finish(st)
+        return str_at(got)
+    if mode == OPEN_EOF
+        got := open_take(co, max)
+        if got == -1000
+            open_finish(st)
+            return str_at(str_new(0, 0))
+        if got < 0
+            open_fail(co, got, "", at)
+            return str_at(0)
+        return str_at(got)
+    # Chunks.
+    mut left := load64(st + OPEN_LEFT)
+    if left == 0
+        sl := net_read_line(c, at)
+        if failed()
+            net_close_conn(co)
+            return str_at(0)
+        if str_addr(sl) == 0
+            net_close_conn(co)
+            net_fail("", "closed", "the connection ended inside a chunk", at)
+            return str_at(0)
+        sp := str_addr(sl)
+        mut se := load64(sp)
+        semi := http_index(sp, 0, se, 59)
+        if semi >= 0
+            se = semi
+        szs := str_sub(sp, 0, se)
+        left = http_number(http_lower(str_addr(szs) + 16, load64(str_addr(szs))), true)
+        if left < 0
+            net_close_conn(co)
+            net_fail("", "protocol", "bad chunk size `{sl}`", at)
+            return str_at(0)
+        if left == 0
+            # Trailers, up to the blank line.
+            while true
+                tl := net_read_line(c, at)
+                if failed()
+                    net_close_conn(co)
+                    return str_at(0)
+                if str_addr(tl) == 0 or load64(str_addr(tl)) == 0
+                    break
+            open_finish(st)
+            return str_at(str_new(0, 0))
+    got := open_take(co, if max < left then max else left)
+    if got < 0
+        open_fail(co, got, "the connection ended inside a chunk", at)
+        return str_at(0)
+    left -= load64(got)
+    store64(st + OPEN_LEFT, left)
+    if left == 0
+        net_read_line(c, at)
+        if failed()
+            net_close_conn(co)
+            return str_at(0)
+    str_at(got)
+
+## `b.close()`: end the body early and close its connection.
+fn open_close(h int)
+    o := net_obj(h)
+    if o == 0
+        return
+    st := load64(o + NET_STREAM)
+    c := load64(st + OPEN_CONN)
+    if c != 0
+        net_close(c)
+    store64(o + NET_FD, -1)

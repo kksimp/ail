@@ -1,0 +1,5 @@
+# io.read_bytes (std.io.1): the rest of standard input, undecoded.
+fn main()
+    b := io.read_bytes()
+    print(b.len())
+    print(b.hex())

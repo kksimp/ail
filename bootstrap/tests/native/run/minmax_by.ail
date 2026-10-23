@@ -1,0 +1,17 @@
+# expr.key.1-4: min and max by a key function; the first of equal keys wins.
+struct P
+    name str
+    age int
+    w float
+
+fn main()
+    ps := [P(name: "b", age: 3, w: 1.5), P(name: "a", age: 9, w: 0.5), P(name: "c", age: 3, w: 2.5)]
+    print(ps.min(by: |p| p.age))
+    print(ps.max(by: |p| p.age))
+    print(ps.min(by: |p| p.name))
+    print(ps.max(by: |p| p.w))
+    print(ps.max(by: |p| -p.age))
+    print(List[P]().min(by: |p| p.age))
+    lo := ps.min(by: |p| p.w) else ps[0]
+    print(lo.name)
+    print(["bb", "a", "ccc"].max(by: |s| s.len()))

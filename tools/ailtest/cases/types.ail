@@ -1,0 +1,38 @@
+struct P
+    x int
+    name str
+
+enum Shape
+    Dot
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Dot => 0
+        Circle(r) => 3 * r * r
+        Rect(w, h) => w * h
+
+@test fn opt_roundtrip(o int?, p P?)
+    assert(true)
+
+@test fn map_sizes(m Map[str, int], t Set[int])
+    assert(m.len() < 100 and t.len() < 100)
+
+@test fn map_small(m Map[str, int])
+    assert(m.len() < 2)
+
+@test fn struct_field(p P, l List[P])
+    assert(p.x < 5 or l.len() > 100)
+
+@test fn shapes(s Shape, t (int, str))
+    assert(area(s) >= 0)
+
+@test fn big_rect(s Shape)
+    assert(area(s) < 50)
+
+@test fn nested(xs List[List[int]], m Map[int, List[str]])
+    assert(xs.len() < 3)
+
+fn main()
+    print("ok")

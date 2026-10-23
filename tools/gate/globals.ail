@@ -1,0 +1,130 @@
+## The native runtime's global slots (bootstrap/tests/native_globals.rs, ported). Every name
+## passed to `global(NAME)` in compiler/rt/native/ is a constant with its own slot below the
+## image's `globals` count; two names share a slot only when the later one's doc comment says
+## `shares`; a code generator constant of the same name has the same value. Run from the
+## repository root:
+##   ail run tools/gate/globals.ail
+## Prints only failures; the last line is `GLOBALS GREEN` or `GLOBALS RED (N failures)`.
+
+struct Decl
+    name str
+    value int
+    at str
+    shares bool
+
+fn upper_name(s str) bool
+    if s.is_empty()
+        return false
+    for c in s.chars()
+        if not (c == '_' or (c.is_digit() and c.code() < 128) or (c.code() >= 65 and c.code() <= 90))
+            return false
+    true
+
+## `NAME := N` at the start of a line, with whether the comment lines just above say `shares`.
+fn constants(path str) List[Decl]
+    lines := (fs.read_text(path) else "").lines()
+    mut out := List[Decl]()
+    for k in 0..lines.len()
+        mut line := lines[k]
+        if line.starts_with("pub ")
+            line = line.slice(4, line.len())
+        parts := line.split(" := ")
+        if parts.len() < 2 or not upper_name(parts[0])
+            continue
+        v := parts[1].trim().to_int() else continue
+        mut shares := false
+        mut j := k
+        while j > 0 and lines[j - 1].trim_start().starts_with("#")
+            j -= 1
+            if lines[j].contains("shares")
+                shares = true
+        out.push(Decl(name: parts[0], value: v, at: "{path}:{k + 1}", shares: shares))
+    out
+
+## The names passed to `global(...)`.
+fn slot_names(text str) List[str]
+    mut out := List[str]()
+    pieces := text.split("global(")
+    for i in 1..pieces.len()
+        rest := pieces[i]
+        close := rest.find(")") else continue
+        name := rest.slice(0, close)
+        if upper_name(name)
+            out.push(name)
+    out
+
+fn main()
+    mut fails := List[str]()
+    mut files := fs.list_dir("compiler/rt/native") else []
+    files.sort()
+    mut decls := List[Decl]()
+    mut used := Set[str]()
+    for f in files
+        if f.ends_with(".ail")
+            p := "compiler/rt/native/{f}"
+            for d in constants(p)
+                decls.push(d)
+            for n in slot_names(fs.read_text(p) else "")
+                used.add(n)
+    image := fs.read_text("compiler/codegen/image.ail") else ""
+    cparts := image.split("globals: ")
+    if cparts.len() < 2
+        fails.push("no `globals: N` in compiler/codegen/image.ail")
+    mut count := 0
+    if cparts.len() >= 2
+        mut digits := ""
+        for c in cparts[1].chars()
+            if not (c.is_digit() and c.code() < 128)
+                break
+            digits = "{digits}{c}"
+        count = digits.to_int() else 0
+    mut names := List[str]()
+    for n in used
+        names.push(n)
+    names.sort()
+    mut slot_owner := Map[int, List[Decl]]()
+    for name in names
+        mut mine := List[Decl]()
+        for d in decls
+            if d.name == name
+                mine.push(d)
+        if mine.len() == 0
+            fails.push("`global({name})`: no `{name} := N` in compiler/rt/native")
+        elif mine.len() == 1
+            d := mine[0]
+            if d.value >= count
+                fails.push("{d.at}: `{name}` is slot {d.value}, but the image has {count} globals")
+            mut cur := slot_owner.get(d.value) else List[Decl]()
+            cur.push(d)
+            slot_owner[d.value] = cur
+        else
+            mut at := List[str]()
+            for d in mine
+                at.push(d.at)
+            fails.push("`{name}` is declared {mine.len()} times: {at.join(", ")}")
+    for slot in 0..count
+        owners := slot_owner.get(slot) else continue
+        mut own := 0
+        for d in owners
+            if not d.shares
+                own += 1
+        if owners.len() > 1 and own > 1
+            mut who := List[str]()
+            for d in owners
+                who.push("`{d.name}` ({d.at})")
+            fails.push("slot {slot} is used by {who.join(" and ")}; give each its own slot, or say `shares` in the doc comment of the one that may")
+    for generator in ["compiler/x64/gen.ail", "compiler/a64/gen.ail"]
+        for d in constants(generator)
+            mut rts := List[Decl]()
+            for r in decls
+                if r.name == d.name
+                    rts.push(r)
+            if rts.len() == 1 and used.contains(d.name) and rts[0].value != d.value
+                fails.push("{d.at}: `{d.name}` is {d.value}, but the runtime's ({rts[0].at}) is {rts[0].value}")
+    for f in fails
+        print(f)
+    if fails.is_empty()
+        print("GLOBALS GREEN")
+    else
+        print("GLOBALS RED ({fails.len()} failures)")
+        io.exit(1)

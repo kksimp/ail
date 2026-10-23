@@ -21,9 +21,30 @@ struct Facts
     ## during the call: a parameter without `mut`, and the immutable locals
     ## bound to a place inside one (lower_move.ail).
     stable Set[str]
+    ## The loop variable of each `for mut` over scalar elements, as
+    ## `FUNCTION|KEY` (keys repeat across functions): the list and the index of the element it stands for (lower_formut.ail).
+    elem_ref Map[str, ElemRef]
+    ## The `defer`red statements of each open block, innermost last, and how many
+    ## loops were open when each block began (lower_defer.ail).
+    defers List[List[ast.Stmt]]
+    defer_loops List[int]
+
+## A `for mut` variable's element: assigning the variable sets it.
+struct ElemRef
+    list int
+    index int
+    pos ast.Pos
 
 fn new_facts() Facts
-    Facts(mut_ptr: {}, moves: [], owned: Set[str](), stable: Set[str]())
+    Facts(
+        mut_ptr: {},
+        moves: [],
+        owned: Set[str](),
+        stable: Set[str](),
+        elem_ref: {},
+        defers: [],
+        defer_loops: [],
+    )
 
 ## A `mut` parameter's object, as `FUNCTION|KEY`.
 fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
@@ -31,7 +52,12 @@ fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
         facts.mut_ptr["{fname}|{key}"] = v
 
 ## The value to bind to `key` after `key = v` of type `ty`.
-fn Lower.assign_param(mut self, key str, ty Ty, v int) int
+fn Lower.assign_param(mut self, key str, ty Ty, v int, pos ast.Pos) int
+    if r := facts.elem_ref.get("{fname}|{key}")
+        mut set := inst(-1, "set", [r.list, r.index, v])
+        set.site = bounds_site(r.pos)
+        emit_void(set)
+        return v
     p := facts.mut_ptr.get("{fname}|{key}") else return v
     if p == v
         return v
@@ -52,5 +78,9 @@ fn Lower.assign_param(mut self, key str, ty Ty, v int) int
                 store(p, k, load(v, k, Ty.Int))
             # The remembered entry belongs to the old table.
             store(p, 10, konst(0, Ty.Int))
-        _ => return v
+        _ =>
+            # A value held in a cell (a scalar, `str`, enum or optional
+            # `mut` parameter or `mut self`, lower_cell.ail).
+            store(p, 0, v)
+            return v
     p

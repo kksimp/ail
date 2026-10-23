@@ -1,0 +1,34 @@
+fn double_all(mut xs List[int])
+    for mut x in xs
+        x *= 2
+
+fn clamp_neg(mut xs List[int]) int
+    mut fixed := 0
+    for mut x in xs
+        if x < 0
+            x = 0
+            fixed += 1
+            continue
+        if x > 100
+            x = 100
+            break
+    fixed
+
+fn shout(mut words List[str])
+    for mut w in words
+        w = "{w}!"
+
+fn main()
+    mut xs := [1, 2, 3]
+    double_all(mut xs)
+    print(xs)
+    mut ys := [5, -1, -2, 200, 7, 300]
+    print(clamp_neg(mut ys))
+    print(ys)
+    mut ws := ["a", "b"]
+    shout(mut ws)
+    print(ws)
+    mut fs := [1.5, 2.5]
+    for mut f in fs
+        f += 1.0
+    print(fs)

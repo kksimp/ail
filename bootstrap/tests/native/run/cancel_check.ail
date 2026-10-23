@@ -1,0 +1,24 @@
+# conc.cancel.1-2: `t.cancel()` wakes a blocked `recv`, `task.check()` fails
+# once cancelled, and a group's `cancel` reaches its tasks.
+fn poll(gate Channel[int]) !
+    gate.recv()
+    task.check()?
+    print("not reached")
+
+fn idle(jobs Channel[int])
+    for v in jobs
+        print("got {v}")
+    print("stopped, cancelled {task.cancelled()}")
+
+fn main() !
+    gate := Channel[int](1)
+    t := spawn poll(gate)
+    t.cancel()
+    t.wait() else err
+        print("poll failed: {err}")
+    jobs := Channel[int](2)
+    g := TaskGroup()
+    g.add(spawn idle(jobs))
+    g.cancel()
+    g.wait_all()?
+    print("main cancelled: {task.cancelled()}")

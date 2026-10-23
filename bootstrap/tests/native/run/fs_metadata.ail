@@ -1,0 +1,19 @@
+# fs.metadata (std.fs.10): size, modification time in ms, is_dir; links followed.
+fn main()
+    path := "/tmp/ail_fs_metadata.txt"
+    fs.write_text(path, "hello") else err
+        print("write {err.kind}")
+        return
+    m := fs.metadata(path) else err
+        print("meta {err.kind}")
+        return
+    print("{m.size} {m.is_dir}")
+    print(m.modified_ms > 1700000000000)
+    d := fs.metadata("/tmp") else err
+        print("dir {err.kind}")
+        return
+    print("{d.size} {d.is_dir}")
+    x := fs.metadata("/tmp/ail_no_such_file") else err
+        print("missing {err.kind} {err.path}")
+        return
+    print(x.size)

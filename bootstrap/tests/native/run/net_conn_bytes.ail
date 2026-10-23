@@ -1,0 +1,26 @@
+# Conn.read_bytes and write_bytes (std.net.16): undecoded bytes both ways.
+fn echo(l net.Listener)
+    c := l.accept() else err
+        return
+    b := c.read_bytes(64) else err
+        return
+    c.write_bytes(b) else err
+        return
+    c.close()
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    t := spawn echo(l)
+    addr := l.addr()
+    port := (addr.split(":")[1].to_int()) else 0
+    c := net.connect("127.0.0.1", port)?
+    c.write_bytes(b"a\x00\xffz")?
+    r := c.read_bytes(64)?
+    print(r.hex())
+    e := c.read_bytes(64)?
+    print(e.len())
+    z := c.read_bytes(0) else err
+        print("zero {err.kind} {err.message}")
+        return
+    print(z.len())
+    t.wait()?
