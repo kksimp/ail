@@ -161,7 +161,7 @@ impl ToJson for Node
             ])
 
 ## What happened. `kind` is `start`, `press`, `edit`, `submit`, `toggle`,
-## `click`, `scroll`, `key`, `resize` or `close` (std.app.5); the other
+## `click`, `scroll`, `key`, `resize`, `close` or `external` (std.app.14); the other
 ## fields are zero or empty when they don't apply.
 pub struct Event
     pub kind str
@@ -289,7 +289,28 @@ pub fn key(name str) Event
     e.text = name
     e
 
+## Where tasks post events into a running app (std.app.14): `post` queues
+## an `external` event that `update` handles in turn with the host's.
+pub struct Inbox
+    ch Channel[Event]
+
+## Queues `ev`, whose `kind` is `external`, `id` names the source and `text`
+## carries its data. Waits while the queue is full.
+pub fn Inbox.post(self, ev Event)
+    self.ch.send(ev)
+
+## An `external` event from `source` with `data`, for `Inbox.post`.
+pub fn external(source str, data str) Event
+    mut e := event("external")
+    e.id = source
+    e.text = data
+    e
+
 pub trait App
+    ## Called once before the first `update` of `run` with the inbox the
+    ## app's own tasks post to (std.app.14).
+    fn attach(mut self, inbox Inbox)
+        return
     ## Changes the state for an event.
     fn update(mut self, ev Event)
     ## The screen for the current state.
@@ -433,10 +454,16 @@ pub fn run_host[T App](mut a T, cmd str, args List[str]) ! AppError
     j := parse_json(hello) else return mismatch(move c, hello)
     if (j.num("v") else 0.0) != 1.0
         return mismatch(move c, hello)
+    inbox := Inbox(ch: Channel[Event](64))
+    a.attach(inbox)
+    g := TaskGroup()
+    g.add(spawn pump(c.out, inbox))
     mut ev := event_from_json(j)
     mut queued := List[Event]()
     while true
         # std.app.8: a line that isn't an event is skipped.
+        if ev.kind == "exited"
+            return gone(move c)
         if ev.kind != ""
             a.update(ev)
         if ev.kind == "close"
@@ -451,13 +478,13 @@ pub fn run_host[T App](mut a T, cmd str, args List[str]) ! AppError
             c.stdin.send("{measure_line(want)}\n")
             mut widths := List[float]()
             while true
-                reply := c.out.recv() else return gone(move c)
-                got := event_from_json(parse_json(reply) else Json.Null)
+                got := inbox.ch.recv() else return gone(move c)
+                if got.kind == "exited"
+                    return gone(move c)
                 if got.kind == "measured"
                     widths = [w.to_float() else 0.0 for w in got.text.split(",")]
                     break
-                if got.kind != ""
-                    queued.push(got)
+                queued.push(got)
             if widths.len() != want.len()
                 break
             a.measured(want, widths)
@@ -470,12 +497,19 @@ pub fn run_host[T App](mut a T, cmd str, args List[str]) ! AppError
             ev = queued[0]
             queued = queued[1..]
         else
-            line := c.out.recv() else return gone(move c)
-            ev = event_from_json(parse_json(line) else Json.Null)
+            ev = inbox.ch.recv() else return gone(move c)
     c.stdin.close()
     for line in c.err
         io.eprint(line)
     proc.wait(move c) else 0
+
+## Reads the host's lines into `inbox` as events until it exits, then posts
+## `exited` (std.app.14).
+fn pump(out Channel[str], inbox Inbox)
+    while true
+        line := out.recv() else break
+        inbox.post(event_from_json(parse_json(line) else Json.Null))
+    inbox.post(event("exited"))
 
 ## The request for the widths of `runs` (std.app.13).
 fn measure_line(runs List[Measure]) str

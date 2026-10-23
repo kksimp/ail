@@ -1,0 +1,29 @@
+## std.app.14: a task the app starts in `attach` posts an event that `update`
+## handles in turn with the host's.
+use std.app
+
+struct Watcher
+    got List[str]
+
+fn poster(inbox app.Inbox)
+    inbox.post(app.external("timer", "tick"))
+
+impl app.App for Watcher
+    fn attach(mut self, inbox app.Inbox)
+        got.push("attached")
+        g := TaskGroup()
+        g.add(spawn poster(inbox))
+
+    fn update(mut self, ev app.Event)
+        if ev.kind == "external"
+            got.push("{ev.id}:{ev.text}")
+
+    fn view(self) app.Node
+        Label(got.join(","))
+
+fn main() !
+    mut w := Watcher(got: [])
+    host := path.join(path.dir(env.program()), "../app/inbox_host.ail")
+    ail := env.get("AIL_BINARY") else "ail"
+    app.run_host(mut w, ail, ["run", host])?
+    print(w.got.join(" "))

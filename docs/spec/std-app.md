@@ -126,6 +126,15 @@ arrive meanwhile are handled afterwards. If the count is wrong the answer is
 dropped. `measured` gets the runs and widths, so the app lays out again. The
 headless `script` never measures. *(ADR 0839)*
 
+**std.app.14** — `run_host` reads the host's lines in a task and passes them,
+with events other tasks post, through one channel, in arrival order.
+`struct Inbox` has `post(ev Event)`; `external(source, data) Event` makes an
+event with `kind` `external`, `id` the source and `text` the data. `trait App`
+has `attach(mut self, inbox Inbox)` (default: nothing), called once before the
+first `update`, where an app starts tasks that post. `exited` (the host's pipe
+closed) fails `run` with `host_exited`. Headless `script` has no inbox.
+*(ADR 0861)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
