@@ -1,4 +1,3 @@
 # Programs whose native output is known wrong (the golden is the interpreter's); the checks skip them and name the owner.
-# these examples find `ail` through env.program(), which is the build cache natively (item 275, RR-1); tool_test_coverage also needs native `--coverage`:
-tool_test_coverage
+# these examples find `ail` through env.program(), which is the build cache natively (item 275, RR-1):
 tool_test_update_preview

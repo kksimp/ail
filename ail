@@ -225,7 +225,7 @@ fi
 if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     for test_arg in "${@:2}"; do
         case "$test_arg" in
-            --trace | --trace=* | --coverage | --coverage=*)
+            --trace | --trace=*)
                 echo "ail test: $test_arg is not native yet (interpreter only: AIL_RUST=1 ./ail test ...)" >&2
                 [ "${AIL_RUST:-}" = 1 ] || exit 2 ;;
         esac

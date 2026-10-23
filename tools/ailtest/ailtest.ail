@@ -394,6 +394,7 @@ fn rewrite(
     mf ModFiles,
     mdropped Set[int],
     snap_lines int,
+    cov Set[int],
 ) Rewritten
     mut keep := lines
     for i in 0..f.tests.len()
@@ -417,6 +418,9 @@ fn rewrite(
     if snap_lines > 0
         for j in 0..snap_lines.min(keep.len())
             keep[j] = snap_line(keep[j], j + 1)
+    for j in 0..keep.len()
+        if cov.contains(j + 1) and not keep[j].trim().is_empty()
+            keep[j] = "{keep[j].slice(0, indent(keep[j]))}ail_cov({j + 1})\n{keep[j]}"
     rewritten := keep
     mut out := List[str]()
     mut origin := List[int]()
@@ -426,8 +430,9 @@ fn rewrite(
             origin.push(-1)
     lead := out.len()
     for j in 0..rewritten.len()
-        out.push(rewritten[j])
-        origin.push(j)
+        for piece in rewritten[j].split("\n")
+            out.push(piece)
+            origin.push(j)
     mut tail := "\nfn main()\n    args := env.args()\n    k := args[0].len()\n"
     mut slot := 1
     mut done := Set[str]()
@@ -454,6 +459,8 @@ fn rewrite(
     tail = "{tail}    io.exit(4)\n"
     if snap_lines > 0
         tail = "{tail}{fs.read_text("{env.get("AIL_ROOT") else "."}/tools/ailtest/snap_rt.ail") else ""}"
+    if not cov.is_empty()
+        tail = "{tail}\nfn ail_cov(l int)\n    io.eprint(\"ail-cov \{l}\")\n"
     if not decs.is_empty()
         tail = "{tail}\nstruct AilCur\n    i int\n{decs}"
     for l in tail.split("\n")
@@ -1374,6 +1381,10 @@ fn snap_line(l str, ln int) str
 fn snap_records(err str) List[SnapRec]
     mut out := List[SnapRec]()
     for l in err.lines()
+        if hit := l.strip_prefix("ail-cov ")
+            if n := hit.to_int()
+                out.push(SnapRec(line: n, col: 0, text: ""))
+            continue
         rest := l.strip_prefix("ail-snapshot ") else continue
         sp1 := rest.find(" ") else continue
         sp2 := rest.slice(sp1 + 1, rest.len()).find(" ") else continue
@@ -1537,6 +1548,54 @@ struct Op
     i int
     j int
 
+## ---- Line coverage (test.cover.1-3, ADR 0289) ----
+
+## The lines of the statements of each non-test function of FILE, one list per function, first statement
+## first, from the native CLI's `cover` command.
+fn cover_points(file str) List[List[int]]
+    if not ensure_native_cli()
+        return []
+    r := proc.run(native_cli(), ["cover", file]) else return []
+    mut out := List[List[int]]()
+    for l in r.out.lines()
+        rest := l.strip_prefix("fn ") else continue
+        mut ls := List[int]()
+        for w in rest.words()
+            ls.push(w.to_int() else continue)
+        if not ls.is_empty()
+            out.push(ls)
+    out
+
+## The coverage report of FILE (test.cover.2-3): the table line or the JSON line, then with `lines` the
+## ranges that never ran.
+fn cover_report(file str, fns List[List[int]], hits Set[int], json bool, lines bool) str
+    mut all := Set[int]()
+    mut fns_hit := 0
+    for f in fns
+        if hits.contains(f[0])
+            fns_hit += 1
+        for l in f
+            all.add(l)
+    sorted := all.sorted()
+    mut hit := 0
+    mut missed := List[(int, int)]()
+    for l in sorted
+        if hits.contains(l)
+            hit += 1
+        elif missed.len() > 0 and missed[missed.len() - 1].1 + 1 == l
+            missed[missed.len() - 1] = (missed[missed.len() - 1].0, l)
+        else
+            missed.push((l, l))
+    if json
+        ranges := [ "[{m.0},{m.1}]" for m in missed ].join(",")
+        return "\{\"coverage\":true,\"file\":{json_str(file)},\"lines\":{sorted.len()},\"lines_hit\":{hit},\"functions\":{fns.len()},\"functions_hit\":{fns_hit},\"missed\":[{ranges}]}"
+    pct := if sorted.is_empty() then 100 else hit * 100 / sorted.len()
+    mut out := "coverage {file}: lines {hit}/{sorted.len()} ({pct}%), functions {fns_hit}/{fns.len()}"
+    if lines and not missed.is_empty()
+        texts := [ if m.0 == m.1 then "{m.0}" else "{m.0}-{m.1}" for m in missed ]
+        out = "{out}\n  not run: {texts.join(", ")}"
+    out
+
 fn report(vs List[Verdict], json bool, src List[str]) int
     mut passed := 0
     mut failed := 0
@@ -1578,7 +1637,7 @@ fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--coverage[=lines]] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
@@ -1586,6 +1645,7 @@ fn main() !
     mut json := false
     mut update := false
     mut dry := false
+    mut coverage := ""
     mut files := List[str]()
     mut cases := 100
     mut has_seed := false
@@ -1605,6 +1665,10 @@ fn main() !
             update = true
         elif a == "--dry-run"
             dry = true
+        elif a == "--coverage"
+            coverage = "table"
+        elif a == "--coverage=lines"
+            coverage = "lines"
         elif a == "--cases" or a == "--seed"
             want = a
         else
@@ -1633,6 +1697,13 @@ fn main() !
         else
             lines = aug.lines
             doc_names = aug.names
+    mut cov_fns := List[List[int]]()
+    mut cov_lines := Set[int]()
+    if not coverage.is_empty()
+        cov_fns = cover_points(file)
+        for f in cov_fns
+            for l in f
+                cov_lines.add(l)
     found := find_tests(lines)
     w := World(decls: parse_decls(lines))
     mut verdicts := List[Verdict]()
@@ -1645,7 +1716,10 @@ fn main() !
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
     if found.tests.len() == 0 and mf.tests.is_empty()
-        io.exit(report(verdicts, json, text.lines()))
+        code := report(verdicts, json, text.lines())
+        if not coverage.is_empty() and not cov_fns.is_empty()
+            print(cover_report(file, cov_fns, Set[int](), json, coverage == "lines"))
+        io.exit(code)
     stem := path.stem(file)
     copy_name := ".ail-test-{stem}.ail"
     mut scratch := ""
@@ -1672,7 +1746,7 @@ fn main() !
     for _ in 0..MAX_ROUNDS
         if dropped.len() == found.tests.len() and mdropped.len() == mf.tests.len()
             break
-        rw := rewrite(w, lines, found, dropped, mf, mdropped, if update then text.lines().len() else 0)
+        rw := rewrite(w, lines, found, dropped, mf, mdropped, if update then text.lines().len() else 0, cov_lines)
         if not mf.tests.is_empty()
             write_modules(scratch, mf, mdropped)? "writing the modules"
         last_lead = rw.lead
@@ -1785,9 +1859,18 @@ fn main() !
     if update
         mut recs := List[SnapRec]()
         for v in verdicts
-            recs.extend(v.snaps)
+            for r in v.snaps
+                if r.col > 0
+                    recs.push(r)
         snap_update(file, text, recs, dry, json)?
     code := report(verdicts, json, text.lines())
+    if not coverage.is_empty() and not cov_fns.is_empty()
+        mut hits := Set[int]()
+        for v in verdicts
+            for r in v.snaps
+                if r.col == 0
+                    hits.add(r.line)
+        print(cover_report(file, cov_fns, hits, json, coverage == "lines"))
     if scratch.is_empty()
         _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
     else
