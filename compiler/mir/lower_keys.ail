@@ -1,0 +1,104 @@
+## Composite map and set keys (ADR 0865): a struct, tuple, enum or list of
+## keys. The table's key kind is then a string object, the key's shape, which
+## `compiler/rt/native/map.ail` walks to hash and compare keys. `i` is a word
+## (int, char, bool), `f` a float, `s` a string, `L` and the shape of its
+## elements a list (`b` elements are bytes), `S` n `;` and n shapes a struct
+## or tuple, `E` n `;` and n variants `V` m `;` and m shapes an enum.
+use ast
+
+## The shape of `t` as a key, or "" when it can't be one. `seen` holds the
+## struct and enum names being described, so a type that holds itself isn't.
+fn Lower.shape_of(self, t Ty, seen List[str]) str
+    match t
+        Int | Char | Sized(_) => "i"
+        Bool => "b"
+        Float => "f"
+        Str | Bytes => "s"
+        List(e) =>
+            inner := shape_of(e, seen)
+            if inner == ""
+                return ""
+            "L{inner}"
+        Tuple(xs) => shapes_of(xs, seen)
+        Struct(n) =>
+            if seen.contains(n) or not structs.contains(n)
+                return ""
+            mut ts := List[Ty]()
+            for sl in structs[n]
+                ts.push(sl.ty)
+            shapes_of(ts, with_name(seen, n))
+        Enum(n) =>
+            if is_flat(n)
+                return "i"
+            if seen.contains(n) or not enums.contains(n)
+                return ""
+            mut out := "E{enums[n].len()};"
+            for c in enums[n]
+                mut ts := List[Ty]()
+                for f in c.fields
+                    ts.push(f.ty)
+                inner := field_shapes(ts, with_name(seen, n))
+                if inner == "!"
+                    return ""
+                out = "{out}V{ts.len()};{inner}"
+            out
+        _ => ""
+
+## The shapes of the field types `ts` one after the other, or "!" when one
+## can't be a key.
+fn Lower.field_shapes(self, ts List[Ty], seen List[str]) str
+    mut out := ""
+    for t in ts
+        s := shape_of(t, seen)
+        if s == ""
+            return "!"
+        out = "{out}{s}"
+    out
+
+## `S n ; shapes` for the field types `ts`, or "" when one can't be a key.
+fn Lower.shapes_of(self, ts List[Ty], seen List[str]) str
+    inner := field_shapes(ts, seen)
+    if inner == "!"
+        return ""
+    "S{ts.len()};{inner}"
+
+## Whether `t` can be the key of a table.
+fn Lower.key_ok(self, t Ty) bool
+    if is_key_ty(t)
+        return true
+    t != Ty.Bool and shape_of(t, []) != ""
+
+## The key kind for tables of `t` keys: a small integer, or the shape.
+fn Lower.kind_val(mut self, t Ty) int
+    if is_key_ty(t)
+        return konst(key_kind(t), Ty.Int)
+    str_value(shape_of(t, []))
+
+## A key about to be stored: converted, and copied when it is a composite
+## value somebody else holds (own.val.1).
+fn Lower.stored_key(mut self, e ast.Expr, k Val, kt Ty, pos ast.Pos) int
+    id := convert(k, kt, pos)
+    if is_key_ty(kt)
+        return id
+    copy_if_place(e, Val(id: id, ty: kt))
+
+fn with_name(seen List[str], n str) List[str]
+    mut out := seen
+    out.push(n)
+    out
+
+## `m[k]` for a composite key: the value, or the trap that names the key by
+## its text (type.map.3).
+fn Lower.composite_at(mut self, m Val, kid int, kt Ty, vt Ty, texts List[int]) Val?
+    e := call("rt.map_find", [m.id, kid], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    found := new_block()
+    missing := new_block()
+    branch(has, found, [], missing, [])
+    seal(missing)
+    cur = missing
+    call("rt.map_gone", [texts[0], value_text(kt, kid), texts[1]], Ty.Unit)
+    finish(unreachable_term())
+    seal(found)
+    cur = found
+    Val(id: entry_value(e, vt), ty: vt)

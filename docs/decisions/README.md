@@ -678,3 +678,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0856](0856-native-compiler-runs-user-derive-generators.md) | The native compiler runs user `@derive` generators as a native program, so it needs no interpreter *(delegated)* | Accepted | 2026-10-22 |
 | [0859](0859-ail-edit-in-ail.md) | `ail edit` is ported to AIL (`compiler/edit/`), byte-identical to the Rust tool; syntax-only check until the loader lands *(delegated)* | Accepted | 2026-10-23 |
 | [0860](0860-ail-fix-machinery-in-ail.md) | The machinery of `ail fix` (edit types, anchor resolution, driver) is ported to AIL (`compiler/fix/`), same fixes and output as the Rust tool *(delegated)* | Accepted | 2026-10-23 |
+| [0865](0865-native-composite-map-keys.md) | Native maps and sets take struct, tuple, enum and list keys, hashed by the key's shape *(delegated)* | Accepted | 2026-10-23 |

@@ -28,12 +28,12 @@ fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
     if name == "Map" and args.len() == 2
         k := type_of(args[0])?
         v := type_of(args[1])?
-        if is_key_ty(k) and is_value_ty(v)
+        if key_ok(k) and is_value_ty(v)
             return Ty.Map(key: k, val: v)
         return none
     if name == "Set" and args.len() == 1
         e := type_of(args[0])?
-        if is_key_ty(e)
+        if key_ok(e)
             return Ty.Set(e)
     none
 
@@ -153,12 +153,12 @@ fn Lower.new_table(mut self, ty Ty) int
             m := value_mode(v)
             call(
                 "rt.map_new",
-                [konst(key_kind(k), Ty.Int), konst(m[0], Ty.Int), konst(m[1], Ty.Int)],
+                [kind_val(k), konst(m[0], Ty.Int), konst(m[1], Ty.Int)],
                 ty,
             )
         Set(e) => call(
             "rt.map_new",
-            [konst(key_kind(e), Ty.Int), konst(0, Ty.Int), konst(0, Ty.Int)],
+            [kind_val(e), konst(0, Ty.Int), konst(0, Ty.Int)],
             ty,
         )
         _ => -1
@@ -237,9 +237,9 @@ fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want T
         v := lower_value(e.value, if vt.is_unknown() then none else vt)?
         if vt.is_unknown()
             vt = v.ty
-        if not is_key_ty(kt) or not is_value_ty(vt)
+        if not key_ok(kt) or not is_value_ty(vt)
             return unsupported(pos, "a map of `{kt.name()}` to `{vt.name()}`")
-        ks.push(convert(k, kt, expr_pos(e.key)))
+        ks.push(stored_key(e.key, k, kt, expr_pos(e.key)))
         vs.push(to_word(
             convert(Val(id: copy_if_place(e.value, v), ty: v.ty), vt, expr_pos(e.value)),
             vt,
@@ -263,9 +263,9 @@ fn Lower.lower_set_lit(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Va
         v := lower_value(x, if et.is_unknown() then none else et)?
         if et.is_unknown()
             et = v.ty
-        if not is_key_ty(et)
+        if not key_ok(et)
             return unsupported(pos, "a set of `{et.name()}`")
-        xs.push(convert(v, et, expr_pos(x)))
+        xs.push(stored_key(x, v, et, expr_pos(x)))
     t := Ty.Set(et)
     s := new_table(t)
     for x in xs
@@ -283,6 +283,8 @@ fn Lower.lower_coll_index(mut self, m Val, index ast.Expr, pos ast.Pos) Val?
             k := lower_value(index, kt)?
             kid := convert(k, kt, expr_pos(index))
             texts := trap_texts("type.map.3", pos)
+            if not is_key_ty(kt)
+                return composite_at(m, kid, kt, vt, texts)
             Val(id: word_call("rt.map_at", [m.id, kid, texts[0], texts[1]], vt), ty: vt)
         _ => unsupported(pos, "indexing a `{m.ty.name()}`")
 
@@ -310,7 +312,7 @@ fn Lower.lower_map_assign(
                     return
                 kt = k.ty
                 vt = r.ty
-            kid := convert(k, kt, ipos)
+            kid := stored_key(index, k, kt, ipos)
             if r.id < 0
                 r = lower_value(value, vt) else return
             mut stored := -1
@@ -466,7 +468,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "add" and vs.len() == 1
                 return Val(
-                    id: call("rt.map_add", [r.id, convert(vs[0], et, npos)], Ty.Bool),
+                    id: call("rt.map_add", [r.id, stored_key(args[0].value, vs[0], et, npos)], Ty.Bool),
                     ty: Ty.Bool,
                 )
             if name == "sorted"
@@ -493,7 +495,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
 fn Lower.map_push(mut self, m Val, kt Ty, vt Ty, args List[ast.Arg], npos ast.Pos) Val?
     et := vt.elem() else return unsupported(npos, "`.push(k, x)` on `{m.ty.name()}`")
     k := lower_value(args[0].value, kt)?
-    kid := convert(k, kt, npos)
+    kid := stored_key(args[0].value, k, kt, npos)
     x := lower_value(args[1].value, et)?
     map_push_vals(m, vt, kid, x, args[1].value, npos)
 
@@ -582,7 +584,7 @@ fn Lower.as_set(mut self, v Val, e Ty, pos ast.Pos) int?
     if v.ty == Ty.Set(e)
         return v.id
     if v.ty == Ty.List(e)
-        return call("rt.set_from_list", [konst(key_kind(e), Ty.Int), v.id], Ty.Set(e))
+        return call("rt.set_from_list", [kind_val(e), v.id], Ty.Set(e))
     problem(pos, "expected a set or list of `{e.name()}`, found `{v.ty.name()}`")
     none
 
