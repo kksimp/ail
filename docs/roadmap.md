@@ -70,6 +70,15 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
    loop invariants and static proof (OQ-060), downcasting `any Trait`
    (OQ-094).
 
+## After Rust removal: AI-first tooling (designer, 2026-10-23)
+
+Order per [ADR 0868](decisions/0868-ai-first-tooling-after-rust-removal.md); each is native and costs nothing when unused:
+`ail ask` semantic queries; typed holes (`todo`) that rank fitting candidates; edit impact
+(`ail test --affected`); native time-travel record and replay; token-priced diagnostics
+(one line or expanded, chosen by `--budget`); a native sandbox (capabilities plus CPU,
+memory and time caps); live attach to running binaries; contracts checked or fuzzed by tools
+(lower priority).
+
 ## Documentation roadmap
 
 - `ail doc`: a documentation tool written in AIL that replaces plain Markdown
