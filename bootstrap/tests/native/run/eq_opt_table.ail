@@ -1,0 +1,38 @@
+struct Item
+    name str?
+    n int?
+    tags Set[str]
+    m Map[str, List[int]]
+
+fn o(n int) int?
+    if n > 0
+        return n
+    none
+
+fn s(n int) str?
+    if n > 0
+        return "a"
+    none
+
+fn mk(k int) Item
+    mut t := Set[str]()
+    t.add("x")
+    mut m := Map[str, List[int]]()
+    m["a"] = [k]
+    Item(name: s(k), n: o(k), tags: t, m: m)
+
+fn main()
+    print(mk(1) == mk(1))
+    print(mk(1) == mk(2))
+    print(mk(0) == mk(0))
+    print(mk(0) == mk(1))
+    print(mk(0) != mk(0))
+    a := {"a": 1, "b": 2}
+    b := {"b": 2, "a": 1}
+    print(a == b)
+    print(a == {"a": 1})
+    print({1, 2} == {2, 1})
+    print({1, 2} != {2, 3})
+    print({true: 1.5} == {true: 1.5})
+    print({true: 1.5} == {true: 2.5})
+    print({"k": [o(1)]} == {"k": [o(1)]})

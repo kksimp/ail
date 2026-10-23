@@ -1,0 +1,18 @@
+struct P
+    a int
+    b str
+
+fn o(n int) int?
+    if n > 0
+        return n
+    none
+
+fn main()
+    print([[1.5], [2.5]].contains([2.5]))
+    print([[1.5], [2.5]].contains([3.5]))
+    print([P(a: 1, b: "x")].contains(P(a: 1, b: "x")))
+    print([P(a: 1, b: "x")].contains(P(a: 2, b: "x")))
+    print([(1, "a"), (2, "b")].contains((2, "b")))
+    print([o(1), o(0)].contains(o(0)))
+    print([o(1)].contains(o(0)))
+    print(List[List[int]]().contains([1]))
