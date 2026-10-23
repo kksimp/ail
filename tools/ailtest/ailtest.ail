@@ -59,9 +59,10 @@ struct Verdict
     cases int
     seed int
     input str
+    snaps List[SnapRec]
 
 fn plain(name str, status str, message str) Verdict
-    Verdict(name: name, status: status, message: message, cases: 0, seed: 0, input: "")
+    Verdict(name: name, status: status, message: message, cases: 0, seed: 0, input: "", snaps: [])
 
 fn indent(l str) int
     l.len() - l.trim_start().len()
@@ -392,6 +393,7 @@ fn rewrite(
     dropped Set[int],
     mf ModFiles,
     mdropped Set[int],
+    snap_lines int,
 ) Rewritten
     mut keep := lines
     for i in 0..f.tests.len()
@@ -412,6 +414,9 @@ fn rewrite(
             for j in m..block_end(lines, m) + 1
                 keep[j] = ""
             break
+    if snap_lines > 0
+        for j in 0..snap_lines.min(keep.len())
+            keep[j] = snap_line(keep[j], j + 1)
     rewritten := keep
     mut out := List[str]()
     mut origin := List[int]()
@@ -447,6 +452,8 @@ fn rewrite(
         tail = "{tail}    if k == {slot}\n        {mt.module}.ail_run_{mt.t.name}()\n        io.exit(0)\n"
         slot += 1
     tail = "{tail}    io.exit(4)\n"
+    if snap_lines > 0
+        tail = "{tail}{fs.read_text("{env.get("AIL_ROOT") else "."}/tools/ailtest/snap_rt.ail") else ""}"
     if not decs.is_empty()
         tail = "{tail}\nstruct AilCur\n    i int\n{decs}"
     for l in tail.split("\n")
@@ -1068,7 +1075,7 @@ fn run_one(exe str, slot int, lead int) Verdict
     r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status == 0
-        return plain("", "pass", "")
+        return Verdict(name: "", status: "pass", message: "", cases: 0, seed: 0, input: "", snaps: snap_records(r.err))
     if r.status == 4
         return plain("", "fail", "error: no such test")
     plain("", "fail", describe(r.err, lead))
@@ -1196,6 +1203,340 @@ fn excerpt(src List[str], line int, col int) str
         return ""
     "{"{line}".pad_left(5, ' ')} | {src[line - 1]}\n{spaces(5)} | {spaces(col - 1)}^"
 
+## ---- Snapshot updating (snap.update.1-6, ADR 0395) ----
+
+struct SnapRec
+    line int
+    col int
+    text str
+
+fn starts_at(cs List[char], at int, s str) bool
+    sc := s.chars()
+    if at + sc.len() > cs.len()
+        return false
+    for k in 0..sc.len()
+        if cs[at + k] != sc[k]
+            return false
+    true
+
+fn find_from(cs List[char], at int, s str) int
+    mut i := at
+    while i < cs.len()
+        if starts_at(cs, i, s)
+            return i
+        i += 1
+    -1
+
+## The index where the literal starting at `at` ends, or -1: a string (plain, raw or `"""`), a character, a
+## number with an optional `-`, `true`, `false`, or a list of these.
+fn literal_end(cs List[char], at int) int
+    if at >= cs.len()
+        return -1
+    first := cs[at]
+    if starts_at(cs, at, "\"\"\"") or starts_at(cs, at, "r\"\"\"")
+        open := if first == 'r' then 4 else 3
+        f := find_from(cs, at + open, "\"\"\"")
+        if f < 0
+            return -1
+        mut end := f + 3
+        while end < cs.len() and cs[end] == '"'
+            end += 1
+        return end
+    if starts_at(cs, at, "r\"")
+        f := find_from(cs, at + 2, "\"")
+        return if f < 0 then -1 else f + 1
+    if first == '"' or first == '\''
+        mut i := at + 1
+        while i < cs.len()
+            c := cs[i]
+            if c == '\\'
+                i += 2
+            elif c == first
+                return i + 1
+            elif c == '\n'
+                return -1
+            else
+                i += 1
+        return -1
+    if starts_at(cs, at, "true")
+        return at + 4
+    if starts_at(cs, at, "false")
+        return at + 5
+    if first == '-' or first.is_digit()
+        mut i := if first == '-' then at + 1 else at
+        start := i
+        while i < cs.len()
+            c := cs[i]
+            sign := (c == '+' or c == '-') and i > at and (cs[i - 1] == 'e' or cs[i - 1] == 'E')
+            if c.is_digit() or c.is_alpha() or c == '_' or c == '.' or sign
+                i += 1
+            else
+                break
+        return if i > start then i else -1
+    if first == '['
+        mut depth := 0
+        mut i := at
+        while i < cs.len()
+            c := cs[i]
+            if c == '['
+                depth += 1
+            elif c == ']'
+                depth -= 1
+                if depth == 0
+                    return i + 1
+            elif c == '"' or c == '\''
+                e := literal_end(cs, i)
+                if e < 0
+                    return -1
+                i = e
+                continue
+            i += 1
+    -1
+
+## The helper suffix of the literal `t` (snap.update.2), or "" when it has no usable form.
+fn snap_kind(t str) str
+    if t.starts_with("\"") or t.starts_with("r\"")
+        return "str"
+    if t.starts_with("'")
+        return "char"
+    if t == "true" or t == "false"
+        return "bool"
+    if t.starts_with("[")
+        inner := t.slice(1, t.len()).trim_start()
+        if inner.starts_with("]") or inner.starts_with("[")
+            return ""
+        k := snap_kind(inner)
+        return if k.is_empty() then "" else "list_{k}"
+    if t.starts_with("0x") or t.starts_with("-0x") or t.starts_with("0b") or t.starts_with("0o")
+        return "int"
+    if t.contains(".") or t.contains("e") or t.contains("E")
+        return "float"
+    "int"
+
+## The index of the `)` closing a call whose arguments start at `from`, or -1; `comma` is the one top-level comma.
+fn call_parts(cs List[char], from int) List[int]
+    mut depth := 0
+    mut comma := -1
+    mut commas := 0
+    mut i := from
+    while i < cs.len()
+        c := cs[i]
+        if c == '"' or c == '\''
+            e := literal_end(cs, i)
+            if e < 0
+                return []
+            i = e
+            continue
+        if c == '(' or c == '['
+            depth += 1
+        elif c == ']'
+            depth -= 1
+        elif c == ')'
+            if depth == 0
+                return if commas == 1 then [comma, i] else []
+            depth -= 1
+        elif c == ',' and depth == 0
+            commas += 1
+            comma = i
+        i += 1
+    []
+
+## `line` (number `ln` in the file) with each `assert_eq(actual, LITERAL)` made a recording call.
+fn snap_line(l str, ln int) str
+    cs := l.chars()
+    mut out := ""
+    mut copied := 0
+    mut i := 0
+    while i < cs.len()
+        prev_ok := i == 0 or not (cs[i - 1].is_alpha() or cs[i - 1].is_digit() or cs[i - 1] == '_' or cs[i - 1] == '.')
+        if prev_ok and starts_at(cs, i, "assert_eq(")
+            open := i + 10
+            parts := call_parts(cs, open)
+            if parts.len() == 2
+                mut ls := parts[0] + 1
+                while ls < parts[1] and cs[ls] == ' '
+                    ls += 1
+                le := literal_end(cs, ls)
+                mut after := le
+                while after >= 0 and after < parts[1] and cs[after] == ' '
+                    after += 1
+                if le > 0 and after == parts[1]
+                    kind := snap_kind(chars_text(cs, ls, le))
+                    if not kind.is_empty()
+                        out = "{out}{chars_text(cs, copied, i)}ail_snap_{kind}({chars_text(cs, open, parts[0])}, {chars_text(cs, ls, le)}, {ln}, {ls + 1})"
+                        copied = parts[1] + 1
+                        i = parts[1] + 1
+                        continue
+        i += 1
+    "{out}{chars_text(cs, copied, cs.len())}"
+
+## The `ail-snapshot LINE COL TEXT` lines a test wrote to standard error.
+fn snap_records(err str) List[SnapRec]
+    mut out := List[SnapRec]()
+    for l in err.lines()
+        rest := l.strip_prefix("ail-snapshot ") else continue
+        sp1 := rest.find(" ") else continue
+        sp2 := rest.slice(sp1 + 1, rest.len()).find(" ") else continue
+        line := rest.slice(0, sp1).to_int() else continue
+        col := rest.slice(sp1 + 1, sp1 + 1 + sp2).to_int() else continue
+        out.push(SnapRec(line: line, col: col, text: rest.slice(sp1 + sp2 + 2, rest.len())))
+    out
+
+struct SnapChange
+    kind str
+    line int
+    col int
+    old str
+    new str
+
+fn snap_report(path str, old str, new str, changes List[SnapChange], json bool) str
+    if not json
+        return unified_diff(path, old, new)
+    mut out := ""
+    for c in changes
+        out = "{out}\{\"snapshot\":{json_str(c.kind)},\"file\":{json_str(path)},\"line\":{c.line},\"col\":{c.col},\"old\":{json_str(c.old)},\"new\":{json_str(c.new)}}\n"
+    out
+
+## Writes (unless `dry`) and prints what the tests recorded for `file`, and the `.out` file next to it
+## (snap.update.1, 2, 3, 5, 6). The doc examples' `# =>` lines (snap.update.4) are not updated yet.
+fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
+    cs := text.chars()
+    mut starts := [0]
+    for k in 0..cs.len()
+        if cs[k] == '\n'
+            starts.push(k + 1)
+    mut seen := Map[str, str]()
+    mut skipped := 0
+    mut order := List[SnapRec]()
+    mut conflict := Set[str]()
+    for r in recs
+        key := "{r.line}:{r.col}"
+        if conflict.contains(key)
+            continue
+        if seen.contains(key)
+            if seen[key] != r.text
+                conflict.add(key)
+                skipped += 1
+            continue
+        seen[key] = r.text
+        order.push(r)
+    mut spans := List[SnapChange]()
+    mut bounds := List[(int, int)]()
+    for r in order
+        if conflict.contains("{r.line}:{r.col}") or r.line < 1 or r.line > starts.len()
+            continue
+        start := starts[r.line - 1] + r.col - 1
+        end := literal_end(cs, start)
+        if end < 0
+            continue
+        old := chars_text(cs, start, end)
+        if old != r.text
+            spans.push(SnapChange(kind: "assert_eq", line: r.line, col: r.col, old: old, new: r.text))
+            bounds.push((start, end))
+    idx := [k for k in 0..spans.len()].sorted(by: |k| bounds[k].0)
+    mut new := ""
+    mut at := 0
+    mut sorted := List[SnapChange]()
+    for k in idx
+        new = "{new}{chars_text(cs, at, bounds[k].0)}{spans[k].new}"
+        at = bounds[k].1
+        sorted.push(spans[k])
+    new = "{new}{chars_text(cs, at, cs.len())}"
+    mut out := ""
+    mut count := 0
+    mut changed := 0
+    if not sorted.is_empty()
+        out = snap_report(file, text, new, sorted, json)
+        count += sorted.len()
+        changed += 1
+        if not dry
+            fs.write_text(file, new)? "writing {file}"
+    stem := file.strip_suffix(".ail") else file
+    expected := "{stem}.out"
+    if stem != file and fs.exists(expected)
+        run := proc.run(ail_path(), ["run", file]) else return
+        old := fs.read_text(expected) else ""
+        if run.out != old
+            change := SnapChange(kind: "out", line: 1, col: 1, old: old, new: run.out)
+            out = "{out}{snap_report(expected, old, run.out, [change], json)}"
+            count += 1
+            changed += 1
+            if not dry
+                fs.write_text(expected, run.out)? "writing {expected}"
+    verb := if dry then "would update" else "updated"
+    if json
+        out = "{out}\{\"snapshots\":true,\"dry_run\":{dry},\"updated\":{count},\"files\":{changed},\"skipped\":{skipped}}\n"
+    else
+        s1 := if count == 1 then "" else "s"
+        s2 := if changed == 1 then "" else "s"
+        left := if skipped > 0 then "; left {skipped} whose value differed between runs (snap.update.3)" else ""
+        out = "{out}{verb} {count} snapshot{s1} in {changed} file{s2}{left}\n"
+    print(out.trim_end())
+
+fn unified_diff(path str, old str, new str) str
+    a := old.lines()
+    b := new.lines()
+    if a == b and old.ends_with("\n") == new.ends_with("\n")
+        return ""
+    # Longest common subsequence, then hunks with three lines of context.
+    n := a.len()
+    m := b.len()
+    mut lcs := [[0 for c in 0..m + 1] for r in 0..n + 1]
+    mut i := n - 1
+    while i >= 0
+        mut j := m - 1
+        while j >= 0
+            lcs[i][j] = if a[i]
+                == b[j] then lcs[i + 1][j + 1] + 1 else lcs[i + 1][j].max(lcs[i][j + 1])
+            j -= 1
+        i -= 1
+    # (' ' | '-' | '+', index in a, index in b)
+    mut ops := List[Op]()
+    i = 0
+    mut j := 0
+    while i < n or j < m
+        if i < n and j < m and a[i] == b[j]
+            ops.push(Op(kind: ' ', i: i, j: j))
+            i += 1
+            j += 1
+        elif i < n and (j == m or lcs[i + 1][j] >= lcs[i][j + 1])
+            ops.push(Op(kind: '-', i: i, j: j))
+            i += 1
+        else
+            ops.push(Op(kind: '+', i: i, j: j))
+            j += 1
+    mut out := ["--- {path}", "+++ {path} (updated)"]
+    changed := [k for k in 0..ops.len() if ops[k].kind != ' ']
+    if changed.len() == 0
+        out.push("\\ the files differ only in the final newline")
+        return "{out.join("\n")}\n"
+    mut k := 0
+    while k < changed.len()
+        start := if changed[k] > 3 then changed[k] - 3 else 0
+        mut end := changed[k] + 1
+        while k < changed.len() and changed[k] <= end + 5
+            end = (changed[k] + 4).min(ops.len())
+            k += 1
+        hunk := ops[start..end]
+        mut a_len := 0
+        mut b_len := 0
+        for o in hunk
+            if o.kind != '+'
+                a_len += 1
+            if o.kind != '-'
+                b_len += 1
+        out.push("@@ -{hunk[0].i + 1},{a_len} +{hunk[0].j + 1},{b_len} @@")
+        for o in hunk
+            text := if o.kind == '+' then b[o.j] else a[o.i]
+            out.push("{o.kind}{text}")
+    "{out.join("\n")}\n"
+
+
+struct Op
+    kind char
+    i int
+    j int
+
 fn report(vs List[Verdict], json bool, src List[str]) int
     mut passed := 0
     mut failed := 0
@@ -1237,12 +1578,14 @@ fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
 fn main() !
     mut json := false
+    mut update := false
+    mut dry := false
     mut files := List[str]()
     mut cases := 100
     mut has_seed := false
@@ -1258,13 +1601,17 @@ fn main() !
             want = ""
         elif a == "--json"
             json = true
+        elif a == "--update"
+            update = true
+        elif a == "--dry-run"
+            dry = true
         elif a == "--cases" or a == "--seed"
             want = a
         else
             files.push(a)
     if not want.is_empty()
         io.exit(usage())
-    if files.len() != 1
+    if files.len() != 1 or (dry and not update)
         io.exit(usage())
     file := files[0]
     checked := proc.run(ail_path(), ["check", file])? "running ail check"
@@ -1325,7 +1672,7 @@ fn main() !
     for _ in 0..MAX_ROUNDS
         if dropped.len() == found.tests.len() and mdropped.len() == mf.tests.len()
             break
-        rw := rewrite(w, lines, found, dropped, mf, mdropped)
+        rw := rewrite(w, lines, found, dropped, mf, mdropped, if update then text.lines().len() else 0)
         if not mf.tests.is_empty()
             write_modules(scratch, mf, mdropped)? "writing the modules"
         last_lead = rw.lead
@@ -1395,7 +1742,7 @@ fn main() !
                 verdicts.push(plain(doc_names[t.name], v.status, v.message))
             elif t.params.is_empty()
                 v := run_one(exe, slot, last_lead)
-                verdicts.push(plain(t.name, v.status, v.message))
+                verdicts.push(Verdict(name: t.name, status: v.status, message: v.message, cases: 0, seed: 0, input: "", snaps: v.snaps))
             else
                 p := run_prop(
                     w,
@@ -1413,6 +1760,7 @@ fn main() !
                     cases: p.cases,
                     seed: seed_for(t.name, has_seed, seed_given),
                     input: p.input,
+                    snaps: [],
                 ))
     mut kept := 0
     for j in 0..found.tests.len()
@@ -1434,6 +1782,11 @@ fn main() !
                     slot += 1
             v := run_one(exe, slot, 0)
             verdicts.push(plain(name, v.status, v.message))
+    if update
+        mut recs := List[SnapRec]()
+        for v in verdicts
+            recs.extend(v.snaps)
+        snap_update(file, text, recs, dry, json)?
     code := report(verdicts, json, text.lines())
     if scratch.is_empty()
         _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
