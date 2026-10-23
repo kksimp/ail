@@ -1,0 +1,3 @@
+poll failed: the task was cancelled
+stopped, cancelled true
+main cancelled: false

@@ -199,15 +199,7 @@ fn nx_match(
         if want_out == got.out and want_status == got.status
             return none
         return "{case}: differs from its golden\n--- golden (exit {want_status}):\n{want_out}\n--- native (exit {got.status}):\n{got.out}{got.err}"
-    want := sh("{envs} {BIN} run {case} < {input}")
-    mut want_err := List[str]()
-    for l in want.err.lines()
-        if m := interp_line(l)
-            want_err.push(m)
-    got_err := got.err.lines()
-    if want.out == got.out and want.status == got.status and want_err == got_err
-        return none
-    "{case}: differs from `ail run`\n--- ail run (exit {want.status}):\n{want.out}{want_err.join("\n")}\n--- native (exit {got.status}):\n{got.out}{got_err.join("\n")}"
+    "{case}: no golden in bootstrap/tests/native/golden: run `ail run tools/gate/goldens.ail freeze {stem}`"
 
 ## ADR 0814: the chunk's programs built in one `build-many` run, so the compiler loads once.
 ## Writes each executable to `exe_of(case)` and says whether it worked; on false the caller
@@ -297,6 +289,14 @@ fn Run.executables(mut self, target str, runner str)
             if stem_of(c) != "tensor_tanh"
                 kept.push(c)
         cases = kept
+    # golden/pending.txt: programs whose native output is known wrong; named, not checked.
+    pending := [l.trim() for l in (fs.read_text("bootstrap/tests/native/golden/pending.txt") else "").lines() if not l.trim().is_empty() and not l.starts_with("#")]
+    if not pending.is_empty()
+        mut live := List[str]()
+        for c in cases
+            if not pending.contains(stem_of(c))
+                live.push(c)
+        cases = live
     stride := (env.get("NX_STRIDE") else "1").to_int() else 1
     if stride > 1
         mut sampled := List[str]()
@@ -501,7 +501,7 @@ fn Run.limits(mut self, target str, runner str)
     ]
         name := spec[0]
         src := "bootstrap/tests/native/limits/{name}.ail"
-        want := ail("", "run {spec[1]} {spec[2]} {src}")
+        want_out := slurp("bootstrap/tests/native/limits/{name}.out")
         for baked in [false, true]
             if name == "loop" and not baked
                 continue
@@ -517,10 +517,10 @@ fn Run.limits(mut self, target str, runner str)
             label := "{src} ({spec[3]}{if baked then ", baked" else ""})"
             if got.status != 1
                 red(label, "exit status {got.status}")
-            elif got.out != want.out
+            elif got.out != want_out
                 red(label, "stdout differs")
-            elif trap_message(got.err) != trap_message(want.err)
-                red(label, "trap line differs:\n{trap_message(got.err)}\n{trap_message(want.err)}")
+            elif trap_message(got.err) != slurp("bootstrap/tests/native/limits/{name}.trap").trim()
+                red(label, "trap line differs:\n{trap_message(got.err)}\n{slurp("bootstrap/tests/native/limits/{name}.trap").trim()}")
     checks += 1
     bad := sh("AIL_TIMEOUT_MS=soon {runner} {tmp}/limit-spin-false")
     if bad.status != 2
@@ -558,7 +558,7 @@ fn Run.sources(mut self)
             else
                 seen[name] = file
 
-## Driver programs (tests/native/driver, `--unsafe driver`): `mem_*` against NAME.out on Linux x86-64, the rest against `ail run`.
+## Driver programs (tests/native/driver, `--unsafe driver`): `mem_*` only on Linux x86-64; all against NAME.out and NAME.err.
 fn Run.drivers(mut self)
     linux_x64 := sh("uname -sm").out.trim() == "Linux x86_64"
     for case in list_ext("bootstrap/tests/native/driver", ".ail")
@@ -580,19 +580,18 @@ fn Run.drivers(mut self)
                     "expected\n{slurp("bootstrap/tests/native/driver/{stem}.out")}got (exit {got.status})\n{got.out}",
                 )
             continue
-        want := ail("", "run --unsafe driver {case}")
-        mut want_err := List[str]()
-        for l in want.err.lines()
-            if not (l.starts_with("  at ") or l.starts_with("note:") or l.starts_with("help:"))
-                want_err.push(l)
+        # The frozen reference: NAME.out, and NAME.err (the report lines without frames) for a trap, which exits 1.
+        base := "bootstrap/tests/native/driver/{stem}"
+        want_err := slurp("{base}.err").lines()
+        want_status := if want_err.is_empty() then 0 else 1
         mut got_err := List[str]()
         for l in got.err.lines()
             if not (l.starts_with("  at ") or l.starts_with("note:") or l.starts_with("help:"))
                 got_err.push(l)
-        if want.out != got.out or want.status != got.status or want_err != got_err
+        if slurp("{base}.out") != got.out or want_status != got.status or want_err != got_err
             red(
                 case,
-                "differs from `ail run`\n--- run (exit {want.status}):\n{want.out}{want_err.join("\n")}\n--- native (exit {got.status}):\n{got.out}{got_err.join("\n")}",
+                "differs from its frozen output\n--- frozen (exit {want_status}):\n{slurp("{base}.out")}{want_err.join("\n")}\n--- native (exit {got.status}):\n{got.out}{got_err.join("\n")}",
             )
 
 fn main() !

@@ -1304,7 +1304,8 @@ fn main() !
     mut scratch := ""
     if not mf.tests.is_empty()
         # The directory is copied so the modules' tests can be made `pub` without touching the tree.
-        made := proc.run("mktemp", ["-d"])? "running mktemp"
+        # Beside the directory, so its package's relative `dep ... path ../x` lines still find their modules.
+        made := proc.run("mktemp", ["-d", "{if dir.is_empty() then "." else dir}/../.ail-test-XXXXXX"])? "running mktemp"
         scratch = made.out.trim()
         _ := proc.run("cp", [
             "-R",

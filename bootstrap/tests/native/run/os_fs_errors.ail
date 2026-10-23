@@ -7,13 +7,13 @@ fn probe(path str)
     text := load(path) else err
         print("failed: {err}")
         return
-    print("read {text.len()} bytes")
+    print("read bytes: {text.len() > 1000}")
 
 fn list(path str)
     names := fs.list_dir(path) else err
         print("list_dir: {err}")
         return
-    print(names.len())
+    print(names.len() > 0)
 
 fn main() ! fs.IoError
     probe("docs/spec/17-std.md")

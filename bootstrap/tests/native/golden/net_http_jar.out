@@ -1,0 +1,20 @@
+h=1; d=2
+[h=1; d=2] [dir=0; h=1; d=2]
+d=2
+
+false
+[h=1; d=2]
+[h=1; d=2] [p=4; h=1; d=2]
+[h=1; d=2] [h=1; d=2; s=5]
+8
+-
+-
+9
+hidden
+false
+long=2; short=1
+200 /home cookie=sid=abc
+jar holds 2 cookies
+/prefs/x cookie=theme=dark; sid=abc
+/home cookie=sid=abc
+/other cookie=mine=1; sid=abc

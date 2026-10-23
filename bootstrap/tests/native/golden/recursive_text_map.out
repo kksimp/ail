@@ -1,0 +1,2 @@
+Obj.Dict(d: {"a": Obj.Arr(items: [Obj.Name(s: "x"), Obj.Null]), "b": Obj.Str(data: [1, 2])})
+Obj.Arr(items: [Obj.Dict(d: {"a": Obj.Arr(items: [Obj.Name(s: "x"), Obj.Null]), "b": Obj.Str(data: [1, 2])})])

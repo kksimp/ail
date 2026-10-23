@@ -1,0 +1,23 @@
+true
+true
+true
+true
+true
+true
+false
+true
+false
+true
+true
+false
+Ordering.Less
+Ordering.Equal
+Ordering.Equal
+Ordering.Greater
+[[0.5, nan], [1.0], [1.0, 2.0], [1.0, nan]]
+[1.0, nan]
+[0.5, nan]
+true
+false
+[[2], [3], [3, 1]]
+["b"]

@@ -1,0 +1,29 @@
+b"ab\x01\"\\\n\xff"
+[b"ab\x01\"\\\n\xff"] 97 195
+true
+true
+true
+true
+true
+b"ab"
+b"hi"
+b"\n\x0b"
+true
+[b"b", b"a\x00"]
+[b"b", b"a\x00"]
+Frame(tag: "t", data: b"\xde\xad")
+(1, b"z")
+[Frame(tag: "u", data: b"")]
+true
+[b"a", b"ab", b"b"]
+[b"a", b"ab", b"b"]
+true
+1
+b"a"
+true
+11
+{b"k": 11, b"\x00z": 2, b"new": 3}
+6b 11
+007a 2
+{b"a", b"b"}
+true

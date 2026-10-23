@@ -1,0 +1,7 @@
+5
+failed: TooBig(n: 12)
+0
+rule: expr.arith.3
+message: 11:7: division by zero in `10 / 0`
+-1
+5

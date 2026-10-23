@@ -138,30 +138,19 @@ if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_buil
     exec "$exe" "$@"
 fi
 
-# `ail test` is native by default; `AIL_NATIVE_TEST=0` skips it (ADR 0858, lane B8, RR-4): `ail test [--json] [--cases N] [--seed S] FILE` is first done by the
-# AIL runner (tools/ailtest/ailtest.ail: native builds of the tests, plain, `?` and property). Its report is
-# used only when every test ran (no `skip`, not a usage error); otherwise the interpreter below runs the file.
-if [ "${AIL_NATIVE_TEST:-1}" != 0 ] && [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
-    test_ok=1 test_file="" test_value=0
+# `ail test` is native only (plan.md step B): the AIL runner (tools/ailtest/ailtest.ail) builds the tests natively and
+# runs each. A test it can't build is reported `skip` with the construct that blocks it. `--update`, `--trace` and
+# `--dry-run` belong to the interpreter and are refused until they are ported.
+if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     for test_arg in "${@:2}"; do
-        if [ "$test_value" = 1 ]; then test_value=0; continue; fi
         case "$test_arg" in
-            --json) ;;
-            --cases | --seed) test_value=1 ;;
-            -*) test_ok=0 ;;
-            *) if [ -n "$test_file" ]; then test_ok=0; fi; test_file="$test_arg" ;;
+            --update | --dry-run | --trace | --trace=*)
+                echo "ail test: $test_arg is not native yet (interpreter only: AIL_RUST=1 ./ail test ...)" >&2
+                [ "${AIL_RUST:-}" = 1 ] || exit 2 ;;
         esac
     done
-    if [ "$test_ok" = 1 ] && [ -n "$test_file" ]; then
-        test_out="$(mktemp)"
-        test_status=0
-        AIL_NATIVE_TEST=0 AIL_NATIVE_CLI= "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}" >"$test_out" 2>/dev/null || test_status=$?
-        if [ "$test_status" != 2 ] && ! grep -qE '^skip |"status":"skip"' "$test_out"; then
-            cat "$test_out"
-            rm -f "$test_out"
-            exit "$test_status"
-        fi
-        rm -f "$test_out"
+    if [ "${AIL_RUST:-}" != 1 ]; then
+        AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}"
     fi
 fi
 

@@ -1,0 +1,7 @@
+GET /a {"x": "1", "y": "two words", "z": "A"} none []
+201 got /a yes
+POST /b {} none [payload]
+201 got /b
+HEAD /c {} none []
+201 []
+after close closed

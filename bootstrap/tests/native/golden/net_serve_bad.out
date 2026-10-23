@@ -1,0 +1,24 @@
+no host: HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Content-Length: 40|Connection: close||an HTTP/1.1 request needs a Host header
+
+version: HTTP/1.1 505 HTTP Version Not Supported|Content-Type: text/plain; charset=utf-8|Content-Length: 41|Connection: close||only HTTP/1.0 and HTTP/1.1 are supported
+
+target: HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Content-Length: 44|Connection: close||the request target must be an absolute path
+
+space colon: HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Content-Length: 61|Connection: close||a header name must be a token with no space before the colon
+
+bad length: HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Content-Length: 34|Connection: close||Content-Length must be one number
+
+big length: HTTP/1.1 413 Content Too Large|Content-Type: text/plain; charset=utf-8|Content-Length: 30|Connection: close||the request body is too large
+
+coding: HTTP/1.1 501 Not Implemented|Content-Type: text/plain; charset=utf-8|Content-Length: 46|Connection: close||only the chunked transfer coding is supported
+
+both: HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Content-Length: 56|Connection: close||a request has both Transfer-Encoding and Content-Length
+
+fold: HTTP/1.1 400 Bad Request|Content-Type: text/plain; charset=utf-8|Content-Length: 36|Connection: close||folded header lines are not allowed
+
+POST /up [abcde] {"host": "h", "x-a": "1, 2", "transfer-encoding": "chunked", "connection": "close"}
+chunked: HTTP/1.1 200 OK|Set-Cookie: a=1|Content-Type: text/plain; charset=utf-8|Content-Length: 2|Connection: close||ok
+bad status bad_request 99 is not an HTTP status; use 100 to 599
+bad name `a b` is not a header name
+twice other
+second: HTTP/1.1 204 No Content|x: c|Connection: close||
