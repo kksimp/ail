@@ -38,6 +38,9 @@ NET_ERROR := "net.NetError"
 NET_CONN := "net.Conn"
 NET_LISTENER := "net.Listener"
 NET_RESPONSE := "net.Response"
+NET_SERVER := "net.Server"
+NET_EXCHANGE := "net.Exchange"
+NET_REQUEST := "net.Request"
 NET_RAW := "net.RawResponse"
 NET_OPTIONS := "net.Options"
 
@@ -56,6 +59,9 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[NET_ERROR] = []
     structs[COMPRESS_ERROR] = []
     structs[NET_CONN] = []
+    structs[NET_SERVER] = []
+    structs[NET_EXCHANGE] = []
+    structs[NET_REQUEST] = []
     structs[NET_LISTENER] = []
     structs[NET_RAW] = [
         Slot(name: "status", ty: Ty.Int),
@@ -86,6 +92,21 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
     ]
     structs[COMPRESS_ERROR] = [Slot(name: "kind", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
     structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_SERVER] = [Slot(name: "handle", ty: Ty.Int)]
+    structs[NET_REQUEST] = [
+        Slot(name: "method", ty: Ty.Str),
+        Slot(name: "path", ty: Ty.Str),
+        Slot(name: "query", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
+        Slot(name: "body", ty: Ty.Str),
+        Slot(name: "peer", ty: Ty.Str),
+        Slot(name: "data", ty: Ty.Bytes),
+        Slot(name: "server", ty: Ty.Int),
+    ]
+    structs[NET_EXCHANGE] = [
+        Slot(name: "request", ty: Ty.Struct(NET_REQUEST)),
+        Slot(name: "handle", ty: Ty.Int),
+    ]
     structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_RESPONSE] = [
         Slot(name: "status", ty: Ty.Int),
@@ -148,7 +169,9 @@ fn Lower.slot_of(self, n str, name str) int
 ## `T(a: x, b: y)` or `T(x, y)`: a new object with every field set.
 fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     slots := structs[n]
-    if args.len() != slots.len()
+    # std.net.17: `net.Response(...)` may leave `all_headers` out; it is empty.
+    left_out := n == NET_RESPONSE and args.len() + 1 == slots.len()
+    if args.len() != slots.len() and not left_out
         return unsupported(pos, "`{n}(...)` without every field")
     mut vs := [-1 for _ in slots]
     for k in 0..args.len()
@@ -161,6 +184,10 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
         t := slots[at].ty
         v := lower_value(a.value, t)?
         vs[at] = copy_if_place(a.value, Val(id: convert(v, t, expr_pos(a.value)), ty: t))
+    if left_out
+        for k in 0..vs.len()
+            if vs[k] < 0
+                vs[k] = new_table(slots[k].ty)
     t := Ty.Struct(n)
     obj := call("rt.obj_new", [konst(8 * slots.len(), Ty.Int), konst(OBJ_STRUCT, Ty.Int)], t)
     for k in 0..vs.len()

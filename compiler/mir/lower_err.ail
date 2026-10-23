@@ -651,6 +651,8 @@ fn Lower.declare_errors(mut self, prog ast.Program)
     err_msgs[PROC_ERROR] = ""
     err_msgs[NET_ERROR] = ""
     err_msgs[COMPRESS_ERROR] = ""
+    # What `Task.wait()` fails with (conc.task.6), named in `! Trapped`.
+    err_msgs["Trapped"] = ""
     for s in prog.structs
         if s.is_error
             err_msgs[s.name] = ""

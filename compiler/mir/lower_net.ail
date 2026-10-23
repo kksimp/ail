@@ -23,6 +23,7 @@ fn net_fn(rt str, params List[Ty], ret Ty, fails bool) NetFn
 fn net_module_lookup(name str) NetFn?
     match name
         "listen" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_LISTENER), true)
+        "serve" => net_fn("rt.net_listen", [Ty.Str], Ty.Struct(NET_SERVER), true)
         "connect" => net_fn("rt.net_connect", [Ty.Str, Ty.Int], Ty.Struct(NET_CONN), true)
         "get" => net_fn("rt.net_get", [Ty.Str], Ty.Struct(NET_RESPONSE), true)
         "post" => net_fn("rt.net_post", [Ty.Str, Ty.Str, Ty.Str], Ty.Struct(NET_RESPONSE), true)
@@ -58,6 +59,23 @@ fn net_method_lookup(key str) NetFn?
         "net.Conn.set_timeout" => net_fn("rt.net_set_timeout", [Ty.Int], Ty.Unit, true)
         "net.Conn.peer" => net_fn("rt.net_peer", [], s, false)
         "net.Conn.close" => net_fn("rt.net_close", [], Ty.Unit, false)
+        "net.Server.accept" => net_fn("rt.serve_accept", [], Ty.Struct(NET_EXCHANGE), true)
+        "net.Server.addr" => net_fn("rt.net_addr", [], s, false)
+        "net.Server.close" => net_fn("rt.net_close", [], Ty.Unit, false)
+        "net.Server.shutdown" => net_fn("rt.serve_shutdown", [], Ty.Unit, false)
+        "net.Request.stop" => net_fn("rt.serve_shutdown", [], Ty.Unit, false)
+        "net.Exchange.respond" => net_fn(
+            "rt.serve_respond",
+            [Ty.Struct(NET_RESPONSE)],
+            Ty.Unit,
+            true,
+        )
+        "net.Exchange.respond_bytes" => net_fn(
+            "rt.serve_respond_bytes",
+            [Ty.Int, Ty.Map(key: s, val: s), Ty.Bytes],
+            Ty.Unit,
+            true,
+        )
         "net.Listener.accept" => net_fn("rt.net_accept", [], Ty.Struct(NET_CONN), true)
         "net.Listener.addr" => net_fn("rt.net_addr", [], s, false)
         "net.Listener.close" => net_fn("rt.net_close", [], Ty.Unit, false)
@@ -92,8 +110,11 @@ fn Lower.lower_net_method(mut self, key str, recv Val?, args List[ast.Arg], pos 
     f := net_method_lookup(key) else
         return unsupported(pos, "calling `{key}`")
     r := recv else return unsupported(pos, "calling `{key}`")
-    # The handle is the struct's one field.
-    net_call(f, [load(r.id, 0, Ty.Int)], args, pos, [])
+    # The handle is the struct's one field; an `Exchange`'s is its second, and
+    # a `Request` names its server in the last.
+    word := if key.starts_with("net.Exchange.") then 1 else if key
+        == "net.Request.stop" then 7 else 0
+    net_call(f, [load(r.id, word, Ty.Int)], args, pos, [])
 
 ## Emit the call of `f` with the leading values `lead`, `args`, and the
 ## trailing values `after`.
