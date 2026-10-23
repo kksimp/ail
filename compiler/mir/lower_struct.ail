@@ -35,6 +35,9 @@ NET_RESPONSE := "net.Response"
 NET_RAW := "net.RawResponse"
 NET_OPTIONS := "net.Options"
 
+## The error of `std.compress` (std.compress.2).
+COMPRESS_ERROR := "compress.CompressError"
+
 ## Record the names of the structs of `prog` (all files first, so fields
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
@@ -43,6 +46,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []
     structs[NET_ERROR] = []
+    structs[COMPRESS_ERROR] = []
     structs[NET_CONN] = []
     structs[NET_LISTENER] = []
     structs[NET_RAW] = [
@@ -72,6 +76,7 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "kind", ty: Ty.Str),
         Slot(name: "message", ty: Ty.Str),
     ]
+    structs[COMPRESS_ERROR] = [Slot(name: "kind", ty: Ty.Str), Slot(name: "message", ty: Ty.Str)]
     structs[NET_CONN] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_LISTENER] = [Slot(name: "handle", ty: Ty.Int)]
     structs[NET_RESPONSE] = [
