@@ -131,10 +131,16 @@ pub fn hunk(src str, from int, to int, lines List[str]) Hunked
             if hit_line.len() == 1
                 lc := scope[hit_line[0]].chars()
                 changed := "{lc[0..hit_at[0]].join("")}{new}{lc[hit_at[0] + pc.len()..].join("")}"
-                return Hunked(text: splice(src, from + hit_line[0], from + hit_line[0] + 1, [changed]), err: "")
+                return Hunked(
+                    text: splice(src, from + hit_line[0], from + hit_line[0] + 1, [changed]),
+                    err: "",
+                )
             if hit_line.len() == 0
                 return Hunked(text: "", err: "`{part}` is not found")
-            return Hunked(text: "", err: "`{part}` occurs {hit_line.len()} times; quote more of its line")
+            return Hunked(
+                text: "",
+                err: "`{part}` occurs {hit_line.len()} times; quote more of its line",
+            )
     mut at := List[int]()
     if scope.len() >= old.len()
         for i in 0..scope.len() - old.len() + 1
@@ -148,7 +154,10 @@ pub fn hunk(src str, from int, to int, lines List[str]) Hunked
     if at.len() == 0
         return Hunked(text: "", err: "the lines `{old.join("` / `")}` are not found")
     if at.len() > 1
-        return Hunked(text: "", err: "the `-` and context lines match {at.len()} places; add a context line")
+        return Hunked(
+            text: "",
+            err: "the `-` and context lines match {at.len()} places; add a context line",
+        )
     i := at[0]
     mut first_old := ""
     for l in lines
@@ -200,7 +209,10 @@ pub fn parse_compact(input str) Compact
         # Flush the hunk being built.
         if open
             if cur_lines.len() == 0
-                return Compact(ops: [], err: "`{cur_id}` has no `-`, `+` or context lines (edit.in.3)")
+                return Compact(
+                    ops: [],
+                    err: "`{cur_id}` has no `-`, `+` or context lines (edit.in.3)",
+                )
             ops.push(hunk_op(has_id, cur_id, cur_lines))
         open = false
         has_id = false
@@ -216,7 +228,10 @@ pub fn parse_compact(input str) Compact
             has_id = true
             open = true
         else
-            return Compact(ops: [], err: "line {n}: expected an id, `rename OLD NEW`, or a line starting with `-`, `+` or a space (edit.in.3)")
+            return Compact(
+                ops: [],
+                err: "line {n}: expected an id, `rename OLD NEW`, or a line starting with `-`, `+` or a space (edit.in.3)",
+            )
     if open
         if cur_lines.len() == 0
             return Compact(ops: [], err: "`{cur_id}` has no `-`, `+` or context lines (edit.in.3)")

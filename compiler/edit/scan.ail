@@ -92,9 +92,17 @@ pub fn decls(src str) List[Decl]
         if d.id == ""
             continue
         mut start := i
-        while start > 0 and (lines[start - 1].starts_with("##") or lines[start - 1].starts_with("@"))
+        while start > 0
+            and (lines[start - 1].starts_with("##") or lines[start - 1].starts_with("@"))
             start -= 1
-        found.push(Decl(id: d.id, name: d.name, start: start, head: i, sig_end: signature_end(lines, i), end: i + 1))
+        found.push(Decl(
+            id: d.id,
+            name: d.name,
+            start: start,
+            head: i,
+            sig_end: signature_end(lines, i),
+            end: i + 1,
+        ))
     # Each runs to the next column-0 code line, without trailing blank and comment lines.
     for k in 0..found.len()
         mut j := found[k].sig_end + 1
