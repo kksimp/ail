@@ -1,0 +1,16 @@
+took 2
+drop 2
+loop 0
+loop 1
+defer w0
+drop 1
+0
+took 2
+drop 2
+loop 0
+loop 1
+inner
+drop 3
+defer w4
+drop 1
+drop 9

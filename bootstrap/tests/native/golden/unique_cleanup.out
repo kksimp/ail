@@ -1,0 +1,21 @@
+unlock 20
+20
+defer in early
+unlock 20
+21
+got 30, peek 30
+unlock 50
+unlock 60
+release 61 by hand
+unlock 61
+first 70
+unlock 70
+unlock 80
+unlock 81
+main ends
+main's defer
+unlock 51
+drop pair 40+41
+unlock 41
+unlock 40
+unlock 30
