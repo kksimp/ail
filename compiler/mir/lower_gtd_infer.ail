@@ -1,0 +1,57 @@
+## Inferred error sets (`fn f() !T`, err.type.6) across functions: a caller's
+## `else err` reads the fields of the one error type its callee can fail with,
+## which is known only once the callee and those it calls are lowered. Before
+## the real lowering, the functions with an inferred set are lowered in a dry
+## run, again until no set changes (at most 8 times), and the output of the
+## dry runs is dropped. Then the real lowering infers them once more.
+use ast
+
+fn Lower.settle_inferred(mut self, srcs List[Source], upto int)
+    if infer_errs.len() == 0
+        return
+    mut rounds := 0
+    while rounds < 8
+        rounds += 1
+        restart_sets(false)
+        before := fn_errs
+        nf := funcs.len()
+        np := problems.len()
+        for k in 0..upto.min(srcs.len())
+            enter_file(k)
+            path = srcs[k].path
+            for f in program_fns(srcs[k].prog)
+                if infer_errs.contains(fn_key(f, prefix)) and not is_test(f)
+                    lower_fn(f)
+        while funcs.len() > nf
+            funcs.pop()
+        while problems.len() > np
+            problems.pop()
+        if same_sets(before, fn_errs)
+            break
+    restart_sets(true)
+
+## Each round, and the real lowering (`last`), infers the sets afresh
+## (`Unknown`: nothing seen yet), while callers see what the last round found:
+## a type, `Unknown` for several, and in a dry run `Unit` for nothing found
+## yet, which a caller ignores (`note_inferred_err`), so functions that call
+## each other settle.
+fn Lower.restart_sets(mut self, last bool)
+    for k in infer_errs.keys()
+        t := infer_errs[k]
+        fn_errs[k] = if t == Ty.Unit
+            Ty.Unknown
+        elif t.is_unknown()
+            if last then Ty.Unknown else Ty.Unit
+        else
+            t
+        infer_errs[k] = Ty.Unknown
+
+fn same_sets(a Map[str, Ty], b Map[str, Ty]) bool
+    if a.len() != b.len()
+        return false
+    for k in a.keys()
+        x := a[k]
+        y := b.get(k) else return false
+        if x.name() != y.name()
+            return false
+    true

@@ -48,11 +48,15 @@ fn Lower.patch_table(mut self, v int, t Ty)
     if v < 0
         return
     mut kinds := List[int]()
+    mut kt := Ty.Unknown
     match t
         Map(k, x) =>
             m := value_mode(x)
             kinds = [key_kind(k), m[0], m[1]]
-        Set(e) => kinds = [key_kind(e), 0, 0]
+            kt = k
+        Set(e) =>
+            kinds = [key_kind(e), 0, 0]
+            kt = e
         _ => return
     for b in 0..blocks.len()
         for i in 0..blocks[b].insts.len()
@@ -62,6 +66,9 @@ fn Lower.patch_table(mut self, v int, t Ty)
                     return
                 for a in 0..3
                     set_const(x.args[a], kinds[a])
+                # A composite key's kind is its shape, a string (lower_keys.ail).
+                if not is_key_ty(kt)
+                    set_str(x.args[0], shape_of(kt, []))
                 return
 
 ## The value of the `const` that defines `v`, else -2.
@@ -71,6 +78,15 @@ fn Lower.const_at(self, v int) int
             if x.dst == v and x.op == "const"
                 return x.imm
     -2
+
+fn Lower.set_str(mut self, v int, s str)
+    for b in 0..blocks.len()
+        for i in 0..blocks[b].insts.len()
+            if blocks[b].insts[i].dst == v and blocks[b].insts[i].op == "const"
+                blocks[b].insts[i].op = "str"
+                blocks[b].insts[i].imm = str_lit(s)
+                vals[v] = Ty.Str
+                return
 
 fn Lower.set_const(mut self, v int, n int)
     for b in 0..blocks.len()
@@ -82,7 +98,7 @@ fn Lower.set_const(mut self, v int, n int)
 ## `m[k] = v` or `m[k] op= v` on a pending table: the key's and the
 ## value's types give its type (type.coll.13). False after a problem.
 fn Lower.settle_map(mut self, m Val, kt Ty, vt Ty, pos ast.Pos) bool
-    if not is_key_ty(kt) or not is_value_ty(vt)
+    if not key_ok(kt) or not is_value_ty(vt)
         problem(pos, "not in the native subset yet: a map of `{kt.name()}` to `{vt.name()}`")
         return false
     settle_pending(m.id, Ty.Map(key: kt, val: vt))
@@ -91,7 +107,7 @@ fn Lower.settle_map(mut self, m Val, kt Ty, vt Ty, pos ast.Pos) bool
 ## `s.add(x)` on a pending table: it is a `Set` of `x`'s type.
 fn Lower.settle_set_add(mut self, s Val, args List[ast.Arg], npos ast.Pos) Val?
     x := lower_value(args[0].value, none)?
-    if not is_key_ty(x.ty)
+    if not key_ok(x.ty)
         return unsupported(npos, "a set of `{x.ty.name()}`")
     t := Ty.Set(x.ty)
     settle_pending(s.id, t)
@@ -103,7 +119,7 @@ fn Lower.settle_map_push(mut self, m Val, args List[ast.Arg], npos ast.Pos) Val?
     k := lower_value(args[0].value, none)?
     x := lower_value(args[1].value, none)?
     vt := Ty.List(x.ty)
-    if not is_key_ty(k.ty) or not is_value_ty(vt)
+    if not key_ok(k.ty) or not is_value_ty(vt)
         return unsupported(npos, "a map of `{k.ty.name()}` to `{vt.name()}`")
     t := Ty.Map(key: k.ty, val: vt)
     settle_pending(m.id, t)
@@ -128,3 +144,17 @@ fn same_shape(a Ty, b Ty) bool
     if a.elem() != none
         return b.elem() != none
     b.is_coll()
+
+## A pending `[]` or `{}` passed where a collection type is expected (a
+## parameter, a `mut` argument): that type settles it (type.coll.13).
+fn Lower.settle_by_want(mut self, v Val, want Ty) bool
+    if not is_pending_coll(v.ty) or is_pending_coll(want) or not same_shape(v.ty, want)
+        return false
+    ok := match want
+        Map(k, _) => key_ok(k)
+        Set(e) => key_ok(e)
+        _ => true
+    if not ok
+        return false
+    settle_pending(v.id, want)
+    true

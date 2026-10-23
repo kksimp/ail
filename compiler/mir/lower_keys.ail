@@ -133,3 +133,17 @@ fn Lower.composite_at(mut self, m Val, kid int, kt Ty, vt Ty, texts List[int]) V
     seal(found)
     cur = found
     Val(id: entry_value(e, vt), ty: vt)
+
+## A new empty table of type `t`, whose key may be composite.
+fn Lower.keyed_table(mut self, t Ty) int
+    match t
+        Map(k, v) =>
+            if is_key_ty(k)
+                return new_table(t)
+            m := value_mode(v)
+            call("rt.map_new", [kind_val(k), konst(m[0], Ty.Int), konst(m[1], Ty.Int)], t)
+        Set(e) =>
+            if is_key_ty(e)
+                return new_table(t)
+            call("rt.map_new", [kind_val(e), konst(0, Ty.Int), konst(0, Ty.Int)], t)
+        _ => new_table(t)

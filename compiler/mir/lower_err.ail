@@ -414,6 +414,9 @@ fn Lower.unit_fails(self) bool
 ## An error value as the last expression of a function that can fail is its
 ## error (err.decl.3): leave with it. False when `e` isn't one.
 fn Lower.tail_error(mut self, e ast.Expr) bool
+    # A failing call as the result passes its errors on (err.type.6).
+    if fails and fallible_call(e)
+        note_inferred_err(error_type_of_call(e))
     fails and is_error_expr(e) and lower_fail_return(e, tail_pos)
 
 ## `return E(...)` in a function that can fail: build the error, record its
@@ -430,6 +433,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
         problem(pos, "returning an error from a function that can't fail")
         return true
     v := lower_value(e, none) else return true
+    note_inferred_err(v.ty)
     msg := display_call(v) else
         problem(pos, "an error type needs a message in the native subset (err.msg.1)")
         return true
@@ -443,6 +447,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
 ## failure (left in the error slot) or its value is this function's result.
 fn Lower.return_fallible_call(mut self, e ast.Expr, pos ast.Pos) bool
     v := lower_expr(e, ret) else return true
+    note_inferred_err(error_type_of_call(e))
     defer_all()
     if ret.is_unit()
         finish(return_of(-1))
@@ -998,7 +1003,8 @@ fn Lower.note_inferred_set(mut self, key str, r ast.TypeRef)
 ## of them agree, that is the function's error type, so `else err` can read its fields.
 fn Lower.note_inferred_err(mut self, t Ty)
     cur_t := infer_errs.get(fname) else return
-    if cur_t == Ty.Unit
+    # `Unit`: a callee whose set isn't known yet (lower_gtd_infer.ail).
+    if cur_t == Ty.Unit or t == Ty.Unit
         return
     if t.is_unknown() or (not cur_t.is_unknown() and cur_t != t)
         infer_errs[fname] = Ty.Unit

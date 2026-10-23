@@ -588,7 +588,7 @@ fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
         Set(x) => x
         List(x) => x
         _ => return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
-    if e != Ty.Int and e != Ty.Str and e != Ty.Char
+    if e == Ty.Bool or not key_ok(e)
         return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
     want := Ty.Set(e)
     sa := as_set(a, e, pos)?

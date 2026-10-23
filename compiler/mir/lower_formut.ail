@@ -9,6 +9,8 @@ use ast
 fn Lower.for_mut_ok(mut self, e Ty, pos ast.Pos) bool
     match e
         Struct(_) => true
+        # A list or table element is a pointer too: writes through it land in place.
+        List(_) | Map(_, _) | Set(_) => true
         Int | Bool | Char | Float | Str => true
         _ =>
             problem(pos, "`for mut` isn't in the native subset yet")

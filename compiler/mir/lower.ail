@@ -328,6 +328,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         l.quiet_lazy(k, before)
     l.stamp_problems()
     l.gen_const_init()
+    l.settle_inferred(srcs, lazy)
     for k in 0..lazy.min(srcs.len())
         l.enter_file(k)
         l.path = srcs[k].path
@@ -959,6 +960,8 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
 fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.opt_inner() != none and not v.ty.is_unknown()
         return convert_opt(v, want, pos)
+    if settle_by_want(v, want)
+        return v.id
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
