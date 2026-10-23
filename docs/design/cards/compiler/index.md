@@ -1,18 +1,20 @@
 # compiler
-(root)  42 items
+(root)  48 items
 a64  60 items
+api  40 items
 ast  129 items
 budget  24 items
-check  306 items
+check  325 items
 codegen  54 items
-derive  32 items
+derive  35 items
 doc  18 items
 edit  45 items
 explain  37 items
 fix  80 items
 fmt  63 items
-load  90 items
-mir  376 items
+load  88 items
+mir  400 items
 obj  58 items
+pkg  25 items
 syntax  105 items
 x64  75 items

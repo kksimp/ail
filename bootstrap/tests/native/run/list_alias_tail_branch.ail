@@ -1,0 +1,35 @@
+struct S
+    sets List[List[int]]
+
+fn S.a(self, j int) List[int]
+    sets[j]
+
+fn S.b(self, j int) List[int]
+    return sets[j]
+
+fn S.c(self, j int) List[int]
+    if j >= 0
+        sets[j]
+    else
+        [0]
+
+fn S.d(self, j int) List[int]
+    match j
+        0 => sets[0]
+        _ => sets[1]
+
+fn main()
+    s := S(sets: [[1], [2]])
+    mut x := s.a(0)
+    x.push(99)
+    mut y := s.b(0)
+    y.push(98)
+    mut z := s.c(0)
+    z.push(97)
+    mut w := s.d(0)
+    w.push(96)
+    print(s.sets)
+    mut q := List[int]()
+    q = s.a(1)
+    q.push(5)
+    print(s.sets)

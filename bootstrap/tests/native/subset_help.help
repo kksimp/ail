@@ -1,4 +1,2 @@
 bootstrap/tests/native/subset_help.ail:23:5: error[native.subset.1]: `for mut` isn't in the native subset yet
 help: loop by index instead: `for i in 0..xs.len()` and `xs[i] = ...`; or `ail run`
-bootstrap/tests/native/subset_help.ail:28:5: error[native.subset.1]: `defer` isn't in the native subset yet
-help: `ail run` runs this program

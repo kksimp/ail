@@ -1,0 +1,8 @@
+# env.vars (std.env.7): UTF-8 variables, in name order.
+fn main()
+    vars := env.vars()
+    print(vars.len() > 0)
+    names := vars.keys()
+    print(names == names.sorted())
+    print(vars.contains("PATH") == (env.get("PATH") != none))
+    print(vars.get("PATH") == env.get("PATH"))

@@ -1,0 +1,4 @@
+# expr.key.1: a set sorted by a key function; ties keep insertion order.
+fn main()
+    print({"x", "yy", "z", "ww"}.sorted(by: |s| s.len()))
+    print({3, 1, 2}.sorted(by: |n| -n))

@@ -1,0 +1,50 @@
+# type.num.8: s.to_float() is a float?; usable with else, if-binding, ?, and in a result type.
+error enum ParseError
+    Bad(text str)
+
+fn parse(s str) float ! ParseError
+    v := s.to_float() else return Bad(text: s)
+    v
+
+fn total(items List[str]) !float
+    mut sum := 0.0
+    for s in items
+        sum += parse(s)? "item {s}"
+    sum
+
+fn half(s str) float?
+    v := s.to_float()?
+    v / 2
+
+fn main() !
+    a := parse("2.5") else 0.0
+    print(a)
+    b := parse("x") else -1.0
+    print(b)
+    c := parse("x") else -1
+    print(c)
+    t := total(["1.5", "2.25", "1e1"]) else err
+        print("unexpected {err}")
+        0
+    print(t)
+    bad := total(["1.5", "oops"]) else err
+        print("error: {err}")
+        -1
+    print(bad)
+    print(half("5"))
+    print(half("five"))
+    print("3.5".to_float())
+    print("3.5x".to_float())
+    if v := "0.1".to_float()
+        print(v + 0.2)
+    else
+        print("none")
+    if w := "".to_float()
+        print(w)
+    else
+        print("empty is none")
+    n := "12".to_float() else 0.0
+    print(n)
+    print("12".to_int())
+    print("12.0".to_int())
+    print("1e3".to_int())

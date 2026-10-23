@@ -1,0 +1,29 @@
+enum Tree
+    Leaf(v int)
+    Node(l List[Tree], tag char?)
+
+struct Cfg
+    on bool
+    ratio float
+    tags Set[str]
+    inner Tree
+
+fn depth(t Tree) int
+    match t
+        Leaf(v) => 1
+        Node(l, tag) => 1 + l.len()
+
+@test fn cfg_shape(c Cfg, f float, s str)
+    assert(depth(c.inner) < 4 or f < 1000000.0)
+
+@test fn ratio_small(c Cfg)
+    assert(c.ratio < 3.0)
+
+@test fn tags_few(c Cfg)
+    assert(c.tags.len() < 2)
+
+@test fn tree_flat(t Tree)
+    assert(depth(t) < 3)
+
+fn main()
+    print("ok")

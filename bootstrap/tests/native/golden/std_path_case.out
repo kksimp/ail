@@ -1,0 +1,10 @@
+a/b/c.txt: a/b c.txt [txt]
+c.txt: . c.txt [txt]
+/c: / c []
+a/.bashrc: a .bashrc []
+a/b.tar.gz: a b.tar.gz [gz]
+a/: a  []
+a/b
+a/b
+/b
+b

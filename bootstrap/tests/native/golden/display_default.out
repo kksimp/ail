@@ -1,0 +1,4 @@
+Color.Red
+Color.Rgb(r: 1, g: 2)
+P(x: 1, name: "a")
+P(x: 2, name: "b") and Color.Red

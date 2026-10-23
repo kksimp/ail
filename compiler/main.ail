@@ -312,8 +312,14 @@ fn check_dump(path str, many bool) !
     diags := report.diags.sorted(by: |d| d.pos.line * 100000 + d.pos.col)
     if many
         print("== {path}")
+    mut sources := Map[str, List[List[char]]]()
+    for f in prog.files
+        if f.base < 1073741824
+            src := fs.read_text(f.path) else ""
+            if src != ""
+                sources[f.path] = fix.split_lines(src)
     for d in diags
-        print(d.to_json(prog.files))
+        print(d.to_json(prog.files, sources))
     if many
         print("rules {check.COVERED_RULES.join(" ")}")
         for s in check.skipped(prog, report)
@@ -334,7 +340,9 @@ fn runtime(dir str, path str) !ast.Program
 ## runtime links only into a program that may use tasks (ADR 0599).
 fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
-    tasks := mir.uses_tasks(source_text(path)?)
+    src := imported_text(path, source_text(path)?, "{dir}/../../../bootstrap/src/std")
+    # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
+    tasks := mir.uses_tasks(src) or mentions_ui(src)
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -363,6 +371,43 @@ fn source_text(path str) !str
         if name.ends_with(".ail")
             texts.push(fs.read_text("{path}/{name}")?)
     texts.join("\n")
+
+## `text` (the program's own source) followed by the text of every module it
+## imports, transitively, so the runtime choice sees a task or a channel in a
+## module as well as in the main file. A module that can't be read is skipped
+## (the build reports it).
+fn imported_text(file str, text str, std str) str
+    mut root := "."
+    if file.ends_with(".ail")
+        cut := file.split("/")
+        root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
+    else
+        root = file
+    mut all := [text]
+    mut seen := Set[str]()
+    mut queue := [text]
+    mut k := 0
+    while k < queue.len()
+        for line in queue[k].split("\n")
+            if not line.starts_with("use ")
+                continue
+            imp := line.slice(4, line.len()).trim().split(" ")[0]
+            if seen.contains(imp)
+                continue
+            seen.add(imp)
+            mut got := ""
+            if imp.starts_with("std.")
+                got = fs.read_text(std_file(std, imp)) else ""
+            else
+                dir := "{root}/{imp.replace(".", "/")}"
+                for name in fs.list_dir(dir) else []
+                    if name.ends_with(".ail")
+                        got = "{got}\n{fs.read_text("{dir}/{name}") else ""}"
+            if got != ""
+                all.push(got)
+                queue.push(got)
+        k += 1
+    all.join("\n")
 
 ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 ## `path` names the program: the macOS target takes its name from it.
@@ -543,7 +588,11 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
         if e.problem != ""
             io.eprint("{srcs[e.file].path}:{e.pos.line}:{e.pos.col}: error[ct.derive.4]: {derive_failure(e.label)}: {e.problem}")
             io.exit(1)
-        out.push(derived_source(if e.module == "" then "-" else e.module, e.label, e.text.lines()))
+        out.push(derived_source(
+            if e.module == "" then "-" else e.module,
+            e.label,
+            derive.tidy(e.text).lines(),
+        ))
     out
 
 ## The methods of the `impl`s of traits with a user-written `@derive(f)`
@@ -572,7 +621,7 @@ fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
         out.push(derived_source(
             if j.module == "" then "-" else j.module,
             j.label,
-            texts[k].lines(),
+            derive.tidy(texts[k]).lines(),
         ))
     out
 
@@ -691,6 +740,27 @@ fn uses_regex(prog ast.Program) bool
             return true
     false
 
+## Whether the program has a `use` that ends in `ui` (`use std.ui`).
+fn uses_ui(prog ast.Program) bool
+    for u in prog.uses
+        if u.path.len() > 0 and u.path[u.path.len() - 1].name == "ui"
+            return true
+    false
+
+## Whether `text` names `ui.` as a word: not the end of a longer name
+## (`gui.`, `build.`).
+fn mentions_ui(text str) bool
+    mut from := 0
+    while from < text.len()
+        rest := text.slice(from, text.len())
+        at := rest.find("ui.") else return false
+        k := from + at
+        b := text.char_at(k - 1) else ' '
+        if not (b.is_alpha() or b.is_digit() or b == '_' or b == '.')
+            return true
+        from = k + 3
+    false
+
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
     parse_text(module, path, fs.read_text(path)?)
@@ -727,6 +797,14 @@ fn parse_with(module str, path str, text str, names Set[str]) mir.Source
         pos := ast.Pos(line: 1, col: 1)
         prog.uses.push(ast.Use(
             path: [ast.Ident(name: "std", pos: pos), ast.Ident(name: "regex", pos: pos)],
+            alias: none,
+            pos: pos,
+        ))
+    # `ui` needs none either; `std.ui` is written in AIL here (std.ui.1).
+    if mentions_ui(text) and not uses_ui(prog) and module != "std.ui"
+        pos := ast.Pos(line: 1, col: 1)
+        prog.uses.push(ast.Use(
+            path: [ast.Ident(name: "std", pos: pos), ast.Ident(name: "ui", pos: pos)],
             alias: none,
             pos: pos,
         ))

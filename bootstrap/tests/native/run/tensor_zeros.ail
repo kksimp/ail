@@ -1,0 +1,7 @@
+fn main()
+    z := tensor.zeros([2, 3])
+    print(z.shape())
+    print(z.to_list())
+    w := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    print(z.add(w).sum())
+    print(tensor.zeros([0]).len())

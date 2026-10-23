@@ -1,0 +1,42 @@
+# conc.share.3, conc.share.7: channels of numbers, booleans and records.
+struct Job
+    id int
+    name str
+
+fn produce(ch Channel[int], n int)
+    for i in 0..n
+        ch.send(i)
+    ch.close()
+
+fn flags(ch Channel[bool])
+    ch.send(false)
+    ch.send(true)
+    ch.close()
+
+fn jobs(ch Channel[Job])
+    ch.send(Job(id: 1, name: "a"))
+    ch.send(Job(id: 2, name: "b"))
+    ch.close()
+
+fn main()
+    ch := Channel[int](3)
+    p := spawn produce(ch, 5)
+    mut sum := 0
+    for v in ch
+        sum += v
+    p.wait() else
+        print("trapped")
+    print(sum)
+    fl := Channel[bool](4)
+    q := spawn flags(fl)
+    while true
+        b := fl.recv() else break
+        print(b)
+    q.wait() else
+        print("trapped")
+    jc := Channel[Job](2)
+    r := spawn jobs(jc)
+    for j in jc
+        print("{j.id} {j.name}")
+    r.wait() else
+        print("trapped")

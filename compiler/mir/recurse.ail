@@ -37,7 +37,7 @@ fn Tarjan.visit(mut self, v int)
 
 ## Clear the trap site of every call that can't recurse, so it gets no
 ## stack check.
-pub fn mark_recursion(m Module) Module
+pub fn mark_recursion(mut m Module)
     n := m.funcs.len()
     mut by_name := Map[str, int]()
     for k in 0..n
@@ -64,15 +64,11 @@ pub fn mark_recursion(m Module) Module
     for v in 0..n
         if t.index[v] < 0
             t.visit(v)
-    mut out := m
     for k in 0..n
-        mut f := out.funcs[k]
-        for b in 0..f.blocks.len()
-            for j in 0..f.blocks[b].insts.len()
-                i := f.blocks[b].insts[j]
+        for b in 0..m.funcs[k].blocks.len()
+            for j in 0..m.funcs[k].blocks[b].insts.len()
+                i := m.funcs[k].blocks[b].insts[j]
                 if i.op == "call" and i.site >= 0
                     callee := by_name.get(i.name) else -1
                     if callee < 0 or t.comp[callee] != t.comp[k]
-                        f.blocks[b].insts[j].site = -1
-        out.funcs[k] = f
-    out
+                        m.funcs[k].blocks[b].insts[j].site = -1

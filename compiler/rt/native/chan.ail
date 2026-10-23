@@ -82,6 +82,11 @@ fn chan_wake(ch int)
 ## it waited for; the message waits in `CHAN_FAULT`).
 fn chan_sleep(ch int, what str) bool
     w := load64(ch + C_WAKE)
+    task_block_on(ch)
+    if task_cancelled()
+        # The caller sees the cancel and leaves; the lock is still held.
+        task_block_on(0)
+        return false
     unlock(ch + C_LOCK)
     k := worker_index()
     if k >= 0
@@ -89,6 +94,7 @@ fn chan_sleep(ch int, what str) bool
     dead := prog_wait(ch + C_WAKE, w, what, true)
     if k >= 0
         wait_leave()
+    task_block_on(0)
     lock(ch + C_LOCK)
     dead
 
@@ -183,6 +189,10 @@ fn chan_send(ch int, v int) int
             chan_put(ch, v)
             unlock(ch + C_LOCK)
             return 0
+        if task_cancelled()
+            # conc.cancel.4: no waiting for room; the value is dropped.
+            unlock(ch + C_LOCK)
+            return 0
         if chan_sleep(ch, "room in a channel")
             unlock(ch + C_LOCK)
             return chan_fault()
@@ -203,7 +213,7 @@ fn chan_recv(ch int) int
             chan_wake(ch)
             unlock(ch + C_LOCK)
             return v
-        if load64(ch + C_CLOSED) != 0
+        if load64(ch + C_CLOSED) != 0 or task_cancelled()
             unlock(ch + C_LOCK)
             return 0
         if load64(ch + C_SOURCE) != 0

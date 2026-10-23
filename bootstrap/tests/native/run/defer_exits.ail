@@ -1,0 +1,41 @@
+# own.defer.1-3: deferred statements run when the block is left, last first:
+# at its end, at `return`, at `break` and `continue`, and on a failing `?`.
+error struct Bad "bad input"
+    code int
+
+fn check(n int) int ! Bad
+    if n < 0
+        return Bad(code: n)
+    n
+
+fn early(n int) int
+    defer print("early done {n}")
+    if n > 1
+        defer print("big branch")
+        return n * 10
+    n
+
+fn looped()
+    for i in 0..4
+        defer print("end {i}")
+        if i == 1
+            continue
+        if i == 3
+            break
+        print("body {i}")
+
+fn tries(n int) int ! Bad
+    defer print("tries {n}")
+    v := check(n)?
+    print("checked {v}")
+    v + 1
+
+fn main()
+    print(early(1))
+    print(early(2))
+    looped()
+    print(tries(5) else -1)
+    print(tries(-2) else -1)
+    if true
+        defer print("inner")
+        print("block")

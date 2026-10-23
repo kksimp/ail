@@ -1765,7 +1765,10 @@ error struct UiError
 a window `cols` by `rows` cells in size, with every cell blank (a space,
 light grey on black). It fails with `kind` `no_display` when no window can
 be shown (no display, or a run without a window host), and `other` when
-`cols` or `rows` is outside 1 to 1000 or a window is already open. *(ADR 0177)*
+`cols` or `rows` is outside 1 to 1000 or a window is already open. In a native build the window is drawn by the
+`std.app` host (`std.app.10`) as one canvas of the cell grid: `no_display` when
+the host can't start, `click` is a `down` mouse event (no `up` or `drag` yet),
+and the clipboard is the program's own. *(ADR 0177, ADR 0863)*
 
 **std.ui.2** — The methods of `Window` are `size`, `clear`, `put`, `cursor`,
 `present`, `next_event`, `poll_event`, `modifiers`, `set_title` and `close`; naming another is a

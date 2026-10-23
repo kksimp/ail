@@ -1,0 +1,11 @@
+fn main()
+    mut m := {b"k": 1}
+    m[b"zz"] = 2
+    print(m[b"k"])
+    print(m.get(b"zz"))
+    print(m.contains(b"k"))
+    print(m.contains(b"q"))
+    print(m.len())
+    print(m)
+    for k in m.keys()
+        print(k)

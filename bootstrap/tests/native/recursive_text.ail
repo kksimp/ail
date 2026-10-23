@@ -1,0 +1,8 @@
+## A type that holds itself prints through a generated text function (ADR 0864),
+## not an endless expansion of its fields.
+enum Tree
+    Leaf(n int)
+    Node(kids List[Tree])
+
+fn main()
+    print(Tree.Leaf(1))
