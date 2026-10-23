@@ -208,6 +208,13 @@ regex engine is written.
   form submission can POST), external script fetches, `window.open`,
   cookies and dialogs are requests in `Vm.host_requests`; the engine does
   no I/O.
+- **`fetch` and XMLHttpRequest** are JavaScript over one native hook
+  (`vm/netapi.ail`). A request with no reply yet is a `fetch` host request
+  and fails as a network error; the browser makes it (cookies for the page's
+  own origin only, CORS by `Access-Control-Allow-Origin`, no preflight or
+  custom headers) and runs the page's scripts again on a fresh tree with the
+  reply in `Vm.fetch_replies`, up to four passes, so a chain of requests
+  resolves one round per pass. Replies arrive from a zero-delay timer.
 - **Virtual time.** Timers run on the fixed clock in order of due time,
   then of creation, until the page's time budget (a second by default) or
   a task cap; `performance.now()` counts from the page's start. A page with
