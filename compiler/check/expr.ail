@@ -152,6 +152,7 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
     if l := local(n)
         return l.ty
     if i := consts.get(n)
+        symbols[pos_key(at)] = "const:{n}"
         if gapped_consts.contains(i)
             gap("a gapped constant")
         return const_type(i)
@@ -414,6 +415,7 @@ fn Checker.bare_variant(mut self, n str, at ast.Pos, expect Ty?) VariantRef?
         if v := variant_index(e, n)
             found.push(VariantRef(enum_index: e, variant: v))
     if found.len() == 1
+        weak_symbols[pos_key(at)] = "variant:{prog.enums[found[0].enum_index].name}.{n}"
         return found[0]
     mut owners := List[str]()
     if found.len() > 1
@@ -1338,6 +1340,7 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                     d = d.did_you_mean(n, s)
                 diags.push(d)
                 return []
+            symbols[pos_key(at)] = "variant:{decl.name}.{n}"
             if cov.wildcard or cov.variants[v]
                 err("expr.match.5", at, "this arm can never match; `{n}` is already covered")
             else

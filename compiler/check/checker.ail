@@ -119,6 +119,11 @@ pub struct Checker
     ## function a call runs, the trait whose implementations it may run, the
     ## standard module of `m.f(...)`, and `ui.Window` methods (eff.infer.3-5).
     pub targets Map[int, int]
+    ## What each use of a declared name refers to, by `pos_key` of the name:
+    ## `fn:f`, `method:T.m`, `variant:E.V`, `field:S.f`, `type:T`, `const:C`
+    ## (api.ref.1). `weak_symbols` hold the uses a symbol overrides.
+    pub symbols Map[int, str]
+    pub weak_symbols Map[int, str]
     ## Declared functions named as values, by the name's position, with the
     ## function's index (type.fn.2).
     pub fn_values Map[int, int]
@@ -222,6 +227,8 @@ pub fn new_checker(p ast.Program) Checker
         unsafe_depth: 0,
         declared_fns: Set[int](),
         targets: Map[int, int](),
+        symbols: Map[int, str](),
+        weak_symbols: Map[int, str](),
         fn_values: Map[int, int](),
         trait_calls: Map[int, int](),
         assoc_calls: Map[int, int](),

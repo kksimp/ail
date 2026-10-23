@@ -19,6 +19,9 @@ pub struct Analysis
     pub report Report
     pub effects List[List[str]]
     pub errors Map[int, List[str]]
+    ## What each use of a declared name refers to (api.ref.1), by `pos_key`.
+    pub symbols Map[int, str]
+    pub weak_symbols Map[int, str]
 
 ## Every pass of `check_with` this checker has, in its order.
 pub fn check_program(p ast.Program) Report
@@ -76,7 +79,13 @@ pub fn analyze(p ast.Program, full bool) Analysis
         gapped_lines: c.gapped_impl_lines(),
     )
     if not full
-        return Analysis(report: report, effects: [], errors: Map[int, List[str]]())
+        return Analysis(
+            report: report,
+            effects: [],
+            errors: Map[int, List[str]](),
+            symbols: Map[int, str](),
+            weak_symbols: Map[int, str](),
+        )
     mut errors := Map[int, List[str]]()
     for i in 0..p.fns.len()
         if p.fns[i].pos.line > 1048576
@@ -84,7 +93,13 @@ pub fn analyze(p ast.Program, full bool) Analysis
         match c.sigs[i].ret
             Res(_, errs) => errors[i] = c.error_names(c.errs_of(errs))
             _ => continue
-    Analysis(report: report, effects: infer_effects(p, c.facts()).sets, errors: errors)
+    Analysis(
+        report: report,
+        effects: infer_effects(p, c.facts()).sets,
+        errors: errors,
+        symbols: c.symbols,
+        weak_symbols: c.weak_symbols,
+    )
 
 ## The diagnostics of the declaration passes only (slice 1).
 pub fn check_declarations(p ast.Program) List[Diag]

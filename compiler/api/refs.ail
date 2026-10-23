@@ -1,0 +1,371 @@
+## `ail api --symbols` (api.ref.1-2): every use of a declared name, as
+## `bootstrap/src/api.rs` (`Refs`) finds them. What a value name, call, field
+## or variant refers to comes from the checker's `symbols`; the type and
+## trait names written in signatures, fields and bounds come from the
+## declarations.
+use ast
+
+## One use: the id of the declaration and where the name is written.
+pub struct Ref
+    pub id str
+    pub pos ast.Pos
+
+struct Refs
+    prog ast.Program
+    symbols Map[int, str]
+    weak Map[int, str]
+    found List[Ref]
+    ## Type parameter names in scope: they shadow no declaration.
+    generics List[str]
+
+fn pk(p ast.Pos) int
+    p.line * 65536 + p.col
+
+## The id's owner path of the fields a struct literal or variant sets:
+## `Point` for `type:Point`, `Shape.Rect` for `variant:Shape.Rect`.
+fn fields_owner(id str) str?
+    if id.starts_with("type:")
+        return id.slice(5, id.len())
+    if id.starts_with("variant:")
+        return id.slice(8, id.len())
+    none
+
+## Every reference in `prog`, by position then id, without the prelude and
+## the other files' (api.ref.1-2). `own_file` keeps only the first file's.
+pub fn references(prog ast.Program, symbols Map[int, str], weak Map[int, str], own_file bool) List[Ref]
+    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [])
+    r.program()
+    limit := if own_file then 1048576 else 1073741824
+    kept := [x for x in r.found if x.pos.line <= limit]
+    sorted := kept.sorted(by: |x| (x.pos.line, x.pos.col, x.id))
+    mut out := List[Ref]()
+    for x in sorted
+        if out.len() > 0
+            last := out[out.len() - 1]
+            if last.pos == x.pos and last.id == x.id
+                continue
+        out.push(x)
+    out
+
+fn Refs.add(mut self, pos ast.Pos, id str)
+    found.push(Ref(id: id, pos: pos))
+
+fn Refs.program(mut self)
+    for s in prog.structs
+        generics = [g.name for g in s.generics]
+        generic_bounds(s.generics)
+        for f in s.fields
+            type_ref(f.ty)
+        for c in s.invariants
+            expr(c.cond)
+    for e in prog.enums
+        generics = [g.name for g in e.generics]
+        generic_bounds(e.generics)
+        for v in e.variants
+            for f in v.fields
+                type_ref(f.ty)
+    generics = []
+    for im in prog.impls
+        add(im.trait_pos, "trait:{im.trait_name}")
+        owner(im.target)
+    for f in prog.fns
+        generics = []
+        if i := impl_index(f.within)
+            scope_owner(prog.impls[i].target)
+        if o := f.owner
+            if top_level(f)
+                owner(o)
+            else
+                scope_owner(o)
+        for g in f.generics
+            generics.push(g.name)
+        generic_bounds(f.generics)
+        for p in f.params
+            type_ref(p.ty)
+        if t := f.ret
+            type_ref(t)
+        for c in f.contracts
+            expr(c.cond)
+            for o in c.olds
+                expr(o.value)
+        if body := f.body
+            block(body)
+    for c in prog.consts
+        expr(c.value)
+
+@allow("expr.match.3") fn impl_index(w ast.Within) int?
+    match w
+        InImpl(i) => i
+        _ => none
+
+fn no_str() str?
+    none
+
+## A free function or a function declared as `fn Type.name` at the top.
+@allow("expr.match.3") fn top_level(f ast.FnDecl) bool
+    match f.within
+        TopLevel => true
+        _ => false
+
+## The type parameters an owner brings into scope, from its declaration.
+fn Refs.scope_owner(mut self, o ast.Owner)
+    mut declared := List[ast.GenericParam]()
+    mut found_decl := false
+    for s in prog.structs
+        if not found_decl and s.name == o.name
+            declared = s.generics
+            found_decl = true
+    for e in prog.enums
+        if not found_decl and e.name == o.name
+            declared = e.generics
+            found_decl = true
+    for g in declared
+        generics.push(g.name)
+    if ps := o.params
+        for g in ps
+            generics.push(g.name)
+
+## `Type` in `fn Type.name` or `impl Trait for Type`, with its bounds.
+fn Refs.owner(mut self, o ast.Owner)
+    if id := type_id(o.name)
+        add(o.pos, id)
+    scope_owner(o)
+    if ps := o.params
+        generic_bounds(ps)
+
+fn Refs.generic_bounds(mut self, gs List[ast.GenericParam])
+    for g in gs
+        for b in g.bounds
+            add(b.pos, "trait:{b.name}")
+
+## The id of a declared type or trait called `name`, unless a type
+## parameter in scope has that name.
+fn Refs.type_id(self, name str) str?
+    if generics.contains(name)
+        return none
+    for s in prog.structs
+        if s.name == name
+            return "type:{name}"
+    for e in prog.enums
+        if e.name == name
+            return "type:{name}"
+    for t in prog.traits
+        if t.name == name
+            return "trait:{name}"
+    none
+
+fn Refs.type_ref(mut self, t ast.TypeRef)
+    match t.shape
+        Named(name, args) =>
+            if id := type_id(name)
+                add(t.pos, id)
+            for a in args
+                type_ref(a)
+        Optional(inner) => type_ref(inner)
+        RefTo(inner) => type_ref(inner)
+        PtrTo(inner) => type_ref(inner)
+        TupleType(elems) =>
+            for e in elems
+                type_ref(e)
+        FnType(params, ret) =>
+            for p in params
+                type_ref(p)
+            if r := ret
+                type_ref(r)
+        AnyTrait(name) => add(t.pos, "trait:{name}")
+        Fallible(ok, errors) =>
+            if o := ok
+                type_ref(o)
+            if es := errors
+                for e in es
+                    type_ref(e)
+
+fn Refs.block(mut self, b List[ast.Stmt])
+    for s in b
+        stmt(s)
+
+@allow("expr.match.3") fn Refs.stmt(mut self, s ast.Stmt)
+    match s
+        Let(_, _, _, value, otherwise) =>
+            expr(value)
+            if o := otherwise
+                else_part(o)
+        LetTuple(_, value, _) => expr(value)
+        Assign(target, _, value, _) =>
+            expr(target)
+            expr(value)
+        While(cond, body, _) =>
+            expr(cond)
+            block(body)
+        For(_, _, _, _, iter, body, _) =>
+            expr(iter)
+            block(body)
+        With(mutex, _, _, body, _) =>
+            expr(mutex)
+            block(body)
+        Unsafe(body, _) => block(body)
+        Return(value, _) =>
+            if v := value
+                expr(v)
+        Eval(value) => expr(value)
+        Handle(value, otherwise) =>
+            expr(value)
+            else_part(otherwise)
+        Defer(inner, _) => stmt(inner)
+        _ => return
+
+fn Refs.else_part(mut self, o ast.Else)
+    match o
+        Fallback(value) => expr(value)
+        Leave(s) => stmt(s)
+        Handler(_, body, _) => block(body)
+
+## The id the checker recorded for the use at `pos`, if any.
+fn Refs.resolved_at(self, pos ast.Pos) str?
+    if id := symbols.get(pk(pos))
+        return id
+    weak.get(pk(pos))
+
+## `Type` or `Trait` before `.name` in `Type.f(...)`, `Enum.Variant` or
+## `Trait.f(x)`, when `.name` resolved through it.
+@allow("expr.match.3") fn Refs.qualifier(mut self, recv ast.Expr, member str?)
+    mut n := ""
+    mut p := ast.Pos(line: 0, col: 0)
+    match recv
+        Name(name, pos) =>
+            n = name
+            p = pos
+        TypeArgs(name, _, pos) =>
+            n = name
+            p = pos
+        _ => return
+    m := member else return
+    parts := m.split(":")
+    path := if parts.len() > 1 then parts[1..].join(":") else ""
+    qowner := path.split(".")[0]
+    if qowner == n
+        if id := type_id(n)
+            add(p, id)
+
+fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
+    for a in args
+        if l := a.label
+            if owner := fields_of
+                add(l.pos, "field:{owner}.{l.name}")
+        expr(a.value)
+
+@allow("expr.match.3") fn Refs.expr(mut self, e ast.Expr)
+    match e
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Hole(v) => expr(v)
+                    Fmt(v, _) => expr(v)
+                    Lit(_) => continue
+        Name(_, p) =>
+            if id := resolved_at(p)
+                add(p, id)
+        TypeArgs(_, targs, p) =>
+            if id := resolved_at(p)
+                add(p, id)
+            for a in targs
+                type_ref(a)
+        ListLit(items, _) =>
+            for x in items
+                expr(x)
+        SetLit(items, _) =>
+            for x in items
+                expr(x)
+        TupleLit(items, _) =>
+            for x in items
+                expr(x)
+        Comp(_, elem, value, clauses, _) =>
+            for c in clauses
+                expr(c.iter)
+                if cond := c.cond
+                    expr(cond)
+            expr(elem)
+            if v := value
+                expr(v)
+        MapLit(entries, _) =>
+            for ent in entries
+                expr(ent.key)
+                expr(ent.value)
+        Call(callee, args, _) =>
+            expr(callee)
+            mut id := no_str()
+            match callee
+                Name(_, p) => id = resolved_at(p)
+                TypeArgs(_, _, p) => id = resolved_at(p)
+                _ => id = none
+            mut owner := no_str()
+            if i := id
+                owner = fields_owner(i)
+            self.args(args, owner)
+        Method(recv, _, name_pos, args) =>
+            id := resolved_at(name_pos)
+            qualifier(recv, id)
+            expr(recv)
+            mut owner := no_str()
+            if i := id
+                owner = fields_owner(i)
+                add(name_pos, i)
+            self.args(args, owner)
+        Member(recv, _, name_pos) =>
+            id := resolved_at(name_pos)
+            qualifier(recv, id)
+            expr(recv)
+            if i := id
+                add(name_pos, i)
+        Index(recv, index, _) =>
+            expr(recv)
+            expr(index)
+        Unary(_, operand, _) => expr(operand)
+        NewRef(value, _) => expr(value)
+        Binary(_, lhs, rhs, _) =>
+            expr(lhs)
+            expr(rhs)
+        Range(lo, hi, _, _) =>
+            if x := lo
+                expr(x)
+            if x := hi
+                expr(x)
+        If(branches, els, _, _) =>
+            for b in branches
+                match b.cond
+                    Test(v) => expr(v)
+                    Bind(_, _, v) => expr(v)
+                block(b.body)
+            if bs := els
+                block(bs)
+        Match(scrutinee, arms, _) =>
+            expr(scrutinee)
+            for arm in arms
+                pattern(arm.pat)
+                if g := arm.guard
+                    expr(g)
+                block(arm.body)
+        Try(inner, context, _) =>
+            expr(inner)
+            if c := context
+                expr(c)
+        OrElse(value, otherwise, _) =>
+            expr(value)
+            else_part(otherwise)
+        _ => return
+
+@allow("expr.match.3") fn Refs.pattern(mut self, p ast.Pattern)
+    match p
+        Alt(alts, _) =>
+            for x in alts
+                pattern(x)
+        TuplePat(elems, _) =>
+            for x in elems
+                pattern(x)
+        Variant(qualifier, _, _, pos) =>
+            if id := symbols.get(pk(pos))
+                if q := qualifier
+                    if tid := type_id(q)
+                        add(pos, tid)
+                add(pos, id)
+        _ => return

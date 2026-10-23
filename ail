@@ -99,7 +99,7 @@ native_api=
 if [ "${1:-}" = api ]; then
     native_api=1; files=0
     for a in "${@:2}"; do
-        case "$a" in --outline | --text | --pretty) ;; -*) native_api= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_api=; fi ;; esac
+        case "$a" in --outline | --text | --pretty | --symbols) ;; -*) native_api= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_api=; fi ;; esac
     done
     [ "$files" = 1 ] || native_api=
 fi

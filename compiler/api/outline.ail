@@ -163,10 +163,19 @@ fn Item.text(self, depth int, mut out List[str])
 fn Item.pos_key(self) int
     line * 100000 + col
 
+fn ref_json(r Ref) J
+    J.Obj([
+        kv("id", J.Str(r.id)),
+        kv("line", J.Int(r.pos.line)),
+        kv("col", J.Int(r.pos.col)),
+    ])
+
 ## What the checker knows about the program, besides its declarations.
 pub struct Facts
     pub effects List[List[str]]
     pub errors Map[int, List[str]]
+    pub symbols Map[int, str]
+    pub weak_symbols Map[int, str]
 
 struct Api
     prog ast.Program
@@ -561,7 +570,7 @@ fn Api.items(self) List[Item]
 
 ## The outline of `prog` for the file `path`, in `form`; `symbols` and
 ## `expanded` are not supported yet.
-pub fn outline(prog ast.Program, facts Facts, path str, form Form) str
+pub fn outline(prog ast.Program, facts Facts, path str, form Form, symbols bool) str
     api := new_api(prog, facts)
     items := api.items()
     match form
@@ -573,9 +582,13 @@ pub fn outline(prog ast.Program, facts Facts, path str, form Form) str
                 return ""
             "{lines.join("\n")}\n"
         Plain | Pretty =>
-            top := J.Obj([
+            mut pairs := [
                 kv("api", J.Int(API_VERSION)),
                 kv("file", J.Str(path)),
                 kv("items", J.Arr([it.json() for it in items])),
-            ])
+            ]
+            if symbols
+                refs := references(prog, facts.symbols, facts.weak_symbols, true)
+                pairs.push(kv("references", J.Arr([ref_json(r) for r in refs])))
+            top := J.Obj(pairs)
             "{write_json(top, form == Form.Pretty, 0)}\n"

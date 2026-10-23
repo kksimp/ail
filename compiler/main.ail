@@ -956,14 +956,16 @@ fn check_cmd(rest List[str])
 ## (api.out.1-5). `--symbols`, `--expanded`, packages and the queries stay
 ## with the Rust `ail api` for now.
 fn api_cmd(rest List[str])
-    usage := "usage: ail api [--outline] FILE [--text | --pretty]"
+    usage := "usage: ail api [--outline] FILE [--text | --pretty] [--symbols]"
     mut form := api.Form.Plain
+    mut symbols := false
     mut files := List[str]()
     for a in rest
         match a
             "--outline" => continue
             "--text" => form = api.Form.Text
             "--pretty" => form = api.Form.Pretty
+            "--symbols" => symbols = true
             _ =>
                 if a.starts_with("--") or files.len() > 0
                     io.eprint(usage)
@@ -988,9 +990,15 @@ fn api_cmd(rest List[str])
     prog := doc.attach(loaded.program, loaded.texts[0])
     out := api.outline(
         prog,
-        api.Facts(effects: analysis.effects, errors: analysis.errors),
+        api.Facts(
+            effects: analysis.effects,
+            errors: analysis.errors,
+            symbols: analysis.symbols,
+            weak_symbols: analysis.weak_symbols,
+        ),
         files[0],
         form,
+        symbols,
     )
     if out != ""
         print(out.strip_suffix("\n") else out)
