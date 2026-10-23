@@ -250,7 +250,9 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
         Bool => text = call("rt.fmt_bool", [v.id], Ty.Str)
         Str => text = v.id
         Char => text = call("rt.str_char", [v.id], Ty.Str)
-        _ => return unsupported(pos, "a format specification on a `{v.ty.name()}`")
+        _ =>
+            # A list, tuple, struct or enum is padded as its text form (lex.str.7).
+            text = text_of(v, pos)?
     w := spec.width else return Val(id: text, ty: Ty.Str)
     numeric := v.ty == Ty.Int or v.ty.is_sized() or v.ty.is_float()
     mut align := if numeric then 1 else 0
