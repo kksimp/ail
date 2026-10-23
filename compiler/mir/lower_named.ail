@@ -1,0 +1,43 @@
+## Named arguments (expr.call.3): `f(a, c: 1, b: 2)`. Positional arguments fill
+## the leading parameters and the named ones the rest; the arguments are
+## evaluated in parameter order, so a labelled call lowers as the same call with
+## its arguments put in that order and the labels dropped.
+use ast
+
+fn has_label(args List[ast.Arg]) bool
+    for a in args
+        if a.label != none
+            return true
+    false
+
+## `args` of a call to `key` in parameter order, without labels; none when the
+## function isn't a user function or a name doesn't fit (the checker rejects
+## those, expr.call.3).
+fn Lower.ordered_args(self, key str, args List[ast.Arg]) List[ast.Arg]?
+    f := fn_decl.get(key)?
+    mut out := List[ast.Arg]()
+    for a in args
+        if a.label == none
+            out.push(a)
+    for k in out.len()..f.params.len()
+        mut found := none
+        for a in args
+            if l := a.label
+                if l.name == f.params[k].name
+                    found = a
+        a := found?
+        out.push(ast.Arg(
+            label: none,
+            mutable: a.mutable,
+            moved: a.moved,
+            value: a.value,
+            param: a.param,
+        ))
+    if out.len() != args.len()
+        return none
+    out
+
+## A call of the function `key`, named `name` in the source, with labelled arguments.
+fn Lower.named_call(mut self, key str, name str, args List[ast.Arg], pos ast.Pos, npos ast.Pos) Val?
+    ordered := ordered_args(key, args) else return unsupported(pos, "labelled arguments")
+    lower_call(ast.Expr.Name(name, npos), ordered, pos)

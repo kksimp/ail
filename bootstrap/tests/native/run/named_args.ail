@@ -1,0 +1,23 @@
+# expr.call.3: named arguments, evaluated in parameter order.
+fn trace(tag str, n int) int
+    print("eval {tag}")
+    n
+
+fn show(tag str, n int, scale int) str
+    "{tag}:{n * scale}"
+
+struct Box
+    w int
+
+fn Box.grow(mut self, by int, times int)
+    w += by * times
+
+fn main()
+    print(show("a", scale: trace("scale", 3), n: trace("n", 4)))
+    print(show(scale: 2, tag: "b", n: 5))
+    mut b := Box(w: 1)
+    b.grow(times: 3, by: 2)
+    print(b.w)
+    mut xs := [1, 2]
+    xs.push(3)
+    print(xs)
