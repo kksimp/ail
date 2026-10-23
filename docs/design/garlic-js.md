@@ -253,6 +253,12 @@ regex engine is written.
 - `Function.prototype.toString` returns a function's source text
   (§20.2.3.5): the parser keeps each function's and class's text, so code
   that rebuilds functions from their source with `eval` works.
+- Selectors (Selectors L4, `vm/selectors.ail`): structural pseudo-classes
+  (`:nth-child` family, `:first/last/only-of-type`), `:not`, `:is`, `:where`,
+  `:has`, form states (`:checked`, `:disabled`, `:required`, ...), `:root`,
+  `:empty`, `:scope`, `:link`, `:focus`, `:lang`. The fragment parser closes
+  `<p>`, `<li>`, `<dd>`, `<option>`, cells and rows implicitly and inserts
+  `<tbody>`/`<tr>`.
 - `MutationObserver` (DOM §4.3, `vm/mutation.ail`): every logged change is
   offered to the observers; records for `childList`, `attributes` (with
   `attributeFilter`) and `characterData`, with `subtree`, reach the callback
