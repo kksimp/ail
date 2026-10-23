@@ -291,7 +291,9 @@ fn runtime(dir str, path str) !ast.Program
 ## runtime links only into a program that may use tasks (ADR 0599).
 fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
-    tasks := mir.uses_tasks(source_text(path)?)
+    src := imported_text(path, source_text(path)?, "{dir}/../../../bootstrap/src/std")
+    # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
+    tasks := mir.uses_tasks(src) or mentions_ui(src)
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -320,6 +322,43 @@ fn source_text(path str) !str
         if name.ends_with(".ail")
             texts.push(fs.read_text("{path}/{name}")?)
     texts.join("\n")
+
+## `text` (the program's own source) followed by the text of every module it
+## imports, transitively, so the runtime choice sees a task or a channel in a
+## module as well as in the main file. A module that can't be read is skipped
+## (the build reports it).
+fn imported_text(file str, text str, std str) str
+    mut root := "."
+    if file.ends_with(".ail")
+        cut := file.split("/")
+        root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
+    else
+        root = file
+    mut all := [text]
+    mut seen := Set[str]()
+    mut queue := [text]
+    mut k := 0
+    while k < queue.len()
+        for line in queue[k].split("\n")
+            if not line.starts_with("use ")
+                continue
+            imp := line.slice(4, line.len()).trim().split(" ")[0]
+            if seen.contains(imp)
+                continue
+            seen.add(imp)
+            mut got := ""
+            if imp.starts_with("std.")
+                got = fs.read_text(std_file(std, imp)) else ""
+            else
+                dir := "{root}/{imp.replace(".", "/")}"
+                for name in fs.list_dir(dir) else []
+                    if name.ends_with(".ail")
+                        got = "{got}\n{fs.read_text("{dir}/{name}") else ""}"
+            if got != ""
+                all.push(got)
+                queue.push(got)
+        k += 1
+    all.join("\n")
 
 ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 ## `path` names the program: the macOS target takes its name from it.

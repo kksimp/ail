@@ -17,4 +17,9 @@ fn Lower.lower_ui_intrinsic(mut self, f ast.FnDecl, key str, name str, params Li
         finish(return_of(r))
         end_fn(name, f.pos)
         return true
+    if key == "std.ui.chan_ready"
+        r := call("rt.chan_ready", params, Ty.Bool)
+        finish(return_of(r))
+        end_fn(name, f.pos)
+        return true
     false
