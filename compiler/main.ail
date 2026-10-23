@@ -129,6 +129,11 @@ fn main() !
             load_dump(args[1..])
         "check-program" =>
             check_cmd(args[1..])
+        "effects" =>
+            io.exit(load.effects_command(args[1..], path.join(
+                path.dir(compiler_dir()),
+                "bootstrap/src/std",
+            )))
         "run" =>
             cli_run(args[1..])
         "prepare" =>

@@ -660,3 +660,33 @@ fn std_fn_effects(fx Facts, key int, recv ast.Expr, n str) List[str]?
     match e
         Name(m, _) => [d for d in prog.enums if d.name == m].len() > 0
         _ => false
+
+## `ail effects FILE [--json]` (eff.infer.6): every program function's effect set by
+## stable id, `fn:NAME` or `method:Type.name`, the prelude's left out. Functions that
+## share an id are merged.
+pub fn effects_report(p ast.Program, json bool) str
+    c := run_checker(p)
+    fx := infer_effects(p, c.facts())
+    mut ids := Map[str, List[str]]()
+    for i in 0..p.fns.len()
+        f := p.fns[i]
+        if is_prelude_line(f.pos.line)
+            continue
+        id := if f.owner == none
+            and f.within == ast.Within.TopLevel then "fn:{f.name}" else "method:{display_name(p, f)}"
+        mut set := ids.get(id) else []
+        for e in fx.sets[i]
+            if not set.contains(e)
+                set.push(e)
+        ids[id] = set.sorted()
+    names := ids.keys().sorted()
+    if json
+        items := [
+            "{Json.Str(n).to_text()}:[{[Json.Str(e).to_text() for e in ids[n]].join(",")}]"
+            for n in names
+        ]
+        return "\{\"ail_api\":1,\"effects\":\{{items.join(",")}}}\n"
+    mut out := ""
+    for n in names
+        out = "{out}{n} \{{ids[n].join(", ")}}\n"
+    out
