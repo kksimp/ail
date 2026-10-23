@@ -1999,7 +1999,7 @@ fn Lower.module_name(self, e ast.Expr) str?
 ## Whether `e` names module `m` (not a local or a field of that name).
 fn Lower.is_module(self, e ast.Expr, m str) bool
     match e
-        Name(n, _) => n == m and lookup(n) == none and self_slot(n) < 0
+        Name(n, _) => (n == m or std_alias(n) == m) and lookup(n) == none and self_slot(n) < 0
         _ => false
 
 ## An empty list typed by its first `push` (type.coll.6): the variable takes

@@ -197,6 +197,9 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
         return lower_hw_call(name, npos, args)
     if m == "bytes" and name == "zeros"
         return lower_bytes_zeros(args, npos)
+    # A standard error struct built by the program, `fs.IoError(...)` (std.err.1).
+    if structs.contains("{m}.{name}") and os_lookup(m, name) == none
+        return new_struct("{m}.{name}", args, npos)
     f := os_lookup(m, name) else
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"
