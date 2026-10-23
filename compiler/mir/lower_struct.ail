@@ -236,14 +236,24 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         return lower_net_method(key, recv, args, pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
+    mut cells := List[Cell]()
     if r := recv
-        vs.push(shield_recv(rcv, args, r))
+        if ct := cell_ty(sig.params[0])
+            e := rcv.expr else
+                problem(pos, "this `mut self` receiver isn't a variable, field or element")
+                return none
+            if rcv.path.len() == 0
+                problem(pos, "this `mut self` receiver isn't a variable, field or element")
+                return none
+            vs.push(new_cell(r.id))
+            cells.push(Cell(key: "", place: e, cell: vs[0], ty: ct, pos: pos))
+        else
+            vs.push(shield_recv(rcv, args, r))
     if args.len() + vs.len() != sig.params.len()
         return unsupported(
             pos,
             "calling `{key}` with {args.len() + vs.len()} arguments instead of {sig.params.len()}",
         )
-    mut cells := List[Cell]()
     for i in 0..args.len()
         a := args[i]
         if a.label != none

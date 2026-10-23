@@ -10,13 +10,16 @@ use ast
 ## A cell passed to a call, to read back into `key` after it.
 struct Cell
     key str
+    ## Set for an argument or receiver that is a field or an element, not a local.
+    place ast.Expr?
     cell int
     ty Ty
+    pos ast.Pos
 
 ## The sig type of a `mut` parameter of scalar type `t`; none for others.
 fn cell_param(t Ty) Ty?
     match t
-        Int | Bool | Char => Ty.Ptr(Ty.Tuple([t]))
+        Int | Bool | Char | Str | Enum(_) | Opt(_) => Ty.Ptr(Ty.Tuple([t]))
         _ => none
 
 ## The scalar a cell parameter holds.
@@ -46,16 +49,52 @@ fn Lower.declare_param(mut self, p ast.Param, ty Ty, v int)
     match a.value
         Name(n, _) => name = n
         _ => name = ""
-    key := lookup(name) else
-        problem(at, "a `mut` argument of a number type that isn't a local")
-        return none
+    mut key := lookup(name) else ""
+    mut place := none
+    if key == ""
+        if place_path(a.value) == none
+            problem(at, "this `mut` argument isn't a variable, field or element")
+            return none
+        place = a.value
     v := lower_value(a.value, t)?
-    cell := call("rt.alloc", [konst(8, Ty.Int), konst(11, Ty.Int)], Ty.Int)
-    store(cell, 0, convert(v, t, at))
-    cells.push(Cell(key: key, cell: cell, ty: t))
+    cell := new_cell(convert(v, t, at))
+    cells.push(Cell(key: key, place: place, cell: cell, ty: t, pos: at))
     cell
 
 ## After the call: each local passed as a cell takes the callee's last value.
 fn Lower.cells_back(mut self, cells List[Cell])
     for c in cells
-        write_var(c.key, cur, load(c.cell, 0, c.ty))
+        back := load(c.cell, 0, c.ty)
+        if p := c.place
+            # A field or element: bind the value to a hidden local and assign it.
+            nvars += 1
+            tmp := "#cell{nvars}"
+            declare(tmp, c.ty, back)
+            lower_assign_body(p, none, ast.Expr.Name(tmp, c.pos), c.pos)
+        else
+            write_var(c.key, cur, back)
+
+## A cell of one word holding `v`.
+fn Lower.new_cell(mut self, v int) int
+    cell := call("rt.alloc", [konst(8, Ty.Int), konst(11, Ty.Int)], Ty.Int)
+    store(cell, 0, v)
+    cell
+
+## The type of the `self` parameter of `f`, a method of `owner`: a cell for a
+## `mut self` that is a shared value (an enum), which the callee can't change in place.
+fn Lower.self_param_ty(self, f ast.FnDecl, owner str) Ty
+    t := owner_ty(owner)
+    if r := f.receiver
+        if r.mutable and enums.contains(owner)
+            return cell_param(t) else t
+    t
+
+## Declare `self`: a cell is read once, and `self = e` is written through.
+fn Lower.declare_self(mut self, recv ast.Receiver, ty Ty, v int)
+    if t := cell_ty(ty)
+        declare("self", t, load(v, 0, t))
+    else
+        declare("self", ty, v)
+    if recv.mutable
+        key := lookup("self") else return
+        facts.mut_ptr["{fname}|{key}"] = v

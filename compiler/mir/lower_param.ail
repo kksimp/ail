@@ -40,7 +40,7 @@ fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
         facts.mut_ptr["{fname}|{key}"] = v
 
 ## The value to bind to `key` after `key = v` of type `ty`.
-fn Lower.assign_param(mut self, key str, ty Ty, v int) int
+fn Lower.assign_param(mut self, key str, ty Ty, v int, pos ast.Pos) int
     if r := facts.elem_ref.get("{fname}|{key}")
         mut set := inst(-1, "set", [r.list, r.index, v])
         set.site = bounds_site(r.pos)
@@ -66,8 +66,9 @@ fn Lower.assign_param(mut self, key str, ty Ty, v int) int
                 store(p, k, load(v, k, Ty.Int))
             # The remembered entry belongs to the old table.
             store(p, 10, konst(0, Ty.Int))
-        Int | Bool | Char =>
+        _ =>
+            # A value held in a cell (a scalar, `str`, enum or optional
+            # `mut` parameter or `mut self`, lower_cell.ail).
             store(p, 0, v)
             return v
-        _ => return v
     p
