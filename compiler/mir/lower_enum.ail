@@ -252,6 +252,18 @@ fn holds_record(t Ty) bool
     match t
         Struct(_) | Enum(_) | Tuple(_) | Map(_, _) | Set(_) => true
         List(e) => not (is_number(e) or e == Ty.Str)
+        Map(_, _) | Set(_) => true
+        _ => false
+
+## The value type of a map; `none` for a set and anything else.
+fn map_val(t Ty) Ty?
+    match t
+        Map(_, v) => v
+        _ => none
+
+fn is_map_like(t Ty) bool
+    match t
+        Map(_, _) | Set(_) => true
         _ => false
 
 ## `a == b` or `a != b` on structs or lists of lists, structs or enums: the
@@ -492,6 +504,46 @@ fn Lower.gen_list_eq(mut self, fkey str, t Ty, e Ty)
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
     end_eq(fkey, yes, no)
 
+## `eq.M(a, b)` for a map or set: the same number of entries, and each entry
+## of `a` has its key in `b` (and an equal value, for a map). Order is ignored.
+fn Lower.gen_map_eq(mut self, fkey str, t Ty)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    a := ps[0]
+    b := ps[1]
+    yes := new_block()
+    no := new_block()
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    ai := op("copy", [a], Ty.Int)
+    bi := op("copy", [b], Ty.Int)
+    len_a := rawop("load64", [ai], Ty.Int)
+    len_b := rawop("load64", [bi], Ty.Int)
+    branch(op("eq", [len_a, len_b], Ty.Bool), head, [konst(0, Ty.Int)], no, [])
+    cur = head
+    used := rawop("load64", [op("add", [ai, konst(8, Ty.Int)], Ty.Int)], Ty.Int)
+    body := new_block()
+    branch(op("lt", [i, used], Ty.Bool), body, [], yes, [])
+    cur = body
+    e := call("rt.map_ent", [a, i], Ty.Int)
+    live := new_block()
+    next := new_block()
+    branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), live, [], next, [])
+    cur = live
+    k := rawop("load64", [op("add", [e, konst(8, Ty.Int)], Ty.Int)], Ty.Int)
+    f := call("rt.map_find", [b, k], Ty.Int)
+    has := new_block()
+    branch(op("ne", [f, konst(0, Ty.Int)], Ty.Bool), has, [], no, [])
+    cur = has
+    if v := map_val(t)
+        same := field_eq(v, entry_value(e, v), entry_value(f, v))
+        branch(same, next, [], no, [])
+    else
+        jump(next, [])
+    cur = next
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    end_eq(fkey, yes, no)
+
 ## `eq.S(a, b)`: every field equal.
 fn Lower.gen_struct_eq(mut self, fkey str, s str)
     t := Ty.Struct(s)
@@ -524,7 +576,7 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
         return call("rt.str_eq", [x, y], Ty.Bool)
     if t.opt_inner() != none
         return opt_compare(false, Val(id: x, ty: t), Val(id: y, ty: t), ast.Pos(line: 1, col: 1)).id
-    if t.elem() != none or struct_name(t) != none or tuple_elems(t) != none
+    if t.elem() != none or struct_name(t) != none or tuple_elems(t) != none or is_map_like(t)
         return call(eq_fn(t), [x, y], Ty.Bool)
     if t.is_coll() or t.opt_inner() != none
         return call(eq_fn(t), [x, y], Ty.Bool)
