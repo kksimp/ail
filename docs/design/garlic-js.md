@@ -238,6 +238,15 @@ regex engine is written.
 - `Function.prototype.toString` returns a function's source text
   (§20.2.3.5): the parser keeps each function's and class's text, so code
   that rebuilds functions from their source with `eval` works.
+- `MutationObserver` (DOM §4.3, `vm/mutation.ail`): every logged change is
+  offered to the observers; records for `childList`, `attributes` (with
+  `attributeFilter`) and `characterData`, with `subtree`, reach the callback
+  through a marker microtask queued at the first record, so they run in
+  queue order with promise jobs. `append(a, b)` makes one record. Not yet:
+  `oldValue`, sibling links, `attributeOldValue`. `el.style.cssText`,
+  `dataset` writes, `outerHTML=`, `replaceChildren`, `normalize`,
+  `template.content` and `defaultValue` follow the DOM and HTML specs; the
+  page tests `mutation` and `observer` match Chromium's output.
 
 ## Generators and async functions
 
