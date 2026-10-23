@@ -648,6 +648,27 @@ fn uses_regex(prog ast.Program) bool
             return true
     false
 
+## Whether the program has a `use` that ends in `ui` (`use std.ui`).
+fn uses_ui(prog ast.Program) bool
+    for u in prog.uses
+        if u.path.len() > 0 and u.path[u.path.len() - 1].name == "ui"
+            return true
+    false
+
+## Whether `text` names `ui.` as a word: not the end of a longer name
+## (`gui.`, `build.`).
+fn mentions_ui(text str) bool
+    mut from := 0
+    while from < text.len()
+        rest := text.slice(from, text.len())
+        at := rest.find("ui.") else return false
+        k := from + at
+        b := text.char_at(k - 1) else ' '
+        if not (b.is_alpha() or b.is_digit() or b == '_' or b == '.')
+            return true
+        from = k + 3
+    false
+
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
     parse_text(module, path, fs.read_text(path)?)
@@ -684,6 +705,14 @@ fn parse_with(module str, path str, text str, names Set[str]) mir.Source
         pos := ast.Pos(line: 1, col: 1)
         prog.uses.push(ast.Use(
             path: [ast.Ident(name: "std", pos: pos), ast.Ident(name: "regex", pos: pos)],
+            alias: none,
+            pos: pos,
+        ))
+    # `ui` needs none either; `std.ui` is written in AIL here (std.ui.1).
+    if mentions_ui(text) and not uses_ui(prog) and module != "std.ui"
+        pos := ast.Pos(line: 1, col: 1)
+        prog.uses.push(ast.Use(
+            path: [ast.Ident(name: "std", pos: pos), ast.Ident(name: "ui", pos: pos)],
             alias: none,
             pos: pos,
         ))
