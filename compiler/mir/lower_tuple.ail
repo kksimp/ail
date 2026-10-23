@@ -334,6 +334,8 @@ fn Lower.text_ok(mut self, t Ty) bool
         return true
     if e := t.elem()
         return text_ok(e)
+    if ext := text_ext_ok(t)
+        return ext
     match t
         Int | Sized(_) | Float | F32 | Bool | Str => true
         Struct | Enum =>
@@ -350,7 +352,7 @@ fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
         _ => return match t
             Int | Sized(_) | Float | F32 | Bool | Str => true
             List(e) => displayable(e, mut seen)
-            _ => false
+            _ => text_ext_ok(t) else false
     if sigs.contains("{key}.to_str") or seen.contains(key)
         return true
     seen.add(key)
@@ -373,6 +375,8 @@ fn has_tuple(t Ty) bool
         return true
     if e := t.elem()
         return has_tuple(e)
+    if t.opt_inner() != none or t.is_coll()
+        return true
     match t
         Struct | Enum => true
         _ => false
@@ -389,7 +393,7 @@ fn Lower.value_text(mut self, t Ty, x int) int
         Tuple(xs) => tuple_text_of(xs, x)
         List(e) => list_text(x, e)
         Struct | Enum => display_call(Val(id: x, ty: t)) else str_value("")
-        _ => str_value("")
+        _ => text_ext(t, x)
 
 ## `(a, b)` of the elements of tuple object `obj`.
 fn Lower.tuple_text_of(mut self, xs List[Ty], obj int) int
