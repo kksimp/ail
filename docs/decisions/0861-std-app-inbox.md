@@ -15,7 +15,7 @@
 
 1. `app.run_host` reads the host's lines in a task and puts them as events into a channel, together with events other tasks post. The loop takes the next event from that channel.
 2. `struct Inbox` wraps the channel. `Inbox.post(ev)` queues an event; `app.external(source, data)` makes one with `kind` `external`, `id` the source and `text` the data.
-3. `trait App` gets `attach(mut self, inbox Inbox)` (default: nothing), called once before the first `update`. An app starts its own tasks there (an `accept` loop, a timer) and gives them the inbox.
+3. `app.new_inbox()` makes an inbox and `app.run_with(mut a, cmd, args, inbox)` is `run_host` with it, so the program starts its own tasks (an `accept` loop, a timer) before the run and stops them after, in a block where their handles live: a task handle cannot outlive its block (`conc.task`), and the native subset has neither `spawn` in a generic nor a `TaskGroup` in a field. `trait App` gets `attach(mut self, inbox Inbox)` (default: nothing).
 4. A host that exits posts `exited`, which fails `run` as before (`host_exited`).
 
 Existing apps change nothing. Headless `script` has no inbox.

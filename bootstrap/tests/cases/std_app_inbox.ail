@@ -11,8 +11,6 @@ fn poster(inbox app.Inbox)
 impl app.App for Watcher
     fn attach(mut self, inbox app.Inbox)
         got.push("attached")
-        g := TaskGroup()
-        g.add(spawn poster(inbox))
 
     fn update(mut self, ev app.Event)
         if ev.kind == "external"
@@ -25,5 +23,8 @@ fn main() !
     mut w := Watcher(got: [])
     host := path.join(path.dir(env.program()), "../app/inbox_host.ail")
     ail := env.get("AIL_BINARY") else "ail"
-    app.run_host(mut w, ail, ["run", host])?
+    inbox := app.new_inbox()
+    g := TaskGroup()
+    g.add(spawn poster(inbox))
+    app.run_with(mut w, ail, ["run", host], inbox)?
     print(w.got.join(" "))

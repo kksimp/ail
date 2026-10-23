@@ -446,6 +446,16 @@ pub fn run[T App](mut a T) ! AppError
 ## (std.app.10); a test passes a host written in AIL. The host's standard
 ## error is copied to the program's when it exits.
 pub fn run_host[T App](mut a T, cmd str, args List[str]) ! AppError
+    run_with(mut a, cmd, args, new_inbox())?
+
+## A new inbox for `run_with`: the program starts its tasks that post to it
+## (a server loop, a timer) before the run and stops them after (std.app.14).
+pub fn new_inbox() Inbox
+    Inbox(ch: Channel[Event](64))
+
+## Runs `a` as `run_host` does, with events from `inbox`, which the program
+## made with `inbox()` and gave to its own tasks.
+pub fn run_with[T App](mut a T, cmd str, args List[str], inbox Inbox) ! AppError
     mut c := proc.start(cmd, args) else err
         return AppError(kind: "start", message: "{err}")
     mut sent := frame(a)
@@ -454,7 +464,6 @@ pub fn run_host[T App](mut a T, cmd str, args List[str]) ! AppError
     j := parse_json(hello) else return mismatch(move c, hello)
     if (j.num("v") else 0.0) != 1.0
         return mismatch(move c, hello)
-    inbox := Inbox(ch: Channel[Event](64))
     a.attach(inbox)
     g := TaskGroup()
     g.add(spawn pump(c.out, inbox))

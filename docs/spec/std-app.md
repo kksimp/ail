@@ -129,11 +129,13 @@ headless `script` never measures. *(ADR 0839)*
 **std.app.14** — `run_host` reads the host's lines in a task and passes them,
 with events other tasks post, through one channel, in arrival order.
 `struct Inbox` has `post(ev Event)`; `external(source, data) Event` makes an
-event with `kind` `external`, `id` the source and `text` the data. `trait App`
-has `attach(mut self, inbox Inbox)` (default: nothing), called once before the
-first `update`, where an app starts tasks that post. `exited` (the host's pipe
-closed) fails `run` with `host_exited`. Headless `script` has no inbox.
-*(ADR 0861)*
+event with `kind` `external`, `id` the source and `text` the data. `new_inbox()`
+makes an inbox; `run_with(mut a, cmd, args, inbox)` is `run_host` with it, so
+the program starts the tasks that post (a server loop, a timer) before the
+run and stops them after, in its own block, where their handles live.
+`trait App` has `attach(mut self, inbox Inbox)` (default: nothing), called
+once before the first `update`. `exited` (the host's pipe closed) fails `run`
+with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
 
 ## Examples
 
