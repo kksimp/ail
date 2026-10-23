@@ -252,6 +252,10 @@ regex engine is written.
   and a registry that never calls back: nothing is collected while scripts
   run. `IntersectionObserver` and `ResizeObserver` take a callback and never
   fire, since Garlic has no scrolling or resizing the page can see.
+- `AbortController` and `AbortSignal` (`vm/abort.ail`): `abort()` sets
+  `aborted` and `reason` and runs the signal's `abort` listeners, then
+  `onabort`. No `AbortSignal.abort()`/`timeout()`/`any()`, and nothing
+  aborts a pending request yet (`fetch` belongs to lane 177).
 
 ## Generators and async functions
 
