@@ -6,6 +6,7 @@
 ##
 ## Spec rules: mod.unit.1-5, mod.use.1-6, mod.vis.1, json.prelude.1.
 use ast
+use fix
 use mir
 use pkg
 use syntax
@@ -369,4 +370,33 @@ fn one_per_line(diags List[syntax.Diag]) List[syntax.Diag]
         same_line := kept.len() > 0 and kept[kept.len() - 1].pos.line == d.pos.line
         if d.rule.starts_with("lex.str.") or not same_line
             kept.push(d)
+            continue
+        prev := kept[kept.len() - 1]
+        if prev.fixed and d.fixed and explicit(prev.edits) and explicit(d.edits) and apart(
+            prev.edits,
+            d.edits,
+        )
+            mut joined := prev.edits
+            joined.extend(d.edits)
+            kept[kept.len() - 1].edits = joined
     kept
+
+fn explicit(edits List[fix.Edit]) bool
+    for e in edits
+        if e.old != none or e.anchor != "exact"
+            return false
+    true
+
+fn apart(xs List[fix.Edit], ys List[fix.Edit]) bool
+    for x in xs
+        for y in ys
+            if overlaps(x, y)
+                return false
+    true
+
+fn overlaps(a fix.Edit, b fix.Edit) bool
+    ka := a.pos.line * 100000 + a.pos.col
+    ea := a.end.line * 100000 + a.end.col
+    kb := b.pos.line * 100000 + b.pos.col
+    eb := b.end.line * 100000 + b.end.col
+    ka <= eb and kb <= ea
