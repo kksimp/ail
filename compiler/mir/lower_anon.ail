@@ -1,0 +1,55 @@
+## A parameter written as a trait name declares an anonymous type parameter bounded by that
+## trait: `fn draw(s Shape)` is `fn draw[T Shape](s T)` (gen.anon.1, ADR 0078). Rewriting the
+## declaration lets the generic instances (ADR 0536) lower it.
+
+use ast
+
+## `f` with each bare-trait parameter type replaced by a type parameter of its own;
+## `f` itself when it has none or isn't a plain function.
+fn Lower.anon_generic(self, f ast.FnDecl) ast.FnDecl
+    if f.owner != none or f.receiver != none
+        return f
+    mut gens := f.generics
+    mut params := List[ast.Param]()
+    mut changed := false
+    for p in f.params
+        t := self.anon_trait(p.ty)
+        if t == ""
+            params.push(p)
+            continue
+        changed = true
+        name := "Anon{params.len()}"
+        gens.push(ast.GenericParam(name: name, pos: p.pos, bounds: [ast.Ident(name: t, pos: p.pos)]))
+        params.push(ast.Param(
+            name: p.name,
+            pos: p.pos,
+            mutable: p.mutable,
+            moved: p.moved,
+            ty: ast.TypeRef(shape: ast.TypeShape.Named(name: name, args: []), pos: p.ty.pos),
+        ))
+    if not changed
+        return f
+    ast.FnDecl(
+        attrs: f.attrs,
+        owner: f.owner,
+        name: f.name,
+        pos: f.pos,
+        doc: f.doc,
+        generics: gens,
+        receiver: f.receiver,
+        params: params,
+        ret: f.ret,
+        body: f.body,
+        within: f.within,
+        contracts: f.contracts,
+        inherits: f.inherits,
+        unsafe_fn: f.unsafe_fn,
+        ext: f.ext,
+    )
+
+## The program's trait a parameter type names, or "".
+fn Lower.anon_trait(self, t ast.TypeRef) str
+    match t.shape
+        Named(name, args) =>
+            if args.len() == 0 and traits.impls.contains(trait_key(name)) then name else ""
+        _ => ""

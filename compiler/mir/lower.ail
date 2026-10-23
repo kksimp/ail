@@ -459,7 +459,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             message: "`extern c fn {f.name}`: `ail build` links only a fixed libc subset (`ail run` can call any C function)",
         ))
         return
-    if declare_generic_fn(f, pre)
+    if declare_generic_fn(anon_generic(f), pre)
         return
     mut params := List[Ty]()
     self_ty = if o := f.owner then owner_key(o.name, pre) else ""
