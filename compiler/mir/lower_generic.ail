@@ -365,6 +365,7 @@ fn Lower.generic_call(
         v := lower_value(a.value, decl_type(pt, binds, params, gf.file))?
         unify(pt, v.ty, params, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
+    check_mut_overlap(args, pos)
     if r := f.ret
         if w := want
             if not w.is_unit()
@@ -375,10 +376,11 @@ fn Lower.generic_call(
     sig := instance(key, f, binds, "", gf.file)?
     if e := fn_errs.get(key)
         fn_errs[g] = e
-    mut ids := List[int]()
-    for k in 0..vs.len()
-        ids.push(convert(vs[k], sig.params[k], expr_pos(args[k].value)))
-    Val(id: user_call(key, ids, sig.ret, pos, shown), ty: sig.ret)
+    mut cells := List[Cell]()
+    ids := generic_arg_ids(args, vs, sig.params, 0, mut cells)
+    res := Val(id: user_call(key, ids, sig.ret, pos, shown), ty: sig.ret)
+    cells_back(cells)
+    res
 
 ## The signature of function instance `key`, declared and queued on first
 ## use.
@@ -406,7 +408,7 @@ fn Lower.instance_sig(mut self, key str, f ast.FnDecl, binds Map[str, Ty], owner
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             bad.add(key)
             return none
-        ps.push(t)
+        ps.push(if p.mutable then (cell_param(t) else t) else t)
     mut rty := Ty.Unit
     mut can_fail := false
     if r := f.ret
@@ -518,14 +520,17 @@ fn Lower.generic_method_call(mut self, key str, recv Val, args List[ast.Arg], po
         v := lower_value(a.value, decl_type(pt, binds, mnames, gf.file))?
         unify(pt, v.ty, mnames, mut binds)
         vs.push(Val(id: shield_arg(args, k, v), ty: v.ty))
+    check_mut_overlap(args, pos)
     if not all_bound(mnames, binds, m, pos)
         return none
     full := "{key}[{[binds[n].name() for n in mnames].join(", ")}]"
     sig := instance(full, f, binds, tkey, gf.file)?
+    mut cells := List[Cell]()
     mut ids := [recv.id]
-    for k in 0..vs.len()
-        ids.push(convert(vs[k], sig.params[k + 1], expr_pos(args[k].value)))
-    Val(id: user_call(full, ids, sig.ret, pos, full), ty: sig.ret)
+    ids.extend(generic_arg_ids(args, vs, sig.params, 1, mut cells))
+    res := Val(id: user_call(full, ids, sig.ret, pos, full), ty: sig.ret)
+    cells_back(cells)
+    res
 
 ## `G(...)` or `G[T](...)` of a generic struct: bind its type parameters
 ## from the written types, the expected type or the fields' values.
@@ -694,6 +699,7 @@ fn Lower.generic_static(mut self, g str, name str, args List[ast.Arg]?, pos ast.
         v := lower_value(a.value, decl_type(pt, binds, gt.params, gf.file))?
         unify(pt, v.ty, gt.params, mut binds)
         vs.push(Val(id: shield_arg(given, k, v), ty: v.ty))
+    check_mut_overlap(given, pos)
     binds_from_want(g, gt.params, want, mut binds)
     if not all_bound(gt.params, binds, g, pos)
         return none
@@ -704,11 +710,12 @@ fn Lower.generic_static(mut self, g str, name str, args List[ast.Arg]?, pos ast.
     key := "{t.name()}.{name}"
     instance_method(key)
     sig := sigs.get(key) else return unsupported(pos, "`{g}.{name}`")
-    mut ids := List[int]()
-    for k in 0..vs.len()
-        ids.push(convert(vs[k], sig.params[k], expr_pos(given[k].value)))
+    mut cells := List[Cell]()
+    ids := generic_arg_ids(given, vs, sig.params, 0, mut cells)
     check_requires(key, ids, pos)
-    Val(id: user_call(key, ids, sig.ret, pos, key), ty: sig.ret)
+    res := Val(id: user_call(key, ids, sig.ret, pos, key), ty: sig.ret)
+    cells_back(cells)
+    res
 
 fn some_ty(t Ty) Ty?
     t

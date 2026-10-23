@@ -1,0 +1,110 @@
+## Overlapping `mut` arguments (own.excl.3, ADR 0064, ADR 0131): two `mut`
+## arguments that are elements of one list, or entries of one map, overlap
+## when their indexes or keys are equal at run time, so the call traps before
+## it starts. Places that overlap whatever the indexes are, the checker
+## rejects; an index that isn't a name or a literal isn't evaluated twice, so
+## its call isn't checked.
+use ast
+
+## The index (key) expressions along a place, outermost first.
+fn place_indexes(e ast.Expr) List[ast.Expr]?
+    match e
+        Name(_, _) => []
+        Member(r, _, _) => place_indexes(r)
+        Index(r, i, _) =>
+            mut xs := place_indexes(r)?
+            xs.push(i)
+            xs
+        _ => none
+
+## Whether reading `e` again has no effect and gives the same value.
+fn plain_index(e ast.Expr) bool
+    match e
+        Name(_, _) | Int(_, _) | Str(_, _) => true
+        _ => false
+
+## Trap at `pos` when two `mut` arguments of the call name the same element.
+fn Lower.check_mut_overlap(mut self, args List[ast.Arg], pos ast.Pos)
+    for i in 0..args.len()
+        for j in i + 1..args.len()
+            if args[i].mutable and args[j].mutable
+                overlap_check(args[i].value, args[j].value, pos)
+
+fn Lower.overlap_check(mut self, a ast.Expr, b ast.Expr, pos ast.Pos)
+    pa := place_path(a) else return
+    pb := place_path(b) else return
+    if not paths_overlap(pa, pb)
+        return
+    xa := place_indexes(a) else return
+    xb := place_indexes(b) else return
+    # The pairs of indexes at the same depth of both places.
+    mut ka := 0
+    mut kb := 0
+    mut eqs := List[int]()
+    for k in 0..pa.len().min(pb.len())
+        if pa[k] == "[]" and pb[k] == "[]"
+            ea := xa[ka]
+            eb := xb[kb]
+            if not plain_index(ea) or not plain_index(eb)
+                return
+            va := lower_value(ea, none) else return
+            vb := lower_value(eb, va.ty) else return
+            eq := if va.ty == Ty.Str then call(
+                "rt.str_eq",
+                [va.id, vb.id],
+                Ty.Bool,
+            ) else if va.ty == Ty.Int
+                or va.ty == Ty.Char then op("eq", [va.id, vb.id], Ty.Bool) else -1
+            if eq < 0
+                return
+            eqs.push(eq)
+        if pa[k] == "[]"
+            ka += 1
+        if pb[k] == "[]"
+            kb += 1
+    if eqs.len() == 0
+        return
+    # Every pair equal: the trap; any pair different: on to the call.
+    ok := new_block()
+    for eq in eqs
+        next := new_block()
+        branch(eq, next, [], ok, [])
+        seal(next)
+        cur = next
+    trap_open("own.excl.3", pos)
+    say("two `mut` arguments of this call overlap")
+    trap_close(pos)
+    seal(ok)
+    cur = ok
+
+## The arguments of a generic call once its instance's signature is known:
+## a `mut` scalar goes in a cell (own.mut.2), like `cell_arg` for a plain
+## call, and `cells_back` writes it back after the call. `params[skip + k]`
+## is argument `k`'s parameter.
+fn Lower.generic_arg_ids(
+    mut self,
+    args List[ast.Arg],
+    vs List[Val],
+    params List[Ty],
+    skip int,
+    mut cells List[Cell],
+) List[int]
+    mut ids := List[int]()
+    for k in 0..vs.len()
+        at := expr_pos(args[k].value)
+        pt := params[k + skip]
+        if t := cell_ty(pt)
+            if args[k].mutable
+                mut key := ""
+                mut place := none
+                match args[k].value
+                    Name(n, _) => key = lookup(n) else ""
+                    _ => key = ""
+                if key == ""
+                    place = args[k].value
+                cell := new_cell(convert(vs[k], t, at))
+                cells.push(Cell(key: key, place: place, cell: cell, ty: t, pos: at))
+                ids.push(cell)
+                continue
+        ids.push(convert(vs[k], pt, at))
+    ids
