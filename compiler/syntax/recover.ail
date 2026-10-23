@@ -576,7 +576,11 @@ fn Parser.from_import(mut self) bool
         if end := tok_end(k + 1)
             after := tokens[k + 2].tok
             if after == Tok.Newline or after == Tok.Eof
-                attach("write a `use`", [fix.span(here(), end, "use {path.join(".")}.{tok_text(tokens[k + 1].tok)}")])
+                attach("write a `use`", [fix.span(
+                    here(),
+                    end,
+                    "use {path.join(".")}.{tok_text(tokens[k + 1].tok)}",
+                )])
     skip_statement()
     true
 
@@ -700,12 +704,20 @@ fn Parser.stray_after_statement(mut self, start int) bool
         if eq >= 0 and eq + 2 < tokens.len()
             a := tokens[eq + 1].tok
             b := tokens[eq + 2].tok
-            empty = (a == Tok.Sym("[") or a == Tok.Sym("\{")) and (b == Tok.Sym("]") or b == Tok.Sym("}"))
+            empty = (a == Tok.Sym("[") or a == Tok.Sym("\{"))
+                and (b == Tok.Sym("]") or b == Tok.Sym("}"))
         if eq >= 0 and empty
-            attach("declare it with `:=` and the type as a constructor", [fix.empty_decl(tok_pos(start))])
+            attach(
+                "declare it with `:=` and the type as a constructor",
+                [fix.empty_decl(tok_pos(start))],
+            )
         elif eq >= 0
             ep := tokens[eq].pos
-            attach("declare it with `:=`", [fix.span(pos, ast.Pos(line: ep.line, col: ep.col + 1), " :=")])
+            attach("declare it with `:=`", [fix.span(
+                pos,
+                ast.Pos(line: ep.line, col: ep.col + 1),
+                " :=",
+            )])
         return true
     # `Color::Red`, `std::fs`
     if cur == ":" and sym_at(1) == ":" and adjacent(k0)

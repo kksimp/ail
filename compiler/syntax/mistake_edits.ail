@@ -43,7 +43,21 @@ fn Parser.opens_block(self, k int) bool
     if first == Tok.Sym("}") or first == Tok.Sym("@")
         return true
     match first
-        Kw(w) => ["fn", "if", "elif", "else", "while", "for", "match", "struct", "enum", "impl", "trait", "error", "pub"].contains(w)
+        Kw(w) => [
+            "fn",
+            "if",
+            "elif",
+            "else",
+            "while",
+            "for",
+            "match",
+            "struct",
+            "enum",
+            "impl",
+            "trait",
+            "error",
+            "pub",
+        ].contains(w)
         _ => false
 
 ## Braces around blocks: the edits that remove every brace pair, when each is
@@ -59,13 +73,18 @@ fn Parser.brace_edits(self, open int) List[fix.Edit]
         alone := close > 0 and tokens[close - 1].pos.line < cp.line
         if close + 1 < tokens.len()
             n := tokens[close + 1]
-            if n.pos.line == cp.line and (n.tok == Tok.Kw("else") or n.tok == Tok.Kw("elif")) and alone
+            if n.pos.line == cp.line
+                and (n.tok == Tok.Kw("else") or n.tok == Tok.Kw("elif"))
+                and alone
                 edits.push(fix.delete(cp, n.pos))
                 continue
             if n.pos.line == cp.line and n.tok != Tok.Newline and n.tok != Tok.Eof
                 return []
         if alone
-            edits.push(fix.delete(ast.Pos(line: cp.line, col: 1), ast.Pos(line: cp.line + 1, col: 1)))
+            edits.push(fix.delete(
+                ast.Pos(line: cp.line, col: 1),
+                ast.Pos(line: cp.line + 1, col: 1),
+            ))
         else
             return []
     edits

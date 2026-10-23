@@ -441,7 +441,15 @@ fn Lexer.attach(mut self, edits List[fix.Edit])
     diags[diags.len() - 1].edits = edits
 
 fn Lexer.diag_help_fix(mut self, rule str, pos ast.Pos, msg str, help str, fixed bool, title str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: fixed, help: help, fix: title, edits: []))
+    diags.push(Diag(
+        rule: rule,
+        pos: pos,
+        msg: msg,
+        fixed: fixed,
+        help: help,
+        fix: title,
+        edits: [],
+    ))
 
 fn Lexer.diag_fix(mut self, rule str, pos ast.Pos, msg str, help str, title str)
     diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title, edits: []))
@@ -539,8 +547,7 @@ fn Lexer.indent_diags(mut self) int
                     ast.Pos(line: x.line, col: x.chars + 1),
                     " ".repeat(x.width / scale * UNIT),
                 )
-                for x in logical
-                if x.width > 0
+                for x in logical if x.width > 0
             ])
             return 0
     0
@@ -734,7 +741,11 @@ fn Lexer.tilde(mut self, line List[char], i int, pos ast.Pos)
         fixed: atom,
         help: "bitwise not is a method: `a.bit_not()` (expr.bit.1)",
         fix: "write `.bit_not()`",
-        edits: if atom then [fix.span(pos, ast.Pos(line: pos.line, col: end + 1), "{text_of(line, i + 1, end)}.bit_not()")] else [],
+        edits: if atom then [fix.span(
+            pos,
+            ast.Pos(line: pos.line, col: end + 1),
+            "{text_of(line, i + 1, end)}.bit_not()",
+        )] else [],
     ))
 
 ## True when only blanks come before `at` on the line.
@@ -843,7 +854,11 @@ fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
                 if fixed
                     close := close_brace(line, i + 3)
                     if cp := hex_char(line, i + 3, close)
-                        attach([fix.span(here, ast.Pos(line: here.line, col: here.col + close - i + 1), utf8_escapes(cp))])
+                        attach([fix.span(
+                            here,
+                            ast.Pos(line: here.line, col: here.col + close - i + 1),
+                            utf8_escapes(cp),
+                        )])
                 i += 2
         elif c.code() < 128
             hex.push(hex_byte(c.code()))
@@ -1100,10 +1115,11 @@ fn Lexer.char_literal(mut self, line List[char], start int, line_no int) int
         "write it as a string",
     )
     if stringy
-        attach([
-            fix.span(pos, ast.Pos(line: line_no, col: start + 2), "\""),
-            fix.span(ast.Pos(line: line_no, col: end), ast.Pos(line: line_no, col: end + 1), "\""),
-        ])
+        attach([fix.span(pos, ast.Pos(line: line_no, col: start + 2), "\""), fix.span(
+            ast.Pos(line: line_no, col: end),
+            ast.Pos(line: line_no, col: end + 1),
+            "\"",
+        )])
     placeholder(pos)
     end
 

@@ -706,5 +706,19 @@ fn Lower.assoc_owner(self, e ast.Expr) str?
                 Struct(k) => k
                 Enum(k) => k
                 Int | Float | Bool | Str => t.name()
+                List(_) => t.name()
                 _ => none
         _ => none
+
+## Declare the instance of `impl Trait for List[T]`'s `name` that `T.name(...)` calls when `T`
+## is a list type, as `builtin_method` does for a method call on a list.
+fn Lower.assoc_instance(mut self, recv ast.Expr, name str)
+    match recv
+        Name(n, _) =>
+            t := gen.tsubst.get(n) else return
+            match t
+                List(_) =>
+                    if k := builtin_method(t, name)
+                        return
+                _ => return
+        _ => return

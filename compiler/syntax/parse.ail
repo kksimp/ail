@@ -445,18 +445,42 @@ fn Parser.attach(mut self, title str, edits List[fix.Edit])
 
 ## A diagnostic with a fix. The same mistake again on one line is one
 ## diagnostic with one fix (gram.rec.1): `msg` identifies the mistake.
-fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str, help str, title str, edits List[fix.Edit])
+fn Parser.error_fix(
+    mut self,
+    rule str,
+    pos ast.Pos,
+    msg str,
+    help str,
+    title str,
+    edits List[fix.Edit],
+)
     if diags.len() > 0
         last := diags[diags.len() - 1]
         if last.rule == rule and last.pos.line == pos.line and last.msg == msg and last.fixed
             # The same mistake again on one line: its edits join the first report's.
             diags[diags.len() - 1].edits.extend(edits)
             return
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title, edits: edits))
+    diags.push(Diag(
+        rule: rule,
+        pos: pos,
+        msg: msg,
+        fixed: true,
+        help: help,
+        fix: title,
+        edits: edits,
+    ))
 
 ## A diagnostic with the bootstrap's message, help line and fix title.
 fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, title str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: title, edits: []))
+    diags.push(Diag(
+        rule: rule,
+        pos: pos,
+        msg: msg,
+        fixed: false,
+        help: help,
+        fix: title,
+        edits: [],
+    ))
 
 fn Parser.int_too_big(mut self, pos ast.Pos)
     error_text(
@@ -952,8 +976,14 @@ fn Parser.impl_decl(mut self)
             if tag_at(1) == "indent" and not declared
                 if moved := methods_out(i + 2, trait_name.name)
                     mut edits := moved
-                    edits.push(fix.delete(ast.Pos(line: pos.line, col: 1), ast.Pos(line: pos.line + 1, col: 1)))
-                    attach("move the methods out of the `impl` block and name the type in each", edits)
+                    edits.push(fix.delete(
+                        ast.Pos(line: pos.line, col: 1),
+                        ast.Pos(line: pos.line + 1, col: 1),
+                    ))
+                    attach(
+                        "move the methods out of the `impl` block and name the type in each",
+                        edits,
+                    )
         else
             unexpected("`for` after the trait name", "trait.impl.1")
         skip_statement()
@@ -1337,7 +1367,11 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         )
         if title != ""
             eq := tokens[i + 2].pos
-            first := if text == "var" then fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 3), "mut") else fix.delete(pos, tokens[i + 1].pos)
+            first := if text == "var" then fix.span(
+                pos,
+                ast.Pos(line: pos.line, col: pos.col + 3),
+                "mut",
+            ) else fix.delete(pos, tokens[i + 1].pos)
             attach(title, [first, fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")])
         return none
     if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
@@ -1949,7 +1983,11 @@ fn Parser.call_args(mut self) List[ast.Arg]?
                 "write `f(dx: 1, dy: 2)`",
                 "write `:`",
             )
-            attach("write `:`", [fix.span(here(), ast.Pos(line: here().line, col: here().col + 1), ": ")])
+            attach("write `:`", [fix.span(
+                here(),
+                ast.Pos(line: here().line, col: here().col + 1),
+                ": ",
+            )])
             return none
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not eat_sym(",")
@@ -2365,7 +2403,11 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             "",
         )
         if at_sym(".")
-            attach("write `..=`", [fix.span(hpos, ast.Pos(line: hpos.line, col: hpos.col + 1), "=")])
+            attach("write `..=`", [fix.span(
+                hpos,
+                ast.Pos(line: hpos.line, col: hpos.col + 1),
+                "=",
+            )])
         return none
     hi := plain_pattern()?
     match hi

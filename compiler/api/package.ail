@@ -88,7 +88,12 @@ pub fn package_command(dir str, form Form, std str) int
     prog := doc.attach_lines(loaded.program, by_line)
     out := package_outline(
         prog,
-        Facts(effects: analysis.effects, errors: analysis.errors, symbols: Map[int, str](), weak_symbols: Map[int, str]()),
+        Facts(
+            effects: analysis.effects,
+            errors: analysis.errors,
+            symbols: Map[int, str](),
+            weak_symbols: Map[int, str](),
+        ),
         dir,
         form,
     )
