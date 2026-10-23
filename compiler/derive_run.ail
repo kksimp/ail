@@ -1,0 +1,172 @@
+## Derive generators the program writes itself (ct.derive.1-4, ADR 0856), run
+## as a native program of their own: for `ail build` (`derive_user`) and for
+## `ail check` (`user_derive_texts`, which the loader splices in).
+use ast
+use check
+use derive
+use load
+use mir
+
+## The methods of the `impl`s of traits with a user-written `@derive(f)`
+## generator (ct.derive.1-4, ADR 0856), each as a source of its module. The
+## generators are the program's own code, so they run as a program of their
+## own: the sources, with every function quiet except the generator calls
+## (the program may call methods that don't exist yet), built for the host
+## and run; each generator's text comes back on its standard output.
+fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
+    mut have := Set[str]()
+    for s in srcs
+        have.add(s.path)
+    mut jobs := List[derive.Job]()
+    for j in derive.user_jobs([s.module for s in srcs], [s.prog for s in srcs])
+        if not have.contains("gen:impl:{j.label}")
+            jobs.push(j)
+    if jobs.len() == 0
+        return []
+    texts := run_generators(srcs, jobs, rt, false)
+    mut out := List[mir.Source]()
+    for k in 0..jobs.len()
+        j := jobs[k]
+        if texts[k].starts_with("@@err ")
+            io.eprint("{srcs[j.file].path}:{j.pos.line}:{j.pos.col}: error[ct.derive.4]: {derive_failure(j.label)}: {texts[k].slice(6, texts[k].len())}")
+            io.exit(1)
+        out.push(derived_source(
+            if j.module == "" then "-" else j.module,
+            j.label,
+            derive.tidy(texts[k]).lines(),
+        ))
+    out
+
+## The text each job's generator wrote, in order, or `@@err MESSAGE`.
+fn run_generators(
+    srcs List[mir.Source],
+    jobs List[derive.Job],
+    rt ast.Program?,
+    quiet bool,
+) List[str]
+    mut calls := List[str]()
+    mut by_module := Map[str, List[str]]()
+    for k in 0..jobs.len()
+        j := jobs[k]
+        calls.push("    run_job_{k}()")
+        mut fns := by_module.get(j.trait_module) else []
+        fns.push("pub fn derive_job_{k}() str ! DeriveError\n    {j.generator}({j.info})?\n")
+        by_module[j.trait_module] = fns
+    mut head := List[str]()
+    for k in 0..jobs.len()
+        alias := if jobs[k].trait_module
+            == "" then "" else "{jobs[k].trait_module.split(".").last() else ""}."
+        head.push("fn run_job_{k}()\n    print(\"@@job {k}\")\n    t := {alias}derive_job_{k}() else err\n        print(\"@@err \{err.message}\")\n        print(\"@@end\")\n        return\n    print(t)\n    print(\"@@end\")\n")
+    mut gen := List[mir.Source]()
+    mut uses := List[str]()
+    for m in by_module.keys().sorted()
+        text := by_module[m].join("\n")
+        if m == ""
+            head.push(text)
+        else
+            gen.push(parse_text(m, "gen:derive", text))
+            uses.push("use {m}\n")
+    head.push("fn main()\n{calls.join("\n")}\n")
+    mut all := [parse_text("", "gen:derive:main", "{uses.join("")}{head.join("\n")}")]
+    all.extend(gen)
+    from := all.len()
+    for s in srcs
+        all.push(user_main_renamed(s))
+    mut prelude := mir.prelude_text(mir.PRELUDE_EMBED)
+    all.push(parse_text("", "<prelude>", prelude))
+    m := mir.lower_package_with(all, rt, from) else err
+        if quiet
+            # `ail check` reports the generators' own problems itself.
+            return []
+        for i in 0..err.items.len()
+            p := err.items[i]
+            io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
+        io.exit(1)
+        return []
+    hex := executable_hex(m, "derive", host_target())
+    exe := bytes.from_hex(hex.replace("\n", "")) else
+        io.eprint("error[native.build.3]: the generator program isn't hexadecimal")
+        io.exit(2)
+        return []
+    tmp := env.get("TMPDIR") else "/tmp"
+    file := "{tmp}/ail-derive-{time.now_ms()}"
+    fs.write_bytes(file, exe) else err
+        io.eprint("error[native.build.3]: can't write {file}: {err}")
+        io.exit(2)
+        return []
+    _ := proc.run("chmod", ["755", file]) else err
+        io.eprint("error[native.build.3]: can't run the generators: {err}")
+        io.exit(2)
+        return []
+    ran := proc.run(file, []) else err
+        remove_quietly(file)
+        io.eprint("error[native.build.3]: can't run the generators: {err}")
+        io.exit(2)
+        return []
+    remove_quietly(file)
+    if ran.status != 0
+        io.eprint("error[ct.derive.4]: a derive generator stopped unexpectedly: {ran.err.trim()}")
+        io.exit(1)
+    mut texts := List[str]()
+    for part in ran.out.split("@@end\n")
+        if part.starts_with("@@job ")
+            body := part.lines()[1..].join("\n")
+            texts.push(body)
+    texts
+
+## "`Trait` can't be derived for `Type`" for the label `Type.Trait`.
+fn derive_failure(label str) str
+    parts := label.split(".")
+    "`{parts.last() else ""}` can't be derived for `{parts[0]}`"
+
+fn remove_quietly(path str)
+    fs.remove(path) else err
+        io.eprint("warning: can't remove {path}: {err}")
+
+## `s` with its function `main` of the root module renamed, so the generator
+## program has a `main` of its own.
+fn user_main_renamed(s mir.Source) mir.Source
+    if s.module != ""
+        return s
+    mut prog := s.prog
+    for i in 0..prog.fns.len()
+        if prog.fns[i].name == "main" and prog.fns[i].owner == none
+            prog.fns[i].name = "user_main"
+    mir.Source(module: s.module, path: s.path, text: s.text, prog: prog)
+
+## `ail check`'s texts of the program's own derive generators, by
+## `TYPE.TRAIT`, for `load.load_derived`: `@@err MESSAGE` for a generator's
+## `DeriveError`, `@@fx REASONS` for one that isn't compile-time-safe
+## (ct.derive.3), which isn't run. Empty when the program has none, or when
+## the generators don't build (the checker reports why).
+fn user_derive_texts(loaded load.Loaded, path_arg str) Map[str, str]
+    mut srcs := List[mir.Source]()
+    for k in 0..loaded.program.files.len()
+        f := loaded.program.files[k]
+        if k < loaded.texts.len() and not f.path.starts_with("gen:")
+            srcs.push(parse_text(f.module, f.path, loaded.texts[k]))
+    mut out := Map[str, str]()
+    if srcs.len() == 0
+        return out
+    jobs := derive.user_jobs([s.module for s in srcs], [s.prog for s in srcs])
+    if jobs.len() == 0
+        return out
+    names := [
+        if j.trait_module == "" then j.generator else "{j.trait_module}.{j.generator}"
+        for j in jobs
+    ]
+    fx := check.generator_effects(loaded.program, names)
+    mut safe := List[derive.Job]()
+    for k in 0..jobs.len()
+        if fx[k] != ""
+            out[jobs[k].label] = "@@fx {fx[k]}"
+        else
+            safe.push(jobs[k])
+    if safe.len() == 0
+        return out
+    rt := runtime_with(path.join(compiler_dir(), "rt/native"), path_arg, "0", "0") else return out
+    texts := run_generators(srcs, safe, rt, true)
+    for k in 0..texts.len()
+        if k < safe.len()
+            out[safe[k].label] = texts[k]
+    out

@@ -83,6 +83,13 @@ DERIVE_NAMES := ["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveErro
 ## Read the program at `arg`, a file or a package directory, with every module
 ## it imports. `std` is the directory of the standard modules in AIL.
 pub fn load(arg str, std str) Loaded ! LoadError
+    load_derived(arg, std, {})
+
+## `load`, with the texts the program's own derive generators wrote, by
+## `TYPE.TRAIT` (ct.derive.1-4): the caller runs them natively and loads
+## again. A text `@@err MESSAGE` is the generator's `DeriveError`, one
+## `@@fx REASONS` a generator that isn't compile-time-safe (ct.derive.3).
+pub fn load_derived(arg str, std str, user Map[str, str]) Loaded ! LoadError
     mut root := "."
     mut root_files := List[str]()
     if arg.ends_with(".ail")
@@ -94,14 +101,14 @@ pub fn load(arg str, std str) Loaded ! LoadError
         root_files = ail_files(arg)
         if root_files.len() == 0
             return LoadError("{arg} has no .ail files (mod.unit.5)")
-    load_package(root, root_files, std)
+    load_package(root, root_files, std, user)
 
 ## The `.ail` files directly in `dir`, sorted (mod.unit.1).
 fn ail_files(dir str) List[str]
     names := fs.list_dir(dir) else return []
     [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail")]
 
-fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
+fn load_package(root str, root_files List[str], std str, user Map[str, str]) Loaded ! LoadError
     mut files := List[ast.SourceFile]()
     mut tokens := List[syntax.Token]()
     mut sources := List[str]()
@@ -148,7 +155,7 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
     mut first := assemble(tokens, files, diags, std)?
     first.texts = sources
     if diags.len() == 0 and first.diags.len() == 0 and wanted(tokens)
-        return expand_derives(first, tokens, files, std)
+        return expand_derives(first, tokens, files, std, user)
     first
 
 ## The standard module `dotted` written in AIL: its file under the std directory.

@@ -4,7 +4,8 @@
 ## four generators (ADR 0850) run here; each one's text becomes a file
 ## `gen:impl:T.Trait` of the `impl`'s module, whose tokens are spliced into the
 ## `impl`, and the program is assembled again. A generator the program writes
-## itself needs the interpreter and is not run yet (RR-2).
+## itself is run natively by the caller, whose texts come in `user`
+## (`load_derived`); without one its `impl` is left as written.
 use ast
 use derive
 use syntax
@@ -64,6 +65,7 @@ fn expand_derives(
     tokens List[syntax.Token],
     files List[ast.SourceFile],
     std str,
+    user Map[str, str],
 ) Loaded ! LoadError
     prog := first.program
     mut errors := List[syntax.Diag]()
@@ -84,16 +86,10 @@ fn expand_derives(
             if not impl_at.contains(key)
                 impl_at[key] = i
     for job in jobs
-        if not BUILTIN_GENERATORS.contains(job.generator)
-            continue
         imp := prog.impls[job.imp]
-        text := run_generator(job) else err
-            errors.push(diag(
-                "ct.derive.4",
-                imp.pos,
-                "`{last(imp.trait_name)}` can't be derived for `{job.type_name}`: {err.message}",
-                "define the methods in this `impl`, or change `{job.generator}`",
-            ))
+        text := generated_text(job, user) else err
+            if err.message != ""
+                errors.push(err_at(imp, job, err.message))
             continue
         index := files.len() + gen_files.len()
         base := index * FILE_LINES
@@ -156,6 +152,35 @@ fn expand_derives(
     mut texts := first.texts
     texts.extend(gen_texts)
     Loaded(program: out, diags: diags, texts: texts)
+
+## The methods `job`'s generator wrote. A failure with an empty message is a
+## user generator that wasn't run; one starting `@@fx ` isn't
+## compile-time-safe (ct.derive.3).
+fn generated_text(job Job, user Map[str, str]) str ! derive.DeriveError
+    if BUILTIN_GENERATORS.contains(job.generator)
+        return run_generator(job)
+    got := user.get(job.label) else return derive.DeriveError("")
+    if got.starts_with("@@err ")
+        return derive.DeriveError(got.slice(6, got.len()))
+    if got.starts_with("@@fx ")
+        return derive.DeriveError(got)
+    got
+
+## ct.derive.3 for a text `@@fx REASONS`, else ct.derive.4 with `message`.
+fn err_at(imp ast.ImplDecl, job Job, message str) syntax.Diag
+    if message.starts_with("@@fx ")
+        return diag(
+            "ct.derive.3",
+            imp.pos,
+            "the derive generator `{job.generator}` runs at compile time but {message.slice(5, message.len())}",
+            "a generator may not do I/O or use a capability; compute the text from its `TypeInfo` only",
+        )
+    diag(
+        "ct.derive.4",
+        imp.pos,
+        "`{last(imp.trait_name)}` can't be derived for `{job.type_name}`: {message}",
+        "define the methods in this `impl`, or change `{job.generator}`",
+    )
 
 @allow("expr.match.3") fn run_generator(job Job) str ! derive.DeriveError
     match job.generator
