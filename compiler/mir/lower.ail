@@ -1514,7 +1514,7 @@ fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.
         return lower_generic_callee(callee, args, pos, want)
     if v := call_variant(callee, want)
         return new_variant(v, args, pos)
-    lower_call(callee, args, pos)
+    lower_call(callee, ordered_call_args(callee, args), pos)
 
 fn Lower.unsupported(mut self, pos ast.Pos, what str) Val?
     problem(pos, "not in the native subset yet: {what}")

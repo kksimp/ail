@@ -221,6 +221,9 @@ fn Lower.self_value(mut self) int
 
 ## A method call `x.m(...)` on a struct, or `T.f(...)` on its type.
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
+    struct_call_in(key, recv, order_args(key, args), pos)
+
+fn Lower.struct_call_in(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
     rcv := take_receiver()
     if not sigs.contains(key)
         instance_method(key)
@@ -412,3 +415,51 @@ fn Lower.lower_member_expr(
             return global_const(key)
         return unsupported(pos, "`{key}` as a value")
     lower_member(recv, name, pos)
+
+## The arguments of a call of `key` in parameter order, labels dropped, when
+## some are labelled (expr.call.3); otherwise as written.
+fn Lower.order_args(self, key str, args List[ast.Arg]) List[ast.Arg]
+    mut labelled := false
+    for a in args
+        if a.label != none
+            labelled = true
+    if not labelled
+        return args
+    f := fn_decl.get(key) else return args
+    n := f.params.len()
+    if args.len() != n
+        return args
+    mut slots := List[ast.Arg?]()
+    for _ in 0..n
+        slots.push(none)
+    mut next := 0
+    for a in args
+        mut at := next
+        if l := a.label
+            at = -1
+            for i in 0..n
+                if f.params[i].name == l.name
+                    at = i
+        else
+            next += 1
+        if at < 0 or at >= n or slots[at] != none
+            return args
+        mut b := a
+        b.label = none
+        slots[at] = b
+    mut out := List[ast.Arg]()
+    for sl in slots
+        x := sl else return args
+        out.push(x)
+    out
+
+## `f(b: 1, a: 2)` of a function of the program: its arguments in order.
+fn Lower.ordered_call_args(self, callee ast.Expr, args List[ast.Arg]) List[ast.Arg]
+    match callee
+        Name(name, _) =>
+            if lookup(name) != none or type_key(name) != none
+                return args
+            if self_ty != "" and sigs.contains("{self_ty}.{name}")
+                return order_args("{self_ty}.{name}", args)
+            order_args("{prefix}{name}", args)
+        _ => args

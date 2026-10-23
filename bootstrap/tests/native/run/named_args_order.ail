@@ -1,0 +1,9 @@
+fn say(s str) int
+    print(s)
+    1
+
+fn f(a int, b int) int
+    a + b
+
+fn main()
+    print(f(b: say("b"), a: say("a")))
