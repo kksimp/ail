@@ -129,35 +129,48 @@ fn Lower.lower_spawn(mut self, e ast.Expr, pos ast.Pos) Val?
     match e
         Call(callee, args, cpos) =>
             match callee
-                Name(name, npos) =>
-                    key := "{prefix}{name}"
-                    if bad.contains(key)
-                        return none
-                    sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
-                    if not tk.on
-                        return unsupported(pos, "`spawn`")
-                    if args.len() != sig.params.len()
-                        return unsupported(cpos, "this call")
-                    rec := call("rt.task_new", [konst(tk.sites.len(), Ty.Int)], Ty.Int)
-                    for k in 0..args.len()
-                        a := args[k]
-                        if a.label != none
-                            return unsupported(cpos, "labelled arguments")
-                        v := lower_value(a.value, sig.params[k])?
-                        id := convert(v, sig.params[k], expr_pos(a.value))
-                        # A task works on its own copy of a list (conc.share.1).
-                        w := copy_if_place(a.value, Val(id: id, ty: sig.params[k]))
-                        at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
-                        prim_op(
-                            if sig.params[k].is_float() then "storef" else "store64",
-                            [at, w],
-                            Ty.Unit,
-                        )
-                    call("rt.task_start", [rec], Ty.Unit)
-                    tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret, loop: -1))
-                    Val(id: rec, ty: Ty.Int)
+                Name(name, npos) => spawn_call("{prefix}{name}", name, npos, args, cpos, pos)
                 _ => unsupported(cpos, "`spawn` of anything but a function")
+        # `spawn m.f(..)`: a function of an imported module (mod.use.2).
+        Method(recv, name, npos, args) =>
+            m := module_name(recv) else return unsupported(
+                pos,
+                "`spawn` of anything but a function call",
+            )
+            spawn_call("{m}.{name}", name, npos, args, npos, pos)
         _ => unsupported(pos, "`spawn` of anything but a function call")
+
+## Queues the task `key(args)` and returns its record.
+fn Lower.spawn_call(
+    mut self,
+    key str,
+    name str,
+    npos ast.Pos,
+    args List[ast.Arg],
+    cpos ast.Pos,
+    pos ast.Pos,
+) Val?
+    if bad.contains(key)
+        return none
+    sig := sigs.get(key) else return unsupported(npos, "calling `{name}`")
+    if not tk.on
+        return unsupported(pos, "`spawn`")
+    if args.len() != sig.params.len()
+        return unsupported(cpos, "this call")
+    rec := call("rt.task_new", [konst(tk.sites.len(), Ty.Int)], Ty.Int)
+    for k in 0..args.len()
+        a := args[k]
+        if a.label != none
+            return unsupported(cpos, "labelled arguments")
+        v := lower_value(a.value, sig.params[k])?
+        id := convert(v, sig.params[k], expr_pos(a.value))
+        # A task works on its own copy of a list (conc.share.1).
+        w := copy_if_place(a.value, Val(id: id, ty: sig.params[k]))
+        at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
+        prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
+    call("rt.task_start", [rec], Ty.Unit)
+    tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret, loop: -1))
+    Val(id: rec, ty: Ty.Int)
 
 ## `t.wait()?`: the task's result, or the program ends with the trap.
 pub fn is_wait_call(e ast.Expr) bool
@@ -177,6 +190,7 @@ fn Lower.lower_wait(mut self, inner ast.Expr, pos ast.Pos) Val?
                         at1 := trace_line(npos)
                         at2 := trace_line(pos)
                         w := call("rt.task_wait", [h, at1, at2], Ty.Int)
+                        chan_deadlock_trap(npos)
                         mut v := Val(id: w, ty: res)
                         if res.is_unit()
                             v = Val(id: -1, ty: Ty.Unit)
@@ -206,6 +220,7 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
     own := tk.fails.contains(key)
     wt := if res.is_unit() or res.is_float() then Ty.Int else res
     w := call("rt.task_try", [h, trace_line(npos), konst(if own then 1 else 0, Ty.Int)], wt)
+    chan_deadlock_trap(npos)
     failure := call("rt.failed", [], Ty.Bool)
     mut v := Val(id: w, ty: res)
     if res.is_unit()
