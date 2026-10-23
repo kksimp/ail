@@ -1,0 +1,87 @@
+## Other languages' method names for the built-in types (gram.foreign.1,
+## expr.name.2; ADR 0262), as `method_help` and `method_rename` in
+## `bootstrap/src/check/builtins.rs`. The fix renames the call.
+use ast
+
+## A type's kind for the tables below: `str`, `list`, `map`, `set`, `bytes`
+## or `char`; empty for the rest.
+@allow("expr.match.3") fn kind_of(t Ty) str
+    match t
+        Str => "str"
+        ListOf => "list"
+        MapOf => "map"
+        SetOf => "set"
+        Bytes => "bytes"
+        Char => "char"
+        _ => ""
+
+## The AIL method for another language's name for it, when the arguments
+## carry over unchanged.
+pub fn method_rename(t Ty, name str) str?
+    k := kind_of(t)
+    if name == "length" or name == "size" or name == "count"
+        if k == "str" or k == "list" or k == "map" or k == "set"
+            return "len"
+    match "{k}.{name}"
+        "str.strip" | "str.lstrip" | "str.rstrip" | "str.trim_start" | "str.trim_end" => "trim"
+        "str.encode" => "to_bytes"
+        "bytes.startswith" | "bytes.startsWith" | "str.startswith" | "str.startsWith" => "starts_with"
+        "bytes.endswith" | "bytes.endsWith" | "str.endswith" | "str.endsWith" => "ends_with"
+        "str.splitlines" => "lines"
+        "str.lower" | "str.lowercase" | "str.toLowerCase" | "char.to_lowercase" => "to_lower"
+        "str.upper" | "str.uppercase" | "str.toUpperCase" | "char.to_uppercase" => "to_upper"
+        "str.includes" | "list.includes" | "list.has" | "map.has" | "map.has_key" | "map.contains_key" | "set.has" => "contains"
+        "str.indexOf" => "find"
+        "str.substring" | "str.substr" => "slice"
+        "char.is_alphabetic" => "is_alpha"
+        "char.is_whitespace" => "is_space"
+        "char.is_alphanumeric" => "is_alnum"
+        "char.is_numeric" | "char.is_ascii_digit" | "char.isdigit" => "is_digit"
+        "list.append" | "list.add" | "list.push_back" => "push"
+        "list.indexOf" => "index_of"
+        "list.pop_back" => "pop"
+        "map.delete" | "set.discard" | "set.delete" => "remove"
+        "set.insert" | "set.push" => "add"
+        _ => none
+
+## Help for a method name that other languages give the built-in types.
+pub fn method_help(t Ty, name str) str?
+    k := kind_of(t)
+    msg := match "{k}.{name}"
+        "str.length" | "str.size" | "str.count" => "write `s.len()` for characters, or `s.byte_len()` for UTF-8 bytes"
+        "str.strip" | "str.lstrip" | "str.rstrip" | "str.trim_start" | "str.trim_end" => "write `s.trim()`"
+        "str.startswith" => "write `s.starts_with(prefix)`"
+        "str.endswith" => "write `s.ends_with(suffix)`"
+        "str.removeprefix" => "write `s.strip_prefix(p)`, which gives a `str?`"
+        "str.removesuffix" => "write `s.strip_suffix(p)`, which gives a `str?`"
+        "str.rjust" | "str.pad_start" | "str.padStart" => "write `s.pad_left(width, ' ')`"
+        "str.ljust" | "str.pad_end" | "str.padEnd" => "write `s.pad_right(width, ' ')`"
+        "str.zfill" => "write `s.pad_left(width, '0')`"
+        "str.join" => "write `xs.join(sep)` on the list"
+        "str.splitlines" => "write `s.lines()`"
+        "str.isdigit" | "str.isalpha" | "str.isalnum" | "str.isspace" | "str.is_digit" | "str.is_alpha" => "character tests are on `char`: `c.is_digit()`; for a string, test each of `s.chars()`"
+        "str.format" => "build text with interpolation: `\"\{a} and \{b}\"`"
+        "char.is_whitespace" => "write `c.is_space()`"
+        "char.is_alphabetic" => "write `c.is_alpha()`"
+        "char.is_alphanumeric" => "write `c.is_alnum()`"
+        "char.is_numeric" | "char.is_ascii_digit" | "char.isdigit" => "write `c.is_digit()`"
+        "char.to_int" => "write `c.code()` for its scalar value, or `c.to_digit(10)` for a digit's value"
+        "char.to_uppercase" => "write `c.to_upper()`"
+        "char.to_lowercase" => "write `c.to_lower()`"
+        "map.push" => "`m.push(k, x)` needs a map whose values are lists, `Map[K, List[T]]`; for other values write `m[k] = v`"
+        "list.append" | "list.add" => "write `xs.push(x)`"
+        "list.length" | "list.size" | "list.count" => "write `xs.len()`"
+        "list.index" | "list.find" | "list.indexOf" => "write `xs.index_of(x)`, which gives `int?` (`none` if absent)"
+        "map.has" | "map.has_key" | "map.contains_key" => "write `m.contains(k)`"
+        "map.put" | "map.set" | "map.insert" => "write `m[k] = v`"
+        "map.delete" | "map.pop" => "write `m.remove(k)`"
+        "set.insert" | "set.push" => "write `s.add(x)`"
+        "set.has" => "write `s.contains(x)`"
+        "set.discard" | "set.delete" => "write `s.remove(x)`"
+        _ => ""
+    if msg != ""
+        return msg
+    match name
+        "message" | "msg" | "description" | "getMessage" | "get_message" => "an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`"
+        "to_string" | "toString" | "__str__" => "write `x.to_str()`, or interpolate: `\"\{x}\"`"
+        _ => none

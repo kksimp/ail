@@ -797,12 +797,18 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
         sig = plain_sig(none, [Ty.Int], Ty.Bytes)
     elif n != "from_list"
         args_only(args)
-        err_help(
+        mut d := new_diag(
             "type.bytes.13",
             at,
             "`bytes` has no associated function `{n}`",
-            "they are `from_list`, `from_hex`, `from_base64` and `zeros`",
-        )
+        ).with_help("they are `from_list`, `from_hex`, `from_base64` and `zeros`")
+        # `bytes.fromhex` is `bytes.from_hex`: the same letters, spelt with `_`.
+        spelt := n.replace("_", "")
+        for k in ["from_list", "from_hex", "from_base64", "zeros"]
+            if k.replace("_", "") == spelt
+                d = d.with_fix("write `{k}`", [fix.replace(at, n, k)])
+                break
+        diags.push(d)
         return Ty.Unknown
     check_call("bytes.{n}", sig, [], args, none, at, expect)
 
@@ -1173,8 +1179,35 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
                     return
         _ => names = names
     mut d := new_diag("expr.name.1", at, "{show(rt)} has no method `{n}`")
-    if s := suggest(n, names)
+    # `x.is_some()` on an optional is a comparison with `none` (type.opt.5).
+    absent := match n
+        "is_some" => " != none"
+        "is_none" => " == none"
+        _ => ""
+    dot := ast.Pos(line: at.line, col: (at.col - 1).max(0))
+    kind := kind_of(rt)
+    if absent != "" and is_opt(rt)
+        d = d.with_help("compare the value with `none`, e.g. `x != none`")
+        d = d.with_fix("compare with `none`", [fix.replace(dot, ".{n}()", absent)])
+    elif kind == "map" and (n == "items" or n == "entries")
+        # type.tuple.5: a map iterates as its `(key, value)` pairs.
+        d = d.with_help("a map iterates as its entries: `for k, v in m`")
+        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
+    elif is_error_type(rt) and ["message", "msg", "description", "getMessage", "get_message"].contains(n)
+        # An error's text is `to_str()` (the same text as interpolating it).
+        d = d.with_help("an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
+        d = d.with_fix("write `to_str`", [fix.replace(at, n, "to_str")])
+    elif new := method_rename(rt, n)
+        d = d.with_help("write `.{new}()`").with_fix("write `{new}`", [fix.replace(at, n, new)])
+    elif h := method_help(rt, n)
+        d = d.with_help(h)
+    elif s := suggest(n, names)
         d = d.did_you_mean(n, s)
+    else
+        match rt
+            Param(p) => d = d.with_help("a type parameter has only the methods of its constraints; add one, e.g. `[{tparams[p].name} Trait]`")
+            Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
+            _ => d = d.with_help("docs/language-card.md lists the methods each built-in type has; `ail api FILE` lists those of your own types")
     diags.push(d)
 
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
@@ -1251,7 +1284,9 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
         RefOf(t) => rt = t
         _ => rt = rt0
     if candidates(rt, n).len() > 0
-        err_help("expr.op.3", at, "`{n}` is a method, so calling it needs `()`", "write `.{n}()`")
+        diags.push(new_diag("expr.op.3", at, "`{n}` is a method, so calling it needs `()`")
+            .with_help("write `.{n}()`")
+            .with_fix("add the parentheses", [fix.replace(at, n, "{n}()")]))
         return Ty.Unknown
     if is_tensor(rt)
         err_help(
@@ -1272,7 +1307,14 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
                     return subst(field_types[s][i], binds_of(struct_params[s], args))
             names := [f.name for f in decl.fields]
             mut d := new_diag("type.struct.6", at, "`{decl.name}` has no field `{n}`")
-            if s2 := suggest(n, names)
+            # Another library's field for the same thing (a `requests` response).
+            other := match "{decl.name}.{n}"
+                "net.Response.status_code" => "status"
+                "net.Response.text" => "body"
+                _ => ""
+            if other != ""
+                d = d.with_help("`{decl.name}` has the field `{other}`").with_fix("write `{other}`", [fix.replace(at, n, other)])
+            elif s2 := suggest(n, names)
                 d = d.did_you_mean(n, s2)
             elif names.len() == 0
                 d = d.with_help("`{decl.name}` has no fields")
@@ -1281,12 +1323,13 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             diags.push(d)
             Ty.Unknown
         _ =>
-            err_help(
-                "type.struct.6",
-                at,
-                "{show(rt)} has no fields",
-                "only structs have fields; the built-in types have methods, written with `()`",
-            )
+            mut d := new_diag("type.struct.6", at, "{show(rt)} has no fields")
+            if new := method_rename(rt, n)
+                d = d.with_help("`{n}` isn't a field; write the method `.{new}()`")
+                d = d.with_fix("write `{new}()`", [fix.replace(at, n, "{new}()")])
+            else
+                d = d.with_help("only structs have fields; the built-in types have methods, written with `()`")
+            diags.push(d)
             Ty.Unknown
 
 @allow("expr.match.3") fn map_key(t Ty) Ty
