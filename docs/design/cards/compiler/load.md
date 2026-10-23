@@ -3,6 +3,7 @@
 ## load
 ```
 pub fn load.effects_command(rest List[str], std str) int [clock env fs io proc]
+pub fn load.fix_command(rest List[str], std str) int [clock env fs io proc]
 pub struct load.SelfDone  ## What the pass changed: the program with the rewritten functions, and its diagnostics.
     pub program ast.Program
     pub diags List[syntax.Diag]
@@ -31,4 +32,4 @@ pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## Th
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
 ```
 
-trimmed to fit 2000 tokens (~625); dropped: private items
+trimmed to fit 2000 tokens (~651); dropped: private items
