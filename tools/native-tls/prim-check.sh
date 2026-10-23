@@ -22,15 +22,17 @@ assert old in s
 s = s.replace(old, 'fn hash_hmac_sha256(op str, args str) str\n    tlsprim_call(op, args)\n\nfn hash_hmac_sha256_real(key str, s str) str\n', 1)
 open(p, 'w').write(s)
 PY
-export AIL_COMPILER="$tmp/compiler"
+# `./ail build` pins AIL_COMPILER to this checkout, so call the native CLI itself.
+./ail check tools/native-tls/prim.ail > /dev/null
+nbuild() { AIL_ROOT="$PWD" AIL_COMPILER="$tmp/compiler" .native/ail build "$@"; }
 vectors="bootstrap/src/net/crypto/testdata/crosscheck.txt bootstrap/src/net/crypto/testdata/signatures.txt bootstrap/src/net/x509/testdata/chain.txt tools/native-tls/vectors384.txt"
 prog=tools/native-tls/prim.ail
-./ail build "$prog" -o "$tmp/x64" > /dev/null
+nbuild "$prog" -o "$tmp/x64" > /dev/null
 "$tmp/x64" $vectors | tee "$tmp/out"
 grep -q ' 0 failed' "$tmp/out"
 qemu=$(command -v qemu-aarch64-static || command -v qemu-aarch64 || true)
 if [ -n "$qemu" ]; then
-  ./ail build "$prog" --target aarch64-linux -o "$tmp/a64" > /dev/null
+  nbuild "$prog" --target aarch64-linux -o "$tmp/a64" > /dev/null
   "$qemu" "$tmp/a64" $vectors | tee "$tmp/out64"
   grep -q ' 0 failed' "$tmp/out64"
 fi

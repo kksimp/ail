@@ -606,3 +606,80 @@ pub fn Asm.vmovq_xr(mut self, dst int, src int)
 
 pub fn Asm.vmovq_rx(mut self, dst int, src int)
     vex_rr(1, 1, 1, 126, src, 0, dst)
+
+# ---- SSE (legacy encodings), for the AES and GHASH kernels ----
+
+## `66 [REX] 0F [38|3A] op /r` with an xmm register `rm`: `esc` 0 is `0F op`,
+## 1 is `0F 38 op`, 2 is `0F 3A op`; `pre` is the mandatory prefix (0x66,
+## 0xF3, or 0 for none).
+fn Asm.sse_head(mut self, pre int, esc int, op int, reg int, x int, b int)
+    if pre != 0
+        byte(pre)
+    rex(0, reg, x, b, false)
+    byte(15)
+    if esc == 1
+        byte(56)
+    elif esc == 2
+        byte(58)
+    byte(op)
+
+pub fn Asm.sse_rr(mut self, pre int, esc int, op int, reg int, rm int)
+    sse_head(pre, esc, op, reg, 0, rm)
+    modrm_reg(reg, rm)
+
+pub fn Asm.sse_rm(mut self, pre int, esc int, op int, reg int, m Mem)
+    sse_head(pre, esc, op, reg, index_of(m), base_of(m))
+    modrm_mem(reg, m, 0)
+
+## `movdqu xmm, [m]` and `movdqu [m], xmm`.
+pub fn Asm.movdqu_rm(mut self, dst int, m Mem)
+    sse_rm(243, 0, 111, dst, m)
+
+pub fn Asm.movdqu_mr(mut self, m Mem, src int)
+    sse_rm(243, 0, 127, src, m)
+
+## `movdqa dst, src`, `pxor`, `por`, `pshufb` and `aesenc`/`aesenclast` on
+## xmm registers (AES-NI, PCLMULQDQ and SSSE3).
+pub fn Asm.movdqa_rr(mut self, dst int, src int)
+    sse_rr(102, 0, 111, dst, src)
+
+pub fn Asm.pxor_rr(mut self, dst int, src int)
+    sse_rr(102, 0, 239, dst, src)
+
+pub fn Asm.por_rr(mut self, dst int, src int)
+    sse_rr(102, 0, 235, dst, src)
+
+pub fn Asm.pshufb_rr(mut self, dst int, src int)
+    sse_rr(102, 1, 0, dst, src)
+
+pub fn Asm.aesenc_rr(mut self, dst int, src int)
+    sse_rr(102, 1, 220, dst, src)
+
+pub fn Asm.aesenclast_rr(mut self, dst int, src int)
+    sse_rr(102, 1, 221, dst, src)
+
+## `pclmulqdq dst, src, imm`.
+pub fn Asm.pclmulqdq(mut self, dst int, src int, imm int)
+    sse_rr(102, 2, 68, dst, src)
+    byte(imm)
+
+## Shifts of an xmm register by an immediate: `kind` is "pslld", "psrld",
+## "pslldq" or "psrldq".
+pub fn Asm.sse_shift(mut self, kind str, r int, n int)
+    op := if kind == "pslldq" or kind == "psrldq" then 115 else 114
+    digit := match kind
+        "pslld" => 6
+        "psrld" => 2
+        "pslldq" => 7
+        _ => 3
+    byte(102)
+    rex(0, 0, 0, r, false)
+    byte(15)
+    byte(op)
+    modrm_reg(digit, r)
+    byte(n)
+
+## `cpuid`.
+pub fn Asm.cpuid(mut self)
+    byte(15)
+    byte(162)

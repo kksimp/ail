@@ -1,0 +1,23 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Hardware AES-GCM for the native TLS client (ADR 0836): the three kernels
+## below are assembled on x86-64 (compiler/x64/kernels_aes.ail); the AIL
+## bodies are the fallback. `aes_hw_ok` is 0 where no kernel exists, and the
+## bit-sliced code of tls_aes.ail runs instead.
+
+## 1 when the CPU has the instructions the kernels use. x86-64 assembles this
+## as a CPUID check; here, ARM64 on macOS (every core there has AES and PMULL).
+## Linux ARM64 stays on the bit-sliced code until it reads the capabilities.
+fn aes_hw_ok() int
+    if target() == 2 then 1 else 0
+
+## Never called while `aes_hw_ok` is 0; the bodies only keep the signature.
+## Encrypt `n` independent 16-byte blocks at `src` into `dst` with the
+## `nr + 1` round keys at `rk` (16 bytes each, FIPS 197 byte order).
+fn aes_hw_blocks(rk int, nr int, src int, n int, dst int)
+    store64(dst, rk + nr + src + n)
+
+## `y = (y ^ block) * h` over the `n` blocks at `p` (GCM byte order).
+fn aes_hw_ghash(h int, y int, p int, n int)
+    store64(y, h + p + n)
