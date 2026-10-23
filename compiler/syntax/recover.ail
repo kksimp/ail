@@ -58,7 +58,13 @@ fn Parser.call_or_old(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos
     if name_of(callee) != "old" or not in_ensures
         return ast.Expr.Call(callee: callee, args: args, pos: pos)
     if args.len() != 1 or not plain_arg(args[0])
-        diag("contract.ens.3", pos)
+        error_text(
+            "contract.ens.3",
+            pos,
+            "`old` takes one expression: the value to remember from when the function was called",
+            "write `old(x)`",
+            "",
+        )
         return ast.Expr.Name(name: "old", pos: pos)
     # The hidden name is the call as written, which can't be a user's name.
     close := i - 1
@@ -81,7 +87,14 @@ fn Parser.call_or_old(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos
 fn Parser.misplaced_contract(mut self) bool
     if not at_kw("requires") and not at_kw("ensures")
         return false
-    diag("contract.decl.1", here())
+    word := tok_text(peek())
+    error_text(
+        "contract.decl.1",
+        here(),
+        "`{word}` must come directly under a function's signature, before its first statement",
+        "move the `{word}` line up to just below the `fn` line",
+        "",
+    )
     skip_statement()
     true
 
@@ -195,7 +208,13 @@ fn Parser.error_message(mut self, is_error bool) Token?
         return none
     message := bump()
     if not is_error
-        diag("err.msg.1", message.pos)
+        error_text(
+            "err.msg.1",
+            message.pos,
+            "only `error` types have messages",
+            "declare it with `error struct` or `error enum`, or write `impl ToStr`",
+            "",
+        )
         return none
     message
 
@@ -213,10 +232,26 @@ fn Parser.splice_messages(
     if whole == none and given == 0
         return
     if generic
-        diag("err.msg.2", pos)
+        error_text(
+            "err.msg.2",
+            pos,
+            "`{name}` has type parameters, so it can't have messages",
+            "write `impl ToStr` for it instead",
+            "",
+        )
         return
     if given != 0 and given != arms.len()
-        diag("err.msg.2", pos)
+        mut missing := ""
+        for a in arms
+            if a.message == none and missing == ""
+                missing = a.name
+        error_text(
+            "err.msg.2",
+            pos,
+            "some variants of `{name}` have a message but `{missing}` doesn't",
+            "give every variant a message, or none (and write `impl ToStr`)",
+            "",
+        )
         return
     mut t := List[Token]()
     for k in [
@@ -303,7 +338,13 @@ fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
     mut path := [take_name("a module path after `use`", "mod.use.1")?]
     while true
         if at_sym(":") and sym_at(1) == ":" and adjacent(i)
-            error_fix("gram.foreign.1", here(), "AIL writes paths with `.`, not `::`")
+            error_fix(
+                "gram.foreign.1",
+                here(),
+                "AIL writes paths with `.`, not `::`",
+                "write `use std.fs`",
+                "write `.`",
+            )
             i += 2
             path.push(take_name("a module name after `.`", "mod.use.1")?)
         elif eat_sym(".")
@@ -331,18 +372,40 @@ fn Parser.pub_marker(mut self)
         or tag_at(0) == "id" and sym_at(1) == ":="
         public.add(pos.line)
     elif k == "impl"
-        diag("mod.vis.2", pos)
+        error_text(
+            "mod.vis.2",
+            pos,
+            "an `impl` has no visibility of its own; its methods have the trait's visibility",
+            "remove `pub`",
+            "",
+        )
     elif k == "use"
-        diag("mod.use.2", pos)
+        error_text(
+            "mod.use.2",
+            pos,
+            "an import can't be re-exported; importers write their own `use`",
+            "remove `pub`",
+            "",
+        )
     else
-        unexpected("a declaration after `pub`", "mod.vis.1")
+        unexpected(
+            "a declaration after `pub` (`fn`, `struct`, `enum`, `error`, `trait` or a constant)",
+            "mod.vis.1",
+        )
         skip_statement()
 
 ## `pub` before a member that takes its visibility from its trait or enum
 ## (mod.vis.2): reported and skipped.
-fn Parser.member_pub(mut self)
+fn Parser.member_pub(mut self, what str)
     if at_kw("pub")
-        diag("mod.vis.2", bump().pos)
+        owner := if what.contains("variant") then "enum" else "trait"
+        error_text(
+            "mod.vis.2",
+            bump().pos,
+            "{what} have the visibility of their {owner}",
+            "remove `pub`",
+            "",
+        )
 
 ## `pub` before a struct field (mod.vis.1).
 fn Parser.field_pub(mut self, rule str)
@@ -352,7 +415,7 @@ fn Parser.field_pub(mut self, rule str)
     if rule == "type.struct.2"
         public.add(pos.line)
     else
-        diag("mod.vis.2", pos)
+        error_text("mod.vis.2", pos, "variant fields have the visibility of their enum", "remove `pub`", "")
 
 # ---- `@derive(f) trait Name` (ct.derive.1) ----
 
@@ -372,7 +435,13 @@ fn Parser.derive_trait(mut self) bool
             k += 1
         if not has_trait
             return false
-        diag("ct.derive.1", here())
+        error_text(
+            "ct.derive.1",
+            here(),
+            "`@derive` before a trait names one generator function",
+            "write `@derive(generator) trait Name`",
+            "",
+        )
         skip_statement()
         return true
     name := tok_text(peek_at(3))
@@ -400,6 +469,64 @@ fn decl_fix(w str) str?
         "package" | "namespace" | "module" => ""
         _ => none
 
+## The message and help of a foreign declaration word (`foreign::decl_word`).
+fn decl_info(w str)(str, str)
+    match w
+        "def" | "func" | "function" | "fun" => ("AIL declares functions with `fn`", "write `fn name(a int) int`")
+        "class" =>
+            (
+                "AIL has no `class`",
+                "declare a `struct` with its fields, then methods as `fn Name.method(self)`",
+            )
+        "interface" | "protocol" => ("AIL has no `interface`", "a set of methods a type provides is a `trait`")
+        "import" =>
+            (
+                "AIL imports with `use`",
+                "write `use` and a module name; the standard modules need no `use` (std.use.4)",
+            )
+        "async" =>
+            (
+                "AIL has no `async`",
+                "tasks are colorless: start any function with `spawn f(x)` and wait with `t.wait()`",
+            )
+        "public" | "export" => ("AIL exports with `pub`", "write `pub` before the declaration")
+        "package" | "namespace" | "module" =>
+            (
+                "AIL modules are directories, not declared in the file",
+                "put the file in a directory and import it elsewhere with `use dir`",
+            )
+        _ =>
+            (
+                "AIL has no access or storage modifiers on declarations",
+                "a declaration is private to its module unless it is marked `pub`",
+            )
+
+## The message and help of a foreign statement word (`foreign::stmt_word`).
+fn stmt_info(w str)(str, str)
+    errors := "errors are values: declare `fn f() T ! MyError`, fail with `return Variant`, and handle a call with `?` or `else` (spec chapter 08)"
+    match w
+        "try" | "catch" | "except" | "finally" => ("AIL has no exceptions", errors)
+        "throw" | "raise" => ("AIL has no `throw`", errors)
+        "switch" | "case" | "default" =>
+            ("AIL has no `switch`", "write `match value` with one `pattern => result` arm per line")
+        "pass" =>
+            (
+                "AIL has no `pass`",
+                "a block needs a statement; write `todo` for code you haven't written yet",
+            )
+        "await" =>
+            (
+                "AIL has no `await`",
+                "tasks are colorless: `t := spawn f(x)` starts one and `t.wait()` waits for it",
+            )
+        "loop" => ("AIL has no `loop`", "write `while true`")
+        "elseif" | "elsif" | "else_if" => ("AIL writes `elseif` as `elif`", "write `elif`")
+        _ =>
+            (
+                "this keyword from another language has no AIL form",
+                "see the language card for the statements AIL has",
+            )
+
 fn stmt_foreign(w str) bool
     match w
         "try" | "catch" | "except" | "finally" | "throw" | "raise" | "switch" | "case" | "default" => true
@@ -417,7 +544,14 @@ fn Parser.foreign_decl(mut self, w str) bool
     if w == "from"
         return from_import()
     fix := decl_fix(w) else return false
-    diag("gram.foreign.1", here())
+    info := decl_info(w)
+    error_text(
+        "gram.foreign.1",
+        here(),
+        info.0,
+        info.1,
+        if fix == "-" then "remove `{w}`" else if fix == "" then "" else "write `{fix}`",
+    )
     # A modifier is followed by the declaration itself.
     t := tag_at(1)
     if (fix == "-" or fix == "pub") and (t == "kw" or t == "id")
@@ -439,7 +573,17 @@ fn Parser.from_import(mut self) bool
             break
     if tokens[k].tok != Tok.Ident("import")
         return false
-    diag("gram.foreign.1", here())
+    mut path := List[str]()
+    for j in i + 1..k
+        if tok_tag(tokens[j].tok) == "id"
+            path.push(tok_text(tokens[j].tok))
+    error_text(
+        "gram.foreign.1",
+        here(),
+        "AIL has no `from ... import`",
+        "import the module with `use {path.join(".")}` and write `{path[path.len() - 1]}.name` for its items",
+        "",
+    )
     skip_statement()
     true
 
@@ -453,7 +597,8 @@ fn Parser.foreign_stmt(mut self) bool
         return false
     if not stmt_foreign(tok_text(peek()))
         return false
-    diag("gram.foreign.1", here())
+    info := stmt_info(tok_text(peek()))
+    error_text("gram.foreign.1", here(), info.0, info.1, "")
     skip_statement()
     true
 
@@ -467,18 +612,31 @@ fn Parser.header_tail(mut self, after str) Header
     if s == ":" and (not cond or tag_at(1) == "nl")
         # `if c:` ends the line; `fn f() : int` goes on to the type.
         colon_only := tag_at(1) == "nl"
-        error_fix("gram.foreign.1", pos, "AIL doesn't put a `:` after a block header")
+        error_fix(
+            "gram.foreign.1",
+            pos,
+            "AIL doesn't put a `:` after a block header",
+            "a line that opens a block ends where the header ends; the block is the indented lines below",
+            "remove the `:`",
+        )
         i += 1
         if colon_only
             i += 1
             return Header.GoOn
         return Header.Reported
     if s == "=" and cond
-        error_fix("expr.bind.3", pos, "`=` assigns; it can't be a condition")
+        error_fix("expr.bind.3", pos, "`=` assigns; it can't be a condition", "compare with `==`", "write `==`")
         return Header.Reported
     if cond and tag_at(0) == "id" and tok_text(peek()) == "is"
         text := if kw_at(1) == "not" then "is not" else "is"
-        error_fix("gram.foreign.1", pos, "AIL has no `{text}`")
+        op := if text == "is" then "==" else "!="
+        error_fix(
+            "gram.foreign.1",
+            pos,
+            "AIL has no `{text}`",
+            "compare with `{op}`, e.g. `x {op} none`",
+            "write `{op}`",
+        )
         return Header.Reported
     if cond and kw_at(0) == "in"
         diags.push(Diag(
@@ -486,12 +644,18 @@ fn Parser.header_tail(mut self, after str) Header
             pos: pos,
             msg: "AIL has no `in` operator for membership",
             fixed: true,
-            help: "",
+            help: "write the test as a method on the collection: `xs.contains(x)`, `m.contains(key)`, `s.contains(sub)`",
             fix: "",
         ))
         return Header.Reported
     if s == "\{" and (tag_at(1) == "nl" or line_ends_at(k0))
-        diag("gram.foreign.1", pos)
+        error_text(
+            "gram.foreign.1",
+            pos,
+            "AIL doesn't use braces around blocks",
+            "a block is the lines indented 4 spaces below its header, with no closing line",
+            "",
+        )
         return Header.Reported
     Header.NotHeader
 
@@ -504,27 +668,64 @@ fn Parser.stray_after_statement(mut self, start int) bool
     cur := sym_at(0)
     # `x: int = 5`
     if tok_tag(tokens[start].tok) == "id" and cur == ":" and k0 == start + 1
-        diag("expr.bind.1", tok_pos(start))
+        name := tok_text(tokens[start].tok)
+        error_text(
+            "expr.bind.1",
+            tok_pos(start),
+            "`{name}` is declared without a type annotation",
+            "write `{name} := value`; the type is inferred. An empty collection names its type in the value: `List[int]()`",
+            "",
+        )
         return true
     # `Color::Red`, `std::fs`
     if cur == ":" and sym_at(1) == ":" and adjacent(k0)
-        error_fix("gram.foreign.1", pos, "AIL writes paths with `.`, not `::`")
+        error_fix(
+            "gram.foreign.1",
+            pos,
+            "AIL writes paths with `.`, not `::`",
+            "write `Color.Red`, `std.fs`",
+            "write `.`",
+        )
         return true
     # `new Point(...)`
     if k0 >= 1 and tokens[k0 - 1].tok == Tok.Ident("new") and tag_at(0) == "id"
-        error_fix("gram.foreign.1", tok_pos(k0 - 1), "AIL has no `new`")
+        error_fix(
+            "gram.foreign.1",
+            tok_pos(k0 - 1),
+            "AIL has no `new`",
+            "construct a struct by calling its name: `Point(x: 1, y: 2)`",
+            "remove `new`",
+        )
         return true
     # `n > 0 ? a : b`
     if k0 >= 1 and tokens[k0 - 1].tok == Tok.Sym("?") and peek() != Tok.Newline
-        diag("gram.foreign.1", tok_pos(k0 - 1))
+        error_text(
+            "gram.foreign.1",
+            tok_pos(k0 - 1),
+            "AIL has no `?:` conditional operator",
+            "use an `if` expression: `x := if n > 0 then a else b`",
+            "",
+        )
         return true
     # `(x) => x + 1`
     if cur == "=>"
-        diag("gram.foreign.1", pos)
+        error_text(
+            "gram.foreign.1",
+            pos,
+            "AIL has no anonymous functions yet",
+            "declare a named `fn` and pass its name",
+            "",
+        )
         return true
     # `Point{x: 1}`
     if cur == "\{" and k0 >= 1 and upper_ident(tokens[k0 - 1].tok)
-        diag("gram.foreign.1", pos)
+        error_text(
+            "gram.foreign.1",
+            pos,
+            "AIL builds a struct with parentheses, not braces",
+            "write `Point(x: 1, y: 2)`: the name, then `field: value` pairs in parentheses",
+            "",
+        )
         return true
     false
 
