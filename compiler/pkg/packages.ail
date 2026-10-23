@@ -63,7 +63,7 @@ fn canonical(dir str) str
         if seg == "" or seg == "."
             continue
         if seg == ".."
-            _ := parts.pop()
+            parts.pop()
         else
             parts.push(seg)
     "/{parts.join("/")}"
@@ -225,7 +225,7 @@ fn Packages.visit(
             declared[dep.name] = Seen(manifest: me, pos: dep.pos)
             stack.push((canon, sub))
             self.visit(dep.name, sub, Seen(manifest: me, pos: dep.pos), mut stack, mut declared)
-            _ := stack.pop()
+            stack.pop()
 
 ## The directory of git dependency `dep`, fetched or from the cache (mod.pkg.7-8);
 ## none after a diagnostic in manifest `me`.

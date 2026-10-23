@@ -49,6 +49,7 @@ pub fn check_program(p ast.Program) Report
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
     c.diags.extend(c.check_contract_effects())
     c.diags.extend(c.check_constants())
