@@ -328,7 +328,7 @@ fn lex_scaled(src str, scale int) Scaled
                         "lex.block.3",
                         ast.Pos(line: line_no, col: width + 1),
                         "indentation increases by {width - top} spaces; a block is indented by exactly 4",
-                        "",
+                        "indent this line by {top + UNIT} spaces",
                     )
                 indents.push(width)
                 lx.push(Indent, pos)
@@ -408,16 +408,14 @@ fn Lexer.unclosed(mut self)
     for o in open
         if o.pos.line != last.pos.line
             one_line = false
-    diags.push(
-        Diag(
-            rule: "lex.stmt.2",
-            pos: last.pos,
-            msg: "this `{last.c}` is never closed",
-            fixed: one_line,
-            help: "",
-            fix: "close the brackets at the end of the line",
-        ),
-    )
+    diags.push(Diag(
+        rule: "lex.stmt.2",
+        pos: last.pos,
+        msg: "this `{last.c}` is never closed",
+        fixed: one_line,
+        help: "",
+        fix: "close the brackets at the end of the line",
+    ))
 
 fn Lexer.diag_help_fix(mut self, rule str, pos ast.Pos, msg str, help str, fixed bool, fix str)
     diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: fixed, help: help, fix: fix))
@@ -526,7 +524,12 @@ fn Lexer.lex_line(mut self, line List[char], start int, line_no int) Opening?
             break
         elif c == '"' and starts_triple(line, i)
             if in_interp > 0
-                diag_msg("lex.str.3", pos, "a multi-line string can't appear inside `\{...}` in a string", "")
+                diag_msg(
+                    "lex.str.3",
+                    pos,
+                    "a multi-line string can't appear inside `\{...}` in a string",
+                    "",
+                )
                 return none
             return Opening(col: i, raw: false)
         elif c == '"'
@@ -671,17 +674,19 @@ fn Lexer.tilde(mut self, line List[char], i int, pos ast.Pos)
     while end < line.len() and (ascii_alnum(line[end]) or line[end] == '_')
         end += 1
     after := if end < line.len() then line[end] else ' '
-    atom := end > i + 1 and not line[i + 1].is_digit() and after != '.' and after != '(' and after != '['
-    diags.push(
-        Diag(
-            rule: "gram.foreign.1",
-            pos: pos,
-            msg: "AIL has no `~`",
-            fixed: atom,
-            help: "bitwise not is a method: `a.bit_not()` (expr.bit.1)",
-            fix: "write `.bit_not()`",
-        ),
-    )
+    atom := end > i + 1
+        and not line[i + 1].is_digit()
+        and after != '.'
+        and after != '('
+        and after != '['
+    diags.push(Diag(
+        rule: "gram.foreign.1",
+        pos: pos,
+        msg: "AIL has no `~`",
+        fixed: atom,
+        help: "bitwise not is a method: `a.bit_not()` (expr.bit.1)",
+        fix: "write `.bit_not()`",
+    ))
 
 ## True when only blanks come before `at` on the line.
 fn blank_before(line List[char], stop int) bool
@@ -1066,7 +1071,12 @@ fn Lexer.escape(mut self, line List[char], i int, line_no int) Escaped
                 next := k + 1
                 ch := hex_char(line, i + 3, k)
                 if ch == none
-                    diag_msg("lex.str.1", pos, "`\\u\{{text_of(line, i + 3, k)}}` is not a valid Unicode scalar value", "")
+                    diag_msg(
+                        "lex.str.1",
+                        pos,
+                        "`\\u\{{text_of(line, i + 3, k)}}` is not a valid Unicode scalar value",
+                        "",
+                    )
                 return Escaped(ch: ch, next: next)
     shown := if i + 1 < line.len() then text_of(line, i + 1, i + 2) else ""
     diag_msg(

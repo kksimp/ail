@@ -279,7 +279,10 @@ fn Parser.top_level(mut self)
         elif tag == "id" and foreign_decl(text)
             i += 0
         else
-            unexpected("a declaration", "gram.syntax.1")
+            unexpected(
+                "a declaration (`fn`, `struct`, `enum`, `error`, `unique`, `trait`, `impl` or a constant)",
+                "gram.syntax.1",
+            )
             skip_statement()
 
 # ---- Tokens ----
@@ -528,7 +531,13 @@ fn Parser.block(mut self, after str, rule str) List[ast.Stmt]?
                 unexpected("end of line after {after}", rule)
                 return none
     if not eat_indent()
-        error_text(rule, here(), "expected an indented block after {after}", "indent the block by 4 spaces", "")
+        error_text(
+            rule,
+            here(),
+            "expected an indented block after {after}",
+            "indent the block by 4 spaces",
+            "",
+        )
         return []
     block_rest()
 
@@ -1167,7 +1176,13 @@ fn Parser.members_open(mut self, rule str, what str) bool
         skip_statement()
         return false
     if not eat_indent()
-        error_text(rule, here(), "{what} needs an indented block of members", "indent each member by 4 spaces", "")
+        error_text(
+            rule,
+            here(),
+            "{what} needs an indented block of members",
+            "indent each member by 4 spaces",
+            "",
+        )
         return false
     true
 
@@ -1610,16 +1625,14 @@ fn Parser.comparison_expr(mut self) ast.Expr?
                 "use brackets",
             )
             return none
-        diags.push(
-            Diag(
-                rule: "expr.prec.2",
-                pos: second,
-                msg: "comparisons can't be chained",
-                fixed: true,
-                help: "combine them with `and`, e.g. `a < b and b < c`",
-                fix: "",
-            ),
-        )
+        diags.push(Diag(
+            rule: "expr.prec.2",
+            pos: second,
+            msg: "comparisons can't be chained",
+            fixed: true,
+            help: "combine them with `and`, e.g. `a < b and b < c`",
+            fix: "",
+        ))
         return none
     ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
 

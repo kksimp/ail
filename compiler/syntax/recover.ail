@@ -415,7 +415,13 @@ fn Parser.field_pub(mut self, rule str)
     if rule == "type.struct.2"
         public.add(pos.line)
     else
-        error_text("mod.vis.2", pos, "variant fields have the visibility of their enum", "remove `pub`", "")
+        error_text(
+            "mod.vis.2",
+            pos,
+            "variant fields have the visibility of their enum",
+            "remove `pub`",
+            "",
+        )
 
 # ---- `@derive(f) trait Name` (ct.derive.1) ----
 
@@ -474,32 +480,17 @@ fn decl_info(w str)(str, str)
     match w
         "def" | "func" | "function" | "fun" => ("AIL declares functions with `fn`", "write `fn name(a int) int`")
         "class" =>
-            (
-                "AIL has no `class`",
-                "declare a `struct` with its fields, then methods as `fn Name.method(self)`",
-            )
+            ("AIL has no `class`", "declare a `struct` with its fields, then methods as `fn Name.method(self)`")
         "interface" | "protocol" => ("AIL has no `interface`", "a set of methods a type provides is a `trait`")
         "import" =>
-            (
-                "AIL imports with `use`",
-                "write `use` and a module name; the standard modules need no `use` (std.use.4)",
-            )
+            ("AIL imports with `use`", "write `use` and a module name; the standard modules need no `use` (std.use.4)")
         "async" =>
-            (
-                "AIL has no `async`",
-                "tasks are colorless: start any function with `spawn f(x)` and wait with `t.wait()`",
-            )
+            ("AIL has no `async`", "tasks are colorless: start any function with `spawn f(x)` and wait with `t.wait()`")
         "public" | "export" => ("AIL exports with `pub`", "write `pub` before the declaration")
         "package" | "namespace" | "module" =>
-            (
-                "AIL modules are directories, not declared in the file",
-                "put the file in a directory and import it elsewhere with `use dir`",
-            )
+            ("AIL modules are directories, not declared in the file", "put the file in a directory and import it elsewhere with `use dir`")
         _ =>
-            (
-                "AIL has no access or storage modifiers on declarations",
-                "a declaration is private to its module unless it is marked `pub`",
-            )
+            ("AIL has no access or storage modifiers on declarations", "a declaration is private to its module unless it is marked `pub`")
 
 ## The message and help of a foreign statement word (`foreign::stmt_word`).
 fn stmt_info(w str)(str, str)
@@ -510,22 +501,13 @@ fn stmt_info(w str)(str, str)
         "switch" | "case" | "default" =>
             ("AIL has no `switch`", "write `match value` with one `pattern => result` arm per line")
         "pass" =>
-            (
-                "AIL has no `pass`",
-                "a block needs a statement; write `todo` for code you haven't written yet",
-            )
+            ("AIL has no `pass`", "a block needs a statement; write `todo` for code you haven't written yet")
         "await" =>
-            (
-                "AIL has no `await`",
-                "tasks are colorless: `t := spawn f(x)` starts one and `t.wait()` waits for it",
-            )
+            ("AIL has no `await`", "tasks are colorless: `t := spawn f(x)` starts one and `t.wait()` waits for it")
         "loop" => ("AIL has no `loop`", "write `while true`")
         "elseif" | "elsif" | "else_if" => ("AIL writes `elseif` as `elif`", "write `elif`")
         _ =>
-            (
-                "this keyword from another language has no AIL form",
-                "see the language card for the statements AIL has",
-            )
+            ("this keyword from another language has no AIL form", "see the language card for the statements AIL has")
 
 fn stmt_foreign(w str) bool
     match w
@@ -625,7 +607,13 @@ fn Parser.header_tail(mut self, after str) Header
             return Header.GoOn
         return Header.Reported
     if s == "=" and cond
-        error_fix("expr.bind.3", pos, "`=` assigns; it can't be a condition", "compare with `==`", "write `==`")
+        error_fix(
+            "expr.bind.3",
+            pos,
+            "`=` assigns; it can't be a condition",
+            "compare with `==`",
+            "write `==`",
+        )
         return Header.Reported
     if cond and tag_at(0) == "id" and tok_text(peek()) == "is"
         text := if kw_at(1) == "not" then "is not" else "is"
