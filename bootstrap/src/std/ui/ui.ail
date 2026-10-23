@@ -102,3 +102,11 @@ pub fn Window.font_size(self) int
 
 pub fn Window.close(mut self)
     return
+
+## std.ui.12: the program's own clipboard (the native runtime keeps it; the
+## lowering supplies the bodies of these two).
+pub fn clipboard_set(text str)
+    return
+
+pub fn clipboard_get() str?
+    none
