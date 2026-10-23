@@ -64,4 +64,7 @@ fn derive.quote(s str) str  ## An AIL string literal holding `s` exactly.
 fn derive.list_of(items List[str], elem str) str
 fn derive.field_expr(f derive.FieldInfo) str
 fn derive.info_expr(t derive.TypeInfo) str  ## The `TypeInfo(...)` expression for `t`, as the bootstrap writes it.
+derive.MAX_WIDTH := 100  ## Longest line the formatter leaves alone (fmt.width.1).
+pub fn derive.tidy(text str) str  ## `text` as the bootstrap's formatter leaves it for the shapes generators
+fn derive.wrap_call(line str) List[str]
 ```

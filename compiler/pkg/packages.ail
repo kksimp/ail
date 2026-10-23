@@ -1,0 +1,261 @@
+## Packages (mod.pkg.1-6, eff.cap.4-5), as `bootstrap/src/packages.rs`: a package
+## root may hold an `ail.pkg`; every package of the dependency graph is read
+## before any source file, a dependency's modules are loaded under its name
+## (`use geo.shapes` is `DIR/shapes`), and a dependency resolves its own
+## imports against its own root and manifest (mod.pkg.3). The manifests
+## become extra files after the program's own, so their diagnostics name
+## `ail.pkg` and its line.
+use ast
+use syntax
+
+## The manifest's file name (mod.pkg.1).
+pub MANIFEST := "ail.pkg"
+
+## Each file's lines are numbered from a multiple of this (modules.rs).
+FILE_LINES := 1048576
+
+struct ManifestFile
+    package str
+    path str
+    src str
+    ## Positions are local to the manifest until `finish`.
+    diags List[syntax.Diag]
+    grants List[ast.Grant]
+    ## The packages this manifest lets contain `unsafe` code (unsafe.block.3).
+    unsafe_ok List[str]
+    ## The packages this manifest lets reach hardware: `unsafe driver` (unsafe.hw.1).
+    driver_ok List[str]
+
+## Every package of a program: the root package (named `""`) and its
+## dependencies, transitively.
+pub struct Packages
+    ## Package name to root directory.
+    roots Map[str, str]
+    ## Package name to the dependencies its manifest declares.
+    deps Map[str, List[str]]
+    manifests List[ManifestFile]
+
+## What an import path written in some module names.
+pub struct Target
+    ## The module's qualified name in the program (`geo.shapes`).
+    pub module str
+    pub dir str
+    ## The import names a package that the importing package doesn't declare (mod.pkg.4).
+    pub undeclared bool
+
+struct Seen
+    manifest int
+    pos ast.Pos
+
+## Whether `dir` is a directory.
+fn is_dir(dir str) bool
+    _ := fs.list_dir(dir) else return false
+    true
+
+## `dir` as an absolute path with `.` and `..` folded, for comparing two
+## spellings of one directory.
+fn canonical(dir str) str
+    full := if dir.starts_with("/") then dir else path.join(env.cwd(), dir)
+    mut parts := List[str]()
+    for seg in full.split("/")
+        if seg == "" or seg == "."
+            continue
+        if seg == ".."
+            _ := parts.pop()
+        else
+            parts.push(seg)
+    "/{parts.join("/")}"
+
+## Read the manifest at `root`, if any, and every path dependency's.
+pub fn read(root str) Packages
+    mut p := Packages(roots: {"": root}, deps: {}, manifests: [])
+    mut declared := Map[str, Seen]()
+    mut stack := [(canonical(root), root)]
+    p.visit("", root, none, mut stack, mut declared)
+    # mod.pkg.4: the root package's modules are unqualified, so none may
+    # share a package's name.
+    names := declared
+        .keys()
+        .sorted(by: |n| declared[n].manifest * 1073741824 + declared[n].pos.line)
+    mut clashes := List[(int, syntax.Diag)]()
+    for name in names
+        at := declared[name]
+        dir := path.join(root, name)
+        if is_dir(dir)
+            clashes.push((at.manifest, diag("mod.pkg.4", at.pos, "package `{name}` has the same name as the module directory `{dir}`", "rename the directory, or the dependency on this line and in its own `ail.pkg`")))
+    for c in clashes
+        p.manifests[c.0].diags.push(c.1)
+    p
+
+## Read package `pkg`'s manifest in `dir` and its dependencies. `from` is the
+## manifest and position of the `dep` line that declared it.
+fn Packages.visit(
+    mut self,
+    pkg str,
+    dir str,
+    from Seen?,
+    mut stack List[(str, str)],
+    mut declared Map[str, Seen],
+)
+    self.deps[pkg] = []
+    file := path.join(dir, MANIFEST)
+    src := fs.read_text(file) else return
+    parsed := parse(src)
+    manifest := parsed.manifest
+    me := self.manifests.len()
+    mut mf := ManifestFile(
+        package: pkg,
+        path: file,
+        src: src,
+        diags: parsed.diags,
+        grants: [],
+        unsafe_ok: [],
+        driver_ok: [],
+    )
+    if manifest.unsafe_ok
+        mf.unsafe_ok.push(pkg)
+    if manifest.driver_ok
+        mf.driver_ok.push(pkg)
+    self.manifests.push(mf)
+    if name := manifest.name
+        if f := from
+            if name != pkg
+                self.manifests[f.manifest].diags.push(diag(
+                    "mod.pkg.4",
+                    f.pos,
+                    "the package in `{dir}` is named `{name}`, not `{pkg}`",
+                    "declare it as `dep {name}`; `use {name} as {pkg}` renames it in one file",
+                ))
+        if c := manifest.caps
+            self.manifests[me].grants.push(ast.Grant(
+                package: pkg,
+                caps: c,
+                pos: manifest.name_pos,
+                own: true,
+            ))
+    for dep in manifest.deps
+        mut sub := ""
+        if rel := dep.dir
+            sub = path.join(dir, rel)
+        elif dep.git != none
+            # Git dependencies are fetched by `git.ail`.
+            gd := self.git_dir(me, dep)
+            sub = gd else ""
+            if sub == ""
+                continue
+        else
+            continue
+        if not is_dir(sub)
+            self.manifests[me].diags.push(diag(
+                "mod.pkg.3",
+                dep.pos,
+                "there is no directory `{sub}`",
+                "a `path` is relative to the directory that holds this `ail.pkg`",
+            ))
+            continue
+        canon := canonical(sub)
+        mut at := -1
+        for i in 0..stack.len()
+            if stack[i].0 == canon and at < 0
+                at = i
+        if at >= 0
+            mut cycle := [s.1 for s in stack[at..]]
+            cycle.push(sub)
+            self.manifests[me].diags.push(diag(
+                "mod.pkg.5",
+                dep.pos,
+                "package dependencies form a cycle: {cycle.join(" -> ")}",
+                "move what the packages share into a package that both depend on",
+            ))
+            continue
+        self.deps[pkg].push(dep.name)
+        if dep.unsafe_ok
+            self.manifests[me].unsafe_ok.push(dep.name)
+        if dep.driver_ok
+            self.manifests[me].driver_ok.push(dep.name)
+        self.manifests[me].grants.push(ast.Grant(
+            package: dep.name,
+            caps: dep.caps,
+            pos: dep.pos,
+            own: false,
+        ))
+        if seen := self.roots.get(dep.name)
+            if canonical(seen) != canon
+                self.manifests[me].diags.push(diag(
+                    "mod.pkg.4",
+                    dep.pos,
+                    "two packages are named `{dep.name}`: `{seen}` and `{sub}`",
+                    "the packages of one program need different names",
+                ))
+        else
+            self.roots[dep.name] = sub
+            declared[dep.name] = Seen(manifest: me, pos: dep.pos)
+            stack.push((canon, sub))
+            self.visit(dep.name, sub, Seen(manifest: me, pos: dep.pos), mut stack, mut declared)
+            _ := stack.pop()
+
+## The directory of git dependency `dep`, fetched or from the cache (mod.pkg.7-8);
+## none after a diagnostic in manifest `me`.
+fn Packages.git_dir(mut self, me int, dep Dep) str?
+    self.manifests[me].diags.push(diag(
+        "mod.pkg.7",
+        dep.pos,
+        "git dependencies aren't supported by the native loader yet",
+        "run with the Rust toolchain, or use a `path` dependency",
+    ))
+    none
+
+## The package that module `module` belongs to: `""` for the root package's modules.
+fn Packages.package_of(self, module str) str
+    head := module.split(".")[0]
+    if head != "" and self.roots.contains(head)
+        return head
+    ""
+
+## The module that the import path `parts`, written in module `from`, names
+## (mod.unit.2, mod.pkg.3).
+pub fn Packages.target(self, from str, parts List[str]) Target
+    pkg := self.package_of(from)
+    head := parts[0]
+    dotted := parts.join(".")
+    mut declared := false
+    if ds := self.deps.get(pkg)
+        declared = ds.contains(head)
+    if declared and self.roots.contains(head)
+        mut dir := self.roots[head]
+        for s in parts[1..]
+            dir = path.join(dir, s)
+        return Target(module: dotted, dir: dir, undeclared: false)
+    mut dir := self.roots[pkg]
+    for s in parts
+        dir = path.join(dir, s)
+    module := if pkg == "" then dotted else "{pkg}.{dotted}"
+    Target(module: module, dir: dir, undeclared: head != pkg and self.roots.contains(head))
+
+## Add the manifests to the program's files, after its source files, with
+## their diagnostics and grants. `texts` holds each file's source in order.
+pub fn Packages.finish(self, mut prog ast.Program, mut diags List[syntax.Diag], mut texts List[str])
+    for m in self.manifests
+        base := prog.files.len() * FILE_LINES
+        for d in m.diags
+            diags.push(syntax.Diag(
+                rule: d.rule,
+                pos: ast.Pos(line: d.pos.line + base, col: d.pos.col),
+                msg: d.msg,
+                fixed: d.fixed,
+                help: d.help,
+                fix: d.fix,
+            ))
+        for g in m.grants
+            prog.grants.push(ast.Grant(
+                package: g.package,
+                caps: g.caps,
+                pos: ast.Pos(line: g.pos.line + base, col: g.pos.col),
+                own: g.own,
+            ))
+        mut ok := prog.unsafe_allowed else []
+        ok.extend(m.unsafe_ok)
+        prog.unsafe_allowed = ok
+        prog.driver_allowed.extend(m.driver_ok)
+        prog.files.push(ast.SourceFile(path: m.path, module: m.package, base: base))
+        texts.push(m.src)
