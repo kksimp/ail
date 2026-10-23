@@ -49,7 +49,7 @@ fn Checker.ui_method(mut self, recv ast.Expr, n str, at ast.Pos, args List[ast.A
         args_only(args)
         mut d := new_diag("std.ui.2", at, "`ui.Window` has no method `{n}`")
         if s := suggest(n, WINDOW_METHODS)
-            d = d.did_you_mean(n, s)
+            d = d.did_you_mean_help(s)
         else
             d = d.with_help("a window's methods are {list_names(WINDOW_METHODS)}")
         diags.push(d)

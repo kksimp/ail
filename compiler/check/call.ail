@@ -1141,7 +1141,7 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     if not names.contains(n)
         mut d := new_diag("std.proc.9", at, "`proc.Output` has no method `{n}`")
         if s := suggest(n, names)
-            d = d.did_you_mean(n, s)
+            d = d.did_you_mean_help(s)
         else
             d = d.with_help("a process result's methods are {list_names(names)}")
         diags.push(d)

@@ -29,6 +29,10 @@ fn Diag.with_help(self, text str) Diag
     d.help = text
     d
 
+## `did you mean `s`?` as help only.
+fn Diag.did_you_mean_help(self, s str) Diag
+    with_help("did you mean `{s}`?")
+
 fn Diag.with_fix(self, title str, edits List[fix.Edit]) Diag
     mut d := self
     d.fixes.push(fix.Fix(title: title, edits: edits))
