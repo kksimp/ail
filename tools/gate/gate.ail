@@ -4,8 +4,10 @@
 ## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
 ## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net`, `bytecode`, `spec` (the files of those names; `net` starts tools/gate/net_server.py, `spec` runs tools/gate/spec.ail), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
 ## PDF reader), `std` (the AIL std sources check, format and are called), `selfhost` (tools/self-host/run.sh, only when named).
-## The native run programs are tools/gate/goldens.ail and nativex. No argument runs
-## every suite but `selfhost`. The last line is `GATE GREEN` or
+## The native run programs are tools/gate/goldens.ail and nativex.
+## Run it through tools/gate/mac-gate.sh, or with AIL_APP_HOST set to a missing path: a std.app program
+## (examples/app_todo.ail) would otherwise open the host's window and wait for ever.
+## No argument runs every suite but `selfhost`. The last line is `GATE GREEN` or
 ## `GATE RED (N failures)`; the exit status is 0 only for green.
 
 ## Examples without a `native_` name that the native backend takes today
