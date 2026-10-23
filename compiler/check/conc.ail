@@ -29,6 +29,7 @@ fn Checker.conc_constructor(
             "write `spawn f(args)`",
         )
         return Ty.Unknown
+    symbols[pos_key(at)] = "type:{n}"
     mut inner := Ty.Unit
     if n == "TaskGroup"
         if has_targs

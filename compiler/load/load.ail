@@ -178,6 +178,7 @@ fn at_line(d syntax.Diag, base int) syntax.Diag
         fixed: d.fixed,
         help: d.help,
         fix: d.fix,
+        edits: d.edits,
     )
 
 ## The tokens with every line moved down by `base`, in interpolations too.
