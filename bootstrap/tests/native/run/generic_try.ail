@@ -1,0 +1,13 @@
+struct U
+    name str
+    n int
+
+impl FromJson for U
+
+fn read[T FromJson](j Json) T ! JsonError
+    T.from_json(j)?
+
+fn main() !
+    j := parse_json("\{\"name\": \"a\", \"n\": 3}")? "parse"
+    u := read[U](j)? "read"
+    print(u)

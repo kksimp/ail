@@ -672,6 +672,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0855](0855-retire-the-rust-bootstrap.md) | Retire the Rust bootstrap: `ail` is a native AIL program, seeded from private release binaries with a committed SHA-256 *(designer; detail delegated)* | Accepted | 2026-10-22 |
 | [0852](0852-native-tls-one-suite-first.md) | Native TLS 1.3 offers ChaCha20-Poly1305 first and lands in checked slices; verification ships with the handshake *(delegated)* | Accepted | 2026-10-22 |
 | [0858](0858-native-assert-lowering.md) | `assert` and `assert_eq` lower natively; `@test` stays a rewrite *(delegated)* | Accepted | 2026-10-22 |
+| [0864](0864-native-recursive-default-text.md) | A recursive type's default text is a generated function, not an unbounded inline expansion *(delegated)* | Accepted | 2026-10-23 |
 | [0848](0848-idle-values-leave-registers-in-loops.md) | Values idle in a loop leave their registers; a checked `mul` result avoids its operands' registers *(delegated)* | Accepted | 2026-10-22 |
 | [0850](0850-native-compiler-runs-builtin-derive-generators.md) | The native compiler runs the prelude's derive generators itself, so it needs no `AIL_DERIVED` file *(delegated)* | Accepted | 2026-10-22 |
 | [0854](0854-std-app-bitmap-op.md) | `std.app` `Bitmap` op: RGBA pixels in the display list, kept by the host under an id; Garlic sends decoded images once *(delegated)* | Accepted | 2026-10-22 |
