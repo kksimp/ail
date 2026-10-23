@@ -8,7 +8,7 @@
 ## The table is its own mapping (global slot `MEM_TAB`): a count, a capacity,
 ## then three words per block, its start, its end and 1 while it is live.
 
-# Global slot 44 (requested from the integrator, 2026-10-23).
+# Global slot 44 (integrator item 261).
 MEM_TAB := 44
 
 ## Record a new block `[p, p + bytes)`; a freed entry it reuses is dropped.
