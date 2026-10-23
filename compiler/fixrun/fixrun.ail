@@ -4,6 +4,7 @@
 ## The check itself comes in as a function (`Diagnose`), so this module needs
 ## neither the loader nor the checker.
 use ast
+use fix
 use fmt
 
 ## Rounds of fix-and-recheck before giving up (fix.apply.2).
@@ -15,7 +16,7 @@ pub struct Found
     pub rule str
     pub pos ast.Pos
     pub warning bool
-    pub fixes List[Fix]
+    pub fixes List[fix.Fix]
 
 ## What a check of one file found: the diagnostics sorted by position with
 ## spans and anchored edits settled, and their text (or JSON lines) as
