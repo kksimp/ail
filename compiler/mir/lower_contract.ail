@@ -16,6 +16,33 @@ struct NameKey
     name str
     key str
 
+## What impl methods inherit from the trait's methods (contract.inh.1-3): the trait method
+## and its name, by the impl method's key, and the trait's `ensures` of the method being lowered.
+struct Inherit
+    of Map[str, ast.FnDecl]
+    label Map[str, str]
+    ens_from ast.FnDecl?
+    ens_n int
+    ens_origin str
+
+## Record that `f` (declared in `prog`) inherits the contracts of its trait's method of the
+## same name (contract.inh.1). The source is read without `link_contracts`, so find it here.
+@allow("expr.match.3") fn Lower.note_inherited(mut self, f ast.FnDecl, prog ast.Program, pre str)
+    k := match f.within
+        InImpl(i) => i
+        _ => return
+    key := fn_key(f, pre)
+    for t in prog.traits
+        if t.name != prog.impls[k].trait_name
+            continue
+        for m in t.methods
+            tf := prog.fns[m]
+            if tf.name == f.name and tf.contracts.len() > 0
+                inh.label[key] = "{t.name}.{tf.name}"
+                inh.of[key] = tf
+                contracted[key] = f
+                return
+
 # ---- positions ----
 
 ## Where `e` starts, as the interpreter reports it.
@@ -145,101 +172,66 @@ fn Lower.check_branch(mut self, cond int) int
 
 # ---- requires ----
 
-## An impl method's inherited contracts (contract.inh.1-3): the trait's method,
-## named `Trait.m`, is kept under `inh:KEY` in `contracted`.
-fn Lower.declare_inherited(mut self, prog ast.Program, pre str)
-    for im in prog.impls
-        if im.target.params != none
-            continue
-        for t in prog.traits
-            if t.name != im.trait_name
-                continue
-            for m in t.methods
-                tm := prog.fns[m]
-                if tm.contracts.len() == 0
-                    continue
-                for n in im.methods
-                    f := prog.fns[n]
-                    if f.name != tm.name
-                        continue
-                    mut g := f
-                    g.owner = im.target
-                    mut label := tm
-                    label.name = "{t.name}.{tm.name}"
-                    contracted["inh:{fn_key(g, pre)}"] = label
-
-fn requires_of(cs List[ast.Contract]) List[ast.Contract]
-    [c for c in cs if not c.is_ensures]
-
-## How many of `cs` are `ensures` lines.
-fn ensures_in(cs List[ast.Contract]) int
-    [c for c in cs if c.is_ensures].len()
-
-## Bind the trait method's parameter names to the implementation's, by
-## position (contract.inh.3).
-fn Lower.alias_params(mut self, f ast.FnDecl, inh ast.FnDecl)
-    for i in 0..inh.params.len()
-        if i < f.params.len() and inh.params[i].name != f.params[i].name
-            scopes[0][inh.params[i].name] = lookup(f.params[i].name) else continue
-
-## Trap unless `c` holds; `note` says where an inherited condition comes from.
-fn Lower.require_one(
+## `c`'s condition, lowered in the callee's module under the names bound in `scope`.
+fn Lower.req_cond(
     mut self,
-    key str,
     c ast.Contract,
-    note str,
-    args List[NameKey],
-    pos ast.Pos,
+    scope List[Map[str, str]],
     callee_file int,
-)
-    caller_file := file
+    caller_file int,
+) Val?
+    scopes = scope
     if callee_file != caller_file
         enter_file(callee_file)
-    cond := lower_value(c.cond, Ty.Bool)
+    v := lower_value(c.cond, Ty.Bool)
     if callee_file != caller_file
         enter_file(caller_file)
-    v := cond else return
-    ok := check_branch(v.id)
-    fail_requires(key, c, note, args, pos, callee_file)
-    cur = ok
+    v
 
-fn Lower.fail_requires(
+## The trap of a `requires` that failed: `label` is the function, `origin` says where an
+## inherited condition came from, `also` that the function's own lines failed too.
+fn Lower.req_trap(
     mut self,
-    key str,
     c ast.Contract,
-    note str,
+    label str,
+    origin str,
+    also bool,
     args List[NameKey],
     pos ast.Pos,
     callee_file int,
+    caller_file int,
 )
     trap_open("contract.req.1", pos)
-    say("`{key}` requires `{c.text}`{note}, but it was called with ")
+    say("`{label}` requires `{c.text}`{origin}, but it was called with ")
     describe_args(args, pos)
-    where := if callee_file != file then "{src_paths[callee_file]}:" else ""
+    if also
+        say(", and neither do its own `requires` lines")
+    where := if callee_file != caller_file then "{src_paths[callee_file]}:" else ""
     say(" (contract at {where}{c.pos.line}:{c.pos.col})")
     trap_close(pos)
 
 ## contract.req.1: before a call of `key` with the arguments `args_v`, each
-## `requires` holds, or the program traps at the call, `pos`. With inherited
-## conditions (contract.inh.1) the call passes when all of them hold or all of
-## the implementation's own do.
+## `requires` holds, or the program traps at the call, `pos`. An implementation's own
+## lines weaken the trait's (contract.inh.1): the call is fine when all of the
+## trait's hold or all of its own do.
 fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     if unchecked or any_requires(key, args_v, pos)
         return
-    own := contracted.get(key)
-    inh := contracted.get("inh:{key}")
-    if own == none and inh == none
-        return
-    f := fn_decl.get(key) else return
+    f := contracted.get(key) else return
     mut reqs := List[ast.Contract]()
-    if o := own
-        reqs = requires_of(o.contracts)
-    mut inh_reqs := List[ast.Contract]()
-    if i := inh
-        inh_reqs = requires_of(i.contracts)
-    if reqs.len() == 0 and inh_reqs.len() == 0
+    for c in f.contracts
+        if not c.is_ensures
+            reqs.push(c)
+    mut theirs := List[ast.Contract]()
+    tf := inh.of.get(key)
+    if t := tf
+        for c in t.contracts
+            if not c.is_ensures
+                theirs.push(c)
+    if reqs.len() == 0 and theirs.len() == 0
         return
     callee_file := fn_file[key]
+    caller_file := file
     sig := sigs[key]
     saved := scopes
     saved_self := self_ty
@@ -255,40 +247,46 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     for i in 0..f.params.len()
         declare(f.params[i].name, sig.params[k + i], args_v[k + i])
         args.push(NameKey(name: f.params[i].name, key: lookup(f.params[i].name) else ""))
+    own_scope := scopes
+    # The trait method's parameter names, for its conditions (contract.inh.3).
+    mut their_scope := own_scope
+    if t := tf
+        their_scope = [Map[str, str]()]
+        scopes = their_scope
+        if t.receiver != none and k == 1
+            declare("self", sig.params[0], args_v[0])
+        for i in 0..t.params.len()
+            declare(t.params[i].name, sig.params[k + i], args_v[k + i])
+        their_scope = scopes
+    label := inh.label.get(key) else key
+    origin := " (inherited from `{label}`)"
     unchecked = true
-    if inh_reqs.len() == 0
-        for c in reqs
-            require_one(key, c, "", args, pos, callee_file)
+    if reqs.len() > 0 and theirs.len() > 0
+        pass := new_block()
+        for c in theirs
+            v := req_cond(c, their_scope, callee_file, caller_file) else break
+            ok := check_branch(v.id)
+            for oc in reqs
+                w := req_cond(oc, own_scope, callee_file, caller_file) else break
+                held := check_branch(w.id)
+                req_trap(c, key, origin, true, args, pos, callee_file, caller_file)
+                cur = held
+            jump(pass, [])
+            cur = ok
+        jump(pass, [])
+        seal(pass)
+        cur = pass
     else
-        i := inh else return
-        alias_params(f, i)
-        note := " (inherited from `{i.name}`)"
-        if reqs.len() == 0
-            for c in inh_reqs
-                require_one(key, c, note, args, pos, callee_file)
-        else
-            # Every inherited condition, or every own one.
-            pass := new_block()
-            own_chk := new_block()
-            for c in inh_reqs
-                cond := lower_value(c.cond, Ty.Bool)
-                v := cond else break
-                nxt := new_block()
-                branch(v.id, nxt, [], own_chk, [])
-                seal(nxt)
-                cur = nxt
-            jump(pass, [])
-            seal(own_chk)
-            cur = own_chk
-            for c in reqs
-                cond := lower_value(c.cond, Ty.Bool)
-                v := cond else break
-                ok := check_branch(v.id)
-                fail_requires(key, inh_reqs[0], note, args, pos, callee_file)
-                cur = ok
-            jump(pass, [])
-            seal(pass)
-            cur = pass
+        for c in theirs
+            v := req_cond(c, their_scope, callee_file, caller_file) else break
+            ok := check_branch(v.id)
+            req_trap(c, key, origin, false, args, pos, callee_file, caller_file)
+            cur = ok
+        for c in reqs
+            v := req_cond(c, own_scope, callee_file, caller_file) else break
+            ok := check_branch(v.id)
+            req_trap(c, key, "", false, args, pos, callee_file, caller_file)
+            cur = ok
     unchecked = false
     scopes = saved
     self_ty = saved_self
@@ -304,11 +302,19 @@ fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
             ens_label = key
             ens_vars = []
     mut list := List[ast.Contract]()
-    inh := contracted.get("inh:{key}")
-    if i := inh
-        for c in i.contracts
+    inh.ens_n = 0
+    inh.ens_from = inh.of.get(key)
+    if t := inh.ens_from
+        inh.ens_origin = " (inherited from `{inh.label.get(key) else key}`)"
+        for c in t.contracts
             if c.is_ensures
+                if c.olds.len() > 0
+                    problem(
+                        c.pos,
+                        "`old(..)` in an inherited `ensures` isn't in the native subset yet",
+                    )
                 list.push(c)
+        inh.ens_n = list.len()
     for c in f.contracts
         if c.is_ensures
             list.push(c)
@@ -322,13 +328,6 @@ fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
     for p in f.params
         ens_vars.push(NameKey(name: p.name, key: lookup(p.name) else ""))
     ens_nargs = ens_vars.len()
-    if i := inh
-        for k in 0..i.params.len()
-            if k < f.params.len() and i.params[k].name != f.params[k].name
-                ens_vars.push(NameKey(
-                    name: i.params[k].name,
-                    key: lookup(f.params[k].name) else "",
-                ))
     unchecked = true
     for c in list
         for o in c.olds
@@ -352,18 +351,28 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
     unit := ret.is_unit()
     if not unit
         declare("result", ret, rv)
+    own_scope := scopes
+    # An inherited condition reads the arguments under the trait method's names (contract.inh.3).
+    mut their_scope := own_scope
+    if t := inh.ens_from
+        mut m := Map[str, str]()
+        skip := if ens_vars.len() > 0 and ens_vars[0].name == "self" then 1 else 0
+        if t.receiver != none and skip == 1
+            m["self"] = ens_vars[0].key
+        for i in 0..t.params.len()
+            m[t.params[i].name] = ens_vars[skip + i].key
+        if rk := own_scope[0].get("result")
+            m["result"] = rk
+        their_scope = [m]
     unchecked = true
-    mut from := ""
-    mut n_inh := 0
-    if i := contracted.get("inh:{ens_label}")
-        from = " (inherited from `{i.name}`)"
-        n_inh = ensures_in(i.contracts)
-    for e in 0..ens.len()
-        c := ens[e]
+    for i in 0..ens.len()
+        c := ens[i]
+        scopes = if i < inh.ens_n then their_scope else own_scope
         v := lower_value(c.cond, Ty.Bool) else break
         ok := check_branch(v.id)
         trap_open("contract.ens.1", c.pos)
-        say("`{ens_label}` ensures `{c.text}`{if e < n_inh then from else ""}, but it returned")
+        origin := if i < inh.ens_n then inh.ens_origin else ""
+        say("`{ens_label}` ensures `{c.text}`{origin}, but it returned")
         if not unit
             say(" ")
             describe(Val(id: rv, ty: ret), c.pos)

@@ -152,7 +152,10 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
         a := args[k]
         if a.label != none or a.mutable
             return unsupported(npos, "this call of `{m}.{name}`")
-        v := lower_value(a.value, sig.params[k])?
+        mut v := lower_value(a.value, sig.params[k])?
+        # `bytes` has a `str`'s layout (native-abi.md §2): `hash.sha256(b"abc")` hashes it as is.
+        if v.ty == Ty.Bytes and sig.params[k] == Ty.Str
+            v = Val(id: op("copy", [v.id], Ty.Str), ty: Ty.Str)
         vs.push(convert(v, sig.params[k], expr_pos(a.value)))
     if m == "random" and name == "int"
         ok := check_branch(op("le", [vs[0], vs[1]], Ty.Bool))
@@ -197,8 +200,8 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
         return lower_hw_call(name, npos, args)
     if m == "bytes" and name == "zeros"
         return lower_bytes_zeros(args, npos)
-    # A standard error struct built by the program, `fs.IoError(...)` (std.err.1).
-    if structs.contains("{m}.{name}") and os_lookup(m, name) == none
+    # A struct of the module built in place: `proc.Output(status: 0, ...)`.
+    if structs.contains("{m}.{name}")
         return new_struct("{m}.{name}", args, npos)
     f := os_lookup(m, name) else
         if structs.contains("{m}.{name}")

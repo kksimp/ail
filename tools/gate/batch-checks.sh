@@ -14,6 +14,8 @@ run() { # run NAME CMD...
 run build ./ail --version
 [ $fails = 0 ] || { echo "CHECKS RED ($fails)"; exit 1; }
 for d in compiler tools/garlic; do run check-${d##*/} ./ail check $d; done
+# The file build nativex and self-host stage 1 do: it sees only main.ail and what it `use`s (item 267).
+run build-cli env AIL_ROOT="$PWD" AIL_COMPILER="$PWD/compiler" AIL_RUST=1 ./ail build compiler/main.ail -o "$out/ail-cli"
 run fmt ./ail fmt --check compiler examples tools/garlic
 run rules tools/rules-audit.sh
 for p in links dupes snippets; do run doc-$p python3 tools/check-doc-$p.py; done

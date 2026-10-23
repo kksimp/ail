@@ -34,6 +34,7 @@ pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Proble
 pub fn mir.lower_package_with(List[mir.Source], ast.Program?, int) mir.Module ! mir.Problems [fail]
 pub fn mir.expr_pos(ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
+pub mir.STD_AIL := ...
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
 pub fn mir.prelude_text(str) str
@@ -78,4 +79,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1137); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1148); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

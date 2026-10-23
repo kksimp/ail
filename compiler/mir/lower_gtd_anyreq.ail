@@ -14,7 +14,7 @@ fn Lower.any_requires(mut self, key str, args_v List[int], pos ast.Pos) bool
     mut has := false
     for s in impls
         m := "{s}.{name}"
-        if contracted.contains(m) or contracted.contains("inh:{m}")
+        if contracted.contains(m)
             has = true
     if not has
         return true
@@ -23,7 +23,7 @@ fn Lower.any_requires(mut self, key str, args_v List[int], pos ast.Pos) bool
     for k in 0..impls.len()
         m := "{impls[k]}.{name}"
         target := sigs.get(m) else continue
-        if not contracted.contains(m) and not contracted.contains("inh:{m}")
+        if not contracted.contains(m)
             continue
         yes := new_block()
         no := new_block()
