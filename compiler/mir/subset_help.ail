@@ -65,8 +65,6 @@ fn entry_help(message str) str
         return "unsafe blocks aren't native yet; `ail run` runs them"
     if message.contains("this `else` must leave")
         return "write `else return`, `else break`, `else continue`, or a fallback value"
-    if message.contains("`for mut`")
-        return "loop by index instead: `for i in 0..xs.len()` and `xs[i] = ...`"
     if message.contains("a comprehension whose element type isn't known")
         return "give the list its type with `List[T]()` and `push` in a loop"
     if message.contains(" on `?`")

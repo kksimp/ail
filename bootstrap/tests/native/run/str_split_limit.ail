@@ -1,0 +1,6 @@
+# type.str.4: `split(sep, limit)` makes at most `limit` pieces.
+fn main()
+    print("a=b=c".split("=", 2))
+    print("a=b=c".split('=', 9))
+    print("abc".split("=", 2))
+    print("a=b".split("=", 0))
