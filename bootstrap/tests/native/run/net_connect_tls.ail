@@ -1,0 +1,6 @@
+# net.connect_tls (std.net.13): the transport failure comes first.
+fn main()
+    c := net.connect_tls("127.0.0.1", 1) else err
+        print("{err.kind}")
+        return
+    print("connected")

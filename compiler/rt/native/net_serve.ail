@@ -610,3 +610,51 @@ fn serve_respond(h int, r int, at str)
 
 fn serve_respond_bytes(h int, status int, headers int, data str, at str)
     serve_answer(h, status, headers, 0, str_addr(data), at)
+
+# ---- bytes on a connection (std.net.16) and TLS (std.net.13) ----
+
+## `c.read_bytes(max)`: at least one byte and up to `max`, undecoded; empty at
+## the end of the stream.
+fn net_read_bytes(h int, max int, at str) str
+    o := net_obj(h)
+    if o == 0
+        net_closed("connection", at)
+        return str_at(0)
+    if max <= 0
+        net_fail(
+            str_at(load64(o + NET_PEER)),
+            "other",
+            "`read` needs a size of at least 1, not {max}",
+            at,
+        )
+        return str_at(0)
+    if load64(o + NET_POS) == load64(o + NET_LEN) and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+        e := net_fill(o)
+        if e < 0
+            net_io_fail(o, e, at)
+            return str_at(0)
+    pos := load64(o + NET_POS)
+    avail := load64(o + NET_LEN) - pos
+    n := if max < avail then max else avail
+    s := str_new(n, n)
+    copy_bytes(s + 16, load64(o + NET_BUF) + pos, n)
+    store64(o + NET_POS, pos + n)
+    str_at(s)
+
+## `net.connect_tls(host, port)`: a connection with the TLS handshake done.
+fn net_connect_tls(host str, port int, at str) int
+    url := "{host}:{port}"
+    h := net_dial(host, port, url, at)
+    if h == 0
+        return 0
+    o := net_obj(h)
+    te := tc_connect(o, host)
+    if te != 0
+        if te <= -1000000
+            msg := str_at(load64(load64(o + NET_TLS) + TS_MSG))
+            net_close(h)
+            return net_fail(url, "tls", msg, at)
+        net_io_fail(o, te, at)
+        net_close(h)
+        return 0
+    net_wrap(h)
