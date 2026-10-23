@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><title>XHR test</title></head>
+<body>
+<p id="out">waiting</p>
+<script>
+const out = document.getElementById("out");
+const log = [];
+const x = new XMLHttpRequest();
+x.onreadystatechange = () => log.push("rs" + x.readyState);
+x.addEventListener("load", () => {
+  log.push("load " + x.status + " " + JSON.parse(x.responseText).items.length);
+});
+x.onloadend = () => {
+  out.textContent = log.join(",");
+  const y = new XMLHttpRequest();
+  y.open("GET", "missing.json");
+  y.onload = () => { out.textContent += " missing " + y.status; };
+  y.send();
+};
+x.open("GET", "data.json", true);
+x.send();
+</script>
+</body></html>

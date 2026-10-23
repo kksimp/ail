@@ -260,7 +260,12 @@ regex engine is written.
   repeats for the fetches that starts, up to 20 rounds, before the page is
   shown. The same runs after a click, typing or submit. Not done: CORS
   checks, streaming, `Request`, `FormData`, `Blob`, aborting a pending
-  fetch, `XMLHttpRequest`.
+  fetch.
+- `XMLHttpRequest` (same file): `send` becomes a fetch request, and the
+  answer fires `readystatechange` (1 to 4), `load`, `error` and `loadend`
+  at the `on...` properties and listeners. A synchronous request is answered
+  a turn later, like an asynchronous one; `responseType` "json" parses,
+  `timeout` is ignored, and there is no upload progress.
 
 ## Generators and async functions
 

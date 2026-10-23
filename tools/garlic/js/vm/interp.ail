@@ -40,6 +40,8 @@ pub struct Vm
     pub fetches Map[int, ref JsObject]
     pub fetch_headers Map[int, str]
     pub fetch_seq int
+    ## XMLHttpRequests waiting for the browser, by request id.
+    pub xhrs Map[int, ref JsObject]
     ## While set, inserted nodes gather in `mo_held` for one record.
     pub mo_hold bool
     pub mo_held List[int]

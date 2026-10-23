@@ -64,6 +64,7 @@ pub fn new_vm() Vm
         fetches: {},
         fetch_headers: {},
         fetch_seq: 0,
+        xhrs: {},
         mo_hold: false,
         mo_held: [],
         template_frags: {},
@@ -361,7 +362,7 @@ fn Vm.setup(mut self)
 ## Natives that `new` may call.
 pub fn native_is_ctor(name str) bool
     match name
-        "Object" | "Function" | "Array" | "String" | "Number" | "Boolean" | "Error" | "TypeError" | "RangeError" | "SyntaxError" | "ReferenceError" | "EvalError" | "URIError" | "AggregateError" | "Map" | "Set" | "WeakMap" | "WeakSet" | "WeakRef" | "FinalizationRegistry" | "IntersectionObserver" | "ResizeObserver" | "dom.fetch.new.AbortController" | "dom.fetch.new.Headers" | "dom.fetch.new.Response" | "RegExp" | "Date" | "Promise" | "dom.Event" | "dom.MutationObserver" | "dom.illegal" | "dom.URL" | "dom.URLSearchParams" | "dom.Image" =>
+        "Object" | "Function" | "Array" | "String" | "Number" | "Boolean" | "Error" | "TypeError" | "RangeError" | "SyntaxError" | "ReferenceError" | "EvalError" | "URIError" | "AggregateError" | "Map" | "Set" | "WeakMap" | "WeakSet" | "WeakRef" | "FinalizationRegistry" | "IntersectionObserver" | "ResizeObserver" | "dom.fetch.xhr.new" | "dom.fetch.new.AbortController" | "dom.fetch.new.Headers" | "dom.fetch.new.Response" | "RegExp" | "Date" | "Promise" | "dom.Event" | "dom.MutationObserver" | "dom.illegal" | "dom.URL" | "dom.URLSearchParams" | "dom.Image" =>
             true
         _ => false
 

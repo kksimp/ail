@@ -1,0 +1,15 @@
+<!DOCTYPE html><html><body><script>
+const x = new XMLHttpRequest();
+const log = [];
+x.onreadystatechange = () => log.push("rs" + x.readyState);
+console.log(x.readyState, x.status, JSON.stringify(x.responseText), x.timeout, x.withCredentials, XMLHttpRequest.DONE, x.OPENED);
+try { x.send(); } catch (e) { console.log(e.name); }
+try { x.setRequestHeader("a", "b"); } catch (e) { console.log(e.name); }
+x.open("POST", "https://example.test/api");
+x.setRequestHeader("Content-Type", "application/json");
+console.log(log.join(","), x.readyState, x.getResponseHeader("x"), JSON.stringify(x.getAllResponseHeaders()));
+console.log(Object.prototype.toString.call(x), typeof x.addEventListener);
+try { XMLHttpRequest(); } catch (e) { console.log(e.name); }
+x.abort();
+console.log(log.join(","), x.readyState);
+</script></body></html>

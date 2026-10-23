@@ -98,6 +98,10 @@ pub fn Vm.fetch_done(
     header_lines str,
     body str,
 )
+    if x := xhrs.get(id)
+        xhrs.remove(id)
+        xhr_done(x, true, status, status_text, url, header_lines, body)
+        return
     p := fetches.get(id) else return
     fetches.remove(id)
     o := object("Response", proto_of("Response"))
@@ -118,6 +122,10 @@ pub fn Vm.fetch_done(
 
 ## fetch `id` failed (no network, refused): `TypeError: Failed to fetch`.
 pub fn Vm.fetch_failed(mut self, id int)
+    if x := xhrs.get(id)
+        xhrs.remove(id)
+        xhr_done(x, false, 0, "", "", "", "")
+        return
     p := fetches.get(id) else return
     fetches.remove(id)
     reject_promise(p, make_error("TypeError", "Failed to fetch"))
@@ -142,6 +150,10 @@ fn Vm.fetch_native(
         if n == "AbortController" or n == "AbortSignal"
             return abort_new(n)
         return fetch_new(n, args)
+    if m == "xhr.new"
+        return xhr_new(new_target)
+    if k := m.strip_prefix("xhr.")
+        return xhr_method(k, this_val, args)
     if k := m.strip_prefix("abort.")
         return abort_method("abort", this_val, args)
     if k := m.strip_prefix("signal.")
@@ -314,3 +326,219 @@ fn Vm.call_listener_plain(mut self, f Value, this_val Value, ev Value)
         v
     else err
         report(uncaught_text(err))
+
+# -------------------------------------------------------- XMLHttpRequest
+
+## XMLHttpRequest (XHR §4), asynchronous only: `send` records a fetch like
+## `fetch` does and the answer fires `readystatechange`, `load` and
+## `loadend`. A synchronous request (`open(..., false)`) is answered the
+## same way, a turn later, since the engine can't wait on the network.
+fn Vm.xhr_setup(mut self)
+    p := object("Object", proto_of("Object"))
+    protos["XMLHttpRequest"] = Obj(p)
+    methods(
+        p,
+        "dom.fetch.xhr",
+        "open:2 setRequestHeader:2 send:0 abort:0 getResponseHeader:1 getAllResponseHeaders:0 overrideMimeType:1 addEventListener:2 removeEventListener:2",
+    )
+    mut names := ["UNSENT", "OPENED", "HEADERS_RECEIVED", "LOADING", "DONE"]
+    for i in 0..names.len()
+        constant(p, names[i], Num(i.to_float()))
+    c := obj_of(native_fn("dom.fetch.xhr.new", "XMLHttpRequest", 0)) else return
+    c.props["prototype"] = Prop(
+        value: Obj(p),
+        get: Undef,
+        set: Undef,
+        accessor: false,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+    )
+    p.props["constructor"] = hidden(Obj(c))
+    for i in 0..names.len()
+        constant(c, names[i], Num(i.to_float()))
+    global_obj.props["XMLHttpRequest"] = hidden(Obj(c))
+    weak_tag("XMLHttpRequest")
+
+fn Vm.xhr_new(mut self, new_target Value) Value ! Thrown
+    if new_target == Value.Undef
+        return type_error("Failed to construct 'XMLHttpRequest': Please use the 'new' operator, this DOM object constructor cannot be called as a function.")
+    proto := get(new_target, "prototype")?
+    o := object("XMLHttpRequest", if is_obj(proto) then proto else proto_of("XMLHttpRequest"))
+    o.props["readyState"] = data(Num(0.0))
+    o.props["status"] = data(Num(0.0))
+    o.props["statusText"] = data(Str(""))
+    o.props["responseText"] = data(Str(""))
+    o.props["response"] = data(Str(""))
+    o.props["responseURL"] = data(Str(""))
+    o.props["responseType"] = data(Str(""))
+    o.props["timeout"] = data(Num(0.0))
+    o.props["withCredentials"] = data(Bool(false))
+    for t in [
+        "readystatechange",
+        "load",
+        "error",
+        "abort",
+        "loadend",
+        "timeout",
+        "loadstart",
+        "progress",
+    ]
+        o.props["on{t}"] = data(Null)
+    o.props["{PRIVATE}method"] = hidden(Str("GET"))
+    o.props["{PRIVATE}url"] = hidden(Str(""))
+    o.props["{PRIVATE}headers"] = hidden(Str(""))
+    o.props["{PRIVATE}response-headers"] = hidden(Str(""))
+    o.props["{PRIVATE}listeners"] = hidden(array([]))
+    Value.Obj(o)
+
+fn xhr_str(o ref JsObject, key str) str
+    if p := o.props.get(key)
+        return str_of(p.value) else ""
+    ""
+
+fn Vm.xhr_state(mut self, o ref JsObject, n int)
+    o.props["readyState"] = data(Num(n.to_float()))
+
+## Fires `type` at the request: its `on...` property, then its listeners.
+fn Vm.xhr_fire(mut self, o ref JsObject, type_name str)
+    ev := make_event(type_name, Value.Undef) else return
+    if e := obj_of(ev)
+        e.props["target"] = data(Value.Obj(o))
+        e.props["currentTarget"] = data(Value.Obj(o))
+    this_val := Value.Obj(o)
+    h := get(this_val, "on{type_name}") else Value.Undef
+    if is_callable(h)
+        call_listener_plain(h, this_val, ev)
+    if ls := obj_of(o.props["{PRIVATE}listeners"].value)
+        for entry in ls.elems
+            entry_type := to_string(get(entry, "0") else Value.Undef) else ""
+            if entry_type == type_name
+                call_listener_plain(get(entry, "1") else Value.Undef, this_val, ev)
+
+fn Vm.xhr_method(mut self, m str, this_val Value, args List[Value]) Value ! Thrown
+    o := this_class(this_val, "XMLHttpRequest", m)?
+    a0 := arg_at(args, 0)
+    a1 := arg_at(args, 1)
+    match m
+        "open" =>
+            o.props["{PRIVATE}method"] = hidden(Str(to_string(a0)?.to_upper()))
+            o.props["{PRIVATE}url"] = hidden(Str(resolve_url(to_string(a1)?)))
+            o.props["{PRIVATE}headers"] = hidden(Str(""))
+            xhr_state(o, 1)
+            xhr_fire(o, "readystatechange")
+            Value.Undef
+        "setRequestHeader" =>
+            if int_of(num_of(o.props["readyState"].value) else 0.0) != 1
+                return dom_exception(
+                    "InvalidStateError",
+                    "Failed to execute 'setRequestHeader' on 'XMLHttpRequest': The object's state must be OPENED.",
+                )
+            prev := xhr_str(o, "{PRIVATE}headers")
+            line := "{to_string(a0)?.to_lower()}: {to_string(a1)?}"
+            o.props["{PRIVATE}headers"] = hidden(Str(if prev == "" then line else "{prev}\n{line}"))
+            Value.Undef
+        "send" =>
+            if int_of(num_of(o.props["readyState"].value) else 0.0) != 1
+                return dom_exception(
+                    "InvalidStateError",
+                    "Failed to execute 'send' on 'XMLHttpRequest': The object's state must be OPENED.",
+                )
+            method := xhr_str(o, "{PRIVATE}method")
+            body := if is_nullish(a0)
+                or method == "GET"
+                or method == "HEAD" then "" else to_string(a0)?
+            fetch_seq += 1
+            xhrs[fetch_seq] = o
+            o.props["{PRIVATE}sent"] = hidden(Bool(true))
+            fetch_headers[fetch_seq] = xhr_str(o, "{PRIVATE}headers")
+            host_requests.push(HostRequest(
+                kind: "fetch",
+                url: xhr_str(o, "{PRIVATE}url"),
+                method: method,
+                node: fetch_seq,
+                text: body,
+            ))
+            xhr_fire(o, "loadstart")
+            Value.Undef
+        "abort" =>
+            sent := o.props.get("{PRIVATE}sent") != none
+            for id in xhrs.keys()
+                if xhrs[id].id == o.id
+                    xhrs.remove(id)
+            if sent
+                o.props.remove("{PRIVATE}sent")
+                xhr_state(o, 4)
+                xhr_fire(o, "readystatechange")
+                xhr_fire(o, "abort")
+                xhr_fire(o, "loadend")
+                xhr_state(o, 0)
+            Value.Undef
+        "getResponseHeader" =>
+            want := to_string(a0)?.to_lower()
+            for line in xhr_str(o, "{PRIVATE}response-headers").split("\n")
+                i := line.find(":") else continue
+                if line.slice(0, i).trim().to_lower() == want
+                    return Value.Str(line.slice(i + 1, line.chars().len()).trim())
+            Value.Null
+        "getAllResponseHeaders" =>
+            mut out := List[str]()
+            for line in xhr_str(o, "{PRIVATE}response-headers").split("\n")
+                if line != ""
+                    out.push("{line.to_lower()}\r\n")
+            Value.Str(out.join(""))
+        "addEventListener" =>
+            cb := a1
+            if is_callable(cb)
+                if ls := obj_of(o.props["{PRIVATE}listeners"].value)
+                    ls.elems.push(array([a0, cb]))
+            Value.Undef
+        "removeEventListener" =>
+            if ls := obj_of(o.props["{PRIVATE}listeners"].value)
+                mut kept := List[Value]()
+                for e in ls.elems
+                    if not (get(e, "0")? == a0 and get(e, "1")? == a1)
+                        kept.push(e)
+                ls.elems = kept
+            Value.Undef
+        _ => Value.Undef
+
+## The browser answered request `id` for an XMLHttpRequest.
+fn Vm.xhr_done(
+    mut self,
+    o ref JsObject,
+    ok bool,
+    status int,
+    status_text str,
+    url str,
+    header_lines str,
+    body str,
+)
+    o.props.remove("{PRIVATE}sent")
+    if not ok
+        xhr_state(o, 4)
+        xhr_fire(o, "readystatechange")
+        xhr_fire(o, "error")
+        xhr_fire(o, "loadend")
+        return
+    o.props["status"] = data(Num(status.to_float()))
+    o.props["statusText"] = data(Str(status_text))
+    o.props["responseURL"] = data(Str(url))
+    o.props["{PRIVATE}response-headers"] = hidden(Str(header_lines))
+    xhr_state(o, 2)
+    xhr_fire(o, "readystatechange")
+    xhr_state(o, 3)
+    xhr_fire(o, "readystatechange")
+    kind := xhr_str(o, "responseType")
+    mut response := Value.Str(body)
+    if kind == "json"
+        if v := json_parse(body, Value.Undef)
+            response = v
+        else err
+            response = Value.Null
+    o.props["responseText"] = data(Str(body))
+    o.props["response"] = data(response)
+    xhr_state(o, 4)
+    xhr_fire(o, "readystatechange")
+    xhr_fire(o, "load")
+    xhr_fire(o, "loadend")

@@ -2692,3 +2692,7 @@ fn flat(s gfx.Scene) List[str]
 @test fn a_pages_fetch_reads_files_and_its_promises_settle()
     b := Browser.new("{testdata()}/fetch.html", 80, 30)
     assert(b.pg.text().contains("status 200 true garlic+onion missing 404 false"))
+
+@test fn an_xmlhttprequest_gets_its_events_and_answer()
+    b := Browser.new("{testdata()}/xhr.html", 80, 30)
+    assert(b.pg.text().contains("rs1,rs2,rs3,rs4,load 200 2 missing 404"))
