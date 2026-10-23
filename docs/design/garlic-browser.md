@@ -142,6 +142,11 @@ An agent drives Garlic headless, with no window:
   presses a button, toggles a box), `type:12=TEXT`, `submit:12` (the form
   of node 12), `check:12`, `select:12=OPTION`, `open:URL`, `back`, `forward`,
   `find:TEXT`, `scroll:ROW`, `reload`.
+  On a page with scripts the engine stays alive after load: `click`, `type`
+  and `submit` first dispatch `click`, `input`/`change` and `submit` through
+  the page's listeners (a cancelled event stops the default), replay what
+  they changed into the tree, and run due timers. Pages restored by Back
+  have no live engine.
 - `--session` keeps one browser open: one JSON action per line on stdin
   (`{"do":"follow","link":3}`, `{"do":"type","id":12,"text":"garlic"}`; the
   argument is `link`, `id` or `row`, or `url` or `text`), answered with the
