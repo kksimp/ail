@@ -230,6 +230,9 @@ fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
 ## contract.ens.1: at a return of `rv` (-1 for none) at `at`, each
 ## `ensures` holds, or the program traps at its line.
 fn Lower.check_ensures(mut self, rv int, at ast.Pos)
+    # The return value is computed; the `defer`red statements run before the
+    # function leaves (own.defer.1).
+    defer_all()
     if (ens.len() == 0 and inv_key == "") or unchecked
         return
     saved := scopes

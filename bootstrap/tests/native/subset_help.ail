@@ -24,10 +24,6 @@ fn loop_by_index(mut xs List[int]) int
         x += 1
     total
 
-fn deferred() int
-    defer print("done")
-    1
-
 fn with_map() int
     m := Map[str, int]()
     m.len()

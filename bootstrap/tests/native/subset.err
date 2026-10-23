@@ -1,2 +1,1 @@
-bootstrap/tests/native/subset.ail:11:5: error[native.subset.1]: `defer` isn't in the native subset yet
-bootstrap/tests/native/subset.ail:15:13: error[native.subset.1]: `==` on `Map[str, int]` isn't in the native subset yet
+bootstrap/tests/native/subset.ail:14:13: error[native.subset.1]: `==` on `Map[str, int]` isn't in the native subset yet

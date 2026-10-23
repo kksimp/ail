@@ -21,9 +21,20 @@ struct Facts
     ## during the call: a parameter without `mut`, and the immutable locals
     ## bound to a place inside one (lower_move.ail).
     stable Set[str]
+    ## The `defer`red statements of each open block, innermost last, and how many
+    ## loops were open when each block began (lower_defer.ail).
+    defers List[List[ast.Stmt]]
+    defer_loops List[int]
 
 fn new_facts() Facts
-    Facts(mut_ptr: {}, moves: [], owned: Set[str](), stable: Set[str]())
+    Facts(
+        mut_ptr: {},
+        moves: [],
+        owned: Set[str](),
+        stable: Set[str](),
+        defers: [],
+        defer_loops: [],
+    )
 
 ## A `mut` parameter's object, as `FUNCTION|KEY`.
 fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)

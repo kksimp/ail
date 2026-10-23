@@ -957,6 +957,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
     tail_want = none
     top_unit_fails := scopes.len() == 1 and unit_fails()
     scopes.push(Map[str, str]())
+    defer_enter()
     mut result := Val(id: -2, ty: Ty.Unit)
     for i in 0..body.len()
         s := body[i]
@@ -975,6 +976,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
         lower_stmt(s)
+    defer_exit()
     scopes.pop()
     if result.id == -2
         return none
@@ -1090,11 +1092,13 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             if loops.len() == 0
                 problem(pos, "`break` outside a loop")
                 return
+            defer_loop_exit()
             jump(loops[loops.len() - 1].exit, [])
         Continue(pos) =>
             if loops.len() == 0
                 problem(pos, "`continue` outside a loop")
                 return
+            defer_loop_exit()
             jump(loops[loops.len() - 1].cont, [])
         Return(value, pos) =>
             if lower_fail_return(value, pos)
@@ -1118,7 +1122,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             note_statement(e)
             lower_expr(e, Ty.Unit)
         Handle(value, other) => lower_handle(value, other)
-        Defer(_, pos) => problem(pos, "`defer` isn't in the native subset yet")
+        Defer(st, _) => defer_note(st)
         With(_, _, _, _, pos) => problem(pos, "`with` isn't in the native subset yet")
         Unsafe(body, _) => lower_block(body, false)
         LetTuple(binders, value, pos) => lower_let_tuple(binders, value, pos)

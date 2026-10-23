@@ -8,7 +8,6 @@ fn label(p Point) str
     "{p.x}"
 
 fn main()
-    defer print(1)
     s := "n = {1}"
     print(s)
     m := {"a": 1}
