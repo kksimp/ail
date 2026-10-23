@@ -187,7 +187,10 @@ pub fn report(files List[ast.SourceFile], texts List[str], diags List[Shown], js
             end := token_end(lines, shown.pos)
             if shown.edits.len() > 0
                 local := [
-                    fix.Fix(title: f.title, edits: [check.shifted(e, files[fi].base) for e in f.edits])
+                    fix.Fix(title: f.title, edits: [
+                        check.shifted(e, files[fi].base)
+                        for e in f.edits
+                    ])
                     for f in shown.edits
                 ]
                 shown.edits = fix.settle_fixes(local, fix.split_lines(text))
