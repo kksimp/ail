@@ -61,6 +61,7 @@ fn Lower.cmp_order(mut self, name str, key str, a Val, b Val) Val
 fn Lower.own_cmp(self, t Ty) str?
     k := if s := struct_name(t) then s else (enum_name(t) else return none)
     if sigs.contains("{k}.cmp") then k else none
+
 ## `a.cmp(b)` on a struct, tuple or enum whose `impl Ord` has no `cmp` of its
 ## own: the field-by-field order of `<` (expr.cmp.1), as an `Ordering`.
 fn Lower.derived_cmp(mut self, a Val, arg ast.Arg, pos ast.Pos) Val?

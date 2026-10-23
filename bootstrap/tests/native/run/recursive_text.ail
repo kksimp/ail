@@ -1,9 +1,0 @@
-struct Node
-    kids List[Node]
-    v int
-
-fn main()
-    n := Node(kids: [Node(kids: [], v: 2)], v: 1)
-    print(n)
-    print([Node(kids: [], v: 3)])
-    print(Json.Arr([Json.Num(1.0), Json.Null]))
