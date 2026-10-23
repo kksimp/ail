@@ -30,6 +30,9 @@ pub struct Traits
     stmt_pos ast.Pos?
     ## The types whose default text function `text.T` was asked for, in order.
     texts List[str]
+    ## The object of the `ref` the method call being lowered is on, or -1
+    ## (own.ref.7, lower_gtd_refcell.ail).
+    ref_obj int
 
 pub fn new_traits() Traits
     Traits(
@@ -41,6 +44,7 @@ pub fn new_traits() Traits
         recv_expr: none,
         stmt_pos: none,
         texts: [],
+        ref_obj: -1,
     )
 
 ## Record the traits of a file and the structs implementing them, in order;

@@ -1,0 +1,37 @@
+## `ref` cells in use (own.ref.7, ADR 0193): a `mut self` method called on a
+## struct reached through a `ref` marks the object in use for the call
+## (`rt.refcell_enter`/`rt.refcell_leave`), and every use of a cell through
+## a `ref` value (a field read or write, a method call) checks the mark and
+## traps. Inside the method `self` is the struct, not the `ref`, so its own
+## uses aren't checked; programs without `ref` pay nothing.
+use ast
+
+## The struct a `ref` value holds, as `deref` gives it, after the check that
+## no `mut` access to it is in progress. The object is noted for a method
+## call on it (`take_receiver`).
+fn Lower.deref_use(mut self, v Val, pos ast.Pos) Val
+    match v.ty
+        Ref(t) =>
+            busy := call("rt.refcell_busy", [v.id], Ty.Bool)
+            ok := check_branch(op("not", [busy], Ty.Bool))
+            trap_open("own.ref.7", pos)
+            say("this `ref` cell is used while a `mut` access to it is in progress (another copy of the reference is being changed)")
+            trap_close(pos)
+            cur = ok
+            traits.ref_obj = v.id
+            Val(id: v.id, ty: t)
+        _ =>
+            traits.ref_obj = -1
+            v
+
+## Before a call of method `key` on receiver `rcv`: a `mut self` method on an
+## object reached through a `ref` marks it in use. The old mark, or -1.
+fn Lower.ref_enter(mut self, rcv Recv, key str) int
+    if rcv.ref_obj < 0 or not traits.mut_self.contains(key)
+        return -1
+    call("rt.refcell_enter", [rcv.ref_obj], Ty.Int)
+
+## After the call: the mark `ref_enter` returned is put back.
+fn Lower.ref_leave(mut self, rcv Recv, old int)
+    if old >= 0
+        call("rt.refcell_leave", [rcv.ref_obj, old], Ty.Unit)

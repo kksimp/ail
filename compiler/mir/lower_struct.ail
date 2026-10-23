@@ -222,7 +222,7 @@ fn Lower.store(mut self, obj int, k int, v int)
 
 ## `x.f` on a struct.
 fn Lower.lower_member(mut self, recv ast.Expr, name str, pos ast.Pos) Val?
-    r := deref(lower_value(recv, none)?)
+    r := deref_use(lower_value(recv, none)?, pos)
     if xs := tuple_elems(r.ty)
         return tuple_member(r, xs, name, pos)
     n := struct_name(r.ty) else return unsupported(pos, "`.{name}` on `{r.ty.name()}`")
@@ -248,7 +248,7 @@ fn Lower.assign_member(
     at ast.Pos,
 )
     held := lower_value(recv, none) else return
-    r := deref(held)
+    r := deref_use(held, pos)
     if xs := tuple_elems(r.ty)
         assign_tuple_elem(r, xs, name, op, value, pos, at)
         return
@@ -344,7 +344,9 @@ fn Lower.struct_call_in(mut self, key str, recv Val?, args List[ast.Arg], pos as
         v := lower_value(a.value, t)?
         vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
+    busy := ref_enter(rcv, key)
     res := Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    ref_leave(rcv, busy)
     cells_back(cells)
     res
 
