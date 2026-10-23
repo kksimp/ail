@@ -62,7 +62,7 @@ pub fn inline_module(mut out Module)
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
     # `rt.vec_*` are replaced by assembled kernels where the target has them.
-    if f.name.starts_with("rt.vec_") or f.name == "rt.fill"
+    if f.name.starts_with("rt.vec_") or f.name == "rt.fill" or f.name.starts_with("rt.aes_hw_")
         return false
     mut n := 0
     for blk in f.blocks
