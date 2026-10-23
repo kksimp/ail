@@ -25,7 +25,9 @@ removal every program, including the tools, runs natively.
 2. `ail prepare FILE` is `run` without the start and prints the executable's path.
    `./ail` execs that path, so the program keeps the terminal; the native std has
    no process-replacing call yet, and `ail run` run directly relays the output at exit.
-3. `./ail` uses the native CLI for `run FILE ARGS` when `AIL_NATIVE_CLI=1`
+3. `./ail run FILE ARGS` uses the native CLI by default (item 252). `AIL_INTERP=1` or `AIL_NATIVE_CLI=0`
+   keeps the interpreter, and a program outside the native subset (`native.subset.1`) falls back to it.
+   The other commands use the native CLI when `AIL_NATIVE_CLI=1`
    (the default flips once the Mac gate runs through it, then `AIL_RUST=1` selects the
    Rust one). Commands the native CLI lacks still go to the Rust `ail`; each later change
    moves one command (`check`, `explain`, `api`, `test`, `fmt`, ...) and the Rust code

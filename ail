@@ -103,7 +103,13 @@ if [ "${1:-}" = api ]; then
     done
     [ "$files" = 1 ] || native_api=
 fi
-if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] ||  { [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || [ "${1:-}" = fmt ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+# `ail run FILE` is native by default (item 252): AIL_INTERP=1 or AIL_NATIVE_CLI=0 keeps the interpreter, and a program outside
+# the native subset (native.subset.1) falls back to it.
+native_run=
+if [ "${1:-}" = run ] && [ "${AIL_NATIVE_CLI:-}" != 0 ] && [ "${AIL_INTERP:-}" != 1 ] && [ -z "${AIL_BINARY:-}" ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
+    native_run=1
+fi
+if { [ "${AIL_NATIVE_CLI:-}" = 1 ] || [ -n "$native_run" ]; } && { [ -n "$native_api" ] || [ -n "$native_build" ] ||  { [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || [ "${1:-}" = fmt ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
@@ -133,9 +139,17 @@ if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_buil
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
     AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$2" || exit $?
-    exe="$(AIL_COMPILER="$root/compiler" "$native" prepare "$2")" || exit $?
-    shift 2
-    exec "$exe" "$@"
+    prep_err="$(mktemp)"
+    if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare "$2" 2>"$prep_err")"; then
+        rm -f "$prep_err"
+        shift 2
+        exec "$exe" "$@"
+    fi
+    if grep -q 'native.subset.1' "$prep_err" && { [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; }; then
+        rm -f "$prep_err"   # not native yet: the interpreter below runs it
+    else
+        cat "$prep_err" >&2; rm -f "$prep_err"; exit 1
+    fi
 fi
 
 # `AIL_NATIVE_TEST=1` (ADR 0858, lane B8): `ail test [--json] [--cases N] [--seed S] FILE` is first done by the
