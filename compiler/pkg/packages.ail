@@ -293,6 +293,7 @@ pub fn Packages.finish(self, mut prog ast.Program, mut diags List[syntax.Diag], 
                 fixed: d.fixed,
                 help: d.help,
                 fix: d.fix,
+                edits: d.edits,
             ))
         for g in m.grants
             prog.grants.push(ast.Grant(

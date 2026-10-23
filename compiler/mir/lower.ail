@@ -1953,6 +1953,7 @@ fn Lower.lower_method(
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if a := assoc_owner(recv)
+        assoc_instance(recv, name)
         return struct_call("{a}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))

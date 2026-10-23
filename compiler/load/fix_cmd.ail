@@ -1,0 +1,59 @@
+## `ail fix FILE [--dry-run] [--json]` (fix.apply.1-4, ADR 0203) with this
+## checker as the diagnoser, in place of `fix.run_with_rust`. Each round's
+## source is written beside FILE under a hidden name and loaded as `ail check`
+## does, so a program's own modules resolve; the diagnostics come back with
+## their settled fixes (ADR 0145) and FILE's name.
+use check
+use fixrun
+use fix
+
+MAX_ROUNDS := 5
+
+## A check of `src`, as the file `path` holds it.
+fn diagnose(file str, src str, json bool, std str) fixrun.Diagnosis
+    cut := file.split("/")
+    dir := if cut.len() > 1 then "{cut[..cut.len() - 1].join("/")}/" else ""
+    tmp := "{dir}.ail-fix-{time.now_ms()}.ail"
+    fs.write_text(tmp, src) else err
+        return fixrun.Diagnosis(found: [], report: "")
+    loaded := load(tmp, std) else err
+        fs.remove(tmp) else e
+            return fixrun.Diagnosis(found: [], report: "error: can't remove {tmp}")
+        return fixrun.Diagnosis(found: [], report: "error: {err.message}")
+    mut shown := [shown_syntax(d) for d in loaded.diags]
+    mut found := List[fixrun.Found]()
+    lines := fix.split_lines(src)
+    for d in loaded.diags
+        mut fixes := List[fix.Fix]()
+        if d.edits.len() > 0
+            fixes = fix.settle_fixes([fix.Fix(title: d.fix, edits: d.edits)], lines)
+        found.push(fixrun.Found(rule: d.rule, pos: d.pos, warning: false, fixes: fixes))
+    if loaded.diags.len() == 0
+        diags := check.check_program(loaded.program).diags
+        shown = [shown_check(d) for d in diags]
+        for d in diags
+            if d.pos.line <= FILE_LINES
+                found.push(fixrun.Found(
+                    rule: d.rule,
+                    pos: d.pos,
+                    warning: d.warning,
+                    fixes: fix.settle_fixes(d.fixes, lines),
+                ))
+    fs.remove(tmp) else e
+        io.eprint("error: can't remove {tmp}")
+    sorted := found.sorted(by: |f| (f.pos.line, f.pos.col))
+    mut text := ""
+    if shown.len() > 0
+        text = report(loaded.program.files, loaded.texts, shown, json).replace(tmp, file)
+    fixrun.Diagnosis(found: sorted, report: text)
+
+pub fn fix_command(rest List[str], std str) int
+    mut r := fixrun.begin(rest)
+    if r.code >= 0
+        return r.code
+    json := rest.contains("--json")
+    for _ in 0..MAX_ROUNDS
+        if not fixrun.step(mut r, diagnose(r.path, r.src, json, std))
+            break
+    fixrun.canonicalize(mut r)
+    fixrun.finish(mut r, diagnose(r.path, r.src, json, std))

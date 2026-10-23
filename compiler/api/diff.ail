@@ -215,7 +215,7 @@ fn public_api(path str, std str) List[Decl] ! DiffError
     for d in found
         if not d.warning
             return DiffError(message: "{path} has errors, so its API can't be compared; fix them first (api.diff.4)")
-    public_decls(loaded.program, Facts(effects: analysis.effects, errors: analysis.errors), is_dir)
+    public_decls(loaded.program, Facts(effects: analysis.effects, errors: analysis.errors, symbols: Map[int, str](), weak_symbols: Map[int, str]()), is_dir)
 
 fn sh_quote(s str) str
     "'{s.replace("'", "'\\''")}'"

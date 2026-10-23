@@ -30,6 +30,7 @@ use check
 use doc
 use edit
 use fix
+use fixrun
 use fmt
 use derive
 use explain
@@ -50,10 +51,12 @@ fn main() !
                 check_dump(path, args.len() > 2)?
         "fixes" =>
             # Test support: the unsettled edits in args[2] settled against args[1].
-            print(fix.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
+            print(fixrun.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
+        "fix" =>
+            io.exit(load.fix_command(args[1..], path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
         "fixrun" =>
             # Test support: `ail fix` with the Rust tool as the checker (tools/fix/parity.py).
-            io.exit(fix.run_with_rust(args[1..]))
+            io.exit(fixrun.run_with_rust(args[1..]))
         "fmt" =>
             io.exit(fmt.command(args[1..]))
         "edit" =>
@@ -786,9 +789,16 @@ fn parse_module(module str, paths List[str]) !List[mir.Source]
 fn parse_text(module str, path str, text str) mir.Source
     parse_with(module, path, text, Set[str]())
 
+## The generic functions of the prelude's `jsonderive` module (`mir/prelude_embed.ail`): the
+## prelude is not in the file's tokens here, so `load_json[T](...)` needs them named.
+PRELUDE_GENERIC := ["load_json", "print_json"]
+
 fn parse_with(module str, path str, text str, names Set[str]) mir.Source
     lexed := syntax.lex(text)
-    parsed := syntax.parse_with(lexed.tokens, names)
+    mut generic := names
+    for n in PRELUDE_GENERIC
+        generic.add(n)
+    parsed := syntax.parse_with(lexed.tokens, generic)
     mut diags := lexed.diags
     diags.extend(parsed.diags)
     report := syntax.report_text(path, text, diags)
@@ -877,15 +887,19 @@ fn cache_trim(dir str)
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str
+    cli_prepare_with(file, "0", "0")
+
+## `cli_prepare` with the run limits baked in (`--timeout MS`, `--max-memory MB`).
+fn cli_prepare_with(file str, ms str, mb str) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, "0", "0"))
+    exe := path.join(dir, cache_key(file, target, ms, mb))
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, "0", "0")
+    compile_fresh(file, tmp, target, ms, mb)
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -893,10 +907,30 @@ fn cli_prepare(file str) str
     exe
 
 fn cli_prepare_cmd(rest List[str])
-    if rest.len() != 1
-        io.eprint("usage: ail prepare FILE")
+    usage := "usage: ail prepare [--timeout MS] [--max-memory MB] FILE"
+    mut ms := "0"
+    mut mb := "0"
+    mut file := ""
+    mut i := 0
+    while i < rest.len()
+        a := rest[i]
+        has := i + 1 < rest.len()
+        if a == "--timeout" and has and positive(rest[i + 1])
+            ms = rest[i + 1]
+            i += 1
+        elif a == "--max-memory" and has and positive(rest[i + 1])
+            mb = rest[i + 1]
+            i += 1
+        elif file == "" and not a.starts_with("-")
+            file = a
+        else
+            io.eprint(usage)
+            io.exit(2)
+        i += 1
+    if file == ""
+        io.eprint(usage)
         io.exit(2)
-    print(cli_prepare(rest[0]))
+    print(cli_prepare_with(file, ms, mb))
 
 ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn cli_run(rest List[str])
@@ -961,7 +995,7 @@ fn check_cmd(rest List[str])
 ## (api.out.1-5). `--symbols`, `--expanded`, packages and the queries stay
 ## with the Rust `ail api` for now.
 fn api_cmd(rest List[str])
-    usage := "usage: ail api [--outline] FILE [--text | --pretty]"
+    usage := "usage: ail api [--outline] FILE [--text | --pretty] [--symbols]"
     if rest.contains("--diff")
         io.exit(api.diff_command(rest, path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
     if rest.contains("--locals")
@@ -970,6 +1004,7 @@ fn api_cmd(rest List[str])
         io.exit(api.card_command(rest, path.join(path.dir(compiler_dir()), "bootstrap/src/std")))
     mut form := api.Form.Plain
     mut expanded := false
+    mut symbols := false
     mut files := List[str]()
     for a in rest
         match a
@@ -977,6 +1012,7 @@ fn api_cmd(rest List[str])
             "--expanded" => expanded = true
             "--text" => form = api.Form.Text
             "--pretty" => form = api.Form.Pretty
+            "--symbols" => symbols = true
             _ =>
                 if a.starts_with("--") or files.len() > 0
                     io.eprint(usage)
@@ -1001,13 +1037,19 @@ fn api_cmd(rest List[str])
             io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
             io.exit(2)
     prog := doc.attach(loaded.program, loaded.texts[0])
-    facts := api.Facts(effects: analysis.effects, errors: analysis.errors)
+    facts := api.Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: analysis.symbols,
+        weak_symbols: analysis.weak_symbols,
+    )
     out := if expanded then api.outline_expanded(
         prog,
         facts,
         loaded.texts,
         files[0],
         form,
-    ) else api.outline(prog, facts, files[0], form)
+        symbols,
+    ) else api.outline(prog, facts, files[0], form, symbols)
     if out != ""
         print(out.strip_suffix("\n") else out)

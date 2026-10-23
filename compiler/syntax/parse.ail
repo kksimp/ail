@@ -14,6 +14,7 @@
 ## mod.vis.1-2, mod.const.1, own.uniq.1, conc.par.5, conc.share.6,
 ## ct.derive.1.
 use ast
+use fix
 
 ## The tree of a file and the diagnostics found making it, in order.
 pub struct Parsed
@@ -267,14 +268,20 @@ fn Parser.top_level(mut self)
         elif tag == "id"
             and (text == "const" or text == "let" or text == "var")
             and tag_at(1) == "id"
-            fix := if sym_at(2) == "=" then "declare the constant with `:=`" else ""
+            title := if sym_at(2) == "=" then "declare the constant with `:=`" else ""
             error_text(
                 "mod.const.1",
                 here(),
                 "AIL has no `{text}`; a constant is declared `NAME := value`",
                 "remove the keyword and write `NAME := value`",
-                fix,
+                title,
             )
+            if title != ""
+                eq := tokens[i + 2].pos
+                attach(title, [
+                    fix.delete(here(), tokens[i + 1].pos),
+                    fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":="),
+                ])
             skip_statement()
         elif tag == "id" and foreign_decl(text)
             i += 0
@@ -385,20 +392,71 @@ fn Parser.line_ends_at(self, k int) bool
 # ---- Diagnostics ----
 
 fn Parser.diag(mut self, rule str, pos ast.Pos)
-    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: ""))
+    diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: "", edits: []))
+
+## The position of the next token when it is on the line of `at`, else `at`.
+fn Parser.next_on_line(self, here_pos ast.Pos) ast.Pos
+    if i + 1 < tokens.len() and tokens[i + 1].pos.line == here_pos.line
+        return tokens[i + 1].pos
+    here_pos
+
+## `n` columns after `at`, or the next token's position when it is on the line.
+fn Parser.after_on_line(self, here_pos ast.Pos, n int) ast.Pos
+    if i + 1 < tokens.len() and tokens[i + 1].pos.line == here_pos.line
+        return tokens[i + 1].pos
+    ast.Pos(line: here_pos.line, col: here_pos.col + n)
+
+## The end of token `k` on its line, when its text is known (identifiers, keywords, symbols).
+## The edits of `{{x}}` in a string: `\{` for the first brace, and the last `}` goes.
+fn escape_brace_edits(code List[Token]) List[fix.Edit]
+    inner := code[0].pos
+    mut edits := [fix.span(
+        ast.Pos(line: inner.line, col: inner.col - 1),
+        ast.Pos(line: inner.line, col: inner.col + 1),
+        "\\\{",
+    )]
+    if code.len() >= 2
+        last := code[code.len() - 2]
+        if tok_tag(last.tok) == "sym" and tok_text(last.tok) == "}"
+            edits.push(fix.delete(
+                ast.Pos(line: last.pos.line, col: last.pos.col + 1),
+                ast.Pos(line: last.pos.line, col: last.pos.col + 2),
+            ))
+    edits
+
+fn Parser.tok_end(self, k int) ast.Pos?
+    if k < 0 or k >= tokens.len()
+        return none
+    text := tok_text(tokens[k].tok)
+    if text == ""
+        return none
+    ast.Pos(line: tokens[k].pos.line, col: tokens[k].pos.col + text.chars().len())
+
+## Whether the previous token ends exactly at `at`.
+fn Parser.attached_before(self, here_pos ast.Pos) bool
+    e := tok_end(i - 1) else return false
+    e == here_pos
+
+## Give the diagnostic just reported a fix.
+fn Parser.attach(mut self, title str, edits List[fix.Edit])
+    diags[diags.len() - 1].fixed = true
+    diags[diags.len() - 1].fix = title
+    diags[diags.len() - 1].edits = edits
 
 ## A diagnostic with a fix. The same mistake again on one line is one
 ## diagnostic with one fix (gram.rec.1): `msg` identifies the mistake.
-fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str, help str, title str)
+fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str, help str, title str, edits List[fix.Edit])
     if diags.len() > 0
         last := diags[diags.len() - 1]
         if last.rule == rule and last.pos.line == pos.line and last.msg == msg and last.fixed
+            # The same mistake again on one line: its edits join the first report's.
+            diags[diags.len() - 1].edits.extend(edits)
             return
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title))
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title, edits: edits))
 
 ## A diagnostic with the bootstrap's message, help line and fix title.
-fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: fix))
+fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, title str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: title, edits: []))
 
 fn Parser.int_too_big(mut self, pos ast.Pos)
     error_text(
@@ -734,6 +792,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
                     "parameters are written `name Type`, without a colon",
                     "write `{p.name} <Type>`",
                     "remove the `:`",
+                    [fix.span(here(), next_on_line(here()), " ")],
                 )
                 i += 1
             ty := type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?
@@ -749,6 +808,7 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
             "there is no `{sym}`; the return type follows `)` directly",
             "remove the `{sym}`",
             "remove the `{sym}`",
+            [fix.delete(here(), after_on_line(here(), sym.chars().len()))],
         )
         i += 1
     mut ret := none
@@ -866,6 +926,13 @@ fn Parser.trait_decl(mut self)
     methods := fn_block(ast.Within.InTrait(index), "`trait {n.name}`")
     traits[index].methods = methods
 
+## Whether a `trait` of this name is declared in the file.
+fn Parser.trait_declared(self, name str) bool
+    for k in 0..tokens.len() - 1
+        if tokens[k].tok == Tok.Kw("trait") and tokens[k + 1].tok == Tok.Ident(name)
+            return true
+    false
+
 ## `impl Trait for Type`, with an optional block of functions (trait.impl.1).
 fn Parser.impl_decl(mut self)
     pos := bump().pos
@@ -881,6 +948,12 @@ fn Parser.impl_decl(mut self)
                 "methods of a struct are plain functions: `fn {trait_name.name}.name(self) T`",
                 "",
             )
+            declared := trait_declared(trait_name.name)
+            if tag_at(1) == "indent" and not declared
+                if moved := methods_out(i + 2, trait_name.name)
+                    mut edits := moved
+                    edits.push(fix.delete(ast.Pos(line: pos.line, col: 1), ast.Pos(line: pos.line + 1, col: 1)))
+                    attach("move the methods out of the `impl` block and name the type in each", edits)
         else
             unexpected("`for` after the trait name", "trait.impl.1")
         skip_statement()
@@ -1060,6 +1133,7 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
             "fields are written `name Type`, without a colon",
             "write `{f.name} <Type>`",
             "remove the `:`",
+            [fix.span(here(), next_on_line(here()), " ")],
         )
         i += 1
     ty := type_ref("the field's type (written `name Type`)", rule)?
@@ -1253,14 +1327,18 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         e := otherwise()?
         return ast.Stmt.Let(name: text, pos: pos, mutable: false, value: value, otherwise: e.part)
     if tag == "id" and (text == "let" or text == "var" or text == "const") and tag_at(1) == "id"
-        fix := if sym_at(2) == "=" then "declare it with `:=`" else ""
+        title := if sym_at(2) == "=" then "declare it with `:=`" else ""
         error_text(
             "expr.bind.1",
             pos,
             "AIL has no `{text}`; bindings are declared with `:=`",
             "write `name := value`, or `mut name := value` to allow reassignment",
-            fix,
+            title,
         )
+        if title != ""
+            eq := tokens[i + 2].pos
+            first := if text == "var" then fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 3), "mut") else fix.delete(pos, tokens[i + 1].pos)
+            attach(title, [first, fix.span(eq, ast.Pos(line: eq.line, col: eq.col + 1), ":=")])
         return none
     if tag == "kw" and sym_at(1) == ":=" and not not_yet(text)
         error_text(
@@ -1349,6 +1427,7 @@ fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
             "loop over a range: `for i in 0..n` (excludes `n`) or `for i in 1..=n` (includes it); use `while` for other conditions",
             "write the range loop",
         )
+        attach("write the range loop", [fix.c_for(here())])
         return none
     v := take_name("a loop variable after `for`", "expr.loop.1")?
     mut var := v.name
@@ -1527,6 +1606,7 @@ fn Parser.with_stmt(mut self, pos ast.Pos) ast.Stmt?
             "write `with m as mut x`; to read the value once, use `m.get()`",
             "write `as mut`",
         )
+        attach("write `as mut`", [fix.insert(here(), "mut ")])
         return none
     v := take_name("a variable after `as mut`", "conc.share.6")?
     body := block("the `with` header", "conc.share.6")?
@@ -1577,6 +1657,11 @@ fn Parser.logical_typo(mut self, sym str, spelled str) bool
         "AIL writes `{sym}` as `{spelled}`",
         "write `{spelled}`",
         "write `{spelled}`",
+        [fix.span(
+            here(),
+            ast.Pos(line: here().line, col: here().col + sym.chars().len()),
+            if sym == "!" then "not " else spelled,
+        )],
     )
     true
 
@@ -1610,7 +1695,14 @@ fn Parser.comparison_expr(mut self) ast.Expr?
     op := comparison(sym_at(0)) else return lhs
     pos := bump().pos
     if op == ast.BinOp.Lt and at_sym(">") and adjacent(i - 1)
-        error_fix("gram.foreign.1", pos, "AIL writes `<>` as `!=`", "write `!=`", "write `!=`")
+        error_fix(
+            "gram.foreign.1",
+            pos,
+            "AIL writes `<>` as `!=`",
+            "write `!=`",
+            "write `!=`",
+            [fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 2), "!=")],
+        )
         return none
     rhs := additive()?
     if comparison(sym_at(0)) != none
@@ -1623,6 +1715,10 @@ fn Parser.comparison_expr(mut self) ast.Expr?
                 "type arguments are written in `[]`, not `<>`",
                 "write `List[int]()`",
                 "use brackets",
+                [
+                    fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 1), "["),
+                    fix.span(second, ast.Pos(line: second.line, col: second.col + 1), "]"),
+                ],
             )
             return none
         diags.push(Diag(
@@ -1631,7 +1727,8 @@ fn Parser.comparison_expr(mut self) ast.Expr?
             msg: "comparisons can't be chained",
             fixed: true,
             help: "combine them with `and`, e.g. `a < b and b < c`",
-            fix: "",
+            fix: "repeat the middle operand with `and`",
+            edits: [fix.chain(pos, second)],
         ))
         return none
     ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
@@ -1666,6 +1763,7 @@ fn Parser.additive(mut self) ast.Expr?
                 "AIL has no `{sym}`",
                 "write `n {assign} 1`",
                 "write `{assign} 1`",
+                [fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 2), " {assign} 1")],
             )
             return none
         rhs := multiplicative()?
@@ -1789,6 +1887,7 @@ fn Parser.postfix(mut self) ast.Expr?
                     "a slice is written with `..`, not `:`",
                     "write `xs[a..b]`, `xs[a..]` or `xs[..b]`",
                     "write `..`",
+                    [fix.span(here(), ast.Pos(line: here().line, col: here().col + 1), "..")],
                 )
                 return none
             expect_sym("]", "`]` after the index", "type.coll.4")?
@@ -1829,6 +1928,7 @@ fn Parser.call_args(mut self) List[ast.Arg]?
                 "bit operations are methods: `a.bit_or(b)` (expr.bit.1)",
                 "write `.bit_or`",
             )
+            attach("write `.bit_or`", [fix.operands(here(), "|", "$l.bit_or($r)")])
             return none
         # `a @ b` is a matrix product (ADR 0382); `name=value` is `name: value`.
         if at_sym("@")
@@ -1839,6 +1939,7 @@ fn Parser.call_args(mut self) List[ast.Arg]?
                 "the matrix product is a method: `a.matmul(b)` (std.tensor.10)",
                 "write `.matmul`",
             )
+            attach("write `.matmul`", [fix.operands(here(), "@", "$l.matmul($r)")])
             return none
         if at_sym("=")
             error_text(
@@ -1848,6 +1949,7 @@ fn Parser.call_args(mut self) List[ast.Arg]?
                 "write `f(dx: 1, dy: 2)`",
                 "write `:`",
             )
+            attach("write `:`", [fix.span(here(), ast.Pos(line: here().line, col: here().col + 1), ": ")])
             return none
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not eat_sym(",")
@@ -2029,7 +2131,8 @@ fn Parser.interpolation(mut self, parts List[Part], pos ast.Pos) ast.Expr?
                         msg: "`\{\{` in a string isn't an escaped brace",
                         fixed: true,
                         help: "write `\\\{` for a literal `\{`, or use a raw string `r\"...\"`",
-                        fix: "",
+                        fix: "escape the brace with a backslash",
+                        edits: escape_brace_edits(code),
                     ))
                     ok = false
                 elif e := sub_expression(code)
@@ -2097,6 +2200,7 @@ fn Parser.if_expr(mut self) ast.Expr?
                     fixed: true,
                     help: "write `elif`",
                     fix: "write `elif`",
+                    edits: [fix.replace(else_pos, "else if", "elif")],
                 ))
                 return none
             # `else err` binds the error (expr.if.6).
@@ -2182,6 +2286,11 @@ fn Parser.arm(mut self) ast.Arm?
                 "arms are written `pattern => result`",
                 "write `=>`",
                 "write `=>`",
+                [fix.span(
+                    here(),
+                    ast.Pos(line: here().line, col: here().col + (if at_sym(":") then 1 else 2)),
+                    if attached_before(here()) then " =>" else "=>",
+                )],
             )
             i += 1
         else
@@ -2195,6 +2304,7 @@ fn Parser.arm(mut self) ast.Arm?
                         "drop `case`, e.g. `1 => \"one\"`",
                         "",
                     )
+                    attach("drop `case`", [fix.delete(cpos, here())])
                 _ =>
                     unexpected("`=>` after the pattern", "expr.match.1")
             return none
@@ -2254,6 +2364,8 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             "write `lo..=hi` for both ends, e.g. `0..=9`; `_` covers the rest",
             "",
         )
+        if at_sym(".")
+            attach("write `..=`", [fix.span(hpos, ast.Pos(line: hpos.line, col: hpos.col + 1), "=")])
         return none
     hi := plain_pattern()?
     match hi
