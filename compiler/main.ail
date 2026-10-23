@@ -779,19 +779,25 @@ fn mentions_ui(text str) bool
 
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
-    parse_text(module, path, fs.read_text(path)?)
+    srcs := parse_module(module, [path])?
+    srcs[0]
 
 ## The files of one module, parsed together: a generic name declared in one
 ## file starts type arguments in the others (gen.infer.2).
 fn parse_module(module str, paths List[str]) !List[mir.Source]
     mut texts := List[str]()
-    mut names := Set[str]()
+    # The root module sees the prelude's generic functions too
+    # (`load_json[T](path)`, json.load.1).
+    mut names := if module == "" then prelude_generic_names() else Set[str]()
     for path in paths
         text := fs.read_text(path)?
         texts.push(text)
         for n in syntax.generic_names(syntax.lex(text).tokens).sorted()
             names.add(n)
     [parse_with(module, paths[k], texts[k], names) for k in 0..paths.len()]
+
+fn prelude_generic_names() Set[str]
+    syntax.generic_names(syntax.lex(mir.prelude_text(mir.PRELUDE_EMBED)).tokens)
 
 ## Text from `path`, parsed; syntax errors are printed and the run fails.
 fn parse_text(module str, path str, text str) mir.Source

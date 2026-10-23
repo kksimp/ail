@@ -855,6 +855,7 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
         Call(callee, _, _) =>
             match callee
                 Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
+                TypeArgs(n, _, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
             match recv

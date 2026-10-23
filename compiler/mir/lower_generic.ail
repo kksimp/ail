@@ -87,6 +87,7 @@ fn Lower.declare_generic_fn(mut self, f ast.FnDecl, pre str) bool
     if f.generics.len() == 0
         return false
     gen.fns[fn_key(f, pre)] = GenFn(decl: f, file: file)
+    note_generic_errs(f, fn_key(f, pre))
     true
 
 ## The key of the generic struct or enum a written name means here.
