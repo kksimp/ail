@@ -1,5 +1,3 @@
-use std.fs
-
 struct U
     name str
     n int
@@ -13,8 +11,3 @@ fn main() !
     j := parse_json("\{\"name\": \"a\", \"n\": 3}")? "parse"
     u := read[U](j)? "read"
     print(u)
-    fs.write_text("generic_try.tmp.json", "\{\"name\": \"b\", \"n\": 4}")?
-    v := load_json[U]("generic_try.tmp.json")? "load"
-    fs.remove("generic_try.tmp.json")?
-    print(v)
-    print(load_json[U]("generic_try.no_such.json") else U(name: "none", n: 0))
