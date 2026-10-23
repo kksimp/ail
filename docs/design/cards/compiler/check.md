@@ -15,7 +15,9 @@ pub fn check.has_attr(ast.FnDecl, str) bool
 pub fn check.module_at(ast.Program, ast.Pos) str
 pub fn check.hidden(ast.Program, ast.Pos, ast.Pos) bool
 pub struct check.Report
+pub struct check.Analysis
 pub fn check.check_program(ast.Program) check.Report [env io]
+pub fn check.analyze(ast.Program, bool) check.Analysis [env io]
 pub fn check.check_declarations(ast.Program) List[check.Diag] [env io]
 pub enum check.Need
 pub struct check.Builtin
@@ -89,4 +91,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1056); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1087); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

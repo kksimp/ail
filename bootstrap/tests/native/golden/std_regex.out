@@ -1,0 +1,29 @@
+a+b: true
+  1..4 aab
+\d{4}-\d\d: true
+  3..10 2026-10
+(?i)hello: true
+  4..9 HeLLo
+^abc$: true
+  0..3 abc
+\bfox\b: true
+  2..5 fox
+é+: true
+  3..5 éé
+(a: unclosed_group at 0 (std.regex.11)
+a**: bad_repeat at 2 (std.regex.15)
+\p{Lu}\p{Ll}+: true
+  3..6 Cde
+a|ab: true
+  0..1 a
+1-2=1
+4-6=22
+8-11=333
+a<1> b<22> c<333>
+a# b22 c333
+1:x, 22:yy
+["1", "22"]
+["a", "b", "c", "d"]
+1\+1=2 \(really\?\)
+2
+true

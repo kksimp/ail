@@ -1,0 +1,13 @@
+{"id":7,"note":"hi","items":[{"name":"a","qty":2,"price":1.5}],"paid":true}
+{"id":8,"note":null,"items":[],"paid":false}
+shape error: JsonError(at: -1, message: "id: expected a whole number, found \"x\"")
+shape error: JsonError(at: -1, message: "items[0].name: expected a string, found number")
+parse error: JsonError(at: 5, message: "unexpected end of input")
+parse error: JsonError(at: 8, message: "trailing comma")
+{"a":[1,2.5,"s\n",null,true]}
+object
+number
+{"xs":[1,2],"ys":[["a"],[]],"o":4}
+{"e":"A"}
+{"e":{"kind":"C","left":"A","right":{"kind":"B","n":3}}}
+shape error: JsonError(at: -1, message: "e: unknown Tree `Z`")
