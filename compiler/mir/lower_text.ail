@@ -1,0 +1,91 @@
+## The text form of optionals, maps, sets and characters inside another value
+## (trait.auto.2, type.map.4): `[1, none]`, `{"a": [1, 2]}`, `{'a', 'b'}`.
+## `value_text` (lower_tuple.ail) calls `text_ext`; `text_ext_ok` says which
+## types it takes.
+use ast
+
+## Whether `t` has a text form here, for the types this file owns; none for
+## any other type.
+fn Lower.text_ext_ok(mut self, t Ty) bool?
+    if inner := t.opt_inner()
+        return text_ok(inner)
+    match t
+        Char => true
+        Map(k, v) => text_ok(k) and text_ok(v)
+        Set(e) => text_ok(e)
+        _ => none
+
+## The text of `x`, a value of a type `text_ext_ok` accepts.
+fn Lower.text_ext(mut self, t Ty, x int) int
+    if inner := t.opt_inner()
+        return opt_text(inner, x)
+    match t
+        Char => call("rt.char_quoted", [x], Ty.Str)
+        Map(k, v) => table_text(x, k, v)
+        Set(e) => table_text(x, e, none)
+        _ => str_value("")
+
+## `none`, or the text of the value inside the optional `x`.
+fn Lower.opt_text(mut self, inner Ty, x int) int
+    absent := new_block()
+    present := new_block()
+    join := new_block()
+    result := new_value(Ty.Str, "")
+    blocks[join].params.push(result)
+    branch(op("eq", [x, konst(0, Ty.Int)], Ty.Bool), absent, [], present, [])
+    seal(absent)
+    seal(present)
+    cur = absent
+    jump(join, [str_value("none")])
+    cur = present
+    jump(join, [value_text(inner, unwrap(Val(id: x, ty: Ty.Opt(inner))).id)])
+    seal(join)
+    cur = join
+    result
+
+## A key or value read from the word list `l` (`rt.map_keys` and
+## `rt.map_values` hold every element in 8 bytes, `bool` included).
+fn Lower.table_word(mut self, l int, i int, t Ty) int
+    if t == Ty.Bool
+        return op("ne", [op("get", [l, i], Ty.Int), konst(0, Ty.Int)], Ty.Bool)
+    op("get", [l, i], t)
+
+## `{k: v, ...}` of table `m`, or `{k, ...}` when `vt` is none, in entry
+## order: a loop that grows the text.
+fn Lower.table_text(mut self, m int, kt Ty, vt Ty?) int
+    keys := call("rt.map_keys", [m], Ty.List(Ty.Int))
+    mut vws := -1
+    if vt != none
+        vws = call("rt.map_values", [m], Ty.List(Ty.Int))
+    n := op("len", [keys], Ty.Int)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    acc := new_value(Ty.Str, "")
+    blocks[head].params.push(i)
+    blocks[head].params.push(acc)
+    jump(head, [konst(0, Ty.Int), str_value("\{")])
+    cur = head
+    body := new_block()
+    exit := new_block()
+    branch(op("lt", [i, n], Ty.Bool), body, [], exit, [])
+    seal(body)
+    cur = body
+    sep := call("rt.text_sep", [i], Ty.Str)
+    mut piece := value_text(kt, table_word(keys, i, kt))
+    if v := vt
+        piece = call("rt.str_cat", [piece, str_value(": ")], Ty.Str)
+        piece = call("rt.str_cat", [piece, value_text(v, table_word(vws, i, v))], Ty.Str)
+    next := call("rt.str_cat", [call("rt.str_cat", [acc, sep], Ty.Str), piece], Ty.Str)
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int), next])
+    seal(head)
+    seal(exit)
+    cur = exit
+    call("rt.str_cat", [acc, str_value("}")], Ty.Str)
+
+## `print(x)` of a value with a text form that the runtime's own printers
+## don't take (a map of lists, a set of tuples).
+fn Lower.out_text(mut self, v Val, pos ast.Pos) Val?
+    if not text_ok(v.ty)
+        return unsupported(pos, "printing a `{v.ty.name()}`")
+    call("rt.out_str", [value_text(v.ty, v.id)], Ty.Unit)
+    Val(id: -1, ty: Ty.Unit)
