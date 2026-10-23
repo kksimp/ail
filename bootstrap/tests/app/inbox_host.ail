@@ -1,0 +1,17 @@
+## A host for std.app that waits for a second view, which only an event the
+## app posted to itself can cause, then closes the window (std.app.14).
+
+fn main()
+    first := io.read_line() else return
+    hello := parse_json(first) else return
+    if hello == Json.Null
+        return
+    print("\{\"v\":1,\"kind\":\"start\"}")
+    second := io.read_line() else return
+    if second == ""
+        return
+    print("\{\"kind\":\"close\"}")
+    while true
+        rest := io.read_line() else break
+        if rest == ""
+            break

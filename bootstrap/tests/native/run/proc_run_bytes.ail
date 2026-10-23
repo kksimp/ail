@@ -1,0 +1,16 @@
+# proc.run_bytes (std.proc.8): bytes in, bytes out, undecoded.
+fn main()
+    r := proc.run_bytes("cat", [], b"a\x00\xffb\n") else err
+        print("run {err.kind}")
+        return
+    print("{r.status} {r.out.len()} {r.err.len()}")
+    print(r.out.hex())
+    q := proc.run_bytes("sh", ["-c", "printf 'x\\377y' >&2; exit 3"]) else err
+        print("run {err.kind}")
+        return
+    print("{q.status} {q.out.len()}")
+    print(q.err.hex())
+    z := proc.run_bytes("/no/such/cmd", []) else err
+        print("missing {err.kind}")
+        return
+    print(z.status)

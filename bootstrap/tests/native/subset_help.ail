@@ -18,15 +18,11 @@ fn same(a str, b str) bool
 fn label(n int) str
     "n is {n}"
 
-fn loop_by_index(mut xs List[int]) int
+fn loop_by_index(mut xs List[List[int]]) int
     mut total := 0
     for mut x in xs
-        x += 1
+        x.push(1)
     total
-
-fn deferred() int
-    defer print("done")
-    1
 
 fn with_map() int
     m := Map[str, int]()

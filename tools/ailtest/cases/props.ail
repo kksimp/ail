@@ -1,0 +1,26 @@
+fn add(a int, b int) int
+    a + b
+
+fn rev(xs List[int]) List[int]
+    mut out := List[int]()
+    for i in 0..xs.len()
+        out.push(xs[xs.len() - 1 - i])
+    out
+
+@test fn add_commutes(a int, b int)
+    assert_eq(add(a, b), add(b, a))
+
+@test fn rev_twice(xs List[int])
+    assert_eq(rev(rev(xs)), xs)
+
+@test fn text_len(s str, c char, b bool, f float)
+    assert(s.len() >= 0)
+
+@test fn short_lists(xs List[str])
+    assert(xs.len() < 3)
+
+@test fn small(x int)
+    assert(x < 10)
+
+fn main()
+    print("ok")

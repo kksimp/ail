@@ -15,10 +15,11 @@ pub fn Ty.opt_inner(self) Ty?
         Opt(t) => t
         _ => none
 
-## `T?` for a type the subset can hold in an optional: no `T??`.
+## `T?` for a type the subset can hold in an optional. A `T??` boxes the inner
+## optional in a pointer-holding cell, so `some(none)` differs from `none`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple | Ref => Ty.Opt(t)
+        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple | Ref | Opt(_) => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool
@@ -64,6 +65,9 @@ fn Lower.some(mut self, v Val) Val
         Int | Char | Sized(_) => Val(id: call("rt.box", [v.id], t), ty: t)
         Float | F32 => Val(id: call("rt.boxf", [v.id], t), ty: t)
         Bool => Val(id: call("rt.box_bool", [v.id], t), ty: t)
+        Opt(_) =>
+            raw := call("rt.box_opt", [v.id], Ty.Int)
+            Val(id: op("copy", [raw], t), ty: t)
         Enum(n) =>
             # A fieldless enum is an `int` tag, and tag 0 is a value: box it.
             if is_flat(n)
@@ -78,6 +82,9 @@ fn Lower.unwrap(mut self, o Val) Val
         Int | Char | Sized(_) => Val(id: call("rt.unbox", [o.id], t), ty: t)
         Float | F32 => Val(id: call("rt.unboxf", [o.id], t), ty: t)
         Bool => Val(id: call("rt.unbox_bool", [o.id], t), ty: t)
+        Opt(_) =>
+            raw := call("rt.unbox", [o.id], Ty.Int)
+            Val(id: op("copy", [raw], t), ty: t)
         Enum(n) =>
             if is_flat(n)
                 tag := call("rt.unbox", [o.id], Ty.Int)
@@ -89,9 +96,13 @@ fn Lower.unwrap(mut self, o Val) Val
 fn Lower.convert_opt(mut self, v Val, want Ty, pos ast.Pos) int
     inner := want.opt_inner() else return v.id
     if v.ty.opt_inner() != none
+        if inner.opt_inner() != none and same_ty(v.ty, inner)
+            return some(v).id
         if not same_ty(v.ty, want)
             problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
         return v.id
+    if inner.opt_inner() != none and same_ty(v.ty, inner.opt_inner() else Ty.Unknown)
+        return convert_opt(some(v), want, pos)
     if not same_ty(v.ty, inner)
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
         return v.id
@@ -144,8 +155,23 @@ fn Lower.out_opt(mut self, v Val, pos ast.Pos) Val?
     jump(join, [])
     seal(present)
     cur = present
-    out(unwrap(v), pos)?
-    jump(join, [])
+    u := unwrap(v)
+    if inner.opt_inner() != none
+        # `some(none)` of an `int??` prints as such; a present inner prints as itself.
+        hollow := new_block()
+        full := new_block()
+        branch(op("eq", [u.id, konst(0, Ty.Int)], Ty.Bool), hollow, [], full, [])
+        seal(hollow)
+        cur = hollow
+        call("rt.out_str", [str_value("some(none)")], Ty.Unit)
+        jump(join, [])
+        seal(full)
+        cur = full
+        out_opt(u, pos)?
+        jump(join, [])
+    else
+        out(u, pos)?
+        jump(join, [])
     seal(join)
     cur = join
     Val(id: -1, ty: Ty.Unit)
@@ -266,6 +292,13 @@ fn Lower.returns_error(self, s Sig) bool
 fn Lower.is_error_type_name(self, e ast.Expr) bool
     match e
         Name(n, _) => err_msgs.contains(n)
+        Member(recv, n, _) => is_module_error(recv, n)
+        _ => false
+
+## `m.E`: an error type of imported module `m`.
+fn Lower.is_module_error(self, recv ast.Expr, n str) bool
+    match recv
+        Name(m, _) => module_of(m) != none and names_error("{m}.{n}")
         _ => false
 
 ## A bare variant name that only error enums have (it names an error enum's variant).
@@ -379,6 +412,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
         return true
     call("rt.err_set", [msg, trace_line(pos)], Ty.Unit)
     call("rt.err_value", [v.id], Ty.Unit)
+    defer_all()
     finish(return_of(zero_of(ret)))
     true
 
@@ -386,6 +420,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
 ## failure (left in the error slot) or its value is this function's result.
 fn Lower.return_fallible_call(mut self, e ast.Expr, pos ast.Pos) bool
     v := lower_expr(e, ret) else return true
+    defer_all()
     if ret.is_unit()
         finish(return_of(-1))
     else
@@ -405,6 +440,7 @@ fn Lower.propagate_result(mut self, v Val, context ast.Expr?, pos ast.Pos) Val
         problem(pos, "`?` in a function that can't fail")
     add_context(context)
     call("rt.err_trace", [trace_line(pos)], Ty.Unit)
+    defer_all()
     finish(return_of(zero_of(ret)))
     cur = good
     v
@@ -420,6 +456,9 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     # `t.wait()?` on a task: a trapped task ends the program (lower_task.ail).
     if tk.on and is_wait_call(e)
         return lower_wait(e, pos)
+    if tk.on and is_wait_all(e)
+        m := wait_all_maybe(e)?
+        return propagate_result(m.val, context, pos)
     if fallible_call(e)
         v := lower_expr(e, none)?
         return propagate_result(v, context, pos)
@@ -441,10 +480,12 @@ fn Lower.lower_try(mut self, e ast.Expr, context ast.Expr?, pos ast.Pos) Val?
     seal(good)
     cur = leave
     if ret.opt_inner() != none
+        defer_all()
         finish(return_of(konst(0, ret)))
     elif fails
         call("rt.err_set", [str_value("a value is absent"), trace_line(pos)], Ty.Unit)
         add_context(context)
+        defer_all()
         finish(return_of(zero_of(ret)))
     else
         problem(
@@ -465,6 +506,11 @@ struct Maybe
     err Ty
 
 fn Lower.lower_maybe(mut self, e ast.Expr) Maybe?
+    if tk.on and is_wait_call(e)
+        if m := lower_wait_try(e)
+            return m
+    if tk.on and is_wait_all(e)
+        return wait_all_maybe(e)
     if fallible_call(e)
         v := lower_expr(e, none)?
         failure := call("rt.failed", [], Ty.Bool)
@@ -561,6 +607,7 @@ fn Lower.else_part(
                     declare(n.name, err, op("copy", [raw], err))
             elif not opt
                 call("rt.err_clear", [], Ty.Unit)
+            tail_want = if r >= 0 and not t.is_unknown() then t else none
             v := lower_block(body, r >= 0)
             if not done()
                 if r >= 0
@@ -580,6 +627,7 @@ fn Lower.else_part(
 ## `else` (err.prop.4): `a?.b`, `a?.m()`, `a?[i]`.
 fn Lower.chain_try(self, e ast.Expr) bool
     match e
+        Try(x, _, _) => receiver_try(x)
         Member(r, _, _) => receiver_try(r)
         Method(r, _, _, args) => receiver_try(r) or args_try(args)
         Index(r, i, _) => receiver_try(r) or receiver_try(i)
@@ -649,7 +697,11 @@ fn Lower.lower_handle(mut self, value ast.Expr, other ast.Else)
 fn Lower.declare_errors(mut self, prog ast.Program)
     err_msgs[IO_ERROR] = ""
     err_msgs[PROC_ERROR] = ""
+    err_msgs[TRAPPED] = ""
     err_msgs[NET_ERROR] = ""
+    err_msgs[COMPRESS_ERROR] = ""
+    # What `Task.wait()` fails with (conc.task.6), named in `! Trapped`.
+    err_msgs["Trapped"] = ""
     for s in prog.structs
         if s.is_error
             err_msgs[s.name] = ""
@@ -770,8 +822,12 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
         Method(recv, name, _, _) =>
             if os_fails(recv, name)
                 m := os_module(recv)
+                if m == "task"
+                    return Ty.Unknown
                 if m == "net"
                     return Ty.Struct(NET_ERROR)
+                if m == "compress"
+                    return Ty.Struct(COMPRESS_ERROR)
                 return Ty.Struct(if m == "proc" then PROC_ERROR else IO_ERROR)
             if m := module_name(recv)
                 return fn_errs.get("{m}.{name}") else Ty.Unknown
@@ -788,6 +844,7 @@ fn Lower.display_call(mut self, v Val) int?
         Struct(k) => k
         Enum(k) => k
         Tuple => return tuple_text(v)
+        Bytes => return call("rt.bytes_show", [v.id], Ty.Str)
         Any(t) => return any_text(t, v)
         List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
@@ -803,7 +860,7 @@ fn Lower.default_error_text(mut self, key str, v Val) int?
     if cases := enums.get(key)
         return default_enum_text(key, cases, v)
     slots := structs.get(key) else return none
-    fields_text("{key}(", slots, v.id, 0)
+    fields_text("{shown_key(key)}(", slots, v.id, 0)
 
 ## `head` then each of `slots` read from `obj` (the first at slot `skip`),
 ## as `name: value` pairs, then `)`.
@@ -819,6 +876,7 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
             F32 => call("rt.fmt_f32", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
+            Bytes => call("rt.bytes_show", [f], Ty.Str)
             Struct | Enum => display_call(Val(id: f, ty: slots[k].ty)) else -1
             _ => if text_ok(slots[k].ty) then value_text(slots[k].ty, f) else -1
         if text < 0
@@ -826,12 +884,19 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, text], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
 
+## The name a type is shown by: `std.ui` is written in AIL here but is the
+## runtime's `ui` module under `ail run`, so its types print as `ui.Event`.
+fn shown_key(key str) str
+    if key.starts_with("std.ui.") and key.slice(7, key.len()).contains(".") == false
+        return key.slice(4, key.len())
+    key
+
 ## A plain struct field's `Name(field: value, ...)`, else -1.
 fn Lower.nested_text(mut self, key str, obj int) int
     slots := structs.get(key) else return -1
     if err_msgs.contains(key) or sigs.contains("{key}.to_str")
         return -1
-    fields_text("{key}(", slots, obj, 0) else -1
+    fields_text("{shown_key(key)}(", slots, obj, 0) else -1
 
 ## The default text of an enum value: a chain of tests on the variant index.
 fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
@@ -849,7 +914,7 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
             seal(no)
             cur = yes
         text := if cases[k].fields.len()
-            == 0 then str_value("{key}.{cases[k].name}") else (fields_text("{key}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
+            == 0 then str_value("{shown_key(key)}.{cases[k].name}") else (fields_text("{shown_key(key)}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
         jump(join, [text])
         if no >= 0
             cur = no

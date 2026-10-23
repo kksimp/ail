@@ -1,0 +1,368 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `compress.zip_dir` and `compress.unzip` (std.compress.5, ADR 0446): zip
+## archives with the methods store and deflate, no zip64. Writing is
+## deterministic (entries sorted by name, the fixed 1980-01-01 timestamp);
+## reading checks every CRC-32 and every name before anything is written.
+## An entry is a name object and a data object (0 for a directory entry).
+
+ZIP_LIMIT := 1073741824
+
+fn zip_put16(p int, v int)
+    store8(p, v.bit_and(255))
+    store8(p + 1, v.shr(8).bit_and(255))
+
+fn zip_put32(p int, v int)
+    zip_put16(p, v.bit_and(65535))
+    zip_put16(p + 2, v.shr(16).bit_and(65535))
+
+fn zip_get16(p int) int
+    load8(p).bit_or(load8(p + 1).shl(8))
+
+fn zip_get32(p int) int
+    zip_get16(p).bit_or(zip_get16(p + 2).shl(16))
+
+fn zip_sig(p int, a int, b int)
+    store8(p, 80)
+    store8(p + 1, 75)
+    store8(p + 2, a)
+    store8(p + 3, b)
+
+fn zip_item(xs List[int], i int) int
+    load64(load64(list_addr(xs) + 16) + 8 * i)
+
+fn zip_corrupt(msg str, at str)
+    cz_error_text("corrupt", msg, at)
+
+## Whether `path` is a link: opening it without following links fails with
+## ELOOP.
+fn zip_is_link(path str) bool
+    p := os_cstr(OS_PATH_B, path)
+    if p == 0
+        return false
+    fd := os_open(p, os_pick(131072, 32768, 256), 0)
+    if fd >= 0
+        os_close(fd)
+        return false
+    fd == os_pick(-40, -40, -62)
+
+## Gather the files below `dir`/`rel` into `names` and `datas`, directories
+## that hold nothing as `rel/`. False after a failure (`os_kind()` and the
+## path in `bad`).
+fn zip_walk(root str, rel str, names List[int], datas List[int], bad int) bool
+    here := if rel == "" then root else path_join(root, rel)
+    list := os_fs_list_dir(here)
+    if not os_ok()
+        store64(bad, str_addr(here))
+        return false
+    mut seen := false
+    for i in 0..list.len()
+        name := str_at(list[i])
+        path := if rel == "" then name else str_cat3(rel, "/", name)
+        full := path_join(root, path)
+        if zip_is_link(full)
+            continue
+        seen = true
+        if os_is_real_dir(full)
+            if not zip_walk(root, path, names, datas, bad)
+                return false
+        else
+            data := os_fs_read_bytes(full)
+            if not os_ok()
+                store64(bad, str_addr(path))
+                return false
+            list_push(names, str_addr(path))
+            list_push(datas, str_addr(data))
+    if not seen and rel != ""
+        list_push(names, str_addr(str_cat(rel, "/")))
+        list_push(datas, 0)
+    true
+
+## Sort the entries by name bytes (a shell sort over the two lists).
+fn zip_sort(names List[int], datas List[int])
+    q := list_addr(names)
+    nd := load64(q + 16)
+    dd := load64(list_addr(datas) + 16)
+    n := load64(q)
+    mut gap := n / 2
+    while gap > 0
+        for i in gap..n
+            mut j := i
+            while j >= gap and str_cmp(
+                str_at(load64(nd + 8 * (j - gap))),
+                str_at(load64(nd + 8 * j)),
+            ) > 0
+                a := load64(nd + 8 * j)
+                store64(nd + 8 * j, load64(nd + 8 * (j - gap)))
+                store64(nd + 8 * (j - gap), a)
+                b := load64(dd + 8 * j)
+                store64(dd + 8 * j, load64(dd + 8 * (j - gap)))
+                store64(dd + 8 * (j - gap), b)
+                j -= gap
+        gap = gap / 2
+
+## `compress.zip_dir(dir, dst)`.
+fn compress_zip_dir(dir str, dst str, at str)
+    names := list_new(16)
+    datas := list_new(16)
+    bad := cz_words(1)
+    if not zip_walk(dir, "", names, datas, bad)
+        cz_io_fail(str_at(load64(bad)), os_kind(), at)
+        return
+    zip_sort(names, datas)
+    n := load64(list_addr(names))
+    if n > 65535
+        cz_error_text("too_big", "more than 65535 files; zip64 is not supported", at)
+        return
+    # Each entry's method, CRC and body, and the size of the archive.
+    methods := cz_words(n + 1)
+    crcs := cz_words(n + 1)
+    bodies := list_new(n + 1)
+    mut total := 22
+    for i in 0..n
+        name := str_at(zip_item(names, i))
+        dp := zip_item(datas, i)
+        mut len := 0
+        mut base := 0
+        if dp != 0
+            base = dp + 16
+            len = load64(dp)
+        if len >= 4294967295
+            cz_error_text("too_big", "over 4 GiB; zip64 is not supported", at)
+            return
+        cz_wr(crcs, i, cz_crc32(base, len))
+        packed := cz_deflate(base, len)
+        if load64(str_addr(packed)) < len
+            cz_wr(methods, i, 8)
+            list_push(bodies, str_addr(packed))
+        else
+            cz_wr(methods, i, 0)
+            list_push(bodies, if dp == 0 then str_addr("") else dp)
+        total += 76 + 2 * load64(str_addr(name)) + load64(zip_item(bodies, i))
+    if total >= 4294967295
+        cz_error_text("too_big", "over 4 GiB; zip64 is not supported", at)
+        return
+    out := str_new(total, total)
+    mut w := out + 16
+    offsets := cz_words(n + 1)
+    for i in 0..n
+        np := str_addr(str_at(zip_item(names, i)))
+        nl := load64(np)
+        bp := zip_item(bodies, i)
+        bl := load64(bp)
+        dp := zip_item(datas, i)
+        ul := if dp == 0 then 0 else load64(dp)
+        cz_wr(offsets, i, w - out - 16)
+        zip_sig(w, 3, 4)
+        zip_put16(w + 4, 20)
+        zip_put16(w + 6, 2048)
+        zip_put16(w + 8, cz_rd(methods, i))
+        zip_put16(w + 10, 0)
+        zip_put16(w + 12, 33)
+        zip_put32(w + 14, cz_rd(crcs, i))
+        zip_put32(w + 18, bl)
+        zip_put32(w + 22, ul)
+        zip_put16(w + 26, nl)
+        zip_put16(w + 28, 0)
+        copy_bytes(w + 30, np + 16, nl)
+        copy_bytes(w + 30 + nl, bp + 16, bl)
+        w += 30 + nl + bl
+    start := w - out - 16
+    for i in 0..n
+        np := str_addr(str_at(zip_item(names, i)))
+        nl := load64(np)
+        bl := load64(zip_item(bodies, i))
+        dp := zip_item(datas, i)
+        ul := if dp == 0 then 0 else load64(dp)
+        zip_sig(w, 1, 2)
+        zip_put16(w + 4, 788)
+        zip_put16(w + 6, 20)
+        zip_put16(w + 8, 2048)
+        zip_put16(w + 10, cz_rd(methods, i))
+        zip_put16(w + 12, 0)
+        zip_put16(w + 14, 33)
+        zip_put32(w + 16, cz_rd(crcs, i))
+        zip_put32(w + 20, bl)
+        zip_put32(w + 24, ul)
+        zip_put16(w + 28, nl)
+        zip_put32(w + 30, 0)
+        zip_put32(w + 34, 0)
+        zip_put32(w + 38, 2175008768)
+        zip_put32(w + 42, cz_rd(offsets, i))
+        copy_bytes(w + 46, np + 16, nl)
+        w += 46 + nl
+    zip_sig(w, 5, 6)
+    zip_put32(w + 4, 0)
+    zip_put16(w + 8, n)
+    zip_put16(w + 10, n)
+    zip_put32(w + 12, w - out - 16 - start)
+    zip_put32(w + 16, start)
+    zip_put16(w + 20, 0)
+    w += 22
+    store64(out, w - out - 16)
+    store64(out + 8, w - out - 16)
+    os_fs_write_text(dst, str_at(out))
+    if not os_ok()
+        cz_io_fail(dst, os_kind(), at)
+
+## std.compress.5: a name is safe when it is relative, has no `\`, `:` or NUL,
+## and no empty, `.` or `..` component (a trailing `/` is dropped first).
+fn zip_safe(name str) bool
+    p := str_addr(name)
+    n := load64(p)
+    if n == 0 or load8(p + 16) == 47
+        return false
+    mut end := n
+    if load8(p + 15 + n) == 47
+        end = n - 1
+    mut start := 0
+    for i in 0..end + 1
+        c := if i < end then load8(p + 16 + i) else 47
+        if c == 92 or c == 58 or c == 0
+            return false
+        if c == 47
+            len := i - start
+            if len == 0
+                return false
+            if len == 1 and load8(p + 16 + start) == 46
+                return false
+            if len == 2 and load8(p + 16 + start) == 46 and load8(p + 17 + start) == 46
+                return false
+            start = i + 1
+    true
+
+## `compress.unzip(archive, dir)`: every entry is read and checked first;
+## then `dir` is created and the entries are written.
+fn compress_unzip(archive str, dir str, at str)
+    data := os_fs_read_bytes(archive)
+    if not os_ok()
+        cz_io_fail(archive, os_kind(), at)
+        return
+    d := str_addr(data) + 16
+    len := load64(str_addr(data))
+    mut eocd := -1
+    mut p := len - 22
+    mut tries := 0
+    while p >= 0 and tries < 65557 and eocd < 0
+        if load8(d + p) == 80
+            and load8(d + p + 1) == 75
+            and load8(d + p + 2) == 5
+            and load8(d + p + 3) == 6
+            eocd = p
+        p -= 1
+        tries += 1
+    if eocd < 0
+        zip_corrupt("not a zip archive", at)
+        return
+    count := zip_get16(d + eocd + 10)
+    mut cp := zip_get32(d + eocd + 16)
+    names := list_new(16)
+    outs := list_new(16)
+    st := cz_words(8)
+    mut total := 0
+    for k in 0..count
+        if cp + 4 > len
+            or load8(d + cp) != 80
+            or load8(d + cp + 1) != 75
+            or load8(d + cp + 2) != 1
+            or load8(d + cp + 3) != 2
+            zip_corrupt("bad zip central directory", at)
+            return
+        if cp + 46 > len
+            zip_corrupt("truncated zip data", at)
+            return
+        flags := zip_get16(d + cp + 8)
+        method := zip_get16(d + cp + 10)
+        crc := zip_get32(d + cp + 16)
+        csize := zip_get32(d + cp + 20)
+        usize := zip_get32(d + cp + 24)
+        nlen := zip_get16(d + cp + 28)
+        xlen := zip_get16(d + cp + 30)
+        clen := zip_get16(d + cp + 32)
+        local := zip_get32(d + cp + 42)
+        if cp + 46 + nlen > len
+            zip_corrupt("truncated zip data", at)
+            return
+        name := os_str_from(d + cp + 46, nlen)
+        if os_utf8_chars(d + cp + 46, nlen) < 0
+            zip_corrupt("zip name is not UTF-8", at)
+            return
+        cp += 46 + nlen + xlen + clen
+        if flags.bit_and(1) != 0
+            cz_error_text("unsupported", "encrypted zip entries are not supported", at)
+            return
+        if not zip_safe(name)
+            cz_error_text("unsafe_path", str_cat("unsafe name in archive: ", name), at)
+            return
+        if local + 4 > len
+            or load8(d + local) != 80
+            or load8(d + local + 1) != 75
+            or load8(d + local + 2) != 3
+            or load8(d + local + 3) != 4
+            zip_corrupt("bad zip local header", at)
+            return
+        if local + 30 > len
+            zip_corrupt("truncated zip data", at)
+            return
+        start := local + 30 + zip_get16(d + local + 26) + zip_get16(d + local + 28)
+        if start + csize > len
+            zip_corrupt("truncated zip data", at)
+            return
+        total += usize
+        if total > ZIP_LIMIT
+            cz_error_text("too_big", "archive expands past the size limit", at)
+            return
+        mut body := str_new(0, 0)
+        if not str_ends_with(name, "/")
+            raw := str_new(csize, csize)
+            copy_bytes(raw + 16, d + start, csize)
+            if method == 0
+                body = raw
+            elif method == 8
+                cz_wr(st, 3, 0)
+                got := cz_inflate_data(str_at(raw), st, "")
+                if cz_rd(st, 3) != 0
+                    cz_error_text(
+                        if cz_rd(st, 3)
+                            == 1 then "corrupt" else if cz_rd(st, 3)
+                            == 2 then "checksum" else if cz_rd(st, 3)
+                            == 3 then "too_big" else "unsupported",
+                        str_at(cz_rd(st, 4)),
+                        at,
+                    )
+                    return
+                body = str_addr(got)
+            else
+                cz_error_text(
+                    "unsupported",
+                    str_cat3("zip method ", fmt_int(method), " is not supported"),
+                    at,
+                )
+                return
+            if load64(body) != usize or cz_crc32(body + 16, usize) != crc
+                cz_error_text("checksum", str_cat("zip CRC-32 or size mismatch in ", name), at)
+                return
+        list_push(names, str_addr(name))
+        list_push(outs, body)
+    os_fs_make_dir(dir)
+    if not os_ok()
+        cz_io_fail(dir, os_kind(), at)
+        return
+    for k in 0..count
+        name := str_at(zip_item(names, k))
+        rel := if str_ends_with(name, "/") then str_sub(
+            str_addr(name),
+            0,
+            load64(str_addr(name)) - 1,
+        ) else name
+        target := path_join(dir, rel)
+        if str_ends_with(name, "/")
+            os_fs_make_dir(target)
+        else
+            os_fs_make_dir(path_dir(target))
+            if os_ok()
+                os_fs_write_text(target, str_at(zip_item(outs, k)))
+        if not os_ok()
+            cz_io_fail(name, os_kind(), at)
+            return

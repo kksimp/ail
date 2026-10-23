@@ -3,6 +3,7 @@
 ## (own.ref.1-7) and `defer` (own.defer.1-3). The names whose use moves a
 ## value are kept in `moved` for the flow check (slice 3).
 use ast
+use fix
 
 ## own.uniq.6: only a unique type has a cleanup, and it is written out.
 fn Checker.check_drop_impls(mut self)
@@ -101,12 +102,14 @@ fn Checker.move_arg(mut self, a ast.Arg, param_moves bool)
     if param_moves and a.moved
         take(a.value, "own.move.2")
     elif param_moves
-        err_help(
+        mut d := new_diag(
             "own.move.2",
             expr_pos(a.value),
             "this parameter is `move`, so the argument must be marked `move`",
-            "write `move` before the argument; the value can't be used after the call",
-        )
+        ).with_help("write `move` before the argument; the value can't be used after the call")
+        if is_plain_name(a.value)
+            d = d.with_fix("mark the argument `move`", [fix.insert(expr_pos(a.value), "move ")])
+        diags.push(d)
     elif a.moved
         err_help(
             "own.move.2",

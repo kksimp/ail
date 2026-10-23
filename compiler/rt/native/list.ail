@@ -83,8 +83,23 @@ fn list_str_eq(a int, b int) bool
     true
 
 ## Equality of two stored words: `kind` 0 integers and bools, 1 strings,
-## 2 floats (IEEE: `nan` is unequal to itself, `-0.0` equals `0.0`).
+## 2 floats (IEEE: `nan` is unequal to itself, `-0.0` equals `0.0`); 8 more
+## is a list of words of the kind below.
 fn list_word_eq(kind int, a int, b int) bool
+    if kind >= 8
+        p := list_addr(list_at(a))
+        q := list_addr(list_at(b))
+        n := load64(p)
+        if n != load64(q)
+            return false
+        for i in 0..n
+            if not list_word_eq(
+                kind - 8,
+                load64(load64(p + 16) + 8 * i),
+                load64(load64(q + 16) + 8 * i),
+            )
+                return false
+        return true
     if kind == 1
         return list_str_eq(a, b)
     if kind == 2
@@ -103,6 +118,8 @@ fn list_contains(xs List[int], w int, kind int, size int) bool
 ## Whether `a` sorts before `b`: `kind` 0 integers, 1 strings (bytes), 2 floats
 ## (type.num.11: `nan` last).
 fn list_word_lt(kind int, a int, b int) bool
+    if kind >= 8
+        return list_cmp(list_at(a), list_at(b), kind - 8) < 0
     if kind == 1
         na := load64(a)
         nb := load64(b)
@@ -122,6 +139,29 @@ fn list_word_lt(kind int, a int, b int) bool
             return true
         return x < y
     a < b
+
+## `xs.cmp(ys)` and `xs < ys`: -1, 0 or 1 by the first element that differs
+## (`kind` as for `list_word_lt`, 8-byte elements), else by length.
+fn list_cmp(xs List[int], ys List[int], kind int) int
+    p := list_addr(xs)
+    q := list_addr(ys)
+    n := load64(p)
+    m := load64(q)
+    a := load64(p + 16)
+    b := load64(q + 16)
+    lim := if n < m then n else m
+    for i in 0..lim
+        x := load64(a + 8 * i)
+        y := load64(b + 8 * i)
+        if list_word_lt(kind, x, y)
+            return -1
+        if list_word_lt(kind, y, x)
+            return 1
+    if n < m
+        return -1
+    if n > m
+        return 1
+    0
 
 ## `xs.sort()`: a stable merge sort of the words.
 fn list_sort(xs List[int], kind int)

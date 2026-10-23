@@ -1,0 +1,13 @@
+# type.coll: sorted, sort, min and max of a List[char] order by code point.
+fn main()
+    cs := ['b', 'A', 'a', 'é', 'Z', '😀', '0']
+    print(cs.sorted())
+    mut ds := cs
+    ds.sort()
+    print(ds)
+    print(cs)
+    print(cs.min())
+    print(cs.max())
+    es := List[char]()
+    print(es.min())
+    print(es.max())

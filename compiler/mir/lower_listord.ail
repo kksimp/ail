@@ -1,0 +1,41 @@
+## Ordering of lists in the native subset (type.coll.11, type.num.11,
+## expr.cmp.1): `<`, `<=`, `>`, `>=` and `.cmp()` on a list compare element by
+## element, the first difference deciding, a prefix before the longer list.
+## The same word kinds order the elements of `sorted`, `min` and `max`: a
+## list of lists adds 8 to its elements' kind (`List[List[float]]` is 10),
+## and `contains` and `==` use the same kinds. Elements are `int`, `char`,
+## sized integers, `str` and `float`; the runtime is `rt.list_cmp` and the
+## kinds of `list_word_lt` and `list_word_eq` in `rt/native/list.ail`.
+use ast
+
+## The kind that orders and compares the words of a list of `e`, or -1:
+## 0 integers (and `char`), 1 strings, 2 floats, and 8 more for a list of
+## those. A `bool` list stores bytes, so it has no kind here.
+fn ord_kind(e Ty) int
+    match e
+        Int | Char | Sized(_) => 0
+        Str => 1
+        Float | F32 => 2
+        List(inner) =>
+            k := ord_kind(inner)
+            if k < 0 or k >= 8 then -1 else k + 8
+        _ => -1
+
+## `a < b` and its kin on two lists of one type.
+fn Lower.list_order(mut self, o ast.BinOp, a Val, b Val) Val?
+    e := a.ty.elem()?
+    k := ord_kind(e)
+    name := op_name(o)
+    if k < 0 or not is_comparison(o) or name == "eq" or name == "ne"
+        return none
+    c := call("rt.list_cmp", [a.id, b.id, konst(k, Ty.Int)], Ty.Int)
+    Val(id: op(name, [c, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
+
+## `a.cmp(b)` on two lists of one type, as an `Ordering`.
+fn Lower.list_cmp_method(mut self, a Val, b Val, pos ast.Pos) Val?
+    e := a.ty.elem()?
+    k := ord_kind(e)
+    if k < 0 or not same_ty(a.ty, b.ty) or not enums.contains("Ordering")
+        return unsupported(pos, "`.cmp()` on `{a.ty.name()}`")
+    c := call("rt.list_cmp", [a.id, b.id, konst(k, Ty.Int)], Ty.Int)
+    ordering(op("add", [c, konst(1, Ty.Int)], Ty.Int))

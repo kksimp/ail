@@ -1,6 +1,6 @@
 # ADR 0842: Gate on the designer's Mac, no Linux VM
 
-- Status: Accepted (amends [ADR 0085](0085-interim-local-testing-gate.md))
+- Status: Accepted (amends [ADR 0085](0085-interim-local-testing-gate.md)); amended by [ADR 0865](0865-no-double-work.md)
 - Decided by: Designer (2026-10-21 18:43 and 2026-10-22 13:10: "default to testing on my mac and not Linux", "no more in your VM with Linux")
 - Date: 2026-10-22
 

@@ -1,0 +1,47 @@
+# std.app.14 shape: an inbox of events fed by tasks in a group.
+struct Event
+    kind str
+    id str
+    text str
+
+struct Inbox
+    ch Channel[Event]
+
+fn Inbox.post(self, ev Event)
+    self.ch.send(ev)
+
+enum Kind
+    Ping
+    Pong(n int)
+
+fn pump(src Channel[str], inbox Inbox)
+    for line in src
+        inbox.post(Event(kind: "external", id: "src", text: line))
+    inbox.post(Event(kind: "exited", id: "", text: ""))
+
+fn kinds(ch Channel[Kind], n int)
+    for i in 0..n
+        ch.send(if i % 2 == 0 then Ping else Pong(i))
+    ch.close()
+
+fn main() !
+    src := Channel[str](4)
+    inbox := Inbox(ch: Channel[Event](8))
+    g := TaskGroup()
+    g.add(spawn pump(src, inbox))
+    src.send("a")
+    src.send("b")
+    src.close()
+    while true
+        ev := inbox.ch.recv() else break
+        print("{ev.kind} {ev.text}")
+        if ev.kind == "exited"
+            break
+    g.wait_all()?
+    kc := Channel[Kind](2)
+    t := spawn kinds(kc, 5)
+    for k in kc
+        match k
+            Ping => print("ping")
+            Pong(n) => print("pong {n}")
+    t.wait()?

@@ -1,7 +1,7 @@
 # compiler
 entry: main in main.ail
 
-## (root) (42 items)
+## (root) (45 items)
 
 ## a64 (60 items)
 
@@ -9,7 +9,7 @@ entry: main in main.ail
 
 ## budget (24 items)
 
-## check (306 items)
+## check (323 items)
 
 ## codegen (54 items)
 
@@ -27,7 +27,7 @@ entry: main in main.ail
 
 ## load (90 items)
 
-## mir (376 items)
+## mir (398 items)
 
 ## obj (58 items)
 
