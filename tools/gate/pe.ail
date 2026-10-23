@@ -1,0 +1,156 @@
+## The Windows PE writer (bootstrap/tests/native_pe.rs, ported): the sample program's image,
+## built by `ail run compiler pe-sample sample`, has the PE32+ structure and the kernel32
+## imports the codegen calls (ADR 0597, ADR 0598). The Wine checks run when `wine` is installed.
+## Run from the repository root:
+##   ail run tools/gate/pe.ail
+## Prints only failures; the last line is `PE GREEN (N checks)` or `PE RED (N failures)`.
+
+BIN := "bootstrap/target/release/ail"
+
+struct Run
+    fails int
+    checks int
+
+fn Run.red(mut self, why str)
+    fails += 1
+    print("RED {why}")
+
+fn Run.same(mut self, what str, got int, want int)
+    checks += 1
+    if got != want
+        self.red("{what}: got {got}, want {want}")
+
+fn sh(script str) proc.Output
+    r := proc.run("sh", ["-c", script]) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
+
+## The bytes an `ail run compiler` command prints as hex lines.
+fn image(args str) bytes?
+    r := sh("{BIN} run compiler {args} 2>/dev/null")
+    if r.status != 0
+        return none
+    bytes.from_hex(r.out.words().join(""))
+
+fn u16_at(b bytes, at int) int
+    b[at].to_int() + b[at + 1].to_int() * 256
+
+fn u32_at(b bytes, at int) int
+    u16_at(b, at) + u16_at(b, at + 2) * 65536
+
+fn has_wine() bool
+    sh("wine --version").status == 0
+
+fn headers(mut r Run, b bytes)
+    r.checks += 1
+    if not b.starts_with(b"MZ")
+        r.red("the image starts with MZ")
+    pe := u32_at(b, 0x3c)
+    r.same("PE header offset", pe, 0x80)
+    r.checks += 1
+    if b[pe..pe + 4] != b"PE\x00\x00"
+        r.red("PE signature")
+    r.same("machine is AMD64", u16_at(b, pe + 4), 0x8664)
+    r.same("four sections: .text .rdata .idata .bss", u16_at(b, pe + 6), 4)
+    r.same("PE32+ optional header", u16_at(b, pe + 24), 0x20b)
+    r.same("entry point is the first code byte", u32_at(b, pe + 24 + 16), 0x1000)
+    r.same("sixteen data directories", u32_at(b, pe + 24 + 108), 16)
+    dirs := pe + 24 + 112
+    r.same("import directory is in .idata", u32_at(b, dirs + 8), 0x3000)
+    r.same("three descriptors: KERNEL32.dll, WS2_32.dll and the null entry", u32_at(b, dirs + 12), 60)
+    r.same("address table starts after the descriptors and KERNEL32 lookup table", u32_at(b, dirs + 96), 0x305c)
+    r.same("KERNEL32: three entries and a null; WS2_32: one and a null", u32_at(b, dirs + 100), 48)
+
+fn imports(mut r Run, b bytes)
+    idata := b[0x800..0xa00]
+    r.checks += 1
+    if idata.find(b"KERNEL32.dll\x00") == none
+        r.red("the DLL name is in .idata")
+    for name in ["GetStdHandle", "WriteFile", "ExitProcess"]
+        r.checks += 1
+        if idata.find(b"\x00\x00" + name.to_bytes() + b"\x00") == none
+            r.red("{name} hint/name entry")
+    # The call to GetStdHandle is FF 15 with a displacement to its slot.
+    text := b[0x400..0x600]
+    iat := u32_at(b, 0x80 + 24 + 112 + 96)
+    call := text.find(b"\xff\x15") else
+        r.red("no call through an import slot")
+        return
+    mut disp := u32_at(text, call + 2)
+    if disp >= 2147483648
+        disp -= 4294967296
+    r.same("the call reaches the address table", 0x1000 + call + 6 + disp, iat)
+
+fn objdump(mut r Run, b bytes, tmp str)
+    r.checks += 1
+    if sh("objdump --version").status != 0
+        return
+    path := "{tmp}/sample.exe"
+    fs.write_bytes(path, b) else
+        r.red("could not write {path}")
+        return
+    t := sh("objdump -x {path}").out
+    if not (t.contains("pei-x86-64") or t.contains("coff-x86-64"))
+        r.red("objdump does not read the file as PE")
+    for want in ["DLL Name: KERNEL32.dll", "ExitProcess", "DLL Name: WS2_32.dll", "closesocket"]
+        if not t.contains(want)
+            r.red("objdump output lacks `{want}`")
+
+## Runs `exe` under Wine and returns its output.
+fn wine(exe str, tmp str) proc.Output
+    sh("WINEDEBUG=-all WINEPREFIX={tmp}/prefix wine {exe}")
+
+fn wine_checks(mut r Run, b bytes, tmp str)
+    sample := "{tmp}/wine-sample.exe"
+    fs.write_bytes(sample, b) else
+        r.red("could not write {sample}")
+        return
+    line := "hello from AIL on Windows\n"
+    w := wine(sample, tmp)
+    r.checks += 1
+    if w.status != 0 or w.out != line
+        r.red("sample under wine: exit {w.status}, printed `{w.out}`")
+    m := image("pe-mir-sample x") else
+        r.red("pe-mir-sample failed")
+        return
+    libsys := "{tmp}/wine-libsys.exe"
+    fs.write_bytes(libsys, m) else
+        r.red("could not write {libsys}")
+        return
+    l := wine(libsys, tmp)
+    r.checks += 1
+    if l.out != line or l.status != line.len()
+        r.red("libsys.WriteFile under wine: exit {l.status}, printed `{l.out}`")
+    hello := "{tmp}/hello.exe"
+    bld := sh("{BIN} build examples/hello.ail --target x86_64-windows -o {hello}")
+    r.checks += 1
+    if bld.status != 0
+        r.red("build for windows failed: {bld.err}")
+        return
+    h := wine(hello, tmp)
+    want := fs.read_text("examples/hello.out") else ""
+    if h.status != 0 or h.out != want
+        r.red("hello under wine: exit {h.status}, printed `{h.out}`")
+
+fn main()
+    mut r := Run(fails: 0, checks: 0)
+    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-pe-gate"
+    sh("rm -rf {tmp} && mkdir -p {tmp}")
+    b := image("pe-sample sample") else
+        print("RED pe-sample failed")
+        print("PE RED (1 failures)")
+        io.exit(1)
+    headers(mut r, b)
+    imports(mut r, b)
+    objdump(mut r, b, tmp)
+    if has_wine()
+        wine_checks(mut r, b, tmp)
+    sh("rm -rf {tmp}")
+    if r.fails == 0
+        print("PE GREEN ({r.checks} checks)")
+    else
+        print("PE RED ({r.fails} failures)")
+        io.exit(1)
