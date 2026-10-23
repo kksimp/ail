@@ -607,7 +607,7 @@ fn time_mono_ms() int
 fn time_sleep_ms(ms int)
     if ms < 0
         os_usage_trap("std.time.2", "a negative sleep")
-    if ms == 0
+    if ms == 0 or task_cancelled()
         return
     ts := os_scratch(OS_TMP)
     if target() == 2

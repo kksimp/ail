@@ -88,13 +88,15 @@ fn os_lookup(mod str, name str) OsFn?
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
         "tz.offset" => os_fn("rt.tz_offset", [s, Ty.Int], Ty.Opt(Ty.Int), false)
         "tz.system" => os_fn("rt.tz_system", [], s, false)
+        "task.cancelled" => os_fn("rt.task_cancelled", [], Ty.Bool, false)
+        "task.check" => os_fn("rt.task_check", [], Ty.Unit, true)
         "time.now_ms" => os_fn("rt.time_now_ms", [], Ty.Int, false)
         "time.sleep_ms" => os_fn("rt.time_sleep_ms", [Ty.Int], Ty.Unit, false)
         _ => none
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz", "hw"]
+    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz", "hw", "task"]
         if is_module(recv, m)
             return m
     ""

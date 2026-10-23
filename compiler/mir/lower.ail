@@ -1893,7 +1893,7 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_atomic_method(r.id, e, name, npos, args)
     if chan_elem(r.ty) != none
         return lower_chan_method(r, name, npos, args)
-    if is_sync(r.ty)
+    if is_sync(r.ty) or is_task_cancel(recv, name)
         return lower_sync_method(r, name, npos, args)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)

@@ -56,6 +56,14 @@ T_HEAD := 56
 T_OP := 64
 T_TAIL := 72
 T_ARGS := 80
+# After the 14 argument words: cancelled, the task that started this one, the
+# channel it sleeps on, its first child and its next sibling (conc.cancel.*).
+T_CANC := 192
+T_PAR := 200
+T_BLK := 208
+T_KIDS := 216
+T_SIB := 224
+T_SIZE := 232
 
 ## The cores this process may run on, 1 to 8 (`sched_getaffinity`).
 fn cores() int
@@ -135,8 +143,15 @@ fn pool() int
 ## A task record for function `id` of `dispatch`; the caller stores the
 ## arguments from `T_ARGS` and calls `task_start`.
 fn task_new(id int) int
-    rec := alloc(T_ARGS + 8 * 14, KIND_TASK)
+    rec := alloc(T_SIZE, KIND_TASK)
     store64(rec + T_ID, id)
+    parent := cur_task()
+    if parent != 0
+        store64(rec + T_PAR, parent)
+        store64(rec + T_SIB, load64(parent + T_KIDS))
+        store64(parent + T_KIDS, rec)
+        # A task started by a cancelled task starts cancelled.
+        store64(rec + T_CANC, atomic_load(parent + T_CANC))
     rec
 
 ## Queue the task and make sure a worker will take it: wake an idle one, or
@@ -708,7 +723,7 @@ fn mutex_unlock(m int, v int) int
     0
 
 fn group_new() int
-    alloc(24, KIND_ENV)
+    alloc(32, KIND_ENV)
 
 ## `g.add(t)`.
 fn group_add(g int, rec int)
@@ -721,6 +736,8 @@ fn group_add(g int, rec int)
         store64(g + 16, bigger)
     store64(load64(g + 16) + 8 * n, rec)
     store64(g, n + 1)
+    if load64(g + 24) != 0
+        task_cancel(rec)
 
 ## `g.wait_all()`: waits for every task; the first trapped one is the failure
 ## `Trapped` in the error slot (conc.task.8).
@@ -778,3 +795,46 @@ fn held_release(slot int)
         futex_wake(m + M_WAKE, 1000000)
         atomic_add(global(CHAN_EPOCH), 1)
         unlock(m + M_LOCK)
+
+# ---- cancellation (conc.cancel.1-4) ----
+
+## The task record this thread is running, or 0 on the main thread.
+fn cur_task() int
+    k := worker_index()
+    if k < 0
+        return 0
+    load64(pool() + P_CUR + 8 * k)
+
+## `task.cancelled()`.
+fn task_cancelled() bool
+    rec := cur_task()
+    rec != 0 and atomic_load(rec + T_CANC) != 0
+
+## `task.check()`: the failure `Cancelled` once the running task is cancelled.
+fn task_check(at str)
+    if task_cancelled()
+        err_set("the task was cancelled", at)
+
+## The running task is about to sleep on channel `ch` (0: it has woken), so a
+## cancel can wake it.
+fn task_block_on(ch int)
+    rec := cur_task()
+    if rec != 0
+        atomic_store(rec + T_BLK, ch)
+
+## `t.cancel()`: the task and every task it started, however deep.
+fn task_cancel(rec int)
+    atomic_xchg(rec + T_CANC, 1)
+    b := atomic_load(rec + T_BLK)
+    if b != 0
+        chan_wake(b)
+    mut kid := load64(rec + T_KIDS)
+    while kid != 0
+        task_cancel(kid)
+        kid = load64(kid + T_SIB)
+
+## `g.cancel()`: every task of the group, and those added later.
+fn group_cancel(g int)
+    store64(g + 24, 1)
+    for i in 0..load64(g)
+        task_cancel(load64(load64(g + 16) + 8 * i))

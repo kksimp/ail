@@ -28,3 +28,15 @@ fn gc_scan_threads()
 
 fn stack_end_self() int
     load64(global(STACK_TOP))
+
+fn cur_task() int
+    0
+
+fn task_cancelled() bool
+    false
+
+fn task_check(at str)
+    return
+
+fn task_block_on(ch int)
+    return
