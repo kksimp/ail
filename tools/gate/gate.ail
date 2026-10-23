@@ -2,7 +2,8 @@
 ## selftest checks for programs, without cargo, and prints only what failed.
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
 ## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
-## and prints it), `native` (each bootstrap/tests/native/run program builds
+## and prints it), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
+## PDF reader), `native` (each bootstrap/tests/native/run program builds
 ## natively and behaves like `ail run`), `selfhost` (tools/self-host/run.sh).
 ## No argument runs them all. The last line is `GATE GREEN` or
 ## `GATE RED (N failures)`; the exit status is 0 only for green.
@@ -116,9 +117,440 @@ fn Gate.selfhost(mut self)
     if r.status != 0
         red("selfhost", r.out.lines().last() else "failed")
 
+## The tools written in AIL (bootstrap/tests/tools.rs, ported). Each check
+## runs `ail` from `root` (the repository) and compares its output.
+fn cat(a List[str], b List[str]) List[str]
+    mut r := a
+    r.extend(b)
+    r
+
+fn repo_root() str
+    r := proc.run("pwd", []) else return "."
+    r.out.trim()
+
+## Run `./ail ARGS` in `dir` with `AIL` set, as the editor tests need.
+fn ail_in(root str, dir str, args List[str]) proc.Output
+    script := "r=$0; d=$1; shift; cd \"$d\" && AIL=\"$r/ail\" exec \"$r/ail\" \"$@\""
+    run_args := cat([root, dir], args)
+    r := proc.run("sh", cat(["-c", script], run_args)) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
+
+fn sh_run(script str) proc.Output
+    r := proc.run("sh", ["-c", script]) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
+
+fn Gate.want(mut self, name str, text str, wants List[str])
+    for w in wants
+        if not text.contains(w)
+            red(name, "lacks `{w}`:\n{text}")
+            return
+
+fn Gate.check_clean(mut self, root str, path str)
+    r := ail_in(root, root, ["check", path])
+    if r.status != 0 or not r.err.is_empty()
+        red("ail check {path}", r.err)
+
+fn Gate.tests_pass(mut self, root str, path str)
+    r := ail_in(root, root, ["test", path])
+    if r.status != 0 or not r.out.contains(" 0 failed")
+        red("ail test {path}", r.out)
+
+fn Gate.editor_basics(mut self, root str)
+    path := "{root}/tools/edit/edit.ail"
+    check_clean(root, path)
+    tests_pass(root, path)
+
+## One headless editor screen: `--print` with FLAGS on FILE, run in `dir`.
+fn Gate.screen(mut self, root str, dir str, file str, flags List[str]) str
+    args := cat(cat(["run", "{root}/tools/edit/edit.ail", "--print"], flags), [file])
+    r := ail_in(root, dir, args)
+    if r.status != 0
+        red("editor {flags}", r.err)
+    r.out
+
+fn Gate.garlic_run(mut self, root str, flags List[str], file str) str
+    r := ail_in(root, root, cat(cat(["run", "{root}/tools/garlic/garlic.ail"], flags), [file]))
+    if r.status != 0
+        red("garlic {flags} {file}", r.err)
+    r.out
+
+fn Gate.garlic_headless(mut self, root str)
+    path := "{root}/tools/garlic/garlic.ail"
+    check_clean(root, path)
+    tests_pass(root, path)
+    page := "{root}/tools/garlic/testdata/index.html"
+    text := garlic_run(root, ["--width", "60", "--print"], page)
+    if not text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n")
+        red("garlic --print", text)
+    json := garlic_run(root, ["--width", "60", "--height", "8", "--json"], page)
+    if not json.starts_with("\{\"api\":1,")
+        or not json.contains("\"role\":\"link\",\"name\":\"Second page\"")
+        red("garlic --json", json)
+    want(
+        "garlic --follow 1",
+        garlic_run(root, ["--follow", "1", "--print"], page),
+        ["# Second page"],
+    )
+    viewport := garlic_run(
+        root,
+        ["--height", "4", "--viewport", "--do", "find:the end", "--json"],
+        page,
+    )
+    if not viewport.contains("\"message\":\"found `the end`")
+        or viewport.contains("\"Second page\"")
+        red("garlic --viewport", viewport)
+    data := "{root}/tools/garlic/testdata"
+    scripted := garlic_run(root, ["--print"], "{data}/script.html")
+    want("garlic script.html", scripted, [
+        "# Made by script",
+        "* onion bulb",
+        "timer ran",
+        "[filled by script",
+    ])
+    want(
+        "garlic redirect.html",
+        garlic_run(root, ["--print"], "{data}/redirect.html"),
+        ["# Second page"],
+    )
+    want(
+        "garlic --no-js redirect.html",
+        garlic_run(root, ["--no-js", "--print"], "{data}/redirect.html"),
+        ["Please enable JavaScript."],
+    )
+    want(
+        "garlic noscript.html",
+        garlic_run(root, ["--print"], "{data}/noscript.html"),
+        ["# Scripts ran, cookie seen=1"],
+    )
+    want(
+        "garlic --no-js noscript.html",
+        garlic_run(root, ["--no-js", "--print"], "{data}/noscript.html"),
+        ["# Second page"],
+    )
+
+fn Gate.editor_replace(mut self, root str, tmp str)
+    dir := "{tmp}/edit-replace"
+    sh_run("rm -rf {dir}; mkdir -p {dir}; cp {root}/tools/edit/testdata/agent.ail {dir}/a.ail")
+    fs.write_text("{dir}/b.ail", "fn main()\n    print(half(2))\n") else
+        red("editor replace", "could not write b.ail")
+        return
+    base := ["--at=5:4", "--key=ctrl+shift+h", "--key=enter", "--type=halve", "--key=enter"]
+    preview := screen(root, dir, "a.ail", base)
+    want("editor replace preview", preview, [
+        "replace `half` with `halve`: 4 of 4 lines, 2 files",
+        " a.ail:12:10: x := half(4)? -> x := halve(4)?",
+        " b.ail:2:11: print(half(2)) -> print(halve(2))",
+    ])
+    skipped := screen(root, dir, "a.ail", cat(base, [
+        "--key=down",
+        "--key=space",
+        "--key=ctrl+enter",
+    ]))
+    want("editor replace skipped row", skipped, [" 12     x := half(4)?", "  5 fn halve(n int)"])
+    marked := screen(root, dir, "a.ail", cat(base, ["--key=down", "--key=space"]))
+    want("editor replace marked", marked, ["3 of 4 lines, 2 files", "[ ] a.ail:12:10:"])
+    applied := screen(root, dir, "a.ail", cat(base, ["--key=ctrl+enter"]))
+    want("editor replace applied", applied, [
+        " a.ail *   b.ail * ",
+        "  5 fn halve(n int) int ! HalfError",
+        "| replaced `half` in 2 files, not saved",
+    ])
+    b := fs.read_text("{dir}/b.ail") else ""
+    if not b.contains("half(2)")
+        red("editor replace", "nothing should be saved")
+    sh_run("rm -rf {dir}")
+
+fn Gate.editor_semantic(mut self, root str, tmp str)
+    dir := "{tmp}/edit-smoke"
+    sh_run("rm -rf {dir}; mkdir -p {dir}; cp {root}/tools/edit/testdata/smoke.ail {dir}/smoke.ail")
+    file := "{dir}/smoke.ail"
+    hover := screen(root, root, file, ["--at=11:15", "--key=ctrl+i"])
+    want("editor hover", hover, [" fn add(a int, b int) int\n", " ## Adds.\n"])
+    locals := screen(root, root, file, [
+        "--at=12:5",
+        "--key=end",
+        "--key=enter",
+        "--type=to",
+        "--key=ctrl+space",
+    ])
+    want("editor locals", locals, [" total int (binding) "])
+    members := screen(root, root, file, ["--at=12:5", "--key=end", "--key=enter", "--type=p."])
+    want("editor members", members, [" x x int ", " y y int "])
+    want("editor F12", screen(root, root, file, ["--at=12:11", "--key=f12"]), ["Ln 11, Col 5"])
+    rename := screen(root, root, file, ["--at=10:5", "--key=f2", "--type=t", "--key=enter"])
+    want("editor F2", rename, ["total := add(pt.x, pt.y)", "| renamed 3 `p`"])
+    # With the file broken `--refs` can't answer, so F2 falls back to words.
+    by_word := screen(root, root, file, [
+        "--at=10:5",
+        "--type=(",
+        "--key=f2",
+        "--type=t",
+        "--key=enter",
+    ])
+    want("editor F2 by word", by_word, ["total := add(pt.x, pt.y)"])
+    if by_word.contains("Ln 10, Col 5")
+        red("editor F2 by word", "fell back wrongly:\n{by_word}")
+    squeeze := ["--at=7:6", "--key=delete", "--key=right", "--key=delete"]
+    want("editor squeeze", screen(root, root, file, squeeze), ["  7     a+b\n"])
+    format := screen(root, root, file, cat(squeeze, ["--key=alt+shift+f"]))
+    want("editor format", format, ["  7     a + b\n", "| formatted"])
+    sh_run("rm -rf {dir}")
+
+fn Gate.editor_keys(mut self, root str)
+    r := ail_in(root, root, ["run", "{root}/tools/edit/edit.ail", "--keys"])
+    readme := fs.read_text("{root}/tools/edit/README.md") else ""
+    if r.status != 0 or not readme.contains(r.out.trim_end())
+        red(
+            "editor key table",
+            "tools/edit/README.md's key table differs from `--keys`; paste its output:\n{r.out}",
+        )
+
+fn Gate.editor_agent(mut self, root str, tmp str)
+    dir := "{tmp}/edit-agent"
+    sh_run("rm -rf {dir}; mkdir -p {dir}; cp {root}/tools/edit/testdata/agent.ail {dir}/agent.ail")
+    file := "{dir}/agent.ail"
+    info := screen(root, root, file, ["--at=12:10", "--key=ctrl+i"])
+    want("editor info", info, [
+        " half: int ! HalfError\n",
+        "     requires n >= 0\n",
+        "     effects: fail\n",
+        "     fails with HalfError\n",
+        " ## Halves an even number.\n",
+        " fn:half: 2 uses in this file",
+    ])
+    trace := screen(root, root, file, ["--key=shift+f5"])
+    want("editor trace", trace, [
+        "   call half(n = 4)  12:10",
+        " requires n >= 0 held  6:5",
+        " trap[type.coll.4] index 2 is out of bounds",
+        "   in main 15:12  locals: x = 2, v = [1, 2]",
+        " > 2",
+    ])
+    want(
+        "editor trace jump",
+        screen(root, root, file, ["--key=shift+f5", "--key=down", "--key=enter"]),
+        ["Ln 12, Col 10"],
+    )
+    paths := screen(root, root, file, ["--key=ctrl+shift+e"])
+    want("editor failure paths", paths, [
+        " fn half fails with HalfError",
+        "   8:16 return: HalfError",
+        "   12:17 propagate half(): HalfError",
+        "   18:15 handle (default) half(): HalfError",
+    ])
+    card := screen(root, root, file, ["--key=ctrl+shift+i"])
+    want("editor program card", card, [
+        " program card ",
+        " entry: main in agent.ail",
+        " tests: halves",
+        "   fn half(n int) int ! HalfError  [fail]",
+        "       requires n >= 0",
+        "       fails with HalfError",
+    ])
+    down := ["--key=down", "--key=down", "--key=down", "--key=down", "--key=down", "--key=enter"]
+    want(
+        "editor card jump",
+        screen(root, root, file, cat(["--key=ctrl+shift+i"], down)),
+        ["Ln 5, Col 4"],
+    )
+    problems := screen(root, root, file, ["--at=13:5", "--type=x", "--key=ctrl+shift+m"])
+    want("editor problems", problems, [
+        " problems: 1 errors, 0 others",
+        "agent.ail:13:5: error[expr.name.1] unknown name `xprint`",
+    ])
+    jump := screen(root, root, file, [
+        "--at=13:5",
+        "--type=x",
+        "--key=end",
+        "--key=ctrl+shift+m",
+        "--key=enter",
+    ])
+    want("editor problem jump", jump, ["Ln 13, Col 5"])
+    # ADR 0353: the shown list follows edits after an idle pause and keeps
+    # the selection on the same diagnostic (`zprint`), so F4 goes on to the
+    # new first row.
+    live := screen(root, root, file, [
+        "--at=13:5",
+        "--type=x",
+        "--at=15:5",
+        "--type=z",
+        "--key=ctrl+shift+m",
+        "--key=down",
+        "--at=9:5",
+        "--type=q",
+        "--idle",
+        "--key=f4",
+    ])
+    want("editor live problems", live, [
+        " problems: 3 errors, 0 others",
+        "agent.ail:9:5: error[expr.name.1] unknown name `qn`",
+        "Ln 9, Col 5",
+    ])
+    want(
+        "editor tests on",
+        screen(root, root, file, ["--key=ctrl+shift+u"]),
+        ["0 warnings, tests 1/1 pass"],
+    )
+    covered := screen(root, root, file, ["--key=ctrl+shift+c"])
+    want("editor coverage", covered, [
+        "\n  8!        return Odd(n)\n",
+        "\n  9     n / 2\n",
+        "| coverage: lines 2/7",
+    ])
+    # Saving with tests on reruns them; this changes the file, so it's last.
+    failing := screen(root, root, file, [
+        "--key=ctrl+shift+u",
+        "--at=9:9",
+        "--type=1",
+        "--key=ctrl+s",
+    ])
+    want("editor tests after save", failing, ["tests 1 FAILED of 1"])
+    sh_run("rm -rf {dir}")
+
+fn pdf_run(root str, args List[str]) proc.Output
+    ail_in(root, root, cat(["run", "{root}/tools/pdf/pdf.ail"], args))
+
+fn Gate.pdf_reader(mut self, root str)
+    path := "{root}/tools/pdf/pdf.ail"
+    check_clean(root, path)
+    tests_pass(root, path)
+    data := "{root}/tools/pdf/testdata"
+    for pair in [
+        ["simple", "simple"],
+        ["xrefstream", "xrefstream"],
+        ["report", "report"],
+        ["damaged", "simple"],
+    ]
+        r := pdf_run(root, ["text", "{data}/{pair[0]}.pdf"])
+        txt := fs.read_text("{data}/{pair[1]}.txt") else ""
+        if r.status != 0 or r.out != txt
+            red("pdf text {pair[0]}.pdf", "{r.out}{r.err}")
+    report := "{data}/report.pdf"
+    g1 := pdf_run(root, ["grep", "LINE BREAK can be tested", report])
+    if g1.status != 0 or not g1.out.starts_with("1: enough to wrap onto more than one line")
+        red("pdf grep across lines", g1.out)
+    g2 := pdf_run(root, ["grep", "--json", "résumé", report])
+    if g2.status != 0 or not g2.out.contains("\"boxes\":[\{\"x0\":327.56,")
+        red("pdf grep --json", g2.out)
+    g3 := pdf_run(root, ["grep", "not in the file", report])
+    if g3.status != 1
+        red("pdf grep no hit", "exit {g3.status}, want 1")
+    want("pdf json", pdf_run(root, ["json", report, "--page", "1"]).out, [
+        "\"uri\":\"https://example.com/ledger\"",
+        "\{\"title\":\"Appendix\",\"depth\":0,\"page\":2}",
+    ])
+    want(
+        "pdf info scan",
+        pdf_run(root, ["info", "{data}/scan.pdf"]).out,
+        ["image-only pages (scans, read by OCR when shown or searched): 1"],
+    )
+    want(
+        "pdf view --print",
+        pdf_run(root, ["view", report, "--find", "without OCR", "--print", "--rows", "20"]).out,
+        [" report.pdf  page 1/2", "Searching a PDF without OCR works", " match 1 of 1"],
+    )
+    # ADR 0511: the viewer reads only the page it shows, and says what is on screen.
+    want(
+        "pdf view --json",
+        pdf_run(root, ["view", report, "--json", "--page", "2"]).out,
+        ["\"pages_read\":1", "\"visible\":[\{\"text\":\"Appendix\""],
+    )
+    g4 := pdf_run(root, ["grep", "--first", "the", report])
+    if g4.status != 0 or g4.out.contains("2: ")
+        red("pdf grep --first", g4.out)
+    # ADR 0512: a Group 4 fax scan is read by OCR when asked for, and not with --no-ocr.
+    scan := "{data}/scan-ocr.pdf"
+    t := pdf_run(root, ["text", scan])
+    txt := fs.read_text("{data}/scan-ocr.txt") else ""
+    if t.status != 0 or t.out != txt
+        red("pdf text scan-ocr.pdf", "{t.out}{t.err}")
+    g5 := pdf_run(root, ["grep", "western library cooperative", scan])
+    if g5.status != 0 or not g5.out.starts_with("1: the growth came")
+        red("pdf grep on a scan", g5.out)
+    g6 := pdf_run(root, ["grep", "--no-ocr", "western", scan])
+    if g6.status != 1
+        red("pdf grep --no-ocr", "exit {g6.status}, want 1")
+    want(
+        "pdf json scan",
+        pdf_run(root, ["json", scan]).out,
+        ["\"image_only\":true,\"ocr\":true,\"confidence\":"],
+    )
+
+fn Gate.garlic_js(mut self, root str)
+    dir := "{root}/tools/garlic/js"
+    check_clean(root, dir)
+    for unit in ["tools/garlic/js/syntax/text.ail", "tools/garlic/js/vm/jsmath.ail"]
+        tests_pass(root, "{root}/{unit}")
+    tokens := ail_in(root, root, ["run", dir, "--tokens", "{dir}/testdata/tokens/sample.js"])
+    expected := fs.read_text("{dir}/testdata/tokens/sample.tokens") else ""
+    if tokens.out != expected
+        red("garlic js --tokens", tokens.out)
+    for pair in [
+        ["--test", "syntax"],
+        ["--test262", "test262-parser"],
+        ["--test-run", "run"],
+        ["--test-page", "page"],
+    ]
+        r := ail_in(root, root, ["run", dir, pair[0], "{dir}/testdata/{pair[1]}"])
+        if r.status != 0
+            red("garlic js {pair[0]}", r.out)
+
+## Garlic fetches pages from `http.serve_dir` (http.serve.2): the files of
+## tools/garlic/testdata served by one AIL program, read by another.
+fn Gate.garlic_serve_dir(mut self, root str)
+    port := 18080 + proc_port_offset()
+    server := proc.start("sh", [
+        "-c",
+        "cd {root} && exec ./ail run tools/garlic/testdata/serve_dir.ail 127.0.0.1:{port}",
+    ]) else
+        red("garlic serve_dir", "could not start the server")
+        return
+    mut text := ""
+    for _ in 0..50
+        url := "http://127.0.0.1:{port}/index.html"
+        r := ail_in(root, root, [
+            "run",
+            "{root}/tools/garlic/garlic.ail",
+            "--width",
+            "60",
+            "--print",
+            url,
+        ])
+        text = r.out
+        if r.status == 0 and text.contains("# Garlic")
+            break
+        sh_run("sleep 0.2")
+    proc.kill(move server)
+    if not text.starts_with("Second page[1] | Example[2]\n\n# Garlic\n")
+        red("garlic over serve_dir", text)
+
+fn proc_port_offset() int
+    r := proc.run("sh", ["-c", "echo $$"]) else return 0
+    (r.out.trim().to_int() else 0) % 1000
+
+fn Gate.tools(mut self, tmp str)
+    root := repo_root()
+    editor_basics(root)
+    garlic_headless(root)
+    editor_replace(root, tmp)
+    editor_semantic(root, tmp)
+    editor_keys(root)
+    editor_agent(root, tmp)
+    pdf_reader(root)
+    garlic_js(root)
+    garlic_serve_dir(root)
+
 fn main() !
     args := env.args()
-    all := ["examples", "native", "selfhost"]
+    all := ["examples", "native", "tools", "selfhost"]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
     fs.make_dir(tmp)? "creating {tmp}"
@@ -127,6 +559,7 @@ fn main() !
         match s
             "examples" => g.examples(tmp)
             "native" => g.native(tmp)
+            "tools" => g.tools(tmp)
             "selfhost" => g.selfhost()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")}")
