@@ -1860,6 +1860,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)
         return Val(id: call("rt.args", [], t), ty: t)
+    if name == "select" and tk.on and is_module(recv, "task")
+        return lower_chan_select(args, npos)
     om := os_module(recv)
     if om != ""
         return lower_os_method(om, name, npos, args)
@@ -1870,8 +1872,6 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_char_from_code(args, npos)
     if name == "from" and is_module(recv, "tensor")
         return lower_tensor_from(args, npos)
-    if name == "select" and tk.on and is_module(recv, "task")
-        return lower_chan_select(args, npos)
     if is_module(recv, "mem")
         return lower_mem_call(name, npos, args)
     if g := generic_enum_ref(recv)
