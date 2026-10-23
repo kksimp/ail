@@ -107,6 +107,33 @@ if [ "${AIL_NATIVE_CLI:-}" = 1 ] && [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "
     exec "$exe" "$@"
 fi
 
+# `AIL_NATIVE_TEST=1` (ADR 0858, lane B8): `ail test [--json] [--cases N] [--seed S] FILE` is first done by the
+# AIL runner (tools/ailtest/ailtest.ail: native builds of the tests, plain, `?` and property). Its report is
+# used only when every test ran (no `skip`, not a usage error); otherwise the interpreter below runs the file.
+if [ "${AIL_NATIVE_TEST:-}" = 1 ] && [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
+    test_ok=1 test_file="" test_value=0
+    for test_arg in "${@:2}"; do
+        if [ "$test_value" = 1 ]; then test_value=0; continue; fi
+        case "$test_arg" in
+            --json) ;;
+            --cases | --seed) test_value=1 ;;
+            -*) test_ok=0 ;;
+            *) if [ -n "$test_file" ]; then test_ok=0; fi; test_file="$test_arg" ;;
+        esac
+    done
+    if [ "$test_ok" = 1 ] && [ -n "$test_file" ]; then
+        test_out="$(mktemp)"
+        test_status=0
+        AIL_NATIVE_TEST= AIL_NATIVE_CLI= "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}" >"$test_out" 2>/dev/null || test_status=$?
+        if [ "$test_status" != 2 ] && ! grep -qE '^skip |"status":"skip"' "$test_out"; then
+            cat "$test_out"
+            rm -f "$test_out"
+            exit "$test_status"
+        fi
+        rm -f "$test_out"
+    fi
+fi
+
 # A test run pins the binary it is testing (AIL_BINARY), so a program that starts `ail` itself isn't
 # rebuilt under it when the sources change mid-run.
 if [ "${1:-}" != selftest ] && [ -n "${AIL_BINARY:-}" ] && [ -x "$AIL_BINARY" ]; then
