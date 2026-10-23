@@ -1,0 +1,43 @@
+## TEMPORARY local stub of RR-5's types; not committed.
+use ast
+
+pub struct Edit
+    pub pos ast.Pos
+    pub end ast.Pos
+    pub old str?
+    pub anchor str
+    pub text str
+
+pub struct Fix
+    pub title str
+    pub edits List[Edit]
+
+pub fn replace(pos ast.Pos, old str, text str) Edit
+    Edit(pos: pos, end: pos, old: old, anchor: "exact", text: text)
+
+pub fn insert(pos ast.Pos, text str) Edit
+    Edit(pos: pos, end: pos, old: none, anchor: "exact", text: text)
+
+pub fn at_line_end(pos ast.Pos, text str) Edit
+    Edit(pos: pos, end: pos, old: none, anchor: "line_end", text: text)
+
+pub fn after_expr(pos ast.Pos, text str) Edit
+    Edit(pos: pos, end: pos, old: none, anchor: "after_expr", text: text)
+
+pub fn call(pos ast.Pos, callee str, template str) Edit
+    Edit(pos: pos, end: pos, old: callee, anchor: "call", text: template)
+
+pub fn call_with(pos ast.Pos, callee str, template str) Edit
+    Edit(pos: pos, end: pos, old: callee, anchor: "brackets", text: template)
+
+pub fn after_block(pos ast.Pos, text str) Edit
+    Edit(pos: pos, end: pos, old: none, anchor: "after_block", text: text)
+
+pub fn delete(pos ast.Pos, end ast.Pos) Edit
+    Edit(pos: pos, end: end, old: none, anchor: "exact", text: "")
+
+pub fn call_named(pos ast.Pos, callee str, names List[str]) Edit
+    Edit(pos: pos, end: pos, old: callee, anchor: "call_named", text: names.join(","))
+
+pub fn operands(pos ast.Pos, op str, template str) Edit
+    Edit(pos: pos, end: pos, old: op, anchor: "operands", text: template)
