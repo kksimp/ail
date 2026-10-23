@@ -227,6 +227,11 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     if name != "eq" and name != "ne"
         problem(pos, "`{op_symbol(o)}` on `{n}` isn't in the native subset yet")
         return quiet
+    if k := user_eq(a.ty)
+        eq := call(k, [a.id, b.id], Ty.Bool)
+        if name == "ne"
+            return Val(id: op("not", [eq], Ty.Bool), ty: Ty.Bool)
+        return Val(id: eq, ty: Ty.Bool)
     if is_flat(n)
         return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
     if k := singleton_tag(b.id)
@@ -360,7 +365,22 @@ fn Lower.variant_eq(mut self, name str, a int, b int, v VariantRef, pos ast.Pos)
         return Val(id: op("not", [r], Ty.Bool), ty: Ty.Bool)
     Val(id: r, ty: Ty.Bool)
 
+## The type's own `eq` (`impl Eq`), which `==` calls instead of comparing field
+## by field (trait.std.1): a method `eq(self, other Self) bool` of a struct or enum.
+fn Lower.user_eq(self, t Ty) str?
+    mut key := ""
+    if s := struct_name(t)
+        key = "{s}.eq"
+    elif e := enum_name(t)
+        key = "{e}.eq"
+    sg := sigs.get(key)?
+    if sg.params.len() == 2 and sg.ret == Ty.Bool and not sg.fails
+        return key
+    none
+
 fn Lower.eq_fn(mut self, t Ty) str
+    if k := user_eq(t)
+        return k
     name := "eq.{t.name()}"
     if not sigs.contains(name)
         sigs[name] = Sig(params: [t, t], ret: Ty.Bool, fails: false)
@@ -371,6 +391,8 @@ fn Lower.eq_fn(mut self, t Ty) str
 ## and lists of those (reported at `pos`, naming enum `outer`, otherwise).
 fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) bool
     if is_number(t) or t == Ty.Str or t.is_ref()
+        return true
+    if user_eq(t) != none
         return true
     if inner := t.opt_inner()
         return comparable(inner, pos, outer, mut seen)

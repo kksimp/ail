@@ -1,0 +1,43 @@
+# == calls a type's own `eq` (impl Eq), also inside lists, tuples, structs and enums.
+struct Name
+    text str
+    id int
+
+impl Eq for Name
+    fn eq(self, other Self) bool
+        self.text == other.text
+
+enum Tag
+    Id(n Name)
+    Other
+
+impl Eq for Tag
+    fn eq(self, other Self) bool
+        match self
+            Id(a) => match other
+                Id(b) => a.text.len() == b.text.len()
+                Other => false
+            Other => match other
+                Id(_) => false
+                Other => true
+
+struct Box
+    n Name
+    k int
+
+fn main()
+    a := Name(text: "ab", id: 1)
+    b := Name(text: "ab", id: 2)
+    c := Name(text: "cd", id: 1)
+    print(a == b)
+    print(a != b)
+    print(a == c)
+    print([a, c] == [b, c])
+    print([a, c] == [c, a])
+    print(Box(n: a, k: 1) == Box(n: b, k: 1))
+    print(Box(n: a, k: 1) == Box(n: b, k: 2))
+    print(Tag.Id(n: a) == Tag.Id(n: c))
+    print(Tag.Id(n: a) != Tag.Other)
+    print(Tag.Other == Tag.Other)
+    print((a, 1) == (b, 1))
+    print({"k": a} == {"k": b})
