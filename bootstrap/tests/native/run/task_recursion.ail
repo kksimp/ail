@@ -1,0 +1,16 @@
+# A recursive function in a task: the stack check is for the main stack only.
+fn fib(n int) int
+    if n < 2
+        return n
+    fib(n - 1) + fib(n - 2)
+
+fn depth(n int) int
+    if n == 0
+        return 0
+    1 + depth(n - 1)
+
+fn main() !
+    a := spawn fib(20)
+    b := spawn depth(5000)
+    print(a.wait()?)
+    print(b.wait()?)

@@ -126,6 +126,10 @@ fn pool() int
     store64(global(TASKS), q)
     hset(H_FASTLIM, 0)
     store64(global(MULTI), 1)
+    # The stack check compares against the main stack's limit, and a worker's
+    # stack lies below it, so every recursive call in a task would trap. With
+    # threads there is no limit; deep recursion meets the guard page instead.
+    store64(global(STACK_LIMIT), 0)
     q
 
 ## A task record for function `id` of `dispatch`; the caller stores the
