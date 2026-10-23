@@ -1,0 +1,157 @@
+## A struct.
+##
+## ```ail
+## print(1)
+## # => 1
+## ```
+pub struct Point
+    ## A field.
+    ##
+    ## ```ail
+    ## print(0)
+    ## ```
+    x int
+    y int
+
+## An enum.
+##
+## ```ail
+## print("e")
+## # => e
+## ```
+enum Color
+    ## A variant.
+    ##
+    ## ```ail
+    ## print(2)
+    ## # => 2
+    ## ```
+    Red
+    ## Another variant.
+    ##
+    ## ```ail
+    ## print(3)
+    ## ```
+    Green(g int)
+
+## An error enum.
+##
+## ```ail
+## print(4)
+## ```
+error enum Oops
+    Bad "bad"
+
+## A trait.
+##
+## ```ail
+## print(5)
+## ```
+trait Shape
+    ## A trait method.
+    ##
+    ## ```ail
+    ## print(6)
+    ## ```
+    fn area(self) int
+
+## A constant.
+##
+## ```ail
+## print(7)
+## # => 7
+## ```
+LIMIT := 10
+
+## A generic function, two blocks, one empty.
+##
+## ```ail
+## print(first([8]))
+## # => 8
+## ```
+##
+## ```ail
+## ```
+##
+## ```ail
+## xs := [9, 10]
+## print(first(xs))
+## print(first(xs) + 1)
+## # => 9
+## # => 11
+## ```
+pub fn first[T](xs List[T]) T
+    xs[0]
+
+## A method.
+##
+## ```ail
+## p := Point(x: 1, y: 2)
+## print(p.sum())
+## # => 3
+## ```
+fn Point.sum(self) int
+    x + y
+
+## A trait impl and its method.
+impl Shape for Point
+    ## An impl method.
+    ##
+    ## ```ail
+    ## print(11)
+    ## # => 11
+    ## ```
+    fn area(self) int
+        x * y
+
+## Followed by a blank line: no declaration.
+##
+## ```ail
+## print(12)
+## ```
+
+fn after_blank() int
+    1
+
+## Followed by an attribute.
+##
+## ```ail
+## print(13)
+## ```
+@inline fn attributed() int
+    1
+
+## Tagged text, not run.
+##
+## ```text
+## nothing
+## ```
+##
+## ```ail fragment
+## nope nope
+## ```
+fn tagged() int
+    1
+
+## Trailing spaces and a mismatch.
+##
+## ```ail
+## print("a  ")
+## # => a
+## print("b")
+## # => c
+## ```
+fn spaces() int
+    1
+
+## A trap.
+##
+## ```ail
+## xs := List[int]()
+## print(xs[3])
+## ```
+fn traps() int
+    1
+
+fn main()
+    print(LIMIT)

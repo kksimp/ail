@@ -1,0 +1,31 @@
+## Squares a number.
+##
+## ```ail
+## assert_eq(square(3), 9)
+## print(square(4))
+## # => 16
+## ```
+##
+## ```ail
+## assert(square(2) == 5)
+## ```
+fn square(x int) int
+    x * x
+
+@test fn own_first()
+    assert_eq(square(2), 4)
+
+## Says hello.
+##
+## ```ail
+## print("hello")
+## # => hello
+## ```
+fn hello() str
+    "hello"
+
+@test fn own_second()
+    assert_eq(square(2), 5)
+
+fn main()
+    print(square(1))

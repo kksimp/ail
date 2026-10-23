@@ -11,6 +11,8 @@
 ## `skip` too. The exit status is 0 if every test that ran passed.
 ## Rewriting follows bootstrap/src/native_test.rs (native.test.2).
 
+use doctest
+
 ## The compiler to drive: `$AIL`, else `./ail`.
 fn ail_path() str
     env.get("AIL") else "./ail"
@@ -39,11 +41,6 @@ struct Found
     tests List[TestFn]
     skipped List[Skipped]
     left_out List[Span]
-
-struct Verdict
-    name str
-    status str
-    message str
 
 fn indent(l str) int
     l.len() - l.trim_start().len()
@@ -309,15 +306,20 @@ fn describe(err str) str
             return "{first.slice(idx + 2, first.len())} at {parts[parts.len() - 2]}:{parts[parts.len() - 1]}"
     first
 
-fn run_one(exe str, slot int) Verdict
+fn run_one(exe str, slot int) doctest.Verdict
     arg := ["x" for _ in 0..slot].join("")
     r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
-        return Verdict(name: "", status: "fail", message: "error: can't start the test binary")
+        return doctest.Verdict(
+            name: "",
+            status: "fail",
+            message: "error: can't start the test binary",
+        )
     if r.status == 0
-        return Verdict(name: "", status: "pass", message: "")
+        # The output stays in the message for doctest.finish (test.doc.2), which clears it.
+        return doctest.Verdict(name: "", status: "pass", message: r.out)
     if r.status == 4
-        return Verdict(name: "", status: "fail", message: "error: no such test")
-    Verdict(name: "", status: "fail", message: describe(r.err))
+        return doctest.Verdict(name: "", status: "fail", message: "error: no such test")
+    doctest.Verdict(name: "", status: "fail", message: describe(r.err))
 
 fn json_str(s str) str
     mut out := "\""
@@ -332,7 +334,7 @@ fn json_str(s str) str
             out = "{out}{c}"
     "{out}\""
 
-fn report(vs List[Verdict], json bool) int
+fn report(vs List[doctest.Verdict], json bool) int
     mut passed := 0
     mut failed := 0
     mut skipped := 0
@@ -374,11 +376,13 @@ fn main() !
         io.eprint(checked.err)
         io.exit(2)
     text := fs.read_text(file)? "reading {file}"
-    lines := text.lines()
+    own := text.lines()
+    docs := doctest.collect(own)
+    lines := doctest.augment(file, own, docs)
     found := find_tests(lines)
-    mut verdicts := List[Verdict]()
+    mut verdicts := List[doctest.Verdict]()
     for s in found.skipped
-        verdicts.push(Verdict(name: s.name, status: "skip", message: s.why))
+        verdicts.push(doctest.Verdict(name: s.name, status: "skip", message: s.why))
     if found.tests.len() == 0
         io.exit(report(verdicts, json))
     dir := path.dir(file)
@@ -390,10 +394,12 @@ fn main() !
     mut why := Map[int, str]()
     mut blocked := ""
     mut built := false
+    mut origin := List[int]()
     for _ in 0..MAX_ROUNDS
         if dropped.len() == found.tests.len()
             break
         rw := rewrite(lines, found, dropped)
+        origin = rw.origin
         fs.write_text(copy, rw.text)? "writing {copy}"
         b := proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
         if b.status == 0
@@ -430,19 +436,19 @@ fn main() !
     for i in 0..found.tests.len()
         t := found.tests[i]
         if dropped.contains(i)
-            verdicts.push(Verdict(
+            verdicts.push(doctest.Verdict(
                 name: t.name,
                 status: "skip",
                 message: "not in the native subset yet: {why[i]}",
             ))
         elif not blocked.is_empty()
-            verdicts.push(Verdict(
+            verdicts.push(doctest.Verdict(
                 name: t.name,
                 status: "skip",
                 message: "outside the tests: {blocked}",
             ))
         elif not built
-            verdicts.push(Verdict(
+            verdicts.push(doctest.Verdict(
                 name: t.name,
                 status: "skip",
                 message: "no build within the round limit",
@@ -453,7 +459,7 @@ fn main() !
                 if not dropped.contains(j)
                     slot += 1
             v := run_one(exe, slot)
-            verdicts.push(Verdict(name: t.name, status: v.status, message: v.message))
-    code := report(verdicts, json)
+            verdicts.push(doctest.Verdict(name: t.name, status: v.status, message: v.message))
+    code := report(doctest.finish(verdicts, docs, own.len(), origin), json)
     _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
     io.exit(code)

@@ -1,0 +1,10 @@
+## A block that does not check.
+##
+## ```ail
+## print(undefined_name)
+## ```
+fn broken() int
+    1
+
+fn main()
+    print(1)
