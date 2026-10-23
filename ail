@@ -133,7 +133,7 @@ native_run=
 if [ "${1:-}" = run ] && [ "${AIL_NATIVE_CLI:-}" != 0 ] && [ "${AIL_INTERP:-}" != 1 ] && [ -z "${AIL_BINARY:-}" ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
     native_run=1
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = fmt ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
@@ -159,6 +159,7 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [
         [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$file" || exit $?
         shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
     fi
+    if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
     if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
@@ -175,6 +176,12 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [
     else
         cat "$prep_err" >&2; rm -f "$prep_err"; exit 1
     fi
+fi
+
+# `ail selftest` with no arguments is the native gate (ADR 0865, item 252): tools/gate/mac-gate.sh runs gate.ail's suites with the
+# native compiler. `AIL_SELFTEST=cargo` (or any argument, e.g. `--fuzz`, `--test NAME`) keeps the cargo tests.
+if [ "${1:-}" = selftest ] && [ "$#" = 1 ] && [ "$native_on" = 1 ] && [ "${AIL_SELFTEST:-}" != cargo ]; then
+    exec "$root/tools/gate/mac-gate.sh"
 fi
 
 # `AIL_NATIVE_TEST=1` (ADR 0858, lane B8): `ail test [--json] [--cases N] [--seed S] FILE` is first done by the

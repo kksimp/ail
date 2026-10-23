@@ -3,6 +3,7 @@
 ## schema v1 JSON object of ADR 0145.
 use ast
 use check
+use fix
 use syntax
 
 ## SYMBOLS of the lexer, longest first: a diagnostic's span ends after one.
@@ -56,6 +57,8 @@ pub struct Shown
     pub warning bool
     ## The titles of the fixes the diagnostic offers.
     pub fixes List[str]
+    ## The fixes with their edits, positions as in the program (ADR 0145).
+    pub fix_list List[fix.Fix]
 
 ## A syntax or loading diagnostic.
 pub fn shown_syntax(d syntax.Diag) Shown
@@ -65,6 +68,9 @@ pub fn shown_syntax(d syntax.Diag) Shown
     mut fixes := List[str]()
     if d.fixed and d.fix != ""
         fixes.push(d.fix)
+    mut fix_list := List[fix.Fix]()
+    if d.edits.len() > 0
+        fix_list.push(fix.Fix(title: d.fix, edits: d.edits))
     Shown(
         rule: d.rule,
         pos: d.pos,
@@ -73,6 +79,7 @@ pub fn shown_syntax(d syntax.Diag) Shown
         notes: [],
         warning: false,
         fixes: fixes,
+        fix_list: fix_list,
     )
 
 ## A checker diagnostic.
@@ -85,6 +92,7 @@ pub fn shown_check(d check.Diag) Shown
         notes: d.notes,
         warning: d.warning,
         fixes: [],
+        fix_list: d.fixes,
     )
 
 ## The file path and in-file position of `at`. Prelude positions stay as they
@@ -180,6 +188,11 @@ pub fn report(files List[ast.SourceFile], texts List[str], diags List[Shown], js
                 shown.help = default_help(shown.rule)
             end := token_end(lines, shown.pos)
             if json
+                local := [
+                    fix.Fix(title: f.title, edits: [shifted(e, files[fi].base) for e in f.edits])
+                    for f in shown.fix_list
+                ]
+                shown.fix_list = fix.settle_fixes(local, fix.split_lines(text))
                 out.push(to_json(shown, end, files[fi].path))
             else
                 out.push(to_text(shown, files[fi].path, text))
@@ -216,7 +229,26 @@ fn to_json(d Shown, end ast.Pos, path str) str
             for n in d.notes
         ]
         s = "{s},\"notes\":[{ns.join(",")}]"
+    if d.fix_list.len() > 0
+        s = "{s},\"fixes\":[{[fix_json(f) for f in d.fix_list].join(",")}]"
     "{s}}"
+
+## `e` with its lines made local to its file.
+fn shifted(e fix.Edit, base int) fix.Edit
+    fix.Edit(
+        pos: ast.Pos(line: e.pos.line - base, col: e.pos.col),
+        end: ast.Pos(line: e.end.line - base, col: e.end.col),
+        old: e.old,
+        anchor: e.anchor,
+        text: e.text,
+    )
+
+fn fix_json(f fix.Fix) str
+    edits := [
+        "\{\"line\":{e.pos.line},\"col\":{e.pos.col},\"end_line\":{e.end.line},\"end_col\":{e.end.col},\"text\":{quote(e.text)}}"
+        for e in f.edits
+    ]
+    "\{\"title\":{quote(f.title)},\"edits\":[{edits.join(",")}]}"
 
 fn chop_cr(l str) str
     if r := l.strip_suffix("\r")
