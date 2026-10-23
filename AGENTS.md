@@ -158,6 +158,7 @@ tools/
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
   fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against the Rust one
+  explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against the Rust one
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)

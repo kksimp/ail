@@ -2,6 +2,8 @@
 # bootstrap and compared with it by the selftest:
 #   ail run compiler check PROGRAM.json   the checker's diagnostics for a program dumped by
 #                                         `ail api --ast --program` (first line), one JSON line each
+#   ail run compiler explain [RULE] [--json]
+#                                         `ail explain`, the rule text read from docs/spec (ADR 0146)
 #   ail run compiler tokens FILE...       the AIL lexer's tokens, as `ail api --tokens FILE` (ADR 0371)
 #   ail run compiler parse FILE...        the AIL parser's tree, as `ail api --ast FILE`
 #   ail run compiler mir FILE [RT]        the native backend's MIR of a program (ADR 0384), with
@@ -25,6 +27,7 @@ use doc
 use edit
 use fmt
 use derive
+use explain
 use mir
 use obj
 use syntax
@@ -32,7 +35,7 @@ use x64
 
 fn main() !
     args := env.args()
-    if args.len() < 2
+    if args.len() == 0 or (args.len() < 2 and args[0] != "explain")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
         io.exit(2)
     match args[0]
@@ -79,6 +82,8 @@ fn main() !
                 aug := doc.augment(text, tests)
                 print(aug.text)
                 print(aug.origin)
+        "explain" =>
+            io.exit(explain.command(args[1..]))
         "tokens" =>
             for path in args[1..]
                 if args.len() > 2
