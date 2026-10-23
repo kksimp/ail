@@ -1,0 +1,11 @@
+["bo", "cy", "al"]
+Person(name: "al", age: 25)
+Person(name: "bo", age: 30)
+["al", "bo", "cy"]
+["c", "a", "b"]
+["x", "z", "yy"]
+none
+[]
+[3, 1]
+[3, 1, 2]
+[]

@@ -24,22 +24,22 @@ struct Check
     names List[str]
     strict bool
 
-## Programs whose output names the host (home, working directory, scratch paths,
-## file sizes): no frozen golden; nativex compares them with `ail run` instead.
-HOST_BOUND := [
-    "os_env_time",
-    "os_fs",
-    "os_fs_copy",
-    "os_fs_errors",
-    "os_fs_glob",
-    "os_fs_repo",
-    "os_fs_walk",
-    "os_stdin",
-    "os_stdin_lossy",
-]
+## The scratch files the os_* programs find through `AIL_TEST_*` (nativex sets the same), under `dir`,
+## and the file their standard input comes from.
+fn run_env(dir str) str
+    "AIL_TEST_A={dir}/a.txt AIL_TEST_B={dir}/b.txt AIL_TEST_DIR={dir}/d1 AIL_TEST_MID={dir}/d1/d2 AIL_TEST_DEEP={dir}/d1/d2/d3 AIL_TEST_IN={dir}/d1/f.txt"
+
+fn stdin_of(src str) str
+    in_path := src.replace(".ail", ".in")
+    if fs.exists(in_path) then in_path else "/dev/null"
+
+## golden/pending.txt: programs whose native output is known wrong; not checked.
+fn pending() List[str]
+    text := fs.read_text("{GOLDEN_DIR}/pending.txt") else return []
+    [l.trim() for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")]
 
 fn Check.wanted(self, stem str) bool
-    if HOST_BOUND.contains(stem)
+    if pending().contains(stem)
         return false
     names.is_empty() or names.contains(stem)
 
@@ -66,14 +66,24 @@ fn build(src str, exe str) str?
         return none
     r.err.lines().first() else "build failed"
 
-fn Check.freeze(mut self)
+## Run the executable `exe` of `src` with its scratch environment and standard input.
+fn run_exe(exe str, src str, tmp str) proc.Output ! proc.ProcError
+    dir := "{tmp}/scratch_{exe.split("/").last() else exe}"
+    cmd := "rm -rf {dir}; mkdir -p {dir}; {run_env(dir)} {exe} < {stdin_of(src)}"
+    proc.run("sh", ["-c", cmd])?
+
+fn Check.freeze(mut self, tmp str)
     _ := proc.run("mkdir", ["-p", GOLDEN_DIR]) else return
     for stem in stems(RUN_DIR)
         if not wanted(stem)
             continue
         src := "{RUN_DIR}/{stem}.ail"
-        r := proc.run("./ail", ["run", src]) else
-            red(src, "ail run could not start")
+        # The goldens come from the native build, not the interpreter (the interpreter is going away).
+        if why := build(src, "{tmp}/fz_{stem}")
+            red(src, "native build failed: {why}")
+            continue
+        r := run_exe("{tmp}/fz_{stem}", src, tmp) else
+            red(src, "could not run the executable")
             continue
         status_path := "{GOLDEN_DIR}/{stem}.status"
         fs.write_text("{GOLDEN_DIR}/{stem}.out", r.out) else
@@ -88,14 +98,14 @@ fn Check.freeze(mut self)
         checked += 1
 
 ## Run the native build of `src` and compare it with the golden stdout and status.
-fn Check.compare(mut self, src str, exe str, want_out str, want_status int)
+fn Check.compare(mut self, src str, exe str, tmp str, want_out str, want_status int)
     if why := build(src, exe)
         unbuilt.push(src)
         if strict
             red(src, "native build failed: {why}")
         return
     checked += 1
-    got := proc.run(exe, []) else
+    got := run_exe(exe, src, tmp) else
         red(src, "could not run the executable")
         return
     if got.status != want_status or got.out != want_out
@@ -121,7 +131,7 @@ fn Check.programs(mut self, tmp str)
         status_path := "{GOLDEN_DIR}/{stem}.status"
         text := if fs.exists(status_path) then (fs.read_text(status_path) else "1") else "0"
         want_status := text.trim().to_int() else 1
-        compare(src, "{tmp}/nt_{stem}", want_out, want_status)
+        compare(src, "{tmp}/nt_{stem}", tmp, want_out, want_status)
 
 ## Examples without a `native_` name that read files beside the executable or
 ## use constructs outside the native subset are left to `ail run` (gate.ail's list).
@@ -144,7 +154,7 @@ fn Check.examples(mut self, tmp str)
         if not (stem.starts_with("native_") or NATIVE_EXTRA.contains(stem))
             continue
         want_out := fs.read_text("examples/{stem}.out") else ""
-        compare("examples/{stem}.ail", "{tmp}/ex_{stem}", want_out, 0)
+        compare("examples/{stem}.ail", "{tmp}/ex_{stem}", tmp, want_out, 0)
 
 fn main() !
     mut args := env.args()
@@ -161,7 +171,7 @@ fn main() !
     tmp := temp_dir()
     fs.make_dir(tmp)? "creating {tmp}"
     if mode == "freeze"
-        c.freeze()
+        c.freeze(tmp)
         print("froze {c.checked} goldens in {GOLDEN_DIR}")
     else
         c.programs(tmp)

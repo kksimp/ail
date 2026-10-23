@@ -3,7 +3,7 @@
 #
 #   ./ail run examples/hello.ail     check and run a program
 #   ./ail check FILE                 check without running (add --json for tools)
-#   ./ail selftest                   build and run the bootstrap's own tests
+#   ./ail selftest                   the Mac gate (tools/gate/mac-gate.sh); AIL_SELFTEST=cargo runs the Rust tests
 #
 # Rust (ADR 0087): if the system Rust doesn't exactly match the version pinned
 # in bootstrap/rust-toolchain.toml, that version is installed privately into
@@ -209,30 +209,19 @@ if [ "${1:-}" = selftest ] && [ "$#" = 1 ] && [ "$native_on" = 1 ] && [ "${AIL_S
     exec "$root/tools/gate/mac-gate.sh"
 fi
 
-# `ail test` is native by default; `AIL_NATIVE_TEST=0` skips it (ADR 0858, lane B8, RR-4): `ail test [--json] [--cases N] [--seed S] FILE` is first done by the
-# AIL runner (tools/ailtest/ailtest.ail: native builds of the tests, plain, `?` and property). Its report is
-# used only when every test ran (no `skip`, not a usage error); otherwise the interpreter below runs the file.
-if [ "${AIL_NATIVE_TEST:-1}" != 0 ] && [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
-    test_ok=1 test_file="" test_value=0
+# `ail test` is native only (plan.md step B): the AIL runner (tools/ailtest/ailtest.ail) builds the tests natively and
+# runs each. A test it can't build is reported `skip` with the construct that blocks it. `--update`, `--trace`, `--dry-run` and
+# `--coverage` belong to the interpreter and are refused until they are ported.
+if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     for test_arg in "${@:2}"; do
-        if [ "$test_value" = 1 ]; then test_value=0; continue; fi
         case "$test_arg" in
-            --json) ;;
-            --cases | --seed) test_value=1 ;;
-            -*) test_ok=0 ;;
-            *) if [ -n "$test_file" ]; then test_ok=0; fi; test_file="$test_arg" ;;
+            --update | --dry-run | --trace | --trace=* | --coverage | --coverage=*)
+                echo "ail test: $test_arg is not native yet (interpreter only: AIL_RUST=1 ./ail test ...)" >&2
+                [ "${AIL_RUST:-}" = 1 ] || exit 2 ;;
         esac
     done
-    if [ "$test_ok" = 1 ] && [ -n "$test_file" ]; then
-        test_out="$(mktemp)"
-        test_status=0
-        AIL_NATIVE_TEST= AIL_RUST=1 "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}" >"$test_out" 2>/dev/null || test_status=$?
-        if [ "$test_status" != 2 ] && ! grep -qE '^skip |"status":"skip"' "$test_out"; then
-            cat "$test_out"
-            rm -f "$test_out"
-            exit "$test_status"
-        fi
-        rm -f "$test_out"
+    if [ "${AIL_RUST:-}" != 1 ]; then
+        AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}"
     fi
 fi
 
@@ -331,6 +320,10 @@ if [ "${1:-}" = selftest ]; then
         case "${1:-}" in ''|*[!0-9]*) ;; *) export AIL_FUZZ_SEED="$1"; shift ;; esac
         echo "fuzz: $AIL_FUZZ_N inputs per fuzzer from seed ${AIL_FUZZ_SEED:-1}" >&2
         exec "$cargo" test --quiet --release --manifest-path "$manifest" --test fuzz --test fuzz_modules fuzz_ "$@" -- --nocapture
+    fi
+    if [ "$#" -eq 0 ] && [ "${AIL_SELFTEST:-gate}" != cargo ]; then
+        # The Mac gate (ADR 0842) is the selftest: native only. `AIL_SELFTEST=cargo` keeps the Rust test binaries.
+        exec "$root/tools/gate/mac-gate.sh"
     fi
     if [ "$#" -eq 0 ]; then
         selftest_parallel

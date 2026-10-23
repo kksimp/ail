@@ -1,0 +1,29 @@
+gave 1
+free 1
+maybe end
+free 2
+1
+maybe end
+free 2
+free 1
+0
+iter 0
+free 20
+free 21
+iter 2
+free 22
+free 23
+free 31
+picked 30
+free 30
+picked 31
+pool 40
+free 11
+free 10
+-1
+pool down
+free 42
+free 41
+free 40
+free 31
+free 30

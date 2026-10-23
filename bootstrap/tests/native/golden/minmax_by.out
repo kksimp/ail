@@ -1,0 +1,8 @@
+P(name: "b", age: 3, w: 1.5)
+P(name: "a", age: 9, w: 0.5)
+P(name: "a", age: 9, w: 0.5)
+P(name: "c", age: 3, w: 2.5)
+P(name: "b", age: 3, w: 1.5)
+none
+a
+ccc
