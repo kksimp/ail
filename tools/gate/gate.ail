@@ -2483,6 +2483,66 @@ fn Gate.spec(mut self)
     if r.status != 0
         red("spec", r.out)
 
+## The native runtime's tests, `ail test --native`, and the native subset table
+## (native_runtime.rs, native_test.rs, native_subset_table.rs, ported).
+fn owner_ok(owner str) bool
+    if owner == "-"
+        return true
+    for part in owner.split(", ")
+        mut digits := ""
+        if part.starts_with("#")
+            digits = part.slice(1, part.len())
+        elif part.starts_with("lane ")
+            digits = part.slice(5, part.len())
+        if digits.is_empty()
+            return false
+        for c in digits.chars()
+            if not (c.is_digit() and c.code() < 128)
+                return false
+    true
+
+fn Gate.native_misc(mut self)
+    for flags in [List[str](), ["--no-bytecode"]]
+        r := ail_run(cat(cat(["test"], flags), ["compiler/rt/rt.ail"])) else return
+        if r.status != 0 or not r.out.contains(" 0 failed")
+            red("native runtime tests {flags}", "{r.out}{r.err}")
+    mixed := "bootstrap/tests/native_test/mixed.ail"
+    n := ail_run(["test", "--native", mixed]) else return
+    if n.status != 0
+        red("test --native", "exit {n.status}\n{n.out}")
+    want("test --native", n.out, [
+        "match {mixed}::adds (native pass, interpreter pass)",
+        "match {mixed}::fails_on_purpose (native fail, interpreter fail)",
+        "assertion failed at line 14",
+        "not-native {mixed}::uses_defer",
+        "skipped {mixed}::holds_for_all",
+    ])
+    nj := ail_run(["test", "--native", "--json", mixed]) else return
+    last := nj.out.lines().last() else ""
+    if nj.status != 0
+        or last != "\{\"summary\":true,\"match\":2,\"differ\":0,\"not-native\":1,\"skipped\":1}"
+        red("test --native --json", "exit {nj.status}\n{nj.out}")
+    # ADR 0746: every row of the table has a construct, a wording and an owner.
+    mut rows := List[List[str]]()
+    for l in slurp("docs/design/native-subset-constructs.md").lines()
+        if l.starts_with("|")
+            cells := l.trim().split("|")
+            mut row := List[str]()
+            for i in 1..cells.len() - 1
+                row.push(cells[i].trim())
+            if row.len() == 3 and row[0] != "Construct" and not row[0].starts_with("---")
+                rows.push(row)
+    if rows.len() < 20
+        red("native subset table", "the table has {rows.len()} rows")
+    mut text := slurp("docs/design/native-coverage.md").replace("`", "")
+    for f in fs.glob("compiler/**/*.ail")
+        text = "{text}{slurp(f).replace("`", "")}"
+    for row in rows
+        if not owner_ok(row[2])
+            red("native subset table", "bad owner `{row[2]}` for `{row[0]}`")
+        if not text.contains(row[1])
+            red("native subset table", "wording `{row[1]}` for `{row[0]}` is in no diagnostic")
+
 fn main() !
     args := env.args()
     all := [
@@ -2530,6 +2590,7 @@ fn main() !
             "net" => g.net()
             "bytecode" => g.bytecode()
             "spec" => g.spec()
+            "native_misc" => g.native_misc()
             "selfhost" => g.selfhost()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")}")
