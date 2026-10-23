@@ -1,0 +1,17 @@
+<!DOCTYPE html><html><body><script>
+const h = new Headers({ "Content-Type": "text/plain", "X-A": "1" });
+h.append("x-a", "2");
+h.set("X-B", "b");
+console.log(h.get("content-type"), h.get("X-A"), h.has("x-b"), h.has("x-c"), h.get("x-c"));
+h.delete("x-b");
+const seen = [];
+h.forEach((v, k) => seen.push(k + "=" + v));
+console.log(seen.join(";"));
+const r = new Response('{"a":[1,2]}', { status: 201, statusText: "Created" });
+console.log(r.status, r.ok, r.statusText, r.bodyUsed, Object.prototype.toString.call(r), Object.prototype.toString.call(h));
+r.clone().text().then(t => { console.log("text", t); return r.json(); })
+  .then(j => { console.log("json", j.a.length, r.bodyUsed); return new Response("not json").json(); })
+  .catch(e => console.log("bad", e.name));
+console.log(typeof fetch, new Response("", { status: 500 }).ok);
+try { Headers(); } catch (e) { console.log(e.name); }
+</script></body></html>

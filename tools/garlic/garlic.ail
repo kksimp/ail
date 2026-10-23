@@ -328,6 +328,7 @@ fn load_doc(target str, method str, body str, mut cj jar.Jar) Loaded
             missing: [],
             changes: 0,
             cookies: [],
+            fetches: [],
         )
         if d.all("script").len() > 0
             ran := jsdom.start(
@@ -339,8 +340,9 @@ fn load_doc(target str, method str, body str, mut cj jar.Jar) Loaded
                 1000.0,
                 5000000,
             )
-            session = ran.0
-            out = ran.1
+            mut live := ran.0
+            out = answer_fetches(mut d, mut live, ran.1, at, mut cj)
+            session = live
         for line in out.cookies
             cj.set_from_script(at, line)
         if env.args().contains("--console")
@@ -360,6 +362,132 @@ fn load_doc(target str, method str, body str, mut cj jar.Jar) Loaded
             b = out.body
         at = next
     Loaded(url: at, doc: html.parse(fetch_with(at, m, b, mut cj)), js: none)
+
+## What a script's `fetch` gets back.
+struct Answer
+    status int
+    status_text str
+    url str
+    headers str
+    body str
+    ok bool
+
+## Makes the request a script's `fetch` asked for, with the page's cookies.
+## `file://` and local paths read the file (404 when missing).
+fn fetch_answer(f jsdom.Fetch, mut cj jar.Jar) Answer
+    s := page.scheme(f.url)
+    if s == "http" or s == "https"
+        mut o := net.options()
+        o.headers["user-agent"] = "Garlic/0.1 (AIL; text)"
+        o.headers["accept"] = "*/*"
+        o.headers["accept-language"] = "en"
+        o.headers["accept-encoding"] = "gzip, deflate"
+        for line in f.headers.split("\n")
+            i := line.find(":") else continue
+            o.headers[line.slice(0, i).trim()] = line.slice(i + 1, line.chars().len()).trim()
+        if f.method != "GET" and f.method != "HEAD"
+            o.body = f.body
+        cookie := cj.header(f.url)
+        if cookie != "" and not o.headers.contains("cookie")
+            o.headers["cookie"] = cookie
+        r := net.request_bytes(f.method, f.url, o) else err
+            return Answer(status: 0, status_text: "", url: f.url, headers: "", body: "", ok: false)
+        for line in r.all_headers.get("set-cookie") else List[str]()
+            cj.set_cookie(f.url, line)
+        mut lines := List[str]()
+        for k in r.headers.keys()
+            lines.push("{k}: {r.headers[k]}")
+        return Answer(
+            status: r.status,
+            status_text: status_text_of(r.status),
+            url: f.url,
+            headers: lines.join("\n"),
+            body: body_text(r),
+            ok: true,
+        )
+    file := (f.url.strip_prefix("file://local/") else (f.url.strip_prefix("file://") else f.url))
+        .split("?")[0]
+        .split("#")[0]
+    data := fs.read_bytes(file) else err
+        return Answer(
+            status: 404,
+            status_text: "Not Found",
+            url: f.url,
+            headers: "",
+            body: "",
+            ok: true,
+        )
+    Answer(
+        status: 200,
+        status_text: "OK",
+        url: f.url,
+        headers: "",
+        body: decode(data, ""),
+        ok: true,
+    )
+
+fn status_text_of(status int) str
+    match status
+        200 => "OK"
+        201 => "Created"
+        204 => "No Content"
+        301 => "Moved Permanently"
+        302 => "Found"
+        304 => "Not Modified"
+        400 => "Bad Request"
+        401 => "Unauthorized"
+        403 => "Forbidden"
+        404 => "Not Found"
+        500 => "Internal Server Error"
+        _ => ""
+
+## Answers the page's `fetch` calls (and the ones those start) until none
+## are waiting, up to MAX_FETCH_ROUNDS rounds. What each round did is added
+## to `out`; the first navigation stays.
+fn answer_fetches(
+    mut d html.Doc,
+    mut s jsdom.Session,
+    first jsdom.Outcome,
+    at str,
+    mut cj jar.Jar,
+) jsdom.Outcome
+    mut out := first
+    mut waiting := out.fetches
+    out.fetches = []
+    mut rounds := 0
+    while waiting.len() > 0 and rounds < MAX_FETCH_ROUNDS
+        rounds += 1
+        mut next := List[jsdom.Fetch]()
+        for f in waiting
+            a := fetch_answer(f, mut cj)
+            got := if a.ok then s.respond(
+                mut d,
+                f.id,
+                a.status,
+                a.status_text,
+                a.url,
+                a.headers,
+                a.body,
+                1000.0,
+            ) else s.fail(mut d, f.id, 1000.0)
+            for line in got.console
+                out.console.push(line)
+            for line in got.cookies
+                out.cookies.push(line)
+            for u in got.missing
+                out.missing.push(u)
+            out.changes += got.changes
+            if out.url == "" and got.url != ""
+                out.url = got.url
+                out.method = got.method
+                out.body = got.body
+            for n in got.fetches
+                next.push(n)
+        waiting = next
+    out
+
+## Rounds of answering `fetch` calls after a page's scripts run.
+MAX_FETCH_ROUNDS := 20
 
 ## The address scripts see: a local file gets a file:// URL.
 fn script_url(u str) str
@@ -627,7 +755,7 @@ fn Browser.activate(mut self, id int)
 ## the browser's own action should follow.
 fn Browser.js_click(mut self, id int) bool
     mut s := js else return false
-    out := s.click(mut doc, id, 1000.0)
+    out := answer_fetches(mut doc, mut s, s.click(mut doc, id, 1000.0), url, mut cj)
     js = s
     if js_went(out)
         return true
@@ -663,7 +791,7 @@ fn Browser.type_into(mut self, id int, text str)
         return
     if js != none
         mut s := js else return
-        out := s.input(mut doc, id, text, 1000.0)
+        out := answer_fetches(mut doc, mut s, s.input(mut doc, id, text, 1000.0), url, mut cj)
         js = s
         if not js_went(out)
             relayout()
@@ -747,7 +875,7 @@ fn Browser.submit(mut self, id int)
         return
     if js != none
         mut s := js else return
-        out := s.submit(mut doc, id, 1000.0)
+        out := answer_fetches(mut doc, mut s, s.submit(mut doc, id, 1000.0), url, mut cj)
         js = s
         if not js_went(out)
             relayout()
@@ -2560,3 +2688,7 @@ fn flat(s gfx.Scene) List[str]
     b.act("click", "{node_with(b, "button", "id", "go")}")
     assert_eq(b.pg.title, "Results")
     assert(b.url.ends_with("/result.html?q=hello"))
+
+@test fn a_pages_fetch_reads_files_and_its_promises_settle()
+    b := Browser.new("{testdata()}/fetch.html", 80, 30)
+    assert(b.pg.text().contains("status 200 true garlic+onion missing 404 false"))

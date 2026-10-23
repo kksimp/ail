@@ -1,0 +1,316 @@
+## fetch (WHATWG Fetch §5), Response and Headers. The engine has no network:
+## `fetch` records a host request and leaves its promise pending until the
+## browser answers with `Vm.fetch_done` or `Vm.fetch_failed`. A page's
+## fetches therefore wait for the browser's next turn, as in a real task.
+## Not done: CORS checks, streaming bodies, `Request`, `FormData`, `Blob`.
+use syntax
+
+pub fn Vm.fetch_setup(mut self)
+    object_proto := proto_of("Object")
+    headers_proto := object("Object", object_proto)
+    protos["Headers"] = Obj(headers_proto)
+    methods(headers_proto, "dom.fetch.headers", "get:1 has:1 set:2 append:2 delete:1 forEach:1")
+    response_proto := object("Object", object_proto)
+    protos["Response"] = Obj(response_proto)
+    methods(response_proto, "dom.fetch.response", "text:0 json:0 clone:0")
+    for name in ["Headers", "Response"]
+        c := obj_of(native_fn("dom.fetch.new.{name}", name, 0)) else continue
+        p := obj_of(proto_of(name)) else continue
+        c.props["prototype"] = Prop(
+            value: Obj(p),
+            get: Undef,
+            set: Undef,
+            accessor: false,
+            enumerable: false,
+            writable: false,
+            configurable: false,
+        )
+        p.props["constructor"] = hidden(Obj(c))
+        p.props[well_known("toStringTag")] = Prop(
+            value: Str(name),
+            get: Undef,
+            set: Undef,
+            accessor: false,
+            enumerable: false,
+            writable: false,
+            configurable: true,
+        )
+        global_obj.props[name] = hidden(Obj(c))
+
+## `fetch(input, init)`: a promise for the browser's answer.
+fn Vm.fetch_start(mut self, args List[Value]) Value ! Thrown
+    p := new_promise()
+    input := arg_at(args, 0)
+    init := arg_at(args, 1)
+    mut url := ""
+    if is_obj(input)
+        url = to_string(get(input, "url")?)?
+        if url == "undefined"
+            url = to_string(input)?
+    else
+        url = to_string(input)?
+    mut method := "GET"
+    mut body := ""
+    mut header_lines := List[str]()
+    if is_obj(init)
+        m := get(init, "method")?
+        if m != Value.Undef
+            method = to_string(m)?.to_upper()
+        b := get(init, "body")?
+        if not is_nullish(b)
+            body = to_string(b)?
+        h := get(init, "headers")?
+        if is_obj(h)
+            for k in own_keys(obj_of(h) else plain())
+                header_lines.push("{k.to_lower()}: {to_string(get(h, k)?)?}")
+        sig := get(init, "signal")?
+        if is_obj(sig) and truthy(get(sig, "aborted")?)
+            reject_promise(p, abort_error())
+            return Value.Obj(p)
+    if method == "GET" or method == "HEAD"
+        body = ""
+    fetch_seq += 1
+    fetches[fetch_seq] = p
+    fetch_headers[fetch_seq] = header_lines.join("\n")
+    host_requests.push(HostRequest(
+        kind: "fetch",
+        url: resolve_url(url),
+        method: method,
+        node: fetch_seq,
+        text: body,
+    ))
+    Value.Obj(p)
+
+fn Vm.abort_error(mut self) Value
+    o := object("Error", proto_of("DOMException"))
+    o.props["message"] = hidden(Str("signal is aborted without reason"))
+    o.props["name"] = hidden(Str("AbortError"))
+    Value.Obj(o)
+
+## The browser's answer to fetch `id`: `header_lines` is `name: value` per
+## line. Settles the promise; the caller then runs the microtasks.
+pub fn Vm.fetch_done(
+    mut self,
+    id int,
+    status int,
+    status_text str,
+    url str,
+    header_lines str,
+    body str,
+)
+    p := fetches.get(id) else return
+    fetches.remove(id)
+    o := object("Response", proto_of("Response"))
+    o.props["status"] = data(Num(status.to_float()))
+    o.props["ok"] = data(Bool(status >= 200 and status < 300))
+    o.props["statusText"] = data(Str(status_text))
+    o.props["url"] = data(Str(url))
+    o.props["redirected"] = data(Bool(false))
+    o.props["type"] = data(Str("basic"))
+    o.props["bodyUsed"] = data(Bool(false))
+    h := object("Headers", proto_of("Headers"))
+    for line in header_lines.split("\n")
+        i := line.find(":") else continue
+        header_add(h, line.slice(0, i).trim(), line.slice(i + 1, line.chars().len()).trim())
+    o.props["headers"] = data(Obj(h))
+    o.props["{PRIVATE}body"] = hidden(Str(body))
+    resolve_promise(p, Obj(o))
+
+## fetch `id` failed (no network, refused): `TypeError: Failed to fetch`.
+pub fn Vm.fetch_failed(mut self, id int)
+    p := fetches.get(id) else return
+    fetches.remove(id)
+    reject_promise(p, make_error("TypeError", "Failed to fetch"))
+
+fn header_add(h ref JsObject, name str, value str)
+    key := name.to_lower()
+    if p := h.props.get(key)
+        h.props[key] = data(Str("{str_of(p.value) else ""}, {value}"))
+    else
+        h.props[key] = data(Str(value))
+
+fn Vm.fetch_native(
+    mut self,
+    m str,
+    this_val Value,
+    args List[Value],
+    new_target Value,
+) Value ! Thrown
+    if n := m.strip_prefix("new.")
+        if new_target == Value.Undef
+            return type_error("Failed to construct '{n}': Please use the 'new' operator, this DOM object constructor cannot be called as a function.")
+        if n == "AbortController" or n == "AbortSignal"
+            return abort_new(n)
+        return fetch_new(n, args)
+    if k := m.strip_prefix("abort.")
+        return abort_method("abort", this_val, args)
+    if k := m.strip_prefix("signal.")
+        return abort_method(k, this_val, args)
+    if k := m.strip_prefix("headers.")
+        return headers_method(k, this_val, args)
+    response_method(m.strip_prefix("response.") else m, this_val)
+
+fn Vm.fetch_new(mut self, n str, args List[Value]) Value ! Thrown
+    init := arg_at(args, 0)
+    if n == "Headers"
+        h := object("Headers", proto_of("Headers"))
+        if is_obj(init)
+            for k in own_keys(obj_of(init) else plain())
+                header_add(h, k, to_string(get(init, k)?)?)
+        return Value.Obj(h)
+    o := object("Response", proto_of("Response"))
+    opts := arg_at(args, 1)
+    mut status := 200
+    mut text := ""
+    if is_obj(opts)
+        s := get(opts, "status")?
+        if s != Value.Undef
+            status = int_of(to_number(s)?)
+        t := get(opts, "statusText")?
+        if t != Value.Undef
+            text = to_string(t)?
+    o.props["status"] = data(Num(status.to_float()))
+    o.props["ok"] = data(Bool(status >= 200 and status < 300))
+    o.props["statusText"] = data(Str(text))
+    o.props["url"] = data(Str(""))
+    o.props["redirected"] = data(Bool(false))
+    o.props["type"] = data(Str("default"))
+    o.props["bodyUsed"] = data(Bool(false))
+    o.props["headers"] = data(Obj(object("Headers", proto_of("Headers"))))
+    o.props["{PRIVATE}body"] = hidden(Str(if is_nullish(init) then "" else to_string(init)?))
+    Value.Obj(o)
+
+fn Vm.headers_method(mut self, m str, this_val Value, args List[Value]) Value ! Thrown
+    h := this_class(this_val, "Headers", m)?
+    key := to_string(arg_at(args, 0))?.to_lower()
+    match m
+        "get" =>
+            if p := h.props.get(key)
+                return p.value
+            Value.Null
+        "has" => Value.Bool(h.props.get(key) != none)
+        "set" =>
+            h.props[key] = data(Str(to_string(arg_at(args, 1))?))
+            Value.Undef
+        "append" =>
+            header_add(h, key, to_string(arg_at(args, 1))?)
+            Value.Undef
+        "delete" =>
+            h.props.remove(key)
+            Value.Undef
+        _ =>
+            f := arg_at(args, 0)
+            for k in own_keys(h)
+                call(f, arg_at(args, 1), [h.props[k].value, Value.Str(k), this_val])?
+            Value.Undef
+
+fn Vm.response_method(mut self, m str, this_val Value) Value ! Thrown
+    r := this_class(this_val, "Response", m)?
+    body := str_of(r.props["{PRIVATE}body"].value) else ""
+    if m == "clone"
+        c := object("Response", proto_of("Response"))
+        for k in r.props.keys()
+            c.props[k] = r.props[k]
+        return Value.Obj(c)
+    p := new_promise()
+    r.props["bodyUsed"] = data(Bool(true))
+    if m == "text"
+        resolve_promise(p, Value.Str(body))
+        return Value.Obj(p)
+    if v := json_parse(body, Value.Undef)
+        resolve_promise(p, v)
+    else err
+        reject_promise(p, err.value)
+    Value.Obj(p)
+
+# ---------------------------------------------------------- AbortController
+
+fn Vm.abort_setup(mut self)
+    object_proto := proto_of("Object")
+    controller_proto := object("Object", object_proto)
+    protos["AbortController"] = Obj(controller_proto)
+    methods(controller_proto, "dom.fetch.abort", "abort:0")
+    signal_proto := object("Object", object_proto)
+    protos["AbortSignal"] = Obj(signal_proto)
+    methods(
+        signal_proto,
+        "dom.fetch.signal",
+        "addEventListener:2 removeEventListener:2 throwIfAborted:0",
+    )
+    for name in ["AbortController", "AbortSignal"]
+        c := obj_of(native_fn("dom.fetch.new.{name}", name, 0)) else continue
+        p := obj_of(proto_of(name)) else continue
+        c.props["prototype"] = Prop(
+            value: Obj(p),
+            get: Undef,
+            set: Undef,
+            accessor: false,
+            enumerable: false,
+            writable: false,
+            configurable: false,
+        )
+        p.props["constructor"] = hidden(Obj(c))
+        p.props[well_known("toStringTag")] = Prop(
+            value: Str(name),
+            get: Undef,
+            set: Undef,
+            accessor: false,
+            enumerable: false,
+            writable: false,
+            configurable: true,
+        )
+        global_obj.props[name] = hidden(Obj(c))
+
+fn Vm.abort_new(mut self, n str) Value ! Thrown
+    if n == "AbortSignal"
+        return type_error("Illegal constructor")
+    c := object("AbortController", proto_of("AbortController"))
+    s := object("AbortSignal", proto_of("AbortSignal"))
+    s.props["aborted"] = data(Bool(false))
+    s.props["reason"] = data(Undef)
+    s.props["onabort"] = data(Null)
+    s.props["{PRIVATE}listeners"] = hidden(array([]))
+    c.props["signal"] = data(Obj(s))
+    Value.Obj(c)
+
+fn Vm.abort_method(mut self, m str, this_val Value, args List[Value]) Value ! Thrown
+    if m == "abort"
+        c := this_class(this_val, "AbortController", m)?
+        s := obj_of(get(Value.Obj(c), "signal")?) else return Value.Undef
+        if truthy(get(Value.Obj(s), "aborted")?)
+            return Value.Undef
+        s.props["aborted"] = data(Bool(true))
+        reason := arg_at(args, 0)
+        s.props["reason"] = data(if reason == Value.Undef then abort_error() else reason)
+        ev := make_event("abort", Value.Undef)?
+        if o := obj_of(ev)
+            o.props["target"] = data(Value.Obj(s))
+        for l in (obj_of(s.props["{PRIVATE}listeners"].value) else plain()).elems
+            call_listener_plain(l, Value.Obj(s), ev)
+        # `onabort` runs after the listeners, the usual order of a page that
+        # adds its listeners first.
+        handler := get(Value.Obj(s), "onabort")?
+        if is_callable(handler)
+            call_listener_plain(handler, Value.Obj(s), ev)
+        return Value.Undef
+    s := this_class(this_val, "AbortSignal", m)?
+    listeners_obj := obj_of(s.props["{PRIVATE}listeners"].value) else return Value.Undef
+    a1 := arg_at(args, 1)
+    match m
+        "addEventListener" =>
+            if to_string(arg_at(args, 0))? == "abort" and is_callable(a1)
+                listeners_obj.elems.push(a1)
+            Value.Undef
+        "removeEventListener" =>
+            listeners_obj.elems = [l for l in listeners_obj.elems if l != a1]
+            Value.Undef
+        _ =>
+            if truthy(get(Value.Obj(s), "aborted")?)
+                return thrown(get(Value.Obj(s), "reason")?)
+            Value.Undef
+
+fn Vm.call_listener_plain(mut self, f Value, this_val Value, ev Value)
+    if v := call(f, this_val, [ev])
+        v
+    else err
+        report(uncaught_text(err))

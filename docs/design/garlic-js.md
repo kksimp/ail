@@ -252,6 +252,15 @@ regex engine is written.
   and a registry that never calls back: nothing is collected while scripts
   run. `IntersectionObserver` and `ResizeObserver` take a callback and never
   fire, since Garlic has no scrolling or resizing the page can see.
+- `fetch`, `Response`, `Headers` and `AbortController` (`vm/fetch.ail`):
+  `fetch` records a host request and leaves its promise pending. Garlic's
+  `answer_fetches` makes the request with the page's cookies (`file://`
+  reads the file, 404 when missing; a network error rejects with
+  `TypeError: Failed to fetch`), answers through `Session.respond`, and
+  repeats for the fetches that starts, up to 20 rounds, before the page is
+  shown. The same runs after a click, typing or submit. Not done: CORS
+  checks, streaming, `Request`, `FormData`, `Blob`, aborting a pending
+  fetch, `XMLHttpRequest`.
 
 ## Generators and async functions
 

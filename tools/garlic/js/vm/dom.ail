@@ -504,6 +504,8 @@ pub fn Vm.dom_setup(mut self)
     getter(class_list_proto, "value", "dom.get.classList.value")
 
     url_setup()
+    fetch_setup()
+    abort_setup()
     exception_proto := object("Object", proto_of("Error"))
     protos["DOMException"] = Obj(exception_proto)
     if c := obj_of(native_fn("dom.illegal", "DOMException", 2))
@@ -533,7 +535,7 @@ pub fn Vm.dom_setup(mut self)
     methods(
         global_obj,
         "dom.window",
-        "setTimeout:1 setInterval:1 clearTimeout:1 clearInterval:1 requestAnimationFrame:1 cancelAnimationFrame:1 queueMicrotask:1 requestIdleCallback:1 addEventListener:2 removeEventListener:2 dispatchEvent:1 getComputedStyle:1 matchMedia:1 alert:1 confirm:1 prompt:1 scrollTo:2 scrollBy:2 scroll:2 open:1 close:0 focus:0 blur:0 postMessage:1 atob:1 btoa:1",
+        "fetch:2 setTimeout:1 setInterval:1 clearTimeout:1 clearInterval:1 requestAnimationFrame:1 cancelAnimationFrame:1 queueMicrotask:1 requestIdleCallback:1 addEventListener:2 removeEventListener:2 dispatchEvent:1 getComputedStyle:1 matchMedia:1 alert:1 confirm:1 prompt:1 scrollTo:2 scrollBy:2 scroll:2 open:1 close:0 focus:0 blur:0 postMessage:1 atob:1 btoa:1",
     )
     global_obj.props["location"] = Prop(
         value: Undef,
@@ -815,6 +817,8 @@ pub fn Vm.dom_native(
         return make_params(args)
     if m == "MutationObserver"
         return mo_new(args)
+    if p := m.strip_prefix("fetch.")
+        return fetch_native(p, this_val, args, new_target)
     if p := m.strip_prefix("mo.")
         return mo_method(p, this_val, args)
     if m == "Event"
@@ -2190,6 +2194,7 @@ fn Vm.window_method(mut self, m str, args List[Value]) Value ! Thrown
             for k in ["addListener", "removeListener", "addEventListener", "removeEventListener"]
                 o.props[k] = hidden(noop)
             Value.Obj(o)
+        "fetch" => fetch_start(args)
         "alert" | "confirm" | "prompt" =>
             host_requests.push(HostRequest(
                 kind: m,

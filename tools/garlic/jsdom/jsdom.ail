@@ -19,6 +19,16 @@ pub struct Outcome
     pub changes int
     ## What scripts assigned to `document.cookie`, in order.
     pub cookies List[str]
+    ## `fetch` calls the browser has yet to answer (`Session.respond`).
+    pub fetches List[Fetch]
+
+## A request a script's `fetch` made. `headers` is `name: value` per line.
+pub struct Fetch
+    pub id int
+    pub url str
+    pub method str
+    pub body str
+    pub headers str
 
 ## A page whose scripts have run and whose engine is kept, so that what
 ## the user does afterwards (click, type, submit) reaches the page's
@@ -93,6 +103,7 @@ fn Session.collect(mut self, mut d html.Doc) Outcome
         missing: [],
         changes: 0,
         cookies: [],
+        fetches: [],
     )
     console = machine.console_out.len()
     out.changes = replay(mut d, machine.mutations[changes..])
@@ -106,8 +117,38 @@ fn Session.collect(mut self, mut d html.Doc) Outcome
             out.missing.push(r.url)
         if r.kind == "cookie"
             out.cookies.push(r.text)
+        if r.kind == "fetch"
+            out.fetches.push(Fetch(
+                id: r.node,
+                url: r.url,
+                method: r.method,
+                body: r.text,
+                headers: machine.fetch_headers.get(r.node) else "",
+            ))
     requests = machine.host_requests.len()
     out
+
+## The browser's answer to fetch `id`; `headers` is `name: value` per line.
+pub fn Session.respond(
+    mut self,
+    mut d html.Doc,
+    id int,
+    status int,
+    status_text str,
+    url str,
+    headers str,
+    body str,
+    budget_ms float,
+) Outcome
+    machine.fetch_done(id, status, status_text, url, headers, body)
+    machine.run_event_loop(machine.clock_ms + budget_ms, 10000)
+    collect(mut d)
+
+## Fetch `id` could not be made.
+pub fn Session.fail(mut self, mut d html.Doc, id int, budget_ms float) Outcome
+    machine.fetch_failed(id)
+    machine.run_event_loop(machine.clock_ms + budget_ms, 10000)
+    collect(mut d)
 
 ## The user clicked node `id`: `click` is dispatched (it bubbles and can be
 ## cancelled), then its default action runs (a link, a submit button, a

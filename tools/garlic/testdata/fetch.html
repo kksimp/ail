@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html><head><title>Fetch test</title></head>
+<body>
+<p id="out">waiting</p>
+<script>
+const out = document.getElementById("out");
+fetch("data.json").then(r => {
+  out.textContent = "status " + r.status + " " + r.ok + " ";
+  return r.json();
+}).then(d => {
+  out.textContent += d.items.join("+");
+  return fetch("missing.json");
+}).then(r => {
+  out.textContent += " missing " + r.status + " " + r.ok;
+}).catch(e => { out.textContent += " error " + e.message; });
+</script>
+</body></html>
