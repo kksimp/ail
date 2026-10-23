@@ -3,7 +3,7 @@
 ## edit
 ```
 edit.USAGE := ...
-pub fn edit.command(args List[str]) int [fs io]  ## `ail edit PATH [--dry-run] [--diff] [--if-clean] [--test] [--json] < EDITS`
+pub fn edit.command(args List[str], std str) int [clock env fs io proc]  ## `ail edit PATH [--dry-run] [--diff] [--if-clean] [--test] [--json] < EDITS`
 fn edit.plural(n int, w str) str
 fn edit.is_dir(path str) bool [fs io]
 fn edit.files_of(path str) List[str] [fs io]  ## The files of the program at `path`: the file, or every `.ail` file of a package.

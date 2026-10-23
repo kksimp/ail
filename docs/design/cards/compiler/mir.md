@@ -42,6 +42,7 @@ pub struct mir.TaskState
 pub fn mir.new_task_state() mir.TaskState
 pub fn mir.uses_tasks(str) bool
 pub fn mir.is_wait_call(ast.Expr) bool
+pub fn mir.plain_name(str) str
 pub struct mir.Traits
 pub fn mir.new_traits() mir.Traits
 pub enum mir.Ty
@@ -79,4 +80,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1148); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1159); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
