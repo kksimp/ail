@@ -1101,6 +1101,94 @@ fn run_one(exe str, slot int) Verdict
         return plain("", "fail", "error: no such test")
     plain("", "fail", describe(r.err))
 
+## ---- Doc examples (test.doc.1-3) ----
+
+## The doc examples of FILE as `@test` functions appended to its source, by the native CLI's
+## `doctests` command (compiler/doc); `names` maps each generated function to `doc:Name`.
+struct Augmented
+    lines List[str]
+    names Map[str, str]
+    note str
+
+fn native_cli() str
+    root := env.get("AIL_ROOT") else "."
+    "{root}/.native/ail"
+
+## Builds the native CLI when it is missing or older than the compiler's sources.
+fn ensure_native_cli() bool
+    cli := native_cli()
+    stale := proc.run("sh", [
+        "-c",
+        "[ ! -x '{cli}' ] || [ -n \"$(find compiler bootstrap/src/std -name '*.ail' -newer '{cli}' 2>/dev/null | head -n 1)\" ]",
+    ]) else return false
+    if stale.status != 0
+        return true
+    _ := proc.run("mkdir", ["-p", path.dir(cli)]) else return false
+    b := proc.run(ail_path(), ["build", "compiler/main.ail", "-o", "{cli}.new"]) else return false
+    if b.status != 0
+        return false
+    m := proc.run("mv", ["{cli}.new", cli]) else return false
+    m.status == 0
+
+fn doc_augment(file str) Augmented
+    none_found := Augmented(lines: [], names: {}, note: "")
+    if not ensure_native_cli()
+        return Augmented(lines: [], names: {}, note: "the native CLI for doc examples didn't build")
+    r := proc.run(native_cli(), ["doctests", file]) else
+        return Augmented(lines: [], names: {}, note: "the native CLI for doc examples didn't run")
+    if r.status != 0
+        return Augmented(lines: [], names: {}, note: "doc examples: {short(r.err)}")
+    out := r.out.split("\n")
+    mut names := Map[str, str]()
+    mut i := 0
+    while i < out.len() and out[i].contains(" doc_example_") and out[i].starts_with("doc:")
+        parts := out[i].split(" ")
+        names[parts[1]] = parts[0]
+        i += 1
+    if names.is_empty()
+        return none_found
+    # The source, then an empty line from `print`, then the origin list.
+    mut end := out.len()
+    while end > i and (out[end - 1].is_empty() or out[end - 1].starts_with("["))
+        end -= 1
+    Augmented(lines: out[i..end], names: names, note: "")
+
+## The lines a doc example's output must equal: its `# =>` lines (test.doc.2).
+fn doc_expected(lines List[str], t TestFn) List[str]
+    mut out := List[str]()
+    for j in t.header + 1..t.last + 1
+        if rest := lines[j].trim().strip_prefix("# =>")
+            out.push(rest.strip_prefix(" ") else rest)
+    out
+
+fn debug_list(xs List[str]) str
+    mut parts := List[str]()
+    for x in xs
+        parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
+    "[{parts.join(", ")}]"
+
+fn run_doc(exe str, slot int, expected List[str]) Verdict
+    arg := ["x" for _ in 0..slot].join("")
+    r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
+        return plain("", "fail", "error: can't start the test binary")
+    if r.status != 0
+        return plain("", "fail", describe(r.err))
+    if expected.is_empty()
+        return plain("", "pass", "")
+    got := r.out.lines()
+    mut same := got.len() == expected.len()
+    if same
+        for k in 0..got.len()
+            if got[k].trim_end() != expected[k].trim_end()
+                same = false
+    if same
+        return plain("", "pass", "")
+    plain(
+        "",
+        "fail",
+        "trap[test.doc.2]: output differs: expected {debug_list(expected)}, found {debug_list(got)}",
+    )
+
 fn json_str(s str) str
     mut out := "\""
     for c in s.chars()
@@ -1183,16 +1271,27 @@ fn main() !
         io.eprint(checked.err)
         io.exit(2)
     text := fs.read_text(file)? "reading {file}"
-    lines := text.lines()
+    mut lines := text.lines()
+    mut doc_names := Map[str, str]()
+    mut has_docs := false
+    for l in lines
+        if l.trim() == "## ```ail"
+            has_docs = true
+    mut doc_note := ""
+    if has_docs
+        aug := doc_augment(file)
+        if aug.lines.is_empty()
+            doc_note = aug.note
+        else
+            lines = aug.lines
+            doc_names = aug.names
     found := find_tests(lines)
     w := World(decls: parse_decls(lines))
     mut verdicts := List[Verdict]()
     for s in found.skipped
         verdicts.push(plain(s.name, "skip", s.why))
-    for l in lines
-        if l.trim() == "## ```ail"
-            verdicts.push(plain("doc examples", "skip", "run by the interpreter (test.doc.1)"))
-            break
+    if not doc_note.is_empty()
+        verdicts.push(plain("doc examples", "skip", doc_note))
     if found.tests.len() == 0
         io.exit(report(verdicts, json))
     dir := path.dir(file)
@@ -1254,7 +1353,10 @@ fn main() !
             for j in 0..i
                 if not dropped.contains(j)
                     slot += 1
-            if t.params.is_empty()
+            if doc_names.contains(t.name)
+                v := run_doc(exe, slot, doc_expected(lines, t))
+                verdicts.push(plain(doc_names[t.name], v.status, v.message))
+            elif t.params.is_empty()
                 v := run_one(exe, slot)
                 verdicts.push(plain(t.name, v.status, v.message))
             else
