@@ -11,8 +11,20 @@ pub struct Report
     ## Lines of generated code's `impl` whose functions are gapped.
     pub gapped_lines List[int]
 
+## What `ail api` reads besides the diagnostics: each function's checked
+## effect set (api.out.4) and the error types of each fallible function
+## (err.api.1), by function index.
+pub struct Analysis
+    pub report Report
+    pub effects List[List[str]]
+    pub errors Map[int, List[str]]
+
 ## Every pass of `check_with` this checker has, in its order.
 pub fn check_program(p ast.Program) Report
+    analyze(p, false).report
+
+## `check_program`, and with `full` the facts `ail api` outlines.
+pub fn analyze(p ast.Program, full bool) Analysis
     mut c := new_checker(p)
     c.list_param = c.new_param("T", [])
     c.collect_traits()
@@ -55,13 +67,23 @@ pub fn check_program(p ast.Program) Report
     c.diags.extend(c.check_par())
     c.diags.extend(c.check_par_comps())
     c.remap_generated()
-    Report(
+    report := Report(
         diags: c.diags,
         gapped: c.gapped.sorted(),
         gapped_structs: c.gapped_structs.sorted(),
         gapped_consts: c.gapped_consts.sorted(),
         gapped_lines: c.gapped_impl_lines(),
     )
+    if not full
+        return Analysis(report: report, effects: [], errors: Map[int, List[str]]())
+    mut errors := Map[int, List[str]]()
+    for i in 0..p.fns.len()
+        if p.fns[i].pos.line > 1048576
+            continue
+        match c.sigs[i].ret
+            Res(_, errs) => errors[i] = c.error_names(c.errs_of(errs))
+            _ => continue
+    Analysis(report: report, effects: infer_effects(p, c.facts()).sets, errors: errors)
 
 ## The diagnostics of the declaration passes only (slice 1).
 pub fn check_declarations(p ast.Program) List[Diag]

@@ -15,6 +15,7 @@
 #                                         `ail build`)
 #   ail run compiler load FILE...         the program of `ail api --ast --program FILE` (ADR 0855)
 #   ail run compiler check-program [--json] FILE|DIR   `ail check` (ADR 0855)
+#   ail run compiler api [--outline] FILE [--text | --pretty]   `ail api` (ADR 0855)
 #   ail run compiler run FILE [ARGS...]   the native CLI's `ail run` (ADR 0855)
 #   ail run compiler prepare FILE         builds FILE into the cache and prints the executable's path
 #   ail run compiler build-many RT TARGET MS MB STD FILE...
@@ -22,6 +23,7 @@
 #                                         used by the selftest), each under a line `== PATH`
 # With several files, each output starts with a line `== PATH`.
 use a64
+use api
 use ast
 use budget
 use check
@@ -129,6 +131,8 @@ fn main() !
             load_dump(args[1..])
         "check-program" =>
             check_cmd(args[1..])
+        "api" =>
+            api_cmd(args[1..])
         "run" =>
             cli_run(args[1..])
         "prepare" =>
@@ -837,3 +841,46 @@ fn check_cmd(rest List[str])
     for d in found
         if not d.warning
             io.exit(2)
+
+## `api [--outline] FILE [--text | --pretty]`: the outline of one file
+## (api.out.1-5). `--symbols`, `--expanded`, packages and the queries stay
+## with the Rust `ail api` for now.
+fn api_cmd(rest List[str])
+    usage := "usage: ail api [--outline] FILE [--text | --pretty]"
+    mut form := api.Form.Plain
+    mut files := List[str]()
+    for a in rest
+        match a
+            "--outline" => continue
+            "--text" => form = api.Form.Text
+            "--pretty" => form = api.Form.Pretty
+            _ =>
+                if a.starts_with("--") or files.len() > 0
+                    io.eprint(usage)
+                    io.exit(2)
+                files.push(a)
+    if files.len() != 1
+        io.eprint(usage)
+        io.exit(2)
+    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
+    loaded := load.load(files[0], std) else err
+        io.eprint("error: {err.message}")
+        io.exit(2)
+        return
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    mut analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            io.exit(2)
+    prog := doc.attach(loaded.program, loaded.texts[0])
+    out := api.outline(
+        prog,
+        api.Facts(effects: analysis.effects, errors: analysis.errors),
+        files[0],
+        form,
+    )
+    if out != ""
+        print(out.strip_suffix("\n") else out)
