@@ -259,7 +259,6 @@ fn holds_record(t Ty) bool
     match t
         Struct(_) | Enum(_) | Tuple(_) | Map(_, _) | Set(_) => true
         List(e) => not (is_number(e) or e == Ty.Str)
-        Map(_, _) | Set(_) => true
         _ => false
 
 ## The value type of a map; `none` for a set and anything else.
