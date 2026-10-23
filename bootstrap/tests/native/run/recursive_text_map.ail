@@ -1,0 +1,11 @@
+enum Obj
+    Null
+    Name(s str)
+    Arr(items List[Obj])
+    Dict(d Map[str, Obj])
+    Str(data List[int])
+
+fn main()
+    o := Obj.Dict(d: {"a": Obj.Arr(items: [Obj.Name(s: "x"), Obj.Null]), "b": Obj.Str(data: [1, 2])})
+    print(o)
+    print(Obj.Arr(items: [o]))
