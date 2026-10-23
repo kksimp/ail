@@ -25,8 +25,8 @@ struct Held
 fn new_lazy(from int) Lazy
     Lazy(from: from, fns: {}, held: {}, names: Set[str]())
 
-## The sources without the prelude's when the program declares a struct or
-## enum the prelude's modules declare too (a program's own `Json`): its name
+## The sources without the prelude's when the program's root module declares
+## a struct or enum the prelude's modules declare too (a program's own `Json`): its name
 ## wins, as it does in the interpreter, where the prelude's types are in a
 ## module of their own.
 fn shadow_free(input List[Source], lazy int) List[Source]
@@ -34,6 +34,9 @@ fn shadow_free(input List[Source], lazy int) List[Source]
         return input
     mut user := Set[str]()
     for k in 0..lazy
+        # Only the root module's: the prelude is a source of the root module.
+        if input[k].module != input[lazy].module
+            continue
         for s in input[k].prog.structs
             user.add(s.name)
         for e in input[k].prog.enums
