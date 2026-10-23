@@ -61,6 +61,7 @@ pub fn new_vm() Vm
         running: Set[int](),
         agen_queues: {},
         observers: [],
+        active: -1,
         fetches: {},
         fetch_headers: {},
         fetch_seq: 0,

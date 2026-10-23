@@ -266,6 +266,13 @@ regex engine is written.
   at the `on...` properties and listeners. A synchronous request is answered
   a turn later, like an asynchronous one; `responseType` "json" parses,
   `timeout` is ignored, and there is no upload progress.
+- Focus and keys (`vm/focus.ail`): `el.focus()`/`blur()` and Tab in Garlic
+  move `document.activeElement` and fire `focus`, `focusin`, `blur`,
+  `focusout`. Typing into a field fires `keydown` (cancellable: that
+  character is dropped), `input` and `keyup` per character, then `change`;
+  Enter fires `keydown`/`keyup` first, and a cancelled `keydown` stops the
+  form from submitting. `KeyboardEvent` and `MouseEvent` start with empty
+  `key`/`code` and zero coordinates, as in Chromium.
 
 ## Generators and async functions
 
