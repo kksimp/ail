@@ -1,0 +1,139 @@
+## The fuzz suite in AIL (fuzz.prop.*, fuzz.fmt.*, fuzz.nat.*; ADRs 0269-0271,
+## 0753): programs from tools/fuzz/gen/gen.ail checked through the real `ail`
+## with no Rust test harness.
+##
+##   ail run tools/fuzz/suite.ail [N [SEED [OUTDIR]]]     from the repository root
+##
+## Program k comes from seed SEED + k. For each one:
+##   fuzz.prop.1  `check` is deterministic and never panics;
+##   fuzz.prop.2  `fmt` is idempotent and leaves `check` saying the same;
+##   fuzz.nat.1   when `build` takes the program, the executable and `ail run`
+##                print the same bytes and exit the same;
+##   fuzz.nat.2   the executable is deterministic and ends in time.
+## A failing program is kept in OUTDIR (default tools/fuzz/failures) as
+## seed-K.ail (a package as a directory). The last line is `FUZZ GREEN` or
+## `FUZZ RED (n failures)`, and the status is 0 only for green.
+
+struct Fuzz
+    fails int
+    built int
+    skipped int
+    out str
+
+fn cat(a List[str], b List[str]) List[str]
+    mut out := a
+    for x in b
+        out.push(x)
+    out
+
+fn sh(script str, args List[str]) proc.Output
+    r := proc.run("sh", cat(["-c", script, "sh"], args)) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
+
+## A crash: a signal's status, or a message that is a bug of the compiler.
+fn crashed(r proc.Output) bool
+    r.status >= 128
+        or r.err.contains("panicked")
+        or r.err.contains("internal error")
+        or r.err.contains("bootstrap.")
+
+fn Fuzz.red(mut self, k int, entry str, rule str, why str)
+    self.fails += 1
+    print("FAIL {rule} program {k}: {why}")
+    dir := "{self.out}/seed-{k}"
+    sh("mkdir -p \"$1\"", [self.out])
+    sh("rm -rf \"$1\" && cp -R \"$2\" \"$1\"", [dir, entry])
+
+## The entry file of generated program `k` in `dir` and what to copy to keep it.
+fn entry_of(dir str, k int) str
+    if fs.exists("{dir}/p{k}/main.ail")
+        return "{dir}/p{k}/main.ail"
+    "{dir}/p{k}.ail"
+
+fn keep_of(entry str) str
+    if entry.ends_with("/main.ail")
+        return entry.slice(0, entry.len() - 9)
+    entry
+
+fn Fuzz.one(mut self, dir str, k int, work str)
+    entry := entry_of(dir, k)
+    keep := keep_of(entry)
+    a := sh("timeout 60 ./ail check \"$1\" 2>&1; echo \"status $?\"", [entry])
+    b := sh("timeout 60 ./ail check \"$1\" 2>&1; echo \"status $?\"", [entry])
+    if a.out != b.out
+        self.red(k, keep, "fuzz.prop.1", "check output differs between two runs")
+        return
+    if a.out.contains("panicked") or a.out.contains("internal error")
+        self.red(k, keep, "fuzz.prop.1", "check panicked")
+        return
+    clean := a.out.ends_with("status 0\n")
+    # fuzz.prop.2: formatting twice is formatting once.
+    f1 := "{work}/f1"
+    f2 := "{work}/f2"
+    sh("rm -rf \"$1\" \"$2\" && cp -R \"$3\" \"$1\" && cp -R \"$3\" \"$2\"", [f1, f2, keep])
+    e1 := if keep == entry then f1 else "{f1}/main.ail"
+    e2 := if keep == entry then f2 else "{f2}/main.ail"
+    r1 := sh("./ail fmt \"$1\" >/dev/null 2>&1; echo $?", [e1])
+    if clean and r1.out.trim() == "0"
+        sh("./ail fmt \"$1\" >/dev/null 2>&1; ./ail fmt \"$1\" >/dev/null 2>&1", [e2])
+        same := sh("diff -r \"$1\" \"$2\" >/dev/null 2>&1; echo $?", [f1, f2])
+        if same.out.trim() != "0"
+            self.red(k, keep, "fuzz.prop.2", "fmt is not idempotent")
+            return
+        again := sh(
+            "timeout 60 ./ail check \"$1\" 2>&1 | sed \"s#$1#X#g\"; echo \"status $?\"",
+            [e1],
+        )
+        before := sh(
+            "timeout 60 ./ail check \"$1\" 2>&1 | sed \"s#$1#X#g\"; echo \"status $?\"",
+            [entry],
+        )
+        if again.out.ends_with("status 0\n") != before.out.ends_with("status 0\n")
+            self.red(k, keep, "fuzz.prop.2", "fmt changed what check says")
+            return
+    if not clean
+        return
+    # fuzz.nat.*: the native build against `ail run`.
+    exe := "{work}/exe"
+    bout := sh("timeout 120 ./ail build \"$1\" -o \"$2\" 2>&1; echo $?", [entry, exe])
+    if not bout.out.ends_with("0\n")
+        self.skipped += 1
+        return
+    self.built += 1
+    n1 := sh("timeout 20 \"$1\" 2>/dev/null; echo \"status $?\"", [exe])
+    n2 := sh("timeout 20 \"$1\" 2>/dev/null; echo \"status $?\"", [exe])
+    if n1.out != n2.out
+        self.red(k, keep, "fuzz.nat.2", "the executable is not deterministic")
+        return
+    if n1.out.contains("status 124") or crashed(n1)
+        self.red(k, keep, "fuzz.nat.2", "the executable hung or crashed")
+        return
+    w := sh("timeout 60 ./ail run \"$1\" 2>/dev/null; echo \"status $?\"", [entry])
+    if w.out != n1.out
+        self.red(k, keep, "fuzz.nat.1", "the executable and ail run disagree")
+
+fn main() !
+    args := env.args()
+    n := if args.len() > 0 then (args[0].to_int() else 24) else 24
+    seed := if args.len() > 1 then (args[1].to_int() else 1) else 1
+    out := if args.len() > 2 then args[2] else "tools/fuzz/failures"
+    work := "/tmp/ail-fuzz-{seed}"
+    dir := "{work}/progs"
+    sh("rm -rf \"$1\" && mkdir -p \"$1\"", [work])
+    g := sh("./ail run tools/fuzz/gen/gen.ail \"$1\" \"$2\" \"$3\"", ["{n}", "{seed}", dir])
+    if g.status != 0
+        print("FUZZ RED (the generator failed: {g.err})")
+        io.exit(1)
+    mut f := Fuzz(fails: 0, built: 0, skipped: 0, out: out)
+    for k in 0..n
+        f.one(dir, k, work)
+    print("fuzz: {n} programs from seed {seed}; {f.built} built natively, {f.skipped} outside the native subset")
+    if f.fails == 0
+        print("FUZZ GREEN")
+        return
+    print("FUZZ RED ({f.fails} failures)")
+    io.exit(1)
