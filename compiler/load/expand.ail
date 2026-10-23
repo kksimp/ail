@@ -1,0 +1,441 @@
+## Derive generators (ct.derive.1-4, ct.gen.1-4, refl.info.1-3), as
+## `bootstrap/src/derive.rs`: an `impl Trait for T` with no methods, for a
+## trait declared `@derive(f)`, is filled in before checking. The prelude's
+## four generators (ADR 0850) run here; each one's text becomes a file
+## `gen:impl:T.Trait` of the `impl`'s module, whose tokens are spliced into the
+## `impl`, and the program is assembled again. A generator the program writes
+## itself needs the interpreter and is not run yet (RR-2).
+use ast
+use derive
+use syntax
+
+## One deriving `impl` to fill in.
+struct Job
+    imp int
+    generator str
+    ## `Version.ToJson`
+    label str
+    ## The short name of the deriving type, for `fn T.name` items.
+    type_name str
+    info derive.TypeInfo
+    trait_name str
+
+## The generators of the prelude, which this compiler contains.
+BUILTIN_GENERATORS := ["derive_to_json", "derive_from_json", "derive_default", "derive_from_args"]
+
+## Whether the tokens may hold a deriving `impl` for a generator trait: an
+## `impl`, and `@derive` or a prelude generator trait's name.
+@allow("expr.match.3") fn wanted(tokens List[syntax.Token]) bool
+    mut has_impl := false
+    for t in tokens
+        match t.tok
+            Kw(w) =>
+                if w == "impl"
+                    has_impl = true
+            _ => 0
+    if not has_impl
+        return false
+    for i in 1..tokens.len()
+        match tokens[i].tok
+            Ident(n) =>
+                match tokens[i - 1].tok
+                    Sym(s) =>
+                        if s == "@" and n == "derive"
+                            return true
+                    _ => 0
+                if ["ToJson", "FromJson", "Default", "FromArgs"].contains(n)
+                    return true
+            _ => 0
+    false
+
+fn last(name str) str
+    name.split(".").last() else name
+
+@allow("expr.match.3") fn plain(tokens List[syntax.Token], i int) bool
+    match tokens[i].tok
+        Kw(w) => w == "impl"
+        _ => false
+
+## Fill in every deriving `impl` of `first`, parsed from `tokens` and `files`;
+## returns the program assembled again with the generated code.
+@allow("expr.match.3")
+fn expand_derives(
+    first Loaded,
+    tokens List[syntax.Token],
+    files List[ast.SourceFile],
+    std str,
+) Loaded ! LoadError
+    prog := first.program
+    mut errors := List[syntax.Diag]()
+    jobs := find_jobs(prog, mut errors)
+    if jobs.len() == 0
+        mut diags := first.diags
+        diags.extend(errors)
+        return Loaded(program: prog, diags: diags, texts: first.texts)
+    mut inserts := List[(int, List[syntax.Token])]()
+    mut gen_files := List[ast.SourceFile]()
+    mut gen_texts := List[str]()
+    mut generated := List[ast.Generated]()
+    # Where each `impl` keyword is, found once instead of by a scan per job.
+    mut impl_at := Map[int, int]()
+    for i in 0..tokens.len()
+        if plain(tokens, i)
+            key := tokens[i].pos.line * 100000 + tokens[i].pos.col
+            if not impl_at.contains(key)
+                impl_at[key] = i
+    for job in jobs
+        if not BUILTIN_GENERATORS.contains(job.generator)
+            continue
+        imp := prog.impls[job.imp]
+        text := run_generator(job) else err
+            errors.push(diag(
+                "ct.derive.4",
+                imp.pos,
+                "`{last(imp.trait_name)}` can't be derived for `{job.type_name}`: {err.message}",
+                "define the methods in this `impl`, or change `{job.generator}`",
+            ))
+            continue
+        index := files.len() + gen_files.len()
+        base := index * FILE_LINES
+        lexed := syntax.lex(text)
+        if lexed.diags.len() > 0
+            errors.push(at_impl(
+                imp.pos,
+                job,
+                lexed.diags[0].pos,
+                "the generated text doesn't lex: {lexed.diags[0].msg}",
+            ))
+            continue
+        mut toks := shift(lexed.tokens, base)
+        toks.pop()
+        parts := split(toks, job, imp.pos, mut errors) else continue
+        key := imp.pos.line * 100000 + imp.pos.col
+        header := impl_at.get(key) else continue
+        mut newline := -1
+        for k in header..tokens.len()
+            match tokens[k].tok
+                Newline =>
+                    newline = k - header
+                    break
+                _ => 0
+        if newline < 0
+            continue
+        mut spliced := List[syntax.Token]()
+        if parts.0.len() > 0
+            spliced.push(syntax.Token(tok: syntax.Tok.Indent, pos: parts.0[0].pos))
+            spliced.extend(parts.0)
+            spliced.push(syntax.Token(tok: syntax.Tok.Dedent, pos: parts.0[parts.0.len() - 1].pos))
+        spliced.extend(parts.1)
+        inserts.push((header + newline + 1, spliced))
+        generated.push(ast.Generated(
+            file: index,
+            impl_pos: imp.pos,
+            label: job.label,
+            generator: job.generator,
+        ))
+        gen_texts.push(text)
+        gen_files.push(ast.SourceFile(
+            path: "gen:impl:{job.label}",
+            module: module_at(prog.files, imp.pos),
+            base: base,
+        ))
+    # Splice from the back, so earlier positions stay valid.
+    mut all := tokens
+    for ins in inserts.sorted(by: |x| 0 - x.0)
+        mut next := all[..ins.0]
+        next.extend(ins.1)
+        next.extend(all[ins.0..])
+        all = next
+    mut all_files := files
+    all_files.extend(gen_files)
+    again := assemble(all, all_files, [], std)?
+    mut out := again.program
+    out.generated = generated
+    mut diags := remap(out, again.diags)
+    diags.extend(errors)
+    mut texts := first.texts
+    texts.extend(gen_texts)
+    Loaded(program: out, diags: diags, texts: texts)
+
+@allow("expr.match.3") fn run_generator(job Job) str ! derive.DeriveError
+    match job.generator
+        "derive_to_json" => derive.derive_to_json(job.info)
+        "derive_from_json" => derive.derive_from_json(job.info)
+        "derive_default" => derive.derive_default(job.info)
+        _ => derive.derive_from_args(job.info)
+
+## The deriving `impl`s: no methods, and a trait with a generator (ct.derive.2).
+## A problem with one is an error in `errors`.
+fn find_jobs(prog ast.Program, mut errors List[syntax.Diag]) List[Job]
+    mut jobs := List[Job]()
+    for i in 0..prog.impls.len()
+        imp := prog.impls[i]
+        if imp.methods.len() > 0
+            continue
+        trait_name := last(imp.trait_name)
+        mut found := -1
+        for k in 0..prog.traits.len()
+            if prog.traits[k].name == trait_name and prog.traits[k].derive != none
+                found = k
+                break
+        if found < 0
+            continue
+        tr := prog.traits[found]
+        gen := tr.derive else continue
+        mut declared := false
+        for f in prog.fns
+            if f.name == gen.name and f.owner == none and f.within == ast.Within.TopLevel
+                declared = true
+                break
+        if not declared
+            mut seen := false
+            for e in errors
+                if e.pos == gen.pos
+                    seen = true
+            if not seen
+                errors.push(diag(
+                    "ct.derive.1",
+                    gen.pos,
+                    "the derive generator `{gen.name}` of `{tr.name}` isn't declared",
+                    "declare `fn {gen.name}(t TypeInfo) str ! DeriveError`",
+                ))
+            continue
+        type_name := last(imp.target.name)
+        # `impl X for Pair[int, str]` names types where the parameters go: the
+        # checker reports it (gen.method.2), so nothing is generated.
+        mut declared_params := List[str]()
+        mut got := false
+        for s in prog.structs
+            if not got and last(s.name) == type_name
+                declared_params = [p.name for p in s.generics]
+                got = true
+        for e in prog.enums
+            if not got and last(e.name) == type_name
+                declared_params = [p.name for p in e.generics]
+                got = true
+        if ps := imp.target.params
+            if [p.name for p in ps] != declared_params
+                continue
+        module := module_at(prog.files, imp.pos)
+        info := type_info(prog, type_name, module) else
+            errors.push(diag(
+                "ct.derive.2",
+                imp.pos,
+                "`{tr.name}` is derived by its generator `{gen.name}`, which needs a struct or enum; `{imp.target.name}` isn't one declared in this program",
+                "define the methods of `{tr.name}` in this `impl`",
+            ))
+            continue
+        jobs.push(Job(
+            imp: i,
+            generator: gen.name,
+            label: "{type_name}.{tr.name}",
+            type_name: type_name,
+            info: info,
+            trait_name: tr.name,
+        ))
+    jobs
+
+## `text` with the module's own prefix `a.b.` removed from its names: the
+## generated code is read inside that module, which names its own types bare
+## (mod.unit.2). A prefix that continues a longer name stays.
+fn unqualify(text str, module str) str
+    if module == ""
+        return text
+    prefix := "{module}."
+    mut out := ""
+    mut rest := text
+    while true
+        at := rest.find(prefix) else break
+        chars := rest.chars()
+        mut in_name := false
+        if at > 0
+            c := chars[at - 1]
+            in_name = c.is_alnum() or c == '_' or c == '.'
+        out = "{out}{chars[..at].join("")}"
+        if in_name
+            out = "{out}{prefix}"
+        rest = chars[at + prefix.chars().len()..].join("")
+    "{out}{rest}"
+
+## The `TypeInfo` describing the struct or enum `name`, preferring one declared
+## in `module` (refl.info.1, refl.info.3).
+fn type_info(prog ast.Program, name str, module str) derive.TypeInfo?
+    mut si := -1
+    for i in 0..prog.structs.len()
+        if last(prog.structs[i].name) == name
+            if si < 0
+                or (module_at(prog.files, prog.structs[i].pos) == module and module_at(prog.files, prog.structs[si].pos) != module)
+                si = i
+    mut ei := -1
+    for i in 0..prog.enums.len()
+        if last(prog.enums[i].name) == name
+            if ei < 0
+                or (module_at(prog.files, prog.enums[i].pos) == module and module_at(prog.files, prog.enums[ei].pos) != module)
+                ei = i
+    if si >= 0
+        s := prog.structs[si]
+        return derive.TypeInfo(
+            name: name,
+            id: "type:{name}",
+            module: module_at(prog.files, s.pos),
+            kind: derive.TypeKind.Struct,
+            is_error: s.is_error,
+            params: [g.name for g in s.generics],
+            fields: field_infos(prog, s.fields),
+            variants: [],
+        )
+    if ei < 0
+        return none
+    e := prog.enums[ei]
+    derive.TypeInfo(
+        name: name,
+        id: "type:{name}",
+        module: module_at(prog.files, e.pos),
+        kind: derive.TypeKind.Enum,
+        is_error: e.is_error,
+        params: [g.name for g in e.generics],
+        fields: [],
+        variants: [
+            derive.VariantInfo(name: v.name, fields: field_infos(prog, v.fields))
+            for v in e.variants
+        ],
+    )
+
+fn field_infos(prog ast.Program, fields List[ast.Field]) List[derive.FieldInfo]
+    [
+        derive.FieldInfo(
+            name: f.name,
+            type_text: unqualify(derive.show_type(f.ty), module_at(prog.files, f.pos)),
+            public: prog.public.contains(f.pos.line),
+            doc: f.doc else "",
+        )
+        for f in fields
+    ]
+
+## Split generated tokens into the methods of the `impl` and the associated
+## functions `fn T.name` of its type (ct.gen.1). `none`, with an error, for
+## anything else at the top level.
+@allow("expr.match.3")
+fn split(
+    toks List[syntax.Token],
+    job Job,
+    at ast.Pos,
+    mut errors List[syntax.Diag],
+)(List[syntax.Token], List[syntax.Token])?
+    mut starts := List[int]()
+    mut depth := 0
+    for i in 0..toks.len()
+        t := toks[i]
+        mut is_fn := false
+        mut skip := false
+        match t.tok
+            Indent => depth += 1
+            Dedent => depth = if depth > 0 then depth - 1 else 0
+            Newline => skip = true
+            Kw(w) =>
+                if w == "fn"
+                    is_fn = true
+            _ => 0
+        if is_fn and depth == 0
+            starts.push(i)
+        elif depth == 0 and starts.len() == 0 and not skip and not is_indent(t) and not is_dedent(t)
+            errors.push(at_impl(at, job, t.pos, "generated text must hold only method definitions"))
+            return none
+        # A top-level line that doesn't start with `fn`.
+        if depth == 0 and i > 0 and not is_fn and not skip and not is_indent(t) and not is_dedent(t)
+            if line_start(toks[i - 1])
+                errors.push(at_impl(
+                    at,
+                    job,
+                    t.pos,
+                    "generated text must hold only method definitions",
+                ))
+                return none
+    mut methods := List[syntax.Token]()
+    mut assoc := List[syntax.Token]()
+    for n in 0..starts.len()
+        s := starts[n]
+        end := if n + 1 < starts.len() then starts[n + 1] else toks.len()
+        chunk := toks[s..end]
+        mut owned := false
+        if chunk.len() > 2
+            match chunk[2].tok
+                Sym(x) => owned = x == "."
+                _ => 0
+        if not owned
+            methods.extend(chunk)
+            continue
+        mut matches := false
+        match chunk[1].tok
+            Ident(x) => matches = x == job.type_name
+            _ => 0
+        if not matches
+            errors.push(at_impl(
+                at,
+                job,
+                chunk[1].pos,
+                "generated functions outside the `impl` must belong to `{job.type_name}`",
+            ))
+            return none
+        assoc.extend(chunk)
+    (methods, assoc)
+
+@allow("expr.match.3") fn is_indent(t syntax.Token) bool
+    match t.tok
+        Indent => true
+        _ => false
+
+@allow("expr.match.3") fn is_dedent(t syntax.Token) bool
+    match t.tok
+        Dedent => true
+        _ => false
+
+@allow("expr.match.3") fn line_start(t syntax.Token) bool
+    match t.tok
+        Newline | Dedent => true
+        _ => false
+
+## ct.gen.3: an error about generated text, at the `impl`, with a note there.
+fn at_impl(at ast.Pos, job Job, gen_pos ast.Pos, message str) syntax.Diag
+    diag(
+        "ct.gen.1",
+        at,
+        "the code `{job.generator}` generated for this `impl` is invalid at gen:impl:{job.label}:{gen_pos.line % FILE_LINES}:{gen_pos.col}: {message}",
+        "make `{job.generator}` return only `fn` definitions for the `impl` and its type",
+    )
+
+## ct.gen.3: a diagnostic inside generated code is reported at the deriving
+## `impl`. After json.derive.1-2 names the field, the generated code's other
+## problems are its follow-ons.
+fn remap(prog ast.Program, diags List[syntax.Diag]) List[syntax.Diag]
+    if prog.generated.len() == 0
+        return diags
+    mut moved := List[syntax.Diag]()
+    mut is_gen := List[bool]()
+    mut gen_at := List[ast.Pos]()
+    for d in diags
+        mut hit := false
+        mut at := d.pos
+        mut nd := d
+        for g in prog.generated
+            base := prog.files[g.file].base
+            if d.pos.line > base and d.pos.line <= base + FILE_LINES
+                nd.pos = g.impl_pos
+                at = g.impl_pos
+                hit = true
+                break
+        moved.push(nd)
+        is_gen.push(hit)
+        gen_at.push(at)
+    mut named := List[ast.Pos]()
+    for k in 0..moved.len()
+        if is_gen[k] and moved[k].rule.starts_with("json.derive.")
+            named.push(moved[k].pos)
+    mut out := List[syntax.Diag]()
+    for k in 0..moved.len()
+        drop := is_gen[k]
+            and named.contains(gen_at[k])
+            and not moved[k].rule.starts_with("json.derive.")
+        if not drop
+            out.push(moved[k])
+    out

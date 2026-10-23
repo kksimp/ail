@@ -13,6 +13,8 @@
 #                                         in directory RT, for x86_64-linux (the default) or
 #                                         aarch64-linux or aarch64-macos (ADRs 0385, 0388, 0389;
 #                                         `ail build`)
+#   ail run compiler load FILE...         the program of `ail api --ast --program FILE` (ADR 0855)
+#   ail run compiler check-program [--json] FILE|DIR   `ail check` (ADR 0855)
 #   ail run compiler run FILE [ARGS...]   the native CLI's `ail run` (ADR 0855)
 #   ail run compiler prepare FILE         builds FILE into the cache and prints the executable's path
 #   ail run compiler build-many RT TARGET MS MB STD FILE...
@@ -29,6 +31,7 @@ use fix
 use fmt
 use derive
 use explain
+use load
 use mir
 use obj
 use syntax
@@ -122,6 +125,10 @@ fn main() !
             print(obj.hex(obj.pe_image(x64.generate_windows(x64.win_sample()))))
         "pe-sample" =>
             print(obj.hex(obj.pe_sample()))
+        "load" =>
+            load_dump(args[1..])
+        "check-program" =>
+            check_cmd(args[1..])
         "run" =>
             cli_run(args[1..])
         "prepare" =>
@@ -794,3 +801,39 @@ fn chop(s str) str
     if s.ends_with("\n")
         return s.chars()[..s.len() - 1].join("")
     s
+
+## `load FILE...`: the loaded program as `ail api --ast --program` prints it.
+fn load_dump(files List[str])
+    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
+    for f in files
+        if files.len() > 1
+            print("== {f}")
+        loaded := load.load(f, std) else err
+            io.eprint("{f}: error: {err.message}")
+            continue
+        print(loaded.program.to_json().to_text())
+        for d in loaded.diags
+            print("{d.pos.line}:{d.pos.col} diag {d.rule}")
+
+## `check-program [--json] FILE|DIR`: `ail check` on the native front end. The
+## diagnostics go to stderr as `ail check` prints them; the exit status is 2
+## when the program is rejected.
+fn check_cmd(rest List[str])
+    json := rest.contains("--json")
+    paths := [a for a in rest if not a.starts_with("--")]
+    if paths.len() != 1
+        io.eprint("usage: ail check [--json] FILE|DIR")
+        io.exit(2)
+    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
+    loaded := load.load(paths[0], std) else err
+        io.eprint("error: {err.message}")
+        io.exit(2)
+        return
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in check.check_program(loaded.program).diags]
+    if found.len() > 0
+        io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
+    for d in found
+        if not d.warning
+            io.exit(2)

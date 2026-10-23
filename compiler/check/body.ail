@@ -77,7 +77,7 @@ fn Checker.remap_generated(mut self)
             if at.line > base and at.line <= base + 1048576
                 diags[k] = diags[k].with_note(
                     at,
-                    "in the code `{g.generator}` generated for this `impl`",
+                    "in the code `{g.generator}` generated for this `impl`, at gen:impl:{g.label}:{at.line - base}:{at.col}",
                 )
                 diags[k].pos = g.impl_pos
                 diags[k] = json_field_problem(g, diags[k])
