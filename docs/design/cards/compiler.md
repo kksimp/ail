@@ -13,11 +13,11 @@ entry: main in main.ail
 
 ## derive (32 items)
 
-## fix (19 items)
+## fix (80 items)
 
 ## fmt (63 items)
 
-## mir (376 items)
+## mir (380 items)
 
 ## obj (58 items)
 

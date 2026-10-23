@@ -676,3 +676,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0854](0854-std-app-bitmap-op.md) | `std.app` `Bitmap` op: RGBA pixels in the display list, kept by the host under an id; Garlic sends decoded images once *(delegated)* | Accepted | 2026-10-22 |
 | [0839](0839-std-app-text-measure.md) | `std.app` text measure: the host reports advance widths for the app's runs, Garlic lays out with them *(delegated)* | Accepted | 2026-10-22 |
 | [0856](0856-native-compiler-runs-user-derive-generators.md) | The native compiler runs user `@derive` generators as a native program, so it needs no interpreter *(delegated)* | Accepted | 2026-10-22 |
+| [0860](0860-ail-fix-machinery-in-ail.md) | The machinery of `ail fix` (edit types, anchor resolution, driver) is ported to AIL (`compiler/fix/`), same fixes and output as the Rust tool *(delegated)* | Accepted | 2026-10-23 |
