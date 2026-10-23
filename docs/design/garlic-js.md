@@ -259,6 +259,13 @@ regex engine is written.
   and a registry that never calls back: nothing is collected while scripts
   run. `IntersectionObserver` and `ResizeObserver` take a callback and never
   fire, since Garlic has no scrolling or resizing the page can see.
+- `Proxy` and `Reflect` (`vm/proxy.ail`, ECMA-262 §10.5, §28.1): a proxy is
+  an object of class `Proxy` holding its target and handler; `get`, `set`,
+  `has` (the `in` operator), `deleteProperty`, `apply` and `construct`
+  traps run, and each falls through to the target without its trap. Own
+  keys, descriptors, the prototype and `Object.keys` read the target
+  without calling `ownKeys`, `getOwnPropertyDescriptor` or `getPrototypeOf`
+  traps. No `Proxy.revocable`, and no invariant checks on trap results.
 
 ## Generators and async functions
 
