@@ -14,7 +14,7 @@ pub struct load.Loaded  ## A loaded program with the diagnostics its loading fou
     pub program ast.Program
     pub diags List[syntax.Diag]
     pub texts List[str]  ## The source of each file of the program, in the order of `program.files`.
-pub fn load.load(arg str, std str) load.Loaded ! load.LoadError [env fail fs io]  ## Read the program at `arg`, a file or a package directory, with every module
+pub fn load.load(arg str, std str) load.Loaded ! load.LoadError [clock env fail fs io proc]  ## Read the program at `arg`, a file or a package directory, with every module
 pub struct load.Shown  ## One diagnostic ready to print, from the loader's or the checker's.
     pub rule str
     pub pos ast.Pos
@@ -23,10 +23,11 @@ pub struct load.Shown  ## One diagnostic ready to print, from the loader's or th
     pub notes List[check.Note]
     pub warning bool
     pub fixes List[str]  ## The titles of the fixes the diagnostic offers.
+    pub edits List[fix.Fix]  ## The edits of those fixes, positions as the checker made them; `report`
 pub fn load.shown_syntax(d syntax.Diag) load.Shown  ## A syntax or loading diagnostic.
 pub fn load.shown_check(d check.Diag) load.Shown  ## A checker diagnostic.
 pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## The file path and in-file position of `at`. Prelude positions stay as they
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
 ```
 
-trimmed to fit 2000 tokens (~567); dropped: private items
+trimmed to fit 2000 tokens (~599); dropped: private items

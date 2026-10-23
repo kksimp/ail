@@ -1,0 +1,25 @@
+## `fn f() !` has an inferred error set (err.type.6): when every `?` in it gives
+## the same error type, `else err` reads that type's fields.
+error struct ParseError
+    line int
+    msg str
+
+fn tokens(src str) List[str] ! ParseError
+    if src == ""
+        return ParseError(line: 1, msg: "empty")
+    src.split(" ")
+
+fn count(src str) int ! ParseError
+    xs := tokens(src)?
+    xs.len()
+
+fn run(src str) !
+    n := count(src)?
+    print("{n} tokens")
+    m := tokens(src)?
+    print(m.join(","))
+
+fn main()
+    for s in ["a b c", ""]
+        run(s) else err
+            print("error at {err.line}: {err.msg}")

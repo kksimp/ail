@@ -126,14 +126,13 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "body", ty: Ty.Str),
         Slot(name: "all_headers", ty: Ty.Map(key: Ty.Str, val: Ty.List(Ty.Str))),
     ]
-    # `data` is a `bytes`, which the native subset doesn't have: a placeholder.
     structs[NET_OPTIONS] = [
         Slot(name: "headers", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
         Slot(name: "query", ty: Ty.Map(key: Ty.Str, val: Ty.Str)),
         Slot(name: "body", ty: Ty.Str),
         Slot(name: "timeout_ms", ty: Ty.Int),
         Slot(name: "max_redirects", ty: Ty.Int),
-        Slot(name: "data", ty: Ty.Int),
+        Slot(name: "data", ty: Ty.Bytes),
         Slot(name: "connect_ms", ty: Ty.Int),
         Slot(name: "total_ms", ty: Ty.Int),
     ]

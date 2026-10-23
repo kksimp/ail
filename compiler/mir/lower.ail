@@ -47,6 +47,8 @@ struct Lower
     err_msgs Map[str, str]
     ## The error type of each function that can fail, when it names one.
     fn_errs Map[str, Ty]
+    ## Functions whose error set is inferred (`fn f() !`), to the error type their `?` calls give so far (lower_err.ail).
+    infer_errs Map[str, Ty]
     ## The type the next block's final expression should have (consumed by `lower_block`).
     tail_want Ty?
     ## Where the function's last expression begins: the trace line of an error it ends in.
@@ -224,6 +226,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         file_paths: [src.path for src in srcs],
         err_msgs: {"fs.IoError": "", "IoError": ""},
         fn_errs: {},
+        infer_errs: {},
         tail_want: none,
         tail_pos: ast.Pos(line: 1, col: 1),
         fails: false,
@@ -332,7 +335,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     for k in 0..lazy.min(srcs.len())
         l.enter_file(k)
         l.path = srcs[k].path
-        for f in program_fns(srcs[k].prog)
+        for f in inferred_first(l, program_fns(srcs[k].prog), l.prefix)
             if not is_test(f)
                 l.lower_fn(f)
         l.stamp_problems()
@@ -527,6 +530,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if can_fail
         if r := f.ret
             fn_errs[fn_key(f, pre)] = error_ty_of(r)
+            note_inferred_set(fn_key(f, pre), r)
     if pre != "rt."
         fn_decl[fn_key(f, pre)] = f
         fn_file[fn_key(f, pre)] = file
@@ -1230,6 +1234,8 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             uniq_replace(key)
             write_var(key, cur, assign_param(key, ty, v, pos))
         Index(recv, index, ipos) =>
+            if assign_after_rhs(target, op, value, pos)
+                return
             l := lower_value(recv, none) else return
             if l.ty.is_coll()
                 lower_map_assign(l, index, op, value, pos, ipos)
