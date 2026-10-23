@@ -1566,6 +1566,8 @@ fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
 
 ## A call `f(...)`, or a variant built by calling it.
 fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+    if ordered := label_ordered(callee, args)
+        return lower_call_expr(callee, ordered, pos, want)
     if is_generic_callee(callee)
         return lower_generic_callee(callee, args, pos, want)
     if v := call_variant(callee, want)

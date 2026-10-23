@@ -1,0 +1,26 @@
+# expr.call.3: named arguments bind by name and are evaluated in parameter order.
+struct Pt
+    x int
+    y int
+
+fn say(tag str, n int) int
+    print("eval {tag}")
+    n
+
+fn shift(p Pt, dx int, dy int) Pt
+    Pt(x: p.x + dx, y: p.y + dy)
+
+fn Pt.moved(self, dx int, dy int) Pt
+    Pt(x: x + dx, y: y + dy)
+
+fn pick[T](a T, b T, first bool) T
+    if first then a else b
+
+fn main()
+    p := Pt(x: 1, y: 1)
+    q := shift(p, dy: say("dy", 5), dx: say("dx", 2))
+    print("{q.x},{q.y}")
+    r := q.moved(dy: say("my", 1), dx: say("mx", 10))
+    print("{r.x},{r.y}")
+    print(pick(3, first: false, b: 4))
+    print(pick(b: "b", a: "a", first: true))
