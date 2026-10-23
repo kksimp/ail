@@ -2254,50 +2254,59 @@ pub fn escape(s str) str
         out.push("{c}")
     out.join("")
 
+## A `Regex` built by a literal from its pattern alone (std.regex.2) is
+## compiled here; a pattern that doesn't compile traps.
+fn ready(re Regex) Regex
+    if re.code.len() > 0
+        return re
+    r := compile(re.pat) else e
+        unreachable("std.regex.2: `regex.Regex(pat: ...)` holds a pattern that doesn't compile ({e.message}): make a regex with `regex.compile`")
+    r
+
 pub fn is_match(re Regex, text str) bool
-    m_is_match(re, text)
+    m_is_match(ready(re), text)
 
 pub fn find(re Regex, text str) Match?
-    m_find(re, text)
+    m_find(ready(re), text)
 
 pub fn find_all(re Regex, text str) List[Match]
-    m_find_all(re, text)
+    m_find_all(ready(re), text)
 
 pub fn captures(re Regex, text str) Captures?
-    m_captures(re, text)
+    m_captures(ready(re), text)
 
 pub fn group_all(re Regex, text str, group int) List[str]
-    m_group_all(re, text, group)
+    m_group_all(ready(re), text, group)
 
 pub fn replace(re Regex, text str, rep str) str
-    m_replace(re, text, rep)
+    m_replace(ready(re), text, rep)
 
 pub fn replace_first(re Regex, text str, rep str) str
-    m_replace_first(re, text, rep)
+    m_replace_first(ready(re), text, rep)
 
 pub fn split(re Regex, text str) List[str]
-    m_split(re, text)
+    m_split(ready(re), text)
 
 pub fn Regex.is_match(self, text str) bool
-    m_is_match(self, text)
+    m_is_match(ready(self), text)
 
 pub fn Regex.find(self, text str) Match?
-    m_find(self, text)
+    m_find(ready(self), text)
 
 pub fn Regex.captures(self, text str) Captures?
-    m_captures(self, text)
+    m_captures(ready(self), text)
 
 pub fn Regex.find_all(self, text str) List[Match]
-    m_find_all(self, text)
+    m_find_all(ready(self), text)
 
 pub fn Regex.group_all(self, text str, group int) List[str]
-    m_group_all(self, text, group)
+    m_group_all(ready(self), text, group)
 
 pub fn Regex.replace(self, text str, rep str) str
-    m_replace(self, text, rep)
+    m_replace(ready(self), text, rep)
 
 pub fn Regex.replace_first(self, text str, rep str) str
-    m_replace_first(self, text, rep)
+    m_replace_first(ready(self), text, rep)
 
 pub fn Regex.split(self, text str) List[str]
-    m_split(self, text)
+    m_split(ready(self), text)

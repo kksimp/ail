@@ -360,6 +360,9 @@ pub fn Window.set_title(mut self, text str)
     title = text
 
 pub fn Window.set_font_size(mut self, px int)
+    # std.ui.15: a window that is not open keeps 20.
+    if not live
+        return
     mut best := 20
     mut gap := 1000
     for n in [10, 12, 13, 14, 15, 18, 20, 24, 26, 28, 30, 36, 40]
@@ -371,7 +374,7 @@ pub fn Window.set_font_size(mut self, px int)
 
 ## std.ui.15: a window opens at 20.
 pub fn Window.font_size(self) int
-    px
+    if live then px else 20
 
 pub fn Window.close(mut self)
     shut()
