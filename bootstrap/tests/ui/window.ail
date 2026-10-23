@@ -1,0 +1,21 @@
+use std.ui
+
+fn main()
+    mut w := ui.open("T", 30, 10) else err
+        print("no window: {err.kind}")
+        return
+    print("size {w.size().cols}x{w.size().rows}")
+    w.clear(0x202020)
+    w.put(1, 1, "hi", 0xFFFFFF, 0x202020)
+    w.present()
+    while true
+        match w.next_event()
+            Key(k, c, a, s) => print("key {k} {c} {a} {s}")
+            Mouse(c, r, b, k) => print("mouse {c},{r} {b} {k}")
+            Scroll(n) => print("scroll {n}")
+            Resize(c, r) => print("resize {c}x{r}")
+            Close =>
+                print("close")
+                break
+        w.present()
+    print(w.size().cols)

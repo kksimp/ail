@@ -852,6 +852,8 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     body := f.body else
         lower_extern(f, name, params)
         return
+    if lower_ui_intrinsic(f, key, name, params)
+        return
     if not unchecked
         enter_contracts(f, key)
     want := not ret.is_unit()
@@ -1129,6 +1131,8 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
                 finish(return_of(-1))
         Eval(e) =>
             note_statement(e)
+            if is_pop_call(e) and lower_pop_stmt(e) != none
+                return
             lower_expr(e, Ty.Unit)
         Handle(value, other) => lower_handle(value, other)
         Defer(st, _) => defer_note(st)

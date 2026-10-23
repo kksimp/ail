@@ -84,6 +84,43 @@ fn shape_fault_n(n int, shape List[int]) int
         return str_addr(sb_str())
     0
 
+## The message of `tensor.zeros(shape)` failing (std.tensor.2), or 0.
+fn tensor_zeros_fault(shape List[int]) int
+    sp := list_addr(shape)
+    rank := load64(sp)
+    d := load64(sp + 16)
+    mut count := 1
+    for i in 0..rank
+        s := load64(d + 8 * i)
+        if s < 0
+            sb_reset()
+            sb_text("a tensor's sizes can't be negative, and the shape is ")
+            put_sizes(d, rank)
+            return str_addr(sb_str())
+        if s != 0 and count > 1099511627776 / s
+            sb_reset()
+            sb_text("the shape ")
+            put_sizes(d, rank)
+            sb_text(" has too many elements")
+            return str_addr(sb_str())
+        count = count * s
+    0
+
+## `tensor.zeros(shape)` of `kind` (0 int, 1 float) once `tensor_zeros_fault`
+## found nothing wrong: the data is fresh memory, which is zero words.
+fn tensor_zeros(shape List[int], kind int) int
+    sp := list_addr(shape)
+    rank := load64(sp)
+    d := load64(sp + 16)
+    mut count := 1
+    for i in 0..rank
+        count = count * load64(d + 8 * i)
+    t := tensor_new(kind, rank, count)
+    tensor_copy_words(t + 32, d, rank)
+    for i in 0..count
+        store64(tensor_data(t) + 8 * i, 0)
+    t
+
 ## `tensor.from(xs, shape)` once `tensor_shape_fault` found nothing wrong.
 fn tensor_from_shape(xs List[int], kind int, shape List[int]) int
     q := list_addr(xs)

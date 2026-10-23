@@ -1,0 +1,25 @@
+## `std.ui` functions that only the runtime can do (std.ui.12, ADR 0177): the
+## module is written in AIL (bootstrap/src/std/ui/ui.ail); the clipboard
+## functions have no body there, and their lowering is a call of the
+## runtime's `ui_clip_set` and `ui_clip_get`.
+use ast
+
+## Lower `f` (the function `key`, with parameter values `params`) as a
+## runtime call when it is one of those; whether it was.
+fn Lower.lower_ui_intrinsic(mut self, f ast.FnDecl, key str, name str, params List[int]) bool
+    if key == "std.ui.clipboard_set"
+        call("rt.ui_clip_set", params, Ty.Unit)
+        finish(return_of(-1))
+        end_fn(name, f.pos)
+        return true
+    if key == "std.ui.clipboard_get"
+        r := call("rt.ui_clip_get", [], Ty.Opt(Ty.Str))
+        finish(return_of(r))
+        end_fn(name, f.pos)
+        return true
+    if key == "std.ui.chan_ready"
+        r := call("rt.chan_ready", params, Ty.Bool)
+        finish(return_of(r))
+        end_fn(name, f.pos)
+        return true
+    false
