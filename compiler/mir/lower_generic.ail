@@ -564,6 +564,11 @@ fn Lower.generic_member_ref(self, e ast.Expr) str?
         Name(n, _) =>
             if lookup(n) == none and traits.impls.contains(trait_key(n))
                 return trait_key(n)
+            if lookup(n) == none
+                if t := gen.tsubst.get(n)
+                    if t.elem() != none and not t.is_coll()
+                        # A type parameter bound to a list (`T.default()`, T = `List[str]`).
+                        return "#tparam:{n}"
             generic_enum_ref(e)
         _ => generic_enum_ref(e)
 
@@ -579,6 +584,11 @@ fn Lower.generic_member(
     pos ast.Pos,
     want Ty?,
 ) Val?
+    if g.starts_with("#tparam:")
+        t := gen.tsubst[g.slice(8, g.len())]
+        key := builtin_method(t, name) else return unsupported(pos, "`.{name}()` on `{t.name()}`")
+        call_args := args else return unsupported(pos, "`{name}` without a call")
+        return struct_call(key, none, call_args, pos)
     if traits.impls.contains(g) and gen.types.get(g) == none
         # `Trait.method(x, ...)` (trait.res.1): the method of `x`'s type.
         call_args := args else return unsupported(pos, "`{g}.{name}` without a call")

@@ -1653,6 +1653,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             and not is_pending_opt(elem)
             and not elem.is_coll()
             and not elem.is_ref()
+            and not elem.is_fn()
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
     l := call("rt.list_new", [n], Ty.List(elem))
@@ -1724,7 +1725,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
-            unsupported(pos, "this call")
+            call_member_value(callee, args, pos)
         TypeArgs(name, targs, tpos) =>
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(targs, args, pos)

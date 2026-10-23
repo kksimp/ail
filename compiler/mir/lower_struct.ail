@@ -237,6 +237,10 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
             # The derived `cmp` of `impl Ord for T` with no body (trait.std.2).
             other := lower_value(args[0].value, r.ty)?
             return lower_cmp(r, other, pos)
+        if key.ends_with(".to_str") and args.len() == 0 and not sigs.contains(key)
+            # The default text of a struct or enum with no `to_str` (trait.auto.2).
+            t := display_call(r) else return unsupported(pos, "`.to_str()` on `{r.ty.name()}`")
+            return Val(id: t, ty: Ty.Str)
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
         return proc_output_method(key, recv, args, pos)
     if key.starts_with("net.")

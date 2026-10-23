@@ -400,7 +400,17 @@ fn Lower.is_get_call(self, e ast.Expr) bool
 
 # ---- methods ----
 
+fn set_elem(t Ty) Ty?
+    match t
+        Set(e) => e
+        _ => none
+
 fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    # `s.sorted(by: |x| e)` sorts the set's elements as a list (expr.key.1).
+    if name == "sorted" and args.len() == 1 and not is_pending_table(r.ty)
+        if et := set_elem(r.ty)
+            keys := call("rt.map_keys", [r.id], Ty.List(et))
+            return lower_sorted(Val(id: keys, ty: Ty.List(et)), name, args, npos)
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "`.{name}()` with a labelled or `mut` argument")

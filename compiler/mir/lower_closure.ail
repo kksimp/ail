@@ -40,10 +40,12 @@ fn Lower.count_close(mut self, c KeyLoop)
 ## Whether `name` with these arguments is `sorted` or `sort` with a key
 ## function; the plain forms are in lower_list.ail.
 fn is_sorting(name str, args List[ast.Arg]) bool
-    (name == "sorted" or name == "sort") and args.len() > 0
+    ((name == "sorted" or name == "sort") and args.len() > 0) or is_extreme_by(name, args)
 
 ## `r.sorted()`, `r.sorted(by: |x| e)`, `r.sort()`, `r.sort(by: |x| e)`.
 fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
+    if is_extreme_by(name, args)
+        return lower_extreme_by(r, name, args, npos)
     e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if e.is_unknown() or not (e == Ty.Int or e == Ty.Float or e == Ty.Str or structural(e))
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
@@ -104,6 +106,53 @@ fn Lower.lower_sorted(mut self, r Val, name str, args List[ast.Arg], npos ast.Po
     count_close(c2)
     Val(id: -1, ty: Ty.Unit)
 
+## Whether `name` with these arguments is `min` or `max` with a key function.
+fn is_extreme_by(name str, args List[ast.Arg]) bool
+    (name == "min" or name == "max") and args.len() == 1 and args[0].param != none
+
+## `r.min(by: |x| e)`, `r.max(by: |x| e)` (expr.key.4): the first element with
+## the least (greatest) key as a `T?`. The keys are made as in `sorted`.
+fn Lower.lower_extreme_by(mut self, r Val, name str, args List[ast.Arg], npos ast.Pos) Val?
+    e := r.ty.elem() else return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    if e.is_unknown()
+        return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
+    a := args[0]
+    by := a.label else return unsupported(npos, "`.{name}()` with this argument")
+    x := a.param else return unsupported(npos, "`.{name}()` with this argument")
+    if by.name != "by" or a.mutable or a.moved
+        return unsupported(npos, "`.{name}()` with this argument")
+    n := op("len", [r.id], Ty.Int)
+    keys := call("rt.list_new", [n], Ty.List(Ty.Int))
+    mut kt := Ty.Int
+    c := count_open(n)
+    scopes.push(Map[str, str]())
+    declare(x.name, e, op("get", [r.id, c.i], e))
+    k := lower_value(a.value, Ty.Int)
+    scopes.pop()
+    if kv := k
+        if kv.ty == Ty.Int or kv.ty == Ty.Float or kv.ty == Ty.Str or orderable_record(kv.ty)
+            kt = kv.ty
+            call(push_fn(kt), [keys, kv.id], Ty.Unit)
+        else
+            problem(
+                expr_pos(a.value),
+                "not in the native subset yet: a key of type `{kv.ty.name()}`",
+            )
+    count_close(c)
+    greatest := konst(if name == "max" then 1 else 0, Ty.Int)
+    idx := if kt == Ty.Int then call(
+        "rt.list_extreme",
+        [keys, konst(0, Ty.Int), greatest],
+        Ty.Int,
+    ) else if kt == Ty.Float
+        or kt == Ty.Str then call(
+            "rt.list_extreme",
+            [keys, konst(if kt == Ty.Str then 1 else 2, Ty.Int), greatest],
+            Ty.Int,
+        ) else call("rt.list_extreme_by", [keys, compare_fn(lt_fn(kt)), greatest], Ty.Int)
+    found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
+    opt_at(r, found, idx, e, false, npos)
+
 ## A declared function used as a value (type.fn.2): its address. `none` if
 ## `name` isn't a function of the program.
 fn Lower.fn_value(mut self, name str, pos ast.Pos) Val?
@@ -150,6 +199,13 @@ fn Lower.call_value(mut self, f Val, args List[ast.Arg], pos ast.Pos) Val?
         emit_void(i)
         return Val(id: -1, ty: Ty.Unit)
     Val(id: emit(i, sig.ret), ty: sig.ret)
+
+## `(x.f)(args)` where the field `f` holds a function value (type.fn.3).
+fn Lower.call_member_value(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) Val?
+    f := lower_value(callee, none)?
+    if not f.ty.is_fn()
+        return unsupported(pos, "this call")
+    call_value(f, args, expr_pos(callee))
 
 ## `unreachable(message)` (err.model.2): a trap that ends the block.
 fn Lower.lower_unreachable(mut self, args List[ast.Arg], pos ast.Pos) Val?
