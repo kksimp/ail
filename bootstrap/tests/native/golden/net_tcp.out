@@ -1,0 +1,16 @@
+true
+hello
+world
+rest
+hé
+llo 
+wörld
+read: timed_out
+0
+end
+write: closed
+connect: refused
+listen: bind
+listen: bad_url
+connect: not_found
+connect: refused

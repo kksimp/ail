@@ -15,6 +15,7 @@ pub struct gfx.Scene  ## A laid-out page: its drawing operations, links and size
     pub height float
     pub bg int  ## The canvas color (the `body` or `html` background, else white).
     pub probes List[gfx.Probe]  ## The text runs whose widths were estimated, not measured.
+    pub bits Map[str, images.Bitmap]  ## Pictures drawn by the layout itself (inline SVG), by the `src` of their `Pic`.
     pub fn gfx.Scene.hit_at(self, x float, y float) gfx.Hit?  ## The link or control under point (`x`, `y`) of the page, if any.
     pub fn gfx.Scene.link_at(self, x float, y float) str?  ## The link under point (`x`, `y`) of the page, if any.
 pub struct gfx.Probe  ## A text run whose width the host can measure (docs/spec/std-app.md,
@@ -32,4 +33,4 @@ pub fn gfx.layout_with(d html.Doc, url str, width float, sheet css.Sheet, sizes 
 pub fn gfx.layout_measured(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]], meas Map[str, float], editing int) gfx.Scene  ## `layout_with` using the run widths in `meas` (`probe_key`), drawing text
 ```
 
-trimmed to fit 2000 tokens (~747); dropped: private items
+trimmed to fit 2000 tokens (~788); dropped: private items
