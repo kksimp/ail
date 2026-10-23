@@ -851,7 +851,7 @@ fn Lower.display_call(mut self, v Val) int?
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
     # No `to_str` and no message: the default text of trait.auto.2.
-    default_error_text(key, v)
+    nested_default(key, v)
 
 ## The text of an error type with no message: its default form,
 ## `Name(field: value, ...)` for a struct and `Enum.Variant(field: value)`

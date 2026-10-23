@@ -145,6 +145,8 @@ struct Lower
     ## the variants without fields that have a shared object.
     enums Map[str, List[Case]]
     eq_tys Map[str, Ty]
+    ## The types whose default text is being expanded (ADR 0864).
+    text_open List[str]
     singletons List[VariantRef]
     ## Program globals by key (ADR 0604), and the constants computed into
     ## them at start-up.
@@ -280,6 +282,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         ens_nargs: 0,
         enums: {},
         eq_tys: {},
+        text_open: [],
         singletons: [],
         globals: {},
         global_consts: [],
