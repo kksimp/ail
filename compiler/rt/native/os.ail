@@ -800,6 +800,10 @@ fn os_io_read_line() str
 
 ## `io.read_all()` (std.io.2): the rest of standard input.
 fn io_read_all() str
+    os_lossy(str_addr(io_read_bytes()))
+
+## `io.read_bytes()`: the rest of standard input, undecoded (std.io.1).
+fn io_read_bytes() str
     mut cap := 4096
     mut s := str_new(cap, 0)
     mut n := 0
@@ -821,7 +825,7 @@ fn io_read_all() str
         store64(global(IN_POS), pos + take)
     store64(s, n)
     os_succeed()
-    os_lossy(s)
+    str_at(s)
 
 # ---- the lowering's entry points (lower_os.ail) ----
 
@@ -906,6 +910,11 @@ fn fs_write_bytes(path str, data str, at str)
 
 fn fs_append_text(path str, text str, at str)
     os_fs_append_text(path, text)
+    if not os_ok()
+        os_error(path, os_kind(), at)
+
+fn fs_append_bytes(path str, data str, at str)
+    os_fs_append_text(path, data)
     if not os_ok()
         os_error(path, os_kind(), at)
 

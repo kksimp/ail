@@ -1,0 +1,16 @@
+# fs.append_bytes (std.fs.3) and io.read_bytes (std.io.1).
+fn main()
+    path := "/tmp/ail_fs_append_bytes.bin"
+    fs.write_bytes(path, b"") else err
+        print("write {err.kind}")
+        return
+    fs.append_bytes(path, b"ab\x00") else err
+        print("append {err.kind}")
+        return
+    fs.append_bytes(path, b"cd\xff") else err
+        print("append {err.kind}")
+        return
+    print(fs.read_bytes(path) else b"")
+    fs.append_bytes("/tmp/ail_no_such_dir/x.bin", b"x") else err
+        print("missing {err.kind}")
+    print(io.read_bytes())
