@@ -128,6 +128,8 @@ struct Lower
     problem_files List[int]
     ## The functions with contracts, by key, and the file of every function.
     contracted Map[str, ast.FnDecl]
+    ## What an impl method inherits from its trait's method (contract.inh.1-3).
+    inh Inherit
     ## The structs with `invariant` lines, and the file of each.
     invariants Map[str, List[ast.Contract]]
     inv_file Map[str, int]
@@ -276,6 +278,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         const_home: {},
         problem_files: [],
         contracted: {},
+        inh: Inherit(of: {}, label: {}, ens_from: none, ens_n: 0, ens_origin: ""),
         invariants: {},
         inv_file: {},
         inv_key: "",
@@ -454,6 +457,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             continue
         before := problems.len()
         declare_fn(f, pre)
+        note_inherited(f, prog, pre)
         if problems.len() > before
             bad.add(fn_key(f, pre))
             sigs.remove(fn_key(f, pre))
