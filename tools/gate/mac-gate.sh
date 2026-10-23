@@ -23,6 +23,13 @@ run() { # run NAME CMD...
 }
 # The cargo copies of the ported suites are deleted (B6's list); --full runs what is left.
 [ "$full" = 1 ] && run selftest ./ail selftest --no-fail-fast
+# Self-host stage 1: the native compiler must build from compiler/main.ail. nativex reuses it
+# (NATIVE_COMPILER), so this is not an extra build; a failure is red here and in nativex.
+if ./ail build compiler/main.ail -o "$out/native-compiler" >"$out/selfhost1.log" 2>&1; then
+  export NATIVE_COMPILER="$out/native-compiler"
+else
+  fails=$((fails+1)); echo "RED selfhost stage 1: ./ail build compiler/main.ail"; head -8 "$out/selfhost1.log" | cut -c1-200
+fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
 # The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.

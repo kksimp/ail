@@ -1,0 +1,25 @@
+# `for x in path` sees the list as it was (expr.loop.3), also when the path
+# is a field that a call in the body changes through `mut self`.
+struct Node
+    kids List[int]
+
+struct Tree
+    nodes List[Node]
+
+fn Tree.detach(mut self, c int)
+    for i in 0..nodes[0].kids.len()
+        if nodes[0].kids[i] == c
+            nodes[0].kids.remove_at(i)
+            return
+
+fn Tree.clear(mut self) int
+    mut seen := 0
+    for c in nodes[0].kids
+        detach(c)
+        seen += 1
+    seen
+
+fn main()
+    mut t := Tree(nodes: [Node(kids: [1, 2, 3, 4, 5])])
+    print(t.clear())
+    print(t.nodes[0].kids)

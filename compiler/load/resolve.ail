@@ -30,7 +30,7 @@ struct Resolver
     diags List[syntax.Diag]
 
 fn diag(rule str, at ast.Pos, msg str, help str) syntax.Diag
-    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "")
+    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "", edits: [])
 
 fn qualified(module str, name str) str
     if module == ""
