@@ -182,7 +182,7 @@ fn Checker.tensor_method(
         args_only(args)
         mut d := new_diag("std.tensor.3", at, "`tensor.Tensor` has no method `{n}`")
         if s := suggest(n, TENSOR_METHODS)
-            d = d.did_you_mean(s)
+            d = d.did_you_mean_help(s)
         else
             d = d.with_help("a tensor's methods are {list_names(TENSOR_METHODS)}")
         diags.push(d)

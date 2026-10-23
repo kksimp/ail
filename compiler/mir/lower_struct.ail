@@ -239,8 +239,19 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
             return derived_cmp(r, args[0], pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
     mut vs := List[int]()
+    mut cells := List[Cell]()
     if r := recv
-        vs.push(shield_recv(rcv, args, r))
+        if ct := cell_ty(sig.params[0])
+            e := rcv.expr else
+                problem(pos, "this `mut self` receiver isn't a variable, field or element")
+                return none
+            if rcv.path.len() == 0
+                problem(pos, "this `mut self` receiver isn't a variable, field or element")
+                return none
+            vs.push(new_cell(r.id))
+            cells.push(Cell(key: "", place: e, cell: vs[0], ty: ct, pos: pos))
+        else
+            vs.push(shield_recv(rcv, args, r))
     if args.len() + vs.len() != sig.params.len()
         return unsupported(
             pos,
@@ -251,10 +262,15 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         t := sig.params[vs.len()]
+        if ct := cell_ty(t)
+            vs.push(cell_arg(a, ct, mut cells)?)
+            continue
         v := lower_value(a.value, t)?
         vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
-    Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    res := Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    cells_back(cells)
+    res
 
 ## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
 ## status is zero; the standard output followed by the standard error.

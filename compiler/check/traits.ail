@@ -346,7 +346,7 @@ fn Checker.check_impls(mut self)
                 names := [prog.fns[k].name for k in decl.methods]
                 mut d := new_diag("trait.impl.5", f.pos, "`{decl.name}` has no method `{f.name}`")
                 d = if s := suggest(f.name, names)
-                    d.did_you_mean(s)
+                    d.did_you_mean(f.name, s)
                 else
                     d.with_help("a method that isn't part of the trait is declared on its own: `fn {imp.target.name}.{f.name}(...)`")
                 diags.push(d)
