@@ -561,6 +561,7 @@ fn Lower.else_part(
                     declare(n.name, err, op("copy", [raw], err))
             elif not opt
                 call("rt.err_clear", [], Ty.Unit)
+            tail_want = if r >= 0 and not t.is_unknown() then t else none
             v := lower_block(body, r >= 0)
             if not done()
                 if r >= 0
