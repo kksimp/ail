@@ -1,0 +1,21 @@
+0
+hello $HOME
+true
+3
+oops
+apple
+fig
+pear
+
+done
+137
+proc.ProcError(cmd: "sleep", kind: "timed_out")
+-1
+proc.ProcError(cmd: "ail-no-such-program", kind: "not_found")
+-1
+true
+true
+300000
+bye
+200000
+labelled
