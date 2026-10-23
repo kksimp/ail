@@ -104,7 +104,7 @@ fn parse_params(text str) List[Param]
         out.push(Param(name: part.slice(0, sp), ty: part.slice(sp, part.len()).trim()))
     out
 
-SCALARS := ["int", "float", "bool", "char", "str"]
+SCALARS := ["int", "float", "bool", "char", "str", "bytes"]
 
 ## A variant of an enum, or the one unnamed variant of a struct.
 struct Variant
@@ -629,6 +629,19 @@ fn gen(w World, ty Ty, mut rng Rng, size int, depth int) Node
         for _ in 0..rng.below(size / 4 + 2)
             text = "{text}{gen_char(mut rng)}"
         return txt_node(text)
+    if k == "bytes"
+        mut octets := List[Node]()
+        for _ in 0..rng.below(size / 4 + 2)
+            r := rng.below(8)
+            if r == 0
+                octets.push(num_node(0))
+            elif r == 1
+                octets.push(num_node(255))
+            elif r == 2
+                octets.push(num_node(97 + rng.below(26)))
+            else
+                octets.push(num_node(rng.below(256)))
+        return kid_node(octets)
     if k == "list" or k == "set" or k == "map"
         n := if depth >= 3 then 0 else rng.below((size / 10).min(10) + 2)
         mut kids := List[Node]()
@@ -764,6 +777,14 @@ fn shrinks(w World, ty Ty, v Node) List[Node]
             for i in 0..cs.len().min(8)
                 if cs[i] != 'a'
                     out.push(txt_node("{chars_text(cs, 0, i)}a{chars_text(cs, i + 1, cs.len())}"))
+    elif k == "bytes"
+        for shorter in shorten(v.kids, 1)
+            out.push(kid_node(shorter))
+        for i in 0..v.kids.len().min(8)
+            if v.kids[i].n != 0
+                mut d := v.kids
+                d[i] = num_node(0)
+                out.push(kid_node(d))
     elif k == "list" or k == "set" or k == "map"
         stride := if k == "map" then 2 else 1
         for shorter in shorten(v.kids, stride)
@@ -819,6 +840,11 @@ fn show(w World, ty Ty, v Node) str
         return "'{escape(v.s, "'")}'"
     if k == "str"
         return "\"{escape(v.s, "\"")}\""
+    if k == "bytes"
+        mut text := "b\""
+        for o in v.kids
+            text = "{text}{byte_text(o.n)}"
+        return "{text}\""
     if k == "list"
         return "[{[show(w, ty.kids[0], x) for x in v.kids].join(", ")}]"
     if k == "set"
@@ -840,6 +866,22 @@ fn show(w World, ty Ty, v Node) str
         parts.push("{vr.fields[j].name}: {show(w, fts[j], v.kids[j])}")
     head := if k == "enum" then "{ty.name}.{vr.name}" else ty.name
     if parts.is_empty() then head else "{head}({parts.join(", ")})"
+
+## One byte inside a `b"..."` literal (type.bytes.2).
+fn byte_text(n int) str
+    if n == 34
+        return "\\\""
+    if n == 92
+        return "\\\\"
+    if n == 10
+        return "\\n"
+    if n == 9
+        return "\\t"
+    if n == 13
+        return "\\r"
+    if n >= 32 and n <= 126
+        return "{char.from_code(n) else 'a'}"
+    "\\x{if n < 16 then "0" else ""}{n.to_hex()}"
 
 fn escape(s str, quote str) str
     mut out := ""
@@ -869,6 +911,11 @@ fn tokens(w World, ty Ty, v Node) List[str]
         out.push("{v.x}")
     elif k == "char" or k == "str"
         out.push(v.s)
+    elif k == "bytes"
+        mut hex := ""
+        for o in v.kids
+            hex = "{hex}{if o.n < 16 then "0" else ""}{o.n.to_hex()}"
+        out.push(hex)
     elif k == "list" or k == "set"
         out.push("{v.kids.len()}")
         for x in v.kids
@@ -941,6 +988,8 @@ fn decoders(w World, ty Ty, mut done Set[str]) str
         body = "    x := t[c.i].chars()[0]\n    c.i += 1\n    x\n"
     elif k == "str"
         body = "    x := t[c.i]\n    c.i += 1\n    x\n"
+    elif k == "bytes"
+        body = "    x := bytes.from_hex(t[c.i]) else b\"\"\n    c.i += 1\n    x\n"
     elif k == "list" or k == "set"
         add := if k == "list" then "push" else "add"
         body = "    n := t[c.i].to_int() else 0\n    c.i += 1\n    mut out := {ty.text}()\n    for _ in 0..n\n        out.{add}({decoder_name(ty.kids[0])}(t, mut c))\n    out\n"
