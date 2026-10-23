@@ -261,6 +261,20 @@ regex engine is written.
   control pressed, `mouseup` and `click` (a cancelled `mousedown` only keeps
   the focus). `KeyboardEvent` and `MouseEvent` start with empty
   `key`/`code` and zero coordinates, as in Chromium.
+- Events (`vm/events.ail`): each interface (`KeyboardEvent`, `MouseEvent`,
+  `PointerEvent`, `ErrorEvent`, `MessageEvent`, ... 22 of them) has its own
+  prototype under its parent's and starts with its dictionary's defaults;
+  `Event.NONE` and the phases exist; `new Event()` needs a type;
+  `composedPath()` is the path while dispatching. An uncaught exception is
+  reported to the window as a cancellable `ErrorEvent` first, and
+  `window.onerror` gets `(message, source, line, column, error)` where
+  `true` cancels; an unhandled rejection fires `unhandledrejection` the same
+  way. `readystatechange` fires at `interactive` and `complete`. Handler
+  properties (`onpointerdown`, ...) exist on elements and the window, but
+  `ontouch...` ones don't, as on a desktop. Timers started by timers nest:
+  from the 7th level a timer waits at least 4 ms (measured against
+  Chromium; the HTML spec says after 5). `lineno`/`colno` of an
+  `ErrorEvent` are 0.
 
 ## Generators and async functions
 
