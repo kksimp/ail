@@ -1924,6 +1924,8 @@ fn Lower.lower_method(
     args List[ast.Arg],
     want Ty?,
 ) Val?
+    if rest := trait_call_args(recv, args)
+        return lower_method(args[0].value, name, npos, rest, want)
     # std.env.1
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)
