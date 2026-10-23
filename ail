@@ -83,11 +83,11 @@ if [ "${1:-}" = build ] && [ -n "${AIL_NATIVE_COMPILER:-}" ]; then
     fi
 fi
 
-# `AIL_NATIVE_CLI=1` (ADR 0855): `ail fmt ...` and `ail run FILE [ARGS]` are done by the native CLI (compiler/main.ail
+# `AIL_NATIVE_CLI=1` (ADR 0855): `ail fmt ...`, `ail test FILE` (tools/ailtest) and `ail run FILE [ARGS]` are done by the native CLI (compiler/main.ail
 # built natively into .native/ail, by the Rust ail or by the published seed when there is no Rust): `check-program` first,
 # then the program from the build cache, exec'd so it keeps the terminal. Anything
 # else, and `run` with options before the file, goes to the Rust `ail` below.
-if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { { [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || [ "${1:-}" = fmt ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; }; }; then
+if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { { [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || [ "${1:-}" = fmt ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
@@ -106,6 +106,7 @@ if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { { [ "${1:-}" = run ] && [ -n "${2:-}" ] &&
         fi
     fi
     if [ "$1" = fmt ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fmt "$@"; fi
+    if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
     AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$2" || exit $?
     exe="$(AIL_COMPILER="$root/compiler" "$native" prepare "$2")" || exit $?
