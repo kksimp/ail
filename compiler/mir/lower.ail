@@ -1412,11 +1412,23 @@ fn Lower.lower_for(
 
 ## Whether a loop body may change the list it iterates (so the loop needs
 ## a copy: `for x in xs` sees the list as it was, expr.loop.3).
+## A path such as `dom[id].children` may be a field of `self`, which any
+## call in the body can change through an implicit `mut self`, so for a
+## path every call counts too ("#call").
 fn mutates(body List[ast.Stmt], iter ast.Expr) bool
-    name := match iter
+    match iter
+        Name(n, _) => block_mutates(body, n)
+        Index(_, _, _) | Member(_, _, _) =>
+            root := path_root(iter) else return false
+            block_mutates(body, root) or block_mutates(body, "#call")
+        _ => false
+
+fn path_root(e ast.Expr) str?
+    match e
         Name(n, _) => n
-        _ => return false
-    block_mutates(body, name)
+        Index(r, _, _) => path_root(r)
+        Member(r, _, _) => path_root(r)
+        _ => none
 
 fn block_mutates(body List[ast.Stmt], name str) bool
     for s in body
@@ -1453,10 +1465,11 @@ fn args_mutate(args List[ast.Arg], name str) bool
 ## argument naming it, counts as a change.
 fn expr_mutates(e ast.Expr, name str) bool
     match e
-        Method(recv, m, _, args) => root_is(recv, name) and m != "len"
+        Method(recv, m, _, args) => name == "#call"
+            or root_is(recv, name) and m != "len"
             or args_mutate(args, name)
             or expr_mutates(recv, name)
-        Call(_, args, _) => args_mutate(args, name)
+        Call(_, args, _) => name == "#call" or args_mutate(args, name)
         Binary(_, a, b, _) => expr_mutates(a, name) or expr_mutates(b, name)
         Unary(_, a, _) => expr_mutates(a, name)
         Index(r, i, _) => expr_mutates(r, name) or expr_mutates(i, name)
