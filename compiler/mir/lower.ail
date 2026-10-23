@@ -213,7 +213,7 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
 ## `lower_package` with the sources from `lazy` on the prelude's, lowered
 ## as the program reaches them (ADR 0808).
 pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
-    srcs := with_error_owners(input)
+    srcs := with_error_owners(shadow_free(input, lazy))
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
