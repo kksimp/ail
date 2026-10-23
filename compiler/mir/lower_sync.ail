@@ -95,7 +95,13 @@ fn Lower.lower_sync_method(mut self, r Val, name str, npos ast.Pos, args List[as
     for a in args
         if a.mutable or a.label != none
             return unsupported(npos, "this method call")
+    if r.ty == Ty.Int and name == "cancel" and args.len() == 0
+        call("rt.task_cancel", [r.id], Ty.Unit)
+        return Val(id: -1, ty: Ty.Unit)
     if r.ty == Ty.Group
+        if name == "cancel" and args.len() == 0
+            call("rt.group_cancel", [r.id], Ty.Unit)
+            return Val(id: -1, ty: Ty.Unit)
         if name == "add" and args.len() == 1
             rec := group_member(args[0].value)?
             call("rt.group_add", [r.id, rec], Ty.Unit)
@@ -215,3 +221,13 @@ fn Lower.end_scope_exits(mut self)
         tk.exits.pop()
         if not done()
             run_exit(act)
+
+## `t.cancel()` on a task handle variable.
+fn Lower.is_task_cancel(self, recv ast.Expr, name str) bool
+    if name != "cancel"
+        return false
+    match recv
+        Name(n, _) =>
+            k := lookup(n) else return false
+            tk.rets.contains(k)
+        _ => false

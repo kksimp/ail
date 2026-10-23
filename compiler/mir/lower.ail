@@ -1883,6 +1883,8 @@ fn Lower.lower_method(
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)
         return Val(id: call("rt.args", [], t), ty: t)
+    if name == "select" and tk.on and is_module(recv, "task")
+        return lower_chan_select(args, npos)
     om := os_module(recv)
     if om != ""
         return lower_os_method(om, name, npos, args)
@@ -1916,7 +1918,7 @@ fn Lower.lower_method(
         return lower_atomic_method(r.id, e, name, npos, args)
     if chan_elem(r.ty) != none
         return lower_chan_method(r, name, npos, args)
-    if is_sync(r.ty)
+    if is_sync(r.ty) or is_task_cancel(recv, name)
         return lower_sync_method(r, name, npos, args)
     if name == "enumerate" and args.len() == 0 and r.ty.elem() != none
         return lower_enumerate(r)

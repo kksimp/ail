@@ -815,6 +815,8 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
         Method(recv, name, _, _) =>
             if os_fails(recv, name)
                 m := os_module(recv)
+                if m == "task"
+                    return Ty.Unknown
                 if m == "net"
                     return Ty.Struct(NET_ERROR)
                 if m == "compress"
