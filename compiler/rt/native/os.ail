@@ -951,11 +951,6 @@ fn fs_append_text(path str, text str, at str)
     if not os_ok()
         os_error(path, os_kind(), at)
 
-fn fs_append_bytes(path str, data str, at str)
-    os_fs_append_text(path, data)
-    if not os_ok()
-        os_error(path, os_kind(), at)
-
 fn fs_list_dir(path str, at str) List[int]
     xs := os_fs_list_dir(path)
     if not os_ok()
