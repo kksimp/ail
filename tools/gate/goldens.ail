@@ -1,0 +1,137 @@
+## Native-only checks against frozen goldens (RR-4, plan.md "Native-only
+## switch-over"): the native tests compare with files, not with a live
+## interpreter run.
+##   ail run tools/gate/goldens.ail freeze [NAME...]   write the goldens
+##   ail run tools/gate/goldens.ail check [--strict] [NAME...]
+## from the repository root. `freeze` runs each bootstrap/tests/native/run
+## program with `ail run` once and writes bootstrap/tests/native/golden/NAME.out
+## (its stdout) and NAME.status (its exit status, only when it isn't 0).
+## `check` builds each of those programs, and each examples/NAME.ail that has a
+## NAME.out, natively, runs the executable and diffs it against the golden
+## without starting the interpreter; it prints only what differs. A program the
+## native backend can't build yet is listed on one line at the end, and counts
+## as a failure only with `--strict` (the switch point is when none are left).
+## Last line: `GOLDENS GREEN (N checked)` or `GOLDENS RED (N failures)`.
+## NAME is a program's file name without `.ail`; with names, only those run.
+
+RUN_DIR := "bootstrap/tests/native/run"
+GOLDEN_DIR := "bootstrap/tests/native/golden"
+
+struct Check
+    fails int
+    checked int
+    unbuilt List[str]
+    names List[str]
+    strict bool
+
+fn Check.wanted(self, stem str) bool
+    names.is_empty() or names.contains(stem)
+
+fn temp_dir() str
+    base := env.get("TMPDIR") else "/tmp"
+    "{base}/ail-goldens"
+
+fn stems(dir str) List[str]
+    mut out := List[str]()
+    for name in fs.list_dir(dir) else []
+        if name.ends_with(".ail")
+            out.push(name.replace(".ail", ""))
+    out.sorted()
+
+fn Check.red(mut self, name str, why str)
+    fails += 1
+    print("RED {name}")
+    print(why.lines().take(3).join("\n"))
+
+## Build `src` natively into `exe`; the first error line if it can't.
+fn build(src str, exe str) str?
+    r := proc.run("./ail", ["build", src, "-o", exe]) else return "could not start ail"
+    if r.status == 0
+        return none
+    r.err.lines().first() else "build failed"
+
+fn Check.freeze(mut self)
+    _ := proc.run("mkdir", ["-p", GOLDEN_DIR]) else return
+    for stem in stems(RUN_DIR)
+        if not wanted(stem)
+            continue
+        src := "{RUN_DIR}/{stem}.ail"
+        r := proc.run("./ail", ["run", src]) else
+            red(src, "ail run could not start")
+            continue
+        status_path := "{GOLDEN_DIR}/{stem}.status"
+        fs.write_text("{GOLDEN_DIR}/{stem}.out", r.out) else
+            red(src, "could not write the golden")
+            continue
+        if r.status != 0
+            fs.write_text(status_path, "{r.status}\n") else
+                red(src, "could not write the status")
+                continue
+        elif fs.exists(status_path)
+            gone := proc.run("rm", ["-f", status_path]) else continue
+        checked += 1
+
+## Run the native build of `src` and compare it with the golden stdout and status.
+fn Check.compare(mut self, src str, exe str, want_out str, want_status int)
+    if why := build(src, exe)
+        unbuilt.push(src)
+        if strict
+            red(src, "native build failed: {why}")
+        return
+    checked += 1
+    got := proc.run(exe, []) else
+        red(src, "could not run the executable")
+        return
+    if got.status != want_status or got.out != want_out
+        red(src, "differs from its golden: exit {got.status} vs {want_status}\n{got.out}{got.err}")
+
+fn Check.programs(mut self, tmp str)
+    for stem in stems(RUN_DIR)
+        if not wanted(stem)
+            continue
+        src := "{RUN_DIR}/{stem}.ail"
+        want_out := fs.read_text("{GOLDEN_DIR}/{stem}.out") else
+            red(src, "no golden: run `freeze` first")
+            continue
+        status_path := "{GOLDEN_DIR}/{stem}.status"
+        text := if fs.exists(status_path) then (fs.read_text(status_path) else "1") else "0"
+        want_status := text.trim().to_int() else 1
+        compare(src, "{tmp}/nt_{stem}", want_out, want_status)
+
+fn Check.examples(mut self, tmp str)
+    for stem in stems("examples")
+        if not wanted(stem) or not fs.exists("examples/{stem}.out")
+            continue
+        want_out := fs.read_text("examples/{stem}.out") else ""
+        compare("examples/{stem}.ail", "{tmp}/ex_{stem}", want_out, 0)
+
+fn main() !
+    mut args := env.args()
+    if args.is_empty() or not ["freeze", "check"].contains(args[0])
+        io.eprint("usage: goldens (freeze | check [--strict]) [NAME...]")
+        io.exit(2)
+    mode := args[0]
+    mut c := Check(fails: 0, checked: 0, unbuilt: [], names: [], strict: false)
+    for a in args[1..]
+        if a == "--strict"
+            c.strict = true
+        else
+            c.names.push(a)
+    tmp := temp_dir()
+    fs.make_dir(tmp)? "creating {tmp}"
+    if mode == "freeze"
+        c.freeze()
+        print("froze {c.checked} goldens in {GOLDEN_DIR}")
+    else
+        c.programs(tmp)
+        c.examples(tmp)
+    _ := proc.run("rm", ["-rf", tmp]) else return
+    if mode == "freeze"
+        io.exit(if c.fails == 0 then 0 else 1)
+    if c.unbuilt.len() > 0
+        print("{c.unbuilt.len()} not native yet: {c.unbuilt.join(" ")}")
+    if c.fails == 0
+        print("GOLDENS GREEN ({c.checked} checked)")
+    else
+        print("GOLDENS RED ({c.fails} failures)")
+        io.exit(1)

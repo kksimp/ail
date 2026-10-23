@@ -1,0 +1,10 @@
+{"tea": 2.75, "milk": 0.99, "rice": 1.5}
+[2.75, 0.99, 1.5]
+5.24
+{0: false, 3: true, 6: false, 2: false, 5: true, 1: false, 4: true}
+[false, true, false, false, true, false, true]
+[0, 3, 6, 2, 5, 1, 4]
+{true: 1, false: 2}
+[true, false]
+0.0
+2.75

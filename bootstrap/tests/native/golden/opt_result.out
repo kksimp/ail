@@ -1,0 +1,17 @@
+9
+-1
+failed: the list is empty
+-2
+failed: the number is too big
+0
+3
+-1
+-1
+check: the number is too big
+check again
+fallback block
+7
+3
+-9
+120
+done
