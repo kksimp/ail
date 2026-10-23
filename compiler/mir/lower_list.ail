@@ -282,6 +282,8 @@ fn Lower.lower_index(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) Val?
         return bytes_index(l, index, pos)
     if l.ty.is_coll()
         return lower_coll_index(l, index, pos)
+    if l.ty.is_tensor()
+        return lower_tensor_index(l, index, pos)
     elem := l.ty.elem() else return unsupported(pos, "indexing a `{l.ty.name()}`")
     if is_range(index)
         return match index

@@ -1454,7 +1454,7 @@ fn Lower.lower_expr(mut self, e ast.Expr, want Ty?) Val?
         Unary(o, operand, pos) => lower_unary(o, operand, pos, want)
         Binary(o, lhs, rhs, pos) => lower_binary_expr(o, lhs, rhs, pos, want)
         Call(callee, args, pos) => lower_call_expr(callee, args, pos, want)
-        Method(recv, name, npos, args) => lower_method(recv, name, npos, args)
+        Method(recv, name, npos, args) => lower_method(recv, name, npos, args, want)
         Index(recv, index, pos) => lower_index(recv, index, pos)
         ListLit(items, pos) => lower_list(items, pos, want)
         If(branches, els, else_err, pos) => lower_if(branches, els, else_err, pos, want)
@@ -1812,8 +1812,6 @@ fn out_fn(t Ty) str
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
-    if tensor_f32(v.ty)
-        return unsupported(pos, "printing a `Tensor[f32]`")
     if v.ty.opt_inner() != none
         return out_opt(v, pos)
     if v.ty.is_coll()
@@ -1844,7 +1842,14 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
     call(f, [v.id], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 
-fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List[ast.Arg]) Val?
+fn Lower.lower_method(
+    mut self,
+    recv ast.Expr,
+    name str,
+    npos ast.Pos,
+    args List[ast.Arg],
+    want Ty?,
+) Val?
     # std.env.1
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)
@@ -1857,8 +1862,8 @@ fn Lower.lower_method(mut self, recv ast.Expr, name str, npos ast.Pos, args List
         return lower_std_call(sm, name, npos, args)
     if name == "from_code" and is_module(recv, "char")
         return lower_char_from_code(args, npos)
-    if name == "from" and is_module(recv, "tensor")
-        return lower_tensor_from(args, npos)
+    if is_module(recv, "tensor")
+        return lower_tensor_call(name, args, npos, want)
     if name == "select" and tk.on and is_module(recv, "task")
         return lower_chan_select(args, npos)
     if is_module(recv, "mem")
