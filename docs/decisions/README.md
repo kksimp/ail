@@ -671,10 +671,17 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0846](0846-native-proc-start-and-macos-proc.md) | Native `proc.start` with streams fed by a poll through the channels' `source` word; `std.proc` on macOS by libSystem `fork` *(delegated)* | Accepted | 2026-10-21 |
 | [0855](0855-retire-the-rust-bootstrap.md) | Retire the Rust bootstrap: `ail` is a native AIL program, seeded from private release binaries with a committed SHA-256 *(designer; detail delegated)* | Accepted | 2026-10-22 |
 | [0852](0852-native-tls-one-suite-first.md) | Native TLS 1.3 offers ChaCha20-Poly1305 first and lands in checked slices; verification ships with the handshake *(delegated)* | Accepted | 2026-10-22 |
+| [0858](0858-native-assert-lowering.md) | `assert` and `assert_eq` lower natively; `@test` stays a rewrite *(delegated)* | Accepted | 2026-10-22 |
+| [0864](0864-native-recursive-default-text.md) | A recursive type's default text is a generated function, not an unbounded inline expansion *(delegated)* | Accepted | 2026-10-23 |
 | [0848](0848-idle-values-leave-registers-in-loops.md) | Values idle in a loop leave their registers; a checked `mul` result avoids its operands' registers *(delegated)* | Accepted | 2026-10-22 |
 | [0850](0850-native-compiler-runs-builtin-derive-generators.md) | The native compiler runs the prelude's derive generators itself, so it needs no `AIL_DERIVED` file *(delegated)* | Accepted | 2026-10-22 |
 | [0854](0854-std-app-bitmap-op.md) | `std.app` `Bitmap` op: RGBA pixels in the display list, kept by the host under an id; Garlic sends decoded images once *(delegated)* | Accepted | 2026-10-22 |
 | [0839](0839-std-app-text-measure.md) | `std.app` text measure: the host reports advance widths for the app's runs, Garlic lays out with them *(delegated)* | Accepted | 2026-10-22 |
 | [0856](0856-native-compiler-runs-user-derive-generators.md) | The native compiler runs user `@derive` generators as a native program, so it needs no interpreter *(delegated)* | Accepted | 2026-10-22 |
+| [0861](0861-std-app-inbox.md) | `std.app` inbox: tasks post `external` events into the running app, woken by a channel, not a tick *(delegated)* | Accepted | 2026-10-23 |
 | [0859](0859-ail-edit-in-ail.md) | `ail edit` is ported to AIL (`compiler/edit/`), byte-identical to the Rust tool; syntax-only check until the loader lands *(delegated)* | Accepted | 2026-10-23 |
 | [0860](0860-ail-fix-machinery-in-ail.md) | The machinery of `ail fix` (edit types, anchor resolution, driver) is ported to AIL (`compiler/fix/`), same fixes and output as the Rust tool *(delegated)* | Accepted | 2026-10-23 |
+| [0862](0862-native-mut-cells-and-for-mut-write-through.md) | Native `mut` parameters and `mut self` of value types use cells; `for mut` over scalars writes through *(delegated)* | Accepted | 2026-10-23 |
+| [0863](0863-native-std-ui-through-the-app-host.md) | Native `std.ui` and widgets render through the `std.app` host: one window path for edit, pdf and Garlic; Mac first | Accepted | 2026-10-23 |
+| [0865](0865-no-double-work.md) | One implementation (native only), one checker (AIL), one Mac gate per batch, generated files once: no double work | Accepted | 2026-10-23 |
+| [0866](0866-native-composite-map-keys.md) | Native maps and sets take struct, tuple, enum and list keys, hashed by the key's shape *(delegated)* | Accepted | 2026-10-23 |

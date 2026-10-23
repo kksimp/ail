@@ -1,0 +1,295 @@
+## The instruction encoders of the native backend (bootstrap/tests/native_asm.rs, ported):
+## compiler/x64/asm.ail against GNU objdump and compiler/a64/asm.ail against llvm-mc
+## (ADR 0385, ADR 0388; ADR 0010 allows them in tests only). Each driver in
+## bootstrap/tests/native/asm/ prints `intent|bytes` per case; the module under test is
+## copied next to it. Run from the repository root:
+##   ail run tools/gate/asm.ail
+## Prints only failures; the last line is `ASM GREEN (N checks)` or `ASM RED (N failures)`.
+## A missing tool skips its half with a message.
+
+BIN := "bootstrap/target/release/ail"
+
+struct Case
+    intent str
+    bs List[u8]
+
+## A list of results, or the reason it could not be had (`err` is empty on success).
+struct Cases
+    items List[Case]
+    err str
+
+struct Lines
+    items List[str]
+    err str
+
+struct Value
+    v int
+    err str
+
+fn sh(script str) proc.Output
+    r := proc.run("sh", ["-c", script]) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
+
+fn have(tool str) bool
+    r := sh("{tool} --version")
+    if r.status != 0
+        return false
+    # macOS ships LLVM's objdump under the GNU name; it has no `-b binary`.
+    if tool == "objdump"
+        return r.out.contains("GNU")
+    true
+
+## Copies `module` to `<tmp>/<dir>/asm/asm.ail` and `driver` to `<tmp>/main.ail`, runs it, and
+## parses the `intent|bytes` lines.
+fn run_driver(dir str, module str, driver str, root str) Cases
+    sh("rm -rf {root} && mkdir -p {root}/{dir}/asm && cp {module} {root}/{dir}/asm/asm.ail && cp {driver} {root}/main.ail")
+    r := sh("{BIN} run {root}/main.ail")
+    if r.status != 0
+        return Cases(items: [], err: "{driver} failed:\n{r.err}")
+    mut out := List[Case]()
+    for line in r.out.lines()
+        parts := line.split("|")
+        if parts.len() != 2
+            return Cases(items: [], err: "bad line `{line}`")
+        mut bs := List[u8]()
+        for w in parts[1].words()
+            b := w.to_int() else return Cases(items: [], err: "bad byte `{w}` in `{line}`")
+            bs.push(b.to_u8())
+        out.push(Case(intent: parts[0], bs: bs))
+    Cases(items: out, err: "")
+
+## Reads `0x..` (as unsigned 64-bit, so `0xffff..ff` is -1) or decimal.
+fn parse_num(w str) int?
+    mut neg := false
+    mut digits := w
+    if w.starts_with("-")
+        neg = true
+        digits = w.slice(1, w.len())
+    mut v := 0
+    if digits.starts_with("0x")
+        hex := digits.slice(2, digits.len())
+        if hex.is_empty()
+            return none
+        for c in hex.chars()
+            ok := c.to_digit(16) else return none
+        n := hex.len()
+        lo_text := if n > 8 then hex.slice(n - 8, n) else hex
+        mut hi := 0
+        if n > 8
+            hi = parse_hex(hex.slice(0, n - 8)) else return none
+            if n > 16
+                return none
+            if n == 16 and hi >= 2147483648
+                hi -= 4294967296
+        lo := parse_hex(lo_text) else return none
+        v = hi * 4294967296 + lo
+    else
+        for c in digits.chars()
+            if not (c.is_digit() and c.code() < 128)
+                return none
+        if digits.is_empty()
+            return none
+        v = digits.to_int() else return none
+    if neg
+        return 0 - v
+    v
+
+fn parse_hex(h str) int?
+    mut v := 0
+    for c in h.chars()
+        d := c.to_digit(16) else return none
+        v = v * 16 + d
+    v
+
+fn replace_all(text str, chars List[str], by str) str
+    mut t := text
+    for c in chars
+        t = t.replace(c, by)
+    t
+
+## Lower-cases and splits an instruction into comparable tokens: punctuation and size
+## words are dropped, immediates become decimal, and zero is dropped (objdump omits a zero
+## displacement that the intent writes out).
+fn norm(text str) List[str]
+    mut t := replace_all(text.to_lower(), ["[", "]", ",", "*", "+", "!", "#"], " ")
+    t = t.replace("-", " -")
+    mut out := List[str]()
+    for w in t.words()
+        if w == "qword"
+            or w == "dword"
+            or w == "word"
+            or w == "byte"
+            or w == "ptr"
+            or w == "xmmword"
+            continue
+        v := parse_num(w) else
+            out.push(w)
+            continue
+        if v != 0
+            out.push("{v}")
+    out
+
+## Splits an intent into instructions (`; `) and normalizes each, joined by `|` per instruction.
+fn expected(intent str) List[str]
+    mut out := List[str]()
+    for part in intent.split("; ")
+        out.push(norm(part).join(" "))
+    out
+
+## The x86-64 instructions objdump prints for `bytes`, Intel syntax.
+fn objdump_x86(bs List[u8], file str) Lines
+    fs.write_bytes(file, bytes.from_list(bs)) else return Lines(
+        items: [],
+        err: "could not write {file}",
+    )
+    r := sh("objdump -D -b binary -m i386:x86-64 -M intel {file}")
+    if r.status != 0
+        return Lines(items: [], err: r.err)
+    mut insns := List[str]()
+    for line in r.out.lines()
+        # `   0:\t48 89 c1 \tmov    rcx,rax`; long instructions continue their bytes on lines
+        # with no text.
+        fields := line.split("\t")
+        if fields.len() >= 3
+            and fields[0].trim_end().ends_with(":")
+            and not fields[2].trim().is_empty()
+            # A RIP-relative operand is followed by objdump's `# 0xADDR` comment.
+            text := fields[2].split(" #")[0]
+            insns.push(text.trim())
+    Lines(items: insns, err: "")
+
+## The ARM64 instructions llvm-mc prints for `bytes`, one per 32-bit word.
+fn llvm_mc_a64(bs List[u8]) Lines
+    mut hex := List[str]()
+    for b in bs
+        hex.push("0x{b:0>2x}")
+    r := sh("printf '%s' '{hex.join(" ")}' | llvm-mc --disassemble -triple=aarch64")
+    if r.status != 0
+        return Lines(items: [], err: r.err)
+    mut out := List[str]()
+    for l in r.out.lines()
+        # Aliases end in a `// =0x..` comment with the value; `.text` is the section
+        # directive llvm-mc prints first, not an instruction.
+        t := l.split(" //")[0].words().join(" ")
+        if not t.is_empty() and not t.starts_with(".")
+            out.push(t)
+    Lines(items: out, err: "")
+
+fn parse_imm(w str) int?
+    parse_num(w.trim().replace("#", ""))
+
+## Runs the instructions for a `const xD=V` case and returns the value of xD they compute:
+## movz, movk and movn by 16-bit part, or llvm's `mov` alias.
+fn simulate_const(lines List[str], d int) Value
+    mut reg := 0
+    for line in lines
+        sp := line.find(" ") else return Value(v: 0, err: "no operands: {line}")
+        mnemonic := line.slice(0, sp)
+        ops := line.slice(sp + 1, line.len()).split(",")
+        if ops[0].trim() != "x{d}"
+            return Value(v: 0, err: "{line} does not write x{d}")
+        imm := parse_imm(ops[1]) else return Value(v: 0, err: "bad immediate in {line}")
+        mut shift := 0
+        if ops.len() > 2
+            shift = parse_imm(
+                ops[2].trim().replace("lsl ", ""),
+            ) else return Value(v: 0, err: "bad shift in {line}")
+        part := imm.shl(shift)
+        if mnemonic == "movz"
+            reg = part
+        elif mnemonic == "movk"
+            reg = reg.bit_and((65535).shl(shift).bit_not()).bit_or(part)
+        elif mnemonic == "movn"
+            reg = part.bit_not()
+        elif mnemonic == "mov"
+            reg = imm
+        else
+            return Value(v: 0, err: "unexpected instruction {line}")
+    Value(v: reg, err: "")
+
+fn x86(tmp str) List[str]
+    if not have("objdump")
+        print("skipping x86-64: objdump is not installed")
+        return []
+    driven := run_driver(
+        "x64",
+        "compiler/x64/asm.ail",
+        "bootstrap/tests/native/asm/x64_encoder.ail",
+        "{tmp}/x64",
+    )
+    if not driven.err.is_empty()
+        return ["x86-64 driver: {driven.err}"]
+    cases := driven.items
+    mut fails := List[str]()
+    if cases.len() <= 300
+        fails.push("the x86-64 driver printed only {cases.len()} cases")
+    for c in cases
+        want := expected(c.intent)
+        od := objdump_x86(c.bs, "{tmp}/x64.bin")
+        if not od.err.is_empty()
+            fails.push("{c.intent}: objdump failed: {od.err}")
+            continue
+        got := od.items
+        mut norms := List[str]()
+        for g in got
+            norms.push(norm(g).join(" "))
+        if want != norms
+            fails.push("{c.intent} | {c.bs}: objdump says {got}")
+    fails
+
+fn a64(tmp str) List[str]
+    if not have("llvm-mc")
+        print("skipping ARM64: llvm-mc is not installed")
+        return []
+    driven := run_driver(
+        "a64",
+        "compiler/a64/asm.ail",
+        "bootstrap/tests/native/asm/a64_encoder.ail",
+        "{tmp}/a64",
+    )
+    if not driven.err.is_empty()
+        return ["ARM64 driver: {driven.err}"]
+    cases := driven.items
+    mut fails := List[str]()
+    if cases.len() <= 100
+        fails.push("the ARM64 driver printed only {cases.len()} cases")
+    for c in cases
+        mc := llvm_mc_a64(c.bs)
+        if not mc.err.is_empty()
+            fails.push("{c.intent}: llvm-mc failed: {mc.err}")
+            continue
+        lines := mc.items
+        if c.intent.starts_with("const x")
+            rest := c.intent.slice(7, c.intent.len())
+            kv := rest.split("=")
+            want := kv[1].to_int() else 0
+            d := kv[0].to_int() else 0
+            sim := simulate_const(lines, d)
+            if not sim.err.is_empty()
+                fails.push("{c.intent}: {sim.err}")
+            elif sim.v != want
+                fails.push("{c.intent}: computes {sim.v.to_hex()} from {lines}")
+            continue
+        mut norms := List[str]()
+        for l in lines
+            norms.push(norm(l).join(" "))
+        if expected(c.intent) != norms
+            fails.push("{c.intent} | {c.bs}: llvm-mc says {lines}")
+    fails
+
+fn main()
+    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-asm-gate"
+    mut fails := x86(tmp)
+    fails.extend(a64(tmp))
+    sh("rm -rf {tmp}")
+    for f in fails
+        print("RED {f}")
+    if fails.is_empty()
+        print("ASM GREEN")
+    else
+        print("ASM RED ({fails.len()} failures)")
+        io.exit(1)

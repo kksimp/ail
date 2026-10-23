@@ -215,6 +215,14 @@ regex engine is written.
   the JSON reply to the live engine (`Session.reply`), which runs the
   page's callback. No script runs twice. Pages restored by Back have no
   engine, so they make no requests.
+- **WebSocket** is a JavaScript class over `__hostWs` (open, send, close).
+  The browser (`ws/ws.ail`, RFC 6455 over `net.connect`/`net.connect_tls`)
+  makes the connection with the page's origin and cookies, and delivers
+  `open`, `message`, `error` and `close` to the live engine as the sockets
+  are read. Sockets are read after every action the page takes and every
+  host event (`Browser.pump`); with no host timer event, a message that
+  arrives while the person does nothing waits for the next event. Text
+  messages only.
 - **Virtual time.** Timers run on the fixed clock in order of due time,
   then of creation, until the page's time budget (a second by default) or
   a task cap; `performance.now()` counts from the page's start. A page with
@@ -245,6 +253,12 @@ regex engine is written.
 - `Function.prototype.toString` returns a function's source text
   (§20.2.3.5): the parser keeps each function's and class's text, so code
   that rebuilds functions from their source with `eval` works.
+- Selectors (Selectors L4, `vm/selectors.ail`): structural pseudo-classes
+  (`:nth-child` family, `:first/last/only-of-type`), `:not`, `:is`, `:where`,
+  `:has`, form states (`:checked`, `:disabled`, `:required`, ...), `:root`,
+  `:empty`, `:scope`, `:link`, `:focus`, `:lang`. The fragment parser closes
+  `<p>`, `<li>`, `<dd>`, `<option>`, cells and rows implicitly and inserts
+  `<tbody>`/`<tr>`.
 - `MutationObserver` (DOM §4.3, `vm/mutation.ail`): every logged change is
   offered to the observers; records for `childList`, `attributes` (with
   `attributeFilter`) and `characterData`, with `subtree`, reach the callback
@@ -279,6 +293,20 @@ regex engine is written.
   control pressed, `mouseup` and `click` (a cancelled `mousedown` only keeps
   the focus). `KeyboardEvent` and `MouseEvent` start with empty
   `key`/`code` and zero coordinates, as in Chromium.
+- Events (`vm/events.ail`): each interface (`KeyboardEvent`, `MouseEvent`,
+  `PointerEvent`, `ErrorEvent`, `MessageEvent`, ... 22 of them) has its own
+  prototype under its parent's and starts with its dictionary's defaults;
+  `Event.NONE` and the phases exist; `new Event()` needs a type;
+  `composedPath()` is the path while dispatching. An uncaught exception is
+  reported to the window as a cancellable `ErrorEvent` first, and
+  `window.onerror` gets `(message, source, line, column, error)` where
+  `true` cancels; an unhandled rejection fires `unhandledrejection` the same
+  way. `readystatechange` fires at `interactive` and `complete`. Handler
+  properties (`onpointerdown`, ...) exist on elements and the window, but
+  `ontouch...` ones don't, as on a desktop. Timers started by timers nest:
+  from the 7th level a timer waits at least 4 ms (measured against
+  Chromium; the HTML spec says after 5). `lineno`/`colno` of an
+  `ErrorEvent` are 0.
 
 ## Generators and async functions
 

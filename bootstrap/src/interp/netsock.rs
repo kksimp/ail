@@ -1128,7 +1128,7 @@ impl<'a, W: Write> Interp<'a, W> {
                         let max = values[0].int();
                         if max <= 0 {
                             put_back(id, Slot::Conn(c));
-                            return Ok(self.net_error(&peer, "other", format!("`read` needs a size of at least 1, not {max}"), pos));
+                            return Ok(self.net_error(&peer, "other", format!("`{}` needs a size of at least 1, not {max}", &m[5..]), pos));
                         }
                         if m == "Conn.read_bytes" {
                             c.read_raw(max as usize).map(super::bytes::bytes_value)

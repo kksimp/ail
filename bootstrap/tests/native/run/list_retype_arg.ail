@@ -1,0 +1,11 @@
+struct Bag
+    items List[int]
+
+fn fill(mut xs List[int], n int)
+    for i in 0..n
+        xs.push(i)
+
+fn main()
+    mut xs := []
+    fill(mut xs, 4)
+    print("{xs} {xs.len()}")

@@ -211,8 +211,8 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
         args: [[], skip],
         value: -1,
     )
-    some := simplify(g)
-    some
+    simplify_in(mut g)
+    g
 
 fn new_val(mut g Func, t Ty) int
     g.vals.push(t)

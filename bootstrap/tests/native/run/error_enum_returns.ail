@@ -1,0 +1,28 @@
+error enum Bad
+    Io(why str)
+    Short
+
+fn pick(n int) List[int] ! Bad
+    if n < 0
+        return Bad.Io(why: "neg")
+    if n == 0
+        return Bad.Short
+    [n]
+
+fn flag(n int) bool ! Bad
+    if n < 0
+        return Bad.Short
+    true
+
+fn main()
+    print(pick(2) else [0])
+    a := pick(-1) else err
+        print("e1")
+        [0]
+    b := flag(-1) else err
+        print("e2")
+        false
+    print(a)
+    print(b)
+    v := pick(0) else [9]
+    print(v)

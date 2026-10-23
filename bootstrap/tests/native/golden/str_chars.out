@@ -1,0 +1,79 @@
+a
+é
+10
+1
+['h', 'e', 'l', 'l', 'o']
+[]
+['h', 'é', 'l', 'l', 'o', ' ', 'w', 'ö', 'r', 'l', 'd', ' ', '✓', ' ', '😀']
+15
+15
+22
+11
+true
+false
+true
+false
+true
+122
+128512
+qé
+['a', '\t', 'b', '\\', 'c', '"', 'd', '\'', 'e', '\n', 'f']
+["a\tb\\c\"d'e\nf"]
+["x", "y\n", "é"]
+['\0', '\u{7f}', '\u{85}', '\u{1f}']
+A false true true false true false A a
+b false true true false false true B b
+1 true false true false false false 1 1
+  false false false true false false    
+_ false false false false false false _ _
+é false true true false false true É é
+! false false false false false false ! !
+À À à true false true
+Ö Ö ö true false true
+Ø Ø ø true false true
+Þ Þ þ true false true
+      false false false
+à À à false true true
+ö Ö ö false true true
+ø Ø ø false true true
+þ Þ þ false true true
+      false false false
+ÿ Ÿ ÿ false true true
+Ÿ Ÿ ÿ true false true
+      false false false
+Ā Ā ā true false true
+ā Ā ā false true true
+Ł Ł ł true false true
+ł Ł ł false true true
+      false false false
+Α Α α true false true
+Ω Ω ω true false true
+α Α α false true true
+ω Ω ω false true true
+ς Σ ς false true true
+      false false false
+Ж Ж ж true false true
+Я Я я true false true
+ж Ж ж false true true
+я Я я false true true
+      false false false
+ß ß ß false true true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+true
+false
+false
+107104111111114, 122114117111103
+àé
+ÀÉ
+2
+80000
+ababababab
+160000

@@ -1,0 +1,28 @@
+# conc.task.6: `wait() else` gives the task's own error or its trap.
+error struct TooBig
+    n int
+
+fn checked(x int) int ! TooBig
+    if x > 9
+        return TooBig(x)
+    x
+
+fn divide(a int, b int) int
+    a / b
+
+fn main() !
+    ok := spawn checked(5)
+    print(ok.wait()?)
+    bad := spawn checked(12)
+    r := bad.wait() else err
+        print("failed: {err}")
+        0
+    print(r)
+    t := spawn divide(10, 0)
+    n := t.wait() else err
+        print("rule: {err.rule}")
+        print("message: {err.message}")
+        -1
+    print(n)
+    u := spawn divide(10, 2)
+    print(u.wait() else -2)

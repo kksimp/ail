@@ -3,12 +3,19 @@
 ##   ail run tools/ailtest/ailtest.ail [--json] FILE
 ## The native backend has no `assert` and refuses to call a `@test` function,
 ## so the build is of a rewritten copy beside FILE (so its `use` lines
-## resolve): `@test` becomes `fn NAME() int?`, `assert(c)` and `assert_eq(a, b)`
+## resolve): `@test` becomes `fn NAME() !`, `assert(c)` and `assert_eq(a, b)`
 ## become calls of a checking function that knows the line and column, and
 ## `main` becomes a dispatcher that picks a test by the length of its first
 ## argument. A test the backend can't build yet is reported `skip` with the
-## first construct that blocks it; a property test (one with parameters) is
-## `skip` too. The exit status is 0 if every test that ran passed.
+## first construct that blocks it. A test is `fn NAME() !`, so `?` works in it
+## (test.attr.4). A property test (test.prop.1-5) takes `int`, `float`, `bool`,
+## `char`, `str`, `List`, `Set`, `Map`, optionals, tuples and the file's own
+## non-generic structs and enums: this tool generates the inputs (the
+## interpreter's splitmix64, sizes and shrinking), runs the binary once per case
+## with the inputs as arguments (the binary decodes them with generated
+## functions), and shrinks a failing input. A parameter of another type
+## (`bytes`, a type from another module) makes the test `skip`. The exit status is 0 if every test that ran passed.
+##   ail run tools/ailtest/ailtest.ail [--json] [--cases N] [--seed S] FILE
 ## Rewriting follows bootstrap/src/native_test.rs (native.test.2).
 
 ## The compiler to drive: `$AIL`, else `./ail`.
@@ -21,11 +28,16 @@ MAX_ROUNDS := 12
 ## Time one test may run, in milliseconds.
 RUN_LIMIT_MS := 30000
 
+struct Param
+    name str
+    ty str
+
 struct TestFn
     name str
     first int
     last int
     header int
+    params List[Param]
 
 struct Span
     first int
@@ -44,6 +56,12 @@ struct Verdict
     name str
     status str
     message str
+    cases int
+    seed int
+    input str
+
+fn plain(name str, status str, message str) Verdict
+    Verdict(name: name, status: status, message: message, cases: 0, seed: 0, input: "")
 
 fn indent(l str) int
     l.len() - l.trim_start().len()
@@ -60,9 +78,167 @@ fn block_end(lines List[str], first int) int
         last = j
     last
 
-## Every plain `@test fn NAME()` and the property tests, which are left out.
+## The parts of `text` between top-level commas (outside brackets and parentheses).
+fn split_top(text str) List[str]
+    mut out := List[str]()
+    mut depth := 0
+    mut start := 0
+    cs := text.chars()
+    for j in 0..cs.len() + 1
+        if j == cs.len() or (cs[j] == ',' and depth == 0)
+            part := text.slice(start, j).trim()
+            if not part.is_empty()
+                out.push(part)
+            start = j + 1
+        elif cs[j] == '[' or cs[j] == '('
+            depth += 1
+        elif cs[j] == ']' or cs[j] == ')'
+            depth -= 1
+    out
+
+## `name type` pairs, as written in a parameter list or a variant's fields.
+fn parse_params(text str) List[Param]
+    mut out := List[Param]()
+    for part in split_top(text)
+        sp := part.find(" ") else part.len()
+        out.push(Param(name: part.slice(0, sp), ty: part.slice(sp, part.len()).trim()))
+    out
+
+SCALARS := ["int", "float", "bool", "char", "str", "bytes"]
+
+## A variant of an enum, or the one unnamed variant of a struct.
+struct Variant
+    name str
+    fields List[Param]
+
+## A non-generic struct or enum declared in the file.
+struct Decl
+    name str
+    is_enum bool
+    variants List[Variant]
+
+## A parameter type: kind is a scalar name, `list`, `set`, `map`, `opt`, `tuple`, `struct` or `enum`.
+## A struct's or enum's fields are found through its declaration.
+struct Ty
+    kind str
+    name str
+    text str
+    kids List[Ty]
+
+fn ty_of(kind str, name str, text str, kids List[Ty]) Ty
+    Ty(kind: kind, name: name, text: text, kids: kids)
+
+## The structs and enums declared at column 0 of the file (test.prop.2). Error and generic ones
+## are left out, so a parameter of such a type is unsupported.
+fn parse_decls(lines List[str]) Map[str, Decl]
+    mut out := Map[str, Decl]()
+    mut i := 0
+    while i < lines.len()
+        l := lines[i]
+        mut head := l
+        if head.starts_with("pub ")
+            head = head.slice(4, head.len())
+        is_struct := head.starts_with("struct ")
+        is_enum := head.starts_with("enum ")
+        if is_struct or is_enum
+            name := head.slice(head.find(" ") else 0, head.len()).trim()
+            last := block_end(lines, i)
+            if name.find("[") == none and name.find(" ") == none and name.find("(") == none
+                mut variants := List[Variant]()
+                mut fields := List[Param]()
+                for j in i + 1..last + 1
+                    f := lines[j].trim()
+                    if f.is_empty()
+                        or f.starts_with("#")
+                        or f.starts_with("@")
+                        or f.starts_with("fn ")
+                        continue
+                    if indent(lines[j]) != indent(lines[i + 1])
+                        continue
+                    if is_struct
+                        w := f.split(" ")[0]
+                        if w != "invariant" and w != "requires"
+                            fields.push(Param(name: w, ty: f.slice(w.len(), f.len()).trim()))
+                    else
+                        po := f.find("(")
+                        if po == none
+                            variants.push(Variant(name: f, fields: []))
+                        elif v := po
+                            variants.push(Variant(
+                                name: f.slice(0, v),
+                                fields: parse_params(f.slice(v + 1, f.len() - 1)),
+                            ))
+                if is_struct
+                    variants.push(Variant(name: "", fields: fields))
+                out[name] = Decl(name: name, is_enum: is_enum, variants: variants)
+            i = last
+        i += 1
+    out
+
+## The type named by `text`, or none when this runner can't generate it.
+fn parse_ty(text str, decls Map[str, Decl]) Ty?
+    t := text.trim()
+    if t.ends_with("?")
+        inner := parse_ty(t.slice(0, t.len() - 1), decls) else return none
+        return ty_of("opt", "", t, [inner])
+    if t.starts_with("(") and t.ends_with(")")
+        mut kids := List[Ty]()
+        for part in split_top(t.slice(1, t.len() - 1))
+            kids.push(parse_ty(part, decls) else return none)
+        return ty_of("tuple", "", t, kids)
+    if SCALARS.contains(t)
+        return ty_of(t, t, t, [])
+    if t.ends_with("]")
+        open := t.find("[") else return none
+        head := t.slice(0, open)
+        mut kids := List[Ty]()
+        for part in split_top(t.slice(open + 1, t.len() - 1))
+            kids.push(parse_ty(part, decls) else return none)
+        if head == "List" and kids.len() == 1
+            return ty_of("list", head, t, kids)
+        if head == "Set" and kids.len() == 1
+            return ty_of("set", head, t, kids)
+        if head == "Map" and kids.len() == 2
+            return ty_of("map", head, t, kids)
+        return none
+    if d := decls.get(t)
+        return ty_of(if d.is_enum then "enum" else "struct", t, t, [])
+    none
+
+## Why a type can't be generated, or "" (test.prop.2). `seen` stops recursive types.
+fn why_not(text str, decls Map[str, Decl], mut seen Set[str]) str
+    ty := parse_ty(text, decls) else
+        return "a property test with a `{text}` parameter (not generated by this runner yet)"
+    why_ty(ty, decls, mut seen)
+
+fn why_ty(ty Ty, decls Map[str, Decl], mut seen Set[str]) str
+    for k in ty.kids
+        r := why_ty(k, decls, mut seen)
+        if not r.is_empty()
+            return r
+    if (ty.kind == "struct" or ty.kind == "enum") and not seen.contains(ty.name)
+        seen.add(ty.name)
+        for v in decls[ty.name].variants
+            for f in v.fields
+                r := why_not(f.ty, decls, mut seen)
+                if not r.is_empty()
+                    return r
+    ""
+
+fn bad_params(text str, decls Map[str, Decl]) str
+    mut seen := Set[str]()
+    for p in parse_params(text)
+        if p.ty.is_empty()
+            return "a property test with an untyped parameter"
+        r := why_not(p.ty, decls, mut seen)
+        if not r.is_empty()
+            return r
+    ""
+
+## Every plain `@test fn NAME()` and the property tests.
 fn find_tests(lines List[str]) Found
     mut found := Found(tests: [], skipped: [], left_out: [])
+    decls := parse_decls(lines)
     mut i := 0
     while i < lines.len()
         l := lines[i]
@@ -83,155 +259,33 @@ fn find_tests(lines List[str]) Found
                     sig := text.slice(3, text.len())
                     if open := sig.find("(")
                         name := sig.slice(0, open).trim()
-                        if sig.slice(open, sig.len()).trim_end() == "()"
-                            last := block_end(lines, header)
+                        last := block_end(lines, header)
+                        close := sig.trim_end().len() - 1
+                        why := bad_params(sig.slice(open + 1, close), decls)
+                        if not sig.trim_end().ends_with(")")
+                            found.skipped.push(Skipped(
+                                name: name,
+                                why: "a signature with a return type",
+                            ))
+                            found.left_out.push(Span(first: i, last: last))
+                        elif not why.is_empty()
+                            found.skipped.push(Skipped(name: name, why: why))
+                            found.left_out.push(Span(first: i, last: last))
+                        else
                             found.tests.push(TestFn(
                                 name: name,
                                 first: i,
                                 last: last,
                                 header: header,
+                                params: parse_params(sig.slice(open + 1, close)),
                             ))
                             i = last
-                        else
-                            found.skipped.push(Skipped(
-                                name: name,
-                                why: "a property test (it takes arguments)",
-                            ))
-                            found.left_out.push(Span(first: i, last: block_end(lines, header)))
         i += 1
     found
 
-fn ident_char(c char) bool
-    c.is_alpha() or c.is_digit() or c == '_'
-
-## The index just past the string literal that starts at `i` (a `"`).
-fn skip_string(b List[char], start int) int
-    mut i := start + 1
-    while i < b.len()
-        if b[i] == '\\'
-            i += 2
-        elif b[i] == '"'
-            return i + 1
-        elif b[i] == '\{'
-            i = skip_braces(b, i)
-        else
-            i += 1
-    b.len()
-
-## The index just past the `{...}` that starts at `i`.
-fn skip_braces(b List[char], start int) int
-    mut depth := 0
-    mut i := start
-    while i < b.len()
-        if b[i] == '"'
-            i = skip_string(b, i)
-            continue
-        if b[i] == '\{'
-            depth += 1
-        elif b[i] == '}'
-            depth -= 1
-            if depth == 0
-                return i + 1
-        i += 1
-    b.len()
-
-struct CallArgs
-    args List[str]
-    end int
-
-## The top-level arguments of the call whose `(` is at `open`.
-fn call_args(b List[char], open int) CallArgs?
-    mut depth := 0
-    mut i := open
-    mut from := open + 1
-    mut args := List[str]()
-    while i < b.len()
-        c := b[i]
-        if c == '"'
-            i = skip_string(b, i)
-            continue
-        if c == '(' or c == '[' or c == '\{'
-            depth += 1
-        elif c == ')' or c == ']' or c == '}'
-            depth -= 1
-            if depth == 0
-                last := b[from..i].join("").trim()
-                if not (last.is_empty() and args.len() > 0)
-                    args.push(last)
-                return CallArgs(args: args, end: i + 1)
-        elif c == ',' and depth == 1
-            args.push(b[from..i].join("").trim())
-            from = i + 1
-        i += 1
-    none
-
-fn count_char(b List[char], from int, to int, c char) int
-    mut n := 0
-    for k in from..to
-        if b[k] == c
-            n += 1
-    n
-
-## `assert(c)` and `assert_eq(a, b)` as calls of `ail_native_check(ok, line, col)`.
-fn rewrite_asserts(text str) str
-    b := text.chars()
-    mut out := List[str]()
-    mut i := 0
-    mut line := 1
-    mut line_start := 0
-    mut copied := 0
-    while i < b.len()
-        c := b[i]
-        if c == '\n'
-            line += 1
-            i += 1
-            line_start = i
-        elif c == '#'
-            while i < b.len() and b[i] != '\n'
-                i += 1
-        elif c == '"'
-            end := skip_string(b, i)
-            nl := count_char(b, i, end, '\n')
-            if nl > 0
-                line += nl
-                mut k := end - 1
-                while k >= i and b[k] != '\n'
-                    k -= 1
-                line_start = k + 1
-            i = end
-        elif c.is_alpha() or c == '_'
-            start := i
-            while i < b.len() and ident_char(b[i])
-                i += 1
-            word := b[start..i].join("")
-            prev_dot := start > 0 and b[start - 1] == '.'
-            if (word == "assert" or word == "assert_eq")
-                and i < b.len()
-                and b[i] == '('
-                and not prev_dot
-                if ca := call_args(b, i)
-                    col := start - line_start + 1
-                    mut call := ""
-                    if word == "assert" and ca.args.len() == 1
-                        call = "ail_native_check({ca.args[0]}, {line}, {col})"
-                    elif word == "assert_eq" and ca.args.len() == 2
-                        call = "ail_native_check(({ca.args[0]}) == ({ca.args[1]}), {line}, {col})"
-                    if not call.is_empty()
-                        out.push(b[copied..start].join(""))
-                        out.push(call)
-                        # Trimmed arguments lose their newlines; give them back so lines stay put.
-                        lost := count_char(b, start, ca.end, '\n') - call.count("\n")
-                        for _ in 0..lost
-                            out.push("\n")
-                        line += count_char(b, start, ca.end, '\n')
-                        copied = ca.end
-                        i = ca.end
-        else
-            i += 1
-    out.push(b[copied..b.len()].join(""))
-    out.join("")
-
 struct Rewritten
+    ## Lines added above the original text.
+    lead int
     text str
     ## For each line of `text`, the original line it came from (-1: added).
     origin List[int]
@@ -243,7 +297,7 @@ fn contains_line(lines List[str], want str) bool
     false
 
 ## The rewritten copy; left-out tests and `main` become blank lines.
-fn rewrite(lines List[str], f Found, dropped Set[int]) Rewritten
+fn rewrite(w World, lines List[str], f Found, dropped Set[int]) Rewritten
     mut keep := lines
     for i in 0..f.tests.len()
         t := f.tests[i]
@@ -254,7 +308,7 @@ fn rewrite(lines List[str], f Found, dropped Set[int]) Rewritten
             h := lines[t.header].trim_start()
             sig := if t.header == t.first then h.slice(5, h.len()).trim_start() else h
             keep[t.first] = ""
-            keep[t.header] = "{sig.trim_end()} int?"
+            keep[t.header] = "{sig.trim_end()} !"
     for r in f.left_out
         for j in r.first..r.last + 1
             keep[j] = ""
@@ -263,61 +317,748 @@ fn rewrite(lines List[str], f Found, dropped Set[int]) Rewritten
             for j in m..block_end(lines, m) + 1
                 keep[j] = ""
             break
-    body := rewrite_asserts(keep.join("\n"))
-    rewritten := body.split("\n")
+    rewritten := keep
     mut out := List[str]()
     mut origin := List[int]()
     for l in ["use std.env", "use std.io"]
         if not contains_line(lines, l)
             out.push(l)
             origin.push(-1)
-    mut ends := Set[int]()
-    for i in 0..f.tests.len()
-        if not dropped.contains(i)
-            ends.add(f.tests[i].last)
+    lead := out.len()
     for j in 0..rewritten.len()
         out.push(rewritten[j])
         origin.push(j)
-        if ends.contains(j)
-            out.push("    return 0")
-            origin.push(-1)
-    mut tail := "\nfn ail_native_check(ok bool, line int, col int)\n    if not ok\n        io.eprint(\"assertion failed at \{line}:\{col}\")\n        io.exit(1)\n\nfn main()\n    args := env.args()\n    k := args[0].len()\n"
+    mut tail := "\nfn main()\n    args := env.args()\n    k := args[0].len()\n"
     mut slot := 1
+    mut done := Set[str]()
+    mut decs := ""
     for i in 0..f.tests.len()
         if dropped.contains(i)
             continue
-        tail = "{tail}    if k == {slot}\n        if r := {f.tests[i].name}()\n            io.exit(r)\n        io.exit(3)\n"
+        t := f.tests[i]
+        mut call := List[str]()
+        tail = "{tail}    if k == {slot}\n"
+        for pi in 0..t.params.len()
+            ty := parse_ty(t.params[pi].ty, w.decls) else continue
+            decs = "{decs}{decoders(w, ty, mut done)}"
+            tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(args[{pi + 1}].split(\"\\u\{1f}\"), mut ail_c{pi})\n"
+            call.push("ail_p{pi}")
+        tail = "{tail}        {t.name}({call.join(", ")}) else err\n            io.eprint(\"error: \{err}\")\n            io.exit(1)\n        io.exit(0)\n"
         slot += 1
     tail = "{tail}    io.exit(4)\n"
+    if not decs.is_empty()
+        tail = "{tail}\nstruct AilCur\n    i int\n{decs}"
     for l in tail.split("\n")
         out.push(l)
         origin.push(-1)
-    Rewritten(text: out.join("\n"), origin: origin)
+    Rewritten(text: out.join("\n"), origin: origin, lead: lead)
 
 fn short(msg str) str
     msg.split("\n").first() else msg
 
 ## The first line of a trap or failure, as `trap[RULE]: text at L:C`.
-fn describe(err str) str
+fn describe(err str, lead int) str
     first := err.lines().first() else ""
-    if first.starts_with("assertion failed at ")
-        return "trap[test.assert.1]: assertion failed at {first.slice(20, first.len())}"
     if idx := first.find(": trap[")
         head := first.slice(0, idx)
         parts := head.split(":")
         if parts.len() >= 3
-            return "{first.slice(idx + 2, first.len())} at {parts[parts.len() - 2]}:{parts[parts.len() - 1]}"
+            line := (parts[parts.len() - 2].to_int() else lead) - lead
+            return "{first.slice(idx + 2, first.len())} at {line}:{parts[parts.len() - 1]}"
     first
 
-fn run_one(exe str, slot int) Verdict
+## ---- Property tests (test.prop.1-5) ----
+
+## splitmix64 on a wrapping `int` (test.prop.3); the same stream as the interpreter's.
+struct Rng
+    state int
+
+fn shr_u(x int, n int) int
+    x.shr(n).bit_and((1.shl(63 - n) - 1) * 2 + 1)
+
+fn Rng.next(mut self) int
+    state = state.wrapping_add(-7046029254386353131)
+    mut z := state
+    z = z.bit_xor(shr_u(z, 30)).wrapping_mul(-4658895280553007687)
+    z = z.bit_xor(shr_u(z, 27)).wrapping_mul(-7723592293110705685)
+    z.bit_xor(shr_u(z, 31))
+
+## `x mod n` for the unsigned reading of `x`.
+fn mod_u(x int, n int) int
+    if x >= 0
+        return x % n
+    h := shr_u(x, 1)
+    ((h % n) * 2 + x.bit_and(1)) % n
+
+fn Rng.below(mut self, n int) int
+    if n == 0 then 0 else mod_u(next(), n)
+
+fn Rng.range(mut self, lo int, hi int) int
+    lo + below(hi - lo + 1)
+
+## FNV-1a of the name: the default seed (test.prop.3).
+fn default_seed(name str) int
+    mut h := -3750763034362895579
+    for c in name.chars()
+        h = h.bit_xor(c.code()).wrapping_mul(1099511628211)
+    h
+
+## The decimal text of `x` read as unsigned.
+fn unsigned_text(x int) str
+    if x >= 0
+        return "{x}"
+    q := shr_u(x, 1) / 5
+    "{q}{x.wrapping_sub(q.wrapping_mul(10))}"
+
+## One generated value. Which fields are used depends on the type: `n` is an int, a bool (0 or 1)
+## or an enum's variant index, `x` a float, `s` a char or str, `kids` the elements of a list, set
+## (one each) or map (key, value, key, value...), the value of a present optional, or the fields
+## of a struct, variant or tuple.
+struct Node
+    n int
+    x float
+    s str
+    kids List[Node]
+
+fn num_node(n int) Node
+    Node(n: n, x: 0.0, s: "", kids: [])
+
+fn flt_node(x float) Node
+    Node(n: 0, x: x, s: "", kids: [])
+
+fn txt_node(s str) Node
+    Node(n: 0, x: 0.0, s: s, kids: [])
+
+fn kid_node(kids List[Node]) Node
+    Node(n: 0, x: 0.0, s: "", kids: kids)
+
+## What generation and shrinking need to know about the file's types.
+struct World
+    decls Map[str, Decl]
+
+ODD := ['\n', '\t', 'é', 'λ', '日', '"', '\\']
+
+fn gen_char(mut rng Rng) char
+    if rng.below(12) == 0
+        return ODD[rng.below(ODD.len())]
+    char.from_code(rng.range(0x20, 0x7e)) else 'a'
+
+## The fields of a struct, or of a variant of an enum.
+fn fields_of(w World, ty Ty, variant int) List[Ty]
+    mut out := List[Ty]()
+    d := w.decls[ty.name]
+    for f in d.variants[variant].fields
+        out.push(parse_ty(f.ty, w.decls) else ty)
+    out
+
+## The variant with the fewest fields: the simplest one to build.
+fn simplest_variant(w World, ty Ty) int
+    d := w.decls[ty.name]
+    mut best := 0
+    for i in 0..d.variants.len()
+        if d.variants[i].fields.len() < d.variants[best].fields.len()
+            best = i
+    best
+
+## Adds `key` (and `val` in a map, `stride` 2) unless the key is there; a map then takes the new value.
+fn put(w World, kt Ty, mut kids List[Node], stride int, key Node, val Node)
+    ks := tokens(w, kt, key).join("\u{1f}")
+    mut i := 0
+    while i < kids.len()
+        if tokens(w, kt, kids[i]).join("\u{1f}") == ks
+            if stride == 2
+                kids[i + 1] = val
+            return
+        i += stride
+    kids.push(key)
+    if stride == 2
+        kids.push(val)
+
+## A random value; `size` grows from 1 to 100 over the run (test.prop.3).
+fn gen(w World, ty Ty, mut rng Rng, size int, depth int) Node
+    bound := 10 + size * 10
+    k := ty.kind
+    if k == "int"
+        r := rng.below(20)
+        if r == 0
+            return num_node([0, 1, -1][rng.below(3)])
+        if r == 1
+            return num_node(rng.range(-2147483648, 2147483648))
+        return num_node(rng.range(-bound, bound))
+    if k == "float"
+        x := if rng.below(20) == 0 then 0.0 else rng.range(
+            -bound * 100,
+            bound * 100,
+        ).to_float() / 100.0
+        return flt_node(x)
+    if k == "bool"
+        return num_node(if rng.below(2) == 0 then 1 else 0)
+    if k == "char"
+        return txt_node("{gen_char(mut rng)}")
+    if k == "str"
+        mut text := ""
+        for _ in 0..rng.below(size / 4 + 2)
+            text = "{text}{gen_char(mut rng)}"
+        return txt_node(text)
+    if k == "bytes"
+        mut octets := List[Node]()
+        for _ in 0..rng.below(size / 4 + 2)
+            r := rng.below(8)
+            if r == 0
+                octets.push(num_node(0))
+            elif r == 1
+                octets.push(num_node(255))
+            elif r == 2
+                octets.push(num_node(97 + rng.below(26)))
+            else
+                octets.push(num_node(rng.below(256)))
+        return kid_node(octets)
+    if k == "list" or k == "set" or k == "map"
+        n := if depth >= 3 then 0 else rng.below((size / 10).min(10) + 2)
+        mut kids := List[Node]()
+        for _ in 0..n
+            if k == "list"
+                kids.push(gen(w, ty.kids[0], mut rng, size, depth + 1))
+            elif k == "set"
+                put(
+                    w,
+                    ty.kids[0],
+                    mut kids,
+                    1,
+                    gen(w, ty.kids[0], mut rng, size, depth + 1),
+                    num_node(0),
+                )
+            else
+                key := gen(w, ty.kids[0], mut rng, size, depth + 1)
+                put(w, ty.kids[0], mut kids, 2, key, gen(w, ty.kids[1], mut rng, size, depth + 1))
+        return kid_node(kids)
+    if k == "opt"
+        if depth >= 3 or rng.below(4) == 0
+            return kid_node([])
+        return kid_node([gen(w, ty.kids[0], mut rng, size, depth + 1)])
+    if k == "tuple"
+        mut kids := List[Node]()
+        for kt in ty.kids
+            kids.push(gen(w, kt, mut rng, size, depth + 1))
+        return kid_node(kids)
+    mut v := 0
+    if k == "enum"
+        v = if depth >= 3 then simplest_variant(
+            w,
+            ty,
+        ) else rng.below(w.decls[ty.name].variants.len())
+    mut kids := List[Node]()
+    for ft in fields_of(w, ty, v)
+        kids.push(gen(w, ft, mut rng, size, depth + 1))
+    Node(n: v, x: 0.0, s: "", kids: kids)
+
+## The simplest value of a type, the end of every shrink.
+fn minimal(w World, ty Ty) Node
+    k := ty.kind
+    if k == "int" or k == "bool"
+        return num_node(0)
+    if k == "float"
+        return flt_node(0.0)
+    if k == "char"
+        return txt_node("a")
+    if k == "str"
+        return txt_node("")
+    if k == "tuple"
+        return kid_node([minimal(w, kt) for kt in ty.kids])
+    if k == "struct"
+        return kid_node([minimal(w, ft) for ft in fields_of(w, ty, 0)])
+    if k == "enum"
+        return minimal_variant(w, ty, simplest_variant(w, ty))
+    kid_node([])
+
+fn minimal_variant(w World, ty Ty, v int) Node
+    Node(n: v, x: 0.0, s: "", kids: [minimal(w, ft) for ft in fields_of(w, ty, v)])
+
+## Shorter versions of a sequence of `stride`-sized units: empty, each half, each of the first 8 removed.
+fn shorten(kids List[Node], stride int) List[List[Node]]
+    mut out := List[List[Node]]()
+    u := kids.len() / stride
+    if u == 0
+        return out
+    out.push([])
+    if u > 1
+        out.push(kids[..u / 2 * stride])
+        out.push(kids[u / 2 * stride..])
+    for i in 0..u.min(8)
+        mut d := List[Node]()
+        for j in 0..kids.len()
+            if j / stride != i
+                d.push(kids[j])
+        out.push(d)
+    out
+
+fn chars_text(cs List[char], from int, to int) str
+    mut out := ""
+    for i in from..to
+        out = "{out}{cs[i]}"
+    out
+
+fn rebuilt(w World, ty Ty, units List[Node]) Node
+    mut kids := List[Node]()
+    stride := if ty.kind == "map" then 2 else 1
+    mut i := 0
+    while i < units.len()
+        put(
+            w,
+            ty.kids[0],
+            mut kids,
+            stride,
+            units[i],
+            if stride == 2 then units[i + 1] else units[i],
+        )
+        i += stride
+    kid_node(kids)
+
+## Simpler values than `v`, simplest first (test.prop.5).
+fn shrinks(w World, ty Ty, v Node) List[Node]
+    mut out := List[Node]()
+    k := ty.kind
+    if k == "int"
+        if v.n != 0
+            out.push(num_node(0))
+            out.push(num_node(v.n / 2))
+            if v.n < 0
+                out.push(num_node(-v.n))
+            out.push(num_node(v.n - (if v.n < 0 then -1 else 1)))
+    elif k == "float"
+        if v.x != 0.0
+            out.push(flt_node(0.0))
+            out.push(flt_node(v.x.to_int().to_float()))
+            out.push(flt_node(v.x / 2.0))
+    elif k == "bool"
+        if v.n == 1
+            out.push(num_node(0))
+    elif k == "char"
+        if v.s != "a"
+            out.push(txt_node("a"))
+    elif k == "str"
+        cs := v.s.chars()
+        if not cs.is_empty()
+            out.push(txt_node(""))
+            if cs.len() > 1
+                out.push(txt_node(chars_text(cs, 0, cs.len() / 2)))
+                out.push(txt_node(chars_text(cs, cs.len() / 2, cs.len())))
+            for i in 0..cs.len().min(8)
+                out.push(txt_node("{chars_text(cs, 0, i)}{chars_text(cs, i + 1, cs.len())}"))
+            for i in 0..cs.len().min(8)
+                if cs[i] != 'a'
+                    out.push(txt_node("{chars_text(cs, 0, i)}a{chars_text(cs, i + 1, cs.len())}"))
+    elif k == "bytes"
+        for shorter in shorten(v.kids, 1)
+            out.push(kid_node(shorter))
+        for i in 0..v.kids.len().min(8)
+            if v.kids[i].n != 0
+                mut d := v.kids
+                d[i] = num_node(0)
+                out.push(kid_node(d))
+    elif k == "list" or k == "set" or k == "map"
+        stride := if k == "map" then 2 else 1
+        for shorter in shorten(v.kids, stride)
+            out.push(if k == "list" then kid_node(shorter) else rebuilt(w, ty, shorter))
+        u := v.kids.len() / stride
+        for i in 0..u.min(8)
+            mut taken := 0
+            for sv in shrinks(w, ty.kids[0], v.kids[i * stride])
+                if taken == (if k == "map" then 2 else 3)
+                    break
+                taken += 1
+                mut d := v.kids
+                d[i * stride] = sv
+                out.push(if k == "list" then kid_node(d) else rebuilt(w, ty, d))
+            if k == "map"
+                taken = 0
+                for sv in shrinks(w, ty.kids[1], v.kids[i * 2 + 1])
+                    if taken == 3
+                        break
+                    taken += 1
+                    mut d := v.kids
+                    d[i * 2 + 1] = sv
+                    out.push(rebuilt(w, ty, d))
+    elif k == "opt"
+        if not v.kids.is_empty()
+            out.push(kid_node([]))
+            for sv in shrinks(w, ty.kids[0], v.kids[0])
+                out.push(kid_node([sv]))
+    elif k == "tuple" or k == "struct" or k == "enum"
+        mut fts := ty.kids
+        if k != "tuple"
+            fts = fields_of(w, ty, v.n)
+        if k == "enum"
+            for earlier in 0..v.n
+                out.push(minimal_variant(w, ty, earlier))
+        for j in 0..v.kids.len()
+            for sv in shrinks(w, fts[j], v.kids[j])
+                mut d := v.kids
+                d[j] = sv
+                out.push(Node(n: v.n, x: 0.0, s: "", kids: d))
+    out
+
+## The values' text forms (trait.auto.2), as `ail test` reports an input.
+fn show(w World, ty Ty, v Node) str
+    k := ty.kind
+    if k == "int"
+        return "{v.n}"
+    if k == "float"
+        return "{v.x}"
+    if k == "bool"
+        return if v.n == 1 then "true" else "false"
+    if k == "char"
+        return "'{escape(v.s, "'")}'"
+    if k == "str"
+        return "\"{escape(v.s, "\"")}\""
+    if k == "bytes"
+        mut text := "b\""
+        for o in v.kids
+            text = "{text}{byte_text(o.n)}"
+        return "{text}\""
+    if k == "list"
+        return "[{[show(w, ty.kids[0], x) for x in v.kids].join(", ")}]"
+    if k == "set"
+        return "\{{[show(w, ty.kids[0], x) for x in v.kids].join(", ")}}"
+    if k == "map"
+        mut parts := List[str]()
+        for i in 0..v.kids.len() / 2
+            parts.push("{show(w, ty.kids[0], v.kids[i * 2])}: {show(w, ty.kids[1], v.kids[i * 2 + 1])}")
+        return "\{{parts.join(", ")}}"
+    if k == "opt"
+        return if v.kids.is_empty() then "none" else show(w, ty.kids[0], v.kids[0])
+    if k == "tuple"
+        return "({[show(w, ty.kids[j], v.kids[j]) for j in 0..v.kids.len()].join(", ")})"
+    d := w.decls[ty.name]
+    vr := d.variants[v.n]
+    fts := fields_of(w, ty, v.n)
+    mut parts := List[str]()
+    for j in 0..v.kids.len()
+        parts.push("{vr.fields[j].name}: {show(w, fts[j], v.kids[j])}")
+    head := if k == "enum" then "{ty.name}.{vr.name}" else ty.name
+    if parts.is_empty() then head else "{head}({parts.join(", ")})"
+
+## One byte inside a `b"..."` literal (type.bytes.2).
+fn byte_text(n int) str
+    if n == 34
+        return "\\\""
+    if n == 92
+        return "\\\\"
+    if n == 10
+        return "\\n"
+    if n == 9
+        return "\\t"
+    if n == 13
+        return "\\r"
+    if n >= 32 and n <= 126
+        return "{char.from_code(n) else 'a'}"
+    "\\x{if n < 16 then "0" else ""}{n.to_hex()}"
+
+fn escape(s str, quote str) str
+    mut out := ""
+    for c in s.chars()
+        t := "{c}"
+        if t == "\n"
+            out = "{out}\\n"
+        elif t == "\t"
+            out = "{out}\\t"
+        elif t == "\\"
+            out = "{out}\\\\"
+        elif t == quote
+            out = "{out}\\{t}"
+        else
+            out = "{out}{t}"
+    out
+
+## The command-line form of a value: tokens that the test binary's decoder reads back in order.
+fn tokens(w World, ty Ty, v Node) List[str]
+    mut out := List[str]()
+    k := ty.kind
+    if k == "int"
+        out.push("{v.n}")
+    elif k == "bool"
+        out.push(if v.n == 1 then "true" else "false")
+    elif k == "float"
+        out.push("{v.x}")
+    elif k == "char" or k == "str"
+        out.push(v.s)
+    elif k == "bytes"
+        mut hex := ""
+        for o in v.kids
+            hex = "{hex}{if o.n < 16 then "0" else ""}{o.n.to_hex()}"
+        out.push(hex)
+    elif k == "list" or k == "set"
+        out.push("{v.kids.len()}")
+        for x in v.kids
+            out.extend(tokens(w, ty.kids[0], x))
+    elif k == "map"
+        out.push("{v.kids.len() / 2}")
+        for i in 0..v.kids.len()
+            out.extend(tokens(w, ty.kids[i % 2], v.kids[i]))
+    elif k == "opt"
+        out.push(if v.kids.is_empty() then "0" else "1")
+        for x in v.kids
+            out.extend(tokens(w, ty.kids[0], x))
+    elif k == "tuple"
+        for j in 0..v.kids.len()
+            out.extend(tokens(w, ty.kids[j], v.kids[j]))
+    else
+        if k == "enum"
+            out.push("{v.n}")
+        fts := fields_of(w, ty, v.n)
+        for j in 0..v.kids.len()
+            out.extend(tokens(w, fts[j], v.kids[j]))
+    out
+
+## A name for the decoder of a type, made of letters, digits and `_`.
+fn mangle(text str) str
+    mut out := ""
+    for c in text.chars()
+        t := "{c}"
+        if c.is_alpha() or c.is_digit() or c == '_'
+            out = "{out}{t}"
+        elif c == '['
+            out = "{out}_L"
+        elif c == ']'
+            out = "{out}_R"
+        elif c == ','
+            out = "{out}_C"
+        elif c == '?'
+            out = "{out}_Q"
+        elif c == '('
+            out = "{out}_T"
+        elif c == ')'
+            out = "{out}_E"
+    out
+
+fn decoder_name(ty Ty) str
+    "ail_d_{mangle(ty.text)}"
+
+## The decoder functions (source text) that read a value of `ty` from tokens, with the ones its
+## parts need. `done` holds the types that already have one.
+fn decoders(w World, ty Ty, mut done Set[str]) str
+    if done.contains(ty.text)
+        return ""
+    done.add(ty.text)
+    mut out := ""
+    for kt in ty.kids
+        out = "{out}{decoders(w, kt, mut done)}"
+    k := ty.kind
+    if k == "struct" or k == "enum"
+        for vi in 0..w.decls[ty.name].variants.len()
+            for ft in fields_of(w, ty, vi)
+                out = "{out}{decoders(w, ft, mut done)}"
+    mut body := ""
+    if k == "int"
+        body = "    x := t[c.i].to_int() else 0\n    c.i += 1\n    x\n"
+    elif k == "float"
+        body = "    x := t[c.i].to_float() else 0.0\n    c.i += 1\n    x\n"
+    elif k == "bool"
+        body = "    x := t[c.i] == \"true\"\n    c.i += 1\n    x\n"
+    elif k == "char"
+        body = "    x := t[c.i].chars()[0]\n    c.i += 1\n    x\n"
+    elif k == "str"
+        body = "    x := t[c.i]\n    c.i += 1\n    x\n"
+    elif k == "bytes"
+        body = "    x := bytes.from_hex(t[c.i]) else b\"\"\n    c.i += 1\n    x\n"
+    elif k == "list" or k == "set"
+        add := if k == "list" then "push" else "add"
+        body = "    n := t[c.i].to_int() else 0\n    c.i += 1\n    mut out := {ty.text}()\n    for _ in 0..n\n        out.{add}({decoder_name(ty.kids[0])}(t, mut c))\n    out\n"
+    elif k == "map"
+        body = "    n := t[c.i].to_int() else 0\n    c.i += 1\n    mut out := {ty.text}()\n    for _ in 0..n\n        key := {decoder_name(ty.kids[0])}(t, mut c)\n        out[key] = {decoder_name(ty.kids[1])}(t, mut c)\n    out\n"
+    elif k == "opt"
+        body = "    flag := t[c.i]\n    c.i += 1\n    if flag == \"1\"\n        return {decoder_name(ty.kids[0])}(t, mut c)\n    none\n"
+    elif k == "tuple"
+        mut names := List[str]()
+        for j in 0..ty.kids.len()
+            body = "{body}    a{j} := {decoder_name(ty.kids[j])}(t, mut c)\n"
+            names.push("a{j}")
+        body = "{body}    ({names.join(", ")})\n"
+    elif k == "struct"
+        body = struct_body(w, ty, 0, ty.name)
+    else
+        body = "    v := t[c.i].to_int() else 0\n    c.i += 1\n"
+        d := w.decls[ty.name]
+        for vi in 0..d.variants.len()
+            vr := d.variants[vi]
+            last := vi == d.variants.len() - 1
+            if not last
+                body = "{body}    if v == {vi}\n"
+            inner := struct_body(w, ty, vi, "{ty.name}.{vr.name}")
+            for l in inner.split("\n")
+                if not l.is_empty()
+                    body = "{body}{if last then "" else "    "}{l}\n"
+    "{out}\nfn {decoder_name(ty)}(t List[str], mut c AilCur) {ty.text}\n{body}"
+
+## Statements that read the fields of one variant (or a struct) and build it; the last is the value.
+fn struct_body(w World, ty Ty, variant int, ctor str) str
+    mut body := ""
+    fts := fields_of(w, ty, variant)
+    fs := w.decls[ty.name].variants[variant].fields
+    mut args := List[str]()
+    for j in 0..fts.len()
+        body = "{body}    f{j} := {decoder_name(fts[j])}(t, mut c)\n"
+        args.push("{fs[j].name}: f{j}")
+    if args.is_empty()
+        return "{body}    return {ctor}\n"
+    "{body}    return {ctor}({args.join(", ")})\n"
+
+struct Prop
+    status str
+    message str
+    cases int
+    input str
+
+## Runs the binary on one input: none when it passes, else the failure line.
+fn try_case(w World, lead int, exe str, slot int, t TestFn, tys List[Ty], args List[Node]) str?
+    mut all := [["x" for _ in 0..slot].join("")]
+    for i in 0..args.len()
+        all.push(tokens(w, tys[i], args[i]).join("\u{1f}"))
+    r := proc.run(exe, all, none, RUN_LIMIT_MS) else
+        return "error: can't start the test binary"
+    if r.status == 0
+        return none
+    if r.status == 4
+        return "error: no such test"
+    describe(r.err, lead)
+
+fn run_prop(w World, lead int, exe str, slot int, t TestFn, cases int, seed int) Prop
+    mut rng := Rng(state: seed)
+    mut tys := List[Ty]()
+    for p in t.params
+        tys.push(parse_ty(p.ty, w.decls) else return Prop(
+            status: "fail",
+            message: "error: unsupported type",
+            cases: 0,
+            input: "",
+        ))
+    for n in 1..cases + 1
+        size := 1 + (n - 1) * 99 / (cases.max(2) - 1)
+        mut args := List[Node]()
+        for ty in tys
+            args.push(gen(w, ty, mut rng, size, 0))
+        mut fail := try_case(w, lead, exe, slot, t, tys, args) else continue
+        mut budget := 2000
+        mut again := true
+        while again and budget > 0
+            again = false
+            for i in 0..args.len()
+                if again or budget == 0
+                    break
+                for cand in shrinks(w, tys[i], args[i])
+                    if budget == 0
+                        break
+                    budget -= 1
+                    mut trial := args
+                    trial[i] = cand
+                    if f := try_case(w, lead, exe, slot, t, tys, trial)
+                        args = trial
+                        fail = f
+                        again = true
+                        break
+        mut shown := List[str]()
+        for i in 0..args.len()
+            shown.push("{t.params[i].name} = {show(w, tys[i], args[i])}")
+        return Prop(status: "fail", message: fail, cases: n, input: shown.join(", "))
+    Prop(status: "pass", message: "", cases: cases, input: "")
+
+fn run_one(exe str, slot int, lead int) Verdict
     arg := ["x" for _ in 0..slot].join("")
     r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
-        return Verdict(name: "", status: "fail", message: "error: can't start the test binary")
+        return plain("", "fail", "error: can't start the test binary")
     if r.status == 0
-        return Verdict(name: "", status: "pass", message: "")
+        return plain("", "pass", "")
     if r.status == 4
-        return Verdict(name: "", status: "fail", message: "error: no such test")
-    Verdict(name: "", status: "fail", message: describe(r.err))
+        return plain("", "fail", "error: no such test")
+    plain("", "fail", describe(r.err, lead))
+
+## ---- Doc examples (test.doc.1-3) ----
+
+## The doc examples of FILE as `@test` functions appended to its source, by the native CLI's
+## `doctests` command (compiler/doc); `names` maps each generated function to `doc:Name`.
+struct Augmented
+    lines List[str]
+    names Map[str, str]
+    note str
+
+fn native_cli() str
+    root := env.get("AIL_ROOT") else "."
+    "{root}/.native/ail"
+
+## Builds the native CLI when it is missing or older than the compiler's sources.
+fn ensure_native_cli() bool
+    cli := native_cli()
+    stale := proc.run("sh", [
+        "-c",
+        "[ ! -x '{cli}' ] || [ -n \"$(find compiler bootstrap/src/std -name '*.ail' -newer '{cli}' 2>/dev/null | head -n 1)\" ]",
+    ]) else return false
+    if stale.status != 0
+        return true
+    _ := proc.run("mkdir", ["-p", path.dir(cli)]) else return false
+    b := proc.run(ail_path(), ["build", "compiler/main.ail", "-o", "{cli}.new"]) else return false
+    if b.status != 0
+        return false
+    m := proc.run("mv", ["{cli}.new", cli]) else return false
+    m.status == 0
+
+fn doc_augment(file str) Augmented
+    none_found := Augmented(lines: [], names: {}, note: "")
+    if not ensure_native_cli()
+        return Augmented(lines: [], names: {}, note: "the native CLI for doc examples didn't build")
+    r := proc.run(native_cli(), ["doctests", file]) else
+        return Augmented(lines: [], names: {}, note: "the native CLI for doc examples didn't run")
+    if r.status != 0
+        return Augmented(lines: [], names: {}, note: "doc examples: {short(r.err)}")
+    out := r.out.split("\n")
+    mut names := Map[str, str]()
+    mut i := 0
+    while i < out.len() and out[i].contains(" doc_example_") and out[i].starts_with("doc:")
+        parts := out[i].split(" ")
+        names[parts[1]] = parts[0]
+        i += 1
+    if names.is_empty()
+        return none_found
+    # The source, then an empty line from `print`, then the origin list.
+    mut end := out.len()
+    while end > i and (out[end - 1].is_empty() or out[end - 1].starts_with("["))
+        end -= 1
+    Augmented(lines: out[i..end], names: names, note: "")
+
+## The lines a doc example's output must equal: its `# =>` lines (test.doc.2).
+fn doc_expected(lines List[str], t TestFn) List[str]
+    mut out := List[str]()
+    for j in t.header + 1..t.last + 1
+        if rest := lines[j].trim().strip_prefix("# =>")
+            out.push(rest.strip_prefix(" ") else rest)
+    out
+
+fn debug_list(xs List[str]) str
+    mut parts := List[str]()
+    for x in xs
+        parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
+    "[{parts.join(", ")}]"
+
+fn run_doc(exe str, slot int, lead int, expected List[str]) Verdict
+    arg := ["x" for _ in 0..slot].join("")
+    r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
+        return plain("", "fail", "error: can't start the test binary")
+    if r.status != 0
+        return plain("", "fail", describe(r.err, lead))
+    if expected.is_empty()
+        return plain("", "pass", "")
+    got := r.out.lines()
+    mut same := got.len() == expected.len()
+    if same
+        for k in 0..got.len()
+            if got[k].trim_end() != expected[k].trim_end()
+                same = false
+    if same
+        return plain("", "pass", "")
+    plain(
+        "",
+        "fail",
+        "trap[test.doc.2]: output differs: expected {debug_list(expected)}, found {debug_list(got)}",
+    )
 
 fn json_str(s str) str
     mut out := "\""
@@ -343,12 +1084,17 @@ fn report(vs List[Verdict], json bool) int
             failed += 1
         else
             skipped += 1
+        tail := if v.cases > 0 then " ({v.cases} cases, seed {unsigned_text(v.seed)})" else ""
         if json
-            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\",\"message\":{json_str(v.message)}}")
+            extra := if v.cases > 0 then ",\"cases\":{v.cases},\"seed\":{unsigned_text(v.seed)}" else ""
+            input := if v.input.is_empty() then "" else ",\"input\":{json_str(v.input)}"
+            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\",\"message\":{json_str(v.message)}{extra}{input}}")
         elif v.status == "pass"
-            print("ok {v.name}")
+            print("ok {v.name}{tail}")
         elif v.status == "fail"
-            print("FAIL {v.name}: {v.message}")
+            print("FAIL {v.name}: {v.message}{tail}")
+            if not v.input.is_empty()
+                print("  input: {v.input}")
         else
             print("skip {v.name}: {v.message}")
     if json
@@ -357,28 +1103,66 @@ fn report(vs List[Verdict], json bool) int
         print("{passed} passed, {failed} failed, {skipped} skipped")
     if failed > 0 then 1 else 0
 
+fn seed_for(name str, has_seed bool, given int) int
+    if has_seed then given else default_seed(name)
+
+fn usage() int
+    io.eprint("usage: ailtest [--json] [--cases N] [--seed S] FILE")
+    io.exit(2)
+    2
+
 fn main() !
     mut json := false
     mut files := List[str]()
+    mut cases := 100
+    mut has_seed := false
+    mut seed_given := 0
+    mut want := ""
     for a in env.args()
-        if a == "--json"
+        if want == "--cases"
+            cases = a.to_int() else usage()
+            want = ""
+        elif want == "--seed"
+            seed_given = a.to_int() else usage()
+            has_seed = true
+            want = ""
+        elif a == "--json"
             json = true
+        elif a == "--cases" or a == "--seed"
+            want = a
         else
             files.push(a)
+    if not want.is_empty()
+        io.exit(usage())
     if files.len() != 1
-        io.eprint("usage: ailtest [--json] FILE")
-        io.exit(2)
+        io.exit(usage())
     file := files[0]
     checked := proc.run(ail_path(), ["check", file])? "running ail check"
-    if checked.status != 0
+    if checked.status != 0 and not checked.err.contains("error[mod.main.1]")
         io.eprint(checked.err)
         io.exit(2)
     text := fs.read_text(file)? "reading {file}"
-    lines := text.lines()
+    mut lines := text.lines()
+    mut doc_names := Map[str, str]()
+    mut has_docs := false
+    for l in lines
+        if l.trim() == "## ```ail"
+            has_docs = true
+    mut doc_note := ""
+    if has_docs
+        aug := doc_augment(file)
+        if aug.lines.is_empty()
+            doc_note = aug.note
+        else
+            lines = aug.lines
+            doc_names = aug.names
     found := find_tests(lines)
+    w := World(decls: parse_decls(lines))
     mut verdicts := List[Verdict]()
     for s in found.skipped
-        verdicts.push(Verdict(name: s.name, status: "skip", message: s.why))
+        verdicts.push(plain(s.name, "skip", s.why))
+    if not doc_note.is_empty()
+        verdicts.push(plain("doc examples", "skip", doc_note))
     if found.tests.len() == 0
         io.exit(report(verdicts, json))
     dir := path.dir(file)
@@ -390,10 +1174,12 @@ fn main() !
     mut why := Map[int, str]()
     mut blocked := ""
     mut built := false
+    mut last_lead := 0
     for _ in 0..MAX_ROUNDS
         if dropped.len() == found.tests.len()
             break
-        rw := rewrite(lines, found, dropped)
+        rw := rewrite(w, lines, found, dropped)
+        last_lead = rw.lead
         fs.write_text(copy, rw.text)? "writing {copy}"
         b := proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
         if b.status == 0
@@ -430,30 +1216,40 @@ fn main() !
     for i in 0..found.tests.len()
         t := found.tests[i]
         if dropped.contains(i)
-            verdicts.push(Verdict(
-                name: t.name,
-                status: "skip",
-                message: "not in the native subset yet: {why[i]}",
-            ))
+            verdicts.push(plain(t.name, "skip", "not in the native subset yet: {why[i]}"))
         elif not blocked.is_empty()
-            verdicts.push(Verdict(
-                name: t.name,
-                status: "skip",
-                message: "outside the tests: {blocked}",
-            ))
+            verdicts.push(plain(t.name, "skip", "outside the tests: {blocked}"))
         elif not built
-            verdicts.push(Verdict(
-                name: t.name,
-                status: "skip",
-                message: "no build within the round limit",
-            ))
+            verdicts.push(plain(t.name, "skip", "no build within the round limit"))
         else
             mut slot := 1
             for j in 0..i
                 if not dropped.contains(j)
                     slot += 1
-            v := run_one(exe, slot)
-            verdicts.push(Verdict(name: t.name, status: v.status, message: v.message))
+            if doc_names.contains(t.name)
+                v := run_doc(exe, slot, last_lead, doc_expected(lines, t))
+                verdicts.push(plain(doc_names[t.name], v.status, v.message))
+            elif t.params.is_empty()
+                v := run_one(exe, slot, last_lead)
+                verdicts.push(plain(t.name, v.status, v.message))
+            else
+                p := run_prop(
+                    w,
+                    last_lead,
+                    exe,
+                    slot,
+                    t,
+                    cases,
+                    seed_for(t.name, has_seed, seed_given),
+                )
+                verdicts.push(Verdict(
+                    name: t.name,
+                    status: p.status,
+                    message: p.message,
+                    cases: p.cases,
+                    seed: seed_for(t.name, has_seed, seed_given),
+                    input: p.input,
+                ))
     code := report(verdicts, json)
     _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
     io.exit(code)

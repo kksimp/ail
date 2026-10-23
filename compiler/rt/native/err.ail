@@ -19,6 +19,11 @@ fn box(v int) int
     store64(p, v)
     p
 
+fn box_opt(v int) int
+    p := alloc(8, 4)
+    store64(p, v)
+    p
+
 fn box_bool(b bool) int
     p := alloc(8, KIND_ATOMIC)
     store64(p, if b then 1 else 0)
@@ -77,6 +82,21 @@ fn err_take() str
     store64(global(ERR), 0)
     store64(global(ERRV), 0)
     str_at(p)
+
+## A task that failed keeps its error in a box until `wait` takes it.
+fn err_box() int
+    b := obj_new(24, 4)
+    store64(b, load64(global(ERR)))
+    store64(b + 8, load64(global(ERRV)))
+    store64(b + 16, load64(global(TRACE)))
+    store64(global(ERR), 0)
+    store64(global(ERRV), 0)
+    b
+
+fn err_restore(b int)
+    store64(global(ERR), load64(b))
+    store64(global(ERRV), load64(b + 8))
+    store64(global(TRACE), load64(b + 16))
 
 fn err_clear()
     store64(global(ERR), 0)

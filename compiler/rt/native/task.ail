@@ -10,7 +10,7 @@
 ## allocator's lock are in `core.ail`.
 ##
 ## A task record (heap, 8-byte words):
-##   +0 state (0 queued or running, 2 done, 3 trapped)   +8 task id (picks
+##   +0 state (0 queued or running, 2 done, 3 trapped, 4 failed with an error)   +8 task id (picks
 ##   the function in `dispatch`)   +16 result   +24 next in the queue
 ##   +32 trap kind   +40 a   +48 b   +56 head string   +64 operator string   +72 source excerpt
 ##   +80 arguments, 8 bytes each
@@ -37,6 +37,8 @@ P_TOP := 1024
 # the callee-saved registers it had (native-abi.md §10).
 P_PARK := 2048
 P_REGS := 4096
+# The mutexes each thread holds from `lock` (a list through the mutex records).
+P_HELD := 12288
 POOL_SZ := 16384
 # Heap kinds of the blocks tasks use: every word may be a pointer, except an
 # atomic cell, which is `KIND_ATOMIC` (heap.ail).
@@ -54,6 +56,14 @@ T_HEAD := 56
 T_OP := 64
 T_TAIL := 72
 T_ARGS := 80
+# After the 14 argument words: cancelled, the task that started this one, the
+# channel it sleeps on, its first child and its next sibling (conc.cancel.*).
+T_CANC := 192
+T_PAR := 200
+T_BLK := 208
+T_KIDS := 216
+T_SIB := 224
+T_SIZE := 232
 
 ## The cores this process may run on, 1 to 8 (`sched_getaffinity`).
 fn cores() int
@@ -124,13 +134,24 @@ fn pool() int
     store64(global(TASKS), q)
     hset(H_FASTLIM, 0)
     store64(global(MULTI), 1)
+    # The stack check compares against the main stack's limit, and a worker's
+    # stack lies below it, so every recursive call in a task would trap. With
+    # threads there is no limit; deep recursion meets the guard page instead.
+    store64(global(STACK_LIMIT), 0)
     q
 
 ## A task record for function `id` of `dispatch`; the caller stores the
 ## arguments from `T_ARGS` and calls `task_start`.
 fn task_new(id int) int
-    rec := alloc(T_ARGS + 8 * 14, KIND_TASK)
+    rec := alloc(T_SIZE, KIND_TASK)
     store64(rec + T_ID, id)
+    parent := cur_task()
+    if parent != 0
+        store64(rec + T_PAR, parent)
+        store64(rec + T_SIB, load64(parent + T_KIDS))
+        store64(parent + T_KIDS, rec)
+        # A task started by a cancelled task starts cancelled.
+        store64(rec + T_CANC, atomic_load(parent + T_CANC))
     rec
 
 ## Queue the task and make sure a worker will take it: wake an idle one, or
@@ -217,7 +238,13 @@ fn worker_main(idx int)
             store64(p + P_CUR + 8 * idx, rec)
             dispatch(load64(rec + T_ID), rec)
             store64(p + P_CUR + 8 * idx, 0)
-            finish_task(rec, 2)
+            held_release(idx + 1)
+            if failed()
+                # The task's own error (conc.task.6) waits for `wait`.
+                store64(rec + T_RESULT, err_box())
+                finish_task(rec, 4)
+            else
+                finish_task(rec, 2)
         else
             s := load64(p + P_SEQ)
             store64(p + P_IDLE, load64(p + P_IDLE) + 1)
@@ -249,6 +276,7 @@ fn on_trap(kind int, a int, b int, head str, op str, tail str)
     store64(rec + T_HEAD, str_addr(head))
     store64(rec + T_OP, str_addr(op))
     store64(rec + T_TAIL, str_addr(tail))
+    held_release(k + 1)
     # A trap inside the allocator (a run limit) still holds its lock.
     if atomic_load(global(ALLOC_OWNER)) == k + 2
         atomic_store(global(ALLOC_OWNER), 0)
@@ -269,7 +297,69 @@ fn task_wait(rec int, at1 str, at2 str) int
     wait_done(rec)
     if atomic_load(rec + T_STATE) == 3
         report_trapped(rec, at1, at2)
+    if atomic_load(rec + T_STATE) == 4
+        err_restore(load64(rec + T_RESULT))
+        return 0
     load64(rec + T_RESULT)
+
+## `t.wait() else ...`: the result, or, when the task trapped, the failure
+## `Trapped(rule, message)` in the error slot (conc.task.6) and 0.
+fn task_try(rec int, at str, own int) int
+    wait_done(rec)
+    if atomic_load(rec + T_STATE) == 4
+        err_restore(load64(rec + T_RESULT))
+        return 0
+    if atomic_load(rec + T_STATE) != 3
+        return load64(rec + T_RESULT)
+    # A function with an error type of its own can't hold a `Trapped`.
+    if own != 0
+        report_trapped(rec, at, at)
+    trapped_error(rec, at)
+    0
+
+## The failure `Trapped(rule, message)` of the trapped task `rec`, in the error slot.
+fn trapped_error(rec int, at str)
+    h := load64(rec + T_HEAD)
+    n := load64(h)
+    d := h + 16
+    mut t := 0
+    while t + 5 <= n and not is_trap_mark(d + t)
+        t += 1
+    mut j := t - 3
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    j -= 1
+    while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
+        j -= 1
+    mut e := t + 5
+    while e < n and load8(d + e) != 93
+        e += 1
+    rule := os_str_from(d + t + 5, e - t - 5)
+    # The message is written to the output buffer, then taken back out of it.
+    out_lock()
+    flush()
+    out_bytes(d + j + 1, t - j - 2)
+    out_byte(32)
+    trap_body(
+        load64(rec + T_KIND),
+        load64(rec + T_A),
+        load64(rec + T_B),
+        str_at(load64(rec + T_OP)),
+    )
+    msg := os_str_from(load64(global(OUT_BUF)), load64(global(OUT_LEN)))
+    store64(global(OUT_LEN), 0)
+    out_unlock()
+    sb_reset()
+    sb_text("Trapped(rule: ")
+    os_put_quoted(rule)
+    sb_text(", message: ")
+    os_put_quoted(msg)
+    sb_byte(41)
+    err_set(sb_str(), at)
+    v := obj_new(16, 4)
+    store64(v, str_addr(rule))
+    store64(v + 8, str_addr(msg))
+    err_value(v)
 
 ## Sleep until the task has ended, trapped or not.
 fn wait_done(rec int)
@@ -535,3 +625,216 @@ fn gc_scan_threads()
                 == 0 then load64(global(STACK_TOP)) else load64(global(STACKS)) + t * STACK_SZ
             gc_scan_range(p + P_REGS + 80 * t, p + P_REGS + 80 * t + 80)
             gc_scan_range(s, top)
+
+# ---- Mutex and TaskGroup (conc.share.5, conc.task.8) ----
+#
+# A mutex is a record: +0 lock word, +8 the value (as an optional holds it),
+# +16 the holder's thread id or 0, +24 wake word. A group is a record: +0 the
+# count, +8 whether `wait_all` has run, +16 the array of task records.
+
+M_LOCK := 0
+M_VAL := 8
+M_OWN := 16
+M_WAKE := 24
+M_NEXT := 32
+
+fn mutex_new(v int) int
+    m := alloc(40, KIND_ENV)
+    store64(m + M_VAL, v)
+    m
+
+fn mutex_fault(text str) int
+    store64(global(CHAN_FAULT), str_addr(text))
+    0
+
+## Wait until nobody else holds `m`, then run with its lock word taken; the
+## caller releases it with `mutex_leave`. With `take`, this thread becomes the
+## holder. Returns 0 if this thread holds it already and `take` is set.
+fn mutex_enter(m int, take bool) int
+    me := thread_id()
+    while true
+        lock(m + M_LOCK)
+        o := load64(m + M_OWN)
+        if o == me and take
+            unlock(m + M_LOCK)
+            return 0
+        if o == 0 or o == me
+            if take
+                store64(m + M_OWN, me)
+                slot := pool() + P_HELD + 8 * (worker_index() + 1)
+                store64(m + M_NEXT, load64(slot))
+                store64(slot, m)
+            return 1
+        w := load64(m + M_WAKE)
+        unlock(m + M_LOCK)
+        k := worker_index()
+        if k >= 0
+            wait_enter()
+        prog_wait(m + M_WAKE, w, "a mutex another task holds", false)
+        if k >= 0
+            wait_leave()
+    0
+
+fn mutex_leave(m int)
+    unlock(m + M_LOCK)
+
+## `m.get()`.
+fn mutex_get(m int) int
+    mutex_enter(m, false)
+    v := load64(m + M_VAL)
+    mutex_leave(m)
+    v
+
+## `m.set(v)`.
+fn mutex_set(m int, v int)
+    mutex_enter(m, false)
+    store64(m + M_VAL, v)
+    mutex_leave(m)
+
+## `m.swap(v)`: the old value.
+fn mutex_swap(m int, v int) int
+    mutex_enter(m, false)
+    old := load64(m + M_VAL)
+    store64(m + M_VAL, v)
+    mutex_leave(m)
+    old
+
+## `m.lock()`: the value, or 0 with the trap message left in `CHAN_FAULT`.
+fn mutex_lock(m int) int
+    if mutex_enter(m, true) == 0
+        return mutex_fault("`lock` while already holding the mutex")
+    v := load64(m + M_VAL)
+    mutex_leave(m)
+    v
+
+## `m.unlock(v)`: 0, or the message of the trap.
+fn mutex_unlock(m int, v int) int
+    lock(m + M_LOCK)
+    if load64(m + M_OWN) != thread_id()
+        unlock(m + M_LOCK)
+        return str_addr("`unlock` without holding the mutex from `lock`")
+    store64(m + M_VAL, v)
+    held_drop(m)
+    store64(m + M_OWN, 0)
+    store64(m + M_WAKE, (load64(m + M_WAKE) + 1).bit_and(4294967295))
+    futex_wake(m + M_WAKE, 1000000)
+    atomic_add(global(CHAN_EPOCH), 1)
+    unlock(m + M_LOCK)
+    0
+
+fn group_new() int
+    alloc(32, KIND_ENV)
+
+## `g.add(t)`.
+fn group_add(g int, rec int)
+    n := load64(g)
+    arr := load64(g + 16)
+    if arr == 0 or n % 8 == 0
+        bigger := alloc(8 * (n + 8), KIND_ENV)
+        for i in 0..n
+            store64(bigger + 8 * i, load64(arr + 8 * i))
+        store64(g + 16, bigger)
+    store64(load64(g + 16) + 8 * n, rec)
+    store64(g, n + 1)
+    if load64(g + 24) != 0
+        task_cancel(rec)
+
+## `g.wait_all()`: waits for every task; the first trapped one is the failure
+## `Trapped` in the error slot (conc.task.8).
+fn group_wait(g int, at str)
+    n := load64(g)
+    mut bad := 0
+    for i in 0..n
+        rec := load64(load64(g + 16) + 8 * i)
+        wait_done(rec)
+        if bad == 0 and atomic_load(rec + T_STATE) == 3
+            bad = rec
+    store64(g + 8, 1)
+    if bad != 0
+        trapped_error(bad, at)
+
+## The block that holds the group ends: wait for the tasks, and a trap in one
+## that `wait_all` didn't report ends this task too (conc.task.8).
+fn group_end(g int)
+    n := load64(g)
+    mut bad := 0
+    for i in 0..n
+        rec := load64(load64(g + 16) + 8 * i)
+        wait_done(rec)
+        if bad == 0 and atomic_load(rec + T_STATE) == 3
+            bad = rec
+    if bad != 0 and load64(g + 8) == 0
+        trap(
+            load64(bad + T_KIND),
+            load64(bad + T_A),
+            load64(bad + T_B),
+            str_at(load64(bad + T_HEAD)),
+            str_at(load64(bad + T_OP)),
+            str_at(load64(bad + T_TAIL)),
+        )
+
+## `m` is no longer held by this thread: take it off the thread's list.
+fn held_drop(m int)
+    slot := pool() + P_HELD + 8 * (worker_index() + 1)
+    mut at := slot
+    while load64(at) != 0 and load64(at) != m
+        at = load64(at) + M_NEXT
+    if load64(at) == m
+        store64(at, load64(m + M_NEXT))
+
+## A task ended or trapped while holding mutexes: release them, keeping the
+## values they had (conc.share.5, conc.share.6).
+fn held_release(slot int)
+    at := pool() + P_HELD + 8 * slot
+    while load64(at) != 0
+        m := load64(at)
+        store64(at, load64(m + M_NEXT))
+        lock(m + M_LOCK)
+        store64(m + M_OWN, 0)
+        store64(m + M_WAKE, (load64(m + M_WAKE) + 1).bit_and(4294967295))
+        futex_wake(m + M_WAKE, 1000000)
+        atomic_add(global(CHAN_EPOCH), 1)
+        unlock(m + M_LOCK)
+
+# ---- cancellation (conc.cancel.1-4) ----
+
+## The task record this thread is running, or 0 on the main thread.
+fn cur_task() int
+    k := worker_index()
+    if k < 0
+        return 0
+    load64(pool() + P_CUR + 8 * k)
+
+## `task.cancelled()`.
+fn task_cancelled() bool
+    rec := cur_task()
+    rec != 0 and atomic_load(rec + T_CANC) != 0
+
+## `task.check()`: the failure `Cancelled` once the running task is cancelled.
+fn task_check(at str)
+    if task_cancelled()
+        err_set("the task was cancelled", at)
+
+## The running task is about to sleep on channel `ch` (0: it has woken), so a
+## cancel can wake it.
+fn task_block_on(ch int)
+    rec := cur_task()
+    if rec != 0
+        atomic_store(rec + T_BLK, ch)
+
+## `t.cancel()`: the task and every task it started, however deep.
+fn task_cancel(rec int)
+    atomic_xchg(rec + T_CANC, 1)
+    b := atomic_load(rec + T_BLK)
+    if b != 0
+        chan_wake(b)
+    mut kid := load64(rec + T_KIDS)
+    while kid != 0
+        task_cancel(kid)
+        kid = load64(kid + T_SIB)
+
+## `g.cancel()`: every task of the group, and those added later.
+fn group_cancel(g int)
+    store64(g + 24, 1)
+    for i in 0..load64(g)
+        task_cancel(load64(load64(g + 16) + 8 * i))

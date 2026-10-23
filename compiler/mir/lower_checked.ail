@@ -34,6 +34,8 @@ fn Lower.int_checked(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
             ty: Ty.Int,
         )
     code := checked_code(name)
+    if code >= 0 and r.ty.is_sized()
+        return sized_checked(r, code, vs)
     if code < 0 or r.ty != Ty.Int
         return none
     if (code == 5) != (vs.len() == 0) or vs.len() > 1
@@ -81,6 +83,54 @@ fn Lower.int_checked(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
     elif code == 4
         s = call("rt.rem_safe", [a, b], Ty.Int)
     jump(join, [some(Val(id: s, ty: Ty.Int)).id])
+    cur = no
+    jump(join, [konst(0, t)])
+    seal(join)
+    cur = join
+    Val(id: res, ty: t)
+
+## `checked_*` on a sized integer (type.num.14): the operation is done in 64
+## bits, which no 32-bit operand pair can overflow, and the result is present
+## when it is inside the type's range. `checked_div` and `checked_rem` are
+## `none` for a zero divisor.
+fn Lower.sized_checked(mut self, r Val, code int, vs List[Val]) Val?
+    if (code == 5) != (vs.len() == 0) or vs.len() > 1
+        return none
+    if vs.len() == 1 and not same_ty(vs[0].ty, r.ty)
+        return none
+    k := sized_kind(r.ty)
+    a := r.id
+    b := if vs.len() == 1 then vs[0].id else a
+    t := Ty.Opt(r.ty)
+    yes := new_block()
+    in_lo := new_block()
+    no := new_block()
+    join := new_block()
+    res := new_value(t, "")
+    blocks[join].params.push(res)
+    if code == 3 or code == 4
+        branch(op("ne", [b, konst(0, Ty.Int)], Ty.Bool), yes, [], no, [])
+    else
+        jump(yes, [])
+    seal(yes)
+    cur = yes
+    mut s := -1
+    match code
+        0 => s = op("add", [a, b], Ty.Int)
+        1 => s = op("sub", [a, b], Ty.Int)
+        2 => s = op("mul", [a, b], Ty.Int)
+        3 => s = op("div", [a, b], Ty.Int)
+        4 => s = op("rem", [a, b], Ty.Int)
+        _ => s = op("neg", [a], Ty.Int)
+    branch(op("ge", [s, konst(sized_lo(k), Ty.Int)], Ty.Bool), in_lo, [], no, [])
+    seal(in_lo)
+    cur = in_lo
+    ok := new_block()
+    branch(op("le", [s, konst(sized_hi(k), Ty.Int)], Ty.Bool), ok, [], no, [])
+    seal(ok)
+    seal(no)
+    cur = ok
+    jump(join, [some(Val(id: s, ty: r.ty)).id])
     cur = no
     jump(join, [konst(0, t)])
     seal(join)

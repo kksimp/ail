@@ -109,11 +109,12 @@ fn thread_bools(mut g Func)
         for u in blk.term.uses()
             uses[u] += 1
     for b in 1..n
-        blk := g.blocks[b]
-        if blk.params.len() != 1 or blk.insts.len() != 0 or blk.term.kind != "branch"
+        if g.blocks[b].params.len() != 1
+            or g.blocks[b].insts.len() != 0
+            or g.blocks[b].term.kind != "branch"
             continue
-        p := blk.params[0]
-        t := blk.term
+        p := g.blocks[b].params[0]
+        t := g.blocks[b].term
         if t.cond != p or uses[p] != 1 or g.vals[p] != Ty.Bool
             continue
         if t.args[0].len() != 0 or t.args[1].len() != 0 or t.targets[0] == b or t.targets[1] == b
@@ -160,6 +161,8 @@ fn drop_unreachable(mut g Func)
         if seen[b]
             map[b] = n
             n += 1
+    if n == g.blocks.len()
+        return
     mut blocks := List[Block]()
     for b in 0..g.blocks.len()
         if seen[b]
@@ -178,15 +181,14 @@ fn remove_dead(mut g Func)
     mut def_inst := [-1 for _ in 0..g.vals.len()]
     mut work := List[int]()
     for b in 0..nb
-        blk := g.blocks[b]
-        for i in 0..blk.insts.len()
-            for u in blk.insts[i].args
+        for i in 0..g.blocks[b].insts.len()
+            for u in g.blocks[b].insts[i].args
                 uses[u] += 1
-            d := blk.insts[i].dst
+            d := g.blocks[b].insts[i].dst
             if d >= 0
                 def_block[d] = b
                 def_inst[d] = i
-        for u in blk.term.uses()
+        for u in g.blocks[b].term.uses()
             uses[u] += 1
     for v in 0..uses.len()
         if uses[v] == 0 and def_block[v] >= 0

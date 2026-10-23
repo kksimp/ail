@@ -126,6 +126,17 @@ arrive meanwhile are handled afterwards. If the count is wrong the answer is
 dropped. `measured` gets the runs and widths, so the app lays out again. The
 headless `script` never measures. *(ADR 0839)*
 
+**std.app.14** — `run_host` reads the host's lines in a task and passes them,
+with events other tasks post, through one channel, in arrival order.
+`struct Inbox` has `post(ev Event)`; `external(source, data) Event` makes an
+event with `kind` `external`, `id` the source and `text` the data. `new_inbox()`
+makes an inbox; `run_with(mut a, cmd, args, inbox)` is `run_host` with it, so
+the program starts the tasks that post (a server loop, a timer) before the
+run and stops them after, in its own block, where their handles live.
+`trait App` has `attach(mut self, inbox Inbox)` (default: nothing), called
+once before the first `update`. `exited` (the host's pipe closed) fails `run`
+with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
@@ -217,6 +228,14 @@ fn main()
     mut h := Hello(name: "")
     app.run(mut h) else err
         print("no window: {err.kind}: {err.message}")
+```
+
+```ail rules=std.app.14
+use std.app
+
+fn main()
+    ev := app.external("timer", "tick")
+    print("{ev.kind} {ev.id} {ev.text}")
 ```
 
 ```ail tool=effects,--json,FILE expect="fn:main":["app" rules=std.app.12

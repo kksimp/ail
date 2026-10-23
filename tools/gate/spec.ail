@@ -1,0 +1,344 @@
+## The spec conformance harness (ADR 0002) in AIL: bootstrap/tests/spec.rs, ported.
+## Every fenced `ail` block of docs/spec/*.md and the other documents agents load is
+## checked as its fence line says (docs/spec/README.md). Run from the repository root:
+##   ail run tools/gate/spec.ail
+## Prints only failures; the last line is `SPEC GREEN (N checked, M skipped)` or
+## `SPEC RED (N failures)`, and the exit status is 0 only for green.
+
+struct Block
+    chapter str
+    line int
+    kind str # clean, error, skip
+    error_rule str
+    wrap bool
+    run bool
+    rules List[str]
+    flags List[str]
+    tool List[str]
+    expect_text str
+    pkg str
+    status int
+    stdin str
+    fixture str
+    code str
+
+## The words of a fence tag like `flags=A,B`, split on commas.
+fn csv(v str) List[str]
+    v.split(",")
+
+## Rule IDs the batch chapters must all demonstrate.
+BATCH_CHAPTERS := [
+    "04-types.md",
+    "05-expressions.md",
+    "15-compile-time.md",
+    "16-reflection.md",
+    "17-std.md",
+    "18-effects.md",
+    "22-tools.md",
+]
+
+DECLS := [
+    "struct ",
+    "enum ",
+    "error ",
+    "unique ",
+    "fn ",
+    "unsafe fn ",
+    "extern ",
+    "trait ",
+    "impl ",
+    "const ",
+    "use ",
+    "type ",
+    "@",
+    "pub ",
+    "#",
+]
+
+fn slurp(p str) str
+    fs.read_text(p) else ""
+
+fn cat(a List[str], b List[str]) List[str]
+    mut r := a
+    r.extend(b)
+    r
+
+## `ail ARGS` in `cwd`, with AIL_BINARY set; stdin comes from `stdin_file` when it isn't empty.
+fn ail_in(cwd str, args List[str], stdin_file str) proc.Output
+    root := repo_root()
+    bin := "{root}/bootstrap/target/release/ail"
+    redirect := if stdin_file.is_empty() then "</dev/null" else "<{stdin_file}"
+    script := "cd \"$0\" && AIL_BINARY={bin} exec {bin} \"$@\" {redirect}"
+    r := proc.run("sh", cat(["-c", script, cwd], args)) else return proc.Output(
+        status: 127,
+        out: "",
+        err: "could not start sh",
+    )
+    r
+
+## The directory part of a path.
+fn parent_of(path str) str
+    parts := path.split("/")
+    mut kept := List[str]()
+    for i in 0..parts.len() - 1
+        kept.push(parts[i])
+    kept.join("/")
+
+fn repo_root() str
+    r := proc.run("pwd", []) else return "."
+    r.out.trim()
+
+fn has_main(code str) bool
+    for l in code.lines()
+        if l.starts_with("fn main")
+            return true
+    false
+
+## Split a fragment into top-level declarations and a `main` body.
+fn wrap_fragment(code str) str
+    mut decls := ""
+    mut body := ""
+    mut in_decl := false
+    for l in code.lines()
+        if not l.is_empty() and not l.starts_with(" ")
+            in_decl = false
+            for d in DECLS
+                if l.starts_with(d)
+                    in_decl = true
+        if in_decl
+            decls = "{decls}{l}\n"
+        elif l.is_empty()
+            body = "{body}\n"
+        else
+            body = "{body}    {l}\n"
+    main_body := if body.trim().is_empty() then "    print(\"\")\n" else body
+    "{decls}\nfn main()\n{main_body}"
+
+## The fences of one document. Returns the blocks and, for a malformed fence, an error text.
+fn blocks_of(path str, mut out List[Block]) str?
+    name := path.split("/").last() else path
+    text := slurp(path)
+    mut open := false
+    mut start := 0
+    mut tags := List[str]()
+    mut code := ""
+    mut n := 0
+    for l in text.lines()
+        n += 1
+        if not open
+            if l.starts_with("```ail")
+                rest := l.slice(6, l.len())
+                if not rest.is_empty() and not rest.starts_with(" ")
+                    continue
+                open = true
+                start = n
+                tags = rest.words()
+                code = ""
+        elif l.starts_with("```")
+            open = false
+            mut b := Block(
+                chapter: name,
+                line: start,
+                kind: "clean",
+                error_rule: "",
+                wrap: name.starts_with("quick-ref") or name.starts_with("language-card"),
+                run: true,
+                rules: [],
+                flags: [],
+                tool: [],
+                expect_text: "",
+                pkg: "",
+                status: 0,
+                stdin: "",
+                fixture: "",
+                code: code,
+            )
+            for t in tags
+                if t.starts_with("flags=")
+                    b.flags = csv(t.slice(6, t.len()))
+                elif t.starts_with("tool=")
+                    b.tool = csv(t.slice(5, t.len()))
+                elif t.starts_with("expect=")
+                    b.expect_text = t.slice(7, t.len())
+                elif t.starts_with("fixture=")
+                    b.fixture = t.slice(8, t.len())
+                elif t.starts_with("pkg=")
+                    b.pkg = t.slice(4, t.len())
+                elif t.starts_with("status=")
+                    b.status = t.slice(7, t.len()).to_int() else 0
+                elif t.starts_with("stdin=")
+                    b.stdin = t.slice(6, t.len())
+                elif t == "fragment"
+                    b.wrap = true
+                elif t.starts_with("error=")
+                    b.kind = "error"
+                    b.error_rule = t.slice(6, t.len())
+                    b.rules.push(b.error_rule)
+                elif t.starts_with("rules=")
+                    b.rules.extend(csv(t.slice(6, t.len())))
+                elif t == "norun"
+                    b.run = false
+                elif t == "skip=bootstrap" or t == "skip=context"
+                    b.kind = "skip"
+                else
+                    return "{name}:{start}: unknown fence annotation `{t}`"
+            out.push(b)
+        else
+            code = "{code}{l}\n"
+    if open
+        return "{name}:{start}: unclosed code fence"
+    none
+
+## Rule IDs defined in docs/spec (a line starting `**id**`), with the chapter file of each.
+fn spec_rules() List[List[str]]
+    mut out := List[List[str]]()
+    mut files := fs.glob("docs/spec/*.md")
+    files.sort()
+    for path in files
+        name := path.split("/").last() else path
+        for l in slurp(path).lines()
+            if l.starts_with("**")
+                rest := l.slice(2, l.len())
+                id := rest.split("**")[0]
+                after := rest.slice(id.len(), rest.len())
+                if not after.contains("[removed in") and id.contains(".") and id_chars(id)
+                    out.push([id, name])
+    out
+
+fn id_chars(id str) bool
+    for c in id.chars()
+        k := c.code()
+        if not ((k >= 97 and k <= 122) or (k >= 48 and k <= 57) or k == 46)
+            return false
+    true
+
+## Runs a program under both interpreter tiers (ADR 0361); an error text if they differ.
+fn run_both_tiers(file str) str?
+    src := slurp(file)
+    if src.contains("ui.open(")
+        return none
+    dir := parent_of(file)
+    mut outs := List[str]()
+    for tier in [List[str](), ["--no-bytecode"]]
+        r := ail_in(dir, cat(cat(["run"], tier), [file]), "")
+        if r.status != 0
+            return "`ail run {tier.join(" ")}` failed:\n{r.err}"
+        outs.push(r.out)
+    if outs[0] != outs[1]
+        return "bytecode and tree-walk tiers print different output"
+    none
+
+fn main() !
+    root := repo_root()
+    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail"
+    mk1 := proc.run("sh", ["-c", "rm -rf {tmp}; mkdir -p {tmp}"]) else return
+    mut files := fs.glob("docs/spec/*.md")
+    files.sort()
+    for extra in [
+        "docs/quick-reference.md",
+        "docs/language-card.md",
+        "README.md",
+        "docs/design/native-guide.md",
+        "docs/design/ai-first-plan.md",
+        "docs/design/cards/edit.md",
+        "docs/design/cards/std.md",
+    ]
+        files.push(extra)
+    mut blocks := List[Block]()
+    for f in files
+        if why := blocks_of(f, mut blocks)
+            print("SPEC RED: {why}")
+            io.exit(1)
+    spec_ids := spec_rules()
+    mut run := 0
+    mut skipped := 0
+    mut fails := List[str]()
+    mut covered := Set[str]()
+    for b in blocks
+        if b.kind == "skip"
+            skipped += 1
+            for r in b.rules
+                covered.add(r)
+            continue
+        run += 1
+        at := "{b.chapter}:{b.line}"
+        stem := b.chapter.replace(".md", "")
+        mut ok := true
+        if not b.fixture.is_empty()
+            r := ail_in(root, ["check", "--json", "bootstrap/tests/cases/{b.fixture}"], "")
+            for rule in b.rules
+                if not r.err.contains("\"rule\":\"{rule}\"")
+                    ok = false
+                    fails.push("{at}: fixture {b.fixture} doesn't report {rule}\n{r.err}")
+        elif not b.tool.is_empty()
+            dir := "{tmp}/tool_{stem}_{b.line}"
+            file := "{dir}/main.ail"
+            if not b.pkg.is_empty()
+                mk2 := proc.run("sh", [
+                    "-c",
+                    "mkdir -p {dir} && cp -R {root}/bootstrap/tests/cases/packages/{b.pkg}/. {dir}/",
+                ]) else return
+            else
+                mk3 := proc.run("sh", ["-c", "mkdir -p {dir}"]) else return
+                code := if has_main(b.code) then b.code else wrap_fragment(b.code)
+                fs.write_text(file, code)? "writing {file}"
+            mut args := List[str]()
+            for a in b.tool
+                if a == "FILE"
+                    args.push(file)
+                elif a == "DIR"
+                    args.push(dir)
+                else
+                    args.push(a)
+            stdin_file := if b.stdin.is_empty() then "" else "{dir}/{b.stdin}"
+            r := ail_in(dir, args, stdin_file)
+            if r.status != b.status or not "{r.out}{r.err}".contains(b.expect_text)
+                ok = false
+                fails.push("{at}: `ail {args.join(" ")}` should exit {b.status} and print `{b.expect_text}`; exit {r.status}\n{r.out}{r.err}")
+        else
+            code := if (b.wrap or b.kind == "error")
+                and not has_main(b.code) then wrap_fragment(b.code) else b.code
+            file := "{tmp}/{stem}_{b.line}.ail"
+            fs.write_text(file, code)? "writing {file}"
+            r := ail_in(root, cat(["check", "--json"], cat(b.flags, [file])), "")
+            mut errors := List[str]()
+            for l in r.err.lines()
+                if l.contains("\"severity\":\"error\"")
+                    parts := l.split("\"rule\":\"")
+                    if parts.len() > 1
+                        errors.push(parts[1].split("\"")[0])
+            if b.kind == "clean" and not errors.is_empty()
+                ok = false
+                fails.push("{at}: expected clean, got errors {errors}\n{r.err}")
+            if b.kind == "error" and not errors.contains(b.error_rule)
+                ok = false
+                fails.push("{at}: expected error {b.error_rule}, got {errors}\n{r.err}")
+            if ok and b.run and b.flags.is_empty() and b.kind == "clean" and has_main(code)
+                if why := run_both_tiers(file)
+                    ok = false
+                    fails.push("{at}: {why}")
+        if ok
+            for rule in b.rules
+                mut known := false
+                for pair in spec_ids
+                    if pair[0] == rule
+                        known = true
+                if not known
+                    fails.push("{at}: example cites {rule}, which no chapter defines")
+                covered.add(rule)
+    # Each rule of the batch chapters needs a runnable example (ADR 0002).
+    for pair in spec_ids
+        if not covered.contains(pair[0]) and BATCH_CHAPTERS.contains(pair[1])
+            fails.push("{pair[1]} {pair[0]}: no runnable example")
+    mk4 := proc.run("rm", ["-rf", tmp]) else return
+    for f in fails
+        fl := f.lines()
+        print("RED {fl[0]}")
+        for i in 1..fl.len()
+            if i <= 3
+                print(fl[i])
+    if fails.is_empty()
+        print("SPEC GREEN ({run} checked, {skipped} skipped)")
+    else
+        print("SPEC RED ({fails.len()} failures)")
+        io.exit(1)

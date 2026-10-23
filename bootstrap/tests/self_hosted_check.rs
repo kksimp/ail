@@ -6,6 +6,9 @@
 //! diagnostics. With nothing skipped (slice 4), the two must also agree on
 //! every diagnostic except the package manifest's capability checks, which
 //! `ail` makes before the checker runs and the AST dump doesn't carry.
+//!
+//! There is one checker, `compiler/check/` (ADR 0865): it may report MORE than
+//! this one, but only rules listed in `checker_known_new.txt`, and never LESS.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -96,8 +99,37 @@ fn key(line: &str) -> Key {
     (str_field(line, "rule"), str_field(line, "file"), num_field(line, "line"), num_field(line, "col"))
 }
 
+/// A diagnostic's fixes, from `"fixes":[` to the end of its JSON line: the
+/// settled edits `ail check` and the AIL checker (through `fix/resolve.ail`) write.
+fn fixes_of(line: &str) -> String {
+    line.find("\"fixes\":[").map(|i| line[i..].to_string()).unwrap_or_default()
+}
+
+/// The rules the AIL checker may report beyond the Rust one: one per line,
+/// `#` starts a comment.
+fn known_new() -> Vec<String> {
+    let text = fs::read_to_string(root().join("bootstrap/tests/checker_known_new.txt")).unwrap_or_default();
+    text.lines().map(|l| l.split('#').next().unwrap().trim().to_string()).filter(|l| !l.is_empty()).collect()
+}
+
+/// Whether `got` holds every diagnostic of `want`, in order, and nothing else
+/// except diagnostics of the `known_new` rules.
+fn covers(want: &[Key], got: &[Key], known_new: &[String]) -> bool {
+    let mut next = 0;
+    for g in got {
+        if want.get(next) == Some(g) {
+            next += 1;
+        } else if !known_new.contains(&g.0) {
+            return false;
+        }
+    }
+    next == want.len()
+}
+
 struct Section {
     diags: Vec<Key>,
+    /// Each diagnostic's fixes, beside `diags`.
+    fixes: Vec<String>,
     /// Each diagnostic's message, beside `diags`.
     messages: Vec<String>,
     rules: Vec<String>,
@@ -160,7 +192,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
         }
         if let Some(p) = line.strip_prefix("== ") {
             current = p.to_string();
-            sections.insert(current.clone(), Section { diags: Vec::new(), messages: Vec::new(), rules: Vec::new(), skips: Vec::new() });
+            sections.insert(current.clone(), Section { diags: Vec::new(), fixes: Vec::new(), messages: Vec::new(), rules: Vec::new(), skips: Vec::new() });
         } else if let Some(r) = line.strip_prefix("rules ") {
             sections.get_mut(&current).unwrap().rules = r.split(' ').map(String::from).collect();
         } else if let Some(s) = line.strip_prefix("skip ") {
@@ -173,12 +205,16 @@ fn ail_checker_agrees_with_the_bootstrap() {
             let sec = sections.get_mut(&current).unwrap();
             sec.diags.push(key(line));
             sec.messages.push(str_field(line, "message"));
+            sec.fixes.push(fixes_of(line));
         }
     }
+    let known = known_new();
     let mut agree = 0;
     let mut failures = Vec::new();
     let (mut agree_all, mut total_diags, mut matched_diags, mut same_text) = (0usize, 0usize, 0usize, 0usize);
     let mut differ_all: Vec<String> = Vec::new();
+    let (mut fixes_total, mut same_fixes) = (0usize, 0usize);
+    let mut fix_diffs: Vec<String> = Vec::new();
     for (prog, path) in &dumps {
         let sec = sections.get(&path.to_string_lossy().into_owned()).expect("a section per dump");
         let out = ail().args(["check", "--json", prog]).output().unwrap();
@@ -188,7 +224,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
         let want: Vec<Key> =
             String::from_utf8_lossy(&out.stderr).lines().filter(|l| l.starts_with('{')).map(key).filter(counted).collect();
         let got: Vec<Key> = sec.diags.iter().filter(|k| counted(k)).cloned().collect();
-        if want == got {
+        if covers(&want, &got, &known) {
             agree += 1;
         } else {
             failures.push(format!("{prog}\n  ail check: {want:?}\n  AIL:       {got:?}"));
@@ -202,10 +238,19 @@ fn ail_checker_agrees_with_the_bootstrap() {
         let all: Vec<Key> = lines.iter().map(|l| key(l)).collect();
         total_diags += all.len();
         matched_diags += all.iter().filter(|k| sec.diags.contains(k)).count();
-        if all == sec.diags {
+        if covers(&all, &sec.diags, &known) {
             agree_all += 1;
             // Wording isn't gated: the report counts the messages that match.
             same_text += lines.iter().zip(&sec.messages).filter(|(l, m)| str_field(l, "message") == **m).count();
+            for (l, got) in lines.iter().zip(&sec.fixes) {
+                fixes_total += usize::from(l.contains("\"fixes\":"));
+                let want = fixes_of(l);
+                if want == *got {
+                    same_fixes += usize::from(!want.is_empty());
+                } else {
+                    fix_diffs.push(format!("{prog}: {} line {}\n  ail check: {want:?}\n  AIL:       {got:?}", str_field(l, "rule"), num_field(l, "line")));
+                }
+            }
         } else {
             differ_all.push(format!("{prog}\n  ail check: {all:?}\n  AIL:       {:?}", sec.diags));
         }
@@ -218,6 +263,8 @@ fn ail_checker_agrees_with_the_bootstrap() {
         dumps.len()
     );
     println!("{same_text} of those {total_diags} diagnostics have the same message");
+    println!("{same_fixes} of {fixes_total} diagnostics with fixes have the same fixes");
+    assert!(fix_diffs.is_empty(), "{} fix disagreements:\n{}", fix_diffs.len(), fix_diffs.join("\n"));
     assert!(failures.is_empty(), "{} disagreements:\n{}", failures.len(), failures.join("\n"));
     assert!(
         differ_all.is_empty(),

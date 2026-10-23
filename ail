@@ -83,29 +83,86 @@ if [ "${1:-}" = build ] && [ -n "${AIL_NATIVE_COMPILER:-}" ]; then
     fi
 fi
 
-# `AIL_NATIVE_CLI=1` (ADR 0855): `ail fmt ...` and `ail run FILE [ARGS]` are done by the native CLI (compiler/main.ail
-# built natively into .native/ail, by the Rust ail or by the published seed when there is no Rust): the Rust `check` first
-# (while it exists), then the program from the build cache, exec'd so it keeps the terminal. Anything
+# `AIL_NATIVE_CLI=1` (ADR 0855): `ail fmt ...`, `ail test FILE` (tools/ailtest), `ail api FILE`, `ail build` and `ail run FILE [ARGS]` are done by the native CLI (compiler/main.ail
+# built natively into .native/ail, by the Rust ail or by the published seed when there is no Rust): `check-program` first,
+# then the program from the build cache, exec'd so it keeps the terminal. Anything
 # else, and `run` with options before the file, goes to the Rust `ail` below.
-if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { { [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || [ "${1:-}" = fmt ]; }; then
+# `ail api` natively: one file, with at most --outline, --text and --pretty.
+native_build=
+if [ "${1:-}" = build ]; then
+    native_build=1
+    for a in "${@:2}"; do
+        case "$a" in --derived-out | --unsafe) native_build= ;; esac
+    done
+fi
+native_api=
+if [ "${1:-}" = api ]; then
+    native_api=1; files=0
+    for a in "${@:2}"; do
+        case "$a" in --outline | --text | --pretty) ;; -*) native_api= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_api=; fi ;; esac
+    done
+    [ "$files" = 1 ] || native_api=
+fi
+if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] ||  { [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || [ "${1:-}" = fmt ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
             mkdir -p "$root/.native"
-            AIL_NATIVE_CLI= "$root/ail" build "$root/compiler/main.ail" -o "$native.new" >&2 || die "building the native CLI failed"
+            log="$native.log"
+            AIL_NATIVE_CLI= "$root/ail" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "building the native CLI failed"; }
+            rm -f "$log"
             mv "$native.new" "$native"
         else
             "$root/tools/release/fetch-seed.sh" || die "no Rust toolchain and no seed; see ADR 0855"
             mkdir -p "$root/.native"
-            AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" >&2 || die "the seed couldn't build the native CLI"
+            log="$native.log"
+            AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "the seed couldn't build the native CLI"; }
+            rm -f "$log"
             mv "$native.new" "$native"
         fi
     fi
     if [ "$1" = fmt ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fmt "$@"; fi
-    if [ -x "$binary" ]; then AIL_NATIVE_CLI= "$root/ail" check "$2" || exit $?; fi
+    if [ "$1" = build ]; then
+        # The native CLI's build doesn't check: check the file (the first operand) first.
+        file=
+        for a in "${@:2}"; do case "$a" in -*) ;; *) if [ -z "$file" ] && [ -f "$a" ]; then file="$a"; fi ;; esac; done
+        [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$file" || exit $?
+        shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
+    fi
+    if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
+    if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
+    if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
+    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$2" || exit $?
     exe="$(AIL_COMPILER="$root/compiler" "$native" prepare "$2")" || exit $?
     shift 2
     exec "$exe" "$@"
+fi
+
+# `AIL_NATIVE_TEST=1` (ADR 0858, lane B8): `ail test [--json] [--cases N] [--seed S] FILE` is first done by the
+# AIL runner (tools/ailtest/ailtest.ail: native builds of the tests, plain, `?` and property). Its report is
+# used only when every test ran (no `skip`, not a usage error); otherwise the interpreter below runs the file.
+if [ "${AIL_NATIVE_TEST:-}" = 1 ] && [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
+    test_ok=1 test_file="" test_value=0
+    for test_arg in "${@:2}"; do
+        if [ "$test_value" = 1 ]; then test_value=0; continue; fi
+        case "$test_arg" in
+            --json) ;;
+            --cases | --seed) test_value=1 ;;
+            -*) test_ok=0 ;;
+            *) if [ -n "$test_file" ]; then test_ok=0; fi; test_file="$test_arg" ;;
+        esac
+    done
+    if [ "$test_ok" = 1 ] && [ -n "$test_file" ]; then
+        test_out="$(mktemp)"
+        test_status=0
+        AIL_NATIVE_TEST= AIL_NATIVE_CLI= "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}" >"$test_out" 2>/dev/null || test_status=$?
+        if [ "$test_status" != 2 ] && ! grep -qE '^skip |"status":"skip"' "$test_out"; then
+            cat "$test_out"
+            rm -f "$test_out"
+            exit "$test_status"
+        fi
+        rm -f "$test_out"
+    fi
 fi
 
 # A test run pins the binary it is testing (AIL_BINARY), so a program that starts `ail` itself isn't

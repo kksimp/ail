@@ -1,0 +1,16 @@
+fn main()
+    mut xs := [1, 2, 3]
+    xs.pop()
+    print(xs.len())
+    if v := xs.pop()
+        print(v)
+    mut names := ["a", "b"]
+    last := names.pop()
+    print(last)
+    mut ys := List[int]()
+    print(ys.pop())
+    mut stack := [10, 20]
+    if s := stack.pop()
+        print(s)
+    z := xs.pop()
+    print(z)

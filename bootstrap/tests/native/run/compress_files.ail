@@ -1,0 +1,25 @@
+# compress.gzip_file and compress.gunzip_file (std.compress.5), and the error
+# value of a failing compress call (std.compress.2).
+fn main()
+    src := "/tmp/ail_cz_files.txt"
+    gz := "/tmp/ail_cz_files.gz"
+    out := "/tmp/ail_cz_files.out"
+    fs.write_text(src, "hello hello hello") else err
+        print("write {err.kind}")
+        return
+    compress.gzip_file(src, gz) else err
+        print("gzip {err.kind}")
+        return
+    compress.gunzip_file(gz, out) else err
+        print("gunzip {err.kind}")
+        return
+    print(fs.read_text(out) else "")
+    print((fs.read_bytes(gz) else b"") == compress.gzip(b"hello hello hello"))
+    compress.gunzip_file(src, out) else err
+        print("corrupt? {err.kind}")
+    compress.gzip_file("/tmp/ail_cz_no_such.txt", out) else err
+        print("missing {err.kind}")
+    d := compress.gunzip(b"junk") else err
+        print("{err.kind} {err.message}")
+        return
+    print(d.len())

@@ -1,13 +1,21 @@
 ## `for mut x in list` (own.excl.5). A struct element is a pointer to its
 ## fields, so a write through `x` changes the list's element in place and
-## the loop lowers as a plain `for`. Other element types would need a
-## write-back on every way out of the loop.
+## the loop lowers as a plain `for`. A scalar or `str` element is a value:
+## the variable's assignments also set the list's element (`assign_param`),
+## so every way out of the loop leaves the list changed.
 use ast
 
 ## Whether `for mut` over elements of type `e` lowers; a problem after not.
 fn Lower.for_mut_ok(mut self, e Ty, pos ast.Pos) bool
     match e
         Struct(_) => true
+        Int | Bool | Char | Float | Str => true
         _ =>
             problem(pos, "`for mut` isn't in the native subset yet")
             false
+
+## Note that `var`, declared as the element at `index` of `list`, writes through.
+fn Lower.note_elem(mut self, var str, elem Ty, list int, index int, pos ast.Pos)
+    if elem == Ty.Int or elem == Ty.Bool or elem == Ty.Char or elem == Ty.Float or elem == Ty.Str
+        key := lookup(var) else return
+        facts.elem_ref["{fname}|{key}"] = ElemRef(list: list, index: index, pos: pos)
