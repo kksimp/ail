@@ -106,6 +106,7 @@ struct Lower
     copy_tys Map[str, Ty]
     ## Unique types and their releases (lower_unique.ail).
     uniq UniqState
+    unw Unwind
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -261,6 +262,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         borrowed: Set[str](),
         copy_tys: {},
         uniq: new_uniq(),
+        unw: new_unwind(),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
@@ -960,7 +962,8 @@ fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
-    elif not same_ty(v.ty, want)
+    elif not same_ty(v.ty, want) and not (is_rt and want.is_fn() and v.ty == Ty.Int)
+        # The runtime calls a function address it kept as an `int` (unwind.ail).
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
 

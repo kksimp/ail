@@ -10,15 +10,18 @@ fn Lower.defer_enter(mut self)
     facts.defers.push([])
     facts.defer_loops.push(loops.len())
     uniq.depths.push(scopes.len())
+    unwind_enter()
     # A block releases the `move` parameters and the `if x := e` binding that
     # were declared just before it (lower_unique.ail).
     for key in uniq.pending
         facts.defers[facts.defers.len() - 1].push(drop_marker(key))
+        unwind_own(key)
     uniq.pending = []
 
 ## `defer st` in the current block.
 fn Lower.defer_note(mut self, st ast.Stmt)
     facts.defers[facts.defers.len() - 1].push(st)
+    unwind_defer(st)
 
 ## The block ends: its deferred statements run unless the block already left.
 fn Lower.defer_exit(mut self)
@@ -27,10 +30,12 @@ fn Lower.defer_exit(mut self)
     facts.defers.pop()
     facts.defer_loops.pop()
     uniq.depths.pop()
+    unwind_exit()
 
 ## Run the deferred statements of the blocks from index `first` outwards-in,
 ## innermost block first and each block's last `defer` first.
 fn Lower.defer_run_from(mut self, first int)
+    unwind_cut(first)
     mut i := facts.defers.len() - 1
     while i >= first and i >= 0
         sts := facts.defers[i]

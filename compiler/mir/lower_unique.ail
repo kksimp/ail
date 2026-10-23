@@ -108,6 +108,7 @@ fn Lower.uniq_declared(mut self, name str)
         uniq.pending.push(key)
         return
     facts.defers[facts.defers.len() - 1].push(drop_marker(key))
+    unwind_own(key)
 
 ## The `move` parameters and `move self` of `f` are released when it returns
 ## (own.uniq.7).
@@ -138,6 +139,7 @@ fn Lower.uniq_take(mut self, e ast.Expr)
             key := lookup(n) else return
             fk := uniq.flags.get("{fname}|{key}") else return
             write_var(fk, cur, konst(0, Ty.Bool))
+            unwind_disarm(key)
         _ => return
 
 ## `recv.m(...)` on a `move self` method `key` moves the receiver away
@@ -199,6 +201,7 @@ fn Lower.uniq_discard(mut self, e ast.Expr, v Val?)
 ## first, and it owns the new one (own.uniq.7).
 fn Lower.uniq_replace(mut self, key str)
     if uniq.flags.contains("{fname}|{key}")
+        unwind_disarm(key)
         uniq_release(key)
         uniq_flag(key)
 

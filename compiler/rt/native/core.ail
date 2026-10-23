@@ -825,6 +825,9 @@ fn parse_ok() bool
 fn trap(kind int, a int, b int, head str, op str, tail str)
     # In a task a trap ends the task, not the process (conc.task.6).
     on_trap(kind, a, b, head, op, tail)
+    # Cleanups first, not on an exhausted stack (unwind.ail).
+    if kind != 11
+        unwind_run()
     flush()
     out_str(head)
     trap_body(kind, a, b, op)
@@ -936,6 +939,7 @@ fn trap_body(kind int, a int, b int, op str)
 ## the output and writes the head, the message follows with the `out_*`
 ## functions, and `trap_end` writes the excerpt and exits.
 fn trap_begin(head str)
+    unwind_run()
     flush()
     out_str(head)
 

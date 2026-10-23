@@ -14,6 +14,7 @@ fn Lower.drop_call(mut self, v int, t Ty)
 
 ## Generate each `drop.T` asked for, including those they ask for.
 fn Lower.gen_drops(mut self)
+    gen_unwinds()
     mut done := Set[str]()
     mut more := true
     while more
