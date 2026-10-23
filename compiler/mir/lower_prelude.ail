@@ -107,3 +107,50 @@ pub fn prelude_text(text str) str
             keep = ["json", "jsonderive", "default", "derive"].contains(m.trim())
         out.push(if keep then line else "")
     "{out.join("\n")}\n"
+
+## The quiet sources (from index `from`) without the declarations the
+## program's own root module also makes: a program's `Json` or `Member`
+## hides the prelude's of that name, as under `ail run`.
+fn hide_shadowed(srcs List[Source], from int) List[Source]
+    mut own := Set[str]()
+    for k in 0..from.min(srcs.len())
+        if srcs[k].module != ""
+            continue
+        p := srcs[k].prog
+        for s in p.structs
+            own.add(s.name)
+        for e in p.enums
+            own.add(e.name)
+        for f in p.fns
+            if f.owner == none
+                own.add(f.name)
+    mut out := List[Source]()
+    for k in 0..srcs.len()
+        src := srcs[k]
+        if k < from or own.len() == 0
+            out.push(src)
+            continue
+        mut prog := src.prog
+        # Renamed, not removed: `Program` holds indexes into its `fns`.
+        for i in 0..prog.structs.len()
+            if own.contains(prog.structs[i].name)
+                prog.structs[i].name = "~{prog.structs[i].name}"
+        for i in 0..prog.enums.len()
+            if own.contains(prog.enums[i].name)
+                prog.enums[i].name = "~{prog.enums[i].name}"
+        for i in 0..prog.impls.len()
+            if own.contains(prog.impls[i].target.name)
+                prog.impls[i].target.name = "~{prog.impls[i].target.name}"
+        for i in 0..prog.fns.len()
+            if shadowed_fn(prog.fns[i], own)
+                if o := prog.fns[i].owner
+                    prog.fns[i].owner = ast.Owner(name: "~{o.name}", pos: o.pos, params: o.params)
+                else
+                    prog.fns[i].name = "~{prog.fns[i].name}"
+        out.push(Source(module: src.module, path: src.path, text: src.text, prog: prog))
+    out
+
+fn shadowed_fn(f ast.FnDecl, own Set[str]) bool
+    if o := f.owner
+        return own.contains(o.name)
+    own.contains(f.name)
