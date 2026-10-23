@@ -1,0 +1,104 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The table of `std.mem` blocks (unsafe.ptr.5-6, unsafe.mem.2, ADRs 0434-0435):
+## each block the program allocated, live or freed, so an access past a
+## block's end, an access to a freed block and a second `free` trap. Memory
+## that didn't come from `std.mem` isn't in the table and isn't checked.
+## The table is its own mapping (global slot `MEM_TAB`): a count, a capacity,
+## then three words per block, its start, its end and 1 while it is live.
+
+# Global slot 44 (requested from the integrator, 2026-10-23).
+MEM_TAB := 44
+
+## Record a new block `[p, p + bytes)`; a freed entry it reuses is dropped.
+fn memtab_add(p int, bytes int)
+    mut t := load64(global(MEM_TAB))
+    if t == 0
+        t = memtab_grow(0, 64)
+    mut n := load64(t)
+    mut k := 0
+    while k < n
+        e := t + 16 + 24 * k
+        if load64(e + 16) == 0 and load64(e) < p + bytes and p < load64(e + 8)
+            n -= 1
+            last := t + 16 + 24 * n
+            store64(e, load64(last))
+            store64(e + 8, load64(last + 8))
+            store64(e + 16, load64(last + 16))
+        else
+            k += 1
+    if n == load64(t + 8)
+        t = memtab_grow(t, 2 * n)
+    e := t + 16 + 24 * n
+    store64(e, p)
+    store64(e + 8, p + bytes)
+    store64(e + 16, 1)
+    store64(t, n + 1)
+
+## A table with room for `cap` blocks holding the entries of `old` (0 for none).
+fn memtab_grow(old int, cap int) int
+    base := heap_reserve(16 + 24 * cap)
+    if base < 0
+        fail(1, 0, 0)
+    n := if old == 0 then 0 else load64(old)
+    copy_bytes(base + 16, old + 16, 24 * n)
+    store64(base, n)
+    store64(base + 8, cap)
+    store64(global(MEM_TAB), base)
+    base
+
+## 0 when an access of `w` bytes at `a` is allowed, 1 when it runs past the
+## end of a live block (unsafe.ptr.5), 2 when the block was freed (unsafe.ptr.6).
+fn memtab_check(a int, w int) int
+    t := load64(global(MEM_TAB))
+    if t == 0
+        return 0
+    n := load64(t)
+    mut freed := false
+    for k in 0..n
+        e := t + 16 + 24 * k
+        lo := load64(e)
+        hi := load64(e + 8)
+        if load64(e + 16) != 0
+            if lo <= a and a <= hi
+                return if a + w <= hi then 0 else 1
+        elif lo <= a and a < hi
+            freed = true
+    if freed then 2 else 0
+
+## Before `mem.free(p)`: 0 for a live block, which is now marked freed; 2 for
+## one already freed (unsafe.mem.2); 1 for a block that isn't the program's.
+fn memtab_free(p int) int
+    t := load64(global(MEM_TAB))
+    if t == 0
+        return 1
+    n := load64(t)
+    mut freed := false
+    for k in 0..n
+        e := t + 16 + 24 * k
+        if load64(e) == p
+            if load64(e + 16) != 0
+                store64(e + 16, 0)
+                return 0
+            freed = true
+    if freed then 2 else 1
+
+fn memtab_oob_msg(a int, w int) int
+    sb_reset()
+    sb_text("access of ")
+    put_int(w)
+    sb_text(" bytes runs past the end of its block (address ")
+    put_int(a)
+    sb_text(")")
+    str_addr(sb_str())
+
+fn memtab_freed_msg() int
+    sb_reset()
+    sb_text("access to a block that was already freed")
+    str_addr(sb_str())
+
+fn memtab_double_msg() int
+    sb_reset()
+    sb_text("`free` of a pointer that was already freed")
+    str_addr(sb_str())
