@@ -1,0 +1,24 @@
+## `ail effects FILE|DIR [--json]` (eff.infer.6): the program loaded and checked as
+## `ail check` does, then each function's effects. A program with errors prints them
+## on stderr and exits 2.
+use check
+
+pub fn effects_command(rest List[str], std str) int
+    json := rest.contains("--json")
+    paths := [a for a in rest if not a.starts_with("--")]
+    if paths.len() != 1
+        io.eprint("usage: ail effects [--json] FILE|DIR")
+        return 2
+    loaded := load(paths[0], std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [shown_syntax(d) for d in loaded.diags]
+    if loaded.diags.len() == 0
+        found = [shown_check(d) for d in check.check_program(loaded.program).diags]
+    if found.len() > 0
+        io.eprint(report(loaded.program.files, loaded.texts, found, json))
+        for d in found
+            if not d.warning
+                return 2
+    print(check.effects_report(loaded.program, json).trim_end())
+    0
