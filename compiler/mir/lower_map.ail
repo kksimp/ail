@@ -22,6 +22,7 @@ fn is_value_ty(t Ty) bool
         or t.is_coll()
         or is_enum(t)
         or t.is_ref()
+        or t.is_fn()
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
 fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?

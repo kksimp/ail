@@ -560,6 +560,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         or is_shared_opt(e)
                         or e.is_coll()
                         or e.is_ref()
+                        or e.is_fn()
                         return Ty.List(e)
                     none
                 "Atomic" =>
