@@ -3,7 +3,7 @@
 #
 #   ./ail run examples/hello.ail     check and run a program
 #   ./ail check FILE                 check without running (add --json for tools)
-#   ./ail selftest                   build and run the bootstrap's own tests
+#   ./ail selftest                   the Mac gate (tools/gate/mac-gate.sh); AIL_SELFTEST=cargo runs the Rust tests
 #
 # Rust (ADR 0087): if the system Rust doesn't exactly match the version pinned
 # in bootstrap/rust-toolchain.toml, that version is installed privately into
@@ -249,6 +249,10 @@ if [ "${1:-}" = selftest ]; then
         case "${1:-}" in ''|*[!0-9]*) ;; *) export AIL_FUZZ_SEED="$1"; shift ;; esac
         echo "fuzz: $AIL_FUZZ_N inputs per fuzzer from seed ${AIL_FUZZ_SEED:-1}" >&2
         exec "$cargo" test --quiet --release --manifest-path "$manifest" --test fuzz --test fuzz_modules fuzz_ "$@" -- --nocapture
+    fi
+    if [ "$#" -eq 0 ] && [ "${AIL_SELFTEST:-gate}" != cargo ]; then
+        # The Mac gate (ADR 0842) is the selftest: native only. `AIL_SELFTEST=cargo` keeps the Rust test binaries.
+        exec "$root/tools/gate/mac-gate.sh"
     fi
     if [ "$#" -eq 0 ]; then
         selftest_parallel
