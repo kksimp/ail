@@ -56,6 +56,8 @@ fn os_lookup(mod str, name str) OsFn?
         "path.join" => os_fn("rt.path_join", [s, s], s, false)
         "compress.gzip_file" => os_fn("rt.compress_gzip_file", [s, s], Ty.Unit, true)
         "compress.gunzip_file" => os_fn("rt.compress_gunzip_file", [s, s], Ty.Unit, true)
+        "compress.zip_dir" => os_fn("rt.compress_zip_dir", [s, s], Ty.Unit, true)
+        "compress.unzip" => os_fn("rt.compress_unzip", [s, s], Ty.Unit, true)
         "compress.gzip" => os_fn("rt.compress_gzip", [s], Ty.Bytes, false)
         "compress.zlib" => os_fn("rt.compress_zlib", [s], Ty.Bytes, false)
         "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
