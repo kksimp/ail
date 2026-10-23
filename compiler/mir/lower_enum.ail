@@ -279,6 +279,8 @@ fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     name := op_name(o)
     if name != "eq" and name != "ne"
+        if a.ty.elem() != none and can_order(a.ty)
+            return tuple_compare(o, a, b, pos)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
         return quiet
     mut seen := Set[str]()

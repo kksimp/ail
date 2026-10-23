@@ -221,6 +221,10 @@ fn Lower.tuple_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
 ## strings, and tuples, structs and enums of those. A float orders as in the
 ## interpreter's `cmp` (type.num.7): NaN after every number, equal to itself.
 fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
+    if user_cmp(t) != none
+        return true
+    if e := t.elem()
+        return orderable(e, mut seen)
     if xs := tuple_elems(t)
         for x in xs
             if not orderable(x, mut seen)
@@ -259,6 +263,19 @@ fn Lower.structural(self, t Ty) bool
     n := enum_name(t) else return false
     not is_flat(n)
 
+## The type's own `cmp` (`impl Ord`), which `<`, `sorted` and `min` use instead of
+## comparing field by field (trait.std.1): `cmp(self, other Self) Ordering` of a struct or enum.
+fn Lower.user_cmp(self, t Ty) str?
+    mut key := ""
+    if s := struct_name(t)
+        key = "{s}.cmp"
+    elif e := enum_name(t)
+        key = "{e}.cmp"
+    sg := sigs.get(key)?
+    if sg.params.len() == 2 and sg.ret == Ty.Enum("Ordering") and not sg.fails
+        return key
+    none
+
 fn Lower.lt_fn(mut self, t Ty) str
     name := "lt.{t.name()}"
     if not sigs.contains(name)
@@ -283,7 +300,7 @@ fn Lower.elem_lt(mut self, t Ty, x int, y int) int
     if t == Ty.Str
         c := call("rt.str_cmp", [x, y], Ty.Int)
         return op("lt", [c, konst(0, Ty.Int)], Ty.Bool)
-    if structural(t)
+    if structural(t) or t.elem() != none
         return call(lt_fn(t), [x, y], Ty.Bool)
     if t == Ty.Float
         # `x < y`, or `y` is NaN and `x` is not.
@@ -322,6 +339,40 @@ fn Lower.gen_tuple_lt(mut self, fkey str, t Ty, xs List[Ty])
         branch(elem_lt(xs[k], y, x), no, [], same, [])
         cur = same
     jump(no, [])
+    end_eq(fkey, yes, no)
+
+## `lt.List[T](a, b)`: the first element that differs decides; a prefix is less.
+fn Lower.gen_list_lt(mut self, fkey str, t Ty, e Ty)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    a := ps[0]
+    b := ps[1]
+    yes := new_block()
+    no := new_block()
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    la := op("len", [a], Ty.Int)
+    lb := op("len", [b], Ty.Int)
+    jump(head, [konst(0, Ty.Int)])
+    cur = head
+    in_b := new_block()
+    body := new_block()
+    done := new_block()
+    branch(op("lt", [i, la], Ty.Bool), in_b, [], done, [])
+    cur = in_b
+    branch(op("lt", [i, lb], Ty.Bool), body, [], done, [])
+    cur = body
+    x := op("get", [a, i], e)
+    y := op("get", [b, i], e)
+    later := new_block()
+    branch(elem_lt(e, x, y), yes, [], later, [])
+    cur = later
+    same := new_block()
+    branch(elem_lt(e, y, x), no, [], same, [])
+    cur = same
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    cur = done
+    branch(op("lt", [la, lb], Ty.Bool), yes, [], no, [])
     end_eq(fkey, yes, no)
 
 ## Whether `t` has a text form here (type.tuple.8): `int`, `float`, `bool`,
@@ -609,7 +660,17 @@ fn Lower.gen_enum_lt(mut self, fkey str, t Ty, n str)
 
 ## Generate `lt.T` for a tuple, a struct or an enum.
 fn Lower.gen_lt(mut self, fkey str, t Ty)
-    if xs := tuple_elems(t)
+    if k := user_cmp(t)
+        # `Ordering.Less` is index 0 (rt.int_cmp).
+        ps := begin_fn(fkey, Ty.Bool, [t, t])
+        r := op("copy", [call(k, [ps[0], ps[1]], Ty.Enum("Ordering"))], Ty.Int)
+        finish(return_of(op("eq", [r, konst(0, Ty.Int)], Ty.Bool)))
+        for blk in 0..blocks.len()
+            sealed[blk] = true
+        end_fn(fkey, ast.Pos(line: 1, col: 1))
+    elif e := t.elem()
+        gen_list_lt(fkey, t, e)
+    elif xs := tuple_elems(t)
         gen_tuple_lt(fkey, t, xs)
     elif s := struct_name(t)
         gen_tuple_lt(fkey, t, [sl.ty for sl in structs[s]])

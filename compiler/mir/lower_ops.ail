@@ -115,6 +115,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         return bytes_compare(o, a, b, pos)
     if holds_record(a.ty)
         return value_compare(o, a, b, pos)
+    if a.ty.elem() != none and is_comparison(o) and name != "eq" and name != "ne"
+        return tuple_compare(o, a, b, pos)
     cmp := is_comparison(o)
     match a.ty
         Int =>
