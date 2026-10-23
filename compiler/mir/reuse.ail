@@ -37,15 +37,14 @@ pub fn reuse_lists(mut m Module)
     for k in 0..m.funcs.len()
         by_name[m.funcs[k].name] = k
     # `free[f][k]`: parameter `k` of function `f` doesn't escape.
-    mut free := [[true for _ in f.params] for f in m.funcs]
+    mut free := [[true for _ in m.funcs[k].params] for k in 0..m.funcs.len()]
     mut changed := true
     while changed
         changed = false
         for k in 0..m.funcs.len()
-            f := m.funcs[k]
-            esc := escaping(f, by_name, free)
-            for j in 0..f.params.len()
-                if free[k][j] and esc.escapes[esc.root(f.params[j])]
+            esc := escaping(m.funcs[k], by_name, free)
+            for j in 0..m.funcs[k].params.len()
+                if free[k][j] and esc.escapes[esc.root(m.funcs[k].params[j])]
                     free[k][j] = false
                     changed = true
     for k in 0..m.funcs.len()

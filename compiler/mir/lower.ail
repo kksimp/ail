@@ -912,7 +912,7 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
     if problems.len() > fn_problems or fn_failed
         facts.moves = []
         return
-    func := simplify(fold(simplify(elide_moves(
+    mut func := elide_moves(
         Func(
             name: name,
             params: blocks[0].params,
@@ -922,7 +922,10 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
             names: names,
         ),
         facts.moves,
-    ))))
+    )
+    simplify_in(mut func)
+    fold_in(mut func)
+    simplify_in(mut func)
     facts.moves = []
     for err in verify(func)
         problems.push(Problem(

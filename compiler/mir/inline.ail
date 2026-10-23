@@ -44,12 +44,10 @@ pub fn inline_module(mut out Module)
             simplify_in(mut f)
             fold_in(mut f)
             simplify_in(mut f)
-        out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(forward_loads(merge_blocks(f))) else fold_prim_addresses(
+        merge_blocks_in(mut f)
+        out.funcs[k] = if f.name.starts_with("rt.") then fold_prim_addresses(forward_loads(f)) else fold_prim_addresses(
             fold_addresses(forward_loads(fill_loops(
-                kept_lengths(
-                    bce(mark_nonneg(merge_blocks(f)), reserve, grow_only),
-                    reserve and grow_only,
-                ),
+                kept_lengths(bce(mark_nonneg(f), reserve, grow_only), reserve and grow_only),
                 fills,
             ))),
         )

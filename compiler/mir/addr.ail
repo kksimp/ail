@@ -31,7 +31,8 @@ pub fn fold_addresses(f Func) Func
                 continue
             g.blocks[b].insts[k].args[1] = y
             g.blocks[b].insts[k].fimm = total.to_float()
-    simplify(g)
+    simplify_in(mut g)
+    g
 
 # ---- load and store primitives ----
 
@@ -141,7 +142,8 @@ pub fn fold_prim_addresses(f Func) Func
             changed = true
     if not changed
         return g
-    simplify(g)
+    simplify_in(mut g)
+    g
 
 ## The `i` in `y = i * size` (a `mul` or `shl` with no overflow check and no
 ## other use), else -1.
