@@ -19,6 +19,7 @@ fn wants_float(want Ty?) bool
 fn is_int_lit(e ast.Expr) bool
     match e
         Int => true
+        Unary(o, operand, _) => o == ast.UnOp.Neg and int_text(operand) != ""
         _ => false
 
 ## What an operator's first operand should be: arithmetic passes the

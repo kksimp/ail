@@ -1,0 +1,24 @@
+# expr.cmp.1: `<` on a fieldless enum and on one with fields.
+enum Level
+    Low
+    Mid
+    High
+
+impl Ord for Level
+
+enum Shape
+    Dot
+    Circle(r int)
+    Rect(w int, h int)
+
+impl Ord for Shape
+
+fn main()
+    print(Level.Low < Level.High)
+    print(Level.High <= Level.Mid)
+    print(Level.High > Level.Mid)
+    print(Level.Mid >= Level.Mid)
+    print(Shape.Dot < Shape.Circle(r: 1))
+    print(Shape.Circle(r: 2) < Shape.Circle(r: 3))
+    print(Shape.Rect(w: 1, h: 5) < Shape.Rect(w: 1, h: 4))
+    print(Shape.Rect(w: 1, h: 5) > Shape.Circle(r: 9))
