@@ -107,9 +107,25 @@ fn Check.programs(mut self, tmp str)
         want_status := text.trim().to_int() else 1
         compare(src, "{tmp}/nt_{stem}", want_out, want_status)
 
+## Examples without a `native_` name that read files beside the executable or
+## use constructs outside the native subset are left to `ail run` (gate.ail's list).
+NATIVE_EXTRA := [
+    "bits",
+    "gradebook",
+    "hello",
+    "parallel",
+    "perms",
+    "route",
+    "shapes",
+    "std_args",
+    "std_math",
+]
+
 fn Check.examples(mut self, tmp str)
     for stem in stems("examples")
         if not wanted(stem) or not fs.exists("examples/{stem}.out")
+            continue
+        if not (stem.starts_with("native_") or NATIVE_EXTRA.contains(stem))
             continue
         want_out := fs.read_text("examples/{stem}.out") else ""
         compare("examples/{stem}.ail", "{tmp}/ex_{stem}", want_out, 0)
