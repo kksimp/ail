@@ -314,6 +314,7 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                 Name(n, _) =>
                     s := callee_sig(n) else return generic_fails(callee_key(n))
                     s.fails
+                TypeArgs(n, _, _) => generic_fails(callee_key(n))
                 _ => false
         Method(recv, name, _, _) => os_fails(recv, name)
             or method_fails(recv, name)
@@ -884,10 +885,12 @@ fn Lower.display_call(mut self, v Val) int?
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
     # No `to_str` and no message: the default text of trait.auto.2.
+    # A type of displayable fields gets one text function; a recursive one the
+    # nested default of ADR 0864.
     mut seen := Set[str]()
-    if not displayable(v.ty, mut seen)
-        return none
-    text_fn_call(key, v)
+    if displayable(v.ty, mut seen)
+        return text_fn_call(key, v)
+    nested_default(key, v)
 
 ## The text of an error type with no message: its default form,
 ## `Name(field: value, ...)` for a struct and `Enum.Variant(field: value)`

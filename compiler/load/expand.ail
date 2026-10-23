@@ -8,6 +8,7 @@
 ## (`load_derived`); without one its `impl` is left as written.
 use ast
 use derive
+use pkg
 use syntax
 
 ## One deriving `impl` to fill in.
@@ -66,6 +67,7 @@ fn expand_derives(
     files List[ast.SourceFile],
     std str,
     user Map[str, str],
+    packages pkg.Packages,
 ) Loaded ! LoadError
     prog := first.program
     mut errors := List[syntax.Diag]()
@@ -87,10 +89,12 @@ fn expand_derives(
                 impl_at[key] = i
     for job in jobs
         imp := prog.impls[job.imp]
-        text := generated_text(job, user) else err
+        written := generated_text(job, user) else err
             if err.message != ""
                 errors.push(err_at(imp, job, err.message))
             continue
+        # The bootstrap formats the generated text (derive.rs); `tidy` does what generators need of it.
+        text := derive.tidy(written)
         index := files.len() + gen_files.len()
         base := index * FILE_LINES
         lexed := syntax.lex(text)
@@ -144,7 +148,7 @@ fn expand_derives(
         all = next
     mut all_files := files
     all_files.extend(gen_files)
-    again := assemble(all, all_files, [], std)?
+    again := assemble(all, all_files, [], std, packages)?
     mut out := again.program
     out.generated = generated
     mut diags := remap(out, again.diags)

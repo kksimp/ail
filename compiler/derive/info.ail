@@ -254,7 +254,7 @@ fn info_expr(t TypeInfo) str
     )
     "TypeInfo(name: {quote(t.name)}, id: {quote(t.id)}, module: {quote(t.module)}, kind: TypeKind.{kind}, is_error: {t.is_error}, params: {params}, fields: {fields}, variants: {variants})"
 
-## Longest line the formatter leaves alone (fmt.width.1).
+## Longest line the formatter leaves alone (ADR 0857).
 MAX_WIDTH := 100
 
 ## `text` as the bootstrap's formatter leaves it for the shapes generators

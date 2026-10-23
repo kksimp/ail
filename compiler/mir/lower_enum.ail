@@ -452,7 +452,9 @@ fn Lower.gen_enum_eqs(mut self)
             done.add(name)
             more = true
             t := eq_tys[name]
-            if name.starts_with("lt.")
+            if name.starts_with("text.")
+                gen_text(name, t)
+            elif name.starts_with("lt.")
                 gen_lt(name, t)
             elif name.starts_with("cmp.")
                 gen_cmp(name, t)

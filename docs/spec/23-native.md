@@ -455,11 +455,10 @@ function natively (native.build.3), runs it as its own process, and compares
 the result with `ail test` in the interpreter. A passing native run exits 0.
 *(ADR 0679)*
 **native.test.2** — The native build is of a rewritten copy of the file: `@test`
-marks go, `assert(c)` and `assert_eq(a, b)` become a check of `c` and of
-`(a) == (b)` that prints the original line and exits with status 1, and the
-copy's `main` is a dispatcher. The rewrite keeps every line number, so a
-construct the backend refuses is reported at its place in the original file.
-*(ADR 0679)*
+marks go and the copy's `main` is a dispatcher. `assert` and `assert_eq`
+lower natively and trap as test.assert.1 says. The runner maps lines back, so
+a construct the backend refuses is reported at its place in the original file.
+*(ADR 0679, ADR 0858)*
 **native.test.3** — A test the backend refuses (native.subset.1) is reported
 as not in the native subset yet, with the first blocking construct and its
 line. The same holds for a test whose file has a refused construct outside any
