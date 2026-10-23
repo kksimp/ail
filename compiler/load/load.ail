@@ -84,6 +84,11 @@ DERIVE_NAMES := ["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveErro
 ## Read the program at `arg`, a file or a package directory, with every module
 ## it imports. `std` is the directory of the standard modules in AIL.
 pub fn load(arg str, std str) Loaded ! LoadError
+    load_with(arg, std, Map[str, str]())
+
+## `load` with the text of some files given instead of read from disk, by
+## path (`ail edit` checks the edited state before anything is written).
+pub fn load_with(arg str, std str, over Map[str, str]) Loaded ! LoadError
     mut root := "."
     mut root_files := List[str]()
     if arg.ends_with(".ail")
@@ -95,14 +100,14 @@ pub fn load(arg str, std str) Loaded ! LoadError
         root_files = ail_files(arg)
         if root_files.len() == 0
             return LoadError("{arg} has no .ail files (mod.unit.5)")
-    load_package(root, root_files, std)
+    load_package(root, root_files, std, over)
 
 ## The `.ail` files directly in `dir`, sorted (mod.unit.1).
 fn ail_files(dir str) List[str]
     names := fs.list_dir(dir) else return []
     [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail")]
 
-fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
+fn load_package(root str, root_files List[str], std str, over Map[str, str]) Loaded ! LoadError
     # The manifests come first: they say where each package is (mod.pkg.1-3).
     packages := pkg.read(root)
     mut files := List[ast.SourceFile]()
@@ -119,7 +124,11 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
             if (files.len() + 1) * FILE_LINES >= PRELUDE_LINE
                 return LoadError("the program has more than {files.len()} files")
             shown := std_shown(p, std)
-            src := fs.read_text(p) else return LoadError("can't read {shown}")
+            mut src := ""
+            if given := over.get(p)
+                src = given
+            else
+                src = fs.read_text(p) else return LoadError("can't read {shown}")
             base := files.len() * FILE_LINES
             lexed := syntax.lex(src)
             mut toks := shift(lexed.tokens, base)

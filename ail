@@ -129,13 +129,14 @@ if [ "${1:-}" = build ]; then
         case "$a" in --derived-out | --unsafe) native_build= ;; esac
     done
 fi
+# Every `ail api` mode is native (outline, --symbols, --expanded, packages, --card, --diff, --locals/--type/--refs); only the
+# syntax dumps `--tokens` and `--ast` stay with the Rust `ail`.
 native_api=
 if [ "${1:-}" = api ]; then
-    native_api=1; files=0
+    native_api=1
     for a in "${@:2}"; do
-        case "$a" in --outline | --text | --pretty | --symbols) ;; -*) native_api= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_api=; fi ;; esac
+        case "$a" in --tokens | --ast) native_api= ;; esac
     done
-    [ "$files" = 1 ] || native_api=
 fi
 # `ail run FILE` is native by default (item 252): AIL_INTERP=1 or AIL_NATIVE_CLI=0 keeps the interpreter, and a program outside
 # the native subset (native.subset.1) falls back to it.
@@ -143,7 +144,7 @@ native_run=
 if [ "${1:-}" = run ] && [ "${AIL_NATIVE_CLI:-}" != 0 ] && [ "${AIL_INTERP:-}" != 1 ] && [ -z "${AIL_BINARY:-}" ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
     native_run=1
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
@@ -169,6 +170,7 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] || [
         [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$file" || exit $?
         shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
     fi
+    if [ "$1" = explain ] || [ "$1" = edit ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
     if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
     if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
