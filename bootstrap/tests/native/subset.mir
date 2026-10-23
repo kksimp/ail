@@ -1,0 +1,64 @@
+# MIR (unstable) of bootstrap/tests/native/subset.ail
+
+fn label(v0:p Point) str
+  b0(v0:p Point):
+    v1 int = load v0:p +0
+    call rt.sb_begin()
+    call rt.put_int(v1)
+    v2 str = call rt.sb_str()
+    return v2
+
+fn main() unit
+  b0:
+    v0 str = str #0
+    v1 int = const 1
+    call rt.sb_begin()
+    call rt.sb_text(v0)
+    call rt.put_int(v1)
+    v2:s str = call rt.sb_str()
+    call rt.out_str(v2:s)
+    call rt.out_nl()
+    v3 str = str #1
+    v6 int = const 0
+    v8:m Map[str, int] = call rt.map_new(v1, v6, v6)
+    call rt.map_set(v8:m, v3, v1)
+    v14 Map[str, int] = call rt.map_new(v1, v6, v6)
+    call rt.map_set(v14, v3, v1)
+    v16 bool = call eq.Map[str, int](v8:m, v14)
+    call rt.out_bool(v16)
+    call rt.out_nl()
+    return
+
+fn eq.Map[str, int](v0 Map[str, int], v1 Map[str, int]) bool
+  b0(v0 Map[str, int], v1 Map[str, int]):
+    v3 List[int] = call rt.map_keys(v0)
+    v4 List[int] = call rt.map_values(v0)
+    v5 int = len v3
+    v6 int = load v0 +0
+    v7 int = load v1 +0
+    v8 bool = eq v6, v7
+    v9 int = const 0
+    branch v8, b3(v9), b2()
+  b1:
+    v20 bool = const 1
+    return v20
+  b2:
+    v21 bool = const 0
+    return v21
+  b3(v2 int):
+    v10 bool = lt v2, v5
+    branch v10, b4(), b1()
+  b4:
+    v11 int = get v3, v2
+    v12 int = call rt.map_find(v1, v11)
+    v14 bool = eq v12, v9
+    branch v14, b2(), b5()
+  b5:
+    v15 int = get v4, v2
+    v16 int = load v12 +16
+    v17 bool = eq v15, v16
+    branch v17, b6(), b2()
+  b6:
+    v18 int = const 1
+    v19 int = add v2, v18
+    jump b3(v19)

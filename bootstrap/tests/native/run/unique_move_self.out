@@ -1,0 +1,11 @@
+closing 3 after 10 bytes
+drop 3
+closing 2 after 10 bytes
+drop 2
+closing 1 after 10 bytes
+drop 1
+closing 0 after 10 bytes
+drop 0
+closing 9 after 1 bytes
+drop 9
+41

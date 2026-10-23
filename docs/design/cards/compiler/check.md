@@ -52,6 +52,7 @@ pub struct check.Diag
 pub fn check.new_diag(str, ast.Pos, str) check.Diag
 pub fn check.shifted(fix.Edit, int) fix.Edit
 pub fn check.fix_json(fix.Fix) str
+pub fn check.effects_report(ast.Program, bool) str [env io]
 pub struct check.VariantRef
 pub struct check.Agree
 pub struct check.Binding
@@ -94,4 +95,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1125); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1146); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

@@ -188,7 +188,8 @@ fn Lower.any_text(mut self, t str, v Val) int?
             seal(no)
             cur = yes
         st := Ty.Struct(impls[k])
-        text := display_call(Val(id: load(v.id, 1, st), ty: st)) else return none
+        inner := load(v.id, 1, st)
+        text := display_call(Val(id: inner, ty: st)) else value_text(st, inner)
         jump(join, [text])
         if no >= 0
             cur = no

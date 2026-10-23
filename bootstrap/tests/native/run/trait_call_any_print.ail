@@ -1,0 +1,30 @@
+# A trait method called through the trait's name (`Shape.area(c)`), and a struct holding
+# `any Shape` values printed: each box shows its own type's text.
+trait Shape
+    fn area(self) int
+
+struct Circle
+    r int
+
+struct Rect
+    w int
+    h int
+
+impl Shape for Circle
+    fn area(self) int
+        3 * self.r * self.r
+
+impl Shape for Rect
+    fn area(self) int
+        self.w * self.h
+
+struct Scene
+    shapes List[any Shape]
+
+fn main()
+    c := Circle(r: 2)
+    print(Shape.area(c))
+    print(Shape.area(Rect(w: 3, h: 4)))
+    scene := Scene(shapes: [c, Rect(w: 1, h: 2)])
+    print(scene)
+    print(scene.shapes.len())
