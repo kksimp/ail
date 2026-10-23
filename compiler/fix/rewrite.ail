@@ -1,0 +1,458 @@
+## Anchored edits that read the source line (fix.edit.2, ADR 0335): the operands
+## around an operator, a C-style `for` header and a typed empty collection.
+## Each is dropped, not guessed, when the line isn't a plain case. A port of
+## `bootstrap/src/diag/rewrite.rs`. Positions here are 0-based character
+## indexes into a line.
+use ast
+
+pub fn is_word(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+## `line[a..b]` as text.
+pub fn text_of(line List[char], a int, b int) str
+    mut out := ""
+    for k in a..b
+        out = "{out}{line[k]}"
+    out
+
+## Does `pat` occur in `line` at index `i`?
+pub fn starts_at(line List[char], i int, pat List[char]) bool
+    if i < 0 or i + pat.len() > line.len()
+        return false
+    for k in 0..pat.len()
+        if line[i + k] != pat[k]
+            return false
+    true
+
+## The last index below `upto` holding `ch`.
+fn rposition(line List[char], upto int, ch char) int?
+    mut k := upto - 1
+    while k >= 0
+        if line[k] == ch
+            return k
+        k -= 1
+    none
+
+## The index just past the bracket that closes the one at `open`. Strings in
+## the brackets must be plain (no escapes), and there are no characters.
+fn skip_brackets(line List[char], open int) int?
+    mut depth := 0
+    mut i := open
+    while i < line.len()
+        c := line[i]
+        if c == '"'
+            i += 1
+            mut closed := false
+            while i < line.len() and not closed
+                if line[i] == '"'
+                    closed = true
+                elif line[i] == '\\'
+                    return none
+                else
+                    i += 1
+            if not closed
+                return none
+        elif c == '\''
+            return none
+        elif c == '(' or c == '['
+            depth += 1
+        elif c == ')' or c == ']'
+            depth -= 1
+            if depth == 0
+                return i + 1
+        i += 1
+    none
+
+## Start of the postfix expression (name, literal, call, index, `.` chain)
+## that ends just before `end`.
+fn atom_before(line List[char], end int) int?
+    mut i := end
+    while true
+        if i < 1 or i - 1 >= line.len()
+            return none
+        c := line[i - 1]
+        if c == '"'
+            i = rposition(line, i - 1, '"') else return none
+        elif c == ')' or c == ']'
+            mut j := i - 1
+            mut depth := 0
+            mut done := false
+            while not done
+                d := line[j]
+                if d == '"'
+                    j = rposition(line, j, '"') else return none
+                    for k in j..i
+                        if line[k] == '\\'
+                            return none
+                elif d == '\''
+                    return none
+                elif d == ')' or d == ']'
+                    depth += 1
+                elif d == '(' or d == '['
+                    depth -= 1
+                    if depth == 0
+                        done = true
+                if not done
+                    if j < 1
+                        return none
+                    j -= 1
+            i = j
+            while i > 0 and is_word(line[i - 1])
+                i -= 1
+        elif is_word(c)
+            while i > 0 and is_word(line[i - 1])
+                i -= 1
+        else
+            return none
+        if i > 0 and line[i - 1] == '.'
+            i -= 1
+            continue
+        return i
+    none
+
+## End (exclusive) of the postfix expression that starts at `from`.
+pub fn atom_after(line List[char], from int) int?
+    mut i := from
+    while true
+        if i >= line.len()
+            return none
+        c := line[i]
+        if c == '"'
+            i += 1
+            mut closed := false
+            while not closed
+                if i >= line.len()
+                    return none
+                if line[i] == '"'
+                    closed = true
+                else
+                    i += if line[i] == '\\' then 2 else 1
+            i += 1
+        elif is_word(c)
+            while i < line.len() and is_word(line[i])
+                i += 1
+        else
+            return none
+        while i < line.len() and (line[i] == '(' or line[i] == '[')
+            i = skip_brackets(line, i) else return none
+        if i < line.len() and line[i] == '.' and i + 1 < line.len() and is_word(line[i + 1])
+            i += 1
+            continue
+        return i
+    none
+
+## The word that ends just before `end`, if any.
+fn word_before(line List[char], end int) str
+    mut start := end
+    while start > 0 and is_word(line[start - 1])
+        start -= 1
+    text_of(line, start, end)
+
+## Does the operand starting at `start` begin an expression of its own, so
+## that nothing binds tighter on its left?
+fn starts_expression(line List[char], start int) bool
+    mut k := start
+    while k > 0 and line[k - 1] == ' '
+        k -= 1
+    if k == 0
+        return true
+    p := line[k - 1]
+    if p == '(' or p == ',' or p == '[' or p == '='
+        return true
+    w := word_before(line, k)
+    w == "if" or w == "while" or w == "elif" or w == "return" or w == "and" or w == "or"
+
+## Does the operand ending at `end` end an expression of its own?
+fn ends_expression(line List[char], end int) bool
+    mut k := end
+    while k < line.len() and line[k] == ' '
+        k += 1
+    if k >= line.len()
+        return true
+    c := line[k]
+    if c == ')' or c == ']' or c == ',' or c == '#'
+        return true
+    mut e := k
+    while e < line.len() and is_word(line[e])
+        e += 1
+    w := text_of(line, k, e)
+    w == "and" or w == "or"
+
+fn has_any(s str, set str) bool
+    for c in s.chars()
+        for d in set.chars()
+            if c == d
+                return true
+    false
+
+## An operand as a piece of an interpolated string.
+pub fn piece(s str) str?
+    n := s.chars().len()
+    if n >= 2 and s.starts_with("\"") and s.ends_with("\"")
+        inner := s.slice(1, n - 1)
+        if has_any(inner, "\"\{}")
+            return none
+        return inner
+    if has_any(s, "\{}\\")
+        return none
+    "\{{s}}"
+
+## What `resolve_operands` found around the operator.
+struct Rewritten
+    pos ast.Pos
+    end ast.Pos
+    text str
+
+pub fn resolve_operands(e Edit, lines List[List[char]]) Edit?
+    op := e.old else return none
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    here := e.pos.col - 1
+    opc := op.chars()
+    if not starts_at(line, here, opc)
+        return none
+    mut le := here
+    while le > 0 and line[le - 1] == ' '
+        le -= 1
+    ls := atom_before(line, le) else return none
+    mut rs := here + opc.len()
+    while rs < line.len() and line[rs] == ' '
+        rs += 1
+    mut re := atom_after(line, rs) else return none
+    # `a + b + "z"` joins as one string: take in the whole chain of `+`.
+    joined := op == "+" and e.text == "\"$lp$rp$c\""
+    if joined
+        while true
+            mut k := re
+            while k < line.len() and line[k] == ' '
+                k += 1
+            if k >= line.len() or line[k] != '+' or (k + 1 < line.len() and line[k + 1] == '=')
+                break
+            k += 1
+            while k < line.len() and line[k] == ' '
+                k += 1
+            re = atom_after(line, k) else return none
+    if not starts_expression(line, ls) or not ends_expression(line, re)
+        return none
+    if joined
+        mut out := "\""
+        mut k := ls
+        while k < re
+            end := atom_after(line, k) else return none
+            p := piece(text_of(line, k, end)) else return none
+            out = "{out}{p}"
+            k = end
+            while k < line.len() and (line[k] == ' ' or line[k] == '+')
+                k += 1
+        out = "{out}\""
+        return placed(e, ls, re, out)
+    l := text_of(line, ls, le)
+    r := text_of(line, rs, re)
+    t := e.text.chars()
+    mut out := ""
+    mut k := 0
+    while k < t.len()
+        c := t[k]
+        k += 1
+        if c != '$'
+            out = "{out}{c}"
+            continue
+        if k >= t.len()
+            return none
+        d := t[k]
+        k += 1
+        if d == 'l' and k < t.len() and t[k] == 'p'
+            k += 1
+            p := piece(l) else return none
+            out = "{out}{p}"
+        elif d == 'r' and k < t.len() and t[k] == 'p'
+            k += 1
+            p := piece(r) else return none
+            out = "{out}{p}"
+        elif d == 'l'
+            out = "{out}{l}"
+        elif d == 'r'
+            out = "{out}{r}"
+        elif d == 'f'
+            if not (l.starts_with("\"") and l.ends_with("\"") and l.chars().len() >= 2)
+                return none
+            lit := l.slice(1, l.chars().len() - 1)
+            if lit.split("%").len() != 2 or has_any(lit, "\{}")
+                return none
+            arg := piece(r) else return none
+            mut filled := ""
+            if lit.contains("%d")
+                filled = replace_once(lit, "%d", arg)
+            elif lit.contains("%s")
+                filled = replace_once(lit, "%s", arg)
+            else
+                return none
+            out = "{out}\"{filled}\""
+        else
+            return none
+    placed(e, ls, re, out)
+
+fn placed(e Edit, from int, to int, text str) Edit?
+    Edit(
+        pos: ast.Pos(line: e.pos.line, col: from + 1),
+        end: ast.Pos(line: e.pos.line, col: to + 1),
+        old: none,
+        anchor: "exact",
+        text: text,
+    )
+
+pub fn resolve_c_for(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    open := e.pos.col - 1
+    mut close := line.len() - 1
+    while close >= 0 and line[close].is_space()
+        close -= 1
+    if close < 0
+        return none
+    if open >= line.len() or line[open] != '(' or line[close] != ')' or close <= open
+        return none
+    inner := text_of(line, open + 1, close)
+    parts := inner.split(";")
+    if parts.len() != 3
+        return none
+    init := parts[0].trim()
+    cond := parts[1].trim()
+    mut incr := ""
+    for c in parts[2].trim().chars()
+        if not c.is_space()
+            incr = "{incr}{c}"
+    mut cut := init.find(":=") else -1
+    mut width := 2
+    if cut < 0
+        cut = init.find("=") else -1
+        width = 1
+    if cut < 0
+        return none
+    n := init.chars().len()
+    var := init.slice(0, cut).trim()
+    from := init.slice(cut + width, n).trim()
+    if var == "" or from == ""
+        return none
+    for c in var.chars()
+        if not is_word(c)
+            return none
+    rest0 := cond.strip_prefix(var) else return none
+    rest := rest0.trim_start()
+    mut dots := ".."
+    mut to := ""
+    if rest.starts_with("<=")
+        dots = "..="
+        to = rest.slice(2, rest.chars().len()).trim()
+    elif rest.starts_with("<")
+        to = rest.slice(1, rest.chars().len()).trim()
+    else
+        return none
+    if to == ""
+        return none
+    if incr != "{var}++" and incr != "{var}+=1" and incr != "{var}={var}+1"
+        return none
+    Edit(
+        pos: ast.Pos(line: e.pos.line, col: open + 1),
+        end: ast.Pos(line: e.pos.line, col: close + 2),
+        old: none,
+        anchor: "exact",
+        text: "{var} in {from}{dots}{to}",
+    )
+
+pub fn resolve_empty_decl(e Edit, lines List[List[char]]) Edit?
+    if e.pos.line < 1 or e.pos.line > lines.len()
+        return none
+    line := lines[e.pos.line - 1]
+    start := e.pos.col - 1
+    if start > line.len()
+        return none
+    text := text_of(line, start, line.len())
+    if text.contains("#")
+        return none
+    c1 := text.find(":") else return none
+    n := text.chars().len()
+    name := text.slice(0, c1).trim()
+    rest := text.slice(c1 + 1, n)
+    c2 := rest.find("=") else return none
+    ty := rest.slice(0, c2).trim()
+    value := rest.slice(c2 + 1, rest.chars().len()).trim()
+    known := (ty.starts_with("List[") or ty.starts_with("Map[") or ty.starts_with("Set["))
+        and ty.ends_with("]")
+    if name == ""
+        return none
+    for c in name.chars()
+        if not is_word(c)
+            return none
+    if not known or (value != "[]" and value != "\{}")
+        return none
+    Edit(
+        pos: e.pos,
+        end: ast.Pos(line: e.pos.line, col: start + text.trim_end().chars().len() + 1),
+        old: none,
+        anchor: "exact",
+        text: "{name} := {ty}()",
+    )
+
+## The arguments of a `printf(format, args...)` call as one interpolated
+## string: `%d` `%i` `%s` `%f` take the next argument, `%.Nf` a precision,
+## `%%` is `%`, a final `\n` is dropped because `print` ends the line. `none`
+## when the format isn't a plain literal or the argument count doesn't fit.
+pub fn printf_text(args List[str]) str?
+    if args.len() == 0
+        return none
+    first := args[0]
+    n := first.chars().len()
+    if n < 2 or not first.starts_with("\"") or not first.ends_with("\"")
+        return none
+    mut lit := first.slice(1, n - 1)
+    if has_any(lit, "\"\{}")
+        return none
+    if lit.ends_with("\\n")
+        lit = lit.slice(0, lit.chars().len() - 2)
+    mut next := 1
+    mut out := "\""
+    cs := lit.chars()
+    mut k := 0
+    while k < cs.len()
+        c := cs[k]
+        k += 1
+        if c != '%'
+            out = "{out}{c}"
+            continue
+        mut spec := ""
+        while k < cs.len() and (cs[k].is_digit() or cs[k] == '.')
+            spec = "{spec}{cs[k]}"
+            k += 1
+        if k >= cs.len()
+            return none
+        d := cs[k]
+        k += 1
+        if d == '%' and spec == ""
+            out = "{out}%"
+        elif (d == 'd' or d == 'i' or d == 's') and spec == ""
+            if next >= args.len()
+                return none
+            p := piece(args[next]) else return none
+            next += 1
+            out = "{out}{p}"
+        elif d == 'f' and (spec == "" or spec.starts_with("."))
+            if next >= args.len()
+                return none
+            arg := args[next]
+            next += 1
+            if has_any(arg, "\"\{}")
+                return none
+            tail := if spec == "" then "" else ":{spec}"
+            out = "{out}\{{arg}{tail}}"
+        else
+            return none
+    if next < args.len()
+        return none
+    "{out}\""
+
+fn replace_once(s str, pat str, rep str) str
+    i := s.find(pat) else return s
+    "{s.slice(0, i)}{rep}{s.slice(i + pat.chars().len(), s.chars().len())}"

@@ -1,0 +1,99 @@
+## Machine-applicable fixes (fix.edit.1-6, ADR 0145, ADR 0335), ported from the
+## `Edit` and `Fix` types of `bootstrap/src/diag.rs`. A checker proposes an
+## edit by position or by an anchor rule, without the source text; `resolve`
+## settles anchors against the source lines, and a fix with an anchor that
+## doesn't match is dropped rather than reported wrong.
+use ast
+
+## How an edit finds its position (fix.edit.2), the `anchor` of an `Edit`:
+##   "exact"        `pos` and `end` are the position (with `old`: the first whole-word match)
+##   "after_block"  insert whole lines after the indented block that starts at `pos`
+##   "line_end"     insert at the end of the code on `pos.line`
+##   "after_expr"   insert just after the expression that starts at `pos`
+##   "call"         rewrite the call `old(args)` at `pos` by a template
+##   "brackets"     rewrite `old[args]` like "call"
+##   "call_named"   like "call", with `text` a comma-separated list of argument names
+##   "chain"        a chained comparison: `pos` is the first operator, `end` the second
+##   "trim_before"  delete the character at `pos` and the blanks before it
+##   "operands"     rewrite `l op r` around the operator at `pos` by a template
+##   "c_for"        a C-style `for (i := a; i < b; i += 1)` header as `for i in a..b`
+##   "empty_decl"   `xs: List[int] = []` as `xs := List[int]()`
+
+pub struct Edit
+    pub pos ast.Pos
+    pub end ast.Pos
+    pub old str?
+    pub anchor str
+    pub text str
+
+pub struct Fix
+    pub title str
+    pub edits List[Edit]
+
+fn at(pos ast.Pos, end ast.Pos, old str?, anchor str, text str) Edit
+    Edit(pos: pos, end: end, old: old, anchor: anchor, text: text)
+
+## Replace the first whole-word occurrence of `old` at or after `pos` on its line.
+pub fn replace(pos ast.Pos, old str, text str) Edit
+    at(pos, pos, old, "exact", text)
+
+## Insert `text` at `pos`.
+pub fn insert(pos ast.Pos, text str) Edit
+    at(pos, pos, none, "exact", text)
+
+## Insert `text` at the end of the code on `pos.line`.
+pub fn at_line_end(pos ast.Pos, text str) Edit
+    at(pos, pos, none, "line_end", text)
+
+## Insert `text` just after the expression that starts at `pos`.
+pub fn after_expr(pos ast.Pos, text str) Edit
+    at(pos, pos, none, "after_expr", text)
+
+## Delete the character at `pos` and the blanks before it.
+pub fn trim_before(pos ast.Pos) Edit
+    at(pos, pos, none, "trim_before", "")
+
+## Replace the span `pos..end` with `text`.
+pub fn span(pos ast.Pos, end ast.Pos, text str) Edit
+    at(pos, end, none, "exact", text)
+
+## Delete the span `pos..end`.
+pub fn delete(pos ast.Pos, end ast.Pos) Edit
+    span(pos, end, "")
+
+## Rewrite the call `callee(...)` at `pos` by a template.
+pub fn call(pos ast.Pos, callee str, template str) Edit
+    at(pos, pos, callee, "call", template)
+
+## Rewrite `callee[args]` by a template.
+pub fn call_with(pos ast.Pos, callee str, template str) Edit
+    at(pos, pos, callee, "brackets", template)
+
+## Name the arguments of the call `callee(...)`.
+pub fn call_named(pos ast.Pos, callee str, names List[str]) Edit
+    at(pos, pos, callee, "call_named", names.join(","))
+
+## Split a chained comparison between its two operators.
+pub fn chain(first ast.Pos, second ast.Pos) Edit
+    at(first, second, none, "chain", "")
+
+## Append the lines `text` (each ending in a newline) after the block starting at `pos`.
+pub fn after_block(pos ast.Pos, text str) Edit
+    at(pos, pos, none, "after_block", text)
+
+## Rewrite `l op r` around the operator at `pos`; `text` is a template: `$l` `$r`
+## are the operands as written, `$lp` `$rp` as pieces of one string, `$f` the
+## left string with its one `%d` or `%s` replaced by the right operand.
+pub fn operands(pos ast.Pos, op str, template str) Edit
+    at(pos, pos, op, "operands", template)
+
+## `for (i := a; i < b; i += 1)` as `for i in a..b`, from the parenthesis at `pos`.
+pub fn c_for(pos ast.Pos) Edit
+    at(pos, pos, none, "c_for", "")
+
+## `xs: List[int] = []` as `xs := List[int]()`, from the statement start.
+pub fn empty_decl(pos ast.Pos) Edit
+    at(pos, pos, none, "empty_decl", "")
+
+pub fn new_fix(title str, edits List[Edit]) Fix
+    Fix(title: title, edits: edits)

@@ -157,6 +157,7 @@ tools/
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
+  fix/                    parity.py, run-parity.py: the AIL fix machinery (compiler/fix/) against the Rust one
   fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against the Rust one
   explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against the Rust one
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
