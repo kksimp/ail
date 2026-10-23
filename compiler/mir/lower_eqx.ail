@@ -1,0 +1,103 @@
+## `==` on optionals, maps and sets held in a record or compared directly:
+## the generated `eq.T?`, `eq.Map[K, V]` and `eq.Set[T]` (type.opt.3,
+## type.map.6). Maps and sets are equal when they have the same keys and, for
+## maps, equal values, whatever their order.
+use ast
+
+## `eq.T?(a, b)`: both `none`, or both present with equal values.
+fn Lower.gen_opt_eq(mut self, fkey str, t Ty, inner Ty)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    yes := new_block()
+    no := new_block()
+    a_none := new_block()
+    a_some := new_block()
+    both := new_block()
+    b0 := op("eq", [ps[1], konst(0, Ty.Int)], Ty.Bool)
+    branch(op("eq", [ps[0], konst(0, Ty.Int)], Ty.Bool), a_none, [], a_some, [])
+    cur = a_none
+    branch(b0, yes, [], no, [])
+    cur = a_some
+    branch(b0, no, [], both, [])
+    cur = both
+    x := unwrap(Val(id: ps[0], ty: t)).id
+    y := unwrap(Val(id: ps[1], ty: t)).id
+    branch(field_eq(inner, x, y), yes, [], no, [])
+    end_eq(fkey, yes, no)
+
+## `x` (a word stored in a table or its key list) as a value of type `t`.
+fn Lower.word_as(mut self, t Ty, x int) int
+    if t == Ty.Bool
+        return op("ne", [x, konst(0, Ty.Int)], Ty.Bool)
+    x
+
+## `eq.Map[K, V](a, b)` and `eq.Set[T](a, b)`: the same count, and each key of
+## `a` found in `b` (with an equal value, for a map).
+fn Lower.gen_table_eq(mut self, fkey str, t Ty)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    a := ps[0]
+    b := ps[1]
+    mut kt := Ty.Int
+    mut vt := Ty.Int
+    mut is_map := false
+    match t
+        Map(k, v) =>
+            kt = k
+            vt = v
+            is_map = true
+        Set(e) => kt = e
+        _ => kt = Ty.Int
+    yes := new_block()
+    no := new_block()
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    keys := call("rt.map_keys", [a], Ty.List(Ty.Int))
+    mut vws := -1
+    if is_map
+        vws = call("rt.map_values", [a], Ty.List(Ty.Int))
+    n := op("len", [keys], Ty.Int)
+    same_len := op("eq", [load(a, 0, Ty.Int), load(b, 0, Ty.Int)], Ty.Bool)
+    branch(same_len, head, [konst(0, Ty.Int)], no, [])
+    cur = head
+    body := new_block()
+    branch(op("lt", [i, n], Ty.Bool), body, [], yes, [])
+    cur = body
+    e := call("rt.map_find", [b, op("get", [keys, i], Ty.Int)], Ty.Int)
+    found := new_block()
+    branch(op("eq", [e, konst(0, Ty.Int)], Ty.Bool), no, [], found, [])
+    cur = found
+    if is_map
+        va := table_word(vws, i, vt)
+        vb := if vt == Ty.Bool then word_as(vt, load(e, 2, Ty.Int)) else load(e, 2, vt)
+        step := new_block()
+        branch(field_eq(vt, va, vb), step, [], no, [])
+        cur = step
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    end_eq(fkey, yes, no)
+
+## `xs.contains(x)` on a list of lists, structs, tuples, enums or optionals:
+## a loop over the elements with the generated `eq.T` (type.coll.9).
+fn Lower.list_contains_eq(mut self, l Val, e Ty, x int) Val?
+    mut seen := Set[str]()
+    if not comparable(e, ast.Pos(line: 1, col: 1), e.name(), mut seen)
+        return none
+    n := op("len", [l.id], Ty.Int)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    join := new_block()
+    found := new_value(Ty.Bool, "")
+    blocks[join].params.push(found)
+    jump(head, [konst(0, Ty.Int)])
+    cur = head
+    body := new_block()
+    branch(op("lt", [i, n], Ty.Bool), body, [], join, [konst(0, Ty.Bool)])
+    cur = body
+    step := new_block()
+    branch(field_eq(e, op("get", [l.id, i], e), x), join, [konst(1, Ty.Bool)], step, [])
+    cur = step
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    seal(head)
+    seal(join)
+    cur = join
+    Val(id: found, ty: Ty.Bool)

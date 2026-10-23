@@ -1,0 +1,164 @@
+## Doc examples as tests (test.doc.1-3): each ```` ```ail ```` block in a `##`
+## doc comment is compiled by `ail test` as a test of its own, in the scope of
+## the file. A port of `bootstrap/src/doctest.rs`. The blocks become `@test`
+## functions appended to the source, and the position of every appended line
+## maps back to the lines of the doc comment.
+use ast
+
+## One example.
+pub struct DocTest
+    ## `doc:Type.method` (test.doc.3).
+    pub name str
+    ## The generated function's name.
+    pub fn_name str
+    ## The lines `# => text` asked for (test.doc.2); `has_expected` is whether there are any.
+    pub expected List[str]
+    pub has_expected bool
+    ## The code with its line in the original file.
+    pub code List[Line]
+    ## The line of the opening fence.
+    pub fence int
+
+pub struct Line
+    pub no int
+    pub text str
+
+## The name of each documented declaration, by its line.
+fn declared(prog ast.Program) Map[int, str]
+    mut names := Map[int, str]()
+    for f in prog.fns
+        add(mut names, f.pos, if o := f.owner then "{o.name}.{f.name}" else f.name)
+    for s in prog.structs
+        add(mut names, s.pos, s.name)
+    for e in prog.enums
+        add(mut names, e.pos, e.name)
+        for v in e.variants
+            add(mut names, v.pos, "{e.name}.{v.name}")
+    for t in prog.traits
+        add(mut names, t.pos, t.name)
+    for c in prog.consts
+        add(mut names, c.pos, c.name)
+    names
+
+fn add(mut names Map[int, str], pos ast.Pos, name str)
+    if pos.line < 1073741824
+        names[pos.line] = name
+
+## The ```` ```ail ```` blocks of every doc comment, in source order
+## (test.doc.1). A block tagged anything but exactly `ail` (`ail fragment`,
+## `text`) is not run.
+pub fn collect(src str, prog ast.Program) List[DocTest]
+    names := declared(prog)
+    mut found := List[DocTest]()
+    mut seen := Map[str, int]()
+    mut run := List[Line]()
+    mut i := 0
+    for raw in src.split("\n")
+        i += 1
+        line := trimmed_line(raw)
+        if line.starts_with("##")
+            run.push(Line(no: i, text: doc_text(line)))
+            continue
+        if run.len() > 0 and line != "" and not line.starts_with("#")
+            if name := names.get(i)
+                for block in blocks(run)
+                    mut n := seen.get(name) else 0
+                    n += 1
+                    seen[name] = n
+                    mut t := block
+                    t.name = if n == 1 then "doc:{name}" else "doc:{name}#{n}"
+                    found.push(t)
+        run.clear()
+    for k in 0..found.len()
+        found[k].fn_name = "doc_example_{k + 1}"
+    found
+
+## The runnable blocks of one doc comment.
+fn blocks(run List[Line]) List[DocTest]
+    mut out := List[DocTest]()
+    mut is_open := false
+    mut fence := 0
+    mut code := List[Line]()
+    for l in run
+        t := l.text.trim()
+        if not is_open
+            if t == "```ail"
+                is_open = true
+                fence = l.no
+                code = []
+        elif t == "```"
+            is_open = false
+            mut any_code := false
+            for c in code
+                if c.text.trim() != ""
+                    any_code = true
+            if any_code
+                mut expected := List[str]()
+                for c in code
+                    if rest := c.text.trim().strip_prefix("# =>")
+                        expected.push(rest.strip_prefix(" ") else rest)
+                out.push(DocTest(
+                    name: "",
+                    fn_name: "",
+                    expected: expected,
+                    has_expected: expected.len() > 0,
+                    code: code,
+                    fence: fence,
+                ))
+        else
+            code.push(l)
+    out
+
+## The source with each example appended as a test (test.doc.1).
+pub struct Augmented
+    pub text str
+    ## The original line of every line of `text`; 0 for the original's own.
+    pub origin List[int]
+
+pub fn augment(src str, tests List[DocTest]) Augmented
+    mut text := src
+    if not text.ends_with("\n")
+        text = "{text}\n"
+    mut parts := [text]
+    base := text.count("\n")
+    mut origin := [0 for _ in 0..base]
+    for t in tests
+        parts.push("@test fn {t.fn_name}()\n")
+        origin.push(t.fence)
+        for c in t.code
+            if c.text.trim() == ""
+                parts.push("\n")
+            else
+                parts.push("    {c.text}\n")
+            origin.push(c.no)
+    Augmented(text: parts.join(""), origin: origin)
+
+## The text a doc example's output must equal, or the failure (test.doc.2).
+## An empty string is a pass.
+pub fn check_output(t DocTest, output str) str
+    if not t.has_expected
+        return ""
+    got := output.lines()
+    if got.len() == t.expected.len()
+        mut same := true
+        for k in 0..got.len()
+            if got[k].trim_end() != t.expected[k].trim_end()
+                same = false
+        if same
+            return ""
+    "trap[test.doc.2]: output differs: expected {debug_list(t.expected)}, found {debug_list(got)}"
+
+## A list of strings as Rust's `{:?}` writes it.
+fn debug_list(xs List[str]) str
+    mut parts := List[str]()
+    for x in xs
+        parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
+    "[{parts.join(", ")}]"
+
+## The lines of its `# =>` expectations (snap.update.4).
+pub fn expected_lines(t DocTest) List[int]
+    [c.no for c in t.code if c.text.trim().starts_with("# =>")]
+
+## Where a failing example is reported: its opening fence.
+pub fn line_of(t DocTest) int
+    t.fence

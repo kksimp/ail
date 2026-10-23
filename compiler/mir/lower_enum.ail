@@ -250,7 +250,7 @@ fn Lower.enum_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
 ## 173's `rt.list_eq`).
 fn holds_record(t Ty) bool
     match t
-        Struct(_) | Enum(_) | Tuple(_) => true
+        Struct(_) | Enum(_) | Tuple(_) | Map(_, _) | Set(_) => true
         List(e) => not (is_number(e) or e == Ty.Str)
         _ => false
 
@@ -362,6 +362,10 @@ fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) b
         return true
     if e := t.elem()
         return comparable(e, pos, outer, mut seen)
+    if inner := t.opt_inner()
+        return comparable(inner, pos, outer, mut seen)
+    if t.is_coll()
+        return comparable_table(t, pos, outer, mut seen)
     if xs := tuple_elems(t)
         for x in xs
             if not comparable(x, pos, outer, mut seen)
@@ -390,6 +394,13 @@ fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) b
                 return false
     true
 
+## Whether `==` on a map or set is in the subset: its keys and values are.
+fn Lower.comparable_table(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) bool
+    match t
+        Map(k, v) => comparable(k, pos, outer, mut seen) and comparable(v, pos, outer, mut seen)
+        Set(e) => comparable(e, pos, outer, mut seen)
+        _ => false
+
 ## Generate each `eq.T` asked for, including those they ask for.
 fn Lower.gen_enum_eqs(mut self)
     mut done := Set[str]()
@@ -404,6 +415,10 @@ fn Lower.gen_enum_eqs(mut self)
             t := eq_tys[name]
             if name.starts_with("lt.")
                 gen_lt(name, t)
+            elif inner := t.opt_inner()
+                gen_opt_eq(name, t, inner)
+            elif t.is_coll()
+                gen_table_eq(name, t)
             elif e := t.elem()
                 gen_list_eq(name, t, e)
             elif xs := tuple_elems(t)
@@ -506,6 +521,8 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
     if t == Ty.Str
         return call("rt.str_eq", [x, y], Ty.Bool)
     if t.elem() != none or struct_name(t) != none or tuple_elems(t) != none
+        return call(eq_fn(t), [x, y], Ty.Bool)
+    if t.is_coll() or t.opt_inner() != none
         return call(eq_fn(t), [x, y], Ty.Bool)
     if m := enum_name(t)
         if not is_flat(m)

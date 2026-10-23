@@ -117,6 +117,8 @@ fn Lower.lower_list_edit(
     if name == "contains" and vs.len() == 1
         k := eq_kind(e)
         if k < 0
+            if found := list_contains_eq(r, e, convert(vs[0], e, npos))
+                return found
             return unsupported(npos, "`.contains()` on `{r.ty.name()}`")
         mut w := convert(vs[0], e, npos)
         if e.is_float()

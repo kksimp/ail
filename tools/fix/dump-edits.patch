@@ -1,0 +1,21 @@
+diff --git a/bootstrap/src/diag.rs b/bootstrap/src/diag.rs
+index 1274ec45..83f9ff2e 100644
+--- a/bootstrap/src/diag.rs
++++ b/bootstrap/src/diag.rs
+@@ -226,6 +226,16 @@ impl Diagnostic {
+         if self.end.is_none() {
+             self.end = Some(token_end(lines, self.pos));
+         }
++        if let Ok(path) = std::env::var("AIL_DUMP_EDITS") {
++            use std::io::Write;
++            let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
++            for (k, fx) in self.fixes.iter().enumerate() {
++                for e in &fx.edits {
++                    let esc = |s: &str| s.replace('\\', "\\\\").replace('\n', "\\n").replace('\t', "\\t");
++                    writeln!(f, "{}\t{}\t{}\t{:?}\t{}\t{}\t{}\t{}\t{}\t{}", self.pos.line, self.pos.col, k, e.anchor, e.pos.line, e.pos.col, e.end.line, e.end.col, e.old.as_deref().map_or("\u{1}".to_string(), |o| esc(o)), esc(&e.text)).unwrap();
++                }
++            }
++        }
+         self.fixes.retain_mut(|f| f.edits.iter_mut().all(|e| e.resolve(lines)));
+     }
+ }

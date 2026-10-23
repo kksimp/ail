@@ -1,0 +1,363 @@
+## `--budget N [--from K]` on every command (budget.out.1-6, ADR 0394), ported
+## from `bootstrap/src/budget.rs`: the command runs as a child process, its
+## output is split into records, and about N tokens of them are shown, most
+## severe first, with counts for the rest and the `--from` handle that continues.
+
+## What `--budget` and `--from` asked for.
+pub struct Budget
+    pub tokens int
+    pub from int
+
+## The result of `take`: the budget (if asked for), or the error to print.
+pub struct Taken
+    pub found bool
+    pub budget Budget
+    pub why str
+
+struct Record
+    text str
+    rank int
+    kind str
+    stderr bool
+
+struct Count
+    kind str
+    n int
+
+## The rank order (budget.out.3): errors and traps, failed tests, warnings,
+## other lines, passed tests; summaries are always shown.
+KINDS := ["error", "fail", "breaking", "warning", "line", "ok", "summary"]
+
+fn rank_of(kind str) int
+    for k in 0..KINDS.len()
+        if KINDS[k] == kind
+            return k
+    4
+
+## The default budget of each command, in estimated tokens (budget.out.5).
+pub fn default_for(command str) int
+    match command
+        "check" | "fix" | "edit" => 1500
+        "test" => 1500
+        "run" => 2000
+        "explain" | "effects" | "diff" => 2000
+        _ => 4000
+
+fn all_digits(v str) bool
+    if v == ""
+        return false
+    for c in v.chars()
+        if not c.is_digit()
+            return false
+    true
+
+## Remove `--budget [N]` and `--from K` from `args` (the words before a
+## program's own arguments). `api --card` keeps its own `--budget` (ADR 0311).
+pub fn take(mut args List[str]) Taken
+    nothing := Taken(found: false, budget: Budget(tokens: 0, from: 0), why: "")
+    if args.len() > 0 and args[0] == "api" and args.contains("--card")
+        return nothing
+    mut command := ""
+    for a in args
+        if not a.starts_with("--")
+            command = a
+            break
+    if command == "api" and args.contains("--diff")
+        command = "diff"
+    mut tokens := -1
+    mut from := -1
+    mut i := 0
+    while i < args.len()
+        if args[i] == "--budget"
+            # budget.out.5: a bare `--budget` takes the command's default.
+            if i + 1 < args.len() and all_digits(args[i + 1])
+                n := args[i + 1].to_int() else
+                    return Taken(
+                        found: false,
+                        budget: nothing.budget,
+                        why: "`--budget` is too large (budget.out.1)",
+                    )
+                tokens = n
+                args = without(args, i, 2)
+            else
+                tokens = default_for(command)
+                args = without(args, i, 1)
+        elif args[i] == "--from"
+            mut k := -1
+            if i + 1 < args.len()
+                k = args[i + 1].to_int() else -1
+            if k < 0
+                return Taken(
+                    found: false,
+                    budget: nothing.budget,
+                    why: "`--from` needs the record number a budgeted output printed, e.g. `--from 12` (budget.out.4)",
+                )
+            from = k
+            args = without(args, i, 2)
+        else
+            i += 1
+    if tokens < 0 and from < 0
+        return nothing
+    t := if tokens < 0 then default_for(command) else tokens
+    f := if from < 0 then 0 else from
+    Taken(found: true, budget: Budget(tokens: t, from: f), why: "")
+
+## A cheap token estimate (api.card.3): a run of letters or digits costs one
+## token per five characters (at least one), any other non-space character
+## one token, a newline one.
+pub fn estimate_tokens(s str) int
+    mut tokens := 0
+    mut word := 0
+    for c in s.chars()
+        if c.is_alpha() or c.is_digit() or c == '_'
+            word += 1
+            continue
+        if word > 0
+            tokens += (word + 4) / 5
+            word = 0
+        if not c.is_space() or c == '\n'
+            tokens += 1
+    tokens + (word + 4) / 5
+
+## The lines of `text`, each with its newline (Rust's `split_inclusive`).
+fn lines_inc(text str) List[str]
+    mut out := List[str]()
+    parts := text.split("\n")
+    for k in 0..parts.len()
+        last := k == parts.len() - 1
+        if last
+            if parts[k] != ""
+                out.push(parts[k])
+        else
+            out.push("{parts[k]}\n")
+    out
+
+fn chomp(line str) str
+    if line.ends_with("\n")
+        return line.slice(0, line.chars().len() - 1)
+    line
+
+fn continues(body str) bool
+    body.starts_with(" ")
+        or body.starts_with("\t")
+        or body.starts_with("help: ")
+        or body.starts_with("note: ")
+        or body.starts_with("fix: ")
+
+## Split one stream into records (budget.out.2).
+fn records(text str, stderr bool, mut out List[Record])
+    mut cur := ""
+    mut cur_kind := ""
+    mut open := false
+    for line in lines_inc(text)
+        body := chomp(line)
+        if continues(body) and open
+            cur = "{cur}{line}"
+            continue
+        if open
+            out.push(Record(text: cur, rank: rank_of(cur_kind), kind: cur_kind, stderr: stderr))
+            open = false
+        kind := classify(body)
+        severe := kind == "error" or kind == "fail" or kind == "breaking" or kind == "warning"
+        if severe and not body.starts_with("\{")
+            cur = line
+            cur_kind = kind
+            open = true
+        else
+            out.push(Record(text: line, rank: rank_of(kind), kind: kind, stderr: stderr))
+    if open
+        out.push(Record(text: cur, rank: rank_of(cur_kind), kind: cur_kind, stderr: stderr))
+
+fn num(s str) bool
+    all_digits(s)
+
+## The kind of a record from its first line (budget.out.2).
+fn classify(line str) str
+    if line.starts_with("\{")
+        if line.contains("\"summary\":true")
+            return "summary"
+        if line.contains("\"severity\":\"error\"") or line.contains("\"severity\":\"trap\"")
+            return "error"
+        if line.contains("\"status\":\"fail\"")
+            return "fail"
+        if line.contains("\"breaking\":[\"")
+            return "breaking"
+        if line.contains("\"severity\":\"warning\"")
+            return "warning"
+        if line.contains("\"status\":\"pass\"")
+            return "ok"
+        return "line"
+    if line.starts_with("FAIL ")
+        return "fail"
+    if line.starts_with("ok ")
+        return "ok"
+    if is_summary(line)
+        return "summary"
+    # api.diff.5: a change that breaks callers comes before the other changes.
+    if line.contains("  breaking: ")
+        and (line.starts_with("+") or line.starts_with("-") or line.starts_with("~"))
+        return "breaking"
+    # `PATH:LINE:COL: SEVERITY[RULE]: message`
+    parts := splitn(line, ":", 4)
+    if parts.len() == 4 and num(parts[1]) and num(parts[2])
+        rest := parts[3].trim_start()
+        if rest.starts_with("error[") or rest.starts_with("trap[")
+            return "error"
+        if rest.starts_with("warning[")
+            return "warning"
+    "line"
+
+## At most `n` pieces; the last holds the rest.
+fn splitn(s str, sep str, n int) List[str]
+    mut out := List[str]()
+    mut rest := s
+    while out.len() + 1 < n
+        cut := rest.find(sep) else break
+        out.push(rest.slice(0, cut))
+        rest = rest.slice(cut + sep.chars().len(), rest.chars().len())
+    out.push(rest)
+    out
+
+## `N passed, M failed` from `ail test`.
+fn is_summary(line str) bool
+    w := line.split(" ")
+    w.len() == 4
+        and all_digits(w[0])
+        and w[1] == "passed,"
+        and all_digits(w[2])
+        and w[3] == "failed"
+
+## The budgeted stdout and stderr (budget.out.1-4), as `(stdout, stderr)`.
+pub fn apply(b Budget, stdout str, stderr str, json bool) List[str]
+    total_tokens := estimate_tokens(stdout) + estimate_tokens(stderr)
+    # budget.out.1: output that fits is passed on unchanged.
+    if b.from == 0 and total_tokens <= b.tokens
+        return [stdout, stderr]
+    mut recs0 := List[Record]()
+    records(stdout, false, mut recs0)
+    records(stderr, true, mut recs0)
+    mut summaries := List[Record]()
+    mut recs := List[Record]()
+    # budget.out.3: sorting by rank, keeping output order within a rank.
+    for r in 0..KINDS.len()
+        for x in recs0
+            if x.kind == "summary"
+                if r == 0
+                    summaries.push(x)
+            elif x.rank == r
+                recs.push(x)
+    total := recs.len()
+    mut used := 0
+    for s in summaries
+        used += estimate_tokens(s.text)
+    mut shown := b.from.min(total)
+    mut o := ""
+    mut e := ""
+    for k in shown..total
+        cost := estimate_tokens(recs[k].text)
+        # At least one record is shown, so a large one can't stall `--from`.
+        if used + cost > b.tokens and shown > b.from
+            break
+        used += cost
+        shown += 1
+        if recs[k].stderr
+            e = "{e}{recs[k].text}"
+        else
+            o = "{o}{recs[k].text}"
+    # Everything fit after all (one record over the budget): unchanged.
+    if b.from == 0 and shown == total
+        return [stdout, stderr]
+    for s in summaries
+        if s.stderr
+            e = "{e}{s.text}"
+        else
+            o = "{o}{s.text}"
+    # budget.out.4: what was left out, by kind, and how to continue.
+    mut counts := List[Count]()
+    mut idx := List[int]()
+    for k in 0..b.from.min(total)
+        idx.push(k)
+    for k in shown..total
+        idx.push(k)
+    for k in idx
+        mut hit := false
+        for c in 0..counts.len()
+            if counts[c].kind == recs[k].kind
+                counts[c].n += 1
+                hit = true
+        if not hit
+            counts.push(Count(kind: recs[k].kind, n: 1))
+    mut sorted := List[Count]()
+    for r in 0..KINDS.len()
+        for c in counts
+            if rank_of(c.kind) == r
+                sorted.push(c)
+    mut first_left_stderr := false
+    if shown < total
+        first_left_stderr = recs[shown].stderr
+    elif total > 0
+        first_left_stderr = recs[0].stderr
+    msg := note(b, total, shown, total_tokens, sorted, json)
+    if first_left_stderr
+        e = "{e}{msg}"
+    else
+        o = "{o}{msg}"
+    [o, e]
+
+fn plural(k str, n int) str
+    name := match k
+        "ok" => "passed test"
+        "fail" => "failed test"
+        _ => k
+    s := if n == 1 then "" else "s"
+    "{n} {name}{s}"
+
+## The closing note (budget.out.4).
+fn note(b Budget, total int, shown int, tokens int, counts List[Count], json bool) str
+    has_next := shown < total
+    if json
+        mut omitted := List[str]()
+        for c in counts
+            omitted.push("\"{c.kind}\":{c.n}")
+        nxt := if has_next then "{shown}" else "null"
+        return "\{\"budget\":{b.tokens},\"from\":{b.from},\"shown\":{shown - b.from.min(total)},\"total\":{total},\"tokens\":{tokens},\"omitted\":\{{omitted.join(",")}},\"next\":{nxt}}\n"
+    mut left := List[str]()
+    for c in counts
+        left.push(plural(c.kind, c.n))
+    lt := if left.len() == 0 then "nothing" else left.join(", ")
+    nxt := if has_next then "; continue with --from {shown}" else ""
+    if b.from >= total
+        return "[budget {b.tokens}: no records from {b.from}; the output has {total}]\n"
+    "[budget {b.tokens}: records {b.from.min(total) + 1}-{shown} of {total} shown (~{tokens} tokens in all); not shown: {lt}{nxt}]\n"
+
+## Run `exe ARGS` as a child with the budget applied to its output
+## (budget.out.1). The exit status is the child's. Standard input is not
+## passed on (`proc.run` takes it as text only).
+pub fn run(b Budget, exe str, args List[str], json bool) int
+    out := proc.run(exe, args) else err
+        io.eprint("error: can't run `ail` under `--budget`: {err.kind}")
+        return 2
+    got := apply(b, out.out, out.err, json)
+    emit(got[0], false)
+    emit(got[1], true)
+    if out.status < 0
+        return 1
+    out.status.min(255)
+
+## `print!` / `eprint!`: the text as it is, which `print` would end with one more newline.
+fn emit(text str, to_err bool)
+    if text == ""
+        return
+    body := if text.ends_with("\n") then text.slice(0, text.chars().len() - 1) else text
+    if to_err
+        io.eprint(body)
+    else
+        print(body)
+
+## `xs` without the `n` items from index `i`.
+fn without(xs List[str], i int, n int) List[str]
+    mut out := List[str]()
+    for k in 0..xs.len()
+        if k < i or k >= i + n
+            out.push(xs[k])
+    out

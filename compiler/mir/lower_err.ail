@@ -820,8 +820,7 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
             Bool => call("rt.fmt_bool", [f], Ty.Str)
             Str => call("rt.str_quoted", [f], Ty.Str)
             Struct | Enum => display_call(Val(id: f, ty: slots[k].ty)) else -1
-            List => if text_ok(slots[k].ty) then value_text(slots[k].ty, f) else -1
-            _ => -1
+            _ => if text_ok(slots[k].ty) then value_text(slots[k].ty, f) else -1
         if text < 0
             return none
         acc = call("rt.str_cat", [acc, text], Ty.Str)

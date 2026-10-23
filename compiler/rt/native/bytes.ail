@@ -68,6 +68,84 @@ fn bytes_eq(a str, b str) bool
         i += 1
     true
 
+## `a < b` and the rest (type.bytes.2): -1, 0 or 1, comparing byte by byte,
+## the shorter first when one is a prefix of the other.
+fn bytes_cmp(a str, b str) int
+    p := str_addr(a)
+    q := str_addr(b)
+    n := load64(p)
+    m := load64(q)
+    k := if n < m then n else m
+    mut i := 0
+    while i < k
+        x := load8(p + 16 + i)
+        y := load8(q + 16 + i)
+        if x != y
+            return if x < y then -1 else 1
+        i += 1
+    if n == m
+        return 0
+    if n < m then -1 else 1
+
+## `bytes.zeros(n)` (type.bytes.13): `n` zero bytes, 0 to 2^32.
+fn bytes_zeros(n int, head str, tail str) str
+    if n < 0 or n > 4294967296
+        str_trap(8, n, 0, 0, head, tail)
+    p := str_new(n, n)
+    mut i := 0
+    while i < n
+        store8(p + 16 + i, 0)
+        i += 1
+    str_at(p)
+
+## `b.hex(sep)` (type.bytes.14): the two digits of each byte, `sep` between.
+fn bytes_hex_sep(b str, sep str) str
+    p := str_addr(b)
+    n := load64(p)
+    sb_reset()
+    mut i := 0
+    while i < n
+        if i > 0
+            sb_text(sep)
+        c := load8(p + 16 + i)
+        sb_byte(hex_digit(c / 16))
+        sb_byte(hex_digit(c % 16))
+        i += 1
+    sb_str()
+
+## `b` as the interpreter shows bytes inside a value: `b"hi\n"`.
+fn bytes_quoted(b str) str
+    p := str_addr(b)
+    n := load64(p)
+    sb_reset()
+    sb_byte(98)
+    sb_byte(34)
+    mut i := 0
+    while i < n
+        c := load8(p + 16 + i)
+        if c == 34 or c == 92
+            sb_byte(92)
+            sb_byte(c)
+        elif c == 10
+            sb_text("\\n")
+        elif c == 9
+            sb_text("\\t")
+        elif c == 13
+            sb_text("\\r")
+        elif c < 32 or c >= 127
+            sb_text("\\x")
+            sb_byte(hex_digit(c / 16))
+            sb_byte(hex_digit(c % 16))
+        else
+            sb_byte(c)
+        i += 1
+    sb_byte(34)
+    sb_str()
+
+## `print(b)` for bytes.
+fn out_bytes_lit(b str)
+    out_str(bytes_quoted(b))
+
 ## `b.hex()` (type.bytes.11): lowercase, two digits a byte.
 fn bytes_hex(b str) str
     p := str_addr(b)

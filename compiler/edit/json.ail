@@ -1,0 +1,170 @@
+## The JSON of an edit list (edit.in.1): a small parser with the messages of
+## `bootstrap/src/edit.rs`. Numbers are kept as text, since edits only need
+## strings and the word `true`/`false`/`null`.
+pub enum J
+    Null
+    Bool(b bool)
+    Num(text str)
+    Str(s str)
+    Arr(xs List[J])
+    Obj(keys List[str], vals List[J])
+
+## The member of an object.
+pub fn J.get(self, key str) J?
+    match self
+        Obj(keys, vals) =>
+            for i in 0..keys.len()
+                if keys[i] == key
+                    return vals[i]
+            none
+        _ => none
+
+## The string member of an object.
+pub fn J.str_of(self, key str) str?
+    if v := get(key)
+        match v
+            Str(s) => return s
+            _ => return none
+    none
+
+## The result of parsing: `err` is empty when the parse worked.
+pub struct Parsed
+    pub value J
+    pub err str
+
+struct Reader
+    cs List[char]
+    at int
+    err str
+
+pub fn parse_json(text str) Parsed
+    mut r := Reader(cs: text.chars(), at: 0, err: "")
+    v := read_value(mut r)
+    if r.err != ""
+        return Parsed(value: Null, err: r.err)
+    skip_ws(mut r)
+    if r.at != r.cs.len()
+        return Parsed(value: Null, err: "unexpected text after the JSON value at character {r.at}")
+    Parsed(value: v, err: "")
+
+fn skip_ws(mut r Reader)
+    while r.at < r.cs.len() and r.cs[r.at].is_space()
+        r.at += 1
+
+fn fail(mut r Reader, msg str) J
+    if r.err == ""
+        r.err = msg
+    Null
+
+fn read_value(mut r Reader) J
+    skip_ws(mut r)
+    start := r.at
+    if r.at >= r.cs.len()
+        return fail(mut r, "the JSON ends early")
+    c := r.cs[r.at]
+    if c == '\{'
+        r.at += 1
+        mut keys := List[str]()
+        mut vals := List[J]()
+        skip_ws(mut r)
+        if r.at < r.cs.len() and r.cs[r.at] == '}'
+            r.at += 1
+            return Obj(keys, vals)
+        while true
+            skip_ws(mut r)
+            k := read_value(mut r)
+            if r.err != ""
+                return Null
+            key := match k
+                Str(s) => s
+                _ => return fail(mut r, "expected a key at character {r.at}")
+            skip_ws(mut r)
+            if r.at >= r.cs.len() or r.cs[r.at] != ':'
+                return fail(mut r, "expected `:` at character {r.at}")
+            r.at += 1
+            v := read_value(mut r)
+            if r.err != ""
+                return Null
+            keys.push(key)
+            vals.push(v)
+            skip_ws(mut r)
+            if r.at < r.cs.len() and r.cs[r.at] == ','
+                r.at += 1
+            elif r.at < r.cs.len() and r.cs[r.at] == '}'
+                r.at += 1
+                return Obj(keys, vals)
+            else
+                return fail(mut r, "expected `,` or `}}` at character {r.at}")
+    if c == '['
+        r.at += 1
+        mut xs := List[J]()
+        skip_ws(mut r)
+        if r.at < r.cs.len() and r.cs[r.at] == ']'
+            r.at += 1
+            return Arr(xs)
+        while true
+            v := read_value(mut r)
+            if r.err != ""
+                return Null
+            xs.push(v)
+            skip_ws(mut r)
+            if r.at < r.cs.len() and r.cs[r.at] == ','
+                r.at += 1
+            elif r.at < r.cs.len() and r.cs[r.at] == ']'
+                r.at += 1
+                return Arr(xs)
+            else
+                return fail(mut r, "expected `,` or `]` at character {r.at}")
+    if c == '"'
+        r.at += 1
+        mut out := List[char]()
+        while r.at < r.cs.len()
+            d := r.cs[r.at]
+            r.at += 1
+            if d == '"'
+                return Str(out.join(""))
+            if d == '\\'
+                if r.at >= r.cs.len()
+                    return fail(mut r, "the JSON ends inside a string")
+                e := r.cs[r.at]
+                r.at += 1
+                if e == 'n'
+                    out.push('\n')
+                elif e == 't'
+                    out.push('\t')
+                elif e == 'r'
+                    out.push('\r')
+                elif e == 'b'
+                    out.push((char.from_code(8) else ' '))
+                elif e == 'f'
+                    out.push((char.from_code(12) else ' '))
+                elif e == 'u'
+                    if r.at + 4 > r.cs.len()
+                        return fail(mut r, "bad \\u escape")
+                    hex := r.cs[r.at..r.at + 4].join("")
+                    r.at += 4
+                    mut n := 0
+                    for h in hex.chars()
+                        dv := h.to_digit(16) else return fail(mut r, "bad \\u escape")
+                        n = n * 16 + dv
+                    out.push(char.from_code(n) else char.from_code(65533) else ' ')
+                else
+                    out.push(e)
+            else
+                out.push(d)
+        return fail(mut r, "the JSON ends inside a string")
+    if c == '-' or c.is_digit()
+        while r.at < r.cs.len() and (r.cs[r.at].is_digit() or "+-.eE".contains(r.cs[r.at]))
+            r.at += 1
+        text := r.cs[start..r.at].join("")
+        if text.to_float() == none
+            return fail(mut r, "bad number `{text}`")
+        return Num(text)
+    for w in ["true", "false", "null"]
+        wc := w.chars()
+        if r.at + wc.len() <= r.cs.len() and r.cs[r.at..r.at + wc.len()].join("") == w
+            r.at += wc.len()
+            if w == "null"
+                return Null
+            return Bool(w == "true")
+    fail(mut r, "unexpected `{c}` at character {start}")
