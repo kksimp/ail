@@ -2,7 +2,7 @@
 ## selftest checks for programs, without cargo, and prints only what failed.
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
 ## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
-## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache` (the files of those names), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
+## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay` (the files of those names), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
 ## PDF reader), `native` (each bootstrap/tests/native/run program builds
 ## natively and behaves like `ail run`), `selfhost` (tools/self-host/run.sh).
 ## No argument runs them all. The last line is `GATE GREEN` or
@@ -1649,6 +1649,243 @@ fn Gate.build_cache(mut self, tmp str)
 fn build_with(bin str, backend str, cache str, prog str, out str, extra str) proc.Output
     sh_run("env -u AIL_NO_CACHE AIL_CACHE_DIR={cache} AIL_COMPILER={backend} {bin} build {prog} -o {out} {extra}")
 
+## The interpreter's thread pool (parallel.rs, ported; conc.par.8-11).
+fn par_run(threads str, args List[str]) proc.Output ! proc.ProcError
+    proc.run("env", cat(
+        ["AIL_THREADS={threads}", "AIL_PAR_LOG=1", "bootstrap/target/release/ail"],
+        args,
+    ))
+
+fn Gate.parallel(mut self)
+    f := "bootstrap/tests/cases/par_pool.ail"
+    one := par_run("1", ["run", f]) else return
+    four := par_run("4", ["run", f]) else return
+    if four.status != 0 or one.out != four.out or not one.err.is_empty()
+        red("par for", "{four.err}")
+    want("par for log", four.err, ["par: line 23: loop: 200 iterations on 4 threads"])
+    o1 := par_run("1", ["run", "examples/parallel.ail"]) else return
+    o4 := par_run("4", ["run", "--parallel", "examples/parallel.ail"]) else return
+    if o1.out != o4.out
+        red("--parallel output", o4.out)
+    want("--parallel log", o4.err, ["par: line 34: loop: 16 iterations on 4 threads"])
+    plain := par_run("4", ["run", "examples/parallel.ail"]) else return
+    if not plain.err.is_empty()
+        red("parallel without the flag", plain.err)
+    d := par_run("4", ["run", "--deterministic", f]) else return
+    if d.status != 0 or not d.err.is_empty()
+        red("deterministic on one thread", d.err)
+    t := "bootstrap/tests/cases/task_pool.ail"
+    t1 := par_run("1", ["run", t]) else return
+    t4 := par_run("4", ["run", t]) else return
+    if t4.status != 0
+        or t1.out != t4.out
+        or t4.err.count("task `work` on its own thread") != 2
+        or not t4.err.contains("task `checked` on its own thread")
+        or t4.err.contains("`report`")
+        red("pure tasks", "{t4.err}")
+    c := "bootstrap/tests/cases/par_comp.ail"
+    c1 := par_run("1", ["run", c]) else return
+    c4 := par_run("4", ["run", c]) else return
+    if c4.status != 0 or c1.out != c4.out
+        red("par comprehension", c4.err)
+    want("par comprehension log", c4.err, [
+        "par: line 17: comprehension: 40 elements on 4 threads",
+        "par: line 21: comprehension: 2 elements in order",
+    ])
+    cd := par_run("4", ["run", "--deterministic", c]) else return
+    if cd.out != c1.out or not cd.err.is_empty()
+        red("par comprehension deterministic", cd.err)
+
+## `ail api --locals/--type/--refs` (api_queries.rs, ported; api.loc, api.type, api.refs, api.pkg).
+fn Gate.api_queries(mut self, tmp str)
+    root := repo_root()
+    d := "{tmp}/api_queries"
+    sh_run("rm -rf {d}; mkdir -p {d}/geo")
+    fs.write_text(
+        "{d}/geo/shapes.ail",
+        "pub struct P\n    pub x int\n\npub fn origin() P\n    P(x: 0)\n",
+    ) else return
+    main := "{d}/main.ail"
+    fs.write_text(
+        main,
+        "use geo\n\nfn main()\n    p := geo.origin()\n    print(\"\{p.x}\")\n",
+    ) else return
+    r := ail_run(["api", "--refs", main, "4", "12"]) else return
+    if r.status != 0
+        red("api --refs", r.err)
+    want("api --refs", r.out, [
+        "\"symbol\":\"fn:geo.origin\"",
+        "\{\"file\":\"{d}/geo/shapes.ail\",\"line\":4,\"col\":8,\"def\":true}",
+        "\"line\":4,\"col\":10,\"def\":false",
+    ])
+    ty := ail_run(["api", "--type", main, "4", "12"]) else return
+    if not ty.out.contains("\"type\":\"geo.P\"")
+        or not (ty.out.contains("\"signature\":\"fn geo.origin() P\"") or ty.out.contains("\"id\":\"fn:geo.origin\""))
+        red("api --type", ty.out)
+    # api.query.1: nothing at the position is exit 1 with a JSON error on stderr.
+    n := ail_run(["api", "--type", main, "3", "1"]) else return
+    if n.status != 1 or not n.err.starts_with("\{\"api\":1,\"severity\":\"error\"")
+        red("api --type nothing", "exit {n.status}\n{n.err}")
+    m := ail_run(["api", "--locals", main]) else return
+    if m.status != 2
+        red("api --locals no position", "exit {m.status}, want 2")
+    fs.write_text("{d}/bad.ail", "fn main()\n    x\n") else return
+    b := ail_run(["api", "--locals", "--json", "{d}/bad.ail", "2", "5"]) else return
+    if b.status != 2 or not b.err.contains("\"rule\":")
+        red("api --locals rejected", "exit {b.status}\n{b.err}")
+    sh_run("rm {d}/bad.ail")
+    for name in fs.list_dir("examples") else []
+        stem := name.replace(".ail", "")
+        if name.ends_with(".ail") and fs.exists("examples/{stem}.out")
+            lines := slurp("examples/{name}").lines().len()
+            e := ail_run(["api", "--locals", "examples/{name}", "{lines}", "5"]) else continue
+            if e.status != 0
+                red("api --locals examples/{name}", e.err)
+    # api.pkg.1: a package directory is outlined whole.
+    fs.write_text(
+        main,
+        "use geo\n\nfn main()\n    p := geo.origin()\n    print(\"\{p.x} \{far()}\")\n",
+    ) else return
+    util := "{d}/util.ail"
+    fs.write_text(util, "use geo\n\npub fn far() int\n    geo.origin().x\n") else return
+    o := ail_run(["api", "--outline", d]) else return
+    if o.status != 0 or not o.out.starts_with("\{\"api\":1,\"package\":")
+        red("api --outline", "exit {o.status}\n{o.err}{o.out}")
+    want("api --outline", o.out, [
+        "\"id\":\"fn:geo.origin\"",
+        "\"id\":\"type:geo.P\"",
+        "\"id\":\"fn:far\"",
+        "\"module\":\"geo\"",
+        "util.ail",
+    ])
+    sy := ail_run(["api", "--symbols", d]) else return
+    want("api --symbols", sy.out, ["\"references\":[", "\"id\":\"fn:geo.origin\""])
+    tx := ail_run(["api", "--text", d]) else return
+    want("api --text package", tx.out, ["fn geo.origin() geo.P"])
+    # api.pkg.2-3: `--refs DIR FILE LINE COL` finds uses in every file of the package.
+    shapes := "{d}/geo/shapes.ail"
+    for q in [[util, "4", "9"], [util, "4", "5"], [shapes, "4", "8"]]
+        a := ail_run(["api", "--refs", d, q[0], q[1], q[2]]) else return
+        if a.status != 0 or not a.out.contains("\"symbol\":\"fn:geo.origin\"")
+            red("api --refs package {q}", "exit {a.status}\n{a.err}{a.out}")
+        for file in ["main.ail", "util.ail", "geo/shapes.ail"]
+            if not a.out.contains("{d}/{file}\"")
+                red("api --refs package {q}", "{file} missing in\n{a.out}")
+    # api.pkg.4: the single-file form keeps working; a file outside the package is an error.
+    single := "{tmp}/api_queries_single"
+    sh_run("rm -rf {single}; mkdir -p {single}/geo; cp {d}/geo/shapes.ail {single}/geo/")
+    fs.write_text(
+        "{single}/main.ail",
+        "use geo\n\nfn main()\n    p := geo.origin()\n    print(\"\{p.x}\")\n",
+    ) else return
+    sf := ail_run(["api", "--refs", "{single}/main.ail", "4", "12"]) else return
+    if sf.status != 0
+        red("api --refs single file", sf.err)
+    stray := "{tmp}/stray.ail"
+    fs.write_text(stray, "fn main()\n    print(\"x\")\n") else return
+    st := ail_run(["api", "--refs", d, stray, "1", "4"]) else return
+    if st.status != 2 or not st.err.contains("api.pkg.2")
+        red("api --refs stray", "exit {st.status}\n{st.err}")
+    sh_run("rm -rf {d} {single} {stray}")
+
+## Record and replay (replay.rs, ported; replay.rec, replay.cap, replay.run, ADR 0398).
+fn rpl(dir str, input str, args List[str]) proc.Output
+    root := repo_root()
+    script := "d=$0; bin=$1; shift; cd \"$d\" && REPLAY_NAME=first exec \"$bin\" \"$@\""
+    r := proc.run(
+        "sh",
+        cat(["-c", script, dir, "{root}/bootstrap/target/release/ail"], args),
+        input,
+    ) else return proc.Output(status: 127, out: "", err: "could not start sh")
+    r
+
+fn Gate.replay(mut self, tmp str)
+    root := repo_root()
+    base := "{tmp}/replay"
+    sh_run("rm -rf {base}; mkdir -p {base}/repeat {base}/diverge {base}/handles {base}/tests {base}/options")
+    program := "fn main() !\n    t := time.now_ms()\n    n := random.int(1, 1000000)\n    data := fs.read_text(\"input.txt\")?\n    name := env.get(\"REPLAY_NAME\") else \"nobody\"\n    line := io.read_line() else \"eof\"\n    gone := fs.read_text(\"missing.txt\") else e\n        \"\{e.kind}\"\n    print(\"\{t} \{n} \{name} \{line} \{data.lines().len()} \{gone}\")\n    xs := [1, 2]\n    print(xs[data.lines().len()])\n"
+    # replay.rec.1-2, replay.run.1-2: a replay prints what the recorded run printed.
+    d := "{base}/repeat"
+    fs.write_text("{d}/prog.ail", program) else return
+    fs.write_text("{d}/input.txt", "a\nb\nc\n") else return
+    first := rpl(d, "hello\n", ["run", "--record", "r.json", "prog.ail"])
+    if first.status != 1
+        or not first.out.contains(" first hello 3 not_found")
+        or not first.err.contains("prog.ail:11:13: trap[type.coll.4]")
+        red("replay record", "exit {first.status}\n{first.out}{first.err}")
+    rec := slurp("{d}/r.json")
+    if not rec.starts_with("\{\"ail_record\":1,\"program\":\"prog.ail\"")
+        or not rec.contains("\{\"call\":\"io.read_line\",\"line\":6,\"col\":16,\"result\":\"hello\"}")
+        red("replay recording", rec)
+    fs.write_text("{d}/input.txt", "x\n") else return
+    again := rpl(d, "", ["run", "--replay", "r.json"])
+    if again.out != first.out or again.err != first.err or again.status != 1
+        red("replay repeats the run", "exit {again.status}\n{again.out}{again.err}")
+    # replay.run.3: a program that changed since the recording traps at the first call that differs.
+    d2 := "{base}/diverge"
+    fs.write_text(
+        "{d2}/prog.ail",
+        "fn main()\n    print(env.get(\"REPLAY_NAME\") else \"\")\n",
+    ) else return
+    if rpl(d2, "", ["run", "--record", "r.json", "prog.ail"]).status != 0
+        red("replay diverge", "recording failed")
+    fs.write_text("{d2}/prog.ail", "fn main()\n    print(fs.exists(\"x\"))\n") else return
+    dv := rpl(d2, "", ["run", "--replay", "r.json", "prog.ail"])
+    want("replay diverges", dv.err, [
+        "prog.ail:2:14: trap[replay.run.3]",
+        "the recording's next effect is `env.get`",
+    ])
+    # replay.cap.2: a call that returns a handle is marked, and the replay stops there.
+    d3 := "{base}/handles"
+    exe := "{root}/bootstrap/target/release/ail"
+    fs.write_text(
+        "{d3}/start.ail",
+        "fn main() !\n    print(\"a\")\n    p := proc.start(\"{exe}\", [\"version\"])?\n",
+    ) else return
+    rpl(d3, "", ["run", "--record", "s.json", "start.ail"])
+    if not slurp("{d3}/s.json").contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"uncaptured\":true")
+        red("replay handle", slurp("{d3}/s.json"))
+    h := rpl(d3, "", ["run", "--replay", "s.json"])
+    if h.out != "a\n" or not h.err.contains("trap[replay.cap.2]")
+        red("replay handle stop", "{h.out}{h.err}")
+    fs.write_text("{d3}/sleep.ail", "fn main()\n    time.sleep_ms(-1)\n") else return
+    sf := rpl(d3, "", ["run", "--record", "t.json", "sleep.ail"])
+    sa := rpl(d3, "", ["run", "--replay", "t.json"])
+    if not sf.err.contains("trap[std.time.2]") or sa.err != sf.err
+        red("replay trap in a call", "{sf.err}|{sa.err}")
+    # replay.rec.1, replay.rec.5, replay.run.1: `ail test --record` keeps the failed tests' effects.
+    d4 := "{base}/tests"
+    fs.write_text(
+        "{d4}/t.ail",
+        "fn greeting() str\n    \"hi \{env.get(\"REPLAY_NAME\") else \"x\"} \{random.int(1, 1000000)}\"\n\n@test\nfn passes()\n    assert_eq(1 + 1, 2)\n\n@test\nfn flaky()\n    assert_eq(greeting(), \"hi first 0\")\n",
+    ) else return
+    tf := rpl(d4, "", ["test", "--record", "r.json", "t.ail"])
+    trec := slurp("{d4}/r.json")
+    if tf.status != 1
+        or not trec.contains("\{\"test\":\"flaky\"}\n\{\"call\":\"env.get\"")
+        or trec.contains("passes")
+        red("test --record", "exit {tf.status}\n{trec}")
+    ta := rpl(d4, "", ["test", "--replay", "r.json"])
+    mut fail_a := ""
+    for l in tf.out.lines()
+        if l.starts_with("FAIL flaky")
+            fail_a = l
+    mut fail_b := ""
+    for l in ta.out.lines()
+        if l.starts_with("FAIL flaky")
+            fail_b = l
+    if fail_a != fail_b or not ta.out.contains("0 passed, 1 failed")
+        red("test --replay", ta.out)
+    # replay.rec.1: the options need `run` or `test` and a file.
+    d5 := "{base}/options"
+    o1 := rpl(d5, "", ["check", "--record", "r.json", "x.ail"])
+    if o1.status != 2 or not o1.err.contains("(replay.rec.1)")
+        red("check --record", "exit {o1.status}\n{o1.err}")
+    o2 := rpl(d5, "", ["run", "--replay", "nothing.json"])
+    if o2.status != 2 or not o2.err.contains("can't read the recording nothing.json")
+        red("--replay nothing", "exit {o2.status}\n{o2.err}")
+    sh_run("rm -rf {base}")
+
 fn main() !
     args := env.args()
     all := [
@@ -1687,6 +1924,9 @@ fn main() !
             "limits" => g.limits()
             "diff" => g.diff(tmp)
             "build_cache" => g.build_cache(tmp)
+            "parallel" => g.parallel()
+            "api_queries" => g.api_queries(tmp)
+            "replay" => g.replay(tmp)
             "selfhost" => g.selfhost()
             _ =>
                 io.eprint("unknown suite {s}; suites: {all.join(" ")}")
