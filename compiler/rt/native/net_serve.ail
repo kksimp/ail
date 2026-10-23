@@ -565,13 +565,8 @@ fn serve_idle_take(h int, c int) int
     store64(ex + 8, c)
     ex
 
-## Fail `accept` with `closed`. Every worker of a pool hits this at once when
-## the server is closed, and the pending-failure words (err.ail) are shared by
-## all threads, so a failure another thread has not yet taken would be lost:
-## each thread waits its own few milliseconds first.
-## TODO: make ERR and TRACE per-thread and drop the wait.
+## Fail `accept` with `closed`.
 fn serve_closed(at str) int
-    time_sleep_ms(4 * thread_slot())
     net_closed("server", at)
 
 ## `srv.accept()` (std.net.9): the next complete request as a `net.Exchange`.
