@@ -1,0 +1,3 @@
+[Node(kind: Kind.Text, n: 1, kids: [1]), Node(kind: Kind.Elem(tag: "p"), n: 2, kids: [])]
+[Node(kind: Kind.Text, n: 1, kids: [1]), Node(kind: Kind.Elem(tag: "p"), n: 2, kids: [])]
+Doc(nodes: [Node(kind: Kind.Text, n: 1, kids: [1]), Node(kind: Kind.Elem(tag: "p"), n: 2, kids: [])])

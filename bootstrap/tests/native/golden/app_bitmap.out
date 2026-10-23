@@ -1,0 +1,4 @@
+canvas #c 0.0x0.0 ops=1
+  bitmap 1.0,2.0 8.0x4.0 red 2x1
+{"v":1,"t":"view","title":"Pic","focus":"","tree":{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Bitmap","x":1,"y":2,"w":8,"h":4,"id":"red","pw":2,"ph":1,"data":"/wAA/wD/AIA="}]}}
+{"v":1,"t":"view","title":"Pic","focus":"","tree":{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Bitmap","x":1,"y":2,"w":8,"h":4,"id":"red","pw":2,"ph":1,"data":""}]}}

@@ -1,0 +1,3 @@
+# Rules the AIL checker (compiler/check/) reports and `ail check` (bootstrap/src/check*) doesn't,
+# one per line. The selftest `self_hosted_check` allows these extras and nothing else
+# (ADR 0865). It still fails if the AIL checker misses a diagnostic the Rust one reports.
