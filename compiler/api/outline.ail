@@ -151,6 +151,10 @@ fn Item.text(self, depth int, mut out List[str])
     # err.api.1: an inferred error set is spelled out.
     if signature.contains(") !") and has_extra("fails_with")
         out.push("       {pad}    fails with {extra_strs("fails_with").join(" | ")}")
+    # ct.gen.4: `--expanded` shows generated code under its signature.
+    if code := extra_text("text")
+        for l in code.lines()[1..]
+            out.push("       {pad}{l}")
     if d := doc
         for l in d.split("\n")
             out.push("       {pad}    ## {l}")
@@ -175,6 +179,10 @@ struct Api
     fn_ids List[str]
     ## A package outlined whole: files after the first are not left out (api.pkg.1).
     whole bool
+    ## `--expanded`: what derive generators wrote is listed too (ct.gen.4).
+    expanded bool
+    ## The source of each file of the program, for the text of generated code.
+    texts List[str]
 
 fn owner_name(prog ast.Program, f ast.FnDecl) str?
     match f.within
@@ -212,7 +220,7 @@ fn new_api(prog ast.Program, facts Facts) Api
     for i in 0..prog.fns.len()
         if is_impl(prog.fns[i]) and (seen.get(ids[i]) else 0) > 1
             ids[i] = fn_id(prog, prog.fns[i], true)
-    Api(prog: prog, facts: facts, fn_ids: ids, whole: false)
+    Api(prog: prog, facts: facts, fn_ids: ids, whole: false, expanded: false, texts: [])
 
 fn outside(pos ast.Pos) bool
     pos.line > 1048576
@@ -221,6 +229,14 @@ fn outside(pos ast.Pos) bool
 fn new_whole_api(prog ast.Program, facts Facts) Api
     mut api := new_api(prog, facts)
     api.whole = true
+    api
+
+## `new_api` that also lists generated code (`--expanded`); `texts` are the
+## program's file sources.
+fn new_expanded_api(prog ast.Program, facts Facts, texts List[str]) Api
+    mut api := new_api(prog, facts)
+    api.expanded = true
+    api.texts = texts
     api
 
 fn Api.hidden(self, pos ast.Pos) bool
@@ -455,6 +471,8 @@ fn Api.in_generated(self, im ast.ImplDecl, pos ast.Pos) bool
     false
 
 fn Api.impl_methods(self, im ast.ImplDecl) List[Item]
+    if expanded
+        return expanded_methods(im)
     [fn_item(m) for m in im.methods if not in_generated(im, prog.fns[m].pos)]
 
 fn take(mut methods Map[str, List[Item]], name str) List[Item]
@@ -547,10 +565,10 @@ fn Api.items(self) List[Item]
             id: "impl:{im.target.name}.{im.trait_name}",
             doc: none,
             signature: "impl {im.trait_name} for {owner_text(im.target)}",
-            extra: [
+            extra: with_derived(im, [
                 kv("trait", J.Str("trait:{im.trait_name}")),
                 kv("type", J.Str("type:{im.target.name}")),
-            ],
+            ]),
             members: [Group(key: "methods", items: impl_methods(im))],
         ))
     for c in prog.consts
@@ -575,7 +593,13 @@ fn Api.items(self) List[Item]
 ## The outline of `prog` for the file `path`, in `form`; `symbols` and
 ## `expanded` are not supported yet.
 pub fn outline(prog ast.Program, facts Facts, path str, form Form) str
-    api := new_api(prog, facts)
+    outline_with(new_api(prog, facts), path, form)
+
+## `outline` with `--expanded` (ct.gen.4); `texts` are the program's file sources.
+pub fn outline_expanded(prog ast.Program, facts Facts, texts List[str], path str, form Form) str
+    outline_with(new_expanded_api(prog, facts, texts), path, form)
+
+fn outline_with(api Api, path str, form Form) str
     items := api.items()
     match form
         Text =>

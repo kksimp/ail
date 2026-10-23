@@ -1,0 +1,67 @@
+## `ail api --expanded` (ct.gen.4, ADR 0228, ADR 0308), as
+## `bootstrap/src/api/expanded.rs`: the methods derive generators wrote, with
+## their origin and text, and which `impl`s are built-in derives, listed by
+## name (OQ-096 option b).
+use ast
+
+## The generated code of `im`, if a generator filled it in.
+fn Api.generated(self, im ast.ImplDecl) ast.Generated?
+    for g in prog.generated
+        if g.impl_pos == im.pos
+            return g
+    none
+
+## The methods listed under an `impl` with `--expanded`: those written in it,
+## and those its generator wrote, including associated functions of the type
+## (ct.gen.1), each with `origin` and `text`.
+fn Api.expanded_methods(self, im ast.ImplDecl) List[Item]
+    mut items := [fn_item(m) for m in im.methods if not in_generated(im, prog.fns[m].pos)]
+    g := generated(im) else return items
+    base := prog.files[g.file].base
+    lines := if g.file < texts.len() then texts[g.file].lines() else List[str]()
+    mut fns := [i for i in 0..prog.fns.len() if in_generated(im, prog.fns[i].pos)]
+    fns = fns.sorted(by: |i| prog.fns[i].pos.line)
+    for n in 0..fns.len()
+        i := fns[n]
+        pos := prog.fns[i].pos
+        start := pos.line - base
+        end := if n + 1 < fns.len() then prog.fns[fns[n + 1]].pos.line - base else lines.len() + 1
+        text := lines[start - 1..end - 1].join("\n")
+        mut item := fn_item(i)
+        item.line = start
+        item.extra.push(kv("origin", J.Obj([
+            kv("kind", J.Str("derive")),
+            kv("impl", J.Str("impl:{g.label}")),
+            kv("generator", J.Str("fn:{g.generator}")),
+            kv("at", J.Str("gen:impl:{g.label}:{start}:{pos.col}")),
+        ])))
+        item.extra.push(kv("text", J.Str("{text.trim_end()}\n")))
+        items.push(item)
+    items
+
+## With `--expanded`, how an `impl` without written methods is derived: by its
+## generator, or `built-in` for `Eq`, `Ord` and `ToStr` (trait.derive.1,
+## OQ-096). `base` are the keys the impl has already.
+fn Api.with_derived(self, im ast.ImplDecl, base List[Kv]) List[Kv]
+    if not expanded
+        return base
+    mut out := base
+    if g := generated(im)
+        out.push(kv("derived_by", J.Str("fn:{g.generator}")))
+        return out
+    mut built_in := false
+    for t in prog.traits
+        if t.name == im.trait_name and t.derive == none and t.pos.line >= 1073741824
+            built_in = true
+    if im.methods.len() == 0 and built_in
+        out.push(kv("derived_by", J.Str("built-in")))
+    out
+
+## The text of the string under `key` in `extra`.
+fn Item.extra_text(self, key str) str?
+    for p in extra
+        if p.key == key
+            match p.val
+                Str(s) => return s
+                Null | Bool(_) | Int(_) | Arr(_) | Obj(_) => return none
+    none

@@ -78,7 +78,8 @@ pub fn analyze(p ast.Program, full bool) Analysis
         return Analysis(report: report, effects: [], errors: Map[int, List[str]]())
     mut errors := Map[int, List[str]]()
     for i in 0..p.fns.len()
-        if p.fns[i].pos.line > 1048576
+        # Every file of a package, and generated code (`api --card`, `--expanded`), but not the prelude.
+        if p.fns[i].pos.line >= 1073741824
             continue
         match c.sigs[i].ret
             Res(_, errs) => errors[i] = c.error_names(c.errs_of(errs))
