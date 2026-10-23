@@ -1,14 +1,14 @@
 ## `ail test` in AIL (RR-4, ADR 0855, test.run.1-4): checks FILE, builds its
 ## `@test` functions natively and runs each in its own process.
 ##   ail run tools/ailtest/ailtest.ail [--json] FILE
-## The native backend has no `assert` and refuses to call a `@test` function,
-## so the build is of a rewritten copy beside FILE (so its `use` lines
-## resolve): `@test` becomes `fn NAME() int?`, `assert(c)` and `assert_eq(a, b)`
-## become calls of a checking function that knows the line and column, and
-## `main` becomes a dispatcher that picks a test by the length of its first
-## argument. A test the backend can't build yet is reported `skip` with the
-## first construct that blocks it; a property test (one with parameters) is
-## `skip` too. The exit status is 0 if every test that ran passed.
+## The native backend refuses to call a `@test` function, so the build is of
+## a rewritten copy beside FILE (so its `use` lines resolve): `@test` becomes
+## `fn NAME() int?` and `main` becomes a dispatcher that picks a test by the
+## length of its first argument; `assert` and `assert_eq` lower natively
+## (ADR 0858, compiler/mir/lower_test.ail). A test the backend can't build yet
+## is reported `skip` with the first construct that blocks it; a property test
+## (one with parameters) is `skip` too. The exit status is 0 if every test that
+## ran passed.
 ## Rewriting follows bootstrap/src/native_test.rs (native.test.2).
 
 ## The compiler to drive: `$AIL`, else `./ail`.
@@ -101,140 +101,12 @@ fn find_tests(lines List[str]) Found
         i += 1
     found
 
-fn ident_char(c char) bool
-    c.is_alpha() or c.is_digit() or c == '_'
-
-## The index just past the string literal that starts at `i` (a `"`).
-fn skip_string(b List[char], start int) int
-    mut i := start + 1
-    while i < b.len()
-        if b[i] == '\\'
-            i += 2
-        elif b[i] == '"'
-            return i + 1
-        elif b[i] == '\{'
-            i = skip_braces(b, i)
-        else
-            i += 1
-    b.len()
-
-## The index just past the `{...}` that starts at `i`.
-fn skip_braces(b List[char], start int) int
-    mut depth := 0
-    mut i := start
-    while i < b.len()
-        if b[i] == '"'
-            i = skip_string(b, i)
-            continue
-        if b[i] == '\{'
-            depth += 1
-        elif b[i] == '}'
-            depth -= 1
-            if depth == 0
-                return i + 1
-        i += 1
-    b.len()
-
-struct CallArgs
-    args List[str]
-    end int
-
-## The top-level arguments of the call whose `(` is at `open`.
-fn call_args(b List[char], open int) CallArgs?
-    mut depth := 0
-    mut i := open
-    mut from := open + 1
-    mut args := List[str]()
-    while i < b.len()
-        c := b[i]
-        if c == '"'
-            i = skip_string(b, i)
-            continue
-        if c == '(' or c == '[' or c == '\{'
-            depth += 1
-        elif c == ')' or c == ']' or c == '}'
-            depth -= 1
-            if depth == 0
-                last := b[from..i].join("").trim()
-                if not (last.is_empty() and args.len() > 0)
-                    args.push(last)
-                return CallArgs(args: args, end: i + 1)
-        elif c == ',' and depth == 1
-            args.push(b[from..i].join("").trim())
-            from = i + 1
-        i += 1
-    none
-
-fn count_char(b List[char], from int, to int, c char) int
-    mut n := 0
-    for k in from..to
-        if b[k] == c
-            n += 1
-    n
-
-## `assert(c)` and `assert_eq(a, b)` as calls of `ail_native_check(ok, line, col)`.
-fn rewrite_asserts(text str) str
-    b := text.chars()
-    mut out := List[str]()
-    mut i := 0
-    mut line := 1
-    mut line_start := 0
-    mut copied := 0
-    while i < b.len()
-        c := b[i]
-        if c == '\n'
-            line += 1
-            i += 1
-            line_start = i
-        elif c == '#'
-            while i < b.len() and b[i] != '\n'
-                i += 1
-        elif c == '"'
-            end := skip_string(b, i)
-            nl := count_char(b, i, end, '\n')
-            if nl > 0
-                line += nl
-                mut k := end - 1
-                while k >= i and b[k] != '\n'
-                    k -= 1
-                line_start = k + 1
-            i = end
-        elif c.is_alpha() or c == '_'
-            start := i
-            while i < b.len() and ident_char(b[i])
-                i += 1
-            word := b[start..i].join("")
-            prev_dot := start > 0 and b[start - 1] == '.'
-            if (word == "assert" or word == "assert_eq")
-                and i < b.len()
-                and b[i] == '('
-                and not prev_dot
-                if ca := call_args(b, i)
-                    col := start - line_start + 1
-                    mut call := ""
-                    if word == "assert" and ca.args.len() == 1
-                        call = "ail_native_check({ca.args[0]}, {line}, {col})"
-                    elif word == "assert_eq" and ca.args.len() == 2
-                        call = "ail_native_check(({ca.args[0]}) == ({ca.args[1]}), {line}, {col})"
-                    if not call.is_empty()
-                        out.push(b[copied..start].join(""))
-                        out.push(call)
-                        # Trimmed arguments lose their newlines; give them back so lines stay put.
-                        lost := count_char(b, start, ca.end, '\n') - call.count("\n")
-                        for _ in 0..lost
-                            out.push("\n")
-                        line += count_char(b, start, ca.end, '\n')
-                        copied = ca.end
-                        i = ca.end
-        else
-            i += 1
-    out.push(b[copied..b.len()].join(""))
-    out.join("")
-
 struct Rewritten
     text str
     ## For each line of `text`, the original line it came from (-1: added).
     origin List[int]
+    ## Lines added above the original text.
+    lead int
 
 fn contains_line(lines List[str], want str) bool
     for l in lines
@@ -263,14 +135,14 @@ fn rewrite(lines List[str], f Found, dropped Set[int]) Rewritten
             for j in m..block_end(lines, m) + 1
                 keep[j] = ""
             break
-    body := rewrite_asserts(keep.join("\n"))
-    rewritten := body.split("\n")
+    rewritten := keep
     mut out := List[str]()
     mut origin := List[int]()
     for l in ["use std.env", "use std.io"]
         if not contains_line(lines, l)
             out.push(l)
             origin.push(-1)
+    lead := out.len()
     mut ends := Set[int]()
     for i in 0..f.tests.len()
         if not dropped.contains(i)
@@ -281,7 +153,7 @@ fn rewrite(lines List[str], f Found, dropped Set[int]) Rewritten
         if ends.contains(j)
             out.push("    return 0")
             origin.push(-1)
-    mut tail := "\nfn ail_native_check(ok bool, line int, col int)\n    if not ok\n        io.eprint(\"assertion failed at \{line}:\{col}\")\n        io.exit(1)\n\nfn main()\n    args := env.args()\n    k := args[0].len()\n"
+    mut tail := "\nfn main()\n    args := env.args()\n    k := args[0].len()\n"
     mut slot := 1
     for i in 0..f.tests.len()
         if dropped.contains(i)
@@ -292,24 +164,23 @@ fn rewrite(lines List[str], f Found, dropped Set[int]) Rewritten
     for l in tail.split("\n")
         out.push(l)
         origin.push(-1)
-    Rewritten(text: out.join("\n"), origin: origin)
+    Rewritten(text: out.join("\n"), origin: origin, lead: lead)
 
 fn short(msg str) str
     msg.split("\n").first() else msg
 
 ## The first line of a trap or failure, as `trap[RULE]: text at L:C`.
-fn describe(err str) str
+fn describe(err str, lead int) str
     first := err.lines().first() else ""
-    if first.starts_with("assertion failed at ")
-        return "trap[test.assert.1]: assertion failed at {first.slice(20, first.len())}"
     if idx := first.find(": trap[")
         head := first.slice(0, idx)
         parts := head.split(":")
         if parts.len() >= 3
-            return "{first.slice(idx + 2, first.len())} at {parts[parts.len() - 2]}:{parts[parts.len() - 1]}"
+            line := (parts[parts.len() - 2].to_int() else lead) - lead
+            return "{first.slice(idx + 2, first.len())} at {line}:{parts[parts.len() - 1]}"
     first
 
-fn run_one(exe str, slot int) Verdict
+fn run_one(exe str, slot int, lead int) Verdict
     arg := ["x" for _ in 0..slot].join("")
     r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
         return Verdict(name: "", status: "fail", message: "error: can't start the test binary")
@@ -317,7 +188,7 @@ fn run_one(exe str, slot int) Verdict
         return Verdict(name: "", status: "pass", message: "")
     if r.status == 4
         return Verdict(name: "", status: "fail", message: "error: no such test")
-    Verdict(name: "", status: "fail", message: describe(r.err))
+    Verdict(name: "", status: "fail", message: describe(r.err, lead))
 
 fn json_str(s str) str
     mut out := "\""
@@ -390,10 +261,12 @@ fn main() !
     mut why := Map[int, str]()
     mut blocked := ""
     mut built := false
+    mut last_lead := 0
     for _ in 0..MAX_ROUNDS
         if dropped.len() == found.tests.len()
             break
         rw := rewrite(lines, found, dropped)
+        last_lead = rw.lead
         fs.write_text(copy, rw.text)? "writing {copy}"
         b := proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
         if b.status == 0
@@ -452,7 +325,7 @@ fn main() !
             for j in 0..i
                 if not dropped.contains(j)
                     slot += 1
-            v := run_one(exe, slot)
+            v := run_one(exe, slot, last_lead)
             verdicts.push(Verdict(name: t.name, status: v.status, message: v.message))
     code := report(verdicts, json)
     _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
