@@ -172,28 +172,6 @@ fn bytes_cmp(a str, b str) int
         return 0
     if n < m then -1 else 1
 
-## `b.hex(sep)` (type.bytes.11): the pairs separated by `sep`.
-fn bytes_hex_sep(b str, sep str) str
-    p := str_addr(b)
-    n := load64(p)
-    k := load64(str_addr(sep))
-    if n == 0
-        return str_at(str_new(0, 0))
-    total := 2 * n + k * (n - 1)
-    s := str_new(total, total)
-    mut at := s + 16
-    mut i := 0
-    while i < n
-        if i > 0
-            copy_bytes(at, str_addr(sep) + 16, k)
-            at += k
-        c := load8(p + 16 + i)
-        store8(at, hex_digit(c / 16))
-        store8(at + 1, hex_digit(c % 16))
-        at += 2
-        i += 1
-    str_at(s)
-
 ## The literal form `b"..."` of `b` (type.bytes.2): printable ASCII as itself, `\" \\ \n \t \r`
 ## as escapes, every other byte as `\xHH`.
 fn bytes_show(b str) str

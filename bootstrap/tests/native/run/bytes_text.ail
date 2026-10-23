@@ -8,8 +8,6 @@ fn main()
     b := b"ab\x01\"\\\n\xff"
     print(b)
     print("[{b}] {b[0]} {b[1] + b[0]}")
-    print(b.hex(" "))
-    print(b"".hex("-"))
     print(b < b"b")
     print(b"a" < b"ab")
     print(b >= b"ab")

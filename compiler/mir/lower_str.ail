@@ -241,12 +241,6 @@ fn Lower.lower_str_method(mut self, r Val, name str, npos ast.Pos, vs List[Val])
             _ => return str_unsupported(name, npos)
     if n == 2
         match name
-            "split" =>
-                a := text_arg(vs[0], name, npos)?
-                k := int_arg(vs[1], name, npos)?
-                h := trap_head("type.str.4", npos)
-                t := Ty.List(Ty.Str)
-                return Val(id: call("rt.str_split_n", [r.id, a, k, h, trap_tail(npos)], t), ty: t)
             "slice" =>
                 a := int_arg(vs[0], name, npos)?
                 b := int_arg(vs[1], name, npos)?
