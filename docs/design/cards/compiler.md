@@ -13,6 +13,8 @@ entry: main in main.ail
 
 ## derive (32 items)
 
+## fix (80 items)
+
 ## fmt (63 items)
 
 ## mir (376 items)
@@ -23,4 +25,4 @@ entry: main in main.ail
 
 ## x64 (75 items)
 
-trimmed to fit 4000 tokens (~116); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~125); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

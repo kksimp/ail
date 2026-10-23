@@ -1,0 +1,247 @@
+## `ail fix FILE [--dry-run] [--json]` (fix.apply.1-4, ADR 0203): apply the
+## machine-applicable fixes that diagnostics carry (ADR 0145), re-check, and
+## repeat until nothing fixable is left. A port of `bootstrap/src/fix.rs`.
+## The check itself comes in as a function (`Diagnose`), so this module needs
+## neither the loader nor the checker.
+use ast
+use fmt
+
+## Rounds of fix-and-recheck before giving up (fix.apply.2).
+MAX_ROUNDS := 5
+
+## A diagnostic as `ail fix` sees it: its rule, position, whether it is a
+## warning, and its settled fixes in order of preference.
+pub struct Found
+    pub rule str
+    pub pos ast.Pos
+    pub warning bool
+    pub fixes List[Fix]
+
+## What a check of one file found: the diagnostics sorted by position with
+## spans and anchored edits settled, and their text (or JSON lines) as
+## `ail check` prints them.
+pub struct Diagnosis
+    pub found List[Found]
+    pub report str
+
+struct Cut
+    from int
+    to int
+    text str
+
+struct Chosen
+    rule str
+    pos ast.Pos
+    title str
+    cuts List[Cut]
+
+## Character offset of the start of each line of `src`.
+fn line_starts(chars List[char]) List[int]
+    mut starts := [0]
+    for i in 0..chars.len()
+        if chars[i] == '\n'
+            starts.push(i + 1)
+    starts
+
+fn offset(starts List[int], total int, p ast.Pos) int?
+    if p.line < 1 or p.line > starts.len()
+        return none
+    o := starts[p.line - 1] + p.col - 1
+    if o < 0 or o > total
+        return none
+    o
+
+## The first fix of every diagnostic that has one, skipping a fix whose edits
+## overlap an earlier-chosen one (fix.apply.1).
+fn choose(found List[Found], src str) List[Chosen]
+    chars := src.chars()
+    starts := line_starts(chars)
+    mut chosen := List[Chosen]()
+    mut taken := List[Cut]()
+    for d in found
+        if d.fixes.len() == 0
+            continue
+        fix := d.fixes[0]
+        mut cuts := List[Cut]()
+        mut ok := true
+        for e in fix.edits
+            s := offset(starts, chars.len(), e.pos)
+            t := offset(starts, chars.len(), e.end)
+            if a := s
+                if b := t
+                    cuts.push(Cut(from: a, to: b, text: e.text))
+                else
+                    ok = false
+            else
+                ok = false
+        if not ok
+            continue
+        mut clash := false
+        for c in cuts
+            for t in taken
+                if c.from <= t.to and t.from <= c.to
+                    clash = true
+        if clash
+            continue
+        for c in cuts
+            taken.push(c)
+        chosen.push(Chosen(rule: d.rule, pos: d.pos, title: fix.title, cuts: cuts))
+    chosen
+
+## Apply the edits from last to first so earlier offsets stay valid.
+fn apply(src str, chosen List[Chosen]) str
+    mut all := List[Cut]()
+    for c in chosen
+        for e in c.cuts
+            all.push(e)
+    # Insertion sort by (from, to): stable, and edit lists are short.
+    mut k := 1
+    while k < all.len()
+        mut j := k
+        while j > 0
+            and (all[j - 1].from > all[j].from or (all[j - 1].from == all[j].from and all[j - 1].to > all[j].to))
+            tmp := all[j - 1]
+            all[j - 1] = all[j]
+            all[j] = tmp
+            j -= 1
+        k += 1
+    mut chars := src.chars()
+    mut i := all.len() - 1
+    while i >= 0
+        e := all[i]
+        mut next := List[char]()
+        for x in 0..e.from
+            next.push(chars[x])
+        for x in e.text.chars()
+            next.push(x)
+        for x in e.to..chars.len()
+            next.push(chars[x])
+        chars = next
+        i -= 1
+    mut out := ""
+    for c in chars
+        out = "{out}{c}"
+    out
+
+fn quote(s str) str
+    Json.Str(s).to_text()
+
+## The usage text.
+FIX_USAGE := "usage: ail fix FILE [--dry-run] [--json]"
+
+## One `ail fix` run. The caller drives it, so this module needs neither the
+## loader nor the checker: `begin`, then `step` with each round's diagnosis
+## until it says no fix is left (at most `MAX_ROUNDS`), then `finish`.
+pub struct Run
+    ## Exit status once the run is over (`begin` failed), else -1.
+    pub code int
+    pub path str
+    pub src str
+    original str
+    dry bool
+    json bool
+    canonical bool
+    applied int
+    rounds int
+    out str
+
+## Read the command line (after the command word) and the file.
+pub fn begin(args List[str]) Run
+    mut r := Run(
+        code: -1,
+        path: "",
+        src: "",
+        original: "",
+        dry: args.contains("--dry-run"),
+        json: args.contains("--json"),
+        canonical: false,
+        applied: 0,
+        rounds: 0,
+        out: "",
+    )
+    for a in args
+        if a.starts_with("--") and a != "--dry-run" and a != "--json"
+            io.eprint("error: unknown option {a} for `ail fix`")
+            r.code = 2
+            return r
+    mut files := List[str]()
+    for a in args
+        if not a.starts_with("--")
+            files.push(a)
+    if files.len() != 1
+        io.eprint(FIX_USAGE)
+        r.code = 2
+        return r
+    r.path = files[0]
+    original := fs.read_text(r.path) else err
+        io.eprint("error: can't read {r.path}: {err.kind}")
+        r.code = 2
+        return r
+    first := fmt.format(original)
+    r.canonical = first.status == 0 and first.text == original
+    r.original = original
+    r.src = original
+    r
+
+## Apply the first fix of each diagnostic in `d`, which is the check of the
+## current `src`. `false` when there was none to apply.
+pub fn step(mut r Run, d Diagnosis) bool
+    chosen := choose(d.found, r.src)
+    if chosen.len() == 0
+        return false
+    r.rounds += 1
+    for c in chosen
+        r.applied += 1
+        if r.json
+            r.out = "{r.out}\{\"api\":1,\"applied\":\{\"round\":{r.rounds},\"rule\":{quote(c.rule)},\"line\":{c.pos.line},\"col\":{c.pos.col},\"title\":{quote(c.title)}}}\n"
+        else
+            r.out = "{r.out}fixed {r.path}:{c.pos.line}:{c.pos.col}: [{c.rule}] {c.title}\n"
+    r.src = apply(r.src, chosen)
+    true
+
+## After the last round (fix.apply.3): a file that was canonical stays canonical.
+## Call it once, then check `src` again for `finish`.
+pub fn canonicalize(mut r Run)
+    if r.applied > 0 and r.canonical
+        f := fmt.format(r.src)
+        if f.status == 0
+            r.src = f.text
+
+## Write the result (or show its diff) and print the summary; `left` is the
+## check of the final `src`. The exit status is 0 when no error is left, 1 when
+## some is, 2 for a file that can't be written.
+pub fn finish(mut r Run, left Diagnosis) int
+    src := r.src
+    mut errors := 0
+    for d in left.found
+        if not d.warning
+            errors += 1
+    if r.applied > 0 and src != r.original
+        if r.dry
+            if not r.json
+                r.out = "{r.out}{fmt.diff(r.path, r.original, src)}"
+        else
+            fs.write_text(r.path, src) else err
+                io.eprint("error: can't write {r.path}: {err.kind}")
+                return 2
+    if r.json
+        r.out = "{r.out}\{\"api\":1,\"summary\":true,\"applied\":{r.applied},\"rounds\":{r.rounds},\"dry_run\":{r.dry},\"clean\":{errors == 0},\"errors\":{errors}}\n"
+    else
+        verb := if r.dry then "would apply" else "applied"
+        r.out = "{r.out}{verb} {r.applied} fix(es) in {r.rounds} round(s); {errors} error(s) remain\n"
+    emit(r.out, false)
+    if left.found.len() > 0
+        emit(left.report, true)
+    if errors == 0
+        return 0
+    1
+
+## `print!` / `eprint!`: the text as it is, which `print` would end with one more newline.
+fn emit(text str, to_err bool)
+    if text == ""
+        return
+    body := if text.ends_with("\n") then text.slice(0, text.chars().len() - 1) else text
+    if to_err
+        io.eprint(body)
+    else
+        print(body)

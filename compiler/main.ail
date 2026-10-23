@@ -20,6 +20,7 @@
 use a64
 use ast
 use check
+use fix
 use fmt
 use derive
 use mir
@@ -36,6 +37,12 @@ fn main() !
         "check" =>
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
+        "fixes" =>
+            # Test support: the unsettled edits in args[2] settled against args[1].
+            print(fix.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
+        "fixrun" =>
+            # Test support: `ail fix` with the Rust tool as the checker (tools/fix/parity.py).
+            io.exit(fix.run_with_rust(args[1..]))
         "fmt" =>
             io.exit(fmt.command(args[1..]))
         "tokens" =>
