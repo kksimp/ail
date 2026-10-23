@@ -224,7 +224,8 @@ fn Checker.check_deferred_bounds(mut self)
 fn Checker.errs_of(self, e Errs) List[Ty]
     match e
         ErrSet(v) => v
-        Inferred(j) => inferred[j]
+        # A copy: the native backend shares a returned list element (bugs/native-list-alias.ail).
+        Inferred(j) => [t for t in inferred[j]]
 
 fn Checker.unknown_type(mut self, n str, at ast.Pos)
     mut candidates := BUILTIN_TYPES
