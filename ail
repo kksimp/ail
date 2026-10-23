@@ -86,18 +86,17 @@ fi
 # The native CLI (ADR 0855) is the default: `ail fmt ...`, `ail test FILE` (tools/ailtest), `ail api FILE`, `ail build`,
 # `ail check FILE` and `ail run [--timeout MS] [--max-memory MB] FILE [ARGS]` are done by compiler/main.ail
 # built natively into .native/ail (by the Rust ail or by the published seed when there is no Rust): `check-program` first,
-# then the program from the build cache, exec'd so it keeps the terminal. `AIL_RUST=1` (or `AIL_NATIVE_CLI=0`) keeps the
-# Rust `ail`; `AIL_INTERP=1` keeps the interpreter for `run`; a pinned AIL_BINARY keeps the Rust `ail` unless AIL_NATIVE_CLI=1.
+# then the program from the build cache, exec'd so it keeps the terminal. `AIL_RUST=1` (or a pinned AIL_BINARY) is the
+# one way to the Rust `ail` and its interpreter, until the Rust is deleted; a program outside the native subset is an error.
 # Anything else, and `run` with other options before the file, goes to the Rust `ail` below.
 # `ail api` natively: one file, with at most --outline, --text, --pretty and --symbols.
 native_on=1
-if [ "${AIL_RUST:-}" = 1 ] || [ "${AIL_NATIVE_CLI:-}" = 0 ]; then native_on=0
-elif [ -n "${AIL_BINARY:-}" ] && [ "${AIL_NATIVE_CLI:-}" != 1 ]; then native_on=0; fi
+if [ "${AIL_RUST:-}" = 1 ] || [ -n "${AIL_BINARY:-}" ]; then native_on=0; fi
 native_run=
 run_opts=
 budget_opts=
 run_skip=0
-if [ "${1:-}" = run ] && [ "$native_on" = 1 ] && [ "${AIL_INTERP:-}" != 1 ]; then
+if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
     run_args=("$@")
     k=1
     while [ "$k" -lt "${#run_args[@]}" ]; do
@@ -146,12 +145,6 @@ if [ "${1:-}" = effects ]; then
     done
     [ "$files" = 1 ] || native_effects=
 fi
-# `ail run FILE` is native by default (item 252): AIL_INTERP=1 or AIL_NATIVE_CLI=0 keeps the interpreter, and a program outside
-# the native subset (native.subset.1) falls back to it.
-native_run=
-if [ "${1:-}" = run ] && [ "${AIL_NATIVE_CLI:-}" != 0 ] && [ "${AIL_INTERP:-}" != 1 ] && [ -z "${AIL_BINARY:-}" ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
-    native_run=1
-fi
 if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
@@ -193,11 +186,7 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
         if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget $budget_opts -- "$exe" "$@"; fi
         exec "$exe" "$@"
     fi
-    if grep -q 'native.subset.1' "$prep_err" && { [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; }; then
-        rm -f "$prep_err"   # not native yet: the interpreter below runs it
-    else
-        cat "$prep_err" >&2; rm -f "$prep_err"; exit 1
-    fi
+    cat "$prep_err" >&2; rm -f "$prep_err"; exit 1
 fi
 
 # `ail selftest` with no arguments is the native gate (ADR 0865, item 252): tools/gate/mac-gate.sh runs gate.ail's suites with the
