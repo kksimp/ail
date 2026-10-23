@@ -20,6 +20,7 @@
 use a64
 use ast
 use check
+use doc
 use fmt
 use derive
 use mir
@@ -38,6 +39,29 @@ fn main() !
                 check_dump(path, args.len() > 2)?
         "fmt" =>
             io.exit(fmt.command(args[1..]))
+        "docs" =>
+            # The doc comment attached to each line, as `LINE: text` (api.doc.1).
+            for path in args[1..]
+                if args.len() > 2
+                    print("== {path}")
+                docs := doc.by_line(fs.read_text(path)?)
+                for line in docs.keys().sorted()
+                    print("{line}: {syntax.quote(docs[line])}")
+        "doctests" =>
+            # The doc examples of each file as tests (test.doc.1-3): one line per example,
+            # then the source with them appended.
+            for path in args[1..]
+                text := fs.read_text(path)?
+                lexed := syntax.lex(text)
+                prog := syntax.parse(lexed.tokens).program
+                tests := doc.collect(text, prog)
+                if args.len() > 2
+                    print("== {path}")
+                for t in tests
+                    print("{t.name} {t.fn_name} fence={t.fence} expected=[{t.expected.join(", ")}]")
+                aug := doc.augment(text, tests)
+                print(aug.text)
+                print(aug.origin)
         "tokens" =>
             for path in args[1..]
                 if args.len() > 2
