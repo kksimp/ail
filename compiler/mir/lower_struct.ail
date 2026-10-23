@@ -86,7 +86,7 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
         if s.generics.len() > 0
             declare_generic_struct(s)
         elif s.is_unique
-            problem(s.pos, "unique struct `{s.name}` isn't in the native subset yet")
+            declare_unique(s, prog, "{prefix}{s.name}")
         else
             structs["{prefix}{s.name}"] = []
             if s.invariants.len() > 0
@@ -300,6 +300,7 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         if r := recv
             return derived_cmp(r, args[0], pos)
     sig := sigs.get(key) else return unsupported(pos, "calling `{key}`")
+    uniq_recv(key, rcv.expr)
     mut vs := List[int]()
     mut cells := List[Cell]()
     if r := recv

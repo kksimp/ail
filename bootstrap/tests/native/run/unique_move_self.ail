@@ -1,0 +1,29 @@
+# own.move.6: a `move self` method consumes its receiver; own.uniq.8-9: a list of unique values.
+unique struct Conn
+    id int
+    sent int
+
+impl Drop for Conn
+    fn drop(mut self)
+        print("drop {id}")
+
+fn Conn.send(mut self, n int)
+    sent += n
+
+fn Conn.close(move self) int
+    print("closing {id} after {sent} bytes")
+    sent
+
+fn main()
+    mut pool := List[Conn]()
+    for i in 0..4
+        pool.push(move Conn(id: i, sent: 0))
+    for mut c in pool
+        c.send(10)
+    mut total := 0
+    while pool.len() > 0
+        c := pool.pop() else break
+        total += c.close()
+    a := Conn(id: 9, sent: 1)
+    total += a.close()
+    print(total)

@@ -1,0 +1,92 @@
+## The release of a unique value (own.uniq.3, own.uniq.7): a generated
+## `drop.T` runs the type's `Drop.drop`, then releases its unique fields, last
+## field first. An optional releases what it holds; a list releases its
+## elements, last first (own.uniq.8).
+use ast
+
+## Release the value `v` of unique type `t`.
+fn Lower.drop_call(mut self, v int, t Ty)
+    name := "drop.{t.name()}"
+    if not sigs.contains(name)
+        sigs[name] = Sig(params: [t], ret: Ty.Unit, fails: false)
+        uniq.wanted[name] = t
+    call(name, [v], Ty.Unit)
+
+## Generate each `drop.T` asked for, including those they ask for.
+fn Lower.gen_drops(mut self)
+    mut done := Set[str]()
+    mut more := true
+    while more
+        more = false
+        for name in uniq.wanted.keys()
+            if done.contains(name)
+                continue
+            done.add(name)
+            more = true
+            gen_drop(name, uniq.wanted[name])
+
+fn Lower.gen_drop(mut self, name str, t Ty)
+    x := begin_fn(name, Ty.Unit, [t])[0]
+    match t
+        Struct(n) =>
+            if m := uniq.drops.get(n)
+                call(m, [x], Ty.Unit)
+            slots := structs[n]
+            mut k := slots.len() - 1
+            while k >= 0
+                if is_uniq(slots[k].ty)
+                    drop_call(load(x, k, slots[k].ty), slots[k].ty)
+                k -= 1
+        Opt(inner) =>
+            some := new_block()
+            none_ := new_block()
+            branch(op("eq", [x, konst(0, Ty.Int)], Ty.Bool), none_, [], some, [])
+            cur = some
+            drop_call(unwrap(Val(id: x, ty: t)).id, inner)
+            jump(none_, [])
+            cur = none_
+        List(e) =>
+            # Last element first (own.uniq.8).
+            head := new_block()
+            i := new_value(Ty.Int, "")
+            blocks[head].params.push(i)
+            jump(head, [op("sub", [op("len", [x], Ty.Int), konst(1, Ty.Int)], Ty.Int)])
+            cur = head
+            body := new_block()
+            exit := new_block()
+            branch(op("ge", [i, konst(0, Ty.Int)], Ty.Bool), body, [], exit, [])
+            cur = body
+            drop_call(op("get", [x, i], e), e)
+            jump(head, [op("sub", [i, konst(1, Ty.Int)], Ty.Int)])
+            cur = exit
+        Map(_, vt) =>
+            # The live entries, last first.
+            raw := op("copy", [x], Ty.Int)
+            head := new_block()
+            i := new_value(Ty.Int, "")
+            blocks[head].params.push(i)
+            used := call("rt.map_used", [raw], Ty.Int)
+            jump(head, [op("sub", [used, konst(1, Ty.Int)], Ty.Int)])
+            cur = head
+            body := new_block()
+            step := new_block()
+            exit := new_block()
+            branch(op("ge", [i, konst(0, Ty.Int)], Ty.Bool), body, [], exit, [])
+            cur = body
+            e := call("rt.map_live", [raw, i], Ty.Int)
+            live := new_block()
+            branch(op("ne", [e, konst(0, Ty.Int)], Ty.Bool), live, [], step, [])
+            cur = live
+            drop_call(entry_value(e, vt), vt)
+            jump(step, [])
+            cur = step
+            jump(head, [op("sub", [i, konst(1, Ty.Int)], Ty.Int)])
+            cur = exit
+        _ => problem(
+            ast.Pos(line: 0, col: 0),
+            "dropping a `{t.name()}` isn't in the native subset yet",
+        )
+    finish(return_of(-1))
+    for b in 0..blocks.len()
+        sealed[b] = true
+    end_fn(name, ast.Pos(line: 0, col: 0))

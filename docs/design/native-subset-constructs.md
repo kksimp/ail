@@ -27,7 +27,6 @@ names the owner, so put the more specific rows first.
 | tensors | tensor | lane 193 |
 | optional field and index access | ? on an optional | lane 175 |
 | error structs and enums | error struct | lane 120 |
-| unique structs | unique struct | lane 120 |
 | comprehension of unknown type | comprehension whose | lane 179 |
 | for mut | for mut | - |
 | char patterns | char patterns | - |

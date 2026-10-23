@@ -9,6 +9,12 @@ use ast
 fn Lower.defer_enter(mut self)
     facts.defers.push([])
     facts.defer_loops.push(loops.len())
+    uniq.depths.push(scopes.len())
+    # A block releases the `move` parameters and the `if x := e` binding that
+    # were declared just before it (lower_unique.ail).
+    for key in uniq.pending
+        facts.defers[facts.defers.len() - 1].push(drop_marker(key))
+    uniq.pending = []
 
 ## `defer st` in the current block.
 fn Lower.defer_note(mut self, st ast.Stmt)
@@ -20,6 +26,7 @@ fn Lower.defer_exit(mut self)
         defer_run_from(facts.defers.len() - 1)
     facts.defers.pop()
     facts.defer_loops.pop()
+    uniq.depths.pop()
 
 ## Run the deferred statements of the blocks from index `first` outwards-in,
 ## innermost block first and each block's last `defer` first.
@@ -29,7 +36,10 @@ fn Lower.defer_run_from(mut self, first int)
         sts := facts.defers[i]
         mut k := sts.len() - 1
         while k >= 0
-            lower_stmt(sts[k])
+            if key := marker_key(sts[k])
+                uniq_release(key)
+            else
+                lower_stmt(sts[k])
             k -= 1
         i -= 1
 
