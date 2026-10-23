@@ -1073,7 +1073,29 @@ fn json_str(s str) str
             out = "{out}{c}"
     "{out}\""
 
-fn report(vs List[Verdict], json bool) int
+## The `L:C` a message ends with (`... at 4:14`), or none.
+fn where_at(msg str)(int, int)?
+    i := msg.rfind(" at ") else return none
+    parts := msg.slice(i + 4, msg.len()).split(":")
+    if parts.len() != 2
+        return none
+    l := parts[0].to_int() else return none
+    c := parts[1].to_int() else return none
+    (l, c)
+
+fn spaces(n int) str
+    mut out := ""
+    for _ in 0..n
+        out = "{out} "
+    out
+
+## The interpreter's source excerpt: the line and a caret under the column.
+fn excerpt(src List[str], line int, col int) str
+    if line < 1 or line > src.len()
+        return ""
+    "{"{line}".pad_left(5, ' ')} | {src[line - 1]}\n{spaces(5)} | {spaces(col - 1)}^"
+
+fn report(vs List[Verdict], json bool, src List[str]) int
     mut passed := 0
     mut failed := 0
     mut skipped := 0
@@ -1088,19 +1110,26 @@ fn report(vs List[Verdict], json bool) int
         if json
             extra := if v.cases > 0 then ",\"cases\":{v.cases},\"seed\":{unsigned_text(v.seed)}" else ""
             input := if v.input.is_empty() then "" else ",\"input\":{json_str(v.input)}"
-            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\",\"message\":{json_str(v.message)}{extra}{input}}")
+            at := if w := where_at(v.message) then ",\"line\":{w.0},\"col\":{w.1}" else ""
+            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(v.message)}{extra}{input}}")
         elif v.status == "pass"
             print("ok {v.name}{tail}")
         elif v.status == "fail"
             print("FAIL {v.name}: {v.message}{tail}")
+            if w := where_at(v.message)
+                shown := excerpt(src, w.0, w.1)
+                if not shown.is_empty()
+                    print(shown)
             if not v.input.is_empty()
                 print("  input: {v.input}")
         else
             print("skip {v.name}: {v.message}")
     if json
-        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed},\"skipped\":{skipped}}")
+        more := if skipped > 0 then ",\"skipped\":{skipped}" else ""
+        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}}")
     else
-        print("{passed} passed, {failed} failed, {skipped} skipped")
+        more := if skipped > 0 then ", {skipped} skipped" else ""
+        print("{passed} passed, {failed} failed{more}")
     if failed > 0 then 1 else 0
 
 fn seed_for(name str, has_seed bool, given int) int
@@ -1164,7 +1193,7 @@ fn main() !
     if not doc_note.is_empty()
         verdicts.push(plain("doc examples", "skip", doc_note))
     if found.tests.len() == 0
-        io.exit(report(verdicts, json))
+        io.exit(report(verdicts, json, text.lines()))
     dir := path.dir(file)
     stem := path.stem(file)
     copy_name := ".ail-test-{stem}.ail"
@@ -1250,6 +1279,6 @@ fn main() !
                     seed: seed_for(t.name, has_seed, seed_given),
                     input: p.input,
                 ))
-    code := report(verdicts, json)
+    code := report(verdicts, json, text.lines())
     _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
     io.exit(code)
