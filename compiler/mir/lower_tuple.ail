@@ -607,11 +607,31 @@ fn Lower.gen_enum_lt(mut self, fkey str, t Ty, n str)
     jump(no, [])
     end_eq(fkey, yes, no)
 
+## Whether struct `s` declares `fn cmp(self, other S) Ordering`.
+fn Lower.has_own_cmp(self, s str) bool
+    sig := sigs.get("{s}.cmp") else return false
+    sig.params.len() == 2 and sig.ret == Ty.Enum("Ordering")
+
 ## Generate `lt.T` for a tuple, a struct or an enum.
 fn Lower.gen_lt(mut self, fkey str, t Ty)
     if xs := tuple_elems(t)
         gen_tuple_lt(fkey, t, xs)
     elif s := struct_name(t)
+        if has_own_cmp(s)
+            # A `cmp` of the struct's own decides (trait.std.4): `a < b` is `a.cmp(b)` being `Less`.
+            ps := begin_fn(fkey, Ty.Bool, [t, t])
+            c := user_call(
+                "{s}.cmp",
+                [ps[0], ps[1]],
+                Ty.Enum("Ordering"),
+                ast.Pos(line: 1, col: 1),
+                "{s}.cmp",
+            )
+            finish(return_of(op("eq", [c, konst(0, Ty.Int)], Ty.Bool)))
+            for blk in 0..blocks.len()
+                sealed[blk] = true
+            end_fn(fkey, ast.Pos(line: 1, col: 1))
+            return
         gen_tuple_lt(fkey, t, [sl.ty for sl in structs[s]])
     else
         gen_enum_lt(fkey, t, enum_name(t) else "")

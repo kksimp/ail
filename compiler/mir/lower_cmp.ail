@@ -11,3 +11,36 @@ fn Lower.lower_cmp(mut self, a Val, b Val, pos ast.Pos) Val?
         c := call("rt.str_cmp", [a.id, b.id], Ty.Int)
         return ordering(op("add", [c, konst(1, Ty.Int)], Ty.Int))
     ordering(call("rt.int_cmp", [a.id, b.id], Ty.Int))
+
+## `a.cmp(b)` on a struct, tuple or enum whose `impl Ord` has no `cmp` of its
+## own: the field-by-field order of `<` (expr.cmp.1), as an `Ordering`.
+fn Lower.derived_cmp(mut self, a Val, arg ast.Arg, pos ast.Pos) Val?
+    if arg.label != none or not enums.contains("Ordering") or not structural(a.ty)
+        return unsupported(pos, "`.cmp()` on `{a.ty.name()}`")
+    b := lower_value(arg.value, a.ty)?
+    if not same_ty(a.ty, b.ty) or not can_order(a.ty)
+        return unsupported(pos, "`.cmp()` on `{a.ty.name()}`")
+    f := lt_fn(a.ty)
+    join := new_block()
+    r := new_value(Ty.Int, "")
+    blocks[join].params.push(r)
+    less := new_block()
+    other := new_block()
+    branch(call(f, [a.id, b.id], Ty.Bool), less, [], other, [])
+    seal(less)
+    seal(other)
+    cur = less
+    jump(join, [konst(0, Ty.Int)])
+    cur = other
+    greater := new_block()
+    equal := new_block()
+    branch(call(f, [b.id, a.id], Ty.Bool), greater, [], equal, [])
+    seal(greater)
+    seal(equal)
+    cur = greater
+    jump(join, [konst(2, Ty.Int)])
+    cur = equal
+    jump(join, [konst(1, Ty.Int)])
+    seal(join)
+    cur = join
+    ordering(r)
