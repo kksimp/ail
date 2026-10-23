@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076; allocated by the integrator)
 - **Topic:** 23 — Rust removal (RR-5)
 - **Spec rules:** edit.id.1-3, edit.op.1-7, edit.in.1-3, edit.out.1-4
-- **Builds on:** [ADR 0397](0397-ail-edit-structured-edits-by-id.md), [ADR 0855](0855-remove-rust-bootstrap.md)
+- **Builds on:** [ADR 0397](0397-ail-edit-structured-edits-by-id.md), ADR 0855
 
 ## Context
 
