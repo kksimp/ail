@@ -14,7 +14,7 @@ pub struct load.Loaded  ## A loaded program with the diagnostics its loading fou
     pub program ast.Program
     pub diags List[syntax.Diag]
     pub texts List[str]  ## The source of each file of the program, in the order of `program.files`.
-pub fn load.load(arg str, std str) load.Loaded ! load.LoadError [env fail fs io]  ## Read the program at `arg`, a file or a package directory, with every module
+pub fn load.load(arg str, std str) load.Loaded ! load.LoadError [fail fs io]  ## Read the program at `arg`, a file or a package directory, with every module
 pub struct load.Shown  ## One diagnostic ready to print, from the loader's or the checker's.
     pub rule str
     pub pos ast.Pos
@@ -29,4 +29,4 @@ pub fn load.locate(files List[ast.SourceFile], at ast.Pos) (str, ast.Pos)  ## Th
 pub fn load.report(files List[ast.SourceFile], texts List[str], diags List[load.Shown], json bool) str  ## Report `diags` for the program `files` (sources `texts`, one per file):
 ```
 
-trimmed to fit 2000 tokens (~567); dropped: private items
+trimmed to fit 2000 tokens (~566); dropped: private items
