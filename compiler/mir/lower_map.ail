@@ -222,7 +222,9 @@ fn Lower.coll_ctor(mut self, name str, targs List[ast.TypeRef], pos ast.Pos) Val
 fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want Ty?) Val?
     mut kt := Ty.Unknown
     mut vt := Ty.Unknown
-    if w := want
+    if wanted := want
+        # `{}` where a `Map[K, V]?` is expected is that map (type.coll.3).
+        w := wanted.opt_inner() else wanted
         match w
             Map(k, v) =>
                 kt = k
