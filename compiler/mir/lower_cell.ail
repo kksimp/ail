@@ -1,0 +1,61 @@
+## `mut` parameters of `int`, `bool` and `char` (own.param.2). The caller
+## passes a cell of one word holding the argument's value, the sig says
+## `*(T)`, a one-element tuple that no program can write, and the callee binds the name to the value read from the cell and
+## writes every assignment back to it (`assign_param`). After the call the
+## caller reads the cell back into the variable it passed with `mut`. A
+## sig of `*(T)` rejects every other call path (`expected *int, found int`),
+## so a path that doesn't know cells reports a problem, not a wrong call.
+use ast
+
+## A cell passed to a call, to read back into `key` after it.
+struct Cell
+    key str
+    cell int
+    ty Ty
+
+## The sig type of a `mut` parameter of scalar type `t`; none for others.
+fn cell_param(t Ty) Ty?
+    match t
+        Int | Bool | Char => Ty.Ptr(Ty.Tuple([t]))
+        _ => none
+
+## The scalar a cell parameter holds.
+fn cell_ty(t Ty) Ty?
+    match t
+        Ptr(inner) =>
+            match inner
+                Tuple(xs) => if xs.len() == 1 then xs[0] else none
+                _ => none
+        _ => none
+
+## Declare parameter `p` of sig type `ty`, value `v`: a cell is read once.
+fn Lower.declare_param(mut self, p ast.Param, ty Ty, v int)
+    if t := cell_ty(ty)
+        declare(p.name, t, load(v, 0, t))
+        return
+    declare(p.name, ty, v)
+
+## The argument `a` for a cell parameter of scalar type `t`: a fresh cell
+## holding its value, remembered in `cells` to read back after the call.
+@allow("expr.match.3") fn Lower.cell_arg(mut self, a ast.Arg, t Ty, mut cells List[Cell]) int?
+    at := expr_pos(a.value)
+    if not a.mutable
+        problem(at, "an argument for a `mut` parameter without `mut`")
+        return none
+    mut name := ""
+    match a.value
+        Name(n, _) => name = n
+        _ => name = ""
+    key := lookup(name) else
+        problem(at, "a `mut` argument of a number type that isn't a local")
+        return none
+    v := lower_value(a.value, t)?
+    cell := call("rt.alloc", [konst(8, Ty.Int), konst(11, Ty.Int)], Ty.Int)
+    store(cell, 0, convert(v, t, at))
+    cells.push(Cell(key: key, cell: cell, ty: t))
+    cell
+
+## After the call: each local passed as a cell takes the callee's last value.
+fn Lower.cells_back(mut self, cells List[Cell])
+    for c in cells
+        write_var(c.key, cur, load(c.cell, 0, c.ty))

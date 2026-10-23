@@ -1,0 +1,25 @@
+fn bump(mut n int)
+    n += 1
+    n = n * 2
+
+fn flip(mut b bool, mut c char)
+    b = not b
+    c = 'z'
+
+fn count(mut total int, xs List[int])
+    for x in xs
+        total += x
+
+fn main()
+    mut k := 5
+    bump(mut k)
+    print(k)
+    mut b := true
+    mut c := 'a'
+    flip(mut b, mut c)
+    print(b)
+    print(c)
+    mut t := 0
+    count(mut t, [1, 2, 3])
+    count(mut t, [10])
+    print(t)

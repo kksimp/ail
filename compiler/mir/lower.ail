@@ -488,6 +488,9 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
         t := type_of(p.ty) else
             problem(p.pos, "parameter `{p.name}`: its type isn't in the native subset yet")
             Ty.Unknown
+        if p.mutable and cell_param(t) != none
+            params.push(cell_param(t) else t)
+            continue
         if p.mutable and not needs_copy(t) and not t.is_unknown() and not t.is_coll()
             problem(
                 p.pos,
@@ -839,7 +842,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
             k = 1
     for i in 0..f.params.len()
         p := f.params[i]
-        declare(p.name, sig.params[k + i], params[k + i])
+        declare_param(p, sig.params[k + i], params[k + i])
         note_mut_param(p, lookup(p.name) else "", params[k + i])
         note_stable_param(p.name, p.mutable)
         borrowed.add(lookup(p.name) else "")
@@ -1307,7 +1310,7 @@ fn Lower.lower_for(
                 return
             elem = e
             list = l.id
-            if mutates(body, iter) and l.id == l0.id
+            if mutates(body, iter) and l.id == l0.id and not mutable
                 list = copy_list(l)
             lo = konst(0, Ty.Int)
             hi = op("len", [list], Ty.Int)
@@ -1329,6 +1332,8 @@ fn Lower.lower_for(
     if list >= 0
         declare(var, elem, op("get", [list, i], elem))
         borrowed.add(lookup(var) else "")
+        if mutable
+            note_elem(var, elem, list, i, fpos)
     else
         declare(var, Ty.Int, i)
     loops.push(Loop(cont: latch, exit: exit))
@@ -1709,17 +1714,23 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
             if args.len() != sig.params.len()
                 return unsupported(pos, "this call")
             mut vs := List[int]()
+            mut cells := List[Cell]()
             for i in 0..args.len()
                 a := args[i]
                 if a.label != none
                     return unsupported(pos, "labelled arguments")
+                if t := cell_ty(sig.params[i])
+                    vs.push(cell_arg(a, t, mut cells)?)
+                    continue
                 v := lower_value(a.value, sig.params[i])?
                 vs.push(shield_arg(args, i, Val(
                     id: convert(v, sig.params[i], expr_pos(a.value)),
                     ty: v.ty,
                 )))
             check_requires(key, vs, npos)
-            Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            cells_back(cells)
+            res
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)

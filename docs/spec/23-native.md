@@ -101,7 +101,7 @@ include structs and enums, and lists of maps and sets (`Map[K, V]()`,
 any type in the subset, enums included (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k)` (a `V?`, type.map.6) and `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
-`Map[K, List[T]]`, `s.add(x)`, `for x in s`, `for mut x in xs` over a list of structs, an empty `{}` where a `Set` is expected, printing a table; an error type with no message, whose fields may be structs (trait.auto.2); a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `m.push(k, x)`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, `for mut x in xs` over a list of structs or of `int`, `bool`, `char`, `float` or `str` (an assignment to `x` also sets the element), a `mut` parameter of type `int`, `bool` or `char` (the caller passes a cell and reads it back; own.param.2), an empty `{}` where a `Set` is expected, printing a table; an error type with no message, whose fields may be structs (trait.auto.2); a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `m.push(k, x)`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
