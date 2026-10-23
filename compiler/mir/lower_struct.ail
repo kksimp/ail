@@ -20,6 +20,9 @@ PROC_OUTPUT := "proc.Output"
 ## The result of `proc.run_bytes` (std.proc.8): the streams undecoded.
 PROC_RAW := "proc.RawOutput"
 
+## The result of `fs.metadata` (std.fs.10).
+FS_METADATA := "fs.Metadata"
+
 ## The child of `proc.start` (std.proc.4): pid and the three streams.
 PROC_CHILD := "proc.Child"
 
@@ -46,6 +49,7 @@ COMPRESS_ERROR := "compress.CompressError"
 fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
     structs[PROC_RAW] = []
+    structs[FS_METADATA] = []
     structs[PROC_CHILD] = []
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []
@@ -105,6 +109,11 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "stdin", ty: Ty.Chan(Ty.Str)),
         Slot(name: "out", ty: Ty.Chan(Ty.Str)),
         Slot(name: "err", ty: Ty.Chan(Ty.Str)),
+    ]
+    structs[FS_METADATA] = [
+        Slot(name: "size", ty: Ty.Int),
+        Slot(name: "modified_ms", ty: Ty.Int),
+        Slot(name: "is_dir", ty: Ty.Bool),
     ]
     structs[PROC_RAW] = [
         Slot(name: "status", ty: Ty.Int),

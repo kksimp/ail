@@ -995,6 +995,42 @@ fn fs_walk(dir str, at str) List[int]
     os_sort_names(load64(q + 16), load64(q))
     out
 
+# ---- fs.metadata (std.fs.10) ----
+
+## `fs.metadata(path)`: an `fs.Metadata` of `size`, `modified_ms` and
+## `is_dir`; links are followed. The `fstat` layout of each target: size at 48
+## (macOS 72), modification seconds at 88 (macOS 40) with nanoseconds 8 after.
+fn fs_metadata(path str, at str) int
+    p := os_cstr(OS_PATH_A, path)
+    if p == 0
+        os_fail_kind(K_NOT_FOUND)
+        os_error(path, os_kind(), at)
+        return 0
+    fd := os_open(p, 0, 0)
+    if fd < 0
+        os_fail_errno(fd)
+        os_error(path, os_kind(), at)
+        return 0
+    buf := os_scratch(OS_TMP)
+    r := syscall(os_pick(5, 80, 189), fd, buf, 0, 0, 0, 0)
+    os_close(fd)
+    if r < 0
+        os_fail_errno(r)
+        os_error(path, os_kind(), at)
+        return 0
+    moff := os_pick(24, 16, 8)
+    mode := (load8(buf + moff) + load8(buf + moff + 1) * 256).bit_and(61440)
+    is_dir := mode == 16384
+    size := load64(buf + os_pick(48, 48, 72))
+    secs := load64(buf + os_pick(88, 88, 40))
+    nanos := load64(buf + os_pick(96, 96, 48))
+    m := obj_new(24, 4)
+    store64(m, if is_dir then 0 else size)
+    store64(m + 8, secs * 1000 + nanos / 1000000)
+    store64(m + 16, if is_dir then 1 else 0)
+    os_succeed()
+    m
+
 # ---- fs.copy (std.fs.12) ----
 
 ## The permission bits of the open file `fd` (`st_mode` of `fstat`).
