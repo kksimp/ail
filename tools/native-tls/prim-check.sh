@@ -3,7 +3,7 @@
 # client (ADR 0366). The primitives have no public API, so this builds the
 # checker in a temporary copy of compiler/ where `hash.hmac_sha256(op, args)`
 # calls tools/native-tls/tlsprim.ail (test-only, never part of the product).
-# Linux x86-64 always, and ARM64 under qemu when it is installed.
+# Runs on the host (Linux x86-64, Linux ARM64 or macOS ARM64), and ARM64 Linux under qemu when it is installed.
 # Run from anywhere: tools/native-tls/prim-check.sh
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -27,7 +27,12 @@ PY
 nbuild() { AIL_ROOT="$PWD" AIL_COMPILER="$tmp/compiler" .native/ail build "$@"; }
 vectors="bootstrap/src/net/crypto/testdata/crosscheck.txt bootstrap/src/net/crypto/testdata/signatures.txt bootstrap/src/net/x509/testdata/chain.txt tools/native-tls/vectors384.txt"
 prog=tools/native-tls/prim.ail
-nbuild "$prog" -o "$tmp/x64" > /dev/null
+case "$(uname -sm)" in
+  "Darwin arm64") host=aarch64-macos ;;
+  "Linux aarch64"|"Linux arm64") host=aarch64-linux ;;
+  *) host=x86_64-linux ;;
+esac
+nbuild "$prog" --target "$host" -o "$tmp/x64" > /dev/null
 "$tmp/x64" $vectors | tee "$tmp/out"
 grep -q ' 0 failed' "$tmp/out"
 qemu=$(command -v qemu-aarch64-static || command -v qemu-aarch64 || true)
