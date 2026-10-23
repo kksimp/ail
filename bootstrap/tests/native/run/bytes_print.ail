@@ -1,6 +1,0 @@
-# print and interpolation of bytes: b"..." with escapes (type.bytes.1).
-fn main()
-    b := "hi\"\n\\é".to_bytes()
-    print(b)
-    print("x {b} y")
-    print(b"")
