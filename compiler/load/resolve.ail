@@ -1,0 +1,761 @@
+## Name resolution across modules (mod.use.1-6, mod.vis.1), as `resolve` in
+## `bootstrap/src/modules.rs`: the items of every module are renamed to their
+## qualified names (`a.b.Point`) and every reference is rewritten to match, so
+## the checker sees one program whose names are unique. Imports and access to
+## private items are checked here.
+use ast
+use check
+use syntax
+
+## What an import name refers to.
+enum Target
+    Module(name str)
+    Std
+
+## Where an import path leads (packages.rs `Target`).
+struct Found
+    module str
+    undeclared bool
+
+## The resolver's state: the items and imports of the whole program, and the
+## declaration being walked (its module, file and type parameters).
+struct Resolver
+    ## Module path to its top-level names and where each is declared.
+    mods Map[str, Map[str, ast.Pos]]
+    ## Per file: the names it imports.
+    imports List[Map[str, Target]]
+    ## The lines that start with `pub`.
+    public Set[int]
+    files List[ast.SourceFile]
+    module str
+    file int
+    ## Type parameters in scope, which no item renaming touches.
+    tyvars List[str]
+    diags List[syntax.Diag]
+
+fn diag(rule str, at ast.Pos, msg str, help str) syntax.Diag
+    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "")
+
+fn qualified(module str, name str) str
+    if module == ""
+        return name
+    "{module}.{name}"
+
+fn is_prelude(at ast.Pos) bool
+    at.line >= PRELUDE_LINE
+
+## The file a position is in: the last whose base is below its line; none for the prelude.
+fn file_index(files List[ast.SourceFile], at ast.Pos) int?
+    if is_prelude(at)
+        return none
+    mut found := none
+    for i in 0..files.len()
+        if files[i].base < at.line
+            found = i
+    found
+
+## The module a position belongs to; "" outside every file.
+fn module_at(files List[ast.SourceFile], at ast.Pos) str
+    if i := file_index(files, at)
+        return files[i].module
+    ""
+
+fn use_name(u ast.Use) ast.Ident
+    if a := u.alias
+        return a
+    u.path[u.path.len() - 1]
+
+fn use_dotted(u ast.Use) str
+    [p.name for p in u.path].join(".")
+
+fn names_of(g List[ast.GenericParam]) List[str]
+    [p.name for p in g]
+
+fn params_of(o ast.Owner) List[str]
+    if ps := o.params
+        return names_of(ps)
+    []
+
+## Where the import path `path`, written in a file of module `from`, leads. With no
+## package manifests, a module is its dotted path (packages.rs `target`).
+fn target_of(from str, path List[str]) Found
+    Found(module: path.join("."), undeclared: false)
+
+## Resolve the loaded `prog`: report the imports' mistakes, rename every
+## item and rewrite every reference. Returns the program and the diagnostics.
+@allow("expr.match.3") fn resolve(prog ast.Program, diags List[syntax.Diag]) Loaded
+    mut out := prog
+    mut found := diags
+    mut modules := List[str]()
+    for f in prog.files
+        if modules.len() == 0 or modules[modules.len() - 1] != f.module
+            modules.push(f.module)
+    # Every module's top-level names (mod.unit.1), before renaming.
+    mut items := Map[str, Map[str, ast.Pos]]()
+    for m in modules
+        items[m] = Map[str, ast.Pos]()
+    for f in prog.fns
+        if f.within == ast.Within.TopLevel and f.owner == none
+            add_item(prog.files, mut items, f.name, f.pos)
+    for s in prog.structs
+        add_item(prog.files, mut items, s.name, s.pos)
+    for e in prog.enums
+        add_item(prog.files, mut items, e.name, e.pos)
+    for t in prog.traits
+        add_item(prog.files, mut items, t.name, t.pos)
+    for c in prog.consts
+        add_item(prog.files, mut items, c.name, c.pos)
+    # Imports, per file (mod.use.1, mod.use.3-6).
+    mut imports := [Map[str, Target]() for _ in prog.files]
+    mut first_decl := [4611686018427387904 for _ in prog.files]
+    mut decls := List[ast.Pos]()
+    for f in prog.fns
+        if f.within == ast.Within.TopLevel
+            decls.push(f.pos)
+    for s in prog.structs
+        decls.push(s.pos)
+    for e in prog.enums
+        decls.push(e.pos)
+    for t in prog.traits
+        decls.push(t.pos)
+    for i in prog.impls
+        decls.push(i.pos)
+    for c in prog.consts
+        decls.push(c.pos)
+    for at in decls
+        if fi := file_index(prog.files, at)
+            if at.line < first_decl[fi]
+                first_decl[fi] = at.line
+    mut edges := List[(str, str, ast.Pos)]()
+    mut unresolved := [Set[str]() for _ in prog.files]
+    for u in prog.uses
+        fi := file_index(prog.files, u.pos) else continue
+        module := prog.files[fi].module
+        dotted := use_dotted(u)
+        nm := use_name(u)
+        if u.pos.line > first_decl[fi]
+            found.push(diag(
+                "mod.use.3",
+                u.pos,
+                "`use` must come before the file's declarations",
+                "move the import to the top of the file",
+            ))
+        # The standard modules, and their errors (std.use.1-3), are the checker's.
+        head := u.path[0]
+        reach := target_of(module, [p.name for p in u.path])
+        mut target := none
+        if head.name == "std" and std_module_known(dotted)
+            target = Target.Module(dotted)
+        elif head.name == "std"
+            target = Target.Std
+        elif reach.module == module
+            found.push(diag(
+                "mod.use.5",
+                head.pos,
+                "module `{dotted}` imports itself",
+                "remove the import; a module's own items are used without one",
+            ))
+        elif reach.undeclared
+            found.push(diag(
+                "mod.pkg.3",
+                head.pos,
+                "package `{head.name}` is not a dependency of this package",
+                "add `dep {head.name} path DIR` to this package's `ail.pkg`",
+            ))
+        elif items.contains(reach.module) and reach.module != ""
+            edges.push((module, reach.module, head.pos))
+            target = Target.Module(reach.module)
+        else
+            help := if s := check.suggest(
+                dotted,
+                check.std_module_names(),
+            ) then "did you mean `{s}`? The standard module `std.{s}` needs no `use` (std.use.4)" else "a module is a directory of `.ail` files; the standard modules need no `use` and are named `regex`, `fs`, `net`, `time` and so on (std.use.4)"
+            found.push(diag("mod.use.4", head.pos, "there is no module `{dotted}`", help))
+        if first := imports[fi].get(nm.name)
+            both_std := match first
+                Std => if t := target then std_target(t) else false
+                Module(_) => false
+            if both_std and not unresolved[fi].contains(nm.name)
+                continue # std.use.3
+            found.push(diag(
+                "mod.use.6",
+                nm.pos,
+                "`{nm.name}` is already imported in this file",
+                "write `use {dotted} as OTHER` to give it another name",
+            ))
+            continue
+        if has_item(items, module, nm.name)
+            found.push(diag(
+                "mod.use.6",
+                nm.pos,
+                "`{nm.name}` is already the name of an item in this module",
+                "write `use {dotted} as OTHER`, or rename the item",
+            ))
+            continue
+        # An unresolved import is still bound, so its uses aren't reported again.
+        if target == none
+            unresolved[fi].add(nm.name)
+        imports[fi][nm.name] = if t := target then t else Target.Std
+    report_cycles(edges, mut found)
+    # Generated code (ct.gen.1) sees the imports of its module's files (ct.derive.6).
+    for gi in 0..prog.files.len()
+        if not prog.files[gi].path.starts_with("gen:impl:")
+            continue
+        mut merged := Map[str, Target]()
+        for fi in 0..prog.files.len()
+            f := prog.files[fi]
+            if fi != gi and f.module == prog.files[gi].module and not f.path.starts_with("gen:")
+                for k in imports[fi].keys()
+                    if not merged.contains(k)
+                        merged[k] = imports[fi][k]
+        imports[gi] = merged
+    mut lines := Set[int]()
+    for l in prog.public
+        lines.add(l)
+    mut r := Resolver(
+        mods: items,
+        imports: imports,
+        public: lines,
+        files: prog.files,
+        module: "",
+        file: 0,
+        tyvars: [],
+        diags: found,
+    )
+    # Rename each module's declarations to their qualified names, so that
+    # implicit `self` sees each type's own members (trait.method.6).
+    for i in 0..out.structs.len()
+        if r.enter(out.structs[i].pos, [])
+            out.structs[i].name = qualified(r.module, out.structs[i].name)
+    for i in 0..out.enums.len()
+        if r.enter(out.enums[i].pos, [])
+            out.enums[i].name = qualified(r.module, out.enums[i].name)
+    for i in 0..out.traits.len()
+        if r.enter(out.traits[i].pos, [])
+            out.traits[i].name = qualified(r.module, out.traits[i].name)
+    for i in 0..out.consts.len()
+        if r.enter(out.consts[i].pos, [])
+            out.consts[i].name = qualified(r.module, out.consts[i].name)
+    for i in 0..out.impls.len()
+        imp := out.impls[i]
+        gens := params_of(imp.target)
+        if r.enter(imp.pos, gens)
+            out.impls[i].trait_name = r.type_name(imp.trait_name, imp.trait_pos)
+            out.impls[i].target.name = r.type_name(imp.target.name, imp.target.pos)
+    for i in 0..out.fns.len()
+        f := out.fns[i]
+        if not r.enter(f.pos, [])
+            continue
+        if f.within == ast.Within.TopLevel
+            if o := f.owner
+                mut no := o
+                no.name = r.type_name(o.name, o.pos)
+                out.fns[i].owner = no
+            else
+                out.fns[i].name = qualified(r.module, f.name)
+    renamed := rewrite_self(out)
+    out = renamed.program
+    r.diags.extend(renamed.diags)
+    # Rewrite every reference to an item to its qualified name.
+    for i in 0..out.structs.len()
+        s := out.structs[i]
+        if r.enter(s.pos, names_of(s.generics))
+            out.structs[i].generics = r.generic_bounds(s.generics)
+            mut fields := List[ast.Field]()
+            for fd in s.fields
+                mut nf := fd
+                nf.ty = r.type_ref(fd.ty)
+                fields.push(nf)
+            out.structs[i].fields = fields
+            mut invariants := List[ast.Contract]()
+            for c in s.invariants
+                mut nc := c
+                nc.cond = r.expr(c.cond)
+                invariants.push(nc)
+            out.structs[i].invariants = invariants
+    for i in 0..out.enums.len()
+        e := out.enums[i]
+        if r.enter(e.pos, names_of(e.generics))
+            out.enums[i].generics = r.generic_bounds(e.generics)
+            mut variants := List[ast.Variant]()
+            for v in e.variants
+                mut nv := v
+                mut fields := List[ast.Field]()
+                for fd in v.fields
+                    mut nf := fd
+                    nf.ty = r.type_ref(fd.ty)
+                    fields.push(nf)
+                nv.fields = fields
+                variants.push(nv)
+            out.enums[i].variants = variants
+    for i in 0..out.consts.len()
+        c := out.consts[i]
+        if r.enter(c.pos, [])
+            out.consts[i].value = r.expr(c.value)
+    mut impl_generics := List[List[str]]()
+    for imp in out.impls
+        impl_generics.push(params_of(imp.target))
+    for i in 0..out.fns.len()
+        f := out.fns[i]
+        mut gens := names_of(f.generics)
+        if o := f.owner
+            gens.extend(params_of(o))
+        match f.within
+            InImpl(k) => gens.extend(impl_generics[k])
+            _ => 0
+        if not r.enter(f.pos, gens)
+            continue
+        mut nf := f
+        nf.generics = r.generic_bounds(f.generics)
+        if o := f.owner
+            if ps := o.params
+                mut no := o
+                no.params = r.generic_bounds(ps)
+                nf.owner = no
+        mut params := List[ast.Param]()
+        for p in f.params
+            r.local(p.name, p.pos)
+            mut np := p
+            np.ty = r.type_ref(p.ty)
+            params.push(np)
+        nf.params = params
+        if ret := f.ret
+            nf.ret = r.type_ref(ret)
+        # contract.decl.2: conditions name the module's items as the body does.
+        mut contracts := List[ast.Contract]()
+        for c in f.contracts
+            mut nc := c
+            nc.cond = r.expr(c.cond)
+            mut olds := List[ast.Old]()
+            for o in c.olds
+                olds.push(ast.Old(name: o.name, value: r.expr(o.value)))
+            nc.olds = olds
+            contracts.push(nc)
+        nf.contracts = contracts
+        if body := f.body
+            nf.body = r.block(body)
+        out.fns[i] = nf
+    for i in 0..out.impls.len()
+        imp := out.impls[i]
+        if ps := imp.target.params
+            if r.enter(imp.pos, names_of(ps))
+                out.impls[i].target.params = r.generic_bounds(ps)
+    Loaded(program: link_contracts(out), diags: r.diags, texts: [])
+
+fn has_item(items Map[str, Map[str, ast.Pos]], module str, name str) bool
+    if names := items.get(module)
+        return names.contains(name)
+    false
+
+fn std_module_known(dotted str) bool
+    std_file(dotted) != none
+
+fn std_target(t Target) bool
+    match t
+        Std => true
+        Module(_) => false
+
+## A top-level `name` of the module its position is in (the first one wins).
+fn add_item(files List[ast.SourceFile], mut items Map[str, Map[str, ast.Pos]], name str, at ast.Pos)
+    if is_prelude(at)
+        return
+    m := module_at(files, at)
+    mut names := items.get(m) else Map[str, ast.Pos]()
+    if not names.contains(name)
+        names[name] = at
+    items[m] = names
+
+## mod.use.5: imports must not form a cycle. Each cycle is reported once, at
+## its first import in source order.
+fn report_cycles(edges List[(str, str, ast.Pos)], mut found List[syntax.Diag])
+    sorted := edges.sorted(by: |e| e.2.line * 1000000 + e.2.col)
+    mut reported := Set[str]()
+    for e in sorted
+        from := e.0
+        mut path := find_path(edges, e.1, from) else continue
+        path.insert(0, from)
+        mut key := path[..path.len() - 1]
+        key = key.sorted()
+        joined := key.join(" ")
+        if reported.contains(joined)
+            continue
+        reported.add(joined)
+        shown := [if m == "" then "(root)" else m for m in path]
+        found.push(diag(
+            "mod.use.5",
+            e.2,
+            "imports form a cycle: {shown.join(" -> ")}",
+            "move what the modules share into a module that both import",
+        ))
+
+## A path of imports from `from` to `to`, both included.
+fn find_path(edges List[(str, str, ast.Pos)], from str, to str) List[str]?
+    mut prev := Map[str, str]()
+    mut work := [from]
+    mut seen := Set[str]()
+    seen.add(from)
+    while work.len() > 0
+        m := work.pop() else break
+        if m == to
+            mut path := [to]
+            mut at := to
+            while at != from
+                at = prev[at]
+                path.push(at)
+            path.reverse()
+            return path
+        mut next := List[str]()
+        for e in edges
+            if e.0 == m
+                next.push(e.1)
+        next = next.sorted()
+        next.reverse()
+        for n in next
+            if not seen.contains(n)
+                seen.add(n)
+                prev[n] = m
+                work.push(n)
+    none
+
+## Position the resolver in the declaration at `at` with type parameters
+## `generics`; false for the prelude, which is left alone.
+fn Resolver.enter(mut self, at ast.Pos, vars List[str]) bool
+    fi := file_index(self.files, at) else return false
+    self.file = fi
+    self.module = self.files[fi].module
+    self.tyvars = vars
+    true
+
+fn Resolver.own(self, name str) bool
+    if self.tyvars.contains(name)
+        return false
+    if names := self.mods.get(self.module)
+        return names.contains(name)
+    false
+
+fn Resolver.import_of(self, name str) Target?
+    self.imports[self.file].get(name)
+
+## The qualified name of item `item` of imported module `m`, reporting an
+## unknown or private item (mod.use.2, mod.vis.1).
+fn Resolver.item(mut self, m str, alias str, item str, at ast.Pos) str
+    names := self.mods.get(m) else Map[str, ast.Pos]()
+    if decl := names.get(item)
+        if not is_prelude(decl) and not self.public.contains(decl.line)
+            self.diags.push(diag(
+                "mod.vis.1",
+                at,
+                "`{item}` is private to module `{m}`",
+                "mark it `pub` in module `{m}` to use it here",
+            ))
+    else
+        keys := names.keys().sorted()
+        help := if s := check.suggest(
+            item,
+            keys,
+        ) then "did you mean `{alias}.{s}`?" else if keys.len()
+            == 0 then "module `{m}` has no public items" else "the module's items include {["`{alias}.{n}`" for n in keys[..keys.len().min(12)]].join(", ")}"
+        self.diags.push(diag("mod.use.2", at, "module `{m}` has no item `{item}`", help))
+    qualified(m, item)
+
+## A type or trait name as written: `T`, or `m.T` through an import.
+fn Resolver.type_name(mut self, name str, at ast.Pos) str
+    dot := name.find(".") else
+        if self.own(name)
+            return qualified(self.module, name)
+        return name
+    head := name.chars()[..dot].join("")
+    rest := name.chars()[dot + 1..].join("")
+    if t := self.import_of(head)
+        match t
+            Module(m) => return self.item(m, head, rest, at)
+            Std => return name
+    # A standard module used without its import: std.use.2, reported by the checker.
+    if check.std_module_names().contains(head)
+        return name
+    self.diags.push(diag(
+        "mod.use.2",
+        at,
+        "`{head}` is not an imported module",
+        "add `use {head}` at the top of this file",
+    ))
+    name
+
+fn Resolver.types(mut self, ts List[ast.TypeRef]) List[ast.TypeRef]
+    mut out := List[ast.TypeRef]()
+    for t in ts
+        out.push(self.type_ref(t))
+    out
+
+fn Resolver.type_ref(mut self, t ast.TypeRef) ast.TypeRef
+    shape := match t.shape
+        Named(name, args) =>
+            n := self.type_name(name, t.pos)
+            ast.TypeShape.Named(n, self.types(args))
+        Optional(inner) => ast.TypeShape.Optional(self.type_ref(inner))
+        RefTo(inner) => ast.TypeShape.RefTo(self.type_ref(inner))
+        PtrTo(inner) => ast.TypeShape.PtrTo(self.type_ref(inner))
+        TupleType(elems) => ast.TypeShape.TupleType(self.types(elems))
+        FnType(params, ret) =>
+            ps := self.types(params)
+            mut r := none
+            if x := ret
+                r = self.type_ref(x)
+            ast.TypeShape.FnType(ps, r)
+        Fallible(ok, errors) =>
+            mut o := none
+            if x := ok
+                o = self.type_ref(x)
+            mut es := none
+            if xs := errors
+                es = self.types(xs)
+            ast.TypeShape.Fallible(o, es)
+        AnyTrait(trait_name) => ast.TypeShape.AnyTrait(self.type_name(trait_name, t.pos))
+    ast.TypeRef(shape: shape, pos: t.pos)
+
+fn Resolver.generic_bounds(mut self, gs List[ast.GenericParam]) List[ast.GenericParam]
+    mut out := List[ast.GenericParam]()
+    for g in gs
+        mut ng := g
+        mut bounds := List[ast.Ident]()
+        for b in g.bounds
+            bounds.push(ast.Ident(name: self.type_name(b.name, b.pos), pos: b.pos))
+        ng.bounds = bounds
+        out.push(ng)
+    out
+
+## expr.bind.5: a local can't take the name of an item of its module or of an
+## import. The checker reports clashes with root-module items.
+fn Resolver.local(mut self, name str, at ast.Pos)
+    mut what := ""
+    if t := self.import_of(name)
+        if not std_target(t)
+            what = "an imported module"
+    if what == "" and self.module != "" and self.own(name)
+        what = "an item"
+    if what == ""
+        return
+    self.diags.push(diag(
+        "expr.bind.5",
+        at,
+        "`{name}` is already {what} name",
+        "choose a different name for the local",
+    ))
+
+fn Resolver.block(mut self, b List[ast.Stmt]) List[ast.Stmt]
+    mut out := List[ast.Stmt]()
+    for s in b
+        out.push(self.stmt(s))
+    out
+
+fn Resolver.stmt(mut self, s ast.Stmt) ast.Stmt
+    match s
+        Let(name, pos, mutable, value, otherwise) =>
+            v := self.expr(value)
+            mut o := none
+            if x := otherwise
+                o = self.otherwise(x)
+            self.local(name, pos)
+            ast.Stmt.Let(name, pos, mutable, v, o)
+        Assign(target, op, value, pos) =>
+            t := self.expr(target)
+            ast.Stmt.Assign(target: t, op: op, value: self.expr(value), pos: pos)
+        While(cond, body, pos) =>
+            c := self.expr(cond)
+            ast.Stmt.While(c, self.block(body), pos)
+        For(is_par, var, var_pos, mutable, iter, body, pos) =>
+            it := self.expr(iter)
+            self.local(var, var_pos)
+            ast.Stmt.For(is_par, var, var_pos, mutable, it, self.block(body), pos)
+        With(mutex, var, var_pos, body, pos) =>
+            mx := self.expr(mutex)
+            self.local(var, var_pos)
+            ast.Stmt.With(mx, var, var_pos, self.block(body), pos)
+        Unsafe(body, pos) => ast.Stmt.Unsafe(self.block(body), pos)
+        Return(value, pos) =>
+            if v := value
+                return ast.Stmt.Return(self.expr(v), pos)
+            s
+        Eval(value) => ast.Stmt.Eval(self.expr(value))
+        LetTuple(names, value, pos) =>
+            v := self.expr(value)
+            for b in names
+                self.local(b.name, b.pos)
+            ast.Stmt.LetTuple(names, v, pos)
+        Handle(value, otherwise) =>
+            v := self.expr(value)
+            ast.Stmt.Handle(v, self.otherwise(otherwise))
+        Defer(inner, pos) => ast.Stmt.Defer(self.stmt(inner), pos)
+        Break(_) | Continue(_) => s
+
+fn Resolver.otherwise(mut self, o ast.Else) ast.Else
+    match o
+        Fallback(value) => ast.Else.Fallback(self.expr(value))
+        Leave(inner) => ast.Else.Leave(self.stmt(inner))
+        Handler(err, body, pos) =>
+            if e := err
+                self.local(e.name, e.pos)
+            ast.Else.Handler(err, self.block(body), pos)
+
+fn Resolver.pattern(mut self, p ast.Pattern) ast.Pattern
+    match p
+        Variant(qualifier, name, bindings, pos) =>
+            mut q := qualifier
+            if x := qualifier
+                q = self.type_name(x, pos)
+            if bs := bindings
+                for b in bs
+                    self.local(b.name, b.pos)
+            ast.Pattern.Variant(q, name, bindings, pos)
+        Alt(alts, pos) =>
+            mut out := List[ast.Pattern]()
+            for a in alts
+                out.push(self.pattern(a))
+            ast.Pattern.Alt(out, pos)
+        TuplePat(elems, pos) =>
+            mut out := List[ast.Pattern]()
+            for a in elems
+                out.push(self.pattern(a))
+            ast.Pattern.TuplePat(out, pos)
+        BindName(name, pos) =>
+            self.local(name, pos)
+            p
+        Wildcard(_) | Literal(_, _) | Range(_, _, _, _) => p
+
+fn Resolver.exprs(mut self, xs List[ast.Expr]) List[ast.Expr]
+    mut out := List[ast.Expr]()
+    for x in xs
+        out.push(self.expr(x))
+    out
+
+fn Resolver.args(mut self, args List[ast.Arg]) List[ast.Arg]
+    mut out := List[ast.Arg]()
+    for a in args
+        mut na := a
+        na.value = self.expr(a.value)
+        out.push(na)
+    out
+
+fn Resolver.opt(mut self, x ast.Expr?) ast.Expr?
+    if v := x
+        return self.expr(v)
+    none
+
+## The imported module that `e` names, if it's a bare import name: module, name, position.
+@allow("expr.match.3") fn Resolver.module_name(self, e ast.Expr)(str, str, ast.Pos)?
+    match e
+        Name(n, p) =>
+            if t := self.import_of(n)
+                match t
+                    Module(m) => return (m, n, p)
+                    Std => return none
+            none
+        _ => none
+
+@allow("expr.match.3") fn Resolver.expr(mut self, e ast.Expr) ast.Expr
+    match e
+        Name(n, pos) =>
+            if t := self.import_of(n)
+                if not std_target(t)
+                    self.diags.push(diag(
+                        "mod.use.2",
+                        pos,
+                        "`{n}` is a module, not a value",
+                        "use one of its items, e.g. `{n}.name`",
+                    ))
+                    return e
+            if self.own(n) and self.module != ""
+                return ast.Expr.Name(qualified(self.module, n), pos)
+            e
+        TypeArgs(name, args, pos) =>
+            n := self.type_name(name, pos)
+            ast.Expr.TypeArgs(n, self.types(args), pos)
+        Member(recv, name, name_pos) =>
+            if mn := self.module_name(recv)
+                q := self.item(mn.0, mn.1, name, name_pos)
+                return ast.Expr.Name(q, mn.2)
+            ast.Expr.Member(self.expr(recv), name, name_pos)
+        Method(recv, name, name_pos, args) =>
+            new_args := self.args(args)
+            if mn := self.module_name(recv)
+                q := self.item(mn.0, mn.1, name, name_pos)
+                return ast.Expr.Call(callee: ast.Expr.Name(q, mn.2), args: new_args, pos: name_pos)
+            ast.Expr.Method(self.expr(recv), name, name_pos, new_args)
+        Call(callee, args, pos) =>
+            c := self.expr(callee)
+            ast.Expr.Call(callee: c, args: self.args(args), pos: pos)
+        Interp(parts, pos) =>
+            mut out := List[ast.InterpPart]()
+            for p in parts
+                match p
+                    Lit(_) => out.push(p)
+                    Hole(x) => out.push(ast.InterpPart.Hole(self.expr(x)))
+                    Fmt(x, spec) => out.push(ast.InterpPart.Fmt(self.expr(x), spec))
+            ast.Expr.Interp(out, pos)
+        ListLit(xs, pos) => ast.Expr.ListLit(self.exprs(xs), pos)
+        SetLit(xs, pos) => ast.Expr.SetLit(self.exprs(xs), pos)
+        TupleLit(xs, pos) => ast.Expr.TupleLit(self.exprs(xs), pos)
+        MapLit(entries, pos) =>
+            mut out := List[ast.MapEntry]()
+            for en in entries
+                k := self.expr(en.key)
+                out.push(ast.MapEntry(key: k, value: self.expr(en.value)))
+            ast.Expr.MapLit(out, pos)
+        Comp(form, elem, value, clauses, pos) =>
+            mut cs := List[ast.CompFor]()
+            for c in clauses
+                mut nc := c
+                nc.iter = self.expr(c.iter)
+                self.local(c.var, c.var_pos)
+                for b in c.unpack
+                    self.local(b.name, b.pos)
+                nc.cond = self.opt(c.cond)
+                cs.push(nc)
+            el := self.expr(elem)
+            ast.Expr.Comp(form, el, self.opt(value), cs, pos)
+        Index(recv, index, pos) =>
+            r := self.expr(recv)
+            ast.Expr.Index(recv: r, index: self.expr(index), pos: pos)
+        Unary(op, operand, pos) => ast.Expr.Unary(op, self.expr(operand), pos)
+        NewRef(value, pos) => ast.Expr.NewRef(self.expr(value), pos)
+        Binary(op, lhs, rhs, pos) =>
+            l := self.expr(lhs)
+            ast.Expr.Binary(op: op, lhs: l, rhs: self.expr(rhs), pos: pos)
+        Range(lo, hi, inclusive, pos) =>
+            l := self.opt(lo)
+            ast.Expr.Range(lo: l, hi: self.opt(hi), inclusive: inclusive, pos: pos)
+        If(branches, els, else_err, pos) =>
+            mut bs := List[ast.Branch]()
+            for b in branches
+                mut cond := b.cond
+                match b.cond
+                    Test(c) => cond = ast.Cond.Test(self.expr(c))
+                    Bind(name, bpos, value) =>
+                        v := self.expr(value)
+                        self.local(name, bpos)
+                        cond = ast.Cond.Bind(name, bpos, v)
+                bs.push(ast.Branch(cond: cond, body: self.block(b.body)))
+            if ee := else_err
+                self.local(ee.name, ee.pos)
+            mut ne := none
+            if b := els
+                ne = self.block(b)
+            ast.Expr.If(bs, ne, else_err, pos)
+        Match(scrutinee, arms, pos) =>
+            sc := self.expr(scrutinee)
+            mut out := List[ast.Arm]()
+            for arm in arms
+                p := self.pattern(arm.pat)
+                g := self.opt(arm.guard)
+                out.push(ast.Arm(pat: p, guard: g, body: self.block(arm.body)))
+            ast.Expr.Match(sc, out, pos)
+        OrElse(value, otherwise, pos) =>
+            v := self.expr(value)
+            ast.Expr.OrElse(v, self.otherwise(otherwise), pos)
+        Try(inner, context, pos) =>
+            i := self.expr(inner)
+            ast.Expr.Try(i, self.opt(context), pos)
+        Str(
+            _,
+            _,
+        ) | Bytes(_, _) | Int(_, _) | Float(_, _) | Char(_, _) | Bool(_, _) | NoneLit(_) | Hole(_) => e

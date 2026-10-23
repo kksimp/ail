@@ -1,0 +1,365 @@
+## The program loader (ADR 0855), the AIL counterpart of `bootstrap/src/modules.rs`
+## `load`: the files of a program and the modules they import, lexed and parsed
+## as one program after the prelude, then resolved (`resolve.ail`). `ail run
+## compiler load FILE` prints what `ail api --ast --program FILE` prints, and
+## `tools/native-cli/load-parity.sh` compares the two.
+##
+## Spec rules: mod.unit.1-5, mod.use.1-6, mod.vis.1, json.prelude.1.
+use ast
+use mir
+use syntax
+
+## Each file's lines are numbered from a multiple of this (modules.rs).
+pub FILE_LINES := 1048576
+
+## Lines from here on belong to the prelude and the standard types.
+pub PRELUDE_LINE := 1073741824
+
+## The standard types are numbered after the prelude (stdlib.rs `FIRST_LINE`).
+STD_TYPES_LINE := 1074790400
+
+## Why a program can't be loaded: a file that can't be read, or no files.
+pub error struct LoadError
+    pub message str
+
+## A loaded program with the diagnostics its loading found.
+pub struct Loaded
+    pub program ast.Program
+    pub diags List[syntax.Diag]
+    ## The source of each file of the program, in the order of `program.files`.
+    pub texts List[str]
+
+## The standard modules written in AIL: path of the module, file under the
+## std directory, and the name the file is shown under.
+STD_MODULES := [
+    ("std.app", "app/app.ail"),
+    ("std.args", "args/args.ail"),
+    ("std.csv", "csv/csv.ail"),
+    ("std.log", "log/log.ail"),
+    ("std.net.http", "net/http.ail"),
+    ("std.net.jar", "net/jar.ail"),
+    ("std.time.date", "time/date.ail"),
+    ("std.ui.widgets", "ui/widgets.ail"),
+]
+
+## Each type of a standard module, declared in `std/types.ail`, and its module.
+STD_TYPES := {
+    "CompressError": "compress",
+    "IoError": "fs",
+    "Metadata": "fs",
+    "Response": "net",
+    "RawResponse": "net",
+    "RawOutput": "proc",
+    "NetError": "net",
+    "Options": "net",
+    "Request": "net",
+    "Server": "net",
+    "Exchange": "net",
+    "Body": "net",
+    "Listener": "net",
+    "Conn": "net",
+    "Output": "proc",
+    "Child": "proc",
+    "ProcError": "proc",
+    "Window": "ui",
+    "Size": "ui",
+    "Modifiers": "ui",
+    "Event": "ui",
+    "Style": "ui",
+    "Cursor": "ui",
+    "UiError": "ui",
+    "Tensor": "tensor",
+    "Regex": "regex",
+    "RegexError": "regex",
+    "Match": "regex",
+    "Captures": "regex",
+}
+
+JSON_NAMES := ["Json", "JsonMember", "JsonError", "parse_json", "parse_json_lines"]
+JSON_DERIVE_NAMES := ["ToJson", "FromJson", "load_json", "print_json"]
+ARGS_DERIVE_NAMES := ["FromArgs", "ArgsFailure"]
+DERIVE_NAMES := ["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveError"]
+
+## Read the program at `arg`, a file or a package directory, with every module
+## it imports. `std` is the directory of the standard modules in AIL.
+pub fn load(arg str, std str) Loaded ! LoadError
+    mut root := "."
+    mut root_files := List[str]()
+    if arg.ends_with(".ail")
+        cut := arg.split("/")
+        root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
+        root_files.push(arg)
+    else
+        root = arg
+        root_files = ail_files(arg)
+        if root_files.len() == 0
+            return LoadError("{arg} has no .ail files (mod.unit.5)")
+    load_package(root, root_files, std)
+
+## The `.ail` files directly in `dir`, sorted (mod.unit.1).
+fn ail_files(dir str) List[str]
+    names := fs.list_dir(dir) else return []
+    [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail")]
+
+fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
+    mut files := List[ast.SourceFile]()
+    mut tokens := List[syntax.Token]()
+    mut sources := List[str]()
+    mut diags := List[syntax.Diag]()
+    mut seen := Set[str]()
+    seen.add("")
+    mut queue := [("", root_files)]
+    while queue.len() > 0
+        item := queue.pop() else break
+        module := item.0
+        for p in item.1
+            if (files.len() + 1) * FILE_LINES >= PRELUDE_LINE
+                return LoadError("the program has more than {files.len()} files")
+            shown := std_shown(p, std)
+            src := fs.read_text(p) else return LoadError("can't read {shown}")
+            base := files.len() * FILE_LINES
+            lexed := syntax.lex(src)
+            mut toks := shift(lexed.tokens, base)
+            toks.pop()
+            for d in lexed.diags
+                diags.push(at_line(d, base))
+            for imp in scan_uses(toks)
+                if imp[0] == "std"
+                    dotted := imp.join(".")
+                    if sf := std_file(dotted)
+                        if not seen.contains(dotted)
+                            seen.add(dotted)
+                            queue.push((dotted, [path.join(std, sf)]))
+                    continue
+                target_module := imp.join(".")
+                if seen.contains(target_module)
+                    continue
+                seen.add(target_module)
+                found := ail_files(path.join(root, imp.join("/")))
+                if found.len() > 0
+                    queue.push((target_module, found))
+            tokens.extend(toks)
+            sources.push(src)
+            files.push(ast.SourceFile(path: shown, module: module, base: base))
+    tokens.push(syntax.Token(
+        tok: syntax.Tok.Eof,
+        pos: ast.Pos(line: files.len() * FILE_LINES, col: 1),
+    ))
+    mut first := assemble(tokens, files, diags, std)?
+    first.texts = sources
+    if diags.len() == 0 and first.diags.len() == 0 and wanted(tokens)
+        return expand_derives(first, tokens, files, std)
+    first
+
+## The standard module `dotted` written in AIL: its file under the std directory.
+fn std_file(dotted str) str?
+    for m in STD_MODULES
+        if m.0 == dotted
+            return m.1
+    none
+
+## The name a file is shown under: `<std>/...` for a standard module.
+fn std_shown(p str, std str) str
+    prefix := "{std}/"
+    if rest := p.strip_prefix(prefix)
+        return "<std>/{rest}"
+    p
+
+fn at_line(d syntax.Diag, base int) syntax.Diag
+    syntax.Diag(
+        rule: d.rule,
+        pos: ast.Pos(line: d.pos.line + base, col: d.pos.col),
+        msg: d.msg,
+        fixed: d.fixed,
+        help: d.help,
+        fix: d.fix,
+    )
+
+## The tokens with every line moved down by `base`, in interpolations too.
+@allow("expr.match.3") fn shift(tokens List[syntax.Token], base int) List[syntax.Token]
+    mut out := List[syntax.Token]()
+    for t in tokens
+        out.push(syntax.Token(
+            tok: shift_tok(t.tok, base),
+            pos: ast.Pos(line: t.pos.line + base, col: t.pos.col),
+        ))
+    out
+
+@allow("expr.match.3") fn shift_tok(tok syntax.Tok, base int) syntax.Tok
+    match tok
+        Interp(parts) =>
+            mut out := List[syntax.Part]()
+            for p in parts
+                match p
+                    Lit(text) => out.push(syntax.Part.Lit(text))
+                    Code(code) => out.push(syntax.Part.Code(shift(code, base)))
+                    Fmt(code, spec) => out.push(syntax.Part.Fmt(shift(code, base), spec))
+            syntax.Tok.Interp(out)
+        _ => tok
+
+## The module paths of a file's top-level `use` lines, to load them before
+## parsing.
+@allow("expr.match.3") fn scan_uses(tokens List[syntax.Token]) List[List[str]]
+    mut out := List[List[str]]()
+    mut depth := 0
+    mut i := 0
+    while i < tokens.len()
+        match tokens[i].tok
+            Indent => depth += 1
+            Dedent => depth = if depth > 0 then depth - 1 else 0
+            Kw(w) =>
+                if w == "use" and depth == 0
+                    mut parts := List[str]()
+                    mut j := i + 1
+                    while j < tokens.len()
+                        match tokens[j].tok
+                            Ident(name) => parts.push(name)
+                            Sym(s) =>
+                                if s != "."
+                                    break
+                            _ => break
+                        j += 1
+                    if parts.len() > 0
+                        out.push(parts)
+            _ => 0
+        i += 1
+    out
+
+## Parse the tokens of `files` after the prelude.
+@allow("expr.match.3")
+fn assemble(
+    tokens List[syntax.Token],
+    files List[ast.SourceFile],
+    diags List[syntax.Diag],
+    std str,
+) Loaded ! LoadError
+    mut all := prelude_tokens(tokens)
+    all.extend(tokens)
+    parsed := syntax.parse(all)
+    mut prog := parsed.program
+    add_std_types(mut prog, std)?
+    prog.files = files
+    mut found := diags
+    found.extend(parsed.diags)
+    resolve(prog, one_per_line(found))
+
+## contract.inh.1: an implementation's method inherits the contracts of the
+## trait's method of the same name.
+@allow("expr.match.3") fn link_contracts(prog ast.Program) ast.Program
+    mut out := prog
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        match f.within
+            InImpl(k) =>
+                for t in prog.traits
+                    if t.name == prog.impls[k].trait_name
+                        for m in t.methods
+                            if prog.fns[m].name == f.name and prog.fns[m].contracts.len() > 0
+                                out.fns[i].inherits = m
+                                break
+                        break
+            _ => 0
+    out
+
+## The prelude's tokens, numbered from `PRELUDE_LINE`.
+@allow("expr.match.3") fn prelude_tokens(tokens List[syntax.Token]) List[syntax.Token]
+    lexed := syntax.lex(prelude_text(tokens))
+    mut toks := shift(lexed.tokens, PRELUDE_LINE)
+    toks.pop()
+    toks
+
+## Whether a token names one of `names` outside its own declaration.
+@allow("expr.match.3") fn wants(tokens List[syntax.Token], names List[str]) bool
+    mut named := false
+    mut declared := false
+    for i in 0..tokens.len()
+        match tokens[i].tok
+            Ident(n) =>
+                if names.contains(n)
+                    named = true
+                    if i > 0
+                        match tokens[i - 1].tok
+                            Kw(w) =>
+                                if ["fn", "struct", "enum", "trait"].contains(w)
+                                    declared = true
+                            _ => 0
+            _ => 0
+    named and not declared
+
+## The always-read prelude, plus the optional modules the program names
+## (json.prelude.1, ADR 0161): `json`, `jsonderive`, `default`, `argsderive` and `derive`.
+@allow("expr.match.3") fn prelude_text(tokens List[syntax.Token]) str
+    parts := split_modules(mir.PRELUDE_EMBED)
+    want_json_derive := wants(tokens, JSON_DERIVE_NAMES)
+    want_json := want_json_derive or wants(tokens, JSON_NAMES)
+    mut at_derive := false
+    for i in 1..tokens.len()
+        match tokens[i].tok
+            Ident(n) =>
+                if n == "derive"
+                    match tokens[i - 1].tok
+                        Sym(s) =>
+                            if s == "@"
+                                at_derive = true
+                        _ => 0
+            _ => 0
+    mut text := parts[0]
+    if want_json
+        text = "{text}{parts[1]}"
+    if want_json_derive
+        text = "{text}{parts[2]}"
+    want_default := wants(tokens, ["Default"])
+    if want_default
+        text = "{text}{parts[3]}"
+    want_args := wants(tokens, ARGS_DERIVE_NAMES)
+    if want_args
+        text = "{text}{parts[4]}"
+    if want_json_derive or want_default or want_args or at_derive or wants(tokens, DERIVE_NAMES)
+        text = "{text}{parts[5]}"
+    text
+
+## The prelude cut at its `## @module` markers: core, json, jsonderive,
+## default, argsderive, derive. Each part after the first starts after its marker line.
+fn split_modules(text str) List[str]
+    mut parts := List[str]()
+    mut cur := List[str]()
+    for line in text.lines()
+        if line.starts_with("## @module ")
+            parts.push("{cur.join("\n")}\n")
+            cur = []
+        else
+            cur.push(line)
+    parts.push("{cur.join("\n")}\n")
+    parts
+
+## Add the standard modules' types to `prog`, each named `module.Type`
+## (std.use.2).
+fn add_std_types(mut prog ast.Program, std str) !LoadError
+    src := fs.read_text(path.join(
+        std,
+        "types.ail",
+    )) else return LoadError("can't read the standard types")
+    lexed := syntax.lex(src)
+    mut toks := shift(lexed.tokens, STD_TYPES_LINE)
+    parsed := syntax.parse(toks)
+    for s in parsed.program.structs
+        mut d := s
+        d.name = "{STD_TYPES[s.name]}.{s.name}"
+        prog.structs.push(d)
+    for e in parsed.program.enums
+        mut d := e
+        d.name = "{STD_TYPES[e.name]}.{e.name}"
+        prog.enums.push(d)
+
+## One syntax diagnostic per line (gram.rec.1, ADR 0263), as `one_per_line` in
+## modules.rs: sorted by position, the first report on a line stays. String
+## errors are independent of the rest and always stay. (The lexer and the
+## parser report no warnings.)
+fn one_per_line(diags List[syntax.Diag]) List[syntax.Diag]
+    sorted := diags.sorted(by: |d| d.pos.line * 100000 + d.pos.col)
+    mut kept := List[syntax.Diag]()
+    for d in sorted
+        same_line := kept.len() > 0 and kept[kept.len() - 1].pos.line == d.pos.line
+        if d.rule.starts_with("lex.str.") or not same_line
+            kept.push(d)
+    kept

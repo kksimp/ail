@@ -1,0 +1,37 @@
+## The help a diagnostic gets when its rule gives none, as `default_help` in
+## `bootstrap/src/diag.rs`. Generated from that table; keep them in step.
+
+@allow("expr.match.3") fn default_help(rule str) str?
+    match rule
+        "lex.stmt.1" => "a statement is one line; continue a long one after a comma or an operator, or inside brackets"
+        "lex.stmt.2" => "close the bracket on the same statement, or remove it"
+        "lex.str.1" => "escapes are `\\n \\t \\r \\0 \\\\ \\\" \\' \\\{ \\u\{...}`; `\{expression}` interpolates"
+        "lex.num.3" => "write a number that fits, or compute it from smaller parts"
+        "lex.block.1" | "lex.block.3" => "indent a block by exactly 4 spaces below the line that opens it"
+        "gram.syntax.1" => "docs/language-card.md lists the declarations and statements AIL has"
+        "gram.fn.1" | "gram.fn.2" => "a function is `fn name(a int, b int) int`, then an indented body"
+        "expr.if.1" | "expr.loop.1" => "a header ends its line, and the block is the lines indented 4 spaces below it"
+        "expr.call.1" => "give exactly the arguments the signature lists; `ail api FILE` shows each signature"
+        "expr.call.2" => "pass a value of the expected type: convert with `n.to_float()`, `x.to_int()`, or `\"\{x}\"` for text"
+        "expr.block.2" => "make the last expression the declared return type, change the return type, or add `return value`"
+        "expr.match.5" => "delete this arm, or move it below the arms it overlaps"
+        "expr.match.7" => "write a pattern of the same type as the matched value"
+        "expr.loop.5" => "`break` and `continue` belong inside a `for` or `while` loop"
+        "expr.loop.6" => "`for mut x in xs` needs `xs` to be a `mut` list"
+        "expr.comp.3" => "a comprehension's element is a value: `[x * 2 for x in xs]`"
+        "trait.op.1" | "trait.op.3" => "both operands need one type and an operator the type has: convert with `n.to_float()` or `x.to_int()`"
+        "type.coll.2" => "give every element the same type; convert the odd one, e.g. `n.to_float()`"
+        "type.struct.4" | "type.struct.5" => "give each field once, as `field: value`, with a value of the field's type"
+        "type.bool.1" => "`not`, `and` and `or` take `bool`; compare first, e.g. `n != 0`"
+        "err.else.1" => "`else` follows a value that can be absent (`T?`) or fail (`T ! E`); remove it here"
+        "err.else.2" => "end the `else` block with `return`, `break` or `continue`, or with a value"
+        "err.prop.1" => "`?` follows a call that can fail or a value that can be absent; remove it here"
+        "mod.main.3" | "std.io.3" => "print a value; a call to a function without a return type gives nothing"
+        "mod.unit.1" => "names are unique within a module; rename one"
+        "own.param.2" => "mark `mut` only a variable, or a field or element of one, and only for a `mut` parameter"
+        "test.assert.2" => "`assert` takes a `bool`, e.g. `assert n == 3`"
+        "contract.decl.2" => "a contract is a pure `bool` expression, e.g. `requires n >= 0`"
+        "trait.impl.1" | "trait.impl.4" | "trait.std.2" => "`impl Trait for Type` then each method; `ail api FILE` lists the traits"
+        "gen.infer.2" => "give as many type arguments as the type declares, in `[]`"
+        "bootstrap.unsupported" => "this part of the spec isn't implemented in the bootstrap yet; see docs/status.md"
+        _ => none

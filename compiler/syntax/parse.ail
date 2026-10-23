@@ -183,7 +183,7 @@ fn Parser.top_level(mut self)
         if tag == "nl" or tag == "dedent"
             i += 1
         elif tag == "indent"
-            diag("lex.block.1", here())
+            unexpected_indent()
             skip_block()
         elif tag == "kw" and text == "fn"
             if f := function(ast.Within.TopLevel)
@@ -279,7 +279,10 @@ fn Parser.top_level(mut self)
         elif tag == "id" and foreign_decl(text)
             i += 0
         else
-            unexpected("a declaration", "gram.syntax.1")
+            unexpected(
+                "a declaration (`fn`, `struct`, `enum`, `error`, `unique`, `trait`, `impl` or a constant)",
+                "gram.syntax.1",
+            )
             skip_statement()
 
 # ---- Tokens ----
@@ -386,27 +389,73 @@ fn Parser.diag(mut self, rule str, pos ast.Pos)
 
 ## A diagnostic with a fix. The same mistake again on one line is one
 ## diagnostic with one fix (gram.rec.1): `msg` identifies the mistake.
-fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str)
+fn Parser.error_fix(mut self, rule str, pos ast.Pos, msg str, help str, title str)
     if diags.len() > 0
         last := diags[diags.len() - 1]
         if last.rule == rule and last.pos.line == pos.line and last.msg == msg and last.fixed
             return
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: "", fix: ""))
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title))
 
 ## A diagnostic with the bootstrap's message, help line and fix title.
 fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
     diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: false, help: help, fix: fix))
 
 fn Parser.int_too_big(mut self, pos ast.Pos)
-    diag("lex.num.3", pos)
+    error_text(
+        "lex.num.3",
+        pos,
+        "integer literal `9223372036854775808` doesn't fit in `int` (64-bit signed)",
+        "",
+        "",
+    )
+
+fn Parser.range_start_error(mut self, pos ast.Pos)
+    error_text(
+        "expr.match.12",
+        pos,
+        "only integer and character literals can start a range pattern",
+        "write `lo..hi` or `lo..=hi` with literal ends",
+        "",
+    )
+
+fn Parser.unexpected_indent(mut self)
+    error_text(
+        "lex.block.1",
+        here(),
+        "unexpected indentation",
+        "only a line that opens a block (like `if`, `for` or `fn`) can be followed by an indented line",
+        "",
+    )
+
+## How the Rust front end names a token in "expected X, found Y".
+fn Parser.describe(self, t Tok) str
+    match t
+        Eof => if in_interp then "`}`" else "end of file"
+        Ident(n) => "`{n}`"
+        Kw(k) => "the keyword `{k}`"
+        Sym(x) => "`{x}`"
+        Str(_) | Interp(_) => "a string"
+        Bytes(_) => "a `bytes` literal"
+        Int(_) | IntMin => "an integer"
+        Float(_) => "a number"
+        Char(_) => "a character"
+        Newline => "end of line"
+        Indent => "an indented block"
+        Dedent => "end of block"
 
 ## Report an unexpected token, preferring "not supported yet" for spec
 ## keywords the bootstrap doesn't implement.
 fn Parser.unexpected(mut self, expected str, rule str)
     if tag_at(0) == "kw" and not_yet(kw_at(0))
-        diag("bootstrap.unsupported", here())
+        error_text(
+            "bootstrap.unsupported",
+            here(),
+            "`{kw_at(0)}` is not supported by the bootstrap yet (spec ffi.decl.1)",
+            "",
+            "",
+        )
         return
-    diag(rule, here())
+    error_text(rule, here(), "expected {expected}, found {describe(peek())}", "", "")
 
 fn Parser.expect_sym(mut self, s str, expected str, rule str) bool?
     if eat_sym(s)
@@ -482,7 +531,13 @@ fn Parser.block(mut self, after str, rule str) List[ast.Stmt]?
                 unexpected("end of line after {after}", rule)
                 return none
     if not eat_indent()
-        diag(rule, here())
+        error_text(
+            rule,
+            here(),
+            "expected an indented block after {after}",
+            "indent the block by 4 spaces",
+            "",
+        )
         return []
     block_rest()
 
@@ -542,7 +597,13 @@ fn Parser.attributed_function(mut self) ast.FnDecl?
             and (sym_at(1) == "@" or kw_at(1) == "fn" or kw_at(1) == "unsafe" or kw_at(1) == "extern")
             i += 1
     if not at_kw("fn") and not (at_kw("unsafe") and kw_at(1) == "fn") and not at_extern_fn()
-        diag("gram.attr.2", here())
+        error_text(
+            "gram.attr.2",
+            here(),
+            "an attribute applies to the function declared right after it",
+            "write `@test fn name()` or put the function on the next line",
+            "",
+        )
         skip_statement()
         return none
     mut f := function(ast.Within.TopLevel)?
@@ -569,7 +630,13 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         kw_pos := bump().pos
         lang := take_name("`c` after `extern`", "ffi.decl.2")?
         if lang.name != "c"
-            diag("ffi.decl.2", lang.pos)
+            error_text(
+                "ffi.decl.2",
+                lang.pos,
+                "`extern {lang.name}` is not supported",
+                "write `extern c fn name(params) Result`",
+                "",
+            )
             return none
         mut lib := absent[str]()
         match peek()
@@ -578,7 +645,13 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
                 lib = text
             Ident(_) | Kw(_) | Sym(_) | Bytes(_) | Interp(_) | Char(_) | Int(_) | IntMin | Float(_) | Newline | Indent | Dedent | Eof => i += 0
         if within != ast.Within.TopLevel
-            diag("ffi.decl.2", kw_pos)
+            error_text(
+                "ffi.decl.2",
+                kw_pos,
+                "an `extern c fn` is declared at the top level",
+                "move it out of the `trait` or `impl` block",
+                "",
+            )
             return none
         ext = ast.Extern(lib: lib)
     bump()
@@ -599,13 +672,26 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
         if at_sym("[")
             generics = generic_params()?
         if at_sym(".")
-            diag("mod.unit.4", here())
+            error_text(
+                "mod.unit.4",
+                here(),
+                "a method is declared in the module of its type",
+                "move the method into the module that declares `{first.name}.{m.name}`",
+                "",
+            )
             return none
         owner = ast.Owner(name: first.name, pos: first.pos, params: params)
         name = m.name
         pos = m.pos
     if owner != none and within != ast.Within.TopLevel
-        diag("trait.impl.1", pos)
+        block := if in_trait(within) then "a `trait`" else "an `impl`"
+        error_text(
+            "trait.impl.1",
+            pos,
+            "functions in {block} block are written without a type name",
+            "write `fn {name}(...)`",
+            "",
+        )
         return none
     expect_sym("(", "`(` after the function name", "gram.fn.1")?
     mut receiver := absent[ast.Receiver]()
@@ -617,11 +703,23 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
             moved := not mutable and eat_kw("move")
             spos := bump().pos
             if owner == none and within == ast.Within.TopLevel
-                diag("trait.method.1", spos)
+                error_text(
+                    "trait.method.1",
+                    spos,
+                    "`self` is only allowed in methods",
+                    "declare a method as `fn Type.{name}(self, ...)`",
+                    "",
+                )
             elif receiver != none or params.len() > 0
-                diag("trait.method.1", spos)
+                error_text("trait.method.1", spos, "`self` must be the first parameter", "", "")
             elif moved and within != ast.Within.TopLevel
-                diag("bootstrap.unsupported", spos)
+                error_text(
+                    "bootstrap.unsupported",
+                    spos,
+                    "`move self` in a trait or `impl` block is not supported by the bootstrap yet (spec own.move.6, OQ-050)",
+                    "declare it as an inherent method, `fn Type.{name}(move self)`",
+                    "",
+                )
                 return none
             else
                 receiver = ast.Receiver(mutable: mutable, moved: moved)
@@ -634,6 +732,8 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
                     "gram.fn.2",
                     here(),
                     "parameters are written `name Type`, without a colon",
+                    "write `{p.name} <Type>`",
+                    "remove the `:`",
                 )
                 i += 1
             ty := type_ref("the parameter's type (written `name Type`)", "gram.fn.2")?
@@ -643,7 +743,13 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
     expect_sym(")", "`)` or `,` in the parameter list", "gram.fn.2")?
     if at_sym("->") or at_sym(":") and tag_at(1) != "nl"
         sym := if at_sym("->") then "->" else ":"
-        error_fix("gram.fn.2", here(), "there is no `{sym}`; the return type follows `)` directly")
+        error_fix(
+            "gram.fn.2",
+            here(),
+            "there is no `{sym}`; the return type follows `)` directly",
+            "remove the `{sym}`",
+            "remove the `{sym}`",
+        )
         i += 1
     mut ret := none
     if tag_at(0) == "id"
@@ -658,7 +764,13 @@ fn Parser.function_inner(mut self, within ast.Within) ast.FnDecl?
     # A trait method without a default ends with its signature (trait.decl.2).
     mut fb := FnBody(body: none, contracts: [])
     if ext != none and (owner != none or receiver != none or generics.len() > 0)
-        diag("ffi.decl.2", pos)
+        error_text(
+            "ffi.decl.2",
+            pos,
+            "an `extern c fn` is a plain function: no type, `self` or type parameters",
+            "declare it as `extern c fn name(params) Result`, and wrap it in an AIL method",
+            "",
+        )
         return none
     if ext != none
         # ffi.decl.2: a C function has a signature and no body.
@@ -713,7 +825,13 @@ fn Parser.trait_decl(mut self)
         skip_statement()
         return
     if at_sym("[")
-        diag("bootstrap.unsupported", here())
+        error_text(
+            "bootstrap.unsupported",
+            here(),
+            "traits with type parameters are not designed yet (OQ-037)",
+            "",
+            "",
+        )
         skip_statement()
         return
     # trait.super.1: `trait Ord Eq` and `trait Sorted Ord + ToStr`.
@@ -756,7 +874,13 @@ fn Parser.impl_decl(mut self)
         return
     if not eat_kw("for")
         if at_newline()
-            diag("trait.impl.1", tokens[i - 1].pos)
+            error_text(
+                "trait.impl.1",
+                tokens[i - 1].pos,
+                "`impl {trait_name.name}` needs `for Type`: `impl` implements a trait",
+                "methods of a struct are plain functions: `fn {trait_name.name}.name(self) T`",
+                "",
+            )
         else
             unexpected("`for` after the trait name", "trait.impl.1")
         skip_statement()
@@ -792,12 +916,18 @@ fn Parser.fn_block(mut self, within ast.Within, what str) List[int]
     mut indexes := List[int]()
     if not eat_indent()
         if in_trait(within)
-            diag("trait.decl.1", here())
+            error_text(
+                "trait.decl.1",
+                here(),
+                "{what} needs an indented block of methods",
+                "indent each method by 4 spaces",
+                "",
+            )
         return indexes
     while peek() != Tok.Dedent and peek() != Tok.Eof
         if eat_newline()
             continue
-        member_pub()
+        member_pub("trait and `impl` methods")
         if not at_kw("fn")
             unexpected("a method (`fn ...`) in {what}", "trait.decl.1")
             skip_statement()
@@ -868,7 +998,13 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
                 break
         expect_sym(")", "`)` or `,` in the tuple type", "type.tuple.1")?
         if elems.len() < 2
-            diag("type.tuple.1", pos)
+            error_text(
+                "type.tuple.1",
+                pos,
+                "a tuple type has two or more elements",
+                "write the element type alone, or `(A, B)`",
+                "",
+            )
             return none
         return ast.TypeRef(shape: ast.TypeShape.TupleType(elems), pos: pos)
     # `fn(A, B) R`: a function value's type (type.fn.1).
@@ -888,7 +1024,13 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
     n := dotted_name(expected, rule)?
     mut args := List[ast.TypeRef]()
     if at_sym("<")
-        diag("gram.generic.1", here())
+        error_text(
+            "gram.generic.1",
+            here(),
+            "type arguments are written in square brackets",
+            "write `{n.name}[...]`",
+            "",
+        )
         return none
     if eat_sym("[")
         while true
@@ -902,11 +1044,23 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
 fn Parser.field_decl(mut self, rule str) ast.Field?
     field_pub(rule)
     if at_kw("fn")
-        diag(rule, here())
+        error_text(
+            rule,
+            here(),
+            "methods aren't declared inside a struct",
+            "declare the method after the struct, with the type's name: `fn Name.method(self) T`",
+            "",
+        )
         return none
     f := take_name("a field name", rule)?
     if at_sym(":")
-        error_fix(rule, here(), "fields are written `name Type`, without a colon")
+        error_fix(
+            rule,
+            here(),
+            "fields are written `name Type`, without a colon",
+            "write `{f.name} <Type>`",
+            "remove the `:`",
+        )
         i += 1
     ty := type_ref("the field's type (written `name Type`)", rule)?
     ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty)
@@ -930,7 +1084,7 @@ fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
     bare := whole != none and at_newline() and tag_at(1) != "indent"
     if bare
         bump()
-    elif members_open("type.struct.1")
+    elif members_open("type.struct.1", "`struct {n.name}`")
         while peek() != Tok.Dedent and peek() != Tok.Eof
             if eat_newline()
                 continue
@@ -977,7 +1131,7 @@ fn Parser.enum_decl(mut self, is_error bool) ast.EnumDecl?
         generics = g
     mut variants := List[ast.Variant]()
     mut messages := List[VariantMessage]()
-    if members_open("type.enum.1")
+    if members_open("type.enum.1", "`enum {n.name}`")
         while peek() != Tok.Dedent and peek() != Tok.Eof
             if eat_newline()
                 continue
@@ -999,7 +1153,7 @@ fn Parser.enum_decl(mut self, is_error bool) ast.EnumDecl?
     )
 
 fn Parser.variant(mut self, is_error bool, mut messages List[VariantMessage]) ast.Variant?
-    member_pub()
+    member_pub("enum variants")
     v := take_name("a variant name", "type.enum.1")?
     mut fields := List[ast.Field]()
     if eat_sym("(")
@@ -1016,13 +1170,19 @@ fn Parser.variant(mut self, is_error bool, mut messages List[VariantMessage]) as
     ast.Variant(name: v.name, pos: v.pos, doc: none, fields: fields)
 
 ## The start of an indented block of one-line members: whether it opened.
-fn Parser.members_open(mut self, rule str) bool
+fn Parser.members_open(mut self, rule str, what str) bool
     if not eat_newline()
-        unexpected("end of line", rule)
+        unexpected("end of line after {what}", rule)
         skip_statement()
         return false
     if not eat_indent()
-        diag(rule, here())
+        error_text(
+            rule,
+            here(),
+            "{what} needs an indented block of members",
+            "indent each member by 4 spaces",
+            "",
+        )
         return false
     true
 
@@ -1039,7 +1199,7 @@ fn Parser.member_end(mut self, ok bool)
 ## A statement ends at the end of its line (lex.stmt.1), or with its block.
 fn Parser.statement(mut self) ast.Stmt?
     if peek() == Tok.Indent
-        diag("lex.block.1", here())
+        unexpected_indent()
         skip_block()
         return none
     if misplaced_contract()
@@ -1146,7 +1306,13 @@ fn Parser.statement_inner(mut self) ast.Stmt?
         value := expression()?
         return ast.Stmt.Return(value: value, pos: pos)
     if tag == "kw" and (text == "elif" or text == "else")
-        diag("expr.if.1", pos)
+        error_text(
+            "expr.if.1",
+            pos,
+            "`{text}` without a matching `if`",
+            "line it up with its `if` (or with the statement the `if` starts in)",
+            "",
+        )
         return none
     if foreign_stmt()
         return none
@@ -1190,7 +1356,13 @@ fn Parser.for_loop(mut self, is_par bool, pos ast.Pos) ast.Stmt?
     mut unpack := List[ast.Binder]()
     if at_sym(",")
         if mutable
-            diag("type.tuple.5", here())
+            error_text(
+                "type.tuple.5",
+                here(),
+                "`for mut` has one variable",
+                "loop with `for a, b in xs` and assign through an index to change the list",
+                "",
+            )
             return none
         unpack = more_binders(ast.Binder(name: v.name, pos: v.pos, mutable: false), "type.tuple.5")?
         var = hidden_name(unpack)
@@ -1302,7 +1474,13 @@ fn Parser.comp_clauses(mut self) List[ast.CompFor]?
         if not eat_kw("for")
             break
         if at_kw("mut")
-            diag("expr.comp.2", here())
+            error_text(
+                "expr.comp.2",
+                here(),
+                "a comprehension's variable can't be `mut`",
+                "use a `for mut` loop to change elements in place",
+                "",
+            )
             return none
         v := take_name("a variable after `for`", "expr.comp.2")?
         mut var := v.name
@@ -1342,7 +1520,13 @@ fn Parser.with_stmt(mut self, pos ast.Pos) ast.Stmt?
         unexpected("`as mut NAME` after the mutex", "conc.share.6")
         return none
     if not eat_kw("mut")
-        diag("conc.share.6", here())
+        error_text(
+            "conc.share.6",
+            here(),
+            "a `with` block writes its variable back to the mutex, so the variable is `mut`",
+            "write `with m as mut x`; to read the value once, use `m.get()`",
+            "write `as mut`",
+        )
         return none
     v := take_name("a variable after `as mut`", "conc.share.6")?
     body := block("the `with` header", "conc.share.6")?
@@ -1387,7 +1571,13 @@ fn Parser.range(mut self) ast.Expr?
 fn Parser.logical_typo(mut self, sym str, spelled str) bool
     if not at_sym(sym)
         return false
-    error_fix("expr.op.1", here(), "AIL writes `{sym}` as `{spelled}`")
+    error_fix(
+        "expr.op.1",
+        here(),
+        "AIL writes `{sym}` as `{spelled}`",
+        "write `{spelled}`",
+        "write `{spelled}`",
+    )
     true
 
 fn Parser.or_expr(mut self) ast.Expr?
@@ -1420,16 +1610,29 @@ fn Parser.comparison_expr(mut self) ast.Expr?
     op := comparison(sym_at(0)) else return lhs
     pos := bump().pos
     if op == ast.BinOp.Lt and at_sym(">") and adjacent(i - 1)
-        error_fix("gram.foreign.1", pos, "AIL writes `<>` as `!=`")
+        error_fix("gram.foreign.1", pos, "AIL writes `<>` as `!=`", "write `!=`", "write `!=`")
         return none
     rhs := additive()?
     if comparison(sym_at(0)) != none
         second := here()
         # `List<int>()`: type arguments use `[]`.
         if op == ast.BinOp.Lt and upper_name(lhs) and at_sym(">")
-            error_fix("gram.foreign.1", pos, "type arguments are written in `[]`, not `<>`")
+            error_fix(
+                "gram.foreign.1",
+                pos,
+                "type arguments are written in `[]`, not `<>`",
+                "write `List[int]()`",
+                "use brackets",
+            )
             return none
-        diags.push(Diag(rule: "expr.prec.2", pos: second, msg: "", fixed: true, help: "", fix: ""))
+        diags.push(Diag(
+            rule: "expr.prec.2",
+            pos: second,
+            msg: "comparisons can't be chained",
+            fixed: true,
+            help: "combine them with `and`, e.g. `a < b and b < c`",
+            fix: "",
+        ))
         return none
     ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
 
@@ -1456,7 +1659,14 @@ fn Parser.additive(mut self) ast.Expr?
             and adjacent(i - 1)
             and line_ends_at(i)
             sym := if plus then "++" else "--"
-            error_fix("gram.foreign.1", pos, "AIL has no `{sym}`")
+            assign := if plus then "+=" else "-="
+            error_fix(
+                "gram.foreign.1",
+                pos,
+                "AIL has no `{sym}`",
+                "write `n {assign} 1`",
+                "write `{assign} 1`",
+            )
             return none
         rhs := multiplicative()?
         lhs = ast.Expr.Binary(op: op, lhs: lhs, rhs: rhs, pos: pos)
@@ -1573,7 +1783,13 @@ fn Parser.postfix(mut self) ast.Expr?
             pos := bump().pos
             index := range()?
             if at_sym(":")
-                error_fix("type.coll.4", here(), "a slice is written with `..`, not `:`")
+                error_fix(
+                    "type.coll.4",
+                    here(),
+                    "a slice is written with `..`, not `:`",
+                    "write `xs[a..b]`, `xs[a..]` or `xs[..b]`",
+                    "write `..`",
+                )
                 return none
             expect_sym("]", "`]` after the index", "type.coll.4")?
             e = ast.Expr.Index(recv: e, index: index, pos: pos)
@@ -1606,14 +1822,32 @@ fn Parser.call_args(mut self) List[ast.Arg]?
         value := expression()?
         # expr.bit.1: `a | b` is `a.bit_or(b)`; AIL has no `|` operator.
         if at_sym("|")
-            diag("gram.foreign.1", here())
+            error_text(
+                "gram.foreign.1",
+                here(),
+                "AIL has no `|`",
+                "bit operations are methods: `a.bit_or(b)` (expr.bit.1)",
+                "write `.bit_or`",
+            )
             return none
         # `a @ b` is a matrix product (ADR 0382); `name=value` is `name: value`.
         if at_sym("@")
-            diag("gram.foreign.1", here())
+            error_text(
+                "gram.foreign.1",
+                here(),
+                "AIL has no `@` operator",
+                "the matrix product is a method: `a.matmul(b)` (std.tensor.10)",
+                "write `.matmul`",
+            )
             return none
         if at_sym("=")
-            diag("expr.call.1", here())
+            error_text(
+                "expr.call.1",
+                here(),
+                "a named argument is written `name: value`, not `name=value`",
+                "write `f(dx: 1, dy: 2)`",
+                "write `:`",
+            )
             return none
         args.push(ast.Arg(label: label, mutable: mutable, moved: moved, value: value, param: param))
         if not eat_sym(",")
@@ -1664,10 +1898,22 @@ fn Parser.primary(mut self) ast.Expr?
                 i += 1
                 return ast.Expr.Name(name: "self", pos: pos)
             if k == "if"
-                diag("expr.if.8", pos)
+                error_text(
+                    "expr.if.8",
+                    pos,
+                    "an `if` operand needs parentheses",
+                    "write `(if c then a else b)`, or bind the `if` to a name first",
+                    "",
+                )
                 return none
             if k == "match"
-                diag("gram.syntax.1", pos)
+                error_text(
+                    "gram.syntax.1",
+                    pos,
+                    "`{k}` can't be part of a larger expression",
+                    "bind the `{k}` to a name first, then use the name",
+                    "",
+                )
                 return none
         Sym(s) =>
             if s == "("
@@ -1682,7 +1928,13 @@ fn Parser.primary(mut self) ast.Expr?
                         elems.push(expression()?)
                     expect_sym(")", "`)` or `,` in the tuple", "type.tuple.2")?
                     if elems.len() < 2
-                        diag("type.tuple.2", pos)
+                        error_text(
+                            "type.tuple.2",
+                            pos,
+                            "a tuple has two or more elements",
+                            "write the value alone, without `(` `,` `)`",
+                            "",
+                        )
                         return none
                     return ast.Expr.TupleLit(items: elems, pos: pos)
                 expect_sym(")", "`)`", "gram.syntax.1")?
@@ -1774,9 +2026,9 @@ fn Parser.interpolation(mut self, parts List[Part], pos ast.Pos) ast.Expr?
                     diags.push(Diag(
                         rule: "lex.str.2",
                         pos: code[0].pos,
-                        msg: "",
+                        msg: "`\{\{` in a string isn't an escaped brace",
                         fixed: true,
-                        help: "",
+                        help: "write `\\\{` for a literal `\{`, or use a raw string `r\"...\"`",
                         fix: "",
                     ))
                     ok = false
@@ -1841,10 +2093,10 @@ fn Parser.if_expr(mut self) ast.Expr?
                 diags.push(Diag(
                     rule: "expr.if.1",
                     pos: else_pos,
-                    msg: "",
+                    msg: "AIL writes `else if` as `elif`",
                     fixed: true,
-                    help: "",
-                    fix: "",
+                    help: "write `elif`",
+                    fix: "write `elif`",
                 ))
                 return none
             # `else err` binds the error (expr.if.6).
@@ -1862,7 +2114,13 @@ fn Parser.if_then(mut self, cond ast.Cond, pos ast.Pos) ast.Expr?
     bump()
     a := expression_plain()?
     if not eat_kw("else")
-        diag("expr.if.8", here())
+        error_text(
+            "expr.if.8",
+            here(),
+            "`if c then a` needs `else b` on the same line",
+            "add `else` and the other value; for a statement with no `else`, put the body on its own line",
+            "",
+        )
         return none
     b := expression_plain()?
     ast.Expr.If(
@@ -1891,7 +2149,13 @@ fn Parser.match_expr(mut self) ast.Expr?
         unexpected("end of line after the `match` value", "expr.match.1")
         return none
     if not eat_indent()
-        diag("expr.match.1", here())
+        error_text(
+            "expr.match.1",
+            here(),
+            "a `match` needs an indented block of arms",
+            "write one `pattern => result` per line",
+            "",
+        )
         return none
     mut arms := List[ast.Arm]()
     while peek() != Tok.Dedent and peek() != Tok.Eof
@@ -1912,13 +2176,25 @@ fn Parser.arm(mut self) ast.Arm?
         guard = expression_plain()?
     if not eat_sym("=>")
         if at_sym(":") or at_sym("->")
-            error_fix("expr.match.1", here(), "arms are written `pattern => result`")
+            error_fix(
+                "expr.match.1",
+                here(),
+                "arms are written `pattern => result`",
+                "write `=>`",
+                "write `=>`",
+            )
             i += 1
         else
             match pat
                 Variant(q, nm, _, cpos) if nm == "case" and q == none =>
                     # AIL has no `case`: an arm is `pattern => result`.
-                    diag("expr.match.1", cpos)
+                    error_text(
+                        "expr.match.1",
+                        cpos,
+                        "AIL has no `case`: an arm is `pattern => result`",
+                        "drop `case`, e.g. `1 => \"one\"`",
+                        "",
+                    )
                 _ =>
                     unexpected("`=>` after the pattern", "expr.match.1")
             return none
@@ -1957,7 +2233,7 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             match value
                 IntLit(_) | CharLit(_) => lo_lit = value
                 StrLit(_) | BoolLit(_) =>
-                    diag("expr.match.12", pos)
+                    range_start_error(pos)
                     return none
         Wildcard(_) | Alt(_, _) | Variant(
             _,
@@ -1965,13 +2241,19 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
         ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) =>
-            diag("expr.match.12", pos)
+            range_start_error(pos)
             return none
     i += 1
     hpos := here()
     # expr.match.12: a range needs both ends (`lo..=hi`).
     if at_sym("=>") or at_sym(".") or at_kw("if")
-        diag("expr.match.12", hpos)
+        error_text(
+            "expr.match.12",
+            hpos,
+            "a range needs both ends, written with two dots",
+            "write `lo..=hi` for both ends, e.g. `0..=9`; `_` covers the rest",
+            "",
+        )
         return none
     hi := plain_pattern()?
     match hi
@@ -1986,7 +2268,13 @@ fn Parser.single_pattern(mut self) ast.Pattern?
             _,
             _,
         ) | Range(_, _, _, _) | TuplePat(_, _) | BindName(_, _) => i += 0
-    diag("expr.match.12", hpos)
+    error_text(
+        "expr.match.12",
+        hpos,
+        "the end of a range pattern must be an integer or character literal",
+        "write `lo..hi` or `lo..=hi` with literal ends",
+        "",
+    )
     none
 
 ## `_`, `Variant`, `Enum.Variant`, or a literal (expr.match.4, expr.match.7).
@@ -2049,7 +2337,13 @@ fn Parser.plain_pattern(mut self) ast.Pattern?
                 i += 1
                 return ast.Pattern.Literal(value: ast.Literal.BoolLit(k == "true"), pos: pos)
         Interp(_) | Float(_) =>
-            diag("expr.match.7", pos)
+            error_text(
+                "expr.match.7",
+                pos,
+                "a pattern can be an integer, character, string or `bool` literal",
+                "compare with `==` in an `if` instead",
+                "",
+            )
             return none
         Bytes(_) | Newline | Indent | Dedent | Eof => i += 0
     unexpected("a pattern (a variant name or `_`)", "expr.match.4")
@@ -2071,6 +2365,12 @@ fn Parser.tuple_pattern(mut self, pos ast.Pos) ast.Pattern?
             break
     expect_sym(")", "`)` or `,` in the tuple pattern", "type.tuple.6")?
     if elems.len() < 2
-        diag("type.tuple.6", pos)
+        error_text(
+            "type.tuple.6",
+            pos,
+            "a tuple pattern has two or more elements",
+            "write `(p, q)`",
+            "",
+        )
         return none
     ast.Pattern.TuplePat(elems: elems, pos: pos)
