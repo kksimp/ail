@@ -2547,13 +2547,13 @@ fn Gate.native_misc(mut self)
         "match {mixed}::adds (native pass, interpreter pass)",
         "match {mixed}::fails_on_purpose (native fail, interpreter fail)",
         "assertion failed at line 14",
-        "not-native {mixed}::uses_defer",
+        "match {mixed}::uses_defer (native pass, interpreter pass)",
         "skipped {mixed}::holds_for_all",
     ])
     nj := ail_run(["test", "--native", "--json", mixed]) else return
     last := nj.out.lines().last() else ""
     if nj.status != 0
-        or last != "\{\"summary\":true,\"match\":2,\"differ\":0,\"not-native\":1,\"skipped\":1}"
+        or last != "\{\"summary\":true,\"match\":3,\"differ\":0,\"not-native\":0,\"skipped\":1}"
         red("test --native --json", "exit {nj.status}\n{nj.out}")
     # ADR 0746: every row of the table has a construct, a wording and an owner.
     mut rows := List[List[str]]()
