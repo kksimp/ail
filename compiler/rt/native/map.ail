@@ -197,6 +197,14 @@ fn map_append(m int, h int, k int, v int) int
     store64(m + 80, e)
     e
 
+## The live entry in slot `i` of the entries array (`i` below `used`), or 0
+## for a removed one; `==` on maps and sets walks the slots with it.
+fn map_ent(m int, i int) int
+    e := load64(m + 40) + i * 24
+    if load64(e) == -1
+        return 0
+    e
+
 ## `m[k] = v`: replace in place, or insert last (type.map.1, type.map.3).
 fn map_set(m int, k int, v int)
     # The key just found by `get` is remembered: store without a call.
