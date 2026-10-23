@@ -12,7 +12,7 @@ explain  37 items
 fix  80 items
 fmt  63 items
 load  90 items
-mir  376 items
+mir  381 items
 obj  58 items
 syntax  105 items
 x64  75 items

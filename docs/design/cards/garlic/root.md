@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 88 (`ail test` lists them)
+tests: 91 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -54,12 +54,15 @@ fn rpc_id(Json) str
 struct Guard
 fn host_of(str) str
 fn sends(str) bool
+fn rpc_reply(str, str) str
 TOOLS_SRC := ...
 fn tools_json() str
 struct Gui
 fn address(str) str [fs io]
 MEASURE_RUNS := 5000
 struct Garlic
+WATCH_TOOLS := ...
+fn watched_text(str) str [clock env fs io net]
 impl std.app.App for Garlic
 fn to_app(draw.Op, Gui) std.app.Op
 GUI_W := 960.0
@@ -67,6 +70,7 @@ GUI_H := 600.0
 GUI_CELL_W := 7.8
 GUI_CELL_H := 16.0
 fn app_main(Browser, bool, bool, str) ! [app clock env fail fs io net net.serve proc random spawn]
+fn ticker(std.app.Inbox, Atomic[int]) [clock]
 fn serve(net.Server, std.app.Inbox, attach.Bridge, str) [io net]
 fn attached_main(mut Garlic, str) ! [clock env fail fs io mutates net net.serve proc random spawn]
 fn flag(List[str], str) str?
@@ -91,4 +95,4 @@ fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 fn flat(gfx.Scene) List[str]
 ```
 
-trimmed to fit 2000 tokens (~1140); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1195); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
