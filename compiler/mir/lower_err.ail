@@ -717,6 +717,9 @@ fn Lower.declare_errors(mut self, prog ast.Program)
 fn Lower.names_error(self, name str) bool
     if err_msgs.contains("{prefix}{name}")
         return true
+    # The built-in `Trapped` is named the same in every module.
+    if name == "Trapped"
+        return true
     if k := type_key(name)
         return err_msgs.contains(k)
     if k := enum_key(name)
