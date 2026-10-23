@@ -7,22 +7,21 @@
 ## The largest offset folded, in elements.
 MAX_OFF := 4095
 
-pub fn fold_addresses(f Func) Func
-    defs := defs_of(f)
-    mut g := f
+pub fn fold_addresses(mut g Func)
+    defs := defs_of(g)
     for b in 0..g.blocks.len()
         for k in 0..g.blocks[b].insts.len()
             i := g.blocks[b].insts[k]
             if i.op != "ldx" and i.op != "stx"
                 continue
-            d := inst_of(f, defs, i.args[1]) else continue
+            d := inst_of(g, defs, i.args[1]) else continue
             if (d.op != "add" and d.op != "sub") or d.site >= 0
                 continue
             mut y := d.args[0]
-            mut c := const_of(f, defs, d.args[1])
+            mut c := const_of(g, defs, d.args[1])
             if c == none and d.op == "add"
                 y = d.args[1]
-                c = const_of(f, defs, d.args[0])
+                c = const_of(g, defs, d.args[0])
             mut n := c else continue
             if d.op == "sub"
                 n = 0 - n
@@ -31,7 +30,7 @@ pub fn fold_addresses(f Func) Func
                 continue
             g.blocks[b].insts[k].args[1] = y
             g.blocks[b].insts[k].fimm = total.to_float()
-    simplify(g)
+    simplify_in(mut g)
 
 # ---- load and store primitives ----
 
@@ -52,10 +51,10 @@ fn prim_kind(name str) int
         "store8" => 2
         _ => 0
 
-pub fn fold_prim_addresses(f Func) Func
-    defs := defs_of(f)
-    mut uses := [0 for _ in 0..f.vals.len()]
-    for blk in f.blocks
+pub fn fold_prim_addresses(mut g Func)
+    defs := defs_of(g)
+    mut uses := [0 for _ in 0..g.vals.len()]
+    for blk in g.blocks
         for i in blk.insts
             for u in i.args
                 uses[u] += 1
@@ -63,12 +62,11 @@ pub fn fold_prim_addresses(f Func) Func
             uses[u] += 1
     # How many of a value's uses are the address of a load or store primitive:
     # a sum used only so can be folded into each of them and then dies.
-    mut addressed := [0 for _ in 0..f.vals.len()]
-    for blk in f.blocks
+    mut addressed := [0 for _ in 0..g.vals.len()]
+    for blk in g.blocks
         for i in blk.insts
             if i.op == "prim" and prim_kind(i.name) != 0
                 addressed[i.args[0]] += 1
-    mut g := f
     mut changed := false
     for b in 0..g.blocks.len()
         for k in 0..g.blocks[b].insts.len()
@@ -83,28 +81,28 @@ pub fn fold_prim_addresses(f Func) Func
             mut base := i.args[0]
             mut idx := -1
             mut disp := 0
-            mut d := inst_of(f, defs, base)
+            mut d := inst_of(g, defs, base)
             # `base + i * size`, or `i * size + base`.
             if x := d
                 if x.op == "add" and x.site < 0 and uses[base] == 1
-                    mut got := scaled(f, defs, uses, x.args[1], size)
+                    mut got := scaled(g, defs, uses, x.args[1], size)
                     mut other := x.args[0]
                     if got < 0
-                        got = scaled(f, defs, uses, x.args[0], size)
+                        got = scaled(g, defs, uses, x.args[0], size)
                         if got >= 0
                             other = x.args[1]
                     if got < 0 and size == 1
                         # A byte address `base + i`.
-                        if const_of(f, defs, x.args[1]) == none
+                        if const_of(g, defs, x.args[1]) == none
                             got = x.args[1]
                             other = x.args[0]
-                        elif const_of(f, defs, x.args[0]) == none
+                        elif const_of(g, defs, x.args[0]) == none
                             got = x.args[0]
                             other = x.args[1]
                     if got >= 0
                         idx = got
                         base = other
-                        d = inst_of(f, defs, base)
+                        d = inst_of(g, defs, base)
             # Constants added to the base.
             mut more := true
             while more
@@ -112,10 +110,10 @@ pub fn fold_prim_addresses(f Func) Func
                 x := d else break
                 if (x.op != "add" and x.op != "sub") or x.site >= 0 or uses[base] != addressed[base]
                     break
-                mut c := const_of(f, defs, x.args[1])
+                mut c := const_of(g, defs, x.args[1])
                 mut next := x.args[0]
                 if c == none and x.op == "add"
-                    c = const_of(f, defs, x.args[0])
+                    c = const_of(g, defs, x.args[0])
                     next = x.args[1]
                 n := c else break
                 total := disp + (if x.op == "sub" then 0 - n else n)
@@ -123,7 +121,7 @@ pub fn fold_prim_addresses(f Func) Func
                     break
                 disp = total
                 base = next
-                d = inst_of(f, defs, base)
+                d = inst_of(g, defs, base)
                 more = true
             if idx < 0 and disp == 0
                 continue
@@ -140,8 +138,8 @@ pub fn fold_prim_addresses(f Func) Func
             g.blocks[b].insts[k] = r
             changed = true
     if not changed
-        return g
-    simplify(g)
+        return
+    simplify_in(mut g)
 
 ## The `i` in `y = i * size` (a `mul` or `shl` with no overflow check and no
 ## other use), else -1.

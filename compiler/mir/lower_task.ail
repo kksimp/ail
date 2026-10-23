@@ -257,14 +257,17 @@ fn Lower.synth_begin(mut self, name str, params List[Ty]) List[int]
     ps
 
 fn Lower.synth_end(mut self, params List[int])
-    func := simplify(fold(simplify(Func(
+    mut func := Func(
         name: fname,
         params: params,
         ret: Ty.Unit,
         blocks: blocks,
         vals: vals,
         names: names,
-    ))))
+    )
+    simplify_in(mut func)
+    fold_in(mut func)
+    simplify_in(mut func)
     for err in verify(func)
         problems.push(Problem(
             rule: "native.build.2",
