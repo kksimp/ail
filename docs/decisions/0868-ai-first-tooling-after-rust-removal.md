@@ -21,10 +21,17 @@ nothing in a program that doesn't use it: no runtime check, no extra code, no sl
 1. **`ail ask`: semantic queries.** Questions such as "who writes field `x`?", "what calls
    `f`?" and "which effects reach `main`?" are answered from the compiler's own graph of the
    program, with no grep and no file reading.
-2. **Typed holes rank candidates.** `todo` (ADR 0147) keeps its token. The hole warning also
-   lists the in-scope values and calls whose type fits, ranked by fit. **`?` is not used**:
-   it is already the error-propagation operator and appears inside strings and comments, so
-   a second meaning would be ambiguous.
+2. **`uhwhatnow?`: the hole that asks** (name chosen by the designer, 2026-10-23).
+   `uhwhatnow?` is a typed hole like `todo` (ADR 0147): it has whatever type its place
+   needs, and evaluating it traps. Its warning lists the in-scope values and calls whose
+   type fits, ranked by fit. The lexer reads `uhwhatnow?` as **one keyword token**, and
+   `uhwhatnow` without the `?` is a reserved word that does not compile, with a fix that
+   adds the `?`. So it never meets the try operator: `x?` keeps its meaning, and no
+   identifier can be named `uhwhatnow`. The try operator on a hole would mean nothing
+   anyway, since a hole already has any type. **`todo` stays** as the quiet placeholder
+   for unfinished code: its warning is one line. `uhwhatnow?` is the question form and
+   gets the expanded, ranked answer. They differ only in how much the compiler says (as
+   item 6 does), and existing code keeps compiling.
 3. **Edit impact.** `ail edit` reports which tests and effects an edit touches, and
    `ail test --affected` runs only those.
 4. **Native time travel.** A native build records a run (inputs, scheduling, syscalls) when
@@ -47,8 +54,10 @@ items after the Rust-removal milestone.
 
 ## Rejected alternatives
 
-- **`?` as the hole token** (the designer's suggestion): it clashes with the try operator
-  (`x?`) and reads as a question mark in prose. `todo` already exists and says what it is.
+- **A bare `?` as the hole token:** it clashes with the try operator (`x?`).
+- **`uhwhatnow` without the `?`:** this parses too, but the `?` is what makes it read as
+  a question, which was the designer's point. As one token it costs nothing in parsing.
+- **Replacing `todo`:** this would break existing code and lose the quiet form.
 - **Build these on the interpreter first:** the interpreter is being removed; work done there
   would be thrown away.
 - **Always-on recording or attach:** this would cost speed in every program, against the
