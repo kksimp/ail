@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 77 (`ail test` lists them)
+tests: 78 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -37,6 +37,9 @@ fn form_fields(html.Doc, int, int) str  ## The form's fields, URL-encoded (`appl
 fn urlencode(str) str  ## `s` encoded for a form: letters, digits and `*-._` as they are, space as
 fn utf8(int) List[int]  ## The UTF-8 bytes of code point `k`.
 fn rpc_id(Json) str  ## The JSON-RPC id of request `j`, as it goes back: a number or a string.
+struct Guard  ## The trust rules of an agent session (docs/design/garlic-browser.md): the
+fn host_of(str) str  ## The host of `url`: "example.com" for "https://example.com:8080/a".
+fn sends(str) bool  ## Whether `do` sends data: it needs `"confirm":true` to run.
 TOOLS_SRC := ...  ## The tool list, with `<` and `>` for the braces of the JSON.
 fn tools_json() str
 struct Gui  ## The native window's side of the browser: the host's cell size in points
@@ -72,4 +75,4 @@ fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 fn flat(gfx.Scene) List[str]  ## The `Str` and `Rect` operations of `s` as `text@x,y` and `rect@x,y wxh`.
 ```
 
-trimmed to fit 2000 tokens (~1817); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1916); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
