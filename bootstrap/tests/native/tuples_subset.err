@@ -1,4 +1,1 @@
-bootstrap/tests/native/tuples_subset.ail:6:10: error[native.subset.1]: not in the native subset yet: `Map` with these type arguments
-bootstrap/tests/native/tuples_subset.ail:8:10: error[native.subset.1]: not in the native subset yet: `Set` with these type arguments
-bootstrap/tests/native/tuples_subset.ail:10:10: error[native.subset.1]: not in the native subset yet: a map of `(int, int)` to `int`
 bootstrap/tests/native/tuples_subset.ail:13:14: error[native.subset.1]: not in the native subset yet: a `Map[str, int]` in a tuple

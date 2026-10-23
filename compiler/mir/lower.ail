@@ -147,6 +147,8 @@ struct Lower
     ## the variants without fields that have a shared object.
     enums Map[str, List[Case]]
     eq_tys Map[str, Ty]
+    ## The types whose default text is being expanded (ADR 0864).
+    text_open List[str]
     singletons List[VariantRef]
     ## Program globals by key (ADR 0604), and the constants computed into
     ## them at start-up.
@@ -283,6 +285,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         ens_nargs: 0,
         enums: {},
         eq_tys: {},
+        text_open: [],
         singletons: [],
         globals: {},
         global_consts: [],
@@ -1157,6 +1160,10 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
     if is_uniq(v.ty)
         return uniq_move(e, v)
+    if is_branchy(e) and place_tail(e, true)
+        if v.ty.is_coll()
+            return copy_coll(v)
+        return if needs_copy(v.ty) then copy_value(v) else v.id
     if v.ty.is_coll() and is_place(e)
         return note_move(e, v, copy_coll(v))
     if not needs_copy(v.ty) or not is_place(e)
@@ -1175,6 +1182,7 @@ fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
         Name(n, _) =>
             key := lookup(n) else return copy_value(v)
             if borrowed.contains(key) then copy_value(v) else v.id
+        If | Match => if place_tail(e, false) then copy_value(v) else v.id
         _ => v.id
 
 ## A copy of the list `v`, deep through nested lists (own.val.1).
@@ -1709,6 +1717,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
+            if (name == "assert" or name == "assert_eq") and not is_rt and lookup(name) == none
+                return lower_assert(name, args, pos)
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(none, args, pos)
             if is_rt and PRIMS.contains(name)
