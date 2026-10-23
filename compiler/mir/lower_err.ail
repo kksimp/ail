@@ -540,7 +540,8 @@ fn Lower.bind_taken_error(mut self, name str, ty Ty)
 ## A value of type `Unit` when `e` has no success value.
 fn Lower.lower_else(mut self, e ast.Expr, other ast.Else, pos ast.Pos) Val?
     if r := str_to_int_recv(e)
-        return lower_str_to_int_else(r, other, pos)
+        if not receiver_try(r)
+            return lower_str_to_int_else(r, other, pos)
     if chain_try(e)
         return lower_else_chain(e, other, pos)
     m := lower_maybe(e)?

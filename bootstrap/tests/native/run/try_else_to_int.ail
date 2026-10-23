@@ -1,0 +1,9 @@
+fn port(name str?) int
+    name?.to_int() else 8080
+
+fn main()
+    print(port(none))
+    print(port("9"))
+    print(port("x"))
+    n := port("7") + 1
+    print(n)
