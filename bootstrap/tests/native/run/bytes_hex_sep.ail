@@ -1,0 +1,9 @@
+## type.bytes.14: `b.hex(sep)` puts `sep` between the byte pairs.
+fn main()
+    b := b"\x00\x0f\xa0\xff"
+    print(b.hex(" "))
+    print(b.hex(":"))
+    print(b.hex(", "))
+    print(b.hex(""))
+    print(b[0..1].hex("-"))
+    print(b[0..0].hex("-").len())

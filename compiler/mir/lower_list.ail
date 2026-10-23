@@ -129,7 +129,7 @@ fn Lower.lower_list_edit(
         )
     if (name == "sort" or name == "sorted") and vs.len() == 0
         k := match e
-            Int | Sized(_) => 0
+            Int | Sized(_) | Char => 0
             Str => 1
             Float | F32 => 2
             _ => -1
@@ -172,7 +172,7 @@ fn Lower.lower_list_edit(
         return opt_at(r, nonempty, last, e, false, npos)
     if (name == "min" or name == "max") and vs.len() == 0
         k := match e
-            Int | Sized(_) => 0
+            Int | Sized(_) | Char => 0
             Str => 1
             Float | F32 => 2
             _ => -1
