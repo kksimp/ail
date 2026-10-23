@@ -65,11 +65,148 @@ fn map_hash_str(s int) int
 fn map_hash(kind int, k int) int
     if kind == 1
         return map_hash_str(k)
+    if kind > 15
+        return shape_hash(kind, 0, k, 0).bit_and(4611686018427387903)
     map_hash_int(k)
+
+# ---- composite keys (ADR 0866) ----
+#
+# A key kind above 15 is a string object that says how a key is laid out:
+# `i` a word (int, char, bool), `f` a float, `s` a string, `L` and the shape
+# of its elements (a list; `b` elements are single bytes), `S` n `;` and n
+# shapes (a struct or tuple, one word per field), `E` n `;` and n variants
+# `V` m `;` and m shapes (an enum whose first word is the variant).
+
+fn shape_at(sh int, p int) int
+    load8(sh + 16 + p)
+
+## The number written at `p`, up to the `;`.
+fn shape_num(sh int, p int) int
+    mut n := 0
+    mut i := p
+    while shape_at(sh, i) != 59
+        n = n * 10 + shape_at(sh, i) - 48
+        i += 1
+    n
+
+## The index after the `;` that ends the number at `p`.
+fn shape_semi(sh int, p int) int
+    mut i := p
+    while shape_at(sh, i) != 59
+        i += 1
+    i + 1
+
+## The index after the shape that starts at `p`.
+fn shape_end(sh int, p int) int
+    c := shape_at(sh, p)
+    if c == 76
+        return shape_end(sh, p + 1)
+    if c == 83 or c == 69 or c == 86
+        n := shape_num(sh, p + 1)
+        mut i := shape_semi(sh, p + 1)
+        for _ in 0..n
+            i = shape_end(sh, i)
+        return i
+    p + 1
+
+## The index of the `V` of variant `tag`, for the enum shape at `p`.
+fn shape_vpos(sh int, p int, tag int) int
+    mut i := shape_semi(sh, p + 1)
+    for _ in 0..tag
+        i = shape_end(sh, i)
+    i
+
+fn shape_mix(h int, x int) int
+    y := (h + x) * -7046029254386353131
+    y.bit_xor(y.shr(29))
+
+## A float's bits, with -0.0 as 0.0 (they are equal).
+fn shape_float(v int) int
+    if v == -9223372036854775808
+        return 0
+    v
+
+fn shape_hash(sh int, p int, v int, h int) int
+    c := shape_at(sh, p)
+    if c == 105 or c == 98
+        return shape_mix(h, v)
+    if c == 102
+        return shape_mix(h, shape_float(v))
+    if c == 115
+        return shape_mix(h, map_hash_str(v))
+    if c == 76
+        n := load64(v)
+        data := load64(v + 16)
+        bytes := shape_at(sh, p + 1) == 98
+        mut r := shape_mix(h, n)
+        for i in 0..n
+            x := if bytes then load8(data + i) else load64(data + 8 * i)
+            r = shape_hash(sh, p + 1, x, r)
+        return r
+    if c == 83
+        n := shape_num(sh, p + 1)
+        mut i := shape_semi(sh, p + 1)
+        mut r := h
+        for k in 0..n
+            r = shape_hash(sh, i, load64(v + 8 * k), r)
+            i = shape_end(sh, i)
+        return r
+    tag := load64(v)
+    vp := shape_vpos(sh, p, tag)
+    m := shape_num(sh, vp + 1)
+    mut r := shape_mix(h, tag)
+    mut i := shape_semi(sh, vp + 1)
+    for k in 0..m
+        r = shape_hash(sh, i, load64(v + 8 * (k + 1)), r)
+        i = shape_end(sh, i)
+    r
+
+fn shape_eq(sh int, p int, a int, b int) bool
+    c := shape_at(sh, p)
+    if c == 105 or c == 98
+        return a == b
+    if c == 102
+        return shape_float(a) == shape_float(b)
+    if c == 115
+        return map_key_eq(1, a, b)
+    if c == 76
+        n := load64(a)
+        if n != load64(b)
+            return false
+        da := load64(a + 16)
+        db := load64(b + 16)
+        bytes := shape_at(sh, p + 1) == 98
+        for i in 0..n
+            x := if bytes then load8(da + i) else load64(da + 8 * i)
+            y := if bytes then load8(db + i) else load64(db + 8 * i)
+            if not shape_eq(sh, p + 1, x, y)
+                return false
+        return true
+    if c == 83
+        n := shape_num(sh, p + 1)
+        mut i := shape_semi(sh, p + 1)
+        for k in 0..n
+            if not shape_eq(sh, i, load64(a + 8 * k), load64(b + 8 * k))
+                return false
+            i = shape_end(sh, i)
+        return true
+    tag := load64(a)
+    if tag != load64(b)
+        return false
+    vp := shape_vpos(sh, p, tag)
+    m := shape_num(sh, vp + 1)
+    mut i := shape_semi(sh, vp + 1)
+    for k in 0..m
+        if not shape_eq(sh, i, load64(a + 8 * (k + 1)), load64(b + 8 * (k + 1)))
+            return false
+        i = shape_end(sh, i)
+    true
 
 fn map_key_eq(kind int, a int, b int) bool
     if a == b
         return true
+    if kind > 15
+        return shape_eq(kind, 0, a, b)
     if kind != 1
         return false
     n := load64(a)
@@ -117,6 +254,8 @@ fn map_find(m int, k int) int
     if load64(m + 80) != 0 and load64(m + 72) == k
         return load64(m + 80)
     kind := load64(m + 32)
+    if kind > 15
+        return map_probe(m, k, map_hash(kind, k))
     h := if kind == 1 then map_hash_str(k) else map_hash_int(k)
     map_probe(m, k, h)
 
@@ -416,6 +555,19 @@ fn map_at(m int, k int, head str, tail str) int
     flush_to(2)
     sys_exit(1)
     0
+
+## The trap of `m[k]` on a missing key whose text `text` the program built
+## (composite keys, ADR 0866).
+fn map_gone(head str, text str, tail str)
+    flush()
+    out_str(head)
+    out_str("the map has no key ")
+    out_str(text)
+    out_byte(10)
+    out_str(tail)
+    trace_frames(tail)
+    flush_to(2)
+    sys_exit(1)
 
 # ---- counting and set algebra (std.count.2, type.coll.16) ----
 
