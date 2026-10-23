@@ -613,6 +613,13 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
                 dt := expr(d, ok, true)
                 if not accepts(ok, dt)
                     mismatch("err.else.1", expr_pos(d), ok, dt)
+                    # A whole-number float literal where an `int` is expected is written `2`.
+                    match d
+                        Float(f, p) =>
+                            if ok == Ty.Int and f == f.floor() and diags.len() > 0 and diags[diags.len() - 1].rule == "err.else.1"
+                                whole := f.to_int()
+                                fix_last("write `{whole}` as an int", [fix.replace(p, "{f:.1}", "{whole}")])
+                        _ => ok = ok
         Leave(st) => stmt(st, none, false)
         Handler(name, body, bpos) =>
             mark := locals.len()

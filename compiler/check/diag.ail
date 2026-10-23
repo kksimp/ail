@@ -56,6 +56,10 @@ pub fn Diag.to_json(self, files List[ast.SourceFile]) str
     mut out := "\{\"severity\":\"{severity}\",\"rule\":\"{rule}\",\"file\":{quote(file)},\"line\":{line},\"col\":{pos.col},\"message\":{quote(message)}"
     if h := help
         out = "{out},\"help\":{quote(h)}"
+    # The titles of the fixes, in order; their edits are resolved against the
+    # source by the `fix` module (ADR 0203, ADR 0204).
+    if fixes.len() > 0
+        out = "{out},\"fix_titles\":[{[quote(f.title) for f in fixes].join(",")}]"
     "{out}}"
 
 ## `s` as a JSON string.

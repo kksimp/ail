@@ -96,8 +96,28 @@ fn key(line: &str) -> Key {
     (str_field(line, "rule"), str_field(line, "file"), num_field(line, "line"), num_field(line, "col"))
 }
 
+/// The titles of a diagnostic's fixes, from `"fixes":[{"title":..}]` (`ail check`)
+/// or `"fix_titles":[..]` (the AIL checker).
+fn fix_titles(line: &str) -> Vec<String> {
+    if let Some(i) = line.find("\"fix_titles\":[") {
+        let rest = &line[i + "\"fix_titles\":[".len()..];
+        let end = rest.find(']').unwrap_or(rest.len());
+        return rest[..end].split("\",\"").map(|t| t.trim_matches('"').replace("\\\"", "\"")).collect();
+    }
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(i) = rest.find("{\"title\":\"") {
+        rest = &rest[i..];
+        out.push(str_field(rest, "title"));
+        rest = &rest[8..];
+    }
+    out
+}
+
 struct Section {
     diags: Vec<Key>,
+    /// Each diagnostic's fix titles, beside `diags`.
+    fixes: Vec<Vec<String>>,
     /// Each diagnostic's message, beside `diags`.
     messages: Vec<String>,
     rules: Vec<String>,
@@ -160,7 +180,7 @@ fn ail_checker_agrees_with_the_bootstrap() {
         }
         if let Some(p) = line.strip_prefix("== ") {
             current = p.to_string();
-            sections.insert(current.clone(), Section { diags: Vec::new(), messages: Vec::new(), rules: Vec::new(), skips: Vec::new() });
+            sections.insert(current.clone(), Section { diags: Vec::new(), fixes: Vec::new(), messages: Vec::new(), rules: Vec::new(), skips: Vec::new() });
         } else if let Some(r) = line.strip_prefix("rules ") {
             sections.get_mut(&current).unwrap().rules = r.split(' ').map(String::from).collect();
         } else if let Some(s) = line.strip_prefix("skip ") {
@@ -173,12 +193,15 @@ fn ail_checker_agrees_with_the_bootstrap() {
             let sec = sections.get_mut(&current).unwrap();
             sec.diags.push(key(line));
             sec.messages.push(str_field(line, "message"));
+            sec.fixes.push(fix_titles(line));
         }
     }
     let mut agree = 0;
     let mut failures = Vec::new();
     let (mut agree_all, mut total_diags, mut matched_diags, mut same_text) = (0usize, 0usize, 0usize, 0usize);
     let mut differ_all: Vec<String> = Vec::new();
+    let (mut fixes_total, mut same_fixes) = (0usize, 0usize);
+    let mut fix_diffs: Vec<String> = Vec::new();
     for (prog, path) in &dumps {
         let sec = sections.get(&path.to_string_lossy().into_owned()).expect("a section per dump");
         let out = ail().args(["check", "--json", prog]).output().unwrap();
@@ -206,6 +229,15 @@ fn ail_checker_agrees_with_the_bootstrap() {
             agree_all += 1;
             // Wording isn't gated: the report counts the messages that match.
             same_text += lines.iter().zip(&sec.messages).filter(|(l, m)| str_field(l, "message") == **m).count();
+            for (l, got) in lines.iter().zip(&sec.fixes) {
+                fixes_total += usize::from(l.contains("\"fixes\":"));
+                let want = fix_titles(l);
+                if want == *got {
+                    same_fixes += usize::from(!want.is_empty());
+                } else {
+                    fix_diffs.push(format!("{prog}: {} line {}\n  ail check: {want:?}\n  AIL:       {got:?}", str_field(l, "rule"), num_field(l, "line")));
+                }
+            }
         } else {
             differ_all.push(format!("{prog}\n  ail check: {all:?}\n  AIL:       {:?}", sec.diags));
         }
@@ -218,6 +250,13 @@ fn ail_checker_agrees_with_the_bootstrap() {
         dumps.len()
     );
     println!("{same_text} of those {total_diags} diagnostics have the same message");
+    println!("{same_fixes} of {fixes_total} diagnostics with fixes have the same fix titles");
+    // `ail check` drops a fix whose anchor doesn't match the source, which the
+    // AIL checker can't tell until the `fix` module resolves edits; until then
+    // the report lists the differences and gates only on a missing fix.
+    println!("{} fix differences:\n{}", fix_diffs.len(), fix_diffs.join("\n"));
+    let missing: Vec<&String> = fix_diffs.iter().filter(|d| d.contains("AIL:       []")).collect();
+    assert!(missing.is_empty(), "{} fixes missing from the AIL checker:\n{:?}", missing.len(), missing);
     assert!(failures.is_empty(), "{} disagreements:\n{}", failures.len(), failures.join("\n"));
     assert!(
         differ_all.is_empty(),
