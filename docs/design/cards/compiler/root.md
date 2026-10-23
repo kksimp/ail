@@ -21,7 +21,6 @@ fn executable_hex(mir.Module, str, str) str [io]  ## The executable of lowered p
 fn runtime_syntax(str, str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn lower_file(str, ast.Program?, str) !mir.Module [clock env fail fs io proc]  ## Parse a program and the modules it imports, and lower them to MIR
 fn mentions_prelude(List[mir.Source]) bool  ## Whether a source names a module of the prelude written in AIL: the test
-fn manifest_dep(str, str) str? [fs io]  ## The directory of dependency `name` in the manifest `ROOT/ail.pkg`:
 fn std_file(str, str) str  ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
 fn derived_sources() !Derived [env fail fs io]  ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
 fn derive_builtin(List[mir.Source]) List[mir.Source] [io]  ## The methods of the `impl`s the built-in generators derive (ADR 0850) that
@@ -38,6 +37,7 @@ fn mentions_ui(str) bool  ## Whether `text` names `ui.` as a word: not the end o
 fn parse_source(str, str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_module(str, List[str]) !List[mir.Source] [fail fs io]  ## The files of one module, parsed together: a generic name declared in one
 fn parse_text(str, str, str) mir.Source [io]  ## Text from `path`, parsed; syntax errors are printed and the run fails.
+PRELUDE_GENERIC := ...  ## The generic functions of the prelude's `jsonderive` module (`mir/prelude_embed.ail`): the
 fn parse_with(str, str, str, Set[str]) mir.Source [io]
 CACHE_KEEP := 64  ## Entries the cache keeps; the least recently used go first (native.build.5).
 fn cache_dir() str [env]  ## The build cache directory: `AIL_CACHE_DIR`, `$XDG_CACHE_HOME/ail/build`,
@@ -45,6 +45,7 @@ fn tree_stamp(str, str) str [fs io]  ## One line per `.ail` file under `root` (p
 fn cache_key(str, str, str, str) str [env fs io]  ## The key of building `file` for `target`: everything that decides the
 fn cache_trim(str) [fs io proc]  ## Keep the newest `CACHE_KEEP` executables of `dir` (`ls -t` lists newest first;
 fn cli_prepare(str) str [clock env fs io proc]  ## The cached executable of `file` for the host, built first when missing.
+fn cli_prepare_with(str, str, str) str [clock env fs io proc]  ## `cli_prepare` with the run limits baked in (`--timeout MS`, `--max-memory MB`).
 fn cli_prepare_cmd(List[str]) [clock env fs io proc]
 fn cli_run(List[str]) [clock env fs io proc]  ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn chop(str) str  ## `s` without one final newline.
@@ -53,4 +54,4 @@ fn check_cmd(List[str]) [clock env fs io proc]  ## `check-program [--json] FILE|
 fn api_cmd(List[str]) [clock env fs io proc]  ## `api [--outline] FILE [--text | --pretty]`: the outline of one file
 ```
 
-trimmed to fit 2000 tokens (~1871); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1928); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

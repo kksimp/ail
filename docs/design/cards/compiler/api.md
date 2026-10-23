@@ -15,11 +15,21 @@ pub enum api.Form  ## How the outline is written.
 pub struct api.Facts  ## What the checker knows about the program, besides its declarations.
     pub effects List[List[str]]
     pub errors Map[int, List[str]]
-pub fn api.outline(prog ast.Program, facts api.Facts, path str, form api.Form) str  ## The outline of `prog` for the file `path`, in `form`; `symbols` and
-pub fn api.outline_expanded(prog ast.Program, facts api.Facts, texts List[str], path str, form api.Form) str  ## `outline` with `--expanded` (ct.gen.4); `texts` are the program's file sources.
+    pub symbols Map[int, str]
+    pub weak_symbols Map[int, str]
+pub fn api.outline(prog ast.Program, facts api.Facts, path str, form api.Form, symbols bool) str  ## The outline of `prog` for the file `path`, in `form`; `symbols` and
+pub fn api.outline_expanded(prog ast.Program, facts api.Facts, texts List[str], path str, form api.Form, symbols bool) str  ## `outline` with `--expanded` (ct.gen.4); `texts` are the program's file sources.
 pub fn api.package_outline(prog ast.Program, facts api.Facts, dir str, form api.Form) str  ## The outline of the package `dir` in `form`.
 pub fn api.package_command(dir str, form api.Form, std str) int [clock env fs io proc]  ## `ail api DIR`; the exit status. Doc comments are attached file by file.
 pub fn api.query_command(rest List[str], std str) int [clock env fs io proc]  ## `ail api --locals|--type|--refs [DIR] FILE LINE COL [--pretty]`; the exit
+pub struct api.Ref  ## One use: the id of the declaration and where the name is written.
+    pub id str
+    pub pos ast.Pos
+pub fn api.references(prog ast.Program, symbols Map[int, str], weak Map[int, str], own_file bool) List[api.Ref]  ## Every reference in `prog`, by position then id, without the prelude and
+pub struct api.Found  ## Every reference of `prog` unsorted, without the prelude, and the value
+    pub refs List[api.Ref]
+    pub names List[(ast.Pos, str)]
+pub fn api.collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) api.Found
 ```
 
-trimmed to fit 2000 tokens (~709); dropped: private items
+trimmed to fit 2000 tokens (~923); dropped: private items

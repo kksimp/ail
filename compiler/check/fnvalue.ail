@@ -26,6 +26,7 @@ fn Checker.fn_value(mut self, n str, i int, at ast.Pos) Ty
         )
         return Ty.Unknown
     fn_values[pos_key(at)] = i
+    symbols[pos_key(at)] = "fn:{n}"
     Ty.FnTy([p.ty for p in sig.params], sig.ret)
 
 ## type.fn.3: call a value of function type.

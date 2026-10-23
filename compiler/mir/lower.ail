@@ -128,6 +128,8 @@ struct Lower
     problem_files List[int]
     ## The functions with contracts, by key, and the file of every function.
     contracted Map[str, ast.FnDecl]
+    ## What an impl method inherits from its trait's method (contract.inh.1-3).
+    inh Inherit
     ## The structs with `invariant` lines, and the file of each.
     invariants Map[str, List[ast.Contract]]
     inv_file Map[str, int]
@@ -276,6 +278,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         const_home: {},
         problem_files: [],
         contracted: {},
+        inh: Inherit(of: {}, label: {}, ens_from: none, ens_n: 0, ens_origin: ""),
         invariants: {},
         inv_file: {},
         inv_key: "",
@@ -454,6 +457,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             continue
         before := problems.len()
         declare_fn(f, pre)
+        note_inherited(f, prog, pre)
         if problems.len() > before
             bad.add(fn_key(f, pre))
             sigs.remove(fn_key(f, pre))
@@ -1408,11 +1412,23 @@ fn Lower.lower_for(
 
 ## Whether a loop body may change the list it iterates (so the loop needs
 ## a copy: `for x in xs` sees the list as it was, expr.loop.3).
+## A path such as `dom[id].children` may be a field of `self`, which any
+## call in the body can change through an implicit `mut self`, so for a
+## path every call counts too ("#call").
 fn mutates(body List[ast.Stmt], iter ast.Expr) bool
-    name := match iter
+    match iter
+        Name(n, _) => block_mutates(body, n)
+        Index(_, _, _) | Member(_, _, _) =>
+            root := path_root(iter) else return false
+            block_mutates(body, root) or block_mutates(body, "#call")
+        _ => false
+
+fn path_root(e ast.Expr) str?
+    match e
         Name(n, _) => n
-        _ => return false
-    block_mutates(body, name)
+        Index(r, _, _) => path_root(r)
+        Member(r, _, _) => path_root(r)
+        _ => none
 
 fn block_mutates(body List[ast.Stmt], name str) bool
     for s in body
@@ -1449,10 +1465,11 @@ fn args_mutate(args List[ast.Arg], name str) bool
 ## argument naming it, counts as a change.
 fn expr_mutates(e ast.Expr, name str) bool
     match e
-        Method(recv, m, _, args) => root_is(recv, name) and m != "len"
+        Method(recv, m, _, args) => name == "#call"
+            or root_is(recv, name) and m != "len"
             or args_mutate(args, name)
             or expr_mutates(recv, name)
-        Call(_, args, _) => args_mutate(args, name)
+        Call(_, args, _) => name == "#call" or args_mutate(args, name)
         Binary(_, a, b, _) => expr_mutates(a, name) or expr_mutates(b, name)
         Unary(_, a, _) => expr_mutates(a, name)
         Index(r, i, _) => expr_mutates(r, name) or expr_mutates(i, name)
@@ -1562,6 +1579,8 @@ fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
 
 ## A call `f(...)`, or a variant built by calling it.
 fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+    if ordered := label_ordered(callee, args)
+        return lower_call_expr(callee, ordered, pos, want)
     if is_generic_callee(callee)
         return lower_generic_callee(callee, args, pos, want)
     if v := call_variant(callee, want)
@@ -1953,6 +1972,7 @@ fn Lower.lower_method(
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if a := assoc_owner(recv)
+        assoc_instance(recv, name)
         return struct_call("{a}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))
