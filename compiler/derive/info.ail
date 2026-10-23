@@ -137,7 +137,7 @@ fn field_infos(prog ast.Program, fields List[ast.Field], module str) List[FieldI
     ]
 
 ## A type as written, as `ail api` prints it.
-fn show_type(t ast.TypeRef) str
+pub fn show_type(t ast.TypeRef) str
     match t.shape
         Named(name, args) =>
             if args.len() == 0
