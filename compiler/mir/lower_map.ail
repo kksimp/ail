@@ -12,7 +12,7 @@ use ast
 # ---- types ----
 
 fn is_key_ty(t Ty) bool
-    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Char or t.is_sized()
+    t == Ty.Int or t == Ty.Bool or t == Ty.Str or t == Ty.Bytes or t == Ty.Char or t.is_sized()
 
 fn is_value_ty(t Ty) bool
     is_number(t)
@@ -40,7 +40,7 @@ fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
 ## How the runtime prints and hashes a key: 0 `int`, 1 `str`, 2 `bool`, 4 `char`.
 fn key_kind(t Ty) int
     match t
-        Str => 1
+        Str | Bytes => 1
         Bool => 2
         Char => 4
         _ => 0
