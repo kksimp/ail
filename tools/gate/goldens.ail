@@ -24,7 +24,23 @@ struct Check
     names List[str]
     strict bool
 
+## Programs whose output names the host (home, working directory, scratch paths,
+## file sizes): no frozen golden; nativex compares them with `ail run` instead.
+HOST_BOUND := [
+    "os_env_time",
+    "os_fs",
+    "os_fs_copy",
+    "os_fs_errors",
+    "os_fs_glob",
+    "os_fs_repo",
+    "os_fs_walk",
+    "os_stdin",
+    "os_stdin_lossy",
+]
+
 fn Check.wanted(self, stem str) bool
+    if HOST_BOUND.contains(stem)
+        return false
     names.is_empty() or names.contains(stem)
 
 fn temp_dir() str

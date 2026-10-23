@@ -166,7 +166,10 @@ fn parse_decls(lines List[str]) Map[str, Decl]
                         elif v := po
                             variants.push(Variant(
                                 name: f.slice(0, v),
-                                fields: parse_params(f.slice(v + 1, f.len() - 1)),
+                                fields: if f.ends_with(")") then parse_params(f.slice(
+                                    v + 1,
+                                    f.len() - 1,
+                                )) else [],
                             ))
                 if is_struct
                     variants.push(Variant(name: "", fields: fields))
