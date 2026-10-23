@@ -314,6 +314,7 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                 Name(n, _) =>
                     s := callee_sig(n) else return generic_fails(callee_key(n))
                     s.fails
+                TypeArgs(n, _, _) => generic_fails(callee_key(n))
                 _ => false
         Method(
             recv,
