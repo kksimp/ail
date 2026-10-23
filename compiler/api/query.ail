@@ -1,0 +1,156 @@
+## Position queries of `ail api`: `--locals`, `--type` and `--refs`
+## (api.loc.1-2, api.type.1-2, api.refs.1-3, ADRs 0258-0261), as
+## `bootstrap/src/api/query.rs`. The checker records the facts
+## (`check/facts.ail`); this file only selects and prints them.
+use ast
+use check
+use doc
+use load
+
+QUERY_USAGE := "usage: ail api (--locals | --type | --refs) [DIR] FILE LINE COL [--pretty] [--json]"
+
+## The first line of the second file (`FILE_LINES`): the largest line of the first file.
+QUERY_FILE_LINES := 1048576
+
+enum Query
+    Locals
+    Type
+    Refs
+
+fn indent_of(line str) int
+    mut n := 0
+    for c in line.chars()
+        if c != ' '
+            break
+        n += 1
+    n
+
+fn is_blank(s str) bool
+    t := s.trim()
+    t == "" or t.starts_with("#")
+
+## api.loc.2: a local is in scope from its declaration (after its name on
+## that line) or, for a parameter, loop variable or pattern name, from the
+## first statement of the block it scopes, down to the first line indented
+## less than the line it starts on. Blank and comment lines don't end it.
+fn in_scope(l check.LocalFact, lines List[str], line int, col int) bool
+    a := l.anchor
+    if a.line > QUERY_FILE_LINES or line < a.line
+        return false
+    if line == a.line and l.decl != none and col <= a.col
+        return false
+    if a.line > lines.len()
+        return false
+    base := indent_of(lines[a.line - 1])
+    for n in a.line + 1..line + 1
+        if n > lines.len()
+            return false
+        s := lines[n - 1]
+        if n == line and s.trim() == ""
+            # An empty cursor line takes its indent from the cursor.
+            if col - 1 < base
+                return false
+        elif not is_blank(s) and indent_of(s) < base
+            return false
+    true
+
+fn visible_locals(
+    facts List[check.LocalFact],
+    lines List[str],
+    line int,
+    col int,
+) List[check.LocalFact]
+    [l for l in facts if in_scope(l, lines, line, col)]
+
+fn local_json(l check.LocalFact) J
+    mut line := J.Null
+    mut col := J.Null
+    if p := l.at
+        line = J.Int(p.line)
+        col = J.Int(p.col)
+    J.Obj([
+        kv("name", J.Str(l.name)),
+        kv("type", J.Str(l.ty)),
+        kv("mut", J.Bool(l.mutable)),
+        kv("kind", J.Str(l.kind)),
+        kv("line", line),
+        kv("col", col),
+    ])
+
+fn sort_key(l check.LocalFact) int
+    mut at := 0
+    if p := l.at
+        at = p.line * 100000 + p.col
+    (if l.kind == "self" then 0 else 1) * 1000000000000 + at
+
+## `ail api --locals|--type|--refs [DIR] FILE LINE COL [--pretty]`; the exit
+## status. `rest` holds the arguments, the flag among them.
+pub fn query_command(rest List[str], std str) int
+    mut query := Query.Locals
+    mut pretty := false
+    mut json := false
+    mut pos_args := List[str]()
+    for a in rest
+        match a
+            "--locals" => query = Query.Locals
+            "--type" => query = Query.Type
+            "--refs" => query = Query.Refs
+            "--pretty" => pretty = true
+            "--json" => json = true
+            _ =>
+                if a.starts_with("--")
+                    io.eprint(QUERY_USAGE)
+                    return 2
+                pos_args.push(a)
+    mut target := ""
+    mut file := ""
+    mut at := List[str]()
+    # api.pkg.2: `DIR FILE LINE COL` asks about a file in the context of its whole package.
+    if pos_args.len() == 3
+        file = pos_args[0]
+        target = file
+        at = pos_args[1..]
+    elif pos_args.len() == 4 and not pos_args[0].ends_with(".ail")
+        target = pos_args[0]
+        file = pos_args[1]
+        at = pos_args[2..]
+    else
+        io.eprint(QUERY_USAGE)
+        return 2
+    line := at[0].to_int() else
+        io.eprint(QUERY_USAGE)
+        return 2
+    col := at[1].to_int() else
+        io.eprint(QUERY_USAGE)
+        return 2
+    src := fs.read_text(file) else err
+        io.eprint("error: can't read {file}: {err}")
+        return 2
+    loaded := load.load(target, std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
+            return 2
+    lines := src.lines()
+    head := [
+        kv("api", J.Int(API_VERSION)),
+        kv("file", J.Str(file)),
+        kv("line", J.Int(line)),
+        kv("col", J.Int(col)),
+    ]
+    mut out := head
+    match query
+        Locals =>
+            vis := visible_locals(analysis.locals, lines, line, col).sorted(by: |l| sort_key(l))
+            out.push(kv("locals", J.Arr([local_json(l) for l in vis])))
+        Type | Refs =>
+            io.eprint("error: this query isn't native yet")
+            return 2
+    print(write_json(J.Obj(out), pretty, 0))
+    0

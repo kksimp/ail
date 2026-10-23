@@ -172,7 +172,13 @@ fn Window.send_view(mut self, first bool)
             while e < cols and bgs[r * cols + e] == bgs[i]
                 e += 1
             if bgs[i] != BLACK
-                ops.push(app.Op.Fill(c.to_float() * cwp, r.to_float() * chp, (e - c).to_float() * cwp, chp, bgs[i]))
+                ops.push(app.Op.Fill(
+                    c.to_float() * cwp,
+                    r.to_float() * chp,
+                    (e - c).to_float() * cwp,
+                    chp,
+                    bgs[i],
+                ))
             c = e
         c = 0
         while c < cols
@@ -184,7 +190,17 @@ fn Window.send_view(mut self, first bool)
             for k in c..e
                 text = "{text}{chars[r * cols + k]}"
             if text.trim_end() != "" or sts[i].bit_and(4) != 0
-                ops.push(app.Op.Str(c.to_float() * cwp, r.to_float() * chp, text, "mono", s, fgs[i], sts[i].bit_and(1) != 0, sts[i].bit_and(2) != 0, sts[i].bit_and(4) != 0))
+                ops.push(app.Op.Str(
+                    c.to_float() * cwp,
+                    r.to_float() * chp,
+                    text,
+                    "mono",
+                    s,
+                    fgs[i],
+                    sts[i].bit_and(1) != 0,
+                    sts[i].bit_and(2) != 0,
+                    sts[i].bit_and(4) != 0,
+                ))
             c = e
     if cur_col >= 0 and cur_col < cols and cur_row >= 0 and cur_row < rows
         x := cur_col.to_float() * cwp
@@ -260,7 +276,9 @@ fn Window.decode(mut self, line str) Event?
     if ev.kind == "key"
         return Event.Key(ev.text, ev.ctrl or ev.meta, ev.alt, ev.shift)
     if ev.kind == "click"
-        button := if ev.text == "right" then "right" else if ev.text == "left" then "left" else "middle"
+        button := if ev.text
+            == "right" then "right" else if ev.text
+            == "left" then "left" else "middle"
         return Event.Mouse((ev.x / cw()).to_int(), (ev.y / ch()).to_int(), button, "down")
     if ev.kind == "scroll"
         lines := (ev.dy / ch()).round().to_int()
