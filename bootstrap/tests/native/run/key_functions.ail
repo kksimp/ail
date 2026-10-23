@@ -1,0 +1,29 @@
+## Key functions: `by: |x| key` on sorted, sort, min and max (expr.key.1-4, ADR 0250).
+struct Person
+    name str
+    age int
+
+fn Person.older(self, people List[Person]) List[str]
+    [p.name for p in people.sorted(by: |p| -p.age) if p.age > age]
+
+fn main()
+    people := [
+        Person(name: "bo", age: 30),
+        Person(name: "al", age: 25),
+        Person(name: "cy", age: 30),
+    ]
+    print([p.name for p in people.sorted(by: |p| -p.age)])
+    print(people.min(by: |p| p.age))
+    print(people.max(by: |p| p.age))
+    mut byname := people
+    byname.sort(by: |p| p.name)
+    print([p.name for p in byname])
+    counts := {"b": 2, "a": 2, "c": 5}
+    print(counts.keys().sorted().sorted(by: |k| -counts[k]))
+    print({"x", "yy", "z"}.sorted(by: |s| s.len()))
+    empty := List[Person]()
+    print(empty.min(by: |p| p.age))
+    print(people[0].older(people))
+    print([3, 1, 2].take(2))
+    print([3, 1, 2].take(9))
+    print([3, 1, 2].take(0))
