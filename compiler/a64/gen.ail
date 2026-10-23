@@ -449,21 +449,7 @@ fn Gen.gen_block(mut self, b int)
     hole_moves(b, true)
     t := blk.term
     match t.kind
-        "jump" =>
-            to := t.targets[0]
-            ps := f.blocks[to].params
-            parallel([move_of(loc[ps[j]], t.args[0][j]) for j in 0..ps.len()])
-            if to != next_block
-                if rotates(to)
-                    # The loop test again here, instead of a jump back to it.
-                    h := f.blocks[to]
-                    branch_to(
-                        compare(h.insts[h.insts.len() - 1]),
-                        h.term.targets[0],
-                        h.term.targets[1],
-                    )
-                else
-                    a.b(blabels[to])
+        "jump" => goto(t.targets[0], t.args[0], true)
         "branch" =>
             yes := t.targets[0]
             no := t.targets[1]
@@ -499,6 +485,41 @@ fn Gen.branch_to(mut self, cc int, yes int, no int)
 ## Whether block `to` is only a comparison and a branch: a jump to it is
 ## cheaper as the comparison and branch themselves, one instruction fewer
 ## on the way round a loop (loop rotation, ADR 0611).
+## Move `args` into the parameters of `to` and continue there. A block of one
+## or two plain instructions that only jumps on is repeated here, instead of
+## jumped to; `inline` is false inside such a copy.
+fn Gen.goto(mut self, to int, args List[int], inline bool)
+    ps := f.blocks[to].params
+    parallel([move_of(loc[ps[j]], args[j]) for j in 0..ps.len()])
+    if to == next_block
+        return
+    if rotates(to)
+        # The loop test again here, instead of a jump back to it.
+        h := f.blocks[to]
+        branch_to(compare(h.insts[h.insts.len() - 1]), h.term.targets[0], h.term.targets[1])
+    elif inline and tail_block(to)
+        h := f.blocks[to]
+        for i in h.insts
+            gen_inst(i)
+        goto(h.term.targets[0], h.term.args[0], false)
+    else
+        a.b(blabels[to])
+
+## Whether `to` is one or two instructions (no call) and a jump, with nothing
+## the allocator moves in or out of it: cheaper to repeat than to jump to.
+fn Gen.tail_block(self, to int) bool
+    h := f.blocks[to]
+    n := h.insts.len()
+    if to == wrap or n == 0 or n > 2 or h.term.kind != "jump"
+        return false
+    for i in h.insts
+        if codegen.is_call(i)
+            return false
+    for hl in holes
+        if hl.block == to
+            return false
+    true
+
 fn Gen.rotates(self, to int) bool
     h := f.blocks[to]
     n := h.insts.len()

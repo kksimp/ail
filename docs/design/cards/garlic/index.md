@@ -1,14 +1,14 @@
 # garlic
-(root)  59 items
+(root)  79 items
 css  31 items
 draw  16 items
 garlicjs.syntax  89 items
-garlicjs.vm  237 items
-gfx  44 items
+garlicjs.vm  242 items
+gfx  45 items
 html  32 items
 image  74 items
 images  6 items
-jsdom  4 items
-page  41 items
+jsdom  7 items
+page  43 items
 std.app  41 items
 std.net.jar  14 items

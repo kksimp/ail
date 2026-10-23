@@ -71,6 +71,7 @@ pub fn check.was_were(int) str
 pub fn check.suggest(str, List[str]) str?  ## The closest of `candidates` to `name`, within a third of its length
 pub fn check.edit_distance(str, str) int
 pub fn check.foreign_type_word(str) str?  ## A type name from another language and the AIL type for it.
+pub fn check.std_module_names() List[str]  ## The names of the standard modules (std.use.1), for the loader's messages.
 pub enum check.Ty
 pub enum check.Errs  ## The error part of `T ! E`: a written set, or a function's inferred set.
 pub enum check.Def  ## A declared struct or enum.
@@ -79,4 +80,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]  ## `ts` sorted by `ty_k
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1820); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1862); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

@@ -142,6 +142,11 @@ An agent drives Garlic headless, with no window:
   presses a button, toggles a box), `type:12=TEXT`, `submit:12` (the form
   of node 12), `check:12`, `select:12=OPTION`, `open:URL`, `back`, `forward`,
   `find:TEXT`, `scroll:ROW`, `reload`.
+  On a page with scripts the engine stays alive after load: `click`, `type`
+  and `submit` first dispatch `click`, `input`/`change` and `submit` through
+  the page's listeners (a cancelled event stops the default), replay what
+  they changed into the tree, and run due timers. Pages restored by Back
+  have no live engine.
 - `--session` keeps one browser open: one JSON action per line on stdin
   (`{"do":"follow","link":3}`, `{"do":"type","id":12,"text":"garlic"}`; the
   argument is `link`, `id` or `row`, or `url` or `text`), answered with the
@@ -257,6 +262,8 @@ the page show up in the page model so an agent can see what a script did.
 | HTTP GET over TLS 1.3 | done (`std.net`, ADR 0360) | nothing |
 | Request headers and methods | done (`net.request`, lane 124): Garlic sends its own `User-Agent` and `Accept`, and POSTs forms | nothing |
 | Cookies | `Response.all_headers` done (lane 124); the jar arrives with the JS engine's Garlic glue (lane 160) | logins |
+| `fetch`, XMLHttpRequest | done (lane 177) | page scripts; see [garlic-js.md](garlic-js.md) |
+| Sub-resource cache | done (lane 177) | sheets and scripts: `max-age` freshness, `ETag`/`Last-Modified` revalidation (304 renews), `no-store`/`private` not kept; Garlic follows redirects itself so each hop sends and stores cookies |
 | Binary bodies | done (`net.request_bytes`, lane 123) | images and fonts still need decoders |
 | gzip/deflate | done (`std.compress` on bytes, lane 128); Garlic sends `Accept-Encoding: gzip, deflate` | nothing |
 | Regex | lane 127 | nothing essential (CSS and HTML are hand-written state machines) |

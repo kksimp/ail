@@ -151,6 +151,9 @@ pub fn vm.cosh(float) float
 pub fn vm.tanh(float) float
 pub fn vm.cbrt(float) float
 pub fn vm.decode_entities(str) str
+pub struct vm.MoTarget
+pub struct vm.Observer
+pub vm.MO_MARK := "\u0000mutation-observers"
 pub fn vm.to_fixed(float, int) str
 pub fn vm.to_exponential(float, int?) str
 pub fn vm.to_precision(float, int) str
@@ -194,4 +197,4 @@ pub fn vm.from_units(List[int]) str
 pub fn vm.unit_len(str) int
 ```
 
-trimmed to fit 4000 tokens (~2232); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~2265); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
