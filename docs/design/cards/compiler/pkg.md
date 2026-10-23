@@ -2,6 +2,7 @@
 
 ## pkg
 ```
+pub fn pkg.command(args List[str]) int [clock env fs io proc]  ## Run `ail pkg ARGS`; the exit status. Only `update` exists.
 pub pkg.LOCK := "ail.lock"  ## The lockfile's name (mod.pkg.8).
 pub struct pkg.Options  ## How the command that loads the program treats fetching and the lock. The
     pub write_lock bool  ## Write `ail.lock` when it is absent or stale (`run`, `test`).
@@ -60,7 +61,8 @@ pub struct pkg.Target  ## What an import path written in some module names.
     pub dir str
     pub undeclared bool  ## The import names a package that the importing package doesn't declare (mod.pkg.4).
 pub fn pkg.read(root str) pkg.Packages [clock env fs io proc]  ## Read the manifest at `root`, if any, and every path dependency's.
+pub fn pkg.read_with(root str, opts pkg.Options) pkg.Packages [clock env fs io proc]  ## `read` with explicit fetch and lock options (`ail pkg update`).
 pub fn pkg.update(packages pkg.Packages, names List[str]) (List[str], List[syntax.Diag])  ## The lines `locked NAME COMMIT` of the dependencies resolved, or the
 ```
 
-trimmed to fit 2000 tokens (~1161); dropped: private items
+trimmed to fit 2000 tokens (~1255); dropped: private items

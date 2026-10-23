@@ -1,0 +1,21 @@
+# contract.inh.1-3: an implementation's own `requires` weaken the trait's; the trait's
+# `ensures` add to its own. Both groups failing traps naming the trait method.
+trait Shape
+    fn scale(self, k int) int
+        requires k > 0
+        ensures result >= 0
+
+struct Sq
+    side int
+
+impl Shape for Sq
+    fn scale(self, factor int) int
+        requires factor == -1
+        ensures result < 1000
+        self.side * factor * factor
+
+fn main()
+    q := Sq(side: 2)
+    print(q.scale(3))
+    print(q.scale(-1))
+    print(q.scale(0))

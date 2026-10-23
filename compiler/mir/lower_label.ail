@@ -1,0 +1,71 @@
+## Named call arguments (expr.call.3, ADR 0454): `f(p, dy: 5, dx: 2)` binds the named arguments to
+## their parameters, and the arguments are evaluated in parameter order, not source order. So
+## the lowering reorders them into parameter order and drops the labels.
+
+use ast
+
+## Whether any argument is named.
+fn has_label(args List[ast.Arg]) bool
+    for a in args
+        if a.label != none
+            return true
+    false
+
+## `args` in the order of `params`, unlabelled; none when nothing is named or a name doesn't
+## fit (the checker already rejected those programs).
+fn order_by_params(args List[ast.Arg], params List[ast.Param]) List[ast.Arg]?
+    if not has_label(args) or args.len() != params.len()
+        return none
+    mut out := List[ast.Arg]()
+    mut given := Set[int]()
+    for i in 0..args.len()
+        if args[i].label != none
+            break
+        out.push(args[i])
+        given.add(i)
+    for p in params[out.len()..]
+        mut found := false
+        for i in 0..args.len()
+            if given.contains(i)
+                continue
+            l := args[i].label else continue
+            if l.name == p.name
+                mut a := args[i]
+                a.label = none
+                out.push(a)
+                given.add(i)
+                found = true
+                break
+        if not found
+            return none
+    out
+
+## The parameters of the user function a call by name goes to, if it is one.
+fn Lower.label_params(self, callee ast.Expr) List[ast.Param]?
+    match callee
+        Name(name, _) =>
+            if lookup(name) != none
+                return none
+            key := "{prefix}{name}"
+            if f := fn_decl.get(key)
+                return f.params
+            if g := gen.fns.get(key)
+                return g.decl.params
+            none
+        _ => none
+
+## A call by name with named arguments, with its arguments in parameter order.
+fn Lower.label_ordered(self, callee ast.Expr, args List[ast.Arg]) List[ast.Arg]?
+    if not has_label(args)
+        return none
+    ps := label_params(callee)?
+    order_by_params(args, ps)
+
+## The same for a method `key`, whose parameters leave out the receiver.
+fn Lower.label_ordered_method(self, key str, args List[ast.Arg]) List[ast.Arg]?
+    if not has_label(args)
+        return none
+    if f := fn_decl.get(key)
+        return order_by_params(args, f.params)
+    g := gen.fns.get(key)?
+    order_by_params(args, g.decl.params)

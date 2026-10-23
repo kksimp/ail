@@ -385,7 +385,9 @@ fn Lower.method_fails(self, recv ast.Expr, name str) bool
         s := sigs.get("{m}.{name}") else return generic_fails("{m}.{name}")
         return s.fails
     key := method_key(recv, name) else return false
-    s := sigs.get(key) else return false
+    s := sigs.get(key) else
+        # `T.from_json(x)` with `T` a list: the instance is declared when it is called.
+        return key.starts_with("List[") and generic_fails("List.{name}")
     s.fails
 
 ## Whether the function being lowered can fail and has no success value: its
@@ -827,6 +829,7 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
         Call(callee, _, _) =>
             match callee
                 Name(n, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
+                TypeArgs(n, _, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
             if os_fails(recv, name)
@@ -893,14 +896,15 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, text], Ty.Str)
     call("rt.str_cat", [acc, str_value(")")], Ty.Str)
 
-## The name a type is shown by: `std.ui` is written in AIL here but is the
-## runtime's `ui` module under `ail run`, so its types print as `ui.Event`.
+## The name a type is shown by: a std module such as `std.ui` is written in AIL
+## here but is the runtime's `ui` module under `ail run`, so its types print as
+## `ui.Event` and `regex.Match`.
 fn shown_key(key str) str
     # An instance of a generic type shows as its type's name (`Pair`).
     cut := key.split("[")[0]
     if cut != key
         return shown_key(cut)
-    if key.starts_with("std.ui.") and key.slice(7, key.len()).contains(".") == false
+    if key.starts_with("std.") and key.slice(4, key.len()).split(".").len() == 2
         return key.slice(4, key.len())
     key
 

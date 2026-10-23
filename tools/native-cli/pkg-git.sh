@@ -9,7 +9,7 @@ t="$(mktemp -d)"
 trap 'rm -rf "$t"' EXIT
 export AIL_HOME="$t/home" AIL_ROOT="$root"
 mkdir "$t/repo" "$t/app"
-(cd "$t/repo" && git init -q && printf 'pub fn hi() str\n    "hi"\n' > shapes.ail && printf 'package geo\n' > ail.pkg \
+(cd "$t/repo" && git init -q && mkdir shapes && printf 'pub fn hi() str\n    "hi"\n' > shapes/shapes.ail && printf 'package geo\n' > ail.pkg \
   && git add -A && git -c user.email=a@b -c user.name=n commit -qm x)
 sha="$(git -C "$t/repo" rev-parse HEAD)"
 printf 'package app\ndep geo git file://%s/repo rev %s\n' "$t" "$sha" > "$t/app/ail.pkg"
@@ -18,4 +18,6 @@ AIL_PKG_FROZEN=1 ./ail run compiler load "$t/app/main.ail" 2>&1 | grep -q 'mod.p
 AIL_PKG_WRITE_LOCK=1 tools/native-cli/load-parity.sh "$t/app/main.ail"
 grep -q "commit $sha" "$t/app/ail.lock" || { echo "FAIL lock not written"; exit 1; }
 AIL_PKG_FROZEN=1 AIL_PKG_OFFLINE=1 ./ail run compiler load "$t/app/main.ail" 2>&1 | grep -q 'mod.pkg' && { echo "FAIL locked cache refused"; exit 1; }
+[ "$(AIL_NATIVE_CLI=1 ./ail run "$t/app/main.ail" 2>&1)" = hi ] || { echo "FAIL native run"; exit 1; }
+cp -r "$t/app" "$t/app2" && rm "$t/app2/ail.lock" && (cd "$t/app2" && AIL_NATIVE_CLI=1 "$root/ail" pkg update | grep -q "locked geo $sha") || { echo "FAIL pkg update"; exit 1; }
 echo "pkg-git ok"

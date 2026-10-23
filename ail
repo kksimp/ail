@@ -54,6 +54,16 @@ install_private_rust() {
     echo "ail: Rust $pin installed" >&2
 }
 
+# Package options for the native loader (mod.pkg.7-8, compiler/pkg/git.ail): `run` and `test` write
+# `ail.lock`, `--deterministic` refuses a stale one, `--deny net` fetches nothing.
+case "${1:-}" in run | test) export AIL_PKG_WRITE_LOCK=1 ;; esac
+prev=
+for a in "$@"; do
+    case "$a" in --deterministic) export AIL_PKG_FROZEN=1 ;; esac
+    if [ "$prev" = --deny ] && [ "${a#*net}" != "$a" ]; then export AIL_PKG_OFFLINE=1; fi
+    prev="$a"
+done
+
 # `AIL_NATIVE_COMPILER=PATH`: `ail build` is done by a natively built compiler (stage 1 of
 # tools/self-host/run.sh) in place of the Rust-hosted one. The program is checked first, as `ail build` does
 # (with `--unsafe driver`, unsafe.hw.1, when given); the native compiler takes the same arguments.
@@ -83,33 +93,82 @@ if [ "${1:-}" = build ] && [ -n "${AIL_NATIVE_COMPILER:-}" ]; then
     fi
 fi
 
-# `AIL_NATIVE_CLI=1` (ADR 0855): `ail fmt ...`, `ail test FILE` (tools/ailtest), `ail api FILE`, `ail build` and `ail run FILE [ARGS]` are done by the native CLI (compiler/main.ail
-# built natively into .native/ail, by the Rust ail or by the published seed when there is no Rust): `check-program` first,
-# then the program from the build cache, exec'd so it keeps the terminal. Anything
-# else, and `run` with options before the file, goes to the Rust `ail` below.
-# `ail api` natively: one file, with at most --outline, --text and --pretty.
+# The native CLI (ADR 0855) is the default: `ail fmt ...`, `ail test FILE` (tools/ailtest), `ail api FILE`, `ail build`,
+# `ail check FILE` and `ail run [--timeout MS] [--max-memory MB] FILE [ARGS]` are done by compiler/main.ail
+# built natively into .native/ail (by the Rust ail or by the published seed when there is no Rust): `check-program` first,
+# then the program from the build cache, exec'd so it keeps the terminal. `AIL_RUST=1` (or `AIL_NATIVE_CLI=0`) keeps the
+# Rust `ail`; `AIL_INTERP=1` keeps the interpreter for `run`; a pinned AIL_BINARY keeps the Rust `ail` unless AIL_NATIVE_CLI=1.
+# Anything else, and `run` with other options before the file, goes to the Rust `ail` below.
+# `ail api` natively: one file, with at most --outline, --text, --pretty and --symbols.
+native_on=1
+if [ "${AIL_RUST:-}" = 1 ] || [ "${AIL_NATIVE_CLI:-}" = 0 ]; then native_on=0
+elif [ -n "${AIL_BINARY:-}" ] && [ "${AIL_NATIVE_CLI:-}" != 1 ]; then native_on=0; fi
+native_run=
+run_opts=
+budget_opts=
+run_skip=0
+if [ "${1:-}" = run ] && [ "$native_on" = 1 ] && [ "${AIL_INTERP:-}" != 1 ]; then
+    run_args=("$@")
+    k=1
+    while [ "$k" -lt "${#run_args[@]}" ]; do
+        a="${run_args[$k]}"
+        case "$a" in
+            --timeout | --max-memory)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]*) break ;; esac
+                run_opts="$run_opts $a $v"; k=$((k + 2)) ;;
+            --budget)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]*) budget_opts="$budget_opts --budget"; k=$((k + 1)) ;; *) budget_opts="$budget_opts --budget $v"; k=$((k + 2)) ;; esac ;;
+            --from)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]*) break ;; esac
+                budget_opts="$budget_opts --from $v"; k=$((k + 2)) ;;
+            --json) budget_opts="$budget_opts --json"; k=$((k + 1)) ;;
+            "" | -*) break ;;
+            *) native_run=1; run_file="$a"; k=$((k + 1)); break ;;
+        esac
+    done
+    run_skip=$k
+    case "$budget_opts" in "" | *--budget*) ;; *) native_run= ;; esac
+fi
 native_build=
 if [ "${1:-}" = build ]; then
     native_build=1
     for a in "${@:2}"; do
-        case "$a" in --derived-out | --unsafe) native_build= ;; esac
+        case "$a" in --derived-out) native_build= ;; esac
     done
 fi
 native_api=
 if [ "${1:-}" = api ]; then
     native_api=1; files=0
     for a in "${@:2}"; do
-        case "$a" in --outline | --text | --pretty) ;; -*) native_api= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_api=; fi ;; esac
+        case "$a" in --outline | --text | --pretty | --symbols) ;; -*) native_api= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_api=; fi ;; esac
     done
     [ "$files" = 1 ] || native_api=
 fi
-if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_build" ] ||  { [ "${1:-}" = run ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || [ "${1:-}" = fmt ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+# `ail effects [--json] FILE` is native too (#695).
+native_effects=
+if [ "${1:-}" = effects ]; then
+    native_effects=1; files=0
+    for a in "${@:2}"; do
+        case "$a" in --json) ;; -*) native_effects= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_effects=; fi ;; esac
+    done
+    [ "$files" = 1 ] || native_effects=
+fi
+# `ail run FILE` is native by default (item 252): AIL_INTERP=1 or AIL_NATIVE_CLI=0 keeps the interpreter, and a program outside
+# the native subset (native.subset.1) falls back to it.
+native_run=
+if [ "${1:-}" = run ] && [ "${AIL_NATIVE_CLI:-}" != 0 ] && [ "${AIL_INTERP:-}" != 1 ] && [ -z "${AIL_BINARY:-}" ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; then
+    native_run=1
+fi
+if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/bootstrap/src/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
             mkdir -p "$root/.native"
             log="$native.log"
-            AIL_NATIVE_CLI= "$root/ail" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "building the native CLI failed"; }
+            AIL_RUST=1 "$root/ail" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "building the native CLI failed"; }
             rm -f "$log"
             mv "$native.new" "$native"
         else
@@ -121,21 +180,43 @@ if [ "${AIL_NATIVE_CLI:-}" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_buil
             mv "$native.new" "$native"
         fi
     fi
+    if [ "$1" = pkg ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" pkg "$@"; fi
     if [ "$1" = fmt ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fmt "$@"; fi
     if [ "$1" = build ]; then
         # The native CLI's build doesn't check: check the file (the first operand) first.
         file=
         for a in "${@:2}"; do case "$a" in -*) ;; *) if [ -z "$file" ] && [ -f "$a" ]; then file="$a"; fi ;; esac; done
-        [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$file" || exit $?
+        unsafe_driver=
+        prev=; for a in "${@:2}"; do if [ "$prev" = --unsafe ] && [ "$a" = driver ]; then unsafe_driver="--unsafe driver"; fi; prev="$a"; done
+        [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $unsafe_driver "$file" || exit $?
         shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
     fi
+    if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
     if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
+    if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
-    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$2" || exit $?
-    exe="$(AIL_COMPILER="$root/compiler" "$native" prepare "$2")" || exit $?
-    shift 2
-    exec "$exe" "$@"
+    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$run_file" || exit $?
+    prep_err="$(mktemp)"
+    # shellcheck disable=SC2086
+    if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then
+        rm -f "$prep_err"
+        shift "$run_skip"
+        # shellcheck disable=SC2086
+        if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget $budget_opts -- "$exe" "$@"; fi
+        exec "$exe" "$@"
+    fi
+    if grep -q 'native.subset.1' "$prep_err" && { [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; }; then
+        rm -f "$prep_err"   # not native yet: the interpreter below runs it
+    else
+        cat "$prep_err" >&2; rm -f "$prep_err"; exit 1
+    fi
+fi
+
+# `ail selftest` with no arguments is the native gate (ADR 0865, item 252): tools/gate/mac-gate.sh runs gate.ail's suites with the
+# native compiler. `AIL_SELFTEST=cargo` (or any argument, e.g. `--fuzz`, `--test NAME`) keeps the cargo tests.
+if [ "${1:-}" = selftest ] && [ "$#" = 1 ] && [ "$native_on" = 1 ] && [ "${AIL_SELFTEST:-}" != cargo ]; then
+    exec "$root/tools/gate/mac-gate.sh"
 fi
 
 # `ail test` is native by default; `AIL_NATIVE_TEST=0` skips it (ADR 0858, lane B8, RR-4): `ail test [--json] [--cases N] [--seed S] FILE` is first done by the
@@ -155,7 +236,7 @@ if [ "${AIL_NATIVE_TEST:-1}" != 0 ] && [ "${1:-}" = test ] && [ -n "${2:-}" ]; t
     if [ "$test_ok" = 1 ] && [ -n "$test_file" ]; then
         test_out="$(mktemp)"
         test_status=0
-        AIL_NATIVE_TEST=0 AIL_NATIVE_CLI= "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}" >"$test_out" 2>/dev/null || test_status=$?
+        AIL_NATIVE_TEST= AIL_RUST=1 "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}" >"$test_out" 2>/dev/null || test_status=$?
         if [ "$test_status" != 2 ] && ! grep -qE '^skip |"status":"skip"' "$test_out"; then
             cat "$test_out"
             rm -f "$test_out"

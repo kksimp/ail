@@ -1,5 +1,5 @@
 ## The native backend's integration tests (bootstrap/tests/native.rs, ported), driven
-## through the native compiler (`NATIVE_COMPILER=PATH`, else built first; `NATIVEX_INTERP=1`
+## through the native compiler (`NATIVE_COMPILER=PATH`, else built first, and a failed build is red; `NATIVEX_INTERP=1`
 ## keeps `ail run compiler`) and `ail build`. `NX_JOBS=N` sets the processes (default: one per
 ## core). Run from the repository root:
 ##   ail run tools/gate/nativex.ail [TEST...]
@@ -631,7 +631,11 @@ fn main() !
             io.eprint(again.err.trim_end())
             io.exit(again.status)
             return
-        io.eprint("nativex: no native compiler ({b.err.lines().last() else ""}); using the interpreter")
+        # No fallback to the interpreted compiler: it hid a broken native self-build.
+        print("native compiler: `ail build compiler/main.ail` failed:\n{b.err.trim_end()}")
+        print("NATIVEX RED (1 failures)")
+        io.exit(1)
+        return
     all := [
         "mir",
         "batch",
