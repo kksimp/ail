@@ -73,7 +73,7 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
 ## After Rust removal: AI-first tooling (designer, 2026-10-23)
 
 Order per [ADR 0868](decisions/0868-ai-first-tooling-after-rust-removal.md); each is native and costs nothing when unused:
-`ail ask` semantic queries; typed holes (`todo`) that rank fitting candidates; edit impact
+`ail ask` semantic queries; `uhwhatnow?`, a hole that ranks the candidates that fit; edit impact
 (`ail test --affected`); native time-travel record and replay; token-priced diagnostics
 (one line or expanded, chosen by `--budget`); a native sandbox (capabilities plus CPU,
 memory and time caps); live attach to running binaries; contracts checked or fuzzed by tools
@@ -87,7 +87,7 @@ one lane run in the order shown. A feature that changes the language or a public
 std API still needs its own ADR first.
 
 1. **Checker and diagnostics** (`compiler/check/`, `compiler/explain/`): ranked
-   typed holes; diagnostics in one-line and expanded forms chosen by `--budget`;
+   `uhwhatnow?` (ranked typed holes); diagnostics in one-line and expanded forms chosen by `--budget`;
    then the open language questions OQ-029, OQ-042, OQ-050, OQ-094.
 2. **Compiler graph tools** (`compiler/api/`, `compiler/edit/`): `ail ask`; edit
    impact and `ail test --affected`; contracts checked or fuzzed by tools, with
