@@ -37,6 +37,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.write_text" => os_fn("rt.fs_write_text", [s, s], Ty.Unit, true)
         "fs.write_bytes" => os_fn("rt.fs_write_bytes", [s, Ty.Bytes], Ty.Unit, true)
         "fs.append_text" => os_fn("rt.fs_append_text", [s, s], Ty.Unit, true)
+        "fs.metadata" => os_fn("rt.fs_metadata", [s], Ty.Struct(FS_METADATA), true)
         "fs.append_bytes" => os_fn("rt.fs_append_bytes", [s, Ty.Bytes], Ty.Unit, true)
         "fs.list_dir" => os_fn("rt.fs_list_dir", [s], Ty.List(s), true)
         "fs.copy" => os_fn("rt.fs_copy", [s, s], Ty.Unit, true)
@@ -46,6 +47,7 @@ fn os_lookup(mod str, name str) OsFn?
         "fs.make_dir" => os_fn("rt.fs_make_dir", [s], Ty.Unit, true)
         "fs.rename" => os_fn("rt.fs_rename", [s, s], Ty.Unit, true)
         "env.get" => os_fn("rt.env_get", [s], maybe, false)
+        "env.vars" => os_fn("rt.env_vars", [], Ty.Map(key: s, val: s), false)
         "env.home" => os_fn("rt.env_home", [], maybe, false)
         "env.cwd" => os_fn("rt.env_cwd", [], s, false)
         "env.program" => os_fn("rt.env_program", [], s, false)
@@ -54,6 +56,10 @@ fn os_lookup(mod str, name str) OsFn?
         "path.ext" => os_fn("rt.path_ext", [s], s, false)
         "path.stem" => os_fn("rt.path_stem", [s], s, false)
         "path.join" => os_fn("rt.path_join", [s, s], s, false)
+        "compress.gzip_file" => os_fn("rt.compress_gzip_file", [s, s], Ty.Unit, true)
+        "compress.gunzip_file" => os_fn("rt.compress_gunzip_file", [s, s], Ty.Unit, true)
+        "compress.zip_dir" => os_fn("rt.compress_zip_dir", [s, s], Ty.Unit, true)
+        "compress.unzip" => os_fn("rt.compress_unzip", [s, s], Ty.Unit, true)
         "compress.gzip" => os_fn("rt.compress_gzip", [s], Ty.Bytes, false)
         "compress.zlib" => os_fn("rt.compress_zlib", [s], Ty.Bytes, false)
         "compress.deflate" => os_fn("rt.compress_deflate", [s], Ty.Bytes, false)
@@ -72,6 +78,14 @@ fn os_lookup(mod str, name str) OsFn?
                 fails: true,
                 optional: 2,
             )
+        "proc.run_bytes" =>
+            OsFn(
+                rt: "rt.proc_run_bytes",
+                params: [s, Ty.List(s), Ty.Opt(Ty.Bytes), Ty.Opt(Ty.Int)],
+                ret: Ty.Struct(PROC_RAW),
+                fails: true,
+                optional: 2,
+            )
         "proc.start" =>
             OsFn(
                 rt: "rt.proc_start",
@@ -84,17 +98,33 @@ fn os_lookup(mod str, name str) OsFn?
         "proc.kill" => os_fn("rt.proc_kill_child", [Ty.Struct(PROC_CHILD)], Ty.Int, false)
         "proc.which" => os_fn("rt.proc_which", [s], maybe, false)
         "io.read_line" => os_fn("rt.io_read_line", [], maybe, false)
+        "io.read_bytes" => os_fn("rt.io_read_bytes", [], Ty.Bytes, false)
         "io.read_all" => os_fn("rt.io_read_all", [], s, false)
         "io.exit" => os_fn("rt.io_exit", [Ty.Int], Ty.Unit, false)
         "tz.offset" => os_fn("rt.tz_offset", [s, Ty.Int], Ty.Opt(Ty.Int), false)
         "tz.system" => os_fn("rt.tz_system", [], s, false)
+        "task.cancelled" => os_fn("rt.task_cancelled", [], Ty.Bool, false)
+        "task.check" => os_fn("rt.task_check", [], Ty.Unit, true)
         "time.now_ms" => os_fn("rt.time_now_ms", [], Ty.Int, false)
         "time.sleep_ms" => os_fn("rt.time_sleep_ms", [Ty.Int], Ty.Unit, false)
         _ => none
 
 ## The module name when `recv` is one of the OS modules.
 fn Lower.os_module(self, recv ast.Expr) str
-    for m in ["fs", "env", "io", "time", "path", "proc", "net", "compress", "bytes", "tz", "hw"]
+    for m in [
+        "fs",
+        "env",
+        "io",
+        "time",
+        "path",
+        "proc",
+        "net",
+        "compress",
+        "bytes",
+        "tz",
+        "hw",
+        "task",
+    ]
         if is_module(recv, m)
             return m
     ""
@@ -238,8 +268,6 @@ fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
 fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     n := spec.precision else -1
     mut text := -1
-    if v.ty.is_sized() and spec.hex
-        return unsupported(pos, "a hex format on `{v.ty.name()}`")
     match v.ty
         Int | Sized(_) =>
             text = call(if spec.hex then "rt.fmt_hex" else "rt.fmt_int", [v.id], Ty.Str)
@@ -253,7 +281,9 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
         Bool => text = call("rt.fmt_bool", [v.id], Ty.Str)
         Str => text = v.id
         Char => text = call("rt.str_char", [v.id], Ty.Str)
-        _ => return unsupported(pos, "a format specification on a `{v.ty.name()}`")
+        _ =>
+            # A list, tuple, struct or enum is padded as its text form (lex.str.7).
+            text = text_of(v, pos)?
     w := spec.width else return Val(id: text, ty: Ty.Str)
     numeric := v.ty == Ty.Int or v.ty.is_sized() or v.ty.is_float()
     mut align := if numeric then 1 else 0

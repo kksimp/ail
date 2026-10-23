@@ -27,7 +27,7 @@ fn passing_and_failing_tests_match_the_interpreter() {
     assert!(out.contains("match bootstrap/tests/native_test/mixed.ail::adds (native pass, interpreter pass)"), "{out}");
     assert!(out.contains("match bootstrap/tests/native_test/mixed.ail::fails_on_purpose (native fail, interpreter fail)"), "{out}");
     assert!(out.contains("assertion failed at line 14"), "the failure names the original line: {out}");
-    assert!(out.contains("not-native bootstrap/tests/native_test/mixed.ail::uses_defer"), "{out}");
+    assert!(out.contains("match bootstrap/tests/native_test/mixed.ail::uses_defer (native pass, interpreter pass)"), "{out}");
     assert!(out.contains("skipped bootstrap/tests/native_test/mixed.ail::holds_for_all"), "{out}");
 }
 
@@ -41,5 +41,5 @@ fn json_lines_end_with_a_summary() {
     let (code, out) = run(&["--json", "bootstrap/tests/native_test/mixed.ail"]);
     assert_eq!(code, 0, "{out}");
     let last = out.lines().last().unwrap();
-    assert_eq!(last, "{\"summary\":true,\"match\":2,\"differ\":0,\"not-native\":1,\"skipped\":1}");
+    assert_eq!(last, "{\"summary\":true,\"match\":3,\"differ\":0,\"not-native\":0,\"skipped\":1}");
 }

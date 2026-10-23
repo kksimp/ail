@@ -1,0 +1,38 @@
+fn bump(mut n int)
+    n += 1
+    n = n * 2
+
+fn flip(mut b bool, mut c char)
+    b = not b
+    c = 'z'
+
+fn count(mut total int, xs List[int])
+    for x in xs
+        total += x
+
+struct Counter
+    n int
+
+fn Counter.add(mut self, by int, mut seen int)
+    self.n += by
+    seen += 1
+
+fn main()
+    mut k := 5
+    bump(mut k)
+    print(k)
+    mut b := true
+    mut c := 'a'
+    flip(mut b, mut c)
+    print(b)
+    print(c)
+    mut t := 0
+    count(mut t, [1, 2, 3])
+    count(mut t, [10])
+    print(t)
+    mut cn := Counter(n: 0)
+    mut seen2 := 0
+    cn.add(5, mut seen2)
+    cn.add(7, mut seen2)
+    print(cn.n)
+    print(seen2)

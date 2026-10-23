@@ -19,6 +19,7 @@ fn wants_float(want Ty?) bool
 fn is_int_lit(e ast.Expr) bool
     match e
         Int => true
+        Unary(o, x, _) => o == ast.UnOp.Neg and is_int_lit(x)
         _ => false
 
 ## What an operator's first operand should be: arithmetic passes the
@@ -145,6 +146,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         _ =>
             if eq := self.list_equal(o, a, b)
                 return eq
+            if ord := self.list_order(o, a, b)
+                return ord
             problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
             a
 
@@ -229,6 +232,11 @@ fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
         return m
     if c := int_checked(r, name, npos, vs)
         return c
+    if name == "to_float" and vs.len() == 0 and r.ty.is_sized()
+        return Val(id: op("itof", [r.id], Ty.Float), ty: Ty.Float)
+    # type.num.14: the digits of an unsigned value are the `int` ones.
+    if name == "to_hex" and vs.len() == 0 and r.ty.is_sized() and sized_lo(sized_kind(r.ty)) == 0
+        return Val(id: call("rt.fmt_hex", [r.id], Ty.Str), ty: Ty.Str)
     if r.ty != Ty.Int
         return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
     if name == "to_float" and vs.len() == 0

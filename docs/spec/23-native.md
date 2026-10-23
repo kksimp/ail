@@ -101,7 +101,7 @@ include structs and enums, and lists of maps and sets (`Map[K, V]()`,
 any type in the subset, enums included (`Map[K, V]()`,
 `Set[T]()`, literals, `m[k]`, `m[k] = v`, `m[k] op= v`, `m.get(k)` (a `V?`, type.map.6) and `m.get(k) else ...`,
 `contains`, `remove`, `len`, `keys`, `values`, `push(k, x)` on a
-`Map[K, List[T]]`, `s.add(x)`, `for x in s`, `for mut x in xs` over a list of structs, an empty `{}` where a `Set` is expected, printing a table; an error type with no message, whose fields may be structs (trait.auto.2); a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `m.push(k, x)`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
+`Map[K, List[T]]`, `s.add(x)`, `for x in s`, `for mut x in xs` over a list of structs or of `int`, `bool`, `char`, `float` or `str` (an assignment to `x` also sets the element), a `mut` parameter of type `int`, `bool`, `char`, `float`, `str`, an enum or an optional, and an enum `mut self` (the caller passes a cell and reads it back; own.param.2), nested optionals `T??` (a cell holding the inner optional, so `some(none)` differs from `none`; ADR 0209), an empty `{}` where a `Set` is expected, printing a table; an error type with no message, whose fields may be structs (trait.auto.2); a local declared from `{}` is typed by its first `m[k] = v`, `m[k] op= v`, `m.push(k, x)`, `s.add(x)` or `m = e`, and one from `[]` by `xs.push(x)` or `xs = e`, type.coll.13), and constants
 that are lists of constants, `join` on lists of strings or characters, and the
 list methods `extend`, `remove_at`, `insert`, `clear`, `reverse`, `pop` (as a
 statement or with `else`), `contains`, `sort` and `sorted` on lists of `int`,
@@ -126,8 +126,8 @@ and the calls `fs.exists`, `fs.read_text`, `fs.write_text`,
 readable yet); `t := spawn f(args)`
 and `t.wait()?`, `par for`, and `Atomic[int]` and `Atomic[bool]` with `load`,
 `store`, `cas` and `add` (`native.task.1`); `Channel[str]` with `send`, `recv`, `close`, `for v in ch`
-and `task.select` of channels written out in a list (`native.chan.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, and on a
-`net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_line`, `write`, `set_timeout`, `peer`,
+and `task.select` of channels written out in a list (`native.chan.1`); raw TCP (std.net.12): `net.listen`, `net.connect`, `net.connect_tls` (the TLS 1.3 client, native.net.tls), and on a
+`net.Listener` `accept`, `addr`, `close`, and on a `net.Conn` `read`, `read_bytes`, `read_line`, `write`, `write_bytes`, `set_timeout`, `peer`,
 `close`, failing with `net.NetError` (std.net.4), and `net.get` and `net.post` over `http://` (std.net.2, std.net.3: one connection
 per request with `Connection: close`, `Content-Length`, chunked or until-close bodies, up to five redirects of a `GET`; an `https://` URL
 uses TLS 1.3 with `TLS_CHACHA20_POLY1305_SHA256` (preferred), `TLS_AES_128_GCM_SHA256` or `TLS_AES_256_GCM_SHA384` and X25519 (std.tls.1, std.tls.3, ADR 0852: the chain checked against `SSL_CERT_FILE` or the platform bundle as in ADRs 0368-0369; no HelloRetryRequest, no resumption, no close_notify sent), and any failure is kind `tls`; an idle connection a response leaves open is kept for the next request to its origin (std.net.19); `Accept-Encoding: gzip, deflate` is sent and a `gzip`, `x-gzip` or `deflate` body is undone as in std.net.26), `std.net.jar` cookie jars (std.net.20-22), `net.get_bytes`, `net.post_bytes` and `net.request_bytes` (std.net.16), `net.request` and `net.options()` (std.net.6, std.net.19: `headers`, `query`, `body`, `timeout_ms`, `max_redirects`, `connect_ms`; `total_ms` is checked but not enforced and `data` is not built); only IPv4 (`A.B.C.D:PORT`, `localhost`, or a name in `/etc/hosts`; any

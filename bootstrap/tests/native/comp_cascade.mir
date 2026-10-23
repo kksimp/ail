@@ -1,0 +1,42 @@
+# MIR (unstable) of bootstrap/tests/native/comp_cascade.ail
+
+fn main() unit
+  b0:
+    v0 int = const 2
+    v1 char = const 98
+    v2 char = const 97
+    v3 List[char] = call rt.list_new(v0)
+    call rt.list_push(v3, v1)
+    call rt.list_push(v3, v2)
+    v4 int = const 8
+    v5:cs List[char] = call rt.list_copy(v3, v4)
+    v6 int = const 0
+    call rt.list_sort(v5:cs, v6)
+    v8:#comp2 List[int] = call rt.list_new(v6)
+    v10 int = len v5:cs
+    jump b2()
+  b1:
+    v23 int = len v8:#comp2
+    call rt.out_int(v23)
+    call rt.out_nl()
+    return
+  b2:
+    v24 int = data v5:cs
+    jump b3(v6)
+  b3(v25:i int):
+    v26 bool = lt v25:i, v10
+    branch v26, b4(), b1()
+  b4:
+    v27 char = ldx v24, v25:i *8
+    v28 char = const 122
+    v29 bool = ne v27, v28
+    branch v29, b6(), b7()
+  b5:
+    v30 int = const 1
+    v31 int = add v25:i, v30
+    jump b3(v31)
+  b6:
+    call rt.list_push(v8:#comp2, v25:i)
+    jump b5()
+  b7:
+    jump b5()

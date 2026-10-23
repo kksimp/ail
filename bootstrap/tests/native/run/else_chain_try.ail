@@ -1,0 +1,18 @@
+# err.prop.4: a `?` inside the value of an `else` goes to that `else`, also when
+# the whole value ends in `?`.
+struct Item
+    name str
+    tags List[str]
+
+fn first_tag(items List[Item]) str
+    items.first()?.tags.first()? else "-"
+
+fn len_of_first(items List[Item]) int
+    items.first()?.name.len() else -1
+
+fn main()
+    print(first_tag([Item(name: "x", tags: ["red", "big"])]))
+    print(first_tag([Item(name: "x", tags: [])]))
+    print(first_tag([]))
+    print(len_of_first([Item(name: "abc", tags: [])]))
+    print(len_of_first([]))

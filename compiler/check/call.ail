@@ -1,6 +1,7 @@
 ## Calls, methods, fields, indexing and literals of collections, structs
 ## and variants (ADR 0377), as `list` to `index` in `bootstrap/src/check.rs`.
 use ast
+use fix
 
 @allow("expr.match.3") fn Checker.list(mut self, elems List[ast.Expr], at ast.Pos, expect Ty?) Ty
     mut hint := none
@@ -387,12 +388,14 @@ fn Checker.check_call(
         bind(p.ty, t, vars, mut binds)
         want := subst_unknown(p.ty, binds, vars)
         if p.mutable and not a.mutable
-            err_help(
+            mut d := new_diag(
                 "own.param.2",
                 expr_pos(a.value),
                 "this parameter is `mut`, so the argument must be marked `mut`",
-                "write `mut` before the argument",
-            )
+            ).with_help("write `mut` before the argument")
+            if is_plain_name(a.value)
+                d = d.with_fix("mark the argument `mut`", [fix.insert(expr_pos(a.value), "mut ")])
+            diags.push(d)
         elif p.mutable
             require_mutable(a.value, "own.param.2", "passed `mut`")
         elif a.mutable
@@ -461,7 +464,16 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
             break
     if first < 0
         if args.len() != sig.params.len()
-            err("expr.call.1", at, miscount)
+            mut d := new_diag("expr.call.1", at, miscount)
+            # `t.reshape(2, 3)`: the shape is one list.
+            if what.ends_with("Tensor.reshape") and sig.params.len() == 1 and args.len() >= 2
+                d = d.with_help("the new shape is one list: `t.reshape([2, 3])`")
+                d = d.with_fix("pass the shape as a list", [fix.call(
+                    at,
+                    "reshape",
+                    "reshape([$a])",
+                )])
+            diags.push(d)
             return none
         return [i for i in 0..args.len()]
     first_pos := args[first].label?.pos else at
@@ -484,17 +496,21 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
             else
                 mut d := new_diag("expr.call.3", l.pos, "`{what}` has no parameter `{l.name}`")
                 if s := suggest(l.name, sig.names)
-                    d = d.did_you_mean(s)
+                    d = d.did_you_mean(l.name, s)
                 diags.push(d)
                 ok = false
                 continue
         elif i > first
-            err_help(
+            mut d := new_diag(
                 "expr.call.3",
                 expr_pos(a.value),
                 "a positional argument can't follow a named one",
-                "name this argument too, or move it before the named ones",
-            )
+            ).with_help("name this argument too, or move it before the named ones")
+            if i < sig.names.len()
+                pn := sig.names[i]
+                if [b for b in args if b.label != none and b.label?.name == pn].len() == 0
+                    d = d.with_fix("name it `{pn}:`", [fix.insert(expr_pos(a.value), "{pn}: ")])
+            diags.push(d)
             ok = false
             continue
         if slot >= filled.len()
@@ -561,12 +577,14 @@ fn Checker.print_call(mut self, args List[ast.Arg], at ast.Pos) Ty
             )
     if args.len() != 1
         args_only(args)
-        err_help(
+        mut d := new_diag(
             "mod.main.3",
             at,
             "`print` takes exactly one argument, but {was_were(args.len())} given",
-            "print one string that interpolates the values: `print(\"\{a} \{b}\")`",
-        )
+        ).with_help("print one string that interpolates the values: `print(\"\{a} \{b}\")`")
+        if args.len() > 1 and [a for a in args if a.label != none or a.mutable].len() == 0
+            d = d.with_fix("print one interpolated string", [fix.call(at, "print", "print($*)")])
+        diags.push(d)
         return Ty.Unit
     v := args[0].value
     t := expr(v, none, true)
@@ -618,7 +636,7 @@ fn Checker.fields_literal(
 )
     mut given := [false for _ in fields]
     slots := field_slots(fields, args)
-    positional_types(label, fields, ts, args, slots)
+    positional_types(label, fields, ts, args, slots, at)
     mut lost := false
     for k in 0..args.len()
         a := args[k]
@@ -637,7 +655,7 @@ fn Checker.fields_literal(
                 names := [f.name for f in fields]
                 mut d := new_diag("type.struct.4", l.pos, "`{label}` has no field `{l.name}`")
                 if s := suggest(l.name, names)
-                    d = d.did_you_mean(s)
+                    d = d.did_you_mean(l.name, s)
                 diags.push(d)
             else
                 err(
@@ -680,12 +698,16 @@ fn Checker.fields_literal(
     ]
     if missing.len() > 0 and not lost
         word := if missing.len() == 1 then "field" else "fields"
-        err_help(
+        mut d := new_diag(
             "type.struct.4",
             at,
             "`{label}(...)` is missing {word} {list_names(missing)}",
-            "every field must be given; there are no defaults yet; `todo` stands in for a value you haven't written",
-        )
+        ).with_help("every field must be given; there are no defaults yet; `todo` stands in for a value you haven't written")
+        holes := ["{m}: todo" for m in missing].join(", ")
+        template := if args.len() == 0 then "{label}({holes})" else "{label}($a, {holes})"
+        if [a for a in args if a.mutable].len() == 0
+            d = d.with_fix("give the missing fields a `todo` each", [fix.call(at, label, template)])
+        diags.push(d)
 
 ## type.struct.7: positional arguments may only fill fields whose types all
 ## differ, so that swapping two of them is a type error.
@@ -696,6 +718,7 @@ fn Checker.positional_types(
     ts List[Ty],
     args List[ast.Arg],
     slots List[Slot],
+    at ast.Pos,
 )
     filled := [s.field for s in slots if s.how == ArgKind.Positional and s.field >= 0]
     mut a := -1
@@ -717,12 +740,20 @@ fn Checker.positional_types(
             break
     fa := fields[a].name
     fb := fields[b].name
-    err_help(
+    mut d := new_diag(
         "type.struct.7",
         where,
         "fields `{fa}` and `{fb}` of `{label}` are both {show(ts[a])}, so they can't be given by position",
-        "name them: `{label}({fa}: ..., {fb}: ...)`",
-    )
+    ).with_help("name them: `{label}({fa}: ..., {fb}: ...)`")
+    if slots.len() == fields.len() and [
+        x
+        for x in slots if x.field < 0 or x.how != ArgKind.Positional
+    ].len() == 0
+        names := [fields[x.field].name for x in slots]
+        # A qualified type is written with its module's alias; the anchor takes the name as written.
+        written := label.split(".").last() else label
+        d = d.with_fix("name the fields", [fix.call_named(at, written, names)])
+    diags.push(d)
 
 ## What `x.name(...)` can refer to (trait.res.1).
 pub enum Cand
@@ -773,12 +804,18 @@ fn Checker.bytes_assoc(mut self, n str, at ast.Pos, args List[ast.Arg], expect T
         sig = plain_sig(none, [Ty.Int], Ty.Bytes)
     elif n != "from_list"
         args_only(args)
-        err_help(
+        mut d := new_diag(
             "type.bytes.13",
             at,
             "`bytes` has no associated function `{n}`",
-            "they are `from_list`, `from_hex`, `from_base64` and `zeros`",
-        )
+        ).with_help("they are `from_list`, `from_hex`, `from_base64` and `zeros`")
+        # `bytes.fromhex` is `bytes.from_hex`: the same letters, spelt with `_`.
+        spelt := n.replace("_", "")
+        for k in ["from_list", "from_hex", "from_base64", "zeros"]
+            if k.replace("_", "") == spelt
+                d = d.with_fix("write `{k}`", [fix.replace(at, n, k)])
+                break
+        diags.push(d)
         return Ty.Unknown
     check_call("bytes.{n}", sig, [], args, none, at, expect)
 
@@ -1030,7 +1067,7 @@ fn Checker.qualified(mut self, tr int, n str, at ast.Pos, args List[ast.Arg]) Ty
         names := [prog.fns[m].name for m in prog.traits[tr].methods]
         mut d := new_diag("expr.name.1", at, "`{tname}` has no method `{n}`")
         if s := suggest(n, names)
-            d = d.did_you_mean(s)
+            d = d.did_you_mean(n, s)
         diags.push(d)
         return Ty.Unknown
     if args.len() == 0
@@ -1111,7 +1148,7 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
     if not names.contains(n)
         mut d := new_diag("std.proc.9", at, "`proc.Output` has no method `{n}`")
         if s := suggest(n, names)
-            d = d.did_you_mean(s)
+            d = d.did_you_mean_help(s)
         else
             d = d.with_help("a process result's methods are {list_names(names)}")
         diags.push(d)
@@ -1149,8 +1186,41 @@ fn Checker.output_method(mut self, n str, at ast.Pos, args List[ast.Arg]) Ty
                     return
         _ => names = names
     mut d := new_diag("expr.name.1", at, "{show(rt)} has no method `{n}`")
-    if s := suggest(n, names)
-        d = d.did_you_mean(s)
+    # `x.is_some()` on an optional is a comparison with `none` (type.opt.5).
+    absent := match n
+        "is_some" => " != none"
+        "is_none" => " == none"
+        _ => ""
+    dot := ast.Pos(line: at.line, col: (at.col - 1).max(0))
+    kind := kind_of(rt)
+    if absent != "" and is_opt(rt)
+        d = d.with_help("compare the value with `none`, e.g. `x != none`")
+        d = d.with_fix("compare with `none`", [fix.replace(dot, ".{n}()", absent)])
+    elif kind == "map" and (n == "items" or n == "entries")
+        # type.tuple.5: a map iterates as its `(key, value)` pairs.
+        d = d.with_help("a map iterates as its entries: `for k, v in m`")
+        d = d.with_fix("drop `.{n}()`", [fix.replace(dot, ".{n}()", "")])
+    elif is_error_type(rt) and [
+        "message",
+        "msg",
+        "description",
+        "getMessage",
+        "get_message",
+    ].contains(n)
+        # An error's text is `to_str()` (the same text as interpolating it).
+        d = d.with_help("an error's message is its text: interpolate `\"\{e}\"` or write `e.to_str()`; the variants' messages are in the `error enum`")
+        d = d.with_fix("write `to_str`", [fix.replace(at, n, "to_str")])
+    elif new := method_rename(rt, n)
+        d = d.with_help("write `.{new}()`").with_fix("write `{new}`", [fix.replace(at, n, new)])
+    elif h := method_help(rt, n)
+        d = d.with_help(h)
+    elif s := suggest(n, names)
+        d = d.did_you_mean(n, s)
+    else
+        match rt
+            Param(p) => d = d.with_help("a type parameter has only the methods of its constraints; add one, e.g. `[{tparams[p].name} Trait]`")
+            Opt => d = d.with_help("a value that can be `none` has no methods yet: get the value first, `v := x else default` or `v := x else return`")
+            _ => d = d.with_help("docs/language-card.md lists the methods each built-in type has; `ail api FILE` lists those of your own types")
     diags.push(d)
 
 ## std.use.4: `n.f(...)` where the local `n` hides the standard module `n`,
@@ -1211,7 +1281,7 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
                     names := [x.name for x in prog.enums[e].variants]
                     mut diag := new_diag("expr.name.1", at, "`{head}` has no variant `{n}`")
                     if s := suggest(n, names)
-                        diag = diag.did_you_mean(s)
+                        diag = diag.did_you_mean(n, s)
                     diags.push(diag)
                 DStruct => err(
                     "type.struct.6",
@@ -1227,7 +1297,11 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
         RefOf(t) => rt = t
         _ => rt = rt0
     if candidates(rt, n).len() > 0
-        err_help("expr.op.3", at, "`{n}` is a method, so calling it needs `()`", "write `.{n}()`")
+        diags.push(
+            new_diag("expr.op.3", at, "`{n}` is a method, so calling it needs `()`")
+                .with_help("write `.{n}()`")
+                .with_fix("add the parentheses", [fix.replace(at, n, "{n}()")]),
+        )
         return Ty.Unknown
     if is_tensor(rt)
         err_help(
@@ -1248,8 +1322,17 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
                     return subst(field_types[s][i], binds_of(struct_params[s], args))
             names := [f.name for f in decl.fields]
             mut d := new_diag("type.struct.6", at, "`{decl.name}` has no field `{n}`")
-            if s2 := suggest(n, names)
-                d = d.did_you_mean(s2)
+            # Another library's field for the same thing (a `requests` response).
+            other := match "{decl.name}.{n}"
+                "net.Response.status_code" => "status"
+                "net.Response.text" => "body"
+                _ => ""
+            if other != ""
+                d = d
+                    .with_help("`{decl.name}` has the field `{other}`")
+                    .with_fix("write `{other}`", [fix.replace(at, n, other)])
+            elif s2 := suggest(n, names)
+                d = d.did_you_mean(n, s2)
             elif names.len() == 0
                 d = d.with_help("`{decl.name}` has no fields")
             else
@@ -1257,12 +1340,13 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             diags.push(d)
             Ty.Unknown
         _ =>
-            err_help(
-                "type.struct.6",
-                at,
-                "{show(rt)} has no fields",
-                "only structs have fields; the built-in types have methods, written with `()`",
-            )
+            mut d := new_diag("type.struct.6", at, "{show(rt)} has no fields")
+            if new := method_rename(rt, n)
+                d = d.with_help("`{n}` isn't a field; write the method `.{new}()`")
+                d = d.with_fix("write `{new}()`", [fix.replace(at, n, "{new}()")])
+            else
+                d = d.with_help("only structs have fields; the built-in types have methods, written with `()`")
+            diags.push(d)
             Ty.Unknown
 
 @allow("expr.match.3") fn map_key(t Ty) Ty
@@ -1322,12 +1406,19 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             if is_negative_literal(index)
                 bad.push(expr_pos(index))
     if bad.len() > 0
-        err_help(
+        mut d := new_diag(
             "type.coll.4",
             bad[0],
             "a list has no negative indexes",
-            "count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`",
-        )
+        ).with_help("count from the end with `xs.len()`: `xs[xs.len() - 1]`, or `xs.last()`")
+        match recv
+            Name(rn, _) => d = d.with_fix("count from the end", [fix.replace(
+                bad[0],
+                "-",
+                "{rn}.len() - ",
+            )])
+            _ => d = d
+        diags.push(d)
     slice := is_range(index)
     match index
         Range(lo, hi, _, _) => range_bounds(lo, hi)
@@ -1352,12 +1443,21 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
         Bytes => if slice then rt else Ty.Num("u8")
         Unknown => Ty.Unknown
         Str =>
-            err_help(
+            mut d := new_diag(
                 "type.str.2",
                 expr_pos(recv),
                 "a `str` can't be indexed",
-                "index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part",
-            )
+            ).with_help("index its characters: `s.chars()[i]`, or `s.chars()[a..b].join(\"\")` for a part")
+            match recv
+                Name(rn, _) =>
+                    tail := if slice then ".join(\"\")" else ""
+                    d = d.with_fix("index the characters", [fix.call_with(
+                        expr_pos(recv),
+                        rn,
+                        "{rn}.chars()[$1]{tail}",
+                    )])
+                _ => d = d
+            diags.push(d)
             Ty.Unknown
         _ =>
             err("type.coll.4", expr_pos(recv), "only lists and maps can be indexed, not {show(rt)}")
@@ -1568,3 +1668,8 @@ fn Checker.comp_part(mut self, e ast.Expr, hint Ty?) Ty
                 _ => return none
         _ => return none
     none
+
+@allow("expr.match.3") fn is_plain_name(e ast.Expr) bool
+    match e
+        Name => true
+        _ => false

@@ -1,0 +1,614 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The HTTP server of `std.net` (std.net.9-11, 24): `net.serve`, `Server.accept`,
+## `Server.shutdown`, `Request.stop`, `Exchange.respond` and `respond_bytes`.
+## A `Server` is a listener's socket object (net.ail). `accept` takes one
+## connection at a time and reads its request to the end, so a slow client
+## holds the task that accepts it (a pool of tasks, as `http.serve` has, is
+## not held up); a malformed request is answered here with its 4xx or 5xx and
+## never shown. Every response closes its connection: there is no keep-alive
+## yet (std.net.22). The socket object of an `Exchange` has `NET_KIND` 2 and
+## the request's method in `NET_ADDR`.
+
+SERVE_MAX_BODY := 16777216
+SERVE_REQUEST_MS := 10000
+SERVE_EXCHANGE := 2
+
+## Append `n` (not negative) in decimal to the text being built.
+fn serve_num(n int)
+    if n >= 10
+        serve_num(n / 10)
+    sb_byte(48 + n % 10)
+
+fn serve_reason(status int) str
+    if status == 100
+        return "Continue"
+    if status == 200
+        return "OK"
+    if status == 201
+        return "Created"
+    if status == 202
+        return "Accepted"
+    if status == 204
+        return "No Content"
+    if status == 206
+        return "Partial Content"
+    if status == 301
+        return "Moved Permanently"
+    if status == 302
+        return "Found"
+    if status == 303
+        return "See Other"
+    if status == 304
+        return "Not Modified"
+    if status == 307
+        return "Temporary Redirect"
+    if status == 308
+        return "Permanent Redirect"
+    if status == 400
+        return "Bad Request"
+    if status == 401
+        return "Unauthorized"
+    if status == 403
+        return "Forbidden"
+    if status == 404
+        return "Not Found"
+    if status == 405
+        return "Method Not Allowed"
+    if status == 408
+        return "Request Timeout"
+    if status == 409
+        return "Conflict"
+    if status == 410
+        return "Gone"
+    if status == 411
+        return "Length Required"
+    if status == 413
+        return "Content Too Large"
+    if status == 415
+        return "Unsupported Media Type"
+    if status == 418
+        return "I'm a Teapot"
+    if status == 422
+        return "Unprocessable Content"
+    if status == 429
+        return "Too Many Requests"
+    if status == 431
+        return "Request Header Fields Too Large"
+    if status == 500
+        return "Internal Server Error"
+    if status == 501
+        return "Not Implemented"
+    if status == 502
+        return "Bad Gateway"
+    if status == 503
+        return "Service Unavailable"
+    if status == 504
+        return "Gateway Timeout"
+    if status == 505
+        return "HTTP Version Not Supported"
+    ""
+
+## Send `n` bytes at `p` on socket object `o`; 0, or a negative `errno`
+## (-110 for a timeout).
+fn serve_send(o int, p int, n int) int
+    fd := load64(o + NET_FD)
+    mut done := 0
+    while done < n
+        r := net_sys_send(fd, p + done, n - done)
+        if r > 0
+            done += r
+            continue
+        if r == -4
+            continue
+        if r != -11 and r != -35 and r != 0
+            return r
+        w := net_wait(fd, 4, load64(o + NET_TIMEOUT))
+        if w == 0
+            return -110
+        if w < 0
+            return w
+    0
+
+## Stop sending on `o` and close it.
+fn serve_end(o int)
+    fd := load64(o + NET_FD)
+    syscall(os_pick(48, 210, 134), fd, 1, 0, 0, 0, 0)
+    os_close(fd)
+    store64(o + NET_FD, -1)
+
+## Answer a connection the server is dropping: best effort, then close.
+fn serve_refuse(o int, status int, message str)
+    sb_reset()
+    sb_text("HTTP/1.1 ")
+    serve_num(status)
+    sb_byte(32)
+    sb_text(serve_reason(status))
+    sb_text("\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ")
+    serve_num(load64(str_addr(message)) + 1)
+    sb_text("\r\nConnection: close\r\n\r\n")
+    sb_text(message)
+    sb_byte(10)
+    t := sb_str()
+    serve_send(o, str_addr(t) + 16, load64(str_addr(t)))
+    serve_end(o)
+
+## The index of `\r\n\r\n` in the `n` bytes at `p`, or -1.
+fn serve_head_end(p int, n int) int
+    mut i := 3
+    while i < n
+        if load8(p + i) == 10
+            and load8(p + i - 1) == 13
+            and load8(p + i - 2) == 10
+            and load8(p + i - 3) == 13
+            return i - 3
+        i += 1
+    -1
+
+## The index of `\r\n` in the bytes `from` to `to` of `p`, or -1.
+fn serve_crlf(p int, from int, to int) int
+    mut i := from
+    while i + 1 < to
+        if load8(p + i) == 13 and load8(p + i + 1) == 10
+            return i
+        i += 1
+    -1
+
+fn serve_index(p int, from int, to int, c int) int
+    mut i := from
+    while i < to
+        if load8(p + i) == c
+            return i
+        i += 1
+    -1
+
+## `%XX` and `+` decoded in a query component; a bad escape stays as written.
+fn serve_decode(p int, n int) str
+    b := hb_new()
+    mut i := 0
+    while i < n
+        c := load8(p + i)
+        if c == 43
+            hb_byte(b, 32)
+        elif c == 37
+            and i + 2 < n
+            and serve_hex(load8(p + i + 1)) >= 0
+            and serve_hex(load8(p + i + 2)) >= 0
+            hb_byte(b, serve_hex(load8(p + i + 1)) * 16 + serve_hex(load8(p + i + 2)))
+            i += 2
+        else
+            hb_byte(b, c)
+        i += 1
+    net_text(load64(b), load64(b + 8))
+
+fn hb_byte(b int, c int)
+    q := alloc_raw(8, KIND_BYTES)
+    store8(q, c)
+    hb_add(b, q, 1)
+
+fn serve_hex(c int) int
+    if c >= 48 and c <= 57
+        return c - 48
+    if c >= 97 and c <= 102
+        return c - 87
+    if c >= 65 and c <= 70
+        return c - 55
+    -1
+
+## `a=1&b=2` of the `n` bytes at `p` into the map `m`; a repeated key keeps its last value.
+fn serve_query(p int, n int, m int)
+    mut at := 0
+    while at <= n
+        mut e := serve_index(p, at, n, 38)
+        if e < 0
+            e = n
+        if e > at
+            eq := serve_index(p, at, e, 61)
+            if eq < 0
+                map_set(m, str_addr(serve_decode(p + at, e - at)), str_addr(""))
+            else
+                map_set(
+                    m,
+                    str_addr(serve_decode(p + at, eq - at)),
+                    str_addr(serve_decode(p + eq + 1, e - eq - 1)),
+                )
+        at = e + 1
+
+fn serve_bad(st int, status int, msg str) int
+    store64(st, str_addr(msg))
+    status
+
+## The request line and headers in the `end` bytes at `p`, into `req` (method,
+## path, query, headers) and `st`: word 1 the framing (0 length, 1 chunked),
+## word 2 the length, word 3 whether `Expect: 100-continue`. 0, or a status
+## with its message in word 0 of `st`.
+fn serve_head(p int, end int, req int, st int) int
+    if os_utf8_chars(p, end) < 0
+        return serve_bad(st, 400, "the request head is not UTF-8")
+    le := serve_crlf(p, 0, end + 2)
+    line_end := if le < 0 then end else le
+    s1 := serve_index(p, 0, line_end, 32)
+    if s1 < 0
+        return serve_bad(st, 400, "a request line is `METHOD TARGET HTTP/1.1`")
+    s2 := serve_index(p, s1 + 1, line_end, 32)
+    if s2 < 0 or serve_index(p, s2 + 1, line_end, 32) >= 0
+        return serve_bad(st, 400, "a request line is `METHOD TARGET HTTP/1.1`")
+    if not http_token(p, s1)
+        return serve_bad(st, 400, "the method is not a token")
+    vn := line_end - s2 - 1
+    mut http11 := false
+    if vn == 8 and http_ieq(p + s2 + 1, 8, "http/1.1") and load8(p + s2 + 1) == 72
+        http11 = true
+    elif vn == 8 and http_ieq(p + s2 + 1, 8, "http/1.0") and load8(p + s2 + 1) == 72
+        http11 = false
+    else
+        return serve_bad(st, 505, "only HTTP/1.0 and HTTP/1.1 are supported")
+    method := os_str_from(p, s1)
+    tn := s2 - s1 - 1
+    tp := p + s1 + 1
+    star := tn == 1 and load8(tp) == 42 and method == "OPTIONS"
+    if tn == 0 or (load8(tp) != 47 and not star)
+        return serve_bad(st, 400, "the request target must be an absolute path")
+    for i in 0..tn
+        c := load8(tp + i)
+        if c < 33 or c == 127
+            return serve_bad(st, 400, "the request target must be an absolute path")
+    q := serve_index(tp, 0, tn, 63)
+    query := map_new(1, 0, 0)
+    mut path := os_str_from(tp, tn)
+    if q >= 0
+        path = os_str_from(tp, q)
+        serve_query(tp + q + 1, tn - q - 1, query)
+    headers := map_new(1, 0, 0)
+    mut at := line_end + 2
+    while line_end < end and at <= end
+        le2 := serve_crlf(p, at, end + 2)
+        e := if le2 < 0 or le2 > end then end else le2
+        if e > at and (load8(p + at) == 32 or load8(p + at) == 9)
+            return serve_bad(st, 400, "folded header lines are not allowed")
+        colon := serve_index(p, at, e, 58)
+        if colon < 0
+            return serve_bad(st, 400, "a header line is `name: value`")
+        if not http_token(p + at, colon - at)
+            return serve_bad(
+                st,
+                400,
+                "a header name must be a token with no space before the colon",
+            )
+        mut vs := colon + 1
+        mut ve := e
+        while vs < ve and (load8(p + vs) == 32 or load8(p + vs) == 9)
+            vs += 1
+        while ve > vs and (load8(p + ve - 1) == 32 or load8(p + ve - 1) == 9)
+            ve -= 1
+        for i in vs..ve
+            c := load8(p + i)
+            if c == 0 or (c < 32 and c != 9)
+                return serve_bad(st, 400, "a header value has a control character")
+        name := http_lower(p + at, colon - at)
+        value := os_str_from(p + vs, ve - vs)
+        old := map_find(headers, str_addr(name))
+        if old == 0
+            map_set(headers, str_addr(name), str_addr(value))
+        else
+            map_set(headers, str_addr(name), str_addr(str_cat3(
+                str_at(load64(old + 16)),
+                ", ",
+                value,
+            )))
+        at = e + 2
+        if e >= end
+            break
+    if http11 and map_find(headers, str_addr("host")) == 0
+        return serve_bad(st, 400, "an HTTP/1.1 request needs a Host header")
+    te := map_find(headers, str_addr("transfer-encoding"))
+    cl := map_find(headers, str_addr("content-length"))
+    mut chunked := false
+    if te != 0
+        tv := str_addr(str_at(load64(te + 16)))
+        if http_ieq(tv + 16, load64(tv), "chunked")
+            chunked = true
+        else
+            return serve_bad(st, 501, "only the chunked transfer coding is supported")
+    store64(st + 8, 0)
+    store64(st + 16, 0)
+    if chunked
+        if cl != 0
+            return serve_bad(st, 400, "a request has both Transfer-Encoding and Content-Length")
+        store64(st + 8, 1)
+    elif cl != 0
+        cv := str_addr(str_at(load64(cl + 16)))
+        cn := load64(cv)
+        if cn == 0
+            return serve_bad(st, 400, "Content-Length must be one number")
+        for i in 0..cn
+            c := load8(cv + 16 + i)
+            if c < 48 or c > 57
+                return serve_bad(st, 400, "Content-Length must be one number")
+        n := http_number(str_at(cv), false)
+        if n < 0 or n > SERVE_MAX_BODY
+            return serve_bad(st, 413, "the request body is too large")
+        store64(st + 16, n)
+    ex := map_find(headers, str_addr("expect"))
+    store64(st + 24, 0)
+    if ex != 0
+        ev := str_addr(str_at(load64(ex + 16)))
+        if http_ieq(ev + 16, load64(ev), "100-continue")
+            store64(st + 24, 1)
+    store64(req, str_addr(method))
+    store64(req + 8, str_addr(path))
+    store64(req + 16, query)
+    store64(req + 24, headers)
+    0
+
+## The chunked body in the `n` bytes at `p` into `body`: 1 when complete (its
+## length in `used`), 0 when more must arrive, or a status (message in `st`).
+fn serve_chunks(p int, n int, body int, used int, st int) int
+    store64(body + 8, 0)
+    mut at := 0
+    while true
+        i := serve_crlf(p, at, n)
+        if i < 0
+            return 0
+        mut e := serve_index(p, at, i, 59)
+        if e < 0
+            e = i
+        mut s := at
+        while s < e and (load8(p + s) == 32 or load8(p + s) == 9)
+            s += 1
+        while e > s and (load8(p + e - 1) == 32 or load8(p + e - 1) == 9)
+            e -= 1
+        size := http_number(os_str_from(p + s, e - s), true)
+        if size < 0
+            return serve_bad(st, 400, "a bad chunk size")
+        at = i + 2
+        if size == 0
+            while true
+                j := serve_crlf(p, at, n)
+                if j < 0
+                    return 0
+                empty := j == at
+                at = j + 2
+                if empty
+                    store64(used, at)
+                    return 1
+        if load64(body + 8) + size > SERVE_MAX_BODY
+            return serve_bad(st, 413, "the request body is too large")
+        if n < at + size + 2
+            return 0
+        hb_add(body, p + at, size)
+        if load8(p + at + size) != 13 or load8(p + at + size + 1) != 10
+            return serve_bad(st, 400, "a chunk is not followed by a line break")
+        at += size + 2
+    0
+
+## Read the request on connection object `o` (handle `c`, listener `server`):
+## the `net.Request`, or 0 after the connection was answered with an error or
+## dropped.
+fn serve_request(c int, o int, server int) int
+    store64(o + NET_TIMEOUT, SERVE_REQUEST_MS)
+    st := cz_words(5)
+    req := obj_new(64, 4)
+    mut end := -1
+    while end < 0
+        len := load64(o + NET_LEN) - load64(o + NET_POS)
+        base := load64(o + NET_BUF) + load64(o + NET_POS)
+        if len > 0
+            end = serve_head_end(base, len)
+        if end >= 0
+            break
+        if len > HTTP_MAX_HEAD
+            serve_refuse(o, 431, "the request head is too large")
+            return 0
+        if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
+            serve_end(o)
+            return 0
+        r := net_fill(o)
+        if r == -110
+            serve_refuse(o, 408, "the request took too long")
+            return 0
+        if r < 0
+            serve_end(o)
+            return 0
+    if end > HTTP_MAX_HEAD
+        serve_refuse(o, 431, "the request head is too large")
+        return 0
+    base0 := load64(o + NET_BUF) + load64(o + NET_POS)
+    status := serve_head(base0, end, req, st)
+    if status != 0
+        serve_refuse(o, status, str_at(load64(st)))
+        return 0
+    if load64(st + 24) != 0
+        serve_send(o, str_addr("HTTP/1.1 100 Continue\r\n\r\n") + 16, 25)
+    start := end + 4
+    framing := load64(st + 8)
+    want := load64(st + 16)
+    body := hb_new()
+    used := alloc_raw(8, KIND_BYTES)
+    while true
+        len := load64(o + NET_LEN) - load64(o + NET_POS)
+        base := load64(o + NET_BUF) + load64(o + NET_POS)
+        if framing == 0
+            if len >= start + want
+                hb_add(body, base + start, want)
+                break
+        else
+            res := serve_chunks(base + start, len - start, body, used, st)
+            if res == 1
+                break
+            if res > 1
+                serve_refuse(o, res, str_at(load64(st)))
+                return 0
+        if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
+            serve_end(o)
+            return 0
+        r := net_fill(o)
+        if r == -110
+            serve_refuse(o, 408, "the request took too long")
+            return 0
+        if r < 0
+            serve_end(o)
+            return 0
+    bp := load64(body)
+    bn := load64(body + 8)
+    raw := str_new(bn, bn)
+    copy_bytes(raw + 16, bp, bn)
+    store64(req + 32, str_addr(net_text(bp, bn)))
+    store64(req + 40, load64(o + NET_PEER))
+    store64(req + 48, raw)
+    store64(req + 56, server)
+    store64(o + NET_TIMEOUT, NET_DEFAULT_MS)
+    store64(o + NET_KIND, SERVE_EXCHANGE)
+    store64(o + NET_ADDR, load64(req))
+    req
+
+## `srv.accept()` (std.net.9): the next complete request as a `net.Exchange`.
+fn serve_accept(h int, at str) int
+    sa := alloc_raw(32, KIND_BYTES)
+    lenp := alloc_raw(8, KIND_BYTES)
+    while true
+        o := net_obj(h)
+        if o == 0
+            return net_closed("server", at)
+        fd := load64(o + NET_FD)
+        store64(lenp, 16)
+        r := net_sys_accept(fd, sa, lenp)
+        if r >= 0
+            syscall(os_pick(72, 25, 92), r, 4, if target() == 2 then 4 else 2048, 0, 0, 0)
+            if target() == 2
+                p := alloc_raw(8, KIND_BYTES)
+                store64(p, 1)
+                syscall(105, r, 65535, 4130, p, 4, 0)
+            c := net_add(r, NET_CONN, net_addr_text(sa), "")
+            req := serve_request(c, net_obj(c), h)
+            if req != 0
+                ex := obj_new(16, 4)
+                store64(ex, req)
+                store64(ex + 8, c)
+                return ex
+            continue
+        if r == -4
+            continue
+        if r != -11 and r != -35
+            return net_fail("", net_errno_kind(-r), "can't accept a connection", at)
+        if load64(o + NET_FLAGS).bit_and(NET_SHUT) != 0
+            net_close(h)
+            return net_closed("server", at)
+        w := net_wait(fd, 1, 50)
+        if w < 0
+            return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
+    0
+
+## `srv.shutdown()` and `req.stop()` (std.net.24): stop listening once the
+## requests already arriving are taken.
+fn serve_shutdown(h int)
+    o := net_obj(h)
+    if o != 0
+        store64(o + NET_FLAGS, load64(o + NET_FLAGS).bit_or(NET_SHUT))
+
+## Whether the `n` bytes at `p` equal `q`'s `m` bytes, ignoring ASCII case.
+fn serve_ieq(p int, n int, q int, m int) bool
+    if n != m
+        return false
+    for i in 0..n
+        a := load8(p + i)
+        b := load8(q + i)
+        if (if a >= 65 and a <= 90 then a + 32 else a)
+            != (if b >= 65 and b <= 90 then b + 32 else b)
+            return false
+    true
+
+## Whether `all` (a map of names) has a name equal to the `n` bytes at `p`.
+fn serve_has(all int, p int, n int) bool
+    for i in 0..http_slots(all)
+        e := http_slot(all, i)
+        if load64(e) != -1
+            k := str_addr(str_at(load64(e + 8)))
+            if serve_ieq(p, n, k + 16, load64(k))
+                return true
+    false
+
+## One header line `name: value` into the response being built; false after
+## a `bad_request` failure for a bad name or value.
+fn serve_line(name str, value str, st int, at str) bool
+    k := str_addr(name)
+    kn := load64(k)
+    if not http_token(k + 16, kn)
+        net_fail("", "bad_request", "`{name}` is not a header name", at)
+        return false
+    v := str_addr(value)
+    for j in 0..load64(v)
+        c := load8(v + 16 + j)
+        if c == 13 or c == 10 or c == 0
+            net_fail("", "bad_request", "the value of header `{name}` has a line break", at)
+            return false
+    if serve_ieq(k + 16, kn, str_addr("content-length") + 16, 14)
+        or serve_ieq(k + 16, kn, str_addr("connection") + 16, 10)
+        or serve_ieq(k + 16, kn, str_addr("transfer-encoding") + 16, 17)
+        return true
+    if serve_ieq(k + 16, kn, str_addr("content-type") + 16, 12)
+        store64(st, 1)
+    sb_text(name)
+    sb_text(": ")
+    sb_text(value)
+    sb_text("\r\n")
+    true
+
+## `ex.respond(r)`, `ex.respond_bytes(...)` (std.net.11, 16, 17): send the
+## response and close the connection. `all` is 0 or the `all_headers` map.
+fn serve_answer(h int, status int, headers int, all int, body int, at str)
+    o := net_obj(h)
+    if o == 0 or load64(o + NET_KIND) != SERVE_EXCHANGE
+        net_fail("", "other", "this exchange has already been answered or is closed", at)
+        return
+    if status < 100 or status > 599
+        net_fail("", "bad_request", "{status} is not an HTTP status; use 100 to 599", at)
+        return
+    nobody := status / 100 == 1 or status == 204 or status == 304
+    sb_reset()
+    sb_text("HTTP/1.1 ")
+    serve_num(status)
+    sb_byte(32)
+    sb_text(serve_reason(status))
+    sb_text("\r\n")
+    st := cz_words(1)
+    for i in 0..http_slots(headers)
+        e := http_slot(headers, i)
+        if load64(e) != -1
+            k := str_addr(str_at(load64(e + 8)))
+            if all == 0 or not serve_has(all, k + 16, load64(k))
+                if not serve_line(str_at(load64(e + 8)), str_at(load64(e + 16)), st, at)
+                    return
+    if all != 0
+        for i in 0..http_slots(all)
+            e := http_slot(all, i)
+            if load64(e) != -1
+                xs := list_addr(list_at(load64(e + 16)))
+                items := load64(xs + 16)
+                for j in 0..load64(xs)
+                    if not serve_line(str_at(load64(e + 8)), str_at(load64(items + 8 * j)), st, at)
+                        return
+    bn := load64(body)
+    if cz_rd(st, 0) == 0 and bn > 0 and not nobody
+        sb_text("Content-Type: text/plain; charset=utf-8\r\n")
+    if status / 100 != 1 and status != 204
+        sb_text("Content-Length: ")
+        serve_num(if nobody then 0 else bn)
+        sb_text("\r\n")
+    sb_text("Connection: close\r\n\r\n")
+    if not nobody and str_at(load64(o + NET_ADDR)) != "HEAD"
+        sb_bytes(body + 16, bn)
+    out := sb_str()
+    r := serve_send(o, str_addr(out) + 16, load64(str_addr(out)))
+    serve_end(o)
+    if r < 0
+        net_io_fail(o, r, at)
+
+fn serve_respond(h int, r int, at str)
+    serve_answer(h, load64(r), load64(r + 8), load64(r + 24), load64(r + 16), at)
+
+fn serve_respond_bytes(h int, status int, headers int, data str, at str)
+    serve_answer(h, status, headers, 0, str_addr(data), at)
+
+# ---- bytes on a connection (std.net.16) and TLS (std.net.13) ----

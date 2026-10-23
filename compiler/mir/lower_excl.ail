@@ -63,6 +63,8 @@ fn Lower.is_statement(self, p ast.Pos) bool
 struct Recv
     path List[str]
     mutable bool
+    ## The receiver expression, to assign a `mut self` cell back to (lower_cell.ail).
+    expr ast.Expr?
 
 ## Record that `f`, declared as `key`, takes `mut self`.
 fn Lower.note_mut_self(mut self, f ast.FnDecl, key str)
@@ -74,10 +76,12 @@ fn Lower.note_mut_self(mut self, f ast.FnDecl, key str)
 fn Lower.set_receiver(mut self, recv ast.Expr, key str)
     traits.recv_path = place_path(recv) else []
     traits.recv_mut = traits.mut_self.contains(key)
+    traits.recv_expr = recv
 
 ## The noted receiver, cleared so a call nested in an argument doesn't see it.
 fn Lower.take_receiver(mut self) Recv
-    r := Recv(path: traits.recv_path, mutable: traits.recv_mut)
+    r := Recv(path: traits.recv_path, mutable: traits.recv_mut, expr: traits.recv_expr)
+    traits.recv_expr = none
     traits.recv_path = []
     traits.recv_mut = false
     r

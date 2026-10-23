@@ -35,7 +35,8 @@ NET_KIND := 56
 NET_ADDR := 64
 NET_CAP := 72
 NET_TLS := 80
-NET_BYTES := 88
+NET_STREAM := 88
+NET_BYTES := 96
 
 # `NET_FLAGS` bits.
 NET_EOF := 1
@@ -157,6 +158,7 @@ fn net_add(fd int, kind int, peer str, addr str) int
     store64(o + NET_ADDR, str_addr(addr))
     store64(o + NET_CAP, 0)
     store64(o + NET_TLS, 0)
+    store64(o + NET_STREAM, 0)
     mut t := load64(global(NET_TAB))
     if t == 0
         xs := list_new(8)
@@ -492,6 +494,24 @@ fn net_connect(host str, port int, at str) int
         return 0
     net_wrap(h)
 
+## `net.connect_tls(host, port)` (std.net.12): the `Conn` of a TLS session
+## (the client of `tls_client.ail`), or 0.
+fn net_connect_tls(host str, port int, at str) int
+    h := net_dial(host, port, "{host}:{port}", at)
+    if h == 0
+        return 0
+    o := net_obj(h)
+    te := tc_connect(o, host)
+    if te != 0
+        if te <= -1000000
+            msg := str_at(load64(load64(o + NET_TLS) + TS_MSG))
+            net_close(h)
+            return net_fail("{host}:{port}", "tls", msg, at)
+        net_io_fail(o, te, at)
+        net_close(h)
+        return 0
+    net_wrap(h)
+
 ## `l.accept()` (std.net.12): the handle of the next `Conn`, or 0.
 fn net_accept(h int, at str) int
     o := net_obj(h)
@@ -724,6 +744,34 @@ fn net_read(h int, max int, at str) str
         store64(o + NET_POS, pos + n)
         return t
     str_at(0)
+
+## `c.read_bytes(max)` (std.net.16): up to `max` bytes as they arrived, at
+## least one unless the stream has ended; the bytes are a `str`-shaped object.
+fn net_read_bytes(h int, max int, at str) str
+    o := net_obj(h)
+    if o == 0
+        net_closed("connection", at)
+        return str_at(0)
+    if max <= 0
+        net_fail(
+            str_at(load64(o + NET_PEER)),
+            "other",
+            "`read_bytes` needs a size of at least 1, not {max}",
+            at,
+        )
+        return str_at(0)
+    if load64(o + NET_POS) == load64(o + NET_LEN) and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+        e := net_fill(o)
+        if e < 0
+            net_io_fail(o, e, at)
+            return str_at(0)
+    pos := load64(o + NET_POS)
+    avail := load64(o + NET_LEN) - pos
+    n := if max < avail then max else avail
+    raw := str_new(n, n)
+    copy_bytes(raw + 16, load64(o + NET_BUF) + pos, n)
+    store64(o + NET_POS, pos + n)
+    str_at(raw)
 
 ## `c.read_line()`: a line without its `\n` or `\r\n` as a `str?`: the string,
 ## or 0 at the end of the stream.

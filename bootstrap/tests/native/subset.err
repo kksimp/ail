@@ -1,1 +1,1 @@
-bootstrap/tests/native/subset.ail:11:5: error[native.subset.1]: `defer` isn't in the native subset yet
+bootstrap/tests/native/subset.ail:16:15: error[native.subset.1]: unique struct `Lock` isn't in the native subset yet
