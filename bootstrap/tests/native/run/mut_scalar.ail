@@ -10,6 +10,13 @@ fn count(mut total int, xs List[int])
     for x in xs
         total += x
 
+struct Counter
+    n int
+
+fn Counter.add(mut self, by int, mut seen int)
+    self.n += by
+    seen += 1
+
 fn main()
     mut k := 5
     bump(mut k)
@@ -23,3 +30,9 @@ fn main()
     count(mut t, [1, 2, 3])
     count(mut t, [10])
     print(t)
+    mut c := Counter(n: 0)
+    mut seen := 0
+    c.add(5, mut seen)
+    c.add(7, mut seen)
+    print(c.n)
+    print(seen)

@@ -243,15 +243,21 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
             pos,
             "calling `{key}` with {args.len() + vs.len()} arguments instead of {sig.params.len()}",
         )
+    mut cells := List[Cell]()
     for i in 0..args.len()
         a := args[i]
         if a.label != none
             return unsupported(pos, "calling `{key}` with a labelled argument")
         t := sig.params[vs.len()]
+        if ct := cell_ty(t)
+            vs.push(cell_arg(a, ct, mut cells)?)
+            continue
         v := lower_value(a.value, t)?
         vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
-    Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    res := Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    cells_back(cells)
+    res
 
 ## `o.ok()` and `o.text()` of a `proc.Output` (std.proc.9, std.proc.10): the
 ## status is zero; the standard output followed by the standard error.
