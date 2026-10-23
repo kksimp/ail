@@ -19,6 +19,7 @@ use a64
 use ast
 use check
 use doc
+use edit
 use fmt
 use derive
 use mir
@@ -37,6 +38,8 @@ fn main() !
                 check_dump(path, args.len() > 2)?
         "fmt" =>
             io.exit(fmt.command(args[1..]))
+        "edit" =>
+            io.exit(edit.command(args[1..]))
         "docs" =>
             # The doc comment attached to each line, as `LINE: text` (api.doc.1).
             for path in args[1..]
