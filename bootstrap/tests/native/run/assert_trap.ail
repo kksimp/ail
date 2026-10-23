@@ -1,0 +1,9 @@
+struct P
+    x int
+
+fn main()
+    assert(1 == 1)
+    assert_eq("ab", "ab")
+    assert_eq(P(x: 2).x, 2)
+    print("ok")
+    assert_eq("a", "b")
