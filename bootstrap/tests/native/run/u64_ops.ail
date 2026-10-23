@@ -1,0 +1,19 @@
+# u64 (type.num.1, type.num.14-15): values above 2^63 print, compare, divide and convert as
+# unsigned numbers; checked, wrapping and saturating forms agree.
+fn top() u64
+    0.to_u64().wrapping_sub(1.to_u64())
+
+fn main()
+    m := top()
+    h := 9223372036854775807.to_u64() + 5.to_u64()
+    print("{m} {h} {m / 10.to_u64()} {m % 10.to_u64()} {h / 3.to_u64()}")
+    print("{m > h} {h > m} {h < m} {m >= m} {h <= 5.to_u64()} {m == top()} {m != h}")
+    print("{m:x} {m.to_hex()} {h.to_hex()} {m.to_float()} {h.to_float()}")
+    print("{m.checked_add(1.to_u64())} {h.checked_add(1.to_u64())} {m.checked_mul(2.to_u64())}")
+    print("{0.to_u64().checked_sub(1.to_u64())} {m.checked_sub(h)} {m.checked_div(0.to_u64())} {m.checked_rem(7.to_u64())}")
+    print("{m.saturating_add(9.to_u64())} {0.to_u64().saturating_sub(4.to_u64())} {h.saturating_mul(4.to_u64())}")
+    print("{m.wrapping_add(2.to_u64())} {h.wrapping_mul(2.to_u64())}")
+    print("{200.to_u8().to_u64()} {4000000000.to_u32().to_u64()} {7.to_u64().to_u32()} {7.to_u64().to_int()}")
+    print([m, 3.to_u64()])
+    s := m / 2.to_u64()
+    print("{s} {s + s} {s * 2.to_u64()}")

@@ -1,0 +1,72 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `u64` (type.num.1, type.num.14-15): a value is its 64 bits in a register, so the signed
+## operations are wrong for it above 2^63. Comparison is the signed one on the bits with the
+## top bit flipped; division, text and conversion are here.
+
+U64_TOP := -9223372036854775807 - 1
+
+## `a < b` as unsigned numbers.
+fn u64_lt(a int, b int) bool
+    a.bit_xor(U64_TOP) < b.bit_xor(U64_TOP)
+
+## `a / b` as unsigned numbers; `b` is not zero.
+fn u64_div(a int, b int) int
+    if b < 0
+        return if u64_lt(a, b) then 0 else 1
+    if a >= 0
+        return a / b
+    mut q := (a.shr(1).bit_and(9223372036854775807) / b) * 2
+    if not u64_lt(a - q * b, b)
+        q += 1
+    q
+
+## `a % b` as unsigned numbers; `b` is not zero.
+fn u64_rem(a int, b int) int
+    a - u64_div(a, b) * b
+
+## Whether `a * b` fits in 64 bits.
+fn u64_mul_ok(a int, b int) bool
+    if b == 0
+        return true
+    u64_div(a * b, b) == a
+
+## The decimal digits of `n` as an unsigned number.
+fn put_u64(n int)
+    if n >= 0
+        put_int(n)
+        return
+    q := u64_div(n, 10)
+    put_int(q)
+    put_int(n - q * 10)
+
+fn fmt_u64(n int) str
+    sb_reset()
+    put_u64(n)
+    sb_str()
+
+fn out_u64(n int)
+    out_str(fmt_u64(n))
+
+## Lowercase hexadecimal of the 64 bits (type.str.11).
+fn fmt_hex_u(n int) str
+    sb_reset()
+    if n == 0
+        sb_byte(48)
+        return sb_str()
+    mut started := false
+    mut i := 15
+    while i >= 0
+        d := n.shr(4 * i).bit_and(15)
+        if d != 0 or started
+            started = true
+            sb_byte(if d < 10 then 48 + d else 87 + d)
+        i -= 1
+    sb_str()
+
+## `n.to_float()` for an unsigned `n`.
+fn u64_float(n int) float
+    if n >= 0
+        return n.to_float()
+    (n.shr(1).bit_and(9223372036854775807).bit_or(n.bit_and(1))).to_float() * 2.0

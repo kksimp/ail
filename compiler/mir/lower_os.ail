@@ -278,7 +278,12 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     mut text := -1
     match v.ty
         Int | Sized(_) =>
-            text = call(if spec.hex then "rt.fmt_hex" else "rt.fmt_int", [v.id], Ty.Str)
+            u := if v.ty == Ty.Sized("u64") then "u" else ""
+            text = call(
+                if spec.hex then "rt.fmt_hex{if u == "" then "" else "_u"}" else "rt.fmt_{if u == "" then "int" else "u64"}",
+                [v.id],
+                Ty.Str,
+            )
         Float | F32 =>
             if n >= 0
                 text = call("rt.fmt_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Str)

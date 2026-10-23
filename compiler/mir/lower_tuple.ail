@@ -405,6 +405,8 @@ fn has_tuple(t Ty) bool
 ## The text of a value of a type `text_ok` accepts, as inside a tuple or a
 ## list: strings in quotes, `(1, "a")`, `[(1, "a")]`.
 fn Lower.value_text(mut self, t Ty, x int) int
+    if t == Ty.Sized("u64")
+        return call("rt.fmt_u64", [x], Ty.Str)
     match t
         Int | Sized(_) => call("rt.fmt_int", [x], Ty.Str)
         Float => call("rt.fmt_float", [x], Ty.Str)

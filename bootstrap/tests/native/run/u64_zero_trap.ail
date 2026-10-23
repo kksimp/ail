@@ -1,0 +1,5 @@
+# Dividing a u64 by zero (expr.arith.3).
+fn main()
+    m := 0.to_u64().wrapping_sub(1.to_u64())
+    print("before")
+    print(m / 0.to_u64())

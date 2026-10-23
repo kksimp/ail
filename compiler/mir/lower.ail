@@ -568,7 +568,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "str" => Ty.Str
                 "bytes" => Ty.Bytes
                 "char" => Ty.Char
-                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "f32" => scalar_ty(name)
+                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "u64" | "f32" => scalar_ty(name)
                 "List" =>
                     if args.len() != 1
                         return none
@@ -1886,6 +1886,8 @@ fn Lower.lower_print_body(mut self, args List[ast.Arg], pos ast.Pos) Val?
     Val(id: -1, ty: Ty.Unit)
 
 fn out_fn(t Ty) str
+    if t == Ty.Sized("u64")
+        return "rt.out_u64"
     match t
         Int | Sized(_) => "rt.out_int"
         Float | F32 => float_out_fn(t)
@@ -1905,6 +1907,8 @@ fn out_fn(t Ty) str
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if v.ty == Ty.List(Ty.Sized("u64"))
+        return out_text(v, pos)
     if v.ty.opt_inner() != none
         return out_opt(v, pos)
     if v.ty.is_coll()
