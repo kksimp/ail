@@ -17,6 +17,7 @@
 # With several files, each output starts with a line `== PATH`.
 use a64
 use ast
+use budget
 use check
 use doc
 use edit
@@ -40,6 +41,19 @@ fn main() !
             io.exit(fmt.command(args[1..]))
         "edit" =>
             io.exit(edit.command(args[1..]))
+        "budget" =>
+            # `budget [--budget [N]] [--from K] [--json] -- EXE ARGS...`: EXE under a budget (budget.out.1-6).
+            cut := args.index_of("--") else args.len()
+            mut opts := args[1..cut]
+            json := opts.contains("--json")
+            taken := budget.take(mut opts)
+            if taken.why != ""
+                io.eprint("error: {taken.why}")
+                io.exit(2)
+            if not taken.found or cut + 1 >= args.len()
+                io.eprint("usage: compiler budget --budget [N] [--from K] [--json] -- EXE ARGS...")
+                io.exit(2)
+            io.exit(budget.run(taken.budget, args[cut + 1], args[cut + 2..], json))
         "docs" =>
             # The doc comment attached to each line, as `LINE: text` (api.doc.1).
             for path in args[1..]
