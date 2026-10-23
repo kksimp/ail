@@ -1,10 +1,10 @@
 # garlic
-(root)  59 items
+(root)  62 items
 css  31 items
 draw  16 items
 garlicjs.syntax  89 items
 garlicjs.vm  237 items
-gfx  44 items
+gfx  45 items
 html  32 items
 image  74 items
 images  6 items
