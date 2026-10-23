@@ -1,10 +1,35 @@
-# Lists of lists and of strings print as the interpreter prints them, strings
-# quoted and escaped (trait.auto.2).
+# print and interpolation of lists of optionals and of maps, maps of lists,
+# and sets inside lists (trait.auto.2, type.map.4).
+fn names() List[str?]
+    ["x", none, "y\"z"]
+
+fn nums() List[int?]
+    [1, none, 3]
+
+fn chars() List[char?]
+    ['a', none, '\n']
+
+fn floats() List[float?]
+    [1.5, none]
+
+fn flags() List[bool?]
+    [true, none, false]
+
+fn lists() Map[str, List[int]]
+    {"a": [1, 2], "b": []}
+
 fn main()
-    print([[1, 2], [3]])
-    print(["a", "b\"c"])
-    print([[1.5], []])
-    print([[true]])
-    print([["x"]])
-    s := "\u{1}\u{7f}\u{200b}"
-    print([s])
+    print(names())
+    print(nums())
+    print(chars())
+    print(floats())
+    print(flags())
+    m1 := {"k": "v", "q": "r"}
+    print([m1, Map[str, str]()])
+    print(lists())
+    ms := {1: {"t": true}}
+    print(ms)
+    ss := {3}
+    print([ss])
+    a := names()
+    print("n {a} {[m1]}")

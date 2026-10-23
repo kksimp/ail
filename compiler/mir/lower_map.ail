@@ -545,8 +545,8 @@ fn Lower.out_coll(mut self, v Val, pos ast.Pos) Val?
         Map(k, x) =>
             kk := scalar_kind(k)
             vk := scalar_kind(x)
-            if vk < 0
-                return unsupported(pos, "printing a `{v.ty.name()}`")
+            if vk < 0 or kk < 0
+                return out_shown(v, pos)
             call("rt.out_map", [v.id, konst(kk, Ty.Int), konst(vk, Ty.Int)], Ty.Unit)
         Set(e) => call("rt.out_set", [v.id, konst(scalar_kind(e), Ty.Int)], Ty.Unit)
         _ => return unsupported(pos, "printing a `{v.ty.name()}`")
