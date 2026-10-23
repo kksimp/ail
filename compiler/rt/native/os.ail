@@ -529,6 +529,44 @@ fn os_env_get(name str) str
     os_fail_kind(K_NOT_FOUND)
     ""
 
+## `env.vars()` (std.env.7): the variables whose names and values are UTF-8,
+## as a `Map[str, str]` in name order (byte order). Windows has no `envp`
+## here yet, so the map is empty there (ADR 0608).
+fn env_vars() int
+    m := map_new(1, 0, 0)
+    if target() == 3
+        os_succeed()
+        return m
+    names := list_new(16)
+    mut e := os_envp()
+    while load64(e) != 0
+        c := load64(e)
+        len := os_c_len(c)
+        mut eq := 0
+        while eq < len and load8(c + eq) != 61
+            eq += 1
+        if eq < len and os_utf8_chars(c, eq) >= 0 and os_utf8_chars(c + eq + 1, len - eq - 1) >= 0
+            list_push(names, str_addr(os_str_from(c, eq)))
+        e += 8
+    q := list_addr(names)
+    data := load64(q + 16)
+    n := load64(q)
+    mut i := 1
+    while i < n
+        x := load64(data + 8 * i)
+        mut j := i
+        while j > 0 and str_cmp(str_at(load64(data + 8 * (j - 1))), str_at(x)) > 0
+            store64(data + 8 * j, load64(data + 8 * (j - 1)))
+            j -= 1
+        store64(data + 8 * j, x)
+        i += 1
+    for k in 0..n
+        name := str_at(load64(data + 8 * k))
+        v := os_env_get(name)
+        map_set(m, str_addr(name), str_addr(v))
+    os_succeed()
+    m
+
 ## `env.home()` (std.env.6): `HOME`, else `USERPROFILE`, when not empty.
 fn os_env_home() str
     h := os_env_get("HOME")
