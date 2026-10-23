@@ -282,12 +282,7 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                     s := callee_sig(n) else return generic_fails(callee_key(n))
                     s.fails
                 _ => false
-        Method(
-            recv,
-            name,
-            _,
-            _,
-        ) => os_fails(recv, name)
+        Method(recv, name, _, _) => os_fails(recv, name)
             or method_fails(recv, name)
             or net_fails(recv, name)
             or generic_member_fails(recv, name)

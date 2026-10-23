@@ -183,7 +183,15 @@ fn Lower.alias_params(mut self, f ast.FnDecl, inh ast.FnDecl)
             scopes[0][inh.params[i].name] = lookup(f.params[i].name) else continue
 
 ## Trap unless `c` holds; `note` says where an inherited condition comes from.
-fn Lower.require_one(mut self, key str, c ast.Contract, note str, args List[NameKey], pos ast.Pos, callee_file int)
+fn Lower.require_one(
+    mut self,
+    key str,
+    c ast.Contract,
+    note str,
+    args List[NameKey],
+    pos ast.Pos,
+    callee_file int,
+)
     caller_file := file
     if callee_file != caller_file
         enter_file(callee_file)
@@ -195,7 +203,15 @@ fn Lower.require_one(mut self, key str, c ast.Contract, note str, args List[Name
     fail_requires(key, c, note, args, pos, callee_file)
     cur = ok
 
-fn Lower.fail_requires(mut self, key str, c ast.Contract, note str, args List[NameKey], pos ast.Pos, callee_file int)
+fn Lower.fail_requires(
+    mut self,
+    key str,
+    c ast.Contract,
+    note str,
+    args List[NameKey],
+    pos ast.Pos,
+    callee_file int,
+)
     trap_open("contract.req.1", pos)
     say("`{key}` requires `{c.text}`{note}, but it was called with ")
     describe_args(args, pos)
@@ -309,7 +325,10 @@ fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
     if i := inh
         for k in 0..i.params.len()
             if k < f.params.len() and i.params[k].name != f.params[k].name
-                ens_vars.push(NameKey(name: i.params[k].name, key: lookup(f.params[k].name) else ""))
+                ens_vars.push(NameKey(
+                    name: i.params[k].name,
+                    key: lookup(f.params[k].name) else "",
+                ))
     unchecked = true
     for c in list
         for o in c.olds

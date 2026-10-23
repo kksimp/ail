@@ -13,7 +13,7 @@ entry: main in main.ail
 
 ## codegen (54 items)
 
-## derive (32 items)
+## derive (35 items)
 
 ## doc (18 items)
 
@@ -25,13 +25,9 @@ entry: main in main.ail
 
 ## fmt (63 items)
 
-<<<<<<< HEAD
-## mir (383 items)
-=======
 ## load (90 items)
 
-## mir (376 items)
->>>>>>> origin/main
+## mir (383 items)
 
 ## obj (58 items)
 
