@@ -395,16 +395,16 @@ fn Parser.diag(mut self, rule str, pos ast.Pos)
     diags.push(Diag(rule: rule, pos: pos, msg: "", fixed: false, help: "", fix: "", edits: []))
 
 ## The position of the next token when it is on the line of `at`, else `at`.
-fn Parser.next_on_line(self, at ast.Pos) ast.Pos
-    if i + 1 < tokens.len() and tokens[i + 1].pos.line == at.line
+fn Parser.next_on_line(self, here_pos ast.Pos) ast.Pos
+    if i + 1 < tokens.len() and tokens[i + 1].pos.line == here_pos.line
         return tokens[i + 1].pos
-    at
+    here_pos
 
 ## `n` columns after `at`, or the next token's position when it is on the line.
-fn Parser.after_on_line(self, at ast.Pos, n int) ast.Pos
-    if i + 1 < tokens.len() and tokens[i + 1].pos.line == at.line
+fn Parser.after_on_line(self, here_pos ast.Pos, n int) ast.Pos
+    if i + 1 < tokens.len() and tokens[i + 1].pos.line == here_pos.line
         return tokens[i + 1].pos
-    ast.Pos(line: at.line, col: at.col + n)
+    ast.Pos(line: here_pos.line, col: here_pos.col + n)
 
 ## The end of token `k` on its line, when its text is known (identifiers, keywords, symbols).
 ## The edits of `{{x}}` in a string: `\{` for the first brace, and the last `}` goes.
@@ -433,9 +433,9 @@ fn Parser.tok_end(self, k int) ast.Pos?
     ast.Pos(line: tokens[k].pos.line, col: tokens[k].pos.col + text.chars().len())
 
 ## Whether the previous token ends exactly at `at`.
-fn Parser.attached_before(self, at ast.Pos) bool
+fn Parser.attached_before(self, here_pos ast.Pos) bool
     e := tok_end(i - 1) else return false
-    e == at
+    e == here_pos
 
 ## Give the diagnostic just reported a fix.
 fn Parser.attach(mut self, title str, edits List[fix.Edit])

@@ -6,7 +6,6 @@
 use check
 use fixrun
 use fix
-use fix
 
 MAX_ROUNDS := 5
 

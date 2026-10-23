@@ -440,11 +440,11 @@ fn Lexer.closers(self) str
 fn Lexer.attach(mut self, edits List[fix.Edit])
     diags[diags.len() - 1].edits = edits
 
-fn Lexer.diag_help_fix(mut self, rule str, pos ast.Pos, msg str, help str, fixed bool, fix str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: fixed, help: help, fix: fix, edits: []))
+fn Lexer.diag_help_fix(mut self, rule str, pos ast.Pos, msg str, help str, fixed bool, title str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: fixed, help: help, fix: title, edits: []))
 
-fn Lexer.diag_fix(mut self, rule str, pos ast.Pos, msg str, help str, fix str)
-    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: fix, edits: []))
+fn Lexer.diag_fix(mut self, rule str, pos ast.Pos, msg str, help str, title str)
+    diags.push(Diag(rule: rule, pos: pos, msg: msg, fixed: true, help: help, fix: title, edits: []))
 
 ## Record the comment at `line[start..]`, if there is one.
 fn Lexer.comment(mut self, line List[char], start int, line_no int)
@@ -842,8 +842,8 @@ fn Lexer.bytes_literal(mut self, line List[char], start int, line_no int) int
                 )
                 if fixed
                     close := close_brace(line, i + 3)
-                    if c := hex_char(line, i + 3, close)
-                        attach([fix.span(here, ast.Pos(line: here.line, col: here.col + close - i + 1), utf8_escapes(c))])
+                    if cp := hex_char(line, i + 3, close)
+                        attach([fix.span(here, ast.Pos(line: here.line, col: here.col + close - i + 1), utf8_escapes(cp))])
                 i += 2
         elif c.code() < 128
             hex.push(hex_byte(c.code()))
