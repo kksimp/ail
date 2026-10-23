@@ -138,6 +138,7 @@ pub fn query_command(rest List[str], std str) int
             io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
             return 2
     lines := src.lines()
+    base := file_base(loaded.program, file, target)
     head := [
         kv("api", J.Int(API_VERSION)),
         kv("file", J.Str(file)),
@@ -149,8 +150,250 @@ pub fn query_command(rest List[str], std str) int
         Locals =>
             vis := visible_locals(analysis.locals, lines, line, col).sorted(by: |l| sort_key(l))
             out.push(kv("locals", J.Arr([local_json(l) for l in vis])))
-        Type | Refs =>
-            io.eprint("error: this query isn't native yet")
-            return 2
+        Type =>
+            asked := answer_type(loaded, analysis, lines, base, line, col)
+            if asked.message != ""
+                return nothing(asked.message)
+            out.extend(asked.kvs)
+        Refs =>
+            asked := answer_refs(loaded, analysis, lines, base, line, col, file)
+            if asked.message != ""
+                return nothing(asked.message)
+            out.extend(asked.kvs)
     print(write_json(J.Obj(out), pretty, 0))
     0
+
+## api.query.1: a position with nothing to answer is exit 1.
+fn is_pos(o ast.Pos?, p ast.Pos) bool
+    if q := o
+        return q == p
+    false
+
+fn nothing(message str) int
+    j := J.Obj([
+        kv("api", J.Int(API_VERSION)),
+        kv("severity", J.Str("error")),
+        kv("message", J.Str(message)),
+    ])
+    io.eprint(write_json(j, false, 0))
+    1
+
+## What a query answers: the keys after the head, or why there is nothing.
+struct Asked
+    kvs List[Kv]
+    message str
+
+struct Token
+    start int
+    end int
+    text str
+
+fn is_word(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+## The name or number around (or just before) `col` on `line`; columns are characters.
+fn token_at(lines List[str], line int, col int) Token?
+    if line < 1 or line > lines.len()
+        return none
+    chars := lines[line - 1].chars()
+    mut i := col - 1
+    if i < 0
+        return none
+    if i >= chars.len() or not is_word(chars[i])
+        if i == 0 or i - 1 >= chars.len() or not is_word(chars[i - 1])
+            return none
+        i -= 1
+    mut a := i
+    mut b := i
+    while a > 0 and is_word(chars[a - 1])
+        a -= 1
+    while b + 1 < chars.len() and is_word(chars[b + 1])
+        b += 1
+    Token(start: a + 1, end: b + 2, text: chars[a..b + 1].join(""))
+
+## The index of the file `path` in the program: where its lines start (api.pkg.2).
+fn file_base(prog ast.Program, path str, target str) int
+    if target == path
+        return 0
+    for f in prog.files
+        if f.path == path
+            return f.base
+    0
+
+fn query_file_of(prog ast.Program, line int)(str, int)
+    if line >= 1073741824
+        return ("", line)
+    mut at := -1
+    for i in 0..prog.files.len()
+        if prog.files[i].base < line
+            at = i
+    if at < 0
+        return ("", line)
+    (prog.files[at].path, line - prog.files[at].base)
+
+fn answer_type(
+    loaded load.Loaded,
+    analysis check.Analysis,
+    lines List[str],
+    base int,
+    line int,
+    col int,
+) Asked
+    prog := loaded.program
+    tok := token_at(lines, line, col) else
+        return Asked(kvs: [], message: "no name or literal at {line}:{col}")
+    start := ast.Pos(line: line + base, col: tok.start)
+    symbol := resolved_in(prog, analysis, start)
+    # Locals are tracked for the first file only.
+    mut ty := ""
+    mut have := false
+    if base == 0
+        for l in visible_locals(analysis.locals, lines, line, col)
+            if not have and l.name == tok.text
+                ty = l.ty
+                have = true
+    # The checker's type of the innermost expression starting here.
+    for e in analysis.exprs
+        if e.0 == start
+            ty = e.1
+            have = true
+            break
+    if not have
+        # The binding site of a local, which is not an expression.
+        for l in analysis.locals
+            if not have and is_pos(l.at, start)
+                ty = l.ty
+                have = true
+    if not have
+        return Asked(kvs: [], message: "no type recorded for `{tok.text}` at {line}:{col}")
+    mut kvs := [
+        kv("text", J.Str(tok.text)),
+        kv("start_col", J.Int(tok.start)),
+        kv("end_col", J.Int(tok.end)),
+        kv("type", J.Str(ty)),
+        kv("symbol", opt_str(symbol)),
+    ]
+    # api.type.2: a call also says what the callee promises.
+    mut callee := J.Null
+    if id := symbol
+        if id.starts_with("fn:") or id.starts_with("method:")
+            # As the Rust query, the callee shows no `fails_with` (its error sets aren't passed).
+            api := new_api(prog, Facts(
+                effects: analysis.effects,
+                errors: Map[int, List[str]](),
+                symbols: analysis.symbols,
+                weak_symbols: analysis.weak_symbols,
+            ))
+            for i in 0..prog.fns.len()
+                if callee == J.Null and api.fn_ids[i] == id and prog.fns[i].pos.line < 1073741824
+                    callee = api.fn_item(i).json()
+    kvs.push(kv("callee", callee))
+    Asked(kvs: kvs, message: "")
+
+fn resolved_in(prog ast.Program, analysis check.Analysis, pos ast.Pos) str?
+    key := pos.line * 65536 + pos.col
+    if id := analysis.symbols.get(key)
+        return id
+    analysis.weak_symbols.get(key)
+
+## Every declaration of `items`, nested, as (position, id).
+fn flatten_decls(items List[Item], mut out List[(ast.Pos, str)])
+    for i in items
+        out.push((ast.Pos(line: i.line, col: i.col), i.id))
+        for g in i.members
+            flatten_decls(g.items, mut out)
+
+fn answer_refs(
+    loaded load.Loaded,
+    analysis check.Analysis,
+    lines List[str],
+    base int,
+    line int,
+    col int,
+    path str,
+) Asked
+    prog := loaded.program
+    tok := token_at(lines, line, col) else
+        return Asked(kvs: [], message: "no name at {line}:{col}")
+    start := ast.Pos(line: line + base, col: tok.start)
+    found := collect_refs(prog, analysis.symbols, analysis.weak_symbols)
+    api := new_whole_api(prog, Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: analysis.symbols,
+        weak_symbols: analysis.weak_symbols,
+    ))
+    mut decls := List[(ast.Pos, str)]()
+    flatten_decls(api.items(), mut decls)
+    # The symbol: a use here, or a declaration here.
+    mut id := no_str()
+    for r in found.refs
+        if id == none and r.pos == start
+            id = r.id
+    for d in decls
+        if id == none and d.0 == start
+            id = d.1
+    if id == none
+        # api.pkg.3: a use through a module (`geo.origin`) is recorded at the qualifier; the
+        # name after the dot asks the same question.
+        chars := lines[line - 1].chars()
+        dot := tok.start - 2
+        if dot >= 0 and dot < chars.len() and chars[dot] == '.'
+            mut from := 0
+            for i in 0..dot
+                if not (is_word(chars[i]) or chars[i] == '.')
+                    from = i + 1
+            q := ast.Pos(line: line + base, col: from + 1)
+            for r in found.refs
+                if id == none and r.pos == q
+                    id = r.id
+    mut at := List[(ast.Pos, bool)]()
+    mut symbol := ""
+    if i := id
+        symbol = i
+        for r in found.refs
+            if r.id == i
+                at.push((r.pos, false))
+        for d in decls
+            if d.1 == i
+                at.push((d.0, true))
+    else
+        # A local: its binding and the unresolved names in its scope.
+        mut scoped := List[check.LocalFact]()
+        if base == 0
+            scoped = [
+                l
+                for l in visible_locals(analysis.locals, lines, line, col) if l.name == tok.text
+            ]
+        mut chosen := scoped
+        chosen.extend([l for l in analysis.locals if is_pos(l.at, start)])
+        if chosen.len() == 0
+            return Asked(kvs: [], message: "no symbol `{tok.text}` at {line}:{col}")
+        m := chosen[0]
+        symbol = "local:{m.name}"
+        if b := m.at
+            at.push((b, true))
+        for n in found.names
+            if n.1 == m.name and n.0.line < QUERY_FILE_LINES and in_scope(
+                m,
+                lines,
+                n.0.line,
+                n.0.col,
+            ) and not is_pos(m.at, n.0)
+                at.push((n.0, false))
+        # `self` has no binding; its uses are all names.
+    at = at.sorted(by: |x| (x.0.line, x.0.col, if x.1 then 0 else 1))
+    mut out := List[J]()
+    for k in 0..at.len()
+        x := at[k]
+        if k > 0 and at[k - 1] == x
+            continue
+        where := query_file_of(prog, x.0.line)
+        file := if where.0 == "" then path else where.0
+        out.push(J.Obj([
+            kv("file", J.Str(file)),
+            kv("line", J.Int(where.1)),
+            kv("col", J.Int(x.0.col)),
+            kv("def", J.Bool(x.1)),
+        ]))
+    Asked(kvs: [kv("symbol", J.Str(symbol)), kv("refs", J.Arr(out))], message: "")
