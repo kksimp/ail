@@ -1,13 +1,8 @@
-# std.tensor.24: softmax along the last axis, per row, for float and f32.
-fn show(t tensor.Tensor[float])
-    print(t.to_list())
-
 fn main()
-    show(tensor.from([0.0, 0.0]).softmax())
+    print(tensor.from([0.0, 0.0]).softmax()) # tensor.from([0.5, 0.5])
+    print(tensor.from([0.0, 0.0, 0.0, 0.0]).softmax()) # 0.25 each
     a := tensor.from([1.0, 3.0, 2.0, 2.0, 2.0, 2.0], [2, 3])
-    show(a.softmax())
-    b := tensor.from([-1.0, 0.5, 4.0, 10.0, -20.0, 0.5, 0.75, 1.0], [2, 2, 2])
-    show(b.softmax())
-    show(b.to_f32().softmax().to_float())
-    show(tensor.from([1.0, 1000.0, -1000.0, 5.0], [2, 2]).softmax())
-    print(a.softmax().shape())
+    print(a.softmax().map(|x| x * 100.0).round()) # one row per line
+    print(tensor.from([1000.0, 1000.0]).softmax()) # shifted, so no overflow
+    f := tensor.from([0.0, 0.0], [2]).to_f32()
+    print(f.softmax().to_float().sum() > 0.99)

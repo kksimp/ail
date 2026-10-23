@@ -1048,3 +1048,78 @@ fn tensor_conv2d(a int, k int) int
                         s = s + x * y
             storef(out + 8 * (oy * ow + ox), s)
     t
+
+# top2 (std.tensor.23).
+
+## The faults of `t.top2(axis)`: with `which` 0 an axis out of range
+## (std.tensor.11), with 1 fewer than two elements along it (std.tensor.23).
+fn tensor_top2_fault(a int, axis int, which int) int
+    rank := load64(a + 8)
+    if axis < 0 or axis >= rank
+        if which != 0
+            return 0
+        sb_reset()
+        sb_text("`top2(")
+        put_int(axis)
+        sb_text(")` on a tensor of shape ")
+        put_sizes(a + 32, rank)
+        sb_text(": the axis must be from 0 to ")
+        put_int(rank - 1)
+        return str_addr(sb_str())
+    if which == 0 or load64(a + 32 + 8 * axis) >= 2
+        return 0
+    sb_reset()
+    sb_text("`top2(")
+    put_int(axis)
+    sb_text(")` needs two elements along the axis, but the shape is ")
+    put_sizes(a + 32, rank)
+    str_addr(sb_str())
+
+## One of the three results of `t.top2(axis)`: `part` 0 the index of the best
+## element, 1 of the second best, 2 the margin. 0 (not a tensor) when a row has
+## no second value or a NaN best.
+fn tensor_top2(a int, axis int, part int) int
+    rank := load64(a + 8)
+    ek := load64(a)
+    n := load64(a + 32 + 8 * axis)
+    mut before := 1
+    mut after := 1
+    for i in 0..axis
+        before = before * load64(a + 32 + 8 * i)
+    for i in axis + 1..rank
+        after = after * load64(a + 32 + 8 * i)
+    t := tensor_new(if part == 2 then ek else 0, rank - 1, before * after)
+    mut at := 0
+    for i in 0..rank
+        if i != axis
+            store64(t + 32 + 8 * at, load64(a + 32 + 8 * i))
+            at += 1
+    da := tensor_data(a)
+    out := tensor_data(t)
+    for b in 0..before
+        for c in 0..after
+            base := da + 8 * (b * n * after + c)
+            mut best := 0
+            mut second := 0 - 1
+            for k in 1..n
+                x := loadf(base + 8 * k * after)
+                if x > loadf(base + 8 * best * after)
+                    second = best
+                    best = k
+                elif second < 0
+                    if x == x
+                        second = k
+                elif x > loadf(base + 8 * second * after)
+                    second = k
+            bv := loadf(base + 8 * best * after)
+            if second < 0 or bv != bv
+                return 0
+            r := out + 8 * (b * after + c)
+            if part == 0
+                store64(r, best)
+            elif part == 1
+                store64(r, second)
+            else
+                m := bv - loadf(base + 8 * second * after)
+                storef(r, if ek == 2 then f32_round(m) else m)
+    t

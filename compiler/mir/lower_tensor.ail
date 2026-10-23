@@ -91,6 +91,7 @@ F32_METHODS := [
     "clamp",
     "round",
     "conv2d",
+    "top2",
 ]
 
 fn tensor_elem(t Ty) Ty
@@ -196,6 +197,39 @@ fn Lower.tensor_reduce(mut self, r Val, kind int, axis_arg ast.Arg?, npos ast.Po
         return Val(id: out, ty: r.ty)
     tensor_first(out, e)
 
+## `t.map(|x| e)` (std.tensor.8): like a key function (lower_closure.ail), `e`
+## is lowered inline in a loop over the elements, which are collected in a
+## list and made a tensor of the same shape; `e` decides the element type.
+fn Lower.tensor_map(mut self, r Val, a ast.Arg, npos ast.Pos) Val?
+    e := tensor_elem(r.ty)
+    x := a.param else return unsupported(npos, "`.map()` with this argument")
+    if a.label != none or a.mutable or a.moved or e == Ty.F32
+        return unsupported(npos, "`.map()` with this argument")
+    items := call("rt.tensor_to_list", [r.id], Ty.List(e))
+    n := op("len", [items], Ty.Int)
+    # The words of an `int` and a `float` list are alike: the list is made
+    # before the loop, and the elements are pushed by their own type.
+    out := call("rt.list_new", [n], Ty.List(Ty.Int))
+    mut rt := Ty.Unknown
+    c := count_open(n)
+    scopes.push(Map[str, str]())
+    declare(x.name, e, op("get", [items, c.i], e))
+    v := lower_value(a.value, e)
+    scopes.pop()
+    if vv := v
+        if vv.ty == Ty.Int or vv.ty == Ty.Float
+            rt = vv.ty
+            call(push_fn(rt), [out, vv.id], Ty.Unit)
+        else
+            problem(expr_pos(a.value), "`.map()` to a `{vv.ty.name()}` isn't in the native subset yet")
+    count_close(c)
+    if rt == Ty.Unknown
+        return none
+    shape := call("rt.tensor_shape", [r.id], Ty.List(Ty.Int))
+    t := Ty.Tensor(rt)
+    kind := konst(if rt == Ty.Float then 1 else 0, Ty.Int)
+    Val(id: call("rt.tensor_from_shape", [out, kind, shape], t), ty: t)
+
 ## `t.argmax(axis)` and `argmin` (std.tensor.17): a `Tensor[int]`, or an `int`
 ## with no axis.
 fn Lower.tensor_arg(mut self, r Val, name str, axis_arg ast.Arg?, npos ast.Pos) Val?
@@ -216,7 +250,32 @@ fn Lower.tensor_arg(mut self, r Val, name str, axis_arg ast.Arg?, npos ast.Pos) 
         return Val(id: out, ty: t)
     tensor_first(out, Ty.Int)
 
+## `t.top2(axis)` (std.tensor.23): a tuple of the best index, second index and
+## margin tensors. It is made here, not through `tuple_elem_ok`, so it only
+## serves a destructuring `let`.
+fn Lower.tensor_top2(mut self, r Val, axis_arg ast.Arg, npos ast.Pos) Val?
+    axis := lower_value(axis_arg.value, Ty.Int)?.id
+    f0 := call("rt.tensor_top2_fault", [r.id, axis, konst(0, Ty.Int)], Ty.Int)
+    tensor_trap_if(f0, "std.tensor.11", npos)
+    f1 := call("rt.tensor_top2_fault", [r.id, axis, konst(1, Ty.Int)], Ty.Int)
+    tensor_trap_if(f1, "std.tensor.23", npos)
+    it := Ty.Tensor(Ty.Int)
+    mt := r.ty
+    ty := Ty.Tuple([it, it, mt])
+    msg := str_value("`top2` of a row with no second value, or with a NaN best")
+    best := call("rt.tensor_top2", [r.id, axis, konst(0, Ty.Int)], it)
+    tensor_trap_unless(op("ne", [best, konst(0, Ty.Int)], Ty.Bool), msg, "std.tensor.23", npos)
+    second := call("rt.tensor_top2", [r.id, axis, konst(1, Ty.Int)], it)
+    margin := call("rt.tensor_top2", [r.id, axis, konst(2, Ty.Int)], mt)
+    obj := call("rt.obj_new", [konst(24, Ty.Int), konst(OBJ_STRUCT, Ty.Int)], ty)
+    store(obj, 0, best)
+    store(obj, 1, second)
+    store(obj, 2, margin)
+    Val(id: obj, ty: ty)
+
 fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
+    if name == "map" and args.len() == 1 and args[0].param != none
+        return tensor_map(r, args[0], npos)
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "`.{name}()` on a tensor with a labelled or `mut` argument")
@@ -276,6 +335,8 @@ fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[
     if args.len() == 1
         if name == "argmax" or name == "argmin"
             return tensor_arg(r, name, args[0], npos)
+        if name == "top2" and e != Ty.Int
+            return tensor_top2(r, args[0], npos)
         if name == "reshape"
             shape := lower_value(args[0].value, Ty.List(Ty.Int))?
             if not same_ty(shape.ty, Ty.List(Ty.Int))
