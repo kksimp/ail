@@ -257,7 +257,9 @@ regex engine is written.
   `focusout`. Typing into a field fires `keydown` (cancellable: that
   character is dropped), `input` and `keyup` per character, then `change`;
   Enter fires `keydown`/`keyup` first, and a cancelled `keydown` stops the
-  form from submitting. `KeyboardEvent` and `MouseEvent` start with empty
+  form from submitting. A click in Garlic fires `mousedown`, focus on the
+  control pressed, `mouseup` and `click` (a cancelled `mousedown` only keeps
+  the focus). `KeyboardEvent` and `MouseEvent` start with empty
   `key`/`code` and zero coordinates, as in Chromium.
 
 ## Generators and async functions
