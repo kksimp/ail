@@ -680,3 +680,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0859](0859-ail-edit-in-ail.md) | `ail edit` is ported to AIL (`compiler/edit/`), byte-identical to the Rust tool; syntax-only check until the loader lands *(delegated)* | Accepted | 2026-10-23 |
 | [0860](0860-ail-fix-machinery-in-ail.md) | The machinery of `ail fix` (edit types, anchor resolution, driver) is ported to AIL (`compiler/fix/`), same fixes and output as the Rust tool *(delegated)* | Accepted | 2026-10-23 |
 | [0862](0862-native-mut-cells-and-for-mut-write-through.md) | Native `mut` parameters and `mut self` of value types use cells; `for mut` over scalars writes through *(delegated)* | Accepted | 2026-10-23 |
+| [0863](0863-native-std-ui-through-the-app-host.md) | Native `std.ui` and widgets render through the `std.app` host: one window path for edit, pdf and Garlic; Mac first | Accepted | 2026-10-23 |
