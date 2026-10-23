@@ -1,0 +1,740 @@
+## The module fuzzers in AIL (fuzz.mod.*, ADR 0460): adversarial inputs for the
+## standard modules through the real `ail`, from the templates in
+## bootstrap/tests/fuzz/modules/NAME.ail (see their headers).
+##
+##   ail run tools/fuzz/modules.ail [N [SEED [NAME [OUTDIR]]]]    from the repository root
+##
+## N inputs per template (default 40) from SEED; NAME picks one template.
+## Properties: fuzz.mod.1 no crash; .2 no hang (10 s); .3 no line starting
+## `FAIL`; .4 a trap names a rule, never `bootstrap.*`; .6 a native build
+## (`# fuzz-native: yes`) agrees; .7 a run repeats. A failing program is saved
+## as OUTDIR/NAME-seed-N.ail (default tools/fuzz/failures). Ends with
+## `FUZZ GREEN` or `FUZZ RED (n failures)`.
+
+PIECES := [
+    "a",
+    "b",
+    "ab",
+    "hello",
+    " ",
+    "  ",
+    "\t",
+    "\n",
+    "\r\n",
+    "é",
+    "日本語",
+    "😀",
+    "e\u{301}",
+    "\u{200b}",
+    "\{",
+    "}",
+    "\\",
+    "\"",
+]
+
+fn cat(a str, b str) str
+    "{a}{b}"
+
+fn pick(xs List[str]) str
+    xs[random.int(0, xs.len() - 1)]
+
+fn below(n int) int
+    random.int(0, n - 1)
+
+fn chance(num int, den int) bool
+    below(den) < num
+
+fn repeat(s str, n int) str
+    s.repeat(n)
+
+fn edge_int() int
+    es := [
+        0,
+        1,
+        -1,
+        255,
+        256,
+        65535,
+        2147483648,
+        -2147483648,
+        9007199254740993,
+        9223372036854775807,
+        86399,
+        253402300799,
+    ]
+    if chance(1, 2)
+        return es[below(es.len())]
+    random.int(0, 1000000) / (1 + below(1000))
+
+## An AIL string literal for `s` (lex.str.1): braces, quotes and controls escaped.
+fn literal(s str) str
+    mut out := "\""
+    for c in s.chars()
+        n := c.code()
+        if c == '\\'
+            out = cat(out, "\\\\")
+        elif c == '"'
+            out = cat(out, "\\\"")
+        elif c == '{'
+            out = cat(out, "\\\{")
+        elif n == 10
+            out = cat(out, "\\n")
+        elif n == 13
+            out = cat(out, "\\r")
+        elif n == 9
+            out = cat(out, "\\t")
+        elif n == 0
+            out = cat(out, "\\0")
+        elif n < 32 or n == 127
+            out = cat(out, "\\u\{{n.to_hex()}}")
+        else
+            out = cat(out, "{c}")
+    cat(out, "\"")
+
+## Delete, insert, swap or truncate a few characters from `alphabet`.
+fn corrupt(s str, alphabet str) str
+    mut cs := s.chars()
+    alpha := alphabet.chars()
+    for _ in 0..1 + below(3)
+        if cs.len() == 0
+            cs.push(alpha[below(alpha.len())])
+            continue
+        i := below(cs.len())
+        k := below(4)
+        if k == 0
+            cs.remove_at(i)
+        elif k == 1
+            cs.insert(i, alpha[below(alpha.len())])
+        elif k == 2
+            j := below(cs.len())
+            t := cs[i]
+            cs[i] = cs[j]
+            cs[j] = t
+        else
+            cs = cs.take(i)
+    ["{c}" for c in cs].join("")
+
+fn plain() str
+    mut s := ""
+    for _ in 0..below(14)
+        s = cat(s, pick(PIECES))
+    if chance(1, 10)
+        s = repeat(s, 1 + below(600))
+    s
+
+JSON_PIECES := [
+    "a",
+    "key",
+    "é",
+    "日",
+    "😀",
+    "\\n",
+    "\\\"",
+    "\\\\",
+    "\\/",
+    "\\u0041",
+    "\\ud83d\\ude00",
+    "\\ud800",
+    "\\u0000",
+    " ",
+]
+
+fn json_string() str
+    mut s := "\""
+    for _ in 0..below(6)
+        s = cat(s, pick(JSON_PIECES))
+    cat(s, "\"")
+
+fn json_value(depth int) str
+    leaf := depth >= 5 or chance(2, 5)
+    k := if leaf then below(5) else 5 + below(2)
+    if k == 0
+        return "null"
+    if k == 1
+        return if chance(1, 2) then "true" else "false"
+    if k == 2
+        return pick([
+            "0",
+            "-0",
+            "1",
+            "-17",
+            "3.14159",
+            "1e3",
+            "2E-5",
+            "1e999",
+            "-1e999",
+            "123456789012345678901234567890",
+            "0.1e1",
+            "9007199254740993",
+        ])
+    if k == 3
+        return json_string()
+    if k == 4
+        return "{below(1000)}"
+    if k == 5
+        return "[{[json_value(depth + 1) for _ in 0..below(5)].join(",")}]"
+    "\{{["{json_string()}:{json_value(depth + 1)}" for _ in 0..below(5)].join(",")}}"
+
+fn json_text() str
+    if chance(1, 25)
+        d := 100 + below(20000)
+        return "{"[".repeat(d)}{"]".repeat(if chance(1, 2) then d else d / 2)}"
+    mut s := json_value(0)
+    if chance(1, 3)
+        s = corrupt(s, "\{}[],:\"\\ \t\nntf0e-+.")
+    if chance(1, 8)
+        s = " {s} \n"
+    s
+
+fn hex2(b int) str
+    "{if b < 16 then "0" else ""}{b.to_hex()}"
+
+fn hex(xs List[int]) str
+    [hex2(b) for b in xs].join("")
+
+fn bytes_hex() str
+    n := [0, 1, 2, 3, 4, 7, 8, 15, 16, 31, 32, 63, 64, 255, 256, 1000][below(16)]
+    k := below(4)
+    if k == 0
+        return hex([below(256) for _ in 0..n])
+    if k == 1
+        v := [0, 255, 128, 127, 97][below(5)]
+        return hex([v for _ in 0..n])
+    if k == 2
+        return hex([i % 251 for i in 0..n])
+    "text bytes é 日本\n".repeat(n / 8 + 4).to_bytes()[0..n].hex()
+
+fn cat_ints(a List[int], b List[int]) List[int]
+    mut out := a
+    for x in b
+        out.push(x)
+    out
+
+fn compress_hex() str
+    n := [0, 1, 5, 40, 300, 5000][below(6)]
+    k := below(4)
+    mut b := [0]
+    if k == 0
+        b = [below(256) for _ in 0..n]
+    elif k == 1
+        b = [120 for _ in 0..n]
+    elif k == 2
+        t := "the quick brown fox jumps over the lazy dog. ".repeat(n / 40 + 2).to_bytes()
+        b = [hex_byte(t.hex(), i) for i in 0..n]
+    else
+        b = [(i * i / 8) % 256 for i in 0..n]
+    if n == 0
+        b = []
+    magics := [[0], [31, 139, 8], [120, 156], [80, 75, 3, 4], [80, 75, 5, 6]]
+    m := below(magics.len())
+    mut all := cat_ints(if m == 0 then b.take(0) else magics[m], b)
+    if all.len() > 0 and chance(1, 3)
+        i := below(all.len())
+        all[i] = all[i].bit_xor(1.shl(below(8)))
+    if chance(1, 4)
+        all = all.take(below(all.len() + 1))
+    hex(all)
+
+fn regex_text(depth int) str
+    mut s := ""
+    if depth == 0 and chance(1, 8)
+        s = cat(s, "^")
+    for _ in 0..1 + below(4)
+        k := if depth >= 3 then below(4) else below(7)
+        mut atom := ""
+        if k == 0
+            atom = pick(["a", "b", "x", "é", "日", "0", " "])
+        elif k == 1
+            atom = "."
+        elif k == 2
+            atom = pick(["[a-c]", "[^a]", "[a-zA-Z0-9_]", "[\\d\\s]", "[]a]", "[a-]", "[é-ü]"])
+        elif k == 3
+            atom = pick(["\\d", "\\w", "\\s", "\\D", "\\W", "\\S", "\\.", "\\\\", "\\b", "\\n"])
+        elif k == 4
+            atom = "({regex_text(depth + 1)})"
+        elif k == 5
+            atom = "(?:{regex_text(depth + 1)}|{regex_text(depth + 1)})"
+        else
+            atom = "({regex_text(depth + 1)}|{regex_text(depth + 1)})"
+        s = cat(s, atom)
+        if chance(2, 5)
+            s = cat(s, pick([
+                "*",
+                "+",
+                "?",
+                "*?",
+                "+?",
+                "\{2}",
+                "\{1,3}",
+                "\{0,}",
+                "\{2,}",
+                "\{0,1000}",
+                "\{1000,2000}",
+            ]))
+    if depth == 0 and chance(1, 8)
+        s = cat(s, "$")
+    if depth == 0 and chance(1, 6)
+        s = pick(["(a*)*b", "(a|aa)+$", "(a+)+b", "(.*a)\{12}", "(x+x+)+y", "(a?)\{30}a\{30}"])
+    s
+
+fn haystack(pat str) str
+    alphabet := [c for c in pat.chars() if c.is_alnum()]
+    n := [0, 1, 5, 30, 200, 3000][below(6)]
+    mut s := ""
+    for _ in 0..n
+        if alphabet.len() == 0 or chance(1, 5)
+            s = cat(s, pick(["a", "b", " ", "é", "\n", "0"]))
+        else
+            s = cat(s, "{alphabet[below(alphabet.len())]}")
+    s
+
+fn date_text() str
+    year := pick([
+        "2026",
+        "1970",
+        "0001",
+        "0000",
+        "9999",
+        "10000",
+        "-0001",
+        "+2026",
+        "1900",
+        "2000",
+        "2024",
+    ])
+    month := pick(["01", "02", "12", "00", "13", "1", "99"])
+    day := pick(["01", "28", "29", "30", "31", "32", "00", "5"])
+    hour := pick(["00", "12", "23", "24", "25", "7"])
+    min := pick(["00", "59", "60", "61"])
+    sec := pick(["00", "59", "60", "61", "59.999999999", "00.5"])
+    zone := pick([
+        "Z",
+        "+00:00",
+        "-05:00",
+        "+14:00",
+        "+99:99",
+        "+0530",
+        "z",
+        "",
+        "UTC",
+        "America/New_York",
+        "Europe/London",
+        "Nowhere/Land",
+        "+5",
+    ])
+    k := below(6)
+    mut s := ""
+    if k == 0
+        s = "{year}-{month}-{day}"
+    elif k == 1
+        s = "{year}-{month}-{day}T{hour}:{min}:{sec}{zone}"
+    elif k == 2
+        s = "{year}{month}{day}T{hour}{min}{sec}{zone}"
+    elif k == 3
+        s = "{hour}:{min}:{sec}"
+    elif k == 4
+        s = pick([
+            "P1Y2M3DT4H5M6S",
+            "PT0S",
+            "P-1D",
+            "PT1.5S",
+            "P",
+            "PT",
+            "P1W",
+            "1h30m",
+            "90m",
+            "-5s",
+            "1d2h",
+        ])
+    else
+        s = "{day}/{month}/{year} {hour}:{min}"
+    if chance(1, 4)
+        s = corrupt(s, "0123456789-:TZ+ .")
+    s
+
+fn csv_text() str
+    fields := [
+        "a",
+        "b c",
+        "",
+        "1",
+        "-2.5",
+        "\"q\"",
+        "\"a,b\"",
+        "\"two\nlines\"",
+        "\"he said \"\"hi\"\"\"",
+        "\"\"",
+        "\" x\"",
+        "x\"y",
+        "é",
+        "日本",
+        "\"unterminated",
+        "\"cr\r\nlf\"",
+    ]
+    mut s := ""
+    for _ in 0..below(6)
+        for k in 0..below(5)
+            if k > 0
+                s = cat(s, ",")
+            s = cat(s, pick(fields))
+        s = cat(s, pick(["\n", "\r\n", "\r", "\n\n", ""]))
+    if chance(1, 6)
+        s = ["{c}" for c in s.chars().take(below(s.chars().len() + 1))].join("")
+    if chance(1, 12)
+        s = repeat(s, 1 + below(200))
+    s
+
+fn args_text() str
+    words := [
+        "-v",
+        "--verbose",
+        "--out",
+        "--out=x",
+        "--out=",
+        "-o",
+        "x",
+        "--",
+        "-",
+        "---",
+        "--bogus",
+        "-vo",
+        "-ov",
+        "file",
+        "",
+        "--verbose=1",
+        "-o=x",
+        "-h-",
+        "--=",
+        "é",
+        "-9",
+        "a b",
+    ]
+    [pick(words) for _ in 0..below(8)].join("\n")
+
+fn cookie_text() str
+    mut s := pick([
+        "a=b",
+        "sid=1",
+        "=x",
+        "x",
+        "",
+        "a=b=c",
+        "a = b",
+        "__Host-id=1",
+        "é=ü",
+        "a=\"q\"",
+        "a=;",
+        "n=v\r\nX: y",
+    ])
+    attrs := [
+        "Path=/",
+        "Path=/a/b",
+        "Path=",
+        "Path=a",
+        "Domain=example.com",
+        "Domain=.example.com",
+        "Domain=com",
+        "Domain=",
+        "Domain=other.org",
+        "Max-Age=60",
+        "Max-Age=0",
+        "Max-Age=-1",
+        "Max-Age=99999999999999999999",
+        "Max-Age=x",
+        "Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+        "Expires=Wed, 21-Oct-15 07:28:00 GMT",
+        "Expires=Wed Oct 21 07:28:00 2015",
+        "Expires=garbage",
+        "Expires=Fri, 31 Dec 9999 23:59:59 GMT",
+        "Secure",
+        "HttpOnly",
+        "SameSite=Lax",
+        "SameSite=None",
+        "SameSite=Strict",
+        "SameSite=x",
+        "secure=1",
+        "Unknown=1",
+        "",
+    ]
+    for _ in 0..below(5)
+        s = cat(s, "; {pick(attrs)}")
+    s
+
+fn response_text() str
+    status := pick([
+        "HTTP/1.1 200 OK",
+        "HTTP/1.1 404 Not Found",
+        "HTTP/1.0 200 OK",
+        "HTTP/1.1 204 No Content",
+        "HTTP/1.1 301 Moved",
+        "HTTP/1.1 100 Continue",
+        "HTTP/1.1 999 X",
+        "HTTP/1.1 20 OK",
+        "HTTP/2 200",
+        "HTTP/1.1",
+        "200 OK",
+        "",
+        "HTTP/1.1 200",
+        "HTTP/1.1 abc OK",
+    ])
+    mut s := "{status}\r\n"
+    chunked := chance(2, 5)
+    heads := [
+        "Content-Type: text/plain",
+        "Content-Length: 5",
+        "Content-Length: 0",
+        "Content-Length: -1",
+        "Content-Length: 99999999999",
+        "Content-Length: 5, 5",
+        "Set-Cookie: a=b; Path=/",
+        "Set-Cookie: =",
+        "Location: /x",
+        "Location: http://127.0.0.1:1/",
+        "Connection: close",
+        "Connection: keep-alive",
+        "Content-Encoding: gzip",
+        "Content-Encoding: deflate",
+        "Content-Encoding: br",
+        "Transfer-Encoding: chunked",
+        "Transfer-Encoding: gzip",
+        "no-colon",
+        " folded: x",
+        "X: a\0b",
+        "Host:",
+        "Trailer: x",
+    ]
+    for _ in 0..below(6)
+        s = cat(cat(s, pick(heads)), if chance(1, 10) then "\n" else "\r\n")
+    if chunked
+        s = cat(s, "Transfer-Encoding: chunked\r\n")
+    s = cat(s, if chance(1, 12) then "" else "\r\n")
+    if chunked
+        for _ in 0..below(4)
+            s = cat(s, pick([
+                "5\r\nhello\r\n",
+                "0\r\n",
+                "1\r\nxx\r\n",
+                "g\r\nabc\r\n",
+                "FFFFFFFFFFFFFFFFF\r\n",
+                "-1\r\n",
+                "3;ext=1\r\nabc\r\n",
+                "3\nabc\n",
+                "",
+                "\r\n",
+                "5\r\nhi",
+            ]))
+        if chance(2, 3)
+            s = cat(s, pick(["0\r\n\r\n", "0\r\nX-T: 1\r\n\r\n", "0\r\n"]))
+    else
+        s = cat(s, pick([
+            "hello",
+            "",
+            "hello world, longer than five",
+            "😀",
+            "\r\n\r\n",
+            "\u{1f}\u{8b}\u{8}garbage",
+        ]))
+    s
+
+fn http_text() str
+    method := pick([
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "HEAD",
+        "OPTIONS",
+        "PATCH",
+        "get",
+        "G E T",
+        "",
+        "TRACE",
+        "CONNECT",
+    ])
+    path := pick([
+        "/",
+        "/a/b?x=1&y=%20",
+        "/%zz",
+        "/é",
+        "*",
+        "http://h/x",
+        "",
+        "/a b",
+        "//",
+        "/../etc/passwd",
+    ])
+    version := pick(["HTTP/1.1", "HTTP/1.0", "HTTP/2", "HTTP/9.9", "HTTP/1.", "http/1.1", ""])
+    mut s := "{method} {path} {version}\r\n"
+    heads := [
+        "Host: example.com",
+        "Content-Length: 5",
+        "Content-Length: -1",
+        "Content-Length: 99999999999999999999",
+        "Content-Length: 5, 5",
+        "Transfer-Encoding: chunked",
+        "Transfer-Encoding: chunked, gzip",
+        "Connection: close",
+        "Cookie: a=b; c=d",
+        "X-Empty:",
+        "no-colon-here",
+        " folded: continuation",
+        "Host: a\0b",
+        "Content-Type: text/plain; charset=\"utf-8\"",
+        "X-Long: {"a".repeat(100)}",
+    ]
+    for _ in 0..below(6)
+        s = cat(cat(s, pick(heads)), if chance(1, 8) then "\n" else "\r\n")
+    s = cat(s, "\r\n")
+    k := below(4)
+    if k == 0
+        s = cat(s, "hello")
+    elif k == 1
+        s = cat(s, "5\r\nhello\r\n0\r\n\r\n")
+    elif k == 2
+        s = cat(s, "zz\r\nxx\r\n")
+    if chance(1, 5)
+        s = corrupt(s, "\r\n: /?&=%")
+    s
+
+## Primary and secondary text of an input of `kind`.
+fn texts(kind str) List[str]
+    if kind == "json"
+        return [json_text(), json_text()]
+    if kind == "bytes"
+        return [bytes_hex(), bytes_hex()]
+    if kind == "compress"
+        return [plain(), compress_hex()]
+    if kind == "regex"
+        pat := regex_text(0)
+        hay := haystack(pat)
+        return [if chance(1, 12) then corrupt(pat, "()[]\{}*+?|\\^$.-") else pat, hay]
+    if kind == "date"
+        return [date_text(), date_text()]
+    if kind == "http"
+        return [http_text(), http_text()]
+    if kind == "csv"
+        return [csv_text(), csv_text()]
+    if kind == "args"
+        return [args_text(), args_text()]
+    if kind == "cookie"
+        return [cookie_text(), cookie_text()]
+    if kind == "httpresp"
+        return [response_text(), plain()]
+    [plain(), plain()]
+
+fn hex_byte(h str, k int) int
+    (bytes.from_hex(h.slice(2 * k, 2 * k + 2)) else b"\x00")[0].to_int()
+
+fn blit(h str) str
+    "b\"{["\\x{h.slice(2 * k, 2 * k + 2)}" for k in 0..h.len() / 2].join("")}\""
+
+## The template with its placeholders filled from one input.
+fn fill(body str, t1 str, t2 str, n int) str
+    mut out := body
+    if out.contains("\{\{BYTES}}")
+        list := [hex_byte(t2, k) for k in 0..t2.len() / 2]
+        out = out.replace("\{\{BYTES}}", "[{["{b}" for b in list].join(", ")}]")
+    if out.contains("\{\{BLIT")
+        out = out.replace("\{\{BLIT2}}", blit(t2)).replace("\{\{BLIT}}", blit(t1))
+    out
+        .replace("\{\{TEXT2}}", literal(t2))
+        .replace("\{\{TEXT}}", literal(t1))
+        .replace("\{\{INT}}", "{n}")
+
+## Run `cmd`; a time-out is status 124, a start failure 127.
+fn run(cmd str, args List[str], ms int) proc.Output
+    r := proc.run(cmd, args, none, ms) else err
+        return proc.Output(status: if err.kind == "timed_out" then 124 else 127, out: "", err: "")
+    r
+
+fn header(body str, key str) str
+    for l in body.lines()
+        p := "# fuzz-{key}:"
+        if l.starts_with(p)
+            return l.slice(p.len(), l.len()).trim()
+    ""
+
+fn crashed(r proc.Output) bool
+    r.status >= 128 and r.status != 124
+        or r.err.contains("panicked")
+        or r.err.contains("internal error")
+
+## The first property the program breaks on this input, or "".
+fn check(path str, src str, tmp str, full bool) str
+    c := run("./ail", ["check", "--json", path], 20000)
+    if crashed(c)
+        return "fuzz.mod.1 check crashed"
+    if c.status != 0
+        return "fuzz.mod.0 the template does not check"
+    net := src.contains("# fuzz-net: yes")
+    flags := if net then ["run", "--no-contracts", path] else [
+        "run",
+        "--no-contracts",
+        "--deterministic",
+        path,
+    ]
+    w := run("./ail", flags, 20000)
+    if w.status == 124
+        return "fuzz.mod.2 hang"
+    if crashed(w)
+        return "fuzz.mod.1 run crashed"
+    for l in w.out.lines()
+        if l.starts_with("FAIL")
+            return "fuzz.mod.3 oracle: {l}"
+    if w.err.contains("bootstrap.")
+        return "fuzz.mod.4 bootstrap.* error while running"
+    if w.status != 0 and not w.err.contains("[")
+        return "fuzz.mod.4 exit {w.status} without a rule id on stderr"
+    if src.contains("# fuzz-native: yes")
+        exe := "{tmp}/native"
+        b := run("./ail", ["build", path, "-o", exe], 60000)
+        if b.status == 0
+            n := run(exe, [], 10000)
+            if n.status != w.status or n.out != w.out
+                return "fuzz.mod.6 native differs (exit {n.status} against {w.status})"
+    if full and not net
+        again := run("./ail", flags, 20000)
+        if again.status != w.status or again.out != w.out or again.err != w.err
+            return "fuzz.mod.7 run is not deterministic"
+    ""
+
+fn main() !
+    args := env.args()
+    n := if args.len() > 0 then (args[0].to_int() else 40) else 40
+    seed := if args.len() > 1 then (args[1].to_int() else 1) else 1
+    only := if args.len() > 2 then args[2] else ""
+    out := if args.len() > 3 then args[3] else "tools/fuzz/failures"
+    full := args.len() > 0
+    tmp := "/tmp/ail-fuzz-mod-{seed}"
+    fs.make_dir(tmp)?
+    dir := "bootstrap/tests/fuzz/modules"
+    mut fails := 0
+    mut ran := 0
+    mut names := [e for e in fs.list_dir(dir)? if e.ends_with(".ail")]
+    names = names.sorted()
+    for file in names
+        name := file.slice(0, file.len() - 4)
+        if only != "" and only != name
+            continue
+        body := fs.read_text("{dir}/{file}")?
+        kind := header(body, "input")
+        for k in 0..n
+            s := seed + k
+            random.seed(s * 40503 + 12345)
+            ts := texts(kind)
+            src := fill(body, ts[0], ts[1], edge_int())
+            path := "{tmp}/m.ail"
+            fs.write_text(path, src)?
+            ran += 1
+            why := check(path, src, tmp, full)
+            if why != ""
+                fails += 1
+                print("FAIL {name} seed {s}: {why.lines().first() else why}")
+                fs.make_dir(out)?
+                fs.write_text("{out}/{name}-seed-{s}.ail", src)?
+    print("fuzz modules: {ran} inputs over {names.len()} templates from seed {seed}")
+    if fails == 0
+        print("FUZZ GREEN")
+        return
+    print("FUZZ RED ({fails} failures)")
+    io.exit(1)
