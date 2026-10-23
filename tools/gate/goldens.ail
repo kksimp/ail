@@ -85,9 +85,18 @@ fn Check.compare(mut self, src str, exe str, want_out str, want_status int)
     if got.status != want_status or got.out != want_out
         red(src, "differs from its golden: exit {got.status} vs {want_status}\n{got.out}{got.err}")
 
+## The programs `macos_known.txt` lists, on macOS (their output differs there by design).
+fn macos_known() List[str]
+    u := proc.run("uname", []) else return []
+    if not u.out.starts_with("Darwin")
+        return []
+    text := fs.read_text("{GOLDEN_DIR}/macos_known.txt") else return []
+    [l.trim() for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")]
+
 fn Check.programs(mut self, tmp str)
+    skip := macos_known()
     for stem in stems(RUN_DIR)
-        if not wanted(stem)
+        if not wanted(stem) or skip.contains(stem)
             continue
         src := "{RUN_DIR}/{stem}.ail"
         want_out := fs.read_text("{GOLDEN_DIR}/{stem}.out") else

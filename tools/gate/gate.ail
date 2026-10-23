@@ -3,9 +3,9 @@
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
 ## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
 ## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net`, `bytecode`, `spec` (the files of those names; `net` starts tools/gate/net_server.py, `spec` runs tools/gate/spec.ail), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
-## PDF reader), `native` (each bootstrap/tests/native/run program builds
-## natively and behaves like `ail run`), `selfhost` (tools/self-host/run.sh).
-## No argument runs them all. The last line is `GATE GREEN` or
+## PDF reader), `selfhost` (tools/self-host/run.sh, only when named).
+## The native run programs are tools/gate/goldens.ail and nativex. No argument runs
+## every suite but `selfhost`. The last line is `GATE GREEN` or
 ## `GATE RED (N failures)`; the exit status is 0 only for green.
 
 ## Examples without a `native_` name that the native backend takes today
@@ -33,20 +33,6 @@ fn temp_dir() str
     base := env.get("TMPDIR") else "/tmp"
     # Not `ail-gate`: mac-gate.sh keeps its logs there.
     "{base}/ail-gate-ail"
-
-## The programs tests/native.rs skips on macOS (its MACOS_KNOWN list: they
-## differ from the interpreter by design), read from that list.
-fn macos_known() List[str]
-    u := proc.run("uname", []) else return []
-    if not u.out.starts_with("Darwin")
-        return []
-    text := fs.read_text("bootstrap/tests/native.rs") else return []
-    at := text.find("MACOS_KNOWN: &[&str]") else return []
-    rest := text.slice(at, text.len())
-    end := rest.find("];") else return []
-    parts := rest.slice(0, end).split("\"")
-    # The names are the quoted parts: every second one.
-    [parts[i] for i in 0..parts.len() if i % 2 == 1]
 
 ## Build `src` natively into `exe`; false (with the reason) if it can't.
 fn build(src str, exe str) str?
@@ -85,30 +71,6 @@ fn Gate.examples(mut self, tmp str)
                 "examples/{name}",
                 "exit {got.status}; output differs from {stem}.out\n{got.out}{got.err}",
             )
-
-## A native program must behave like the interpreter: same stdout, same exit.
-fn Gate.native(mut self, tmp str)
-    skip := macos_known()
-    for name in fs.list_dir("bootstrap/tests/native/run") else []
-        if not name.ends_with(".ail")
-            continue
-        stem := name.replace(".ail", "")
-        if skip.contains(stem)
-            continue
-        src := "bootstrap/tests/native/run/{name}"
-        exe := "{tmp}/nt_{stem}"
-        if why := build(src, exe)
-            red(src, "native build failed: {why}")
-            continue
-        built += 1
-        want := proc.run("./ail", ["run", src]) else
-            red(src, "ail run could not start")
-            continue
-        got := proc.run(exe, []) else
-            red(src, "could not run the executable")
-            continue
-        if got.status != want.status or got.out != want.out
-            red(src, "differs from `ail run`: exit {got.status} vs {want.status}\n{got.out}")
 
 fn Gate.selfhost(mut self)
     r := proc.run("tools/self-host/run.sh", [], none, 3600000) else
@@ -2580,7 +2542,6 @@ fn main() !
     args := env.args()
     all := [
         "examples",
-        "native",
         "tools",
         "cases",
         "explain",
@@ -2593,7 +2554,6 @@ fn main() !
         "globals",
         "pe",
         "asm",
-        "selfhost",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -2602,7 +2562,6 @@ fn main() !
     for s in suites
         match s
             "examples" => g.examples(tmp)
-            "native" => g.native(tmp)
             "tools" => g.tools(tmp)
             "cases" => g.cases()
             "explain" => g.explain_coverage()
@@ -2634,7 +2593,7 @@ fn main() !
             "native_misc" => g.native_misc()
             "selfhost" => g.selfhost()
             _ =>
-                io.eprint("unknown suite {s}; suites: {all.join(" ")}")
+                io.eprint("unknown suite {s}; suites: {all.join(" ")} selfhost")
                 io.exit(2)
     _ := proc.run("rm", ["-rf", tmp]) else return
     if g.unbuilt.len() > 0
