@@ -678,9 +678,11 @@ fn Checker.binary(mut self, op ast.BinOp, lhs ast.Expr, rhs ast.Expr, at ast.Pos
                 text := "`{op_symbol(op)}` needs `bool` operands, found {show(t)}"
                 if is_opt(t) and op == ast.BinOp.Or
                     # `x or d` on an optional is `x else d` (type.opt.4).
-                    diags.push(new_diag("type.bool.1", expr_pos(side), text)
-                        .with_help("a default for a value that may be `none` is `x else d`")
-                        .with_fix("write `else`", [fix.operands(at, "or", "$l else $r")]))
+                    diags.push(
+                        new_diag("type.bool.1", expr_pos(side), text)
+                            .with_help("a default for a value that may be `none` is `x else d`")
+                            .with_fix("write `else`", [fix.operands(at, "or", "$l else $r")]),
+                    )
                 elif is_opt(t)
                     err_help(
                         "type.bool.1",
@@ -748,21 +750,29 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
         if arith and ((lt == Ty.Int and rt == Ty.Float) or (lt == Ty.Float and rt == Ty.Int))
             # `n / 4.0` with an `int` variable `n`: convert it, as `n.to_float()` (type.num.10).
             template := if lt == Ty.Int then "$l.to_float() {sym} $r" else "$l {sym} $r.to_float()"
-            diags.push(new_diag("trait.op.3", at, text)
-                .with_help("`int` and `float` don't mix: convert the integer with `n.to_float()`")
-                .with_fix("convert with `.to_float()`", [fix.operands(at, sym, template)]))
+            diags.push(
+                new_diag("trait.op.3", at, text)
+                    .with_help("`int` and `float` don't mix: convert the integer with `n.to_float()`")
+                    .with_fix("convert with `.to_float()`", [fix.operands(at, sym, template)]),
+            )
         elif op == ast.BinOp.Add and (lt == Ty.Str or rt == Ty.Str)
-            diags.push(new_diag("trait.op.3", at, text)
-                .with_help("build text with interpolation: \"\{a}\{b}\"")
-                .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp\"")]))
+            diags.push(
+                new_diag("trait.op.3", at, text)
+                    .with_help("build text with interpolation: \"\{a}\{b}\"")
+                    .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp\"")]),
+            )
         elif lt == Ty.Str and op == ast.BinOp.Rem
-            diags.push(new_diag("trait.op.3", at, text)
-                .with_help("AIL has no `%` formatting; interpolate the values: \"n is \{n}\"")
-                .with_fix("interpolate", [fix.operands(at, "%", "$f")]))
+            diags.push(
+                new_diag("trait.op.3", at, text)
+                    .with_help("AIL has no `%` formatting; interpolate the values: \"n is \{n}\"")
+                    .with_fix("interpolate", [fix.operands(at, "%", "$f")]),
+            )
         elif lt == Ty.Str and op == ast.BinOp.Mul
-            diags.push(new_diag("trait.op.3", at, text)
-                .with_help("repeat a string with `s.repeat(n)`")
-                .with_fix("write `.repeat`", [fix.operands(at, "*", "$l.repeat($r)")]))
+            diags.push(
+                new_diag("trait.op.3", at, text)
+                    .with_help("repeat a string with `s.repeat(n)`")
+                    .with_fix("write `.repeat`", [fix.operands(at, "*", "$l.repeat($r)")]),
+            )
         else
             err("trait.op.3", at, text)
         return fail
@@ -778,9 +788,11 @@ fn Checker.operator(mut self, op ast.BinOp, lt Ty, rt Ty, at ast.Pos) Ty
         if lt == Ty.Bytes and op == ast.BinOp.Add
             return Ty.Bytes
         if lt == Ty.Str and op == ast.BinOp.Add
-            diags.push(new_diag("trait.op.1", at, "`+` doesn't join strings")
-                .with_help("build text with interpolation: \"\{a}\{b}\"")
-                .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]))
+            diags.push(
+                new_diag("trait.op.1", at, "`+` doesn't join strings")
+                    .with_help("build text with interpolation: \"\{a}\{b}\"")
+                    .with_fix("interpolate", [fix.operands(at, "+", "\"$lp$rp$c\"")]),
+            )
         else
             err("trait.op.1", at, "`{sym}` is not defined for {show(lt)}")
         return Ty.Unknown
@@ -1104,8 +1116,11 @@ fn Checker.match_expr(
         vs := prog.enums[enum_index].variants
         missing := [vs[k].name for k in 0..vs.len() if not cov.variants[k]]
         if missing.len() > 0
-            mut d := new_diag("expr.match.2", at, "this `match` doesn't cover {list_names(missing)}")
-                .with_help("add an arm for each, or a `_` arm")
+            mut d := new_diag(
+                "expr.match.2",
+                at,
+                "this `match` doesn't cover {list_names(missing)}",
+            ).with_help("add an arm for each, or a `_` arm")
             # fix.edit.4: one arm per missing variant, each a typed hole.
             if arms.len() > 0
                 last := arms[arms.len() - 1].pat
@@ -1116,16 +1131,25 @@ fn Checker.match_expr(
                         holes := ["_" for _ in vs[k].fields].join(", ")
                         binds := if vs[k].fields.len() == 0 then "" else "({holes})"
                         text = "{text}{indent}{vs[k].name}{binds} => todo\n"
-                d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(pattern_pos(last), text)])
+                d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(
+                    pattern_pos(last),
+                    text,
+                )])
             diags.push(d)
     # type.tuple.6: a tuple match needs an arm that takes any tuple.
     if tuple_elems(st) != none and not cov.wildcard
-        mut d := new_diag("expr.match.2", at, "this `match` on {show(st)} doesn't cover every value")
-            .with_help("add a `_` arm, or an arm of names and `_` such as `(a, _)`")
+        mut d := new_diag(
+            "expr.match.2",
+            at,
+            "this `match` on {show(st)} doesn't cover every value",
+        ).with_help("add a `_` arm, or an arm of names and `_` such as `(a, _)`")
         if arms.len() > 0
             last := arms[arms.len() - 1].pat
             indent := " ".repeat(pattern_pos(last).col - 1)
-            d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(pattern_pos(last), "{indent}_ => todo\n")])
+            d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(
+                pattern_pos(last),
+                "{indent}_ => todo\n",
+            )])
         diags.push(d)
     if literal and not cov.wildcard
         both_bools := st == Ty.Bool
@@ -1134,7 +1158,11 @@ fn Checker.match_expr(
         if not both_bools
             hint := if st
                 == Ty.Bool then "add the missing `true` or `false` arm" else "add a `_` arm for the other values"
-            mut d := new_diag("expr.match.2", at, "this `match` on {show(st)} doesn't cover every value").with_help(hint)
+            mut d := new_diag(
+                "expr.match.2",
+                at,
+                "this `match` on {show(st)} doesn't cover every value",
+            ).with_help(hint)
             if arms.len() > 0
                 last := arms[arms.len() - 1].pat
                 indent := " ".repeat(pattern_pos(last).col - 1)
@@ -1144,7 +1172,10 @@ fn Checker.match_expr(
                     for b in [true, false]
                         if not cov.literals.contains(ast.Literal.BoolLit(b))
                             text = "{text}{indent}{b} => todo\n"
-                d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(pattern_pos(last), text)])
+                d = d.with_fix("add the missing arms, each a `todo`", [fix.after_block(
+                    pattern_pos(last),
+                    text,
+                )])
             diags.push(d)
     agree_result(agree)
 
@@ -1336,17 +1367,29 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
 ## An unknown name; `nargs` is the argument count when it was called.
 fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
     if n == "old" and nargs != none
-        mut d := new_diag("contract.ens.3", at, "`old(...)` is only available in an `ensures` condition")
-            .with_help("name the value in the body before it changes, or move the condition to an `ensures` line")
+        mut d := new_diag(
+            "contract.ens.3",
+            at,
+            "`old(...)` is only available in an `ensures` condition",
+        ).with_help("name the value in the body before it changes, or move the condition to an `ensures` line")
         # On entry `old(e)` is `e`, so in a `requires` the call can go.
         if in_requires
-            d = d.with_fix("drop `old`: on entry it is the value itself", [fix.call(at, "old", "$p")])
+            d = d.with_fix(
+                "drop `old`: on entry it is the value itself",
+                [fix.call(at, "old", "$p")],
+            )
         diags.push(d)
         return
     if n == "result" and nargs == none and in_requires
-        diags.push(new_diag("contract.ens.2", at, "`result` is only available in an `ensures` condition")
-            .with_help("a `requires` condition can read only the parameters; move this check to an `ensures` line")
-            .with_fix("write `ensures`: the condition is about the result", [fix.replace(requires_pos else at, "requires", "ensures")]))
+        diags.push(
+            new_diag("contract.ens.2", at, "`result` is only available in an `ensures` condition")
+                .with_help("a `requires` condition can read only the parameters; move this check to an `ensures` line")
+                .with_fix("write `ensures`: the condition is about the result", [fix.replace(
+                    requires_pos else at,
+                    "requires",
+                    "ensures",
+                )]),
+        )
         return
     mut candidates := [l.name for l in locals]
     for f in fns.keys()
@@ -1376,7 +1419,11 @@ fn Checker.unknown_name(mut self, n str, at ast.Pos, nargs int?)
         d = d.with_help(h)
     elif in_assoc and assoc_fields.contains(n)
         d = d.with_help("this function has no `self`, so the field `{n}` isn't in scope; add `self` as its first parameter")
-        d = d.with_fix("add `self`", [fix.replace(f.pos, "(", if f.params.len() > 0 then "(self, " else "(self")])
+        d = d.with_fix("add `self`", [fix.replace(
+            f.pos,
+            "(",
+            if f.params.len() > 0 then "(self, " else "(self",
+        )])
     elif s := suggest(n, candidates)
         d = d.did_you_mean(n, s)
     else

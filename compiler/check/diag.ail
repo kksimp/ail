@@ -40,7 +40,10 @@ fn Diag.with_fix(self, title str, edits List[fix.Edit]) Diag
 
 ## `did you mean `s`?` and the fix that replaces `name` by `s` (diag.rs `did_you_mean`).
 fn Diag.did_you_mean(self, name str, s str) Diag
-    with_help("did you mean `{s}`?").with_fix("replace `{name}` with `{s}`", [fix.replace(pos, name, s)])
+    with_help("did you mean `{s}`?").with_fix(
+        "replace `{name}` with `{s}`",
+        [fix.replace(pos, name, s)],
+    )
 
 ## One line of JSON: severity, rule, file, local line and column, message
 ## and help, in the order `ail check --json` writes them.

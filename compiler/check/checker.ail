@@ -243,7 +243,15 @@ fn Checker.err_help(mut self, rule str, at ast.Pos, text str, hint str)
     diags.push(new_diag(rule, at, text).with_help(hint))
 
 ## `err_help` with a fix.
-fn Checker.err_fix(mut self, rule str, at ast.Pos, text str, hint str, title str, edits List[fix.Edit])
+fn Checker.err_fix(
+    mut self,
+    rule str,
+    at ast.Pos,
+    text str,
+    hint str,
+    title str,
+    edits List[fix.Edit],
+)
     diags.push(new_diag(rule, at, text).with_help(hint).with_fix(title, edits))
 
 ## Add a fix to the diagnostic just reported.

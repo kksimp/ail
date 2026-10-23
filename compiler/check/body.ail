@@ -438,7 +438,11 @@ fn Checker.let_stmt(mut self, n str, at ast.Pos, mutable bool, value ast.Expr, o
         locals.push(Local(name: n, ty: ty, mutable: mutable, how: LocalKind.Binding, decl: at))
     elif mutable and diags.len() > 0 and diags[diags.len() - 1].fixes.len() > 0
         # `mut x := e` again becomes `x = e`, so the `mut` goes too.
-        diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(ast.Pos(line: at.line, col: 1), "mut ", ""))
+        diags[diags.len() - 1].fixes[0].edits.insert(0, fix.replace(
+            ast.Pos(line: at.line, col: 1),
+            "mut ",
+            "",
+        ))
 
 @allow("expr.match.3") fn method_name(e ast.Expr) str
     match e
@@ -616,9 +620,16 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
                     # A whole-number float literal where an `int` is expected is written `2`.
                     match d
                         Float(f, p) =>
-                            if ok == Ty.Int and f == f.floor() and diags.len() > 0 and diags[diags.len() - 1].rule == "err.else.1"
+                            if ok == Ty.Int
+                                and f == f.floor()
+                                and diags.len() > 0
+                                and diags[diags.len() - 1].rule == "err.else.1"
                                 whole := f.to_int()
-                                fix_last("write `{whole}` as an int", [fix.replace(p, "{f:.1}", "{whole}")])
+                                fix_last("write `{whole}` as an int", [fix.replace(
+                                    p,
+                                    "{f:.1}",
+                                    "{whole}",
+                                )])
                         _ => ok = ok
         Leave(st) => stmt(st, none, false)
         Handler(name, body, bpos) =>
@@ -792,7 +803,11 @@ fn Checker.condition(mut self, cond ast.Expr)
         return
     hint := truthiness_help(t)
     suffix := truthiness_suffix(t)
-    d := new_diag("expr.if.2", expr_pos(cond), "a condition must be `bool`, found {show(t)}").with_help(hint)
+    d := new_diag(
+        "expr.if.2",
+        expr_pos(cond),
+        "a condition must be `bool`, found {show(t)}",
+    ).with_help(hint)
     if is_simple_cond(cond) and suffix != ""
         diags.push(d.with_fix("test `{suffix.trim()}`", [fix.at_line_end(expr_pos(cond), suffix)]))
     else
@@ -890,7 +905,10 @@ fn Checker.condition(mut self, cond ast.Expr)
                         Name(n, p) =>
                             if l := local(n)
                                 if is_channel(l.ty)
-                                    d = d.with_fix("receive until the channel is closed", [fix.replace(p, "{n}.recv()", n)])
+                                    d = d.with_fix(
+                                        "receive until the channel is closed",
+                                        [fix.replace(p, "{n}.recv()", n)],
+                                    )
                         _ => d = d
             _ => d = d
         diags.push(d)
@@ -973,9 +991,16 @@ fn Checker.assign(mut self, target ast.Expr, op ast.BinOp?, value ast.Expr, at a
             if n == "self"
                 expr(target, none, true)
             else
-                mut d := new_diag("expr.bind.3", expr_pos(target), "`{n}` isn't declared").with_help("declare it with `mut {n} := ...`")
+                mut d := new_diag(
+                    "expr.bind.3",
+                    expr_pos(target),
+                    "`{n}` isn't declared",
+                ).with_help("declare it with `mut {n} := ...`")
                 if op == none
-                    d = d.with_fix("declare `{n}` with `mut {n} :=`", [fix.insert(expr_pos(target), "mut "), fix.replace(at, "=", ":=")])
+                    d = d.with_fix("declare `{n}` with `mut {n} :=`", [
+                        fix.insert(expr_pos(target), "mut "),
+                        fix.replace(at, "=", ":="),
+                    ])
                 diags.push(d)
                 # Later uses don't report the same name again (gram.rec.2).
                 locals.push(Local(

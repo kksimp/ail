@@ -96,8 +96,14 @@ pub fn name_word(name str) NameWord?
     match name
         "True" => NameWord(new: "true", help: "booleans are `true` and `false`")
         "False" => NameWord(new: "false", help: "booleans are `true` and `false`")
-        "None" | "nil" | "null" | "undefined" | "NULL" => NameWord(new: "none", help: "the absent value is `none`, and the type must say it can be absent: `int?`")
-        "println" | "puts" | "echo" | "print_line" | "printline" | "writeln" => NameWord(new: "print", help: "`print(value)` writes a value and a newline")
+        "None" | "nil" | "null" | "undefined" | "NULL" => NameWord(
+            new: "none",
+            help: "the absent value is `none`, and the type must say it can be absent: `int?`",
+        )
+        "println" | "puts" | "echo" | "print_line" | "printline" | "writeln" => NameWord(
+            new: "print",
+            help: "`print(value)` writes a value and a newline",
+        )
         _ => none
 
 ## A call to a function other languages have: the template that rewrites it
@@ -108,20 +114,36 @@ pub struct CallHint
     pub help str
 
 fn method_hint(name str, recv_example str, rest str) CallHint
-    CallHint(template: "$r1.{name}({rest})", example: "{recv_example}.{name}({rest})", help: "`{name}` is a method: write `{recv_example}.{name}({rest})`")
+    CallHint(
+        template: "$r1.{name}({rest})",
+        example: "{recv_example}.{name}({rest})",
+        help: "`{name}` is a method: write `{recv_example}.{name}({rest})`",
+    )
 
 pub fn call_hint(name str, nargs int) CallHint?
     mut skip := false
     match name
         "len" | "length" | "size" =>
             if nargs == 1
-                return CallHint(template: "$r1.len()", example: "xs.len()", help: "`len` is a method: write `xs.len()`")
+                return CallHint(
+                    template: "$r1.len()",
+                    example: "xs.len()",
+                    help: "`len` is a method: write `xs.len()`",
+                )
         "bytes" =>
             if nargs == 1
-                return CallHint(template: "bytes.zeros($1)", example: "bytes.zeros(n)", help: "`n` zero bytes are `bytes.zeros(n)`")
+                return CallHint(
+                    template: "bytes.zeros($1)",
+                    example: "bytes.zeros(n)",
+                    help: "`n` zero bytes are `bytes.zeros(n)`",
+                )
         "str" | "string" | "toString" =>
             if nargs == 1
-                return CallHint(template: "\"\{$1}\"", example: "\"\{n}\"", help: "interpolate to get text: `\"\{n}\"`, or write `n.to_str()`")
+                return CallHint(
+                    template: "\"\{$1}\"",
+                    example: "\"\{n}\"",
+                    help: "interpolate to get text: `\"\{n}\"`, or write `n.to_str()`",
+                )
         "printf" =>
             if nargs >= 1
                 return CallHint(
@@ -131,11 +153,36 @@ pub fn call_hint(name str, nargs int) CallHint?
                 )
         "range" =>
             if nargs == 1
-                return CallHint(template: "0..$1", example: "0..n", help: "a range is written `0..n` (excludes `n`) or `1..=n` (includes it)")
+                return CallHint(
+                    template: "0..$1",
+                    example: "0..n",
+                    help: "a range is written `0..n` (excludes `n`) or `1..=n` (includes it)",
+                )
             if nargs == 2
-                return CallHint(template: "$1..$2", example: "a..b", help: "a range is written `a..b` (excludes `b`) or `a..=b` (includes it)")
+                return CallHint(
+                    template: "$1..$2",
+                    example: "a..b",
+                    help: "a range is written `a..b` (excludes `b`) or `a..=b` (includes it)",
+                )
         _ => skip = true
-    one := ["sqrt", "sin", "cos", "tan", "atan", "exp", "ln", "log10", "cbrt", "floor", "ceil", "round", "abs", "sum", "sorted", "enumerate"]
+    one := [
+        "sqrt",
+        "sin",
+        "cos",
+        "tan",
+        "atan",
+        "exp",
+        "ln",
+        "log10",
+        "cbrt",
+        "floor",
+        "ceil",
+        "round",
+        "abs",
+        "sum",
+        "sorted",
+        "enumerate",
+    ]
     if nargs == 1 and one.contains(name)
         mut recv := "x"
         if name == "abs"
@@ -144,9 +191,17 @@ pub fn call_hint(name str, nargs int) CallHint?
             recv = "xs"
         return method_hint(name, recv, "")
     if nargs == 2 and (name == "atan2" or name == "pow" or name == "hypot")
-        return CallHint(template: "$r1.{name}($2)", example: "x.{name}(y)", help: "`{name}` is a method: write `x.{name}(y)`")
+        return CallHint(
+            template: "$r1.{name}($2)",
+            example: "x.{name}(y)",
+            help: "`{name}` is a method: write `x.{name}(y)`",
+        )
     if nargs == 2 and (name == "max" or name == "min")
-        return CallHint(template: "$r1.{name}($2)", example: "a.{name}(b)", help: "`{name}` is a method: write `a.{name}(b)`")
+        return CallHint(
+            template: "$r1.{name}($2)",
+            example: "a.{name}(b)",
+            help: "`{name}` is a method: write `a.{name}(b)`",
+        )
     none
 
 ## Help for another language's call that has no one-line rewrite.

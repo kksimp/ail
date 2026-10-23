@@ -1,0 +1,115 @@
+## A machine-applicable fix, as `Edit` and `Fix` in `bootstrap/src/diag.rs`
+## (fix.edit.1-5, ADRs 0203, 0204, 0264): a title and edits, each replacing
+## the text from `pos` to `end` with `text`. An edit that names an `anchor`
+## instead of a span is settled against the source before it is printed, as
+## `diag.rs` `resolve` does, so the checker can propose it without the text.
+use ast
+
+## How an edit finds its position when the checker doesn't name a span.
+pub enum Anchor
+    ## `pos..end` is the span (`old`, when set, is the whole word to find on the line).
+    Exact
+    ## The end of the code on `pos.line`.
+    LineEnd
+    ## Just after the expression that starts at `pos`.
+    AfterExpr
+    ## The character at `pos` and the blanks before it.
+    TrimBefore
+    ## Rewrite the call `old(...)` at `pos` by the template in `text`.
+    Call
+    ## Rewrite `old[args]` by the template in `text`.
+    Brackets
+    ## Name the arguments of the call `old(...)`; `text` lists the names, comma-separated.
+    CallNamed
+    ## Split a chained comparison between its operators at `pos` and `end`.
+    Chain
+    ## Append the lines of `text` after the block starting at `pos`.
+    AfterBlock
+    ## Rewrite the binary expression whose operator `old` is at `pos`, by the template in `text`.
+    Operands
+    ## A C-style `for` becomes a range loop.
+    CFor
+    ## `xs: List[int] = []` as `xs := List[int]()`.
+    EmptyDecl
+
+pub struct Edit
+    pub pos ast.Pos
+    pub end ast.Pos
+    pub old str?
+    pub anchor Anchor
+    pub text str
+
+pub struct Fix
+    pub title str
+    pub edits List[Edit]
+
+fn at(pos ast.Pos, old str?, anchor Anchor, text str) Edit
+    Edit(pos: pos, end: pos, old: old, anchor: anchor, text: text)
+
+## Replace the first whole-word `old` at or after `pos` on its line by `text`.
+pub fn replace(pos ast.Pos, old str, text str) Edit
+    at(pos, old, Anchor.Exact, text)
+
+## Insert `text` at `pos`.
+pub fn insert(pos ast.Pos, text str) Edit
+    at(pos, none, Anchor.Exact, text)
+
+## Insert `text` at the end of the code on `pos.line`.
+pub fn at_line_end(pos ast.Pos, text str) Edit
+    at(pos, none, Anchor.LineEnd, text)
+
+## Insert `text` just after the expression that starts at `pos`.
+pub fn after_expr(pos ast.Pos, text str) Edit
+    at(pos, none, Anchor.AfterExpr, text)
+
+## Delete the character at `pos` and the blanks before it.
+pub fn trim_before(pos ast.Pos) Edit
+    at(pos, none, Anchor.TrimBefore, "")
+
+## Replace the span `pos..end` with `text`.
+pub fn span(pos ast.Pos, end ast.Pos, text str) Edit
+    Edit(pos: pos, end: end, old: none, anchor: Anchor.Exact, text: text)
+
+## Delete the span `pos..end`.
+pub fn delete(pos ast.Pos, end ast.Pos) Edit
+    span(pos, end, "")
+
+## Rewrite the call `callee(...)` at `pos` by a template.
+pub fn call(pos ast.Pos, callee str, template str) Edit
+    at(pos, callee, Anchor.Call, template)
+
+## Rewrite `callee[args]` by a template.
+pub fn call_with(pos ast.Pos, callee str, template str) Edit
+    at(pos, callee, Anchor.Brackets, template)
+
+## Name the arguments of the call `callee(...)`.
+pub fn call_named(pos ast.Pos, callee str, names List[str]) Edit
+    at(pos, callee, Anchor.CallNamed, names.join(","))
+
+## Split a chained comparison between its two operators.
+pub fn chain(first ast.Pos, second ast.Pos) Edit
+    Edit(pos: first, end: second, old: none, anchor: Anchor.Chain, text: "")
+
+## Append the lines `text` (each ending in a newline) after the block starting at `pos`.
+pub fn after_block(pos ast.Pos, text str) Edit
+    at(pos, none, Anchor.AfterBlock, text)
+
+## Rewrite the binary expression whose operator `op` is at `pos` by a template.
+pub fn operands(pos ast.Pos, op str, template str) Edit
+    at(pos, op, Anchor.Operands, template)
+
+## A C-style `for` at `pos` as a range loop.
+pub fn c_for(pos ast.Pos) Edit
+    at(pos, none, Anchor.CFor, "")
+
+## `xs: List[int] = []` at `pos` as `xs := List[int]()`.
+pub fn empty_decl(pos ast.Pos) Edit
+    at(pos, none, Anchor.EmptyDecl, "")
+
+## An edit as the JSON object `ail check --json` writes once its span is settled.
+pub fn Edit.to_json(self) str
+    "\{\"line\":{pos.line},\"col\":{pos.col},\"end_line\":{end.line},\"end_col\":{end.col},\"text\":{Json.Str(text).to_text()}}"
+
+## A fix as `{"title":..,"edits":[..]}`.
+pub fn Fix.to_json(self) str
+    "\{\"title\":{Json.Str(title).to_text()},\"edits\":[{[e.to_json() for e in edits].join(",")}]}"
