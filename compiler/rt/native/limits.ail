@@ -58,6 +58,8 @@ fn limits_init()
     mb := lim_env("AIL_MAX_MEMORY_MB", "megabytes", lim_baked_mb())
     if os_env_get("AIL_GC_STATS") != ""
         hset(25, 1)
+    if os_env_get("AIL_GC_VERIFY") != ""
+        hset(26, 1)
     if mb > 0
         store64(global(LIM_CAP), mb * 1048576)
     if ms > 0

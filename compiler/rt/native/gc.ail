@@ -158,6 +158,60 @@ fn gc_sweep()
     hset(H_THRESH, if live * 3 > MIN_THRESH then live * 3 else MIN_THRESH)
     hset(H_FASTLIM, if load64(global(MULTI)) == 0 then hs(H_THRESH) else 0)
 
+## `AIL_GC_VERIFY` set: before marking, check every allocated block's header
+## (a payload that fits the block, no stray flag bits) and say which block is
+## wrong, with its neighbour, then exit 70. Finds heap corruption at the first
+## collection after it happens. Costs nothing when the variable is unset.
+fn gc_bad_header(bs int, prev int, csz int, what int)
+    flush()
+    out_str("gc verify: bad header ")
+    out_int(what)
+    out_str(" at block ")
+    out_int(bs - hs(H_BASE))
+    out_str(" size ")
+    out_int(csz)
+    out_str(" word ")
+    out_int(load64(bs))
+    out_str(" previous block word ")
+    out_int(load64(prev))
+    out_str(" previous block size ")
+    out_int(csz)
+    out_str("\n")
+    flush_to(2)
+    sys_exit(70)
+
+fn gc_verify()
+    base := hs(H_BASE)
+    pt := hs(H_PAGES)
+    top_i := (hs(H_TOP) - base) / PAGE
+    mut pi := 0
+    while pi < top_i
+        t := load64(pt + 8 * pi)
+        tag := t.bit_and(255)
+        pb := base + pi * PAGE
+        if tag == 1
+            idx := t.shr(8).bit_and(255)
+            csz := t.shr(16).bit_and(65535)
+            per := PAGE / csz
+            for k in 0..per
+                bs := pb + k * csz
+                h := load64(bs)
+                fresh := bs >= hs(H_BUMP + idx) and bs < hs(H_BEND + idx)
+                if h != 0 and not fresh
+                    if h.shr(16) > csz - 8
+                        gc_bad_header(bs, if k > 0 then bs - csz else bs, csz, 1)
+                    if h.bit_and(65280) != 0
+                        gc_bad_header(bs, if k > 0 then bs - csz else bs, csz, 2)
+            pi += 1
+        elif tag == 2
+            np := t.shr(8)
+            h := load64(pb)
+            if h.shr(16) > np * PAGE - 8 or h.bit_and(65280) != 0
+                gc_bad_header(pb, pb, np * PAGE, 3)
+            pi += np
+        else
+            pi += 1
+
 ## `AIL_GC_STATS` set: before each sweep, the live bytes and blocks by object
 ## kind on standard error (the table is words 300-363 and 380-443 of the heap
 ## state block). Costs nothing when the variable is unset.
@@ -214,6 +268,8 @@ fn gc_collect()
     # collector holds the allocation lock, so none can allocate meanwhile.
     gc_stop_world()
     m := heap_state()
+    if hs(26) != 0
+        gc_verify()
     sp := gc_regs(m + 8 * H_REGS)
     hset(H_MARKN, 0)
     gc_scan_range(m + 8 * H_REGS, m + 8 * (H_REGS + 10))
