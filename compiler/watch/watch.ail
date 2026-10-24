@@ -1,0 +1,36 @@
+## The `ail run` attach shim (attach.run.1-3, ADR 0884): a program that runs
+## a `std.app` app is built to serve the attach socket by rewriting its source
+## text before it is lowered.
+
+const SERVE := "ail_serve"
+const ATTACH := "ail_attach"
+
+## `text` with `app.run(` calls made `std.attach.serve.run(` calls and an
+## `impl attach.Observe` added for each non-generic `impl app.App for T`, so
+## the observed fields and the screen answer queries (attach.run.1). The two
+## imports go on lines of their own at the top. A program that doesn't run an
+## app comes back unchanged.
+pub fn shim(text str) str
+    if not text.contains("app.run(") or not text.contains("use std.app")
+        return text
+    mut out := [
+        "use std.attach as {ATTACH}",
+        "use std.attach.serve as {SERVE}",
+    ]
+    mut owners := List[str]()
+    for line in text.lines()
+        out.push(retarget(line))
+        head := "impl app.App for "
+        if line.starts_with(head)
+            owner := line[head.len()..].strip()
+            if not owner.contains("[") and not text.contains("Observe for {owner}")
+                owners.push(owner)
+    for o in owners
+        out.push("impl {ATTACH}.Observe for {o}")
+    "{out.join("\n")}\n"
+
+## A line with its `app.run(` calls retargeted; comments stay as they are.
+fn retarget(line str) str
+    if line.strip().starts_with("#")
+        return line
+    line.replace("app.run(", "{SERVE}.run(")

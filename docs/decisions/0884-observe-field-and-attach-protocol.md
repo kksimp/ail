@@ -37,3 +37,7 @@ The designer approved the field form in ADR 0879, and it is also the cheapest in
 ## Consequences
 
 Implementation is staged: spec and this ADR; the `std.attach` module with the server and protocol; the field attribute in the parser, formatter and checker, and `observed` generation; the `ail run` and `--attach` flags. Plain (non-`std.app`) programs get no attach in this ADR.
+
+## Amendment 2026-10-24: how attach is switched on
+
+`ail run` and `ail build --attach` rewrite the program's source text before lowering (`attach.run.1-3`): `app.run(` becomes `std.attach.serve.run(`, and the empty `impl attach.Observe` of item 2 is added for each `impl app.App for T`. Rejected: a hook in `std.app.run` (a cycle, `std.app` → `std.screen.view` → `std.app`, and a branch in every program), and an environment variable read at run time (the code would be linked in when off). A rewritten program that doesn't build falls back to the program as written, with a warning. Limits: only `app.run(` through an import named `app`; generic app types get no empty impl.

@@ -39,6 +39,7 @@ use mir
 use obj
 use pkg
 use syntax
+use watch
 use x64
 
 fn main() !
@@ -175,7 +176,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]"
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
 ## A positive whole number (run.limit.4).
 fn positive(v str) bool
@@ -203,6 +204,7 @@ fn build_cli(rest List[str])
     mut ms := "0"
     mut mb := "0"
     mut cached := true
+    mut attach := false
     mut i := 0
     while i < rest.len()
         a := rest[i]
@@ -224,6 +226,8 @@ fn build_cli(rest List[str])
             i += 1
         elif a == "--no-cache"
             cached = false
+        elif a == "--attach"
+            attach = true
         elif file == "" and not a.starts_with("-")
             file = a
         else
@@ -234,7 +238,7 @@ fn build_cli(rest List[str])
         io.eprint(BUILD_USAGE)
         io.exit(2)
     if cached
-        compile_to(file, out, target, ms, mb)
+        compile_to(file, out, target, ms, mb, attach)
     else
         compile_fresh(
             file,
@@ -242,6 +246,7 @@ fn build_cli(rest List[str])
             if target == "" then host_target() else target,
             ms,
             mb,
+            attach,
         )
 
 ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
@@ -257,17 +262,17 @@ fn compiler_dir() str
 
 ## Build `file` for `target` (the host's when empty) into `out` (by default
 ## the file's name in the current directory) with the run limits `ms` and `mb`.
-fn compile_to(file str, out_arg str, target_arg str, ms str, mb str)
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool)
     target := if target_arg == "" then host_target() else target_arg
     out := if out_arg == "" then path.stem(file) else out_arg
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb))
+    exe := path.join(dir, cache_key(file, target, ms, mb, attach))
     if cached_copy(exe, out, target)
         return
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb)
+    compile_fresh(file, tmp, target, ms, mb, attach)
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -286,17 +291,30 @@ fn cached_copy(exe str, out str, target str) bool
     true
 
 ## `compile_to` without the cache.
-fn compile_fresh(file str, out str, target str, ms str, mb str)
+fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
     dir := compiler_dir()
     rt := runtime_with(path.join(dir, "rt/native"), file, ms, mb) else err
         io.eprint("error[native.build.3]: can't read the runtime: {err}")
         io.exit(2)
         return
     std := path.join(path.dir(dir), "std")
+    over := if attach then watch.shim(fs.read_text(file) else "") else ""
+    if over != ""
+        # A shim that doesn't build leaves the program as written, with a warning.
+        shimmed := lower_file_with(file, rt, std, over) else shim_err
+            io.eprint("warning[attach.run.2]: attach is off for this run: {shim_err}")
+            compile_fresh(file, out, target, ms, mb, false)
+            return
+        emit(shimmed, file, out, target)
+        return
     m := lower_file(file, rt, std) else err
         io.eprint("error[native.build.3]: {err}")
         io.exit(1)
         return
+    emit(m, file, out, target)
+
+## The executable of `m` for `target`, written to `out`.
+fn emit(m mir.Module, file str, out str, target str)
     hex := executable_hex(m, file, target)
     exe := bytes.from_hex(hex.replace("\n", "")) else
         io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
@@ -454,12 +472,23 @@ fn runtime_syntax(path str, text str)
 ## outside the native subset are printed as `ail check` prints
 ## diagnostics, and the run fails.
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module
+    lower_file_with(path, rt, std, "")
+
+## `lower_file` with the root file's text given when `over` isn't empty (the
+## attach shim).
+fn lower_file_with(path str, rt ast.Program?, std str, over str) !mir.Module
     mut srcs := List[mir.Source]()
     mut root := path
     if path.ends_with(".ail")
         cut := path.split("/")
         root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
-        srcs.push(parse_source("", path)?)
+        if over != ""
+            mut names := prelude_generic_names()
+            for n in syntax.generic_names(syntax.lex(over).tokens).sorted()
+                names.add(n)
+            srcs.push(parse_with("", path, over, names))
+        else
+            srcs.push(parse_source("", path)?)
     else
         mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
@@ -910,12 +939,12 @@ fn sched_points() bool
 
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
-fn cache_key(file str, target str, ms str, mb str) str
+fn cache_key(file str, target str, ms str, mb str, attach bool) str
     dir := compiler_dir()
     root := path.dir(file)
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-2 {target} {ms} {mb} {file} {sched_points()} {env.get("AIL_INSTRUMENT") else ""}",
+        "ail-native-cache-2 {target} {ms} {mb} {attach} {file} {sched_points()} {env.get("AIL_INSTRUMENT") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         tree_stamp("std", std),
@@ -936,19 +965,19 @@ fn cache_trim(dir str)
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str
-    cli_prepare_with(file, "0", "0")
+    cli_prepare_with(file, "0", "0", false)
 
 ## `cli_prepare` with the run limits baked in (`--timeout MS`, `--max-memory MB`).
-fn cli_prepare_with(file str, ms str, mb str) str
+fn cli_prepare_with(file str, ms str, mb str, attach bool) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb))
+    exe := path.join(dir, cache_key(file, target, ms, mb, attach))
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb)
+    compile_fresh(file, tmp, target, ms, mb, attach)
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -979,15 +1008,21 @@ fn cli_prepare_cmd(rest List[str])
     if file == ""
         io.eprint(usage)
         io.exit(2)
-    print(cli_prepare_with(file, ms, mb))
+    print(cli_prepare_with(file, ms, mb, false))
 
 ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn cli_run(rest List[str])
     if rest.len() < 1
         io.eprint("usage: ail run FILE [ARGS...]")
         io.exit(2)
-    exe := cli_prepare(rest[0])
-    out := proc.run(exe, rest[1..]) else err
+    # attach.run.1: on by default for `ail run`; `--no-attach` turns it off.
+    attach := rest[0] != "--no-attach"
+    args := if attach then rest else rest[1..]
+    if args.len() < 1
+        io.eprint("usage: ail run [--no-attach] FILE [ARGS...]")
+        io.exit(2)
+    exe := cli_prepare_with(args[0], "0", "0", attach)
+    out := proc.run(exe, args[1..]) else err
         io.eprint("error[native.build.3]: can't start {exe}: {err}")
         io.exit(2)
         return

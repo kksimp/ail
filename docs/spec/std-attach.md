@@ -4,8 +4,8 @@ Chapter key: `attach`
 
 > **Status:** Drafted (ADR 0884, amending ADR 0879). The field attribute, its
 > check, the protocol functions, the listener and the app wrapper are built;
-> the `Observe` generator is built; adding the empty impls and the `ail run`
-> default are not yet.
+> the `Observe` generator is built; the `ail run` default and `ail build --attach`
+> (a source shim, `attach.run.1-3`) are built.
 
 A running program tells an attached agent its state directly, read-only.
 
@@ -122,4 +122,42 @@ impl attach.Observe for Shop
 fn main() !
     mut s := Shop(n: 0)
     serve.run(mut s)?
+```
+
+**attach.run.1** — `ail run FILE` builds a program that calls `app.run(` with
+attach on, unless it is given `--no-attach` as its first argument. `ail build
+--attach` does the same for a built executable; without `--attach`, `ail build`
+adds nothing. The build rewrites the source text before it is lowered: two
+imports on new first lines, each `app.run(` call made a `std.attach.serve.run(`
+call, and an `impl attach.Observe` added for each non-generic
+`impl app.App for T` that has none. A program that doesn't run an app is built
+as written. *(ADR 0884)*
+
+**attach.run.2** — If the rewritten program doesn't build, the build warns
+`attach is off for this run` with the reason and builds the program as written.
+Attach off adds no listener, no thread and no `observed` method (zero cost).
+*(ADR 0884)*
+
+**attach.run.3** — The cache key of a build includes whether attach is on.
+*(ADR 0884)*
+
+```ail skip=bootstrap rules=attach.run.1,attach.run.2,attach.run.3
+# ail run counter.ail            attach on: the socket is served
+# ail run --no-attach counter.ail   attach off
+# ail build --attach counter.ail -o counter
+use std.app
+
+struct Counter
+    @observe n int
+
+impl app.App for Counter
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.label("{n}")
+
+fn main() !
+    mut c := Counter(n: 0)
+    app.run(mut c)?
 ```
