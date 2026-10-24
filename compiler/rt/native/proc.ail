@@ -1,6 +1,9 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
+## On Windows (`target()` 3) `run` and `which` are `win.ail`'s (CreateProcessW on
+## three pipes); `start` is not built there yet.
+##
 ## `std.proc.run`, `which` and `start` (std.proc.1-7, ADR 0770): the program is
 ## found on `PATH`, run by `clone` (Linux) or libSystem's `fork` (macOS) and
 ## `execve` with its three standard streams on pipes, and fed and drained with
@@ -62,6 +65,8 @@ fn proc_join(d int, dn int, name str) int
 ## it has a `/`, else the first `DIR/name` on `PATH` that is executable.
 ## 0 when there is none, -1 when only a file that isn't executable exists.
 fn proc_find(name str) int
+    if target() == 3
+        return win_find(name)
     np := str_addr(name)
     n := load64(np)
     if n == 0 or os_has_nul(name)
@@ -306,6 +311,8 @@ fn proc_run_bytes(cmd str, args List[int], input int, timeout int, at str) int
     proc_run_with(cmd, args, input, timeout, at, true)
 
 fn proc_run_with(cmd str, args List[int], input int, timeout int, at str, raw bool) int
+    if target() == 3
+        return win_proc_run(cmd, args, input, timeout, at, raw)
     mut limit := -1
     if timeout != 0
         limit = unbox(timeout)

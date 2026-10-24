@@ -1,0 +1,733 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The Windows file-system and clock layer of the native runtime (ADR 0598,
+## plat.target.1). The operating-system layer in `os.ail` is written over
+## Linux system calls; on Windows (`target()` 3) each of its primitives calls
+## the matching function here, which returns what the Linux call would: a
+## result of zero or more, or a negative `errno`. Paths arrive as UTF-8 and go
+## to the wide kernel32 calls as UTF-16 with `\` for `/`. A descriptor is the
+## Win32 HANDLE itself, except 0, 1 and 2, which are the standard handles.
+##
+## No global slots: the buffers sit in the scratch area of `os.ail`
+## (`os_scratch`), after the offsets that file uses.
+
+OS_WIN_A := 45056
+OS_WIN_B := 47104
+OS_WIN_T := 49152
+OS_WIN_NAME := 49408
+OS_WIN_DIRS := 51200
+WIN_DIR_SLOTS := 8
+WIN_DIR_SIZE := 1536
+WIN_PATH_UNITS := 1020
+
+## The handle behind descriptor `fd`.
+fn win_h(fd int) int
+    if fd == 0
+        return import_call("GetStdHandle", -10, 0, 0, 0)
+    if fd == 1
+        return import_call("GetStdHandle", -11, 0, 0, 0)
+    if fd == 2
+        return import_call("GetStdHandle", -12, 0, 0, 0)
+    fd
+
+## `-errno` for the calling thread's last Win32 error.
+fn win_err() int
+    e := import_call("GetLastError", 0, 0, 0, 0)
+    if e == 2 or e == 3 or e == 15 or e == 18
+        return -2
+    if e == 5 or e == 19 or e == 32 or e == 33 or e == 1314
+        return -13
+    if e == 80 or e == 183
+        return -17
+    if e == 145
+        return -39
+    if e == 267
+        return -20
+    if e == 4
+        return -24
+    if e == 8 or e == 14
+        return -12
+    if e == 109 or e == 232
+        return -32
+    if e == 123 or e == 161 or e == 87
+        return -22
+    if e == 206
+        return -36
+    -5
+
+## The unsigned 32-bit value at `p`.
+fn win_u32(p int) int
+    load8(p) + 256 * load8(p + 1) + 65536 * load8(p + 2) + 16777216 * load8(p + 3)
+
+fn win_put16(w int, i int, u int)
+    store8(w + 2 * i, u % 256)
+    store8(w + 2 * i + 1, u / 256)
+
+## The NUL-terminated UTF-8 path at `p` as UTF-16 at `w`, room for `cap`
+## units, with `/` as `\`. False when it doesn't fit.
+fn win_wide(w int, cap int, p int) bool
+    mut i := 0
+    mut o := 0
+    while true
+        b := load8(p + i)
+        if b == 0
+            break
+        if o + 3 >= cap
+            return false
+        mut cp := b
+        mut extra := 0
+        if b >= 240
+            cp = b - 240
+            extra = 3
+        elif b >= 224
+            cp = b - 224
+            extra = 2
+        elif b >= 192
+            cp = b - 192
+            extra = 1
+        i += 1
+        for k in 0..extra
+            cp = cp * 64 + load8(p + i).bit_and(63)
+            i += 1
+        if cp == 47
+            cp = 92
+        if cp >= 65536
+            c := cp - 65536
+            win_put16(w, o, 55296 + c / 1024)
+            win_put16(w, o + 1, 56320 + c % 1024)
+            o += 2
+        else
+            win_put16(w, o, cp)
+            o += 1
+    win_put16(w, o, 0)
+    true
+
+## The NUL-terminated UTF-16 string at `w` as UTF-8 at `dst`, ended by a NUL;
+## the number of bytes before it.
+fn win_narrow(w int, dst int) int
+    mut q := 0
+    mut out := dst
+    while win_unit(w, q) != 0
+        cp := win_cp(w, q)
+        out = win_put(out, cp)
+        q += win_width(cp)
+    store8(out, 0)
+    out - dst
+
+## The attributes of the file at wide path `w`, or -1.
+fn win_attrs(w int) int
+    a := import_call("GetFileAttributesW", w, 0, 0, 0)
+    if a == 4294967295
+        return -1
+    a
+
+fn win_is_dir_handle(h int) bool
+    t := os_scratch(OS_WIN_T)
+    if import_call("GetFileInformationByHandle", h, t, 0, 0) == 0
+        return false
+    win_u32(t).bit_and(16) != 0
+
+# ---- directory enumeration state ----
+# A slot per open directory: the handle (0), the FindFirstFile handle (8), the
+# state (16: 0 not started, 1 an entry waits in the data block, 3 take the next
+# one, 2 finished), the search pattern as UTF-16 (24), the WIN32_FIND_DATAW (832).
+
+fn win_dir_slot(h int) int
+    if h == 0
+        return 0
+    base := os_scratch(OS_WIN_DIRS)
+    for i in 0..WIN_DIR_SLOTS
+        s := base + WIN_DIR_SIZE * i
+        if load64(s) == h
+            return s
+    0
+
+## Remember directory `h`, opened from the wide path in `w`.
+fn win_dir_add(h int, w int) bool
+    base := os_scratch(OS_WIN_DIRS)
+    for i in 0..WIN_DIR_SLOTS
+        s := base + WIN_DIR_SIZE * i
+        if load64(s) == 0
+            store64(s, h)
+            store64(s + 8, 0)
+            store64(s + 16, 0)
+            mut n := 0
+            while win_unit(w, n) != 0 and n < 400
+                n += 1
+            copy_bytes(s + 24, w, 2 * n)
+            mut o := n
+            if n > 0 and win_unit(w, n - 1) != 92
+                win_put16(s + 24, o, 92)
+                o += 1
+            win_put16(s + 24, o, 42)
+            win_put16(s + 24, o + 1, 0)
+            return true
+    false
+
+fn win_dir_drop(s int)
+    f := load64(s + 8)
+    if f != 0
+        import_call("FindClose", f, 0, 0, 0)
+    store64(s, 0)
+    store64(s + 8, 0)
+    store64(s + 16, 0)
+
+# ---- the primitives ----
+
+## `open`: Linux flag bits (access mode 3, create 64, exclusive 128, truncate
+## 512, append 1024, directory 65536).
+fn win_open(path int, flags int, mode int) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    acc := flags.bit_and(3)
+    access := if acc == 0 then 2147483648 else if acc == 1 then 1073741824 else 3221225472
+    creat := flags.bit_and(64) != 0
+    excl := flags.bit_and(128) != 0
+    trunc := flags.bit_and(512) != 0
+    mut disp := 3
+    if creat
+        disp = if excl then 1 else if trunc then 2 else 4
+    elif trunc
+        disp = 5
+    if acc != 0
+        a := win_attrs(w)
+        if a >= 0 and a.bit_and(16) != 0
+            return -21
+    # FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, so a directory opens too.
+    h := import_call("CreateFileW", w, access, 7, 0, disp, 33554560, 0)
+    if h == -1
+        return win_err()
+    dir := win_is_dir_handle(h)
+    if flags.bit_and(65536) != 0
+        if not dir
+            import_call("CloseHandle", h, 0, 0, 0)
+            return -20
+        if not win_dir_add(h, w)
+            import_call("CloseHandle", h, 0, 0, 0)
+            return -24
+    elif flags.bit_and(1024) != 0
+        import_call("SetFilePointerEx", h, 0, 0, 2)
+    h
+
+fn win_close(fd int) int
+    s := win_dir_slot(fd)
+    if s != 0
+        win_dir_drop(s)
+    if import_call("CloseHandle", win_h(fd), 0, 0, 0) == 0
+        return win_err()
+    0
+
+fn win_read(fd int, p int, n int) int
+    h := win_h(fd)
+    t := os_scratch(OS_WIN_T)
+    store64(t, 0)
+    want := if n > 1073741824 then 1073741824 else n
+    if import_call("ReadFile", h, p, want, t, 0) == 0
+        e := import_call("GetLastError", 0, 0, 0, 0)
+        # End of a pipe.
+        if e == 109 or e == 38
+            return 0
+        if win_is_dir_handle(h)
+            return -21
+        return win_err()
+    win_u32(t)
+
+fn win_write(fd int, p int, n int) int
+    h := win_h(fd)
+    t := os_scratch(OS_WIN_T)
+    store64(t, 0)
+    want := if n > 1073741824 then 1073741824 else n
+    if import_call("WriteFile", h, p, want, t, 0) == 0
+        return win_err()
+    win_u32(t)
+
+fn win_lseek(fd int, off int, whence int) int
+    t := os_scratch(OS_WIN_T)
+    if import_call("SetFilePointerEx", win_h(fd), off, t, whence) == 0
+        return -29
+    load64(t)
+
+fn win_access(path int) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    if win_attrs(w) < 0
+        return win_err()
+    0
+
+fn win_mkdir(path int) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    if import_call("CreateDirectoryW", w, 0, 0, 0) == 0
+        return win_err()
+    0
+
+## A file, or with `dir` an empty directory. A directory named as a file is
+## `EISDIR`, as on Linux.
+fn win_unlink(path int, dir bool) int
+    w := os_scratch(OS_WIN_A)
+    if not win_wide(w, WIN_PATH_UNITS, path)
+        return -36
+    if dir
+        if import_call("RemoveDirectoryW", w, 0, 0, 0) == 0
+            return win_err()
+        return 0
+    a := win_attrs(w)
+    if a >= 0 and a.bit_and(16) != 0
+        return -21
+    if import_call("DeleteFileW", w, 0, 0, 0) == 0
+        return win_err()
+    0
+
+## Replaces an existing `to`, as `rename` does.
+fn win_rename(from int, to int) int
+    a := os_scratch(OS_WIN_A)
+    b := os_scratch(OS_WIN_B)
+    if not win_wide(a, WIN_PATH_UNITS, from) or not win_wide(b, WIN_PATH_UNITS, to)
+        return -36
+    if import_call("MoveFileExW", a, b, 1, 0) == 0
+        return win_err()
+    0
+
+## Directory entries into `buf` in the Linux `getdents64` layout (name at 19,
+## record length at 16); zero when there are no more.
+fn win_getdents(fd int, buf int, n int) int
+    s := win_dir_slot(fd)
+    if s == 0
+        return -9
+    data := s + 832
+    mut at := 0
+    while true
+        st := load64(s + 16)
+        if st == 2
+            break
+        if st == 0
+            f := import_call("FindFirstFileW", s + 24, data, 0, 0)
+            if f == -1
+                code := import_call("GetLastError", 0, 0, 0, 0)
+                store64(s + 16, 2)
+                if code == 2 or code == 18
+                    break
+                return win_err()
+            store64(s + 8, f)
+            store64(s + 16, 1)
+        elif st == 3
+            if import_call("FindNextFileW", load64(s + 8), data, 0, 0) == 0
+                store64(s + 16, 2)
+                break
+            store64(s + 16, 1)
+        name := os_scratch(OS_WIN_NAME)
+        nlen := win_narrow(data + 44, name)
+        reclen := (19 + nlen + 1 + 7) / 8 * 8
+        if at + reclen > n
+            if at == 0
+                return -22
+            break
+        ent := buf + at
+        store64(ent, 0)
+        store64(ent + 8, 0)
+        store8(ent + 16, reclen % 256)
+        store8(ent + 17, reclen / 256)
+        store8(ent + 18, if win_u32(data).bit_and(16) != 0 then 4 else 8)
+        copy_bytes(ent + 19, name, nlen + 1)
+        at += reclen
+        store64(s + 16, 3)
+    at
+
+## `fstat` for the fields the runtime reads, at their Linux x86-64 offsets:
+## `st_mode` (24), `st_size` (48), the modification time (88, 96).
+fn win_fstat(fd int, buf int) int
+    t := os_scratch(OS_WIN_T)
+    if import_call("GetFileInformationByHandle", win_h(fd), t, 0, 0) == 0
+        return win_err()
+    attrs := win_u32(t)
+    store64(buf + 24, if attrs.bit_and(16) != 0 then 16877 else 33206)
+    store64(buf + 48, win_u32(t + 32) * 4294967296 + win_u32(t + 36))
+    ft := win_u32(t + 24) * 4294967296 + win_u32(t + 20) - 116444736000000000
+    store64(buf + 88, ft / 10000000)
+    store64(buf + 96, ft % 10000000 * 100)
+    0
+
+## `getcwd` into `buf`: the length with the NUL, or a negative result.
+fn win_getcwd(buf int) int
+    w := os_scratch(OS_WIN_A)
+    n := import_call("GetCurrentDirectoryW", 1000, w, 0, 0)
+    if n <= 0 or n > 1000
+        return -5
+    win_narrow(w, buf) + 1
+
+# ---- clocks ----
+
+## Milliseconds since 1970-01-01T00:00:00Z.
+fn win_now_ms() int
+    t := os_scratch(OS_WIN_T)
+    import_call("GetSystemTimePreciseAsFileTime", t, 0, 0, 0)
+    ft := win_u32(t + 4) * 4294967296 + win_u32(t) - 116444736000000000
+    ft / 10000
+
+## Nanoseconds from the performance counter.
+fn win_mono_ns() int
+    t := os_scratch(OS_WIN_T)
+    import_call("QueryPerformanceFrequency", t, 0, 0, 0)
+    import_call("QueryPerformanceCounter", t + 8, 0, 0, 0)
+    f := load64(t)
+    c := load64(t + 8)
+    if f <= 0
+        return 0
+    c / f * 1000000000 + c % f * 1000000000 / f
+
+fn win_sleep_ms(ms int)
+    import_call("Sleep", ms, 0, 0, 0)
+
+## 2 when standard output is a console, else 1 (`line_buffered`).
+fn win_tty() int
+    if import_call("GetFileType", win_h(1), 0, 0, 0) == 2
+        return 2
+    1
+
+# ---- running a program (std.proc.1-3) ----
+
+## The wide string of the bytes at `p` (UTF-8, NUL-terminated) at `w`, `\`
+## where the path layer would turn `/` into it, without that change.
+fn win_wide_raw(w int, p int) int
+    mut i := 0
+    mut o := 0
+    while true
+        b := load8(p + i)
+        if b == 0
+            break
+        mut cp := b
+        mut extra := 0
+        if b >= 240
+            cp = b - 240
+            extra = 3
+        elif b >= 224
+            cp = b - 224
+            extra = 2
+        elif b >= 192
+            cp = b - 192
+            extra = 1
+        i += 1
+        for k in 0..extra
+            cp = cp * 64 + load8(p + i).bit_and(63)
+            i += 1
+        if cp >= 65536
+            c := cp - 65536
+            win_put16(w, o, 55296 + c / 1024)
+            win_put16(w, o + 1, 56320 + c % 1024)
+            o += 2
+        else
+            win_put16(w, o, cp)
+            o += 1
+    win_put16(w, o, 0)
+    o
+
+## `name` as the C string of the file `run(name, ...)` would start, or 0:
+## itself (or with `.exe`) when it names a path, else the first match on `PATH`
+## that `SearchPathW` finds, trying `.exe`.
+fn win_find(name str) int
+    np := str_addr(name)
+    n := load64(np)
+    if n == 0 or os_has_nul(name)
+        return 0
+    c := proc_cstr(name)
+    if c == 0
+        return 0
+    mut sep := false
+    for i in 0..n
+        b := load8(np + 16 + i)
+        if b == 47 or b == 92 or b == 58
+            sep = true
+    a := os_scratch(OS_WIN_A)
+    if sep
+        if not win_wide(a, WIN_PATH_UNITS, c)
+            return 0
+        at := win_attrs(a)
+        if at >= 0 and at.bit_and(16) == 0
+            return c
+        if at < 0
+            d := alloc(n + 5, KIND_BYTES)
+            copy_bytes(d, c, n)
+            store8(d + n, 46)
+            store8(d + n + 1, 101)
+            store8(d + n + 2, 120)
+            store8(d + n + 3, 101)
+            store8(d + n + 4, 0)
+            if win_wide(a, WIN_PATH_UNITS, d)
+                at2 := win_attrs(a)
+                if at2 >= 0 and at2.bit_and(16) == 0
+                    return d
+        return 0
+    if not win_wide(a, WIN_PATH_UNITS, c)
+        return 0
+    ext := os_scratch(OS_WIN_T) + 64
+    b := os_scratch(OS_WIN_B)
+    for k in 0..3
+        # `.exe`, then the scripts `cmd.exe` starts for the caller (`PATHEXT`).
+        win_put16(ext, 0, 46)
+        win_put16(ext, 1, if k == 0 then 101 else 99 - 0 * k)
+        win_put16(ext, 2, if k == 0 then 120 else 109)
+        win_put16(ext, 3, if k == 0 then 101 else 100)
+        win_put16(ext, 4, 0)
+        if k == 2
+            win_put16(ext, 1, 98)
+            win_put16(ext, 2, 97)
+            win_put16(ext, 3, 116)
+        got := import_call("SearchPathW", 0, a, ext, 1000, b, 0)
+        if got > 0 and got <= 1000
+            out := alloc(3 * got + 4, KIND_BYTES)
+            win_narrow(b, out)
+            return out
+    0
+
+## Whether the C string `p` ends in `.cmd` or `.bat` (any case).
+fn win_is_script(p int) bool
+    n := os_c_len(p)
+    if n < 4 or load8(p + n - 4) != 46
+        return false
+    a := load8(p + n - 3).bit_or(32)
+    b := load8(p + n - 2).bit_or(32)
+    c := load8(p + n - 1).bit_or(32)
+    (a == 99 and b == 109 and c == 100) or (a == 98 and b == 97 and c == 116)
+
+## Append `n` bytes at `p` to `out` as one command-line word, quoted by the
+## rules `CommandLineToArgvW` reads back; the address after it.
+fn win_quote_arg(out int, p int, n int) int
+    mut need := n == 0
+    for i in 0..n
+        c := load8(p + i)
+        if c == 32 or c == 9 or c == 34 or c == 10 or c == 11
+            need = true
+    if not need
+        copy_bytes(out, p, n)
+        return out + n
+    mut o := out
+    store8(o, 34)
+    o += 1
+    mut i := 0
+    while true
+        mut bs := 0
+        while i < n and load8(p + i) == 92
+            bs += 1
+            i += 1
+        if i == n
+            for k in 0..2 * bs
+                store8(o, 92)
+                o += 1
+            break
+        if load8(p + i) == 34
+            for k in 0..2 * bs + 1
+                store8(o, 92)
+                o += 1
+            store8(o, 34)
+            o += 1
+        else
+            for k in 0..bs
+                store8(o, 92)
+                o += 1
+            store8(o, load8(p + i))
+            o += 1
+        i += 1
+    store8(o, 34)
+    o + 1
+
+## Close handle `h` unless it is 0.
+fn win_close_h(h int)
+    if h != 0
+        import_call("CloseHandle", h, 0, 0, 0)
+
+## Drain what is waiting on pipe `h` into `buf` (capacity `cap`, `n` used):
+## the new count, or -1 when the writer is gone and nothing is left.
+fn win_pipe_take(h int, buf int, cap int, n int) int
+    t := os_scratch(OS_WIN_T)
+    store64(t, 0)
+    if import_call("PeekNamedPipe", h, 0, 0, 0, t, 0) == 0
+        return -1
+    avail := win_u32(t)
+    if avail == 0
+        return n
+    mut want := avail
+    if want > cap - n
+        want = cap - n
+    store64(t + 16, 0)
+    if import_call("ReadFile", h, buf + n, want, t + 16, 0) == 0
+        return -1
+    n + win_u32(t + 16)
+
+## `run(cmd, args, input, timeout_ms)` on Windows: the `Output` object, or 0
+## with the error slot set (see `proc_run_with`).
+fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw bool) int
+    mut limit := -1
+    if timeout != 0
+        limit = unbox(timeout)
+        if limit < 0
+            os_usage_trap("std.proc.2", str_cat(
+                str_cat("can't time out after ", fmt_int(limit)),
+                " milliseconds",
+            ))
+    exe := win_find(cmd)
+    if exe == 0
+        return proc_fail(cmd, "not_found", at)
+    # The command line: the program as given, then each argument, quoted.
+    al := list_addr(args)
+    nargs := load64(al)
+    data := load64(al + 16)
+    script := win_is_script(exe)
+    mut total := load64(str_addr(cmd)) + os_c_len(exe) + 8
+    for i in 0..nargs
+        total += 2 * load64(load64(data + 8 * i)) + 4
+    line := alloc(total + 4, KIND_BYTES)
+    # A script is started by name (cmd.exe runs it); a program by its path.
+    mut o := win_quote_arg(line, str_addr(cmd) + 16, load64(str_addr(cmd)))
+    if script
+        o = win_quote_arg(line, exe, os_c_len(exe))
+    for i in 0..nargs
+        sp := load64(data + 8 * i)
+        if os_has_nul(str_at(sp))
+            return proc_fail(cmd, "other", at)
+        store8(o, 32)
+        o = win_quote_arg(o + 1, sp + 16, load64(sp))
+    store8(o, 0)
+    wline := alloc(2 * (total + 4), KIND_BYTES)
+    win_wide_raw(wline, line)
+    wexe := alloc(2 * (os_c_len(exe) + 4), KIND_BYTES)
+    win_wide_raw(wexe, exe)
+    # Three pipes; the child's ends are inheritable, ours are not.
+    sa := alloc_z(32, KIND_BYTES, 1)
+    store64(sa, 24)
+    store64(sa + 8, 0)
+    store64(sa + 16, 1)
+    hp := alloc_z(48, KIND_BYTES, 1)
+    mut ilen := 0
+    if input != 0
+        ilen = load64(input)
+    mut ibuf := 65536
+    if ilen + 4096 > ibuf
+        ibuf = if ilen + 4096 > 16777216 then 16777216 else ilen + 4096
+    if import_call("CreatePipe", hp, hp + 8, sa, ibuf) == 0
+        return proc_fail(cmd, "other", at)
+    if import_call("CreatePipe", hp + 16, hp + 24, sa, 1048576) == 0
+        return proc_fail(cmd, "other", at)
+    if import_call("CreatePipe", hp + 32, hp + 40, sa, 1048576) == 0
+        return proc_fail(cmd, "other", at)
+    in_r := load64(hp)
+    in_w := load64(hp + 8)
+    out_r := load64(hp + 16)
+    out_w := load64(hp + 24)
+    err_r := load64(hp + 32)
+    err_w := load64(hp + 40)
+    import_call("SetHandleInformation", in_w, 1, 0, 0)
+    import_call("SetHandleInformation", out_r, 1, 0, 0)
+    import_call("SetHandleInformation", err_r, 1, 0, 0)
+    si := alloc_z(112, KIND_BYTES, 1)
+    store64(si, 104)
+    store64(si + 60, 256)
+    store64(si + 80, in_r)
+    store64(si + 88, out_w)
+    store64(si + 96, err_w)
+    pi := alloc_z(32, KIND_BYTES, 1)
+    flush()
+    # CREATE_NO_WINDOW.
+    app := if script then 0 else wexe
+    ok := import_call("CreateProcessW", app, wline, 0, 0, 1, 134217728, 0, 0, si, pi)
+    if ok == 0
+        code := import_call("GetLastError", 0, 0, 0, 0)
+        win_close_h(in_r)
+        win_close_h(in_w)
+        win_close_h(out_r)
+        win_close_h(out_w)
+        win_close_h(err_r)
+        win_close_h(err_w)
+        kind := if code == 2 or code == 3 then "not_found" else if code == 5 then "permission" else "other"
+        return proc_fail(cmd, kind, at)
+    proc := load64(pi)
+    win_close_h(load64(pi + 8))
+    win_close_h(in_r)
+    win_close_h(out_w)
+    win_close_h(err_w)
+    mut ifd := in_w
+    mut ofd := out_r
+    mut efd := err_r
+    if ilen > 0
+        # One write when the pipe was made big enough for all of it; larger
+        # inputs go in pieces, the output drained between them.
+        mut sent := 0
+        while sent < ilen
+            mut piece := ilen - sent
+            if piece > 1048576
+                piece = 1048576
+            tw := os_scratch(OS_WIN_T) + 32
+            store64(tw, 0)
+            if import_call("WriteFile", ifd, input + 16 + sent, piece, tw, 0) == 0
+                break
+            sent += win_u32(tw)
+    win_close_h(ifd)
+    ifd = 0
+    mut ob := str_new(PROC_CHUNK, 0)
+    mut oc := PROC_CHUNK
+    mut on := 0
+    mut eb := str_new(PROC_CHUNK, 0)
+    mut ec := PROC_CHUNK
+    mut en := 0
+    mut deadline := -1
+    if limit >= 0
+        deadline = time_now_ms() + limit
+    mut timed_out := false
+    while ofd != 0 or efd != 0
+        if deadline >= 0 and time_now_ms() >= deadline
+            timed_out = true
+            break
+        mut moved := false
+        if ofd != 0
+            if on == oc
+                ob = proc_widen(ob, on, oc)
+                oc = oc * 2
+            n := win_pipe_take(ofd, ob + 16, oc, on)
+            if n < 0
+                win_close_h(ofd)
+                ofd = 0
+            elif n > on
+                on = n
+                moved = true
+        if efd != 0
+            if en == ec
+                eb = proc_widen(eb, en, ec)
+                ec = ec * 2
+            n := win_pipe_take(efd, eb + 16, ec, en)
+            if n < 0
+                win_close_h(efd)
+                efd = 0
+            elif n > en
+                en = n
+                moved = true
+        if not moved
+            import_call("WaitForSingleObject", proc, 2, 0, 0)
+    win_close_h(ofd)
+    win_close_h(efd)
+    if timed_out
+        import_call("TerminateProcess", proc, 1, 0, 0)
+        import_call("WaitForSingleObject", proc, 4294967295, 0, 0)
+        win_close_h(proc)
+        return proc_fail(cmd, "timed_out", at)
+    import_call("WaitForSingleObject", proc, 4294967295, 0, 0)
+    t := os_scratch(OS_WIN_T)
+    store64(t + 48, 0)
+    import_call("GetExitCodeProcess", proc, t + 48, 0, 0)
+    status := win_u32(t + 48)
+    win_close_h(proc)
+    code := if status > 255 then 255 else status
+    store64(ob, on)
+    store64(eb, en)
+    if raw
+        store64(ob + 8, on)
+        store64(eb + 8, en)
+    out := if raw then str_at(ob) else os_lossy(ob)
+    err := if raw then str_at(eb) else os_lossy(eb)
+    r := obj_new(24, PROC_STRUCT)
+    store64(r, code)
+    store64(r + 8, str_addr(out))
+    store64(r + 16, str_addr(err))
+    r

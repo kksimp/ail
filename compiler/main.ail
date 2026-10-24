@@ -184,6 +184,9 @@ fn positive(v str) bool
 
 ## The target `ail build` makes by default: the host's, from `uname`.
 fn host_target() str
+    # Windows sets `OS`; it has no `uname`.
+    if (env.get("OS") else "") == "Windows_NT"
+        return "x86_64-windows"
     out := proc.run("uname", ["-sm"]) else
         return "x86_64-linux"
     match out.out.trim()
