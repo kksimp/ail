@@ -9,6 +9,10 @@ use ast
 pub struct Ref
     pub id str
     pub pos ast.Pos
+    ## The index of the function whose body or signature has it, `-1` outside one.
+    pub within int
+    ## A field named by a label in a struct literal or variant (api.ask.2).
+    pub label bool
 
 struct Refs
     prog ast.Program
@@ -19,6 +23,8 @@ struct Refs
     generics List[str]
     ## Value names that resolved to no declaration: locals, for `--refs`.
     names List[(ast.Pos, str)]
+    ## The function being walked (`Ref.within`).
+    cur int
 
 fn pk(p ast.Pos) int
     p.line * 65536 + p.col
@@ -40,7 +46,7 @@ pub fn references(
     weak Map[int, str],
     own_file bool,
 ) List[Ref]
-    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [])
+    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [], cur: -1)
     r.program()
     limit := if own_file then 1048576 else 1073741824
     kept := [x for x in r.found if x.pos.line <= limit]
@@ -61,12 +67,15 @@ pub struct Found
     pub names List[(ast.Pos, str)]
 
 pub fn collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) Found
-    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [])
+    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [], cur: -1)
     r.program()
     Found(refs: [x for x in r.found if x.pos.line < 1073741824], names: r.names)
 
 fn Refs.add(mut self, pos ast.Pos, id str)
-    found.push(Ref(id: id, pos: pos))
+    found.push(Ref(id: id, pos: pos, within: cur, label: false))
+
+fn Refs.add_label(mut self, pos ast.Pos, id str)
+    found.push(Ref(id: id, pos: pos, within: cur, label: true))
 
 fn Refs.program(mut self)
     for s in prog.structs
@@ -86,7 +95,9 @@ fn Refs.program(mut self)
     for im in prog.impls
         add(im.trait_pos, "trait:{im.trait_name}")
         owner(im.target)
-    for f in prog.fns
+    for fi in 0..prog.fns.len()
+        f := prog.fns[fi]
+        cur = fi
         generics = []
         if i := impl_index(f.within)
             scope_owner(prog.impls[i].target)
@@ -108,6 +119,7 @@ fn Refs.program(mut self)
                 expr(o.value)
         if body := f.body
             block(body)
+    cur = -1
     for c in prog.consts
         expr(c.value)
 
@@ -269,7 +281,7 @@ fn Refs.args(mut self, args List[ast.Arg], fields_of str?)
     for a in args
         if l := a.label
             if owner := fields_of
-                add(l.pos, "field:{owner}.{l.name}")
+                add_label(l.pos, "field:{owner}.{l.name}")
         expr(a.value)
 
 @allow("expr.match.3") fn Refs.expr(mut self, e ast.Expr)
