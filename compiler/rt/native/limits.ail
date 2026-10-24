@@ -56,6 +56,8 @@ fn lim_bad(name str, unit str)
 fn limits_init()
     ms := lim_env("AIL_TIMEOUT_MS", "milliseconds", lim_baked_ms())
     mb := lim_env("AIL_MAX_MEMORY_MB", "megabytes", lim_baked_mb())
+    if os_env_get("AIL_GC_STATS") != ""
+        hset(25, 1)
     if mb > 0
         store64(global(LIM_CAP), mb * 1048576)
     if ms > 0

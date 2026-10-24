@@ -146,6 +146,7 @@ struct Lower
     unchecked bool
     unchecked_list List[str]
     unchecked_seen Set[str]
+    auto_par Set[str]
     ## The `ensures` of the function being lowered, its label, and the keys
     ## of its receiver, parameters and `old(e)` values.
     ens List[ast.Contract]
@@ -232,6 +233,11 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
 ## `lower_package` with the sources from `lazy` on the prelude's, lowered
 ## as the program reaches them (ADR 0808).
 pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
+    lower_package_par(input, rt, lazy, Set[str]())
+
+## `lower_package_with` that also runs the loops named by `pooled` as `par for`
+## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
+pub fn lower_package_par(input List[Source], rt ast.Program?, lazy int, pooled Set[str]) Module ! Problems
     srcs := with_error_owners(shadow_free(input, lazy))
     mut l := Lower(
         path: srcs[0].path,
@@ -299,6 +305,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         unchecked: false,
         unchecked_list: [],
         unchecked_seen: Set[str](),
+        auto_par: pooled,
         ens: [],
         ens_label: "",
         ens_vars: [],
@@ -1137,7 +1144,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
-            if is_par
+            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return

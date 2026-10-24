@@ -210,3 +210,5 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 ## Open questions
 
 See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-117 with gaps), 52 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-042, OQ-050, OQ-060, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097.
+
+- 2026-10-24: D4 (ADR 0855): `./ail` builds the native CLI only from the published seed (stage 0); the cargo fallback is gone. The Rust binary is still built for `AIL_RUST=1` routes until D5.
