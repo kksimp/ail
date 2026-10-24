@@ -44,6 +44,8 @@ pub struct page.Page  ## A laid-out page.
     pub fn page.Page.head_json(self, scroll int, height int) str  ## The model's members before `nodes`: where the page is and what changed.
     pub fn page.Page.node_objects(self, scroll int, height int) Map[int, str]  ## Each drawn box as its JSON object, by node id, in document order.
     pub fn page.Page.to_json_budget(self, scroll int, height int, max_chars int) str  ## The model in at most about `max_chars` characters: the viewport's nodes
+    pub fn page.Page.at_json(self, x int, y int) str  ## The drawn box at column `x`, row `y` as its JSON object, or `null` (also
+    pub fn page.Page.where_json(self, q str) str  ## The boxes whose role is `q` or whose name contains it (ignoring case), as
 pub page.HIDDEN := ...  ## Elements never drawn: metadata, scripts and templates.
 pub page.BLOCKS := ...  ## Elements laid out as blocks; the rest flow inline.
 pub fn page.input_type(d html.Doc, id int) str  ## The `type` of an `input`, lowercase; "text" when absent.
@@ -58,4 +60,4 @@ pub fn page.resolve(base str, rel str) str  ## `rel` resolved against `base` (RF
 pub fn page.remove_dots(p str) str  ## The path with `.` and `..` segments removed (RFC 3986 5.2.4); the query
 ```
 
-trimmed to fit 2000 tokens (~1184); dropped: private items
+trimmed to fit 2000 tokens (~1270); dropped: private items
