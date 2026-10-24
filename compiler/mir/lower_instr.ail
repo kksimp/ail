@@ -88,7 +88,7 @@ fn Lower.watch_stmt(mut self, s ast.Stmt)
                 _ => instr.wpos = instr.wpos
         Eval(e) =>
             match e
-                Method(recv, name, npos, _) =>
+                Method(recv, _, npos, _) =>
                     match recv
                         Name(n, _) =>
                             if n == instr.watch
@@ -130,7 +130,7 @@ fn Lower.watch_note(
     mut self,
     pos ast.Pos,
     r Val,
-    op str,
+    kind str,
     elem Val,
     label str,
     at Val,
@@ -138,7 +138,7 @@ fn Lower.watch_note(
     if not watch_here(pos) or not vals_printable(r.ty, structs)
         return
     cont := watch_start(r)
-    say("{op} ")
+    say("{kind} ")
     describe(elem, pos)
     say(" at {label} ")
     describe(at, pos)
@@ -171,7 +171,7 @@ fn Lower.instr_after(mut self, s ast.Stmt)
     if not vals_printable(ty, structs)
         return
     # A `mut` parameter follows the watched variable only while the call passed it (trace.watch.3).
-    object := facts.mut_ptr.get("{fname}|{key}") else -1
+    object := facts.mut_ptr.get("{fname}|{key}") else 0 - 1
     if object < 0 and rn != instr.watch
         return
     if object < 0 and watch_object(ty)

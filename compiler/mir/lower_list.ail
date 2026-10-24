@@ -384,14 +384,9 @@ fn Lower.list_method(
         item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
         pushed := convert(item, el, npos)
         call(push_fn(el), [r.id, pushed], Ty.Unit)
-        watch_note(
-            npos,
-            r,
-            "push",
-            Val(id: pushed, ty: el),
-            "index",
-            Val(id: op("sub", [op("len", [r.id], Ty.Int), konst(1, Ty.Int)], Ty.Int), ty: Ty.Int),
-        )
+        if watch_here(npos)
+            last := op("sub", [op("len", [r.id], Ty.Int), konst(1, Ty.Int)], Ty.Int)
+            watch_note(npos, r, "push", Val(id: pushed, ty: el), "index", Val(id: last, ty: Ty.Int))
         return Val(id: -1, ty: Ty.Unit)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 
