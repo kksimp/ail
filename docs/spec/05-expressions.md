@@ -550,6 +550,35 @@ program still runs: `area` is never called.
 
 **expr.hole.2** — Evaluating a hole MUST trap (`err.trap.1`). *(ADR 0147)*
 
+**expr.hole.3** — `uhwhatnow?` is the hole that asks: one keyword token
+(`lex.kw.1`) with the type and trap of `todo` (`expr.hole.1–2`). Its warning
+MUST rank what in scope fits the expected type, best first: locals, innermost
+first; then fields of `self`, written bare; then fields of other locals; then
+calls of the local's methods and of the module's own non-generic functions,
+each argument filled by the local named like the parameter, else the innermost
+local of its type, else `todo`. A call ranks lower for each argument left as
+`todo`, for a result that can fail (written `?` in a function that returns a
+`Result`, else `else todo`), and when it calls the function being checked. A
+value fits when its type is the expected type, or the expected type is `T?` and
+the value is a `T`. The warning lists at most eight candidates, each with a fix
+that writes it in place of the hole. Where no type is expected, or nothing
+fits, it says so and lists the locals as `todo` does. The trap names the
+`uhwhatnow?`. *(ADR 0872)*
+
+```ail skip=bootstrap rules=expr.hole.3
+struct Cart
+    total int
+
+fn price(c Cart, tax int) int
+    uhwhatnow?
+
+fn main()
+    print(price(Cart(total: 3), 1))   # traps: reached a `uhwhatnow?` hole
+```
+
+The checker warns "uhwhatnow?: expected `int`; best fit: `tax`", with
+`tax`, then `c.total`, then `price(c, tax)` listed below it.
+
 > **Note:** a hole lets a program be written top-down: the checker says what
 > each gap needs, and the program runs until it reaches one. The bootstrap
 > doesn't infer an unknown hole type from later uses; a later lane may.

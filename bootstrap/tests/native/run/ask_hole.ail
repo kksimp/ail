@@ -1,0 +1,13 @@
+## `uhwhatnow?` (expr.hole.3, lex.kw.1): it checks with a ranked warning,
+## runs until reached, and its trap names the hole.
+struct Cart
+    total int
+
+fn price(c Cart, tax int) int
+    if tax < 0
+        return uhwhatnow?
+    c.total + tax
+
+fn main()
+    print(price(Cart(total: 3), 1))
+    print(price(Cart(total: 3), -1))
