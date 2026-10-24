@@ -68,8 +68,9 @@ fn build(src str, exe str) str?
 
 ## Run the executable `exe` of `src` with its scratch environment and standard input.
 fn run_exe(exe str, src str, tmp str) proc.Output ! proc.ProcError
-    dir := "{tmp}/scratch_{exe.split("/").last() else exe}"
-    cmd := "rm -rf {dir}; mkdir -p {dir}; {run_env(dir)} {exe} < {stdin_of(src)}"
+    # A fresh directory per run (mktemp), removed after, so overlapping runs never share a tree.
+    base := "{tmp}/scratch_{exe.split("/").last() else exe}"
+    cmd := "dir=$(mktemp -d {base}-XXXXXX) && {run_env("$dir")} {exe} < {stdin_of(src)}; code=$?; rm -rf \"$dir\"; exit $code"
     proc.run("sh", ["-c", cmd])?
 
 fn Check.freeze(mut self, tmp str)
