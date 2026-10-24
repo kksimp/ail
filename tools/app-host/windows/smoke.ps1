@@ -18,11 +18,13 @@ if (-not $t.Wait(10000)) { Write-Output 'smoke: RED no line in 10 s'; $p.Kill();
 Write-Output "first line: $($t.Result)"
 # Every event for 3 s: the canvas's resize events show its final size.
 $deadline = [DateTime]::Now.AddSeconds(3)
+$u = $null
 while ([DateTime]::Now -lt $deadline) {
-    $u = $p.StandardOutput.ReadLineAsync()
-    if (-not $u.Wait(500)) { continue }
+    if ($null -eq $u) { $u = $p.StandardOutput.ReadLineAsync() }
+    if (-not $u.Wait(500)) { continue }   # keep the pending read; a second one would fail
     if ($null -eq $u.Result) { break }
     Write-Output "next line: $($u.Result)"
+    $u = $null
 }
 $p.StandardInput.Close()
 if (-not $p.WaitForExit(10000)) { Write-Output 'smoke: RED host did not exit'; $p.Kill(); exit 1 }
