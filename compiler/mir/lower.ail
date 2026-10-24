@@ -97,6 +97,8 @@ struct Lower
     loops List[Loop]
     ## Tasks (lower_task.ail, ADR 0599).
     tk TaskState
+    ## Set while the one-at-a-time arm of a fused tensor chain is lowered.
+    nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
     ## The struct whose method is being lowered, else "".
@@ -274,6 +276,7 @@ pub fn lower_package_par(input List[Source], rt ast.Program?, lazy int, pooled S
         nvars: 0,
         loops: [],
         tk: new_task_state(),
+        nofuse: false,
         structs: {},
         self_ty: "",
         borrowed: Set[str](),
