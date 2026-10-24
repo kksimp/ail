@@ -697,7 +697,7 @@ static GtkWidget *build(Node *n) {
         w = gtk_box_new(n->kind == N_COLUMN ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL, 6);
         for (int i = 0; i < n->nkids; i++) {
             GtkWidget *k = build(n->kids[i]);
-            gtk_box_pack_start(GTK_BOX(w), k, n->kids[i]->kind == N_SPACER || n->kids[i]->kind == N_CANVAS ? TRUE : FALSE, TRUE, 0);
+            gtk_box_pack_start(GTK_BOX(w), k, FALSE, TRUE, 0);
         }
         break;
     case N_SPACER:
