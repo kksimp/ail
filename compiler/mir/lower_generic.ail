@@ -970,3 +970,13 @@ fn Lower.assoc_instance(mut self, recv ast.Expr, name str)
                         return
                 _ => return
         _ => return
+
+## `m.f(...)` or `m.G(...)` through an import, where `f` or `G` is generic:
+## the written name as one callee.
+fn Lower.qualified_generic_callee(self, recv ast.Expr, name str, pos ast.Pos) ast.Expr?
+    n := match recv
+        Name(r, _) => "{r}.{name}"
+        _ => return none
+    if generic_fn_key(n) != none or (lookup(n) == none and generic_type_key(n) != none)
+        return ast.Expr.Name(name: n, pos: pos)
+    none
