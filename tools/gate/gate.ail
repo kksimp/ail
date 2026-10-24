@@ -1040,12 +1040,12 @@ fn Gate.cli_effects(mut self, tmp str)
         red("--deny io", "exit {d.status}\n{d.err}")
     fs.write_text(main, "use std.env\n\nfn main()\n    print(env.cwd())\n") else return
     root := repo_root()
-    w := sh_run("cd {dir}/gone && rmdir {dir}/gone && AIL_BINARY={root}/bootstrap/target/release/ail exec {root}/bootstrap/target/release/ail run {main}")
+    w := sh_run("cd {dir}/gone && rmdir {dir}/gone && exec {bin_path(root)} run {main}")
     if w.status != 1 or not w.err.contains("trap[std.env.3]")
         red("env.cwd removed", "exit {w.status}\n{w.err}")
     for t in [["print(io.read_line())", "std.io.1"], ["print(io.read_all().len())", "std.io.2"]]
         fs.write_text(main, "use std.io\n\nfn main()\n    {t[0]}\n") else return
-        i := sh_run("AIL_BINARY={root}/bootstrap/target/release/ail {root}/bootstrap/target/release/ail run {main} < {dir}")
+        i := sh_run("{bin_path(root)} run {main} < {dir}")
         if i.status != 1 or not i.err.contains("trap[{t[1]}]")
             red("stdin a directory {t[1]}", "exit {i.status}\n{i.err}")
     fs.write_text(
@@ -1563,6 +1563,12 @@ fn Gate.limits(mut self, tmp str)
     want("test contract json", kj.out, ["\"snapshot\":\""])
 
 ## `ail diff OLD NEW` (diff.rs, ported; diff.out.1-7, ADRs 0396, 0399).
+## The binary the suites that moved to native (D3) call: `./ail` under `GATE_NATIVE=1`, else the Rust one.
+fn bin_path(root str) str
+    if (env.get("GATE_NATIVE") else "") == "1"
+        return "{root}/ail"
+    "{root}/bootstrap/target/release/ail"
+
 fn Gate.diff(mut self, tmp str)
     old_src := "fn add(a int, b int) int\n    a + b\n\nfn gone() int\n    1\n\nfn same() int\n    2\n\n@test fn adds()\n    assert(add(1, 2) == 3)\n\nfn main()\n    print(add(1, 2))\n"
     new_src := "## Adds.\npub fn add(a int, b int, c int) int\n    requires c >= 0\n    a + b\n\nfn same() int\n    2\n\nfn fresh() int\n    todo\n\n@test fn adds()\n    assert(add(1, 2, 0) == 4)\n\nfn main()\n    print(add(1, 2, 0))\n"
@@ -1608,7 +1614,7 @@ fn Gate.diff(mut self, tmp str)
         if s1.status != 0
             red("diff --rev", "git setup failed: {s1.err}")
         fs.write_text("{g}/p.ail", new_src) else return
-        bin := "{root}/bootstrap/target/release/ail"
+        bin := bin_path(root)
         r := sh_run("cd {g} && {bin} diff --rev HEAD --no-tests p.ail")
         if not r.out.ends_with("1 added, 1 removed, 3 changed; diagnostics +1 -0; tests not run\n")
             red("diff --rev", "{r.out}{r.err}")
@@ -1631,7 +1637,7 @@ fn Gate.build_cache(mut self, tmp str)
     # A private copy of the backend: the cache key covers every file of it.
     sh_run("rm -rf {d} {backend}; mkdir -p {d}; cp -R {root}/compiler {backend}")
     fs.write_text(prog, "fn main()\n    print(\"one\")\n") else return
-    bin := "{root}/bootstrap/target/release/ail"
+    bin := bin_path(root)
     f := build_with(bin, backend, cache, prog, "{d}/first", "")
     if f.status != 0
         red("build cache", "first build failed: {f.err}")
@@ -2124,7 +2130,7 @@ fn Gate.api_card(mut self, tmp str)
 ## `ail edit PATH < EDITS` (edit.rs, ported; edit.in, edit.id, edit.op, edit.out, ADRs 0397, 0399).
 fn edit_run(path str, flags List[str], edits str) proc.Output
     r := proc.run(
-        "bootstrap/target/release/ail",
+        bin_path("."),
         cat(cat(["edit"], flags), [path]),
         edits,
     ) else return proc.Output(status: 127, out: "", err: "could not start ail")
@@ -2242,7 +2248,7 @@ fn gd_manifest(dir str, url str, rest str)
 fn gd_ail(dir str, cwd str, path str, args str) proc.Output
     root := repo_root()
     p := if path.is_empty() then "" else "PATH={path} "
-    sh_run("cd {cwd} && AIL_HOME={dir}/home {p}{root}/bootstrap/target/release/ail {args}")
+    sh_run("cd {cwd} && AIL_HOME={dir}/home {p}{bin_path(root)} {args}")
 
 fn gd_setup(tmp str, name str) str
     dir := "{tmp}/git-deps-{name}"
@@ -2295,13 +2301,9 @@ fn Gate.git_deps(mut self, tmp str)
         or not st.err.contains("ail pkg update geo")
         or not slurp(lock).contains(second)
         red("git dep stale lock", "exit {st.status}\n{st.err}")
-    if gd_ail(
-        dir,
-        dir,
-        "",
-        "run app",
-    ).out != "12\nfalse\n" or not slurp(lock).contains("rev {first} commit {first}")
-        red("git dep relock", slurp(lock))
+    rl := gd_ail(dir, dir, "", "run app")
+    if rl.out != "12\nfalse\n" or not slurp(lock).contains("rev {first} commit {first}")
+        red("git dep relock", "exit {rl.status}\n{rl.out}{rl.err}\n{slurp(lock)}")
     # eff.cap.4: grants apply to git dependencies as to path ones.
     gd_manifest(dir, url, "rev {first}")
     cp := gd_ail(dir, dir, "", "check app")
@@ -2326,7 +2328,8 @@ fn Gate.git_deps(mut self, tmp str)
     ur := gd_ail(dir2, dir2, "", "run app")
     want("git dep unreachable", ur.err, ["error[mod.pkg.7]: can't fetch dependency `geo`"])
     gd_manifest(dir2, url2, "tag v1 caps fs")
-    sh_run("mkdir -p {dir2}/empty")
+    # A PATH without git: the shell tools `./ail` itself uses are linked in, git is not.
+    sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
     ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
     want("git dep no git", ng.err, ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"])
     nu := gd_ail(dir2, "{dir2}/app", "", "pkg update nope")

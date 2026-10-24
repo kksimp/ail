@@ -987,11 +987,15 @@ fn exe_ext(target str) str
 fn cache_key(file str, target str, ms str, mb str, attach bool) str
     dir := compiler_dir()
     root := path.dir(file)
+    # `ail.lock` names the commit of every git dependency, whose files live in the cache outside `root`.
+    # (`file` may be the package directory itself.)
+    lock := "{fs.read_text(path.join(root, "ail.lock")) else ""}{fs.read_text(path.join(file, "ail.lock")) else ""}"
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-2 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""}",
+        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
+        "lock {hash.sha256(lock)}",
         tree_stamp("std", std),
     ]
     hash.sha256(parts.join("\n"))

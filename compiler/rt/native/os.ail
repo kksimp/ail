@@ -759,7 +759,7 @@ fn err_end()
     store64(global(OUT_FD), 1)
 
 ## Refill the standard-input buffer; false at the end of input.
-fn os_in_fill() bool
+fn os_in_fill(rule str) bool
     flush()
     mut b := load64(global(IN_BUF))
     if b == 0
@@ -769,6 +769,14 @@ fn os_in_fill() bool
         r := os_read(0, b, OS_IN_SIZE)
         if r == -4
             continue
+        if r < 0 and r != -9
+            # A read error that isn't a closed standard input (EBADF is the end of input): a directory, say.
+            flush()
+            out_str("trap[")
+            out_str(rule)
+            out_str("]: can't read standard input\n")
+            flush_to(2)
+            sys_exit(1)
         if r <= 0
             store64(global(IN_POS), 0)
             store64(global(IN_LEN), 0)
@@ -787,7 +795,7 @@ fn os_read_until_newline() int
     mut seen := false
     while true
         if load64(global(IN_POS)) >= load64(global(IN_LEN))
-            if not os_in_fill()
+            if not os_in_fill("std.io.1")
                 break
         b := load64(global(IN_BUF))
         pos := load64(global(IN_POS))
@@ -892,7 +900,7 @@ fn io_read_bytes() str
     mut n := 0
     while true
         if load64(global(IN_POS)) >= load64(global(IN_LEN))
-            if not os_in_fill()
+            if not os_in_fill("std.io.2")
                 break
         b := load64(global(IN_BUF))
         pos := load64(global(IN_POS))
