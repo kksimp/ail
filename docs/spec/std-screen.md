@@ -108,7 +108,7 @@ with `why` "estimated layout"; `focus` (`App.focus`) marks the focused control.
 For app `a`: `of_node(a.view(), w, h, a.focus())`. The model is built only when
 this is called (`std.screen.9`).
 
-```ail rules=std.screen.12,std.screen.13
+```ail skip=bootstrap rules=std.screen.12,std.screen.13
 use std.app
 use std.screen
 use std.screen.view
