@@ -1,0 +1,17 @@
+use std.app
+use std.screen.view as sview
+
+fn main()
+    pw := 40
+    ph := 20
+    mut raw := List[int]()
+    for y in 0..ph
+        for x in 0..pw
+            inside := x >= 4 and x < 16 and y >= 4 and y < 12
+            raw.push(if inside then 0xcc else 0xff)
+            raw.push(if inside then 0xcc else 0xff)
+            raw.push(if inside then 0xcc else 0xff)
+            raw.push(255)
+    ops := [app.Op.Bitmap(x: 10.0, y: 10.0, w: 80.0, h: 40.0, id: "page", pw: pw, ph: ph, data: app.bitmap_data(raw))]
+    for it in sview.of_ops(ops, 0.0, 0.0)
+        print("{it.role} {it.x.to_int()},{it.y.to_int()} {it.w.to_int()}x{it.h.to_int()}")
