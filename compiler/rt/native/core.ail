@@ -291,7 +291,11 @@ fn flush_to(fd int)
         store64(global(OUT_LEN), 0)
 
 fn flush()
-    flush_to(if load64(global(OUT_FD)) == 2 then 2 else 1)
+    fd := load64(global(OUT_FD))
+    if fd == 2 or fd == 0 - 1
+        flush_to(fd)
+    else
+        flush_to(1)
 
 ## Flush, then end the process.
 fn exit(code int)

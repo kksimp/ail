@@ -123,6 +123,14 @@ fi
 # `ail api` natively: one file, with at most --outline, --text, --pretty and --symbols.
 native_on=1
 if [ "${AIL_RUST:-}" = 1 ] || [ -n "${AIL_BINARY:-}" ]; then native_on=0; fi
+# trace.run.1: the tracing options belong to `run` and `test`.
+if [ "${1:-}" != run ] && [ "${1:-}" != test ]; then
+    for trace_arg in "$@"; do
+        case "$trace_arg" in
+            --trace | --trace=* | --trace-limit | --watch | --watch=* | --verbose) echo "error[trace.run.1]: the tracing options (\`$trace_arg\`) work with \`ail run\` and \`ail test\` (trace.run.1)" >&2; exit 2 ;;
+        esac
+    done
+fi
 # replay.rec.1: `--record` and `--replay` belong to `run` and `test`.
 if [ "${1:-}" != run ] && [ "${1:-}" != test ]; then
     for rec_arg in "$@"; do
@@ -167,6 +175,16 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 v="${run_args[$((k + 1))]-}"
                 case "$v" in "" | *[!A-Za-z0-9_]*) die "\`--watch\` needs a variable name, e.g. \`--watch total\` (trace.watch.1)" ;; esac
                 export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}watch=$v"; k=$((k + 2)) ;;
+            --no-contracts) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}nocontracts"; k=$((k + 1)) ;;
+            --trace | --trace=calls | --trace=all) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace"; k=$((k + 1)) ;;
+            --trace=effects) die "\`--trace=effects\` is not native yet: effect events come with the next trace step (trace.run.6)" ;;
+            --trace=*) die "\`$a\` isn't a trace kind: use \`--trace\`, \`--trace=calls\`, \`--trace=effects\` or \`--trace=all\` (trace.run.1)" ;;
+            --trace-limit)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]* | 0) die "\`--trace-limit\` needs a positive number of events (trace.run.4)" ;; esac
+                export AIL_TRACE_LIMIT="$v"; k=$((k + 2)) ;;
+            --verbose) k=$((k + 1)) ;;
+            --no-attach) run_opts="$run_opts --no-attach"; k=$((k + 1)) ;;
             --values) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values"; k=$((k + 1)) ;;
             --deterministic) export AIL_DETERMINISTIC=1; det_run=1; check_opts="$check_opts --deterministic"; k=$((k + 1)) ;;
             --deny)

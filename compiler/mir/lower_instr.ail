@@ -32,6 +32,10 @@ pub struct Instr
     owner str
     np int
     descs List[ValDesc]
+    ## `trace`: `ail run --trace` (trace.run.1-4, trace.run.6): call and return events on standard error.
+    trace bool
+    ## `nocontracts`: `ail run --no-contracts` (contract.run.3): no condition is evaluated.
+    nocontracts bool
     ## `watch=NAME`: the variable whose assignments are events (`--watch`, trace.watch.1).
     watch str
     ids Map[str, int]
@@ -112,6 +116,8 @@ fn new_instr() Instr
         owner: "",
         np: 0,
         descs: [],
+        trace: modes.split(",").contains("trace"),
+        nocontracts: modes.split(",").contains("nocontracts"),
         watch: watch_name(modes),
         ids: {},
         sites: [],
@@ -161,6 +167,8 @@ fn Lower.instr_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
         instr.sp = call("rt.vals_enter", [], Ty.Int)
         instr.owner = fname
         instr.np = nvars
+    if instr.trace and not (is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path))
+        trace_call(f, tys, params)
     if not instr.calls or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
         return
     call(
@@ -233,15 +241,75 @@ fn Lower.vals_spill(mut self)
     for k in 0..d.names.len()
         store(instr.sp, k + 1, read_var(order[k].key, cur))
 
-## Before each `return` of a function with a spill: drop it from the table.
+## Before each `return` of a function with a spill: drop it from the table; of a traced one: the
+## return event.
 fn Lower.instr_end(mut self)
-    if instr.sp < 0 or instr.owner != fname
+    if instr.owner != fname
+        return
+    if instr.trace
+        instr.owner = ""
+        trace_returns()
+    if instr.sp < 0
         return
     instr.sp = -1
     for b in 0..blocks.len()
         if blocks[b].term.kind == "return"
             cur = b
             call("rt.vals_leave", [], Ty.Unit)
+
+## `trace: call NAME(a = 1) at LINE:COL`, on standard error (trace.run.2).
+fn Lower.trace_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
+    instr.owner = fname
+    call("rt.tr_call_open", [], Ty.Unit)
+    say("call {plain_name(fname)}(")
+    mut labels := List[str]()
+    if f.receiver != none
+        labels.push("self")
+    for p in f.params
+        labels.push(p.name)
+    mut first := true
+    for i in 0..params.len().min(labels.len())
+        if not vals_printable(tys[i], structs)
+            continue
+        if not first
+            say(", ")
+        first = false
+        say("{labels[i]} = ")
+        describe(Val(id: params[i], ty: tys[i]), f.pos)
+    say(") at ")
+    call("rt.tr_site", [konst(f.pos.line, Ty.Int), konst(f.pos.col, Ty.Int)], Ty.Unit)
+    say("\n")
+    call("rt.tr_close", [], Ty.Unit)
+
+## Before each `return` of a traced function: `trace: NAME returned VALUE`. Only values
+## that print without a loop are shown; a list or map shows as `…`.
+fn Lower.trace_returns(mut self)
+    for b in 0..blocks.len()
+        t := blocks[b].term
+        if t.kind != "return"
+            continue
+        cur = b
+        call("rt.tr_ret_open", [], Ty.Unit)
+        say("{plain_name(fname)} returned ")
+        if t.value < 0 or ret.is_unit()
+            say("()")
+        elif flat_printable(ret, structs)
+            describe(Val(id: t.value, ty: ret), ast.Pos(line: 1, col: 1))
+        else
+            say("…")
+        say("\n")
+        call("rt.tr_ret_done", [], Ty.Unit)
+
+fn flat_printable(t Ty, structs Map[str, List[Slot]]) bool
+    match t
+        Int | Float | Bool | Str | Char | Enum(_) => true
+        Struct(n) =>
+            slots := structs.get(n) else return false
+            for sl in slots
+                if not flat_printable(sl.ty, structs)
+                    return false
+            true
+        _ => false
 
 ## The `vd.N` describers: print `(a = 1, b = 2); c = 3`.
 fn Lower.gen_describers(mut self)

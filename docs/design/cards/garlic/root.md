@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 98 (`ail test` lists them)
+tests: 101 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
