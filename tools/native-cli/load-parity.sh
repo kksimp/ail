@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The native program loader against the Rust one (ADR 0855): for each FILE, the
-# program `ail run compiler load` builds must equal `ail api --ast --program`.
+# program `ail run compiler load` builds must equal the Rust `ail api --ast --program` (`AIL_RUST=1`).
 #   tools/native-cli/load-parity.sh [FILE...]     default: examples/*.ail
 # Prints one line per differing file (with the first differing field) and a count.
 set -uo pipefail
@@ -26,12 +26,13 @@ else:
             chunks[cur] += line + "\n"
 bad = 0
 for f in files:
-    want = subprocess.run(["./ail", "api", "--ast", "--program", f], capture_output=True, text=True).stdout
+    want = subprocess.run(["./ail", "api", "--ast", "--program", f], capture_output=True, text=True, env={**__import__("os").environ, "AIL_RUST": "1"}).stdout
     got = chunks.get(f, "")
     try:
         a, b = json.loads(got.split("\n", 1)[0]), json.loads(want.split("\n", 1)[0])
     except ValueError:
         bad += 1; print("BAD   ", f, "(no program)"); continue
+    a.pop("asks", None)  # the native parser's `uhwhatnow?` list (ADR 0868); the Rust one has none
     if a != b:
         bad += 1
         k = next((k for k in b if a.get(k) != b[k]), "?")
