@@ -71,7 +71,10 @@ function Install-PrivateRust {
     if ($expected -ne $actual) { Fail 'rustup-init checksum mismatch; not installing' }
     if (-not $onWindows) { & chmod +x $init }
     $log = Join-Path $tmp 'install.log'
+    # Windows PowerShell 5.1 turns a native command's stderr into an error record, which `Stop` would take for a failure.
+    $ErrorActionPreference = 'Continue'
     & $init -y --no-modify-path --profile minimal --default-toolchain $pin --default-host $triple *> $log
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) {
         Get-Content $log | ForEach-Object { [Console]::Error.WriteLine($_) }
         Fail 'Rust installation failed'
