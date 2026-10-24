@@ -1,0 +1,9 @@
+#1000330 textbox 'search', dark gray, at 0,52 200x24, enabled, focused, probably (0.9: estimated layout)
+#1637303 checkbox 'Gift (on)', dark gray, at 55,24 59x24, enabled, probably (0.9: estimated layout)
+#1319297 button 'Pay', dark gray, at 0,24 47x24, enabled, probably (0.9: estimated layout)
+#5000316 canvas 'c', white, at 0,80 100x40, enabled
+#3456775 text 'Cart', dark gray, at 0,0 31x20, enabled
+#2664615 box, red, at 5,85 30x10, enabled
+#3704040 text 'Hi', white, at 6,86 16x17, enabled
+#1000330 textbox 'search', dark gray, at 0,52 200x24, enabled, focused, probably (0.9: estimated layout)
+#3704040 text 'Hi', white, at 6,86 16x17, enabled

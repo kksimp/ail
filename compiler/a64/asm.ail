@@ -229,6 +229,22 @@ pub fn Asm.ldr_d(mut self, t int, n int, off int)
 pub fn Asm.str_d(mut self, t int, n int, off int)
     mem(4244635648, 4227858432, t, n, off)
 
+## `ldr st, [n, #off]` and `str st, [n, #off]` of one single: scaled 12-bit
+## when `off` is a multiple of 4 in range, else the unscaled 9-bit form.
+pub fn Asm.ldr_s(mut self, t int, n int, off int)
+    mem4(3175088128, 3158310912, t, n, off)
+
+pub fn Asm.str_s(mut self, t int, n int, off int)
+    mem4(3170893824, 3154116608, t, n, off)
+
+fn Asm.mem4(mut self, scaled int, unscaled int, t int, n int, off int)
+    if off >= 0 and off % 4 == 0 and off < 16384
+        word(scaled + off / 4 * 1024 + n * 32 + t)
+        return
+    if off < -256 or off > 255
+        unreachable("a64: offset {off} out of range")
+    word(unscaled + off.bit_and(511) * 4096 + n * 32 + t)
+
 fn Asm.mem(mut self, scaled int, unscaled int, t int, n int, off int)
     if off >= 0 and off % 8 == 0 and off < 32768
         word(scaled + off / 8 * 1024 + n * 32 + t)
@@ -381,9 +397,13 @@ pub fn Asm.str_q(mut self, t int, n int, off int)
 pub fn Asm.vzero(mut self, d int)
     word(1862329344 + d)
 
-## `fadd` and `fmul` on `v.4s` (four singles).
+## `fadd`, `fsub`, `fmul`, `fdiv` on `v.4s` (four singles).
 pub fn Asm.vop4(mut self, op str, d int, n int, m int)
-    base := if op == "fadd" then 1310774272 else 1847647232
+    base := match op
+        "fadd" => 1310774272
+        "fsub" => 1319162880
+        "fmul" => 1847647232
+        _ => 1847655424
     word(rrr(base, d, n, m))
 
 ## `fcvtn2 vd.4s, vn.2d` and `fcvtl2 vd.2d, vn.4s`: the upper halves.
@@ -397,9 +417,13 @@ pub fn Asm.vcvtl2(mut self, d int, n int)
 pub fn Asm.vdup4(mut self, d int, n int)
     word(1308886016 + n * 32 + d)
 
-## `fadd` and `fmul` on singles (`s` registers).
+## `fadd`, `fsub`, `fmul`, `fdiv` on singles (`s` registers).
 pub fn Asm.fop_s(mut self, op str, d int, n int, m int)
-    base := if op == "fadd" then 505423872 else 505415680
+    base := match op
+        "fadd" => 505423872
+        "fsub" => 505427968
+        "fmul" => 505415680
+        _ => 505419776
     word(rrr(base, d, n, m))
 
 ## `fmov xd, dn` and `fmov dd, xn`: the bits, unchanged.

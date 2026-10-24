@@ -235,14 +235,37 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
     )
 
 ## `print` holds the output buffer's lock while a program runs tasks, so a
-## line from one task isn't split by another's.
+## line from one task isn't split by another's. The values are worked out
+## first: `print(t.wait()?)` must not hold the lock while it waits for a task
+## that prints or traps.
 fn Lower.lower_print(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if not tk.on
         return lower_print_body(args, pos)
+    if args.len() != 1
+        return unsupported(pos, "this `print`")
+    mut shown := List[Val]()
+    mut ipos := pos
+    match args[0].value
+        Interp(parts, at) =>
+            ipos = at
+            for p in parts
+                match p
+                    Lit(_) => shown.push(Val(id: -1, ty: Ty.Unit))
+                    Hole(x) => shown.push(lower_value(x, none)?)
+                    Fmt(x, _) => shown.push(lower_value(x, none)?)
+        _ => shown.push(lower_value(args[0].value, none)?)
     call("rt.out_lock", [], Ty.Unit)
-    r := lower_print_body(args, pos)
+    match args[0].value
+        Interp(parts, _) =>
+            for k in 0..parts.len()
+                match parts[k]
+                    Lit(text) => call("rt.out_str", [str_value(text)], Ty.Unit)
+                    Hole(_) => out(shown[k], ipos)?
+                    Fmt(_, spec) => lower_fmt_print(shown[k], spec, ipos)?
+        _ => out(shown[0], pos)?
+    call("rt.out_nl", [], Ty.Unit)
     call("rt.out_unlock", [], Ty.Unit)
-    r
+    Val(id: -1, ty: Ty.Unit)
 
 # ---- the functions that run tasks ----
 
