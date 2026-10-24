@@ -83,6 +83,8 @@ struct Gen
     wrap int
     region List[bool]
     holes List[codegen.Hole]
+    ## The dynamic-library symbols this function calls (Linux, ADR 0870).
+    imports List[str]
 
 ## Generate the whole program: `_start`, then each function.
 pub fn generate(m mir.Module) codegen.Image
@@ -163,6 +165,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         wrap: al.wrap,
         region: al.region,
         holes: al.holes,
+        imports: [],
     )
     for r in al.saved
         if r >= codegen.FLOAT_BASE
@@ -180,6 +183,8 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         g.gen_block(b)
     g.gen_stubs()
     g.a.resolve_labels()
+    for sym in g.imports
+        codegen.import_slot(mut img, sym)
     for x in g.f64s
         codegen.add_f64(mut img, x)
     for s in g.stubs
@@ -1089,14 +1094,16 @@ fn Gen.push(mut self, i mir.Inst)
 
 fn Gen.call_out(mut self, i mir.Inst)
     if i.name.starts_with("libsys.")
-        # System DLL calls exist only on Windows (ADR 0606). Elsewhere the
-        # call traps if it is ever run.
-        # macOS names start with `_` and are never imported on Windows.
-        if self.win and not i.name.starts_with("libsys._")
+        # System DLL calls exist on Windows (ADR 0606). On Linux a call is
+        # through the slot the dynamic loader binds (ADR 0870), made below as
+        # any call is. macOS names start with `_` and trap here.
+        sym := i.name.replace("libsys.", "")
+        if self.win and not sym.starts_with("_") and not codegen.linux_import(sym)
             self.libsys_call(i)
-        else
+            return
+        if self.win or not codegen.linux_import(sym)
             a.ud2()
-        return
+            return
     if i.site >= 0
         # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
         a.alu_rm("cmp", RSP, at_sym("globals", 8 * STACK_LIMIT))
@@ -1106,6 +1113,13 @@ fn Gen.call_out(mut self, i mir.Inst)
     mut nf := 0
     # A call through a value (`icall`) takes the callee first, into the scratch register.
     indirect := i.op == "icall"
+    # A C function (`icall` named "c", ADR 0870) may clobber xmm8-xmm13, which
+    # AIL functions keep: save them around the call.
+    c_call := indirect and i.name == "c"
+    if c_call
+        a.alu_ri("sub", RSP, 48)
+        for k in 0..6
+            a.vmovsd_mr(at(RSP, 8 * k), 8 + k)
     mut extra := List[int]()
     for k in 0..i.args.len()
         v := i.args[k]
@@ -1130,9 +1144,9 @@ fn Gen.call_out(mut self, i mir.Inst)
     if indirect
         a.call_reg(S0)
     elif i.name.starts_with("libsys.")
-        # An import exists only on macOS; the runtime guards it with
-        # `target() == 2`, so on x86-64 Linux it is never reached.
-        a.ud2()
+        sym := i.name.replace("libsys.", "")
+        imports.push(sym)
+        a.call_import(sym)
     else
         a.call_sym(i.name)
     if i.imm != 0
@@ -1140,6 +1154,10 @@ fn Gen.call_out(mut self, i mir.Inst)
         calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
     if room > 0
         a.alu_ri("add", RSP, room)
+    if c_call
+        for k in 0..6
+            a.vmovsd_rm(8 + k, at(RSP, 8 * k))
+        a.alu_ri("add", RSP, 48)
     if i.dst >= 0
         if f.vals[i.dst].is_float()
             put_xmm(i.dst, 0)

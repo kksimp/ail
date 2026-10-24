@@ -167,11 +167,11 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `13-unsafe.md:226` | norun | `unsafe.mem.2` | traps on purpose: the freed or null memory is used at run time, so the output is a trap | 223 |
 | `13-unsafe.md:235` | norun | `unsafe.mem.3` | traps on purpose: the freed or null memory is used at run time, so the output is a trap | 223 |
 | `13-unsafe.md:243` | skip=context | `unsafe.block.3` | illustration; the two package cases are unsafe_denied and unsafe_root_denied | 223 |
-| `14-ffi.md:191` | norun | `ffi.native.1` | `ail build` rejects it; the gate runs only `ail check` | 223 |
-| `14-ffi.md:200` | norun | `ffi.load.1` | traps at load time on a missing library, so it is checked and not run | 223 |
-| `14-ffi.md:209` | norun | `ffi.load.2` | traps at load time on a missing symbol, so it is checked and not run | 223 |
-| `14-ffi.md:218` | norun | `ffi.load.3` | the kernel32 note needs Windows; checked and not run | 223 |
-| `14-ffi.md:228` | skip=bootstrap | `ffi.decl.1` | use c "stdlib.h" is not built into the bootstrap yet | 238 |
+| `14-ffi.md:198` | norun | `ffi.native.1` | the process id differs on every run; `14-ffi.md:110` runs the rule | 223 |
+| `14-ffi.md:207` | norun | `ffi.load.1` | traps at load time on a missing library, so it is checked and not run | 223 |
+| `14-ffi.md:216` | norun | `ffi.load.2` | traps at load time on a missing symbol, so it is checked and not run | 223 |
+| `14-ffi.md:225` | norun | `ffi.load.3` | the kernel32 note needs Windows; checked and not run | 223 |
+| `14-ffi.md:235` | skip=bootstrap | `ffi.decl.1` | use c "stdlib.h" is not built into the bootstrap yet | 238 |
 | `15-compile-time.md:141` | norun | `ct.eval.3` | not run: traps on purpose, needs input or a host resource, or prints tool output | 223 |
 | `15-compile-time.md:160` | norun | `ct.eval.4` | optional reuse of compile-time results is a MAY rule; not built, see OQ-135 | 238 |
 | `17-std.md:139` | norun | `std.fs.9` | needs a network, UI, process, device or clock the gate lacks | unowned |
@@ -235,7 +235,7 @@ by `skip=context` blocks that show the layout. Their checks are the package case
 `bootstrap/tests/cases/packages/` and `bootstrap/tests/git_deps.rs`, not the spec gate.
 Chapter 13 (unsafe, 15 rules, lane 223): all cited. Runtime traps (`unsafe.ptr.4`–`6`, `unsafe.mem.2`, `unsafe.mem.3`) are `norun`. `unsafe.block.3` (manifest opt-in) is a `skip=context` block with the package cases named. `unsafe.block.1` is shown by the valid block example, since the bootstrap reports the disallowed case as `unsafe.op.1`.
 
-Chapter 14 (FFI, 12 rules, lane 223): all cited. `ffi.decl.1` (`use c "header.h"`) is `skip=bootstrap`: specified, not built. `ffi.native.1` is `norun` because `ail build` rejects the declaration and the gate only checks. The load traps (`ffi.load.1`–`3`) are `norun`. `ffi.load.3` is Windows-only behaviour and is shown by a `norun` block.
+Chapter 14 (FFI, 12 rules, lane 223): all cited. `ffi.decl.1` (`use c "header.h"`) is `skip=bootstrap`: specified, not built. `ffi.native.1` has a runnable block (`isdigit`, outside the libc subset, bound at its first call, ADR 0870) and a `norun` one that prints a process id. The load traps (`ffi.load.1`–`3`) are `norun`. `ffi.load.3` is Windows-only behaviour and is shown by a `norun` block.
 
 Chapter 15 is taken by the Haiku lane; 16 onward too.
 

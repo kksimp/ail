@@ -4,8 +4,8 @@ a64  65 items
 api  144 items
 ast  129 items
 budget  24 items
-check  330 items
-codegen  54 items
+check  334 items
+codegen  55 items
 cover  4 items
 derive  35 items
 doc  18 items
@@ -15,8 +15,8 @@ fix  54 items
 fixrun  26 items
 fmt  63 items
 load  100 items
-mir  429 items
-obj  58 items
+mir  431 items
+obj  64 items
 pkg  44 items
-syntax  109 items
+syntax  110 items
 x64  80 items

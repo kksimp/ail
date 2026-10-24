@@ -19,7 +19,7 @@ fn tuple_elems(t Ty) List[Ty]?
 ## table or a function value is not (its copy would share state).
 fn tuple_elem_ok(t Ty) bool
     match t
-        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | Unit | Unknown => false
+        Map(_, _) | Set(_) | Fn(_, _) | Unit | Unknown => false
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.
@@ -455,7 +455,7 @@ fn has_tuple(t Ty) bool
     if t.opt_inner() != none or t.is_coll()
         return true
     match t
-        Struct | Enum | Bytes | Ref => true
+        Struct | Enum | Bytes | Ref | Tensor => true
         _ => false
 
 ## The text of a value of a type `text_ok` accepts, as inside a tuple or a

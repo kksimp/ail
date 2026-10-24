@@ -35,6 +35,9 @@ fi
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
 suites="examples tools cases explain fix cli mistakes contracts misc docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
 [ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
+# Until step D, the cases suite still runs `ail run` through the Rust binary (AIL_BINARY), whose
+# `ail explain` embeds docs/spec: keep it in step with the tree, or a spec change reads as a diff.
+run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
 run gate_ail ./ail run tools/gate/gate.ail $suites
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build bootstrap/tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
