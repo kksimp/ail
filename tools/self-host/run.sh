@@ -5,9 +5,8 @@
 #   tools/self-host/run.sh [OUT_DIR]
 #
 # Stages (each runs only if the one before it worked):
-#   0  needs: the library calls the compiler's own source makes (fs, io, env)
-#      that the native backend can't compile yet.
-#   1  `./ail build compiler/main.ail` (Rust-hosted) makes the native compiler.
+#   0  the pinned seed (tools/release/SEED_TAG) is what ./ail starts from.
+#   1  `./ail build compiler/main.ail` (seed-hosted) makes the native compiler.
 #   2  stage 1 builds compiler/main.ail again.
 #   3  stage 2 builds it a third time; stage 2 and 3 must be byte-identical
 #      (the fixed point), and stage 1 and 2 too (same compiler, same output).
@@ -63,7 +62,7 @@ unhex() { perl -ne 'chomp; print pack("H*", $_)' > "$1" && chmod +x "$1"; }
 # derive generators itself (ADR 0856), with no Rust-made derive file.
 build_with() { # compiler src out
     local cc="$1" src="$2" dst="$3"
-    # The paths `ail build` passes (bootstrap/src/build.rs): absolute, since they
+    # The paths `ail build` passes (`ail build`): absolute, since they
     # end up in the trap texts of the executable. Relative ones make stage 1 and
     # the later stages differ in size.
     "$cc" build "$src" "$root/compiler/rt/native" "$TARGET" 0 0 "$root/compiler/../std" > "$dst.hex" 2> "$dst.err" || return 1
@@ -73,36 +72,13 @@ build_with() { # compiler src out
 say "# Self-host bootstrap ($(date -u +%Y-%m-%dT%H:%M:%SZ), $(git rev-parse --short HEAD))"
 say ""
 
-# ---- stage 0: what the compiler's source needs from the library ----
-# `env.args` is native. With the native OS layer (lane 177, ADR 0580, file
-# compiler/mir/lower_os.ail) `fs.*`, `io.*` are native too, but only in `else`
-# forms; a call ending in `?` or `else err` waits for error values (lane 175).
-say "## Stage 0: library calls in compiler/ (outside rt)"
-os_layer=0
-[ -f compiler/mir/lower_os.ail ] && os_layer=1
-srcs=$(find compiler -name '*.ail' ! -path 'compiler/rt/*')
-needs=$(grep -hoE '\b(fs|io|env)\.[a-z_]+\(' $srcs | sed 's/($//' | sort | uniq -c | sort -rn)
+# ---- stage 0: the seed ----
+# ./ail builds the native compiler from the pinned seed (tools/release/SEED_TAG); no Rust is involved.
+say "## Stage 0: the pinned seed (tools/release/SEED_TAG: $(cat tools/release/SEED_TAG 2>/dev/null || echo none))"
 missing=0
-while read -r n name; do
-    [ -z "${name:-}" ] && continue
-    if [ "$name" == "env.args" ]; then
-        say "- $name ($n uses): native"
-    elif [ "$os_layer" == 1 ]; then
-        q=$(grep -hE "\b${name//./\\.}\(" $srcs | grep -cE '\)\?|else err')
-        if [ "$q" -gt 0 ]; then
-            say "- $name ($n uses): native in else forms; $q use(s) with \`?\` or \`else err\` need error values (lane 175)"
-            missing=$((missing + 1))
-        else
-            say "- $name ($n uses): native"
-        fi
-    else
-        say "- $name ($n uses): NOT native (no OS layer yet, lane 177)"
-        missing=$((missing + 1))
-    fi
-done <<< "$needs"
 say ""
 
-# ---- stage 1: the Rust-hosted build ----
+# ---- stage 1: the seed-hosted build ----
 say "## Stage 1: ./ail build compiler/main.ail"
 if [ -n "${STAGE1:-}" ]; then
     stage1="$STAGE1"
@@ -119,7 +95,7 @@ else
         if [ "$missing" -gt 0 ]; then
             say "Also: stage 0 lists $missing library calls the compiler can't make natively yet."
         fi
-        blocked "stage 1" "the Rust-hosted build of compiler/main.ail reports native.subset.1 problems"
+        blocked "stage 1" "the seed-hosted build of compiler/main.ail failed (see the log)"
     fi
 fi
 say ""
