@@ -694,6 +694,16 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0873](0873-rust-only-features-after-rust-removal.md) | Rust-only features: native record/replay and deterministic scheduler; the bytecode tier goes | Accepted | 2026-10-24 |
 | [0874](0874-purity-driven-speed-optimizations.md) | Purity-driven speed optimizations: memoization by cost model, pure-call CSE and hoisting, merging only for speed | Accepted | 2026-10-24 |
 | [0884](0884-observe-field-and-attach-protocol.md) | `@observe` marks a struct field; attach speaks JSON lines on loopback with a 0600 token file | Accepted | 2026-10-24 |
+| [0877](0877-no-downcast-of-any-trait.md) | No downcasting of `any Trait`: an enum is the checked way to hold one of several known types (resolves OQ-094) | Accepted | 2026-10-24 |
 | [0880](0880-budgeted-diagnostic-forms.md) | Token-priced diagnostics: one-line and expanded forms under `--budget` (ADR 0868 item 6) | Accepted | 2026-10-24 |
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
+| [0891](0891-ail-context-budgeted-pack.md) | `ail context SYM --budget N`: the smallest useful context pack (designer chose; details delegated) | Proposed | 2026-10-24 |
+| [0892](0892-tool-functions-mcp-server.md) | `@tool` functions served by `ail serve --mcp` | Proposed | 2026-10-24 |
+| [0893](0893-ail-try.md) | `ail try`: check and test a patch in memory | Proposed | 2026-10-24 |
+| [0894](0894-effect-changes-in-ail-diff.md) | Effect changes in `ail diff` | Proposed | 2026-10-24 |
+| [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Proposed | 2026-10-24 |
+| [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Proposed | 2026-10-24 |
+| [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Proposed | 2026-10-24 |
+| [0898](0898-ail-database-engine.md) | A database engine and its shell, as a showcase program | Proposed | 2026-10-24 |
+| [0899](0899-ail-media-and-image-editor.md) | A media player or image editor, as a showcase program | Proposed | 2026-10-24 |

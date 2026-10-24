@@ -76,7 +76,7 @@ below 1.0 and a `why` (`std.screen.3`).
 times its height and its area is under 5% of the raster; then it is a `button`
 whose text is the label, `conf` 0.9 with a cut corner (rounded) and 0.7 without.
 
-```ail rules=std.screen.10,std.screen.11
+```ail skip=bootstrap rules=std.screen.10,std.screen.11
 use std.screen
 use std.screen.pixels
 
@@ -108,7 +108,7 @@ with `why` "estimated layout"; `focus` (`App.focus`) marks the focused control.
 For app `a`: `of_node(a.view(), w, h, a.focus())`. The model is built only when
 this is called (`std.screen.9`).
 
-```ail rules=std.screen.12,std.screen.13
+```ail skip=bootstrap rules=std.screen.12,std.screen.13
 use std.app
 use std.screen
 use std.screen.view

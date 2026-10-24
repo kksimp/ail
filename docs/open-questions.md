@@ -276,7 +276,7 @@ every current need is an impl); (b) a module-level `@generate(f)` whose items
 appear in `ail api --expanded` like derives. *Owner: AI under ADR 0076.*
 
 ## OQ-094 — Downcasting `any Trait`
-**Resolved** by the designer on 2026-10-24: no downcast; enums are the checked way (ADR text in [pending-no-downcast-of-any-trait.md](decisions/pending-no-downcast-of-any-trait.md) until it is numbered).
+**Resolved** by [ADR 0877](decisions/0877-no-downcast-of-any-trait.md) (option a: no downcast; an enum is the checked way).
 
 ## OQ-095 — Compile-time evaluation limits
 `ct.eval.3` sets 100,000,000 steps and 1 GiB per constant or derive.
