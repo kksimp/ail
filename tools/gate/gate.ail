@@ -61,11 +61,15 @@ fn Gate.examples(mut self, tmp str)
             or not fs.exists("examples/{stem}.out")
             continue
         exe := "{tmp}/ex_{stem}"
+        # A std.app program waits for an app host (the cases suite runs those against a fake one).
+        if (fs.read_text("examples/{name}") else "").contains("use std.app")
+            continue
         if why := build("examples/{name}", exe)
             unbuilt.push("examples/{name}")
             continue
         built += 1
-        got := proc.run(exe, []) else
+        # Under a 60 second alarm: one hang is one red example, not a stuck gate.
+        got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
             red("examples/{name}", "could not run the executable")
             continue
         want := fs.read_text("examples/{stem}.out") else ""
@@ -524,7 +528,7 @@ fn slurp(p str) str
 ## programs that start `ail` themselves (std.app hosts) use this binary.
 fn ail_run(args List[str]) proc.Output ! proc.ProcError
     if (env.get("GATE_NATIVE") else "") == "1"
-        return proc.run("sh", cat(["-c", "exec \"$PWD/ail\" \"$@\"", "sh"], args))
+        return proc.run("sh", cat(["-c", "exec perl -e 'alarm 120; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"], args))
     script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
     proc.run("sh", cat(["-c", script, "sh"], args))
 
@@ -912,9 +916,11 @@ fn Gate.explain_coverage(mut self)
     for l in slurp("compiler/explain/fixable.txt").lines()
         listed.add(l)
     if listed.sorted() != seen.sorted()
+        extra := [r for r in seen.sorted() if not listed.contains(r)]
+        gone := [r for r in listed.sorted() if not seen.contains(r)]
         red(
             "explain.cover.3",
-            "src/fixable.txt is out of step with the fixes the test programs produce",
+            "compiler/explain/fixable.txt is out of step with the fixes the test programs produce; produced but not listed: {extra}; listed but not produced: {gone}",
         )
     for r in listed.sorted()
         if not spec.contains(r)
