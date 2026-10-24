@@ -2019,6 +2019,8 @@ fn Lower.lower_method(
         return struct_call("{a}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))
+    if cal := qualified_generic_callee(recv, name, npos)
+        return lower_generic_callee(cal, args, npos, want)
     if m := module_name(recv)
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)

@@ -1,0 +1,85 @@
+## The built-in generator of `std.attach.Observe` (attach.observe.4, ADR 0884):
+## `impl attach.Observe for T` with no methods gets `observed`, which reports
+## each `@observe` field of `T` as a name, a type and a JSON value. Not part of
+## the generated gens.ail: it needs the syntax tree for the `@observe` marks.
+use ast
+
+## The fields of struct `name` marked `@observe`, in order; the variant names
+## of every enum without payloads, by enum name.
+pub struct ObserveFacts
+    pub fields List[str]
+    pub enums Map[str, List[str]]
+
+pub fn observe_facts(progs List[ast.Program], name str) ObserveFacts
+    mut fields := List[str]()
+    for p in progs
+        for s in p.structs
+            if s.name.split(".").last() == name
+                for f in s.fields
+                    if f.observe
+                        fields.push(f.name)
+    mut enums := Map[str, List[str]]()
+    for p in progs
+        for e in p.enums
+            mut plain := e.generics.len() == 0
+            for v in e.variants
+                if v.fields.len() > 0
+                    plain = false
+            if plain
+                key := e.name.split(".").last() else e.name
+                enums[key] = [v.name for v in e.variants]
+    ObserveFacts(fields: fields, enums: enums)
+
+## Statements that set `var` (already declared `mut var := ""`) to the JSON
+## text of `expr`, a value of type `ty`; `n` numbers the temporaries.
+fn value_lines(
+    ty str,
+    expr str,
+    var str,
+    facts ObserveFacts,
+    n int,
+    pad str,
+) List[str] ! DeriveError
+    if ty == "int" or ty == "float" or ty == "bool"
+        return ["{pad}{var} = \"\{{expr}}\""]
+    if ty == "str"
+        return ["{pad}{var} = Json.Str({expr}).to_text()"]
+    if inner := list_item(ty)
+        e := "e{n}"
+        p := "p{n}"
+        parts := "parts{n}"
+        mut out := [
+            "{pad}mut {parts} := List[str]()",
+            "{pad}for {e} in {expr}",
+            "{pad}    mut {p} := \"\"",
+        ]
+        out.extend(value_lines(inner, e, p, facts, n + 1, "{pad}    ")?)
+        out.push("{pad}    {parts}.push({p})")
+        out.push("{pad}{var} = \"[\{{parts}.join(\",\")}]\"")
+        return out
+    if names := facts.enums.get(ty)
+        mut out := ["{pad}match {expr}"]
+        for v in names
+            out.push("{pad}    {v} => {var} = \"\\\"{v}\\\"\"")
+        return out
+    DeriveError("`@observe` can't report a `{ty}`: use int, float, bool, str, an enum without payloads, or a List of those")
+
+fn list_item(ty str) str?
+    inner := ty.strip_prefix("List[")?
+    inner.strip_suffix("]")
+
+pub fn derive_observe(t TypeInfo, facts ObserveFacts) str ! DeriveError
+    if t.kind == TypeKind.Enum
+        return DeriveError("`Observe` is for a struct with `@observe` fields")
+    mut out := ["fn observed(self) List[attach.Observed]", "    mut out := List[attach.Observed]()"]
+    mut k := 0
+    for f in t.fields
+        if not facts.fields.contains(f.name)
+            continue
+        v := "v{k}"
+        out.push("    mut {v} := \"\"")
+        out.extend(value_lines(f.type_text, "self.{f.name}", v, facts, 0, "    ")?)
+        out.push("    out.push(attach.observed(\"{f.name}\", \"{f.type_text}\", {v}))")
+        k += 1
+    out.push("    out")
+    "{out.join("\n")}\n"

@@ -1,7 +1,7 @@
 # compiler
 entry: main in main.ail
 
-## (root) (54 items)
+## (root) (56 items)
 
 ## a64 (73 items)
 
@@ -15,7 +15,7 @@ entry: main in main.ail
 
 ## codegen (55 items)
 
-## derive (35 items)
+## derive (40 items)
 
 ## doc (18 items)
 
@@ -39,6 +39,8 @@ entry: main in main.ail
 
 ## syntax (110 items)
 
+## watch (3 items)
+
 ## x64 (87 items)
 
-trimmed to fit 4000 tokens (~200); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~209); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

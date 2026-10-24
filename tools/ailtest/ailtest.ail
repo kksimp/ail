@@ -2570,6 +2570,32 @@ fn main() !
         fs.write_text(rec_file, "{rec_head}\n{rec_out}")? "writing the recording {rec_file}"
     if update
         mut recs := List[SnapRec]()
+        # snap.update.3: the assertion that reaches a literal with a second, different value fails.
+        cs := text.chars()
+        mut starts := [0]
+        for k in 0..cs.len()
+            if cs[k] == '\n'
+                starts.push(k + 1)
+        mut seen := Map[str, str]()
+        mut failed := Set[str]()
+        for i in 0..verdicts.len()
+            for r in verdicts[i].snaps
+                if r.col < 0
+                    continue
+                key := "{r.line}:{r.col}"
+                prior := seen.get(key) else ""
+                if not seen.contains(key)
+                    seen[key] = r.text
+                elif prior != r.text
+                    and not failed.contains(key)
+                    and r.line >= 1
+                    and r.line <= starts.len()
+                    failed.add(key)
+                    start := starts[r.line - 1] + r.col - 1
+                    end := literal_end(cs, start)
+                    if end >= 0 and verdicts[i].status == "pass"
+                        verdicts[i].status = "fail"
+                        verdicts[i].message = "trap[test.assert.1]: assertion failed: left is {r.text}, right is {chars_text(cs, start, end)}"
         for v in verdicts
             for r in v.snaps
                 if r.col != 0

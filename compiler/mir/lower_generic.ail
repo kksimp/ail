@@ -105,6 +105,11 @@ fn Lower.generic_type_key(self, name str) str?
 fn Lower.generic_fn_key(self, name str) str?
     if lookup(name) != none
         return none
+    parts := name.split(".")
+    if parts.len() > 1
+        m := aliases.get(parts[0])?
+        key := "{m}.{parts[1..].join(".")}"
+        return if gen.fns.contains(key) then key else none
     if self_ty != "" and sigs.contains("{self_ty}.{name}")
         return none
     key := "{prefix}{name}"
@@ -271,7 +276,10 @@ fn Lower.is_generic_callee(self, callee ast.Expr) bool
     name := match callee
         Name(n, _) => n
         TypeArgs(n, _, _) => n
+        Member => if p := path_of(callee) then p else ""
         _ => return false
+    if name == ""
+        return false
     if generic_fn_key(name) != none
         return true
     lookup(name) == none and generic_type_key(name) != none
@@ -296,6 +304,9 @@ fn Lower.lower_generic_callee(
         TypeArgs(n, ts, p) =>
             name = n
             targs = ts
+            at = p
+        Member(_, _, p) =>
+            name = path_of(callee) else return unsupported(pos, "this call")
             at = p
         _ => return unsupported(pos, "this call")
     if g := generic_fn_key(name)
@@ -959,3 +970,13 @@ fn Lower.assoc_instance(mut self, recv ast.Expr, name str)
                         return
                 _ => return
         _ => return
+
+## `m.f(...)` or `m.G(...)` through an import, where `f` or `G` is generic:
+## the written name as one callee.
+fn Lower.qualified_generic_callee(self, recv ast.Expr, name str, pos ast.Pos) ast.Expr?
+    n := match recv
+        Name(r, _) => "{r}.{name}"
+        _ => return none
+    if generic_fn_key(n) != none or (lookup(n) == none and generic_type_key(n) != none)
+        return ast.Expr.Name(name: n, pos: pos)
+    none
