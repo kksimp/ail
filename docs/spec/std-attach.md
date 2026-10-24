@@ -2,8 +2,8 @@
 
 Chapter key: `attach`
 
-> **Status:** Drafted (ADR 0884, amending ADR 0879). The field attribute and its
-> check are built; the attach server and the `ail run` default are not yet.
+> **Status:** Drafted (ADR 0884, amending ADR 0879). The field attribute, its
+> check and the protocol functions are built; the listener, the app wrapper and the `ail run` default are not yet.
 
 A running program tells an attached agent its state directly, read-only.
 
@@ -37,4 +37,39 @@ struct Panel
 fn main()
     p := Panel(count: 1, tags: ["a"], mode: Mode.On)
     print(p.count)
+```
+
+## The protocol
+
+`use std.attach` provides the protocol as pure functions: `Observed`,
+`Tracker`, `answer`, `authorized`. The listener that carries it is separate.
+
+**attach.wire.2** — A request line without the token the program published, or
+with another one, is answered with an error and does nothing. *(ADR 0884)*
+
+**attach.wire.3** — A request is one JSON object on a line and a reply is one
+JSON object on a line, with `"v":1`. A line that is not JSON gets an error
+reply. *(ADR 0884)*
+
+**attach.wire.4** — The queries are `observe`, `screen` and `heap`. Any other
+`q`, including one that asks to set or change something, gets an error reply
+that says all queries only read. `screen` answers with the `std.screen` query
+named by `x`, `y`, `w`, `h`, `role`, `color`, `text` and `budget`. `heap` gives
+the summary the program supplies, or an error when it has none. *(ADR 0884)*
+
+**attach.wire.5** — `observe` answers `{"v":1,"rev":N,"values":{name:value}}`.
+`names` limits the values; `since` limits them to those that changed after
+revision `since`. A `Tracker` raises its revision once per `update` that adds
+a value or changes one. *(ADR 0884)*
+
+```ail skip=bootstrap rules=attach.wire.2,attach.wire.3,attach.wire.4,attach.wire.5
+use std.attach
+use std.screen
+
+fn main()
+    mut tr := attach.Tracker.new()
+    tr.update([attach.observed("total", "int", "3")])
+    s := screen.Screen(w: 10.0, h: 10.0, items: [])
+    print(attach.answer("\{\"q\":\"observe\",\"token\":\"k\"}", "k", tr, s, ""))
+    print(attach.answer("\{\"q\":\"observe\"}", "k", tr, s, ""))
 ```
