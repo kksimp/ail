@@ -259,6 +259,18 @@ if [ "${1:-}" = effects ]; then
     done
     [ "$files" = 1 ] || native_effects=
 fi
+# Routes only the Rust bootstrap could run are refused (ADR 0900): `test --native` compared native builds with the
+# interpreter, and `selftest --test NAME` ran one cargo test. `AIL_RUST=1` still reaches the Rust `ail` until it is deleted.
+if [ "${AIL_RUST:-}" != 1 ]; then
+    if [ "${1:-}" = test ]; then
+        for a in "${@:2}"; do
+            [ "$a" = --native ] && die "\`ail test --native\` is retired: \`ail test\` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)"
+        done
+    fi
+    if [ "${1:-}" = selftest ] && [ "${2:-}" = --test ]; then
+        die "\`ail selftest --test NAME\` ran one cargo test and is retired: name a gate suite, as \`ail selftest cases\`, or run \`ail test FILE\` (ADR 0900)"
+    fi
+fi
 native_errors=
 if [ "${1:-}" = check ]; then
     for a in "${@:2}"; do [ "$a" = --errors ] && native_errors=1; done
