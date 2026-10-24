@@ -265,9 +265,19 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
 fi
 
 # `ail selftest` with no arguments is the native gate (ADR 0865, item 252): tools/gate/mac-gate.sh runs gate.ail's suites with the
-# native compiler. `AIL_SELFTEST=cargo` (or any argument, e.g. `--fuzz`, `--test NAME`) keeps the cargo tests.
-if [ "${1:-}" = selftest ] && [ "$#" = 1 ] && [ "$native_on" = 1 ] && [ "${AIL_SELFTEST:-}" != cargo ]; then
-    exec "$root/tools/gate/mac-gate.sh"
+# native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers; `AIL_SELFTEST=cargo` keeps the cargo tests.
+if [ "${1:-}" = selftest ] && [ "$native_on" = 1 ] && [ "${AIL_SELFTEST:-}" != cargo ]; then
+    if [ "$#" = 1 ]; then exec "$root/tools/gate/mac-gate.sh"; fi
+    if [ "${2:-}" = --fuzz ]; then
+        # The AIL fuzzers (tools/fuzz/suite.ail, modules.ail): programs and module inputs, no Rust harness.
+        n="${3:?usage: ail selftest --fuzz N [SEED]}"; shift 3
+        seed=1; case "${1:-}" in ''|*[!0-9]*) ;; *) seed="$1"; shift ;; esac
+        echo "fuzz: $n inputs per fuzzer from seed $seed" >&2
+        "$root/ail" run "$root/tools/fuzz/suite.ail" "$n" "$seed" || exit $?
+        exec "$root/ail" run "$root/tools/fuzz/modules.ail" "$n" "$seed"
+    fi
+    # Gate suites by name (tools/gate/gate.ail), as the Mac gate runs them.
+    shift; exec "$root/ail" run "$root/tools/gate/gate.ail" "$@"
 fi
 
 # `ail test` is native only (plan.md step B): the AIL runner (tools/ailtest/ailtest.ail) builds the tests natively and
