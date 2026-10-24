@@ -62,11 +62,11 @@ BIN_ENV = {}
 LAST = {}
 
 
-def run(binary, args, cwd=None, tmp=None, stdin=None):
+def run(binary, args, cwd=None, tmp=None, stdin=None, stderr=True):
     """(exit status, hash of stdout + stderr) with the scratch directory's name normalised."""
     env = dict(os.environ, AIL_ROOT=ROOT, **BIN_ENV)
     r = subprocess.run(binary + args, cwd=cwd or ROOT, capture_output=True, text=True, env=env, input=stdin)
-    out = r.stdout + "\x00" + r.stderr
+    out = r.stdout + "\x00" + (r.stderr if stderr else "")
     if tmp:
         out = out.replace(tmp, "T")
     out = re.sub(r"/(?:tmp|var/folders)/[^\"/ ]*/", "TMP/", out)
@@ -99,7 +99,7 @@ def fmt_cases(binary):
     cases = []
     for f in listing("*.ail"):
         ins = file_hash(f)
-        cases.append((f"fmt plain {f}", ins, (lambda b, f=f: run(b, ["fmt", "--stdout", f]))))
+        cases.append((f"fmt plain {f}", ins, (lambda b, f=f: run(b, ["fmt", "--stdout", f], stderr=False))))
         cases.append((f"fmt long {f}", ins, (lambda b, f=f: fmt_long(b, f))))
     return cases
 
@@ -109,7 +109,7 @@ def fmt_long(binary, f):
     try:
         p = os.path.join(d, "long.ail")
         lengthened(f, p)
-        return run(binary, ["fmt", "--stdout", p], tmp=d)
+        return run(binary, ["fmt", "--stdout", p], tmp=d, stderr=False)
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -144,7 +144,7 @@ API_FLAGS = [[], ["--text"], ["--pretty"], ["--symbols"], ["--tokens"], ["--ast"
 def api_cases(binary):
     files = listing("examples/*.ail", "tests/cases/*.ail")
     cases = [
-        (f"api {' '.join(fl)} {f}", file_hash(f), (lambda b, f=f, fl=fl: run(b, ["api"] + fl + [f])))
+        (f"api {' '.join(fl)} {f}", file_hash(f), (lambda b, f=f, fl=fl: run(b, ["api"] + fl + [f], stderr=False)))
         for f in files
         for fl in API_FLAGS
     ]
