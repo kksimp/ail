@@ -56,7 +56,7 @@ A rule is tested when its id appears in a case, example or Rust test; spec examp
 
 ## Documentation snippets (lane 198, 2026-10-21)
 
-The spec harness (`bootstrap/tests/spec.rs`, run by `./ail selftest`) also
+The spec harness (the gate's spec suite, ADR 0842; formerly `bootstrap/tests/spec.rs`) also
 checks the `ail` fences of the documents agents load. Counts for the
 documents with fences:
 

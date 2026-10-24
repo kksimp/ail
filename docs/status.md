@@ -2,13 +2,12 @@
 
 _Last updated: 2026-10-21_
 
-**Current stage:** 2 — Bootstrap front end and interpreter. The Stage 1 core
-design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
-Linux x86-64 and macOS ARM64 gate every change ([ADR 0085](decisions/0085-interim-local-testing-gate.md));
-Windows is tested when convenient. The Linux selftest passes; macOS
-verification of the 2026-10-20 batch is pending. See
-[bootstrap/README.md](../bootstrap/README.md) for the supported subset and
-pipeline, and [roadmap.md](roadmap.md) for what comes next.
+**Current stage:** 3 and 4 — the toolchain is written in AIL and native; the Rust
+bootstrap is removed (ADR XXXX, step D5 of [ADR 0855](decisions/0855-retire-the-rust-bootstrap.md)).
+The Stage 1 core design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
+The Mac gate ([ADR 0842](decisions/0842-mac-first-gate.md)) gates every change;
+Linux and Windows are tested on the designer's VMs. There is no `cargo` and no
+`./ail selftest`. See [roadmap.md](roadmap.md) for what comes next.
 
 ## What is implemented
 
@@ -30,7 +29,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - `compiler/ast/`: the syntax tree in AIL, with derived JSON as the shape of `ail api --ast` (ADR 0376).
 - `compiler/check/`: the checker in AIL, ported pass for pass (ADR 0377). Slices 1 (declarations), 2 (function bodies, ADR 0378) and 3 (flow passes: moves, task handles, effects, parallel loops) are done. Slice 4 is the differential report: with nothing skipped, the AIL checker agrees with `ail check` on all 522 corpus programs (including `tools/edit` and `compiler`), all 2,615 function bodies and all 536 diagnostics, with identical messages. Only the package manifest checks eff.cap.4–5 are outside it. The selftest `self_hosted_check` gates on this (ADR 0380). `@allow("expr.match.3")` (ADR 0379) keeps `ail check compiler` warning-free. Progress and agreement rates: [self-hosting-status.md](design/self-hosting-status.md).
 - Native self-host fixed point (Linux x86-64, 2026-10-22): the stage-1 native compiler builds `compiler/main.ail` (stage 2), stage 2 builds it again (stage 3), and stages 2 and 3 are byte-identical, equal to the interpreted compiler run with the same arguments. The selftest `self_host_fixed_point` runs `tools/self-host/run.sh` (stages 1-3 and three native tests). Stage 1 differs from stage 2 only in what `ail build` passes (absolute paths).
-- Retiring the Rust bootstrap (ADR 0855): the native `ail` CLI has `run` and `prepare` (build cache, then start), the default in `./ail` (`run` and `build` are native only; `AIL_RUST=1` is the one way to the Rust `ail`); seeds come from private release assets (`tools/release/seed.sh`, `fetch-seed.sh`, committed `seeds.sha256`, pinned to seed-2026.10.22). `check`, `explain`, `api`, `test`, `fmt` still run in Rust.
+- Retiring the Rust bootstrap (ADR 0855): the native `ail` CLI has `run` and `prepare` (build cache, then start), the default in `./ail` (`run` and `build` are native only; `AIL_RUST=1` is the one way to the Rust `ail`); seeds come from private release assets (`tools/release/seed.sh`, `fetch-seed.sh`, committed `seeds.sha256`, pinned to seed-2026.10.22). `check`, `explain`, `api`, `test`, `fmt` moved to AIL (RR-5), and the Rust bootstrap was deleted (ADR XXXX).
 - Native `std.ui` and widgets (ADR 0863, decided by Kaleb 2026-10-23): `ui.Window` becomes an AIL module over the `std.app` host (a task feeds an inbox channel), one window path for edit, pdf and Garlic; Mac first. Not implemented yet.
 - AI-first tooling after Rust removal (ADR 0868, designer 2026-10-23): eight native agent features. Item 2, `uhwhatnow?` ranked holes (ADR 0872), is implemented in the AIL checker and native backend (`expr.hole.3`, `lex.kw.1`); the rest are not implemented yet. Screen model (ADR 0878) and `@observe` with live attach (ADR 0879) approved 2026-10-24; `@observe` and attach are not implemented yet. Slice 1 of the screen model (`std.screen`: items, queries, token budget, colour names) is in `docs/spec/std-screen.md`; Garlic adapter, pixel classifier and `std.app` hook follow.
 - HTTP proxies (ADR 0869, `std.net.30`): the native client reads `HTTP_PROXY`, `HTTPS_PROXY` (through `CONNECT`) and `NO_PROXY`; `tools/native-net/proxy-check.sh`.

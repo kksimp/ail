@@ -137,7 +137,7 @@ diagnostics are printed and the exit code is 2, as for api.out.5. A missing
 path or a bad option is exit code 2.
 
 **api.card.5** — `docs/design/cards/edit.md` and `std.md` are the output for
-`tools/edit` and `std`; `cargo test --test api_card` fails
+`tools/edit` and `std`; the gate's card check fails
 when either differs from the command's output. Regenerate with
 `./ail api --card tools/edit > docs/design/cards/edit.md`.
 
@@ -605,9 +605,9 @@ Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that
 its output contains the `expect=` text. The tools' output formats are
 non-normative; these examples check the behaviour the rules describe.
-`explain.cover.*` is also enforced by `bootstrap/tests/explain_coverage.rs`
-in `./ail selftest`, and `api.card.5` (the generated cards match `ail api --card`)
-by `bootstrap/tests/api_card.rs`; the harness cannot read the repository's cards.
+`explain.cover.*` and `api.card.5` (the generated cards match `ail api --card`)
+are enforced by the Mac gate (`tools/gate/mac-gate.sh`, ADR 0842); the harness
+cannot read the repository's cards.
 ```ail tool=api,--text,FILE expect=add rules=api.id.1
 fn add(a int, b int) int
     a + b

@@ -26,8 +26,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Baseline (ISA)** | The minimum CPU feature level the compiler may assume without runtime checks. See ADR 0005 and ADR 0006. |
 | **Bit operation** | An `int` method that works on the 64-bit two's complement bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-2, ADR 0465). |
 | **Block parameter** | A MIR value defined on entry to a block; each edge into the block passes one argument per parameter, in place of phi nodes (ADR 0222, ADR 0384). |
-| **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. |
-| **Bytecode tier** | The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |
+| **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. Never used (ADR 0010). |
+| **Bytecode tier** | (Removed with the Rust bootstrap, ADR XXXX.) The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |
 | **Bytes** | The built-in `bytes` type: an immutable sequence of `u8` for binary data, written `b"..."` (ADR 0412, `type.bytes.1`). Not text: `str` is UTF-8 text, and `b.text()` or `b.to_str()` read bytes as text. |
 | **Cancellation** | Asking a task to stop with `t.cancel()` or `g.cancel()`: the task sees `task.cancelled()`, `task.check()` fails with `Cancelled`, and blocking calls return early (a `send` on a full channel drops its value); a cancel reaches every task the task started; the scope still waits for it (`conc.cancel.1–4`, ADRs 0321, 0351). |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
@@ -184,7 +184,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Probe** | A one-to-three statement program that feeds edge values (extremes, zero, empty, non-ASCII) to an operation that may trap; a trap is correct, an interpreter panic is the finding (ADR 0269). |
 | **Property test** | A `@test` with parameters: `ail test` runs it on generated inputs from a replayable seed and shrinks a failure to the smallest failing input (ADR 0198–0199). |
 | **Pure function** | A function marked `@pure`: it has no `io`, `unsafe`, `spawn` or capability, though it may fail or take `mut` parameters (ADR 0164). |
-| **Qualified name** | An item named through its module, `geo.Point`; the bootstrap renames every imported item to its module path plus its name (ADR 0156). |
+| **Qualified name** | An item named through its module, `geo.Point`; the compiler renames every imported item to its module path plus its name (ADR 0156). |
 | **Random schedule** | `--schedule=random:SEED` for `ail test` and `ail run`: the scheduler (`compiler/rt/native/sched.ail`) switches tasks at points picked from `SEED`, so a race shows up under some seeds and replays exactly under the same one (`conc.sched.1–2`, ADR 0322). |
 | **Raw string** | `r"..."` or `r"""..."""`: a string literal with no escapes or interpolation (ADR 0135). |
 | **Receiver** | The value a method is called on, written `self` (read-only) or `mut self` (mutable) in the method's declaration (ADR 0072). |
@@ -197,6 +197,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Rematerialisation** | Rebuilding a constant at each use instead of keeping it in a register; the native allocator gives constants no location (ADR 0386). |
 | **Root module** | The module that declares `main`: the `.ail` files directly in the package root for `ail run DIR`, or the single file for `ail run FILE` (ADR 0153). |
 | **Root store** | The set of root certificates a TLS client trusts as the end of a certificate chain: the platform's (or `SSL_CERT_FILE`'s) for `std.net` (ADR 0368). |
+| **Rust removal** | Step D5 of ADR 0855: deleting `bootstrap/`, the interpreter and the Rust toolchain. `./ail` then runs a pinned native seed (ADR XXXX). |
 | **Rule ID** | A stable identifier for a normative spec rule, formatted `<chapter>.<section>.<n>` (e.g. `plat.ptr.1`). See ADR 0002. |
 | **Run limit** | `--timeout`, `--max-memory` or `--max-steps`: a run that exceeds one traps with `run.limit.*` and a snapshot (ADR 0288). |
 | **Runtime dispatch** | Choosing among code paths at run time based on detected CPU features. |
@@ -205,9 +206,9 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
-| **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, run by the bootstrap and compared with the Rust ones on every program (Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
+| **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR XXXX; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
 | **SIMD** | Single Instruction, Multiple Data: vector instructions (NEON and SVE on ARM; SSE, AVX2 and AVX-512 on x86). |
-| **Site cache** | A per-AST-node cache in the bootstrap interpreter (keyed by the node's address, valid because the program is immutable) that remembers a resolved call target, method, string literal or field slot. It never changes behaviour (ADR 0220). |
+| **Site cache** | (Removed with the Rust interpreter, ADR XXXX.) A per-AST-node cache in the bootstrap interpreter (keyed by the node's address, valid because the program is immutable) that remembers a resolved call target, method, string literal or field slot. It never changes behaviour (ADR 0220). |
 | **Sized number** | One of `i8 i16 i32 u8 u16 u32 u64 f32`: the numeric types besides `int` (`i64`) and `float` (`f64`). Literals take their type from context, and nothing converts implicitly (ADRs 0194–0195). |
 | **Snapshot (expectation)** | An expected value written in a test: a literal in `assert_eq`, a doc example's `# =>` lines, or a `NAME.out` file. `ail test --update` rewrites stale ones and prints the diff (ADR 0395). |
 | **Span-free fingerprint** | The hash of an item's HIR with spans replaced by offsets relative to the item, so moving code doesn't invalidate cached results (ADR 0224). |
@@ -258,7 +259,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **TZif** | The binary file format of the IANA time zone database (RFC 9636) that `std.tz` reads from `/usr/share/zoneinfo`; a footer holds a POSIX rule for instants after the last stored transition (`std.tz.1`, ADR 0448). |
 | **Weak memory model** | A model (as on ARM) in which loads and stores can be observed out of order unless barriers or ordered atomics are used. |
 | **Whole-program optimisation** | Optimising across all modules at once (specialisation, devirtualisation, cross-module constant propagation). See OQ-017. |
-| **Window host** | In the bootstrap, the main thread that owns `std.ui`'s window and serves the interpreter thread's requests, because macOS allows windows only on the main thread (ADR 0178). |
+| **Window host** | The main thread that owns the window and serves the program's requests (now the `std.app` host process, ADR 0838), because macOS allows windows only on the main thread (ADR 0178). |
 | **`with` block** | `with m as mut x` and a block: holds mutex `m`, with its value in `x`, and stores `x` back however the block ends; a trap keeps the old value (`conc.share.6`, ADR 0301). |
 | **Work stealing** | A scheduler in which each worker thread has its own queue of work and idle workers take work from the others' queues; the runtime uses one such pool for tasks and parallel loops (ADR 0238). |
 | **Write barrier** | Code the GC requires on certain pointer stores so it can track references between heap regions or generations. |

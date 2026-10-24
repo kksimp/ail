@@ -11,8 +11,8 @@ compiler that answers structured questions about your program.
 main.ail      ail build · ail run · ail test · ail fmt · ail check
 ```
 
-> **Status:** Stage 2. The bootstrap interpreter runs its first programs.
-> See [docs/status.md](docs/status.md).
+> **Status:** Stage 2 complete, Rust bootstrap removed (ADR XXXX). `ail` is native
+> and builds itself. See [docs/status.md](docs/status.md).
 
 ## Try it
 
@@ -27,9 +27,9 @@ fn main()
     print("Hello, world!")
 ```
 
-The first run installs a private copy of Rust inside the repository and builds
-the bootstrap ([bootstrap/README.md](bootstrap/README.md)). Nothing outside the
-repository is changed. On Windows use `.\ail.ps1 run examples\hello.ail`
+The first run downloads a pinned native `ail` seed (checksummed in
+`seeds.sha256`) into the repository and builds the compiler with it. There is no
+Rust toolchain. Nothing outside the repository is changed. On Windows use `.\ail.ps1 run examples\hello.ail`
 (not yet tested on Windows).
 
 ## Targets
@@ -44,8 +44,8 @@ Linux, Windows, and macOS are all first-class.
 
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
 strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For
-now, testing is local on Linux and macOS
-([ADR 0085](docs/decisions/0085-interim-local-testing-gate.md)).
+now, testing is local: the Mac gate and the Linux and Windows VMs
+([ADR 0842](docs/decisions/0842-mac-first-gate.md)).
 
 ## Documentation
 
