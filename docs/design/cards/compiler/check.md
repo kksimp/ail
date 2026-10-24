@@ -86,6 +86,7 @@ pub fn check.was_were(int) str
 pub fn check.suggest(str, List[str]) str?
 pub fn check.edit_distance(str, str) int
 pub fn check.foreign_type_word(str) str?
+pub fn check.each_block(ast.Stmt) List[List[ast.Stmt]]
 pub struct check.SigFix
 pub fn check.std_module_names() List[str]
 pub enum check.Ty
@@ -96,4 +97,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1174); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1195); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
