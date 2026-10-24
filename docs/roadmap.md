@@ -92,6 +92,12 @@ std API still needs its own ADR first.
 2. **Compiler graph tools** (`compiler/api/`, `compiler/edit/`): `ail ask`; edit
    impact and `ail test --affected`; contracts checked or fuzzed by tools, with
    OQ-060 (lower priority).
+   Then the AI-first tools the designer chose on 2026-10-24, in this order, each
+   with its own ADR (0891-0897) and no cost when unused (ADR 0868):
+   `ail context SYM --budget N`; `@tool` functions served by `ail serve --mcp`;
+   `ail try` (a patch checked and tested in memory); effect changes in `ail diff`;
+   `ail infer` (suggested `requires`/`ensures`); `ail test --mutate`; `ail check --perf`
+   (shares facts with the optimizer).
 3. **Native runtime** (`compiler/rt/`): time-travel record and replay; the
    agent sandbox (capabilities plus CPU, memory and time caps); live attach.
 4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
@@ -111,6 +117,11 @@ std API still needs its own ADR first.
 9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
    [ADR 0874](decisions/0874-purity-driven-speed-optimizations.md): memoization by a cost
    model, pure-call CSE and hoisting, merging only where it is faster.
+   Then two showcase programs the designer chose (2026-10-24), each with its own ADR:
+   a database engine with its shell (file format, index, query language; an
+   optimizer benchmark against C using contracts, `ail test --mutate` and
+   `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
+   (SIMD, multi-core and tensor speed; ADR 0899).
 10. **Last:** the Rust-free rebuild of `tools/edit` compared with
    [editor-baseline.md](design/editor-baseline.md); a drag race of Garlic
    against Chrome and Firefox on a fixed set of real sites (page load, first
