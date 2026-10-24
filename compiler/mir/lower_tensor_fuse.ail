@@ -1,0 +1,118 @@
+## Fused elementwise chains on tensors (std.tensor.20, ADR 0815 amendment
+## 2026-10-24). A chain of two or more `+ - * /` over names and `float`
+## literals, where the tensors are `float` or `f32` of one type, is lowered to
+## a plan the runtime runs chunk by chunk (compiler/rt/native/tensor_fuse.ail).
+## The plan applies only when every tensor has one shape at run time
+## (`rt.fuse_ok`); otherwise the operators run one at a time, each with its own
+## checks and position, as before.
+use ast
+
+fn fuse_arith(o ast.BinOp) bool
+    tensor_op_code(o) >= 0
+
+## The operators in a chain of arithmetic.
+fn fuse_ops(e ast.Expr) int
+    match e
+        Binary(o, l, r, _) =>
+            if fuse_arith(o)
+                return 1 + fuse_ops(l) + fuse_ops(r)
+            0
+        _ => 0
+
+## The plan being built: one entry per node.
+struct FusePlan
+    kinds List[int]
+    ## A leaf's value, else -1.
+    vals List[int]
+    ops List[int]
+    lhs List[int]
+    rhs List[int]
+    ## The tensor type of the chain, once a tensor leaf is seen.
+    ty Ty
+
+## Add the nodes of `e`; the index of its node, or -1 when it is not fusable.
+fn Lower.fuse_collect(mut self, e ast.Expr, mut p FusePlan) int
+    match e
+        Binary(o, l, r, _) =>
+            if not fuse_arith(o)
+                return -1
+            a := fuse_collect(l, mut p)
+            if a < 0
+                return -1
+            b := fuse_collect(r, mut p)
+            if b < 0 or (p.kinds[a] == 1 and p.kinds[b] == 1)
+                return -1
+            p.kinds.push(2)
+            p.vals.push(-1)
+            p.ops.push(tensor_op_code(o))
+            p.lhs.push(a)
+            p.rhs.push(b)
+            p.kinds.len() - 1
+        Name(_, _) | Float(_, _) =>
+            v := lower_value(e, none) else return -1
+            mut kind := -1
+            if v.ty.is_tensor()
+                el := tensor_elem(v.ty)
+                if el != Ty.Float and el != Ty.F32
+                    return -1
+                if p.ty != Ty.Unknown and not same_ty(p.ty, v.ty)
+                    return -1
+                p.ty = v.ty
+                kind = 0
+            elif v.ty == Ty.Float
+                kind = 1
+            if kind < 0
+                return -1
+            p.kinds.push(kind)
+            p.vals.push(v.id)
+            p.ops.push(0)
+            p.lhs.push(0)
+            p.rhs.push(0)
+            p.kinds.len() - 1
+        _ => -1
+
+## `lhs o rhs` as a fused chain, or none when it is not one (nothing but
+## loads of names has been emitted then).
+fn Lower.try_fuse(mut self, o ast.BinOp, lhs ast.Expr, rhs ast.Expr, pos ast.Pos, want Ty?) Val?
+    if nofuse or not fuse_arith(o) or fuse_ops(lhs) + fuse_ops(rhs) < 1
+        return none
+    mut p := FusePlan(kinds: [], vals: [], ops: [], lhs: [], rhs: [], ty: Ty.Unknown)
+    e := ast.Expr.Binary(o, lhs, rhs, pos)
+    root := fuse_collect(e, mut p)
+    if root < 0 or p.ty == Ty.Unknown or p.kinds[root] != 2
+        return none
+    n := p.kinds.len()
+    f := call("rt.fuse_new", [konst(n, Ty.Int)], Ty.Int)
+    for i in 0..n
+        if p.kinds[i] == 0
+            call("rt.fuse_set", [f, konst(i, Ty.Int), konst(0, Ty.Int), p.vals[i], konst(0, Ty.Int), konst(0, Ty.Int)], Ty.Unit)
+        elif p.kinds[i] == 1
+            call("rt.fuse_set_f", [f, konst(i, Ty.Int), p.vals[i]], Ty.Unit)
+        else
+            call(
+                "rt.fuse_set",
+                [f, konst(i, Ty.Int), konst(2, Ty.Int), konst(p.ops[i], Ty.Int), konst(p.lhs[i], Ty.Int), konst(p.rhs[i], Ty.Int)],
+                Ty.Unit,
+            )
+    ok := call("rt.fuse_ok", [f], Ty.Bool)
+    join := new_block()
+    res := new_value(p.ty, "")
+    blocks[join].params.push(res)
+    fused := new_block()
+    plain := new_block()
+    branch(ok, fused, [], plain, [])
+    seal(fused)
+    seal(plain)
+    cur = fused
+    jump(join, [call("rt.tensor_fused", [f, konst(root, Ty.Int)], p.ty)])
+    cur = plain
+    nofuse = true
+    v := lower_binary_plain(o, lhs, rhs, pos, want)
+    nofuse = false
+    if got := v
+        jump(join, [got.id])
+    else
+        jump(join, [res])
+    seal(join)
+    cur = join
+    Val(id: res, ty: p.ty)
