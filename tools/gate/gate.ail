@@ -541,6 +541,14 @@ fn native_only() List[str]
     text := fs.read_text("tests/cases/native_only.txt") else return []
     [l.trim() for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")]
 
+## The interpreter always ran tasks in the fixed order (conc.sched.3); the
+## native default is free, so the conc cases ask for it. (Not every case:
+## `--schedule=fixed` hangs fuzz_net_status_digits natively.)
+fn sched(at str) List[str]
+    if at.contains("/conc_")
+        return ["--schedule=fixed"]
+    []
+
 fn run_case(at str, exp str) str?
     native := native_only().contains(path.stem(at))
     out_file := "{exp}out"
@@ -548,7 +556,7 @@ fn run_case(at str, exp str) str?
     if fs.exists("{exp}stderr")
         # trace.run.1: `ail run` with the options in NAME.args, one line.
         flags := slurp("{exp}args").words()
-        r := case_run(native, cat(cat(["run"], flags), [at])) else return "could not start ail"
+        r := case_run(native, cat(cat(cat(["run"], sched(at)), flags), [at])) else return "could not start ail"
         want := slurp("{exp}stderr").replace("$FILE", at)
         if r.status == 2 or r.err != want
             return "standard error differs\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -564,7 +572,7 @@ fn run_case(at str, exp str) str?
         return none
     if fs.exists("{exp}err")
         flags := slurp("{exp}args").words()
-        r := case_run(native, cat(cat(["run"], flags), [at])) else return "could not start ail"
+        r := case_run(native, cat(cat(cat(["run"], sched(at)), flags), [at])) else return "could not start ail"
         want := slurp("{exp}err").replace("$FILE", at)
         if r.status != 1 or r.err != want
             return "expected exit 1 and this report\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -572,7 +580,7 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}trap")
-        r := case_run(native, ["run", at]) else return "could not start ail"
+        r := case_run(native, cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         rule := slurp("{exp}trap").trim()
         if r.status != 1 or not r.err.contains("trap[{rule}]")
             return "expected trap[{rule}] (exit 1), got {r.status}\n{r.err}"
@@ -580,7 +588,7 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists(out_file)
-        r := case_run(native, ["run", at]) else return "could not start ail"
+        r := case_run(native, cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         if r.status != 0
             return "exit {r.status}\n{r.err}"
         if r.out != want_out
