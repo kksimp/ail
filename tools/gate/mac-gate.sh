@@ -34,8 +34,8 @@ fi
 # The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
 # D3: these suites run on ./ail (GATE_NATIVE=1); the rest still call the Rust binary until their reds are fixed.
-native_suites="mistakes sched docs fmt"
-suites="examples tools cases explain fix cli contracts misc limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
+native_suites="mistakes sched docs fmt diff build_cache"
+suites="examples tools cases explain fix cli contracts misc limits api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
 [ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
 # The cases suite still runs on the Rust binary (item 301), so build it; the native cases run below is a report.
 run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
