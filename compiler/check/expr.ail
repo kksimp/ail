@@ -507,7 +507,9 @@ fn Checker.hole(mut self, at ast.Pos, expect Ty?) Ty
 @allow("expr.match.3")
 fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
     t := expr(inner, none, true)
+    mut has_context := false
     if c := context
+        has_context = true
         ct := expr(c, Ty.Str, true)
         # err.prop.5: `opt? "context"` fails with `Absent` and the context.
         absent := is_opt(t) and catching == 0 and is_inferred(fn_ret)
@@ -523,6 +525,7 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
             _ => return t
     match t
         Opt(v) =>
+            note_path(at, "absent", "", inner, [], has_context)
             if catching > 0
                 # err.prop.4: an enclosing `else` handles the absence.
                 caught += 1
@@ -536,6 +539,7 @@ fn Checker.try_expr(mut self, inner ast.Expr, context ast.Expr?, at ast.Pos) Ty
             v
         Res(ok, errs) =>
             errors := errs_of(errs)
+            note_path(at, "propagate", "", inner, errors, has_context)
             match fn_ret
                 Res(_, want) =>
                     missing := add_errors(want, errors)
