@@ -1,0 +1,40 @@
+## `@observe` fields (ADR 0884): an attached agent may read the field, so its
+## type must have a JSON text form (attach.observe.1-2).
+use ast
+
+OBSERVE_HELP := "observe an `int`, `float`, `bool`, `str`, an enum without payloads, or a `List` of those"
+
+pub fn check_observe(prog ast.Program) List[Diag]
+    mut diags := List[Diag]()
+    for s in prog.structs
+        for f in s.fields
+            if f.observe and not observable(f.ty, prog)
+                diags.push(Diag(
+                    rule: "attach.observe.2",
+                    pos: f.pos,
+                    message: "`@observe` field `{f.name}` of `{s.name}` has a type an agent can't read as text",
+                    help: OBSERVE_HELP,
+                    notes: [],
+                    fixes: [],
+                    warning: false,
+                ))
+    diags
+
+## attach.observe.1: the types an observed field may have.
+fn observable(t ast.TypeRef, prog ast.Program) bool
+    match t.shape
+        Named(name, args) =>
+            if name == "List" and args.len() == 1
+                return observable(args[0], prog)
+            if args.len() > 0
+                return false
+            if name == "int" or name == "float" or name == "bool" or name == "str"
+                return true
+            for e in prog.enums
+                if e.name == name and e.generics.len() == 0
+                    for v in e.variants
+                        if v.fields.len() > 0
+                            return false
+                    return true
+            false
+        _ => false
