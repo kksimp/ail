@@ -9,7 +9,7 @@ edit 18 0
 eff 15 0
 err 40 5
 explain 6 0
-expr 65 17
+expr 65 18
 ffi 12 0
 fix 9 0
 gen 14 0
@@ -25,10 +25,10 @@ refl 4 0
 replay 11 0
 run 6 0
 snap 6 0
-std 253 1
+std 254 1
 test 25 0
-trace 21 0
+trace 22 0
 trait 43 4
 type 117 10
 unsafe 21 0
-all 1023 53
+all 1025 54

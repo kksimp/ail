@@ -1,6 +1,9 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
+## On Windows (`target()` 3) `run` and `which` are `win.ail`'s (CreateProcessW on
+## three pipes); `start` is not built there yet.
+##
 ## `std.proc.run`, `which` and `start` (std.proc.1-7, ADR 0770): the program is
 ## found on `PATH`, run by `clone` (Linux) or libSystem's `fork` (macOS) and
 ## `execve` with its three standard streams on pipes, and fed and drained with
@@ -62,6 +65,8 @@ fn proc_join(d int, dn int, name str) int
 ## it has a `/`, else the first `DIR/name` on `PATH` that is executable.
 ## 0 when there is none, -1 when only a file that isn't executable exists.
 fn proc_find(name str) int
+    if target() == 3
+        return win_find(name)
     np := str_addr(name)
     n := load64(np)
     if n == 0 or os_has_nul(name)
@@ -306,6 +311,8 @@ fn proc_run_bytes(cmd str, args List[int], input int, timeout int, at str) int
     proc_run_with(cmd, args, input, timeout, at, true)
 
 fn proc_run_with(cmd str, args List[int], input int, timeout int, at str, raw bool) int
+    if target() == 3
+        return win_proc_run(cmd, args, input, timeout, at, raw)
     mut limit := -1
     if timeout != 0
         limit = unbox(timeout)
@@ -516,7 +523,11 @@ fn ps_read(ps int, k int) int
         buf = proc_widen(buf, n, cap)
         store64(ps + PS_OBUF + 16 * k, buf)
         cap = cap * 2
-    r := os_read(fd, buf + 16 + n, cap - n)
+    r := if target() == 3 then win_read_nb(
+        fd,
+        buf + 16 + n,
+        cap - n,
+    ) else os_read(fd, buf + 16 + n, cap - n)
     if r > 0
         store64(ps + PS_ON + 16 * k, n + r)
         ps_lines(ps, k, false)
@@ -541,6 +552,9 @@ fn ps_drain(ps int)
 ## most `ms` milliseconds (negative: until something is ready), then a read
 ## of each stream that is ready.
 fn ps_round(ps int, want_in bool, ms int)
+    if target() == 3
+        win_ps_round(ps, ms)
+        return
     pf := alloc(48, KIND_BYTES)
     mut ifd := -1
     if want_in
@@ -570,7 +584,12 @@ fn ps_round(ps int, want_in bool, ms int)
 ## Reap the child if it has exited, without waiting; true once it is reaped.
 fn ps_reap(ps int) bool
     lock(ps + PS_LOCK)
-    if load64(ps + PS_DONE) == 0
+    if load64(ps + PS_DONE) == 0 and target() == 3
+        raw := win_exit_raw(load64(ps + PS_PID))
+        if raw >= 0
+            store64(ps + PS_STATUS, raw)
+            store64(ps + PS_DONE, 1)
+    elif load64(ps + PS_DONE) == 0
         w := alloc(8, KIND_BYTES)
         r := syscall(os_pick(61, 260, 7), load64(ps + PS_PID), w, 1, 0, 0, 0)
         if r == load64(ps + PS_PID) or r < -4
@@ -582,13 +601,20 @@ fn ps_reap(ps int) bool
         ps_drain(ps)
     done
 
+## End the child `id` (a process id; on Windows a process handle) at once.
+fn proc_kill9(id int)
+    if target() == 3
+        win_kill(id)
+        return
+    syscall(os_pick(62, 129, 37), id, 9, 0, 0, 0, 0)
+
 ## Kill the child once its time limit has passed (std.proc.4).
 fn ps_check_deadline(ps int)
     d := load64(ps + PS_DEAD)
     if d >= 0 and load64(ps + PS_TIMED) == 0 and load64(ps + PS_DONE) == 0
         if time_now_ms() >= d
             store64(ps + PS_TIMED, 1)
-            syscall(os_pick(62, 129, 37), load64(ps + PS_PID), 9, 0, 0, 0, 0)
+            proc_kill9(load64(ps + PS_PID))
 
 ## How long one poll may last: until the time limit, and at most 100 ms so a
 ## child that exited with its pipes still held open is noticed.
@@ -642,7 +668,15 @@ fn chan_source_send(ch int, s int)
         fd := load64(ps + PS_IN)
         if fd < 0
             break
-        w := syscall(os_pick(1, 64, 4), fd, p + 16 + off, n - off, 0, 0, 0)
+        w := if target() == 3 then win_write(fd, p + 16 + off, n - off) else syscall(
+            os_pick(1, 64, 4),
+            fd,
+            p + 16 + off,
+            n - off,
+            0,
+            0,
+            0,
+        )
         if w > 0
             off += w
         elif w == 0 - os_pick(11, 11, 35)
@@ -677,14 +711,29 @@ fn proc_start(cmd str, args List[int], timeout int, at str) int
                 " milliseconds",
             ))
     st := alloc(256, KIND_BYTES)
-    pid := proc_launch(cmd, args, at, st)
+    pid := if target() == 3 then win_launch(
+        cmd,
+        args,
+        at,
+        st,
+        1048576,
+    ) else proc_launch(cmd, args, at, st)
     if pid == 0
         return 0
     # A write to a child that has gone is an error, not SIGPIPE; every end
-    # of ours is nonblocking.
-    proc_sigpipe_ignore(st)
-    for k in 0..3
-        syscall(os_pick(72, 25, 92), load64(st + 32 + 8 * k), 4, os_pick(2048, 2048, 4), 0, 0, 0)
+    # of ours is nonblocking (on Windows the reads peek first instead).
+    if target() != 3
+        proc_sigpipe_ignore(st)
+        for k in 0..3
+            syscall(
+                os_pick(72, 25, 92),
+                load64(st + 32 + 8 * k),
+                4,
+                os_pick(2048, 2048, 4),
+                0,
+                0,
+                0,
+            )
     ps := alloc(PS_SIZE, PROC_STRUCT)
     store64(ps + PS_PID, pid)
     store64(ps + PS_IN, load64(st + 32))
@@ -697,7 +746,8 @@ fn proc_start(cmd str, args List[int], timeout int, at str) int
     store64(ps + PS_DEAD, if limit >= 0 then time_now_ms() + limit else -1)
     store64(ps + PS_CMD, str_addr(cmd))
     c := alloc(32, PROC_STRUCT)
-    store64(c, pid)
+    # The process id the program sees; on Windows `pid` is the process handle.
+    store64(c, if target() == 3 then load64(st + 56) else pid)
     for k in 0..3
         ch := chan_new()
         store64(ch + CH_SOURCE, ps)
@@ -720,6 +770,9 @@ fn ps_close(ps int)
     if fd >= 0
         os_close(fd)
         store64(ps + PS_IN, -1)
+    if target() == 3 and load64(ps + PS_PID) > 0
+        win_close_h(load64(ps + PS_PID))
+        store64(ps + PS_PID, -1)
 
 ## `wait(move c)` (std.proc.6): the status, or 0 with the error slot set when
 ## the time limit killed the child. Other tasks run while it waits, and what
@@ -739,7 +792,7 @@ fn proc_wait_child(c int, at str) int
 fn proc_kill_child(c int) int
     ps := load64(load64(c + 8) + CH_SOURCE)
     if load64(ps + PS_DONE) == 0
-        syscall(os_pick(62, 129, 37), load64(ps + PS_PID), 9, 0, 0, 0, 0)
+        proc_kill9(load64(ps + PS_PID))
     while not ps_reap(ps)
         ps_round(ps, false, 10)
     ps_close(ps)

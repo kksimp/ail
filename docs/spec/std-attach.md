@@ -125,13 +125,13 @@ fn main() !
 ```
 
 **attach.run.1** — `ail run FILE` builds a program that calls `app.run(` with
-attach on, unless it is given `--no-attach` as its first argument. `ail build
+attach on, unless it is given `--no-attach` before the file (the `ail` script passes it to `prepare`, which attaches by default). `ail build
 --attach` does the same for a built executable; without `--attach`, `ail build`
 adds nothing. The build rewrites the source text before it is lowered: two
 imports on new first lines, each `app.run(` call made a `std.attach.serve.run(`
 call, and an `impl attach.Observe` added for each non-generic
-`impl app.App for T` that has none. A program that doesn't run an app is built
-as written. *(ADR 0884)*
+`impl app.App for T` that has none. A program that doesn't run an app, or that already uses the name `attach`
+or `ail_serve` for another module, is built as written. *(ADR 0884)*
 
 **attach.run.2** — If the rewritten program doesn't build, the build warns
 `attach is off for this run` with the reason and builds the program as written.
