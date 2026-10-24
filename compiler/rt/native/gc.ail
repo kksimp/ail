@@ -155,6 +155,56 @@ fn gc_sweep()
     hset(H_THRESH, if live * 3 > MIN_THRESH then live * 3 else MIN_THRESH)
     hset(H_FASTLIM, if load64(global(MULTI)) == 0 then hs(H_THRESH) else 0)
 
+## `AIL_GC_STATS` set: before each sweep, the live bytes and blocks by object
+## kind on standard error (the table is words 300-363 and 380-443 of the heap
+## state block). Costs nothing when the variable is unset.
+fn gc_census()
+    base := hs(H_BASE)
+    pt := hs(H_PAGES)
+    top_i := (hs(H_TOP) - base) / PAGE
+    for k in 0..64
+        hset(300 + k, 0)
+        hset(380 + k, 0)
+    mut pi := 0
+    while pi < top_i
+        t := load64(pt + 8 * pi)
+        tag := t.bit_and(255)
+        pb := base + pi * PAGE
+        if tag == 1
+            csz := t.shr(16).bit_and(65535)
+            per := PAGE / csz
+            for k in 0..per
+                h := load64(pb + k * csz)
+                if h.bit_and(256) != 0
+                    kind := h.bit_and(63)
+                    hset(300 + kind, hs(300 + kind) + csz)
+                    hset(380 + kind, hs(380 + kind) + 1)
+            pi += 1
+        elif tag == 2
+            np := t.shr(8)
+            h := load64(pb)
+            if h.bit_and(256) != 0
+                kind := h.bit_and(63)
+                hset(300 + kind, hs(300 + kind) + np * PAGE)
+                hset(380 + kind, hs(380 + kind) + 1)
+            pi += np
+        else
+            pi += 1
+    flush()
+    out_str("gc census: heap ")
+    out_int((hs(H_TOP) - base) / 1048576)
+    out_str(" MB")
+    for k in 0..64
+        if hs(380 + k) != 0
+            out_str(", kind ")
+            out_int(k)
+            out_str(" ")
+            out_int(hs(300 + k) / 1048576)
+            out_str(" MB/")
+            out_int(hs(380 + k))
+    out_str("\n")
+    flush_to(2)
+
 ## Collect garbage. Called by `alloc` when enough has been allocated.
 fn gc_collect()
     # With threads, every other one parks first (native-abi.md §10); the
@@ -168,5 +218,7 @@ fn gc_collect()
     gc_scan_threads()
     gc_scan_range(global(OUT_BUF), globals_end())
     gc_drain()
+    if hs(25) != 0
+        gc_census()
     gc_sweep()
     gc_start_world()
