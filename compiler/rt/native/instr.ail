@@ -231,6 +231,8 @@ fn tr_open(kind int) bool
     w := tr_state()
     if w == 0
         return false
+    # One event is one piece of the shared output buffer: no other thread writes in it.
+    out_lock()
     if load64(w + 96) == 0
         given := os_env_get("AIL_TRACE_LIMIT")
         store64(w + 96, (if given == "" then 1000 else str_to_int(given)) + 1)
@@ -255,13 +257,20 @@ fn tr_is_json() bool
 
 ## The end of an event: its text is written and output is back on standard output.
 fn tr_close()
-    flush_to(if load64(global(OUT_FD)) == 2 then 2 else 0 - 1)
+    if tr_state() == 0
+        return
+    fd := load64(global(OUT_FD))
+    flush_to(if fd == 2 then 2 else 0 - 1)
     store64(global(OUT_FD), 1)
+    out_unlock()
 
 ## `--watch NAME` (trace.watch.1, ADR 0868): a build with `watch=NAME` calls this before the
 ## text of each event; it says whether the event is within the limit.
 fn watch_open() bool
-    tr_open(KIND_WATCH)
+    if tr_open(KIND_WATCH)
+        return true
+    tr_close()
+    false
 
 fn watch_close()
     tr_close()
