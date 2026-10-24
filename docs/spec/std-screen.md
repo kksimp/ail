@@ -118,3 +118,25 @@ fn main()
     s := view.of_node(tree, 200.0, 100.0, "pay")
     print(s.find("button", "", "", 0))
 ```
+
+**std.screen.14** — `of_ops` also runs the pixel classifier (`std.screen.10`) over
+each `Bitmap` that carries its pixels, and adds the regions it finds after the
+`image` item, moved and scaled to the bitmap's rectangle (a PDF page, a
+screenshot). A `Bitmap` with an empty `data` or a size that doesn't match
+`pw`, `ph` gets the `image` item only. Nothing is computed until a query is
+called (`std.screen.9`). *(ADR 0878)*
+
+```ail skip=bootstrap rules=std.screen.14
+use std.app
+use std.screen.view
+
+fn main()
+    mut rgba := List[int]()
+    for y in 0..20
+        for x in 0..40
+            c := if x >= 4 and x < 16 and y >= 4 and y < 12 then 0xcc else 0xff
+            rgba.extend([c, c, c, 255])
+    ops := [app.Op.Bitmap(x: 10.0, y: 10.0, w: 80.0, h: 40.0, id: "page", pw: 40, ph: 20, data: app.bitmap_data(rgba))]
+    for it in view.of_ops(ops, 0.0, 0.0)
+        print("{it.role} {it.x} {it.y}")
+```
