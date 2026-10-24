@@ -212,20 +212,15 @@ fn id_chars(id str) bool
             return false
     true
 
-## Runs a program under both interpreter tiers (ADR 0361); an error text if they differ.
+## Runs a program with `ail run`; an error text if it fails. The bytecode tier is gone (ADR 0873), so there is one tier to compare.
 fn run_both_tiers(file str) str?
     src := slurp(file)
     if src.contains("ui.open(")
         return none
     dir := parent_of(file)
-    mut outs := List[str]()
-    for tier in [List[str](), ["--no-bytecode"]]
-        r := ail_in(dir, cat(cat(["run"], tier), [file]), "")
-        if r.status != 0
-            return "`ail run {tier.join(" ")}` failed:\n{r.err}"
-        outs.push(r.out)
-    if outs[0] != outs[1]
-        return "bytecode and tree-walk tiers print different output"
+    r := ail_in(dir, ["run", file], "")
+    if r.status != 0
+        return "`ail run` failed:\n{r.err}"
     none
 
 fn main() !
