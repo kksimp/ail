@@ -90,6 +90,14 @@ function Get-Cargo {
     if ((Get-Command cargo -ErrorAction SilentlyContinue) -and (Get-Command rustc -ErrorAction SilentlyContinue)) {
         $systemRust = ((& rustc --version) -split ' ')[1]
     }
+    # bootstrap/src/std is a symlink to ../../std; a Windows checkout without symlink rights makes it a text file,
+    # which the Rust build cannot read through. A junction does the same job.
+    $stdLink = Join-Path $bootstrap 'src\std'
+    if ($onWindows -and (Test-Path $stdLink -PathType Leaf)) {
+        Remove-Item -Force $stdLink
+        New-Item -ItemType Junction -Path $stdLink -Target (Join-Path $root 'std') | Out-Null
+        & git -C $root update-index --assume-unchanged -- bootstrap/src/std 2>$null
+    }
     if ($systemRust -eq $pin) { return 'cargo' }
     $env:RUSTUP_HOME = Join-Path $toolDir 'rustup'
     $env:CARGO_HOME = Join-Path $toolDir 'cargo'
