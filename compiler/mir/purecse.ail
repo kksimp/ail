@@ -253,7 +253,10 @@ fn pc_cse_calls(f Func, fx Map[str, PcFx]) Func
     mut g := f
     for b in 0..n
         for at in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[at].args = [resolve_val(w.repl, a) for a in g.blocks[b].insts[at].args]
+            g.blocks[b].insts[at].args = [
+                resolve_val(w.repl, a)
+                for a in g.blocks[b].insts[at].args
+            ]
         g.blocks[b].insts = [
             g.blocks[b].insts[at]
             for at in 0..g.blocks[b].insts.len() if not w.gone[b][at]
