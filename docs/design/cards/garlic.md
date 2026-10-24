@@ -1,6 +1,6 @@
 # garlic
 entry: main in garlic.ail
-tests: 111 (`ail test` lists them)
+tests: 118 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -36,6 +36,8 @@ ail.pkg:
 
 ## svg (19 items)
 
+## tabstrip (21 items)
+
 ## ws (18 items)
 
-trimmed to fit 4000 tokens (~214); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~224); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

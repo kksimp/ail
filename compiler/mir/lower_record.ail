@@ -1,0 +1,56 @@
+## Record and replay (ADR 0873, replay.nat.1): with `AIL_INSTRUMENT=record`,
+## a captured call of the OS modules goes to its `rt.rec_FN` wrapper
+## (rt/native/record.ail), told its place by `rt.rec_at` first. The calls
+## the runtime has no wrapper for run as they are, after `rt.rec_guard`,
+## which stops a replay at them (replay.cap.2). Without the mode nothing
+## changes.
+use ast
+
+## The runtime functions that have a `rec_` wrapper.
+RECORDED := [
+    "fs_exists",
+    "fs_read_text",
+    "fs_read_bytes",
+    "fs_write_text",
+    "fs_write_bytes",
+    "fs_append_text",
+    "fs_append_bytes",
+    "fs_remove",
+    "fs_make_dir",
+    "fs_rename",
+    "fs_copy",
+    "env_get",
+    "env_home",
+    "env_cwd",
+    "env_program",
+    "io_read_line",
+    "io_read_all",
+    "io_read_bytes",
+    "time_now_ms",
+    "time_sleep_ms",
+    "tz_system",
+    "proc_which",
+]
+
+## The modules whose calls a recording covers (replay.cap.1).
+CAPTURED := ["fs", "env", "io", "time", "tz", "proc"]
+
+## The call of `f` with arguments `vs`, as the mode asks.
+fn Lower.rec_call(mut self, f OsFn, vs List[int], pos ast.Pos) Val
+    name := f.rt.slice(3, f.rt.len())
+    parts := name.split("_")
+    if not CAPTURED.contains(parts[0]) or name == "io_exit"
+        return Val(id: call(f.rt, vs, f.ret), ty: f.ret)
+    if RECORDED.contains(name)
+        at := [str_value(path), konst(pos.line, Ty.Int), konst(pos.col, Ty.Int)]
+        call("rt.rec_at", at, Ty.Unit)
+        return Val(id: call("rt.rec_{name}", vs, f.ret), ty: f.ret)
+    at := [str_value(path), konst(pos.line, Ty.Int), konst(pos.col, Ty.Int)]
+    call("rt.rec_at", at, Ty.Unit)
+    call("rt.rec_guard", [str_value("{parts[0]}.{parts[1..].join("_")}")], Ty.Unit)
+    Val(id: call(f.rt, vs, f.ret), ty: f.ret)
+
+## A `net` call is not captured yet: a replay stops at it.
+fn Lower.rec_net(mut self, name str)
+    if instr.rec
+        call("rt.rec_guard", [str_value("net.{name}")], Ty.Unit)
