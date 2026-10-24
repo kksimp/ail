@@ -33,7 +33,7 @@ fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
 # The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
-suites="examples tools cases explain fix cli mistakes contracts misc docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
+suites="examples tools cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
 [ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
 run gate_ail ./ail run tools/gate/gate.ail $suites
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).

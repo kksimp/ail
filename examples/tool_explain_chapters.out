@@ -1,6 +1,6 @@
 api 43 0
-budget 6 0
-conc 44 1
+budget 7 0
+conc 45 1
 contract 18 2
 ct 18 0
 diff 7 0
@@ -17,7 +17,7 @@ http 3 0
 json 22 0
 lex 24 7
 mod 29 2
-native 29 0
+native 32 0
 own 39 2
 plat 8 0
 refl 4 0
@@ -25,9 +25,9 @@ replay 10 0
 run 6 0
 snap 6 0
 std 241 1
-test 23 0
+test 24 0
 trace 19 0
 trait 43 4
 type 117 10
 unsafe 21 0
-all 974 53
+all 980 53

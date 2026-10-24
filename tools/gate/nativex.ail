@@ -172,7 +172,7 @@ fn Run.batch(mut self)
 ## One program of tests/native/run against `ail run`: stdout, exit status, and the trap report.
 fn nx_match(
     case str,
-    scratch_dir str,
+    scratch_base str,
     exe str,
     target str,
     runner str,
@@ -181,7 +181,9 @@ fn nx_match(
     prebuilt bool,
 ) str?
     stem := stem_of(case)
-    sh("rm -rf {scratch_dir}; mkdir -p {scratch_dir}")
+    # A fresh directory per run of a case (mktemp), so no two workers or suites share a tree (os_fs_glob flake).
+    made := sh("mkdir -p {tmp} && mktemp -d {scratch_base}-XXXXXX")
+    scratch_dir := if made.status == 0 then made.out.trim() else scratch_base
     if not prebuilt
         b := ail(
             "",

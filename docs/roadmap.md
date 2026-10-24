@@ -94,9 +94,9 @@ std API still needs its own ADR first.
    OQ-060 (lower priority).
 3. **Native runtime** (`compiler/rt/`): time-travel record and replay; the
    agent sandbox (capabilities plus CPU, memory and time caps); live attach.
-4. **std.app and its host** (`std/app`, `tools/app-host/`): `@observe` (needs
-   an ADR), then the screen model shared by every GUI program (display list
-   first, pixels only for canvas and images).
+4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
+   ([ADR 0878](decisions/0878-screen-model-for-std-app.md)), Garlic first, then every
+   GUI program; `@observe` and live attach ([ADR 0879](decisions/0879-observe-and-live-attach.md)).
 5. **Garlic interface** (`tools/garlic/` window and chrome): closing tabs, and
    a redesign that looks as polished as Chrome or Firefox but has its own look.
 6. **Garlic agent features** (`tools/garlic/` page model and agent server):
