@@ -42,7 +42,8 @@ fn parallel_report(loaded Loaded, path str, json bool) str
     mut out := ""
     for r in rows
         kw := if r.is_par then "par for" else "for"
-        near := if r.at.line == r.pos.line and r.at.col == r.pos.col then "" else " at {place(files, path, r.at)}"
+        near := if r.at.line == r.pos.line
+            and r.at.col == r.pos.col then "" else " at {place(files, path, r.at)}"
         out = "{out}{place(files, path, r.pos)} {r.func} {kw} {r.var}: {r.verdict} ({r.rule}: {r.reason}{near})\n"
     out
 

@@ -44,7 +44,11 @@ pub fn errors_command(rest List[str], std str) int
             continue
         ordered := paths.sorted(by: |p| p.pos.line * 100000 + p.pos.col)
         items := [path_json(p) for p in ordered]
-        mut kvs := [kv("id", J.Str(api.fn_ids[i])), kv("name", J.Str(f.name)), kv("line", J.Int(f.pos.line))]
+        mut kvs := [
+            kv("id", J.Str(api.fn_ids[i])),
+            kv("name", J.Str(f.name)),
+            kv("line", J.Int(f.pos.line)),
+        ]
         if fails
             kvs.push(kv("fails_with", strs(fails_with)))
         kvs.push(kv("paths", J.Arr(items)))
@@ -58,7 +62,11 @@ pub fn errors_command(rest List[str], std str) int
     0
 
 fn path_json(p check.FailPath) J
-    mut kvs := [kv("line", J.Int(p.pos.line)), kv("col", J.Int(p.pos.col)), kv("kind", J.Str(p.kind))]
+    mut kvs := [
+        kv("line", J.Int(p.pos.line)),
+        kv("col", J.Int(p.pos.col)),
+        kv("kind", J.Str(p.kind)),
+    ]
     if p.how != ""
         kvs.push(kv("how", J.Str(p.how)))
     if p.call != ""
