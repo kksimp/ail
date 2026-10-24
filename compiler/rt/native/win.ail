@@ -557,17 +557,11 @@ fn win_pipe_take(h int, buf int, cap int, n int) int
         return -1
     n + win_u32(t + 16)
 
-## `run(cmd, args, input, timeout_ms)` on Windows: the `Output` object, or 0
-## with the error slot set (see `proc_run_with`).
-fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw bool) int
-    mut limit := -1
-    if timeout != 0
-        limit = unbox(timeout)
-        if limit < 0
-            os_usage_trap("std.proc.2", str_cat(
-                str_cat("can't time out after ", fmt_int(limit)),
-                " milliseconds",
-            ))
+## Start `cmd` with `args` on three pipes: the process handle, or 0 with the
+## error slot set. The parent's ends of the child's input, output and error
+## are left in `st` + 32, + 40 and + 48 and its process id at `st` + 56 (`st`
+## is a block of 64 zeroed bytes). `ibuf` sizes the input pipe.
+fn win_launch(cmd str, args List[int], at str, st int, ibuf int) int
     exe := win_find(cmd)
     if exe == 0
         return proc_fail(cmd, "not_found", at)
@@ -598,15 +592,8 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
     # Three pipes; the child's ends are inheritable, ours are not.
     sa := alloc_z(32, KIND_BYTES, 1)
     store64(sa, 24)
-    store64(sa + 8, 0)
     store64(sa + 16, 1)
     hp := alloc_z(48, KIND_BYTES, 1)
-    mut ilen := 0
-    if input != 0
-        ilen = load64(input)
-    mut ibuf := 65536
-    if ilen + 4096 > ibuf
-        ibuf = if ilen + 4096 > 16777216 then 16777216 else ilen + 4096
     if import_call("CreatePipe", hp, hp + 8, sa, ibuf) == 0
         return proc_fail(cmd, "other", at)
     if import_call("CreatePipe", hp + 16, hp + 24, sa, 1048576) == 0
@@ -630,8 +617,8 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
     store64(si + 96, err_w)
     pi := alloc_z(32, KIND_BYTES, 1)
     flush()
-    # CREATE_NO_WINDOW.
     app := if script then 0 else wexe
+    # CREATE_NO_WINDOW.
     ok := import_call("CreateProcessW", app, wline, 0, 0, 1, 134217728, 0, 0, si, pi)
     if ok == 0
         code := import_call("GetLastError", 0, 0, 0, 0)
@@ -647,17 +634,58 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
         elif code == 5
             kind = "permission"
         return proc_fail(cmd, kind, at)
-    proc := load64(pi)
     win_close_h(load64(pi + 8))
     win_close_h(in_r)
     win_close_h(out_w)
     win_close_h(err_w)
-    mut ifd := in_w
-    mut ofd := out_r
-    mut efd := err_r
+    store64(st + 32, in_w)
+    store64(st + 40, out_r)
+    store64(st + 48, err_r)
+    store64(st + 56, load64(pi + 16).bit_and(4294967295))
+    load64(pi)
+
+## The exit status of process `h` once it has ended, as `ps_code` reads it;
+## -1 while it runs.
+fn win_exit_raw(h int) int
+    if import_call("WaitForSingleObject", h, 0, 0, 0) != 0
+        return -1
+    t := os_scratch(OS_WIN_T)
+    store64(t + 48, 0)
+    import_call("GetExitCodeProcess", h, t + 48, 0, 0)
+    status := win_u32(t + 48)
+    code := if status > 255 then 255 else status
+    code * 256
+
+## End process `h` at once.
+fn win_kill(h int)
+    import_call("TerminateProcess", h, 137, 0, 0)
+
+## `run(cmd, args, input, timeout_ms)` on Windows: the `Output` object, or 0
+## with the error slot set (see `proc_run_with`).
+fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw bool) int
+    mut limit := -1
+    if timeout != 0
+        limit = unbox(timeout)
+        if limit < 0
+            os_usage_trap("std.proc.2", str_cat(
+                str_cat("can't time out after ", fmt_int(limit)),
+                " milliseconds",
+            ))
+    mut ilen := 0
+    if input != 0
+        ilen = load64(input)
+    mut ibuf := 65536
+    if ilen + 4096 > ibuf
+        ibuf = if ilen + 4096 > 16777216 then 16777216 else ilen + 4096
+    st := alloc_z(64, KIND_BYTES, 1)
+    proc := win_launch(cmd, args, at, st, ibuf)
+    if proc == 0
+        return 0
+    mut ifd := load64(st + 32)
+    mut ofd := load64(st + 40)
+    mut efd := load64(st + 48)
     if ilen > 0
-        # One write when the pipe was made big enough for all of it; larger
-        # inputs go in pieces, the output drained between them.
+        # Larger inputs go in pieces of 1 MiB.
         mut sent := 0
         while sent < ilen
             mut piece := ilen - sent
@@ -712,17 +740,13 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
     win_close_h(ofd)
     win_close_h(efd)
     if timed_out
-        import_call("TerminateProcess", proc, 1, 0, 0)
+        win_kill(proc)
         import_call("WaitForSingleObject", proc, 4294967295, 0, 0)
         win_close_h(proc)
         return proc_fail(cmd, "timed_out", at)
     import_call("WaitForSingleObject", proc, 4294967295, 0, 0)
-    t := os_scratch(OS_WIN_T)
-    store64(t + 48, 0)
-    import_call("GetExitCodeProcess", proc, t + 48, 0, 0)
-    status := win_u32(t + 48)
+    code := win_exit_raw(proc) / 256
     win_close_h(proc)
-    code := if status > 255 then 255 else status
     store64(ob, on)
     store64(eb, en)
     if raw
@@ -735,3 +759,63 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
     store64(r + 8, str_addr(out))
     store64(r + 16, str_addr(err))
     r
+
+# ---- a started child (std.proc.4-7) ----
+
+## Whether pipe `h` has something to read, or has ended (a read then reports it).
+fn win_pipe_ready(h int) bool
+    if h <= 0
+        return false
+    t := os_scratch(OS_WIN_T)
+    store64(t, 0)
+    if import_call("PeekNamedPipe", h, 0, 0, 0, t, 0) == 0
+        return true
+    win_u32(t) > 0
+
+## A read that does not wait: what is there (up to `cap` bytes), -11 when
+## nothing is yet, 0 at the end of the stream.
+fn win_read_nb(h int, buf int, cap int) int
+    t := os_scratch(OS_WIN_T)
+    store64(t, 0)
+    if import_call("PeekNamedPipe", h, 0, 0, 0, t, 0) == 0
+        return 0
+    avail := win_u32(t)
+    if avail == 0
+        return -11
+    want := if avail > cap then cap else avail
+    store64(t + 16, 0)
+    if import_call("ReadFile", h, buf, want, t + 16, 0) == 0
+        return 0
+    win_u32(t + 16)
+
+## `ps_round` on Windows: wait up to `ms` (negative: until something is ready)
+## for output on either stream of the child, then read each stream that has some.
+fn win_ps_round(ps int, ms int)
+    multi := load64(global(MULTI)) != 0
+    mut parked := 0
+    if multi
+        parked = blocked_enter()
+    start := time_mono_ms()
+    mut ro := false
+    mut re := false
+    while true
+        ro = win_pipe_ready(load64(ps + PS_OUT))
+        re = win_pipe_ready(load64(ps + PS_ERR))
+        if ro or re or ms == 0
+            break
+        if ms > 0 and time_mono_ms() - start >= ms
+            break
+        # Wakes at once if the child exits, which `ps_reap` then notices.
+        if import_call("WaitForSingleObject", load64(ps + PS_PID), 2, 0, 0) == 0
+            ro = win_pipe_ready(load64(ps + PS_OUT))
+            re = win_pipe_ready(load64(ps + PS_ERR))
+            break
+    if multi
+        blocked_leave(parked)
+    if ro or re
+        lock(ps + PS_LOCK)
+        if ro
+            ps_read(ps, 0)
+        if re
+            ps_read(ps, 1)
+        unlock(ps + PS_LOCK)
