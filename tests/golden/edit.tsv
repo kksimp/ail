@@ -1,0 +1,15 @@
+edit --dry-run tests/cases/packages/edit_impact edits.json	a2c25f214f28fe72	0	eb8f67e6c42e1967
+edit --dry-run --json tests/cases/packages/edit_impact edits.json	a2c25f214f28fe72	0	7eb7de70775ba875
+edit --dry-run --diff tests/cases/packages/edit_impact edits.json	a2c25f214f28fe72	0	eb8f67e6c42e1967
+edit --dry-run tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
+edit --dry-run --json tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
+edit --dry-run --diff tests/cases/packages/edit_ops bad.json	95da342dc63fb2bd	2	c8646bf5be79840d
+edit --dry-run tests/cases/packages/edit_ops edits.json	95da342dc63fb2bd	0	531bda0ddc21cc77
+edit --dry-run --json tests/cases/packages/edit_ops edits.json	95da342dc63fb2bd	0	4e439aa356e75ec8
+edit --dry-run --diff tests/cases/packages/edit_ops edits.json	95da342dc63fb2bd	0	531bda0ddc21cc77
+edit --dry-run tests/cases/packages/edit_ops hunk.txt	95da342dc63fb2bd	0	63a68d96d4f02ad2
+edit --dry-run --json tests/cases/packages/edit_ops hunk.txt	95da342dc63fb2bd	0	7447d6e9a47c758c
+edit --dry-run --diff tests/cases/packages/edit_ops hunk.txt	95da342dc63fb2bd	0	63a68d96d4f02ad2
+edit --dry-run tests/cases/packages/edit_ops text.txt	95da342dc63fb2bd	2	c1178dcae77a3663
+edit --dry-run --json tests/cases/packages/edit_ops text.txt	95da342dc63fb2bd	2	c1178dcae77a3663
+edit --dry-run --diff tests/cases/packages/edit_ops text.txt	95da342dc63fb2bd	2	c1178dcae77a3663
