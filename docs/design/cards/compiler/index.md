@@ -8,7 +8,7 @@ check  347 items
 codegen  55 items
 derive  40 items
 doc  18 items
-edit  45 items
+edit  51 items
 explain  37 items
 fix  54 items
 fixrun  26 items
