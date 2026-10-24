@@ -912,9 +912,11 @@ fn Gate.explain_coverage(mut self)
     for l in slurp("compiler/explain/fixable.txt").lines()
         listed.add(l)
     if listed.sorted() != seen.sorted()
+        extra := [r for r in seen.sorted() if not listed.contains(r)]
+        gone := [r for r in listed.sorted() if not seen.contains(r)]
         red(
             "explain.cover.3",
-            "src/fixable.txt is out of step with the fixes the test programs produce",
+            "compiler/explain/fixable.txt is out of step with the fixes the test programs produce; produced but not listed: {extra}; listed but not produced: {gone}",
         )
     for r in listed.sorted()
         if not spec.contains(r)
