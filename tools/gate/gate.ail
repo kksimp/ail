@@ -524,13 +524,21 @@ fn Gate.tools(mut self, tmp str)
 fn slurp(p str) str
     fs.read_text(p) else ""
 
-## `ail ARGS` through the built binary with AIL_BINARY set, as cargo sets it:
-## programs that start `ail` themselves (std.app hosts) use this binary.
-fn ail_run(args List[str]) proc.Output ! proc.ProcError
-    if (env.get("GATE_NATIVE") else "") == "1"
-        return proc.run("sh", cat(["-c", "exec perl -e 'alarm 120; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"], args))
+## Suites run on `./ail`; `GATE_RUST=1` (mac-gate.sh sets it for the suites that still have native reds)
+## sends them to the Rust binary. `GATE_NATIVE=1` is the same as the default.
+fn native() bool
+    (env.get("GATE_RUST") else "") != "1" or (env.get("GATE_NATIVE") else "") == "1"
+
+## `ail ARGS` through the Rust binary with AIL_BINARY set, as cargo sets it.
+fn rust_run(args List[str]) proc.Output ! proc.ProcError
     script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
     proc.run("sh", cat(["-c", script, "sh"], args))
+
+## `ail ARGS`: programs that start `ail` themselves (std.app hosts) find it through AIL.
+fn ail_run(args List[str]) proc.Output ! proc.ProcError
+    if not native()
+        return rust_run(args)
+    proc.run("sh", cat(["-c", "exec perl -e 'alarm 120; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"], args))
 
 ## The cases suite's native run (`GATE_CASES_NATIVE=1`, the report the Mac gate can print) goes through `./ail`,
 ## each case under a 60 second alarm so one hang is one red case, not a stuck gate (item 309).
@@ -538,7 +546,7 @@ fn case_run(native bool, args List[str]) proc.Output ! proc.ProcError
     if native or (env.get("GATE_CASES_NATIVE") else "") == "1"
         script := "perl -e 'alarm 60; exec @ARGV' \"$PWD/ail\" \"$@\""
         return proc.run("sh", cat(["-c", script, "sh"], args))
-    ail_run(args)
+    rust_run(args)
 
 ## tests/cases/native_only.txt: the stems of cases that use features only the native CLI has. Only these go
 ## native where the suite runs on the Rust binary (ADR 0865: the bootstrap learns nothing new).
@@ -1275,7 +1283,7 @@ fn Gate.snapshot(mut self, tmp str)
 ## Small end-to-end checks of derive_json.rs, ct_limit.rs, deterministic.rs,
 ## test_stderr.rs and schedule.rs, ported.
 fn ail_env(var str, args List[str]) proc.Output ! proc.ProcError
-    proc.run("env", cat([var, "bootstrap/target/release/ail"], args))
+    proc.run("env", cat([var, bin_path(".")], args))
 
 fn Gate.misc(mut self, tmp str)
     # json.derive.1-3, ADR 0343
@@ -1569,9 +1577,9 @@ fn Gate.limits(mut self, tmp str)
     want("test contract json", kj.out, ["\"snapshot\":\""])
 
 ## `ail diff OLD NEW` (diff.rs, ported; diff.out.1-7, ADRs 0396, 0399).
-## The binary the suites that moved to native (D3) call: `./ail` under `GATE_NATIVE=1`, else the Rust one.
+## The binary the suites call: `./ail`, or the Rust one under `GATE_RUST=1`.
 fn bin_path(root str) str
-    if (env.get("GATE_NATIVE") else "") == "1"
+    if native()
         return "{root}/ail"
     "{root}/bootstrap/target/release/ail"
 
