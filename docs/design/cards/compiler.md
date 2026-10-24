@@ -3,7 +3,7 @@ entry: main in main.ail
 
 ## (root) (51 items)
 
-## a64 (65 items)
+## a64 (73 items)
 
 ## api (159 items)
 
@@ -11,7 +11,7 @@ entry: main in main.ail
 
 ## budget (27 items)
 
-## check (334 items)
+## check (337 items)
 
 ## codegen (55 items)
 
@@ -31,7 +31,7 @@ entry: main in main.ail
 
 ## load (100 items)
 
-## mir (454 items)
+## mir (457 items)
 
 ## obj (64 items)
 
@@ -39,6 +39,6 @@ entry: main in main.ail
 
 ## syntax (110 items)
 
-## x64 (80 items)
+## x64 (87 items)
 
 trimmed to fit 4000 tokens (~200); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

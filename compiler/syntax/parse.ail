@@ -63,7 +63,8 @@ struct Parser
     impls List[ast.ImplDecl]
     consts List[ast.ConstDecl]
     uses List[ast.Use]
-    ## The struct whose members are being parsed, for moving its methods out (type.struct.2).
+    ## The struct whose members are being parsed ("" outside one), for the
+    ## fix that moves its methods out (type.struct.2).
     member_owner str
 
 ## The kind of a token, in one word.
@@ -476,9 +477,6 @@ fn Parser.error_fix(
         fix: title,
         edits: edits,
     ))
-
-fn fix_none() List[fix.Edit]?
-    none
 
 ## A diagnostic with the bootstrap's message, help line and fix title.
 fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, title str)
@@ -1132,14 +1130,14 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?
         if at_sym("->")
             # The result type follows `)` directly, as in a declaration (gram.fn.2).
-            op := here()
+            arrow := here()
             error_fix(
                 "gram.fn.2",
-                op,
+                arrow,
                 "there is no `->` in a function type; the result type follows `)` directly",
                 "write `fn(int) int`",
                 "remove the `->`",
-                [fix.delete(op, after_on_line(op, 2))],
+                [fix.delete(arrow, after_on_line(arrow, 2))],
             )
             return none
         mut ret := absent[ast.TypeRef]()
@@ -1167,26 +1165,37 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
 
 ## `name Type`, a field of a struct or of a variant (type.struct.2, type.enum.2).
 fn Parser.field_decl(mut self, rule str) ast.Field?
+    mut observe := false
+    if at_sym("@")
+        i += 1
+        a := take_name("an attribute name after `@`", "gram.attr.6")?
+        if a.name != "observe"
+            error_text(
+                "gram.attr.6",
+                a.pos,
+                "`@{a.name}` doesn't apply to a field; the only field attribute is `@observe`",
+                "write `@observe name Type`, or remove the attribute",
+                "",
+            )
+            return none
+        observe = true
     field_pub(rule)
     if at_kw("fn")
-        fn_pos := here()
         msg := "methods aren't declared inside a struct"
         help := "declare the method after the struct, with the type's name: `fn Name.method(self) T`"
         # Methods are the last members, so they move out where they stand.
-        mut moved := fix_none()
-        if member_owner != "" and fn_pos.col == 5
-            moved = methods_out(i, member_owner)
-        if edits := moved
-            error_fix(
-                rule,
-                fn_pos,
-                msg,
-                help,
-                "move the methods after the struct and name the type in each",
-                edits,
-            )
-        else
-            error_text(rule, fn_pos, msg, help, "")
+        if member_owner != "" and here().col == 5
+            if moved := methods_out(i, member_owner)
+                error_fix(
+                    rule,
+                    here(),
+                    msg,
+                    help,
+                    "move the methods after the struct and name the type in each",
+                    moved,
+                )
+                return none
+        error_text(rule, here(), msg, help, "")
         return none
     f := take_name("a field name", rule)?
     if at_sym(":")
@@ -1200,7 +1209,7 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
         )
         i += 1
     ty := type_ref("the field's type (written `name Type`)", rule)?
-    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty)
+    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty, observe: observe)
 
 ## `struct Name` and one `name Type` field per line (type.struct.1-2).
 fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
