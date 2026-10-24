@@ -1,6 +1,6 @@
-# NNNN. Token-priced diagnostics: one-line and expanded forms under `--budget`
+# 0880. Token-priced diagnostics: one-line and expanded forms under `--budget`
 
-- **Status:** Accepted (number pending from the integrator; rename this file then)
+- **Status:** Accepted
 - **Date:** 2026-10-24
 - **Decided by:** Designer (2026-10-23, the item, ADR 0868 item 6); the forms and the choice by AI (delegated, ADR 0076)
 - **Amends:** [ADR 0394](0394-token-budgets-on-every-command.md) (token budgets), [ADR 0868](0868-ai-first-tooling-after-rust-removal.md) item 6

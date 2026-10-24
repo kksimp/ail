@@ -693,3 +693,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0867](0867-native-unique-values-and-drop.md) | Native unique values and `Drop`: ownership flags on the defer machinery *(delegated)* | Accepted | 2026-10-23 |
 | [0873](0873-rust-only-features-after-rust-removal.md) | Rust-only features: native record/replay and deterministic scheduler; the bytecode tier goes | Accepted | 2026-10-24 |
 | [0874](0874-purity-driven-speed-optimizations.md) | Purity-driven speed optimizations: memoization by cost model, pure-call CSE and hoisting, merging only for speed | Accepted | 2026-10-24 |
+| [0880](0880-budgeted-diagnostic-forms.md) | Token-priced diagnostics: one-line and expanded forms under `--budget` (ADR 0868 item 6) | Accepted | 2026-10-24 |
