@@ -33,14 +33,14 @@ fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
 # The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
-# D3: these suites run on ./ail (GATE_NATIVE=1); the rest still call the Rust binary until their reds are fixed.
+# D3: these suites run on ./ail (the default); the rest still call the Rust binary (GATE_RUST=1) until their reds are fixed.
 native_suites="mistakes sched docs fmt diff build_cache cli git_deps examples fix explain"
 suites="tools cases contracts misc limits api_queries api_card edit net spec native_misc nativex globals pe asm"
 [ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
 # The cases suite still runs on the Rust binary (item 301), so build it; the native cases run below is a report.
 run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
-run gate_ail ./ail run tools/gate/gate.ail $suites
-run gate_native perl -e 'alarm 2400; exec @ARGV' env GATE_NATIVE=1 ./ail run tools/gate/gate.ail $native_suites
+run gate_ail env GATE_RUST=1 ./ail run tools/gate/gate.ail $suites
+run gate_native perl -e 'alarm 2400; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
 if [ "${GATE_CASES_NATIVE_REPORT:-0}" = 1 ]; then
 if perl -e 'alarm 900; exec @ARGV' env GATE_CASES_NATIVE=1 ./ail run tools/gate/gate.ail cases >"$out/cases_native.log" 2>&1; then
   echo "native cases: green"
