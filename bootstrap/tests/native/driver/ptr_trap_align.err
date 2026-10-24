@@ -1,0 +1,3 @@
+bootstrap/tests/native/driver/ptr_trap_align.ail:7:17: trap[unsafe.hw.3]: `read_volatile` of 4 bytes at an address that is not a multiple of 4
+  7 |         print(p.read_volatile())
+    |                 ^

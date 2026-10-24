@@ -13,6 +13,7 @@ fn Lower.text_ext_ok(mut self, t Ty) bool?
         Char | Bytes => true
         Map(k, v) => text_ok(k) and text_ok(v)
         Set(e) => text_ok(e)
+        Ref(inner) => ref_text_ok(inner)
         Any(tr) => any_text_ok(tr)
         _ => none
 
@@ -25,6 +26,7 @@ fn Lower.text_ext(mut self, t Ty, x int) int
         Bytes => call("rt.bytes_quoted", [x], Ty.Str)
         Map(k, v) => table_text(x, k, v)
         Set(e) => table_text(x, e, none)
+        Ref => ref_text(t, x)
         Any(tr) => any_text(tr, Val(id: x, ty: t)) else str_value("")
         _ => str_value("")
 

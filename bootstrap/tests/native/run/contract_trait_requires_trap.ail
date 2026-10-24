@@ -1,0 +1,22 @@
+# contract.inh.1: a call through the trait that breaks the inherited `requires`
+# traps at the call.
+trait Shape
+    fn scale(self, k int) int
+        requires k > 0
+    fn name(self) str
+
+struct Plain
+    side int
+
+impl Shape for Plain
+    fn scale(self, factor int) int
+        self.side * factor
+    fn name(self) str
+        "plain"
+
+fn total(s Shape, k int) int
+    s.scale(k)
+
+fn main()
+    print(total(Plain(side: 4), 2))
+    print(total(Plain(side: 4), 0))

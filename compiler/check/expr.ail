@@ -163,6 +163,7 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
     if l := local(n)
         return l.ty
     if i := consts.get(n)
+        symbols[pos_key(at)] = "const:{n}"
         if gapped_consts.contains(i)
             gap("a gapped constant")
         return const_type(i)
@@ -233,9 +234,14 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
 
 ## `m` used as a value where `m` is a standard module (std.use.2).
 fn Checker.module_as_value(mut self, n str, at ast.Pos) bool
-    if std_module(n) == none
-        return false
-    err_help("std.use.2", at, "`{n}` is a module, not a value", "call one of its functions")
+    module := std_module(n) else return false
+    example := std_functions(module).first() else "f"
+    err_help(
+        "std.use.2",
+        at,
+        "`{n}` is a module, not a value",
+        "call one of its functions, e.g. `{n}.{example}(...)`",
+    )
     true
 
 ## The type of constant `i`, typing it first if needed (mod.const.3).
@@ -425,6 +431,7 @@ fn Checker.bare_variant(mut self, n str, at ast.Pos, expect Ty?) VariantRef?
         if v := variant_index(e, n)
             found.push(VariantRef(enum_index: e, variant: v))
     if found.len() == 1
+        weak_symbols[pos_key(at)] = "variant:{prog.enums[found[0].enum_index].name}.{n}"
         return found[0]
     mut owners := List[str]()
     if found.len() > 1
@@ -1349,6 +1356,7 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                     d = d.did_you_mean(n, s)
                 diags.push(d)
                 return []
+            symbols[pos_key(at)] = "variant:{decl.name}.{n}"
             if cov.wildcard or cov.variants[v]
                 err("expr.match.5", at, "this arm can never match; `{n}` is already covered")
             else

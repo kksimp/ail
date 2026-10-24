@@ -43,6 +43,7 @@ pub struct syntax.Diag  ## A mistake: the rule it breaks and where. The parser k
     pub fixed bool
     pub help str
     pub fix str
+    pub edits List[fix.Edit]  ## The edits of the fix, when it has them (ADR 0145).
 pub struct syntax.Comment  ## A comment (lex.comment.1): `text` runs from the `#` to the end of the line.
     pub pos ast.Pos
     pub text str
@@ -59,4 +60,4 @@ pub fn syntax.parse(tokens List[syntax.Token]) syntax.Parsed  ## Parse a file's 
 pub fn syntax.parse_with(tokens List[syntax.Token], extra Set[str]) syntax.Parsed  ## `parse` of a file whose module's other files declare generic names too:
 ```
 
-trimmed to fit 2000 tokens (~1089); dropped: private items
+trimmed to fit 2000 tokens (~1115); dropped: private items

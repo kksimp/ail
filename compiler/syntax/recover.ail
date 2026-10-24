@@ -3,6 +3,7 @@
 ## (mod.use.1-2, mod.vis.1-2), `@derive` traits (ct.derive.1), and
 ## recovery from other languages' constructs (gram.foreign.1, gram.rec.1).
 use ast
+use fix
 
 # ---- Contracts ----
 
@@ -344,6 +345,7 @@ fn Parser.use_path(mut self, pos ast.Pos) ast.Use?
                 "AIL writes paths with `.`, not `::`",
                 "write `use std.fs`",
                 "write `.`",
+                [fix.span(here(), ast.Pos(line: here().line, col: here().col + 2), ".")],
             )
             i += 2
             path.push(take_name("a module name after `.`", "mod.use.1")?)
@@ -525,18 +527,22 @@ fn Parser.foreign_decl(mut self, w str) bool
     # `from a.b import c` becomes `use a.b.c`.
     if w == "from"
         return from_import()
-    fix := decl_fix(w) else return false
+    repl := decl_fix(w) else return false
     info := decl_info(w)
     error_text(
         "gram.foreign.1",
         here(),
         info.0,
         info.1,
-        if fix == "-" then "remove `{w}`" else if fix == "" then "" else "write `{fix}`",
+        if repl == "-" then "remove `{w}`" else if repl == "" then "" else "write `{repl}`",
     )
+    if repl == "-"
+        attach("remove `{w}`", [fix.delete(here(), through_blank(i) else here())])
+    elif repl != ""
+        attach("write `{repl}`", [fix.span(here(), tok_end(i) else here(), repl)])
     # A modifier is followed by the declaration itself.
     t := tag_at(1)
-    if (fix == "-" or fix == "pub") and (t == "kw" or t == "id")
+    if (repl == "-" or repl == "pub") and (t == "kw" or t == "id")
         i += 1
         return true
     skip_statement()
@@ -566,6 +572,15 @@ fn Parser.from_import(mut self) bool
         "import the module with `use {path.join(".")}` and write `{path[path.len() - 1]}.name` for its items",
         "",
     )
+    if k + 2 < tokens.len() and tok_tag(tokens[k + 1].tok) == "id"
+        if end := tok_end(k + 1)
+            after := tokens[k + 2].tok
+            if after == Tok.Newline or after == Tok.Eof
+                attach("write a `use`", [fix.span(
+                    here(),
+                    end,
+                    "use {path.join(".")}.{tok_text(tokens[k + 1].tok)}",
+                )])
     skip_statement()
     true
 
@@ -579,8 +594,16 @@ fn Parser.foreign_stmt(mut self) bool
         return false
     if not stmt_foreign(tok_text(peek()))
         return false
-    info := stmt_info(tok_text(peek()))
+    word := tok_text(peek())
+    info := stmt_info(word)
     error_text("gram.foreign.1", here(), info.0, info.1, "")
+    mut repl := ""
+    if word == "pass"
+        repl = "todo"
+    elif word == "elseif" or word == "elsif" or word == "else_if"
+        repl = "elif"
+    if repl != ""
+        attach("write `{repl}`", [fix.span(here(), tok_end(i) else here(), repl)])
     skip_statement()
     true
 
@@ -600,6 +623,7 @@ fn Parser.header_tail(mut self, after str) Header
             "AIL doesn't put a `:` after a block header",
             "a line that opens a block ends where the header ends; the block is the indented lines below",
             "remove the `:`",
+            [fix.delete(pos, colon_end(k0, pos, colon_only))],
         )
         i += 1
         if colon_only
@@ -613,6 +637,7 @@ fn Parser.header_tail(mut self, after str) Header
             "`=` assigns; it can't be a condition",
             "compare with `==`",
             "write `==`",
+            [fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 1), "==")],
         )
         return Header.Reported
     if cond and tag_at(0) == "id" and tok_text(peek()) == "is"
@@ -624,6 +649,7 @@ fn Parser.header_tail(mut self, after str) Header
             "AIL has no `{text}`",
             "compare with `{op}`, e.g. `x {op} none`",
             "write `{op}`",
+            [fix.span(pos, tok_end(if text == "is" then k0 else k0 + 1) else pos, op)],
         )
         return Header.Reported
     if cond and kw_at(0) == "in"
@@ -633,7 +659,8 @@ fn Parser.header_tail(mut self, after str) Header
             msg: "AIL has no `in` operator for membership",
             fixed: true,
             help: "write the test as a method on the collection: `xs.contains(x)`, `m.contains(key)`, `s.contains(sub)`",
-            fix: "",
+            fix: "write `.contains`",
+            edits: [fix.operands(pos, "in", "$r.contains($l)")],
         ))
         return Header.Reported
     if s == "\{" and (tag_at(1) == "nl" or line_ends_at(k0))
@@ -644,6 +671,9 @@ fn Parser.header_tail(mut self, after str) Header
             "a block is the lines indented 4 spaces below its header, with no closing line",
             "",
         )
+        braces := brace_edits(k0)
+        if braces.len() > 0
+            attach("remove the braces", braces)
         return Header.Reported
     Header.NotHeader
 
@@ -664,6 +694,30 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "write `{name} := value`; the type is inferred. An empty collection names its type in the value: `List[int]()`",
             "",
         )
+        mut eq := -1
+        mut e := k0
+        while e < tokens.len() and tokens[e].tok != Tok.Newline and tokens[e].tok != Tok.Eof
+            if eq < 0 and tokens[e].tok == Tok.Sym("=")
+                eq = e
+            e += 1
+        mut empty := false
+        if eq >= 0 and eq + 2 < tokens.len()
+            a := tokens[eq + 1].tok
+            b := tokens[eq + 2].tok
+            empty = (a == Tok.Sym("[") or a == Tok.Sym("\{"))
+                and (b == Tok.Sym("]") or b == Tok.Sym("}"))
+        if eq >= 0 and empty
+            attach(
+                "declare it with `:=` and the type as a constructor",
+                [fix.empty_decl(tok_pos(start))],
+            )
+        elif eq >= 0
+            ep := tokens[eq].pos
+            attach("declare it with `:=`", [fix.span(
+                pos,
+                ast.Pos(line: ep.line, col: ep.col + 1),
+                " :=",
+            )])
         return true
     # `Color::Red`, `std::fs`
     if cur == ":" and sym_at(1) == ":" and adjacent(k0)
@@ -673,6 +727,7 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "AIL writes paths with `.`, not `::`",
             "write `Color.Red`, `std.fs`",
             "write `.`",
+            [fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 2), ".")],
         )
         return true
     # `new Point(...)`
@@ -683,6 +738,7 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "AIL has no `new`",
             "construct a struct by calling its name: `Point(x: 1, y: 2)`",
             "remove `new`",
+            [fix.delete(tok_pos(k0 - 1), pos)],
         )
         return true
     # `n > 0 ? a : b`
@@ -694,6 +750,8 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "use an `if` expression: `x := if n > 0 then a else b`",
             "",
         )
+        if edits := ternary_edits(start, k0 - 1)
+            attach("write it as `if c then a else b`", edits)
         return true
     # `(x) => x + 1`
     if cur == "=>"
@@ -714,6 +772,12 @@ fn Parser.stray_after_statement(mut self, start int) bool
             "write `Point(x: 1, y: 2)`: the name, then `field: value` pairs in parentheses",
             "",
         )
+        if close := matching(k0)
+            cp := tokens[close].pos
+            attach("use parentheses", [
+                fix.span(pos, ast.Pos(line: pos.line, col: pos.col + 1), "("),
+                fix.span(cp, ast.Pos(line: cp.line, col: cp.col + 1), ")"),
+            ])
         return true
     false
 

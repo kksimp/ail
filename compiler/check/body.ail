@@ -19,6 +19,9 @@ pub struct Analysis
     pub report Report
     pub effects List[List[str]]
     pub errors Map[int, List[str]]
+    ## What each use of a declared name refers to (api.ref.1), by `pos_key`.
+    pub symbols Map[int, str]
+    pub weak_symbols Map[int, str]
     ## What `ail api --locals/--type` select from (api.loc.1, api.type.1).
     pub locals List[LocalFact]
     pub exprs List[(ast.Pos, str)]
@@ -86,6 +89,8 @@ pub fn analyze(p ast.Program, full bool) Analysis
             report: report,
             effects: [],
             errors: Map[int, List[str]](),
+            symbols: Map[int, str](),
+            weak_symbols: Map[int, str](),
             locals: [],
             exprs: [],
         )
@@ -101,6 +106,8 @@ pub fn analyze(p ast.Program, full bool) Analysis
         report: report,
         effects: infer_effects(p, c.facts()).sets,
         errors: errors,
+        symbols: c.symbols,
+        weak_symbols: c.weak_symbols,
         locals: c.fact_locals,
         exprs: c.fact_exprs,
     )
@@ -251,6 +258,12 @@ fn Checker.check_fn(mut self, idx int)
             mismatch("expr.block.2", at, sig.ret, got)
         else
             mut d := new_diag("expr.block.2", at, msg)
+            declared := match sig.ret
+                Res(ok, _) => ok
+                _ => sig.ret
+            if declared == Ty.Int and got == Ty.Float
+                # Two candidates, the likelier first; neither is applied, since each is a choice.
+                d = d.with_help("convert the value with `x.to_int()`, or declare the return type `float` instead")
             if r := f.ret
                 d = d.with_note(r.pos, "the return type is declared here")
             diags.push(d)

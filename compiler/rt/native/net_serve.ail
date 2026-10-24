@@ -27,6 +27,8 @@ SERVE_PENDING := 8
 SERVE_CONT := 16
 # A connection accepted that has sent nothing yet.
 SERVE_FRESH := 32
+## How long a graceful shutdown waits before closing idle connections.
+SERVE_SHUT_GRACE_MS := 25
 
 ## Append `n` (not negative) in decimal to the text being built.
 fn serve_num(n int)
@@ -479,6 +481,13 @@ fn serve_more(o int) int
         return 0
     -1
 
+## Whether bytes have already arrived on connection `o`: a request on its
+## way, which a graceful shutdown still answers (std.net.24).
+fn serve_ready(o int) bool
+    pf := alloc_raw(8, KIND_BYTES)
+    store64(pf, load64(o + NET_FD).bit_and(4294967295).bit_or(1.shl(32)))
+    serve_poll(pf, 1, 0) > 0 and load8(pf + 6) != 0
+
 ## Close the connections parked on server `h` that have no request under
 ## way (all of them when `all`, for `close`).
 fn serve_idle_drop(h int, all bool)
@@ -488,7 +497,7 @@ fn serve_idle_drop(h int, all bool)
     for i in 1..load64(t)
         o := net_obj(i)
         if o != 0 and load64(o + NET_KIND) == NET_CONN and load64(o + NET_STREAM) == h
-            if all or load64(o + NET_FLAGS).bit_and(SERVE_PENDING) == 0
+            if all or (load64(o + NET_FLAGS).bit_and(SERVE_PENDING) == 0 and not serve_ready(o))
                 if atomic_cas(o + NET_STREAM, h, 0) == h
                     serve_end(o)
 
@@ -575,6 +584,7 @@ fn serve_closed(at str) int
 fn serve_accept(h int, at str) int
     sa := alloc_raw(32, KIND_BYTES)
     lenp := alloc_raw(8, KIND_BYTES)
+    mut shut_at := 0
     while true
         o := net_obj(h)
         if o == 0
@@ -582,7 +592,11 @@ fn serve_accept(h int, at str) int
             return serve_closed(at)
         fd := load64(o + NET_FD)
         shut := load64(o + NET_FLAGS).bit_and(NET_SHUT) != 0
-        if shut
+        # Bytes a client sent just before the shutdown may not have reached
+        # the socket yet: idle connections get SERVE_SHUT_GRACE_MS first.
+        if shut and shut_at == 0
+            shut_at = time_mono_ms()
+        if shut and time_mono_ms() - shut_at >= SERVE_SHUT_GRACE_MS
             serve_idle_drop(h, false)
         store64(lenp, 16)
         r := net_sys_accept(fd, sa, lenp)

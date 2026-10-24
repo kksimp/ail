@@ -112,6 +112,7 @@ fn Checker.args_only(mut self, args List[ast.Arg])
     if d := types.get(n)
         match d
             DStruct(s) =>
+                symbols[pos_key(npos)] = "type:{n}"
                 mut explicit := no_binds()
                 if has_targs
                     explicit = explicit_args(n, struct_params[s], targs, npos)
@@ -130,6 +131,7 @@ fn Checker.args_only(mut self, args List[ast.Arg])
         note_deprecated(i, npos)
         note_unsafe_call(i, npos)
         declared_fns.add(pos_key(npos))
+        symbols[pos_key(npos)] = "fn:{n}"
         mut s := sigs[i]
         # A test can fail (test.attr.4), but calling it is already an error.
         if has_attr(prog.fns[i], "test") and prog.fns[i].ret == none
@@ -497,6 +499,11 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
                 mut d := new_diag("expr.call.3", l.pos, "`{what}` has no parameter `{l.name}`")
                 if s := suggest(l.name, sig.names)
                     d = d.did_you_mean(l.name, s)
+                elif sig.names.is_empty()
+                    d = d.with_help("`{what}` has no parameters, so it takes no named arguments")
+                else
+                    listed := ["`{n}`" for n in sig.names].join(", ")
+                    d = d.with_help("its parameters are {listed}; name one of them")
                 diags.push(d)
                 ok = false
                 continue
@@ -522,7 +529,12 @@ fn Checker.arg_slots(mut self, what str, sig Sig, args List[ast.Arg], at ast.Pos
             if l := a.label
                 where = l.pos
                 how = ""
-            err("expr.call.3", where, "parameter `{sig.names[slot]}` is given more than once{how}")
+            err_help(
+                "expr.call.3",
+                where,
+                "parameter `{sig.names[slot]}` is given more than once{how}",
+                "pass each parameter once: remove one of the two arguments",
+            )
             ok = false
         else
             filled[slot] = i
@@ -996,6 +1008,7 @@ fn Checker.inherent_call(
     if mutable
         require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
     targets[pos_key(at)] = i
+    symbols[pos_key(at)] = "method:{tn}.{n}"
     note_deprecated(i, at)
     note_unsafe_call(i, at)
     move_receiver(i, recv)
@@ -1042,6 +1055,7 @@ fn Checker.trait_call(
     if sig.receiver == true
         require_mutable(recv, "trait.method.3", "the receiver of a `mut self` method")
     trait_calls[pos_key(at)] = tr
+    weak_symbols[pos_key(at)] = "method:{prog.traits[tr].name}.{n}"
     if c := con_of(rt)
         if k := impl_of.get(impl_key(tr, c))
             record_impl_target(at, k, tr, n)
@@ -1107,6 +1121,7 @@ fn Checker.associated(
     tn := def_name(d)
     if e := enum_of_def(d)
         if v := variant_index(e, n)
+            symbols[pos_key(at)] = "variant:{tn}.{n}"
             return variant_literal(e, v, explicit, args, at, expect)
     i := method_index(tn, n) else
         if t := impl_assoc_call(d, explicit, n, at, args, expect)
@@ -1131,6 +1146,7 @@ fn Checker.associated(
     note_deprecated(i, at)
     note_unsafe_call(i, at)
     targets[pos_key(at)] = i
+    symbols[pos_key(at)] = "method:{tn}.{n}"
     if gapped.contains(i) and is_inferred(sig.ret)
         gap("calls a gapped associated function")
     check_call("{tn}.{n}", sig, binds, args, none, at, expect)
@@ -1259,6 +1275,7 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             match d
                 DEnum(e) =>
                     if v := variant_index(e, n)
+                        symbols[pos_key(at)] = "variant:{head}.{n}"
                         fields := prog.enums[e].variants[v].fields
                         if fields.len() > 0
                             shown := ["{f.name}: ..." for f in fields]
@@ -1319,6 +1336,7 @@ fn Checker.hidden_std_module(mut self, recv ast.Expr, n str, at ast.Pos) bool
             for i in 0..decl.fields.len()
                 if decl.fields[i].name == n
                     private_field(s, i, at)
+                    symbols[pos_key(at)] = "field:{decl.name}.{n}"
                     return subst(field_types[s][i], binds_of(struct_params[s], args))
             names := [f.name for f in decl.fields]
             mut d := new_diag("type.struct.6", at, "`{decl.name}` has no field `{n}`")

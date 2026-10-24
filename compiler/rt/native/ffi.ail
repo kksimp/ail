@@ -32,6 +32,7 @@ fn mem_alloc(bytes int) int
     if base < 0
         fail(1, 0, 0)
     store64(base, bytes + 16)
+    memtab_add(base + 16, bytes)
     base + 16
 
 ## Return a block of `mem_alloc`. Windows keeps it until the process ends.

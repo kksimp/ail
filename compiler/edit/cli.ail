@@ -1,4 +1,6 @@
+use check
 use fmt
+use load
 use syntax
 
 USAGE := [
@@ -28,7 +30,7 @@ USAGE := [
 ## The check is still syntax only: the semantic checker's driver (loading a
 ## package, the prelude) is not in AIL yet, so a note on standard error says
 ## so and `--test` and `rename` are refused (RR-1, RR-4).
-pub fn command(args List[str]) int
+pub fn command(args List[str], std str) int
     mut dry := false
     mut show_diff := false
     mut if_clean := false
@@ -105,17 +107,31 @@ pub fn command(args List[str]) int
             work.texts[i] = done.text
         if original[i] != work.texts[i]
             changed.push(i)
-    # edit.out.2: the new state's diagnostics.
-    mut errors := 0
-    mut report := List[str]()
+    # edit.out.2: the new state's diagnostics, checked from memory: nothing is written yet.
+    mut over := Map[str, str]()
     for i in 0..work.paths.len()
-        lexed := syntax.lex(work.texts[i])
-        mut diags := lexed.diags
-        diags.extend(syntax.parse(lexed.tokens).diags)
-        if diags.len() > 0
-            errors += syntax.one_per_line(diags).len()
-            report.push(syntax.report_text(work.paths[i], work.texts[i], diags))
-    warnings := 0
+        over[work.paths[i]] = work.texts[i]
+    loaded := load.load_with(path, std, over) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in check.analyze(loaded.program, false).report.diags]
+    # A single file may lack `main`.
+    found = [d for d in found if package or d.rule != "mod.main.1"]
+    mut errors := 0
+    mut warnings := 0
+    for d in found
+        if d.warning
+            warnings += 1
+        else
+            errors += 1
+    report := if found.len() > 0 then load.report(
+        loaded.program.files,
+        loaded.texts,
+        found,
+        json,
+    ) else ""
     kept := not dry and not (if_clean and errors > 0)
     if kept
         for i in changed
@@ -129,10 +145,8 @@ pub fn command(args List[str]) int
     if out.len() > 0
         joined := out.join("")
         print(joined.slice(0, joined.chars().len() - 1))
-    for r in report
-        io.eprint(r)
-    if not json
-        io.eprint("note: the native `ail edit` checks syntax only; run `ail check` for the full check")
+    if report != ""
+        io.eprint(report)
     mut verb := "not written (--if-clean)"
     if kept
         verb = "edited"
@@ -146,9 +160,19 @@ pub fn command(args List[str]) int
         print("{verb} {plural(changed.len(), "file")}; {plural(errors, "error")}{warned}")
     if errors > 0
         return 2
+    # edit.out.4: `--test` runs the tests of the edited file.
     if test and kept
-        io.eprint("error: --test needs the native test runner (RR-4)")
-        return 2
+        exe := env.get("AIL") else
+            io.eprint("error: can't run the tests: AIL names no `ail` to run")
+            return 2
+        ran := proc.run(exe, if json then ["test", path, "--json"] else ["test", path]) else err
+            io.eprint("error: can't run the tests: {err}")
+            return 2
+        if ran.out != ""
+            print(ran.out.strip_suffix("\n") else ran.out)
+        if ran.err != ""
+            io.eprint(ran.err.strip_suffix("\n") else ran.err)
+        return ran.status
     0
 
 fn plural(n int, w str) str

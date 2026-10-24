@@ -1,0 +1,22 @@
+# own.ref.6: the text of a `ref` is `ref` and its contents' text; a cell met
+# again inside its own text shows `ref ...`.
+struct Inner
+    x int
+
+struct Outer
+    inner Inner
+    tag str
+
+struct Link
+    next ref Link?
+    v int
+
+fn main()
+    o := ref Outer(inner: Inner(x: 1), tag: "a")
+    print(o)
+    print("got {o}")
+    print([o, o])
+    a := ref Link(next: none, v: 1)
+    b := ref Link(next: a, v: 2)
+    a.next = b
+    print(b)

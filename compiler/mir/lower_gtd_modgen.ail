@@ -1,0 +1,38 @@
+## `m.G[A].f(...)`: a function of generic type `G` of imported module `m`
+## with written type arguments (gen.infer.2). The file's parser knows only
+## its own module's generic names, so this arrives as an index of `m.G`;
+## read it as the type arguments it is.
+
+use ast
+
+## `recv` as `TypeArgs("m.G", [A])` when it is `m.G[A]` of a generic type
+## `G` of module `m`.
+fn Lower.module_type_args(self, recv ast.Expr) ast.Expr?
+    match recv
+        Index(base, ix, pos) =>
+            match base
+                Member(m, g, _) =>
+                    mod := match m
+                        Name(n, _) => n
+                        _ => return none
+                    if lookup(mod) != none
+                        return none
+                    generic_type_key("{mod}.{g}")?
+                    t := written_type(ix)?
+                    ast.Expr.TypeArgs(name: "{mod}.{g}", args: [t], pos: pos)
+                _ => none
+        _ => none
+
+## A type written in expression position: `int`, `List[str]`, `m.T`.
+fn written_type(e ast.Expr) ast.TypeRef?
+    match e
+        Name(n, p) => ast.TypeRef(shape: Named(n, []), pos: p)
+        Member(m, n, p) =>
+            match m
+                Name(mn, _) => ast.TypeRef(shape: Named("{mn}.{n}", []), pos: p)
+                _ => none
+        Index(base, ix, p) =>
+            match base
+                Name(n, _) => ast.TypeRef(shape: Named(n, [written_type(ix)?]), pos: p)
+                _ => none
+        _ => none

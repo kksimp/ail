@@ -1,0 +1,79 @@
+trait Shape
+    fn area(self) int
+    fn name(self) str
+        "shape"
+
+struct Sq
+    side int
+
+impl Shape for Sq
+    fn area(self) int
+        self.side * self.side
+
+struct Version
+    major int
+    minor int
+
+impl Ord for Version
+
+enum Level
+    Low
+    Mid
+    High
+
+impl Ord for Level
+
+enum Rank
+    Num(n int)
+    Ace
+
+impl Ord for Rank
+
+struct Money
+    cents int
+
+impl Ord for Money
+    fn cmp(self, other Self) Ordering
+        other.cents.cmp(self.cents)
+
+struct Name
+    text str
+    id int
+
+impl Eq for Name
+    fn eq(self, other Self) bool
+        self.text == other.text
+
+trait Zero
+    fn zero() Self
+    fn zeros(n int) List[Self]
+        [Self.zero() for _ in 0..n]
+
+impl Zero for int
+    fn zero() int
+        0
+
+fn one[T Zero]() T
+    T.zero()
+
+fn bigger(a Shape, b Shape) bool
+    a.area() > b.area()
+
+fn main()
+    q := Sq(side: 3)
+    print(Shape.area(q))
+    print(bigger(q, Sq(side: 2)))
+    print(Version(major: 1, minor: 9) < Version(major: 2, minor: 0))
+    print(Version(major: 1, minor: 9).cmp(Version(major: 1, minor: 9)))
+    print(Level.Low < Level.High)
+    print(Level.High >= Level.Mid)
+    print(Rank.Num(n: 5) < Rank.Ace)
+    print(Rank.Ace.cmp(Rank.Num(n: 9)))
+    print([1, 2] < [1, 3])
+    print([1, 2, 3] > [1, 2])
+    print([[1, 2], [0, 9]].len())
+    print(Money(cents: 5) < Money(cents: 1))
+    print(Money(cents: 5).cmp(Money(cents: 1)))
+    print(Name(text: "a", id: 1) == Name(text: "a", id: 2))
+    print(Name(text: "a", id: 1) != Name(text: "b", id: 1))
+    print(one[int]())

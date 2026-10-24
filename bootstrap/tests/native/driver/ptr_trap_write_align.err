@@ -1,0 +1,3 @@
+bootstrap/tests/native/driver/ptr_trap_write_align.ail:7:11: trap[unsafe.hw.3]: `write_volatile` of 2 bytes at an address that is not a multiple of 2
+  7 |         p.write_volatile(1.to_u16())
+    |           ^

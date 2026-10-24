@@ -23,8 +23,19 @@ run() { # run NAME CMD...
 }
 # The cargo copies of the ported suites are deleted (B6's list); --full runs what is left.
 [ "$full" = 1 ] && run selftest ./ail selftest --no-fail-fast
+# Self-host stage 1: the native compiler must build from compiler/main.ail. nativex reuses it
+# (NATIVE_COMPILER), so this is not an extra build; a failure is red here and in nativex.
+if ./ail build compiler/main.ail -o "$out/native-compiler" >"$out/selfhost1.log" 2>&1; then
+  export NATIVE_COMPILER="$out/native-compiler"
+else
+  fails=$((fails+1)); echo "RED selfhost stage 1: ./ail build compiler/main.ail"; head -8 "$out/selfhost1.log" | cut -c1-200
+fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
-run gate_ail ./ail run tools/gate/gate.ail examples tools cases explain fix cli mistakes contracts snapshot misc docs fmt budget limits diff build_cache parallel api_queries replay api_card edit git_deps net bytecode spec native_misc nativex globals pe asm
+# The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
+# the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
+suites="examples tools cases explain fix cli mistakes contracts misc docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
+[ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
+run gate_ail ./ail run tools/gate/gate.ail $suites
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build bootstrap/tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }

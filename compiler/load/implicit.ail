@@ -153,6 +153,7 @@ fn SelfCx.declare(mut self, name str, at ast.Pos)
         fixed: false,
         help: "rename the local; inside the method, `{name}` already means `self.{name}`",
         fix: "",
+        edits: [],
     ))
 
 fn SelfCx.block(mut self, b List[ast.Stmt]) List[ast.Stmt]
@@ -264,6 +265,7 @@ fn SelfCx.args(mut self, args List[ast.Arg]) List[ast.Arg]
                             fixed: false,
                             help: "write `self.{n}(...)` for the method, or rename one of them",
                             fix: "",
+                            edits: [],
                         ))
                         return ast.Expr.Call(callee, new_args, pos)
                     ast.Expr.Method(ast.Expr.Name("self", name_pos), n, name_pos, new_args)

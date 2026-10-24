@@ -1,0 +1,124 @@
+## ARMv8 crypto-extension kernels for the native TLS client: the ARM64 twins
+## of compiler/x64/kernels_aes.ail, replacing `rt.aes_hw_blocks` and
+## `rt.aes_hw_ghash` of compiler/rt/native/tls_aes_hw.ail. (`aes_hw_ok` is
+## AIL there: macOS, whose cores all have AES and PMULL; Linux ARM64 keeps the
+## bit-sliced code until it reads the hardware capabilities.) They use x0..x6
+## and v0..v7, v16, v17, which calls don't preserve (native-abi.md §1).
+
+## The kernels this file assembles.
+pub fn is_aes_kernel(name str) bool
+    name == "rt.aes_hw_blocks" or name == "rt.aes_hw_ghash"
+
+pub fn gen_aes_kernel(mut a Asm, name str)
+    if name == "rt.aes_hw_blocks"
+        kernel_aes_blocks(mut a)
+    else
+        kernel_aes_ghash(mut a)
+
+## `rt.aes_hw_blocks(rk, nr, src, n, dst)`: x0 = rk (`nr + 1` round keys of 16
+## bytes, FIPS 197 order), x1 = nr, x2 = src, x3 = n blocks, x4 = dst. `aese`
+## adds the round key first, so `nr - 1` pairs of `aese`/`aesmc` take keys
+## 0..nr-2, one more `aese` takes key nr-1, and the last key is XORed.
+fn kernel_aes_blocks(mut a Asm)
+    done := a.label()
+    blocks := a.label()
+    rounds := a.label()
+    a.cbz(3, done)
+    a.bind(blocks)
+    a.ldr_q_post(0, 2)
+    a.mov_rr(5, 0)
+    a.alu_ri("sub", 6, 1, 1)
+    a.bind(rounds)
+    a.ldr_q_post(1, 5)
+    a.aese(0, 1)
+    a.aesmc(0, 0)
+    a.alu_ri("subs", 6, 6, 1)
+    a.b_cond(NE, rounds)
+    a.ldr_q_post(1, 5)
+    a.aese(0, 1)
+    a.ldr_q(1, 5, 0)
+    a.veor(0, 0, 1)
+    a.str_q_post(0, 4)
+    a.alu_ri("subs", 3, 3, 1)
+    a.b_cond(NE, blocks)
+    a.bind(done)
+    a.ret()
+
+## Reverse the 16 bytes of v`r`.
+fn rev128(mut a Asm, r int)
+    a.vrev64(r, r)
+    a.vext(r, r, r, 8)
+
+## `rt.aes_hw_ghash(h, y, p, n)`: as the x86-64 kernel, step for step, with
+## `pmull`/`pmull2` for `pclmulqdq` (the middle terms use `h` with its halves
+## swapped, v17) and `ext` with the zero register v16 for the byte shifts.
+## x0 = h, x1 = y, x2 = p, x3 = n. v1 = h, v6 = y.
+fn kernel_aes_ghash(mut a Asm)
+    done := a.label()
+    blocks := a.label()
+    a.cbz(3, done)
+    a.vzero(16)
+    a.ldr_q(1, 0, 0)
+    rev128(mut a, 1)
+    a.vext(17, 1, 1, 8)
+    a.ldr_q(6, 1, 0)
+    rev128(mut a, 6)
+    a.bind(blocks)
+    a.ldr_q_post(0, 2)
+    rev128(mut a, 0)
+    a.veor(0, 0, 6)
+    # 256-bit product in v6:v3.
+    a.pmull(3, 0, 1)
+    a.pmull(4, 0, 17)
+    a.pmull2(5, 0, 17)
+    a.pmull2(6, 0, 1)
+    a.veor(4, 4, 5)
+    a.vmov(5, 4)
+    a.vext(4, 4, 16, 8)
+    a.vext(5, 16, 5, 8)
+    a.veor(3, 3, 5)
+    a.veor(6, 6, 4)
+    # Shift the product left by one bit (the values are bit-reflected).
+    a.vmov(7, 3)
+    a.vmov(0, 6)
+    a.vshl4(3, 3, 1)
+    a.vshl4(6, 6, 1)
+    a.vushr4(7, 7, 31)
+    a.vushr4(0, 0, 31)
+    a.vmov(2, 7)
+    a.vext(0, 16, 0, 12)
+    a.vext(7, 16, 7, 12)
+    a.vext(2, 2, 16, 12)
+    a.vorr(3, 3, 7)
+    a.vorr(6, 6, 0)
+    a.vorr(6, 6, 2)
+    # Reduce modulo x^128 + x^7 + x^2 + x + 1.
+    a.vmov(7, 3)
+    a.vmov(0, 3)
+    a.vmov(2, 3)
+    a.vshl4(7, 7, 31)
+    a.vshl4(0, 0, 30)
+    a.vshl4(2, 2, 25)
+    a.veor(7, 7, 0)
+    a.veor(7, 7, 2)
+    a.vmov(0, 7)
+    a.vext(7, 16, 7, 4)
+    a.vext(0, 0, 16, 4)
+    a.veor(3, 3, 7)
+    a.vmov(2, 3)
+    a.vmov(4, 3)
+    a.vmov(5, 3)
+    a.vushr4(2, 2, 1)
+    a.vushr4(4, 4, 2)
+    a.vushr4(5, 5, 7)
+    a.veor(2, 2, 4)
+    a.veor(2, 2, 5)
+    a.veor(2, 2, 0)
+    a.veor(3, 3, 2)
+    a.veor(6, 6, 3)
+    a.alu_ri("subs", 3, 3, 1)
+    a.b_cond(NE, blocks)
+    rev128(mut a, 6)
+    a.str_q(6, 1, 0)
+    a.bind(done)
+    a.ret()

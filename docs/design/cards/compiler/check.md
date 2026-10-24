@@ -47,6 +47,7 @@ pub fn check.new_checker(ast.Program) check.Checker
 pub check.COVERED_RULES := ...
 pub struct check.Skip
 pub fn check.skipped(ast.Program, check.Report) List[check.Skip]
+pub fn check.generator_effects(ast.Program, List[str]) List[str] [env io]
 pub struct check.Note
 pub struct check.Diag
 pub fn check.new_diag(str, ast.Pos, str) check.Diag
@@ -95,4 +96,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1146); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1174); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

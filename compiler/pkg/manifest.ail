@@ -46,7 +46,7 @@ struct Word
     pos ast.Pos
 
 fn diag(rule str, at ast.Pos, msg str, help str) syntax.Diag
-    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "")
+    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "", edits: [])
 
 fn is_space(c char) bool
     c == ' ' or c == '\t' or c == '\r' or c == '\u{b}' or c == '\u{c}'

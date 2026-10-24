@@ -1,6 +1,6 @@
 ## Writes `compiler/mir/prelude_embed.ail`: the prelude's text inside the native
 ## compiler, so a compiler built natively finds the `json` and `default`
-## modules without the Rust front end's AIL_DERIVED file (ADR 0808):
+## modules itself (ADR 0808):
 ##
 ##     ./ail run tools/native/gen_prelude.ail > compiler/mir/prelude_embed.ail
 ##
