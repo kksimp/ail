@@ -492,6 +492,8 @@ class HostForm : Form
     bool started;
     bool quiet; // set while the host itself changes a control
     readonly Dictionary<string, string> lastSent = new Dictionary<string, string>();
+    // The texts of the edits sent for a field since the program last answered with a value it chose itself.
+    readonly Dictionary<string, List<string>> edits = new Dictionary<string, List<string>>();
     readonly Dictionary<string, Control> byId = new Dictionary<string, Control>();
     readonly List<Control> leaves = new List<Control>();
 
@@ -557,6 +559,21 @@ class HostForm : Form
             case "Field":
                 var tb = (TextBox)leaves[idx++];
                 string last;
+                // A view that echoes an edit sent before the newest one is out of date: typing has gone on
+                // since, so it must not overwrite the box. One that echoes the newest edit is in step. Any
+                // other value is the program's own choice and wins.
+                List<string> es;
+                if (edits.TryGetValue(n.Id, out es) && es.Count > 0)
+                {
+                    int at = es.LastIndexOf(n.Text);
+                    if (at >= 0)
+                    {
+                        if (at == es.Count - 1) { es.Clear(); lastSent[n.Id] = n.Text; }
+                        else es.RemoveRange(0, at + 1);
+                        break;
+                    }
+                    es.Clear();
+                }
                 // The user's typing stands until the program sends a different value than last time.
                 if (!lastSent.TryGetValue(n.Id, out last) || last != n.Text)
                 {
@@ -605,7 +622,16 @@ class HostForm : Form
             case "Field":
                 var t = new TextBox { Tag = n.Id, Dock = DockStyle.Fill, Margin = new Padding(3), MinimumSize = new Size(120, 0) };
                 string fid = n.Id;
-                t.TextChanged += delegate { if (!quiet) { lastSent[fid] = null; Outbox.Send("edit", "id", fid, "text", t.Text); } };
+                t.TextChanged += delegate
+                {
+                    if (quiet) return;
+                    lastSent[fid] = null;
+                    List<string> es;
+                    if (!edits.TryGetValue(fid, out es)) { es = new List<string>(); edits[fid] = es; }
+                    if (es.Count >= 256) es.RemoveAt(0);
+                    es.Add(t.Text);
+                    Outbox.Send("edit", "id", fid, "text", t.Text);
+                };
                 t.KeyDown += delegate (object s, KeyEventArgs e)
                 {
                     if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; Outbox.Send("submit", "id", fid); }
