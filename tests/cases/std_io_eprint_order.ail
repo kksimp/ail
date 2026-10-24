@@ -1,0 +1,11 @@
+## std.io.3: `eprint` works out its text first. A call inside the argument that
+## prints writes to standard output; only the finished text goes to standard error.
+use std.io
+
+fn report() str
+    print("printed while the text is built")
+    "the text"
+
+fn main()
+    io.eprint("to standard error: {report()}")
+    print("after")

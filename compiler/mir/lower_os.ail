@@ -230,6 +230,7 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
             vs.push(convert(v, f.params[i], expr_pos(a.value)))
     for i in args.len()..f.params.len()
         vs.push(konst(0, f.params[i]))
+    trace_effect(f.rt, f.params, vs, pos)
     if f.fails
         vs.push(trace_line(pos))
     if f.rt == "rt.io_exit" or f.rt == "rt.time_sleep_ms"
@@ -264,8 +265,35 @@ fn Lower.lower_to_float(mut self, s Val) Val
 
 ## `io.eprint(x)` (std.io.3): `print`'s text on standard error.
 fn Lower.lower_eprint(mut self, args List[ast.Arg], pos ast.Pos) Val?
+    if args.len() != 1
+        return unsupported(pos, "this `print`")
+    # The text is worked out before standard output is switched to error: an
+    # argument that prints (`io.eprint("{report()}")`) writes to standard output.
+    mut shown := List[Val]()
+    mut ipos := pos
+    match args[0].value
+        Interp(parts, at) =>
+            ipos = at
+            for p in parts
+                match p
+                    Lit(_) => shown.push(Val(id: -1, ty: Ty.Unit))
+                    Hole(x) => shown.push(lower_value(x, none)?)
+                    Fmt(x, _) => shown.push(lower_value(x, none)?)
+        _ => shown.push(lower_value(args[0].value, none)?)
     call("rt.err_begin", [], Ty.Unit)
-    lower_print(args, pos)?
+    if tk.on
+        call("rt.out_lock", [], Ty.Unit)
+    match args[0].value
+        Interp(parts, _) =>
+            for k in 0..parts.len()
+                match parts[k]
+                    Lit(text) => call("rt.out_str", [str_value(text)], Ty.Unit)
+                    Hole(_) => out(shown[k], ipos)?
+                    Fmt(_, spec) => lower_fmt_print(shown[k], spec, ipos)?
+        _ => out(shown[0], pos)?
+    call("rt.out_nl", [], Ty.Unit)
+    if tk.on
+        call("rt.out_unlock", [], Ty.Unit)
     call("rt.err_end", [], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 

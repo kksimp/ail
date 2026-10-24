@@ -98,7 +98,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Garlic** | The web browser written in AIL (`tools/garlic`): text mode first, with a page model for agents. See [garlic-browser.md](design/garlic-browser.md). |
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
-| **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`. |
+| **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`, the Windows host `tools/app-host/windows` (ADR 0888). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
 | **Module fuzzer** | A template program in `tests/fuzz/modules/` that `fuzz_modules.rs` fills with seeded adversarial inputs (text, JSON, hex bytes, regexes, dates, HTTP) and runs on both tiers and, once it exists, natively (ADR 0461). |
