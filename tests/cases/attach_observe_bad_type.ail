@@ -10,8 +10,6 @@ struct Cart
     @observe tags List[str]
     @observe mode Mode
     @observe shape Shape
-    @observe pair (int, int)
-    @observe maybe int?
     name str
 
 fn main()
