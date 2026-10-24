@@ -479,6 +479,18 @@ buffered stdio, so `rt_exit` calls `fflush(0)` through the dynamic symbol when
 libc is linked, before the `exit` syscall. This is an open risk until a
 differential test with `printf` passes on both Linux ARM64 and macOS.
 
+**As built (ADR 0870).** An `extern c fn` outside the runtime's libc subset is
+bound on its first call by `rt.ffi_addr` (`compiler/rt/native/ffi_load.ail`):
+`dlopen` of the library, `dlsym` of the symbol, the address kept in a cell of
+the table in global slot 57. The body then makes an `icall` named `c`, which
+the x86-64 generator brackets with a save and restore of `xmm8`-`xmm13`. The
+executable imports only `dlopen` and `dlsym`. On Linux `obj/elf.ail` writes a
+dynamic ELF in that case (`PT_INTERP`, `DT_NEEDED` libc, `DT_BIND_NOW`, two weak
+`GLOB_DAT` relocations into the import slots after the globals); the import
+call is `call [slot]` on x86-64 and `adrp`/`ldr`/`blr` on ARM64. On macOS the
+imports are `_dlopen` and `_dlsym` in the bind table of §11. Programs that
+call only the libc subset still have no `PT_INTERP`.
+
 **Memory.** `mem.alloc`, `mem.cstr` and `mem.free` call libc `malloc` and
 `free` when libc is linked, so a block can cross the boundary in either
 direction (`unsafe.mem.1`); without libc they use `rt_alloc` and `free` is a

@@ -245,6 +245,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Table object** | The native runtime's `Map` or `Set`: an insertion-ordered entry array plus an open-addressing hash index, one allocation per table (ADR 0568). |
 | **Type argument inference** | Working out a generic call's type arguments from its arguments and expected type (ADR 0129). |
 | **Typed hole** | `todo` written where code isn't finished: it takes the expected type, the checker warns with what it needs and the names in scope, and running it traps (ADR 0147). |
+| **Uhwhatnow** | `uhwhatnow?`, the typed hole that asks: like `todo`, but its warning ranks what in scope fits, best first, each with a fix (ADR 0872, `expr.hole.3`). |
 | **TypeInfo** | The prelude value describing a struct or enum as declared (name, id, fields, variants), passed only to derive generators; AIL has no run-time reflection (`refl.*`, ADR 0229). |
 | **Unique type** | A `unique struct` or `unique enum`: its values can't be copied, only moved, and are released (their `Drop` run) exactly once (ADRs 0066, 0069, 0191). A list or map of a unique type is unique too (ADR 0318). |
 | **Unit result** | A result with no success value, `! E` or bare `!`: the function either completes or fails (ADR 0139). |

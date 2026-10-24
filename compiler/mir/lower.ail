@@ -109,6 +109,8 @@ struct Lower
     ## Unique types and their releases (lower_unique.ail).
     uniq UniqState
     unw Unwind
+    ## Where each `uhwhatnow?` hole is, `FILE:LINE:COL` (expr.hole.3).
+    asks Set[str]
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -162,6 +164,8 @@ struct Lower
     ## Generic declarations and their instances (ADR 0536).
     gen Gen
     lazy Lazy
+    ## The next cell of `rt.ffi_addr` (ADR 0870).
+    ffi_k int
     ## The failure blocks of the `else` parts being lowered, innermost last:
     ## a `?` on an optional inside an `else` value goes there (err.prop.4).
     else_targets List[int]
@@ -268,6 +272,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         copy_tys: {},
         uniq: new_uniq(),
         unw: new_unwind(),
+        asks: ask_keys(srcs),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
@@ -299,6 +304,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         global_consts: [],
         gen: new_gen(),
         lazy: new_lazy(lazy),
+        ffi_k: 0,
         else_targets: [],
     )
     l.note_lazy_names(srcs)
@@ -467,13 +473,6 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
     self_ty = ""
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
-    if f.ext != none and not ffi_known(f)
-        problems.push(Problem(
-            rule: "ffi.native.1",
-            pos: f.pos,
-            message: "`extern c fn {f.name}`: `ail build` links only a fixed libc subset (`ail run` can call any C function)",
-        ))
-        return
     if declare_generic_fn(anon_generic(f), pre)
         return
     mut params := List[Ty]()
@@ -582,6 +581,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         or is_enum(e)
                         or is_shared_opt(e)
                         or e.is_coll()
+                        or e.is_tensor()
                         or e.is_ref()
                         or e.is_fn()
                         return Ty.List(e)

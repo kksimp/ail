@@ -45,9 +45,12 @@ fn ffi_known(f ast.FnDecl) bool
 fn Lower.lower_extern(mut self, f ast.FnDecl, name str, params List[int])
     if f.ext == none
         return
-    r := call("rt.ffi_{f.name}", params, ret)
-    finish(return_of(if ret.is_unit() then -1 else r))
-    end_fn(name, f.pos)
+    if ffi_known(f)
+        r := call("rt.ffi_{f.name}", params, ret)
+        finish(return_of(if ret.is_unit() then -1 else r))
+        end_fn(name, f.pos)
+    else
+        lower_extern_dyn(f, name, params)
 
 ## `mem.NAME(args)` (unsafe.mem.1-3).
 fn Lower.lower_mem_call(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?

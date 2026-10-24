@@ -21,6 +21,7 @@ fn is_value_ty(t Ty) bool
         or t == Ty.Bytes
         or needs_copy(t)
         or t.is_coll()
+        or t.is_tensor()
         or is_enum(t)
         or is_shared_opt(t)
         or t.is_ref()
