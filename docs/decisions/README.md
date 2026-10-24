@@ -693,6 +693,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0867](0867-native-unique-values-and-drop.md) | Native unique values and `Drop`: ownership flags on the defer machinery *(delegated)* | Accepted | 2026-10-23 |
 | [0873](0873-rust-only-features-after-rust-removal.md) | Rust-only features: native record/replay and deterministic scheduler; the bytecode tier goes | Accepted | 2026-10-24 |
 | [0874](0874-purity-driven-speed-optimizations.md) | Purity-driven speed optimizations: memoization by cost model, pure-call CSE and hoisting, merging only for speed | Accepted | 2026-10-24 |
+| [0884](0884-observe-field-and-attach-protocol.md) | `@observe` marks a struct field; attach speaks JSON lines on loopback with a 0600 token file | Accepted | 2026-10-24 |
+| [0877](0877-no-downcast-of-any-trait.md) | No downcasting of `any Trait`: an enum is the checked way to hold one of several known types (resolves OQ-094) | Accepted | 2026-10-24 |
 | [0880](0880-budgeted-diagnostic-forms.md) | Token-priced diagnostics: one-line and expanded forms under `--budget` (ADR 0868 item 6) | Accepted | 2026-10-24 |
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |

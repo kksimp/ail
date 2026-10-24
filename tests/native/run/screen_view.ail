@@ -1,0 +1,28 @@
+use std.app
+use std.screen
+use std.screen.view as sview
+
+struct Shop
+    n int
+
+impl app.App for Shop
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.column([
+            app.label("Cart"),
+            app.row([app.button("pay", "Pay"), app.toggle("gift", "Gift", true)]),
+            app.field("q", "", "search"),
+            app.canvas("c", 100.0, 40.0, [app.draw_rect(5.0, 5.0, 30.0, 10.0, 0xcc2222), app.draw_text(6.0, 6.0, "Hi", 0xffffff)]),
+        ])
+
+    fn focus(self) str
+        "q"
+
+fn main()
+    s := Shop(n: 0)
+    sc := sview.of_node(s.view(), 300.0, 200.0, s.focus())
+    print(sc.find("", "", "", 0))
+    print(sc.find("textbox", "", "", 0))
+    print(sc.what_is_at(12.0, 90.0))
