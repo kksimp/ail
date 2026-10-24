@@ -49,6 +49,20 @@ pub struct Deferred
     pub pos ast.Pos
     pub what str
 
+## One place where a function fails, passes a failure on, or handles one (err.paths.1).
+pub struct FailPath
+    pub func int
+    pub pos ast.Pos
+    ## `propagate`, `handle`, `return` or `absent`.
+    pub kind str
+    ## For `handle`: `default`, `leave` or `block`; empty otherwise.
+    pub how str
+    ## The function or method the failure comes from, when it is a call; empty otherwise.
+    pub call str
+    pub errors List[str]
+    ## `?` carried context text (err.ctx.2).
+    pub context bool
+
 pub struct Checker
     pub prog ast.Program
     pub diags List[Diag]
@@ -105,6 +119,8 @@ pub struct Checker
     pub fact_exprs List[(ast.Pos, str)]
     ## Where a field is written, through a place `require_mutable` accepted.
     pub fact_writes List[ast.Pos]
+    ## Where each function fails or handles a failure, recorded with the facts (err.paths.1).
+    pub fail_paths List[FailPath]
     pub pending List[Pending]
     pub fn_ret Ty
     pub loop_depth int
@@ -232,6 +248,7 @@ pub fn new_checker(p ast.Program) Checker
         fact_locals: [],
         fact_exprs: [],
         fact_writes: [],
+        fail_paths: [],
         pending: [],
         fn_ret: Ty.Unit,
         loop_depth: 0,

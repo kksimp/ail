@@ -8,6 +8,7 @@ pub fn api.card_command(rest List[str], std str) int [clock env fs io proc]  ## 
 pub fn api.public_decls(prog ast.Program, facts api.Facts, whole bool) List[api.Decl]  ## The public declarations of `prog` (api.diff.2).
 pub fn api.render_diff(old str, new str, a List[api.Decl], b List[api.Decl], json bool) (str, int)  ## The report of `a` (OLD) against `b` (NEW), and how many declarations
 pub fn api.diff_command(args List[str], std str) int [clock env fs io proc]  ## `ail api --diff ...` with its arguments after `--diff`; the exit status:
+pub fn api.errors_command(rest List[str], std str) int [clock env fs io proc]
 pub struct api.Impact  ## What an edit touches.
     pub changed List[str]  ## Declarations whose text changed, or that are new.
     pub affected List[str]  ## Functions that are, or reach, a changed declaration.
@@ -48,4 +49,4 @@ pub fn api.collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, s
 pub fn api.semantic_diff_command(args List[str], std str) int [clock env fs io proc]  ## `ail diff ARGS`; the exit status: 0 when nothing changed, 1 when something did, 2 for an error.
 ```
 
-trimmed to fit 2000 tokens (~1374); dropped: private items
+trimmed to fit 2000 tokens (~1400); dropped: private items
