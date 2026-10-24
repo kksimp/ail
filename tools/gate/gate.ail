@@ -2539,7 +2539,10 @@ fn owner_ok(owner str) bool
 ## failures and ends with `NATIVEX GREEN` or `NATIVEX RED`.
 ## Native-only features (ADR 0865) build here, so nativex runs on `./ail` with no AIL_BINARY.
 fn Gate.nativex(mut self)
-    r := proc.run("sh", ["-c", "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail"]) else
+    r := proc.run("sh", [
+        "-c",
+        "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail",
+    ]) else
         red("nativex", "could not start tools/gate/nativex.ail")
         return
     if r.status != 0 or not r.out.contains("NATIVEX GREEN")
