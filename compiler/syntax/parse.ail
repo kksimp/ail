@@ -63,6 +63,8 @@ struct Parser
     impls List[ast.ImplDecl]
     consts List[ast.ConstDecl]
     uses List[ast.Use]
+    ## The struct whose members are being parsed, for moving its methods out (type.struct.2).
+    member_owner str
 
 ## The kind of a token, in one word.
 fn tok_tag(t Tok) str
@@ -146,6 +148,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         impls: [],
         consts: [],
         uses: [],
+        member_owner: "",
     )
 
 ## Parse a file's tokens (the lexer's, ending in `Eof`).
@@ -473,6 +476,9 @@ fn Parser.error_fix(
         fix: title,
         edits: edits,
     ))
+
+fn fix_none() List[fix.Edit]?
+    none
 
 ## A diagnostic with the bootstrap's message, help line and fix title.
 fn Parser.error_text(mut self, rule str, pos ast.Pos, msg str, help str, title str)
@@ -1124,6 +1130,18 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
             if not eat_sym(",")
                 break
         expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?
+        if at_sym("->")
+            # The result type follows `)` directly, as in a declaration (gram.fn.2).
+            at := here()
+            error_fix(
+                "gram.fn.2",
+                at,
+                "there is no `->` in a function type; the result type follows `)` directly",
+                "write `fn(int) int`",
+                "remove the `->`",
+                [fix.delete(at, after_on_line(at, 2))],
+            )
+            return none
         mut ret := absent[ast.TypeRef]()
         if tag_at(0) == "id" or at_sym("(") or at_kw("any") or at_kw("ref")
             ret = optional_type("the result type", "type.fn.1")?
@@ -1151,13 +1169,17 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
 fn Parser.field_decl(mut self, rule str) ast.Field?
     field_pub(rule)
     if at_kw("fn")
-        error_text(
-            rule,
-            here(),
-            "methods aren't declared inside a struct",
-            "declare the method after the struct, with the type's name: `fn Name.method(self) T`",
-            "",
-        )
+        at := here()
+        msg := "methods aren't declared inside a struct"
+        help := "declare the method after the struct, with the type's name: `fn Name.method(self) T`"
+        # Methods are the last members, so they move out where they stand.
+        mut moved := fix_none()
+        if member_owner != "" and at.col == 5
+            moved = methods_out(i, member_owner)
+        if edits := moved
+            error_fix(rule, at, msg, help, "move the methods after the struct and name the type in each", edits)
+        else
+            error_text(rule, at, msg, help, "")
         return none
     f := take_name("a field name", rule)?
     if at_sym(":")
@@ -1193,6 +1215,7 @@ fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
     if bare
         bump()
     elif members_open("type.struct.1", "`struct {n.name}`")
+        member_owner = n.name
         while peek() != Tok.Dedent and peek() != Tok.Eof
             if eat_newline()
                 continue
@@ -1205,6 +1228,7 @@ fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
                 fields.push(f)
                 ok = true
             member_end(ok)
+        member_owner = ""
         eat_dedent()
     if whole != none
         splice_messages(n.name, n.pos, generics.len() > 0, [], whole)

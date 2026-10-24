@@ -346,7 +346,12 @@ fn mark_param_tuples(mut toks List[FTok])
         return
     mut depth := 0
     for j in i..toks.len()
-        if toks[j].sym("(") and depth >= 1 and j >= 2 and toks[j - 1].kind == WORD and (toks[j - 2].sym(",") or toks[j - 2].sym("(")) and toks[j - 1].space_after
+        if toks[j].sym("(")
+            and depth >= 1
+            and j >= 2
+            and toks[j - 1].kind == WORD
+            and (toks[j - 2].sym(",") or toks[j - 2].sym("("))
+            and toks[j - 1].space_after
             toks[j].tuple_ty = true
         if toks[j].opens()
             depth += 1
