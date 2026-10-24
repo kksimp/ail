@@ -240,6 +240,7 @@ fn Lower.req_trap(
     callee_file int,
     caller_file int,
 )
+    trace_contract(label, "requires", c, konst(0, Ty.Bool))
     trap_open("contract.req.1", pos)
     say("`{label}` requires `{c.text}`{origin}, but it was called with ")
     describe_args(args, pos)
@@ -307,11 +308,9 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
         pass := new_block()
         for c in theirs
             v := req_cond(c, their_scope, callee_file, caller_file) else break
-            trace_contract(key, "requires", c, v.id)
             ok := check_branch(v.id)
             for oc in reqs
                 w := req_cond(oc, own_scope, callee_file, caller_file) else break
-                trace_contract(key, "requires", oc, w.id)
                 held := check_branch(w.id)
                 req_trap(c, key, origin, true, args, pos, callee_file, caller_file)
                 cur = held
@@ -323,19 +322,29 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     else
         for c in theirs
             v := req_cond(c, their_scope, callee_file, caller_file) else break
-            trace_contract(key, "requires", c, v.id)
             ok := check_branch(v.id)
             req_trap(c, key, origin, false, args, pos, callee_file, caller_file)
             cur = ok
         for c in reqs
             v := req_cond(c, own_scope, callee_file, caller_file) else break
-            trace_contract(key, "requires", c, v.id)
             ok := check_branch(v.id)
             req_trap(c, key, "", false, args, pos, callee_file, caller_file)
             cur = ok
     unchecked = false
     scopes = saved
     self_ty = saved_self
+
+## The `requires` of `f` that held, traced on entry so they follow the call event:
+## the checks themselves run at the call site, and a failing one traps there.
+fn Lower.trace_requires(mut self, f ast.FnDecl, key str)
+    if instr.nocontracts
+        return
+    unchecked = true
+    for c in f.contracts
+        if not c.is_ensures
+            v := lower_value(c.cond, Ty.Bool) else continue
+            trace_contract(key, "requires", c, v.id)
+    unchecked = false
 
 # ---- ensures ----
 
