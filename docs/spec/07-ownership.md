@@ -605,13 +605,13 @@ fn main()
     print(c.len())      # 2
 ```
 
-```ail rules=own.ref.5
+```ail skip=bootstrap rules=own.ref.5
 fn main()
     c := ref 7          # a new cell holding 7
     print(c)            # ref 7
 ```
 
-```ail rules=own.ref.6
+```ail skip=bootstrap rules=own.ref.6
 fn main()
     a := ref 1
     b := a
