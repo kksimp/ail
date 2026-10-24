@@ -120,7 +120,8 @@ fn tlsprim_chain(args str) str
 fn tlsprim_aesbench(args str) str
     mib := args.to_int() else 16
     n := mib * 1048576
-    ak := alloc_raw(AK_SIZE, KIND_BYTES)
+    # 1248 bytes is AK_SIZE; the literal also builds against older runtimes.
+    ak := alloc_raw(1248, KIND_BYTES)
     key := alloc_raw(16, KIND_BYTES)
     nonce := alloc_raw(12, KIND_BYTES)
     aad := alloc_raw(8, KIND_BYTES)
