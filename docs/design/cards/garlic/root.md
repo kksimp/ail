@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 101 (`ail test` lists them)
+tests: 104 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -20,6 +20,8 @@ fn fetch_with(str, str, str, mut std.net.jar.Jar) str [clock fs io mutates net]
 struct Got
 MAX_HOPS := 10
 MAX_REPLIES := 32
+LOG_KEEP := 20
+MAX_WAIT_ROUNDS := 10
 fn fetch_got(str, str, str, str, bool, bool, mut std.net.jar.Jar, mut Map[str, Cached]) Got [clock fs io mutates net]
 fn fresh_until(Map[str, str], int, int) int
 fn keep_cached(str, Walked, int, mut Map[str, Cached]) [mutates]
@@ -67,6 +69,7 @@ fn tools_json() str
 struct Gui
 fn address(str) str [fs io]
 MEASURE_RUNS := 5000
+fn id_tag(float, float, int) List[draw.Op]
 struct Garlic
 WATCH_TOOLS := ...
 fn watched_text(str) str [clock env fs io net random]
@@ -103,4 +106,4 @@ fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 fn flat(gfx.Scene) List[str]
 ```
 
-trimmed to fit 2000 tokens (~1426); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1456); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
