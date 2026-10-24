@@ -75,7 +75,7 @@ for path in sorted((root / "docs" / "spec").glob("*.md")):
 cited = {}  # rule -> set of files that cite it (comments or literals)
 emitted = {}  # rule -> set of files that emit it as a literal
 sources = (list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "bootstrap" / "src").rglob("*.ail"))
-           + [root / "tools" / "gate" / "gate.ail"] + list((root / "compiler").rglob("*.ail")))
+           + [root / "tools" / "gate" / "gate.ail"] + list((root / "compiler").rglob("*.ail")) + list((root / "std").rglob("*.ail")))
 for path in sources:
     rel = str(path.relative_to(root))
     for line in path.read_text(encoding="utf-8").splitlines():
