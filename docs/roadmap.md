@@ -92,6 +92,12 @@ std API still needs its own ADR first.
 2. **Compiler graph tools** (`compiler/api/`, `compiler/edit/`): `ail ask`; edit
    impact and `ail test --affected`; contracts checked or fuzzed by tools, with
    OQ-060 (lower priority).
+   Then the AI-first tools the designer chose on 2026-10-24, in this order, each
+   with its own ADR (0891-0897) and no cost when unused (ADR 0868):
+   `ail context SYM --budget N`; `@tool` functions served by `ail serve --mcp`;
+   `ail try` (a patch checked and tested in memory); effect changes in `ail diff`;
+   `ail infer` (suggested `requires`/`ensures`); `ail test --mutate`; `ail check --perf`
+   (shares facts with the optimizer).
 3. **Native runtime** (`compiler/rt/`): time-travel record and replay; the
    agent sandbox (capabilities plus CPU, memory and time caps); live attach.
 4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
