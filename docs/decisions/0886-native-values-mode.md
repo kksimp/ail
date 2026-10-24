@@ -31,6 +31,11 @@ in the report's last line, and each caller's from its spill, found by the caller
 frame pointer. A contract trap prints its `values:` line. The ellipsis line names
 `--verbose` as the interpreter's does.
 
+`--verbose` implies `--values` (amended 2026-10-24, integrator item 353): it is a build mode
+`verbose` of the same instrumentation, so it stays opt-in and the default build keeps ADR 0641's zero
+cost. In that build the report shows every frame (no ellipsis) and prints each local of a frame on
+its own line, `      NAME = VALUE`, after the frame's `at L:C in NAME(ARGS)` line.
+
 Limits: single-threaded frames (a task's frames are not registered separately in
 any special way); a trap in an unowned (std) function shows the nearest owned
 caller's values.
