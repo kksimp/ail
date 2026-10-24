@@ -114,6 +114,10 @@ fn Packages.settle_lock(mut self)
         if problem := self.lock.save()
             self.manifests[0].diags.push(diag("mod.pkg.8", at, problem, ""))
 
+## A git dependency's fetch failed (mod.pkg.7), so its modules are missing for that reason alone.
+pub fn Packages.fetch_failed(self) bool
+    self.lock.failed
+
 ## The git dependencies resolved, for `ail pkg update` (mod.pkg.9).
 pub fn Packages.locked(self) List[Entry]
     self.lock.used

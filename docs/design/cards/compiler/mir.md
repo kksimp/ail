@@ -34,7 +34,7 @@ pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Proble
 pub fn mir.lower_package_with(List[mir.Source], ast.Program?, int) mir.Module ! mir.Problems [env fail fs io]
 pub fn mir.lower_package_par(List[mir.Source], ast.Program?, int, Set[str]) mir.Module ! mir.Problems [env fail fs io]
 pub fn mir.expr_pos(ast.Expr) ast.Pos
-pub mir.RT_GLOBALS := 64
+pub mir.RT_GLOBALS := 72
 pub struct mir.ValDesc
 pub struct mir.Instr
 pub mir.STD_AIL := ...

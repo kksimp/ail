@@ -11,6 +11,7 @@ expr.bind.3
 expr.bind.4
 expr.call.1
 expr.call.3
+expr.hole.3
 expr.if.1
 expr.if.2
 expr.loop.1
