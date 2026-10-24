@@ -1063,10 +1063,13 @@ fn api_cmd(rest List[str])
     mut form := api.Form.Plain
     mut expanded := false
     mut symbols := false
+    # `--json`: a rejected program's diagnostics as JSON lines (api.out.5); the outline is JSON anyway.
+    mut json := false
     mut files := List[str]()
     for a in rest
         match a
             "--outline" => continue
+            "--json" => json = true
             "--expanded" => expanded = true
             "--text" => form = api.Form.Text
             "--pretty" => form = api.Form.Pretty
@@ -1092,7 +1095,7 @@ fn api_cmd(rest List[str])
         found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
     for d in found
         if not d.warning
-            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
             io.exit(2)
     prog := doc.attach(loaded.program, loaded.texts[0])
     facts := api.Facts(
