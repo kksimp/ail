@@ -539,7 +539,7 @@ fn each_let(b List[ast.Stmt]) List[LetOf]
     out
 
 ## The blocks directly inside `s` (not nested deeper).
-fn each_block(s ast.Stmt) List[List[ast.Stmt]]
+pub fn each_block(s ast.Stmt) List[List[ast.Stmt]]
     mut out := List[List[ast.Stmt]]()
     match s
         Let(_, _, _, value, o) =>

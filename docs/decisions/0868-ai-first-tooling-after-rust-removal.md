@@ -36,7 +36,10 @@ nothing in a program that doesn't use it: no runtime check, no extra code, no sl
    `ail test --affected` runs only those.
 4. **Native time travel.** A native build records a run (inputs, scheduling, syscalls) when
    asked to. Replay answers questions such as "when did `x` become 0?" without adding prints
-   (native form of ADR 0398).
+   (native form of ADR 0398). One native instrumentation layer (line, call and value
+   events, compiled in only when a flag asks) serves replay, `ail test --trace`
+   (trace.test.1-2, the trap snapshots) and `ail test --coverage`. These two test flags
+   were interpreter-only; they come first, because Rust removal (step D) needs them.
 5. **Contracts checked by tools** (lower priority). `requires` and `ensures` are fuzzed or
    checked statically, so agents get counterexamples rather than traces.
 6. **Token-priced diagnostics.** Every diagnostic has a one-line form and an expanded form,

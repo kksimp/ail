@@ -363,7 +363,12 @@ fn Gate.editor_agent(mut self, root str, tmp str)
         screen(root, root, file, ["--key=ctrl+shift+u"]),
         ["0 warnings, tests 1/1 pass"],
     )
-    # Line coverage (ctrl+shift+c) needs `ail test --coverage`, which the native runner doesn't have yet (item 275).
+    covered := screen(root, root, file, ["--key=ctrl+shift+c"])
+    want("editor coverage", covered, [
+        "\n  8!        return Odd(n)\n",
+        "\n  9     n / 2\n",
+        "| coverage: lines 2/7",
+    ])
     # Saving with tests on reruns them; this changes the file, so it's last.
     failing := screen(root, root, file, [
         "--key=ctrl+shift+u",
@@ -2416,6 +2421,8 @@ fn Gate.bytecode(mut self)
             cmds.push("run {flags}{args.words().join(" ")} {f}")
         if fs.exists(f.replace(".ail", ".test"))
             cmds.push("test --json {f}")
+            if steady
+                cmds.push("test --coverage {f}")
         runs += cmds.len()
         jobs.push(cmds.join("\n"))
     mut pkgs := fs.list_dir("bootstrap/tests/cases/packages") else []

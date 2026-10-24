@@ -1,0 +1,62 @@
+## Coverage points for `ail test --coverage` (test.cover.1): the lines of the statements of each non-test
+## function, in the order the interpreter counts them, so the runner can mark which ran.
+##   cover FILE   prints one line per function: `fn L1 L2 ...`, the lines that start a statement, first one first.
+use ast
+use check
+use syntax
+
+fn is_test(f ast.FnDecl) bool
+    for a in f.attrs
+        if a.name == "test"
+            return true
+    false
+
+## True when the statement at `pos` starts its line (so a call can be put on the line before it).
+fn starts_line(lines List[str], pos ast.Pos) bool
+    if pos.line < 1 or pos.line > lines.len()
+        return false
+    l := lines[pos.line - 1]
+    prefix := l.slice(0, (pos.col - 1).min(l.len())).trim()
+    prefix.is_empty() or prefix == "mut"
+
+fn points(lines List[str], b List[ast.Stmt], mut out List[int])
+    for s in b
+        p := check.stmt_pos(s)
+        if starts_line(lines, p)
+            out.push(p.line)
+        match s
+            Defer(inner, _) =>
+                q := check.stmt_pos(inner)
+                if starts_line(lines, q)
+                    out.push(q.line)
+            Let | LetTuple | Assign | While | For | Break | Continue | Return | Eval | Handle | With | Unsafe => out = out
+        for inner in check.each_block(s)
+            points(lines, inner, mut out)
+
+pub fn command(args List[str]) int
+    for path in args
+        text := fs.read_text(path) else
+            io.eprint("error: can't read {path}")
+            return 1
+        lexed := syntax.lex(text)
+        prog := syntax.parse(lexed.tokens).program
+        lines := text.lines()
+        for f in prog.fns
+            body := f.body else continue
+            if is_test(f)
+                continue
+            skip := match f.within
+                TopLevel => false
+                InTrait | InImpl => true
+            if skip
+                continue
+            mut ls := List[int]()
+            points(lines, body, mut ls)
+            mut seen := Set[int]()
+            mut shown := List[str]()
+            for l in ls
+                if not seen.contains(l)
+                    seen.add(l)
+                    shown.push("{l}")
+            print("fn {shown.join(" ")}")
+    0
