@@ -305,16 +305,16 @@ fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
             io.eprint("warning[attach.run.2]: attach is off for this run: {shim_err}")
             compile_fresh(file, out, target, ms, mb, false)
             return
-        emit(shimmed, file, out, target)
+        finish_build(shimmed, file, out, target)
         return
     m := lower_file(file, rt, std) else err
         io.eprint("error[native.build.3]: {err}")
         io.exit(1)
         return
-    emit(m, file, out, target)
+    finish_build(m, file, out, target)
 
 ## The executable of `m` for `target`, written to `out`.
-fn emit(m mir.Module, file str, out str, target str)
+fn finish_build(m mir.Module, file str, out str, target str)
     hex := executable_hex(m, file, target)
     exe := bytes.from_hex(hex.replace("\n", "")) else
         io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")

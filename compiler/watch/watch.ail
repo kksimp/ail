@@ -3,7 +3,6 @@
 ## text before it is lowered.
 
 SERVE := "ail_serve"
-ATTACH := "ail_attach"
 
 ## `text` with `app.run(` calls made `std.attach.serve.run(` calls and an
 ## `impl attach.Observe` added for each non-generic `impl app.App for T`, so
@@ -13,10 +12,10 @@ ATTACH := "ail_attach"
 pub fn shim(text str) str
     if not text.contains("app.run(") or not text.contains("use std.app")
         return text
-    mut out := [
-        "use std.attach as {ATTACH}",
-        "use std.attach.serve as {SERVE}",
-    ]
+    # The generated `impl` names the module `attach`.
+    mut out := ["use std.attach.serve as {SERVE}"]
+    if not text.contains("use std.attach\n")
+        out.push("use std.attach")
     mut owners := List[str]()
     for line in text.lines()
         out.push(retarget(line))
@@ -25,7 +24,7 @@ pub fn shim(text str) str
             if not owner.contains("[") and not text.contains("Observe for {owner}")
                 owners.push(owner)
     for o in owners
-        out.push("impl {ATTACH}.Observe for {o}")
+        out.push("impl attach.Observe for {o}")
     "{out.join("\n")}\n"
 
 ## A line with its `app.run(` calls retargeted; comments stay as they are.
