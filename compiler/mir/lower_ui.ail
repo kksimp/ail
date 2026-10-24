@@ -8,12 +8,24 @@ use ast
 ## runtime call when it is one of those; whether it was.
 fn Lower.lower_ui_intrinsic(mut self, f ast.FnDecl, key str, name str, params List[int]) bool
     if key == "std.ui.clipboard_set"
-        call("rt.ui_clip_set", params, Ty.Unit)
+        if instr.rec
+            call(
+                "rt.rec_at",
+                [str_value(path), konst(f.pos.line, Ty.Int), konst(f.pos.col, Ty.Int)],
+                Ty.Unit,
+            )
+        call(if instr.rec then "rt.rec_ui_clip_set" else "rt.ui_clip_set", params, Ty.Unit)
         finish(return_of(-1))
         end_fn(name, f.pos)
         return true
     if key == "std.ui.clipboard_get"
-        r := call("rt.ui_clip_get", [], Ty.Opt(Ty.Str))
+        if instr.rec
+            call(
+                "rt.rec_at",
+                [str_value(path), konst(f.pos.line, Ty.Int), konst(f.pos.col, Ty.Int)],
+                Ty.Unit,
+            )
+        r := call(if instr.rec then "rt.rec_ui_clip_get" else "rt.ui_clip_get", [], Ty.Opt(Ty.Str))
         finish(return_of(r))
         end_fn(name, f.pos)
         return true

@@ -1,0 +1,190 @@
+## Memoization of tree-recursive pure functions (ADR 0874, speed only).
+##
+## `fib(n - 1) + fib(n - 2)` makes calls that overlap: the same call is made
+## again and again, so the time grows with the answer, not the argument. A
+## function that reads and writes no memory returns the same result for the
+## same arguments, so a small direct-mapped cache in the program's global
+## slots makes each distinct call run once.
+##
+## The cost model admits a function only when the saving is plain: it is
+## scalar (`pc_effects`), has one or two `int` parameters and an `int` result,
+## and calls itself from two or more places, each with every argument either a
+## parameter or a parameter minus a positive constant (the overlapping
+## subproblems of `fib`, not the disjoint ones of a split in halves). A
+## program that starts threads is left alone, since the cache has no lock.
+## A function that traps never caches the call that trapped.
+
+## Entries in a cache; a power of two. An entry is four words: set, the two
+## keys, the value.
+MEMO_ENTRIES := 256
+
+## At most this many functions are memoized, so the cache slots stay small.
+MEMO_MAX := 4
+
+## The value `v` is `sub(param, c)` for a positive constant: its parameter's index, else -1.
+fn memo_shift(f Func, defs Map[int, Inst], v int) int
+    i := defs.get(v) else return -1
+    if i.op != "sub" or i.args.len() != 2
+        return -1
+    c := defs.get(i.args[1]) else return -1
+    if c.op != "const" or c.imm <= 0
+        return -1
+    for k in 0..f.params.len()
+        if f.params[k] == i.args[0]
+            return k
+    -1
+
+## Whether `f` is a tree recursion the cache pays for.
+fn memo_candidate(f Func, fx Map[str, PcFx]) bool
+    e := fx.get(f.name) else return false
+    if not e.scalar or not e.plain or f.params.len() == 0 or f.params.len() > 2
+        return false
+    if f.ret.name() != "int"
+        return false
+    for p in f.params
+        if f.vals[p].name() != "int"
+            return false
+    mut defs := Map[int, Inst]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.dst >= 0
+                defs[i.dst] = i
+    mut sites := 0
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op != "call" or i.name != f.name
+                continue
+            if i.args.len() != f.params.len()
+                return false
+            mut shifted := false
+            for a in i.args
+                if f.params.contains(a)
+                    continue
+                if memo_shift(f, defs, a) < 0
+                    return false
+                shifted = true
+            if not shifted
+                return false
+            sites += 1
+    sites >= 2
+
+fn memo_has_threads(m Module) bool
+    for f in m.funcs
+        for blk in f.blocks
+            for i in blk.insts
+                if i.op == "prim" and i.name == "clone"
+                    return true
+    false
+
+struct MemoBuild
+    g Func
+
+fn MemoBuild.val(mut self, t Ty) int
+    g.vals.push(t)
+    g.names.push("")
+    g.vals.len() - 1
+
+fn MemoBuild.add(mut self, b int, op str, args List[int], t Ty) int
+    d := val(t)
+    g.blocks[b].insts.push(inst(d, op, args))
+    d
+
+fn MemoBuild.konst(mut self, b int, n int) int
+    d := val(Ty.Int)
+    mut i := inst(d, "const", [])
+    i.imm = n
+    g.blocks[b].insts.push(i)
+    d
+
+fn MemoBuild.load(mut self, b int, addr int, off int) int
+    d := val(Ty.Int)
+    mut i := inst(d, "load", [addr])
+    i.imm = off
+    g.blocks[b].insts.push(i)
+    d
+
+fn MemoBuild.store(mut self, b int, addr int, off int, v int)
+    mut i := inst(-1, "store", [addr, v])
+    i.imm = off
+    g.blocks[b].insts.push(i)
+
+## The cache in front of `raw` (the old body, now `name$raw`), under `name`.
+fn memo_wrapper(f Func, base int) Func
+    n := f.params.len()
+    mut mb := MemoBuild(g: Func(
+        name: f.name,
+        params: [],
+        ret: Ty.Int,
+        blocks: [],
+        vals: [],
+        names: [],
+    ))
+    mut ps := List[int]()
+    for k in 0..n
+        ps.push(mb.val(Ty.Int))
+    mb.g.params = ps
+    # 0 look up; 1 first key; 2 second key (two parameters); then hit and miss.
+    for _ in 0..4
+        mb.g.blocks.push(Block(params: [], insts: [], term: unreachable_term()))
+    mb.g.blocks[0].params = ps
+    slot := mb.konst(0, base)
+    tab := mb.add(0, "prim", [slot], Ty.Int)
+    mb.g.blocks[0].insts[mb.g.blocks[0].insts.len() - 1].name = "global"
+    mut h := ps[0]
+    if n == 2
+        mul := mb.add(0, "mul", [ps[1], mb.konst(0, 7919)], Ty.Int)
+        h = mb.add(0, "add", [h, mul], Ty.Int)
+    # A mention of the last slot, so that `globals_used` counts the whole table.
+    last := mb.add(0, "prim", [mb.konst(0, base + MEMO_ENTRIES * 4 - 1)], Ty.Int)
+    mb.g.blocks[0].insts[mb.g.blocks[0].insts.len() - 1].name = "global"
+    idx := mb.add(0, "band", [h, mb.konst(0, MEMO_ENTRIES - 1)], Ty.Int)
+    off := mb.add(0, "mul", [idx, mb.konst(0, 32)], Ty.Int)
+    ent := mb.add(0, "add", [tab, off], Ty.Int)
+    set := mb.load(0, ent, 0)
+    isset := mb.add(0, "ne", [set, mb.konst(0, 0)], Ty.Bool)
+    # Blocks: 1 compares the first key, 2 the second, 3 hit, 4 miss.
+    mb.g.blocks.push(Block(params: [], insts: [], term: unreachable_term()))
+    mb.g.blocks[0].term = branch_on(isset, 1, 4)
+    k0 := mb.load(1, ent, 8)
+    same0 := mb.add(1, "eq", [k0, ps[0]], Ty.Bool)
+    if n == 1
+        mb.g.blocks[1].term = branch_on(same0, 3, 4)
+    else
+        mb.g.blocks[1].term = branch_on(same0, 2, 4)
+        k1 := mb.load(2, ent, 16)
+        same1 := mb.add(2, "eq", [k1, ps[1]], Ty.Bool)
+        mb.g.blocks[2].term = branch_on(same1, 3, 4)
+    hit := mb.load(3, ent, 24)
+    mb.g.blocks[3].term = return_of(hit)
+    r := mb.val(Ty.Int)
+    mut c := inst(r, "call", ps)
+    c.name = "{f.name}$raw"
+    mb.g.blocks[4].insts.push(c)
+    mb.store(4, ent, 0, mb.konst(4, 1))
+    mb.store(4, ent, 8, ps[0])
+    if n == 2
+        mb.store(4, ent, 16, ps[1])
+    mb.store(4, ent, 24, r)
+    mb.g.blocks[4].term = return_of(r)
+    mb.g
+
+## Memoize the functions of `m` the cost model admits.
+pub fn memoize(mut m Module)
+    if memo_has_threads(m)
+        return
+    fx := pc_effects(m)
+    mut base := m.globals_used()
+    mut made := 0
+    for k in 0..m.funcs.len()
+        if made >= MEMO_MAX
+            break
+        f := m.funcs[k]
+        if f.name.starts_with("rt.") or not memo_candidate(f, fx)
+            continue
+        wrapper := memo_wrapper(f, base)
+        base += MEMO_ENTRIES * 4
+        made += 1
+        mut raw := f
+        raw.name = "{f.name}$raw"
+        m.funcs[k] = raw
+        m.funcs.push(wrapper)

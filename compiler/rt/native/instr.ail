@@ -28,7 +28,7 @@ TRACE_HEAD := 48
 fn instr_table() int
     mut t := load64(global(INSTR_TAB))
     if t == 0
-        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP)
+        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP + 32)
         if t < 0
             return 0
         store64(global(INSTR_TAB), t)
@@ -161,6 +161,21 @@ fn instr_dump()
                     store8(buf + w, 10)
                     os_write_all(fd, buf, w + 1)
                 os_close(fd)
+    shown := load64(t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP + 16)
+    dropped := load64(t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP + 24)
+    if shown + dropped > 0
+        flush()
+        out_str("trace: summary: ")
+        out_int(shown)
+        out_str(" events shown, ")
+        out_int(dropped)
+        out_str(" dropped (watch ")
+        out_int(shown + dropped)
+        out_str(")\n")
+        flush_to(2)
+    # No site was hit (a `steps` or `record` build): no hits file, and none beside the source.
+    if load64(t) == 0
+        return
     p := instr_path(buf + 65536, os_env_get("AIL_INSTRUMENT_OUT"), ".hits")
     if p == 0
         return
@@ -178,3 +193,54 @@ fn instr_dump()
                 k = 0
     os_write_all(fd, buf, k)
     os_close(fd)
+
+## `--max-steps N` (run.limit.3, ADR 0883): a build with `AIL_INSTRUMENT=steps` calls this at the
+## start of each statement of the program's own files. The count and the limit
+## (`$AIL_MAX_STEPS`, read at the first step) follow the call trace in the table.
+fn instr_step(path str, line int, col int)
+    t := instr_table()
+    if t <= 0
+        return
+    w := t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP
+    n := load64(w) + 1
+    store64(w, n)
+    if n == 1
+        given := os_env_get("AIL_MAX_STEPS")
+        store64(w + 8, if given == "" then 0 else str_to_int(given))
+    max := load64(w + 8)
+    if max > 0 and n > max
+        flush()
+        out_str(path)
+        out_byte(58)
+        out_int(line)
+        out_byte(58)
+        out_int(col)
+        out_str(": trap[run.limit.3]: run took more than --max-steps ")
+        out_int(max)
+        out_str(" steps (a step is one statement run; raise it, or find the loop)\n")
+        flush_to(2)
+        sys_exit(1)
+
+## `--watch NAME` (trace.watch.1, ADR 0868): a build with `watch=NAME` calls this before the
+## text of each event, which goes to standard error. It says whether the event is within the
+## limit (`$AIL_TRACE_LIMIT`, default 1000); the count of events shown and dropped follows
+## the step count in the table, and `instr_dump` ends the run with the summary.
+fn watch_open() bool
+    t := instr_table()
+    if t <= 0
+        return false
+    w := t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP + 16
+    given := os_env_get("AIL_TRACE_LIMIT")
+    limit := if given == "" then 1000 else str_to_int(given)
+    if load64(w) >= limit
+        store64(w + 8, load64(w + 8) + 1)
+        return false
+    store64(w, load64(w) + 1)
+    flush()
+    store64(global(OUT_FD), 2)
+    true
+
+## The end of an event.
+fn watch_close()
+    flush_to(2)
+    store64(global(OUT_FD), 1)

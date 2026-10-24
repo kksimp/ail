@@ -32,7 +32,8 @@ struct Gate
     unbuilt List[str]
 
 fn temp_dir() str
-    base := env.get("TMPDIR") else "/tmp"
+    raw := env.get("TMPDIR") else "/tmp"
+    base := if raw.len() > 1 and raw.ends_with("/") then raw.slice(0, raw.len() - 1) else raw
     # Not `ail-gate`: mac-gate.sh keeps its logs there.
     "{base}/ail-gate-ail"
 
@@ -522,16 +523,44 @@ fn slurp(p str) str
 ## `ail ARGS` through the built binary with AIL_BINARY set, as cargo sets it:
 ## programs that start `ail` themselves (std.app hosts) use this binary.
 fn ail_run(args List[str]) proc.Output ! proc.ProcError
+    if (env.get("GATE_NATIVE") else "") == "1"
+        return proc.run("sh", cat(["-c", "exec \"$PWD/ail\" \"$@\"", "sh"], args))
     script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
     proc.run("sh", cat(["-c", script, "sh"], args))
 
+## The cases suite's native run (`GATE_CASES_NATIVE=1`, the report the Mac gate can print) goes through `./ail`,
+## each case under a 60 second alarm so one hang is one red case, not a stuck gate (item 309).
+fn case_run(native bool, args List[str]) proc.Output ! proc.ProcError
+    if native or (env.get("GATE_CASES_NATIVE") else "") == "1"
+        script := "perl -e 'alarm 60; exec @ARGV' \"$PWD/ail\" \"$@\""
+        return proc.run("sh", cat(["-c", script, "sh"], args))
+    ail_run(args)
+
+## tests/cases/native_only.txt: the stems of cases that use features only the native CLI has. Only these go
+## native where the suite runs on the Rust binary (ADR 0865: the bootstrap learns nothing new).
+fn native_only() List[str]
+    text := fs.read_text("tests/cases/native_only.txt") else return []
+    [l.trim() for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")]
+
+## The interpreter always ran tasks in the fixed order (conc.sched.3); the
+## native default is free, so the conc cases ask for it. (Not every case:
+## `--schedule=fixed` hangs fuzz_net_status_digits natively.)
+fn sched(at str) List[str]
+    if at.contains("/conc_")
+        return ["--schedule=fixed"]
+    []
+
 fn run_case(at str, exp str) str?
+    native := native_only().contains(path.stem(at))
     out_file := "{exp}out"
     want_out := if fs.exists(out_file) then slurp(out_file) else ""
     if fs.exists("{exp}stderr")
         # trace.run.1: `ail run` with the options in NAME.args, one line.
         flags := slurp("{exp}args").words()
-        r := ail_run(cat(cat(["run"], flags), [at])) else return "could not start ail"
+        r := case_run(native, cat(
+            cat(cat(["run"], sched(at)), flags),
+            [at],
+        )) else return "could not start ail"
         want := slurp("{exp}stderr").replace("$FILE", at)
         if r.status == 2 or r.err != want
             return "standard error differs\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -539,14 +568,18 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}test")
-        r := ail_run(["test", "--json", at]) else return "could not start ail"
+        r := case_run(native, ["test", "--json", at]) else return "could not start ail"
         want := slurp("{exp}test")
         want_exit := if want.contains("\"status\":\"fail\"") then 1 else 0
         if r.status != want_exit or r.out != want
             return "ail test output differs\n--- expected (exit {want_exit})\n{want}--- actual (exit {r.status})\n{r.out}"
         return none
     if fs.exists("{exp}err")
-        r := ail_run(["run", at]) else return "could not start ail"
+        flags := slurp("{exp}args").words()
+        r := case_run(native, cat(
+            cat(cat(["run"], sched(at)), flags),
+            [at],
+        )) else return "could not start ail"
         want := slurp("{exp}err").replace("$FILE", at)
         if r.status != 1 or r.err != want
             return "expected exit 1 and this report\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -554,7 +587,7 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}trap")
-        r := ail_run(["run", at]) else return "could not start ail"
+        r := case_run(native, cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         rule := slurp("{exp}trap").trim()
         if r.status != 1 or not r.err.contains("trap[{rule}]")
             return "expected trap[{rule}] (exit 1), got {r.status}\n{r.err}"
@@ -562,14 +595,14 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists(out_file)
-        r := ail_run(["run", at]) else return "could not start ail"
+        r := case_run(native, cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         if r.status != 0
             return "exit {r.status}\n{r.err}"
         if r.out != want_out
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}rules")
-        r := ail_run(["check", "--json", at]) else return "could not start ail"
+        r := case_run(native, ["check", "--json", at]) else return "could not start ail"
         want_exit := if r.err.contains("\"severity\":\"error\"") then 2 else 0
         if r.status != want_exit
             return "expected exit {want_exit}, got {r.status}\n{r.err}"
@@ -591,8 +624,6 @@ fn stem_list(path str) List[str]
 
 fn Gate.case_dir(mut self, dir str)
     pending_cases := stem_list("tests/native/golden/pending.txt")
-    # tests/cases/native_only.txt: features Rust is never taught (ADR 0865)
-    native_only := stem_list("tests/cases/native_only.txt")
     mut names := fs.list_dir(dir) else []
     names.sort()
     for name in names
@@ -603,8 +634,6 @@ fn Gate.case_dir(mut self, dir str)
         # (`ail test --coverage`, `--update`): named here, not checked.
         if pending_cases.contains(name.replace(".ail", ""))
             print("PENDING {at}")
-            continue
-        if native_only.contains(name.replace(".ail", ""))
             continue
         if why := run_case(at, "{dir}/{name.replace(".ail", "")}.")
             red(at, why)
@@ -702,7 +731,7 @@ fn Gate.cli_checks(mut self)
         prop_run(["--trace", "--trace-limit", "1"], tp),
         ["\"trace\":\"dropped\""],
     )
-    h := ail_run(["test", "--trace=calls", tp]) else return
+    h := native_run(["test", "--trace=calls", tp]) else return
     want("test --trace=calls human", h.out, ["  trace: call fails()"])
     # fix.note.1: a duplicate declaration points at the first.
     for pair in [
@@ -735,7 +764,7 @@ fn Gate.cli_checks(mut self)
         red("trace run", traced_run.err)
 
 fn prop_run(extra List[str], path str) str
-    r := ail_run(cat(cat(["test", "--json"], extra), [path])) else return ""
+    r := native_run(cat(cat(["test", "--json"], extra), [path])) else return ""
     r.out
 
 ## `ail api` (ADR 0150) outlines every example and every accepted case,
@@ -1197,7 +1226,7 @@ fn Gate.snapshot(mut self, tmp str)
     f := "{d}/p.ail"
     fs.write_text(f, program) else return
     fs.write_text("{d}/p.out", "old\n") else return
-    r := ail_run(["test", "--update", f]) else return
+    r := native_run(["test", "--update", f]) else return
     want("snapshot update", r.out, [
         "-    assert_eq(greet(\"bo\"), \"hello\")\n",
         "+    assert_eq(greet(\"bo\"), \"hi, bo!\")\n",
@@ -1207,13 +1236,13 @@ fn Gate.snapshot(mut self, tmp str)
         red("snapshot update", "exit {r.status}\n{r.out}")
     if slurp(f) != updated or slurp("{d}/p.out") != "hi, x!\n"
         red("snapshot update", "files not rewritten:\n{slurp(f)}")
-    again := ail_run(["test", "--update", f]) else return
+    again := native_run(["test", "--update", f]) else return
     if not again.out.starts_with("updated 0 snapshots in 0 files\n")
         red("snapshot update again", again.out)
     # snap.update.6: `--dry-run` writes nothing; `--json` lists each change.
     sh_run("rm -rf {d}; mkdir -p {d}")
     fs.write_text(f, program) else return
-    j := ail_run(["test", "--update", "--dry-run", "--json", f]) else return
+    j := native_run(["test", "--update", "--dry-run", "--json", f]) else return
     if slurp(f) != program
         red("snapshot dry-run", "wrote the file")
     want("snapshot --json", j.out, [
@@ -1225,7 +1254,7 @@ fn Gate.snapshot(mut self, tmp str)
     sh_run("rm -rf {d}; mkdir -p {d}")
     src := "@test fn loops()\n    for i in 0..3\n        assert_eq(i * 2, 0)\n\n@test fn named()\n    want := 3\n    assert_eq(1 + 1, want)\n"
     fs.write_text(f, src) else return
-    c := ail_run(["test", "--update", f]) else return
+    c := native_run(["test", "--update", f]) else return
     if c.status != 1
         red("snapshot conflict", "exit {c.status}\n{c.out}")
     want("snapshot conflict", c.out, [
@@ -1244,11 +1273,7 @@ fn ail_env(var str, args List[str]) proc.Output ! proc.ProcError
 
 fn Gate.misc(mut self, tmp str)
     # json.derive.1-3, ADR 0343
-    a := ail_run([
-        "api",
-        "--expanded",
-        "tests/cases/derive_json_enum_payloads.ail",
-    ]) else return
+    a := ail_run(["api", "--expanded", "tests/cases/derive_json_enum_payloads.ail"]) else return
     if a.status != 0
         red("api --expanded", a.err)
     want("api --expanded", a.out, [
@@ -1275,11 +1300,7 @@ fn Gate.misc(mut self, tmp str)
     s12 := ail_run(["run", "--seed", "12", unseeded]) else return
     if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
         red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
-    for program in [
-        unseeded,
-        "tests/deterministic/clock.ail",
-        "tests/deterministic/proc.ail",
-    ]
+    for program in [unseeded, "tests/deterministic/clock.ail", "tests/deterministic/proc.ail"]
         d := ail_run(["run", "--deterministic", program]) else return
         if d.status != 2 or not d.err.contains("eff.cap.1")
             red("--deterministic {program}", "exit {d.status}\n{d.err}")
@@ -1334,11 +1355,7 @@ fn Gate.misc(mut self, tmp str)
         red("schedule sometimes", "exit {bad.status}, want 2")
     # conc.cancel.3-4, conc.atomic.7: cancel trees and orderings pass every seed.
     for seed in 1..25
-        x := ail_run([
-            "test",
-            "--schedule=random:{seed}",
-            "tests/schedule/cancel.ail",
-        ]) else return
+        x := ail_run(["test", "--schedule=random:{seed}", "tests/schedule/cancel.ail"]) else return
         if x.status != 0 or not x.out.ends_with("4 passed, 0 failed\n")
             red("schedule cancel seed {seed}", x.out)
 
@@ -1485,15 +1502,27 @@ fn Gate.budget(mut self, tmp str)
     sh_run("rm -rf {dir}")
 
 ## Run limits and coverage (limits.rs, ported; run.limit.1-4, test.cover.1-3, test.run.5).
-fn Gate.limits(mut self)
+fn Gate.limits(mut self, tmp str)
     case := "tests/limits"
     r := ail_run(["run", "--timeout", "200", "{case}/limit_endless.ail"]) else return
     if r.status != 1 or not r.err.contains("trap[run.limit.1]") or not r.err.contains("in main(")
         red("--timeout", "exit {r.status}\n{r.err}")
-    a := ail_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
-    b := ail_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
+    # run.limit.3 is native only (ADR 0883): the Rust binary doesn't know `--max-steps`.
+    a := native_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
+    b := native_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
     if a.status != 1 or not a.err.contains("trap[run.limit.3]") or a.err != b.err
         red("--max-steps", "exit {a.status}\n{a.err}")
+    # trace.watch.5: native `--watch`, live and over a recording (ADR 0868 item 4).
+    w := native_run(["run", "--watch", "n", "{case}/watch_when.ail"]) else return
+    if w.status != 0
+        or not w.err.contains("watch: n = 0 at 5:5\n")
+        or not w.err.contains("(watch 4)")
+        red("--watch", "exit {w.status}\n{w.err}")
+    rec := "{tmp}/watch.rec"
+    _r := native_run(["run", "--record", rec, "{case}/watch_when.ail"]) else return
+    w2 := native_run(["run", "--replay", rec, "--watch", "n"]) else return
+    if w2.status != 0 or w2.err != w.err
+        red("--watch over --replay", "exit {w2.status}\n{w2.err}")
     m := ail_run(["run", "--max-memory", "100", "{case}/limit_memory.ail"]) else return
     if m.status != 1 or not m.err.contains("trap[run.limit.2]")
         red("--max-memory", "exit {m.status}\n{m.err}")
@@ -1510,14 +1539,18 @@ fn Gate.limits(mut self)
         ["run", "--max-steps", "x", "x.ail"],
         ["check", "--timeout", "5", "x.ail"],
     ]
-        u := ail_run(args) else return
+        mut u := proc.Output(status: 127, out: "", err: "")
+        if args[1] == "--max-steps"
+            u = native_run(args) else return
+        else
+            u = ail_run(args) else return
         if u.status != 2 or not u.err.contains("run.limit.4")
             red("limit usage {args}", "exit {u.status}\n{u.err}")
-    c := ail_run(["test", "--coverage=lines", "{case}/coverage_two_fns.ail"]) else return
+    c := native_run(["test", "--coverage=lines", "{case}/coverage_two_fns.ail"]) else return
     if c.status != 0
         red("coverage", "exit {c.status}\n{c.err}{c.out}")
     want("coverage", c.out, ["coverage ", ": lines 3/5 (60%), functions 1/2", "  not run: 11-12"])
-    cj := ail_run(["test", "--json", "--coverage", "{case}/coverage_two_fns.ail"]) else return
+    cj := native_run(["test", "--json", "--coverage", "{case}/coverage_two_fns.ail"]) else return
     line := cj.out.lines().last() else ""
     if not line.starts_with("\{\"coverage\":true,\"file\":")
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
@@ -1785,7 +1818,7 @@ fn rpl(dir str, input str, args List[str]) proc.Output
 fn Gate.replay(mut self, tmp str)
     root := repo_root()
     base := "{tmp}/replay"
-    sh_run("rm -rf {base}; mkdir -p {base}/repeat {base}/diverge {base}/handles {base}/options")
+    sh_run("rm -rf {base}; mkdir -p {base}/world {base}/repeat {base}/diverge {base}/handles {base}/tests {base}/options")
     program := "fn main() !\n    t := time.now_ms()\n    n := random.int(1, 1000000)\n    data := fs.read_text(\"input.txt\")?\n    name := env.get(\"REPLAY_NAME\") else \"nobody\"\n    line := io.read_line() else \"eof\"\n    gone := fs.read_text(\"missing.txt\") else e\n        \"\{e.kind}\"\n    print(\"\{t} \{n} \{name} \{line} \{data.lines().len()} \{gone}\")\n    xs := [1, 2]\n    print(xs[data.lines().len()])\n"
     # replay.rec.1-2, replay.run.1-2: a replay prints what the recorded run printed.
     d := "{base}/repeat"
@@ -1804,6 +1837,10 @@ fn Gate.replay(mut self, tmp str)
     again := rpl(d, "", ["run", "--replay", "r.json"])
     if again.out != first.out or again.err != first.err or again.status != 1
         red("replay repeats the run", "exit {again.status}\n{again.out}{again.err}")
+    # replay.run.1: `--replay R FILE` runs FILE, and an argument after the recording is not its program.
+    rf := rpl(d, "hello\n", ["run", "--replay", "r.json", "prog.ail"])
+    if rf.out != again.out or rf.err != again.err
+        red("replay with a file", "{rf.out}{rf.err}|{again.out}{again.err}")
     # replay.run.3: a program that changed since the recording traps at the first call that differs.
     d2 := "{base}/diverge"
     fs.write_text(
@@ -1818,7 +1855,7 @@ fn Gate.replay(mut self, tmp str)
         "prog.ail:2:14: trap[replay.run.3]",
         "the recording's next effect is `env.get`",
     ])
-    # replay.cap.2: a call that returns a handle is marked, and the replay stops there.
+    # replay.nat.1: a child process is recorded with its streams, and a replay answers it.
     d3 := "{base}/handles"
     exe := "{root}/ail"
     fs.write_text(
@@ -1826,17 +1863,52 @@ fn Gate.replay(mut self, tmp str)
         "fn main() !\n    print(\"a\")\n    p := proc.start(\"{exe}\", [\"version\"])?\n",
     ) else return
     rpl(d3, "", ["run", "--record", "s.json", "start.ail"])
-    if not slurp("{d3}/s.json").contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"uncaptured\":true")
+    if not slurp("{d3}/s.json").contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"result\":")
         red("replay handle", slurp("{d3}/s.json"))
     h := rpl(d3, "", ["run", "--replay", "s.json"])
-    if h.out != "a\n" or not h.err.contains("trap[replay.cap.2]")
-        red("replay handle stop", "{h.out}{h.err}")
+    if h.out != "a\n" or h.status != 0
+        red("replay handle", "{h.out}{h.err}")
+    # replay.nat.1: lists, structs, maps, a child's streams and the HTTP client replay without the world.
+    d6 := "{base}/world"
+    sh_run("rm -rf {d6}; mkdir -p {d6}/dir; echo hello > {d6}/dir/a.txt; touch {d6}/dir/b.txt")
+    fs.write_text(
+        "{d6}/w.ail",
+        "fn main() !\n    print(\"\{fs.list_dir(\"dir\")?}\")\n    m := fs.metadata(\"dir/a.txt\")?\n    print(\"\{m.size} \{m.is_dir}\")\n    print(\"\{env.vars().get(\"REPLAY_NAME\") else \"none\"}\")\n    o := proc.run(\"echo\", [\"hi\", \"there\"])?\n    print(\"\{o.status} \{o.out.trim()}\")\n    c := proc.start(\"sh\", [\"-c\", \"read x; echo got $x; echo oops >&2\"])?\n    c.stdin.send(\"in\\n\")\n    c.stdin.close()\n    for l in c.out\n        print(\"out \{l}\")\n    for l in c.err\n        print(\"err \{l}\")\n    print(\"\{proc.wait(move c)?}\")\n",
+    ) else return
+    w1 := rpl(d6, "", ["run", "--record", "w.json", "w.ail"])
+    sh_run("rm -rf {d6}/dir")
+    w2 := rpl(d6, "", ["run", "--replay", "w.json"])
+    if w1.status != 0 or w2.out != w1.out or w2.status != 0 or not w1.out.contains("out got in")
+        red("replay world", "{w1.out}{w1.err}|{w2.out}{w2.err}")
     fs.write_text("{d3}/sleep.ail", "fn main()\n    time.sleep_ms(-1)\n") else return
     sf := rpl(d3, "", ["run", "--record", "t.json", "sleep.ail"])
     sa := rpl(d3, "", ["run", "--replay", "t.json"])
     if not sf.err.contains("trap[std.time.2]") or sa.err != sf.err
         red("replay trap in a call", "{sf.err}|{sa.err}")
-    # `ail test --record` and `--replay` are not native yet (replay.nat.1); their checks return with them.
+    # replay.rec.1, replay.rec.5, replay.run.1: `ail test --record` keeps the failed tests' effects.
+    d4 := "{base}/tests"
+    fs.write_text(
+        "{d4}/t.ail",
+        "fn greeting() str\n    \"hi \{env.get(\"REPLAY_NAME\") else \"x\"} \{random.int(1, 1000000)}\"\n\n@test\nfn passes()\n    assert_eq(1 + 1, 2)\n\n@test\nfn flaky()\n    assert_eq(greeting(), \"hi first 0\")\n",
+    ) else return
+    tf := rpl(d4, "", ["test", "--record", "r.json", "t.ail"])
+    trec := slurp("{d4}/r.json")
+    if tf.status != 1
+        or not trec.contains("\{\"test\":\"flaky\"}\n\{\"call\":\"env.get\"")
+        or trec.contains("passes")
+        or not trec.contains("\{\"call\":\"env.get\",\"line\":2,")
+        red("test --record", "exit {tf.status}\n{trec}")
+    ta := rpl(d4, "", ["test", "--replay", "r.json"])
+    mut fail_a := ""
+    for l in tf.out.lines()
+        if l.starts_with("FAIL flaky")
+            fail_a = l
+    mut fail_b := ""
+    for l in ta.out.lines()
+        if l.starts_with("FAIL flaky")
+            fail_b = l
+    if fail_a != fail_b or not ta.out.contains("0 passed, 1 failed")
+        red("test --replay", ta.out)
     # replay.rec.1: the options need `run` or `test` and a file.
     d5 := "{base}/options"
     o1 := rpl(d5, "", ["check", "--record", "r.json", "x.ail"])
@@ -2394,7 +2466,8 @@ fn Gate.bytecode(mut self)
     mut jobs := List[str]()
     mut runs := 0
     for f in files
-        args := slurp(f.replace(".ail", ".args"))
+        # `--values` (trace.frame.3) is native only.
+        args := slurp(f.replace(".ail", ".args")).replace("--values", "")
         src := slurp(f)
         mut steady := true
         for w in concurrent
@@ -2402,7 +2475,7 @@ fn Gate.bytecode(mut self)
                 steady = false
         mut variants := [""]
         if steady
-            variants = ["", "--max-steps 300 ", "--trace=all "]
+            variants = ["", "--trace=all "]
         mut cmds := List[str]()
         for flags in variants
             cmds.push("run {flags}{args.words().join(" ")} {f}")
@@ -2464,8 +2537,12 @@ fn owner_ok(owner str) bool
 
 ## bootstrap/tests/native.rs, ported to tools/gate/nativex.ail (B6). It prints only
 ## failures and ends with `NATIVEX GREEN` or `NATIVEX RED`.
+## Native-only features (ADR 0865) build here, so nativex runs on `./ail` with no AIL_BINARY.
 fn Gate.nativex(mut self)
-    r := ail_run(["run", "tools/gate/nativex.ail"]) else
+    r := proc.run("sh", [
+        "-c",
+        "unset AIL_BINARY; exec \"$PWD/ail\" run tools/gate/nativex.ail",
+    ]) else
         red("nativex", "could not start tools/gate/nativex.ail")
         return
     if r.status != 0 or not r.out.contains("NATIVEX GREEN")
@@ -2699,11 +2776,7 @@ fn Gate.sched(mut self)
     s12 := native_run(["run", "--seed", "12", unseeded]) else return
     if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
         red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
-    for program in [
-        unseeded,
-        "tests/deterministic/clock.ail",
-        "tests/deterministic/proc.ail",
-    ]
+    for program in [unseeded, "tests/deterministic/clock.ail", "tests/deterministic/proc.ail"]
         e := native_run(["run", "--deterministic", program]) else return
         if e.status != 2 or not e.err.contains("eff.cap.1")
             red("--deterministic {program}", "exit {e.status}\n{e.err}")
@@ -2750,7 +2823,7 @@ fn main() !
             "docs" => g.docs()
             "fmt" => g.fmt(tmp)
             "budget" => g.budget(tmp)
-            "limits" => g.limits()
+            "limits" => g.limits(tmp)
             "diff" => g.diff(tmp)
             "build_cache" => g.build_cache(tmp)
             "parallel" => g.parallel()

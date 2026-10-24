@@ -29,7 +29,7 @@ impl app.App for Meter
 
 fn main() !
     mut m := Meter(words: ["ab", "cdef"], widths: {})
-    host := path.join(path.dir(env.program()), "../app/measure_host.ail")
-    ail := env.get("AIL_BINARY") else "ail"
+    host := "tests/app/measure_host.ail"
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
     app.run_host(mut m, ail, ["run", host])?
     print(app.outline(m.view()))
