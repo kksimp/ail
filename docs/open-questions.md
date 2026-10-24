@@ -271,12 +271,7 @@ every current need is an impl); (b) a module-level `@generate(f)` whose items
 appear in `ail api --expanded` like derives. *Owner: AI under ADR 0076.*
 
 ## OQ-094 — Downcasting `any Trait`
-`refl.run.1` gives no way to recover the concrete type of an `any Trait`
-value. Options: (a) none (recommended for now: an enum is the checked way to
-hold one of several known types, and `match` is exhaustive); (b) a checked
-`x as T?` returning `none` on a mismatch (needs a type tag per value, which
-`any Trait` already has as its method table); (c) a trait method the author
-writes. *Owner: designer (it changes what `any Trait` promises).*
+**Resolved** by [ADR 0877](decisions/0877-no-downcast-of-any-trait.md) (option a: no downcast; an enum is the checked way).
 
 ## OQ-095 — Compile-time evaluation limits
 `ct.eval.3` sets 100,000,000 steps and 1 GiB per constant or derive.
