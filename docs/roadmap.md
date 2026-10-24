@@ -117,6 +117,11 @@ std API still needs its own ADR first.
 9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
    [ADR 0874](decisions/0874-purity-driven-speed-optimizations.md): memoization by a cost
    model, pure-call CSE and hoisting, merging only where it is faster.
+   Then two showcase programs the designer chose (2026-10-24), each with its own ADR:
+   a database engine with its shell (file format, index, query language; an
+   optimizer benchmark against C using contracts, `ail test --mutate` and
+   `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
+   (SIMD, multi-core and tensor speed; ADR 0899).
 10. **Last:** the Rust-free rebuild of `tools/edit` compared with
    [editor-baseline.md](design/editor-baseline.md); a drag race of Garlic
    against Chrome and Firefox on a fixed set of real sites (page load, first
