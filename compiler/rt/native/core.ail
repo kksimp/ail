@@ -51,7 +51,14 @@ MAXW := 64
 fn sys_write(fd int, p int, n int)
     t := target()
     if t == 3
-        win_write(fd, p, n)
+        # Windows output (ADR 0608): `WriteFile` (win.ail) on the standard handle until every byte is written.
+        # A failed write ends the output, as on the other targets.
+        mut sent := 0
+        while sent < n
+            w := win_write(fd, p + sent, n - sent)
+            if w <= 0
+                return
+            sent += w
         return
     mut done := 0
     while done < n
@@ -81,18 +88,6 @@ fn sys_mmap(n int) int
     k := if t == 0 then 9 else if t == 1 then 222 else 197
     flags := if t == 2 then 4098 else 34
     syscall(k, 0, n, 3, flags, -1, 0)
-
-## Windows output (ADR 0608): `WriteFile` on the standard handle until every
-## byte is written. A failed write ends the output, as on the other targets.
-fn win_write(fd int, p int, n int)
-    h := import_call("GetStdHandle", if fd == 2 then -12 else -11, 0, 0, 0)
-    mut done := 0
-    while done < n
-        ok := import_call("WriteFile", h, p + done, n - done, global(WIN_WRITTEN), 0)
-        w := load64(global(WIN_WRITTEN))
-        if ok == 0 or w <= 0
-            return
-        done += w
 
 ## A thread-stack region: `n` bytes that need no commit up front.
 fn sys_mmap_lazy(n int) int
@@ -451,7 +446,11 @@ fn flush_to(fd int)
         store64(global(OUT_LEN), 0)
 
 fn flush()
-    flush_to(if load64(global(OUT_FD)) == 2 then 2 else 1)
+    fd := load64(global(OUT_FD))
+    if fd == 2 or fd == 0 - 1
+        flush_to(fd)
+    else
+        flush_to(1)
 
 ## Flush, then end the process.
 fn exit(code int)
