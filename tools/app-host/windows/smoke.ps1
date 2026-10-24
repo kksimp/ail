@@ -1,6 +1,6 @@
 # Checks the Windows host's protocol with no AIL toolchain (ADR 0888): starts
-# the host, sends one view, expects the first line back to be {"kind":"start","v":1},
-# presses nothing, then closes stdin and expects the host to exit.
+# the host, sends one view, a junk line and a measure request, and expects the first line to carry "v":1, a start event before any resize, and a measured reply,
+# then closes stdin and expects the host to exit.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tools\app-host\windows\smoke.ps1
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $exe = Join-Path $here 'build\AILAppHost.exe'
@@ -16,23 +16,26 @@ $p.StandardInput.WriteLine($view)
 $p.StandardInput.WriteLine('not json')
 $p.StandardInput.WriteLine('{"v":1,"t":"measure","runs":[{"text":"hello","font":"mono","size":13,"bold":false,"italic":false},{"text":"hi","font":"sans","size":13,"bold":true,"italic":false}]}')
 $p.StandardInput.Flush()
-$t = $p.StandardOutput.ReadLineAsync()
-if (-not $t.Wait(10000)) { Write-Output 'smoke: RED no line in 10 s'; $p.Kill(); exit 1 }
-Write-Output "first line: $($t.Result)"
-# Every event for 3 s: the canvas's resize events show its final size.
-$measured = $null
-$deadline = [DateTime]::Now.AddSeconds(3)
+# Every event for 3 s; keep the pending read, a second one would fail.
+$lines = @()
 $u = $null
+$deadline = [DateTime]::Now.AddSeconds(3)
 while ([DateTime]::Now -lt $deadline) {
     if ($null -eq $u) { $u = $p.StandardOutput.ReadLineAsync() }
-    if (-not $u.Wait(500)) { continue }   # keep the pending read; a second one would fail
+    if (-not $u.Wait(500)) { continue }
     if ($null -eq $u.Result) { break }
-    Write-Output "next line: $($u.Result)"
-    if ($u.Result -like '*"kind":"measured"*') { $measured = $u.Result }
+    Write-Output "line: $($u.Result)"
+    $lines += $u.Result
     $u = $null
 }
 $p.StandardInput.Close()
 if (-not $p.WaitForExit(10000)) { Write-Output 'smoke: RED host did not exit'; $p.Kill(); exit 1 }
+if ($lines.Count -eq 0 -or $lines[0] -notlike '*"v":1*') { Write-Output 'smoke: RED the first line lacks "v":1'; exit 1 }
+$start = ($lines | Where-Object { $_ -like '*"kind":"start"*' } | Select-Object -First 1)
+$firstResize = ($lines | Where-Object { $_ -like '*"kind":"resize"*' } | Select-Object -First 1)
+if (-not $start) { Write-Output 'smoke: RED no start event'; exit 1 }
+if ($firstResize -and [array]::IndexOf($lines, $start) -gt [array]::IndexOf($lines, $firstResize)) { Write-Output 'smoke: RED resize came before start'; exit 1 }
+$measured = ($lines | Where-Object { $_ -like '*"kind":"measured"*' } | Select-Object -First 1)
 if ($measured -notmatch '"text":"[0-9.]+,[0-9.]+"') { Write-Output "smoke: RED measured reply missing or wrong: $measured"; exit 1 }
-if ($t.Result -like '*"kind":"start"*' -and $t.Result -like '*"v":1*') { Write-Output 'smoke: GREEN'; exit 0 }
-Write-Output 'smoke: RED unexpected first line'; exit 1
+Write-Output 'smoke: GREEN'
+exit 0
