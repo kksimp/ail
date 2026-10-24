@@ -64,6 +64,7 @@ fn sys_write(fd int, p int, n int)
         done += r
 
 fn sys_exit(code int)
+    instr_dump()
     t := target()
     if t == 3
         import_call("ExitProcess", code, 0, 0, 0)

@@ -513,13 +513,14 @@ fn os_env_get(name str) str
     mut e := os_envp()
     while load64(e) != 0
         c := load64(e)
-        mut same := load8(c + n) == 61
+        mut same := true
         mut i := 0
         while same and i < n
             if load8(c + i) != load8(q + 16 + i)
                 same = false
             i += 1
-        if same
+        # Read the `=` last: a short variable at the top of the stack ends before `c + n`.
+        if same and load8(c + n) == 61
             len := os_c_len(c + n + 1)
             if os_utf8_chars(c + n + 1, len) < 0
                 break

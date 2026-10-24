@@ -394,7 +394,7 @@ fn rewrite(
     mf ModFiles,
     mdropped Set[int],
     snap_lines int,
-    cov Set[int],
+    keep_main bool,
 ) Rewritten
     mut keep := lines
     for i in 0..f.tests.len()
@@ -412,15 +412,16 @@ fn rewrite(
             keep[j] = ""
     for m in 0..lines.len()
         if lines[m].starts_with("fn main(")
-            for j in m..block_end(lines, m) + 1
-                keep[j] = ""
+            if keep_main
+                # Coverage counts its statements: it stays, never called (test.cover.1).
+                keep[m] = "fn ail_main_orig({lines[m].slice(8, lines[m].len())}"
+            else
+                for j in m..block_end(lines, m) + 1
+                    keep[j] = ""
             break
     if snap_lines > 0
         for j in 0..snap_lines.min(keep.len())
             keep[j] = snap_line(keep[j], j + 1)
-    for j in 0..keep.len()
-        if cov.contains(j + 1) and not keep[j].trim().is_empty()
-            keep[j] = "{keep[j].slice(0, indent(keep[j]))}ail_cov({j + 1})\n{keep[j]}"
     rewritten := keep
     mut out := List[str]()
     mut origin := List[int]()
@@ -459,8 +460,6 @@ fn rewrite(
     tail = "{tail}    io.exit(4)\n"
     if snap_lines > 0
         tail = "{tail}{fs.read_text("{env.get("AIL_ROOT") else "."}/tools/ailtest/snap_rt.ail") else ""}"
-    if not cov.is_empty()
-        tail = "{tail}\nfn ail_cov(l int)\n    io.eprint(\"ail-cov \{l}\")\n"
     if not decs.is_empty()
         tail = "{tail}\nstruct AilCur\n    i int\n{decs}"
     for l in tail.split("\n")
@@ -1077,12 +1076,26 @@ fn run_prop(w World, lead int, exe str, slot int, t TestFn, cases int, seed int)
         return Prop(status: "fail", message: fail, cases: n, input: shown.join(", "))
     Prop(status: "pass", message: "", cases: cases, input: "")
 
-fn run_one(exe str, slot int, lead int) Verdict
+## Run the test binary on `arg`, with the trace limit `lim` (trace.run.4) when there is one.
+fn started(exe str, arg str, lim str) !proc.Output
+    if lim.is_empty()
+        return proc.run(exe, [arg], none, RUN_LIMIT_MS)?
+    proc.run("env", ["AIL_TRACE_LIMIT={lim}", exe, arg], none, RUN_LIMIT_MS)?
+
+fn run_one(exe str, slot int, lead int, lim str) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
+    r := started(exe, arg, lim) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status == 0
-        return Verdict(name: "", status: "pass", message: "", cases: 0, seed: 0, input: "", snaps: snap_records(r.err))
+        return Verdict(
+            name: "",
+            status: "pass",
+            message: "",
+            cases: 0,
+            seed: 0,
+            input: "",
+            snaps: snap_records(r.err),
+        )
     if r.status == 4
         return plain("", "fail", "error: no such test")
     plain("", "fail", describe(r.err, lead))
@@ -1158,9 +1171,9 @@ fn debug_list(xs List[str]) str
         parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
     "[{parts.join(", ")}]"
 
-fn run_doc(exe str, slot int, lead int, expected List[str], update bool, orig List[int]) Verdict
+fn run_doc(exe str, slot int, lead int, expected List[str], update bool, orig List[int], lim str) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
+    r := started(exe, arg, lim) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status != 0
         return plain("", "fail", describe(r.err, lead))
@@ -1364,7 +1377,8 @@ fn snap_line(l str, ln int) str
     mut copied := 0
     mut i := 0
     while i < cs.len()
-        prev_ok := i == 0 or not (cs[i - 1].is_alpha() or cs[i - 1].is_digit() or cs[i - 1] == '_' or cs[i - 1] == '.')
+        prev_ok := i == 0
+            or not (cs[i - 1].is_alpha() or cs[i - 1].is_digit() or cs[i - 1] == '_' or cs[i - 1] == '.')
         if prev_ok and starts_at(cs, i, "assert_eq(")
             open := i + 10
             parts := call_parts(cs, open)
@@ -1390,10 +1404,6 @@ fn snap_line(l str, ln int) str
 fn snap_records(err str) List[SnapRec]
     mut out := List[SnapRec]()
     for l in err.lines()
-        if hit := l.strip_prefix("ail-cov ")
-            if n := hit.to_int()
-                out.push(SnapRec(line: n, col: 0, text: ""))
-            continue
         rest := l.strip_prefix("ail-snapshot ") else continue
         sp1 := rest.find(" ") else continue
         sp2 := rest.slice(sp1 + 1, rest.len()).find(" ") else continue
@@ -1453,7 +1463,13 @@ fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
             continue
         old := chars_text(cs, start, end)
         if old != r.text
-            spans.push(SnapChange(kind: "assert_eq", line: r.line, col: r.col, old: old, new: r.text))
+            spans.push(SnapChange(
+                kind: "assert_eq",
+                line: r.line,
+                col: r.col,
+                old: old,
+                new: r.text,
+            ))
             bounds.push((start, end))
     idx := [k for k in 0..spans.len()].sorted(by: |k| bounds[k].0)
     mut new := ""
@@ -1583,61 +1599,150 @@ fn unified_diff(path str, old str, new str) str
             out.push("{o.kind}{text}")
     "{out.join("\n")}\n"
 
-
 struct Op
     kind char
     i int
     j int
 
-## ---- Line coverage (test.cover.1-3, ADR 0289) ----
+## ---- Coverage (test.cover.1-3) ----
 
-## The lines of the statements of each non-test function of FILE, one list per function, first statement
-## first, from the native CLI's `cover` command.
-fn cover_points(file str) List[List[int]]
-    if not ensure_native_cli()
-        return []
-    r := proc.run(native_cli(), ["cover", file]) else return []
-    mut out := List[List[int]]()
-    for l in r.out.lines()
-        rest := l.strip_prefix("fn ") else continue
-        mut ls := List[int]()
-        for w in rest.words()
-            ls.push(w.to_int() else continue)
-        if not ls.is_empty()
-            out.push(ls)
-    out
+struct FileCover
+    file str
+    lines Set[int]
+    hit_lines Set[int]
+    fns Set[str]
+    hit_fns Set[str]
 
-## The coverage report of FILE (test.cover.2-3): the table line or the JSON line, then with `lines` the
-## ranges that never ran.
-fn cover_report(file str, fns List[List[int]], hits Set[int], json bool, lines bool) str
-    mut all := Set[int]()
-    mut fns_hit := 0
-    for f in fns
-        if hits.contains(f[0])
-            fns_hit += 1
-        for l in f
-            all.add(l)
-    sorted := all.sorted()
-    mut hit := 0
-    mut missed := List[(int, int)]()
-    for l in sorted
-        if hits.contains(l)
-            hit += 1
-        elif missed.len() > 0 and missed[missed.len() - 1].1 + 1 == l
-            missed[missed.len() - 1] = (missed[missed.len() - 1].0, l)
+## The ids in the hits file, as a set (the runtime appends one id per line per run).
+fn hit_ids(path str) Set[int]
+    mut ids := Set[int]()
+    text := fs.read_text(path) else return ids
+    for l in text.lines()
+        n := l.to_int() else continue
+        ids.add(n)
+    ids
+
+## Per-file coverage from the site table the build wrote and the ids the runs hit. `copy` is the
+## rewritten source (its first `lead` lines were added, and only its first `orig_len` lines are the
+## file's own), `scratch` the copied package directory when there is one, and `skip` the names of
+## the functions that are not the program's own (the tests, their wrappers).
+fn collect_cover(
+    sites str,
+    hits str,
+    file str,
+    copy str,
+    lead int,
+    orig_len int,
+    scratch str,
+    dir str,
+    skip Set[str],
+) List[FileCover]
+    ids := hit_ids(hits)
+    mut files := List[FileCover]()
+    mut at := Map[str, int]()
+    text := fs.read_text(sites) else return files
+    for l in text.lines()
+        c := l.split("\t")
+        if c.len() < 5
+            continue
+        id := c[0].to_int() else continue
+        mut line := c[2].to_int() else continue
+        name := c[3]
+        if skip.contains(name) or name.starts_with("ail_run_")
+            continue
+        mut shown := c[1]
+        if c[1] == copy
+            line -= lead
+            if line < 1 or line > orig_len
+                continue
+            shown = file
+        elif not scratch.is_empty() and c[1].starts_with("{scratch}/")
+            shown = "{dir}/{c[1].slice(scratch.len() + 1, c[1].len())}"
+        if not at.contains(shown)
+            at[shown] = files.len()
+            files.push(FileCover(
+                file: shown,
+                lines: Set[int](),
+                hit_lines: Set[int](),
+                fns: Set[str](),
+                hit_fns: Set[str](),
+            ))
+        k := at[shown]
+        files[k].lines.add(line)
+        if c[4] == "1"
+            files[k].fns.add(name)
+        if ids.contains(id)
+            files[k].hit_lines.add(line)
+            if c[4] == "1"
+                files[k].hit_fns.add(name)
+    files
+
+## The unexecuted lines as inclusive ranges, in file order.
+fn missed_ranges(c FileCover) List[Span]
+    mut out := List[Span]()
+    for line in c.lines.sorted()
+        if c.hit_lines.contains(line)
+            continue
+        if out.len() > 0 and out[out.len() - 1].last + 1 == line
+            out[out.len() - 1].last = line
         else
-            missed.push((l, l))
-    if json
-        ranges := [ "[{m.0},{m.1}]" for m in missed ].join(",")
-        return "\{\"coverage\":true,\"file\":{json_str(file)},\"lines\":{sorted.len()},\"lines_hit\":{hit},\"functions\":{fns.len()},\"functions_hit\":{fns_hit},\"missed\":[{ranges}]}"
-    pct := if sorted.is_empty() then 100 else hit * 100 / sorted.len()
-    mut out := "coverage {file}: lines {hit}/{sorted.len()} ({pct}%), functions {fns_hit}/{fns.len()}"
-    if lines and not missed.is_empty()
-        texts := [ if m.0 == m.1 then "{m.0}" else "{m.0}-{m.1}" for m in missed ]
-        out = "{out}\n  not run: {texts.join(", ")}"
+            out.push(Span(first: line, last: line))
     out
 
-fn report(vs List[Verdict], json bool, src List[str]) int
+## One file's coverage line, or JSON line (test.cover.2-3).
+fn print_cover(c FileCover, json bool, detail bool)
+    total := c.lines.len()
+    hit := c.hit_lines.len()
+    ranges := missed_ranges(c)
+    if json
+        parts := ["[{r.first},{r.last}]" for r in ranges]
+        print("\{\"coverage\":true,\"file\":{json_str(c.file)},\"lines\":{total},\"lines_hit\":{hit},\"functions\":{c.fns.len()},\"functions_hit\":{c.hit_fns.len()},\"missed\":[{parts.join(",")}]}")
+        return
+    pct := if total == 0 then 100 else hit * 100 / total
+    print("coverage {c.file}: lines {hit}/{total} ({pct}%), functions {c.hit_fns.len()}/{c.fns.len()}")
+    if detail and ranges.len() > 0
+        shown := [if r.first == r.last then "{r.first}" else "{r.first}-{r.last}" for r in ranges]
+        print("  not run: {shown.join(", ")}")
+
+## ---- Traces (trace.test.1-2) ----
+
+## One event of a test's trace, from a line the run wrote to `EXE.trace`
+## (`call<TAB>FN<TAB>LINE<TAB>COL<TAB>NAME=VALUE...`), as JSON; "" for a line that isn't the program's.
+fn trace_json(line str) str
+    c := line.split("\t")
+    if c.len() == 1
+        n := line.to_int() else return ""
+        return "\{\"api\":1,\"trace\":\"dropped\",\"count\":{n}}"
+    if c.len() < 4 or c[0] != "call" or c[1] == "main" or c[1].starts_with("ail_")
+        return ""
+    mut args := List[str]()
+    for a in c[4..]
+        eq := a.find("=") else continue
+        args.push("{json_str(a.slice(0, eq))}:{json_str(a.slice(eq + 1, a.len()))}")
+    "\{\"api\":1,\"trace\":\"call\",\"fn\":{json_str(c[1])},\"args\":\{{args.join(",")}},\"line\":{c[2]},\"col\":{c[3]}}"
+
+## The same event as a line of the human form.
+fn trace_text(line str) str
+    c := line.split("\t")
+    if c.len() == 1
+        n := line.to_int() else return ""
+        return "trace: {n} more events dropped"
+    if c.len() < 4 or c[0] != "call" or c[1] == "main" or c[1].starts_with("ail_")
+        return ""
+    mut args := List[str]()
+    for a in c[4..]
+        eq := a.find("=") else continue
+        args.push("{a.slice(0, eq)} = {a.slice(eq + 1, a.len())}")
+    "trace: call {c[1]}({args.join(", ")})"
+
+## The events a run wrote, and none when it wrote nothing; the file is removed.
+fn take_trace(exe str) List[str]
+    path := "{exe}.trace"
+    text := fs.read_text(path) else return []
+    fs.remove(path) else return text.lines()
+    text.lines()
+
+fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]) int
     mut passed := 0
     mut failed := 0
     mut skipped := 0
@@ -1653,7 +1758,14 @@ fn report(vs List[Verdict], json bool, src List[str]) int
             extra := if v.cases > 0 then ",\"cases\":{v.cases},\"seed\":{unsigned_text(v.seed)}" else ""
             input := if v.input.is_empty() then "" else ",\"input\":{json_str(v.input)}"
             at := if w := where_at(v.message) then ",\"line\":{w.0},\"col\":{w.1}" else ""
-            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(v.message)}{extra}{input}}")
+            raw := traces.get(v.name) else []
+            mut events := List[str]()
+            for e in raw
+                j := trace_json(e)
+                if not j.is_empty()
+                    events.push(j)
+            shown := if events.is_empty() then "" else ",\"trace\":[{events.join(",")}]"
+            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(v.message)}{extra}{input}{shown}}")
         elif v.status == "pass"
             print("ok {v.name}{tail}")
         elif v.status == "fail"
@@ -1662,6 +1774,11 @@ fn report(vs List[Verdict], json bool, src List[str]) int
                 shown := excerpt(src, w.0, w.1)
                 if not shown.is_empty()
                     print(shown)
+            seen := traces.get(v.name) else []
+            for e in seen
+                t := trace_text(e)
+                if not t.is_empty()
+                    print("  {t}")
             if not v.input.is_empty()
                 print("  input: {v.input}")
         else
@@ -1678,7 +1795,7 @@ fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--coverage[=lines]] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
@@ -1692,6 +1809,8 @@ fn main() !
     mut has_seed := false
     mut seed_given := 0
     mut want := ""
+    mut trace := false
+    mut trace_limit := ""
     for a in env.args()
         if want == "--cases"
             cases = a.to_int() else usage()
@@ -1704,6 +1823,13 @@ fn main() !
             json = true
         elif a == "--update"
             update = true
+        elif a == "--trace" or a == "--trace=calls" or a == "--trace=all" or a == "--trace=effects"
+            trace = true
+        elif want == "--trace-limit"
+            trace_limit = a
+            want = ""
+        elif a == "--trace-limit"
+            want = a
         elif a == "--dry-run"
             dry = true
         elif a == "--coverage"
@@ -1740,13 +1866,6 @@ fn main() !
             lines = aug.lines
             doc_names = aug.names
             doc_where = aug.where
-    mut cov_fns := List[List[int]]()
-    mut cov_lines := Set[int]()
-    if not coverage.is_empty()
-        cov_fns = cover_points(file)
-        for f in cov_fns
-            for l in f
-                cov_lines.add(l)
     found := find_tests(lines)
     w := World(decls: parse_decls(lines))
     mut verdicts := List[Verdict]()
@@ -1759,17 +1878,17 @@ fn main() !
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
     if found.tests.len() == 0 and mf.tests.is_empty()
-        code := report(verdicts, json, text.lines())
-        if not coverage.is_empty() and not cov_fns.is_empty()
-            print(cover_report(file, cov_fns, Set[int](), json, coverage == "lines"))
-        io.exit(code)
+        io.exit(report(verdicts, json, text.lines(), {}))
     stem := path.stem(file)
     copy_name := ".ail-test-{stem}.ail"
     mut scratch := ""
     if not mf.tests.is_empty()
         # The directory is copied so the modules' tests can be made `pub` without touching the tree.
         # Beside the directory, so its package's relative `dep ... path ../x` lines still find their modules.
-        made := proc.run("mktemp", ["-d", "{if dir.is_empty() then "." else dir}/../.ail-test-XXXXXX"])? "running mktemp"
+        made := proc.run("mktemp", [
+            "-d",
+            "{if dir.is_empty() then "." else dir}/../.ail-test-XXXXXX",
+        ])? "running mktemp"
         scratch = made.out.trim()
         _ := proc.run("cp", [
             "-R",
@@ -1781,6 +1900,7 @@ fn main() !
     exe := "{copy}.bin"
     mut mdropped := Set[int]()
     mut mwhy := Map[int, str]()
+    mut with_main := not coverage.is_empty()
     mut dropped := Set[int]()
     mut why := Map[int, str]()
     mut blocked := ""
@@ -1789,12 +1909,41 @@ fn main() !
     for _ in 0..MAX_ROUNDS
         if dropped.len() == found.tests.len() and mdropped.len() == mf.tests.len()
             break
-        rw := rewrite(w, lines, found, dropped, mf, mdropped, if update then text.lines().len() else 0, cov_lines)
+        rw := rewrite(
+            w,
+            lines,
+            found,
+            dropped,
+            mf,
+            mdropped,
+            if update then text.lines().len() else 0,
+            with_main,
+        )
         if not mf.tests.is_empty()
             write_modules(scratch, mf, mdropped)? "writing the modules"
         last_lead = rw.lead
         fs.write_text(copy, rw.text)? "writing {copy}"
-        b := proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
+        modes := [
+            m
+            for m in [
+                if coverage.is_empty() then "" else "lines",
+                if trace then "tests" else "",
+            ] if m != ""
+        ].join(",")
+        b := if modes.is_empty()
+            proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
+        else
+            # native.instr.2-3, test.cover.4, trace.test.1: the build counts the statements run and notes the calls (rt/native/instr.ail).
+            proc.run("env", [
+                "AIL_INSTRUMENT={modes}",
+                "AIL_INSTRUMENT_SITES={exe}.sites",
+                ail_path(),
+                "build",
+                "--no-cache",
+                copy,
+                "-o",
+                exe,
+            ])? "running ail build"
         if b.status == 0
             built = true
             break
@@ -1838,9 +1987,16 @@ fn main() !
                 dropped.add(owner)
                 why[owner] = "{short(msg)} (line {o + 1})"
                 progressed = true
+        if not progressed and with_main
+            # The file's own `main` didn't build: count without it.
+            with_main = false
+            progressed = true
         if not progressed
             blocked = if outside.is_empty() then "the build failed" else outside
             break
+    if not coverage.is_empty()
+        _ := proc.run("rm", ["-f", "{exe}.hits"]) else io.exit(2)
+    mut traces := Map[str, List[str]]()
     for i in 0..found.tests.len()
         t := found.tests[i]
         if dropped.contains(i)
@@ -1855,11 +2011,27 @@ fn main() !
                 if not dropped.contains(j)
                     slot += 1
             if doc_names.contains(t.name)
-                v := run_doc(exe, slot, last_lead, doc_expected(lines, t), update, doc_where.get(t.name) else [])
+                v := run_doc(exe, slot, last_lead, doc_expected(lines, t), update, doc_where.get(t.name) else [], trace_limit)
                 verdicts.push(Verdict(name: doc_names[t.name], status: v.status, message: v.message, cases: 0, seed: 0, input: "", snaps: v.snaps))
+                if trace and v.status == "fail"
+                    traces[doc_names[t.name]] = take_trace(exe)
+                elif trace
+                    take_trace(exe)
             elif t.params.is_empty()
-                v := run_one(exe, slot, last_lead)
-                verdicts.push(Verdict(name: t.name, status: v.status, message: v.message, cases: 0, seed: 0, input: "", snaps: v.snaps))
+                v := run_one(exe, slot, last_lead, trace_limit)
+                if trace and v.status == "fail"
+                    traces[t.name] = take_trace(exe)
+                elif trace
+                    take_trace(exe)
+                verdicts.push(Verdict(
+                    name: t.name,
+                    status: v.status,
+                    message: v.message,
+                    cases: 0,
+                    seed: 0,
+                    input: "",
+                    snaps: v.snaps,
+                ))
             else
                 p := run_prop(
                     w,
@@ -1897,7 +2069,7 @@ fn main() !
             for j in 0..mi
                 if not mdropped.contains(j)
                     slot += 1
-            v := run_one(exe, slot, 0)
+            v := run_one(exe, slot, 0, trace_limit)
             verdicts.push(plain(name, v.status, v.message))
     if update
         mut recs := List[SnapRec]()
@@ -1906,16 +2078,34 @@ fn main() !
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
-    code := report(verdicts, json, text.lines())
-    if not coverage.is_empty() and not cov_fns.is_empty()
-        mut hits := Set[int]()
-        for v in verdicts
-            for r in v.snaps
-                if r.col == 0
-                    hits.add(r.line)
-        print(cover_report(file, cov_fns, hits, json, coverage == "lines"))
+    code := report(verdicts, json, text.lines(), traces)
+    if not coverage.is_empty() and built
+        mut skip := Set[str]()
+        for t in found.tests
+            skip.add(t.name)
+        for mt in mf.tests
+            skip.add(mt.t.name)
+        for c in collect_cover(
+            "{exe}.sites",
+            "{exe}.hits",
+            file,
+            copy,
+            last_lead,
+            lines.len(),
+            scratch,
+            dir,
+            skip,
+        )
+            print_cover(c, json, coverage == "lines")
     if scratch.is_empty()
-        _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
+        _ := proc.run("rm", [
+            "-f",
+            copy,
+            exe,
+            "{exe}.sites",
+            "{exe}.hits",
+            "{exe}.trace",
+        ]) else io.exit(code)
     else
         _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)
     io.exit(code)
