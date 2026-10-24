@@ -33,6 +33,8 @@ for f in files:
     except ValueError:
         bad += 1; print("BAD   ", f, "(no program)"); continue
     a.pop("asks", None)  # the native parser's `uhwhatnow?` list (ADR 0868); the Rust one has none
+    # Fields only the native program carries, empty (`asks`, expr.hole.3), aren't differences.
+    a = {k: v for k, v in a.items() if k in b or v not in (None, [])}
     if a != b:
         bad += 1
         k = next((k for k in b if a.get(k) != b[k]), "?")
