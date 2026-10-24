@@ -23,6 +23,10 @@ if (-not (Test-Path $exe) -or ((Get-Item $src).LastWriteTime -gt (Get-Item $exe)
 
 if ($args.Count -gt 0) {
     $env:AIL_APP_HOST = $exe
-    & (Join-Path $root 'ail.ps1') run @args
+    # The run's output also goes to build\last-run.log, for runs without a console.
+    $log = Join-Path $here 'build\last-run.log'
+    "run: $($args -join ' ')" | Set-Content $log
+    & (Join-Path $root 'ail.ps1') run @args 2>&1 | Tee-Object -FilePath $log -Append
+    "exit: $LASTEXITCODE" | Add-Content $log
     exit $LASTEXITCODE
 }
