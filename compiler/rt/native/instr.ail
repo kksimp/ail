@@ -28,7 +28,7 @@ TRACE_HEAD := 48
 fn instr_table() int
     mut t := load64(global(INSTR_TAB))
     if t == 0
-        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP + 128)
+        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP + 17024)
         if t < 0
             return 0
         store64(global(INSTR_TAB), t)
@@ -244,6 +244,15 @@ fn tr_open(kind int) bool
     store64(global(OUT_FD), 2)
     true
 
+## Whether events are JSON objects (`--trace --json`, `$AIL_TRACE_JSON`).
+fn tr_is_json() bool
+    w := tr_state()
+    if w == 0
+        return false
+    if load64(w + 104) == 0
+        store64(w + 104, if os_env_get("AIL_TRACE_JSON") == "" then 1 else 2)
+    load64(w + 104) == 2
+
 ## The end of an event: its text is written and output is back on standard output.
 fn tr_close()
     flush_to(if load64(global(OUT_FD)) == 2 then 2 else 0 - 1)
@@ -264,22 +273,39 @@ fn tr_summary(w int)
     if shown + dropped == 0
         return
     flush()
-    out_str("trace: summary: ")
-    out_int(shown)
-    out_str(" events shown, ")
-    out_int(dropped)
-    out_str(" dropped (")
-    mut first := true
-    for k in 0..7
-        n := load64(w + 40 + 8 * k)
-        if n > 0
-            if not first
-                out_str(", ")
-            first = false
-            out_str(tr_kind(k))
-            out_byte(32)
-            out_int(n)
-    out_str(")\n")
+    json := tr_is_json()
+    if json
+        out_str("\{\"api\":1,\"trace\":\"summary\",\"shown\":")
+        out_int(shown)
+        out_str(",\"dropped\":")
+        out_int(dropped)
+        for k in 0..7
+            n := load64(w + 40 + 8 * k)
+            if n > 0
+                out_str(",\"")
+                out_str(tr_kind(k))
+                out_str("\":")
+                out_int(n)
+        out_str("}\n")
+    else
+        out_str("trace: summary: ")
+        out_int(shown)
+        out_str(" events shown, ")
+        out_int(dropped)
+        out_str(" dropped (")
+        mut first := true
+        for k in 0..7
+            n := load64(w + 40 + 8 * k)
+            if n > 0
+                if not first
+                    out_str(", ")
+                first = false
+                out_str(tr_kind(k))
+                out_byte(32)
+                out_int(n)
+        if first
+            out_str("none")
+        out_str(")\n")
     flush_to(2)
 
 fn tr_kind(k int) str

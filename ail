@@ -176,8 +176,9 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 case "$v" in "" | *[!A-Za-z0-9_]*) die "\`--watch\` needs a variable name, e.g. \`--watch total\` (trace.watch.1)" ;; esac
                 export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}watch=$v"; k=$((k + 2)) ;;
             --no-contracts) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}nocontracts"; k=$((k + 1)) ;;
-            --trace | --trace=calls | --trace=all) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace"; k=$((k + 1)) ;;
-            --trace=effects) die "\`--trace=effects\` is not native yet: effect events come with the next trace step (trace.run.6)" ;;
+            --trace | --trace=all) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace,traceeffects"; trace_run=1; k=$((k + 1)) ;;
+            --trace=calls) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace"; trace_run=1; k=$((k + 1)) ;;
+            --trace=effects) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}traceeffects"; trace_run=1; k=$((k + 1)) ;;
             --trace=*) die "\`$a\` isn't a trace kind: use \`--trace\`, \`--trace=calls\`, \`--trace=effects\` or \`--trace=all\` (trace.run.1)" ;;
             --trace-limit)
                 v="${run_args[$((k + 1))]-}"
@@ -203,6 +204,10 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
         esac
     done
     run_skip=$k
+    # trace.run.1: with a trace, `--json` makes the events JSON objects.
+    if [ "${trace_run:-}" = 1 ] && [ "$budget_opts" = " --json" ]; then
+        budget_opts=""; export AIL_TRACE_JSON=1 AIL_INSTRUMENT="$AIL_INSTRUMENT,tracejson"
+    fi
     # Record and replay (ADR 0873, replay.rec.1-2, replay.run.1): the recording's first line says what ran.
     if [ "${rep_run:-}" = 1 ] && [ "${rec_run:-}" != 1 ]; then
         [ -r "$AIL_REPLAY" ] || die "can't read the recording $AIL_REPLAY (replay.run.1)"

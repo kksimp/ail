@@ -307,9 +307,11 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
         pass := new_block()
         for c in theirs
             v := req_cond(c, their_scope, callee_file, caller_file) else break
+            trace_contract(key, "requires", c, v.id)
             ok := check_branch(v.id)
             for oc in reqs
                 w := req_cond(oc, own_scope, callee_file, caller_file) else break
+                trace_contract(key, "requires", oc, w.id)
                 held := check_branch(w.id)
                 req_trap(c, key, origin, true, args, pos, callee_file, caller_file)
                 cur = held
@@ -321,11 +323,13 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     else
         for c in theirs
             v := req_cond(c, their_scope, callee_file, caller_file) else break
+            trace_contract(key, "requires", c, v.id)
             ok := check_branch(v.id)
             req_trap(c, key, origin, false, args, pos, callee_file, caller_file)
             cur = ok
         for c in reqs
             v := req_cond(c, own_scope, callee_file, caller_file) else break
+            trace_contract(key, "requires", c, v.id)
             ok := check_branch(v.id)
             req_trap(c, key, "", false, args, pos, callee_file, caller_file)
             cur = ok
@@ -413,6 +417,7 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
         c := ens[i]
         scopes = if i < inh.ens_n then their_scope else own_scope
         v := lower_value(c.cond, Ty.Bool) else break
+        trace_contract(ens_label, "ensures", c, v.id)
         ok := check_branch(v.id)
         trap_open("contract.ens.1", c.pos)
         origin := if i < inh.ens_n then inh.ens_origin else ""
@@ -456,6 +461,7 @@ fn Lower.check_invariants(mut self, key str, obj int, pos ast.Pos, by str, at as
     unchecked = true
     for c in list
         v := lower_value(c.cond, Ty.Bool) else break
+        trace_contract(name, "invariant", c, v.id)
         ok := check_branch(v.id)
         if by == ""
             trap_open("contract.inv.2", c.pos)
