@@ -10,8 +10,9 @@
 ## `fs.IoError` (err.text.1) and returns zero; `env_get`, `env_home` and
 ## `io_read_line` return the string, or 0 for `none`.
 ##
-## Linux x86-64, Linux ARM64 and macOS ARM64 (`target()` 0, 1, 2). Windows
-## (`plat.target.1`, Tier 1) has no native target yet: its calls are not built.
+## Linux x86-64, Linux ARM64 and macOS ARM64 (`target()` 0, 1, 2). On Windows
+## (`target()` 3) the primitives below call `win.ail`, and `os_pick` gives the
+## Linux x86-64 numbers and flag values that layer takes.
 
 # Global slots 32-47 are this file's (native-abi.md §2 lists the ranges).
 OS_OK := 32
@@ -29,7 +30,7 @@ OS_PATH_B := 4096
 OS_TMP := 8192
 OS_DENTS := 12288
 OS_DENTS_SIZE := 32768
-OS_AREA_SIZE := 45056
+OS_AREA_SIZE := 65536
 OS_PATH_MAX := 4095
 OS_IN_SIZE := 65536
 
@@ -47,7 +48,7 @@ K_OTHER := 10
 
 fn os_pick(x64 int, a64 int, mac int) int
     t := target()
-    if t == 0
+    if t == 0 or t == 3
         return x64
     if t == 1
         return a64
@@ -55,45 +56,70 @@ fn os_pick(x64 int, a64 int, mac int) int
 
 ## `-errno` or a non-negative result.
 fn os_open(path int, flags int, mode int) int
+    if target() == 3
+        return win_open(path, flags, mode)
     if target() == 2
         return syscall(5, path, flags, mode, 0, 0, 0)
     syscall(os_pick(257, 56, 0), -100, path, flags, mode, 0, 0)
 
 fn os_close(fd int) int
+    if target() == 3
+        return win_close(fd)
     syscall(os_pick(3, 57, 6), fd, 0, 0, 0, 0, 0)
 
 fn os_read(fd int, p int, n int) int
+    if target() == 3
+        return win_read(fd, p, n)
     syscall(os_pick(0, 63, 3), fd, p, n, 0, 0, 0)
 
 fn os_lseek(fd int, off int, whence int) int
+    if target() == 3
+        return win_lseek(fd, off, whence)
     syscall(os_pick(8, 62, 199), fd, off, whence, 0, 0, 0)
 
 fn os_access(path int) int
+    if target() == 3
+        return win_access(path)
     if target() == 2
         return syscall(33, path, 0, 0, 0, 0, 0)
     syscall(os_pick(269, 48, 0), -100, path, 0, 0, 0, 0)
 
 fn os_mkdir(path int) int
+    if target() == 3
+        return win_mkdir(path)
     if target() == 2
         return syscall(136, path, 511, 0, 0, 0, 0)
     syscall(os_pick(258, 34, 0), -100, path, 511, 0, 0, 0)
 
 ## A file, or with `dir` an empty directory.
 fn os_unlink(path int, dir bool) int
+    if target() == 3
+        return win_unlink(path, dir)
     if target() == 2
         return syscall(if dir then 137 else 10, path, 0, 0, 0, 0, 0)
     syscall(os_pick(263, 35, 0), -100, path, if dir then 512 else 0, 0, 0, 0)
 
 fn os_rename(from int, to int) int
+    if target() == 3
+        return win_rename(from, to)
     if target() == 2
         return syscall(128, from, to, 0, 0, 0, 0)
     syscall(os_pick(264, 38, 0), -100, from, -100, to, 0, 0)
 
 ## Directory entries into `buf`: Linux `getdents64`, macOS `getdirentries64`.
 fn os_getdents(fd int, buf int, n int) int
+    if target() == 3
+        return win_getdents(fd, buf, n)
     if target() == 2
         return syscall(344, fd, buf, n, os_scratch(OS_TMP + 64), 0, 0)
     syscall(os_pick(217, 61, 0), fd, buf, n, 0, 0, 0)
+
+## `fstat` of `fd` into `buf`; the fields the runtime reads are at the offsets
+## `os_pick` names (Windows fills the Linux x86-64 ones).
+fn os_fstat(fd int, buf int) int
+    if target() == 3
+        return win_fstat(fd, buf)
+    syscall(os_pick(5, 80, 189), fd, buf, 0, 0, 0, 0)
 
 ## `open` flags: 0 read, 1 create and truncate for writing, 2 create and append.
 fn os_open_flags(mode int) int
@@ -343,7 +369,15 @@ fn os_fs_read_bytes(path str) str
 fn os_write_all(fd int, p int, n int) int
     mut done := 0
     while done < n
-        r := syscall(os_pick(1, 64, 4), fd, p + done, n - done, 0, 0, 0)
+        r := if target() == 3 then win_write(fd, p + done, n - done) else syscall(
+            os_pick(1, 64, 4),
+            fd,
+            p + done,
+            n - done,
+            0,
+            0,
+            0,
+        )
         if r == -4
             continue
         if r < 0
@@ -501,13 +535,15 @@ fn os_fs_rename(from str, to str)
 fn os_envp() int
     load64(global(ARGV)) + 8 * (load64(global(ARGC)) + 1)
 
+## Windows variable names are case-insensitive (`Path` is `PATH`): fold ASCII
+## capitals there; other targets compare bytes as they are.
+fn os_env_fold(b int) int
+    if target() == 3 and b >= 65 and b <= 90
+        return b + 32
+    b
+
 ## `env.get(name)` (std.env.2): "" with `os_ok()` false when unset or not UTF-8.
 fn os_env_get(name str) str
-    # Windows has no `envp` here: every variable reads as unset until the
-    # environment arm lands (ADR 0608).
-    if target() == 3
-        os_fail_kind(K_NOT_FOUND)
-        return ""
     q := str_addr(name)
     n := load64(q)
     mut e := os_envp()
@@ -516,7 +552,7 @@ fn os_env_get(name str) str
         mut same := true
         mut i := 0
         while same and i < n
-            if load8(c + i) != load8(q + 16 + i)
+            if os_env_fold(load8(c + i)) != os_env_fold(load8(q + 16 + i))
                 same = false
             i += 1
         # Read the `=` last: a short variable at the top of the stack ends before `c + n`.
@@ -531,13 +567,9 @@ fn os_env_get(name str) str
     ""
 
 ## `env.vars()` (std.env.5): the variables whose names and values are UTF-8,
-## as a `Map[str, str]` in name order (byte order). Windows has no `envp`
-## here yet, so the map is empty there (ADR 0608).
+## as a `Map[str, str]` in name order (byte order).
 fn env_vars() int
     m := map_new(1, 0, 0)
-    if target() == 3
-        os_succeed()
-        return m
     names := list_new(16)
     mut e := os_envp()
     while load64(e) != 0
@@ -588,7 +620,9 @@ fn env_program() str
 fn env_cwd() str
     buf := os_scratch(OS_TMP)
     mut r := 0
-    if target() == 2
+    if target() == 3
+        r = win_getcwd(buf)
+    elif target() == 2
         # No `getcwd` call: open "." and ask for its path (F_GETPATH).
         dot := os_scratch(OS_PATH_A)
         store8(dot, 46)
@@ -599,8 +633,11 @@ fn env_cwd() str
         else
             r = syscall(92, fd, 50, buf, 0, 0, 0)
             os_close(fd)
-            if r >= 0
+            # F_GETPATH still names a removed directory: check it exists.
+            if r >= 0 and os_access(buf) == 0
                 r = os_c_len(buf) + 1
+            else
+                r = -1
     else
         r = syscall(os_pick(79, 17, 0), buf, 4096, 0, 0, 0, 0)
     if r <= 0
@@ -614,6 +651,8 @@ fn env_cwd() str
 
 ## `time.now_ms()` (std.time.1): milliseconds since 1970-01-01T00:00:00Z.
 fn time_now_ms() int
+    if target() == 3
+        return win_now_ms()
     ts := os_scratch(OS_TMP)
     if target() == 2
         # `gettimeofday`: seconds, then microseconds in 32 bits.
@@ -630,6 +669,8 @@ fn time_now_ms() int
 ## `clock_gettime_nsec_np(CLOCK_UPTIME_RAW)` or `mach_continuous_time` through
 ## libSystem (ADR 0534, `import_call`) and drop this branch.
 fn time_mono_ns() int
+    if target() == 3
+        return win_mono_ns()
     ts := os_scratch(OS_TMP)
     if target() == 2
         syscall(116, ts, 0, 0, 0, 0, 0)
@@ -647,6 +688,9 @@ fn time_sleep_ms(ms int)
     if ms < 0
         os_usage_trap("std.time.2", "a negative sleep")
     if ms == 0 or task_cancelled()
+        return
+    if target() == 3
+        win_sleep_ms(ms)
         return
     ts := os_scratch(OS_TMP)
     if target() == 2
@@ -689,6 +733,9 @@ fn io_exit(code int)
 ## and remembers: 1 not a terminal, 2 a terminal.
 fn line_buffered() bool
     mut k := load64(global(OUT_TTY))
+    if k == 0 and target() == 3
+        k = win_tty()
+        store64(global(OUT_TTY), k)
     if k == 0
         buf := os_scratch(OS_TMP)
         r := if target() == 2 then syscall(54, 1, 1078490131, buf, 0, 0, 0) else syscall(
@@ -715,7 +762,7 @@ fn err_end()
     store64(global(OUT_FD), 1)
 
 ## Refill the standard-input buffer; false at the end of input.
-fn os_in_fill() bool
+fn os_in_fill(rule str) bool
     flush()
     mut b := load64(global(IN_BUF))
     if b == 0
@@ -725,6 +772,14 @@ fn os_in_fill() bool
         r := os_read(0, b, OS_IN_SIZE)
         if r == -4
             continue
+        if r < 0 and r != -9
+            # A read error that isn't a closed standard input (EBADF is the end of input): a directory, say.
+            flush()
+            out_str("trap[")
+            out_str(rule)
+            out_str("]: can't read standard input\n")
+            flush_to(2)
+            sys_exit(1)
         if r <= 0
             store64(global(IN_POS), 0)
             store64(global(IN_LEN), 0)
@@ -743,7 +798,7 @@ fn os_read_until_newline() int
     mut seen := false
     while true
         if load64(global(IN_POS)) >= load64(global(IN_LEN))
-            if not os_in_fill()
+            if not os_in_fill("std.io.1")
                 break
         b := load64(global(IN_BUF))
         pos := load64(global(IN_POS))
@@ -848,7 +903,7 @@ fn io_read_bytes() str
     mut n := 0
     while true
         if load64(global(IN_POS)) >= load64(global(IN_LEN))
-            if not os_in_fill()
+            if not os_in_fill("std.io.2")
                 break
         b := load64(global(IN_BUF))
         pos := load64(global(IN_POS))
@@ -1018,7 +1073,7 @@ fn fs_metadata(path str, at str) int
         os_error(path, os_kind(), at)
         return 0
     buf := os_scratch(OS_TMP)
-    r := syscall(os_pick(5, 80, 189), fd, buf, 0, 0, 0, 0)
+    r := os_fstat(fd, buf)
     os_close(fd)
     if r < 0
         os_fail_errno(r)
@@ -1042,7 +1097,7 @@ fn fs_metadata(path str, at str) int
 ## The permission bits of the open file `fd` (`st_mode` of `fstat`).
 fn os_fd_mode(fd int) int
     buf := os_scratch(OS_TMP)
-    r := syscall(os_pick(5, 80, 189), fd, buf, 0, 0, 0, 0)
+    r := os_fstat(fd, buf)
     if r < 0
         return 438
     # macOS syscall 189 fills the legacy `struct stat`: st_dev is 4 bytes and
@@ -1068,7 +1123,8 @@ fn os_copy_file(src str, dst str)
         os_close(sfd)
         os_fail_errno(dfd)
         return
-    syscall(os_pick(91, 52, 124), dfd, mode, 0, 0, 0, 0)
+    if target() != 3
+        syscall(os_pick(91, 52, 124), dfd, mode, 0, 0, 0, 0)
     buf := alloc_raw(65536, KIND_BYTES)
     mut failed := 0
     while failed == 0

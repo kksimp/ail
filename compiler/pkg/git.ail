@@ -193,6 +193,11 @@ fn fetch(name str, source Source, locked str?, offline bool) Fetched
     result
 
 fn clone(name str, source Source, locked str?, tmp str, deps str) Fetched
+    if proc.which("git") == none
+        return failed(
+            "can't run `git` to fetch dependency `{name}`: not found on PATH",
+            "install `git`, or depend on a local copy with `path DIR`",
+        )
     out := run_git(["clone", "--quiet", "--no-checkout", source.url, tmp]) else err
         return failed(
             "can't run `git` to fetch dependency `{name}`: {err}",

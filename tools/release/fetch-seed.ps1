@@ -27,7 +27,10 @@ try {
     if ($gh -and $LASTEXITCODE -eq 0) {
         $id = & gh api "repos/$repo/releases/tags/$Tag" --jq ".assets[] | select(.name == \`"$asset\`") | .id"
         if (-not $id) { Fail "release $Tag has no asset $asset" }
-        & gh api -H 'Accept: application/octet-stream' "repos/$repo/releases/assets/$id" > $file
+        # `gh release download`, not `gh api ... > $file`: Windows PowerShell 5.1 would re-encode a redirected native
+        # stream as text, and the seed would not match its SHA-256.
+        & gh release download $Tag --repo $repo --pattern $asset --output $file --clobber
+        if ($LASTEXITCODE -ne 0) { Fail "can't download $asset from release $Tag" }
     } elseif ($env:GITHUB_TOKEN) {
         $h = @{ Authorization = "Bearer $env:GITHUB_TOKEN" }
         $rel = Invoke-RestMethod -Headers $h -Uri "https://api.github.com/repos/$repo/releases/tags/$Tag"

@@ -134,6 +134,7 @@ struct Hit
 fn search_text(str, str, str) List[Hit]
 fn jtext(Json) str
 fn json_pairs(Json) str
+fn trap_text_hits(str, str) List[Hit]
 fn trace_hits(str, str, str) List[Hit]
 fn failure_hits(str, str) List[Hit]
 fn parse_coverage(str) Set[int]
@@ -155,4 +156,4 @@ fn bench(mut Editor) [clock io mutates]
 fn main() ! [clock env fail fs io proc ui]
 ```
 
-trimmed to fit 2000 tokens (~1563); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1577); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
