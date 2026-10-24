@@ -132,6 +132,17 @@ pub fn Asm.alu_ri(mut self, op str, d int, n int, imm int)
         "sub" => 3506438144
         "adds" => 2969567232
         _ => 4043309056
+    if imm < 0 or imm > 16777215
+        unreachable("a64: the add/sub immediate {imm} does not fit in 24 bits")
+    if imm > 4095
+        # The immediate field is 12 bits: the high part goes through the
+        # shifted form (`lsl #12`), the low part is a second instruction.
+        if op != "add" and op != "sub"
+            unreachable("a64: the {op} immediate {imm} does not fit in 12 bits")
+        word(base + 4194304 + imm / 4096 * 1024 + n * 32 + d)
+        if imm % 4096 != 0
+            word(base + imm % 4096 * 1024 + d * 32 + d)
+        return
     word(base + imm * 1024 + n * 32 + d)
 
 pub fn Asm.cmp_rr(mut self, n int, m int)
