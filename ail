@@ -127,6 +127,7 @@ native_run=
 run_opts=
 budget_opts=
 run_skip=0
+check_opts=
 if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
     run_args=("$@")
     k=1
@@ -145,7 +146,14 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 case "$v" in "" | *[!0-9]*) break ;; esac
                 budget_opts="$budget_opts --from $v"; k=$((k + 2)) ;;
             --json) budget_opts="$budget_opts --json"; k=$((k + 1)) ;;
-            --deterministic) export AIL_DETERMINISTIC=1; det_run=1; k=$((k + 1)) ;;
+            --deterministic) export AIL_DETERMINISTIC=1; check_opts="$check_opts --deterministic"; k=$((k + 1)) ;;
+            --deny)
+                v="${run_args[$((k + 1))]-}"
+                [ -n "$v" ] || die "\`--deny\` needs a list of capabilities, e.g. \`--deny fs,proc\`"
+                check_opts="$check_opts --deny $v"; k=$((k + 2)) ;;
+            --unsafe)
+                [ "${run_args[$((k + 1))]-}" = driver ] || break
+                check_opts="$check_opts --unsafe driver"; k=$((k + 2)) ;;
             --seed)
                 v="${run_args[$((k + 1))]-}"
                 case "$v" in "" | *[!0-9]*) die "\`--seed\` needs an integer, e.g. \`--seed 42\` (std.random.3)" ;; esac
@@ -173,6 +181,9 @@ if [ "${1:-}" = api ]; then
         case "$a" in --tokens | --ast) native_api= ;; esac
     done
 fi
+# `ail check --deny/--deterministic/--unsafe ...` is native too (eff.cap.1, eff.det.1, unsafe.hw.1).
+native_check=
+if [ "${1:-}" = check ]; then case "${2:-}" in --deny | --deterministic | --unsafe) native_check=1 ;; esac; fi
 # `ail effects [--json] FILE` is native too (#695).
 native_effects=
 if [ "${1:-}" = effects ]; then
@@ -182,7 +193,7 @@ if [ "${1:-}" = effects ]; then
     done
     [ "$files" = 1 ] || native_effects=
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         # The published seed builds the native CLI (ADR 0855); the Rust `ail` only when no seed can be had.
@@ -236,15 +247,8 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
         AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget check "${bopts[@]}" -- "$native" check-program "${copts[@]}"
     fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
-    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$run_file" || exit $?
-    # eff.det.1: `--deterministic` denies the capabilities a run could differ by.
-    if [ "${det_run:-}" = 1 ]; then
-        det_effects="$(AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" effects --json "$run_file" 2>/dev/null || true)"
-        det_main="$(printf '%s' "$det_effects" | sed -n 's/.*"fn:main":\[\([^]]*\)\].*/\1/p')"
-        for det_cap in clock net proc random; do
-            case "$det_main" in *"\"$det_cap\""*) echo "error[eff.cap.1]: \`main\` reaches the \`$det_cap\` capability, which \`--deterministic\` denies (eff.det.1)" >&2; exit 2 ;; esac
-        done
-    fi
+    # shellcheck disable=SC2086
+    AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $check_opts "$run_file" || exit $?
     prep_err="$(mktemp)"
     # shellcheck disable=SC2086
     if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then

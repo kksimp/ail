@@ -133,6 +133,8 @@ pub struct Checker
     ## (api.ref.1). `weak_symbols` hold the uses a symbol overrides.
     pub symbols Map[int, str]
     pub weak_symbols Map[int, str]
+    ## The capabilities `--deny` rejects in `main` (eff.cap.1).
+    pub denied List[str]
     ## Declared functions named as values, by the name's position, with the
     ## function's index (type.fn.2).
     pub fn_values Map[int, int]
@@ -244,6 +246,7 @@ pub fn new_checker(p ast.Program) Checker
         targets: Map[int, int](),
         symbols: Map[int, str](),
         weak_symbols: Map[int, str](),
+        denied: [],
         fn_values: Map[int, int](),
         trait_calls: Map[int, int](),
         assoc_calls: Map[int, int](),

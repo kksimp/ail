@@ -32,7 +32,12 @@ pub fn check_program(p ast.Program) Report
 
 ## `check_program`, and with `full` the facts `ail api` outlines.
 pub fn analyze(p ast.Program, full bool) Analysis
+    analyze_denying(p, full, [])
+
+## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
+pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     mut c := new_checker(p)
+    c.denied = denied
     c.list_param = c.new_param("T", [])
     c.collect_traits()
     c.collect_types()
@@ -70,6 +75,7 @@ pub fn analyze(p ast.Program, full bool) Analysis
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_denied())
     c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
     c.diags.extend(c.check_contract_effects())
