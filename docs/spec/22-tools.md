@@ -941,8 +941,9 @@ from `proc.start`, a socket, a listener) is recorded as
 whose result is unit, an int, a bool, a string, bytes or an optional string.
 Any other call of those modules (a list, struct or map result, a handle, and
 every `std.net` call) is recorded as `"uncaptured":true`, runs live, and traps
-`replay.cap.2` in a replay. `ail test --record` and `--replay` are not native
-yet.
+`replay.cap.2` in a replay. `ail test --record` and `--replay` run each test
+in its own process, record into `{"test":NAME}` sections, and replay only the
+tests the recording holds (`replay.rec.5`: each starts from the recording's seed).
 **replay.run.1** — `ail run --replay R [FILE]` runs `FILE` (by default the
 recording's program) with the recording's arguments and seed, and answers
 each captured call from R instead of running it: nothing is read, written,
