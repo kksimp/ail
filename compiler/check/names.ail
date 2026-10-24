@@ -72,6 +72,8 @@ pub STD_MODULES := [
 pub AIL_STD_MODULES := [
     "std.app",
     "std.args",
+    "std.attach",
+    "std.attach.serve",
     "std.csv",
     "std.log",
     "std.net.http",

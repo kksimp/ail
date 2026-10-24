@@ -32,8 +32,10 @@ pub fn mir.lower_module(str, str, ast.Program, ast.Program?) mir.Module ! mir.Pr
 pub struct mir.Source
 pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Problems [env fail fs io]
 pub fn mir.lower_package_with(List[mir.Source], ast.Program?, int) mir.Module ! mir.Problems [env fail fs io]
+pub fn mir.lower_package_par(List[mir.Source], ast.Program?, int, Set[str]) mir.Module ! mir.Problems [env fail fs io]
 pub fn mir.expr_pos(ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
+pub struct mir.ValDesc
 pub struct mir.Instr
 pub mir.STD_AIL := ...
 pub fn mir.aliases_of(ast.Program) Map[str, str]
@@ -46,6 +48,7 @@ pub fn mir.is_wait_call(ast.Expr) bool
 pub fn mir.plain_name(str) str
 pub struct mir.Traits
 pub fn mir.new_traits() mir.Traits
+pub fn mir.memoize(mut mir.Module) [mutates]
 pub enum mir.Ty
 pub struct mir.Inst
 pub fn mir.inst(int, str, List[int]) mir.Inst
@@ -82,4 +85,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1193); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1265); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

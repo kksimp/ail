@@ -1,0 +1,116 @@
+## std.attach (spec attach.wire.2, attach.wire.3, attach.wire.4, attach.wire.5; ADR 0884): the protocol a running
+## program speaks to an attached agent, as pure functions. One JSON object per
+## line in, one per line out. Every query reads; none writes (attach.wire.4).
+## The listener, the token file and the app wrapper are separate (ADR 0884).
+
+use std.screen
+
+## An observed value: its name, its type's name, and its value as JSON text.
+pub struct Observed
+    pub name str
+    pub ty str
+    pub value str
+
+pub fn observed(name str, ty str, value str) Observed
+    Observed(name: name, ty: ty, value: value)
+
+## The values the program has shown so far, with the revision at which each
+## last changed (attach.wire.5).
+pub struct Tracker
+    pub rev int
+    pub values List[Observed]
+    pub changed List[int]
+
+pub fn Tracker.new() Tracker
+    Tracker(rev: 0, values: [], changed: [])
+
+## Records the program's current `vals`: the revision goes up when any value
+## is new or differs, and each such value remembers it (attach.wire.5).
+pub fn Tracker.update(mut self, vals List[Observed])
+    mut bumped := false
+    for v in vals
+        mut at := -1
+        for k in 0..values.len()
+            if values[k].name == v.name
+                at = k
+        if at < 0
+            if not bumped
+                rev += 1
+                bumped = true
+            values.push(v)
+            changed.push(rev)
+        elif values[at].value != v.value or values[at].ty != v.ty
+            if not bumped
+                rev += 1
+                bumped = true
+            values[at] = v
+            changed[at] = rev
+
+fn text(s str) str
+    Json.Str(s).to_text()
+
+fn failure(why str) str
+    "\{\"v\":1,\"error\":{text(why)}}"
+
+## attach.wire.2: whether request `req` carries `token`.
+pub fn authorized(req Json, token str) bool
+    given := req.str("token") else return false
+    token != "" and given == token
+
+## The `observe` reply (attach.wire.5): the values named in `names` (all when
+## empty) that changed after revision `since`.
+pub fn Tracker.observe(self, names List[str], since int) str
+    mut parts := List[str]()
+    for k in 0..values.len()
+        v := values[k]
+        if changed[k] <= since
+            continue
+        if names.len() > 0 and not names.contains(v.name)
+            continue
+        parts.push("{text(v.name)}:{v.value}")
+    "\{\"v\":1,\"rev\":{rev},\"values\":\{{parts.join(",")}}}"
+
+## The `screen` reply (attach.wire.4): the std.screen query the request
+## names, answered as text within its `budget`.
+pub fn screen_reply(req Json, sc screen.Screen) str
+    budget := (req.num("budget") else 0.0).to_int()
+    body := screen_text(req, sc, budget)
+    "\{\"v\":1,\"text\":{text(body)}}"
+
+fn screen_text(req Json, sc screen.Screen, budget int) str
+    if px := req.num("x")
+        if py := req.num("y")
+            if rw := req.num("w")
+                return sc.describe(px, py, rw, req.num("h") else 1.0, budget)
+            return sc.what_is_at(px, py)
+    sc.find(req.str("role") else "", req.str("color") else "", req.str("text") else "", budget)
+
+## The reply to request line `line` (attach.wire.2-5). `tr` holds the observed
+## values, `sc` the screen, `heap` the heap summary text ("" when there is none).
+pub fn answer(line str, token str, tr Tracker, sc screen.Screen, heap str) str
+    req := parse_json(line) else err
+        return failure("not JSON: {err.message}")
+    if not authorized(req, token)
+        return failure("missing or wrong token")
+    q := req.str("q") else ""
+    if q == "observe"
+        mut names := List[str]()
+        for n in req.arr("names") else []
+            if s := n.as_str()
+                names.push(s)
+        since := (req.num("since") else -1.0).to_int()
+        return tr.observe(names, since)
+    if q == "screen"
+        return screen_reply(req, sc)
+    if q == "heap"
+        if heap == ""
+            return failure("no heap summary is available")
+        return "\{\"v\":1,\"heap\":{text(heap)}}"
+    failure("unknown query {text(q)}; the queries are observe, screen and heap, and all of them only read")
+
+## A type that can report its observed values (attach.observe.4). The compiler
+## writes the `impl` for a type with `@observe` fields when attach is on; a
+## type with none can take the default, which reports nothing.
+pub trait Observe
+    fn observed(self) List[Observed]
+        []

@@ -159,7 +159,7 @@ fn list_sum_sized(xs List[int], lo int, hi int, k int, head str, tail str) int
             sb_kind(k)
             sb_text("`\n")
             out_str(sb_str())
-            out_str(tail)
+            trap_tail(tail)
             trace_frames(tail)
             flush_to(2)
             sys_exit(1)

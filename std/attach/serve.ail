@@ -1,0 +1,138 @@
+## std.attach.serve (spec attach.wire.1, attach.wire.3, attach.wire.6, ADR 0884):
+## the listener that carries the attach protocol for a `std.app` program.
+## One thread listens on 127.0.0.1 and hands each request line to the app
+## through its inbox; the app answers between events, so program state is never
+## read from another thread. Nothing here runs unless `run` is called.
+
+use std.app
+use std.attach
+use std.env
+use std.fs
+use std.net
+use std.proc
+use std.random
+use std.screen
+use std.screen.view
+
+## The bridge between the listener thread and the app: `lock` serialises
+## requests and `replies` carries each answer back.
+pub struct Hub
+    pub lock Mutex[int]
+    pub replies Channel[str]
+
+pub fn Hub.new() Hub
+    Hub(lock: Mutex(0), replies: Channel[str](1))
+
+## A token an agent must present: 24 bytes from the system's random source,
+## else from the generator (attach.wire.2).
+pub fn make_token() str
+    out := proc.run(
+        "sh",
+        ["-c", "head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \\n'"],
+        none,
+        none,
+    ) else err
+        return fallback_token()
+    got := out.text().trim()
+    if out.ok() and got.chars().len() == 48
+        return got
+    fallback_token()
+
+fn fallback_token() str
+    mut s := ""
+    for k in 0..4
+        s = "{s}{random.int(0, 1000000000000).to_hex()}"
+    s
+
+## The app `inner` with the attach protocol answered between its events
+## (attach.wire.6). Its window size is `w` by `h` for the screen model.
+pub struct Watched[T app.App + attach.Observe]
+    pub inner T
+    pub token str
+    pub tr attach.Tracker
+    pub hub Hub
+    pub w float
+    pub h float
+
+impl app.App for Watched[T app.App + attach.Observe]
+    fn attach(mut self, inbox app.Inbox)
+        inner.attach(inbox)
+
+    fn update(mut self, ev app.Event)
+        if ev.kind == "external" and ev.id == "attach"
+            tr.update(inner.observed())
+            sc := view.of_node(inner.view(), w, h, inner.focus())
+            hub.replies.send(attach.answer(ev.text, token, tr, sc, ""))
+            return
+        if ev.kind == "resize"
+            w = ev.dx
+            h = ev.dy
+        inner.update(ev)
+
+    fn view(self) app.Node
+        inner.view()
+
+    fn title(self) str
+        inner.title()
+
+    fn focus(self) str
+        inner.focus()
+
+    fn measures(self) List[app.Measure]
+        inner.measures()
+
+    fn measured(mut self, runs List[app.Measure], widths List[float])
+        inner.measured(runs, widths)
+
+## Reads request lines from each connection until it closes and answers each
+## through the app (attach.wire.3). One connection at a time; a silent client
+## is dropped after 5 seconds.
+fn listen_loop(l net.Listener, inbox app.Inbox, hub Hub)
+    while true
+        c := l.accept() else break
+        c.set_timeout(5000)
+        while true
+            got := c.read_line() else break
+            line := got else break
+            if line.trim() == ""
+                break
+            mut reply := ""
+            with hub.lock as mut n
+                n += 1
+                inbox.post(app.external("attach", line))
+                reply = hub.replies.recv() else ""
+            c.write("{reply}\n") else break
+        c.close()
+
+## Where the address and token are published: `$TMPDIR/ail-attach-PORT.json`,
+## mode 0600 (attach.wire.1).
+pub fn token_path(port str) str
+    dir := env.get("TMPDIR") else "/tmp"
+    "{dir}/ail-attach-{port}.json"
+
+## Runs `a` in its window as `app.run` does, with the attach listener on
+## 127.0.0.1 (a free port); its address and token go to `token_path`, which is
+## removed when the window closes (attach.wire.1).
+pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
+    l := net.listen("127.0.0.1:0") else err
+        return app.AppError(kind: "attach", message: "can't listen: {err}")
+    addr := l.addr()
+    port := addr.split(":").last() else addr
+    path := token_path(port)
+    token := make_token()
+    # Create the file empty, restrict it, then put the token in it.
+    fs.write_text(path, "") else err
+        return app.AppError(kind: "attach", message: "can't write {path}: {err}")
+    chmod := proc.run("chmod", ["600", path], none, none) else err
+        return app.AppError(kind: "attach", message: "can't restrict {path}: {err}")
+    fs.write_text(path, "\{\"addr\":\"{addr}\",\"token\":\"{token}\"}\n") else err
+        return app.AppError(kind: "attach", message: "can't write {path}: {err}")
+    hub := Hub.new()
+    inbox := app.new_inbox()
+    g := TaskGroup()
+    g.add(spawn listen_loop(l, inbox, hub))
+    mut w := Watched(inner: a, token: token, tr: attach.Tracker.new(), hub: hub, w: 800.0, h: 600.0)
+    app.run_with(mut w, app.host_path()?, [], inbox)?
+    a = w.inner
+    l.close()
+    fs.remove(path) else return

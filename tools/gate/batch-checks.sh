@@ -10,7 +10,7 @@ run() { # run NAME CMD...
   "$@" >"$out/$name.log" 2>&1 && return 0
   # SIGBUS (135): the native CLI was rebuilt under a running copy; one rerun settles it.
   [ $? = 135 ] && "$@" >"$out/$name.log" 2>&1 && return 0
-  fails=$((fails+1)); echo "RED $name"; grep -vE '^\s*$' "$out/$name.log" | tail -6 | cut -c1-200
+  fails=$((fails+1)); echo "RED $name"; grep -vE '^\s*$|: 0$' "$out/$name.log" | tail -12 | cut -c1-200
 }
 # ./ail rebuilds the bootstrap binary (it embeds the compiler) when its sources changed.
 run build ./ail --version
