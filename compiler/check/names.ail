@@ -76,6 +76,8 @@ pub AIL_STD_MODULES := [
     "std.log",
     "std.net.http",
     "std.screen",
+    "std.screen.pixels",
+    "std.screen.view",
     "std.net.jar",
     "std.time.date",
     "std.ui.widgets",
