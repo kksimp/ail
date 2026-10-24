@@ -309,6 +309,48 @@ fn main()
     print(Sq.area(Sq(side: 2)))
 ```
 
+**contract.fuzz.1** — `ail test --contracts FILE` checks contracts by running
+generated inputs ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md)
+item 5). For each function that has `requires` or `ensures` lines it makes a
+property of the function's parameters (`test.prop.1-5`): an input that fails
+a `requires` is discarded, any other calls the function. A failing `ensures`,
+or a contract of anything the function calls, ends the property with the
+smallest failing input, reported as `input: n = 1` with the failing condition,
+the number of cases and the seed. Only these checks run: the file's own
+`@test` functions don't. The exit status and `--json` form are those of
+`test.run.3-4`, and `--cases` and `--seed` apply.
+
+**contract.fuzz.2** — A free function whose parameters are all property-test
+types (`test.prop.2`), without a generic, `mut` or `move` parameter, is
+checked; a method, or a function whose parameter type can't be generated, is
+not (it is reported as `skip` with the reason when it has contracts and its
+type is the cause).
+
+**contract.fuzz.3** — A function with effects (`eff.infer.1`) is reported as
+`skip` and is not called with generated inputs, so checking contracts does
+no I/O. With no contracts in the file, the output is `no contracts to check`
+and the status 0.
+
+```ail skip=bootstrap tool=test,--contracts,FILE status=1 expect=input: rules=contract.fuzz.1,contract.fuzz.2
+fn half(n int) int
+    requires n >= 0
+    ensures result * 2 == n
+    n / 2
+
+fn main()
+    print(half(4))
+```
+
+```ail skip=bootstrap tool=test,--contracts,FILE expect=skip rules=contract.fuzz.3
+fn shout(n int) int
+    ensures result == n
+    print(n)
+    n
+
+fn main()
+    print(shout(1))
+```
+
 ## Checked examples for the rules without one
 
 Each block is checked; the blocks marked `norun` trap on purpose, so they are not run (contract.ens.1, contract.inv.2, contract.inv.3).
