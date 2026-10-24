@@ -134,6 +134,7 @@ struct Hit
 fn search_text(str, str, str) List[Hit]
 fn jtext(Json) str
 fn json_pairs(Json) str
+fn trap_text_hits(str, str) List[Hit]
 fn trace_hits(str, str, str) List[Hit]
 fn failure_hits(str, str) List[Hit]
 fn parse_coverage(str) Set[int]
@@ -180,4 +181,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~1869); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~1883); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

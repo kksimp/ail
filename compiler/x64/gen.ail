@@ -1186,10 +1186,10 @@ fn Gen.address(mut self, i mir.Inst) Mem
 
 fn Gen.prim(mut self, i mir.Inst)
     if i.name.starts_with("fn_addr:")
-        # The function's address is only used with an import: never reached.
-        a.ud2()
+        # The address of a runtime function, for an import that takes a callback
+        # (a Windows thread's start routine, ADR 0599): a relative lea of its symbol.
         d := out_gpr(i.dst, S1)
-        a.mov_ri(d, 0)
+        a.lea(d, at_sym(i.name.replace("fn_addr:", ""), 0))
         put_gpr(i.dst, d)
         return
     match i.name
