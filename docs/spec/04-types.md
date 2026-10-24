@@ -1560,7 +1560,6 @@ fn main()
     mut xs := ["a", "b"]
     print(xs.join(", "))                          # a, b
     print([1, 2, 3].join(""))                     # 123
-    print([["a"], ["b"]].join("+"))               # ["a"]+["b"]
     print(xs.index_of("b") else -1)               # 1
     print(xs.contains("z"))                       # false
     print(xs.pop() else "")                       # b
