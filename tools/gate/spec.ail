@@ -63,12 +63,12 @@ fn cat(a List[str], b List[str]) List[str]
     r.extend(b)
     r
 
-## `ail ARGS` in `cwd`, with AIL_BINARY set; stdin comes from `stdin_file` when it isn't empty.
+## `ail ARGS` in `cwd`; stdin comes from `stdin_file` when it isn't empty.
 fn ail_in(cwd str, args List[str], stdin_file str) proc.Output
     root := repo_root()
-    bin := if (env.get("GATE_NATIVE") else "") == "1" then "{root}/ail" else "{root}/bootstrap/target/release/ail"
+    bin := "{root}/ail"
     redirect := if stdin_file.is_empty() then "</dev/null" else "<{stdin_file}"
-    script := "cd \"$0\" && AIL_BINARY={bin} exec {bin} \"$@\" {redirect}"
+    script := "cd \"$0\" && exec {bin} \"$@\" {redirect}"
     r := proc.run("sh", cat(["-c", script, cwd], args)) else return proc.Output(
         status: 127,
         out: "",
