@@ -28,12 +28,13 @@ pub struct mir.Sig
 pub struct mir.Problem
 pub error struct mir.Problems
 pub impl ToStr for mir.Problems
-pub fn mir.lower_module(str, str, ast.Program, ast.Program?) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_module(str, str, ast.Program, ast.Program?) mir.Module ! mir.Problems [env fail fs io]
 pub struct mir.Source
-pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Problems [fail]
-pub fn mir.lower_package_with(List[mir.Source], ast.Program?, int) mir.Module ! mir.Problems [fail]
+pub fn mir.lower_package(List[mir.Source], ast.Program?) mir.Module ! mir.Problems [env fail fs io]
+pub fn mir.lower_package_with(List[mir.Source], ast.Program?, int) mir.Module ! mir.Problems [env fail fs io]
 pub fn mir.expr_pos(ast.Expr) ast.Pos
 pub mir.RT_GLOBALS := 64
+pub struct mir.Instr
 pub mir.STD_AIL := ...
 pub fn mir.aliases_of(ast.Program) Map[str, str]
 pub fn mir.imports_of(ast.Program) List[str]
@@ -80,4 +81,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1159); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1175); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

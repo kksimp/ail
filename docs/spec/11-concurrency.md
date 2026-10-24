@@ -254,7 +254,9 @@ mutexes. *(ADR 0186)*
 > **Note:** the bootstrap interpreter runs one task at a time and in a fixed
 > order, so its output is repeatable: a new task runs at once until it
 > blocks or finishes, its spawner resumes next, and other ready tasks run
-> first in, first out. Native code runs tasks in parallel (`conc.task.3`).
+> first in, first out. Native code runs tasks in parallel (`conc.task.3`)
+> unless the program is run with `--deterministic` or `--schedule`
+> (`conc.sched.3`).
 
 **conc.sched.1** — `ail test --schedule=random:SEED` (and `ail run` with the
 same option) runs tasks on a random schedule decided by `SEED`: at each
@@ -266,6 +268,16 @@ picked at random from the ready ones. Pooled loops and tasks
 (`conc.par.8–10`) run on the scheduler instead. The same seed gives the
 same interleaving on every run and target, so a failure can be replayed;
 `--schedule=random` without a seed picks one. *(ADR 0322)*
+
+**conc.sched.3** — `ail run --deterministic` (and `--schedule=fixed`) runs
+tasks one at a time on the fixed schedule of the note under `conc.task.9`:
+a new task runs at once until it blocks or finishes, its spawner resumes
+next, a task that waits joins the line when what it waits for changes, and
+other ready tasks run first in, first out. Pooled loops and tasks run on the
+scheduler too (`conc.par.9`). Native programs pay for the mode only when
+they ask for it: the scheduler is read from the process environment once,
+when the first task starts, and a build for `--schedule=random` adds switch
+points at atomic operations. *(ADRs 0186, 0207)*
 
 **conc.sched.2** — When a test fails under a random schedule, `ail test`
 prints `schedule seed SEED: replay with ...` after its summary, and with
@@ -670,9 +682,10 @@ fn main()
     print(a.load(order: Acquire))
 ```
 
-```ail norun rules=conc.sched.1,conc.sched.2
+```ail norun rules=conc.sched.1,conc.sched.2,conc.sched.3
 # norun: the gate runs no test. Run this with `ail test --schedule=random:7`;
-# a failing run prints the seed (conc.sched.2).
+# a failing run prints the seed (conc.sched.2). `ail run --deterministic` runs the
+# fixed schedule (conc.sched.3).
 fn take(ch Channel[int]) int
     ch.recv() else 0
 
