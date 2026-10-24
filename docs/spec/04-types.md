@@ -952,7 +952,6 @@ names := List[str]()
 xs := ["a", "b"]
 xs.join(", ")           # a, b
 [1, 2, 3].join("")      # 123
-[["a"], ["b"]].join("+")  # ["a"]+["b"]
 xs.index_of("b")        # 1
 ```
 
