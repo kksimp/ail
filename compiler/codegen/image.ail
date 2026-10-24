@@ -131,7 +131,11 @@ pub fn add_trap_texts(mut img Image, m mir.Module, k int, op str)
     lines := if site.file < m.file_lines.len() then m.file_lines[site.file] else m.lines
     # `std.unreachable`: the runtime prints the rule from the message (rt kind 17).
     head := "{path}:{site.line}:{site.col}: trap["
-    add_str(mut img, "d:h{k}", if site.rule == "std.unreachable" then head else "{head}{site.rule}]: ")
+    add_str(
+        mut img,
+        "d:h{k}",
+        if site.rule == "std.unreachable" then head else "{head}{site.rule}]: ",
+    )
     line := if site.line >= 1 and site.line <= lines.len() then lines[site.line - 1] else ""
     excerpt := mir.excerpt(line, site.line, site.col)
     # The stack's innermost lines: the trapping function and the functions

@@ -996,7 +996,8 @@ fn trap_end_in_task(tail str)
     base := load64(global(OUT_BUF))
     n := load64(global(OUT_LEN))
     mut at := 0
-    while at + 3 <= n and not (load8(base + at) == 93 and load8(base + at + 1) == 58 and load8(base + at + 2) == 32)
+    while at + 3 <= n
+        and not (load8(base + at) == 93 and load8(base + at + 1) == 58 and load8(base + at + 2) == 32)
         at += 1
     head := os_str_from(base, at + 3)
     msg := os_str_from(base + at + 3, n - at - 3)
