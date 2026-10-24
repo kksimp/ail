@@ -223,6 +223,13 @@ fn run_both_tiers(file str) str?
         return "`ail run` failed:\n{r.err}"
     none
 
+fn show_fail(f str)
+    fl := f.lines()
+    print("RED {fl[0]}")
+    for i in 1..fl.len()
+        if i <= 3
+            print(fl[i])
+
 fn main() !
     root := repo_root()
     tmp := "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail"
@@ -249,7 +256,12 @@ fn main() !
     mut skipped := 0
     mut fails := List[str]()
     mut covered := Set[str]()
+    mut shown := 0
     for b in blocks
+        # print each failure as soon as it is known, so a stopped run still lists them
+        while shown < fails.len()
+            show_fail(fails[shown])
+            shown += 1
         if b.kind == "skip"
             skipped += 1
             for r in b.rules
@@ -326,12 +338,9 @@ fn main() !
         if not covered.contains(pair[0]) and BATCH_CHAPTERS.contains(pair[1])
             fails.push("{pair[1]} {pair[0]}: no runnable example")
     mk4 := proc.run("rm", ["-rf", tmp]) else return
-    for f in fails
-        fl := f.lines()
-        print("RED {fl[0]}")
-        for i in 1..fl.len()
-            if i <= 3
-                print(fl[i])
+    while shown < fails.len()
+        show_fail(fails[shown])
+        shown += 1
     if fails.is_empty()
         print("SPEC GREEN ({run} checked, {skipped} skipped)")
     else
