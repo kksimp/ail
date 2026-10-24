@@ -10,7 +10,7 @@ SERVE := "ail_serve"
 ## imports go on lines of their own at the top. A program that doesn't run an
 ## app comes back unchanged.
 pub fn shim(text str) str
-    if not text.contains("app.run(") or not text.contains("use std.app")
+    if not text.contains("app.run(") or not text.contains("use std.app") or has_clash(text)
         return text
     # The generated `impl` names the module `attach`.
     mut out := ["use std.attach.serve as {SERVE}"]
@@ -32,3 +32,20 @@ fn retarget(line str) str
     if line.trim().starts_with("#")
         return line
     line.replace("app.run(", "{SERVE}.run(")
+
+## Whether the program already uses the name `attach` or `ail_serve` for
+## another module (Garlic's own `attach`): the generated `attach.Observed` and
+## the shim's import would then mean something else, so the program is built as
+## written (attach.run.2).
+fn has_clash(text str) bool
+    for line in text.lines()
+        rest := line.strip_prefix("use ") else continue
+        cut := rest.split(" as ")
+        mut name := ""
+        if cut.len() > 1
+            name = cut[1].trim()
+        else
+            name = rest.trim().split(".").last() else ""
+        if (name == "attach" and rest.trim() != "std.attach") or name == SERVE
+            return true
+    false
