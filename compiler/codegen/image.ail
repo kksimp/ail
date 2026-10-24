@@ -43,7 +43,7 @@ pub fn new_image() Image
         relocs: [],
         data: [],
         data_syms: {},
-        globals: 64,
+        globals: 72,
         entry: 0,
         calls: [],
         imports: [],

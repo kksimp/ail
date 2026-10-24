@@ -53,6 +53,7 @@ pub struct pkg.Packages  ## Every package of a program: the root package (named 
     manifests List[pkg.ManifestFile]
     lock pkg.Lock
     opts pkg.Options
+    pub fn pkg.Packages.fetch_failed(self) bool  ## A git dependency's fetch failed (mod.pkg.7), so its modules are missing for that reason alone.
     pub fn pkg.Packages.locked(self) List[pkg.Entry]  ## The git dependencies resolved, for `ail pkg update` (mod.pkg.9).
     pub fn pkg.Packages.target(self, from str, parts List[str]) pkg.Target  ## The module that the import path `parts`, written in module `from`, names
     pub fn pkg.Packages.finish(self, mut prog ast.Program, mut diags List[syntax.Diag], mut texts List[str]) [mutates]  ## Add the manifests to the program's files, after its source files, with
@@ -65,4 +66,4 @@ pub fn pkg.read_with(root str, opts pkg.Options) pkg.Packages [clock env fs io p
 pub fn pkg.update(packages pkg.Packages, names List[str]) (List[str], List[syntax.Diag])  ## The lines `locked NAME COMMIT` of the dependencies resolved, or the
 ```
 
-trimmed to fit 2000 tokens (~1255); dropped: private items
+trimmed to fit 2000 tokens (~1302); dropped: private items

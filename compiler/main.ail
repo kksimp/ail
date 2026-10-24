@@ -188,8 +188,18 @@ fn positive(v str) bool
     n := v.to_int() else return false
     n > 0
 
+## `p` with `/` for each `\\` on Windows, where the compiler splits paths on
+## `/` and the shell hands it backslashes.
+fn fwd(p str) str
+    if (env.get("OS") else "") == "Windows_NT"
+        return p.replace("\\", "/")
+    p
+
 ## The target `ail build` makes by default: the host's, from `uname`.
 fn host_target() str
+    # Windows sets `OS`; it has no `uname`.
+    if (env.get("OS") else "") == "Windows_NT"
+        return "x86_64-windows"
     out := proc.run("uname", ["-sm"]) else
         return "x86_64-linux"
     match out.out.trim()
@@ -271,7 +281,7 @@ fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool
     target := if target_arg == "" then host_target() else target_arg
     out := if out_arg == "" then path.stem(file) else out_arg
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb, attach))
+    exe := path.join(dir, "{cache_key(file, target, ms, mb, attach)}{exe_ext(target)}")
     if cached_copy(exe, out, target)
         return
     fs.make_dir(dir) else err
@@ -413,7 +423,8 @@ fn source_text(path str) !str
 ## imports, transitively, so the runtime choice sees a task or a channel in a
 ## module as well as in the main file. A module that can't be read is skipped
 ## (the build reports it).
-fn imported_text(file str, text str, std str) str
+fn imported_text(file_arg str, text str, std str) str
+    file := fwd(file_arg)
     mut root := "."
     if file.ends_with(".ail")
         cut := file.split("/")
@@ -482,7 +493,8 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
 
 ## `lower_file` with the root file's text given when `over` isn't empty (the
 ## attach shim).
-fn lower_file_with(path str, rt ast.Program?, std str, over str) !mir.Module
+fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
+    path := fwd(path_arg)
     mut srcs := List[mir.Source]()
     mut root := path
     if path.ends_with(".ail")
@@ -964,16 +976,26 @@ fn sched_points() bool
     s := env.get("AIL_SCHEDULE") else ""
     s.starts_with("random")
 
+## Windows runs only files named `.exe`.
+fn exe_ext(target str) str
+    if target.ends_with("windows")
+        return ".exe"
+    ""
+
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
 fn cache_key(file str, target str, ms str, mb str, attach bool) str
     dir := compiler_dir()
     root := path.dir(file)
+    # `ail.lock` names the commit of every git dependency, whose files live in the cache outside `root`.
+    # (`file` may be the package directory itself.)
+    lock := "{fs.read_text(path.join(root, "ail.lock")) else ""}{fs.read_text(path.join(file, "ail.lock")) else ""}"
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-2 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""}",
+        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
+        "lock {hash.sha256(lock)}",
         tree_stamp("std", std),
     ]
     hash.sha256(parts.join("\n"))
@@ -998,7 +1020,7 @@ fn cli_prepare(file str) str
 fn cli_prepare_with(file str, ms str, mb str, attach bool) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb, attach))
+    exe := path.join(dir, "{cache_key(file, target, ms, mb, attach)}{exe_ext(target)}")
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err

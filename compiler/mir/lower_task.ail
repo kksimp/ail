@@ -158,6 +158,7 @@ fn Lower.spawn_call(
     if args.len() != sig.params.len()
         return unsupported(cpos, "this call")
     rec := call("rt.task_new", [konst(tk.sites.len(), Ty.Int)], Ty.Int)
+    mut traced := List[int]()
     for k in 0..args.len()
         a := args[k]
         if a.label != none
@@ -166,8 +167,10 @@ fn Lower.spawn_call(
         id := convert(v, sig.params[k], expr_pos(a.value))
         # A task works on its own copy of a list (conc.share.1).
         w := copy_if_place(a.value, Val(id: id, ty: sig.params[k]))
+        traced.push(w)
         at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
         prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
+    trace_spawn(key, sig.params, traced, rec, pos)
     call("rt.task_start", [rec], Ty.Unit)
     tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret, loop: -1))
     Val(id: rec, ty: Ty.Int)
@@ -189,6 +192,7 @@ fn Lower.lower_wait(mut self, inner ast.Expr, pos ast.Pos) Val?
                         h := read_var(key, cur)
                         at1 := trace_line(npos)
                         at2 := trace_line(pos)
+                        trace_wait(h, npos)
                         w := call("rt.task_wait", [h, at1, at2], Ty.Int)
                         chan_deadlock_trap(npos)
                         mut v := Val(id: w, ty: res)

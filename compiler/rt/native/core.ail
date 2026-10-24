@@ -51,7 +51,14 @@ MAXW := 64
 fn sys_write(fd int, p int, n int)
     t := target()
     if t == 3
-        win_write(fd, p, n)
+        # Windows output (ADR 0608): `WriteFile` (win.ail) on the standard handle until every byte is written.
+        # A failed write ends the output, as on the other targets.
+        mut sent := 0
+        while sent < n
+            w := win_write(fd, p + sent, n - sent)
+            if w <= 0
+                return
+            sent += w
         return
     mut done := 0
     while done < n
@@ -82,18 +89,6 @@ fn sys_mmap(n int) int
     flags := if t == 2 then 4098 else 34
     syscall(k, 0, n, 3, flags, -1, 0)
 
-## Windows output (ADR 0608): `WriteFile` on the standard handle until every
-## byte is written. A failed write ends the output, as on the other targets.
-fn win_write(fd int, p int, n int)
-    h := import_call("GetStdHandle", if fd == 2 then -12 else -11, 0, 0, 0)
-    mut done := 0
-    while done < n
-        ok := import_call("WriteFile", h, p + done, n - done, global(WIN_WRITTEN), 0)
-        w := load64(global(WIN_WRITTEN))
-        if ok == 0 or w <= 0
-            return
-        done += w
-
 ## A thread-stack region: `n` bytes that need no commit up front.
 fn sys_mmap_lazy(n int) int
     t := target()
@@ -106,6 +101,9 @@ fn sys_mmap_lazy(n int) int
 ## macOS has no futex: `__ulock_wait` and `__ulock_wake` of libSystem do the
 ## same on a 32-bit word (UL_COMPARE_AND_WAIT is 1, ULF_WAKE_ALL 0x100).
 fn futex_wait_raw(a int, v int)
+    if target() == 3
+        win_wait(a, v, -1)
+        return
     if target() == 2
         import_call("___ulock_wait", 1, a, v, 0)
         return
@@ -127,7 +125,9 @@ fn futex_wait(a int, v int)
 ## when woken, or when the time ran out (the caller looks at the word).
 fn futex_wait_timed(a int, v int, ms int)
     mut t := ms * 1000
-    if target() != 2
+    if target() == 3
+        t = ms
+    elif target() != 2
         t = alloc(16, KIND_BYTES)
         store64(t, ms / 1000)
         store64(t + 8, ms % 1000 * 1000000)
@@ -140,6 +140,9 @@ fn futex_wait_timed(a int, v int, ms int)
 
 ## `t` is the timeout: microseconds on macOS, else the address of a timespec.
 fn futex_wait_raw_t(a int, v int, t int)
+    if target() == 3
+        win_wait(a, v, t)
+        return
     if target() == 2
         import_call("___ulock_wait", 1, a, v, t)
         return
@@ -147,6 +150,9 @@ fn futex_wait_raw_t(a int, v int, t int)
     syscall(k, a, 128, v, t, 0, 0)
 
 fn futex_wake(a int, n int)
+    if target() == 3
+        # Waiters on Windows poll the word (`win_wait`), so there is nobody to wake.
+        return
     if target() == 2
         op := if n > 1 then 257 else 1
         import_call("___ulock_wake", op, a, 0, 0)
@@ -176,6 +182,8 @@ fn unlock(a int)
 ## The worker thread this code runs on (0 to 63), or -1 for the main thread
 ## or before any worker exists. A worker's stack lies in the `STACKS` region.
 fn worker_index() int
+    if target() == 3
+        return win_worker_index()
     base := load64(global(STACKS))
     if base == 0
         return -1
@@ -227,10 +235,157 @@ fn init(argc int, argv int)
     store64(global(OUT_LEN), 0)
     heap_init(argv)
     limits_init()
+    # Windows has no argument vector on entry: read the command line.
+    if target() == 3
+        win_args_init()
     # The argument vector sits at the top of the main stack. Windows
     # (target 3) has no limit yet: a zero limit is never reached.
     if target() != 3
         store64(global(STACK_LIMIT), argv - stack_use())
+
+## Windows (target 3) hands the program no `argv` or `envp`: build them from
+## `GetCommandLineW` (UTF-16, by the rules of `CommandLineToArgvW`, program
+## name first) and `GetEnvironmentStringsW`. They live in pages that are
+## never freed.
+fn win_args_init()
+    p := import_call("GetCommandLineW", 0, 0, 0, 0)
+    if p == 0
+        return
+    mut n := 0
+    while win_unit(p, n) != 0
+        n += 1
+    # The environment block: `NAME=VALUE` entries of UTF-16, each ended by a NUL, the block by a second one.
+    e := import_call("GetEnvironmentStringsW", 0, 0, 0, 0)
+    mut m := 0
+    if e != 0
+        while win_unit(e, m) != 0 or win_unit(e, m + 1) != 0
+            m += 1
+    # Words for `argv` (at most one argument per two units) and then `envp`;
+    # then 3 UTF-8 bytes per unit plus a NUL for each string.
+    vec := sys_mmap(8 * (n + 4) + 8 * (m / 2 + 4) + 4 * (n + m) + 64)
+    mut out := vec + 8 * (n + 4) + 8 * (m / 2 + 4)
+    mut argc := 0
+    mut i := 0
+    store64(vec, out)
+    if win_unit(p, 0) == 34
+        i = 1
+        while win_unit(p, i) != 0 and win_unit(p, i) != 34
+            cp := win_cp(p, i)
+            out = win_put(out, cp)
+            i += win_width(cp)
+        if win_unit(p, i) == 34
+            i += 1
+    else
+        while win_unit(p, i) != 0 and win_unit(p, i) != 32 and win_unit(p, i) != 9
+            cp := win_cp(p, i)
+            out = win_put(out, cp)
+            i += win_width(cp)
+    store8(out, 0)
+    out += 1
+    argc = 1
+    while true
+        while win_unit(p, i) == 32 or win_unit(p, i) == 9
+            i += 1
+        if win_unit(p, i) == 0
+            break
+        store64(vec + 8 * argc, out)
+        mut quoted := false
+        while win_unit(p, i) != 0
+            c := win_unit(p, i)
+            if c == 92
+                mut b := 0
+                while win_unit(p, i + b) == 92
+                    b += 1
+                i += b
+                if win_unit(p, i) == 34
+                    for k in 0..b / 2
+                        store8(out, 92)
+                        out += 1
+                    if b % 2 == 1
+                        store8(out, 34)
+                        out += 1
+                        i += 1
+                else
+                    for k in 0..b
+                        store8(out, 92)
+                        out += 1
+            elif c == 34
+                quoted = not quoted
+                i += 1
+            elif (c == 32 or c == 9) and not quoted
+                break
+            else
+                cp := win_cp(p, i)
+                out = win_put(out, cp)
+                i += win_width(cp)
+        store8(out, 0)
+        out += 1
+        argc += 1
+    store64(vec + 8 * argc, 0)
+    # `envp` follows `argv`'s NULL, as on Linux. The per-drive entries that
+    # start with `=` are not variables and are left out.
+    mut ne := 0
+    mut q := 0
+    while e != 0 and win_unit(e, q) != 0
+        start := out
+        first := win_unit(e, q)
+        while win_unit(e, q) != 0
+            cp := win_cp(e, q)
+            out = win_put(out, cp)
+            q += win_width(cp)
+        store8(out, 0)
+        out += 1
+        q += 1
+        if first == 61
+            out = start
+        else
+            store64(vec + 8 * (argc + 1) + 8 * ne, start)
+            ne += 1
+    store64(vec + 8 * (argc + 1) + 8 * ne, 0)
+    store64(global(ARGC), argc)
+    store64(global(ARGV), vec)
+
+## The UTF-16 unit `i` of the NUL-terminated string at `p`.
+fn win_unit(p int, i int) int
+    load8(p + 2 * i) + 256 * load8(p + 2 * i + 1)
+
+## The code point at unit `i`: a surrogate pair is one, a lone surrogate is U+FFFD.
+fn win_cp(p int, i int) int
+    c := win_unit(p, i)
+    if c >= 55296 and c < 56320
+        d := win_unit(p, i + 1)
+        if d >= 56320 and d < 57344
+            return 65536 + (c - 55296) * 1024 + (d - 56320)
+        return 65533
+    if c >= 56320 and c < 57344
+        return 65533
+    c
+
+## How many UTF-16 units a code point took.
+fn win_width(cp int) int
+    if cp >= 65536
+        return 2
+    1
+
+## Write `cp` as UTF-8 at `out`; the address after it.
+fn win_put(out int, cp int) int
+    if cp < 128
+        store8(out, cp)
+        return out + 1
+    if cp < 2048
+        store8(out, 192 + cp / 64)
+        store8(out + 1, 128 + cp % 64)
+        return out + 2
+    if cp < 65536
+        store8(out, 224 + cp / 4096)
+        store8(out + 1, 128 + cp / 64 % 64)
+        store8(out + 2, 128 + cp % 64)
+        return out + 3
+    store8(out, 240 + cp / 262144)
+    store8(out + 1, 128 + cp / 4096 % 64)
+    store8(out + 2, 128 + cp / 64 % 64)
+    store8(out + 3, 128 + cp % 64)
+    out + 4
 
 ## How much of the main stack a program may use: its size limit
 ## (`RLIMIT_STACK`, 3) less the reserve, capped at 1 GiB.

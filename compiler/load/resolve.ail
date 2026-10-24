@@ -157,7 +157,8 @@ fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loa
         elif items.contains(reach.module) and reach.module != ""
             edges.push((module, reach.module, head.pos))
             target = Target.Module(reach.module)
-        else
+        elif not packages.fetch_failed()
+            # (After a failed fetch mod.pkg.7 already says why the dependency's modules are missing.)
             help := if s := check.suggest(
                 dotted,
                 check.std_module_names(),
