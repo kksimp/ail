@@ -1,9 +1,8 @@
-# Pending ADR: native `--values` build mode
+# 0886. Native `--values` build mode
 
 - Status: Accepted
 - Date: 2026-10-24
 - Decided by: Kaleb (option A on the decision card), design by AI (delegated, ADR 0076)
-- Number: to be allocated by the integrator
 
 ## Context
 

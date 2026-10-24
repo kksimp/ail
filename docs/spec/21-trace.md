@@ -258,7 +258,7 @@ declaration order; the values of types the runtime can print), a contract
 trap's `  values: ` line (the arguments the condition names, in name order),
 and `  … N more frames (--verbose shows every frame and value)`. A build
 without `--values` prints no values (trace.frame.1) and costs nothing for
-them. *(ADR pending, ADR 0641)*
+them. *(ADR 0886, ADR 0641)*
 
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
