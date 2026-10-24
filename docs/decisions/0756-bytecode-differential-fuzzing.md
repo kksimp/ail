@@ -1,6 +1,6 @@
 # 0756. Differential fuzzing of the bytecode tier
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0873](0873-rust-only-features-after-rust-removal.md)
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 16 — Testing

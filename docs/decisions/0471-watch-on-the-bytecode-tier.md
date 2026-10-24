@@ -1,6 +1,6 @@
 # 0471. `--watch` runs on the bytecode tier
 
-- **Status:** Accepted; amends [0364](0364-bytecode-tier-limits-coverage-and-traces.md) (`--watch` no longer keeps a run on the walker)
+- **Status:** Superseded by [ADR 0873](0873-rust-only-features-after-rust-removal.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076), within the designer's ADR 0359
 - **Topic:** interpreter performance; tracing

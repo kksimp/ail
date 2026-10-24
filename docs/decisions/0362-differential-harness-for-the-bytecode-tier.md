@@ -1,6 +1,6 @@
 # 0362. `./ail selftest` runs every program on both tiers and the fuzzer compares them
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0873](0873-rust-only-features-after-rust-removal.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076), within the designer's ADR 0359
 - **Topic:** testing; interpreter performance

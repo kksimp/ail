@@ -349,12 +349,12 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0356](0356-ail-lock-pins-commits.md) | `ail.lock` pins each git dependency to a commit; `run` and `test` write it *(delegated)* | Accepted | 2026-10-20 |
 | [0357](0357-ail-pkg-update.md) | `ail pkg update [NAME...]` re-resolves git dependencies *(delegated)* | Accepted | 2026-10-20 |
 | [0358](0358-mistakes-corpus-for-rounds-5-9.md) | The mistakes corpus covers the features of rounds 5 to 9 *(delegated)* | Accepted | 2026-10-20 |
-| [0359](0359-bytecode-tier-in-the-bootstrap.md) | Add a bytecode tier to the bootstrap interpreter (designer) | Accepted | 2026-10-20 |
+| [0359](0359-bytecode-tier-in-the-bootstrap.md) | Add a bytecode tier to the bootstrap interpreter (designer) | Superseded by 0873 | 2026-10-20 |
 | [0360](0360-in-house-tls-for-std-net.md) | `https` in `std.net` through an in-house TLS implementation, not a crate (designer) | Accepted | 2026-10-20 |
-| [0361](0361-bytecode-tier-design.md) | The bytecode tier: register code over the tree walker's environment, with hand-offs *(delegated)* | Accepted | 2026-10-20 |
-| [0362](0362-differential-harness-for-the-bytecode-tier.md) | `./ail selftest` runs every program on both tiers; `fuzz.prop.5` compares them *(delegated)* | Accepted | 2026-10-20 |
-| [0363](0363-bytecode-tier-methods-and-data.md) | The bytecode tier compiles method and trait calls, data construction, `match`, interpolation and `?` *(delegated)* | Accepted | 2026-10-20 |
-| [0364](0364-bytecode-tier-limits-coverage-and-traces.md) | Run limits, coverage and call and effect traces run on the bytecode tier *(delegated)* | Accepted | 2026-10-20 |
+| [0361](0361-bytecode-tier-design.md) | The bytecode tier: register code over the tree walker's environment, with hand-offs *(delegated)* | Superseded by 0873 | 2026-10-20 |
+| [0362](0362-differential-harness-for-the-bytecode-tier.md) | `./ail selftest` runs every program on both tiers; `fuzz.prop.5` compares them *(delegated)* | Superseded by 0873 | 2026-10-20 |
+| [0363](0363-bytecode-tier-methods-and-data.md) | The bytecode tier compiles method and trait calls, data construction, `match`, interpolation and `?` *(delegated)* | Superseded by 0873 | 2026-10-20 |
+| [0364](0364-bytecode-tier-limits-coverage-and-traces.md) | Run limits, coverage and call and effect traces run on the bytecode tier *(delegated)* | Superseded by 0873 | 2026-10-20 |
 | [0366](0366-tls-crypto-primitives.md) | TLS cryptographic primitives, constant time, tested against RFC/NIST vectors and OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0367](0367-tls13-client-handshake.md) | The TLS 1.3 client handshake and record layer, tested on a recorded trace and live OpenSSL *(delegated)* | Accepted | 2026-10-20 |
 | [0368](0368-tls-certificate-verification.md) | TLS certificate verification: X.509 chains to the platform's roots *(delegated)* | Accepted | 2026-10-20 |
@@ -393,7 +393,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0578](0578-dominated-list-accesses.md) | Accesses that an earlier access or a `push` vouches for *(delegated)* | Accepted | 2026-10-20 |
 | [0579](0579-list-presizing.md) | Sizing a list before the loop that fills it (`rt.list_reserve`) *(delegated)* | Accepted | 2026-10-20 |
 | [0611](0611-overflow-checks-by-range-guards.md) | Overflow checks removed by range guards in versioned loops, duplicate checked operations dropped, x86-64 immediate and test forms *(delegated)* | Accepted | 2026-10-20 |
-| [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Accepted | 2026-10-21 |
+| [0618](0618-bytecode-typed-fast-paths.md) | Typed fast paths in the bytecode tier: floats, list element updates, `push`/`len`, computed `op=` and `mut` argument calls *(delegated)* | Superseded by 0873 | 2026-10-21 |
 | [0670](0670-explain-examples-from-tagged-blocks.md) | `ail explain` examples: worked examples count in the audit; a `rules=` block fills a rule with no example in its section *(delegated)* | Accepted | 2026-10-21 |
 | [0622](0622-loop-starts-steps-and-index-spans.md) | Versioned loops with computed starts and unchanging steps; index arithmetic bounded by a constant loop bound *(delegated)* | Accepted | 2026-10-21 |
 | [0623](0623-branch-and-codegen-peepholes.md) | Branch and codegen peepholes: flipped `not` branches, bit operations into the result register, direct spill moves *(delegated)* | Accepted | 2026-10-21 |
@@ -463,7 +463,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0468](0468-optional-none-locals-and-if-branches.md) | A `mut` local that starts as `none` takes its type from its first assignment; `if c then x else none` is `T?` *(delegated)* | Accepted | 2026-10-20 |
 | [0469](0469-locals-may-shadow-functions.md) | A local may shadow a function; calling it in the local's block is `expr.call.1` *(delegated)* | Accepted | 2026-10-20 |
 | [0470](0470-parenthesised-if-operand.md) | A one-line `if` is an operand in parentheses: `col + (if c then a else b)` *(delegated)* | Accepted | 2026-10-20 |
-| [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Accepted | 2026-10-20 |
+| [0471](0471-watch-on-the-bytecode-tier.md) | `--watch` runs on the bytecode tier: watched assignments and mutating calls hand off to the walker *(delegated)* | Superseded by 0873 | 2026-10-20 |
 | [0477](0477-agent-corpus-round-three.md) | Agent corpus round three: ten programs on today's standard library, with Python twins (*delegated*) | Accepted | 2026-10-20 |
 | [0483](0483-rule-id-audit.md) | A script audits spec rule IDs against the code; the `api.*` and `fix.*` rules are normative *(delegated)* | Accepted | 2026-10-20 |
 | [0489](0489-editor-find-references.md) | Editor find references on Shift-F12 through `ail api --refs` (delegated) | Accepted | 2026-10-20 |
@@ -525,7 +525,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0603](0603-native-match.md) | `match` in native code: a compare chain on the variant index, bindings, guards, `|`, ranges, `int`/`bool`/`str` literals *(delegated)* | Accepted | 2026-10-20 |
 | [0604](0604-native-computed-constants.md) | Computed module constants in native code: globals filled by `init.consts` before `main`, dependencies first *(delegated)* | Accepted | 2026-10-20 |
 | [0702](0702-native-bytes.md) | Native `bytes`: string-object layout, literals decoded at the use, a `Byte` type that only `to_int` accepts *(delegated)* | Accepted | 2026-10-21 |
-| [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Accepted | 2026-10-21 |
+| [0619](0619-bytecode-calls-loops-and-fusion.md) | Bytecode tier: lean calls, in-place `for` variable, `while` tested after the body, fused `push`/`len` and `a[i][k]`, cheaper register writes *(delegated)* | Superseded by 0873 | 2026-10-21 |
 | [0626](0626-std-csv.md) | `std.csv`: CSV as rows and records *(delegated)* | Accepted | 2026-10-21 |
 | [0627](0627-std-args.md) | `std.args`: flags, options and positionals with help *(delegated)* | Accepted | 2026-10-21 |
 | [0628](0628-std-log.md) | `std.log`: leveled messages on standard error *(delegated)* | Accepted | 2026-10-21 |
@@ -583,11 +583,11 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0738](0738-map-lookup-without-key-conversion.md) | Text and integer map keys are looked up without building a `Key` *(delegated)* | Accepted | 2026-10-21 |
 | [0737](0737-runtime-small-block-allocator.md) | `ail run` and `ail test` allocate small blocks from per-thread free lists *(delegated)* | Accepted | 2026-10-21 |
 | [0739](0739-json-parse-builds-text-once.md) | The native JSON parser builds each text value once *(delegated)* | Accepted | 2026-10-21 |
-| [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Accepted | 2026-10-21 |
-| [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Accepted | 2026-10-21 |
-| [0759](0759-bytecode-tier-stalls-not-frames.md) | Bytecode tier: the cost left is stalls, not the frame layout; two frame redesigns measured and dropped *(delegated)* | Accepted | 2026-10-21 |
+| [0620](0620-bytecode-element-method-calls.md) | Bytecode tier: `mut self` method calls on list elements, field `op=` on `self`, nested `else` *(delegated)* | Superseded by 0873 | 2026-10-21 |
+| [0621](0621-bytecode-bounds-checks-stay.md) | Bytecode tier: bounds checks stay (no safe way to drop them); what is left is the tier's design *(delegated)* | Superseded by 0873 | 2026-10-21 |
+| [0759](0759-bytecode-tier-stalls-not-frames.md) | Bytecode tier: the cost left is stalls, not the frame layout; two frame redesigns measured and dropped *(delegated)* | Superseded by 0873 | 2026-10-21 |
 | [0760](0760-packed-list-storage.md) | Lists of `int`, `float` and `bool` are stored packed (`Value::List(Rc<List>)`), invisible to programs; sieve 0.59 s to 0.21 s *(delegated)* | Accepted | 2026-10-21 |
-| [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Accepted | 2026-10-21 |
+| [0756](0756-bytecode-differential-fuzzing.md) | Differential fuzzing of the bytecode tier: a loop, struct and `mut self` generator, byte-identical output and traps, hand-off counts *(delegated)* | Superseded by 0873 | 2026-10-21 |
 | [0757](0757-fuzz-math-special-values.md) | A fuzzer for `std.math` special values; the fuzz budget stays in the harness *(delegated)* | Accepted | 2026-10-21 |
 | [0605](0605-native-list-methods.md) | Native list methods: `extend`, `remove_at`, `insert`, `pop`, `contains`, `sort`, `sorted` as runtime calls *(delegated)* | Accepted | 2026-10-20 |
 | [0802](0802-native-list-queries.md) | Native `sum`, `min`, `max`, `first`, `last`, `index_of`, `swap` on lists and `Set.sorted` *(delegated)* | Accepted | 2026-10-21 |
@@ -690,3 +690,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0870](0870-native-extern-c-bound-lazily-with-dlopen.md) | A native `extern c fn` outside the libc subset binds lazily with `dlopen` and `dlsym`; libc-only programs stay static | Accepted | 2026-10-24 |
 | [0866](0866-native-composite-map-keys.md) | Native maps and sets take struct, tuple, enum and list keys, hashed by the key's shape *(delegated)* | Accepted | 2026-10-23 |
 | [0867](0867-native-unique-values-and-drop.md) | Native unique values and `Drop`: ownership flags on the defer machinery *(delegated)* | Accepted | 2026-10-23 |
+| [0873](0873-rust-only-features-after-rust-removal.md) | Rust-only features: native record/replay and deterministic scheduler; the bytecode tier goes | Accepted | 2026-10-24 |
