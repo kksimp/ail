@@ -601,6 +601,40 @@ fn main()
     print(missing)
 ```
 
+## Edit impact
+
+What an edit can break, from the same graph as `ail ask`
+([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 3).
+
+**api.impact.1** — A declaration is *changed* when it is new or its text
+differs from before, ignoring blank lines, comments, doc comments and
+attributes. The declarations compared are functions, methods, types, traits
+and constants.
+
+**api.impact.2** — A function is *affected* when it is a changed function, or
+names a changed declaration (a call, a field or variant of a changed type, a
+constant), or calls an affected function. A function that fills in a trait's
+method also reaches the callers of that trait method. The result is
+conservative: it may name a test the change can't alter, but never misses one
+that it can.
+
+**api.impact.3** — `ail ask PROGRAM --affected [--rev REV]` prints the name of
+every affected `@test` function, one per line: the changes are those of the
+program as written now against the same path at git revision `REV` (default
+`HEAD`), as `api.diff.1` reads a revision. `--json` prints the whole impact
+(`api.impact.4`) instead. Both versions must check without errors, and an
+unknown revision is an error: exit status 2.
+
+**api.impact.4** — The impact is the changed declarations, the affected
+functions, the affected tests and the *effects* changes: each function whose
+effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
+`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`.
+
+```ail skip=bootstrap tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
+fn main()
+    print(1)
+```
+
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that
@@ -960,6 +994,12 @@ are renamed over it.
 **edit.out.4** — `--test` runs `ail test PATH` after an edit that was
 written without errors, and its report and exit status follow the summary.
 
+**edit.out.5** — `--impact` adds the edit's impact (`api.impact.1-4`) after the
+summary: the declarations it changed, the tests it can affect and the
+effects it changed. It is computed from the program before and after the edit,
+so it costs nothing when the flag is absent. With `--json` the summary line
+has an `impact` member.
+
 ```ail pkg=edit_ops tool=edit,--dry-run,main.ail stdin=edits.json expect=file; rules=edit.in.1,edit.id.1,edit.op.1,edit.op.2,edit.op.3,edit.op.4,edit.op.5,edit.op.6,edit.out.1,edit.out.2,edit.out.3
 ```
 
@@ -970,6 +1010,9 @@ written without errors, and its report and exit status follow the summary.
 ```
 
 ```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
+```
+
+```ail skip=bootstrap pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
 ```
 
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5

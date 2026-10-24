@@ -97,6 +97,19 @@ fn two()
     assert(false)
 ```
 
+**test.affected.1** — `ail test --affected [--since REV] FILE` runs only the
+`@test` functions that the changes since git revision `REV` (default `HEAD`)
+can reach (`api.impact.3`) and says `affected: N of M tests` on standard
+error. The tests of imported modules always run. With no changes no test
+runs. Everything else is as `test.run.1-4`.
+[ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 3.
+
+```ail skip=bootstrap tool=test,--affected,--since,nosuch,FILE status=2 expect=api.impact.3 rules=test.affected.1
+@test
+fn adds()
+    assert_eq(1 + 1, 2)
+```
+
 ## Assertions
 
 **test.assert.1** — `assert(cond)` does nothing when `cond` is `true` and traps
