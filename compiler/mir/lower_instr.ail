@@ -32,7 +32,7 @@ pub struct Instr
     owner str
     np int
     descs List[ValDesc]
-    ## `trace`: `ail run --trace` (trace.run.1-4): call and return events on standard error.
+    ## `trace`: `ail run --trace` (trace.run.1-4, trace.run.6): call and return events on standard error.
     trace bool
     ## `nocontracts`: `ail run --no-contracts` (contract.run.3): no condition is evaluated.
     nocontracts bool
