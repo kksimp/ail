@@ -2,8 +2,9 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted, slice 1 (ADR 0878). Items and queries are built; the
-> pixel classifier (`std.screen.3`) and the `std.app` hook come in later slices.
+> **Status:** Drafted, slices 1-3 (ADR 0878). Items, queries, the pixel
+> segmenter and the `std.app` view are built; reading the editor's and PDF
+> viewer's rasters and live attach come in later slices.
 
 What is on a screen, as text an agent can read without a vision model.
 
@@ -58,4 +59,62 @@ fn main()
     print(s.describe(0.0, 0.0, 200.0, 50.0, 0))
     print(s.find("", "", "", 1))
     print(s.changes_since(s, 0))
+```
+
+## The pixel classifier
+
+**std.screen.10** — `use std.screen.pixels` provides `segment(w, h, px,
+texts) List[Item]`. `px` is `w * h` packed `0xRRGGBB` values, row by row (any
+other length gives no items). It returns one item per flat-colour region that is
+at least 6 by 6, at least 80% of its bounding box, and under 60% of the raster
+(the background). Ids are `5000000 + y * w + x` of the region's top left, so the
+same box keeps its id between frames (`std.screen.5`). Every item has `conf`
+below 1.0 and a `why` (`std.screen.3`).
+
+**std.screen.11** — A region is a `panel` (`conf` 0.5) unless a text item in
+`texts` has its centre inside it, its height is 16 to 60, its width is 1.5 to 12
+times its height and its area is under 5% of the raster; then it is a `button`
+whose text is the label, `conf` 0.9 with a cut corner (rounded) and 0.7 without.
+
+```ail skip=bootstrap rules=std.screen.10,std.screen.11
+use std.screen
+use std.screen.pixels
+
+fn main()
+    w := 400
+    h := 200
+    mut px := List[int]()
+    for _ in 0..w * h
+        px.push(0xffffff)
+    for y in 10..34
+        for x in 10..60
+            px[y * w + x] = 0xcc2222
+    texts := [screen.item(1, "text", "Pay", 0xffffff, 25.0, 16.0, 20.0, 12.0)]
+    print(pixels.segment(w, h, px, texts)[0].line())
+```
+
+## Any `std.app` program
+
+**std.screen.12** — `use std.screen.view` provides `of_ops(ops, ox, oy)`,
+which turns canvas ops into items moved by (`ox`, `oy`): `Fill` is a `box`, `Str`
+a `text`, `Pic` and `Bitmap` an `image`, `Stroke` a `line`. These boxes are
+exact (`conf` 1.0), except that a string's width is estimated.
+
+**std.screen.13** — `of_node(node, w, h, focus)` makes the `Screen` of a view
+tree: `Button` is a `button`, `Field` a `textbox`, `Toggle` a `checkbox`,
+`Label` a `text` and `Canvas` a `canvas` followed by its ops. The host owns
+the real layout, so controls are placed by nominal sizes and carry `conf` 0.9
+with `why` "estimated layout"; `focus` (`App.focus`) marks the focused control.
+For app `a`: `of_node(a.view(), w, h, a.focus())`. The model is built only when
+this is called (`std.screen.9`).
+
+```ail skip=bootstrap rules=std.screen.12,std.screen.13
+use std.app
+use std.screen
+use std.screen.view
+
+fn main()
+    tree := app.column([app.label("Cart"), app.button("pay", "Pay")])
+    s := view.of_node(tree, 200.0, 100.0, "pay")
+    print(s.find("button", "", "", 0))
 ```

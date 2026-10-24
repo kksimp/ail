@@ -51,12 +51,14 @@ fn trace_lead(tail str) int
 
 ## Print the callers of the function that trapped, after `tail`'s frames.
 fn trace_frames(tail str)
+    trace_frames_n(trace_lead(tail))
+
+fn trace_frames_n(lead int)
     tab := code_tab()
     n := load64(tab)
     base := tab - load64(tab + 8)
     ents := tab + 24
     names := ents + 16 * n
-    lead := trace_lead(tail)
     # One pass counts the frames, the next prints them.
     mut total := lead
     mut p := frame_ptr()
@@ -81,7 +83,22 @@ fn trace_frames(tail str)
             out_byte(58)
             out_int(w1.bit_and(4294967295))
             out_str(" in ")
-            out_str(str_at(tab + load64(fn_row)))
+            name := str_at(tab + load64(fn_row))
+            # `--values` (trace.frame.3): the caller's own spill, in place of the `(..)`.
+            sp := vals_find(load64(p))
+            if sp != 0 and load64(sp) != 0
+                np := str_addr(name)
+                mut nl := load64(np)
+                while nl > 0 and load8(np + 16 + nl - 1) != 40
+                    nl -= 1
+                if nl > 0
+                    out_bytes(np + 16, nl - 1)
+                    vals_print(load64(p))
+                    out_byte(10)
+                    shown += 1
+                    p = trace_next(p)
+                    continue
+            out_str(name)
             out_byte(10)
             shown += 1
         p = trace_next(p)
@@ -93,4 +110,7 @@ fn trace_frames(tail str)
         out_byte(166)
         out_byte(32)
         out_int(total - LINES + 1)
-        out_str(" more frames\n")
+        out_str(" more frames")
+        if load64(global(VALS)) != 0
+            out_str(" (--verbose shows every frame and value)")
+        out_byte(10)

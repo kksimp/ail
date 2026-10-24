@@ -1,3 +1,4 @@
+use api
 use check
 use fmt
 use load
@@ -18,7 +19,7 @@ USAGE := [
     "\{\"op\":\"rename\",\"id\":\"fn:f\",\"to\":\"g\"}                  the declaration and every reference",
     "\{\"op\":\"import\",\"module\":\"std.fs\"}                    adds `use std.fs` if missing",
     "In a package, ids may carry the module (fn:geo.origin) and \"file\" picks the file for insert and import.",
-    "A bare name (average, P.m) stands for the one declaration with that name. --test runs `ail test PATH` after a clean edit.",
+    "A bare name (average, P.m) stands for the one declaration with that name. --test runs `ail test PATH` after a clean edit. --impact adds the tests and effects the edit touches.",
 ]
 
 ## `ail edit PATH [--dry-run] [--diff] [--if-clean] [--test] [--json] < EDITS`
@@ -35,6 +36,7 @@ pub fn command(args List[str], std str) int
     mut show_diff := false
     mut if_clean := false
     mut test := false
+    mut impact := false
     mut json := false
     mut paths := List[str]()
     for a in args
@@ -46,6 +48,8 @@ pub fn command(args List[str], std str) int
             if_clean = true
         elif a == "--test"
             test = true
+        elif a == "--impact"
+            impact = true
         elif a == "--json"
             json = true
         elif a.starts_with("--")
@@ -115,8 +119,9 @@ pub fn command(args List[str], std str) int
         io.eprint("error: {err.message}")
         return 2
     mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, impact and loaded.diags.len() == 0)
     if loaded.diags.len() == 0
-        found = [load.shown_check(d) for d in check.analyze(loaded.program, false).report.diags]
+        found = [load.shown_check(d) for d in analysis.report.diags]
     # A single file may lack `main`.
     found = [d for d in found if package or d.rule != "mod.main.1"]
     mut errors := 0
@@ -132,6 +137,15 @@ pub fn command(args List[str], std str) int
         found,
         json,
     ) else ""
+    # edit.out.5: `--impact` says which tests and effects the edit touches.
+    mut touched := ""
+    if impact and errors == 0
+        before_edit := load.load_with(path, std, Map[str, str]()) else err
+            io.eprint("error: {err.message}")
+            return 2
+        was := check.analyze(before_edit.program, true)
+        shown := api.impact_between(before_edit, was, loaded, analysis)
+        touched = if json then ",\"impact\":{api.impact_json(shown)}" else api.impact_text(shown)
     kept := not dry and not (if_clean and errors > 0)
     if kept
         for i in changed
@@ -154,10 +168,12 @@ pub fn command(args List[str], std str) int
         verb = "would edit"
     if json
         names := [syntax.quote(work.paths[i]) for i in changed]
-        print("\{\"summary\":true,\"edits\":{ops.len()},\"written\":{kept},\"files\":[{names.join(",")}],\"errors\":{errors},\"warnings\":{warnings}}")
+        print("\{\"summary\":true,\"edits\":{ops.len()},\"written\":{kept},\"files\":[{names.join(",")}],\"errors\":{errors},\"warnings\":{warnings}{touched}}")
     else
         warned := if warnings > 0 then ", {plural(warnings, "warning")}" else ""
         print("{verb} {plural(changed.len(), "file")}; {plural(errors, "error")}{warned}")
+        if touched != ""
+            print(touched)
     if errors > 0
         return 2
     # edit.out.4: `--test` runs the tests of the edited file.

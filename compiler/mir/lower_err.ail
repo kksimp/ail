@@ -424,7 +424,11 @@ fn Lower.tail_error(mut self, e ast.Expr) bool
     # A failing call as the result passes its errors on (err.type.6).
     if fails and fallible_call(e)
         note_inferred_err(error_type_of_call(e))
-    fails and is_error_expr(e) and lower_fail_return(e, tail_pos)
+    # The trace names where the error expression starts, not its `(`.
+    start := match e
+        Call(callee, _, _) => expr_pos(callee)
+        _ => tail_pos
+    fails and is_error_expr(e) and lower_fail_return(e, start)
 
 ## `return E(...)` in a function that can fail: build the error, record its
 ## display text and the value, and leave (ADR 0804).
@@ -915,9 +919,25 @@ fn Lower.display_call(mut self, v Val) int?
 ## for an enum (trait.auto.2), for fields of `int`, `float`, `bool`, `str`, and structs and enums of those.
 ## The name a default text shows for type `key`: a generic instance as its
 ## generic's name (`Pair[int, str]` shows `Pair`), a standard module's type
-## without `std.`.
+## without `std.`, except a module written in AIL (`std.ui.widgets.Action`,
+## as the interpreter shows it).
+SHOWN_STD_AIL := [
+    "std.app.",
+    "std.args.",
+    "std.csv.",
+    "std.log.",
+    "std.net.http.",
+    "std.screen.",
+    "std.net.jar.",
+    "std.time.date.",
+    "std.ui.widgets.",
+]
+
 fn shown_type(key str) str
     base := key.split("[")[0]
+    for m in SHOWN_STD_AIL
+        if base.starts_with(m)
+            return base
     base.strip_prefix("std.") else base
 
 fn Lower.default_error_text(mut self, key str, v Val) int?

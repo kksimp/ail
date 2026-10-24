@@ -1,0 +1,24 @@
+use std.screen
+use std.screen.pixels
+
+fn fill(mut px List[int], w int, x0 int, y0 int, x1 int, y1 int, c int)
+    for y in y0..y1
+        for x in x0..x1
+            px[y * w + x] = c
+
+fn main()
+    w := 400
+    h := 200
+    mut px := List[int]()
+    for _ in 0..w * h
+        px.push(0xffffff)
+    ## A red button with its four corner pixels cut, and a grey panel.
+    fill(mut px, w, 10, 10, 60, 34, 0xcc2222)
+    for p in [(10, 10), (59, 10), (10, 33), (59, 33)]
+        px[p.1 * w + p.0] = 0xffffff
+    fill(mut px, w, 70, 40, 110, 70, 0xcccccc)
+    fill(mut px, w, 2, 2, 4, 4, 0x000000)
+    texts := [screen.item(1, "text", "Pay", 0xffffff, 25.0, 16.0, 20.0, 12.0)]
+    s := screen.Screen(w: 400.0, h: 200.0, items: pixels.segment(w, h, px, texts))
+    print(s.describe(0.0, 0.0, 400.0, 200.0, 0))
+    print(s.find("button", "red", "", 0))

@@ -150,4 +150,6 @@ fn Lower.net_call(
         vs.push(v)
     if f.fails
         vs.push(trace_line(pos))
+    if instr.rec
+        return rec_net_call(f, vs, pos)
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)
