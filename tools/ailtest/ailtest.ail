@@ -394,6 +394,7 @@ fn rewrite(
     mf ModFiles,
     mdropped Set[int],
     snap_lines int,
+    keep_main bool,
 ) Rewritten
     mut keep := lines
     for i in 0..f.tests.len()
@@ -411,8 +412,12 @@ fn rewrite(
             keep[j] = ""
     for m in 0..lines.len()
         if lines[m].starts_with("fn main(")
-            for j in m..block_end(lines, m) + 1
-                keep[j] = ""
+            if keep_main
+                # Coverage counts its statements: it stays, never called (test.cover.1).
+                keep[m] = "fn ail_main_orig({lines[m].slice(8, lines[m].len())}"
+            else
+                for j in m..block_end(lines, m) + 1
+                    keep[j] = ""
             break
     if snap_lines > 0
         for j in 0..snap_lines.min(keep.len())
@@ -1602,7 +1607,7 @@ fn collect_cover(
         id := c[0].to_int() else continue
         mut line := c[2].to_int() else continue
         name := c[3]
-        if skip.contains(name) or name == "main" or name.starts_with("ail_run_")
+        if skip.contains(name) or name.starts_with("ail_run_")
             continue
         mut shown := c[1]
         if c[1] == copy
@@ -1852,6 +1857,7 @@ fn main() !
     exe := "{copy}.bin"
     mut mdropped := Set[int]()
     mut mwhy := Map[int, str]()
+    mut with_main := not coverage.is_empty()
     mut dropped := Set[int]()
     mut why := Map[int, str]()
     mut blocked := ""
@@ -1868,12 +1874,19 @@ fn main() !
             mf,
             mdropped,
             if update then text.lines().len() else 0,
+            with_main,
         )
         if not mf.tests.is_empty()
             write_modules(scratch, mf, mdropped)? "writing the modules"
         last_lead = rw.lead
         fs.write_text(copy, rw.text)? "writing {copy}"
-        modes := [m for m in [if coverage.is_empty() then "" else "lines", if trace then "tests" else ""] if m != ""].join(",")
+        modes := [
+            m
+            for m in [
+                if coverage.is_empty() then "" else "lines",
+                if trace then "tests" else "",
+            ] if m != ""
+        ].join(",")
         b := if modes.is_empty()
             proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
         else
@@ -1931,6 +1944,10 @@ fn main() !
                 dropped.add(owner)
                 why[owner] = "{short(msg)} (line {o + 1})"
                 progressed = true
+        if not progressed and with_main
+            # The file's own `main` didn't build: count without it.
+            with_main = false
+            progressed = true
         if not progressed
             blocked = if outside.is_empty() then "the build failed" else outside
             break
@@ -2038,7 +2055,14 @@ fn main() !
         )
             print_cover(c, json, coverage == "lines")
     if scratch.is_empty()
-        _ := proc.run("rm", ["-f", copy, exe, "{exe}.sites", "{exe}.hits", "{exe}.trace"]) else io.exit(code)
+        _ := proc.run("rm", [
+            "-f",
+            copy,
+            exe,
+            "{exe}.sites",
+            "{exe}.hits",
+            "{exe}.trace",
+        ]) else io.exit(code)
     else
         _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)
     io.exit(code)

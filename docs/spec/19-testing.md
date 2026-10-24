@@ -298,8 +298,8 @@ fn main()
 ```
 
 **test.cover.4** — The native `ail test --coverage` is built on the
-instrumentation of native.instr.1-3. The file's own `main` is not counted (the
-test build replaces it). *(ADR 0871)*
+instrumentation of native.instr.1-3. The file's own `main` stays in the test
+build, never called, so it counts like any function the tests do not run. *(ADR 0871)*
 
 ```ail tool=test,--coverage,FILE expect=coverage rules=test.cover.4
 @test
