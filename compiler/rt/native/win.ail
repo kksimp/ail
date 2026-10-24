@@ -594,7 +594,7 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
     wline := alloc(2 * (total + 4), KIND_BYTES)
     win_wide_raw(wline, line)
     wexe := alloc(2 * (os_c_len(exe) + 4), KIND_BYTES)
-    win_wide_raw(wexe, exe)
+    win_wide(wexe, os_c_len(exe) + 4, exe)
     # Three pipes; the child's ends are inheritable, ours are not.
     sa := alloc_z(32, KIND_BYTES, 1)
     store64(sa, 24)
