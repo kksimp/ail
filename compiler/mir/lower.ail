@@ -1026,6 +1026,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
         lower_stmt(s)
+        instr_after(s)
     defer_exit()
     end_scope_exits()
     scopes.pop()

@@ -32,9 +32,63 @@ pub struct Instr
     owner str
     np int
     descs List[ValDesc]
+    ## `watch=NAME`: the variable whose assignments are events (`--watch`, trace.watch.1).
+    watch str
     ids Map[str, int]
     sites List[str]
     started Set[str]
+
+## `NAME` of the `watch=NAME` mode, or "".
+fn watch_name(modes str) str
+    for m in modes.split(",")
+        if m.starts_with("watch=")
+            return m.replace("watch=", "")
+    ""
+
+## The variable an assignment target is rooted in, and where its text starts.
+fn watch_root(e ast.Expr) ast.Expr
+    match e
+        Index(r, _, _) => watch_root(r)
+        Member(r, _, _) => watch_root(r)
+        _ => e
+
+## After the statement `s`, an assignment to the watched variable is an event:
+## `watch: NAME = VALUE at LINE:COL`, on standard error (trace.watch.1, trace.watch.5).
+fn Lower.instr_after(mut self, s ast.Stmt)
+    if instr.watch == "" or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    mut pos := ast.Pos(line: 0, col: 0)
+    match s
+        Let(n, p, m, _, _) =>
+            if n == instr.watch and m
+                pos = p
+        Assign(target, _, _, _) =>
+            r := watch_root(target)
+            match r
+                Name(n, p) =>
+                    if n == instr.watch
+                        pos = p
+                _ => pos = pos
+        _ => pos = pos
+    if pos.line == 0
+        return
+    key := lookup(instr.watch) else return
+    ty := var_ty.get(key) else return
+    if not vals_printable(ty, structs)
+        return
+    on := new_block()
+    cont := new_block()
+    branch(call("rt.watch_open", [], Ty.Bool), on, [], cont, [])
+    seal(on)
+    cur = on
+    root := if file == 0 then "" else "{src_paths[file]}:"
+    say("watch: {instr.watch} = ")
+    describe(Val(id: read_var(key, cur), ty: ty), pos)
+    say(" at {root}{pos.line}:{pos.col}\n")
+    call("rt.watch_close", [], Ty.Unit)
+    jump(cont, [])
+    seal(cont)
+    cur = cont
 
 ## A name in scope, with its declaration number.
 struct Pair
@@ -58,6 +112,7 @@ fn new_instr() Instr
         owner: "",
         np: 0,
         descs: [],
+        watch: watch_name(modes),
         ids: {},
         sites: [],
         started: Set[str](),

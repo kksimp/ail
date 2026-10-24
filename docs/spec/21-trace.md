@@ -153,6 +153,22 @@ fn main()
     print(x)
 ```
 
+**trace.watch.5** — Natively, `ail run --watch NAME FILE` builds the program with
+the watch (only then does it cost anything) and shows trace.watch.1's events on
+standard error, `watch: NAME = VALUE at LINE:COL`, then the summary line
+(trace.run.4); over `--replay R` (replay.run.1) the same run is repeated exactly,
+so it answers "when did `NAME` become 0?" on a recorded run. The events are the
+assignments and `mut NAME := e` of trace.watch.1; a builtin mutating method,
+an element write's note (trace.watch.4) and a `mut` argument followed into a callee
+(trace.watch.3) are not shown yet. *(ADRs 0868, 0886)*
+
+```ail tool=run,--watch,n,FILE expect="watch: n = 0" rules=trace.watch.5
+fn main()
+    mut n := 3
+    n -= 3
+    print(n)
+```
+
 ## Tracing tests
 
 **trace.test.1** — `ail test --trace[=calls|effects|all]` (and `--trace-limit`,

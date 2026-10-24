@@ -1478,7 +1478,7 @@ fn Gate.budget(mut self, tmp str)
     sh_run("rm -rf {dir}")
 
 ## Run limits and coverage (limits.rs, ported; run.limit.1-4, test.cover.1-3, test.run.5).
-fn Gate.limits(mut self)
+fn Gate.limits(mut self, tmp str)
     case := "tests/limits"
     r := ail_run(["run", "--timeout", "200", "{case}/limit_endless.ail"]) else return
     if r.status != 1 or not r.err.contains("trap[run.limit.1]") or not r.err.contains("in main(")
@@ -1488,6 +1488,15 @@ fn Gate.limits(mut self)
     b := native_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
     if a.status != 1 or not a.err.contains("trap[run.limit.3]") or a.err != b.err
         red("--max-steps", "exit {a.status}\n{a.err}")
+    # trace.watch.5: native `--watch`, live and over a recording (ADR 0868 item 4).
+    w := native_run(["run", "--watch", "n", "{case}/watch_when.ail"]) else return
+    if w.status != 0 or not w.err.contains("watch: n = 0 at 5:5\n") or not w.err.contains("(watch 4)")
+        red("--watch", "exit {w.status}\n{w.err}")
+    rec := "{tmp}/watch.rec"
+    _r := native_run(["run", "--record", rec, "{case}/watch_when.ail"]) else return
+    w2 := native_run(["run", "--replay", rec, "--watch", "n"]) else return
+    if w2.status != 0 or w2.err != w.err
+        red("--watch over --replay", "exit {w2.status}\n{w2.err}")
     m := ail_run(["run", "--max-memory", "100", "{case}/limit_memory.ail"]) else return
     if m.status != 1 or not m.err.contains("trap[run.limit.2]")
         red("--max-memory", "exit {m.status}\n{m.err}")
@@ -2788,7 +2797,7 @@ fn main() !
             "docs" => g.docs()
             "fmt" => g.fmt(tmp)
             "budget" => g.budget(tmp)
-            "limits" => g.limits()
+            "limits" => g.limits(tmp)
             "diff" => g.diff(tmp)
             "build_cache" => g.build_cache(tmp)
             "parallel" => g.parallel()
