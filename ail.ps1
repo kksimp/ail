@@ -16,8 +16,10 @@
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
+# The native CLI splits paths on `/`; Windows takes `/` too, so hand it paths that way.
+function Fwd([string]$p) { $p -replace '\\', '/' }
 # std.app.10: a program finds the app host built under the toolchain.
-$env:AIL_ROOT = $root
+$env:AIL_ROOT = (Fwd $root)
 $bootstrap = Join-Path $root 'bootstrap'
 $manifest = Join-Path $bootstrap 'Cargo.toml'
 $pin = (Select-String -Path (Join-Path $bootstrap 'rust-toolchain.toml') -Pattern '^channel\s*=\s*"(.*)"').Matches[0].Groups[1].Value
@@ -90,7 +92,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 
 # Which commands the native CLI does (the same conditions as ./ail).
 $cmd = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
-$rest = @($args | Select-Object -Skip 1)
+$rest = @($args | Select-Object -Skip 1 | ForEach-Object { if ("$_" -and (Test-Path -LiteralPath "$_" -ErrorAction SilentlyContinue)) { Fwd "$_" } else { $_ } })
 $nativeOn = ($env:AIL_RUST -ne '1') -and ($env:AIL_NATIVE_CLI -ne '0') -and (-not $env:AIL_BINARY -or $env:AIL_NATIVE_CLI -eq '1')
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
 $runFile = $null; $runSkip = 0
@@ -150,7 +152,7 @@ if ($route) {
     if ($stale) {
         New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
         $log = "$native.log"
-        $mainAil = Join-Path $root 'compiler\main.ail'
+        $mainAil = Fwd (Join-Path $root 'compiler\main.ail')
         $rc = 1
         # A built Rust ail is used as it is; otherwise the verified seed, and cargo only when no seed is published for this host.
         if (-not (Test-Path $binary)) {
@@ -170,13 +172,13 @@ if ($route) {
         Remove-Item -Force $log -ErrorAction SilentlyContinue
         Move-Item -Force "$native.new" $native
     }
-    $env:AIL_COMPILER = Join-Path $root 'compiler'
+    $env:AIL_COMPILER = Fwd (Join-Path $root 'compiler')
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
-    if (-not $env:AIL) { $env:AIL = Join-Path $root 'ail.cmd' }
+    if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
     switch ($cmd) {
         { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects' } { & $native $cmd @rest; exit $LASTEXITCODE }
         'check' { & $native check-program @rest; exit $LASTEXITCODE }
-        'test' { & $native run (Join-Path $root 'tools\ailtest\ailtest.ail') @rest; exit $LASTEXITCODE }
+        'test' { & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
         'build' {
             # The native CLI's build doesn't check: check the file (the first operand) first.
             $f = $rest | Where-Object { (& $isFile $_) -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1
