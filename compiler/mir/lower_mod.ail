@@ -33,6 +33,7 @@ pub STD_AIL := [
     "std.net.http",
     "std.screen",
     "std.screen.pixels",
+    "std.screen.view",
     "std.net.jar",
     "std.regex",
     "std.time.date",

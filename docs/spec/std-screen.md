@@ -2,9 +2,9 @@
 
 Chapter key: `std`
 
-> **Status:** Drafted, slices 1-2 (ADR 0878). Items, queries and the pixel
-> segmenter are built; wiring it to the editor and PDF viewer and the
-> `std.app` hook come in later slices.
+> **Status:** Drafted, slices 1-3 (ADR 0878). Items, queries, the pixel
+> segmenter and the `std.app` view are built; reading the editor's and PDF
+> viewer's rasters and live attach come in later slices.
 
 What is on a screen, as text an agent can read without a vision model.
 
@@ -91,4 +91,30 @@ fn main()
             px[y * w + x] = 0xcc2222
     texts := [screen.item(1, "text", "Pay", 0xffffff, 25.0, 16.0, 20.0, 12.0)]
     print(pixels.segment(w, h, px, texts)[0].line())
+```
+
+## Any `std.app` program
+
+**std.screen.12** — `use std.screen.view` provides `of_ops(ops, ox, oy)`,
+which turns canvas ops into items moved by (`ox`, `oy`): `Fill` is a `box`, `Str`
+a `text`, `Pic` and `Bitmap` an `image`, `Stroke` a `line`. These boxes are
+exact (`conf` 1.0), except that a string's width is estimated.
+
+**std.screen.13** — `of_node(node, w, h, focus)` makes the `Screen` of a view
+tree: `Button` is a `button`, `Field` a `textbox`, `Toggle` a `checkbox`,
+`Label` a `text` and `Canvas` a `canvas` followed by its ops. The host owns
+the real layout, so controls are placed by nominal sizes and carry `conf` 0.9
+with `why` "estimated layout"; `focus` (`App.focus`) marks the focused control.
+For app `a`: `of_node(a.view(), w, h, a.focus())`. The model is built only when
+this is called (`std.screen.9`).
+
+```ail rules=std.screen.12,std.screen.13
+use std.app
+use std.screen
+use std.screen.view
+
+fn main()
+    tree := app.column([app.label("Cart"), app.button("pay", "Pay")])
+    s := view.of_node(tree, 200.0, 100.0, "pay")
+    print(s.find("button", "", "", 0))
 ```
