@@ -931,6 +931,12 @@ fn trap_body(kind int, a int, b int, op str)
         # `unreachable(message)` (err.model.2): `a` is the message
         out_str("unreachable: ")
         out_str(str_at(a))
+    elif kind == 18
+        # A contract or `assert` failure in a task: `a` is the message.
+        out_str(str_at(a))
+    elif kind == 17
+        # `unreachable("RULE: why")` in a std module: `head` ends at `trap[`.
+        trap_rule_message(str_at(a))
     elif kind == 16
         # `Atomic.add` leaves `int` (conc.atomic.5, ADR 0600)
         out_str("atomic add overflows: ")
@@ -939,15 +945,45 @@ fn trap_body(kind int, a int, b int, op str)
         out_int(b)
         out_str(" is outside int")
 
+## `RULE: why` as `RULE]: why`, after a head that ends at `trap[`; a message
+## with no `: ` is `err.model.2`'s.
+fn trap_rule_message(msg str)
+    base := str_addr(msg)
+    n := load64(base)
+    mut at := -1
+    mut k := 0
+    while k + 1 < n and at < 0
+        if load8(base + 16 + k) == 58 and load8(base + 16 + k + 1) == 32
+            at = k
+        k += 1
+    if at < 0
+        out_str("err.model.2]: unreachable: ")
+        out_str(msg)
+        return
+    for j in 0..at
+        out_byte(load8(base + 16 + j))
+    out_str("]: ")
+    for j in at + 2..n
+        out_byte(load8(base + 16 + j))
+
 ## A contract trap is written in pieces (ADR 0612): `trap_begin` flushes
 ## the output and writes the head, the message follows with the `out_*`
 ## functions, and `trap_end` writes the excerpt and exits.
 fn trap_begin(head str)
+    if worker_index() >= 0
+        # In a task the piece is kept, not written: the output lock is held
+        # until `trap_end` records the whole text with the task (conc.task.6).
+        out_lock()
+        flush()
+        out_str(head)
+        return
     unwind_run()
     flush()
     out_str(head)
 
 fn trap_end(tail str)
+    if worker_index() >= 0
+        trap_end_in_task(tail)
     out_byte(10)
     trap_tail(tail)
     trace_frames(tail)
@@ -961,6 +997,20 @@ fn trap_rest(tail str, extra int)
     trace_frames_n(1 + extra)
     flush_to(2)
     sys_exit(1)
+
+## `trap_end` in a task: the text since `trap_begin` is the head up to `]: `
+## and the message; the task ends with it as a trap of kind 18.
+fn trap_end_in_task(tail str)
+    base := load64(global(OUT_BUF))
+    n := load64(global(OUT_LEN))
+    mut at := 0
+    while at + 3 <= n
+        and not (load8(base + at) == 93 and load8(base + at + 1) == 58 and load8(base + at + 2) == 32)
+        at += 1
+    head := os_str_from(base, at + 3)
+    msg := os_str_from(base + at + 3, n - at - 3)
+    store64(global(OUT_LEN), 0)
+    on_trap(18, str_addr(msg), 0, head, "", tail)
 
 ## A failure of the runtime itself: out of memory (run.limit.2).
 fn fail(kind int, a int, b int)

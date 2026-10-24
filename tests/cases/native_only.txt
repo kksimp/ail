@@ -1,0 +1,2 @@
+attach_observe_ok
+attach_observe_bad_type
