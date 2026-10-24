@@ -682,3 +682,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0862](0862-native-mut-cells-and-for-mut-write-through.md) | Native `mut` parameters and `mut self` of value types use cells; `for mut` over scalars writes through *(delegated)* | Accepted | 2026-10-23 |
 | [0863](0863-native-std-ui-through-the-app-host.md) | Native `std.ui` and widgets render through the `std.app` host: one window path for edit, pdf and Garlic; Mac first | Accepted | 2026-10-23 |
 | [0865](0865-no-double-work.md) | One implementation (native only), one checker (AIL), one Mac gate per batch, generated files once: no double work | Accepted | 2026-10-23 |
+| [0890](0890-optimizer-roadmap-to-match-c.md) | Optimizer roadmap to match C at -O2/-O3: allocation, register allocation, inlining, loop opts, range analysis, auto-vectorization, maps, tail calls; speed-only per ADR 0874 *(delegated)* | Proposed | 2026-10-24 |
