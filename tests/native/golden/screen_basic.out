@@ -1,0 +1,25 @@
+#1 button 'Submit', red, at 412,300 100x32, enabled, focused, links to /pay
+nothing at 0,0
+#1 button 'Submit', red, at 412,300 100x32, enabled, focused, links to /pay
+#3 button 'Cancel', gray, at 300,300 80x32, enabled
+#1 button 'Submit', red, at 412,300 100x32, enabled, focused, links to /pay
+#2 text 'Total: 5', dark gray, at 20,20 200x16, enabled
+#2 text 'Total: 5', dark gray, at 20,20 200x16, enabled
+#1 button 'Submit', red, at 412,300 100x32, enabled, focused, links to /pay
++2 more
+~ #2 text 'Total: 6', dark gray, at 20,20 200x16, enabled
++ #9 image, blue, at 0,400 50x50, enabled
+- #3 button 'Cancel', gray, at 300,300 80x32, enabled
+unchanged
+black
+white
+red
+dark red
+green
+dark green
+blue
+orange
+brown
+pink
+gray
+dark purple

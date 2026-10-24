@@ -711,9 +711,14 @@ fn tensor_to_f32(a int) int
 fn tensor_to_float(a int) int
     n := load64(a + 16)
     rank := load64(a + 8)
-    t := tensor_new(1, rank, n)
+    # An f32 element is a float already, and a tensor is never changed, so the
+    # result shares the elements.
+    t := alloc(32 + 8 * rank, TENSOR_OBJ)
+    store64(t, 1)
+    store64(t + 8, rank)
+    store64(t + 16, n)
+    store64(t + 24, tensor_data(a))
     tensor_copy_words(t + 32, a + 32, rank)
-    tensor_copy_words(tensor_data(t), tensor_data(a), n)
     t
 
 # Reductions (std.tensor.11): kind 0 `sum`, 1 `max`, 2 `mean`.
