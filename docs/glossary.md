@@ -167,6 +167,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Position query** | `ail api --locals`, `--type` or `--refs` with `FILE LINE COL`: the names in scope, the type, or the references at one position (ADRs 0258–0261). |
 | **Renderer** | The part of a host that turns a view tree into controls on screen; one per platform (SwiftUI on macOS), so the same AIL app runs everywhere a host exists (ADR 0838). |
 | **SameSite** | The cookie attribute (`Strict`, `Lax` or `None`) that limits which cross-site requests carry the cookie; the cookie jar honours it ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
+| **Screen model** | What is on a screen as items (role, text, colour name, box, state) that an agent queries in text within a token budget, without a vision model (`std.screen`, ADR 0878). |
 | **Spill** | Storing a value in memory because no register is free for it; the allocator spills the value cheapest to keep in memory ([ADR 0624](decisions/0624-loop-weighted-spill-choice.md)). |
 | **`std.args`** | The standard module for flags, options and positional arguments, with generated help ([ADR 0627](decisions/0627-std-args.md)). |
 | **`std.csv`** | The standard module that reads CSV as rows and records, with quoted fields ([ADR 0626](decisions/0626-std-csv.md)). |
