@@ -7,7 +7,7 @@
 ## 64-bit words, word `i` holding bit `i` of each of the 64 byte lanes (lane
 ## `16 * block + 4 * column + row`). SubBytes is the GF(2^8) inverse as
 ## x^254 by bit-sliced multiplication, then the affine map. GHASH multiplies
-## bit by bit under masks. Vectors: bootstrap/src/net/crypto/testdata.
+## bit by bit under masks. Vectors: tests/data/net/crypto.
 ##
 ## A key schedule `ak`: the round count at 0, H as two big-endian words at 8
 ## and 16, then eight mask words per round key from 24. For the hardware

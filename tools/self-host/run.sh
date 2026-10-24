@@ -11,7 +11,7 @@
 #   2  stage 1 builds compiler/main.ail again.
 #   3  stage 2 builds it a third time; stage 2 and 3 must be byte-identical
 #      (the fixed point), and stage 1 and 2 too (same compiler, same output).
-#   T  the native test programs (bootstrap/tests/native/run/*.ail) built with
+#   T  the native test programs (tests/native/run/*.ail) built with
 #      the newest compiler, run, and diffed against `ail run` (stdout and exit
 #      code).
 # Prints one line per stage and the first blocker. Exit 0 only if every stage
@@ -43,7 +43,7 @@ cd "$root" || exit 2
 [ -x ./ail ] || { echo "run.sh: no ./ail launcher" >&2; exit 2; }
 
 rt=compiler/rt/native
-tests=bootstrap/tests/native/run
+tests=tests/native/run
 report="$out/report.md"
 case "$(uname -s)-$(uname -m)" in
     Darwin-arm64) host_target=aarch64-macos ;;
@@ -66,7 +66,7 @@ build_with() { # compiler src out
     # The paths `ail build` passes (bootstrap/src/build.rs): absolute, since they
     # end up in the trap texts of the executable. Relative ones make stage 1 and
     # the later stages differ in size.
-    "$cc" build "$src" "$root/compiler/rt/native" "$TARGET" 0 0 "$root/compiler/../bootstrap/src/std" > "$dst.hex" 2> "$dst.err" || return 1
+    "$cc" build "$src" "$root/compiler/rt/native" "$TARGET" 0 0 "$root/compiler/../std" > "$dst.hex" 2> "$dst.err" || return 1
     unhex "$dst" < "$dst.hex"
 }
 
@@ -182,7 +182,7 @@ pass=0; fail=0; failed=()
 # from the interpreter by design), read from that list so the two agree.
 macos_known=""
 if [[ "$TARGET" == *macos* ]]; then
-    macos_known=$(grep -v '^#' bootstrap/tests/native/golden/macos_known.txt | tr '\n' ',')
+    macos_known=$(grep -v '^#' tests/native/golden/macos_known.txt | tr '\n' ',')
 fi
 for f in "$tests"/*.ail; do
     name=$(basename "$f" .ail)

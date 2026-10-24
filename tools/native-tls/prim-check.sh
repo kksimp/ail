@@ -25,7 +25,7 @@ PY
 # `./ail build` pins AIL_COMPILER to this checkout, so call the native CLI itself.
 ./ail check tools/native-tls/prim.ail > /dev/null
 nbuild() { AIL_ROOT="$PWD" AIL_COMPILER="$tmp/compiler" .native/ail build "$@"; }
-vectors="bootstrap/src/net/crypto/testdata/crosscheck.txt bootstrap/src/net/crypto/testdata/signatures.txt bootstrap/src/net/x509/testdata/chain.txt tools/native-tls/vectors384.txt"
+vectors="tests/data/net/crypto/crosscheck.txt tests/data/net/crypto/signatures.txt tests/data/net/x509/chain.txt tools/native-tls/vectors384.txt"
 prog=tools/native-tls/prim.ail
 case "$(uname -sm)" in
   "Darwin arm64") host=aarch64-macos ;;

@@ -40,7 +40,7 @@ suites="examples tools cases explain fix cli mistakes contracts misc docs fmt li
 run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
 run gate_ail ./ail run tools/gate/gate.ail $suites
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
-if ./ail build bootstrap/tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
+if ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }
 else fails=$((fails+1)); echo "RED native build of arith.ail"; fi
 [ "$fails" = 0 ] && echo "GATE GREEN" || echo "GATE RED ($fails failures); logs in $out"

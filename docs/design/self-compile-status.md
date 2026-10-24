@@ -81,7 +81,7 @@ Also seen, smaller: `.extend()` on `List[int]` (4, 176), `for mut` and
 ## Repro cases and owners (lane 226, 2026-10-21, batch head fcc7f33d)
 
 Minimal native cases for the blocked constructs live in
-`bootstrap/tests/native/selfc/` (`selfc_NAME.ail`, with `selfc_NAME.out` from
+`tests/native/selfc/` (`selfc_NAME.ail`, with `selfc_NAME.out` from
 `ail run`). They are not in `tests/native/run/`, so they do not gate
 `cargo test --test native`; a case that fails is a blocker, not a broken test.
 `tools/self-compile/selfc-cases.sh` builds each one and prints the pass count.

@@ -1,6 +1,6 @@
 ## The module fuzzers in AIL (fuzz.mod.*, ADR 0460): adversarial inputs for the
 ## standard modules through the real `ail`, from the templates in
-## bootstrap/tests/fuzz/modules/NAME.ail (see their headers).
+## tests/fuzz/modules/NAME.ail (see their headers).
 ##
 ##   ail run tools/fuzz/modules.ail [N [SEED [NAME [OUTDIR]]]]    from the repository root
 ##
@@ -707,7 +707,7 @@ fn main() !
     full := args.len() > 0
     tmp := "/tmp/ail-fuzz-mod-{seed}"
     fs.make_dir(tmp)?
-    dir := "bootstrap/tests/fuzz/modules"
+    dir := "tests/fuzz/modules"
     mut fails := 0
     mut ran := 0
     mut names := [e for e in fs.list_dir(dir)? if e.ends_with(".ail")]

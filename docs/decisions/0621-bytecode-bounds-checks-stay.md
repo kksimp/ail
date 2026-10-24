@@ -1,6 +1,6 @@
 # 0621. Bytecode tier: bounds checks stay; no safe way to remove them
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0873](0873-rust-only-features-after-rust-removal.md)
 - **Date:** 2026-10-21
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** 20 — Interpreter

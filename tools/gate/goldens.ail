@@ -3,8 +3,8 @@
 ## interpreter run.
 ##   ail run tools/gate/goldens.ail freeze [NAME...]   write the goldens
 ##   ail run tools/gate/goldens.ail check [--strict] [NAME...]
-## from the repository root. `freeze` runs each bootstrap/tests/native/run
-## program with `ail run` once and writes bootstrap/tests/native/golden/NAME.out
+## from the repository root. `freeze` runs each tests/native/run
+## program with `ail run` once and writes tests/native/golden/NAME.out
 ## (its stdout) and NAME.status (its exit status, only when it isn't 0).
 ## `check` builds each of those programs, and each examples/NAME.ail that has a
 ## NAME.out, natively, runs the executable and diffs it against the golden
@@ -14,8 +14,8 @@
 ## Last line: `GOLDENS GREEN (N checked)` or `GOLDENS RED (N failures)`.
 ## NAME is a program's file name without `.ail`; with names, only those run.
 
-RUN_DIR := "bootstrap/tests/native/run"
-GOLDEN_DIR := "bootstrap/tests/native/golden"
+RUN_DIR := "tests/native/run"
+GOLDEN_DIR := "tests/native/golden"
 
 struct Check
     fails int

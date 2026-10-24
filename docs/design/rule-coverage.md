@@ -154,12 +154,12 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `12-modules.md:94` | skip=context | `mod.vis.3` | layout illustration of two packages | 223 |
 | `12-modules.md:134` | skip=bootstrap | `(none cited)` | - | 238 |
 | `12-modules.md:169` | skip=bootstrap | `(none cited)` | - | 238 |
-| `12-modules.md:201` | skip=context | `mod.pkg.1,mod.pkg.2,mod.pkg.3` | package layout illustration; the package cases are in bootstrap/tests/packages | 223 |
-| `12-modules.md:243` | skip=context | `mod.pkg.6` | package layout illustration; the package cases are in bootstrap/tests/packages | 223 |
+| `12-modules.md:201` | skip=context | `mod.pkg.1,mod.pkg.2,mod.pkg.3` | package layout illustration; the package cases are in tests/packages | 223 |
+| `12-modules.md:243` | skip=context | `mod.pkg.6` | package layout illustration; the package cases are in tests/packages | 223 |
 | `12-modules.md:326` | norun | `mod.const.3` | the overflow traps when the constant is computed before main, so it is checked and not run | 223 |
 | `12-modules.md:349` | norun | `mod.use.1,mod.use.2` | needs a second module or package named in the block; checked and not run | 223 |
 | `12-modules.md:399` | norun | `mod.main.2` | a duplicate main is a checker error with no output to print | 223 |
-| `12-modules.md:407` | skip=context | `mod.use.5` | needs a second package named in the block; the cases are in bootstrap/tests/packages | 223 |
+| `12-modules.md:407` | skip=context | `mod.use.5` | needs a second package named in the block; the cases are in tests/packages | 223 |
 | `12-modules.md:412` | skip=context | `mod.pkg.4,mod.pkg.5,mod.pkg.7,mod.pkg.8,mod.pkg.9` | names tests/cases/packages and tests/git_deps.rs; needs packages or git, which the gate does not set up | 223 |
 | `13-unsafe.md:202` | norun | `unsafe.ptr.4` | traps on purpose: the raw pointer is invalid at run time, so the output is a trap | 223 |
 | `13-unsafe.md:209` | norun | `unsafe.ptr.5` | traps on purpose: the raw pointer is invalid at run time, so the output is a trap | 223 |
@@ -232,7 +232,7 @@ their own blocks (`mod.unit.1`, `mod.const.*`, `mod.use.3`, `mod.use.4`, `mod.us
 `mod.unit.4`, `mod.vis.2`, `mod.main.2`). The rules that need a directory tree, a manifest
 or a git cache (`mod.unit.2`, `mod.unit.5`, `mod.use.5`, `mod.pkg.*`, `mod.vis.3`) are cited
 by `skip=context` blocks that show the layout. Their checks are the package cases in
-`bootstrap/tests/cases/packages/` and `bootstrap/tests/git_deps.rs`, not the spec gate.
+`tests/cases/packages/` and `bootstrap/tests/git_deps.rs`, not the spec gate.
 Chapter 13 (unsafe, 15 rules, lane 223): all cited. Runtime traps (`unsafe.ptr.4`–`6`, `unsafe.mem.2`, `unsafe.mem.3`) are `norun`. `unsafe.block.3` (manifest opt-in) is a `skip=context` block with the package cases named. `unsafe.block.1` is shown by the valid block example, since the bootstrap reports the disallowed case as `unsafe.op.1`.
 
 Chapter 14 (FFI, 12 rules, lane 223): all cited. `ffi.decl.1` (`use c "header.h"`) is `skip=bootstrap`: specified, not built. `ffi.native.1` has a runnable block (`isdigit`, outside the libc subset, bound at its first call, ADR 0870) and a `norun` one that prints a process id. The load traps (`ffi.load.1`–`3`) are `norun`. `ffi.load.3` is Windows-only behaviour and is shown by a `norun` block.
@@ -247,7 +247,7 @@ Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integra
 `tools/rules-audit.sh` check 2 found 87 rules at the batch head. Three rounds have sorted them:
 
 - **Definitional, 10.** Marked `[definitional]` in the spec (spec README, rule 2; ADR 0673) and skipped by the audit: `conc.mm.1`, `conc.task.9`, `plat.ptr.1`, `plat.ptr.2`, `plat.ptr.3`, `plat.endian.1`, `plat.target.1`, `refl.run.1`, `type.opt.1`, `own.borrow.2`.
-- **Cited, 55.** 28 were implemented in AIL std sources (`bootstrap/src/std/**/*.ail`, `bootstrap/src/prelude.ail`), which the audit did not scan; it now does. 18 more were cited at the code that implements them (PR #244): `json.type.1`, `json.parse.2`, `json.print.2`, `json.prelude.1`, `err.trap.2`, `conc.atomic.2`, `type.num.12`, `type.str.12`, `own.uniq.7`, `std.mem.1`, `std.regex.23`, `test.run.6`, `edit.out.3`, `native.build.4`, `plat.isa.1`, `plat.isa.2`, `ffi.link.1`, `unsafe.block.4`. The follow-up adds nine: `mod.vis.3`, `eff.det.2`, `eff.det.3`, `fix.edit.6`, `ct.eval.1`, `trait.op.2`, and `explain.cover.1`-`3` (the audit now reads comments in `bootstrap/tests/explain_coverage.rs`, which enforce them).
+- **Cited, 55.** 28 were implemented in AIL std sources (`std/**/*.ail`, `tools/native/prelude.ail`), which the audit did not scan; it now does. 18 more were cited at the code that implements them (PR #244): `json.type.1`, `json.parse.2`, `json.print.2`, `json.prelude.1`, `err.trap.2`, `conc.atomic.2`, `type.num.12`, `type.str.12`, `own.uniq.7`, `std.mem.1`, `std.regex.23`, `test.run.6`, `edit.out.3`, `native.build.4`, `plat.isa.1`, `plat.isa.2`, `ffi.link.1`, `unsafe.block.4`. The follow-up adds nine: `mod.vis.3`, `eff.det.2`, `eff.det.3`, `fix.edit.6`, `ct.eval.1`, `trait.op.2`, and `explain.cover.1`-`3` (the audit now reads comments in `bootstrap/tests/explain_coverage.rs`, which enforce them).
 - **Still uncited, 22.**
   - *Not implemented, 8:* `native.bce.1`-`4` (no bounds-check or overflow-check removal in `compiler/mir`); `ct.eval.3` (constants have a statement-step limit, ADR 0742; the memory limit and a derive's limits are still missing); `ct.eval.4` (optional reuse of compile-time results, a MAY rule); `plat.isa.3` (no start-up check of the CPU feature level); `own.copy.1` (no report of deep-copy sites found).
   - *Enforced by a test that does not exist yet, 1:* `native.build.1` (needs the `ail test --native` differential runner, lane 209).

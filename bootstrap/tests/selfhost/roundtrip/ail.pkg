@@ -1,3 +1,0 @@
-# Reads `ail api --ast` dumps through the AIL syntax tree (api.ast.2, ADR 0376).
-package roundtrip
-dep ast path ../../../../compiler/ast

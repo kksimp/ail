@@ -37,7 +37,7 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   GitHub-hosted testing.
 - **One checker:** checker changes go in `compiler/check/` only. The selftest
   `self_hosted_check` lets the AIL checker report more than the Rust one, for
-  the rules in `bootstrap/tests/checker_known_new.txt`, and never less
+  the rules in `tests/checker_known_new.txt`, and never less
   ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md), amended
   by the no-double-work rules).
 - **Native lowering ([ADR 0823](docs/decisions/0823-lower-ail-feature-files.md)):**

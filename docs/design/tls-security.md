@@ -27,7 +27,7 @@ been verified to do. Update it in the same change as the code.
   definition for all 256 inputs.
 - **Cross-check:** 160 random vectors whose outputs came from OpenSSL 3.0,
   lengths 0–1000 around every block edge, for every primitive
-  (`bootstrap/src/net/crypto/testdata/crosscheck.txt`).
+  (`tests/data/net/crypto/crosscheck.txt`).
 - **Tamper:** a flipped bit in ciphertext, tag, AAD or nonce fails `open`.
 - **Handshake, recorded:** a real TLS_AES_256_GCM_SHA384 handshake (The
   Illustrated TLS 1.3 Connection) replays with every client byte equal to
@@ -58,7 +58,7 @@ been verified to do. Update it in the same change as the code.
   RSA-PSS), verified against the test root; the wrong host name fails as a
   certificate error naming the cause.
 - **Root stores:** all 122 roots in Ubuntu's bundle parse.
-- **End to end:** an AIL program (`bootstrap/tests/net/https.ail`) fetches
+- **End to end:** an AIL program (`tests/net/https.ail`) fetches
   from a local `openssl s_server` over `https` with the test root as
   `SSL_CERT_FILE`, and gets kind `tls` with the expected message for a
   wrong host and for an untrusted root.

@@ -265,7 +265,7 @@ fn main() !
         stem := b.chapter.replace(".md", "")
         mut ok := true
         if not b.fixture.is_empty()
-            r := ail_in(root, ["check", "--json", "bootstrap/tests/cases/{b.fixture}"], "")
+            r := ail_in(root, ["check", "--json", "tests/cases/{b.fixture}"], "")
             for rule in b.rules
                 if not r.err.contains("\"rule\":\"{rule}\"")
                     ok = false
@@ -276,7 +276,7 @@ fn main() !
             if not b.pkg.is_empty()
                 mk2 := proc.run("sh", [
                     "-c",
-                    "mkdir -p {dir} && cp -R {root}/bootstrap/tests/cases/packages/{b.pkg}/. {dir}/",
+                    "mkdir -p {dir} && cp -R {root}/tests/cases/packages/{b.pkg}/. {dir}/",
                 ]) else return
             else
                 mk3 := proc.run("sh", ["-c", "mkdir -p {dir}"]) else return

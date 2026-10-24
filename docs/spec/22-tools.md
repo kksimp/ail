@@ -137,7 +137,7 @@ diagnostics are printed and the exit code is 2, as for api.out.5. A missing
 path or a bad option is exit code 2.
 
 **api.card.5** — `docs/design/cards/edit.md` and `std.md` are the output for
-`tools/edit` and `bootstrap/src/std`; `cargo test --test api_card` fails
+`tools/edit` and `std`; `cargo test --test api_card` fails
 when either differs from the command's output. Regenerate with
 `./ail api --card tools/edit > docs/design/cards/edit.md`.
 
