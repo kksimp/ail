@@ -1,12 +1,12 @@
 # garlic
 entry: main in garlic.ail
-tests: 118 (`ail test` lists them)
+tests: 119 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
     dep image path ../pdf/image caps fs
 
-## (root) (91 items)
+## (root) (93 items)
 
 ## attach (10 items)
 
@@ -28,16 +28,20 @@ ail.pkg:
 
 ## jsdom (8 items)
 
+## look (3 items)
+
 ## page (43 items)
 
 ## std.app (46 items)
 
 ## std.net.jar (14 items)
 
+## std.screen (10 items)
+
 ## svg (19 items)
 
-## tabstrip (21 items)
+## tabstrip (30 items)
 
 ## ws (18 items)
 
-trimmed to fit 4000 tokens (~224); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~245); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

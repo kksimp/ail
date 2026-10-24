@@ -276,3 +276,18 @@ fn det_yield()
     rq_push_back(d, me)
     det_pass(d, rq_pop(d))
     det_park(d, me)
+
+## The running task lets the ready ones run, then goes to the back of the line: true when it
+## did, false when none was ready. For a task that polls for something another task provides.
+fn det_relax() bool
+    p := load64(global(TASKS))
+    if p == 0 or load64(p + P_DET + D_MODE) == 0
+        return false
+    d := p + P_DET
+    if load64(d + D_RQN) == 0
+        return false
+    me := thread_slot()
+    rq_push_back(d, me)
+    det_pass(d, rq_pop(d))
+    det_park(d, me)
+    true
