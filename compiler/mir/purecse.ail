@@ -1,0 +1,349 @@
+## Pure-call elimination (ADR 0874, speed only): a call of a function that
+## touches no memory, or only reads it, gives the same result for the same
+## arguments, so
+##
+## - a later call with the same arguments, in a block the earlier call's block
+##   dominates, reuses the earlier value (CSE/GVN); a function that reads
+##   memory is reused only inside one run of blocks with nothing in between
+##   that could write memory, as `forward.ail` does for loads;
+## - a call whose arguments are all defined outside a loop moves to the loop's
+##   preheader, when the callee can neither trap nor run for ever (it has no
+##   loop, no recursion, no checked operation), so the move adds no behaviour
+##   and a loop that runs zero times is unchanged.
+##
+## Traps are kept: a call that traps ends the program at its first use, and a
+## later call with the same arguments is never reached.
+
+## What a function can do, as far as these passes need.
+struct PcFx
+    ## Writes nothing, allocates nothing, calls only such functions.
+    readonly bool
+    ## Also reads no memory.
+    scalar bool
+    ## Also has no checked operation, no loop and no recursion.
+    total bool
+    ## Its result is a number, a `bool` or a `char`: no object that a call
+    ## makes fresh.
+    plain bool
+
+## What one instruction does, for the analysis.
+struct PcFacts
+    ## Not reading-only: writes, allocates, does I/O or isn't known.
+    writes bool
+    reads bool
+    traps bool
+    calls List[str]
+
+fn pc_plain_ty(t Ty) bool
+    match t
+        Int | Float | Bool | Char | F32 | Sized(_) => true
+        _ => false
+
+## Arithmetic that can trap when its `site` is set.
+fn pc_arith_op(op str) bool
+    match op
+        "add" | "sub" | "mul" | "div" | "rem" | "neg" | "shl" | "shr" => true
+        _ => false
+
+fn pc_facts_of(f Func) PcFacts
+    mut fa := PcFacts(writes: false, reads: false, traps: false, calls: [])
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call"
+                fa.calls.push(i.name)
+            elif pc_arith_op(i.op)
+                if i.site >= 0
+                    fa.traps = true
+            elif i.op == "ftoi" or i.op == "trap" or i.op == "utrap"
+                fa.traps = true
+            elif i.op == "get" or i.op == "ldx"
+                fa.reads = true
+                if i.site >= 0
+                    fa.traps = true
+            elif i.op == "len" or i.op == "cap" or i.op == "data" or i.op == "load"
+                fa.reads = true
+            elif i.op == "prim"
+                if not pure_prim(i.name)
+                    fa.writes = true
+            elif not i.is_pure()
+                fa.writes = true
+    fa
+
+## Whether `f` has an edge back to a block that comes no later in reverse
+## postorder: a loop.
+fn pc_has_loop(f Func) bool
+    order := rpo(f)
+    mut at := [-1 for _ in 0..f.blocks.len()]
+    for k in 0..order.len()
+        at[order[k]] = k
+    for b in order
+        for t in f.blocks[b].term.targets
+            if at[t] <= at[b]
+                return true
+    false
+
+## The pc_effects of every function of `m`, by name.
+fn pc_effects(m Module) Map[str, PcFx]
+    mut facts := Map[str, PcFacts]()
+    mut loops := Map[str, bool]()
+    mut ro := Set[str]()
+    for f in m.funcs
+        fa := pc_facts_of(f)
+        facts[f.name] = fa
+        if not fa.writes
+            ro.add(f.name)
+    # Read-only is the greatest fixed point: drop a function that calls one that is not.
+    mut changed := true
+    while changed
+        changed = false
+        for f in m.funcs
+            if not ro.contains(f.name)
+                continue
+            for c in facts[f.name].calls
+                if not ro.contains(c)
+                    ro.remove(f.name)
+                    changed = true
+                    break
+    mut scalar := Set[str]()
+    for f in m.funcs
+        if ro.contains(f.name) and not facts[f.name].reads
+            scalar.add(f.name)
+    changed = true
+    while changed
+        changed = false
+        for f in m.funcs
+            if not scalar.contains(f.name)
+                continue
+            for c in facts[f.name].calls
+                if not scalar.contains(c)
+                    scalar.remove(f.name)
+                    changed = true
+                    break
+    # Total is the least fixed point: it grows from the functions with no calls.
+    mut total := Set[str]()
+    for f in m.funcs
+        if ro.contains(f.name) and not facts[f.name].traps
+            loops[f.name] = pc_has_loop(f)
+    changed = true
+    while changed
+        changed = false
+        for f in m.funcs
+            if total.contains(f.name) or not loops.contains(f.name) or loops[f.name]
+                continue
+            mut ok := true
+            for c in facts[f.name].calls
+                if not total.contains(c)
+                    ok = false
+                    break
+            if ok
+                total.add(f.name)
+                changed = true
+    mut out := Map[str, PcFx]()
+    for f in m.funcs
+        if ro.contains(f.name)
+            out[f.name] = PcFx(
+                readonly: true,
+                scalar: scalar.contains(f.name),
+                total: total.contains(f.name),
+                plain: pc_plain_ty(f.ret),
+            )
+    out
+
+## Whether an instruction may write memory or do anything else a reader of
+## memory must not be shifted across.
+fn pc_may_write(i Inst, fx Map[str, PcFx]) bool
+    if i.op == "call"
+        e := fx.get(i.name) else return true
+        return not e.readonly
+    if pc_arith_op(i.op) or i.op == "get" or i.op == "ldx" or i.op == "len" or i.op == "cap"
+        return false
+    if i.op == "data" or i.op == "load" or i.op == "ftoi"
+        return false
+    if i.op == "prim"
+        return not pure_prim(i.name)
+    not i.is_pure()
+
+## The pc_effects of a call that is a pc_candidate for these passes, else none.
+fn pc_candidate(i Inst, fx Map[str, PcFx]) PcFx?
+    if i.op != "call" or i.dst < 0
+        return none
+    e := fx.get(i.name)?
+    if not e.plain
+        return none
+    e
+
+pub fn pure_calls(mut m Module)
+    fx := pc_effects(m)
+    mut found := false
+    for f in m.funcs
+        if f.name.starts_with("rt.")
+            continue
+        for blk in f.blocks
+            for i in blk.insts
+                if pc_candidate(i, fx) != none
+                    found = true
+    if not found
+        return
+    for k in 0..m.funcs.len()
+        if m.funcs[k].name.starts_with("rt.")
+            continue
+        m.funcs[k] = pc_hoist_calls(pc_cse_calls(m.funcs[k], fx), fx)
+
+struct PcWalk
+    f Func
+    fx Map[str, PcFx]
+    kids List[List[int]]
+    preds List[int]
+    idom List[int]
+    seen Map[str, int]
+    repl List[int]
+    gone List[List[bool]]
+    end_epoch List[int]
+    epoch int
+    next_epoch int
+    changed bool
+
+fn pc_cse_calls(f Func, fx Map[str, PcFx]) Func
+    n := f.blocks.len()
+    dom := dominators(f)
+    order := rpo(f)
+    mut reach := [false for _ in 0..n]
+    for b in order
+        reach[b] = true
+    mut preds := [0 for _ in 0..n]
+    for b in order
+        for t in f.blocks[b].term.targets
+            preds[t] += 1
+    # Immediate dominator: the strict dominator with the most dominators.
+    mut idom := [-1 for _ in 0..n]
+    mut kids := [List[int]() for _ in 0..n]
+    for b in order
+        if b == 0
+            continue
+        mut best := -1
+        mut best_n := -1
+        for d in order
+            if d != b and dom[b][d]
+                mut c := 0
+                for e in order
+                    if dom[d][e]
+                        c += 1
+                if c > best_n
+                    best_n = c
+                    best = d
+        idom[b] = best
+        kids[best].push(b)
+    mut w := PcWalk(
+        f: f,
+        fx: fx,
+        kids: kids,
+        preds: preds,
+        idom: idom,
+        seen: {},
+        repl: [v for v in 0..f.vals.len()],
+        gone: [[false for _ in blk.insts] for blk in f.blocks],
+        end_epoch: [-1 for _ in 0..n],
+        epoch: 0,
+        next_epoch: 1,
+        changed: false,
+    )
+    pc_walk_block(mut w, 0)
+    if not w.changed
+        return f
+    mut g := f
+    for b in 0..n
+        for at in 0..g.blocks[b].insts.len()
+            g.blocks[b].insts[at].args = [
+                resolve_val(w.repl, a)
+                for a in g.blocks[b].insts[at].args
+            ]
+        g.blocks[b].insts = [
+            g.blocks[b].insts[at]
+            for at in 0..g.blocks[b].insts.len() if not w.gone[b][at]
+        ]
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = resolve_val(w.repl, t.cond)
+        if t.value >= 0
+            t.value = resolve_val(w.repl, t.value)
+        t.args = [[resolve_val(w.repl, a) for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    g
+
+fn pc_walk_block(mut w PcWalk, b int)
+    # A block entered only from its immediate dominator carries the memory
+    # state on; any other starts a new one.
+    if w.preds[b] == 1 and b != 0 and w.end_epoch[w.idom[b]] >= 0
+        w.epoch = w.end_epoch[w.idom[b]]
+    else
+        w.epoch = w.next_epoch
+        w.next_epoch += 1
+    mut added := List[str]()
+    insts := w.f.blocks[b].insts
+    for at in 0..insts.len()
+        i := insts[at]
+        if e := pc_candidate(i, w.fx)
+            args := [resolve_val(w.repl, a) for a in i.args]
+            key := if e.scalar then "{i.name}|{args}" else "{i.name}|{args}|{w.epoch}"
+            if prior := w.seen.get(key)
+                w.repl[i.dst] = prior
+                w.gone[b][at] = true
+                w.changed = true
+            else
+                w.seen[key] = i.dst
+                added.push(key)
+            # A reader changes nothing, so the memory state goes on.
+            continue
+        if pc_may_write(i, w.fx)
+            w.epoch = w.next_epoch
+            w.next_epoch += 1
+    w.end_epoch[b] = w.epoch
+    for c in w.kids[b]
+        pc_walk_block(mut w, c)
+    for key in added
+        w.seen.remove(key)
+
+fn pc_hoist_calls(f Func, fx Map[str, PcFx]) Func
+    loops := find_loops(f)
+    if loops.len() == 0
+        return f
+    mut g := f
+    for lp in loops
+        if lp.pre < 0
+            continue
+        mut defs := defs_of(g)
+        mut writes := false
+        for b in lp.blocks
+            for i in g.blocks[b].insts
+                if pc_may_write(i, fx)
+                    writes = true
+        mut shifted := true
+        while shifted
+            shifted = false
+            for b in lp.blocks
+                mut at := 0
+                while at < g.blocks[b].insts.len()
+                    i := g.blocks[b].insts[at]
+                    e := pc_candidate(i, fx) else
+                        at += 1
+                        continue
+                    if not e.total or (not e.scalar and writes)
+                        at += 1
+                        continue
+                    mut outside := true
+                    for a in i.args
+                        d := defs[a]
+                        if d.block >= 0 and lp.member[d.block]
+                            outside = false
+                    if not outside
+                        at += 1
+                        continue
+                    g.blocks[lp.pre].insts.push(i)
+                    mut rest := g.blocks[b].insts[..at]
+                    rest.extend(g.blocks[b].insts[at + 1..])
+                    g.blocks[b].insts = rest
+                    shifted = true
+                    # Its value is now defined outside the loop.
+                    defs[i.dst] = Def(block: lp.pre, at: g.blocks[lp.pre].insts.len() - 1)
+        # Block and instruction positions shifted: recompute for the next loop.
+    g

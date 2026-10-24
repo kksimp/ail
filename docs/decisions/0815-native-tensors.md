@@ -57,6 +57,19 @@ elementwise operators, general loops that any tensor program uses) bring them to
 0.05 s and 0.26-0.30 s on x86-64, against 0.05 s and 0.34-0.42 s for `ail run`
 and 0.10-0.15 s and 0.24-0.37 s for NumPy. A Mac run showed the first NEON kernels behind `ail run` on `f32_matmul`, `softmax_sum` and `sigmoid`, so `matmul` became a register-blocked row kernel (`rt.vec_mm`: eight columns of sums stay in registers across the inner loop, `f32` as four singles per register) and `exp` lost its tail argument and most of its branches, with the same results bit for bit. The NEON kernels of `compiler/a64/kernels.ail` are the ARM64 half (two doubles at a time, the same operations and roundings).
 
+## Amendment, 2026-10-24: native operator fusion, shared `to_float`
+
+A chain of two or more `+ - * /` over names and `float` literals, whose tensors
+are `float` or `f32` of one type, lowers to a plan (`compiler/mir/lower_tensor_fuse.ail`)
+that `compiler/rt/native/tensor_fuse.ail` runs 1024 elements at a time with the
+`vec_zip` and `vec_scal` kernels, so no operator writes a full temporary
+(std.tensor.20, as the interpreter does, ADR 0524). It applies when every tensor
+has one shape at run time; otherwise the one-at-a-time code runs, so traps keep
+their operator and position. Results are bit-identical. `to_float()` on a
+`Tensor[f32]` shares the elements (a tensor is never changed). Measured on the
+Linux x86-64 container, `f32_chain` (2^22 elements, 50 rounds) went from 3.4 s to
+1.5 s against 0.28 s for C -O2; the Mac figures are in the pull request.
+
 ## Rejected alternatives
 
 - **Tensors as lists of lists.** Copying and indexing costs, and the shape and

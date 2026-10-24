@@ -31,6 +31,7 @@ pub STD_AIL := [
     "std.csv",
     "std.log",
     "std.net.http",
+    "std.screen",
     "std.net.jar",
     "std.regex",
     "std.time.date",

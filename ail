@@ -123,6 +123,14 @@ fi
 # `ail api` natively: one file, with at most --outline, --text, --pretty and --symbols.
 native_on=1
 if [ "${AIL_RUST:-}" = 1 ] || [ -n "${AIL_BINARY:-}" ]; then native_on=0; fi
+# replay.rec.1: `--record` and `--replay` belong to `run` and `test`.
+if [ "${1:-}" != run ] && [ "${1:-}" != test ]; then
+    for rec_arg in "$@"; do
+        case "$rec_arg" in
+            --record | --replay) echo "error[replay.rec.1]: \`$rec_arg\` works with \`ail run\` and \`ail test\` and a file name (replay.rec.1)" >&2; exit 2 ;;
+        esac
+    done
+fi
 native_run=
 run_opts=
 budget_opts=
@@ -145,6 +153,11 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 case "$v" in "" | *[!0-9]*) break ;; esac
                 budget_opts="$budget_opts --from $v"; k=$((k + 2)) ;;
             --json) budget_opts="$budget_opts --json"; k=$((k + 1)) ;;
+            --record | --replay)
+                v="${run_args[$((k + 1))]-}"
+                [ -n "$v" ] || die "\`$a\` needs a recording file, e.g. \`$a r.json\` (replay.rec.1)"
+                if [ "$a" = --record ]; then export AIL_RECORD="$v"; rec_run=1; else export AIL_REPLAY="$v"; rep_run=1; fi
+                export AIL_INSTRUMENT=record; k=$((k + 2)) ;;
             --deterministic) export AIL_DETERMINISTIC=1; det_run=1; k=$((k + 1)) ;;
             --seed)
                 v="${run_args[$((k + 1))]-}"
@@ -155,6 +168,29 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
         esac
     done
     run_skip=$k
+    # Record and replay (ADR 0873, replay.rec.1-2, replay.run.1): the recording's first line says what ran.
+    if [ "${rep_run:-}" = 1 ] && [ "${rec_run:-}" != 1 ]; then
+        [ -r "$AIL_REPLAY" ] || die "can't read the recording $AIL_REPLAY (replay.run.1)"
+        rep_head="$(head -n 1 "$AIL_REPLAY")"
+        rep_prog="$(printf '%s' "$rep_head" | sed -n 's/.*"program":"\(\([^"\\]\|\\.\)*\)".*/\1/p')"
+        rep_seed="$(printf '%s' "$rep_head" | sed -n 's/.*"seed":\([0-9]*\).*/\1/p')"
+        rep_list="$(printf '%s' "$rep_head" | sed -n 's/.*"args":\[\(.*\)\],"seed".*/\1/p')"
+        rep_args=()
+        if [ -n "$rep_list" ]; then
+            while IFS= read -r rep_a; do rep_args+=("$rep_a"); done < <(printf '%s' "$rep_list" | sed 's/^"//; s/"$//; s/","/\n/g; s/\\"/"/g; s/\\\\/\\/g')
+        fi
+        [ -n "$rep_seed" ] && export AIL_SEED="$rep_seed"
+        if [ "$k" -ge "${#run_args[@]}" ]; then run_file="$rep_prog"; else run_file="${run_args[$((k - 1))]}"; fi
+        set -- run "$run_file" ${rep_args[@]+"${rep_args[@]}"}
+        run_skip=2; native_run=1
+    elif [ "${rec_run:-}" = 1 ] && [ -n "${native_run:-}" ]; then
+        [ -n "${AIL_SEED:-}" ] || export AIL_SEED="$(( $(date +%s) * 1000003 + $$ ))"
+        rec_q() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+        rec_list=
+        rec_i=$run_skip
+        while [ "$rec_i" -lt "${#run_args[@]}" ]; do rec_list="$rec_list${rec_list:+,}\"$(rec_q "${run_args[$rec_i]}")\""; rec_i=$((rec_i + 1)); done
+        printf '{"ail_record":1,"program":"%s","args":[%s],"seed":%s,"limit":67108864}\n' "$(rec_q "$run_file")" "$rec_list" "$AIL_SEED" > "$AIL_RECORD" || die "can't write the recording $AIL_RECORD"
+    fi
     case "$budget_opts" in "" | *--budget*) ;; *) native_run= ;; esac
 fi
 native_build=
@@ -271,7 +307,7 @@ fi
 if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     for test_arg in "${@:2}"; do
         case "$test_arg" in
-            --watch | --watch=*)
+            --watch | --watch=* | --record | --replay)
                 echo "ail test: $test_arg is not native yet (interpreter only: AIL_RUST=1 ./ail test ...)" >&2
                 [ "${AIL_RUST:-}" = 1 ] || exit 2 ;;
         esac
