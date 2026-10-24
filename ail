@@ -199,8 +199,9 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
         shift "$run_skip"
         # shellcheck disable=SC2086
         if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget $budget_opts -- "$exe" "$@"; fi
-        # A program that starts `ail` itself finds this wrapper by `AIL`, since `env.program()` is the cached executable.
-        AIL="$root/ail" exec "$exe" "$@"
+        # `env.program()` is the source path, as it was given (std.env.4), so paths next to the source work:
+        # argv[0] is set to it rather than the cached executable. `AIL` names this wrapper.
+        AIL="$root/ail" exec -a "$run_file" "$exe" "$@"
     fi
     cat "$prep_err" >&2; rm -f "$prep_err"; exit 1
 fi

@@ -96,22 +96,23 @@ fn main()
 
 ## Native builds
 
-**ffi.native.1** — `ail build` links no C library. It accepts an `extern c fn`
-only for the fixed libc subset the runtime provides (`hypot`, `abs`, `toupper`,
-`strlen`, `atoi`, `memset`, `memcpy`, `strtod`, declared with the C types of
-`examples/ffi_libc.ail` and `examples/ffi_buffers.ail`) and compiles `std.mem`
-(`alloc`, `free`, `cstr`, `from_cstr`, `cast`, `null`) over the runtime's own
-blocks. Any other `extern c fn` is an error that names the declaration. The
-interpreter calls any C function. A native program does not check
-`unsafe.ptr.5-6`: an access outside a block, or to a freed one, is undefined
-as in C. *(ADR 0436, ADR 0844)*
+**ffi.native.1** — `ail build` links no C library for the fixed libc subset the
+runtime provides (`hypot`, `abs`, `toupper`, `strlen`, `atoi`, `memset`,
+`memcpy`, `strtod`, declared with the C types of `examples/ffi_libc.ail` and
+`examples/ffi_buffers.ail`), and compiles `std.mem` (`alloc`, `free`, `cstr`,
+`from_cstr`, `cast`, `null`) over the runtime's own blocks. Any other
+`extern c fn` is bound on its first call as `ffi.load.1-2` say, so the
+executable then imports `dlopen` and `dlsym` from the system's C library; a
+program that calls only the subset stays static. A native program does not
+check `unsafe.ptr.5-6`: an access outside a block, or to a freed one, is
+undefined as in C. *(ADR 0436, ADR 0844, ADR 0870)*
 
-```ail tool=build,FILE status=1 expect=ffi.native.1 rules=ffi.native.1
-extern c fn getpid() int
+```ail tool=run,FILE expect=true rules=ffi.native.1
+extern c fn isdigit(c i32) i32
 
 fn main()
     unsafe
-        print(getpid())
+        print(isdigit(55) != 0)
 ```
 
 ## Loading
@@ -195,7 +196,7 @@ fn main()
 ```
 
 ```ail norun rules=ffi.native.1
-# norun: `ail build` rejects the declaration; `ail check` and `ail run` accept it.
+# norun: the process id differs on every run.
 extern c fn getpid() int
 
 fn main()

@@ -1107,6 +1107,7 @@ fn run_one(exe str, slot int, lead int, lim str) Verdict
 struct Augmented
     lines List[str]
     names Map[str, str]
+    where Map[str, List[int]]
     note str
 
 fn native_cli() str
@@ -1130,19 +1131,23 @@ fn ensure_native_cli() bool
     m.status == 0
 
 fn doc_augment(file str) Augmented
-    none_found := Augmented(lines: [], names: {}, note: "")
+    none_found := Augmented(lines: [], names: {}, where: {}, note: "")
     if not ensure_native_cli()
-        return Augmented(lines: [], names: {}, note: "the native CLI for doc examples didn't build")
+        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't build")
     r := proc.run(native_cli(), ["doctests", file]) else
-        return Augmented(lines: [], names: {}, note: "the native CLI for doc examples didn't run")
+        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't run")
     if r.status != 0
-        return Augmented(lines: [], names: {}, note: "doc examples: {short(r.err)}")
+        return Augmented(lines: [], names: {}, where: {}, note: "doc examples: {short(r.err)}")
     out := r.out.split("\n")
     mut names := Map[str, str]()
+    mut where := Map[str, List[int]]()
     mut i := 0
     while i < out.len() and out[i].contains(" doc_example_") and out[i].starts_with("doc:")
         parts := out[i].split(" ")
         names[parts[1]] = parts[0]
+        for part in parts
+            if csv := part.strip_prefix("lines=")
+                where[parts[1]] = [n.to_int() else 0 for n in csv.split(",") if not n.is_empty()]
         i += 1
     if names.is_empty()
         return none_found
@@ -1150,7 +1155,7 @@ fn doc_augment(file str) Augmented
     mut end := out.len()
     while end > i and (out[end - 1].is_empty() or out[end - 1].starts_with("["))
         end -= 1
-    Augmented(lines: out[i..end], names: names, note: "")
+    Augmented(lines: out[i..end], names: names, where: where, note: "")
 
 ## The lines a doc example's output must equal: its `# =>` lines (test.doc.2).
 fn doc_expected(lines List[str], t TestFn) List[str]
@@ -1166,7 +1171,7 @@ fn debug_list(xs List[str]) str
         parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
     "[{parts.join(", ")}]"
 
-fn run_doc(exe str, slot int, lead int, expected List[str], lim str) Verdict
+fn run_doc(exe str, slot int, lead int, expected List[str], update bool, orig List[int], lim str) Verdict
     arg := ["x" for _ in 0..slot].join("")
     r := started(exe, arg, lim) else
         return plain("", "fail", "error: can't start the test binary")
@@ -1182,6 +1187,10 @@ fn run_doc(exe str, slot int, lead int, expected List[str], lim str) Verdict
                 same = false
     if same
         return plain("", "pass", "")
+    if update and not orig.is_empty()
+        csv := [ "{n}" for n in orig ].join(",")
+        rec := SnapRec(line: orig[0], col: -1, text: "{csv}\n{r.out}")
+        return Verdict(name: "", status: "pass", message: "", cases: 0, seed: 0, input: "", snaps: [rec])
     plain(
         "",
         "fail",
@@ -1431,6 +1440,8 @@ fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
     mut order := List[SnapRec]()
     mut conflict := Set[str]()
     for r in recs
+        if r.col < 0
+            continue
         key := "{r.line}:{r.col}"
         if conflict.contains(key)
             continue
@@ -1469,6 +1480,36 @@ fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
         at = bounds[k].1
         sorted.push(spans[k])
     new = "{new}{chars_text(cs, at, cs.len())}"
+    # snap.update.4: a doc example whose output differs takes its `# =>` lines from the output; later examples first.
+    docs := [r for r in recs if r.col < 0].sorted(by: |r| -r.line)
+    mut dl := new.split("\n")
+    for r in docs
+        cut := r.text.find("\n") else continue
+        nums := [n.to_int() else 0 for n in r.text.slice(0, cut).split(",")]
+        output := r.text.slice(cut + 1, r.text.len())
+        first := nums[0]
+        if first < 1 or first > dl.len()
+            continue
+        model := dl[first - 1]
+        mark := model.find("# =>") else continue
+        prefix := model.slice(0, mark)
+        replaced := [ if l.is_empty() then "{prefix}# =>" else "{prefix}# => {l}" for l in output.lines() ]
+        mut before := List[str]()
+        for n in nums
+            if n >= 1 and n <= dl.len()
+                before.push(dl[n - 1])
+        if before.len() == replaced.len() and [b.trim_end() for b in before] == [b.trim_end() for b in replaced]
+            continue
+        mut kept := List[str]()
+        for i in 0..dl.len()
+            if i + 1 == first
+                kept.extend(replaced)
+            elif not nums.contains(i + 1)
+                kept.push(dl[i])
+        dl = kept
+        sorted.push(SnapChange(kind: "doc", line: first, col: 1, old: before.join("\n"), new: replaced.join("\n")))
+    new = dl.join("\n")
+    sorted = sorted.sorted(by: |c| (c.line, c.col))
     mut out := ""
     mut count := 0
     mut changed := 0
@@ -1811,6 +1852,7 @@ fn main() !
     text := fs.read_text(file)? "reading {file}"
     mut lines := text.lines()
     mut doc_names := Map[str, str]()
+    mut doc_where := Map[str, List[int]]()
     mut has_docs := false
     for l in lines
         if l.trim() == "## ```ail"
@@ -1823,6 +1865,7 @@ fn main() !
         else
             lines = aug.lines
             doc_names = aug.names
+            doc_where = aug.where
     found := find_tests(lines)
     w := World(decls: parse_decls(lines))
     mut verdicts := List[Verdict]()
@@ -1968,8 +2011,8 @@ fn main() !
                 if not dropped.contains(j)
                     slot += 1
             if doc_names.contains(t.name)
-                v := run_doc(exe, slot, last_lead, doc_expected(lines, t), trace_limit)
-                verdicts.push(plain(doc_names[t.name], v.status, v.message))
+                v := run_doc(exe, slot, last_lead, doc_expected(lines, t), update, doc_where.get(t.name) else [], trace_limit)
+                verdicts.push(Verdict(name: doc_names[t.name], status: v.status, message: v.message, cases: 0, seed: 0, input: "", snaps: v.snaps))
                 if trace and v.status == "fail"
                     traces[doc_names[t.name]] = take_trace(exe)
                 elif trace
@@ -2032,7 +2075,7 @@ fn main() !
         mut recs := List[SnapRec]()
         for v in verdicts
             for r in v.snaps
-                if r.col > 0
+                if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
     code := report(verdicts, json, text.lines(), traces)

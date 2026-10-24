@@ -25,7 +25,7 @@ E
 ./ail diff OLD NEW               # changed declarations with their lines, diagnostics, tests
 ```
 
-`todo` is a typed hole: `ail check` warns with its expected type and the names in scope.
+`todo` is a typed hole: `ail check` warns with its expected type and the names in scope. `uhwhatnow?` also ranks what fits, with a fix each.
 
 Modules: `use a.b` imports directory `a/b` as `b.item`; `pub` exports. Standard
 modules need no `use` (`fs.read_text(p)`); a local of the same name hides one.

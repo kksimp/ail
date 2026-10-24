@@ -11,9 +11,9 @@ entry: main in main.ail
 
 ## budget (24 items)
 
-## check (330 items)
+## check (334 items)
 
-## codegen (54 items)
+## codegen (55 items)
 
 ## cover (4 items)
 
@@ -33,13 +33,13 @@ entry: main in main.ail
 
 ## load (100 items)
 
-## mir (429 items)
+## mir (431 items)
 
-## obj (58 items)
+## obj (64 items)
 
 ## pkg (44 items)
 
-## syntax (109 items)
+## syntax (110 items)
 
 ## x64 (80 items)
 

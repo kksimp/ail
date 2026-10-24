@@ -19,7 +19,7 @@ pub fn Ty.opt_inner(self) Ty?
 ## optional in a pointer-holding cell, so `some(none)` differs from `none`.
 fn opt_of(t Ty) Ty?
     match t
-        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple | Ref | Opt(_) => Ty.Opt(t)
+        Int | Float | F32 | Bool | Char | Sized(_) | Str | Bytes | List | Map | Set | Struct | Enum | Tuple | Tensor | Ref | Opt(_) => Ty.Opt(t)
         _ => none
 
 fn is_boxed(t Ty) bool

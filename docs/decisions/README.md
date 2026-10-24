@@ -687,5 +687,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0868](0868-ai-first-tooling-after-rust-removal.md) | AI-first tooling after Rust removal: `ail ask`, `uhwhatnow?` ranked typed holes, edit impact, native time travel, tool-checked contracts, token-priced diagnostics, native sandbox, live attach; zero cost when unused | Accepted | 2026-10-23 |
 | [0869](0869-http-proxy-from-the-environment.md) | HTTP proxies from the environment in the native `std.net` client: `HTTP_PROXY`, `HTTPS_PROXY` through `CONNECT`, `NO_PROXY` | Accepted | 2026-10-23 |
 | [0871](0871-native-instrumentation-layer.md) | One native instrumentation layer for coverage and call traces (`AIL_INSTRUMENT`) | Accepted | 2026-10-24 |
+| [0872](0872-uhwhatnow-ranked-holes.md) | `uhwhatnow?`, the hole that asks: locals, fields, then calls that fit, best first, eight at most, a fix each | Accepted | 2026-10-24 |
+| [0870](0870-native-extern-c-bound-lazily-with-dlopen.md) | A native `extern c fn` outside the libc subset binds lazily with `dlopen` and `dlsym`; libc-only programs stay static | Accepted | 2026-10-24 |
 | [0866](0866-native-composite-map-keys.md) | Native maps and sets take struct, tuple, enum and list keys, hashed by the key's shape *(delegated)* | Accepted | 2026-10-23 |
 | [0867](0867-native-unique-values-and-drop.md) | Native unique values and `Drop`: ownership flags on the defer machinery *(delegated)* | Accepted | 2026-10-23 |

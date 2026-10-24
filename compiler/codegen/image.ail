@@ -79,6 +79,12 @@ pub fn add_f64(mut img Image, x float) str
         push64(mut img.data, bits)
     sym
 
+## Whether `sym` (a `libsys.` name without its prefix) is a libc function a
+## Linux executable imports through the dynamic loader (ADR 0870). Every other
+## name is for Windows or macOS, and traps on Linux if ever reached.
+pub fn linux_import(sym str) bool
+    sym == "dlopen" or sym == "dlsym"
+
 ## The slot of import `sym`, added on first use.
 pub fn import_slot(mut img Image, sym str) int
     for k in 0..img.imports.len()
