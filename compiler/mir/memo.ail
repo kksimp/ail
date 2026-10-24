@@ -111,7 +111,14 @@ fn MemoBuild.store(mut self, b int, addr int, off int, v int)
 ## The cache in front of `raw` (the old body, now `name$raw`), under `name`.
 fn memo_wrapper(f Func, base int) Func
     n := f.params.len()
-    mut mb := MemoBuild(g: Func(name: f.name, params: [], ret: Ty.Int, blocks: [], vals: [], names: []))
+    mut mb := MemoBuild(g: Func(
+        name: f.name,
+        params: [],
+        ret: Ty.Int,
+        blocks: [],
+        vals: [],
+        names: [],
+    ))
     mut ps := List[int]()
     for k in 0..n
         ps.push(mb.val(Ty.Int))
