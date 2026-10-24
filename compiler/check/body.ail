@@ -34,8 +34,8 @@ pub fn check_program(p ast.Program) Report
 pub fn analyze(p ast.Program, full bool) Analysis
     analyze_denying(p, full, [])
 
-## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
-pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
+## The checker after every declaration and function body has been checked.
+fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     mut c := new_checker(p)
     c.denied = denied
     c.list_param = c.new_param("T", [])
@@ -72,6 +72,17 @@ pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     for i in 0..p.fns.len()
         c.check_fn(i)
     c.record = false
+    c
+
+## The `for` loops `conc.par.2-4` prove independent, which `ail run --parallel`
+## puts on the pool (conc.par.8): their positions.
+pub fn proven_loops(p ast.Program) List[ast.Pos]
+    c := checked_fns(p, false, [])
+    c.proven_loops()
+
+## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
+pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
+    mut c := checked_fns(p, full, denied)
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())

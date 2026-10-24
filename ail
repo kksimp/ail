@@ -151,6 +151,7 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 v="${run_args[$((k + 1))]-}"
                 [ -n "$v" ] || die "\`--deny\` needs a list of capabilities, e.g. \`--deny fs,proc\`"
                 check_opts="$check_opts --deny $v"; k=$((k + 2)) ;;
+            --parallel) export AIL_PARALLEL=1; k=$((k + 1)) ;;
             --unsafe)
                 [ "${run_args[$((k + 1))]-}" = driver ] || break
                 check_opts="$check_opts --unsafe driver"; k=$((k + 2)) ;;
