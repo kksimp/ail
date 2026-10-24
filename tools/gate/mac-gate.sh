@@ -40,7 +40,7 @@ suites="tools cases contracts misc limits api_queries api_card edit net spec nat
 # The cases suite still runs on the Rust binary (item 301), so build it; the native cases run below is a report.
 run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
 run gate_ail ./ail run tools/gate/gate.ail $suites
-run gate_native env GATE_NATIVE=1 ./ail run tools/gate/gate.ail $native_suites
+run gate_native perl -e 'alarm 2400; exec @ARGV' env GATE_NATIVE=1 ./ail run tools/gate/gate.ail $native_suites
 if [ "${GATE_CASES_NATIVE_REPORT:-0}" = 1 ]; then
 if perl -e 'alarm 900; exec @ARGV' env GATE_CASES_NATIVE=1 ./ail run tools/gate/gate.ail cases >"$out/cases_native.log" 2>&1; then
   echo "native cases: green"
