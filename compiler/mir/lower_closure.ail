@@ -215,7 +215,9 @@ fn Lower.lower_unreachable(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if m.ty != Ty.Str
         return unsupported(expr_pos(args[0].value), "`unreachable` of a `{m.ty.name()}`")
     mut i := inst(-1, "utrap", [m.id])
-    i.site = site("err.model.2", "unreachable", "", pos)
+    # A std module's `unreachable("RULE: why")` traps as RULE (std.regex.7, 24).
+    rule := if fname.starts_with("std.") then "std.unreachable" else "err.model.2"
+    i.site = site(rule, "unreachable", "", pos)
     emit_void(i)
     finish(unreachable_term())
     Val(id: -1, ty: Ty.Unit)
