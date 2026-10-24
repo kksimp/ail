@@ -95,7 +95,7 @@ fi
 
 # The native CLI (ADR 0855) is the default: `ail fmt ...`, `ail test FILE` (tools/ailtest), `ail api FILE`, `ail build`,
 # `ail check FILE` and `ail run [--timeout MS] [--max-memory MB] FILE [ARGS]` are done by compiler/main.ail
-# built natively into .native/ail (by the Rust ail or by the published seed when there is no Rust): `check-program` first,
+# built natively into .native/ail (by the published seed (the Rust `ail` only when no seed can be fetched)): `check-program` first,
 # then the program from the build cache, exec'd so it keeps the terminal. `AIL_RUST=1` (or a pinned AIL_BINARY) is the
 # one way to the Rust `ail` and its interpreter, until the Rust is deleted; a program outside the native subset is an error.
 # Anything else, and `run` with other options before the file, goes to the Rust `ail` below.
@@ -159,20 +159,22 @@ fi
 if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
-        if [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
-            mkdir -p "$root/.native"
-            log="$native.log"
-            AIL_RUST=1 "$root/ail" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "building the native CLI failed"; }
-            rm -f "$log"
-            mv "$native.new" "$native"
-        else
-            "$root/tools/release/fetch-seed.sh" || die "no Rust toolchain and no seed; see ADR 0855"
-            mkdir -p "$root/.native"
-            log="$native.log"
-            AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "the seed couldn't build the native CLI"; }
-            rm -f "$log"
-            mv "$native.new" "$native"
+        # The published seed builds the native CLI (ADR 0855); the Rust `ail` only when no seed can be had.
+        mkdir -p "$root/.native"
+        want_tag="$(head -n 1 "$root/tools/release/SEED_TAG" 2>/dev/null || true)"
+        if [ ! -x "$root/.native/seed" ] || [ "$(cat "$root/.native/seed.tag" 2>/dev/null)" != "$want_tag" ]; then
+            if "$root/tools/release/fetch-seed.sh"; then echo "$want_tag" > "$root/.native/seed.tag"; else rm -f "$root/.native/seed"; fi
         fi
+        log="$native.log"
+        if [ -x "$root/.native/seed" ]; then
+            AIL_ROOT="$root" "$root/.native/seed" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "the seed couldn't build the native CLI"; }
+        elif [ -x "$binary" ] || command -v cargo >/dev/null 2>&1; then
+            AIL_RUST=1 "$root/ail" build "$root/compiler/main.ail" -o "$native.new" 2>"$log" || { cat "$log" >&2; die "building the native CLI failed"; }
+        else
+            die "no seed and no Rust toolchain; see ADR 0855"
+        fi
+        rm -f "$log"
+        mv "$native.new" "$native"
     fi
     if [ "$1" = pkg ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" pkg "$@"; fi
     if [ "$1" = fmt ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fmt "$@"; fi
