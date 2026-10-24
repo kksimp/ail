@@ -1012,9 +1012,10 @@ fn cli_prepare_with(file str, ms str, mb str, attach bool) str
     exe
 
 fn cli_prepare_cmd(rest List[str])
-    usage := "usage: ail prepare [--timeout MS] [--max-memory MB] FILE"
+    usage := "usage: ail prepare [--no-attach] [--timeout MS] [--max-memory MB] FILE"
     mut ms := "0"
     mut mb := "0"
+    mut attach := true
     mut file := ""
     mut i := 0
     while i < rest.len()
@@ -1026,6 +1027,8 @@ fn cli_prepare_cmd(rest List[str])
         elif a == "--max-memory" and has and positive(rest[i + 1])
             mb = rest[i + 1]
             i += 1
+        elif a == "--no-attach"
+            attach = false
         elif file == "" and not a.starts_with("-")
             file = a
         else
@@ -1035,7 +1038,7 @@ fn cli_prepare_cmd(rest List[str])
     if file == ""
         io.eprint(usage)
         io.exit(2)
-    print(cli_prepare_with(file, ms, mb, false))
+    print(cli_prepare_with(file, ms, mb, attach))
 
 ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn cli_run(rest List[str])
