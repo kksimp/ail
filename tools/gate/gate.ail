@@ -32,7 +32,8 @@ struct Gate
     unbuilt List[str]
 
 fn temp_dir() str
-    base := env.get("TMPDIR") else "/tmp"
+    raw := env.get("TMPDIR") else "/tmp"
+    base := if raw.len() > 1 and raw.ends_with("/") then raw.slice(0, raw.len() - 1) else raw
     # Not `ail-gate`: mac-gate.sh keeps its logs there.
     "{base}/ail-gate-ail"
 

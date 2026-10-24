@@ -1116,17 +1116,17 @@ function, or none left) traps with `replay.run.3`, naming the call the
 recording expected and where it was recorded; a recorded result that names
 a type the program doesn't have traps the same way.
 
-```ail pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
+```ail skip=bootstrap pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
 ```
 
-```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.nat.1,replay.run.1,replay.run.2
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.nat.1,replay.run.1,replay.run.2
 ```
 
-```ail pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3
 ```
 
-```ail pkg=replay_env tool=run,--replay,h.json status=1 expect=replay.cap.2 rules=replay.cap.2
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,h.json status=1 expect=replay.cap.2 rules=replay.cap.2
 ```
 
-```ail pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
 ```
