@@ -1,6 +1,9 @@
 ## The edit operations (edit.op.1-7) and the compact input form (edit.in.3).
 ## A port of the second half of `bootstrap/src/edit.rs`. An operation that
 ## fails leaves `Work.err` set; the caller stops at the first one.
+use api
+use check
+use load
 
 ## The working copy: each file's text, keyed by path (in path order).
 pub struct Work
@@ -9,6 +12,8 @@ pub struct Work
     pub paths List[str]
     pub texts List[str]
     pub err str
+    ## The directory of the standard modules, for the check a rename needs.
+    pub std str
 
 fn Work.index(self, file str) int
     for i in 0..paths.len()
@@ -375,7 +380,7 @@ pub fn apply(mut work Work, op J, path str)
         to := need(mut work, op, kind, "to")
         if work.err != ""
             return
-        work.fail("rename needs the references of the checker, which the native `ail` doesn't have yet (edit.op.5)")
+        rename(mut work, id, to)
     elif kind == "import"
         module := need(mut work, op, kind, "module")
         if work.err != ""
@@ -417,3 +422,169 @@ fn need(mut work Work, op J, kind str, key str) str
         work.fail("`{kind}` needs \"{key}\" (edit.in.1)")
         return ""
     v
+
+## Whether `s` is at character `i` of `cs`.
+fn text_at(cs List[char], i int, s str) bool
+    n := s.chars().len()
+    i >= 0 and i + n <= cs.len() and cs[i..i + n].join("") == s
+
+fn ident_char(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+fn is_ident(s str) bool
+    cs := s.chars()
+    if cs.len() == 0 or cs[0].is_digit()
+        return false
+    for c in cs
+        if not (c.is_alpha() or c.is_digit() or c == '_')
+            return false
+    true
+
+## The 1-based column of a declaration's name on its line, `0` when it isn't there.
+fn name_column(head str, d Decl) int
+    mut from := 0
+    for k in ["fn ", "struct ", "enum ", "trait "]
+        if i := head.find(k)
+            from = i + k.chars().len()
+            break
+    rest := head.chars()[from..].join("")
+    mut off := 0
+    if d.id.starts_with("method:")
+        dot := rest.find(".") else return 0
+        off = dot + 1
+    if text_at(head.chars(), from + off, d.name)
+        return from + off + 1
+    0
+
+## Where `id` is declared: the file, 1-based line and column, and the name.
+## Fields and variants are found inside their type (edit.op.5).
+struct Spot
+    file int
+    line int
+    col int
+    name str
+
+fn Work.declared_at(mut self, id str) Spot
+    none_spot := Spot(file: -1, line: 0, col: 0, name: "")
+    if id.starts_with("field:") or id.starts_with("variant:")
+        c := id.find(":") else 0
+        kind := id.slice(0, c)
+        rest := id.slice(c + 1, id.chars().len())
+        dot := rest.rfind(".") else
+            fail("`{id}` names no member (edit.id.1)")
+            return none_spot
+        owner := rest.slice(0, dot)
+        member := rest.slice(dot + 1, rest.chars().len())
+        h := find("type:{owner}")
+        if err != ""
+            return none_spot
+        lines := texts[h.file].split("\n")
+        for i in h.decl.head + 1..h.decl.end
+            if i >= lines.len()
+                break
+            t := lines[i].trim_start()
+            mut word := ""
+            for ch in t.chars()
+                if ident_char(ch)
+                    word = "{word}{ch}"
+                else
+                    break
+            if word == member and lines[i].chars().len() - t.chars().len() == 4
+                return Spot(file: h.file, line: i + 1, col: 5, name: member)
+        fail("no {kind} `{member}` in `{owner}` (edit.id.1)")
+        return none_spot
+    h := find(id)
+    if err != ""
+        return none_spot
+    head := texts[h.file].split("\n")[h.decl.head]
+    col := name_column(head, h.decl)
+    if col == 0
+        fail("can't find `{h.decl.name}` on its declaration line (edit.op.5)")
+        return none_spot
+    Spot(file: h.file, line: h.decl.head + 1, col: col, name: h.decl.name)
+
+## `{"op":"rename","id":ID,"to":NAME}` (edit.op.5): the declaration and every
+## reference the checker reports, in every file of the program.
+fn rename(mut work Work, id str, to str)
+    if not is_ident(to)
+        work.fail("`{to}` is not a name (edit.op.5)")
+        return
+    # edit.id.3: a bare name becomes the id it stands for.
+    mut full := id
+    if not id.contains(":")
+        h := work.find(id)
+        if work.err != ""
+            return
+        full = h.decl.id
+    decl := work.declared_at(full)
+    if work.err != ""
+        return
+    mut over := Map[str, str]()
+    for i in 0..work.paths.len()
+        over[work.paths[i]] = work.texts[i]
+    loaded := load.load_with(work.root, work.std, over) else err
+        work.fail("a rename needs a program that loads: {err.message} (edit.op.5)")
+        return
+    if loaded.diags.len() > 0
+        d := loaded.diags[0]
+        work.fail("a rename needs a program that checks; first error: {d.msg} [{d.rule}] (edit.op.5)")
+        return
+    analysis := check.analyze(loaded.program, true)
+    for d in analysis.report.diags
+        if not d.warning and (work.package or d.rule != "mod.main.1")
+            work.fail("a rename needs a program that checks; first error: {d.message} [{d.rule}] (edit.op.5)")
+            return
+    # References name a package's declarations with their module (api.pkg.1).
+    c := full.find(":") else 0
+    kind := full.slice(0, c)
+    bare := full.slice(c + 1, full.chars().len())
+    module := work.module(work.paths[decl.file])
+    mut want := "{kind}:{bare}"
+    if work.package and module != "" and not bare.starts_with("{module}.")
+        want = qualified(full, module)
+    mut spots := List[(int, int, int)]()
+    prog := loaded.program
+    for r in api.collect_refs(prog, analysis.symbols, analysis.weak_symbols).refs
+        if r.id != want
+            continue
+        mut at := -1
+        for i in 0..prog.files.len()
+            if prog.files[i].base < r.pos.line
+                at = i
+        if at < 0
+            continue
+        mut f := work.index(prog.files[at].path)
+        if f < 0 and not work.package
+            f = 0
+        if f >= 0
+            spots.push((f, r.pos.line - prog.files[at].base, r.pos.col))
+    spots.push((decl.file, decl.line, decl.col))
+    old := decl.name
+    for f in 0..work.paths.len()
+        mine := [(s.1, s.2) for s in spots if s.0 == f].sorted(by: |x| (x.0, x.1))
+        if mine.len() == 0
+            continue
+        mut lines := work.texts[f].split("\n")
+        mut last := (0, 0)
+        for k in 0..mine.len()
+            spot := mine[mine.len() - 1 - k]
+            if spot == last
+                continue
+            last = spot
+            if spot.0 < 1 or spot.0 > lines.len()
+                continue
+            cs := lines[spot.0 - 1].chars()
+            mut i := spot.1 - 1
+            # A qualified reference (`geo.origin`) points at its qualifier.
+            while i >= 0 and i < cs.len() and not text_at(cs, i, old)
+                mut word := 0
+                while i + word < cs.len() and ident_char(cs[i + word])
+                    word += 1
+                if word == 0 or i + word >= cs.len() or cs[i + word] != '.'
+                    break
+                i += word + 1
+            if not text_at(cs, i, old)
+                work.fail("{work.paths[f]}:{spot.0}:{spot.1} doesn't hold `{old}`; nothing was renamed (edit.op.5)")
+                return
+            lines[spot.0 - 1] = "{cs[..i].join("")}{to}{cs[i + old.chars().len()..].join("")}"
+        work.texts[f] = lines.join("\n")
