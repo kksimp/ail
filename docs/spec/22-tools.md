@@ -316,7 +316,8 @@ shown, after the records.
 **budget.out.4** — The note counts the records not shown by kind and gives
 the number `K` of the first one not shown; `--from K` with the same command
 and budget skips the first `K` records in rank order. With `--json` the note
-is one line `{"budget","from","shown","total","tokens","omitted","next"}`,
+is one line `{"budget","from","shown","full","total","tokens","omitted","next"}`
+(`full` counts the records shown in full, `budget.out.7`),
 `next` being `null` when nothing is left. The note is written to the stream
 of the first record not shown.
 
@@ -328,6 +329,30 @@ of the first record not shown.
 **budget.out.6** — A record is never cut, so a command whose whole output is
 one line (`ail api FILE`, `ail explain --json`) is shown whole; its text forms
 (`--text`) split into records.
+
+**budget.out.7** — Each record has an expanded form, the whole record, and a
+one-line form, its first line (for a diagnostic, `FILE:L:C: severity[rule]:
+message`). When the output doesn't fit, the first record shown is expanded,
+the rest are counted against the budget in their one-line form, and then
+records are expanded in rank order while the budget lasts; the expanded
+records come first. The note says which records are in one line and gives
+`--from K`, which shows record `K + 1` expanded. A JSON line is its own
+one-line form ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 6).
+
+```ail skip=bootstrap tool=check,--budget,200,FILE expect=full status=2 rules=budget.out.7
+fn main()
+    x := 1
+    x = 2
+    y := 3
+    y = 4
+    z := 5
+    z = 6
+    print(x + y + z)
+```
+
+The first error is shown with its source line, help, note and fix; the other
+two as their first lines; the note ends
+`records 1-3 of 3 shown, 2-3 in one line (~285 tokens in all); --from 1 shows 2 in full`.
 
 ## Snapshot updating
 **snap.update.1** — `ail test --update FILE` runs the tests of `FILE` as
