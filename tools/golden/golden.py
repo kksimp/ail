@@ -8,9 +8,12 @@ output hashes are kept in tests/golden/TOOL.tsv; `check` runs the native `ail` a
 compares. No Rust binary is needed to check.
 
   tools/golden/golden.py freeze TOOL... [--bin CMD] [--jobs N] [--limit N]
+  tools/golden/golden.py compare TOOL --ref CMD --bin CMD [--match TEXT] [--limit N]
   tools/golden/golden.py check  TOOL... [--bin CMD] [--jobs N] [--limit N] [--strict]
 
-TOOL is explain, fmt, fix, api, edit or all. `--bin` is the `ail` to run (default `./ail`;
+TOOL is explain, fmt, fix, api, edit or all. `compare` runs the matching cases with both binaries (`--ref`, `--bin`) and prints the text
+of each difference, to see why a `check` failed while a reference binary still exists.
+`--bin` is the `ail` to run (default `./ail`;
 freeze it with `--bin "AIL_RUST=1 ./ail"` until the Rust binary is gone, afterwards with the
 native one, to refresh a golden on purpose). A row is `case<TAB>input hash<TAB>exit
 status<TAB>output hash`. The input hash is of the files the case reads, so a row whose
@@ -18,7 +21,7 @@ input has changed since the freeze is stale: it is skipped and counted, and it i
 failure only with `--strict` (refreeze to bring it up to date). Last line:
 `GOLDEN TOOL GREEN (N checked, M stale)` or `GOLDEN TOOL RED (N failures)`.
 """
-import hashlib, os, re, shutil, subprocess, sys, tempfile
+import difflib, hashlib, os, re, shutil, subprocess, sys, tempfile, threading
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
@@ -56,6 +59,7 @@ def split_bin(text):
 
 
 BIN_ENV = {}
+LAST = {}
 
 
 def run(binary, args, cwd=None, tmp=None, stdin=None):
@@ -66,6 +70,7 @@ def run(binary, args, cwd=None, tmp=None, stdin=None):
     if tmp:
         out = out.replace(tmp, "T")
     out = re.sub(r"/(?:tmp|var/folders)/[^\"/ ]*/", "TMP/", out)
+    LAST[threading.get_ident()] = out
     return r.returncode, h(out)
 
 
@@ -186,11 +191,12 @@ def load(tool):
 
 def main():
     args = sys.argv[1:]
-    if not args or args[0] not in ("freeze", "check"):
+    if not args or args[0] not in ("freeze", "check", "compare"):
         print(__doc__)
         return 2
     mode = args.pop(0)
     binary, jobs, limit, strict, tools = ["./ail"], 3, 0, False, []
+    ref, match = None, ""
     while args:
         a = args.pop(0)
         if a == "--bin":
@@ -200,6 +206,10 @@ def main():
             jobs = int(args.pop(0))
         elif a == "--limit":
             limit = int(args.pop(0))
+        elif a == "--ref":
+            ref = split_bin(args.pop(0))
+        elif a == "--match":
+            match = args.pop(0)
         elif a == "--strict":
             strict = True
         else:
@@ -214,6 +224,35 @@ def main():
         cases = BUILDERS[tool](binary)
         if limit:
             cases = cases[:limit]
+        if mode == "compare":
+            if ref is None:
+                print("compare needs --ref")
+                return 2
+            shown = 0
+            bin_env = dict(BIN_ENV)
+            for name, _, fn in cases:
+                if match not in name:
+                    continue
+                texts = []
+                for b, extra in ((ref[0], ref[1]), (binary, bin_env)):
+                    saved = dict(BIN_ENV)
+                    BIN_ENV.clear()
+                    BIN_ENV.update(extra)
+                    rc, _ = fn(b)
+                    texts.append((rc, LAST[threading.get_ident()]))
+                    BIN_ENV.clear()
+                    BIN_ENV.update(saved)
+                if texts[0] != texts[1]:
+                    shown += 1
+                    print(f"=== {name}: exit ref {texts[0][0]}, bin {texts[1][0]}")
+                    a = texts[0][1].replace("\x00", "\n--stderr--\n").splitlines()
+                    b = texts[1][1].replace("\x00", "\n--stderr--\n").splitlines()
+                    for line in list(difflib.unified_diff(a, b, "ref", "bin", lineterm="", n=1))[:40]:
+                        print(line)
+                    if limit and shown >= limit:
+                        break
+            print(f"{shown} differing")
+            continue
         if mode == "freeze":
             with ThreadPoolExecutor(jobs) as ex:
                 results = list(ex.map(lambda c: c[2](binary), cases))
