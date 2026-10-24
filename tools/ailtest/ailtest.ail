@@ -1877,7 +1877,7 @@ fn main() !
         b := if modes.is_empty()
             proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
         else
-            # native.instr.2-3: the build counts the statements run and notes the calls (rt/native/instr.ail).
+            # native.instr.2-3, test.cover.4, trace.test.1: the build counts the statements run and notes the calls (rt/native/instr.ail).
             proc.run("env", [
                 "AIL_INSTRUMENT={modes}",
                 "AIL_INSTRUMENT_SITES={exe}.sites",
