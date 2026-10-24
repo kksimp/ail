@@ -156,7 +156,7 @@ fn gc_sweep()
     hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
     hset(H_THRESH, if live * 3 > MIN_THRESH then live * 3 else MIN_THRESH)
-    hset(H_FASTLIM, if load64(global(MULTI)) == 0 then hs(H_THRESH) else 0)
+    hset(H_FASTLIM, if load64(global(MULTI)) == 0 and hs(26) == 0 then hs(H_THRESH) else 0)
 
 ## `AIL_GC_VERIFY` set: before marking, check every allocated block's header
 ## (a payload that fits the block, no stray flag bits) and say which block is
@@ -176,9 +176,22 @@ fn gc_bad_header(bs int, prev int, csz int, what int)
     out_int(load64(prev))
     out_str(" previous block size ")
     out_int(csz)
+    out_str(" allocations ")
+    out_int(hs(27))
     out_str("\n")
+    trace_frames_n(0)
     flush_to(2)
     sys_exit(70)
+
+## `AIL_GC_VERIFY=lo,hi,stride`: besides every collection, check the heap at
+## allocations lo, lo+stride, ... below hi (counted from the start), so a bad
+## header is caught within `stride` allocations of the store that made it.
+## The failing report names the allocation count and the callers.
+fn gv_tick()
+    c := hs(27) + 1
+    hset(27, c)
+    if hs(26) == 2 and c >= hs(28) and c < hs(29) and (c - hs(28)) % hs(30) == 0
+        gc_verify()
 
 fn gc_verify()
     base := hs(H_BASE)
