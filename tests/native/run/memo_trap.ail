@@ -1,0 +1,8 @@
+fn grow(n int) int
+    if n < 1
+        return 1
+    grow(n - 1) * 3 + grow(n - 2)
+
+fn main()
+    print(grow(30))
+    print(grow(100))
