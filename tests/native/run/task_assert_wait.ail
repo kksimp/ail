@@ -1,0 +1,18 @@
+fn checked(n int) int
+    assert_eq(n, 4)
+    n
+
+fn loud(n int) int
+    print("task {n}")
+    n * 2
+
+fn main()
+    t := spawn checked(3)
+    v := t.wait() else err
+        print("trapped: {err.rule}")
+        0
+    print(v)
+    u := spawn loud(21)
+    print("got {u.wait() else 0}")
+    w := spawn loud(4)
+    print(w.wait() else 0)

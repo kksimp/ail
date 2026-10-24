@@ -112,6 +112,8 @@ pub struct Field
     pub pos Pos
     pub doc str?
     pub ty TypeRef
+    ## Marked `@observe`: an attached agent may read it (attach.observe.1).
+    pub observe bool
 
 pub struct EnumDecl
     pub name str
