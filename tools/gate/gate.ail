@@ -617,8 +617,6 @@ fn stem_list(path str) List[str]
 
 fn Gate.case_dir(mut self, dir str)
     pending_cases := stem_list("tests/native/golden/pending.txt")
-    # tests/cases/native_only.txt: features Rust is never taught (ADR 0865)
-    native_only := stem_list("tests/cases/native_only.txt")
     mut names := fs.list_dir(dir) else []
     names.sort()
     for name in names
@@ -629,8 +627,6 @@ fn Gate.case_dir(mut self, dir str)
         # (`ail test --coverage`, `--update`): named here, not checked.
         if pending_cases.contains(name.replace(".ail", ""))
             print("PENDING {at}")
-            continue
-        if native_only.contains(name.replace(".ail", ""))
             continue
         if why := run_case(at, "{dir}/{name.replace(".ail", "")}.")
             red(at, why)

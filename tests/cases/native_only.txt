@@ -3,3 +3,11 @@
 attach_observe_ok
 attach_observe_bad_type
 tool_replay_check
+maps_trap_msg_enum
+maps_trap_msg_int
+maps_trap_msg_keys
+maps_trap_msg_list
+maps_trap_msg_struct
+trap_contract_values
+trap_deep
+trap_snapshot

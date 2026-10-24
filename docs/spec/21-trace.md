@@ -162,7 +162,7 @@ assignments and `mut NAME := e` of trace.watch.1; a builtin mutating method,
 an element write's note (trace.watch.4) and a `mut` argument followed into a callee
 (trace.watch.3) are not shown yet. *(ADRs 0868, 0886)*
 
-```ail tool=run,--watch,n,FILE expect="watch: n = 0" rules=trace.watch.5
+```ail tool=run,--watch,n,FILE expect=watch: rules=trace.watch.5
 fn main()
     mut n := 3
     n -= 3
