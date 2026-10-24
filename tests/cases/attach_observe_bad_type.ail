@@ -1,0 +1,18 @@
+enum Mode
+    On
+    Off
+
+enum Shape
+    Circle(r float)
+
+struct Cart
+    @observe total int
+    @observe tags List[str]
+    @observe mode Mode
+    @observe shape Shape
+    @observe pair (int, int)
+    @observe maybe int?
+    name str
+
+fn main()
+    print(1)

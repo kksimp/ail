@@ -72,6 +72,7 @@ pub fn analyze(p ast.Program, full bool) Analysis
     c.diags.extend(c.check_pure())
     c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
+    c.diags.extend(check_observe(p))
     c.diags.extend(c.check_contract_effects())
     c.diags.extend(c.check_constants())
     c.diags.extend(c.check_par())

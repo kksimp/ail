@@ -1149,6 +1149,20 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
 
 ## `name Type`, a field of a struct or of a variant (type.struct.2, type.enum.2).
 fn Parser.field_decl(mut self, rule str) ast.Field?
+    mut observe := false
+    if at_sym("@")
+        i += 1
+        a := take_name("an attribute name after `@`", "gram.attr.6")?
+        if a.name != "observe"
+            error_text(
+                "gram.attr.6",
+                a.pos,
+                "`@{a.name}` doesn't apply to a field; the only field attribute is `@observe`",
+                "write `@observe name Type`, or remove the attribute",
+                "",
+            )
+            return none
+        observe = true
     field_pub(rule)
     if at_kw("fn")
         error_text(
@@ -1171,7 +1185,7 @@ fn Parser.field_decl(mut self, rule str) ast.Field?
         )
         i += 1
     ty := type_ref("the field's type (written `name Type`)", rule)?
-    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty)
+    ast.Field(name: f.name, pos: f.pos, doc: none, ty: ty, observe: observe)
 
 ## `struct Name` and one `name Type` field per line (type.struct.1-2).
 fn Parser.struct_decl(mut self, is_error bool) ast.StructDecl?
