@@ -109,6 +109,8 @@ struct Lower
     ## Unique types and their releases (lower_unique.ail).
     uniq UniqState
     unw Unwind
+    ## Where each `uhwhatnow?` hole is, `FILE:LINE:COL` (expr.hole.3).
+    asks Set[str]
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -268,6 +270,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         copy_tys: {},
         uniq: new_uniq(),
         unw: new_unwind(),
+        asks: ask_keys(srcs),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,

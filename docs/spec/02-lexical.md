@@ -36,6 +36,18 @@ fn main()
     print(c)
 ```
 
+**lex.kw.3** — `uhwhatnow?`, with no space before the `?`, is one keyword
+token, the hole that asks (`expr.hole.3`). `uhwhatnow` alone is reserved: it
+MUST NOT be used as a name, and where it stands as an expression the error
+carries a fix that adds the `?`. *(ADR 0868)*
+
+```ail skip=bootstrap error=lex.kw.3
+fn main()
+    n := 2
+    print(n)
+    x := uhwhatnow      # error: written with its `?`
+```
+
 ## Names
 
 **lex.name.1** — A name starts with a letter (the Unicode `Alphabetic`

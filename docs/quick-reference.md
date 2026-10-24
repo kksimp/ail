@@ -26,7 +26,8 @@ With `--json`, each diagnostic is one line of schema v1 (`"api":1`), with a
 span and, where the fix is obvious, `fixes` to apply by line and column.
 
 `todo` marks code not yet written: it has the expected type; `ail check` warns
-(`expr.hole.1`) and running it traps (`expr.hole.2`).
+(`expr.hole.1`) and running it traps (`expr.hole.2`). `uhwhatnow?` is the same hole, but
+its warning ranks what in scope fits, best first, each with a fix (`expr.hole.3`).
 
 ```ail
 fn area(w int, h int) int
