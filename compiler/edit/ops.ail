@@ -483,13 +483,13 @@ fn Work.declared_at(mut self, id str) Spot
             if i >= lines.len()
                 break
             t := lines[i].trim_start()
-            mut word := ""
+            mut head_word := ""
             for ch in t.chars()
                 if ident_char(ch)
-                    word = "{word}{ch}"
+                    head_word = "{head_word}{ch}"
                 else
                     break
-            if word == member and lines[i].chars().len() - t.chars().len() == 4
+            if head_word == member and lines[i].chars().len() - t.chars().len() == 4
                 return Spot(file: h.file, line: i + 1, col: 5, name: member)
         fail("no {kind} `{member}` in `{owner}` (edit.id.1)")
         return none_spot
@@ -577,12 +577,12 @@ fn rename(mut work Work, id str, to str)
             mut i := spot.1 - 1
             # A qualified reference (`geo.origin`) points at its qualifier.
             while i >= 0 and i < cs.len() and not text_at(cs, i, old)
-                mut word := 0
-                while i + word < cs.len() and ident_char(cs[i + word])
-                    word += 1
-                if word == 0 or i + word >= cs.len() or cs[i + word] != '.'
+                mut wlen := 0
+                while i + wlen < cs.len() and ident_char(cs[i + wlen])
+                    wlen += 1
+                if wlen == 0 or i + wlen >= cs.len() or cs[i + wlen] != '.'
                     break
-                i += word + 1
+                i += wlen + 1
             if not text_at(cs, i, old)
                 work.fail("{work.paths[f]}:{spot.0}:{spot.1} doesn't hold `{old}`; nothing was renamed (edit.op.5)")
                 return
