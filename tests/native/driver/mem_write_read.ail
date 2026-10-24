@@ -1,9 +1,9 @@
-# Writes and reads back through every width and type in unused runtime global slots (0x410000 + 56..61 slots).
+# Writes and reads back through every width and type in scratch runtime global slots (0x410000 + slots 64..71, unused by the runtime).
 # Native only: `ail run` has nothing mapped there.
 use std.hw
 
 fn main()
-    base := 4260304
+    base := 4260352
     unsafe
         q := hw.at(base, 0)
         q.write(0)
