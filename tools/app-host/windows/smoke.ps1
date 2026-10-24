@@ -12,11 +12,15 @@ $psi.RedirectStandardOutput = $true
 $p = [System.Diagnostics.Process]::Start($psi)
 $view = '{"v":1,"t":"view","title":"smoke","focus":"","tree":{"kind":"Column","kids":[{"kind":"Label","text":"hi"},{"kind":"Field","id":"f","value":"x","hint":"h"},{"kind":"Button","id":"b","caption":"Go"},{"kind":"Canvas","id":"c","w":0,"h":0,"ops":[{"kind":"Fill","x":0,"y":0,"w":20,"h":20,"color":16711680},{"kind":"Str","x":4,"y":4,"text":"A","font":"mono","size":13,"fg":0}]}]}}'
 $p.StandardInput.WriteLine($view)
+# Lines that aren't views are skipped (std.app.8), and a measure request is answered (std.app.13).
+$p.StandardInput.WriteLine('not json')
+$p.StandardInput.WriteLine('{"v":1,"t":"measure","runs":[{"text":"hello","font":"mono","size":13,"bold":false,"italic":false},{"text":"hi","font":"sans","size":13,"bold":true,"italic":false}]}')
 $p.StandardInput.Flush()
 $t = $p.StandardOutput.ReadLineAsync()
 if (-not $t.Wait(10000)) { Write-Output 'smoke: RED no line in 10 s'; $p.Kill(); exit 1 }
 Write-Output "first line: $($t.Result)"
 # Every event for 3 s: the canvas's resize events show its final size.
+$measured = $null
 $deadline = [DateTime]::Now.AddSeconds(3)
 $u = $null
 while ([DateTime]::Now -lt $deadline) {
@@ -24,9 +28,11 @@ while ([DateTime]::Now -lt $deadline) {
     if (-not $u.Wait(500)) { continue }   # keep the pending read; a second one would fail
     if ($null -eq $u.Result) { break }
     Write-Output "next line: $($u.Result)"
+    if ($u.Result -like '*"kind":"measured"*') { $measured = $u.Result }
     $u = $null
 }
 $p.StandardInput.Close()
 if (-not $p.WaitForExit(10000)) { Write-Output 'smoke: RED host did not exit'; $p.Kill(); exit 1 }
+if ($measured -notmatch '"text":"[0-9.]+,[0-9.]+"') { Write-Output "smoke: RED measured reply missing or wrong: $measured"; exit 1 }
 if ($t.Result -like '*"kind":"start"*' -and $t.Result -like '*"v":1*') { Write-Output 'smoke: GREEN'; exit 0 }
 Write-Output 'smoke: RED unexpected first line'; exit 1
