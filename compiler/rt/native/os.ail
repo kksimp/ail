@@ -501,13 +501,15 @@ fn os_fs_rename(from str, to str)
 fn os_envp() int
     load64(global(ARGV)) + 8 * (load64(global(ARGC)) + 1)
 
+## Windows variable names are case-insensitive (`Path` is `PATH`): fold ASCII
+## capitals there; other targets compare bytes as they are.
+fn os_env_fold(b int) int
+    if target() == 3 and b >= 65 and b <= 90
+        return b + 32
+    b
+
 ## `env.get(name)` (std.env.2): "" with `os_ok()` false when unset or not UTF-8.
 fn os_env_get(name str) str
-    # Windows has no `envp` here: every variable reads as unset until the
-    # environment arm lands (ADR 0608).
-    if target() == 3
-        os_fail_kind(K_NOT_FOUND)
-        return ""
     q := str_addr(name)
     n := load64(q)
     mut e := os_envp()
@@ -516,7 +518,7 @@ fn os_env_get(name str) str
         mut same := true
         mut i := 0
         while same and i < n
-            if load8(c + i) != load8(q + 16 + i)
+            if os_env_fold(load8(c + i)) != os_env_fold(load8(q + 16 + i))
                 same = false
             i += 1
         # Read the `=` last: a short variable at the top of the stack ends before `c + n`.
@@ -531,13 +533,9 @@ fn os_env_get(name str) str
     ""
 
 ## `env.vars()` (std.env.5): the variables whose names and values are UTF-8,
-## as a `Map[str, str]` in name order (byte order). Windows has no `envp`
-## here yet, so the map is empty there (ADR 0608).
+## as a `Map[str, str]` in name order (byte order).
 fn env_vars() int
     m := map_new(1, 0, 0)
-    if target() == 3
-        os_succeed()
-        return m
     names := list_new(16)
     mut e := os_envp()
     while load64(e) != 0
