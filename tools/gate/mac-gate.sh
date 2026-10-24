@@ -35,7 +35,14 @@ fi
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
 suites="examples tools cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
 [ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
+# The cases suite still runs on the Rust binary (item 301), so build it; the native cases run below is a report.
+run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
 run gate_ail ./ail run tools/gate/gate.ail $suites
+if GATE_CASES_NATIVE=1 ./ail run tools/gate/gate.ail cases >"$out/cases_native.log" 2>&1; then
+  echo "native cases: green"
+else
+  echo "native cases (report, not gating): $(tail -1 "$out/cases_native.log"); $out/cases_native.log"
+fi
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }

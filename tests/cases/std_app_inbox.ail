@@ -22,7 +22,7 @@ impl app.App for Watcher
 fn main() !
     mut w := Watcher(got: [])
     host := "tests/app/inbox_host.ail"
-    ail := env.get("AIL") else "ail"
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
     inbox := app.new_inbox()
     g := TaskGroup()
     g.add(spawn poster(inbox))

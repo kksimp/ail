@@ -31,7 +31,7 @@ impl app.App for Todo
 fn main() !
     mut t := Todo(items: [], draft: "", log: [])
     host := "tests/app/fake_host.ail"
-    ail := env.get("AIL") else "ail"
+    ail := env.get("AIL") else (env.get("AIL_BINARY") else "ail")
     app.run_host(mut t, ail, ["run", host])?
     print(t.log.join("\n"))
     print(app.outline(t.view()))
