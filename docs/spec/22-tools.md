@@ -493,6 +493,113 @@ lines first ([ADR 0731](../decisions/0731-api-diff-output-and-budget.md)).
 
 ```ail pkg=api_diff_pair tool=api,--diff,bad/a.ail,new/a.ail status=2 expect=api.diff.4 rules=api.diff.4
 ```
+## Semantic questions
+
+`ail ask PROGRAM QUESTION...` answers a question about a program from the
+checker's graph of it, with no grep and no file reading
+([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 1).
+
+**api.ask.1** — The question is plain words after the program: `who writes
+field total`, `what calls pay`, `what does main call`, `which effects reach
+main`, `who uses Cart?`. The verb picks the question (`writes`, `reads`,
+`calls`, `callees`, `effects`, `uses`); filler words (`who`, `what`, `which`,
+`does`, `field`, `the`, ...) and a trailing `?` say nothing; the last other
+word is the subject. A subject names a declaration by its id (`field:Cart.total`),
+its qualified name (`Cart.total`) or its bare name (`total`); a bare name that
+fits several declarations answers for each. Exit status is 0 when there are
+answers, 1 when there are none, 2 for an error. `--json` prints the answers
+as JSON.
+
+**api.ask.2** — `writes` lists every place that sets a field, `reads` every
+place that only reads it, each with its function, file, line and column. A
+write is an assignment, a `mut` argument, or a `mut self` or built-in mutating
+method called on a place that reaches the field (`a.b.c = x` writes `c` and
+`b`); a field named in a struct literal is an `init`. Anything else that
+names the field is a read.
+
+**api.ask.3** — `calls` lists the functions that call the subject, each call
+once, and `callees` lists the functions the subject calls, each at its first
+call.
+
+**api.ask.4** — `effects` lists the effects of the subject function (`eff.infer.1`),
+and for each the chain of calls down to the function that has the effect of
+its own: `io: fn:main > fn:pay` says `main` has `io` through `pay`, which has
+it itself.
+
+**api.ask.5** — `uses` lists every use of the subject: a type in a signature,
+field or expression, a function or method call, a field access, a constant or
+variant.
+
+**api.ask.6** — A program that has errors can't be asked about: the errors
+are shown and the status is 2, as `api.diff.4`. A subject that names no
+declaration of the right kind, or a question with no known verb, is an error
+(status 2) that says so.
+
+```ail skip=bootstrap tool=ask,FILE,who,writes,field,total expect=fn:add rules=api.ask.1,api.ask.2
+struct Cart
+    total int
+fn add(mut c Cart, n int)
+    c.total += n
+fn main()
+    mut c := Cart(total: 0)
+    add(mut c, 5)
+    print(c.total)
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,reads,field,total? expect=fn:main rules=api.ask.2
+struct Cart
+    total int
+fn main()
+    c := Cart(total: 3)
+    print(c.total)
+```
+
+```ail skip=bootstrap tool=ask,FILE,what,calls,show expect=fn:pay rules=api.ask.3
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail skip=bootstrap tool=ask,FILE,what,does,main,call expect=fn:pay rules=api.ask.3
+fn pay(n int) int
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail skip=bootstrap tool=ask,FILE,which,effects,reach,main expect=fn:log rules=api.ask.4
+fn log(s str)
+    print(s)
+fn main()
+    log("hi")
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,uses,Cart expect=type:Cart rules=api.ask.5
+struct Cart
+    total int
+fn size(c Cart) int
+    c.total
+fn main()
+    print(size(Cart(total: 1)))
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,writes,field,nosuch status=2 expect=api.ask.1 rules=api.ask.1
+struct Cart
+    total int
+fn main()
+    print(Cart(total: 1).total)
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,writes,field,total status=2 expect=api.ask.6 rules=api.ask.6
+struct Cart
+    total int
+fn main()
+    print(missing)
+```
+
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that
@@ -936,6 +1043,13 @@ the replay writes again), `io.exit`, `std.random` (repeated by the seed),
 from `proc.start`, a socket, a listener) is recorded as
 `"uncaptured":true`, and a replay that reaches it stops with a trap
 `replay.cap.2`.
+**replay.nat.1** — The native `ail run --record` and `--replay`
+(`AIL_INSTRUMENT=record`, ADR 0873) capture the calls of `replay.cap.1`
+whose result is unit, an int, a bool, a string, bytes or an optional string.
+Any other call of those modules (a list, struct or map result, a handle, and
+every `std.net` call) is recorded as `"uncaptured":true`, runs live, and traps
+`replay.cap.2` in a replay. `ail test --record` and `--replay` are not native
+yet.
 **replay.run.1** — `ail run --replay R [FILE]` runs `FILE` (by default the
 recording's program) with the recording's arguments and seed, and answers
 each captured call from R instead of running it: nothing is read, written,
@@ -952,7 +1066,7 @@ a type the program doesn't have traps the same way.
 ```ail pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
 ```
 
-```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.run.1,replay.run.2
+```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.nat.1,replay.run.1,replay.run.2
 ```
 
 ```ail pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3

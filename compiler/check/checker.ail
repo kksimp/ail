@@ -103,6 +103,8 @@ pub struct Checker
     pub bound Map[int, ast.Pos]
     pub fact_locals List[LocalFact]
     pub fact_exprs List[(ast.Pos, str)]
+    ## Where a field is written, through a place `require_mutable` accepted.
+    pub fact_writes List[ast.Pos]
     pub pending List[Pending]
     pub fn_ret Ty
     pub loop_depth int
@@ -227,6 +229,7 @@ pub fn new_checker(p ast.Program) Checker
         bound: Map[int, ast.Pos](),
         fact_locals: [],
         fact_exprs: [],
+        fact_writes: [],
         pending: [],
         fn_ret: Ty.Unit,
         loop_depth: 0,
