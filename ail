@@ -205,7 +205,7 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
                 *) copts+=("$a") ;;
             esac
         done
-        AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget "${bopts[@]}" -- "$native" check-program "${copts[@]}"
+        AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget check "${bopts[@]}" -- "$native" check-program "${copts[@]}"
     fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
     AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$run_file" || exit $?
@@ -215,7 +215,7 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
         rm -f "$prep_err"
         shift "$run_skip"
         # shellcheck disable=SC2086
-        if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget $budget_opts -- "$exe" "$@"; fi
+        if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget run $budget_opts -- "$exe" "$@"; fi
         # A program that starts `ail` itself finds this wrapper by `AIL`, since `env.program()` is the cached executable.
         AIL="$root/ail" exec "$exe" "$@"
     fi
