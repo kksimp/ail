@@ -19,7 +19,10 @@ fn tlsprim_bytes(s str) List[int]
         return [alloc_raw(8, KIND_BYTES), 0]
     out := alloc_raw(n / 2 + 8, KIND_BYTES)
     for i in 0..n / 2
-        store8(out + i, tlsprim_nibble(load8(p + 16 + 2 * i)) * 16 + tlsprim_nibble(load8(p + 17 + 2 * i)))
+        store8(
+            out + i,
+            tlsprim_nibble(load8(p + 16 + 2 * i)) * 16 + tlsprim_nibble(load8(p + 17 + 2 * i)),
+        )
     [out, n / 2]
 
 fn tlsprim_hex(p int, n int) str
@@ -58,11 +61,41 @@ fn tlsprim_verify(op str, f List[List[int]]) str
         if load8(sig + 4 + rl) != 2
             return "0"
         sl := load8(sig + 5 + rl)
-        ok = ecdsa_verify(curve, f[0][0], f[0][1], digest, sig_hlen(alg), sig + 4, rl, sig + 6 + rl, sl)
+        ok = ecdsa_verify(
+            curve,
+            f[0][0],
+            f[0][1],
+            digest,
+            sig_hlen(alg),
+            sig + 4,
+            rl,
+            sig + 6 + rl,
+            sl,
+        )
     elif op.starts_with("rsa_pss")
-        ok = rsa_verify_pss(alg, f[0][0], f[0][1], f[1][0], f[1][1], f[2][0], f[2][1], f[3][0], f[3][1])
+        ok = rsa_verify_pss(
+            alg,
+            f[0][0],
+            f[0][1],
+            f[1][0],
+            f[1][1],
+            f[2][0],
+            f[2][1],
+            f[3][0],
+            f[3][1],
+        )
     else
-        ok = rsa_verify_pkcs1(alg, f[0][0], f[0][1], f[1][0], f[1][1], f[2][0], f[2][1], f[3][0], f[3][1])
+        ok = rsa_verify_pkcs1(
+            alg,
+            f[0][0],
+            f[0][1],
+            f[1][0],
+            f[1][1],
+            f[2][0],
+            f[2][1],
+            f[3][0],
+            f[3][1],
+        )
     if ok then "1" else "0"
 
 ## `chain`: `HOST NOW ROOT CERT...` (HOST text, NOW decimal seconds, ROOT and
@@ -82,9 +115,31 @@ fn tlsprim_chain(args str) str
     e := tv_chain(chain, roots, w[0], str_to_int(w[1]))
     if e == "" then "ok" else e
 
+## `aesbench MIB`: seal then open `MIB` MiB of zeros with AES-128-GCM, timed by
+## the caller (tools/native-tls/aes-bench.sh); "ok" when the open succeeds.
+fn tlsprim_aesbench(args str) str
+    mib := args.to_int() else 16
+    n := mib * 1048576
+    ak := alloc_raw(AK_SIZE, KIND_BYTES)
+    key := alloc_raw(16, KIND_BYTES)
+    nonce := alloc_raw(12, KIND_BYTES)
+    aad := alloc_raw(8, KIND_BYTES)
+    plain := alloc_raw(n + 16, KIND_BYTES)
+    sealed := alloc_raw(n + 16, KIND_BYTES)
+    back := alloc_raw(n + 16, KIND_BYTES)
+    for i in 0..16
+        store8(key + i, i)
+    aes_setup(ak, key, 16)
+    aes_gcm_seal(ak, nonce, aad, 0, plain, n, sealed)
+    if aes_gcm_open(ak, nonce, aad, 0, sealed, n + 16, back) != 0
+        return "open failed"
+    "ok"
+
 fn tlsprim_call(op str, args str) str
     if op == "chain"
         return tlsprim_chain(args)
+    if op == "aesbench"
+        return tlsprim_aesbench(args)
     f := tlsprim_fields(args)
     if op == "poly1305"
         out := alloc_raw(16, KIND_BYTES)
