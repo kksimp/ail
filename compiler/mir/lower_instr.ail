@@ -29,7 +29,10 @@ fn new_instr() Instr
 
 ## A file the program owns: not the prelude, a generated file or the std.
 fn instr_owned(p str) bool
-    not p.starts_with("<") and not p.starts_with("gen:") and not p.contains("bootstrap/src/std/")
+    not p.starts_with("<")
+        and not p.starts_with("gen:")
+        and not p.starts_with("std/")
+        and not p.contains("/std/")
 
 ## The start of statement `s` is a site.
 fn Lower.instr_stmt(mut self, s ast.Stmt)
