@@ -522,6 +522,8 @@ fn slurp(p str) str
 ## `ail ARGS` through the built binary with AIL_BINARY set, as cargo sets it:
 ## programs that start `ail` themselves (std.app hosts) use this binary.
 fn ail_run(args List[str]) proc.Output ! proc.ProcError
+    if (env.get("GATE_NATIVE") else "") == "1"
+        return proc.run("sh", cat(["-c", "exec \"$PWD/ail\" \"$@\"", "sh"], args))
     script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
     proc.run("sh", cat(["-c", script, "sh"], args))
 
