@@ -15,9 +15,9 @@ fn cached_copy(exe str, out str, target str) bool [fs io proc]
 fn compile_fresh(file str, out str, target str, ms str, mb str) [clock env fs io proc]
 fn check_dump(path str, many bool) ! [env fail fs io]
     fails with JsonError | fs.IoError
-fn runtime(dir str, path str) !ast.Program [fail fs io]
+fn runtime(dir str, path str) !ast.Program [env fail fs io]
     fails with fs.IoError
-fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [fail fs io]
+fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [env fail fs io]
     fails with fs.IoError
 fn source_text(path str) !str [fail fs io]
     fails with fs.IoError
@@ -26,6 +26,8 @@ fn executable_hex(m mir.Module, path str, target str) str [io]
 fn runtime_syntax(path str, text str) [io]
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
+fn parallel_on() bool [env]
+fn proven_loop_keys(file str, std str) Set[str] [clock env fs io proc]
 fn mentions_prelude(srcs List[mir.Source]) bool
 fn std_file(std str, imp str) str
 fn derive_builtin(srcs List[mir.Source]) List[mir.Source] [io]
@@ -61,7 +63,8 @@ fn cli_run(rest List[str]) [clock env fs io proc]
 fn chop(s str) str
 fn load_dump(files List[str]) [clock env fs io proc]
 fn check_cmd(rest List[str]) [clock env fs io proc]
+fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1053); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1108); dropped: private items, doc comments

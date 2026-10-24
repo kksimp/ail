@@ -1,11 +1,11 @@
-api 49 0
+api 53 0
 attach 2 0
 budget 7 0
 conc 45 1
-contract 18 2
+contract 21 2
 ct 18 0
 diff 7 0
-edit 17 0
+edit 18 0
 eff 15 0
 err 40 5
 explain 6 0
@@ -26,9 +26,9 @@ replay 11 0
 run 6 0
 snap 6 0
 std 253 1
-test 24 0
-trace 19 0
+test 25 0
+trace 21 0
 trait 43 4
 type 117 10
 unsafe 21 0
-all 1002 53
+all 1013 53
