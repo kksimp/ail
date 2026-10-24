@@ -1258,10 +1258,11 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
             else
                 cov.literals.push(lit)
         Variant(_, n, _, at) =>
-            err(
+            err_help(
                 "expr.match.4",
                 at,
                 "`{n}` is a variant pattern, but the value matched is {show(t)}",
+                "a name in a pattern is a variant, not a variable: test the matched value with a guard, e.g. `_ if n > 0 =>`",
             )
         # expr.match.12: a range covers some values, never all, so it marks
         # nothing as seen.
