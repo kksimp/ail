@@ -85,13 +85,31 @@ fn Lower.try_fuse(mut self, o ast.BinOp, lhs ast.Expr, rhs ast.Expr, pos ast.Pos
     f := call("rt.fuse_new", [konst(n, Ty.Int)], Ty.Int)
     for i in 0..n
         if p.kinds[i] == 0
-            call("rt.fuse_set", [f, konst(i, Ty.Int), konst(0, Ty.Int), p.vals[i], konst(0, Ty.Int), konst(0, Ty.Int)], Ty.Unit)
+            call(
+                "rt.fuse_set",
+                [
+                    f,
+                    konst(i, Ty.Int),
+                    konst(0, Ty.Int),
+                    p.vals[i],
+                    konst(0, Ty.Int),
+                    konst(0, Ty.Int),
+                ],
+                Ty.Unit,
+            )
         elif p.kinds[i] == 1
             call("rt.fuse_set_f", [f, konst(i, Ty.Int), p.vals[i]], Ty.Unit)
         else
             call(
                 "rt.fuse_set",
-                [f, konst(i, Ty.Int), konst(2, Ty.Int), konst(p.ops[i], Ty.Int), konst(p.lhs[i], Ty.Int), konst(p.rhs[i], Ty.Int)],
+                [
+                    f,
+                    konst(i, Ty.Int),
+                    konst(2, Ty.Int),
+                    konst(p.ops[i], Ty.Int),
+                    konst(p.lhs[i], Ty.Int),
+                    konst(p.rhs[i], Ty.Int),
+                ],
                 Ty.Unit,
             )
     ok := call("rt.fuse_ok", [f], Ty.Bool)
