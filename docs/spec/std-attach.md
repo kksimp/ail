@@ -4,7 +4,8 @@ Chapter key: `attach`
 
 > **Status:** Drafted (ADR 0884, amending ADR 0879). The field attribute, its
 > check, the protocol functions, the listener and the app wrapper are built;
-> generating `observe` impls and the `ail run` default are not yet.
+> the `Observe` generator is built; adding the empty impls and the `ail run`
+> default are not yet.
 
 A running program tells an attached agent its state directly, read-only.
 
@@ -42,9 +43,12 @@ fn main()
 
 **attach.observe.4** — `attach.Observe` is the trait of types that report
 their observed values: `observed(self) List[Observed]`, whose default reports
-none. With attach on, the compiler writes the `impl` of a type with `@observe`
-fields (not built yet); a type may also write it by hand. With attach off
-nothing is generated. *(ADR 0884)*
+none. An `impl attach.Observe for T` with no methods gets `observed` from a
+built-in generator (as `ToJson` does, ADR 0850): one `Observed` per `@observe`
+field, in order, with the field's name, its type as written and its value as
+JSON text (numbers and bools as written, a `str` quoted, a payload-less enum
+as its variant name in quotes, a `List` as a JSON array). A type may write the
+`impl` by hand instead. Without such an `impl`, nothing is generated. *(ADR 0884)*
 
 ## The protocol
 
