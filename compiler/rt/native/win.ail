@@ -641,7 +641,11 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
         win_close_h(out_w)
         win_close_h(err_r)
         win_close_h(err_w)
-        kind := if code == 2 or code == 3 then "not_found" else if code == 5 then "permission" else "other"
+        mut kind := "other"
+        if code == 2 or code == 3
+            kind = "not_found"
+        elif code == 5
+            kind = "permission"
         return proc_fail(cmd, kind, at)
     proc := load64(pi)
     win_close_h(load64(pi + 8))

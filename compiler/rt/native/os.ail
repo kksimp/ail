@@ -369,7 +369,15 @@ fn os_fs_read_bytes(path str) str
 fn os_write_all(fd int, p int, n int) int
     mut done := 0
     while done < n
-        r := if target() == 3 then win_write(fd, p + done, n - done) else syscall(os_pick(1, 64, 4), fd, p + done, n - done, 0, 0, 0)
+        r := if target() == 3 then win_write(fd, p + done, n - done) else syscall(
+            os_pick(1, 64, 4),
+            fd,
+            p + done,
+            n - done,
+            0,
+            0,
+            0,
+        )
         if r == -4
             continue
         if r < 0
