@@ -182,6 +182,8 @@ PRIMS := {
     "store8": "unit",
     "loadf": "float",
     "storef": "unit",
+    "loadf32": "float",
+    "storef32": "unit",
     "syscall": "int",
     "global": "int",
     "str_addr": "int",

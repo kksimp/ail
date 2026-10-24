@@ -1016,6 +1016,18 @@ fn Gen.prim(mut self, i mir.Inst)
             else
                 a.ldr_d(d, pl.base, pl.off)
             put_fpr(i.dst, d)
+        "loadf32" =>
+            # One packed single (ADR 0875), widened exactly.
+            pl := address(i)
+            d := out_fpr(i.dst, X0)
+            a.ldr_s(d, pl.base, pl.off)
+            a.fop1("fcvt_ds", d, d)
+            put_fpr(i.dst, d)
+        "storef32" =>
+            pl := address(i)
+            v := fpr(i.args[i.args.len() - 1], X0)
+            a.fop1("fcvt_sd", X1, v)
+            a.str_s(X1, pl.base, pl.off)
         "store64" =>
             pl := address(i)
             v := gpr(i.args[i.args.len() - 1], S1)
