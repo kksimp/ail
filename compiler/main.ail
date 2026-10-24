@@ -496,19 +496,6 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
             t := packages.target(srcs[k].module, parts)
             if t.undeclared
                 continue
-            if t.module != imp
-                # The import names the module by its place in the program
-                # (`shapes` in package `geo` is `geo.shapes`), keeping the
-                # name the file uses for it.
-                segs := t.module.split(".")
-                mut alias := ast.Ident(name: parts[parts.len() - 1], pos: u.pos)
-                if given := u.alias
-                    alias = given
-                srcs[k].prog.uses[ui] = ast.Use(
-                    path: [ast.Ident(name: n, pos: u.pos) for n in segs],
-                    alias: alias,
-                    pos: u.pos,
-                )
             if loaded.contains(t.module)
                 continue
             loaded.add(t.module)
@@ -518,6 +505,38 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
                     files.push("{t.dir}/{name}")
             srcs.extend(parse_module(t.module, files)?)
         k += 1
+    # A generic type of another module starts type arguments after `m.Name`
+    # (gen.infer.2): parse again the files that name one, knowing every
+    # module's generic names.
+    mut generics := Set[str]()
+    for src in srcs
+        for n in syntax.generic_names(syntax.lex(src.text).tokens).sorted()
+            generics.add(n)
+    for i in 0..srcs.len()
+        if srcs[i].path != "<prelude>" and [
+            n
+            for n in generics.sorted() if srcs[i].text.contains(".{n}[")
+        ].len() > 0
+            srcs[i] = parse_with(srcs[i].module, srcs[i].path, srcs[i].text, generics)
+    # Imports name modules by their place in the program (`shapes` in package
+    # `geo` is `geo.shapes`), keeping the name the file uses for them.
+    for i in 0..srcs.len()
+        for ui in 0..srcs[i].prog.uses.len()
+            u := srcs[i].prog.uses[ui]
+            parts := [x.name for x in u.path]
+            if parts.len() == 0 or parts[0] == "std"
+                continue
+            t := packages.target(srcs[i].module, parts)
+            if t.module == parts.join(".") or t.undeclared
+                continue
+            mut alias := ast.Ident(name: parts[parts.len() - 1], pos: u.pos)
+            if given := u.alias
+                alias = given
+            srcs[i].prog.uses[ui] = ast.Use(
+                path: [ast.Ident(name: n, pos: u.pos) for n in t.module.split(".")],
+                alias: alias,
+                pos: u.pos,
+            )
     srcs.extend(derive_builtin(srcs))
     srcs.extend(derive_user(srcs, rt, std))
     lazy := srcs.len()
