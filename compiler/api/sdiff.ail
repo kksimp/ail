@@ -1,0 +1,475 @@
+## `ail diff OLD NEW [--json] [--no-tests]` (diff.out.1-7, ADR 0396), as
+## `bootstrap/src/api/diff.rs`: what changed between two versions of a file
+## or package, by meaning: declarations added, removed or changed (signature,
+## visibility, effects, errors, contracts, docs, body), diagnostics that
+## appeared or went away, and tests whose outcome changed.
+use ast
+use check
+use doc
+use load
+
+SDIFF_USAGE := "usage: ail diff OLD NEW [--json] [--no-tests]   (two files, or two package directories)\n       ail diff --rev REV PATH [--json] [--no-tests]   (PATH as of git revision REV against now)"
+
+## Item keys compared by diff.out.2; the rest repeat the signature.
+SDIFF_KEYS := ["signature", "pub", "effects", "fails_with", "requires", "ensures", "inherits", "default", "doc", "body"]
+
+## The most lines a body hunk shows (diff.out.7).
+HUNK_LINES := 12
+
+HEX_DIGITS := "0123456789abcdef"
+
+## One declaration: its id, kind and the compared properties as text.
+struct SDecl
+    id str
+    line int
+    kind str
+    props List[(str, str)]
+    ## A function's body lines, for the hunk of diff.out.7.
+    body List[str]
+
+fn SDecl.get(self, key str) str
+    for p in props
+        if p.0 == key
+            return p.1
+    ""
+
+## A diagnostic, compared by rule, file and message (lines move).
+struct SFound
+    severity str
+    rule str
+    file str
+    line int
+    message str
+
+struct STest
+    name str
+    passed bool
+    message str
+
+## One side of the comparison.
+struct SSide
+    has_decls bool
+    decls List[SDecl]
+    diags List[SFound]
+    has_tests bool
+    tests List[STest]
+
+struct SChange
+    key str
+    old str
+    new str
+
+fn sd_is_fn(d SDecl) bool
+    d.kind == "fn" or d.kind == "method"
+
+## The declaration and its members, flattened.
+fn sd_flatten(prog ast.Program, item Item, mut out List[SDecl])
+    is_pub := item.line >= PRELUDE_FIRST or prog.public.contains(item.line)
+    mut props := [("signature", item.signature), ("pub", "{is_pub}")]
+    for p in item.extra
+        if SDIFF_KEYS.contains(p.key)
+            props.push((p.key, write_json(p.val, false, 0)))
+    if d := item.doc
+        props.push(("doc", d))
+    out.push(SDecl(id: item.id, line: item.line, kind: item.kind, props: props, body: []))
+    for g in item.members
+        for m in g.items
+            sd_flatten(prog, m, mut out)
+
+fn sd_starts(items List[Item], mut out List[int])
+    for it in items
+        out.push(it.line)
+        for g in it.members
+            sd_starts(g.items, mut out)
+
+## The UTF-8 bytes of a code point.
+fn sd_utf8(cp int) List[int]
+    if cp < 128
+        return [cp]
+    if cp < 2048
+        return [192 + cp / 64, 128 + cp % 64]
+    if cp < 65536
+        return [224 + cp / 4096, 128 + cp / 64 % 64, 128 + cp % 64]
+    [240 + cp / 262144, 128 + cp / 4096 % 64, 128 + cp / 64 % 64, 128 + cp % 64]
+
+## 32 bits as eight hex digits.
+fn sd_hex8(n int) str
+    mut out := ""
+    mut k := 28
+    while k >= 0
+        d := n.shr(k).bit_and(15)
+        out = "{out}{HEX_DIGITS.char_at(d) else '0'}"
+        k -= 4
+    out
+
+## A short hash of a declaration's source lines after `line`, up to `next`
+## (0: the end of its file), without trailing blank and comment lines, and
+## those lines without their indent.
+fn sd_body(prog ast.Program, texts List[str], line int, next int) (str, List[str])
+    mut fi := -1
+    mut i := prog.files.len()
+    while i > 0 and fi < 0
+        i -= 1
+        if prog.files[i].base < line
+            fi = i
+    if fi < 0 or line >= PRELUDE_FIRST
+        return ("", [])
+    file := prog.files[fi]
+    src := texts[fi].lines()
+    first := line - file.base
+    mut last := src.len()
+    if next > file.base
+        last = if next - file.base - 1 < src.len() then next - file.base - 1 else src.len()
+    lo := if first < last then first else last
+    mut text := src[lo..last]
+    while text.len() > 0
+        tail := text[text.len() - 1]
+        if tail.trim() == "" or tail.trim_start().starts_with("#")
+            text.pop()
+        else
+            break
+    # FNV-1a: stable across runs and platforms.
+    mut h := -3750763034362895579
+    joined := text.join("\n")
+    for k in 0..joined.len()
+        c := joined.char_at(k) else continue
+        for b in sd_utf8(c.code())
+            h = h.bit_xor(b).wrapping_mul(1099511628211)
+    body := [t.strip_prefix("    ") else t for t in text]
+    (sd_hex8(h.shr(32).bit_and(4294967295)), body)
+
+## The lines removed (`-`) and added (`+`) between two bodies, by a longest
+## common subsequence, at most `HUNK_LINES` of them and then a count of the rest.
+fn sd_hunk(old List[str], new List[str]) List[str]
+    n := old.len()
+    m := new.len()
+    w := m + 1
+    mut lcs := [0 for _ in 0..(n + 1) * w]
+    mut i := n
+    while i > 0
+        i -= 1
+        mut j := m
+        while j > 0
+            j -= 1
+            if old[i] == new[j]
+                lcs[i * w + j] = lcs[(i + 1) * w + j + 1] + 1
+            else
+                a := lcs[(i + 1) * w + j]
+                b := lcs[i * w + j + 1]
+                lcs[i * w + j] = if a > b then a else b
+    mut out := List[str]()
+    mut x := 0
+    mut y := 0
+    while x < n or y < m
+        if x < n and y < m and old[x] == new[y]
+            x += 1
+            y += 1
+        elif x < n and (y == m or lcs[(x + 1) * w + y] >= lcs[x * w + y + 1])
+            out.push("-{old[x]}")
+            x += 1
+        else
+            out.push("+{new[y]}")
+            y += 1
+    if out.len() > HUNK_LINES
+        more := out.len() - HUNK_LINES
+        out = out[..HUNK_LINES]
+        out.push("... {more} more changed line{if more == 1 then "" else "s"}")
+    out
+
+## Load, check and outline `path`, and run its tests (diff.out.1).
+fn sd_side(path_arg str, run_tests bool, std str) SSide ! DiffError
+    is_dir := not path_arg.ends_with(".ail")
+    root := if is_dir then "{path_arg.strip_suffix("/") else path_arg}/" else path_arg
+    loaded := load.load(path_arg, std) else err
+        return DiffError(message: err.message)
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags]
+    found = [d for d in found if is_dir or d.rule != "mod.main.1"]
+    mut rejected := false
+    mut diags := List[SFound]()
+    for d in found
+        if not d.warning
+            rejected = true
+        here := load.locate(loaded.program.files, d.pos)
+        rel := if here.0 == root then "" else (here.0.strip_prefix(root) else here.0)
+        diags.push(SFound(
+            severity: if d.warning then "warning" else "error",
+            rule: d.rule,
+            file: rel,
+            line: here.1.line,
+            message: d.message,
+        ))
+    mut decls := List[SDecl]()
+    if not rejected
+        mut by_line := Map[int, str]()
+        for i in 0..loaded.program.files.len()
+            f := loaded.program.files[i]
+            if f.path.ends_with(".ail")
+                lines := doc.by_line(loaded.texts[i])
+                for l in lines.keys()
+                    by_line[f.base + l] = lines[l]
+        prog := doc.attach_lines(loaded.program, by_line)
+        facts := Facts(
+            effects: analysis.effects,
+            errors: analysis.errors,
+            symbols: Map[int, str](),
+            weak_symbols: Map[int, str](),
+        )
+        api := if is_dir then new_whole_api(prog, facts) else new_api(prog, facts)
+        items := api.items()
+        mut starts := List[int]()
+        sd_starts(items, mut starts)
+        sorted_starts := starts.sorted()
+        for item in items
+            sd_flatten(prog, item, mut decls)
+        for k in 0..decls.len()
+            if sd_is_fn(decls[k])
+                mut next := 0
+                for s in sorted_starts
+                    if next == 0 and s > decls[k].line
+                        next = s
+                hashed := sd_body(prog, loaded.texts, decls[k].line, next)
+                mut d := decls[k]
+                d.props.push(("body", hashed.0))
+                d.body = hashed.1
+                decls[k] = d
+    mut tests := List[STest]()
+    mut has_tests := false
+    if run_tests and not is_dir and not rejected
+        got := sd_tests(path_arg)
+        has_tests = got.0
+        tests = got.1
+    SSide(has_decls: not rejected, decls: decls, diags: diags, has_tests: has_tests, tests: tests)
+
+## Each test's outcome, from `ail test --json` in a child (diff.out.4); false
+## when the tests could not be run.
+fn sd_tests(path_arg str) (bool, List[STest])
+    ail := env.get("AIL") else return (false, [])
+    root := path.dir(ail)
+    ran := proc.run(ail, ["run", "--timeout", "10000", path.join(root, "tools/ailtest/ailtest.ail"), "--json", path_arg]) else return (false, [])
+    mut tests := List[STest]()
+    for line in ran.out.lines()
+        j := parse_json(line) else continue
+        name := j.str("test") else continue
+        tests.push(STest(name: name, passed: j.text("status", "") == "pass", message: j.text("message", "")))
+    (true, tests)
+
+fn sd_shown(v str) str
+    if v == "" then "(none)" else v
+
+fn sd_decl_line(op str, d SDecl, json bool) str
+    sig := d.get("signature")
+    if json
+        return "\{\"change\":\"api\",\"op\":\"{op}\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"signature\":{quote(sig)}}"
+    sign := if op == "added" then "+" else "-"
+    "{sign} {d.id} {sig}"
+
+fn sd_changed_line(d SDecl, diffs List[SChange], hunk List[str], json bool) str
+    if json
+        keys := ["{quote(c.key)}:\{\"old\":{quote(c.old)},\"new\":{quote(c.new)}}" for c in diffs]
+        mut lines := ""
+        if hunk.len() > 0
+            lines = ",\"lines\":[{[quote(l) for l in hunk].join(",")}]"
+        return "\{\"change\":\"api\",\"op\":\"changed\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"keys\":\{{keys.join(",")}}{lines}}"
+    # A doc comment is long; say that it changed. A body shows its changed lines (diff.out.7).
+    flags := [c.key for c in diffs if c.key == "doc" or c.key == "body"]
+    mut s := "~ {d.id}"
+    if flags.len() > 0
+        s = "{s} ({flags.join(", ")} changed)"
+    for c in diffs
+        if c.key != "doc" and c.key != "body"
+            s = "{s}\n    {c.key}: {sd_shown(c.old)} -> {sd_shown(c.new)}"
+    for l in hunk
+        s = "{s}\n    {l}"
+    s
+
+fn sd_key(f SFound) str
+    "{f.rule}\n{f.file}\n{f.message}"
+
+fn sd_named(f SFound, side str) str
+    if f.file == ""
+        return side
+    if not side.ends_with(".ail")
+        return "{side.strip_suffix("/") else side}/{f.file}"
+    f.file
+
+fn sd_outcome(n int) str
+    if n < 0
+        return "absent"
+    if n == 1
+        return "pass"
+    "fail"
+
+fn sd_test_line(name str, was int, now int, message str, json bool) str
+    ## -1 absent, 0 fail, 1 pass
+    show_was := sd_outcome(was)
+    show_now := sd_outcome(now)
+    if json
+        fail := if now == 0 then ",\"status\":\"fail\"" else ""
+        return "\{\"change\":\"test\",\"test\":{quote(name)},\"old\":\"{show_was}\",\"new\":\"{show_now}\"{fail},\"message\":{quote(message)}}"
+    tail := if message == "" then "" else ": {message}"
+    "test {name}: {show_was} -> {show_now}{tail}"
+
+fn sd_failing(tests List[STest]) int
+    mut n := 0
+    for t in tests
+        if not t.passed
+            n += 1
+    n
+
+## The report and the number of changes (diff.out.2-5).
+fn sd_render(old str, new str, a SSide, b SSide, json bool) (str, int)
+    mut lines := List[str]()
+    mut added := 0
+    mut removed := 0
+    mut changed := 0
+    # diff.out.2: declarations by id, in the new version's order, then the removed ones.
+    if a.has_decls and b.has_decls
+        mut old_by := Map[str, SDecl]()
+        for d in a.decls
+            old_by[d.id] = d
+        mut new_ids := Set[str]()
+        for d in b.decls
+            new_ids.add(d.id)
+        for d in b.decls
+            if o := old_by.get(d.id)
+                mut diffs := List[SChange]()
+                for k in SDIFF_KEYS
+                    if o.get(k) != d.get(k)
+                        diffs.push(SChange(key: k, old: o.get(k), new: d.get(k)))
+                if diffs.len() > 0
+                    changed += 1
+                    mut hunk := List[str]()
+                    if [c for c in diffs if c.key == "body"].len() > 0
+                        hunk = sd_hunk(o.body, d.body)
+                    lines.push(sd_changed_line(d, diffs, hunk, json))
+            else
+                added += 1
+                lines.push(sd_decl_line("added", d, json))
+        for d in a.decls
+            if not new_ids.contains(d.id)
+                removed += 1
+                lines.push(sd_decl_line("removed", d, json))
+    else
+        which := if not a.has_decls then old else new
+        if json
+            lines.push("\{\"change\":\"api\",\"op\":\"unavailable\",\"reason\":{quote("{which} has errors")}}")
+        else
+            lines.push("api: not compared, {which} has errors")
+    # diff.out.3: diagnostics by rule, file and message, counted.
+    mut left := Map[str, int]()
+    for f in a.diags
+        k := sd_key(f)
+        left[k] = (left.get(k) else 0) + 1
+    mut gained := List[SFound]()
+    for f in b.diags
+        k := sd_key(f)
+        n := left.get(k) else 0
+        if n > 0
+            left[k] = n - 1
+        else
+            gained.push(f)
+    mut lost := List[SFound]()
+    for f in a.diags
+        k := sd_key(f)
+        n := left.get(k) else 0
+        if n > 0
+            left[k] = n - 1
+            lost.push(f)
+    for f in gained
+        lines.push(sd_diag_line("added", f, sd_named(f, new), json))
+    for f in lost
+        lines.push(sd_diag_line("removed", f, sd_named(f, old), json))
+    # diff.out.4: tests whose outcome changed, were added or were removed.
+    mut test_changes := 0
+    if a.has_tests and b.has_tests
+        mut before := Map[str, bool]()
+        for t in a.tests
+            before[t.name] = t.passed
+        for t in b.tests
+            was := before.get(t.name)
+            if was == none or was != t.passed
+                test_changes += 1
+                w := if x := was then (if x then 1 else 0) else -1
+                lines.push(sd_test_line(t.name, w, if t.passed then 1 else 0, t.message, json))
+        mut now_names := Set[str]()
+        for t in b.tests
+            now_names.add(t.name)
+        for t in a.tests
+            if not now_names.contains(t.name)
+                test_changes += 1
+                lines.push(sd_test_line(t.name, if t.passed then 1 else 0, -1, "", json))
+    total := added + removed + changed + gained.len() + lost.len() + test_changes
+    mut out := ""
+    for l in lines
+        out = "{out}{l}\n"
+    both := a.has_tests and b.has_tests
+    if json
+        tests := if both then ",\"failing_before\":{sd_failing(a.tests)},\"failing_after\":{sd_failing(b.tests)}" else ""
+        out = "{out}\{\"summary\":true,\"old\":{quote(old)},\"new\":{quote(new)},\"added\":{added},\"removed\":{removed},\"changed\":{changed},\"diagnostics_added\":{gained.len()},\"diagnostics_removed\":{lost.len()},\"tests_changed\":{test_changes}{tests}}\n"
+    else
+        tests := if both then "; failing tests {sd_failing(a.tests)} -> {sd_failing(b.tests)}" else "; tests not run"
+        out = "{out}{added} added, {removed} removed, {changed} changed; diagnostics +{gained.len()} -{lost.len()}{tests}\n"
+    (out, total)
+
+fn sd_diag_line(op str, f SFound, file str, json bool) str
+    if json
+        return "\{\"change\":\"diagnostic\",\"op\":\"{op}\",\"severity\":\"{f.severity}\",\"rule\":{quote(f.rule)},\"file\":{quote(file)},\"line\":{f.line},\"message\":{quote(f.message)}}"
+    sign := if op == "added" then "+" else "-"
+    "{sign} {f.severity}[{f.rule}] {file}:{f.line}: {f.message}"
+
+## `ail diff ARGS`; the exit status: 0 when nothing changed, 1 when something did, 2 for an error.
+pub fn semantic_diff_command(args List[str], std str) int
+    mut paths := List[str]()
+    mut rev := ""
+    mut json := false
+    mut run_tests := true
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        i += 1
+        if a == "--no-tests"
+            run_tests = false
+        elif a == "--json"
+            json = true
+        elif a == "--rev"
+            if i >= args.len()
+                io.eprint("error: `--rev` needs a git revision, e.g. `--rev HEAD` (diff.out.5)\n{SDIFF_USAGE}")
+                return 2
+            rev = args[i]
+            i += 1
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}`\n{SDIFF_USAGE}")
+            return 2
+        else
+            paths.push(a)
+    mut old := ""
+    mut new := ""
+    mut scrap := ""
+    if rev == "" and paths.len() == 2
+        old = paths[0]
+        new = paths[1]
+    elif rev != "" and paths.len() == 1
+        new = paths[0]
+        got := at_revision(rev, new) else err
+            io.eprint("error: {err.message} (diff.out.5)")
+            return 2
+        old = got.0
+        scrap = got.1
+    else
+        io.eprint(SDIFF_USAGE)
+        return 2
+    before := sd_side(old, run_tests, std) else err
+        remove_scrap(scrap)
+        io.eprint("error: {err.message}")
+        return 2
+    after := sd_side(new, run_tests, std) else err
+        remove_scrap(scrap)
+        io.eprint("error: {err.message}")
+        return 2
+    remove_scrap(scrap)
+    result := sd_render(old, new, before, after, json)
+    print(result.0.strip_suffix("\n") else result.0)
+    if result.1 == 0 then 0 else 1
