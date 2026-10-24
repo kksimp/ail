@@ -1,0 +1,7 @@
+# trace.watch.5: when did `n` become 0? The watch names the statement.
+fn main()
+    mut n := 3
+    n -= 1
+    n -= 2
+    n += 5
+    print(n)

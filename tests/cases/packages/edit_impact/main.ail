@@ -1,0 +1,23 @@
+struct Cart
+    total int
+
+fn add(mut c Cart, n int)
+    c.total += n
+
+fn show(c Cart) str
+    "{c.total}"
+
+@test
+fn adds()
+    mut c := Cart(total: 0)
+    add(mut c, 2)
+    assert_eq(c.total, 2)
+
+@test
+fn shows()
+    assert_eq(show(Cart(total: 1)), "1")
+
+fn main()
+    mut c := Cart(total: 0)
+    add(mut c, 5)
+    print(show(c))

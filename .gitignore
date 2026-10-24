@@ -10,3 +10,4 @@ bootstrap/target/
 tools/fuzz/failures/
 *.whl
 .native/
+.ail-test-*
