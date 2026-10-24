@@ -19,6 +19,7 @@ pub struct check.Analysis
 pub fn check.check_program(ast.Program) check.Report [env io]
 pub fn check.analyze(ast.Program, bool) check.Analysis [env io]
 pub fn check.proven_loops(ast.Program) List[ast.Pos] [env io]
+pub fn check.parallel_rows(ast.Program) List[check.ParRow] [env io]
 pub fn check.analyze_denying(ast.Program, bool, List[str]) check.Analysis [env io]
 pub fn check.check_declarations(ast.Program) List[check.Diag] [env io]
 pub enum check.Need
@@ -40,6 +41,7 @@ pub struct check.ImplInfo
 pub struct check.SigParam
 pub struct check.Sig
 pub struct check.Deferred
+pub struct check.FailPath
 pub struct check.Checker
 pub enum check.LocalKind
 pub struct check.Local
@@ -92,6 +94,7 @@ pub fn check.edit_distance(str, str) int
 pub fn check.foreign_type_word(str) str?
 pub fn check.check_observe(ast.Program) List[check.Diag]
 pub fn check.each_block(ast.Stmt) List[List[ast.Stmt]]
+pub struct check.ParRow
 pub struct check.SigFix
 pub fn check.std_module_names() List[str]
 pub enum check.Ty
@@ -102,4 +105,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1301); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1342); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

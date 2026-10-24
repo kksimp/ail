@@ -7,7 +7,7 @@ pub struct forms.Step  ## One thing to do to a control: `kind` is `type`, `check
     pub kind str
     pub id int
     pub arg str
-fn forms.field_label(d html.Doc, id int) str  ## What the control is called: its label, else aria-label, placeholder, name.
+pub fn forms.field_label(d html.Doc, id int) str  ## What the control is called: its label, else aria-label, placeholder, name.
 fn forms.is_button(d html.Doc, id int) bool  ## `input` types that are not fields to fill.
 fn forms.is_field(d html.Doc, id int) bool
 fn forms.kind_of(d html.Doc, id int) str
