@@ -20,9 +20,8 @@ pub fn shim(text str) str
     mut owners := List[str]()
     for line in text.lines()
         out.push(retarget(line))
-        head := "impl app.App for "
-        if line.starts_with(head)
-            owner := line[head.len()..].strip()
+        if rest := line.strip_prefix("impl app.App for ")
+            owner := rest.trim()
             if not owner.contains("[") and not text.contains("Observe for {owner}")
                 owners.push(owner)
     for o in owners
@@ -31,6 +30,6 @@ pub fn shim(text str) str
 
 ## A line with its `app.run(` calls retargeted; comments stay as they are.
 fn retarget(line str) str
-    if line.strip().starts_with("#")
+    if line.trim().starts_with("#")
         return line
     line.replace("app.run(", "{SERVE}.run(")
