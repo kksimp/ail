@@ -497,7 +497,8 @@ lines first ([ADR 0731](../decisions/0731-api-diff-output-and-budget.md)).
 
 `ail ask PROGRAM QUESTION...` answers a question about a program from the
 checker's graph of it, with no grep and no file reading
-([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 1).
+([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 1,
+[ADR 0881](../decisions/0881-ail-ask.md)).
 
 **api.ask.1** — The question is plain words after the program: `who writes
 field total`, `what calls pay`, `what does main call`, `which effects reach

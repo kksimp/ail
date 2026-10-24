@@ -696,3 +696,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0880](0880-budgeted-diagnostic-forms.md) | Token-priced diagnostics: one-line and expanded forms under `--budget` (ADR 0868 item 6) | Accepted | 2026-10-24 |
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
 | [0879](0879-observe-and-live-attach.md) | `@observe` and live attach: read-only program state for agents; on in `ail run`, opt-in for `ail build` | Accepted | 2026-10-24 |
+| [0881](0881-ail-ask.md) | `ail ask`: semantic questions (who writes a field, what calls a function, which effects reach it) answered from the checker's graph | Accepted | 2026-10-24 |
