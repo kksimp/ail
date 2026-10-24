@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076); Windows host requested by the designer (item 307)
 - **Topic:** 17 — Standard library; GUI
 - **Spec rules:** `std.app.7`–`10`, `std.app.13`
-- **Builds:** [ADR 0838](0838-std-app-native-windows.md), [ADR 0009](0009-custom-tooling-by-default.md)
+- **Builds:** [ADR 0838](0838-std-app-native-windows.md), [ADR 0009](0009-custom-tooling-policy.md)
 
 ## Context
 
