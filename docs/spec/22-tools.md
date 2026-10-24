@@ -604,7 +604,8 @@ fn main()
 ## Edit impact
 
 What an edit can break, from the same graph as `ail ask`
-([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 3).
+([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 3,
+[ADR 0882](../decisions/0882-edit-impact.md)).
 
 **api.impact.1** — A declaration is *changed* when it is new or its text
 differs from before, ignoring blank lines, comments, doc comments and

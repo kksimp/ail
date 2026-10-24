@@ -102,7 +102,8 @@ fn two()
 can reach (`api.impact.3`) and says `affected: N of M tests` on standard
 error. The tests of imported modules always run. With no changes no test
 runs. Everything else is as `test.run.1-4`.
-[ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 3.
+[ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 3,
+[ADR 0882](../decisions/0882-edit-impact.md).
 
 ```ail skip=bootstrap tool=test,--affected,--since,nosuch,FILE status=2 expect=api.impact.3 rules=test.affected.1
 @test
