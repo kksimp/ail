@@ -6,13 +6,13 @@
 #   tools/step-d/d2.sh apply    apply in THIS checkout (the integrator's freeze window); then commit
 #
 # Moves (git mv, history kept):
-#   bootstrap/src/std                       -> std
-#   bootstrap/src/prelude.ail               -> tools/native/prelude.ail
-#   bootstrap/src/fixable.txt               -> compiler/explain/fixable.txt
+#   std                       -> std
+#   tools/native/prelude.ail               -> tools/native/prelude.ail
+#   compiler/explain/fixable.txt               -> compiler/explain/fixable.txt
 #   bootstrap/src/net/{crypto,tls,x509}/testdata -> tests/data/net/{crypto,tls,x509}
-#   bootstrap/tests/** except *.rs          -> tests/**
+#   tests/** except *.rs          -> tests/**
 # Then every reference outside docs/decisions/ is rewritten with the same table. The Rust sources
-# keep building until D5 through symlinks left at the old places (bootstrap/src/std -> ../../std, ...);
+# keep building until D5 through symlinks left at the old places (std -> ../../std, ...);
 # D5 deletes bootstrap/ with them. Paths of the Rust binary (bootstrap/target/release/ail) are D3's.
 set -euo pipefail
 mode="${1:-plan}"
@@ -24,27 +24,27 @@ rewrite_table() {
 s{bootstrap/src/net/(crypto|tls|x509)/testdata}{tests/data/net/$1}g
 s{bootstrap/src/prelude\.ail}{tools/native/prelude.ail}g
 s{bootstrap/src/fixable\.txt}{compiler/explain/fixable.txt}g
-s{bootstrap/src/std\b}{std}g
-s{bootstrap/tests(?=/(?![A-Za-z_]+\.rs\b)|\b(?!/))}{tests}g
+s{std\b}{std}g
+s{tests(?=/(?![A-Za-z_]+\.rs\b)|\b(?!/))}{tests}g
 EOF
 }
 
 moves() {
     # source -> destination, one per line
-    echo "bootstrap/src/std std"
-    echo "bootstrap/src/prelude.ail tools/native/prelude.ail"
-    echo "bootstrap/src/fixable.txt compiler/explain/fixable.txt"
+    echo "std std"
+    echo "tools/native/prelude.ail tools/native/prelude.ail"
+    echo "compiler/explain/fixable.txt compiler/explain/fixable.txt"
     for d in crypto tls x509; do
         [ -d "bootstrap/src/net/$d/testdata" ] && echo "bootstrap/src/net/$d/testdata tests/data/net/$d"
     done
     # tests: every top-level entry except Rust sources
-    for e in bootstrap/tests/*; do
+    for e in tests/*; do
         case "$e" in *.rs) ;; *) echo "$e tests/$(basename "$e")" ;; esac
     done
 }
 
 # Files whose text is rewritten: tracked, outside bootstrap/src (Rust), outside ADR history,
-# not binary, not generated results. bootstrap/tests files move first, so they are included at their new place.
+# not binary, not generated results. tests files move first, so they are included at their new place.
 rewrite_files() {
     git ls-files -z | grep -zv '^bootstrap/\(src/\|target/\|Cargo\|build\.rs\|rust\)\|^docs/decisions/\|^tools/native-coverage/results\.json$\|^\.git' \
         | xargs -0 grep -lIE 'bootstrap/(src/(std|prelude|fixable|net/(crypto|tls|x509)/testdata)|tests)' 2>/dev/null || true
@@ -71,16 +71,16 @@ do_apply() {
         git mv "$a" "$b"
     done
     # the old places stay readable for the Rust build (D5 removes them with bootstrap/)
-    ln -s ../../std bootstrap/src/std
-    ln -s ../../tools/native/prelude.ail bootstrap/src/prelude.ail
-    ln -s ../../compiler/explain/fixable.txt bootstrap/src/fixable.txt
+    ln -s ../../std std
+    ln -s ../../tools/native/prelude.ail tools/native/prelude.ail
+    ln -s ../../compiler/explain/fixable.txt compiler/explain/fixable.txt
     for d in crypto tls x509; do
         [ -d "tests/data/net/$d" ] && ln -s "../../../../tests/data/net/$d" "bootstrap/src/net/$d/testdata"
     done
-    # tests: link the moved entries back into bootstrap/tests/ for the Rust tests still there
+    # tests: link the moved entries back into tests/ for the Rust tests still there
     for e in tests/*; do
         n=$(basename "$e")
-        [ -e "bootstrap/tests/$n" ] || ln -s "../../tests/$n" "bootstrap/tests/$n"
+        [ -e "tests/$n" ] || ln -s "../../tests/$n" "tests/$n"
     done
     rewrite_files | while read -r f; do
         [ -L "$f" ] && continue
@@ -96,7 +96,7 @@ do_checks() {
         | xargs grep -nE 'bootstrap/(src/(std|prelude\.ail|fixable)|tests/[A-Za-z_./-]*[^s]\b)' 2>/dev/null \
         | grep -v '\.rs\b' | head -20 || true
     echo "== old places are links"
-    ls -ld bootstrap/src/std bootstrap/src/prelude.ail bootstrap/src/fixable.txt 2>&1 | sed 's/^/  /'
+    ls -ld std tools/native/prelude.ail compiler/explain/fixable.txt 2>&1 | sed 's/^/  /'
     echo "== native CLI builds with the new layout"
     # the worktree has no cargo build of its own: use the checkout's Rust binary when there is one
     rust="$here/bootstrap/target/release/ail"
@@ -110,8 +110,8 @@ do_checks() {
     done
     echo "== the new native CLI with the old places removed (std must come from std/)"
     cli="${TMPDIR:-/tmp}/d2-ail-cli"
-    rm -f bootstrap/src/std bootstrap/src/prelude.ail bootstrap/src/fixable.txt
-    if [ -x "$cli" ] && AIL_ROOT="$PWD" AIL_COMPILER="$PWD/compiler" "$cli" build tests/native/run/std_app_run.ail -o "${TMPDIR:-/tmp}/d2-prog2" >/dev/null 2>&1 && "${TMPDIR:-/tmp}/d2-prog2" >/dev/null 2>&1; then echo "  ok   native build without bootstrap/src/std"; else echo "  FAIL native build without bootstrap/src/std"; fi
+    rm -f std tools/native/prelude.ail compiler/explain/fixable.txt
+    if [ -x "$cli" ] && AIL_ROOT="$PWD" AIL_COMPILER="$PWD/compiler" "$cli" build tests/native/run/std_app_run.ail -o "${TMPDIR:-/tmp}/d2-prog2" >/dev/null 2>&1 && "${TMPDIR:-/tmp}/d2-prog2" >/dev/null 2>&1; then echo "  ok   native build without std"; else echo "  FAIL native build without std"; fi
     echo "== changed files: $(git status --short | wc -l)"
 }
 

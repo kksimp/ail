@@ -39,10 +39,10 @@ fn programs() -> Vec<String> {
     let r = root();
     let rel = |p: PathBuf| p.strip_prefix(&r).unwrap().to_string_lossy().into_owned();
     let mut out: Vec<String> = Vec::new();
-    for dir in ["examples", "bootstrap/tests/cases", "bootstrap/tests/mistakes", "tools/perfbench/programs"] {
+    for dir in ["examples", "tests/cases", "tests/mistakes", "tools/perfbench/programs"] {
         out.extend(with_ext(&r.join(dir), "ail").into_iter().map(rel));
     }
-    let mut pkgs: Vec<PathBuf> = fs::read_dir(r.join("bootstrap/tests/cases/packages"))
+    let mut pkgs: Vec<PathBuf> = fs::read_dir(r.join("tests/cases/packages"))
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| p.is_dir())
@@ -108,7 +108,7 @@ fn fixes_of(line: &str) -> String {
 /// The rules the AIL checker may report beyond the Rust one: one per line,
 /// `#` starts a comment.
 fn known_new() -> Vec<String> {
-    let text = fs::read_to_string(root().join("bootstrap/tests/checker_known_new.txt")).unwrap_or_default();
+    let text = fs::read_to_string(root().join("tests/checker_known_new.txt")).unwrap_or_default();
     text.lines().map(|l| l.split('#').next().unwrap().trim().to_string()).filter(|l| !l.is_empty()).collect()
 }
 

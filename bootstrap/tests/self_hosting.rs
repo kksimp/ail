@@ -89,13 +89,13 @@ fn ast_dumps_read_back_through_the_ail_syntax_tree() {
         n += 1;
     }
     // api.ast.3: the whole program, prelude and derive output included.
-    for f in ["examples/json.ail", "tools/edit/edit.ail", "bootstrap/tests/cases/packages/geometry"] {
+    for f in ["examples/json.ail", "tools/edit/edit.ail", "tests/cases/packages/geometry"] {
         let text = run(ail().args(["api", "--ast", "--program"]).arg(root().join(f)));
         assert!(text.contains("\"line\":10737418"), "{f}: no prelude");
         fs::write(dir.join(format!("{n:04}.json")), text).unwrap();
         n += 1;
     }
-    let out = run(ail().arg("run").arg(root().join("bootstrap/tests/selfhost/roundtrip")).arg(&dir));
+    let out = run(ail().arg("run").arg(root().join("tests/selfhost/roundtrip")).arg(&dir));
     assert_eq!(out, format!("checked {n}\n"));
     assert!(n > 700, "{n} files");
 }
@@ -175,7 +175,7 @@ fn ail_front_end_reports_one_diagnostic_per_line_for_a_stray_ampersand() {
 /// only shrinks; a new divergence, or a listed file that now matches, fails.
 #[test]
 fn ail_syntax_diagnostic_text_matches_the_bootstrap() {
-    let mut files: Vec<PathBuf> = fs::read_dir(root().join("bootstrap/tests/mistakes"))
+    let mut files: Vec<PathBuf> = fs::read_dir(root().join("tests/mistakes"))
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|x| x == "ail"))
@@ -207,7 +207,7 @@ fn ail_syntax_diagnostic_text_matches_the_bootstrap() {
             diverging.push(name.trim_start_matches(&format!("{}/", root().display())).to_string());
         }
     }
-    let known: Vec<String> = fs::read_to_string(root().join("bootstrap/tests/diag_text_known.txt"))
+    let known: Vec<String> = fs::read_to_string(root().join("tests/diag_text_known.txt"))
         .unwrap()
         .lines()
         .filter(|l| !l.is_empty())

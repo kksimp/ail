@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # The native `ail api` against the Rust one (ADR 0855): stdout and exit status for each
 # FILE with the flags in $API_FLAGS (default none).
-#   tools/native-cli/api-parity.sh [FILE...]    default: examples/*.ail bootstrap/tests/cases/*.ail
+#   tools/native-cli/api-parity.sh [FILE...]    default: examples/*.ail tests/cases/*.ail
 set -uo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
 export AIL_ROOT="$root"
 files=("$@")
-[ ${#files[@]} -gt 0 ] || files=(examples/*.ail bootstrap/tests/cases/*.ail)
+[ ${#files[@]} -gt 0 ] || files=(examples/*.ail tests/cases/*.ail)
 native="${NATIVE:-$(mktemp -d)/ail-native}"
 [ -x "$native" ] || ./ail build compiler/main.ail -o "$native" > /dev/null 2>&1 || { echo "api-parity: the native CLI doesn't build" >&2; exit 2; }
 bad=0

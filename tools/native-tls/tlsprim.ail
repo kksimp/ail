@@ -2,7 +2,7 @@
 ## next to the real runtime in a temporary compiler directory, never shipped.
 ## `tlsprim_call(op, args)` runs one TLS primitive on hex arguments (`-` is
 ## empty, fields separated by spaces) and returns its output as hex, so the
-## vectors of bootstrap/src/net/crypto/testdata can be checked natively.
+## vectors of tests/data/net/crypto can be checked natively.
 
 fn tlsprim_nibble(c int) int
     if c >= 48 and c <= 57

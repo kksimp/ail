@@ -11,7 +11,7 @@ the repository's `./ail`.
 | 1 | `./ail build compiler/main.ail` (Rust-hosted) | it builds; else the problem count and the top constructs |
 | 2 | stage 1 runs `build compiler/main.ail compiler/rt/native` and the hex it prints becomes the stage-2 executable | it builds, and stage 1 == stage 2 byte for byte |
 | 3 | stage 2 builds the compiler again | stage 2 == stage 3 byte for byte (the fixed point) |
-| T | every `bootstrap/tests/native/run/*.ail` is built by the stage-2 compiler, run, and compared with `ail run` | same stdout, exit code and first trap line |
+| T | every `tests/native/run/*.ail` is built by the stage-2 compiler, run, and compared with `ail run` | same stdout, exit code and first trap line |
 
 A blocked stage prints `BLOCKED at <stage>: <why>` and exits 1; the report is
 `OUT_DIR/report.md`. Environment: `STAGE1=PATH` supplies a stage-1 compiler

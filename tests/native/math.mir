@@ -1,0 +1,17 @@
+# MIR (unstable) of tests/native/math.ail
+
+fn main() unit
+  b0:
+    v0 float = fconst 2.0
+    v1 float = fconst 3.0
+    v2 float = call rt.float_pow(v0, v1)
+    v3 float = call rt.float_sin(v2)
+    call rt.out_float(v3)
+    call rt.out_nl()
+    v4 float = fconst 0.5
+    v5 float = fconst 1.5
+    v6 float = call rt.float_atan2(v4, v5)
+    v7 float = call rt.float_cbrt(v6)
+    call rt.out_float(v7)
+    call rt.out_nl()
+    return

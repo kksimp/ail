@@ -11,9 +11,9 @@ for spec in "$@"; do
   git fetch -q origin "+refs/pull/$n/head:refs/remotes/origin/pr$n"
   if ! git merge --no-ff origin/pr$n -m "Merge $title (#$n)" >/dev/null 2>&1; then
     c=$(git diff --name-only --diff-filter=U); echo "PR $n conflicts: $c"
-    for f in $c; do case "$f" in docs/*|*.md|examples/*.out|bootstrap/tests/diag_text_known.txt) python3 $S/union-docs.py "$f";; *) echo "CODE CONFLICT in $f: stopping"; exit 3;; esac; done
+    for f in $c; do case "$f" in docs/*|*.md|examples/*.out|tests/diag_text_known.txt) python3 $S/union-docs.py "$f";; *) echo "CODE CONFLICT in $f: stopping"; exit 3;; esac; done
     git add -A; git commit -q -m "Merge $title (#$n)"
   fi
 done
-git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!bootstrap/tests" | head -3
+git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!tests" | head -3
 git log --oneline -1

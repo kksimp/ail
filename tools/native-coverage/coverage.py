@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Native coverage tracker (ADR 0583, ADR 0584). Measurement only; run run.sh.
 
-For every program in examples/, bootstrap/tests/cases/ and tools/perfbench/programs/
+For every program in examples/, tests/cases/ and tools/perfbench/programs/
 it runs `ail build`, then classifies the program:
 
   built-match      built, and its output, exit status and trap line equal `ail run`
