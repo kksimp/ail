@@ -140,6 +140,8 @@ fn main() !
             io.exit(pkg.command(args[1..]))
         "effects" =>
             io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "check-errors" =>
+            io.exit(api.errors_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "api" =>
             api_cmd(args[1..])
         "diff" =>

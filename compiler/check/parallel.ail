@@ -654,6 +654,8 @@ struct Verdict
     var str
     is_par bool
     sequential bool
+    ## A `par for` that holds only by its assertion (conc.par.6).
+    asserted bool
     rule str
     reason str
     at ast.Pos
@@ -865,6 +867,7 @@ fn judge_for(
             var: var,
             is_par: is_par,
             sequential: not (is_par and not p.provable),
+            asserted: is_par and not p.provable,
             rule: p.rule,
             reason: p.reason,
             at: p.at,
@@ -885,6 +888,7 @@ fn judge_for(
         var: var,
         is_par: is_par,
         sequential: false,
+        asserted: false,
         rule: rule,
         reason: reason,
         at: pos,
@@ -984,6 +988,47 @@ fn Checker.proven_loops(self) List[ast.Pos]
                 if not v.sequential
                     out.push(v.pos)
     out
+
+## One row of `ail effects --parallel` (conc.par.6): a `for` loop and its verdict.
+pub struct ParRow
+    pub pos ast.Pos
+    pub func str
+    pub var str
+    pub par bool
+    ## `parallel`, `asserted` or `sequential`.
+    pub verdict str
+    pub rule str
+    pub reason str
+    pub at ast.Pos
+
+## Every `for` loop of the user's functions with its verdict, in source order (conc.par.6).
+fn Checker.parallel_rows(self) List[ParRow]
+    cx := par_context()
+    mut out := List[ParRow]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        body := f.body else continue
+        id := if f.owner == none
+            and f.within == ast.Within.TopLevel then "fn:{f.name}" else "method:{display_name(prog, f)}"
+        for s in loops(body)
+            if v := judge(cx, f, s)
+                mut word := "parallel"
+                if v.sequential
+                    word = "sequential"
+                elif v.asserted
+                    word = "asserted"
+                out.push(ParRow(
+                    pos: v.pos,
+                    func: id,
+                    var: v.var,
+                    par: v.is_par,
+                    verdict: word,
+                    rule: v.rule,
+                    reason: v.reason,
+                    at: v.at,
+                ))
+    out.sorted(by: |r| r.pos.line * 100000 + r.pos.col)
 
 ## A `[e par for x in xs]` comprehension (conc.par.12).
 struct ParComp
@@ -1151,6 +1196,7 @@ fn judge_comp(cx ParContext, elem ast.Expr, c ast.CompFor) Verdict
             var: c.var,
             is_par: true,
             sequential: p.provable,
+            asserted: not p.provable,
             rule: p.rule,
             reason: p.reason,
             at: p.at,
@@ -1161,6 +1207,7 @@ fn judge_comp(cx ParContext, elem ast.Expr, c ast.CompFor) Verdict
         var: c.var,
         is_par: true,
         sequential: false,
+        asserted: false,
         rule: "conc.par.12",
         reason: "computes each element independently",
         at: c.var_pos,

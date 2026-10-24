@@ -192,6 +192,45 @@ fn Checker.error_names(self, errors List[Ty]) List[str]
             out.push(n)
     out
 
+## The function or method an expression calls, if it is a call (err.paths.1).
+@allow("expr.match.3") fn callee_text(e ast.Expr) str
+    match e
+        Call(callee, _, _) =>
+            match callee
+                Name(n, _) => n
+                TypeArgs(n, _, _) => n
+                _ => ""
+        Method(recv, name, _, _) =>
+            match recv
+                Name(r, _) => "{r}.{name}"
+                _ => ".{name}"
+        _ => ""
+
+## Remember a failure path of the function being checked (err.paths.1); final pass only.
+fn Checker.note_path(
+    mut self,
+    pos ast.Pos,
+    kind str,
+    how str,
+    value ast.Expr?,
+    errors List[Ty],
+    context bool,
+)
+    if not record
+        return
+    mut call := ""
+    if v := value
+        call = callee_text(v)
+    fail_paths.push(FailPath(
+        func: cur_fn,
+        pos: pos,
+        kind: kind,
+        how: how,
+        call: call,
+        errors: error_names(errors),
+        context: context,
+    ))
+
 ## The return type that would let this function fail with `extra` too, as
 ## the source writes it; `none` for an optional return type.
 @allow("expr.match.3") fn Checker.failing_ret(self, extra List[Ty]) str?
