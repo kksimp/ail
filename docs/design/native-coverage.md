@@ -94,127 +94,127 @@ The first reported problem whose owner is known from the lane briefs. `follows` 
 
 | program | differs in |
 |---|---|
-| bootstrap/tests/cases/deep_recursion.ail | exit; trap |
-| bootstrap/tests/cases/std_env.ail | stdout (native `false`, interpreter `true`) |
-| bootstrap/tests/cases/std_net_offline.ail | stdout (native `tls: https://127.0.0.1:1/`, interpreter `refused: https://127.0.0.1:1/`) |
-| bootstrap/tests/cases/std_proc_negative_timeout.ail | trap |
-| bootstrap/tests/cases/std_regex_group_bad.ail | trap |
-| bootstrap/tests/cases/std_regex_template_trap.ail | trap |
+| tests/cases/deep_recursion.ail | exit; trap |
+| tests/cases/std_env.ail | stdout (native `false`, interpreter `true`) |
+| tests/cases/std_net_offline.ail | stdout (native `tls: https://127.0.0.1:1/`, interpreter `refused: https://127.0.0.1:1/`) |
+| tests/cases/std_proc_negative_timeout.ail | trap |
+| tests/cases/std_regex_group_bad.ail | trap |
+| tests/cases/std_regex_template_trap.ail | trap |
 | examples/tool.ail | exit; stdout (native ``, interpreter `file: tool.ail`) |
 
 ## Other failures
 
-- bootstrap/tests/cases/std_csv.ail: backend-error: /home/user/ail/bootstrap/tests/cases/std_csv.ail:4:4: error[native.build.2]: internal error: invalid MIR: main: b17 passes a List[?] to b15's List[List[str]]
+- tests/cases/std_csv.ail: backend-error: /home/user/ail/tests/cases/std_csv.ail:4:4: error[native.build.2]: internal error: invalid MIR: main: b17 passes a List[?] to b15's List[List[str]]
 
 ## Change since the last run
 
 Built and matching: 161 to 246 (+85).
 
-- bootstrap/tests/cases/absent_try.ail: not-subset to built-match
-- bootstrap/tests/cases/attr_allow_wildcard.ail: not-subset to built-match
-- bootstrap/tests/cases/attr_inline_deprecated.ail: not-subset to built-match
-- bootstrap/tests/cases/attr_own_line.ail: not-subset to built-match
-- bootstrap/tests/cases/coll_op_assign_first_use.ail: not-subset to built-match
-- bootstrap/tests/cases/comp_unpack_tier.ail: new, built-match
-- bootstrap/tests/cases/comprehension_forms.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_ensures_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_failure_skips_ensures.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_invariant.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_invariant_built_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_invariant_method_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_no_contracts.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_old.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_old_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_requires_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/contract_satisfied.ail: not-subset to built-match
-- bootstrap/tests/cases/derive_from_json_field_without.ail: new, check-rejected
-- bootstrap/tests/cases/diag_type_coll_15.ail: not-subset to built-match
-- bootstrap/tests/cases/diag_unsafe_mem_1.ail: new, check-rejected
-- bootstrap/tests/cases/empty_literal_inference.ail: not-subset to built-match
-- bootstrap/tests/cases/ffi_double_free.ail: not-subset to check-rejected
-- bootstrap/tests/cases/ffi_missing_library.ail: not-subset to check-rejected
-- bootstrap/tests/cases/ffi_missing_symbol.ail: not-subset to check-rejected
-- bootstrap/tests/cases/float_parse_grammar.ail: not-subset to built-match
-- bootstrap/tests/cases/float_parse_long.ail: not-subset to built-match
-- bootstrap/tests/cases/fmt_attr_long.ail: not-subset to built-match
-- bootstrap/tests/cases/fuzz_csv_blank_row.ail: not-subset to built-match
-- bootstrap/tests/cases/habits_fixes_work.ail: not-subset to built-match
-- bootstrap/tests/cases/if_bind.ail: not-subset to built-match
-- bootstrap/tests/cases/if_then.ail: not-subset to built-match
-- bootstrap/tests/cases/is_empty_stem.ail: not-subset to built-match
-- bootstrap/tests/cases/list_edit.ail: not-subset to built-match
-- bootstrap/tests/cases/main_fails.ail: not-subset to built-match
-- bootstrap/tests/cases/maps_trap_msg_keys.ail: not-subset to built-match
-- bootstrap/tests/cases/mem_alloc_negative.ail: not-subset to check-rejected
-- bootstrap/tests/cases/mem_cast.ail: not-subset to check-rejected
-- bootstrap/tests/cases/num_convert_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/optional_none.ail: not-subset to built-match
-- bootstrap/tests/cases/ptr_null.ail: not-subset to check-rejected
-- bootstrap/tests/cases/ptr_oob.ail: not-subset to check-rejected
-- bootstrap/tests/cases/ptr_use_after_free.ail: not-subset to check-rejected
-- bootstrap/tests/cases/random_int_bad_range.ail: not-subset to built-match
-- bootstrap/tests/cases/random_seeded.ail: not-subset to built-match
-- bootstrap/tests/cases/std_app_calls.ail: new, not-subset
-- bootstrap/tests/cases/std_app_host.ail: new, not-subset
-- bootstrap/tests/cases/std_args_derive.ail: new, not-subset
-- bootstrap/tests/cases/std_csv.ail: not-subset to backend-error
-- bootstrap/tests/cases/std_csv_quote.ail: new, built-match
-- bootstrap/tests/cases/std_env.ail: not-subset to built-differs
-- bootstrap/tests/cases/std_hash.ail: not-subset to built-match
-- bootstrap/tests/cases/std_implicit.ail: not-subset to built-match
-- bootstrap/tests/cases/std_io.ail: not-subset to built-match
-- bootstrap/tests/cases/std_net_jar_matching.ail: new, not-subset
-- bootstrap/tests/cases/std_net_offline.ail: not-subset to built-differs
-- bootstrap/tests/cases/std_net_options_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/std_net_total_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/std_regex_error.ail: not-subset to built-match
-- bootstrap/tests/cases/std_regex_group_all.ail: not-subset to built-match
-- bootstrap/tests/cases/std_regex_group_bad.ail: not-subset to built-differs
-- bootstrap/tests/cases/std_regex_template_trap.ail: not-subset to built-differs
-- bootstrap/tests/cases/std_ui_widgets_methods.ail: new, not-subset
-- bootstrap/tests/cases/str_count_empty.ail: not-subset to built-match
-- bootstrap/tests/cases/str_edit.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_char_classes.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_char_radix_0_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_char_radix_1_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_char_radix_37_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_char_radix_huge_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_char_radix_neg_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_repeat_pad.ail: not-subset to built-match
-- bootstrap/tests/cases/strings_trim_lines_chars.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_axis_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_broadcast_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_from_fn.ail: new, not-subset
-- bootstrap/tests/cases/tensor_from_fn_errors.ail: new, check-rejected
-- bootstrap/tests/cases/tensor_from_fn_trap.ail: new, not-subset
-- bootstrap/tests/cases/tensor_from_zeros_arity_errors.ail: new, check-rejected
-- bootstrap/tests/cases/tensor_from_zeros_table.ail: new, not-subset
-- bootstrap/tests/cases/tensor_fusion_f32.ail: new, not-subset
-- bootstrap/tests/cases/tensor_matmul_pool.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_negate.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_negate_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_overflow_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_shape_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/tensor_softmax.ail: new, not-subset
-- bootstrap/tests/cases/tensor_softmax_errors.ail: new, check-rejected
-- bootstrap/tests/cases/tensor_softmax_trap.ail: new, not-subset
-- bootstrap/tests/cases/tensor_top2.ail: new, not-subset
-- bootstrap/tests/cases/tensor_top2_errors.ail: new, check-rejected
-- bootstrap/tests/cases/tensor_top2_trap.ail: new, not-subset
-- bootstrap/tests/cases/tensor_transpose_trap.ail: not-subset to built-match
-- bootstrap/tests/cases/trace_calls.ail: not-subset to built-match
-- bootstrap/tests/cases/trace_json.ail: not-subset to built-match
-- bootstrap/tests/cases/trap_contract_values.ail: not-subset to built-match
-- bootstrap/tests/cases/tuple_errors.ail: new, check-rejected
-- bootstrap/tests/cases/tuple_for_mut.ail: new, check-rejected
-- bootstrap/tests/cases/tuple_literal_one.ail: new, check-rejected
-- bootstrap/tests/cases/tuple_pattern_one.ail: new, check-rejected
-- bootstrap/tests/cases/tuple_traits.ail: new, check-rejected
-- bootstrap/tests/cases/tuple_type_one.ail: new, check-rejected
-- bootstrap/tests/cases/tuples_basic.ail: new, not-subset
-- bootstrap/tests/cases/tuples_json.ail: new, not-subset
-- bootstrap/tests/cases/tuples_props.ail: new, check-rejected
-- bootstrap/tests/cases/unsafe_block.ail: not-subset to built-match
+- tests/cases/absent_try.ail: not-subset to built-match
+- tests/cases/attr_allow_wildcard.ail: not-subset to built-match
+- tests/cases/attr_inline_deprecated.ail: not-subset to built-match
+- tests/cases/attr_own_line.ail: not-subset to built-match
+- tests/cases/coll_op_assign_first_use.ail: not-subset to built-match
+- tests/cases/comp_unpack_tier.ail: new, built-match
+- tests/cases/comprehension_forms.ail: not-subset to built-match
+- tests/cases/contract_ensures_trap.ail: not-subset to built-match
+- tests/cases/contract_failure_skips_ensures.ail: not-subset to built-match
+- tests/cases/contract_invariant.ail: not-subset to built-match
+- tests/cases/contract_invariant_built_trap.ail: not-subset to built-match
+- tests/cases/contract_invariant_method_trap.ail: not-subset to built-match
+- tests/cases/contract_no_contracts.ail: not-subset to built-match
+- tests/cases/contract_old.ail: not-subset to built-match
+- tests/cases/contract_old_trap.ail: not-subset to built-match
+- tests/cases/contract_requires_trap.ail: not-subset to built-match
+- tests/cases/contract_satisfied.ail: not-subset to built-match
+- tests/cases/derive_from_json_field_without.ail: new, check-rejected
+- tests/cases/diag_type_coll_15.ail: not-subset to built-match
+- tests/cases/diag_unsafe_mem_1.ail: new, check-rejected
+- tests/cases/empty_literal_inference.ail: not-subset to built-match
+- tests/cases/ffi_double_free.ail: not-subset to check-rejected
+- tests/cases/ffi_missing_library.ail: not-subset to check-rejected
+- tests/cases/ffi_missing_symbol.ail: not-subset to check-rejected
+- tests/cases/float_parse_grammar.ail: not-subset to built-match
+- tests/cases/float_parse_long.ail: not-subset to built-match
+- tests/cases/fmt_attr_long.ail: not-subset to built-match
+- tests/cases/fuzz_csv_blank_row.ail: not-subset to built-match
+- tests/cases/habits_fixes_work.ail: not-subset to built-match
+- tests/cases/if_bind.ail: not-subset to built-match
+- tests/cases/if_then.ail: not-subset to built-match
+- tests/cases/is_empty_stem.ail: not-subset to built-match
+- tests/cases/list_edit.ail: not-subset to built-match
+- tests/cases/main_fails.ail: not-subset to built-match
+- tests/cases/maps_trap_msg_keys.ail: not-subset to built-match
+- tests/cases/mem_alloc_negative.ail: not-subset to check-rejected
+- tests/cases/mem_cast.ail: not-subset to check-rejected
+- tests/cases/num_convert_trap.ail: not-subset to built-match
+- tests/cases/optional_none.ail: not-subset to built-match
+- tests/cases/ptr_null.ail: not-subset to check-rejected
+- tests/cases/ptr_oob.ail: not-subset to check-rejected
+- tests/cases/ptr_use_after_free.ail: not-subset to check-rejected
+- tests/cases/random_int_bad_range.ail: not-subset to built-match
+- tests/cases/random_seeded.ail: not-subset to built-match
+- tests/cases/std_app_calls.ail: new, not-subset
+- tests/cases/std_app_host.ail: new, not-subset
+- tests/cases/std_args_derive.ail: new, not-subset
+- tests/cases/std_csv.ail: not-subset to backend-error
+- tests/cases/std_csv_quote.ail: new, built-match
+- tests/cases/std_env.ail: not-subset to built-differs
+- tests/cases/std_hash.ail: not-subset to built-match
+- tests/cases/std_implicit.ail: not-subset to built-match
+- tests/cases/std_io.ail: not-subset to built-match
+- tests/cases/std_net_jar_matching.ail: new, not-subset
+- tests/cases/std_net_offline.ail: not-subset to built-differs
+- tests/cases/std_net_options_trap.ail: not-subset to built-match
+- tests/cases/std_net_total_trap.ail: not-subset to built-match
+- tests/cases/std_regex_error.ail: not-subset to built-match
+- tests/cases/std_regex_group_all.ail: not-subset to built-match
+- tests/cases/std_regex_group_bad.ail: not-subset to built-differs
+- tests/cases/std_regex_template_trap.ail: not-subset to built-differs
+- tests/cases/std_ui_widgets_methods.ail: new, not-subset
+- tests/cases/str_count_empty.ail: not-subset to built-match
+- tests/cases/str_edit.ail: not-subset to built-match
+- tests/cases/strings_char_classes.ail: not-subset to built-match
+- tests/cases/strings_char_radix_0_trap.ail: not-subset to built-match
+- tests/cases/strings_char_radix_1_trap.ail: not-subset to built-match
+- tests/cases/strings_char_radix_37_trap.ail: not-subset to built-match
+- tests/cases/strings_char_radix_huge_trap.ail: not-subset to built-match
+- tests/cases/strings_char_radix_neg_trap.ail: not-subset to built-match
+- tests/cases/strings_repeat_pad.ail: not-subset to built-match
+- tests/cases/strings_trim_lines_chars.ail: not-subset to built-match
+- tests/cases/tensor_axis_trap.ail: not-subset to built-match
+- tests/cases/tensor_broadcast_trap.ail: not-subset to built-match
+- tests/cases/tensor_from_fn.ail: new, not-subset
+- tests/cases/tensor_from_fn_errors.ail: new, check-rejected
+- tests/cases/tensor_from_fn_trap.ail: new, not-subset
+- tests/cases/tensor_from_zeros_arity_errors.ail: new, check-rejected
+- tests/cases/tensor_from_zeros_table.ail: new, not-subset
+- tests/cases/tensor_fusion_f32.ail: new, not-subset
+- tests/cases/tensor_matmul_pool.ail: not-subset to built-match
+- tests/cases/tensor_negate.ail: not-subset to built-match
+- tests/cases/tensor_negate_trap.ail: not-subset to built-match
+- tests/cases/tensor_overflow_trap.ail: not-subset to built-match
+- tests/cases/tensor_shape_trap.ail: not-subset to built-match
+- tests/cases/tensor_softmax.ail: new, not-subset
+- tests/cases/tensor_softmax_errors.ail: new, check-rejected
+- tests/cases/tensor_softmax_trap.ail: new, not-subset
+- tests/cases/tensor_top2.ail: new, not-subset
+- tests/cases/tensor_top2_errors.ail: new, check-rejected
+- tests/cases/tensor_top2_trap.ail: new, not-subset
+- tests/cases/tensor_transpose_trap.ail: not-subset to built-match
+- tests/cases/trace_calls.ail: not-subset to built-match
+- tests/cases/trace_json.ail: not-subset to built-match
+- tests/cases/trap_contract_values.ail: not-subset to built-match
+- tests/cases/tuple_errors.ail: new, check-rejected
+- tests/cases/tuple_for_mut.ail: new, check-rejected
+- tests/cases/tuple_literal_one.ail: new, check-rejected
+- tests/cases/tuple_pattern_one.ail: new, check-rejected
+- tests/cases/tuple_traits.ail: new, check-rejected
+- tests/cases/tuple_type_one.ail: new, check-rejected
+- tests/cases/tuples_basic.ail: new, not-subset
+- tests/cases/tuples_json.ail: new, not-subset
+- tests/cases/tuples_props.ail: new, check-rejected
+- tests/cases/unsafe_block.ail: not-subset to built-match
 - examples/app_todo.ail: new, not-subset
 - examples/checksums.ail: not-subset to built-match
 - examples/digest_lines.ail: not-subset to built-match

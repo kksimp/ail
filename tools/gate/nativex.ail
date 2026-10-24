@@ -104,7 +104,7 @@ fn interp_line(l str) str?
     l
 
 fn Run.mir(mut self)
-    for case in list_ext("bootstrap/tests/native", ".ail")
+    for case in list_ext("tests/native", ".ail")
         checks += 1
         r := comp("mir {case}")
         stem := case.slice(0, case.len() - 4)
@@ -125,7 +125,7 @@ fn Run.mir(mut self)
     # ADR 0722: each `native.subset.1` problem is followed by its `help:` line. Every help
     # form of subset_help.ail is native now (its .mir golden), so this uses a refused program.
     checks += 1
-    case := "bootstrap/tests/native/tuples_subset.ail"
+    case := "tests/native/tuples_subset.ail"
     r := comp("mir {case}")
     mut lines := List[str]()
     mut prev := false
@@ -138,14 +138,14 @@ fn Run.mir(mut self)
             prev = false
         else
             prev = false
-    if "{lines.join("\n")}\n" != slurp("bootstrap/tests/native/tuples_subset.help")
+    if "{lines.join("\n")}\n" != slurp("tests/native/tuples_subset.help")
         red("subset help lines", lines.join("\n"))
 
 ## ADR 0814: a batch build gives the same bytes as one `ail build` per program.
 fn Run.batch(mut self)
     checks += 1
     mut all := List[str]()
-    for f in list_ext("bootstrap/tests/native/run", ".ail")
+    for f in list_ext("tests/native/run", ".ail")
         if not slurp(f).contains("derive")
             all.push(f)
     step := all.len() / 5
@@ -154,7 +154,7 @@ fn Run.batch(mut self)
     while i < all.len()
         sample.push(all[i])
         i += step
-    r := comp("build-many compiler/rt/native {host_target()} 0 0 {self.root}/bootstrap/src/std {sample.join(" ")}")
+    r := comp("build-many compiler/rt/native {host_target()} 0 0 {self.root}/std {sample.join(" ")}")
     if r.status != 0
         red("batch build", r.err)
         return
@@ -189,10 +189,10 @@ fn nx_match(
         if b.status != 0
             return "{case}: `ail build` failed:\n{b.err}"
     envs := "AIL_TEST_A={scratch_dir}/a.txt AIL_TEST_B={scratch_dir}/b.txt AIL_TEST_DIR={scratch_dir}/d1 AIL_TEST_MID={scratch_dir}/d1/d2 AIL_TEST_DEEP={scratch_dir}/d1/d2/d3 AIL_TEST_IN={scratch_dir}/d1/f.txt"
-    input := if fs.exists("bootstrap/tests/native/run/{stem}.in") then "bootstrap/tests/native/run/{stem}.in" else "/dev/null"
+    input := if fs.exists("tests/native/run/{stem}.in") then "tests/native/run/{stem}.in" else "/dev/null"
     got := sh("{envs} {runner} {exe} < {input}")
     ## The frozen golden (tools/gate/goldens.ail): stdout and exit status; no interpreter run.
-    gold := "bootstrap/tests/native/golden/{stem}"
+    gold := "tests/native/golden/{stem}"
     if fs.exists("{gold}.out")
         want_out := fs.read_text("{gold}.out") else ""
         status := if fs.exists("{gold}.status") then (fs.read_text("{gold}.status") else "1") else "0"
@@ -200,7 +200,7 @@ fn nx_match(
         if want_out == got.out and want_status == got.status
             return none
         return "{case}: differs from its golden\n--- golden (exit {want_status}):\n{want_out}\n--- native (exit {got.status}):\n{got.out}{got.err}"
-    "{case}: no golden in bootstrap/tests/native/golden: run `ail run tools/gate/goldens.ail freeze {stem}`"
+    "{case}: no golden in tests/native/golden: run `ail run tools/gate/goldens.ail freeze {stem}`"
 
 ## ADR 0814: the chunk's programs built in one `build-many` run, so the compiler loads once.
 ## Writes each executable to `exe_of(case)` and says whether it worked; on false the caller
@@ -210,7 +210,7 @@ fn nx_batch(chunk List[str], target str, root str, tmp str, tag str) bool
         if ail("", "check {f}").status != 0
             return false
     tgt := if target.is_empty() then host_target() else target
-    r := comp("build-many compiler/rt/native {tgt} 0 0 {root}/bootstrap/src/std {chunk.join(" ")}")
+    r := comp("build-many compiler/rt/native {tgt} 0 0 {root}/std {chunk.join(" ")}")
     if r.status != 0
         return false
     parts := r.out.split("== ")
@@ -283,7 +283,7 @@ fn chunk_main(args List[str])
         print(why)
 
 fn Run.executables(mut self, target str, runner str)
-    mut cases := list_ext("bootstrap/tests/native/run", ".ail")
+    mut cases := list_ext("tests/native/run", ".ail")
     if host_target() == "aarch64-macos" or target.contains("macos")
         mut kept := List[str]()
         for c in cases
@@ -293,7 +293,7 @@ fn Run.executables(mut self, target str, runner str)
     # golden/pending.txt: programs whose native output is known wrong; named, not checked.
     pending := [
         l.trim()
-        for l in (fs.read_text("bootstrap/tests/native/golden/pending.txt") else "").lines() if not l.trim().is_empty()
+        for l in (fs.read_text("tests/native/golden/pending.txt") else "").lines() if not l.trim().is_empty()
             and not l.starts_with("#")
     ]
     if not pending.is_empty()
@@ -357,7 +357,7 @@ fn Run.executables(mut self, target str, runner str)
 
 ## Each tests/native/stack/NAME.ail against NAME.out and the first line of NAME.err (err.trap.1, ADR 0535).
 fn Run.stack(mut self, target str, runner str)
-    for case in list_ext("bootstrap/tests/native/stack", ".ail")
+    for case in list_ext("tests/native/stack", ".ail")
         checks += 1
         stem := case.slice(0, case.len() - 4)
         exe := "{tmp}/stack-{stem_of(case)}"
@@ -380,20 +380,20 @@ fn Run.misc_builds(mut self)
     out := "{tmp}/refused"
     sh("rm -f {out}")
     # Any program with an expected-problems golden (`.err`) is still outside the subset.
-    names := fs.list_dir("bootstrap/tests/native") else []
+    names := fs.list_dir("tests/native") else []
     refused := [n for n in names if n.ends_with(".err")].sorted()
-    src := "bootstrap/tests/native/{(refused.first() else "subset_ext.err").replace(".err", ".ail")}"
+    src := "tests/native/{(refused.first() else "subset_ext.err").replace(".err", ".ail")}"
     r := ail("", "build {src} -o {out}")
     if r.status == 0 or fs.exists(out) or not r.err.contains("error[native.subset.1]")
         red("build refuses programs outside the subset", r.err)
     # native.task.1, ADR 0599: a task program builds for macOS with a bind table naming pthread_create.
     checks += 1
     mac := "{tmp}/mac-task"
-    t := ail("", "build bootstrap/tests/native/run/task_basic.ail --target aarch64-macos -o {mac}")
+    t := ail("", "build tests/native/run/task_basic.ail --target aarch64-macos -o {mac}")
     if t.status != 0 or sh("grep -aq '_pthread_create' {mac}").status != 0
         red("tasks build for macOS", t.err)
     mac2 := "{tmp}/mac-arith"
-    a := ail("", "build bootstrap/tests/native/run/arith.ail --target aarch64-macos -o {mac2}")
+    a := ail("", "build tests/native/run/arith.ail --target aarch64-macos -o {mac2}")
     if a.status != 0
         or sh("grep -aq '_pthread_create' {mac2}").status == 0
         or sh("grep -aq 'GetStdHandle' {mac2}").status == 0
@@ -422,10 +422,10 @@ fn Run.misc_builds(mut self)
 fn Run.without_derived(mut self)
     for name in ["json_modules"]
         checks += 1
-        rel := "bootstrap/tests/native/run/{name}.ail"
+        rel := "tests/native/run/{name}.ail"
         c := ail(
             "env -u AIL_DERIVED",
-            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/bootstrap/src/std",
+            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/std",
         )
         built := "{tmp}/via-build-{name}"
         b := ail("", "build {rel} -o {built}")
@@ -436,10 +436,10 @@ fn Run.without_derived(mut self)
             )
     for name in ["json_prelude", "json_native", "derive_default", "derive_json_args", "derive_user"]
         checks += 1
-        rel := "bootstrap/tests/native/run/{name}.ail"
+        rel := "tests/native/run/{name}.ail"
         c := ail(
             "env -u AIL_DERIVED",
-            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/bootstrap/src/std",
+            "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/std",
         )
         built := "{tmp}/via-build-{name}"
         b := ail("", "build {rel} -o {built}")
@@ -449,10 +449,10 @@ fn Run.without_derived(mut self)
                 "{c.err}{b.err}\nthe built-in generators differ from `ail build`'s",
             )
     checks += 1
-    rel := "bootstrap/tests/cases/derive_generator_fails.ail"
+    rel := "tests/cases/derive_generator_fails.ail"
     g := ail(
         "env -u AIL_DERIVED",
-        "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/bootstrap/src/std",
+        "run compiler build {rel} compiler/rt/native {host_target()} 0 0 {root}/std",
     )
     if g.status != 1
         or not g.err.contains("error[ct.derive.4]: `Size` can't be derived for `Light`: `Size` needs a struct; `Light` is an enum")
@@ -484,12 +484,12 @@ fn Run.compiler_cli(mut self)
     if g1.status != 0 or slurp(log).trim() != "build -o x --target x86_64-linux examples/hello.ail"
         red("ail script routes build", "{g1.err}{slurp(log)}")
     sh("rm -f {log}")
-    g2 := sh("AIL_NATIVE_COMPILER={stub} ./ail build --unsafe driver -o x bootstrap/tests/native/unsafe/hw_volatile.ail")
+    g2 := sh("AIL_NATIVE_COMPILER={stub} ./ail build --unsafe driver -o x tests/native/unsafe/hw_volatile.ail")
     if g2.status != 0
-        or slurp(log).trim() != "build --unsafe driver -o x bootstrap/tests/native/unsafe/hw_volatile.ail"
+        or slurp(log).trim() != "build --unsafe driver -o x tests/native/unsafe/hw_volatile.ail"
         red("ail script routes --unsafe driver", "{g2.err}{slurp(log)}")
     sh("rm -f {log}")
-    g3 := sh("AIL_NATIVE_COMPILER={stub} ./ail build -o x --target x86_64-linux bootstrap/tests/native/run/no_such_file.ail")
+    g3 := sh("AIL_NATIVE_COMPILER={stub} ./ail build -o x --target x86_64-linux tests/native/run/no_such_file.ail")
     if g3.status == 0 or fs.exists(log)
         red("ail script on a bad program", "reached the native compiler")
     # unsafe.hw.1-4, ADR 0820: `build FILE --unsafe driver` on the native compiler's command line.
@@ -497,7 +497,7 @@ fn Run.compiler_cli(mut self)
     exe := "{tmp}/hw"
     u := ail(
         "AIL_ROOT={root}",
-        "run compiler build bootstrap/tests/native/unsafe/hw_volatile.ail --unsafe driver -o {exe}",
+        "run compiler build tests/native/unsafe/hw_volatile.ail --unsafe driver -o {exe}",
     )
     if u.status != 0 or sh(exe).out.trim() != "7"
         red("native build takes --unsafe driver", u.err)
@@ -518,8 +518,8 @@ fn Run.limits(mut self, target str, runner str)
         ["loop", "--timeout", "300", "AIL_TIMEOUT_MS"],
     ]
         name := spec[0]
-        src := "bootstrap/tests/native/limits/{name}.ail"
-        want_out := slurp("bootstrap/tests/native/limits/{name}.out")
+        src := "tests/native/limits/{name}.ail"
+        want_out := slurp("tests/native/limits/{name}.out")
         for baked in [false, true]
             if name == "loop" and not baked
                 continue
@@ -537,10 +537,10 @@ fn Run.limits(mut self, target str, runner str)
                 red(label, "exit status {got.status}")
             elif got.out != want_out
                 red(label, "stdout differs")
-            elif trap_message(got.err) != slurp("bootstrap/tests/native/limits/{name}.trap").trim()
+            elif trap_message(got.err) != slurp("tests/native/limits/{name}.trap").trim()
                 red(
                     label,
-                    "trap line differs:\n{trap_message(got.err)}\n{slurp("bootstrap/tests/native/limits/{name}.trap").trim()}",
+                    "trap line differs:\n{trap_message(got.err)}\n{slurp("tests/native/limits/{name}.trap").trim()}",
                 )
     checks += 1
     bad := sh("AIL_TIMEOUT_MS=soon {runner} {tmp}/limit-spin-false")
@@ -582,7 +582,7 @@ fn Run.sources(mut self)
 ## Driver programs (tests/native/driver, `--unsafe driver`): `mem_*` only on Linux x86-64; all against NAME.out and NAME.err.
 fn Run.drivers(mut self)
     linux_x64 := sh("uname -sm").out.trim() == "Linux x86_64"
-    for case in list_ext("bootstrap/tests/native/driver", ".ail")
+    for case in list_ext("tests/native/driver", ".ail")
         stem := stem_of(case)
         mem_only := stem.starts_with("mem_")
         if mem_only and not linux_x64
@@ -595,14 +595,14 @@ fn Run.drivers(mut self)
             continue
         got := sh(exe)
         if mem_only
-            if got.out != slurp("bootstrap/tests/native/driver/{stem}.out") or got.status != 0
+            if got.out != slurp("tests/native/driver/{stem}.out") or got.status != 0
                 red(
                     case,
-                    "expected\n{slurp("bootstrap/tests/native/driver/{stem}.out")}got (exit {got.status})\n{got.out}",
+                    "expected\n{slurp("tests/native/driver/{stem}.out")}got (exit {got.status})\n{got.out}",
                 )
             continue
         # The frozen reference: NAME.out, and NAME.err (the report lines without frames) for a trap, which exits 1.
-        base := "bootstrap/tests/native/driver/{stem}"
+        base := "tests/native/driver/{stem}"
         want_err := slurp("{base}.err").lines()
         want_status := if want_err.is_empty() then 0 else 1
         mut got_err := List[str]()

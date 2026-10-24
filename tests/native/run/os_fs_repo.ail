@@ -1,0 +1,27 @@
+# std.fs.1, std.fs.5: reading files of any size and listing large directories
+# (the working directory is the repository root).
+fn main()
+    big := fs.read_text("docs/spec/17-std.md") else "unreadable"
+    print(big.len() > 1000)
+    print(big.chars().len() == big.len())
+    lines := big.len()
+    print(lines > 50000)
+    status := fs.read_text("/proc/self/status") else "no procfs"
+    print(status.len() > 0)
+    bad := fs.read_text("tests/native/run/os_bad_utf8.bin") else "not utf-8"
+    print(bad)
+    empty := fs.read_text("docs/decisions") else "a directory"
+    print(empty)
+    missing := fs.read_text("docs/no-such-file.md") else "missing"
+    print(missing)
+    names := fs.list_dir("docs/decisions") else return
+    print(names.len() > 100)
+    print(names[0])
+    print(names[names.len() - 1])
+    print(fs.exists("docs/decisions/README.md"))
+    print(fs.exists("docs/decisions/NOPE.md"))
+    print(fs.exists("docs/decisions"))
+    inside := fs.list_dir("docs/decisions/README.md") else
+        print("not a directory")
+        return
+    print(inside.len())

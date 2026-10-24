@@ -449,7 +449,7 @@ fn main()
     print(line)
 ```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
-(by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
+(by default `examples`, `tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the
 function natively (native.build.3), runs it as its own process, and compares
 the result with `ail test` in the interpreter. A passing native run exits 0.

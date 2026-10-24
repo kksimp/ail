@@ -1,1 +1,0 @@
-bootstrap/tests/native/generics_out.ail:19:8: error[native.subset.1]: `Tag.pair`: generic methods aren't in the native subset yet

@@ -1,4 +1,4 @@
-"""Loopback HTTP server for gate.ail's `net` suite: the routes bootstrap/tests/net/client.ail asks for.
+"""Loopback HTTP server for gate.ail's `net` suite: the routes tests/net/client.ail asks for.
 Usage: python3 -I tools/gate/net_server.py PORT"""
 import socket
 import sys

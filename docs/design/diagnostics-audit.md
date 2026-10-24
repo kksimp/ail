@@ -7,7 +7,7 @@
 > [0264](../decisions/0264-anchored-call-rewrite-fixes.md).
 
 AIL is read and written by AI agents, and an agent learns the language from the
-first diagnostic it sees. The corpus in `bootstrap/tests/mistakes/` (109 small
+first diagnostic it sees. The corpus in `tests/mistakes/` (109 small
 programs) holds one plausible mistake each, written as if AIL were Python,
 Rust, Go or TypeScript. Each has `NAME.rules` (the diagnostics' rule IDs) and,
 when `ail fix` leaves it clean, `NAME.fixed`. `cargo test --test mistakes`
@@ -242,7 +242,7 @@ diagnostics. Each diagnostic is measured as the text `ail check FILE` prints for
 it: the header, the source line and caret, `help`, `note`, `fix` lines
 (`mistral-spm-v1` column of tokbench). Each program is run from its own
 directory, so the path is the bare file name an agent would see. Run from the
-repository root, the path `bootstrap/tests/mistakes/` adds about 1,480 tokens
+repository root, the path `tests/mistakes/` adds about 1,480 tokens
 (83.4 mean against 73.9); that is a corpus artifact, not a diagnostic cost.
 | Measure | Before | After |
 |---|---|---|
