@@ -3,56 +3,17 @@
 #
 #   ./ail run examples/hello.ail     check and run a program
 #   ./ail check FILE                 check without running (add --json for tools)
-#   ./ail selftest                   the Mac gate (tools/gate/mac-gate.sh); AIL_SELFTEST=cargo runs the Rust tests
+#   ./ail selftest                   the Mac gate (tools/gate/mac-gate.sh)
 #
-# Rust (ADR 0087): if the system Rust doesn't exactly match the version pinned
-# in bootstrap/rust-toolchain.toml, that version is installed privately into
-# .toolchain/ on first run. Nothing outside this repository is changed.
+# There is no Rust toolchain here (ADR 0855, D4): the published seed (tools/release/fetch-seed.sh) builds the native CLI.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # std.app.10: a program finds the app host built under the toolchain.
 export AIL_ROOT="$root"
-manifest="$root/bootstrap/Cargo.toml"
 binary="$root/bootstrap/target/release/ail"
-pin="$(sed -n 's/^channel *= *"\(.*\)"$/\1/p' "$root/bootstrap/rust-toolchain.toml")"
-tooldir="${AIL_TOOLCHAIN_DIR:-$root/.toolchain}"
 
 die() { echo "ail: $*" >&2; exit 2; }
-
-host_triple() {
-    case "$(uname -s)-$(uname -m)" in
-        Darwin-arm64) echo aarch64-apple-darwin ;;
-        Linux-x86_64) echo x86_64-unknown-linux-gnu ;;
-        Linux-aarch64 | Linux-arm64) echo aarch64-unknown-linux-gnu ;;
-        Darwin-x86_64) die "Intel Macs aren't supported (ADR 0004)" ;;
-        *) die "unsupported host: $(uname -s) $(uname -m)" ;;
-    esac
-}
-
-sha256_of() {
-    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
-    else shasum -a 256 "$1" | cut -d' ' -f1; fi
-}
-
-install_private_rust() {
-    local triple tmp url
-    triple="$(host_triple)"
-    echo "ail: installing Rust $pin privately into ${tooldir#"$root"/}/ (first run only; takes a few minutes) ..." >&2
-    tmp="$(mktemp -d)"
-    url="https://static.rust-lang.org/rustup/dist/$triple/rustup-init"
-    curl --proto '=https' --tlsv1.2 -fsS -o "$tmp/rustup-init" "$url" || die "couldn't download $url"
-    curl --proto '=https' --tlsv1.2 -fsS -o "$tmp/rustup-init.sha256" "$url.sha256" || die "couldn't download $url.sha256"
-    [ "$(cut -d' ' -f1 "$tmp/rustup-init.sha256")" = "$(sha256_of "$tmp/rustup-init")" ] ||
-        die "rustup-init checksum mismatch; not installing"
-    chmod +x "$tmp/rustup-init"
-    if ! "$tmp/rustup-init" -y --no-modify-path --profile minimal --default-toolchain "$pin" >"$tmp/install.log" 2>&1; then
-        cat "$tmp/install.log" >&2
-        die "Rust installation failed"
-    fi
-    rm -rf "$tmp"
-    echo "ail: Rust $pin installed" >&2
-}
 
 # conc.sched.1: `--schedule=fixed|random[:SEED]` of `run` and `test` becomes AIL_SCHEDULE, which the build (switch points at
 # atomic operations) and the runtime (sched.ail) read; a random schedule without a seed picks one and prints it.
@@ -325,8 +286,8 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
 fi
 
 # `ail selftest` with no arguments is the native gate (ADR 0865, item 252): tools/gate/mac-gate.sh runs gate.ail's suites with the
-# native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers; `AIL_SELFTEST=cargo` keeps the cargo tests.
-if [ "${1:-}" = selftest ] && [ "$native_on" = 1 ] && [ "${AIL_SELFTEST:-}" != cargo ]; then
+# native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers.
+if [ "${1:-}" = selftest ] && [ "$native_on" = 1 ]; then
     if [ "$#" = 1 ]; then exec "$root/tools/gate/mac-gate.sh"; fi
     if [ "${2:-}" = --fuzz ]; then
         # The AIL fuzzers (tools/fuzz/suite.ail, modules.ail): programs and module inputs, no Rust harness.
@@ -362,107 +323,9 @@ if [ "${1:-}" != selftest ] && [ -n "${AIL_BINARY:-}" ] && [ -x "$AIL_BINARY" ];
     exec "$AIL_BINARY" "$@"
 fi
 
-# Fast path: when nothing the bootstrap builds from is newer than its binary, run it without
-# looking for a toolchain. Cargo's freshness check and the Rust version probe cost about 0.1 s per run.
-if [ "${1:-}" != selftest ] && [ -x "$binary" ] &&
-    [ -z "$(find "$root/bootstrap/src" "$manifest" "$root/bootstrap/Cargo.lock" "$root/bootstrap/build.rs" \
-        "$root/bootstrap/rust-toolchain.toml" -newer "$binary" 2>/dev/null | head -n 1)" ]; then
-    exec "$binary" "$@"
-fi
+if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail 0.1.0 (native)"; exit 0; fi
 
-# Pick cargo: the system's if it matches the pin, otherwise the private copy.
-if command -v cargo >/dev/null 2>&1 && [ "$(rustc --version 2>/dev/null | cut -d' ' -f2)" = "$pin" ]; then
-    cargo="cargo"
-else
-    export RUSTUP_HOME="$tooldir/rustup" CARGO_HOME="$tooldir/cargo" RUSTUP_TOOLCHAIN="$pin"
-    cargo="$CARGO_HOME/bin/cargo"
-    if [ ! -x "$cargo" ]; then
-        install_private_rust
-    elif ! "$CARGO_HOME/bin/rustup" toolchain list 2>/dev/null | grep -q "^$pin"; then
-        "$CARGO_HOME/bin/rustup" toolchain install --profile minimal "$pin" >&2 || die "couldn't install Rust $pin"
-    fi
-fi
-
-# Building Rust code needs the platform linker.
-if [ "$(uname -s)" = Darwin ] && ! xcrun --find cc >/dev/null 2>&1; then
-    die "Apple's command-line developer tools are required (one-time): run  xcode-select --install"
-fi
-
-# Runs the test binaries listed in $2 with $1 workers; logs and exit codes go to $3.
-run_binaries() {
-    AIL_SELFTEST_DIR="$3" AIL_SELFTEST_ROOT="$root/bootstrap" xargs -P "$1" -n 1 sh -c '
-        name="$(basename "$1")"
-        [ -e "$AIL_SELFTEST_DIR/FAILED" ] && exit 0
-        (cd "$AIL_SELFTEST_ROOT" && "$1") >"$AIL_SELFTEST_DIR/$name.log" 2>&1
-        rc=$?
-        echo "$rc" >"$AIL_SELFTEST_DIR/$name.rc"
-        [ "$rc" -eq 0 ] || touch "$AIL_SELFTEST_DIR/FAILED"
-        exit 0' sh <"$2"
-}
-
-# `./ail selftest` with no arguments (ADR 0814): build the test binaries with cargo, then run
-# them on four workers, the native test first since it is the longest. Each binary's output
-# goes to its own log, and the logs print in cargo's order at the end. After a failure, the
-# workers start no new binaries; those are reported as skipped. The workers only run the
-# binaries, so a test's own temporary paths must be unique per run (ADR 0814).
-selftest_parallel() {
-    local dir exe name rc status=0
-    dir="$(mktemp -d)" || die "can't make a temporary directory"
-    if ! (cd "$root/bootstrap" && "$cargo" test --release --manifest-path "$manifest" --no-run) >"$dir/build.log" 2>&1; then
-        cat "$dir/build.log" >&2
-        rm -rf "$dir"
-        return 1
-    fi
-    # cargo prints one `Executable NAME (PATH)` line per test binary; PATH is relative to bootstrap/.
-    sed -n 's/^ *Executable .*(\(.*\))$/\1/p' "$dir/build.log" > "$dir/all"
-    grep 'deps/native-' "$dir/all" > "$dir/first" || true
-    grep -v 'deps/native-' "$dir/all" > "$dir/rest" || true
-    cat "$dir/first" "$dir/rest" > "$dir/order"
-    # The native binary runs alone: it already uses four threads (ADR 0814). The rest
-    # share four workers.
-    run_binaries 1 "$dir/first" "$dir"
-    run_binaries 4 "$dir/rest" "$dir"
-    while read -r exe; do
-        name="$(basename "$exe")"
-        echo "     Running $exe"
-        if [ -e "$dir/$name.rc" ]; then
-            cat "$dir/$name.log"
-            read -r rc <"$dir/$name.rc"
-            if [ "$rc" -ne 0 ]; then
-                echo "test binary $name failed (exit $rc)" >&2
-                status=1
-            fi
-        else
-            echo "skipped after a failure: $name"
-            status=1
-        fi
-    done <"$dir/order"
-    rm -rf "$dir"
-    return "$status"
-}
-
-if [ "${1:-}" = selftest ]; then
-    shift
-    # `--fuzz N [SEED]` runs both fuzzers (fuzz.run.2); other words go to `cargo test`
-    # (fuzz.run.1: `./ail selftest --test fuzz`).
-    if [ "${1:-}" = --fuzz ]; then
-        export AIL_FUZZ_N="${2:?usage: ail selftest --fuzz N [SEED]}"
-        shift 2
-        case "${1:-}" in ''|*[!0-9]*) ;; *) export AIL_FUZZ_SEED="$1"; shift ;; esac
-        echo "fuzz: $AIL_FUZZ_N inputs per fuzzer from seed ${AIL_FUZZ_SEED:-1}" >&2
-        exec "$cargo" test --quiet --release --manifest-path "$manifest" --test fuzz --test fuzz_modules fuzz_ "$@" -- --nocapture
-    fi
-    if [ "$#" -eq 0 ] && [ "${AIL_SELFTEST:-gate}" != cargo ]; then
-        # The Mac gate (ADR 0842) is the selftest: native only. `AIL_SELFTEST=cargo` keeps the Rust test binaries.
-        exec "$root/tools/gate/mac-gate.sh"
-    fi
-    if [ "$#" -eq 0 ]; then
-        selftest_parallel
-        exit $?
-    fi
-    exec "$cargo" test --quiet --release --manifest-path "$manifest" "$@"
-fi
-
-[ -x "$binary" ] || echo "ail: building the bootstrap (first run only) ..." >&2
-"$cargo" build --quiet --release --manifest-path "$manifest" || die "building the bootstrap failed"
-exec "$binary" "$@"
+# Everything else had no native form: the Rust `ail` is gone from here (D4). A binary built by hand from bootstrap/ still runs
+# with AIL_RUST=1 until D5 deletes it.
+if [ "${AIL_RUST:-}" = 1 ] && [ -x "$binary" ]; then exec "$binary" "$@"; fi
+die "\`ail ${1:-}\` has no native form; run \`./ail\` with a command from docs/quick-reference.md (D4: no cargo bootstrap)"
