@@ -1,6 +1,7 @@
 ## `ail effects FILE|DIR [--json]` (eff.infer.6): the program loaded and checked as
 ## `ail check` does, then each function's effects. A program with errors prints them
 ## on stderr and exits 2.
+use ast
 use check
 
 pub fn effects_command(rest List[str], std str) int
