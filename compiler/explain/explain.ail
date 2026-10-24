@@ -134,7 +134,7 @@ fn all_rules(chs List[Chapter]) List[str]
 
 ## Does `ail fix` repair diagnostics of `rule`?
 fn fixable(rule str) bool
-    file := path.join(root(), "bootstrap/src/fixable.txt")
+    file := path.join(root(), "compiler/explain/fixable.txt")
     text := fs.read_text(file) else ""
     text.lines().contains(rule)
 

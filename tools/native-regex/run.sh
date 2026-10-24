@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Differential tests of native std.regex against `ail run` (lane 232).
 #
-#   tools/native-regex/run.sh                # the vector file, bootstrap/tests/regex/vectors.txt
-#   tools/native-regex/run.sh cases          # the std.regex cases of bootstrap/tests/cases
+#   tools/native-regex/run.sh                # the vector file, tests/regex/vectors.txt
+#   tools/native-regex/run.sh cases          # the std.regex cases of tests/cases
 #   tools/native-regex/run.sh fuzz [N [SEED]]  # N random vectors (default 2,000 from seed 1)
 #
 # Each mode builds the program with `ail build`, runs it and `ail run` on the
@@ -40,8 +40,8 @@ same() { # SRC EXE ARGS... : the same stdout and exit code from both
 case "$mode" in
 vectors)
     build tools/native-regex/vectors.ail "$out/vectors" || exit $?
-    same tools/native-regex/vectors.ail "$out/vectors" bootstrap/tests/regex/vectors.txt || exit 1
-    echo "vectors: $(grep -vc '^#\|^$' bootstrap/tests/regex/vectors.txt) lines agree"
+    same tools/native-regex/vectors.ail "$out/vectors" tests/regex/vectors.txt || exit 1
+    echo "vectors: $(grep -vc '^#\|^$' tests/regex/vectors.txt) lines agree"
     ;;
 fuzz)
     n="${2:-2000}"; seed="${3:-1}"
@@ -52,7 +52,7 @@ fuzz)
     ;;
 cases)
     status=0; n=0
-    for src in bootstrap/tests/cases/*regex*.ail; do
+    for src in tests/cases/*regex*.ail; do
         build "$src" "$out/case" > "$out/case.log" 2>&1 || { echo "skip $src ($(sed -n 2p "$out/case.log"))"; status=3; continue; }
         same "$src" "$out/case" || status=1
         n=$((n + 1))

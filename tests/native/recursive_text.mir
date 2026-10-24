@@ -1,0 +1,61 @@
+# MIR (unstable) of tests/native/recursive_text.ail
+
+fn main() unit
+  b0:
+    v0 int = const 1
+    v1 int = const 16
+    v2 int = const 5
+    v3 Tree = call rt.obj_new(v1, v2)
+    v4 int = const 0
+    store v3, v4 +0
+    store v3, v0 +8
+    v5 str = call text.Tree(v3)
+    call rt.out_str(v5)
+    call rt.out_nl()
+    return
+
+fn text.Tree(v0 Tree) str
+  b0(v0 Tree):
+    v2 int = load v0 +0
+    v3 int = const 0
+    v4 bool = eq v2, v3
+    branch v4, b2(), b3()
+  b1(v1 str):
+    return v1
+  b2:
+    v5 str = str #0
+    v6 str = str #1
+    v7 str = call rt.str_cat(v5, v6)
+    v8 int = load v0 +8
+    v9 str = call rt.fmt_int(v8)
+    v10 str = call rt.str_cat(v7, v9)
+    v11 str = str #2
+    v12 str = call rt.str_cat(v10, v11)
+    jump b1(v12)
+  b3:
+    v13 str = str #3
+    v14 str = str #4
+    v15 str = call rt.str_cat(v13, v14)
+    v16 List[Tree] = load v0 +8
+    v17 int = len v16
+    v21 str = str #5
+    jump b4(v3, v21)
+  b4(v18 int, v19 str):
+    v22 bool = lt v18, v17
+    branch v22, b5(), b6()
+  b5:
+    v23 str = call rt.text_sep(v18)
+    v24 Tree = get v16, v18
+    v25 str = call text.Tree(v24)
+    v26 str = call rt.str_cat(v19, v23)
+    v27 str = call rt.str_cat(v26, v25)
+    v28 int = const 1
+    v29 int = add v18, v28
+    jump b4(v29, v27)
+  b6:
+    v30 str = str #6
+    v31 str = call rt.str_cat(v19, v30)
+    v32 str = call rt.str_cat(v15, v31)
+    v33 str = str #2
+    v34 str = call rt.str_cat(v32, v33)
+    jump b1(v34)

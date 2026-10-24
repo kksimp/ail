@@ -1,4 +1,4 @@
-# Runs the primitive vectors of bootstrap/src/net/crypto/testdata/crosscheck.txt
+# Runs the primitive vectors of tests/data/net/crypto/crosscheck.txt
 # through the native runtime: see tools/native-tls/prim-check.sh. In this build
 # `hash.hmac_sha256(op, args)` is the test hook (a temporary compiler directory
 # maps it to `tlsprim_call`); the vectors files are the arguments: crosscheck.txt

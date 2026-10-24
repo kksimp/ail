@@ -27,7 +27,7 @@ since=$(date -u -d "-${AGE:-24} hours" +%FT%TZ 2>/dev/null || date -u -v-${AGE:-
 [ ${#prs[@]} -eq 0 ] && { echo "no PRs (pass numbers, or log gh in)"; exit 2; }
 git fetch -q origin $(case $base in origin/*) echo "${base#origin/}";; esac) $(for n in "${prs[@]}"; do echo "+refs/pull/$n/head:refs/remotes/origin/pr$n"; done) || exit 2
 git checkout -q -B "$branch" "$base"
-docs() { case $1 in docs/*|*.md|examples/*.out|bootstrap/tests/diag_text_known.txt) return 0;; esac; return 1; }
+docs() { case $1 in docs/*|*.md|examples/*.out|tests/diag_text_known.txt) return 0;; esac; return 1; }
 in=() files=$(mktemp)
 for n in "${prs[@]}"; do
   r=origin/pr$n
@@ -60,7 +60,7 @@ awk '{print $2}' "$files" | sort | uniq -d | while read -r f; do
   case $f in *.ail) [ -f "$f" ] && grep -oE '^(pub )?fn [A-Za-z0-9_.]+' "$f" | sort | uniq -d | sed "s|^|WATCH $f duplicate |";; esac
 done
 rm -f "$files"
-git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!bootstrap/tests" | head -3
+git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!tests" | head -3
 [ $checks = 1 ] && { "$S/batch-checks.sh" || exit 1; }
 [ $push = 1 ] && git push -q -f origin "$branch"
 echo "BATCH $(git rev-parse --short=8 HEAD) PRs ${in[*]}"

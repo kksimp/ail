@@ -302,5 +302,5 @@ fn main()
 ```ail skip=context rules=unsafe.block.3
 # A package's manifest opts in: `package app unsafe allow` (or `dep NAME ... unsafe allow`).
 # Without it, an `unsafe` block in the package is an error at the block. The package
-# cases under bootstrap/tests/cases/packages/ cover the manifest rules (mod.pkg.2).
+# cases under tests/cases/packages/ cover the manifest rules (mod.pkg.2).
 ```

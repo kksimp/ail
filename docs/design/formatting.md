@@ -126,7 +126,7 @@ the point (CRLF line endings, continuation lines); programs shouldn't use it.
 
 ## Scope
 
-`ail fmt --check examples bootstrap/tests/cases` must pass, and a test
+`ail fmt --check examples tests/cases` must pass, and a test
 enforces it. `tools/tokbench/corpus/` is left as written: its files are
 measurement data, some deliberately in other layouts, and formatting them
 would change recorded measurements.
@@ -141,7 +141,7 @@ statements over 100 characters being split. The other four examples were
 already canonical.
 
 Chains and attributes (ADRs 0323–0324): `ail fmt` changes no file under
-`examples/`, `tools/edit/` or `bootstrap/tests/cases/` (already canonical), so
+`examples/`, `tools/edit/` or `tests/cases/` (already canonical), so
 the measured change is 0 tokens (0.00%, budget 1%).
 
 ## Not yet done

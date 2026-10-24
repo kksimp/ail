@@ -8,7 +8,7 @@
 # Sets up its own toolchain through ./ail. A failure is minimised and saved
 # in tools/fuzz/failures/ (git-ignored) as gen-SEED.ail or mut-SEED.ail; the
 # seed alone reproduces it. Every crash becomes a case (fuzz.policy.1).
-# Also runs the module fuzzers (bootstrap/tests/fuzz/modules, ADR 0461); `ail selftest --fuzz N [SEED]` is the short form.
+# Also runs the module fuzzers (tests/fuzz/modules, ADR 0461); `ail selftest --fuzz N [SEED]` is the short form.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 export AIL_FUZZ_N="${1:-10000}"

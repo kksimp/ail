@@ -299,7 +299,7 @@ fn main()
 The checks below are single files, so each one runs or fails on its own. Rules
 that need a directory tree, a manifest or a git cache are cited by `skip=context`
 blocks that show the layout; their checks are the package cases in
-`bootstrap/tests/cases/packages/` (each folder's `expected.rules` names the rule
+`tests/cases/packages/` (each folder's `expected.rules` names the rule
 IDs it reports) and `bootstrap/tests/git_deps.rs`.
 
 ```ail error=mod.unit.1

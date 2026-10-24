@@ -1106,7 +1106,7 @@ fn ensure_native_cli() bool
     cli := native_cli()
     stale := proc.run("sh", [
         "-c",
-        "[ ! -x '{cli}' ] || [ -n \"$(find compiler bootstrap/src/std -name '*.ail' -newer '{cli}' 2>/dev/null | head -n 1)\" ]",
+        "[ ! -x '{cli}' ] || [ -n \"$(find compiler std -name '*.ail' -newer '{cli}' 2>/dev/null | head -n 1)\" ]",
     ]) else return false
     if stale.status != 0
         return true

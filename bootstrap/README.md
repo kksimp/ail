@@ -25,8 +25,8 @@ From the repository root (it sets itself up on first run, per ADR 0071 and ADR 0
 ./ail run examples/ui_hello.ail    # a window (std.ui); needs a display
 ./ail run FILE a b                 # words after FILE go to the program (env.args())
 .\ail.ps1 run examples\hello.ail   # Windows (not yet tested on Windows)
-./ail run bootstrap/tests/cases/packages/geometry   # a package: root module plus `use`d modules
-./ail run bootstrap/tests/cases/packages/deps_path  # an ail.pkg with path dependencies and capability grants
+./ail run tests/cases/packages/geometry   # a package: root module plus `use`d modules
+./ail run tests/cases/packages/deps_path  # an ail.pkg with path dependencies and capability grants
 ./ail check --json FILE            # diagnostics as JSON lines
 ./ail test [--json] [--cases N] [--seed S] FILE  # run tests, properties, doc examples (--trace: a failing test's events)
 ./ail effects [--json] FILE        # each function's inferred effects

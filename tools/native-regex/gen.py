@@ -3,7 +3,7 @@
 
     python3 tools/native-regex/gen.py N SEED > FILE
 
-Writes N lines in the format of bootstrap/tests/regex/vectors.txt that
+Writes N lines in the format of tests/regex/vectors.txt that
 vectors.ail understands: search lines `PATTERN<TAB>TEXT<TAB>-`, and the
 `ALL`, `REPLACE`, `REPLACE_FIRST`, `SPLIT` and `ERR` forms. The third column
 of a search line is ignored by the harness (the engines are compared with

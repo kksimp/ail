@@ -1,5 +1,5 @@
 ## `std.ui` functions that only the runtime can do (std.ui.12, ADR 0177): the
-## module is written in AIL (bootstrap/src/std/ui/ui.ail); the clipboard
+## module is written in AIL (std/ui/ui.ail); the clipboard
 ## functions have no body there, and their lowering is a call of the
 ## runtime's `ui_clip_set` and `ui_clip_get`.
 use ast
