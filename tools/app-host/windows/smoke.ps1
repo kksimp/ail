@@ -16,9 +16,14 @@ $p.StandardInput.Flush()
 $t = $p.StandardOutput.ReadLineAsync()
 if (-not $t.Wait(10000)) { Write-Output 'smoke: RED no line in 10 s'; $p.Kill(); exit 1 }
 Write-Output "first line: $($t.Result)"
-$u = $p.StandardOutput.ReadLineAsync()
-$null = $u.Wait(3000)
-if ($u.IsCompleted) { Write-Output "next line: $($u.Result)" }
+# Every event for 3 s: the canvas's resize events show its final size.
+$deadline = [DateTime]::Now.AddSeconds(3)
+while ([DateTime]::Now -lt $deadline) {
+    $u = $p.StandardOutput.ReadLineAsync()
+    if (-not $u.Wait(500)) { continue }
+    if ($null -eq $u.Result) { break }
+    Write-Output "next line: $($u.Result)"
+}
 $p.StandardInput.Close()
 if (-not $p.WaitForExit(10000)) { Write-Output 'smoke: RED host did not exit'; $p.Kill(); exit 1 }
 if ($t.Result -like '*"kind":"start"*' -and $t.Result -like '*"v":1*') { Write-Output 'smoke: GREEN'; exit 0 }
