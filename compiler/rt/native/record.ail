@@ -12,7 +12,8 @@
 ## The state block (global slot 57) is: mode (0 live, 1 record, 2 replay),
 ## the output descriptor, the output buffer, its length, the replay position,
 ## the bytes written, whether `{"truncated":true}` was written, the path of the
-## program text of the call in progress, then its line and column. Slot 58
+## program text of the call in progress, then its line and column, then the cursor
+## of a result being read. Slot 58
 ## holds the recording being replayed, as a string the collector can see.
 
 REC := 57
@@ -28,6 +29,9 @@ REC_CUT := 48
 REC_PATH := 56
 REC_LINE := 64
 REC_COL := 72
+REC_CUR := 80
+REC_LOCK := 88
+REC_NCHILD := 96
 
 ## The most the recording holds (replay.rec.4).
 REC_LIMIT := 67108864
@@ -131,16 +135,26 @@ fn rec_json(s int, t str)
             rec_byte(s, c)
     rec_byte(s, 34)
 
-## Start the line of a call, unless the recording is full (replay.rec.4).
-fn rec_begin(name str, res int) int
+## Start a line, unless the recording is full (replay.rec.4): the state block with its
+## lock held (`rec_end` frees it), or 0.
+fn rec_open() int
     s := rec_state()
     if s == 0 or load64(s + REC_MODE) != 1
         return 0
+    lock(s + REC_LOCK)
     if load64(s + REC_BYTES) + load64(s + REC_LEN) > REC_LIMIT
         if load64(s + REC_CUT) == 0
             store64(s + REC_CUT, 1)
             rec_text(s, "\{\"truncated\":true}\n")
             rec_flush(s)
+        unlock(s + REC_LOCK)
+        return 0
+    s
+
+## Start the line of a call.
+fn rec_begin(name str, res int) int
+    s := rec_open()
+    if s == 0
         return 0
     rec_text(s, "\{\"call\":")
     rec_json(s, name)
@@ -155,6 +169,7 @@ fn rec_begin(name str, res int) int
 fn rec_end(s int)
     rec_text(s, "}\n")
     rec_flush(s)
+    unlock(s + REC_LOCK)
 
 ## The failure in the error slot, as `{"fail":KIND,"path":PATH}` (an `fs.IoError`).
 fn rec_fail(s int)
@@ -247,6 +262,7 @@ fn rec_guard(name str)
         # Recorded as a call without a result: the call runs, a replay can't answer it.
         rec_text(s, ",\"uncaptured\":true}\n")
         rec_flush(s)
+        unlock(s + REC_LOCK)
     if rec_mode() == 2
         rec_stop(
             "replay.cap.2",
@@ -264,8 +280,15 @@ fn rec_next(name str) int
     d := tp + 16
     n := load64(tp)
     mut pos := load64(s + REC_POS)
-    while pos < n and (load8(d + pos) == 10 or load8(d + pos) == 13 or load8(d + pos) == 32)
-        pos += 1
+    while pos < n
+        while pos < n and (load8(d + pos) == 10 or load8(d + pos) == 13 or load8(d + pos) == 32)
+            pos += 1
+        # A child's stream line belongs to its `proc.start` (replay.nat.1).
+        if pos + 2 < n and load8(d + pos + 2) == 115
+            while pos < n and load8(d + pos) != 10
+                pos += 1
+        else
+            break
     if pos >= n or load8(d + pos + 2) != 99
         rec_stop(
             "replay.run.3",
@@ -330,6 +353,7 @@ fn rec_string(q int) str
         else
             sb_byte(c)
         i += 1
+    store64(rec_state() + REC_CUR, i + 1)
     sb_str()
 
 ## Stop a failing call's replay: the `fs.IoError` the recording holds.
@@ -549,4 +573,433 @@ fn rec_proc_which(name str) int
         return str_addr(rec_r_opt("proc.which"))
     r := proc_which(name)
     rec_w_opt("proc.which", str_at(r))
+    r
+
+
+# ---- results that are lists, structs and maps (replay.rec.3, replay.nat.1) ----
+
+## The cursor over a result: `rec_cur_to(p)` starts it at `p`, the readers advance it.
+fn rec_cur_to(p int)
+    store64(rec_state() + REC_CUR, p)
+
+fn rec_cur() int
+    load64(rec_state() + REC_CUR)
+
+fn rec_c_ws()
+    s := rec_state()
+    mut i := load64(s + REC_CUR)
+    while load8(i) == 32 or load8(i) == 10
+        i += 1
+    store64(s + REC_CUR, i)
+
+fn rec_c_int() int
+    rec_c_ws()
+    s := rec_state()
+    mut i := load64(s + REC_CUR)
+    mut neg := false
+    if load8(i) == 45
+        neg = true
+        i += 1
+    mut v := 0
+    while load8(i) >= 48 and load8(i) <= 57
+        v = v * 10 + load8(i) - 48
+        i += 1
+    store64(s + REC_CUR, i)
+    if neg then 0 - v else v
+
+fn rec_c_bool() bool
+    rec_c_ws()
+    s := rec_state()
+    i := load64(s + REC_CUR)
+    if load8(i) == 116
+        store64(s + REC_CUR, i + 4)
+        return true
+    store64(s + REC_CUR, i + 5)
+    false
+
+fn rec_c_str() str
+    rec_c_ws()
+    rec_string(rec_cur())
+
+## Up to the `[` after the next `"fields":` of a struct.
+fn rec_c_fields()
+    s := rec_state()
+    mut i := load64(s + REC_CUR)
+    while not (load8(i) == 34 and load8(i + 1) == 102 and load8(i + 2) == 105 and load8(i + 6) == 115 and load8(i + 8) == 58)
+        i += 1
+    store64(s + REC_CUR, i + 9)
+
+## Past a `[`; whether an element follows.
+fn rec_c_open() bool
+    rec_c_ws()
+    s := rec_state()
+    i := load64(s + REC_CUR) + 1
+    store64(s + REC_CUR, i)
+    rec_c_ws()
+    if load8(rec_cur()) == 93
+        store64(s + REC_CUR, rec_cur() + 1)
+        return false
+    true
+
+## After an element: past the `,` before the next one (true), or the `]` (false).
+fn rec_c_next() bool
+    rec_c_ws()
+    s := rec_state()
+    c := load8(load64(s + REC_CUR))
+    store64(s + REC_CUR, load64(s + REC_CUR) + 1)
+    c == 44
+
+## Past a `]` or `}`.
+fn rec_c_close()
+    rec_c_ws()
+    s := rec_state()
+    store64(s + REC_CUR, load64(s + REC_CUR) + 1)
+
+## Stop a failing process call's replay: the `proc.ProcError` the recording holds.
+fn rec_raise_proc(p int, at str)
+    kind := rec_string(p + 8)
+    # `,"path":` follows the kind string.
+    mut k := p + 9
+    while load8(k) != 34
+        k += 1
+    cmd := rec_string(k + 9)
+    proc_fail(cmd, kind, at)
+
+## The recorded list of strings at `p`.
+fn rec_c_strs() List[int]
+    mut xs := List[int]()
+    if rec_c_open()
+        xs.push(str_addr(rec_c_str()))
+        while rec_c_next()
+            xs.push(str_addr(rec_c_str()))
+    xs
+
+fn rec_w_strs_body(s int, xs List[int])
+    q := list_addr(xs)
+    data := load64(q + 16)
+    rec_byte(s, 91)
+    for i in 0..load64(q)
+        if i > 0
+            rec_byte(s, 44)
+        rec_json(s, str_at(load64(data + 8 * i)))
+    rec_byte(s, 93)
+
+fn rec_w_strs(name str, xs List[int], fails int)
+    s := rec_begin(name, 1)
+    if s != 0
+        if fails != 0 and failed()
+            rec_fail(s)
+        else
+            rec_w_strs_body(s, xs)
+        rec_end(s)
+
+fn rec_r_strs(name str, at str) List[int]
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise(p, at)
+        return List[int]()
+    rec_cur_to(p)
+    rec_c_strs()
+
+fn rec_fs_list_dir(path str, at str) List[int]
+    if rec_mode() == 2
+        return rec_r_strs("fs.list_dir", at)
+    r := fs_list_dir(path, at)
+    rec_w_strs("fs.list_dir", r, 1)
+    r
+
+fn rec_fs_walk(path str, at str) List[int]
+    if rec_mode() == 2
+        return rec_r_strs("fs.walk", at)
+    r := fs_walk(path, at)
+    rec_w_strs("fs.walk", r, 1)
+    r
+
+fn rec_fs_glob(pattern str) List[int]
+    if rec_mode() == 2
+        return rec_r_strs("fs.glob", "")
+    r := fs_glob(pattern)
+    rec_w_strs("fs.glob", r, 0)
+    r
+
+fn rec_fs_metadata(path str, at str) int
+    if rec_mode() == 2
+        p := rec_next("fs.metadata")
+        if rec_failed(p)
+            rec_raise(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        m := obj_new(24, 4)
+        store64(m, rec_c_int())
+        rec_c_next()
+        store64(m + 8, rec_c_int())
+        rec_c_next()
+        store64(m + 16, if rec_c_bool() then 1 else 0)
+        return m
+    m := fs_metadata(path, at)
+    s := rec_begin("fs.metadata", 1)
+    if s != 0
+        if failed()
+            rec_fail(s)
+        else
+            rec_text(s, "\{\"struct\":\"fs.Metadata\",\"fields\":[")
+            rec_int(s, load64(m))
+            rec_byte(s, 44)
+            rec_int(s, load64(m + 8))
+            rec_text(s, if load64(m + 16) != 0 then ",true]}" else ",false]}")
+        rec_end(s)
+    m
+
+fn rec_env_vars() int
+    if rec_mode() == 2
+        p := rec_next("env.vars")
+        rec_cur_to(p)
+        m := map_new(1, 0, 0)
+        rec_c_ws()
+        # `{"map":[[k,v],...]}`
+        rec_cur_to(rec_cur() + 7)
+        if rec_c_open()
+            rec_c_open()
+            k := rec_c_str()
+            rec_c_next()
+            v := rec_c_str()
+            rec_c_close()
+            map_set(m, str_addr(k), str_addr(v))
+            while rec_c_next()
+                rec_c_open()
+                k2 := rec_c_str()
+                rec_c_next()
+                v2 := rec_c_str()
+                rec_c_close()
+                map_set(m, str_addr(k2), str_addr(v2))
+        return m
+    m := env_vars()
+    s := rec_begin("env.vars", 1)
+    if s != 0
+        rec_text(s, "\{\"map\":[")
+        keys := map_keys(m)
+        q := list_addr(keys)
+        data := load64(q + 16)
+        for i in 0..load64(q)
+            k := load64(data + 8 * i)
+            if i > 0
+                rec_byte(s, 44)
+            rec_byte(s, 91)
+            rec_json(s, str_at(k))
+            rec_byte(s, 44)
+            rec_json(s, str_at(load64(map_find(m, k) + 16)))
+            rec_byte(s, 93)
+        rec_text(s, "]}")
+        rec_end(s)
+    m
+
+## The optional `int` of `tz.offset`: boxed, 0 for `none`.
+fn rec_tz_offset(zone str, secs int) int
+    if rec_mode() == 2
+        p := rec_next("tz.offset")
+        if load8(p) == 123
+            return 0
+        rec_cur_to(p)
+        return box(rec_c_int())
+    r := tz_offset(zone, secs)
+    s := rec_begin("tz.offset", 1)
+    if s != 0
+        if r == 0
+            rec_text(s, "\{\"none\":true}")
+        else
+            rec_int(s, unbox(r))
+        rec_end(s)
+    r
+
+## `proc.run` and `proc.run_bytes`: a `[status, out, err]` struct.
+fn rec_proc_result(name str, sname str, r int, raw bool)
+    s := rec_begin(name, 1)
+    if s != 0
+        if failed()
+            rec_fail(s)
+        else
+            rec_text(s, "\{\"struct\":")
+            rec_json(s, sname)
+            rec_text(s, ",\"fields\":[")
+            rec_int(s, load64(r))
+            for k in 1..3
+                rec_byte(s, 44)
+                v := str_at(load64(r + 8 * k))
+                if raw
+                    p := str_addr(v)
+                    rec_text(s, "\{\"bytes\":\"")
+                    for i in 0..load64(p)
+                        c := load8(p + 16 + i)
+                        rec_hex(s, c / 16)
+                        rec_hex(s, c % 16)
+                    rec_text(s, "\"}")
+                else
+                    rec_json(s, v)
+            rec_text(s, "]}")
+        rec_end(s)
+
+fn rec_c_bytes() str
+    rec_c_ws()
+    s := rec_state()
+    mut i := load64(s + REC_CUR) + 10
+    sb_reset()
+    while load8(i) != 34
+        h := load8(i)
+        l := load8(i + 1)
+        sb_byte((if h <= 57 then h - 48 else h - 87) * 16 + (if l <= 57 then l - 48 else l - 87))
+        i += 2
+    store64(s + REC_CUR, i + 2)
+    sb_str()
+
+fn rec_r_proc_result(name str, at str, raw bool) int
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise_proc(p, at)
+        return 0
+    rec_cur_to(p)
+    rec_c_fields()
+    rec_c_open()
+    r := obj_new(24, PROC_STRUCT)
+    store64(r, rec_c_int())
+    rec_c_next()
+    store64(r + 8, str_addr(if raw then rec_c_bytes() else rec_c_str()))
+    rec_c_next()
+    store64(r + 16, str_addr(if raw then rec_c_bytes() else rec_c_str()))
+    r
+
+fn rec_proc_run(cmd str, args List[int], input int, timeout int, at str) int
+    if rec_mode() == 2
+        return rec_r_proc_result("proc.run", at, false)
+    r := proc_run(cmd, args, input, timeout, at)
+    rec_proc_result("proc.run", "proc.Output", r, false)
+    r
+
+fn rec_proc_run_bytes(cmd str, args List[int], input int, timeout int, at str) int
+    if rec_mode() == 2
+        return rec_r_proc_result("proc.run_bytes", at, true)
+    r := proc_run_bytes(cmd, args, input, timeout, at)
+    rec_proc_result("proc.run_bytes", "proc.RawOutput", r, true)
+    r
+
+
+# ---- child processes (replay.nat.1) ----
+
+## A line (`k` 0 output, 1 error) or the end of a stream of the child `seq`, noted as the
+## recording's own line, apart from the calls.
+fn rec_stream_line(seq int, k int, line str)
+    s := rec_open()
+    if s != 0
+        rec_text(s, "\{\"stream\":")
+        rec_int(s, seq)
+        rec_text(s, if k == 0 then ",\"out\":" else ",\"err\":")
+        rec_json(s, line)
+        rec_end(s)
+
+fn rec_stream_end(seq int, k int)
+    s := rec_open()
+    if s != 0
+        rec_text(s, "\{\"stream\":")
+        rec_int(s, seq)
+        rec_text(s, if k == 0 then ",\"end\":\"out\"" else ",\"end\":\"err\"")
+        rec_end(s)
+
+## The `Child` of a replayed `proc.start`: channels already holding what the recorded
+## child wrote, closed; a stand-in process that takes whatever is sent to its input.
+fn rec_child(pid int, seq int) int
+    ps := alloc(PS_SIZE, PROC_STRUCT)
+    store64(ps + PS_PID, pid)
+    store64(ps + PS_IN, -1)
+    store64(ps + PS_OUT, -1)
+    store64(ps + PS_ERR, -1)
+    store64(ps + PS_DONE, 1)
+    c := alloc(32, PROC_STRUCT)
+    store64(c, pid)
+    for k in 0..3
+        ch := chan_new()
+        store64(ch + CH_SOURCE, ps)
+        store64(c + 8 + 8 * k, ch)
+        store64(ps + PS_INCH + 8 * k, ch)
+    tp := load64(global(REC_TEXT))
+    d := tp + 16
+    n := load64(tp)
+    mut i := 0
+    while i < n
+        if load8(d + i + 2) == 115 and load8(d + i + 3) == 116
+            mut j := i + 10
+            mut num := 0
+            while load8(d + j) >= 48 and load8(d + j) <= 57
+                num = num * 10 + load8(d + j) - 48
+                j += 1
+            if num == seq
+                q := d + j + 1
+                if load8(q + 2) == 117
+                    chan_push(load64(c + 16), rec_string(q + 6))
+                elif load8(q + 2) == 114
+                    chan_push(load64(c + 24), rec_string(q + 6))
+        while i < n and load8(d + i) != 10
+            i += 1
+        i += 1
+    for k in 1..3
+        chan_mark_closed(load64(c + 8 + 8 * k))
+    c
+
+fn rec_proc_start(cmd str, args List[int], timeout int, at str) int
+    s := rec_state()
+    if rec_mode() == 2
+        p := rec_next("proc.start")
+        if rec_failed(p)
+            rec_raise_proc(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        pid := rec_c_int()
+        seq := load64(s + REC_NCHILD) + 1
+        store64(s + REC_NCHILD, seq)
+        return rec_child(pid, seq)
+    c := proc_start(cmd, args, timeout, at)
+    if rec_mode() == 1 and c != 0
+        seq := load64(s + REC_NCHILD) + 1
+        store64(s + REC_NCHILD, seq)
+        ps := load64(load64(c + 8) + CH_SOURCE)
+        store64(ps + PS_SEQ, seq)
+    r := rec_begin("proc.start", 1)
+    if r != 0
+        if c == 0
+            rec_fail(r)
+        else
+            rec_text(r, "\{\"struct\":\"proc.Child\",\"fields\":[")
+            rec_int(r, load64(c))
+            rec_text(r, "]}")
+        rec_end(r)
+    c
+
+fn rec_proc_int(name str, r int, fails int)
+    s := rec_begin(name, 1)
+    if s != 0
+        if fails != 0 and failed()
+            rec_fail(s)
+        else
+            rec_int(s, r)
+        rec_end(s)
+
+fn rec_proc_wait_child(c int, at str) int
+    if rec_mode() == 2
+        p := rec_next("proc.wait")
+        if rec_failed(p)
+            rec_raise_proc(p, at)
+            return 0
+        rec_cur_to(p)
+        return rec_c_int()
+    r := proc_wait_child(c, at)
+    rec_proc_int("proc.wait", r, 1)
+    r
+
+fn rec_proc_kill_child(c int) int
+    if rec_mode() == 2
+        return rec_r_int("proc.kill")
+    r := proc_kill_child(c)
+    rec_proc_int("proc.kill", r, 0)
     r

@@ -1810,7 +1810,7 @@ fn Gate.replay(mut self, tmp str)
         "prog.ail:2:14: trap[replay.run.3]",
         "the recording's next effect is `env.get`",
     ])
-    # replay.cap.2: a call that returns a handle is marked, and the replay stops there.
+    # replay.nat.1: a child process is recorded with its streams, and a replay answers it.
     d3 := "{base}/handles"
     exe := "{root}/ail"
     fs.write_text(
@@ -1818,11 +1818,11 @@ fn Gate.replay(mut self, tmp str)
         "fn main() !\n    print(\"a\")\n    p := proc.start(\"{exe}\", [\"version\"])?\n",
     ) else return
     rpl(d3, "", ["run", "--record", "s.json", "start.ail"])
-    if not slurp("{d3}/s.json").contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"uncaptured\":true")
+    if not slurp("{d3}/s.json").contains("\"call\":\"proc.start\",\"line\":3,\"col\":15,\"result\":")
         red("replay handle", slurp("{d3}/s.json"))
     h := rpl(d3, "", ["run", "--replay", "s.json"])
-    if h.out != "a\n" or not h.err.contains("trap[replay.cap.2]")
-        red("replay handle stop", "{h.out}{h.err}")
+    if h.out != "a\n" or h.status != 0
+        red("replay handle", "{h.out}{h.err}")
     fs.write_text("{d3}/sleep.ail", "fn main()\n    time.sleep_ms(-1)\n") else return
     sf := rpl(d3, "", ["run", "--record", "t.json", "sleep.ail"])
     sa := rpl(d3, "", ["run", "--replay", "t.json"])

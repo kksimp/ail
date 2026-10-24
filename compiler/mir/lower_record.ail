@@ -30,6 +30,17 @@ RECORDED := [
     "time_sleep_ms",
     "tz_system",
     "proc_which",
+    "fs_list_dir",
+    "fs_walk",
+    "fs_glob",
+    "fs_metadata",
+    "env_vars",
+    "tz_offset",
+    "proc_run",
+    "proc_run_bytes",
+    "proc_start",
+    "proc_wait_child",
+    "proc_kill_child",
 ]
 
 ## The modules whose calls a recording covers (replay.cap.1).
