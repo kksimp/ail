@@ -557,7 +557,10 @@ fn run_case(at str, exp str) str?
     if fs.exists("{exp}stderr")
         # trace.run.1: `ail run` with the options in NAME.args, one line.
         flags := slurp("{exp}args").words()
-        r := case_run(native, cat(cat(cat(["run"], sched(at)), flags), [at])) else return "could not start ail"
+        r := case_run(native, cat(
+            cat(cat(["run"], sched(at)), flags),
+            [at],
+        )) else return "could not start ail"
         want := slurp("{exp}stderr").replace("$FILE", at)
         if r.status == 2 or r.err != want
             return "standard error differs\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -573,7 +576,10 @@ fn run_case(at str, exp str) str?
         return none
     if fs.exists("{exp}err")
         flags := slurp("{exp}args").words()
-        r := case_run(native, cat(cat(cat(["run"], sched(at)), flags), [at])) else return "could not start ail"
+        r := case_run(native, cat(
+            cat(cat(["run"], sched(at)), flags),
+            [at],
+        )) else return "could not start ail"
         want := slurp("{exp}err").replace("$FILE", at)
         if r.status != 1 or r.err != want
             return "expected exit 1 and this report\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -1267,11 +1273,7 @@ fn ail_env(var str, args List[str]) proc.Output ! proc.ProcError
 
 fn Gate.misc(mut self, tmp str)
     # json.derive.1-3, ADR 0343
-    a := ail_run([
-        "api",
-        "--expanded",
-        "tests/cases/derive_json_enum_payloads.ail",
-    ]) else return
+    a := ail_run(["api", "--expanded", "tests/cases/derive_json_enum_payloads.ail"]) else return
     if a.status != 0
         red("api --expanded", a.err)
     want("api --expanded", a.out, [
@@ -1298,11 +1300,7 @@ fn Gate.misc(mut self, tmp str)
     s12 := ail_run(["run", "--seed", "12", unseeded]) else return
     if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
         red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
-    for program in [
-        unseeded,
-        "tests/deterministic/clock.ail",
-        "tests/deterministic/proc.ail",
-    ]
+    for program in [unseeded, "tests/deterministic/clock.ail", "tests/deterministic/proc.ail"]
         d := ail_run(["run", "--deterministic", program]) else return
         if d.status != 2 or not d.err.contains("eff.cap.1")
             red("--deterministic {program}", "exit {d.status}\n{d.err}")
@@ -1357,11 +1355,7 @@ fn Gate.misc(mut self, tmp str)
         red("schedule sometimes", "exit {bad.status}, want 2")
     # conc.cancel.3-4, conc.atomic.7: cancel trees and orderings pass every seed.
     for seed in 1..25
-        x := ail_run([
-            "test",
-            "--schedule=random:{seed}",
-            "tests/schedule/cancel.ail",
-        ]) else return
+        x := ail_run(["test", "--schedule=random:{seed}", "tests/schedule/cancel.ail"]) else return
         if x.status != 0 or not x.out.ends_with("4 passed, 0 failed\n")
             red("schedule cancel seed {seed}", x.out)
 
@@ -1520,7 +1514,9 @@ fn Gate.limits(mut self, tmp str)
         red("--max-steps", "exit {a.status}\n{a.err}")
     # trace.watch.5: native `--watch`, live and over a recording (ADR 0868 item 4).
     w := native_run(["run", "--watch", "n", "{case}/watch_when.ail"]) else return
-    if w.status != 0 or not w.err.contains("watch: n = 0 at 5:5\n") or not w.err.contains("(watch 4)")
+    if w.status != 0
+        or not w.err.contains("watch: n = 0 at 5:5\n")
+        or not w.err.contains("(watch 4)")
         red("--watch", "exit {w.status}\n{w.err}")
     rec := "{tmp}/watch.rec"
     _r := native_run(["run", "--record", rec, "{case}/watch_when.ail"]) else return
@@ -2776,11 +2772,7 @@ fn Gate.sched(mut self)
     s12 := native_run(["run", "--seed", "12", unseeded]) else return
     if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
         red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
-    for program in [
-        unseeded,
-        "tests/deterministic/clock.ail",
-        "tests/deterministic/proc.ail",
-    ]
+    for program in [unseeded, "tests/deterministic/clock.ail", "tests/deterministic/proc.ail"]
         e := native_run(["run", "--deterministic", program]) else return
         if e.status != 2 or not e.err.contains("eff.cap.1")
             red("--deterministic {program}", "exit {e.status}\n{e.err}")
