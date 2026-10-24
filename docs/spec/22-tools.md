@@ -337,7 +337,7 @@ the rest are counted against the budget in their one-line form, and then
 records are expanded in rank order while the budget lasts; the expanded
 records come first. The note says which records are in one line and gives
 `--from K`, which shows record `K + 1` expanded. A JSON line is its own
-one-line form ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 6).
+one-line form ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 6, [ADR 0880](../decisions/0880-budgeted-diagnostic-forms.md)).
 
 ```ail skip=bootstrap tool=check,--budget,200,FILE expect=full status=2 rules=budget.out.7
 fn main()
