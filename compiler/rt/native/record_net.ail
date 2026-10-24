@@ -1,0 +1,445 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Record and replay of `std.net` (ADR 0873, replay.nat.1): the `rec_FN`
+## wrappers of net.ail, net_http.ail, net_open.ail and net_serve.ail, in the
+## way record.ail wraps the OS calls. A connection, listener, server or body
+## is recorded as its handle number; a replay makes the same struct with that
+## number and never uses it, because every call on it is answered from the
+## recording too.
+
+## A `net.NetError`: `{"fail":KIND,"path":URL,"message":TEXT}`.
+fn rec_fail_net(s int)
+    e := load64(err_addr(1))
+    rec_text(s, "\{\"fail\":")
+    rec_json(s, str_at(load64(e + 8)))
+    rec_text(s, ",\"path\":")
+    rec_json(s, str_at(load64(e)))
+    rec_text(s, ",\"message\":")
+    rec_json(s, str_at(load64(e + 16)))
+    rec_text(s, "}")
+
+fn rec_raise_net(p int, at str)
+    kind := rec_string(p + 8)
+    url := rec_string(rec_cur() + 8)
+    msg := rec_string(rec_cur() + 11)
+    net_fail(url, kind, msg, at)
+
+fn rec_net_unit(name str, fails int)
+    s := rec_begin(name, 1)
+    if s != 0
+        if fails != 0 and failed()
+            rec_fail_net(s)
+        else
+            rec_text(s, "null")
+        rec_end(s)
+
+fn rec_net_r_unit(name str, at str)
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise_net(p, at)
+
+## A call whose result is a one-field handle struct: `{"struct":TYPE,"fields":[N]}`.
+fn rec_net_w_handle(name str, ty str, r int)
+    s := rec_begin(name, 1)
+    if s != 0
+        if r == 0
+            rec_fail_net(s)
+        else
+            rec_text(s, "\{\"struct\":")
+            rec_json(s, ty)
+            rec_text(s, ",\"fields\":[")
+            rec_int(s, load64(r))
+            rec_text(s, "]}")
+        rec_end(s)
+
+fn rec_net_r_handle(name str, at str) int
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise_net(p, at)
+        return 0
+    rec_cur_to(p)
+    rec_c_fields()
+    rec_c_open()
+    net_wrap(rec_c_int())
+
+fn rec_net_connect(host str, port int, at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.connect", at)
+    r := net_connect(host, port, at)
+    rec_net_w_handle("net.connect", "net.Conn", r)
+    r
+
+fn rec_net_connect_tls(host str, port int, at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.connect_tls", at)
+    r := net_connect_tls(host, port, at)
+    rec_net_w_handle("net.connect_tls", "net.Conn", r)
+    r
+
+## `net.listen` and `net.serve` are one runtime function with two result types.
+fn rec_net_listen(addr str, at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.listen", at)
+    r := net_listen(addr, at)
+    rec_net_w_handle("net.listen", "net.Listener", r)
+    r
+
+fn rec_net_accept(h int, at str) int
+    if rec_mode() == 2
+        return rec_net_r_handle("net.accept", at)
+    r := net_accept(h, at)
+    rec_net_w_handle("net.accept", "net.Conn", r)
+    r
+
+fn rec_net_read(h int, max int, at str) str
+    if rec_mode() == 2
+        p := rec_next("net.read")
+        if rec_failed(p)
+            rec_raise_net(p, at)
+            return str_at(0)
+        return rec_string(p)
+    r := net_read(h, max, at)
+    s := rec_begin("net.read", 1)
+    if s != 0
+        if failed()
+            rec_fail_net(s)
+        else
+            rec_json(s, r)
+        rec_end(s)
+    r
+
+fn rec_net_read_bytes(h int, max int, at str) str
+    if rec_mode() == 2
+        p := rec_next("net.read_bytes")
+        if rec_failed(p)
+            rec_raise_net(p, at)
+            return str_at(0)
+        rec_cur_to(p)
+        return rec_c_bytes()
+    r := net_read_bytes(h, max, at)
+    s := rec_begin("net.read_bytes", 1)
+    if s != 0
+        if failed()
+            rec_fail_net(s)
+        else
+            rec_w_hex(s, r)
+        rec_end(s)
+    r
+
+## `r` as `{"bytes":HEX}`.
+fn rec_w_hex(s int, r str)
+    p := str_addr(r)
+    rec_text(s, "\{\"bytes\":\"")
+    for i in 0..load64(p)
+        c := load8(p + 16 + i)
+        rec_hex(s, c / 16)
+        rec_hex(s, c % 16)
+    rec_text(s, "\"}")
+
+fn rec_net_read_line(h int, at str) str
+    if rec_mode() == 2
+        p := rec_next("net.read_line")
+        if rec_failed(p)
+            rec_raise_net(p, at)
+            return str_at(0)
+        if load8(p) == 123
+            return str_at(0)
+        return rec_string(p)
+    r := net_read_line(h, at)
+    s := rec_begin("net.read_line", 1)
+    if s != 0
+        if failed()
+            rec_fail_net(s)
+        elif str_addr(r) == 0
+            rec_text(s, "\{\"none\":true}")
+        else
+            rec_json(s, r)
+        rec_end(s)
+    r
+
+fn rec_net_write(h int, text str, at str)
+    if rec_mode() == 2
+        rec_net_r_unit("net.write", at)
+        return
+    net_write(h, text, at)
+    rec_net_unit("net.write", 1)
+
+fn rec_net_set_timeout(h int, ms int, at str)
+    if rec_mode() == 2
+        rec_net_r_unit("net.set_timeout", at)
+        return
+    net_set_timeout(h, ms, at)
+    rec_net_unit("net.set_timeout", 1)
+
+fn rec_net_peer(h int) str
+    if rec_mode() == 2
+        return rec_r_str("net.peer", "")
+    r := net_peer(h)
+    rec_w_str("net.peer", r, 0)
+    r
+
+fn rec_net_addr(h int) str
+    if rec_mode() == 2
+        return rec_r_str("net.addr", "")
+    r := net_addr(h)
+    rec_w_str("net.addr", r, 0)
+    r
+
+fn rec_net_close(h int)
+    if rec_mode() == 2
+        rec_r_unit("net.close", "")
+        return
+    net_close(h)
+    rec_w_unit("net.close", 0)
+
+fn rec_serve_shutdown(h int)
+    if rec_mode() == 2
+        rec_r_unit("net.shutdown", "")
+        return
+    serve_shutdown(h)
+    rec_w_unit("net.shutdown", 0)
+
+# ---- HTTP responses ----
+
+## A response object as `{"struct":TYPE,"fields":[status,headers,body,all_headers]}`; with
+## `raw` the body is the undecoded bytes.
+fn rec_net_w_response(name str, ty str, r int, raw bool)
+    s := rec_begin(name, 1)
+    if s != 0
+        if r == 0
+            rec_fail_net(s)
+        else
+            rec_text(s, "\{\"struct\":")
+            rec_json(s, ty)
+            rec_text(s, ",\"fields\":[")
+            rec_int(s, load64(r))
+            rec_byte(s, 44)
+            rec_w_map_ss(s, load64(r + 8))
+            rec_byte(s, 44)
+            if raw
+                rec_w_hex(s, str_at(load64(r + 32)))
+            else
+                rec_json(s, str_at(load64(r + 16)))
+            rec_byte(s, 44)
+            rec_w_map_sl(s, load64(r + 24))
+            rec_text(s, "]}")
+        rec_end(s)
+
+fn rec_net_r_response(name str, raw bool, at str) int
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise_net(p, at)
+        return 0
+    rec_cur_to(p)
+    rec_c_fields()
+    rec_c_open()
+    r := obj_new(40, 4)
+    store64(r, rec_c_int())
+    rec_c_next()
+    store64(r + 8, rec_c_map_ss())
+    rec_c_next()
+    body := if raw then rec_c_bytes() else rec_c_str()
+    store64(r + 16, str_addr(body))
+    store64(r + 32, str_addr(body))
+    rec_c_next()
+    store64(r + 24, rec_c_map_sl())
+    r
+
+fn rec_net_get(url str, at str) int
+    if rec_mode() == 2
+        return rec_net_r_response("net.get", false, at)
+    r := net_get(url, at)
+    rec_net_w_response("net.get", "net.Response", r, false)
+    r
+
+fn rec_net_post(url str, body str, ctype str, at str) int
+    if rec_mode() == 2
+        return rec_net_r_response("net.post", false, at)
+    r := net_post(url, body, ctype, at)
+    rec_net_w_response("net.post", "net.Response", r, false)
+    r
+
+fn rec_net_request(method str, url str, o int, head6 str, head19 str, tail str, at str) int
+    if rec_mode() == 2
+        return rec_net_r_response("net.request", false, at)
+    r := net_request(method, url, o, head6, head19, tail, at)
+    rec_net_w_response("net.request", "net.Response", r, false)
+    r
+
+## The `*_bytes` calls build their `RawResponse` from the response object.
+fn rec_net_get_bytes(url str, at str) int
+    if rec_mode() == 2
+        return net_raw(rec_net_r_response("net.get_bytes", true, at))
+    r := net_get(url, at)
+    rec_net_w_response("net.get_bytes", "net.RawResponse", r, true)
+    net_raw(r)
+
+fn rec_net_post_bytes(url str, data str, ctype str, at str) int
+    if rec_mode() == 2
+        return net_raw(rec_net_r_response("net.post_bytes", true, at))
+    r := net_post(url, data, ctype, at)
+    rec_net_w_response("net.post_bytes", "net.RawResponse", r, true)
+    net_raw(r)
+
+fn rec_net_request_bytes(method str, url str, o int, head6 str, head19 str, tail str, at str) int
+    if rec_mode() == 2
+        return net_raw(rec_net_r_response("net.request_bytes", true, at))
+    r := net_request(method, url, o, head6, head19, tail, at)
+    rec_net_w_response("net.request_bytes", "net.RawResponse", r, true)
+    net_raw(r)
+
+# ---- streamed bodies ----
+
+fn rec_net_open(method str, url str, o int, head6 str, head19 str, tail str, at str) int
+    if rec_mode() == 2
+        p := rec_next("net.open")
+        if rec_failed(p)
+            rec_raise_net(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        b := obj_new(32, 4)
+        store64(b, rec_c_int())
+        rec_c_next()
+        store64(b + 8, rec_c_map_ss())
+        rec_c_next()
+        store64(b + 16, rec_c_map_sl())
+        rec_c_next()
+        store64(b + 24, rec_c_int())
+        return b
+    b := net_open(method, url, o, head6, head19, tail, at)
+    s := rec_begin("net.open", 1)
+    if s != 0
+        if b == 0
+            rec_fail_net(s)
+        else
+            rec_text(s, "\{\"struct\":\"net.Body\",\"fields\":[")
+            rec_int(s, load64(b))
+            rec_byte(s, 44)
+            rec_w_map_ss(s, load64(b + 8))
+            rec_byte(s, 44)
+            rec_w_map_sl(s, load64(b + 16))
+            rec_byte(s, 44)
+            rec_int(s, load64(b + 24))
+            rec_text(s, "]}")
+        rec_end(s)
+    b
+
+fn rec_open_read(h int, max int, at str) str
+    if rec_mode() == 2
+        p := rec_next("net.body_read")
+        if rec_failed(p)
+            rec_raise_net(p, at)
+            return str_at(0)
+        rec_cur_to(p)
+        return rec_c_bytes()
+    r := open_read(h, max, at)
+    s := rec_begin("net.body_read", 1)
+    if s != 0
+        if failed()
+            rec_fail_net(s)
+        else
+            rec_w_hex(s, r)
+        rec_end(s)
+    r
+
+fn rec_open_close(h int)
+    if rec_mode() == 2
+        rec_r_unit("net.body_close", "")
+        return
+    open_close(h)
+    rec_w_unit("net.body_close", 0)
+
+# ---- serving ----
+
+## `srv.accept()`: an `Exchange` of a request `[method, path, query, headers, body, peer, data, server]`
+## and its handle.
+fn rec_serve_accept(h int, at str) int
+    if rec_mode() == 2
+        p := rec_next("net.accept_request")
+        if rec_failed(p)
+            rec_raise_net(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        req := obj_new(64, 4)
+        store64(req, str_addr(rec_c_str()))
+        rec_c_next()
+        store64(req + 8, str_addr(rec_c_str()))
+        rec_c_next()
+        store64(req + 16, rec_c_map_ss())
+        rec_c_next()
+        store64(req + 24, rec_c_map_ss())
+        rec_c_next()
+        store64(req + 32, str_addr(rec_c_str()))
+        rec_c_next()
+        store64(req + 40, str_addr(rec_c_str()))
+        rec_c_next()
+        store64(req + 48, str_addr(rec_c_bytes()))
+        rec_c_next()
+        store64(req + 56, rec_c_int())
+        rec_c_next()
+        ex := obj_new(16, 4)
+        store64(ex, req)
+        store64(ex + 8, rec_c_int())
+        return ex
+    ex := serve_accept(h, at)
+    s := rec_begin("net.accept_request", 1)
+    if s != 0
+        if ex == 0
+            rec_fail_net(s)
+        else
+            req := load64(ex)
+            rec_text(s, "\{\"struct\":\"net.Exchange\",\"fields\":[")
+            for k in 0..2
+                rec_json(s, str_at(load64(req + 8 * k)))
+                rec_byte(s, 44)
+            rec_w_map_ss(s, load64(req + 16))
+            rec_byte(s, 44)
+            rec_w_map_ss(s, load64(req + 24))
+            rec_byte(s, 44)
+            rec_json(s, str_at(load64(req + 32)))
+            rec_byte(s, 44)
+            rec_json(s, str_at(load64(req + 40)))
+            rec_byte(s, 44)
+            rec_w_hex(s, str_at(load64(req + 48)))
+            rec_byte(s, 44)
+            rec_int(s, load64(req + 56))
+            rec_byte(s, 44)
+            rec_int(s, load64(ex + 8))
+            rec_text(s, "]}")
+        rec_end(s)
+    ex
+
+fn rec_serve_respond(h int, r int, at str)
+    if rec_mode() == 2
+        rec_net_r_unit("net.respond", at)
+        return
+    serve_respond(h, r, at)
+    rec_net_unit("net.respond", 1)
+
+fn rec_serve_respond_bytes(h int, status int, headers int, data str, at str)
+    if rec_mode() == 2
+        rec_net_r_unit("net.respond", at)
+        return
+    serve_respond_bytes(h, status, headers, data, at)
+    rec_net_unit("net.respond", 1)
+
+# ---- the clipboard (replay.cap.1) ----
+
+fn rec_ui_clip_set(s str)
+    if rec_mode() == 2
+        rec_r_unit("ui.clipboard_set", "")
+        return
+    ui_clip_set(s)
+    rec_w_unit("ui.clipboard_set", 0)
+
+fn rec_ui_clip_get() int
+    if rec_mode() == 2
+        return str_addr(rec_r_opt("ui.clipboard_get"))
+    r := ui_clip_get()
+    rec_w_opt("ui.clipboard_get", str_at(r))
+    r

@@ -937,18 +937,20 @@ from `proc.start`, a socket, a listener) is recorded as
 `"uncaptured":true`, and a replay that reaches it stops with a trap
 `replay.cap.2`.
 **replay.nat.1** — The native `ail run --record` and `--replay`
-(`AIL_INSTRUMENT=record`, ADR 0873) capture the calls of `replay.cap.1`
-with results of unit, int, bool, string, bytes, optional string or int, a
-list of strings (`fs.list_dir`, `fs.walk`, `fs.glob`), `fs.metadata`,
-`env.vars`, `proc.run` and `proc.run_bytes`. A child process
-(`proc.start`, `proc.wait`, `proc.kill`) is captured with the lines of its
-output streams, `{"stream":N,"out"|"err":LINE}` and `{"stream":N,"end":"out"|"err"}`
-after its `proc.start`; a replay fills the same channels and drops what is sent
-to its input. A `std.net` call is recorded as `"uncaptured":true`, runs live,
-and traps `replay.cap.2` in a replay. `ail test --record` and `--replay` run
-each test in its own process, record into `{"test":NAME}` sections, and replay
-only the tests the recording holds (`replay.rec.5`: each starts from the
-recording's seed).
+(`AIL_INSTRUMENT=record`, ADR 0873) capture every call of `replay.cap.1`.
+A result that is a list of strings (`fs.list_dir`, `fs.walk`, `fs.glob`), a
+struct (`fs.metadata`, `proc.run`, `net.get` and the other responses) or a map
+(`env.vars`) is written as in `replay.rec.3`. A handle is written by number and
+never used again by the replay: a connection, listener, server or body
+answers each call on it from the recording. A child process (`proc.start`,
+`proc.wait`, `proc.kill`) is written with the lines of its output streams,
+`{"stream":N,"out"|"err":LINE}` and `{"stream":N,"end":"out"|"err"}`, after its
+`proc.start`; a replay fills the same channels and drops what is sent to its
+input. A call the build can't capture is written as `"uncaptured":true` and
+traps `replay.cap.2` in a replay. `ail test --record` and `--replay` run each
+test in its own process, record into `{"test":NAME}` sections, and replay only
+the tests the recording holds (`replay.rec.5`: each starts from the recording's
+seed).
 **replay.run.1** — `ail run --replay R [FILE]` runs `FILE` (by default the
 recording's program) with the recording's arguments and seed, and answers
 each captured call from R instead of running it: nothing is read, written,

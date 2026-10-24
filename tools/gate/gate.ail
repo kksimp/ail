@@ -1777,7 +1777,7 @@ fn rpl(dir str, input str, args List[str]) proc.Output
 fn Gate.replay(mut self, tmp str)
     root := repo_root()
     base := "{tmp}/replay"
-    sh_run("rm -rf {base}; mkdir -p {base}/repeat {base}/diverge {base}/handles {base}/tests {base}/options")
+    sh_run("rm -rf {base}; mkdir -p {base}/world {base}/repeat {base}/diverge {base}/handles {base}/tests {base}/options")
     program := "fn main() !\n    t := time.now_ms()\n    n := random.int(1, 1000000)\n    data := fs.read_text(\"input.txt\")?\n    name := env.get(\"REPLAY_NAME\") else \"nobody\"\n    line := io.read_line() else \"eof\"\n    gone := fs.read_text(\"missing.txt\") else e\n        \"\{e.kind}\"\n    print(\"\{t} \{n} \{name} \{line} \{data.lines().len()} \{gone}\")\n    xs := [1, 2]\n    print(xs[data.lines().len()])\n"
     # replay.rec.1-2, replay.run.1-2: a replay prints what the recorded run printed.
     d := "{base}/repeat"
@@ -1823,6 +1823,18 @@ fn Gate.replay(mut self, tmp str)
     h := rpl(d3, "", ["run", "--replay", "s.json"])
     if h.out != "a\n" or h.status != 0
         red("replay handle", "{h.out}{h.err}")
+    # replay.nat.1: lists, structs, maps, a child's streams and the HTTP client replay without the world.
+    d6 := "{base}/world"
+    sh_run("rm -rf {d6}; mkdir -p {d6}/dir; echo hello > {d6}/dir/a.txt; touch {d6}/dir/b.txt")
+    fs.write_text(
+        "{d6}/w.ail",
+        "fn main() !\n    print(\"\{fs.list_dir(\"dir\")?}\")\n    m := fs.metadata(\"dir/a.txt\")?\n    print(\"\{m.size} \{m.is_dir}\")\n    print(\"\{env.vars().get(\"REPLAY_NAME\") else \"none\"}\")\n    o := proc.run(\"echo\", [\"hi\", \"there\"])?\n    print(\"\{o.status} \{o.out.trim()}\")\n    c := proc.start(\"sh\", [\"-c\", \"read x; echo got $x; echo oops >&2\"])?\n    c.stdin.send(\"in\\n\")\n    c.stdin.close()\n    for l in c.out\n        print(\"out \{l}\")\n    for l in c.err\n        print(\"err \{l}\")\n    print(\"\{proc.wait(move c)?}\")\n",
+    ) else return
+    w1 := rpl(d6, "", ["run", "--record", "w.json", "w.ail"])
+    sh_run("rm -rf {d6}/dir")
+    w2 := rpl(d6, "", ["run", "--replay", "w.json"])
+    if w1.status != 0 or w2.out != w1.out or w2.status != 0 or not w1.out.contains("out got in")
+        red("replay world", "{w1.out}{w1.err}|{w2.out}{w2.err}")
     fs.write_text("{d3}/sleep.ail", "fn main()\n    time.sleep_ms(-1)\n") else return
     sf := rpl(d3, "", ["run", "--record", "t.json", "sleep.ail"])
     sa := rpl(d3, "", ["run", "--replay", "t.json"])

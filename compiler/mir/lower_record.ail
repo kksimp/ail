@@ -61,7 +61,41 @@ fn Lower.rec_call(mut self, f OsFn, vs List[int], pos ast.Pos) Val
     call("rt.rec_guard", [str_value("{parts[0]}.{parts[1..].join("_")}")], Ty.Unit)
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)
 
-## A `net` call is not captured yet: a replay stops at it.
-fn Lower.rec_net(mut self, name str)
-    if instr.rec
-        call("rt.rec_guard", [str_value("net.{name}")], Ty.Unit)
+## The runtime functions of `std.net` that have a `rec_` wrapper (record_net.ail).
+RECORDED_NET := [
+    "net_listen",
+    "net_connect",
+    "net_connect_tls",
+    "net_get",
+    "net_post",
+    "net_request",
+    "net_open",
+    "net_get_bytes",
+    "net_post_bytes",
+    "net_request_bytes",
+    "net_read",
+    "net_read_bytes",
+    "net_write",
+    "net_read_line",
+    "net_set_timeout",
+    "net_peer",
+    "net_close",
+    "net_addr",
+    "net_accept",
+    "serve_accept",
+    "serve_shutdown",
+    "serve_respond",
+    "serve_respond_bytes",
+    "open_read",
+    "open_close",
+]
+
+## The call of the `std.net` function `f` with the values `vs`, as the mode asks.
+fn Lower.rec_net_call(mut self, f NetFn, vs List[int], pos ast.Pos) Val
+    name := f.rt.slice(3, f.rt.len())
+    at := [str_value(path), konst(pos.line, Ty.Int), konst(pos.col, Ty.Int)]
+    call("rt.rec_at", at, Ty.Unit)
+    if RECORDED_NET.contains(name)
+        return Val(id: call("rt.rec_{name}", vs, f.ret), ty: f.ret)
+    call("rt.rec_guard", [str_value("net.{name}")], Ty.Unit)
+    Val(id: call(f.rt, vs, f.ret), ty: f.ret)
