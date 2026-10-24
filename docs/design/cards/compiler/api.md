@@ -2,6 +2,7 @@
 
 ## api
 ```
+pub fn api.ask_command(args List[str], std str) int [clock env fs io proc]  ## `ail ask PROGRAM QUESTION...`; the exit status: 0 answered, 1 nothing
 pub fn api.estimate_tokens(s str) int  ## A cheap token estimate (api.card.3): a run of letters or digits costs one
 pub fn api.card_command(rest List[str], std str) int [clock env fs io proc]  ## `ail api --card ...`; the exit status. `rest` holds the arguments, `--card`
 pub fn api.public_decls(prog ast.Program, facts api.Facts, whole bool) List[api.Decl]  ## The public declarations of `prog` (api.diff.2).
@@ -25,6 +26,8 @@ pub fn api.query_command(rest List[str], std str) int [clock env fs io proc]  ##
 pub struct api.Ref  ## One use: the id of the declaration and where the name is written.
     pub id str
     pub pos ast.Pos
+    pub within int  ## The index of the function whose body or signature has it, `-1` outside one.
+    pub label bool  ## A field named by a label in a struct literal or variant (api.ask.2).
 pub fn api.references(prog ast.Program, symbols Map[int, str], weak Map[int, str], own_file bool) List[api.Ref]  ## Every reference in `prog`, by position then id, without the prelude and
 pub struct api.Found  ## Every reference of `prog` unsorted, without the prelude, and the value
     pub refs List[api.Ref]
@@ -32,4 +35,4 @@ pub struct api.Found  ## Every reference of `prog` unsorted, without the prelude
 pub fn api.collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) api.Found
 ```
 
-trimmed to fit 2000 tokens (~923); dropped: private items
+trimmed to fit 2000 tokens (~1033); dropped: private items
