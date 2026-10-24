@@ -184,7 +184,6 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 case "$v" in "" | *[!0-9]* | 0) die "\`--trace-limit\` needs a positive number of events (trace.run.4)" ;; esac
                 export AIL_TRACE_LIMIT="$v"; k=$((k + 2)) ;;
             --verbose) k=$((k + 1)) ;;
-            --no-attach) run_opts="$run_opts --no-attach"; k=$((k + 1)) ;;
             --values) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values"; k=$((k + 1)) ;;
             --deterministic) export AIL_DETERMINISTIC=1; det_run=1; check_opts="$check_opts --deterministic"; k=$((k + 1)) ;;
             --deny)
