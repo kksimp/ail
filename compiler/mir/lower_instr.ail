@@ -126,15 +126,7 @@ fn Lower.watch_end(mut self, cont int)
     instr.noted = true
 
 ## `[OP ELEM at LABEL INDEX]` for the operation at `pos` on `r`, when it is the watched statement's.
-fn Lower.watch_note(
-    mut self,
-    pos ast.Pos,
-    r Val,
-    kind str,
-    elem Val,
-    label str,
-    at Val,
-)
+fn Lower.watch_note(mut self, pos ast.Pos, r Val, kind str, elem Val, label str, at Val)
     if not watch_here(pos) or not vals_printable(r.ty, structs)
         return
     cont := watch_start(r)
