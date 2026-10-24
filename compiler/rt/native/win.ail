@@ -123,7 +123,7 @@ fn win_attrs(w int) int
     a
 
 fn win_is_dir_handle(h int) bool
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     if import_call("GetFileInformationByHandle", h, t, 0, 0) == 0
         return false
     win_u32(t).bit_and(16) != 0
@@ -221,7 +221,7 @@ fn win_close(fd int) int
 
 fn win_read(fd int, p int, n int) int
     h := win_h(fd)
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     store64(t, 0)
     want := if n > 1073741824 then 1073741824 else n
     if import_call("ReadFile", h, p, want, t, 0) == 0
@@ -236,7 +236,7 @@ fn win_read(fd int, p int, n int) int
 
 fn win_write(fd int, p int, n int) int
     h := win_h(fd)
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     store64(t, 0)
     want := if n > 1073741824 then 1073741824 else n
     if import_call("WriteFile", h, p, want, t, 0) == 0
@@ -244,7 +244,7 @@ fn win_write(fd int, p int, n int) int
     win_u32(t)
 
 fn win_lseek(fd int, off int, whence int) int
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     if import_call("SetFilePointerEx", win_h(fd), off, t, whence) == 0
         return -29
     load64(t)
@@ -340,7 +340,7 @@ fn win_getdents(fd int, buf int, n int) int
 ## `fstat` for the fields the runtime reads, at their Linux x86-64 offsets:
 ## `st_mode` (24), `st_size` (48), the modification time (88, 96).
 fn win_fstat(fd int, buf int) int
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     if import_call("GetFileInformationByHandle", win_h(fd), t, 0, 0) == 0
         return win_err()
     attrs := win_u32(t)
@@ -363,14 +363,14 @@ fn win_getcwd(buf int) int
 
 ## Milliseconds since 1970-01-01T00:00:00Z.
 fn win_now_ms() int
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     import_call("GetSystemTimePreciseAsFileTime", t, 0, 0, 0)
     ft := win_u32(t + 4) * 4294967296 + win_u32(t) - 116444736000000000
     ft / 10000
 
 ## Nanoseconds from the performance counter.
 fn win_mono_ns() int
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     import_call("QueryPerformanceFrequency", t, 0, 0, 0)
     import_call("QueryPerformanceCounter", t + 8, 0, 0, 0)
     f := load64(t)
@@ -463,7 +463,7 @@ fn win_find(name str) int
         return 0
     if not win_wide(a, WIN_PATH_UNITS, c)
         return 0
-    ext := os_scratch(OS_WIN_T) + 64
+    ext := win_tmp() + 64
     b := os_scratch(OS_WIN_B)
     for k in 0..3
         # `.exe`, then the scripts `cmd.exe` starts for the caller (`PATHEXT`).
@@ -542,7 +542,7 @@ fn win_close_h(h int)
 ## Drain what is waiting on pipe `h` into `buf` (capacity `cap`, `n` used):
 ## the new count, or -1 when the writer is gone and nothing is left.
 fn win_pipe_take(h int, buf int, cap int, n int) int
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     store64(t, 0)
     if import_call("PeekNamedPipe", h, 0, 0, 0, t, 0) == 0
         return -1
@@ -649,7 +649,7 @@ fn win_launch(cmd str, args List[int], at str, st int, ibuf int) int
 fn win_exit_raw(h int) int
     if import_call("WaitForSingleObject", h, 0, 0, 0) != 0
         return -1
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     store64(t + 48, 0)
     import_call("GetExitCodeProcess", h, t + 48, 0, 0)
     status := win_u32(t + 48)
@@ -691,7 +691,7 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
             mut piece := ilen - sent
             if piece > 1048576
                 piece = 1048576
-            tw := os_scratch(OS_WIN_T) + 32
+            tw := win_tmp() + 32
             store64(tw, 0)
             if import_call("WriteFile", ifd, input + 16 + sent, piece, tw, 0) == 0
                 break
@@ -766,7 +766,7 @@ fn win_proc_run(cmd str, args List[int], input int, timeout int, at str, raw boo
 fn win_pipe_ready(h int) bool
     if h <= 0
         return false
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     store64(t, 0)
     if import_call("PeekNamedPipe", h, 0, 0, 0, t, 0) == 0
         return true
@@ -775,7 +775,7 @@ fn win_pipe_ready(h int) bool
 ## A read that does not wait: what is there (up to `cap` bytes), -11 when
 ## nothing is yet, 0 at the end of the stream.
 fn win_read_nb(h int, buf int, cap int) int
-    t := os_scratch(OS_WIN_T)
+    t := win_tmp()
     store64(t, 0)
     if import_call("PeekNamedPipe", h, 0, 0, 0, t, 0) == 0
         return 0
@@ -795,7 +795,7 @@ fn win_ps_round(ps int, ms int)
     mut parked := 0
     if multi
         parked = blocked_enter()
-    start := time_mono_ms()
+    start := win_tick()
     mut ro := false
     mut re := false
     while true
@@ -803,7 +803,7 @@ fn win_ps_round(ps int, ms int)
         re = win_pipe_ready(load64(ps + PS_ERR))
         if ro or re or ms == 0
             break
-        if ms > 0 and time_mono_ms() - start >= ms
+        if ms > 0 and win_tick() - start >= ms
             break
         # Wakes at once if the child exits, which `ps_reap` then notices.
         if import_call("WaitForSingleObject", load64(ps + PS_PID), 2, 0, 0) == 0
@@ -819,3 +819,80 @@ fn win_ps_round(ps int, ms int)
         if re
             ps_read(ps, 1)
         unlock(ps + PS_LOCK)
+
+# ---- threads (conc.task.*, ADR 0599) ----
+# Workers are kernel32 threads on the stacks the system makes. A thread is
+# known by its thread id in the pool block (`P_TID`); the top of its stack,
+# where the collector stops scanning, is `P_TOP` as on macOS. Sleeping on a
+# word is polling it (`win_wait`): kernel32 has no futex, and `WaitOnAddress`
+# lives in another DLL the PE writer does not import from yet.
+
+P_WTMP := 20736
+P_TID := 3072
+P_NEWT := 3584
+
+## Sleep while the low 32 bits of `*a` equal those of `v`; for at most `ms`
+## milliseconds, or with -1 until the word changes.
+fn win_wait(a int, v int, ms int)
+    want := v.bit_and(4294967295)
+    start := if ms >= 0 then win_tick() else 0
+    mut spins := 0
+    while atomic_load(a).bit_and(4294967295) == want
+        if ms >= 0 and win_tick() - start >= ms
+            return
+        spins += 1
+        if spins < 64
+            import_call("SwitchToThread", 0, 0, 0, 0)
+        else
+            import_call("Sleep", 1, 0, 0, 0)
+
+## Eight words of out-parameter room for this thread's Win32 calls: its own
+## block of the pool once there are threads, the shared scratch before.
+fn win_tmp() int
+    p := load64(global(TASKS))
+    if p == 0
+        return os_scratch(OS_WIN_T)
+    mut k := thread_slot()
+    if k > 29
+        k = 29
+    p + P_WTMP + 128 * k
+
+## Milliseconds from a clock that needs no out-parameter, for timeouts.
+fn win_tick() int
+    import_call("GetTickCount64", 0, 0, 0, 0)
+
+## The worker this code runs on (0 up), or -1 for the main thread.
+fn win_worker_index() int
+    p := load64(global(TASKS))
+    if p == 0
+        return -1
+    me := import_call("GetCurrentThreadId", 0, 0, 0, 0)
+    n := load64(p + P_LIVE)
+    for i in 0..n
+        if load64(p + P_TID + 8 * i) == me
+            return i
+    -1
+
+## Start worker `idx`. The new thread learns its index from `P_NEWT + 8`,
+## which it reads before it lets go of the word at `P_NEWT` (one start at a time).
+fn win_start_thread(p int, idx int)
+    while atomic_cas(p + P_NEWT, 0, 1) != 0
+        import_call("SwitchToThread", 0, 0, 0, 0)
+    store64(p + P_NEWT + 8, idx)
+    # STACK_SIZE_PARAM_IS_A_RESERVATION: STACK_SZ bytes of address space, committed as used.
+    h := import_call("CreateThread", 0, STACK_SZ, fn_addr("rt.win_thread_entry"), 0, 65536, 0)
+    if h == 0
+        fail(1, 0, 0)
+    import_call("CloseHandle", h, 0, 0, 0)
+
+## The start routine of a worker thread. Win64 hands it one argument in rcx,
+## which this ignores, so it does not matter that the compiled code reads its
+## arguments elsewhere; it never returns.
+fn win_thread_entry() int
+    p := load64(global(TASKS))
+    idx := load64(p + P_NEWT + 8)
+    store64(p + P_TID + 8 * idx, import_call("GetCurrentThreadId", 0, 0, 0, 0))
+    store64(p + P_TOP + 8 * idx, sp())
+    atomic_store(p + P_NEWT, 0)
+    worker_main(idx)
+    0

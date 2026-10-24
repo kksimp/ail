@@ -106,6 +106,9 @@ fn sys_mmap_lazy(n int) int
 ## macOS has no futex: `__ulock_wait` and `__ulock_wake` of libSystem do the
 ## same on a 32-bit word (UL_COMPARE_AND_WAIT is 1, ULF_WAKE_ALL 0x100).
 fn futex_wait_raw(a int, v int)
+    if target() == 3
+        win_wait(a, v, -1)
+        return
     if target() == 2
         import_call("___ulock_wait", 1, a, v, 0)
         return
@@ -127,7 +130,9 @@ fn futex_wait(a int, v int)
 ## when woken, or when the time ran out (the caller looks at the word).
 fn futex_wait_timed(a int, v int, ms int)
     mut t := ms * 1000
-    if target() != 2
+    if target() == 3
+        t = ms
+    elif target() != 2
         t = alloc(16, KIND_BYTES)
         store64(t, ms / 1000)
         store64(t + 8, ms % 1000 * 1000000)
@@ -140,6 +145,9 @@ fn futex_wait_timed(a int, v int, ms int)
 
 ## `t` is the timeout: microseconds on macOS, else the address of a timespec.
 fn futex_wait_raw_t(a int, v int, t int)
+    if target() == 3
+        win_wait(a, v, t)
+        return
     if target() == 2
         import_call("___ulock_wait", 1, a, v, t)
         return
@@ -147,6 +155,9 @@ fn futex_wait_raw_t(a int, v int, t int)
     syscall(k, a, 128, v, t, 0, 0)
 
 fn futex_wake(a int, n int)
+    if target() == 3
+        # Waiters on Windows poll the word (`win_wait`), so there is nobody to wake.
+        return
     if target() == 2
         op := if n > 1 then 257 else 1
         import_call("___ulock_wake", op, a, 0, 0)
@@ -176,6 +187,8 @@ fn unlock(a int)
 ## The worker thread this code runs on (0 to 63), or -1 for the main thread
 ## or before any worker exists. A worker's stack lies in the `STACKS` region.
 fn worker_index() int
+    if target() == 3
+        return win_worker_index()
     base := load64(global(STACKS))
     if base == 0
         return -1
