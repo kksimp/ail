@@ -296,7 +296,7 @@ counter in it only when the flag is given (ADR 0883). Steps count the same on
 every machine, so a limit found once reproduces the same trap. `ail test`
 counts per test. *(ADR 0288, ADR 0883)*
 
-```ail tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
+```ail skip=bootstrap tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
 fn main()
     mut n := 0
     while true

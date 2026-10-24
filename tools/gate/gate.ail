@@ -1482,8 +1482,9 @@ fn Gate.limits(mut self)
     r := ail_run(["run", "--timeout", "200", "{case}/limit_endless.ail"]) else return
     if r.status != 1 or not r.err.contains("trap[run.limit.1]") or not r.err.contains("in main(")
         red("--timeout", "exit {r.status}\n{r.err}")
-    a := ail_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
-    b := ail_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
+    # run.limit.3 is native only (ADR 0883): the Rust binary doesn't know `--max-steps`.
+    a := native_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
+    b := native_run(["run", "--max-steps", "1000", "{case}/limit_endless.ail"]) else return
     if a.status != 1 or not a.err.contains("trap[run.limit.3]") or a.err != b.err
         red("--max-steps", "exit {a.status}\n{a.err}")
     m := ail_run(["run", "--max-memory", "100", "{case}/limit_memory.ail"]) else return
@@ -1502,7 +1503,11 @@ fn Gate.limits(mut self)
         ["run", "--max-steps", "x", "x.ail"],
         ["check", "--timeout", "5", "x.ail"],
     ]
-        u := ail_run(args) else return
+        mut u := proc.Output(status: 127, out: "", err: "")
+        if args[1] == "--max-steps"
+            u = native_run(args) else return
+        else
+            u = ail_run(args) else return
         if u.status != 2 or not u.err.contains("run.limit.4")
             red("limit usage {args}", "exit {u.status}\n{u.err}")
     c := ail_run(["test", "--coverage=lines", "{case}/coverage_two_fns.ail"]) else return
@@ -1796,6 +1801,10 @@ fn Gate.replay(mut self, tmp str)
     again := rpl(d, "", ["run", "--replay", "r.json"])
     if again.out != first.out or again.err != first.err or again.status != 1
         red("replay repeats the run", "exit {again.status}\n{again.out}{again.err}")
+    # replay.run.1: `--replay R FILE` runs FILE, and an argument after the recording is not its program.
+    rf := rpl(d, "hello\n", ["run", "--replay", "r.json", "prog.ail"])
+    if rf.out != again.out or rf.err != again.err
+        red("replay with a file", "{rf.out}{rf.err}|{again.out}{again.err}")
     # replay.run.3: a program that changed since the recording traps at the first call that differs.
     d2 := "{base}/diverge"
     fs.write_text(
@@ -1851,6 +1860,7 @@ fn Gate.replay(mut self, tmp str)
     if tf.status != 1
         or not trec.contains("\{\"test\":\"flaky\"}\n\{\"call\":\"env.get\"")
         or trec.contains("passes")
+        or not trec.contains("\{\"call\":\"env.get\",\"line\":2,")
         red("test --record", "exit {tf.status}\n{trec}")
     ta := rpl(d4, "", ["test", "--replay", "r.json"])
     mut fail_a := ""
@@ -2428,7 +2438,7 @@ fn Gate.bytecode(mut self)
                 steady = false
         mut variants := [""]
         if steady
-            variants = ["", "--max-steps 300 ", "--trace=all "]
+            variants = ["", "--trace=all "]
         mut cmds := List[str]()
         for flags in variants
             cmds.push("run {flags}{args.words().join(" ")} {f}")

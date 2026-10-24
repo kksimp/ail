@@ -1144,12 +1144,27 @@ fn rec_prepare(
         return test_env(lim, "", tmp, seed, steps)
     test_env(lim, "", "", 0, steps)
 
+## `line` with the `"line":N` of each call line moved up by `lead`, the lines the runner added at the top.
+fn rec_unlead(body str, lead int) str
+    if lead == 0
+        return body
+    mut out := List[str]()
+    for l in body.lines()
+        at := l.find("\"line\":") else
+            out.push(l)
+            continue
+        rest := l.slice(at + 7, l.len())
+        end := rest.find(",") else rest.len()
+        n := rest.slice(0, end).to_int() else 0
+        out.push("{l.slice(0, at + 7)}{n - lead}{rest.slice(end, rest.len())}")
+    "{out.join("\n")}\n"
+
 ## The recorded lines of the test NAME when it failed, as a section of the recording (replay.rec.2).
-fn rec_section(mode str, exe str, name str, v Verdict) str
+fn rec_section(mode str, exe str, name str, v Verdict, lead int) str
     if mode != "record" or v.status != "fail"
         return ""
     body := fs.read_text("{exe}.rec") else ""
-    "\{\"test\":{json_str(name)}}\n{body}"
+    "\{\"test\":{json_str(name)}}\n{rec_unlead(body, lead)}"
 
 fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
     arg := ["x" for _ in 0..slot].join("")
@@ -2182,7 +2197,7 @@ fn main() !
                     doc_where.get(t.name) else [],
                     envs,
                 )
-                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v)}"
+                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
                 verdicts.push(Verdict(
                     name: doc_names[t.name],
                     status: v.status,
@@ -2208,7 +2223,7 @@ fn main() !
                     max_steps,
                 )?
                 v := run_one(exe, slot, last_lead, envs)
-                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v)}"
+                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
                 if trace and v.status == "fail"
                     traces[t.name] = take_trace(exe)
                 elif trace
@@ -2263,7 +2278,7 @@ fn main() !
                 continue
             envs := rec_prepare(rec_mode, exe, name, rec_seed_n, rec_head, rec_secs, trace_limit, max_steps)?
             v := run_one(exe, slot, 0, envs)
-            rec_out = "{rec_out}{rec_section(rec_mode, exe, name, v)}"
+            rec_out = "{rec_out}{rec_section(rec_mode, exe, name, v, 0)}"
             verdicts.push(plain(name, v.status, v.message))
     if rec_mode == "record"
         fs.write_text(rec_file, "{rec_head}\n{rec_out}")? "writing the recording {rec_file}"

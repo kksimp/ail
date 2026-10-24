@@ -176,15 +176,17 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
     if [ "${rep_run:-}" = 1 ] && [ "${rec_run:-}" != 1 ]; then
         [ -r "$AIL_REPLAY" ] || die "can't read the recording $AIL_REPLAY (replay.run.1)"
         rep_head="$(head -n 1 "$AIL_REPLAY")"
-        rep_prog="$(printf '%s' "$rep_head" | sed -n 's/.*"program":"\(\([^"\\]\|\\.\)*\)".*/\1/p')"
-        rep_seed="$(printf '%s' "$rep_head" | sed -n 's/.*"seed":\([0-9]*\).*/\1/p')"
-        rep_list="$(printf '%s' "$rep_head" | sed -n 's/.*"args":\[\(.*\)\],"seed".*/\1/p')"
+        # Plain parameter expansion and awk, so BSD sed (macOS) reads the header the same way.
+        rep_unq() { printf '%s' "$1" | sed 's/\\"/"/g; s/\\\\/\\/g'; }
+        rep_prog="${rep_head#*\"program\":\"}"; rep_prog="$(rep_unq "${rep_prog%%\",\"args\"*}")"
+        rep_seed="${rep_head#*\"seed\":}"; rep_seed="${rep_seed%%,*}"
+        rep_list="${rep_head#*\"args\":[}"; rep_list="${rep_list%%],\"seed\"*}"
         rep_args=()
         if [ -n "$rep_list" ]; then
-            while IFS= read -r rep_a; do rep_args+=("$rep_a"); done < <(printf '%s' "$rep_list" | sed 's/^"//; s/"$//; s/","/\n/g; s/\\"/"/g; s/\\\\/\\/g')
+            while IFS= read -r rep_a; do rep_args+=("$rep_a"); done < <(printf '%s' "$rep_list" | sed 's/^"//; s/"$//' | awk 'BEGIN { FS = "\",\"" } { for (i = 1; i <= NF; i++) print $i }' | sed 's/\\"/"/g; s/\\\\/\\/g')
         fi
         [ -n "$rep_seed" ] && export AIL_SEED="$rep_seed"
-        if [ "$k" -ge "${#run_args[@]}" ]; then run_file="$rep_prog"; else run_file="${run_args[$((k - 1))]}"; fi
+        [ -n "${run_file:-}" ] || run_file="$rep_prog"
         set -- run "$run_file" ${rep_args[@]+"${rep_args[@]}"}
         run_skip=2; native_run=1
     elif [ "${rec_run:-}" = 1 ] && [ -n "${native_run:-}" ]; then

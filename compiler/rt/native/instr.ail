@@ -161,6 +161,9 @@ fn instr_dump()
                     store8(buf + w, 10)
                     os_write_all(fd, buf, w + 1)
                 os_close(fd)
+    # No site was hit (a `steps` or `record` build): no hits file, and none beside the source.
+    if load64(t) == 0
+        return
     p := instr_path(buf + 65536, os_env_get("AIL_INSTRUMENT_OUT"), ".hits")
     if p == 0
         return
