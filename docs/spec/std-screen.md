@@ -76,7 +76,7 @@ below 1.0 and a `why` (`std.screen.3`).
 times its height and its area is under 5% of the raster; then it is a `button`
 whose text is the label, `conf` 0.9 with a cut corner (rounded) and 0.7 without.
 
-```ail rules=std.screen.10,std.screen.11
+```ail skip=bootstrap rules=std.screen.10,std.screen.11
 use std.screen
 use std.screen.pixels
 
