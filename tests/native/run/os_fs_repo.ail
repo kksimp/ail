@@ -17,7 +17,8 @@ fn main()
     names := fs.list_dir("docs/decisions") else return
     print(names.len() > 100)
     print(names[0])
-    print(names[names.len() - 1])
+    # Not the last name: any new file under docs/decisions would change it.
+    print(names.contains("README.md"))
     print(fs.exists("docs/decisions/README.md"))
     print(fs.exists("docs/decisions/NOPE.md"))
     print(fs.exists("docs/decisions"))

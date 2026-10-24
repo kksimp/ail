@@ -562,3 +562,43 @@ fn main()
 fn main()
     print("ok")
 ```
+
+## Instrumentation
+
+**native.instr.1** — A native build is instrumented only when the environment of
+`ail build` has `AIL_INSTRUMENT` (a comma list of `lines`, `calls`, `tests`). Without it
+the program has no instrumentation call and no table. *(ADR 0871)*
+
+```ail rules=native.instr.1
+fn main()
+    print("no instrumentation without AIL_INSTRUMENT")
+```
+
+**native.instr.2** — `lines`: each statement of the program's own files (not the
+prelude, `std`, generated code or the runtime) starts with a hit of its site. The build
+writes the sites to `$AIL_INSTRUMENT_SITES`, one `ID<TAB>PATH<TAB>LINE<TAB>FN<TAB>FIRST`
+line each. When the program exits or traps it appends the ids hit, one per line, to
+`$AIL_INSTRUMENT_OUT`, else to `EXE.hits`. *(ADR 0871)*
+
+```ail rules=native.instr.2
+fn square(n int) int
+    n * n
+
+fn main()
+    print(square(3))
+```
+
+**native.instr.3** — `calls`: each function of the program's own files starts a
+`call<TAB>FN<TAB>LINE<TAB>COL` event with `<TAB>NAME=VALUE` for each argument that is a
+number, a `bool` or a `str` (cut at 60 bytes). At most `$AIL_TRACE_LIMIT` (default 1000)
+events are kept; a last line gives the count dropped. The events go to `$AIL_TRACE_OUT`,
+else `EXE.trace`. `tests` is `calls` without the test runner's `main` and `ail_*` helpers.
+*(ADR 0871)*
+
+```ail rules=native.instr.3
+fn greet(name str) str
+    "hi {name}"
+
+fn main()
+    print(greet("bo"))
+```

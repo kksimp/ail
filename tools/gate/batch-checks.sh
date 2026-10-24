@@ -8,6 +8,8 @@ out="${TMPDIR:-/tmp}/ail-batch"; mkdir -p "$out"; fails=0
 run() { # run NAME CMD...
   name=$1; shift
   "$@" >"$out/$name.log" 2>&1 && return 0
+  # SIGBUS (135): the native CLI was rebuilt under a running copy; one rerun settles it.
+  [ $? = 135 ] && "$@" >"$out/$name.log" 2>&1 && return 0
   fails=$((fails+1)); echo "RED $name"; grep -vE '^\s*$' "$out/$name.log" | tail -6 | cut -c1-200
 }
 # ./ail rebuilds the bootstrap binary (it embeds the compiler) when its sources changed.
@@ -17,6 +19,19 @@ for d in compiler tools/garlic; do run check-${d##*/} ./ail check $d; done
 # The file build nativex and self-host stage 1 do: it sees only main.ail and what it `use`s (item 267).
 run build-cli env AIL_ROOT="$PWD" AIL_COMPILER="$PWD/compiler" AIL_RUST=1 ./ail build compiler/main.ail -o "$out/ail-cli"
 run fmt ./ail fmt --check compiler examples tools/garlic
+# Every native run program has a frozen golden, or a pending.txt line (item 282; goldens.ail reds it on the Mac otherwise).
+missing_goldens() {
+  local g=bootstrap/tests/native/golden bad=0
+  for f in bootstrap/tests/native/run/*.ail; do
+    n=$(basename "$f" .ail)
+    [ -f "$g/$n.out" ] || grep -qE "^$n([[:space:]]|$)" "$g/pending.txt" 2>/dev/null || { echo "no golden: $n"; bad=1; }
+  done
+  return $bad
+}
+run goldens missing_goldens
+# A union that missed a hunk leaves markers that still build when they sit in docs (BN, 2026-10-24).
+markers() { ! git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!bootstrap/tests"; }
+run markers markers
 run rules tools/rules-audit.sh
 for p in links dupes snippets; do run doc-$p python3 tools/check-doc-$p.py; done
 run cards tools/gate/regen-cards.sh

@@ -73,9 +73,11 @@ fn chan_msg(head str, ch int, tail str) int
 fn chan_wake(ch int)
     store64(ch + C_WAKE, (load64(ch + C_WAKE) + 1).bit_and(4294967295))
     futex_wake(ch + C_WAKE, 1000000)
+    det_wake(ch + C_WAKE)
     atomic_add(global(CHAN_EPOCH), 1)
     if atomic_load(global(CHAN_SEL)) != 0
         futex_wake(global(CHAN_EPOCH), 1000000)
+        det_wake(global(CHAN_EPOCH))
 
 ## Called holding the lock: release it, sleep until the channel changes, take
 ## it again. Whether the main task found a deadlock instead (`what` is what
@@ -103,6 +105,8 @@ fn chan_sleep(ch int, what str) bool
 ## changed for 100 ms it is a deadlock (conc.task.7): with `report` it returns
 ## true after storing the message, else it goes on waiting.
 fn prog_wait(a int, v int, what str, report bool) bool
+    if det_on()
+        return det_block(a, v, what, report)
     atomic_add(global(BLOCKED_N), 1)
     mut dead := false
     if worker_index() >= 0
@@ -177,6 +181,7 @@ fn chan_mark_closed(ch int)
 
 ## `ch.send(v)`: 0, or the message of the trap (conc.share.4).
 fn chan_send(ch int, v int) int
+    det_yield()
     if load64(ch + C_SOURCE) != 0
         chan_source_send(ch, v)
         return 0
@@ -200,6 +205,7 @@ fn chan_send(ch int, v int) int
 
 ## `ch.recv()`: the oldest value, or 0 once the channel is closed and empty.
 fn chan_recv(ch int) int
+    det_yield()
     lock(ch + C_LOCK)
     while true
         n := load64(ch + C_COUNT)

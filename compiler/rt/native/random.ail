@@ -14,10 +14,21 @@ fn random_seed(s int)
     store64(global(RAND_STATE), s)
     store64(global(RAND_SEEDED), 1)
 
+## The first state: `AIL_SEED` when `ail run --seed S` set it (std.random.3), else the clock.
+fn random_start() int
+    s := os_env_get("AIL_SEED")
+    if not os_ok()
+        return time_now_ms() * 2862933555777941757 + 1
+    a := str_addr(s)
+    mut v := 0
+    for i in 0..load64(a)
+        v = v * 10 + load8(a + 16 + i) - 48
+    v
+
 ## The next 64 random bits.
 fn random_next() int
     if load64(global(RAND_SEEDED)) == 0
-        random_seed(time_now_ms() * 2862933555777941757 + 1)
+        random_seed(random_start())
     s := load64(global(RAND_STATE)) + -7046029254386353131
     store64(global(RAND_STATE), s)
     mut z := s
