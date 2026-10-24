@@ -1,4 +1,5 @@
-## std.screen (spec std.screen.1-9, ADR 0878): what is on a screen, as
+## std.screen (spec std.screen.1, std.screen.2, std.screen.3, std.screen.4, std.screen.5, std.screen.7,
+## std.screen.8, std.screen.9; ADR 0878): what is on a screen, as
 ## items an agent can ask about without a vision model. A program (or a
 ## front end such as Garlic) builds a `Screen` from what it already draws;
 ## the queries answer in text, most important first, within a token budget.

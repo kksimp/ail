@@ -42,3 +42,20 @@ background work, no streaming.
 
 Rejected: a vision model over screenshots (slow, token-heavy, guesses what the
 program knows); streaming every frame (costs tokens whether or not asked).
+
+```ail rules=std.screen.1,std.screen.2,std.screen.3,std.screen.4,std.screen.5,std.screen.7,std.screen.8,std.screen.9
+use std.screen
+
+fn main()
+    mut a := screen.item(1, "button", "Pay", 0xcc2222, 10.0, 10.0, 80.0, 30.0)
+    a.href = "/pay"
+    mut guess := screen.item(2, "button", "", 0x2255cc, 10.0, 60.0, 80.0, 30.0)
+    guess.conf = 0.8
+    guess.why = "rounded blue rectangle"
+    s := screen.Screen(w: 200.0, h: 200.0, items: [a, guess])
+    print(s.what_is_at(20.0, 20.0))
+    print(s.find("button", "blue", "", 0))
+    print(s.describe(0.0, 0.0, 200.0, 50.0, 0))
+    print(s.find("", "", "", 1))
+    print(s.changes_since(s, 0))
+```
