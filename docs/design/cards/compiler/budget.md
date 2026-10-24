@@ -33,8 +33,13 @@ fn budget.splitn(s str, sep str, n int) List[str]  ## At most `n` pieces; the la
 fn budget.is_summary(line str) bool  ## `N passed, M failed` from `ail test`.
 pub fn budget.apply(b budget.Budget, stdout str, stderr str, json bool) List[str]  ## The budgeted stdout and stderr (budget.out.1-4), as `(stdout, stderr)`.
 fn budget.plural(k str, n int) str
-fn budget.note(b budget.Budget, total int, shown int, tokens int, counts List[budget.Count], json bool) str  ## The closing note (budget.out.4).
+fn budget.note(b budget.Budget, total int, shown int, full int, tokens int, counts List[budget.Count], json bool) str  ## The closing note (budget.out.4).
 pub fn budget.run(b budget.Budget, exe str, args List[str], json bool) int [io proc]  ## Run `exe ARGS` as a child with the budget applied to its output
 fn budget.emit(text str, to_err bool) [io]  ## `print!` / `eprint!`: the text as it is, which `print` would end with one more newline.
 fn budget.without(xs List[str], i int, n int) List[str]  ## `xs` without the `n` items from index `i`.
+struct budget.Pick  ## How many records are shown, and how many of them in full (from the start).
+    shown int
+    full int
+fn budget.one_line(text str) str  ## The one-line form of a record: its first line.
+fn budget.choose(recs List[budget.Record], from int, tokens int, used int) budget.Pick  ## The records from `from` that `tokens` covers, with `used` already spent
 ```

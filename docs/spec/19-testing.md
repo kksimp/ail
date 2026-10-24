@@ -297,6 +297,19 @@ fn main()
     print(1)
 ```
 
+**test.cover.4** — The native `ail test --coverage` is built on the
+instrumentation of native.instr.1-3. The file's own `main` stays in the test
+build, never called, so it counts like any function the tests do not run. *(ADR 0871)*
+
+```ail tool=test,--coverage,FILE expect=coverage rules=test.cover.4
+@test
+fn one()
+    assert(1 == 1)
+
+fn main()
+    print(1)
+```
+
 ## Checked examples for the attribute and property rules
 
 Each block runs `ail test` or checks the program, with the options on its fence (test.attr.1-4, test.prop.1, 3-5).

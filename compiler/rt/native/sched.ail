@@ -1,0 +1,278 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The deterministic scheduler (conc.sched.1-3, conc.par.9, eff.det.1-3, ADRs 0186, 0207, 0322, 0873). A
+## process started with `AIL_DETERMINISTIC=1` or `AIL_SCHEDULE=fixed|random:SEED` (the `ail run`
+## flags `--deterministic` and `--schedule`) runs its tasks one at a time: exactly one thread holds
+## the turn, and it gives it up only when it blocks, ends, or (random schedules) reaches a switch
+## point. Without those variables nothing here runs. Linked with `task.ail` only (`notask.ail`
+## stubs the hooks).
+##
+## Order (fixed): a new task runs at once, its spawner resumes next, other ready tasks run first
+## in, first out; a task that waits joins the line when what it waits for changes.
+## Order (random:SEED): at a spawn a seeded draw says whether the new task or the spawner goes on,
+## at every switch point a draw says whether to yield, and the next task is a seeded pick from
+## the line. Integer-only generator, so a seed replays on every target.
+##
+## State, in the pool block at `P_DET` (8-byte words; slot 0 is the main thread, worker `k` is
+## slot `k + 1`):
+##   +0 mode (0 off, 1 fixed, 2 random)   +8 generator   +16 deadlock found   +24 line length
+##   +32 line head   +40 waits begun   +48 idle workers   +64 the line (slots, a ring)
+## and, one word per slot: the address it waits on (0: none), when it began, what it waits for
+## (a string), whether the wait reports a deadlock, its turn word, the task handed to it, the
+## idle workers (a stack).
+
+P_DET := 16384
+SLOTS := 65
+D_MODE := 0
+D_RNG := 8
+D_DEAD := 16
+D_RQN := 24
+D_RQH := 32
+D_WSEQ := 40
+D_IDLEN := 48
+D_RQ := 64
+D_WADDR := 640
+D_WSQ := 1160
+D_WWHAT := 1680
+D_WREP := 2200
+D_TURN := 2720
+D_ASSIGN := 3240
+D_IDLE := 3760
+
+## Read the mode from the environment, once, when the pool block is made.
+fn det_init(p int)
+    mut mode := 0
+    mut seed := 0
+    os_env_get("AIL_DETERMINISTIC")
+    if os_ok()
+        mode = 1
+    sch := os_env_get("AIL_SCHEDULE")
+    if os_ok()
+        a := str_addr(sch)
+        n := load64(a)
+        if n > 7 and load8(a + 16) == 114
+            mode = 2
+            mut i := 7
+            while i < n
+                c := load8(a + 16 + i)
+                if c >= 48 and c <= 57
+                    seed = seed * 10 + c - 48
+                i += 1
+        else
+            mode = 1
+    store64(p + P_DET + D_MODE, mode)
+    store64(p + P_DET + D_RNG, seed)
+
+## Whether this process runs its tasks one at a time.
+fn det_on() bool
+    p := load64(global(TASKS))
+    p != 0 and load64(p + P_DET + D_MODE) != 0
+
+## The next seeded draw, never negative (splitmix64, as `std.random`).
+fn det_rand(d int) int
+    s := load64(d + D_RNG) + -7046029254386353131
+    store64(d + D_RNG, s)
+    mut z := s
+    z = z.bit_xor(z.shr(30).bit_and(17179869183)) * -4658895280553007687
+    z = z.bit_xor(z.shr(27).bit_and(137438953471)) * -7723592293110705685
+    z.bit_xor(z.shr(31).bit_and(8589934591)).bit_and(9223372036854775807)
+
+fn rq_push_back(d int, s int)
+    n := load64(d + D_RQN)
+    h := load64(d + D_RQH)
+    store64(d + D_RQ + 8 * ((h + n) % SLOTS), s)
+    store64(d + D_RQN, n + 1)
+
+fn rq_push_front(d int, s int)
+    h := (load64(d + D_RQH) + SLOTS - 1) % SLOTS
+    store64(d + D_RQH, h)
+    store64(d + D_RQ + 8 * h, s)
+    store64(d + D_RQN, load64(d + D_RQN) + 1)
+
+## The thread to run next, or -1 when none is ready: the first in line, or in a random schedule a
+## seeded pick.
+fn rq_pop(d int) int
+    n := load64(d + D_RQN)
+    if n == 0
+        return -1
+    h := load64(d + D_RQH)
+    mut k := 0
+    if load64(d + D_MODE) == 2 and n > 1
+        k = det_rand(d) % n
+    s := load64(d + D_RQ + 8 * ((h + k) % SLOTS))
+    mut i := k
+    while i > 0
+        store64(d + D_RQ + 8 * ((h + i) % SLOTS), load64(d + D_RQ + 8 * ((h + i - 1) % SLOTS)))
+        i -= 1
+    store64(d + D_RQH, (h + 1) % SLOTS)
+    store64(d + D_RQN, n - 1)
+    s
+
+## Give the turn to slot `to`.
+fn det_pass(d int, to int)
+    atomic_store(d + D_TURN + 8 * to, 1)
+    futex_wake(d + D_TURN + 8 * to, 1)
+
+## Sleep, parked for the collector, until the turn comes to slot `me`.
+fn det_park(d int, me int)
+    s := blocked_enter()
+    while atomic_load(d + D_TURN + 8 * me) == 0
+        futex_wait_raw(d + D_TURN + 8 * me, 0)
+    atomic_store(d + D_TURN + 8 * me, 0)
+    blocked_leave(s)
+
+## Something at address `a` changed: every thread waiting on it joins the line, in the order
+## they began to wait. Called by whoever changes a word others sleep on.
+fn det_wake(a int)
+    p := load64(global(TASKS))
+    if p == 0 or load64(p + P_DET + D_MODE) == 0
+        return
+    d := p + P_DET
+    while true
+        mut best := -1
+        mut first := 0
+        for s in 0..SLOTS
+            if load64(d + D_WADDR + 8 * s) == a
+                sq := load64(d + D_WSQ + 8 * s)
+                if best < 0 or sq < first
+                    best = s
+                    first = sq
+        if best < 0
+            return
+        store64(d + D_WADDR + 8 * best, 0)
+        rq_push_back(d, best)
+
+## `prog_wait` in a deterministic run: sleep while `*a == v` by passing the turn on. When nothing
+## else can run, the main task reports the deadlock (conc.task.7), with `report` as true.
+fn det_block(a int, v int, what str, report bool) bool
+    d := load64(global(TASKS)) + P_DET
+    me := thread_slot()
+    mut dead := false
+    while atomic_load(a).bit_and(4294967295) == v and not dead
+        seq := load64(d + D_WSEQ) + 1
+        store64(d + D_WSEQ, seq)
+        store64(d + D_WADDR + 8 * me, a)
+        store64(d + D_WSQ + 8 * me, seq)
+        store64(d + D_WWHAT + 8 * me, str_addr(what))
+        store64(d + D_WREP + 8 * me, if report then 1 else 0)
+        nxt := rq_pop(d)
+        if nxt >= 0
+            det_pass(d, nxt)
+            det_park(d, me)
+        elif me == 0
+            dead = true
+        else
+            store64(d + D_DEAD, 1)
+            det_pass(d, 0)
+            det_park(d, me)
+        if me == 0 and load64(d + D_DEAD) != 0
+            store64(d + D_DEAD, 0)
+            dead = true
+    if dead
+        store64(d + D_WADDR + 8 * me, 0)
+        det_deadlock(d, report)
+    dead
+
+## The main task found everything blocked: the message waits in `CHAN_FAULT` for the caller's
+## trap. A wait that cannot report ends the program.
+fn det_deadlock(d int, report bool)
+    mut others := 0
+    for s in 1..SLOTS
+        if load64(d + D_WADDR + 8 * s) != 0
+            others += 1
+    sb_reset()
+    sb_text("deadlock: the main task waits for ")
+    sb_text(str_at(load64(d + D_WWHAT)))
+    sb_text(", and ")
+    if others == 0
+        sb_text("no other tasks are")
+    elif others == 1
+        sb_text("1 other task is")
+    else
+        put_int(others)
+        sb_text(" other tasks are")
+    sb_text(" blocked")
+    msg := sb_str()
+    store64(global(CHAN_FAULT), str_addr(msg))
+    if not report
+        flush()
+        out_str("error: ")
+        out_str(msg)
+        out_byte(10)
+        flush_to(2)
+        sys_exit(1)
+
+## `task_start` in a deterministic run: hand the task to an idle worker or a new one, and either
+## switch to it now (the spawner is first in line again) or leave it in the line.
+fn det_spawn(p int, rec int)
+    d := p + P_DET
+    atomic_add(global(TASKS_LIVE), 1)
+    mut slot := 0
+    n := load64(d + D_IDLEN)
+    if n > 0
+        slot = load64(d + D_IDLE + 8 * (n - 1))
+        store64(d + D_IDLEN, n - 1)
+        store64(d + D_ASSIGN + 8 * slot, rec)
+    else
+        idx := load64(p + P_LIVE)
+        if idx >= MAXW
+            fail(1, 0, 0)
+        store64(p + P_LIVE, idx + 1)
+        slot = idx + 1
+        store64(d + D_ASSIGN + 8 * slot, rec)
+        start_thread(p, idx)
+    me := thread_slot()
+    if load64(d + D_MODE) == 1 or det_rand(d) % 2 == 0
+        rq_push_front(d, me)
+        det_pass(d, slot)
+        det_park(d, me)
+    else
+        rq_push_back(d, slot)
+
+## A worker's whole life in a deterministic run: sleep until a task is handed over, run it,
+## then give the turn on.
+fn det_worker(idx int)
+    p := load64(global(TASKS))
+    d := p + P_DET
+    slot := idx + 1
+    while true
+        det_park(d, slot)
+        rec := load64(d + D_ASSIGN + 8 * slot)
+        store64(p + P_CUR + 8 * idx, rec)
+        dispatch(load64(rec + T_ID), rec)
+        store64(p + P_CUR + 8 * idx, 0)
+        held_release(slot)
+        if failed()
+            store64(rec + T_RESULT, err_box())
+            finish_task(rec, 4)
+        else
+            finish_task(rec, 2)
+        det_end(d, slot)
+
+## The task of worker `slot` has ended: it is idle, and the first in line has the turn. With
+## nobody in line the main task is told to report the deadlock.
+fn det_end(d int, slot int)
+    n := load64(d + D_IDLEN)
+    store64(d + D_IDLE + 8 * n, slot)
+    store64(d + D_IDLEN, n + 1)
+    nxt := rq_pop(d)
+    if nxt >= 0
+        det_pass(d, nxt)
+    else
+        store64(d + D_DEAD, 1)
+        det_pass(d, 0)
+
+## A switch point (conc.sched.1): in a random schedule, a draw says whether to let another task
+## run. Never called with an internal lock held.
+fn det_yield()
+    p := load64(global(TASKS))
+    if p == 0 or load64(p + P_DET + D_MODE) != 2
+        return
+    d := p + P_DET
+    if det_rand(d) % 2 == 0
+        return
+    me := thread_slot()
+    rq_push_back(d, me)
+    det_pass(d, rq_pop(d))
+    det_park(d, me)
