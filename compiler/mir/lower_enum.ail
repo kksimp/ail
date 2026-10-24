@@ -394,7 +394,7 @@ fn Lower.eq_fn(mut self, t Ty) str
 ## Whether `==` on `t` is in the subset: numbers, strings, enums, structs
 ## and lists of those (reported at `pos`, naming enum `outer`, otherwise).
 fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) bool
-    if is_number(t) or t == Ty.Str or t == Ty.Bytes or t.is_ref()
+    if is_number(t) or t == Ty.Str or t == Ty.Bytes or t.is_ref() or t.is_tensor()
         return true
     if user_eq(t) != none
         return true
@@ -606,6 +606,8 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
         return call("rt.str_eq", [x, y], Ty.Bool)
     if t == Ty.Bytes
         return call("rt.bytes_eq", [x, y], Ty.Bool)
+    if t.is_tensor()
+        return call("rt.tensor_eq", [x, y], Ty.Bool)
     if t.opt_inner() != none
         return opt_compare(false, Val(id: x, ty: t), Val(id: y, ty: t), ast.Pos(line: 1, col: 1)).id
     if t.elem() != none or struct_name(t) != none or tuple_elems(t) != none or is_map_like(t)
