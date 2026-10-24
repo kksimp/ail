@@ -1,0 +1,233 @@
+## std.screen (spec std.screen.1-9, ADR 0878): what is on a screen, as
+## items an agent can ask about without a vision model. A program (or a
+## front end such as Garlic) builds a `Screen` from what it already draws;
+## the queries answer in text, most important first, within a token budget.
+## Nothing here runs unless a caller asks (std.screen.9).
+
+## One thing on the screen. `id` is stable across frames (std.screen.5);
+## `conf` is 1.0 when read from the program's own tree and lower when guessed
+## from pixels, with `why` giving the evidence (std.screen.3).
+pub struct Item
+    pub id int
+    pub role str
+    pub text str
+    pub color int
+    pub x float
+    pub y float
+    pub w float
+    pub h float
+    pub enabled bool
+    pub focused bool
+    pub href str
+    pub conf float
+    pub why str
+
+pub struct Screen
+    pub w float
+    pub h float
+    pub items List[Item]
+
+## A plain item with the usual defaults: enabled, unfocused, certain.
+pub fn item(id int, role str, text str, color int, x float, y float, w float, h float) Item
+    Item(
+        id,
+        role,
+        text,
+        color,
+        x,
+        y,
+        w,
+        h,
+        enabled: true,
+        focused: false,
+        href: "",
+        conf: 1.0,
+        why: "",
+    )
+
+## `rgb` as a name from a fixed palette (std.screen.7), so a theme change or
+## anti-aliasing does not change the answer.
+pub fn color_name(rgb int) str
+    r := (rgb / 65536) % 256
+    g := (rgb / 256) % 256
+    b := rgb % 256
+    hi := r.max(g).max(b)
+    lo := r.min(g).min(b)
+    l := hi + lo
+    if hi - lo < 28
+        if l < 60
+            return "black"
+        if l < 150
+            return "dark gray"
+        if l < 330
+            return "gray"
+        if l < 450
+            return "light gray"
+        return "white"
+    d := (hi - lo).to_float()
+    mut h := 0.0
+    if hi == r
+        h = (g - b).to_float() / d
+        if h < 0.0
+            h += 6.0
+    elif hi == g
+        h = (b - r).to_float() / d + 2.0
+    else
+        h = (r - g).to_float() / d + 4.0
+    deg := h * 60.0
+    dark := l < 200
+    mut base := "pink"
+    if deg < 15.0 or deg >= 345.0
+        base = "red"
+    elif deg < 40.0
+        base = "orange"
+    elif deg < 70.0
+        base = "yellow"
+    elif deg < 165.0
+        base = "green"
+    elif deg < 200.0
+        base = "cyan"
+    elif deg < 260.0
+        base = "blue"
+    elif deg < 330.0
+        base = "purple"
+    if base == "orange" and dark
+        return "brown"
+    if dark
+        return "dark {base}"
+    if l > 350 and base == "red"
+        return "pink"
+    base
+
+fn num(f float) str
+    "{f.round().to_int()}"
+
+## The one-line answer for `it` (std.screen.2):
+## `button 'Submit', red, at 412,300 100x32, enabled, links to /pay`.
+pub fn Item.line(self) str
+    mut s := "{role}"
+    if text != ""
+        s = "{s} '{text}'"
+    s = "{s}, {color_name(color)}, at {num(x)},{num(y)} {num(w)}x{num(h)}"
+    s = "{s}, {if enabled then "enabled" else "disabled"}"
+    if focused
+        s = "{s}, focused"
+    if href != ""
+        s = "{s}, links to {href}"
+    if conf < 1.0
+        s = "{s}, probably ({conf}: {why})"
+    "#{id} {s}"
+
+fn interactive(role str) bool
+    role == "button"
+        or role == "link"
+        or role == "textbox"
+        or role == "checkbox"
+        or role == "radio"
+        or role == "combobox"
+
+## How much `it` matters (std.screen.4): focused, then interactive, then
+## large; higher first.
+fn rank(it Item) int
+    mut r := (it.w * it.h / 100.0).to_int().min(99)
+    if interactive(it.role)
+        r += 1000
+    if it.focused
+        r += 2000
+    r
+
+fn inside(it Item, x float, y float, w float, h float) bool
+    it.x < x + w and it.x + it.w > x and it.y < y + h and it.y + it.h > y
+
+## Roughly four characters to a token.
+fn fits(used int, line str, budget int) bool
+    budget <= 0 or used + line.chars().len() / 4 + 1 <= budget
+
+## `items` as lines, most important first, in about `budget` tokens (0 for no
+## limit), ending in `+N more` for those left out (std.screen.4).
+pub fn lines(items List[Item], budget int) str
+    mut taken := List[bool]()
+    for _ in items
+        taken.push(false)
+    mut out := List[str]()
+    mut used := 0
+    mut left := items.len()
+    while left > 0
+        mut best := -1
+        for k in 0..items.len()
+            if not taken[k] and (best < 0 or rank(items[k]) > rank(items[best]))
+                best = k
+        line := items[best].line()
+        if out.len() > 0 and not fits(used, line, budget)
+            break
+        taken[best] = true
+        left -= 1
+        used += line.chars().len() / 4 + 1
+        out.push(line)
+    if left > 0
+        out.push("+{left} more")
+    if out.len() == 0
+        return "nothing"
+    out.join("\n")
+
+## The topmost item at point (`x`, `y`): the last one drawn (std.screen.2).
+pub fn Screen.what_is_at(self, x float, y float) str
+    mut k := items.len()
+    while k > 0
+        k -= 1
+        if inside(items[k], x, y, 0.001, 0.001)
+            return items[k].line()
+    "nothing at {num(x)},{num(y)}"
+
+## The items matching every non-empty criterion: `role`, colour name
+## `color`, and `text` as a case-insensitive substring (std.screen.2).
+pub fn Screen.find(self, role str, color str, text str, budget int) str
+    mut hits := List[Item]()
+    for it in items
+        if role != "" and it.role != role
+            continue
+        if color != "" and color_name(it.color) != color
+            continue
+        if text != "" and not it.text.to_lower().contains(text.to_lower())
+            continue
+        hits.push(it)
+    lines(hits, budget)
+
+## The items that overlap the region (std.screen.2).
+pub fn Screen.describe(self, x float, y float, rw float, rh float, budget int) str
+    mut hits := List[Item]()
+    for it in items
+        if inside(it, x, y, rw, rh)
+            hits.push(it)
+    lines(hits, budget)
+
+## What differs from `before` (std.screen.8): items that appeared (`+`), went
+## (`-`) or changed (`~`, with the new line), matched by id.
+pub fn Screen.changes_since(self, before Screen, budget int) str
+    mut diff := List[str]()
+    mut seen := Set[int]()
+    for it in items
+        seen.add(it.id)
+        mut old := none
+        for b in before.items
+            if b.id == it.id
+                old = b
+        if o := old
+            if o.line() != it.line()
+                diff.push("~ {it.line()}")
+        else
+            diff.push("+ {it.line()}")
+    for b in before.items
+        if not seen.contains(b.id)
+            diff.push("- {b.line()}")
+    if diff.len() == 0
+        return "unchanged"
+    mut out := List[str]()
+    mut used := 0
+    for k in 0..diff.len()
+        if not fits(used, diff[k], budget)
+            out.push("+{diff.len() - k} more")
+            break
+        used += diff[k].chars().len() / 4 + 1
+        out.push(diff[k])
+    out.join("\n")
