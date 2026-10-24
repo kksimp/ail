@@ -62,7 +62,10 @@ fn gc_mark_list_data(w int, len int)
         if kind != 0 and h.bit_and(256) == 0
             store64(bs, h.bit_or(256))
             if kind == KIND_LDATA
-                gc_scan_range(bs + 8, bs + 8 + 8 * len)
+                # Never past the block: a list's `len` read while the list is
+                # being changed must not send the scan beyond its data.
+                room := h.shr(16) / 8
+                gc_scan_range(bs + 8, bs + 8 + 8 * (if len < room then len else room))
 
 ## Most words are not heap addresses (integers, characters, small values), so
 ## the range test is done here once per word, with the heap bounds read once,
