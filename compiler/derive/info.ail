@@ -25,6 +25,7 @@ fn generator_of(trait_name str) str
         "FromJson" => "derive_from_json"
         "Default" => "derive_default"
         "FromArgs" => "derive_from_args"
+        "Observe" => "derive_observe"
         _ => ""
 
 fn last(name str) str
@@ -43,7 +44,9 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
         for imp in progs[k].impls
             trait_name := last(imp.trait_name)
             gen := generator_of(trait_name)
-            if gen == "" or imp.methods.len() > 0 or declared.contains(trait_name)
+            if gen == ""
+                or imp.methods.len() > 0
+                or (declared.contains(trait_name) and gen != "derive_observe")
                 continue
             type_name := last(imp.target.name)
             info := type_info(modules, progs, type_name, modules[k]) else continue
@@ -55,7 +58,8 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
                 text: "",
                 problem: "",
             )
-            text := run(gen, info) else err
+            facts := observe_facts(progs, type_name)
+            text := run(gen, info, facts) else err
                 e.problem = err.message
                 out.push(e)
                 continue
@@ -63,8 +67,9 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
             out.push(e)
     out
 
-fn run(gen str, info TypeInfo) str ! DeriveError
+fn run(gen str, info TypeInfo, facts ObserveFacts) str ! DeriveError
     match gen
+        "derive_observe" => derive_observe(info, facts)
         "derive_to_json" => derive_to_json(info)
         "derive_from_json" => derive_from_json(info)
         "derive_default" => derive_default(info)

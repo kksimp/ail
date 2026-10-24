@@ -983,7 +983,7 @@ fn trap(kind int, a int, b int, head str, op str, tail str)
     out_str(head)
     trap_body(kind, a, b, op)
     out_byte(10)
-    out_str(tail)
+    trap_tail(tail)
     trace_frames(tail)
     flush_to(2)
     sys_exit(1)
@@ -1132,7 +1132,7 @@ fn trap_end(tail str)
     if worker_index() >= 0
         trap_end_in_task(tail)
     out_byte(10)
-    out_str(tail)
+    trap_tail(tail)
     trace_frames(tail)
     flush_to(2)
     sys_exit(1)
@@ -1150,6 +1150,14 @@ fn trap_end_in_task(tail str)
     msg := os_str_from(base + at + 3, n - at - 3)
     store64(global(OUT_LEN), 0)
     on_trap(18, str_addr(msg), 0, head, "", tail)
+
+## The end of a trap whose excerpt and `values:` line are already written (`--values`):
+## `tail` is the trapping frame's line; `extra` the lines written since the message.
+fn trap_rest(tail str, extra int)
+    trap_tail(tail)
+    trace_frames_n(1 + extra)
+    flush_to(2)
+    sys_exit(1)
 
 ## A failure of the runtime itself: out of memory (run.limit.2).
 fn fail(kind int, a int, b int)

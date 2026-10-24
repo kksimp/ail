@@ -530,20 +530,18 @@ fn serve_poll(pf int, n int, ms int) int
     if not det_on()
         return serve_poll_raw(pf, n, ms)
     # On a deterministic schedule the others run between polls (see `net_wait`).
-    mut left := ms
+    deadline := if ms < 0 then -1 else time_mono_ms() + ms
     while true
         r := serve_poll_raw(pf, n, 0)
         if r != 0 or ms == 0
             return r
+        if deadline >= 0 and time_mono_ms() >= deadline
+            return 0
         if det_relax()
             continue
-        if left == 0
-            return 0
         r2 := serve_poll_raw(pf, n, 1)
         if r2 != 0
             return r2
-        if left > 0
-            left -= 1
     0
 
 fn serve_poll_raw(pf int, n int, ms int) int

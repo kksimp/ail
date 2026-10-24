@@ -287,6 +287,8 @@ const AIL_MODULES: &[(&str, &str, &str)] = &[
     ("std.net.http", "<std>/net/http.ail", include_str!("std/net/http.ail")),
     ("std.net.jar", "<std>/net/jar.ail", include_str!("std/net/jar.ail")),
     ("std.screen", "<std>/screen/screen.ail", include_str!("std/screen/screen.ail")),
+    ("std.screen.pixels", "<std>/screen/pixels.ail", include_str!("std/screen/pixels.ail")),
+    ("std.screen.view", "<std>/screen/view.ail", include_str!("std/screen/view.ail")),
     ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
     ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),
 ];

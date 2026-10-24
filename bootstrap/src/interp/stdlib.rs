@@ -75,10 +75,6 @@ impl<'a, W: Write> Interp<'a, W> {
         if matches!(module, "hash" | "compress") {
             return Ok(self.codec_call(module, f, &values, pos));
         }
-        // replay.cap.1: a recorded run's effects come from the recording.
-        if super::replay::on() && super::replay::captured(module, f) {
-            return self.captured_call(module, f, values, pos);
-        }
         self.std_effect(module, f, values, pos)
     }
 
@@ -275,7 +271,6 @@ impl<'a, W: Write> Interp<'a, W> {
                 }
                 self.flush(pos)?;
                 super::spawn::reap_all();
-                super::replay::finish();
                 std::process::exit(code as i32);
             }
             ("proc", "run" | "run_bytes") => {
