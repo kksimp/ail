@@ -81,8 +81,8 @@ use std.screen
 use std.screen.pixels
 
 fn main()
-    w := 200
-    h := 100
+    w := 400
+    h := 200
     mut px := List[int]()
     for _ in 0..w * h
         px.push(0xffffff)
