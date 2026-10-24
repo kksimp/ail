@@ -96,7 +96,7 @@ and the app answers between its other events with the observed values (the
 `Observe` trait), the screen of its view tree (`std.screen.view`) and the
 protocol reply. A client that sends nothing for 5 seconds is dropped. *(ADR 0884)*
 
-```ail skip=bootstrap rules=attach.wire.1,attach.wire.6
+```ail skip=bootstrap rules=attach.observe.4,attach.wire.1,attach.wire.6
 use std.app
 use std.attach
 use std.attach.serve
