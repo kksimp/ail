@@ -2,8 +2,8 @@
 ## a `std.app` app is built to serve the attach socket by rewriting its source
 ## text before it is lowered.
 
-const SERVE := "ail_serve"
-const ATTACH := "ail_attach"
+SERVE := "ail_serve"
+ATTACH := "ail_attach"
 
 ## `text` with `app.run(` calls made `std.attach.serve.run(` calls and an
 ## `impl attach.Observe` added for each non-generic `impl app.App for T`, so
