@@ -50,14 +50,16 @@ pub page.HIDDEN := ...  ## Elements never drawn: metadata, scripts and templates
 pub page.BLOCKS := ...  ## Elements laid out as blocks; the rest flow inline.
 pub fn page.input_type(d html.Doc, id int) str  ## The `type` of an `input`, lowercase; "text" when absent.
 pub fn page.control_value(d html.Doc, id int) str  ## A form control's value: an input's `value`, a textarea's text (or the
+pub fn page.label_of(d html.Doc, id int) str  ## The text of the `label` for control `id`: `<label for=ID>`, else a
 pub fn page.layout(d html.Doc, url str, width int) page.Page  ## Lays `d` out at `width` columns; `url` resolves relative links. The
 pub fn page.referrer(from str, to str) str  ## The `Referer` for a request to `to` from the page `from`: the whole
 pub fn page.base_of(d html.Doc, url str) str  ## Where relative addresses in `d` start from: its first `<base href>`
 pub fn page.layout_with(d html.Doc, url str, width int, sheet css.Sheet) page.Page  ## Lays `d` out with `sheet` (its linked style sheets) before its own.
 pub fn page.quote(s str) str  ## `s` as a JSON string.
 pub fn page.scheme(u str) str  ## The scheme of `u` (`https`), or "" when it has none (RFC 3986 3.1).
+pub fn page.file_path(url str) str  ## The file a `file://` URL names: the path after `file://`, and for a Windows
 pub fn page.resolve(base str, rel str) str  ## `rel` resolved against `base` (RFC 3986 5.2): absolute URLs as they are,
 pub fn page.remove_dots(p str) str  ## The path with `.` and `..` segments removed (RFC 3986 5.2.4); the query
 ```
 
-trimmed to fit 2000 tokens (~1270); dropped: private items
+trimmed to fit 2000 tokens (~1355); dropped: private items
