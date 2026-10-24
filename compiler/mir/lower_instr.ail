@@ -9,6 +9,7 @@ use ast
 
 pub struct Instr
     on bool
+    calls bool
     ids Map[str, int]
     sites List[str]
     started Set[str]
@@ -17,6 +18,7 @@ fn new_instr() Instr
     modes := env.get("AIL_INSTRUMENT") else ""
     Instr(
         on: modes.split(",").contains("lines"),
+        calls: modes.split(",").contains("calls"),
         ids: {},
         sites: [],
         started: Set[str](),
@@ -41,6 +43,31 @@ fn Lower.instr_stmt(mut self, s ast.Stmt)
         instr.sites.push("{id}\t{path}\t{line}\t{fname}\t1")
     instr.started.add(fname)
     call("rt.instr_hit", [konst(id, Ty.Int)], Ty.Unit)
+
+## The start of function `f`, whose parameters `params` hold (with `self` first for a method):
+## a call event with the arguments that are numbers, `bool`s or `str`s (rt/native/instr.ail).
+fn Lower.instr_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
+    if not instr.calls or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    call(
+        "rt.instr_call",
+        [str_value(fname), konst(f.pos.line, Ty.Int), konst(f.pos.col, Ty.Int)],
+        Ty.Unit,
+    )
+    mut labels := List[str]()
+    if f.receiver != none
+        labels.push("self")
+    for p in f.params
+        labels.push(p.name)
+    for i in 0..params.len().min(labels.len())
+        helper := match tys[i]
+            Int | Char | Byte => "int"
+            Bool => "bool"
+            Str => "str"
+            _ => ""
+        if helper != ""
+            call("rt.instr_arg_{helper}", [str_value(labels[i]), params[i]], Ty.Unit)
+    call("rt.instr_call_end", [], Ty.Unit)
 
 ## Write the site table.
 fn Lower.instr_finish(mut self)

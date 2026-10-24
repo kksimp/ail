@@ -16,20 +16,129 @@ INSTR_TAB := 56
 ## The most sites a program can have; later ids are not recorded.
 INSTR_CAP := 4194304
 
-fn instr_hit(id int)
+## The call trace (`AIL_INSTRUMENT=calls`, trace.test.1-2) lives after the hit bytes in the
+## same table: a word with the limit plus one (0 until read from `$AIL_TRACE_LIMIT`, default
+## 1000), the events shown, the events dropped, whether the event being written is dropped,
+## the text length, then the text. An event is a line `call<TAB>FN<TAB>LINE<TAB>COL` followed by
+## `<TAB>NAME=VALUE` for each argument that is a number, a `bool` or a `str`.
+TRACE_CAP := 1048576
+TRACE_HEAD := 48
+
+## The table, made if it is not there yet; 0 when it can't be.
+fn instr_table() int
     mut t := load64(global(INSTR_TAB))
     if t == 0
-        t = sys_mmap(INSTR_CAP + 8)
+        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP)
         if t < 0
-            return
+            return 0
         store64(global(INSTR_TAB), t)
-    if id < INSTR_CAP
+    t
+
+fn instr_hit(id int)
+    t := instr_table()
+    if t > 0 and id < INSTR_CAP
         store8(t + 8 + id, 1)
         if id >= load64(t)
             store64(t, id + 1)
 
-## Append the ids hit to `$AIL_INSTRUMENT_OUT`, else to `EXE.hits` beside the
-## program (its `argv[0]`), so that several runs add up.
+## The head of the call trace in the table `t`.
+fn instr_trace(t int) int
+    t + 8 + INSTR_CAP
+
+## The start of a call event, unless the limit is reached.
+fn instr_call(name str, line int, col int)
+    t := instr_table()
+    if t <= 0
+        return
+    h := instr_trace(t)
+    if load64(h) == 0
+        given := os_env_get("AIL_TRACE_LIMIT")
+        store64(h, (if given == "" then 1000 else str_to_int(given)) + 1)
+    if load64(h + 8) >= load64(h) - 1
+        store64(h + 16, load64(h + 16) + 1)
+        store64(h + 24, 1)
+        return
+    store64(h + 8, load64(h + 8) + 1)
+    store64(h + 24, 0)
+    instr_put("call\t")
+    instr_put(name)
+    instr_put("\t")
+    instr_put_int(line)
+    instr_put("\t")
+    instr_put_int(col)
+
+## The end of the event: its newline.
+fn instr_call_end()
+    t := load64(global(INSTR_TAB))
+    if t > 0 and load64(instr_trace(t) + 24) == 0
+        instr_put("\n")
+
+fn instr_arg_int(name str, v int)
+    instr_arg_start(name)
+    instr_put_int(v)
+
+fn instr_arg_bool(name str, v bool)
+    instr_arg_start(name)
+    instr_put(if v then "true" else "false")
+
+## A `str` argument, quoted and cut at 60 bytes; control bytes show as spaces.
+fn instr_arg_str(name str, v str)
+    instr_arg_start(name)
+    t := load64(global(INSTR_TAB))
+    if t <= 0 or load64(instr_trace(t) + 24) != 0
+        return
+    p := str_addr(v)
+    n := load64(p)
+    instr_put("\"")
+    for i in 0..(if n > 60 then 60 else n)
+        c := load8(p + 16 + i)
+        instr_byte(if c < 32 then 32 else c)
+    instr_put("\"")
+
+fn instr_arg_start(name str)
+    t := load64(global(INSTR_TAB))
+    if t > 0 and load64(instr_trace(t) + 24) == 0
+        instr_put("\t")
+        instr_put(name)
+        instr_put("=")
+
+fn instr_put(s str)
+    p := str_addr(s)
+    for i in 0..load64(p)
+        instr_byte(load8(p + 16 + i))
+
+fn instr_put_int(n int)
+    scratch := instr_trace(load64(global(INSTR_TAB))) + TRACE_HEAD + TRACE_CAP - 8192
+    for i in 0..(write_int(scratch, n))
+        instr_byte(load8(scratch + i))
+
+## Append a byte to the trace text, unless it is full (the last 4 KiB stay free).
+fn instr_byte(b int)
+    h := instr_trace(load64(global(INSTR_TAB)))
+    n := load64(h + 32)
+    if n < TRACE_CAP - 16384
+        store8(h + TRACE_HEAD + n, b)
+        store64(h + 32, n + 1)
+
+## The path of the file `suffix` beside the program (its `argv[0]`), made in `at`; 0 when
+## `named` is not empty it is the path given.
+fn instr_path(at int, named str, suffix str) int
+    if named != ""
+        return os_cstr(OS_PATH_A, named)
+    a0 := load64(load64(global(ARGV)))
+    n := os_c_len(a0)
+    if n > 4000
+        return 0
+    for i in 0..n
+        store8(at + i, load8(a0 + i))
+    q := str_addr(suffix) + 16
+    m := load64(str_addr(suffix))
+    for i in 0..m
+        store8(at + n + i, load8(q + i))
+    store8(at + n + m, 0)
+    at
+
+## Write the hits and the trace (see the head of this file).
 fn instr_dump()
     t := load64(global(INSTR_TAB))
     if t <= 0 or target() == 3
@@ -38,36 +147,34 @@ fn instr_dump()
     buf := sys_mmap(65536 + 8192)
     if buf < 0
         return
-    named := os_env_get("AIL_INSTRUMENT_OUT")
-    mut p := 0
-    if named == ""
-        a0 := load64(load64(global(ARGV)))
-        n := os_c_len(a0)
-        if n > 4000
-            return
-        for i in 0..n
-            store8(buf + 65536 + i, load8(a0 + i))
-        suffix := ".hits"
-        q := str_addr(suffix) + 16
-        for i in 0..5
-            store8(buf + 65536 + n + i, load8(q + i))
-        store8(buf + 65536 + n + 5, 0)
-        p = buf + 65536
-    else
-        p = os_cstr(OS_PATH_A, named)
+    h := instr_trace(t)
+    n := load64(h + 32)
+    if n > 0 or load64(h + 16) > 0
+        p := instr_path(buf + 65536, os_env_get("AIL_TRACE_OUT"), ".trace")
+        if p != 0
+            fd := os_open(p, os_open_flags(1), 438)
+            if fd >= 0
+                os_write_all(fd, h + TRACE_HEAD, n)
+                dropped := load64(h + 16)
+                if dropped > 0
+                    w := write_int(buf, dropped)
+                    store8(buf + w, 10)
+                    os_write_all(fd, buf, w + 1)
+                os_close(fd)
+    p := instr_path(buf + 65536, os_env_get("AIL_INSTRUMENT_OUT"), ".hits")
     if p == 0
         return
     fd := os_open(p, os_open_flags(2), 438)
     if fd < 0
         return
-    mut n := 0
+    mut k := 0
     for id in 0..load64(t)
         if load8(t + 8 + id) != 0
-            n += write_int(buf + n, id)
-            store8(buf + n, 10)
-            n += 1
-            if n > 65000
-                os_write_all(fd, buf, n)
-                n = 0
-    os_write_all(fd, buf, n)
+            k += write_int(buf + k, id)
+            store8(buf + k, 10)
+            k += 1
+            if k > 65000
+                os_write_all(fd, buf, k)
+                k = 0
+    os_write_all(fd, buf, k)
     os_close(fd)

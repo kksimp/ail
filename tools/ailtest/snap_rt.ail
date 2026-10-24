@@ -1,0 +1,78 @@
+
+## Appended to the rewritten copy under `ail test --update` (snap.update.2): a failing `assert_eq(actual,
+## LITERAL)` writes `ail-snapshot LINE COL TEXT` to standard error and the test goes on.
+fn ail_snap_quote(s str) str
+    mut out := "\""
+    for c in s.chars()
+        if c == '"'
+            out = "{out}\\\""
+        elif c == '\\'
+            out = "{out}\\\\"
+        elif c == '{'
+            out = "{out}\\\{"
+        elif c == '\n'
+            out = "{out}\\n"
+        elif c == '\t'
+            out = "{out}\\t"
+        elif c == '\r'
+            out = "{out}\\r"
+        else
+            out = "{out}{c}"
+    "{out}\""
+
+fn ail_snap_quote_char(c char) str
+    if c == '\''
+        "'\\''"
+    elif c == '\\'
+        "'\\\\'"
+    elif c == '\n'
+        "'\\n'"
+    elif c == '\t'
+        "'\\t'"
+    elif c == '\r'
+        "'\\r'"
+    else
+        "'{c}'"
+
+fn ail_snap_say(l int, c int, text str)
+    io.eprint("ail-snapshot {l} {c} {text}")
+
+fn ail_snap_str(a str, e str, l int, c int)
+    if a != e
+        ail_snap_say(l, c, ail_snap_quote(a))
+
+fn ail_snap_char(a char, e char, l int, c int)
+    if a != e
+        ail_snap_say(l, c, ail_snap_quote_char(a))
+
+fn ail_snap_int(a int, e int, l int, c int)
+    if a != e
+        ail_snap_say(l, c, "{a}")
+
+fn ail_snap_float(a float, e float, l int, c int)
+    if a != e
+        ail_snap_say(l, c, "{a}")
+
+fn ail_snap_bool(a bool, e bool, l int, c int)
+    if a != e
+        ail_snap_say(l, c, "{a}")
+
+fn ail_snap_list_str(a List[str], e List[str], l int, c int)
+    if a != e
+        ail_snap_say(l, c, "[{[ail_snap_quote(x) for x in a].join(", ")}]")
+
+fn ail_snap_list_char(a List[char], e List[char], l int, c int)
+    if a != e
+        ail_snap_say(l, c, "[{[ail_snap_quote_char(x) for x in a].join(", ")}]")
+
+fn ail_snap_list_int(a List[int], e List[int], l int, c int)
+    if a != e
+        ail_snap_say(l, c, "[{a.join(", ")}]")
+
+fn ail_snap_list_float(a List[float], e List[float], l int, c int)
+    if a != e
+        ail_snap_say(l, c, "[{a.join(", ")}]")
+
+fn ail_snap_list_bool(a List[bool], e List[bool], l int, c int)
+    if a != e
+        ail_snap_say(l, c, "[{a.join(", ")}]")
