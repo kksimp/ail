@@ -8,7 +8,7 @@ fn same(v0:a Bag, v1:b Bag) bool
 fn main() unit
   b0:
     call init.enums()
-    v0 int = const 64
+    v0 int = const 72
     v1 int = prim global(v0)
     v2 Bag = load v1 +0
     v4 int = prim global(v0)
@@ -176,7 +176,7 @@ fn init.enums() unit
     v2 Bag = call rt.obj_new(v0, v1)
     v3 int = const 1
     store v2, v3 +0
-    v4 int = const 64
+    v4 int = const 72
     v5 int = prim global(v4)
     store v5, v2 +0
     return

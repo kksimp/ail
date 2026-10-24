@@ -2,16 +2,23 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## `std.path` (std.path.1-5, ADR 0253, ADR 0630): text functions on paths,
-## with no system calls and no global slots. The separator is `/`; the
-## Windows rules of std.path.2 and std.path.4 come with the Windows target.
+## with no system calls and no global slots. The separator is `/`, and on
+## Windows (`target()` 3) `\` too, with `X:` drive roots; the other Windows
+## rules of std.path.2 and std.path.4 are still to come.
 ## A path is a string object (native-abi.md §2): `+0` bytes, `+16` UTF-8.
 ## `/` and `.` are single bytes, so byte offsets are enough.
 
-## The last byte equal to `c` in `lo..hi` of the string at `p`, else -1.
+## Whether byte `b` separates path components: `/`, and `\` on Windows.
+fn path_sep(b int) bool
+    b == 47 or (b == 92 and target() == 3)
+
+## The last byte equal to `c` in `lo..hi` of the string at `p`, else -1; a
+## `c` of 47 matches any separator.
 fn path_rfind(p int, lo int, hi int, c int) int
     mut i := hi - 1
     while i >= lo
-        if load8(p + 16 + i) == c
+        b := load8(p + 16 + i)
+        if b == c or (c == 47 and path_sep(b))
             return i
         i -= 1
     -1
@@ -25,6 +32,9 @@ fn path_dir(s str) str
         return "."
     if i == 0
         return str_sub(p, 0, 1)
+    # `C:\x` is in the root of drive `C:`.
+    if i == 2 and target() == 3 and load8(p + 17) == 58
+        return str_sub(p, 0, 3)
     str_sub(p, 0, i)
 
 ## `path.base(s)`: the text after the last `/`.
@@ -60,8 +70,10 @@ fn path_join(a str, b str) str
     ap := str_addr(a)
     bp := str_addr(b)
     an := load64(ap)
-    if an == 0 or (load64(bp) > 0 and load8(bp + 16) == 47)
+    if an == 0 or (load64(bp) > 0 and path_sep(load8(bp + 16)))
         return b
-    if load8(ap + 16 + an - 1) == 47
+    if target() == 3 and load64(bp) > 1 and load8(bp + 17) == 58
+        return b
+    if path_sep(load8(ap + 16 + an - 1))
         return str_cat(a, b)
     str_cat(str_cat(a, "/"), b)

@@ -240,6 +240,7 @@ fn Lower.req_trap(
     callee_file int,
     caller_file int,
 )
+    trace_contract(label, "requires", c, konst(0, Ty.Bool))
     trap_open("contract.req.1", pos)
     say("`{label}` requires `{c.text}`{origin}, but it was called with ")
     describe_args(args, pos)
@@ -333,6 +334,18 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     scopes = saved
     self_ty = saved_self
 
+## The `requires` of `f` that held, traced on entry so they follow the call event:
+## the checks themselves run at the call site, and a failing one traps there.
+fn Lower.trace_requires(mut self, f ast.FnDecl, key str)
+    if instr.nocontracts
+        return
+    unchecked = true
+    for c in f.contracts
+        if not c.is_ensures
+            v := lower_value(c.cond, Ty.Bool) else continue
+            trace_contract(key, "requires", c, v.id)
+    unchecked = false
+
 # ---- ensures ----
 
 ## On entry to `f`: take the `old(e)` values of its `ensures` lines
@@ -413,6 +426,7 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
         c := ens[i]
         scopes = if i < inh.ens_n then their_scope else own_scope
         v := lower_value(c.cond, Ty.Bool) else break
+        trace_contract(ens_label, "ensures", c, v.id)
         ok := check_branch(v.id)
         trap_open("contract.ens.1", c.pos)
         origin := if i < inh.ens_n then inh.ens_origin else ""
@@ -456,6 +470,7 @@ fn Lower.check_invariants(mut self, key str, obj int, pos ast.Pos, by str, at as
     unchecked = true
     for c in list
         v := lower_value(c.cond, Ty.Bool) else break
+        trace_contract(name, "invariant", c, v.id)
         ok := check_branch(v.id)
         if by == ""
             trap_open("contract.inv.2", c.pos)
