@@ -1,7 +1,7 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## Native instrumentation (ADR 0868 item 4, test.cover.1). A program built
+## Native instrumentation (ADR 0871, native.instr.1-3). A program built
 ## with `AIL_INSTRUMENT=lines` calls `instr_hit(ID)` at the start of each
 ## statement; `ID` numbers the sites in the table the compiler writes
 ## (lower_instr.ail). The hits are one byte each in a table that global slot
@@ -16,7 +16,7 @@ INSTR_TAB := 56
 ## The most sites a program can have; later ids are not recorded.
 INSTR_CAP := 4194304
 
-## The call trace (`AIL_INSTRUMENT=calls`, trace.test.1-2) lives after the hit bytes in the
+## The call trace (`AIL_INSTRUMENT=calls`, native.instr.3, trace.test.1-2) lives after the hit bytes in the
 ## same table: a word with the limit plus one (0 until read from `$AIL_TRACE_LIMIT`, default
 ## 1000), the events shown, the events dropped, whether the event being written is dropped,
 ## the text length, then the text. An event is a line `call<TAB>FN<TAB>LINE<TAB>COL` followed by
@@ -116,7 +116,7 @@ fn instr_put_int(n int)
 fn instr_byte(b int)
     h := instr_trace(load64(global(INSTR_TAB)))
     n := load64(h + 32)
-    if n < TRACE_CAP - 16384
+    if n < TRACE_CAP - 16384 and load64(h + 24) == 0
         store8(h + TRACE_HEAD + n, b)
         store64(h + 32, n + 1)
 

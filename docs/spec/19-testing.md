@@ -297,13 +297,9 @@ fn main()
     print(1)
 ```
 
-**test.cover.4** — The native `ail test --coverage` builds the tests with
-`AIL_INSTRUMENT=lines`: each statement of the program's own files starts with
-a hit of its site (compiler/mir/lower_instr.ail, `rt/native/instr.ail`), the
-build writes the site table to `$AIL_INSTRUMENT_SITES`, and a run appends the
-ids hit to `$AIL_INSTRUMENT_OUT`, else `EXE.hits`, when it exits or traps. A
-build without the variable has no site and no table. `main` of the file is
-not counted (the test build replaces it). *(ADR 0868)*
+**test.cover.4** — The native `ail test --coverage` is built on the
+instrumentation of native.instr.1-3. The file's own `main` is not counted (the
+test build replaces it). *(ADR 0871)*
 
 ## Checked examples for the attribute and property rules
 

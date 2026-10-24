@@ -1071,9 +1071,15 @@ fn run_prop(w World, lead int, exe str, slot int, t TestFn, cases int, seed int)
         return Prop(status: "fail", message: fail, cases: n, input: shown.join(", "))
     Prop(status: "pass", message: "", cases: cases, input: "")
 
-fn run_one(exe str, slot int, lead int) Verdict
+## Run the test binary on `arg`, with the trace limit `lim` (trace.run.4) when there is one.
+fn started(exe str, arg str, lim str) !proc.Output
+    if lim.is_empty()
+        return proc.run(exe, [arg], none, RUN_LIMIT_MS)?
+    proc.run("env", ["AIL_TRACE_LIMIT={lim}", exe, arg], none, RUN_LIMIT_MS)?
+
+fn run_one(exe str, slot int, lead int, lim str) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
+    r := started(exe, arg, lim) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status == 0
         return Verdict(
@@ -1155,9 +1161,9 @@ fn debug_list(xs List[str]) str
         parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
     "[{parts.join(", ")}]"
 
-fn run_doc(exe str, slot int, lead int, expected List[str]) Verdict
+fn run_doc(exe str, slot int, lead int, expected List[str], lim str) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := proc.run(exe, [arg], none, RUN_LIMIT_MS) else
+    r := started(exe, arg, lim) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status != 0
         return plain("", "fail", describe(r.err, lead))
@@ -1652,7 +1658,45 @@ fn print_cover(c FileCover, json bool, detail bool)
         shown := [if r.first == r.last then "{r.first}" else "{r.first}-{r.last}" for r in ranges]
         print("  not run: {shown.join(", ")}")
 
-fn report(vs List[Verdict], json bool, src List[str]) int
+## ---- Traces (trace.test.1-2) ----
+
+## One event of a test's trace, from a line the run wrote to `EXE.trace`
+## (`call<TAB>FN<TAB>LINE<TAB>COL<TAB>NAME=VALUE...`), as JSON; "" for a line that isn't the program's.
+fn trace_json(line str) str
+    c := line.split("\t")
+    if c.len() == 1
+        n := line.to_int() else return ""
+        return "\{\"api\":1,\"trace\":\"dropped\",\"count\":{n}}"
+    if c.len() < 4 or c[0] != "call" or c[1] == "main" or c[1].starts_with("ail_")
+        return ""
+    mut args := List[str]()
+    for a in c[4..]
+        eq := a.find("=") else continue
+        args.push("{json_str(a.slice(0, eq))}:{json_str(a.slice(eq + 1, a.len()))}")
+    "\{\"api\":1,\"trace\":\"call\",\"fn\":{json_str(c[1])},\"args\":\{{args.join(",")}},\"line\":{c[2]},\"col\":{c[3]}}"
+
+## The same event as a line of the human form.
+fn trace_text(line str) str
+    c := line.split("\t")
+    if c.len() == 1
+        n := line.to_int() else return ""
+        return "trace: {n} more events dropped"
+    if c.len() < 4 or c[0] != "call" or c[1] == "main" or c[1].starts_with("ail_")
+        return ""
+    mut args := List[str]()
+    for a in c[4..]
+        eq := a.find("=") else continue
+        args.push("{a.slice(0, eq)} = {a.slice(eq + 1, a.len())}")
+    "trace: call {c[1]}({args.join(", ")})"
+
+## The events a run wrote, and none when it wrote nothing; the file is removed.
+fn take_trace(exe str) List[str]
+    path := "{exe}.trace"
+    text := fs.read_text(path) else return []
+    fs.remove(path) else return text.lines()
+    text.lines()
+
+fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]) int
     mut passed := 0
     mut failed := 0
     mut skipped := 0
@@ -1668,7 +1712,14 @@ fn report(vs List[Verdict], json bool, src List[str]) int
             extra := if v.cases > 0 then ",\"cases\":{v.cases},\"seed\":{unsigned_text(v.seed)}" else ""
             input := if v.input.is_empty() then "" else ",\"input\":{json_str(v.input)}"
             at := if w := where_at(v.message) then ",\"line\":{w.0},\"col\":{w.1}" else ""
-            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(v.message)}{extra}{input}}")
+            raw := traces.get(v.name) else []
+            mut events := List[str]()
+            for e in raw
+                j := trace_json(e)
+                if not j.is_empty()
+                    events.push(j)
+            shown := if events.is_empty() then "" else ",\"trace\":[{events.join(",")}]"
+            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(v.message)}{extra}{input}{shown}}")
         elif v.status == "pass"
             print("ok {v.name}{tail}")
         elif v.status == "fail"
@@ -1677,6 +1728,11 @@ fn report(vs List[Verdict], json bool, src List[str]) int
                 shown := excerpt(src, w.0, w.1)
                 if not shown.is_empty()
                     print(shown)
+            seen := traces.get(v.name) else []
+            for e in seen
+                t := trace_text(e)
+                if not t.is_empty()
+                    print("  {t}")
             if not v.input.is_empty()
                 print("  input: {v.input}")
         else
@@ -1693,7 +1749,7 @@ fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--coverage[=lines]] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
@@ -1707,6 +1763,8 @@ fn main() !
     mut has_seed := false
     mut seed_given := 0
     mut want := ""
+    mut trace := false
+    mut trace_limit := ""
     for a in env.args()
         if want == "--cases"
             cases = a.to_int() else usage()
@@ -1719,6 +1777,13 @@ fn main() !
             json = true
         elif a == "--update"
             update = true
+        elif a == "--trace" or a == "--trace=calls" or a == "--trace=all" or a == "--trace=effects"
+            trace = true
+        elif want == "--trace-limit"
+            trace_limit = a
+            want = ""
+        elif a == "--trace-limit"
+            want = a
         elif a == "--dry-run"
             dry = true
         elif a == "--coverage"
@@ -1765,7 +1830,7 @@ fn main() !
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
     if found.tests.len() == 0 and mf.tests.is_empty()
-        io.exit(report(verdicts, json, text.lines()))
+        io.exit(report(verdicts, json, text.lines(), {}))
     stem := path.stem(file)
     copy_name := ".ail-test-{stem}.ail"
     mut scratch := ""
@@ -1808,12 +1873,13 @@ fn main() !
             write_modules(scratch, mf, mdropped)? "writing the modules"
         last_lead = rw.lead
         fs.write_text(copy, rw.text)? "writing {copy}"
-        b := if coverage.is_empty()
+        modes := [m for m in [if coverage.is_empty() then "" else "lines", if trace then "tests" else ""] if m != ""].join(",")
+        b := if modes.is_empty()
             proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
         else
-            # test.cover.4: the build counts the statements run (rt/native/instr.ail).
+            # native.instr.2-3: the build counts the statements run and notes the calls (rt/native/instr.ail).
             proc.run("env", [
-                "AIL_INSTRUMENT=lines",
+                "AIL_INSTRUMENT={modes}",
                 "AIL_INSTRUMENT_SITES={exe}.sites",
                 ail_path(),
                 "build",
@@ -1870,6 +1936,7 @@ fn main() !
             break
     if not coverage.is_empty()
         _ := proc.run("rm", ["-f", "{exe}.hits"]) else io.exit(2)
+    mut traces := Map[str, List[str]]()
     for i in 0..found.tests.len()
         t := found.tests[i]
         if dropped.contains(i)
@@ -1884,10 +1951,18 @@ fn main() !
                 if not dropped.contains(j)
                     slot += 1
             if doc_names.contains(t.name)
-                v := run_doc(exe, slot, last_lead, doc_expected(lines, t))
+                v := run_doc(exe, slot, last_lead, doc_expected(lines, t), trace_limit)
                 verdicts.push(plain(doc_names[t.name], v.status, v.message))
+                if trace and v.status == "fail"
+                    traces[doc_names[t.name]] = take_trace(exe)
+                elif trace
+                    take_trace(exe)
             elif t.params.is_empty()
-                v := run_one(exe, slot, last_lead)
+                v := run_one(exe, slot, last_lead, trace_limit)
+                if trace and v.status == "fail"
+                    traces[t.name] = take_trace(exe)
+                elif trace
+                    take_trace(exe)
                 verdicts.push(Verdict(
                     name: t.name,
                     status: v.status,
@@ -1934,7 +2009,7 @@ fn main() !
             for j in 0..mi
                 if not mdropped.contains(j)
                     slot += 1
-            v := run_one(exe, slot, 0)
+            v := run_one(exe, slot, 0, trace_limit)
             verdicts.push(plain(name, v.status, v.message))
     if update
         mut recs := List[SnapRec]()
@@ -1943,7 +2018,7 @@ fn main() !
                 if r.col > 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
-    code := report(verdicts, json, text.lines())
+    code := report(verdicts, json, text.lines(), traces)
     if not coverage.is_empty() and built
         mut skip := Set[str]()
         for t in found.tests
@@ -1963,7 +2038,7 @@ fn main() !
         )
             print_cover(c, json, coverage == "lines")
     if scratch.is_empty()
-        _ := proc.run("rm", ["-f", copy, exe, "{exe}.sites", "{exe}.hits"]) else io.exit(code)
+        _ := proc.run("rm", ["-f", copy, exe, "{exe}.sites", "{exe}.hits", "{exe}.trace"]) else io.exit(code)
     else
         _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)
     io.exit(code)
