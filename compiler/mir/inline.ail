@@ -208,4 +208,4 @@ fn rename(mut g Func, repl List[int])
         g.blocks[b].term = t
 
 fn kept_lengths(f Func, on bool) Func
-    if on then keep_lengths(f) else f
+    if on and not opt_off("keep") then keep_lengths(f) else f

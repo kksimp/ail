@@ -50,7 +50,16 @@ MAX_PER := 8
 ## to this value.
 MAX_REACH := 16777216
 
-pub fn bce(f Func, reserve bool, grow_only bool) Func
+## `AIL_OPT_OFF=bce,reserve,keep` (comma list) turns the named list
+## optimizations off in the compiler's output, to bisect a miscompile.
+pub fn opt_off(name str) bool
+    off := env.get("AIL_OPT_OFF") else ""
+    off.split(",").contains(name)
+
+pub fn bce(f Func, reserve0 bool, grow_only bool) Func
+    if opt_off("bce")
+        return f
+    reserve := reserve0 and not opt_off("reserve")
     mut g := f
     if grow_only
         g = dominated(g)
