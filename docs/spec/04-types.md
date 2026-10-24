@@ -261,8 +261,8 @@ list of fields, each written `name Type`. *(ADR 0053)*
 
 ```ail fragment
 enum Shape
-    Circle(r f64)
-    Rect(w f64, h f64)
+    Circle(r float)
+    Rect(w float, h float)
     Empty
 ```
 
