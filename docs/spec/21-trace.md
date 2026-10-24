@@ -249,6 +249,17 @@ frame. *(ADRs 0641, 0642)*
 reports the callee's frame, then the caller at the inlined call, as if the
 call had been made. *(ADR 0643)*
 
+**trace.frame.3** — `ail run --values FILE` builds the program so that its
+own functions keep their arguments and locals where a trap can print them. The
+trap then reports each frame as the interpreter does (trace.snap.2,
+trace.snap.3): `  at LINE:COL in NAME(a = 1, b = 2); c = 3` (the arguments,
+then `; ` and the locals in scope at the statement that was running, in
+declaration order; the values of types the runtime can print), a contract
+trap's `  values: ` line (the arguments the condition names, in name order),
+and `  … N more frames (--verbose shows every frame and value)`. A build
+without `--values` prints no values (trace.frame.1) and costs nothing for
+them. *(ADR pending, ADR 0641)*
+
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
 

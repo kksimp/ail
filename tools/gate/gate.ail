@@ -546,7 +546,8 @@ fn run_case(at str, exp str) str?
             return "ail test output differs\n--- expected (exit {want_exit})\n{want}--- actual (exit {r.status})\n{r.out}"
         return none
     if fs.exists("{exp}err")
-        r := ail_run(["run", at]) else return "could not start ail"
+        flags := slurp("{exp}args").words()
+        r := ail_run(cat(cat(["run"], flags), [at])) else return "could not start ail"
         want := slurp("{exp}err").replace("$FILE", at)
         if r.status != 1 or r.err != want
             return "expected exit 1 and this report\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -2430,7 +2431,8 @@ fn Gate.bytecode(mut self)
     mut jobs := List[str]()
     mut runs := 0
     for f in files
-        args := slurp(f.replace(".ail", ".args"))
+        # `--values` (trace.frame.3) is native only.
+        args := slurp(f.replace(".ail", ".args")).replace("--values", "")
         src := slurp(f)
         mut steady := true
         for w in concurrent

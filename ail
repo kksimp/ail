@@ -162,6 +162,7 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 v="${run_args[$((k + 1))]-}"
                 case "$v" in "" | *[!0-9]* | 0) die "\`--max-steps\` needs a positive number of steps (run.limit.4)" ;; esac
                 export AIL_MAX_STEPS="$v" AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}steps"; k=$((k + 2)) ;;
+            --values) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values"; k=$((k + 1)) ;;
             --deterministic) export AIL_DETERMINISTIC=1; det_run=1; k=$((k + 1)) ;;
             --seed)
                 v="${run_args[$((k + 1))]-}"

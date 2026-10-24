@@ -951,6 +951,7 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
     if problems.len() > fn_problems or fn_failed
         facts.moves = []
         return
+    instr_end()
     mut func := elide_moves(
         Func(
             name: name,

@@ -7,6 +7,13 @@
 ## variable nothing is emitted: no call, no table.
 use ast
 
+## What one `vd.N` describer prints: the names and types of the spilled slots, the first
+## `np` being the arguments.
+pub struct ValDesc
+    names List[str]
+    tys List[Ty]
+    np int
+
 pub struct Instr
     on bool
     calls bool
@@ -16,9 +23,27 @@ pub struct Instr
     steps bool
     ## `tests`: calls, but not those of the test runner's own `main` and `ail_*` helpers.
     tests bool
+    ## `values`: each function keeps its arguments and locals where a trap's stack can print
+    ## them (`--values`, trace.frame.3; rt/native/vals.ail).
+    vals bool
+    ## The spill object of the function being lowered (-1 for none), its name, and how many
+    ## of the names declared by then are its parameters.
+    sp int
+    owner str
+    np int
+    descs List[ValDesc]
     ids Map[str, int]
     sites List[str]
     started Set[str]
+
+## A name in scope, with its declaration number.
+struct Pair
+    n int
+    key str
+    name str
+
+## How many names a spill holds.
+VALS_SLOTS := 32
 
 fn new_instr() Instr
     modes := env.get("AIL_INSTRUMENT") else ""
@@ -28,6 +53,11 @@ fn new_instr() Instr
         tests: modes.split(",").contains("tests"),
         rec: modes.split(",").contains("record"),
         steps: modes.split(",").contains("steps"),
+        vals: modes.split(",").contains("values"),
+        sp: -1,
+        owner: "",
+        np: 0,
+        descs: [],
         ids: {},
         sites: [],
         started: Set[str](),
@@ -42,6 +72,8 @@ fn instr_owned(p str) bool
 
 ## The start of statement `s` is a site.
 fn Lower.instr_stmt(mut self, s ast.Stmt)
+    if instr.sp >= 0 and instr.owner == fname
+        vals_spill()
     if not (instr.on or instr.steps)
         or is_rt
         or unchecked
@@ -70,6 +102,10 @@ fn Lower.instr_stmt(mut self, s ast.Stmt)
 fn Lower.instr_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
     if instr.tests and (fname == "main" or fname.starts_with("ail_"))
         return
+    if instr.vals and not (is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path))
+        instr.sp = call("rt.vals_enter", [], Ty.Int)
+        instr.owner = fname
+        instr.np = nvars
     if not instr.calls or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
         return
     call(
@@ -92,8 +128,91 @@ fn Lower.instr_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
             call("rt.instr_arg_{helper}", [str_value(labels[i]), params[i]], Ty.Unit)
     call("rt.instr_call_end", [], Ty.Unit)
 
+## Whether a describer can print a value of type `t`.
+fn vals_printable(t Ty, structs Map[str, List[Slot]]) bool
+    match t
+        Int | Float | Bool | Str | Char | Enum(_) => true
+        Map(k, v) => vals_printable(k, structs) and vals_printable(v, structs)
+        Struct(n) =>
+            slots := structs.get(n) else return false
+            for sl in slots
+                if not vals_printable(sl.ty, structs)
+                    return false
+            true
+        List(e) => vals_printable(e, structs)
+        _ => false
+
+## The start of a statement of a function with a spill: store the describer for the names in
+## scope, and their values.
+fn Lower.vals_spill(mut self)
+    mut best := Map[str, str]()
+    for sc in scopes
+        for name in sc.keys()
+            best[name] = sc[name]
+    mut order := List[Pair]()
+    for name in best.keys()
+        if name == "_" or name.contains(" ") or name.contains("$") or name.contains(".")
+            continue
+        key := best[name]
+        ty := var_ty.get(key) else continue
+        if not vals_printable(ty, structs)
+            continue
+        n := key.split("#")[1].to_int() else 0
+        mut at := order.len()
+        while at > 0 and order[at - 1].n > n
+            at -= 1
+        order.insert(at, Pair(n: n, key: key, name: name))
+    mut d := ValDesc(names: [], tys: [], np: 0)
+    for o in order
+        if d.names.len() >= VALS_SLOTS
+            break
+        if o.n <= instr.np
+            d.np += 1
+        d.names.push(o.name)
+        d.tys.push(var_ty[o.key])
+    id := instr.descs.len()
+    instr.descs.push(d)
+    mut a := inst(-1, "fnaddr", [])
+    a.name = "vd.{id}"
+    store(instr.sp, 0, emit(a, Ty.Int))
+    for k in 0..d.names.len()
+        store(instr.sp, k + 1, read_var(order[k].key, cur))
+
+## Before each `return` of a function with a spill: drop it from the table.
+fn Lower.instr_end(mut self)
+    if instr.sp < 0 or instr.owner != fname
+        return
+    instr.sp = -1
+    for b in 0..blocks.len()
+        if blocks[b].term.kind == "return"
+            cur = b
+            call("rt.vals_leave", [], Ty.Unit)
+
+## The `vd.N` describers: print `(a = 1, b = 2); c = 3`.
+fn Lower.gen_describers(mut self)
+    mut n := 0
+    while n < instr.descs.len()
+        d := instr.descs[n]
+        x := begin_fn("vd.{n}", Ty.Unit, [Ty.Int])[0]
+        pos := ast.Pos(line: 1, col: 1)
+        say("(")
+        for k in 0..d.np
+            if k > 0
+                say(", ")
+            say("{d.names[k]} = ")
+            describe(Val(id: load(x, k + 1, d.tys[k]), ty: d.tys[k]), pos)
+        say(")")
+        for k in d.np..d.names.len()
+            say(if k == d.np then "; " else ", ")
+            say("{d.names[k]} = ")
+            describe(Val(id: load(x, k + 1, d.tys[k]), ty: d.tys[k]), pos)
+        finish(return_of(-1))
+        end_fn("vd.{n}", pos)
+        n += 1
+
 ## Write the site table.
 fn Lower.instr_finish(mut self)
+    gen_describers()
     out := env.get("AIL_INSTRUMENT_SITES") else ""
     if instr.on and out != ""
         fs.write_text(out, "{instr.sites.join("\n")}\n") else err
