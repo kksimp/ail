@@ -10,7 +10,7 @@ compares. No Rust binary is needed to check.
   tools/golden/golden.py freeze TOOL... [--bin CMD] [--jobs N] [--limit N]
   tools/golden/golden.py check  TOOL... [--bin CMD] [--jobs N] [--limit N] [--strict]
 
-TOOL is explain, fmt, fix, api or all. `--bin` is the `ail` to run (default `./ail`;
+TOOL is explain, fmt, fix, api, edit or all. `--bin` is the `ail` to run (default `./ail`;
 freeze it with `--bin "AIL_RUST=1 ./ail"` until the Rust binary is gone, afterwards with the
 native one, to refresh a golden on purpose). A row is `case<TAB>input hash<TAB>exit
 status<TAB>output hash`. The input hash is of the files the case reads, so a row whose
@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
 GOLDEN = os.path.join(ROOT, "tests", "golden")
-TOOLS = ["explain", "fmt", "fix", "api"]
+TOOLS = ["explain", "fmt", "fix", "api", "edit"]
 
 
 def h(data):
@@ -58,10 +58,10 @@ def split_bin(text):
 BIN_ENV = {}
 
 
-def run(binary, args, cwd=None, tmp=None):
+def run(binary, args, cwd=None, tmp=None, stdin=None):
     """(exit status, hash of stdout + stderr) with the scratch directory's name normalised."""
     env = dict(os.environ, AIL_ROOT=ROOT, **BIN_ENV)
-    r = subprocess.run(binary + args, cwd=cwd or ROOT, capture_output=True, text=True, env=env)
+    r = subprocess.run(binary + args, cwd=cwd or ROOT, capture_output=True, text=True, env=env, input=stdin)
     out = r.stdout + "\x00" + r.stderr
     if tmp:
         out = out.replace(tmp, "T")
@@ -150,7 +150,28 @@ def api_cases(binary):
     return cases
 
 
-BUILDERS = {"explain": explain_cases, "fmt": fmt_cases, "fix": fix_cases, "api": api_cases}
+EDIT_FLAGS = [["--dry-run"], ["--dry-run", "--json"], ["--dry-run", "--diff"]]
+
+
+def edit_one(binary, pkg, name, flags):
+    cwd = os.path.join(ROOT, pkg)
+    with open(os.path.join(cwd, name)) as f:
+        return run(binary, ["edit"] + flags + ["main.ail"], cwd=cwd, stdin=f.read())
+
+
+def edit_cases(binary):
+    """Each edit input of a tests/cases/packages/edit_* directory, dry-run against its main.ail."""
+    cases = []
+    for pkg in sorted({os.path.dirname(f) for f in listing("tests/cases/packages/edit_*/main.ail")}):
+        names = [os.path.basename(f) for f in listing(pkg + "/*.json", pkg + "/*.txt") if os.path.basename(f) != "expected.out"]
+        ins = tree_hash(listing(pkg + "/*"))
+        for n in names:
+            for fl in EDIT_FLAGS:
+                cases.append((f"edit {' '.join(fl)} {pkg} {n}", ins, (lambda b, pkg=pkg, n=n, fl=fl: edit_one(b, pkg, n, fl))))
+    return cases
+
+
+BUILDERS = {"explain": explain_cases, "fmt": fmt_cases, "fix": fix_cases, "api": api_cases, "edit": edit_cases}
 
 
 def load(tool):
