@@ -7,7 +7,7 @@
 ## Prints only failures; the last line is `ASM GREEN (N checks)` or `ASM RED (N failures)`.
 ## A missing tool skips its half with a message.
 
-BIN := "./ail"
+BIN := "bootstrap/target/release/ail"
 
 struct Case
     intent str

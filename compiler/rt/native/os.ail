@@ -1205,8 +1205,6 @@ fn env_home() str
     str_at(0)
 
 fn io_read_line() str
-    # Output a peer is waiting on goes out before this blocks (a host speaking a line protocol over pipes).
-    flush()
     s := os_io_read_line()
     if os_ok()
         return s
