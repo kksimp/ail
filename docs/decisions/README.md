@@ -703,3 +703,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0895](0895-ail-infer.md) | `ail infer`: suggested `requires` and `ensures` | Proposed | 2026-10-24 |
 | [0896](0896-ail-test-mutate.md) | `ail test --mutate`: which tests never notice a break | Proposed | 2026-10-24 |
 | [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Proposed | 2026-10-24 |
+| [0898](0898-ail-database-engine.md) | A database engine and its shell, as a showcase program | Proposed | 2026-10-24 |
+| [0899](0899-ail-media-and-image-editor.md) | A media player or image editor, as a showcase program | Proposed | 2026-10-24 |
