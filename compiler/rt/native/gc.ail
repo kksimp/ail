@@ -152,7 +152,16 @@ fn gc_sweep()
     hset(H_HINT, 0)
     hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
-    hset(H_THRESH, if live * 3 > MIN_THRESH then live * 3 else MIN_THRESH)
+    # Allocation allowed before the next collection: 3x the live bytes, less
+    # as the heap gets big, so that the heap peaks at 4x live up to 128 MB
+    # live, 3x up to 256 MB and 2x above (the compiler's own build peaked at
+    # 1.6 GB for 335 MB live).
+    mut budget := live * 3
+    if live > 268435456
+        budget = live
+    elif live > 134217728
+        budget = live * 2
+    hset(H_THRESH, if budget > MIN_THRESH then budget else MIN_THRESH)
     hset(H_FASTLIM, if load64(global(MULTI)) == 0 then hs(H_THRESH) else 0)
 
 ## `AIL_GC_STATS` set: before each sweep, the live bytes and blocks by object
