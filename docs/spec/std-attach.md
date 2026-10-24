@@ -125,7 +125,7 @@ fn main() !
 ```
 
 **attach.run.1** — `ail run FILE` builds a program that calls `app.run(` with
-attach on, unless it is given `--no-attach` as its first argument. `ail build
+attach on, unless it is given `--no-attach` before the file (the `ail` script passes it to `prepare`, which attaches by default). `ail build
 --attach` does the same for a built executable; without `--attach`, `ail build`
 adds nothing. The build rewrites the source text before it is lowered: two
 imports on new first lines, each `app.run(` call made a `std.attach.serve.run(`
