@@ -234,9 +234,14 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
 
 ## `m` used as a value where `m` is a standard module (std.use.2).
 fn Checker.module_as_value(mut self, n str, at ast.Pos) bool
-    if std_module(n) == none
-        return false
-    err_help("std.use.2", at, "`{n}` is a module, not a value", "call one of its functions")
+    module := std_module(n) else return false
+    example := std_functions(module).first() else "f"
+    err_help(
+        "std.use.2",
+        at,
+        "`{n}` is a module, not a value",
+        "call one of its functions, e.g. `{n}.{example}(...)`",
+    )
     true
 
 ## The type of constant `i`, typing it first if needed (mod.const.3).

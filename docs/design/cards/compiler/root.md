@@ -4,54 +4,63 @@ entry: main in main.ail
 ## (root)
 ```
 fn main() ! [clock env fail fs io proc]
+    fails with JsonError | fs.IoError
 BUILD_USAGE := ...
-fn positive(str) bool  ## A positive whole number (run.limit.4).
-fn host_target() str [io proc]  ## The target `ail build` makes by default: the host's, from `uname`.
-fn build_cli(List[str]) [clock env fs io proc]  ## `ail build FILE [-o OUT] [--target T] [--timeout MS] [--max-memory MB]
-fn compiler_dir() str [env io]  ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
-fn compile_to(str, str, str, str, str) [clock env fs io proc]  ## Build `file` for `target` (the host's when empty) into `out` (by default
-fn cached_copy(str, str, str) bool [fs io proc]  ## Copy the cached executable `exe` to `out`; false when there is none
-fn compile_fresh(str, str, str, str, str) [clock env fs io proc]  ## `compile_to` without the cache.
-fn check_dump(str, bool) ! [env fail fs io]  ## The checker's diagnostics for one dump, sorted by position as `ail check`
-fn runtime(str, str) !ast.Program [fail fs io]  ## The native runtime in directory `dir`, parsed as one program.
-fn runtime_with(str, str, str, str) !ast.Program [fail fs io]  ## The runtime with `ail build`'s default time limit in milliseconds and
-fn source_text(str) !str [fail fs io]  ## The text of a program: a file, or all the files of a package directory.
-fn imported_text(str, str, str) str [fs io]  ## `text` (the program's own source) followed by the text of every module it
-fn executable_hex(mir.Module, str, str) str [io]  ## The executable of lowered program `m` for `target` as hex text (native.build.3).
-fn runtime_syntax(str, str) [io]  ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
-fn lower_file(str, ast.Program?, str) !mir.Module [clock env fail fs io proc]  ## Parse a program and the modules it imports, and lower them to MIR
-fn mentions_prelude(List[mir.Source]) bool  ## Whether a source names a module of the prelude written in AIL: the test
-fn std_file(str, str) str  ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
-fn derived_sources() !Derived [env fail fs io]  ## The methods derive generators wrote (ct.gen.1), which `ail build` puts
-fn derive_builtin(List[mir.Source]) List[mir.Source] [io]  ## The methods of the `impl`s the built-in generators derive (ADR 0850) that
-fn derive_user(List[mir.Source], ast.Program?, str) List[mir.Source] [clock env fs io proc]  ## The methods of the `impl`s of traits with a user-written `@derive(f)`
-fn run_generators(List[mir.Source], List[derive.Job], ast.Program?) List[str] [clock env fs io proc]  ## The text each job's generator wrote, in order, or `@@err MESSAGE`.
-fn derive_failure(str) str  ## "`Trait` can't be derived for `Type`" for the label `Type.Trait`.
-fn remove_quietly(str) [fs io]
-fn user_main_renamed(mir.Source) mir.Source  ## `s` with its function `main` of the root module renamed, so the generator
-struct Derived  ## What `ail build` passes besides the program's files.
-fn derived_source(str, str, List[str]) mir.Source [io]  ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
-fn uses_regex(ast.Program) bool  ## Whether the program has a `use` that ends in `regex` (`use std.regex`, `use app.regex`).
-fn uses_ui(ast.Program) bool  ## Whether the program has a `use` that ends in `ui` (`use std.ui`).
-fn mentions_ui(str) bool  ## Whether `text` names `ui.` as a word: not the end of a longer name
-fn parse_source(str, str) !mir.Source [fail fs io]  ## One file, parsed; syntax errors are printed and the run fails.
-fn parse_module(str, List[str]) !List[mir.Source] [fail fs io]  ## The files of one module, parsed together: a generic name declared in one
-fn parse_text(str, str, str) mir.Source [io]  ## Text from `path`, parsed; syntax errors are printed and the run fails.
-PRELUDE_GENERIC := ...  ## The generic functions of the prelude's `jsonderive` module (`mir/prelude_embed.ail`): the
-fn parse_with(str, str, str, Set[str]) mir.Source [io]
-CACHE_KEEP := 64  ## Entries the cache keeps; the least recently used go first (native.build.5).
-fn cache_dir() str [env]  ## The build cache directory: `AIL_CACHE_DIR`, `$XDG_CACHE_HOME/ail/build`,
-fn tree_stamp(str, str) str [fs io]  ## One line per `.ail` file under `root` (path and the SHA-256 of its text),
-fn cache_key(str, str, str, str) str [env fs io]  ## The key of building `file` for `target`: everything that decides the
-fn cache_trim(str) [fs io proc]  ## Keep the newest `CACHE_KEEP` executables of `dir` (`ls -t` lists newest first;
-fn cli_prepare(str) str [clock env fs io proc]  ## The cached executable of `file` for the host, built first when missing.
-fn cli_prepare_with(str, str, str) str [clock env fs io proc]  ## `cli_prepare` with the run limits baked in (`--timeout MS`, `--max-memory MB`).
-fn cli_prepare_cmd(List[str]) [clock env fs io proc]
-fn cli_run(List[str]) [clock env fs io proc]  ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
-fn chop(str) str  ## `s` without one final newline.
-fn load_dump(List[str]) [clock env fs io proc]  ## `load FILE...`: the loaded program as `ail api --ast --program` prints it.
-fn check_cmd(List[str]) [clock env fs io proc]  ## `check-program [--json] FILE|DIR`: `ail check` on the native front end.
-fn api_cmd(List[str]) [clock env fs io proc]  ## `api [--outline] FILE [--text | --pretty]`: the outline of one file
+fn positive(v str) bool
+fn host_target() str [io proc]
+fn build_cli(rest List[str]) [clock env fs io proc]
+fn compiler_dir() str [env io]
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str) [clock env fs io proc]
+fn cached_copy(exe str, out str, target str) bool [fs io proc]
+fn compile_fresh(file str, out str, target str, ms str, mb str) [clock env fs io proc]
+fn check_dump(path str, many bool) ! [env fail fs io]
+    fails with JsonError | fs.IoError
+fn runtime(dir str, path str) !ast.Program [fail fs io]
+    fails with fs.IoError
+fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [fail fs io]
+    fails with fs.IoError
+fn source_text(path str) !str [fail fs io]
+    fails with fs.IoError
+fn imported_text(file str, text str, std str) str [fs io]
+fn executable_hex(m mir.Module, path str, target str) str [io]
+fn runtime_syntax(path str, text str) [io]
+fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]
+    fails with fs.IoError
+fn mentions_prelude(srcs List[mir.Source]) bool
+fn std_file(std str, imp str) str
+fn derive_builtin(srcs List[mir.Source]) List[mir.Source] [io]
+fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source] [clock env fs io proc]
+fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?, quiet bool) List[str] [clock env fs io proc]
+fn documented(srcs List[mir.Source]) List[ast.Program]
+fn derive_failure(label str) str
+fn remove_quietly(path str) [fs io]
+fn user_main_renamed(s mir.Source) mir.Source
+fn user_derive_texts(loaded load.Loaded, path_arg str) Map[str, str] [clock env fs io proc]
+fn derived_source(module str, label str, body List[str]) mir.Source [io]
+fn uses_regex(prog ast.Program) bool
+fn uses_ui(prog ast.Program) bool
+fn mentions_ui(text str) bool
+fn parse_source(module str, path str) !mir.Source [fail fs io]
+    fails with fs.IoError
+fn parse_module(module str, paths List[str]) !List[mir.Source] [fail fs io]
+    fails with fs.IoError
+fn prelude_generic_names() Set[str]
+fn parse_text(module str, path str, text str) mir.Source [io]
+PRELUDE_GENERIC := ...
+fn parse_with(module str, path str, text str, names Set[str]) mir.Source [io]
+CACHE_KEEP := 64
+fn cache_dir() str [env]
+fn tree_stamp(tag str, root str) str [fs io]
+fn cache_key(file str, target str, ms str, mb str) str [env fs io]
+fn cache_trim(dir str) [fs io proc]
+fn cli_prepare(file str) str [clock env fs io proc]
+fn cli_prepare_with(file str, ms str, mb str) str [clock env fs io proc]
+fn cli_prepare_cmd(rest List[str]) [clock env fs io proc]
+fn cli_run(rest List[str]) [clock env fs io proc]
+fn chop(s str) str
+fn load_dump(files List[str]) [clock env fs io proc]
+fn check_cmd(rest List[str]) [clock env fs io proc]
+fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1928); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~1042); dropped: private items, doc comments

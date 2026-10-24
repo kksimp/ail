@@ -1,0 +1,5 @@
+# u64 overflow traps with the operands printed unsigned (expr.arith.1).
+fn main()
+    m := 0.to_u64().wrapping_sub(1.to_u64())
+    print("before")
+    print(m * 2.to_u64())

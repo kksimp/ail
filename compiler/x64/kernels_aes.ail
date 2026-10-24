@@ -1,0 +1,155 @@
+## AES-NI and PCLMULQDQ kernels for the native TLS client (ADR 0836, lane
+## "hardware AES-GCM"). They replace the functions of
+## `compiler/rt/native/tls_aes_hw.ail` named `rt.aes_hw_*`, whose AIL bodies are
+## the fallback and the reference (`aes_hw_ok` is 0 there, so the bit-sliced
+## code in tls_aes.ail runs). Legacy SSE encodings with register operands
+## only, since the legacy forms fault on an unaligned memory operand. They use
+## rax, rcx..r11 and xmm0..xmm7, which calls don't preserve (native-abi.md §1).
+use codegen
+
+## The kernels this file assembles.
+pub fn is_aes_kernel(name str) bool
+    name == "rt.aes_hw_ok" or name == "rt.aes_hw_blocks" or name == "rt.aes_hw_ghash"
+
+pub fn gen_aes_kernel(mut a Asm, name str)
+    match name
+        "rt.aes_hw_ok" => kernel_aes_ok(mut a)
+        "rt.aes_hw_blocks" => kernel_aes_blocks(mut a)
+        _ => kernel_aes_ghash(mut a)
+
+## `rt.aes_hw_ok() int`: 1 when the CPU has AES-NI, PCLMULQDQ and SSSE3
+## (CPUID leaf 1, ecx bits 25, 1 and 9). rbx is callee-saved, so cpuid's use
+## of it is bracketed.
+fn kernel_aes_ok(mut a Asm)
+    mask := 33554432 + 2 + 512
+    a.push(RBX)
+    a.mov_ri(RAX, 1)
+    a.cpuid()
+    a.alu_ri("and", RCX, mask)
+    a.alu_ri("cmp", RCX, mask)
+    a.setcc(CC_E, RAX)
+    a.movzx8_rr(RAX, RAX)
+    a.pop(RBX)
+    a.ret()
+
+## `rt.aes_hw_blocks(rk, nr, src, n, dst)`: encrypt `n` independent 16-byte
+## blocks at `src` into `dst` with the `nr + 1` round keys (16 bytes each, in
+## FIPS 197 byte order) at `rk`. rdi = rk, rsi = nr, rdx = src, rcx = n,
+## r8 = dst.
+fn kernel_aes_blocks(mut a Asm)
+    done := a.label()
+    blocks := a.label()
+    rounds := a.label()
+    a.test_rr(RCX, RCX)
+    a.jcc(CC_E, done)
+    a.bind(blocks)
+    a.movdqu_rm(0, at(RDX, 0))
+    a.movdqu_rm(1, at(RDI, 0))
+    a.pxor_rr(0, 1)
+    a.lea(R10, at(RDI, 16))
+    a.mov_rr(R11, RSI)
+    a.alu_ri("sub", R11, 1)
+    a.bind(rounds)
+    a.movdqu_rm(1, at(R10, 0))
+    a.aesenc_rr(0, 1)
+    a.alu_ri("add", R10, 16)
+    a.alu_ri("sub", R11, 1)
+    a.jcc(CC_NE, rounds)
+    a.movdqu_rm(1, at(R10, 0))
+    a.aesenclast_rr(0, 1)
+    a.movdqu_mr(at(R8, 0), 0)
+    a.alu_ri("add", RDX, 16)
+    a.alu_ri("add", R8, 16)
+    a.alu_ri("sub", RCX, 1)
+    a.jcc(CC_NE, blocks)
+    a.bind(done)
+    a.ret()
+
+## `rt.aes_hw_ghash(h, y, p, n)`: `y = (y ^ block) * h` in GF(2^128) for each
+## of the `n` 16-byte blocks at `p`; `h` and `y` are 16 bytes in GCM byte
+## order. The carry-less multiply of Intel's "Carry-Less Multiplication and
+## Its Usage for Computing the GCM Mode" (figure 5), on byte-reversed values.
+## rdi = h, rsi = y, rdx = p, rcx = n. xmm1 = h, xmm6 = y, [rsp] = the byte
+## reversal mask.
+fn kernel_aes_ghash(mut a Asm)
+    done := a.label()
+    blocks := a.label()
+    a.test_rr(RCX, RCX)
+    a.jcc(CC_E, done)
+    a.alu_ri("sub", RSP, 16)
+    a.mov_ri(R10, 0x08090a0b0c0d0e0f)
+    a.mov_mr(at(RSP, 0), R10)
+    a.mov_ri(R10, 0x0001020304050607)
+    a.mov_mr(at(RSP, 8), R10)
+    a.movdqu_rm(7, at(RSP, 0))
+    a.movdqu_rm(1, at(RDI, 0))
+    a.pshufb_rr(1, 7)
+    a.movdqu_rm(6, at(RSI, 0))
+    a.pshufb_rr(6, 7)
+    a.bind(blocks)
+    a.movdqu_rm(0, at(RDX, 0))
+    a.movdqu_rm(7, at(RSP, 0))
+    a.pshufb_rr(0, 7)
+    a.pxor_rr(0, 6)
+    # 256-bit product in xmm6:xmm3.
+    a.movdqa_rr(3, 0)
+    a.pclmulqdq(3, 1, 0)
+    a.movdqa_rr(4, 0)
+    a.pclmulqdq(4, 1, 16)
+    a.movdqa_rr(5, 0)
+    a.pclmulqdq(5, 1, 1)
+    a.movdqa_rr(6, 0)
+    a.pclmulqdq(6, 1, 17)
+    a.pxor_rr(4, 5)
+    a.movdqa_rr(5, 4)
+    a.sse_shift("psrldq", 4, 8)
+    a.sse_shift("pslldq", 5, 8)
+    a.pxor_rr(3, 5)
+    a.pxor_rr(6, 4)
+    # Shift the product left by one bit (the values are bit-reflected).
+    a.movdqa_rr(7, 3)
+    a.movdqa_rr(0, 6)
+    a.sse_shift("pslld", 3, 1)
+    a.sse_shift("pslld", 6, 1)
+    a.sse_shift("psrld", 7, 31)
+    a.sse_shift("psrld", 0, 31)
+    a.movdqa_rr(2, 7)
+    a.sse_shift("pslldq", 0, 4)
+    a.sse_shift("pslldq", 7, 4)
+    a.sse_shift("psrldq", 2, 12)
+    a.por_rr(3, 7)
+    a.por_rr(6, 0)
+    a.por_rr(6, 2)
+    # Reduce modulo x^128 + x^7 + x^2 + x + 1.
+    a.movdqa_rr(7, 3)
+    a.movdqa_rr(0, 3)
+    a.movdqa_rr(2, 3)
+    a.sse_shift("pslld", 7, 31)
+    a.sse_shift("pslld", 0, 30)
+    a.sse_shift("pslld", 2, 25)
+    a.pxor_rr(7, 0)
+    a.pxor_rr(7, 2)
+    a.movdqa_rr(0, 7)
+    a.sse_shift("pslldq", 7, 12)
+    a.sse_shift("psrldq", 0, 4)
+    a.pxor_rr(3, 7)
+    a.movdqa_rr(2, 3)
+    a.movdqa_rr(4, 3)
+    a.movdqa_rr(5, 3)
+    a.sse_shift("psrld", 2, 1)
+    a.sse_shift("psrld", 4, 2)
+    a.sse_shift("psrld", 5, 7)
+    a.pxor_rr(2, 4)
+    a.pxor_rr(2, 5)
+    a.pxor_rr(2, 0)
+    a.pxor_rr(3, 2)
+    a.pxor_rr(6, 3)
+    a.alu_ri("add", RDX, 16)
+    a.alu_ri("sub", RCX, 1)
+    a.jcc(CC_NE, blocks)
+    a.movdqu_rm(7, at(RSP, 0))
+    a.pshufb_rr(6, 7)
+    a.movdqu_mr(at(RSI, 0), 6)
+    a.alu_ri("add", RSP, 16)
+    a.bind(done)
+    a.ret()

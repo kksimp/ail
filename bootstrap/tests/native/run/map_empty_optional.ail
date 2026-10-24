@@ -1,0 +1,51 @@
+struct Reg
+    names Map[str, int]
+    seen Set[int]
+
+fn size(m Map[str, int]) int
+    m.len()
+
+fn count(s Set[str]) int
+    s.len()
+
+fn make_map() Map[int, str]
+    {}
+
+fn make_set() Set[int]
+    {}
+
+fn early(flag bool) Map[str, int]
+    if flag
+        return {}
+    {"x": 1}
+
+fn opt() Map[int, int]?
+    {}
+
+fn main()
+    r := Reg(names: {}, seen: {})
+    print(r)
+    print(size({}))
+    print(count({}))
+    print(make_map())
+    print(make_set())
+    print(early(true))
+    print(early(false))
+    mut m := {"a": 1}
+    m = {}
+    print(m)
+    print(m.len())
+    mut s := {1}
+    s = {}
+    print(s)
+    print(s == {})
+    print(m == {})
+    mut rs := Reg(names: {"z": 26}, seen: {7})
+    rs.names = {}
+    rs.seen = {}
+    print(rs)
+    print(opt())
+    lists := [{1: 2}, {}]
+    print(lists)
+    sets := [{1}, {}, {2, 3}]
+    print(sets)

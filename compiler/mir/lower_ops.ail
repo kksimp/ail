@@ -109,6 +109,9 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
         return a
     if a.ty.is_ref() and (name == "eq" or name == "ne")
         return Val(id: op(name, [a.id, b.id], Ty.Bool), ty: Ty.Bool)
+    if k := own_cmp(a.ty)
+        if name == "lt" or name == "gt" or name == "le" or name == "ge"
+            return cmp_order(name, k, a, b)
     if is_enum(a.ty)
         return enum_compare(o, a, b, pos)
     if a.ty == Ty.Bytes
@@ -148,6 +151,8 @@ fn Lower.binary(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
                 return eq
             if ord := self.list_order(o, a, b)
                 return ord
+            if cmp and a.ty.elem() != none and can_order(a.ty)
+                return tuple_compare(o, a, b, pos)
             problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
             a
 

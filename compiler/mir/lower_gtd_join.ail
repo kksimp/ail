@@ -1,0 +1,28 @@
+## `xs.join(sep)` on a list of structs or enums (type.coll.9): each element's
+## display text (its `to_str`, or the default form), with `sep` between.
+use ast
+
+fn Lower.join_shown(mut self, r Val, e Ty, sep int) Val?
+    key := struct_name(e) else enum_name(e) else return none
+    if not sigs.contains("{key}.to_str") and not text_ok(e)
+        return none
+    nvars += 1
+    ak := "#join{nvars}"
+    var_ty[ak] = Ty.Str
+    write_var(ak, cur, str_value(""))
+    c := count_open(op("len", [r.id], Ty.Int))
+    shown := display_call(Val(id: op("get", [r.id, c.i], e), ty: e)) else str_value("")
+    acc := read_var(ak, cur)
+    later := new_block()
+    join := new_block()
+    piece := new_value(Ty.Str, "")
+    blocks[join].params.push(piece)
+    branch(op("eq", [c.i, konst(0, Ty.Int)], Ty.Bool), join, [acc], later, [])
+    seal(later)
+    cur = later
+    jump(join, [call("rt.str_cat", [acc, sep], Ty.Str)])
+    seal(join)
+    cur = join
+    write_var(ak, cur, call("rt.str_cat", [piece, shown], Ty.Str))
+    count_close(c)
+    Val(id: read_var(ak, cur), ty: Ty.Str)

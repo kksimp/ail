@@ -1,0 +1,18 @@
+## json.derive.2, trait.assoc.4: List[U].from_json reads a JSON array of U.
+struct U
+    name str
+    age int
+
+impl ToJson for U
+impl FromJson for U
+
+fn main() !
+    text := "[\{\"name\": \"a\", \"age\": 3}, \{\"name\": \"b\", \"age\": 40}]"
+    users := List[U].from_json(parse_json(text)?)?
+    print(users)
+    ints := List[int].from_json(parse_json("[1, 2]")?)?
+    print(ints)
+    bad := List[U].from_json(parse_json("[\{\"name\": \"a\"}]")?) else err
+        print("error: {err}")
+        []
+    print(bad.len())

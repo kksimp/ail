@@ -1,0 +1,22 @@
+## own.excl.3: `mut` arguments that are the same element or map entry only at
+## run time trap before the call; different ones do not.
+fn swap[T](mut a T, mut b T)
+    t := a
+    a = b
+    b = t
+
+fn bump(mut a int, mut b int)
+    a += 1
+    b += 10
+
+fn main()
+    mut xs := [1, 2, 3]
+    mut m := {"a": 1, "b": 2}
+    bump(mut xs[0], mut xs[1])
+    bump(mut m["a"], mut m["b"])
+    i := 1
+    j := 2
+    swap(mut xs[i], mut xs[j])
+    print("{xs} {m}")
+    k := "a"
+    bump(mut m[k], mut m["a"])

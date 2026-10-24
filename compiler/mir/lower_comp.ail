@@ -123,12 +123,9 @@ fn Lower.lower_comp_untyped(
     if form == ast.CompKind.SetComp
         xs := lower_comp(ast.CompKind.ListComp, elem, none, clauses, pos, none)?
         e := xs.ty.elem() else Ty.Unknown
-        if e == Ty.Bool or not is_key_ty(e)
+        if e == Ty.Bool or not key_ok(e)
             return unsupported(pos, "{what} comprehension whose type isn't known")
-        return Val(
-            id: call("rt.set_from_list", [konst(key_kind(e), Ty.Int), xs.id], Ty.Set(e)),
-            ty: Ty.Set(e),
-        )
+        return Val(id: call("rt.set_from_list", [kind_val(e), xs.id], Ty.Set(e)), ty: Ty.Set(e))
     v := value_expr else return none
     nvars += 1
     kname := "#comp{nvars}"
@@ -157,10 +154,10 @@ fn Lower.lower_comp_untyped(
     vkey := lookup(vname)?
     kt := var_ty[kkey].elem() else Ty.Unknown
     vt := var_ty[vkey].elem() else Ty.Unknown
-    if kt == Ty.Bool or not is_key_ty(kt) or not is_value_ty(vt)
+    if kt == Ty.Bool or not key_ok(kt) or not is_value_ty(vt)
         return unsupported(pos, "{what} comprehension whose type isn't known")
     t := Ty.Map(key: kt, val: vt)
-    declare(mname, t, new_table(t))
+    declare(mname, t, keyed_table(t))
     me := ast.Expr.Name(name: mname, pos: pos)
     zero := ast.Expr.Int(value: "0", pos: pos)
     at := ast.Expr.Name(name: "#i", pos: pos)

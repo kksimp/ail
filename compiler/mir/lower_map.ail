@@ -24,6 +24,7 @@ fn is_value_ty(t Ty) bool
         or is_enum(t)
         or is_shared_opt(t)
         or t.is_ref()
+        or t.is_fn()
 
 ## `Map[K, V]` and `Set[T]` written as types, if they are in the subset.
 fn Lower.coll_type_of(mut self, name str, args List[ast.TypeRef]) Ty?
@@ -213,7 +214,9 @@ fn Lower.coll_ctor(mut self, name str, targs List[ast.TypeRef], pos ast.Pos) Val
 fn Lower.lower_map_lit(mut self, entries List[ast.MapEntry], pos ast.Pos, want Ty?) Val?
     mut kt := Ty.Unknown
     mut vt := Ty.Unknown
-    if w := want
+    if wanted := want
+        # `{}` where a `Map[K, V]?` is expected is that map (type.coll.3).
+        w := wanted.opt_inner() else wanted
         match w
             Map(k, v) =>
                 kt = k
@@ -399,18 +402,23 @@ fn Lower.is_get_call(self, e ast.Expr) bool
 
 # ---- methods ----
 
-## The element type of a set that `sorted(by:)` takes natively.
-fn key_set_elem(t Ty) Ty?
+fn set_elem(t Ty) Ty?
     match t
-        Set(et) => if et == Ty.Int or et == Ty.Str or et == Ty.Char then et else none
+        Set(e) => e
         _ => none
 
 fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
-    # `s.sorted(by: |x| e)` (expr.key.1): the elements in insertion order, then as a list.
-    if name == "sorted" and args.len() == 1 and args[0].label != none
-        if et := key_set_elem(r.ty)
-            items := Val(id: call("rt.map_keys", [r.id], Ty.List(et)), ty: Ty.List(et))
-            return lower_sorted(items, name, args, npos)
+    # `s.sorted(by: |x| e)` sorts the set's elements as a list (expr.key.1).
+    if name == "sorted" and args.len() == 1 and not is_pending_table(r.ty)
+        if et := set_elem(r.ty)
+            keys := call("rt.map_keys", [r.id], Ty.List(et))
+            return lower_sorted(Val(id: keys, ty: Ty.List(et)), name, args, npos)
+    # `s.sorted()` of composite elements: as a list of them, by their order.
+    if name == "sorted" and args.len() == 0 and not is_pending_table(r.ty)
+        if et := set_elem(r.ty)
+            if not is_key_ty(et)
+                keys := call("rt.map_keys", [r.id], Ty.List(et))
+                return tuple_list_edit(Val(id: keys, ty: Ty.List(et)), et, name, npos, [])
     for a in args
         if a.label != none or a.mutable
             return unsupported(npos, "`.{name}()` with a labelled or `mut` argument")
@@ -581,7 +589,7 @@ fn Lower.set_op(mut self, a Val, name str, b Val, pos ast.Pos) Val?
         Set(x) => x
         List(x) => x
         _ => return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
-    if e != Ty.Int and e != Ty.Str and e != Ty.Char
+    if e == Ty.Bool or not key_ok(e)
         return unsupported(pos, "`.{name}()` on a `{a.ty.name()}`")
     want := Ty.Set(e)
     sa := as_set(a, e, pos)?

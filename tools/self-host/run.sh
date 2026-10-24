@@ -59,16 +59,14 @@ blocked() { say ""; say "BLOCKED at $1: $2"; say "Report: $report"; exit 1; }
 # hex text (stdin) to the executable PATH
 unhex() { perl -ne 'chomp; print pack("H*", $_)' > "$1" && chmod +x "$1"; }
 
-# build SRC with compiler CMD into OUT; the compiler prints hex
-# The derive output (ADR 0807) of SRC, as the Rust-hosted `ail build` makes it;
-# the native compiler reads it through AIL_DERIVED.
+# build SRC with compiler CMD into OUT; the compiler prints hex. It runs the
+# derive generators itself (ADR 0856), with no Rust-made derive file.
 build_with() { # compiler src out
     local cc="$1" src="$2" dst="$3"
-    ./ail build "$src" --derived-out "$dst.derived" > /dev/null 2>&1 || : > "$dst.derived"
     # The paths `ail build` passes (bootstrap/src/build.rs): absolute, since they
     # end up in the trap texts of the executable. Relative ones make stage 1 and
     # the later stages differ in size.
-    AIL_DERIVED="$dst.derived" "$cc" build "$src" "$root/compiler/rt/native" "$TARGET" 0 0 "$root/compiler/../bootstrap/src/std" > "$dst.hex" 2> "$dst.err" || return 1
+    "$cc" build "$src" "$root/compiler/rt/native" "$TARGET" 0 0 "$root/compiler/../bootstrap/src/std" > "$dst.hex" 2> "$dst.err" || return 1
     unhex "$dst" < "$dst.hex"
 }
 

@@ -1,0 +1,8 @@
+use std.env
+
+fn main()
+    port := env.get("PORT")?.to_int() else 8080
+    print(port)
+    s := "12"
+    o := if s.len() > 0 then s else none
+    print(o?.to_int() else 0)

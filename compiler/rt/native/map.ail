@@ -75,7 +75,9 @@ fn map_hash(kind int, k int) int
 # `i` a word (int, char, bool), `f` a float, `s` a string, `L` and the shape
 # of its elements (a list; `b` elements are single bytes), `S` n `;` and n
 # shapes (a struct or tuple, one word per field), `E` n `;` and n variants
-# `V` m `;` and m shapes (an enum whose first word is the variant).
+# `V` m `;` and m shapes (an enum whose first word is the variant), `O` and
+# a shape (an optional: 0 is `none`, and a word, float or optional inside is
+# boxed), `@` n `;` (the shape at offset n: a type that holds itself).
 
 fn shape_at(sh int, p int) int
     load8(sh + 16 + p)
@@ -99,8 +101,10 @@ fn shape_semi(sh int, p int) int
 ## The index after the shape that starts at `p`.
 fn shape_end(sh int, p int) int
     c := shape_at(sh, p)
-    if c == 76
+    if c == 76 or c == 79
         return shape_end(sh, p + 1)
+    if c == 64
+        return shape_semi(sh, p + 1)
     if c == 83 or c == 69 or c == 86
         n := shape_num(sh, p + 1)
         mut i := shape_semi(sh, p + 1)
@@ -126,8 +130,21 @@ fn shape_float(v int) int
         return 0
     v
 
+## The value inside optional `v` of shape `O` at `p`: unboxed when boxed.
+fn shape_some(sh int, p int, v int) int
+    c := shape_at(sh, p + 1)
+    if c == 105 or c == 98 or c == 102 or c == 79
+        return load64(v)
+    v
+
 fn shape_hash(sh int, p int, v int, h int) int
     c := shape_at(sh, p)
+    if c == 64
+        return shape_hash(sh, shape_num(sh, p + 1), v, h)
+    if c == 79
+        if v == 0
+            return shape_mix(h, 0)
+        return shape_hash(sh, p + 1, shape_some(sh, p, v), shape_mix(h, 1))
     if c == 105 or c == 98
         return shape_mix(h, v)
     if c == 102
@@ -163,6 +180,12 @@ fn shape_hash(sh int, p int, v int, h int) int
 
 fn shape_eq(sh int, p int, a int, b int) bool
     c := shape_at(sh, p)
+    if c == 64
+        return shape_eq(sh, shape_num(sh, p + 1), a, b)
+    if c == 79
+        if a == 0 or b == 0
+            return a == b
+        return shape_eq(sh, p + 1, shape_some(sh, p, a), shape_some(sh, p, b))
     if c == 105 or c == 98
         return a == b
     if c == 102

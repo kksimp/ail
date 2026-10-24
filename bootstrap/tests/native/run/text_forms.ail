@@ -1,0 +1,33 @@
+# trait.auto.2: every value has a text form.
+enum Grade
+    A
+    B
+
+struct Student
+    name str
+    grade Grade
+    scores List[int]
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn find(xs List[int], x int) int?
+    for i in 0..xs.len()
+        if xs[i] == x
+            return i
+    none
+
+fn main()
+    print(Grade.A)
+    print("{Grade.B}")
+    s := Student(name: "Ada", grade: A, scores: [90, 85])
+    print(s)
+    print("student: {s}")
+    print([Shape.Circle(r: 1), Rect(w: 2, h: 3)])
+    print(["a", "b"])
+    print(find([4, 5], 5))
+    print(find([4, 5], 6))
+    print(s.to_str())
+    n := 42
+    print(n.to_str())
