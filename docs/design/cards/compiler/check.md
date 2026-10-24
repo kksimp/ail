@@ -18,6 +18,8 @@ pub struct check.Report
 pub struct check.Analysis
 pub fn check.check_program(ast.Program) check.Report [env io]
 pub fn check.analyze(ast.Program, bool) check.Analysis [env io]
+pub fn check.proven_loops(ast.Program) List[ast.Pos] [env io]
+pub fn check.analyze_denying(ast.Program, bool, List[str]) check.Analysis [env io]
 pub fn check.check_declarations(ast.Program) List[check.Diag] [env io]
 pub enum check.Need
 pub struct check.Builtin
@@ -53,6 +55,8 @@ pub struct check.Diag
 pub fn check.new_diag(str, ast.Pos, str) check.Diag
 pub fn check.shifted(fix.Edit, int) fix.Edit
 pub fn check.fix_json(fix.Fix) str
+pub fn check.deterministic_deny() List[str]
+pub fn check.parse_deny(str) (List[str], str)
 pub fn check.effects_report(ast.Program, bool) str [env io]
 pub struct check.VariantRef
 pub struct check.Agree
@@ -98,4 +102,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1215); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1301); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

@@ -1,0 +1,42 @@
+use std.app
+use std.attach
+use std.attach.serve as aserve
+
+struct Shop
+    n int
+
+impl app.App for Shop
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.column([app.label("Cart"), app.button("pay", "Pay")])
+
+    fn focus(self) str
+        "pay"
+
+impl attach.Observe for Shop
+    fn observed(self) List[attach.Observed]
+        [attach.observed("n", "int", "{n}")]
+
+fn main()
+    tok := aserve.make_token()
+    assert_eq(tok.chars().len(), 48)
+    assert(tok != aserve.make_token())
+    assert(aserve.token_path("4242").ends_with("ail-attach-4242.json"))
+    mut w := aserve.Watched(inner: Shop(n: 0), token: tok, tr: attach.Tracker.new(), hub: aserve.Hub.new(), w: 300.0, h: 200.0)
+    w.update(app.external("attach", "\{\"q\":\"observe\",\"token\":\"{tok}\"}"))
+    assert_eq(w.hub.replies.recv() else "", "\{\"v\":1,\"rev\":1,\"values\":\{\"n\":0}}")
+    w.update(app.press("pay"))
+    assert_eq(w.inner.n, 1)
+    w.update(app.external("attach", "\{\"q\":\"observe\",\"token\":\"{tok}\",\"since\":1}"))
+    assert_eq(w.hub.replies.recv() else "", "\{\"v\":1,\"rev\":2,\"values\":\{\"n\":1}}")
+    w.update(app.external("attach", "\{\"q\":\"screen\",\"token\":\"{tok}\",\"role\":\"button\"}"))
+    shown := w.hub.replies.recv() else ""
+    assert(shown.contains("button 'Pay'"))
+    assert(shown.contains("focused"))
+    w.update(app.external("attach", "\{\"q\":\"observe\",\"token\":\"wrong\"}"))
+    bad := w.hub.replies.recv() else ""
+    assert(bad.contains("wrong token"))
+    assert_eq(w.inner.n, 1)
+    print("ok")

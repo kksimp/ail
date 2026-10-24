@@ -127,20 +127,18 @@ fn net_wait(fd int, events int, ms int) int
     # On a deterministic schedule the task holds the turn, so it polls and
     # lets the others run in between: the peer that would make `fd` ready may be one
     # (conc.sched.3).
-    mut left := ms
+    deadline := if ms < 0 then -1 else time_mono_ms() + ms
     while true
         r := net_poll(fd, events, 0)
         if r != 0 or ms == 0
             return r
+        if deadline >= 0 and time_mono_ms() >= deadline
+            return 0
         if det_relax()
             continue
-        if left == 0
-            return 0
         r2 := net_poll(fd, events, 1)
         if r2 != 0
             return r2
-        if left > 0
-            left -= 1
     0
 
 fn net_poll(fd int, events int, ms int) int
