@@ -311,7 +311,7 @@ fn main()
 
 **contract.fuzz.1** — `ail test --contracts FILE` checks contracts by running
 generated inputs ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md)
-item 5). For each function that has `requires` or `ensures` lines it makes a
+item 5, [ADR 0885](../decisions/0885-contracts-checked-by-fuzzing.md)). For each function that has `requires` or `ensures` lines it makes a
 property of the function's parameters (`test.prop.1-5`): an input that fails
 a `requires` is discarded, any other calls the function. A failing `ensures`,
 or a contract of anything the function calls, ends the property with the
