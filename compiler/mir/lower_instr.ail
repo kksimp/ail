@@ -10,6 +10,8 @@ use ast
 pub struct Instr
     on bool
     calls bool
+    ## `record`: captured calls go through the recorder (lower_record.ail).
+    rec bool
     ## `tests`: calls, but not those of the test runner's own `main` and `ail_*` helpers.
     tests bool
     ids Map[str, int]
@@ -22,6 +24,7 @@ fn new_instr() Instr
         on: modes.split(",").contains("lines"),
         calls: modes.split(",").contains("calls") or modes.split(",").contains("tests"),
         tests: modes.split(",").contains("tests"),
+        rec: modes.split(",").contains("record"),
         ids: {},
         sites: [],
         started: Set[str](),

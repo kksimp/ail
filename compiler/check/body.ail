@@ -25,6 +25,8 @@ pub struct Analysis
     ## What `ail api --locals/--type` select from (api.loc.1, api.type.1).
     pub locals List[LocalFact]
     pub exprs List[(ast.Pos, str)]
+    ## The name positions of every field a write reaches (`ail ask`, api.ask.2).
+    pub writes List[ast.Pos]
 
 ## Every pass of `check_with` this checker has, in its order.
 pub fn check_program(p ast.Program) Report
@@ -94,6 +96,7 @@ pub fn analyze(p ast.Program, full bool) Analysis
             weak_symbols: Map[int, str](),
             locals: [],
             exprs: [],
+            writes: [],
         )
     mut errors := Map[int, List[str]]()
     for i in 0..p.fns.len()
@@ -111,6 +114,7 @@ pub fn analyze(p ast.Program, full bool) Analysis
         weak_symbols: c.weak_symbols,
         locals: c.fact_locals,
         exprs: c.fact_exprs,
+        writes: c.fact_writes,
     )
 
 ## The diagnostics of the declaration passes only (slice 1).
@@ -1170,6 +1174,7 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
 ## Report if `e` isn't a mutable place (own.place.1). `rule` is the rule for
 ## this context; without one, it is chosen by the kind of root.
 fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
+    record_write(e)
     # own.ref.4: a `ref` cell's contents are mutable through any copy.
     if writes_through_ref(e, rule == "trait.method.3")
         ref_writes.add(pos_key(expr_pos(e)))
