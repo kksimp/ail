@@ -448,12 +448,10 @@ fn main()
             line = []
     print(line)
 ```
-**native.test.1** — `ail test --native [PATH...]` takes files and directories
-(by default `examples`, `tests/cases` and `tools`) and, for every
-`@test` function with no parameters in a file that has one, builds the
-function natively (native.build.3), runs it as its own process, and compares
-the result with `ail test` in the interpreter. A passing native run exits 0.
-*(ADR 0679)*
+**native.test.1** — *Retired (ADR 0900).* `ail test --native` compared each native
+verdict with the interpreter's. With the interpreter gone, `ail test` runs every
+`@test` function natively (native.test.2-5), and `ail test --native` is refused
+with exit 2. *(ADR 0679, ADR 0900)*
 **native.test.2** — The native build is of a rewritten copy of the file: `@test`
 marks go and the copy's `main` is a dispatcher. `assert` and `assert_eq`
 lower natively and trap as test.assert.1 says. The runner maps lines back, so
@@ -464,10 +462,10 @@ as not in the native subset yet, with the first blocking construct and its
 line. The same holds for a test whose file has a refused construct outside any
 test; the report says so. A property test, which takes arguments, is skipped.
 *(ADR 0679)*
-**native.test.4** — Each test is `match` (native and interpreter agree on pass
-or fail), `DIFF` (they disagree), `not-native` or `skipped`, and the command
-ends with the counts. The exit status is 1 if any test is `DIFF`, otherwise 0.
-`--json` writes one object per test and a final summary. *(ADR 0679)*
+**native.test.4** — *Retired with native.test.1 (ADR 0900).* The per-test
+verdicts `match`, `DIFF`, `not-native` and `skipped`, the counts line and the
+`--json` summary belonged to the comparison with the interpreter. `ail test`
+reports each test as `ok`, `FAIL` or `skip` (test.run.1). *(ADR 0679, ADR 0900)*
 
 ```ail rules=native.bce.9
 fn main()
@@ -486,9 +484,9 @@ are reported as not in the native subset yet. *(ADR 0679)*
 
 ## Checked examples for the native rules
 
-Each block runs `ail test --native` or `ail build` with the options on its fence. The rules below have no observable output the harness can check (a Windows image, the cache, a backend fault, a package staging run), so their blocks are `norun`: checked, not run (native.build.2, native.build.4, native.build.5, native.test.5).
+Each block runs `ail test` or `ail build` with the options on its fence. The rules below have no observable output the harness can check (a Windows image, the cache, a backend fault, a package staging run), so their blocks are `norun`: checked, not run (native.build.2, native.build.4, native.build.5, native.test.5).
 
-```ail tool=test,--native,FILE expect=match rules=native.str.1,native.test.1
+```ail tool=test,FILE expect=ok rules=native.str.1,native.test.1
 @test fn strings()
     s := "hello"
     assert(s.len() == 5)
@@ -499,7 +497,7 @@ fn main()
     print("ok")
 ```
 
-```ail tool=test,--native,FILE expect=assertion rules=native.test.2
+```ail tool=test,FILE status=1 expect=FAIL rules=native.test.2
 @test fn wrong()
     assert(1 == 2)
 
@@ -507,7 +505,7 @@ fn main()
     print("ok")
 ```
 
-```ail tool=test,--native,FILE expect=not-native rules=native.test.3
+```ail norun rules=native.test.3
 struct Tag
     n int
 
@@ -521,7 +519,7 @@ fn main()
     print("ok")
 ```
 
-```ail tool=test,--native,--json,FILE expect=summary rules=native.test.4
+```ail norun rules=native.test.4
 @test fn strings()
     s := "hello"
     assert(s.len() == 5)
