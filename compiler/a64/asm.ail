@@ -481,3 +481,46 @@ pub fn Asm.resolve_labels(mut self)
             unreachable("label {f.label} was never placed")
         patch(mut code, f, f.at, to)
     fixups = rest
+
+# ---- crypto and byte vectors (AES and GHASH kernels) ----
+
+## `aese vd.16b, vn.16b` and `aesmc vd.16b, vn.16b`.
+pub fn Asm.aese(mut self, d int, n int)
+    word(1311262720 + n * 32 + d)
+
+pub fn Asm.aesmc(mut self, d int, n int)
+    word(1311270912 + n * 32 + d)
+
+## `eor vd.16b, vn.16b, vm.16b` and `orr vd.16b, vn.16b, vm.16b`.
+pub fn Asm.veor(mut self, d int, n int, m int)
+    word(rrr(1847598080, d, n, m))
+
+pub fn Asm.vorr(mut self, d int, n int, m int)
+    word(rrr(1319115776, d, n, m))
+
+## `mov vd.16b, vn.16b`.
+pub fn Asm.vmov(mut self, d int, n int)
+    word(rrr(1319115776, d, n, n))
+
+## `pmull vd.1q, vn.1d, vm.1d` and `pmull2 vd.1q, vn.2d, vm.2d`: the carry-less
+## product of the low (high) 64-bit halves.
+pub fn Asm.pmull(mut self, d int, n int, m int)
+    word(rrr(249618432, d, n, m))
+
+pub fn Asm.pmull2(mut self, d int, n int, m int)
+    word(rrr(1323360256, d, n, m))
+
+## `ext vd.16b, vn.16b, vm.16b, #k`: bytes `k..k+15` of `vn` followed by `vm`.
+pub fn Asm.vext(mut self, d int, n int, m int, k int)
+    word(rrr(1845493760, d, n, m) + k * 2048)
+
+## `shl vd.4s, vn.4s, #k` and `ushr vd.4s, vn.4s, #k`, for `k` in 1..31.
+pub fn Asm.vshl4(mut self, d int, n int, k int)
+    word(1325421568 + (32 + k) * 65536 + n * 32 + d)
+
+pub fn Asm.vushr4(mut self, d int, n int, k int)
+    word(1862272000 + (64 - k) * 65536 + n * 32 + d)
+
+## `rev64 vd.16b, vn.16b`: the bytes of each half reversed.
+pub fn Asm.vrev64(mut self, d int, n int)
+    word(1310722048 + n * 32 + d)

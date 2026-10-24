@@ -31,7 +31,7 @@ fn Lower.declare_enum_names(mut self, prog ast.Program)
             enums["{prefix}{e.name}"] = []
             declare_unique_enum(e, prog, "{prefix}{e.name}")
 
-## The prelude's `enum Ordering` (trait.std.2), registered once per program
+## The prelude's `enum Ordering` (trait.std.1). registered once per program
 ## unless the program declares an `Ordering` of its own: the Rust front end
 ## adds it to the program it runs, but the native compiler reads only source.
 fn Lower.declare_prelude_enums(mut self)
@@ -281,6 +281,8 @@ fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     name := op_name(o)
     if name != "eq" and name != "ne"
+        if a.ty.elem() != none
+            return tuple_compare(o, a, b, pos)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
         return quiet
     mut seen := Set[str]()
@@ -455,6 +457,8 @@ fn Lower.gen_enum_eqs(mut self)
                 gen_text(name, t)
             elif name.starts_with("lt.")
                 gen_lt(name, t)
+            elif name.starts_with("cmp.")
+                gen_cmp(name, t)
             elif inner := t.opt_inner()
                 gen_opt_eq(name, t, inner)
             elif t.is_coll()

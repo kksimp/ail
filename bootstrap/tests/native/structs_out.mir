@@ -7,14 +7,19 @@ fn main() unit
     v2 int = const 4
     v3:p Point = call rt.obj_new(v1, v2)
     store v3:p, v0 +0
-    v4 str = str #0
-    v5 str = str #1
-    v6 str = call rt.str_cat(v4, v5)
-    v7 int = load v3:p +0
-    v8 str = call rt.fmt_int(v7)
-    v9 str = call rt.str_cat(v6, v8)
-    v10 str = str #2
-    v11 str = call rt.str_cat(v9, v10)
-    call rt.out_str(v11)
+    v4 str = call text.Point(v3:p)
+    call rt.out_str(v4)
     call rt.out_nl()
     return
+
+fn text.Point(v0 Point) str
+  b0(v0 Point):
+    v1 str = str #0
+    v2 str = str #1
+    v3 str = call rt.str_cat(v1, v2)
+    v4 int = load v0 +0
+    v5 str = call rt.fmt_int(v4)
+    v6 str = call rt.str_cat(v3, v5)
+    v7 str = str #2
+    v8 str = call rt.str_cat(v6, v7)
+    return v8

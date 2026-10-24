@@ -1,0 +1,55 @@
+struct Node
+    kids List[int]
+
+struct Tree
+    nodes List[Node]
+    log List[int]
+
+fn Tree.grow(mut self, i int)
+    self.nodes[i].kids.push(i)
+
+fn Tree.walk(mut self)
+    for k in self.nodes[0].kids
+        self.grow(0)
+    print(self.nodes[0].kids)
+    for i, k in self.nodes[0].kids.enumerate()
+        self.grow(0)
+    print(self.nodes[0].kids)
+    for k in self.nodes[0].kids[1..]
+        self.grow(0)
+    print(self.nodes[0].kids)
+    for n in self.nodes
+        self.grow(0)
+        self.nodes.push(n)
+    print(self.nodes.len())
+
+fn bump(mut xs List[int])
+    xs.push(1)
+
+fn main()
+    mut t := Tree(nodes: [Node(kids: [5, 6])], log: [])
+    t.walk()
+    r := ref Node(kids: [1, 2, 3])
+    alias := r
+    for x in r.kids
+        alias.kids.push(x)
+    print(r.kids)
+    for x in r.kids
+        alias.kids = [x]
+    print(r.kids)
+    mut xs := [1, 2]
+    for x in xs
+        bump(mut xs)
+    print(xs)
+    mut gs := [[1], [2]]
+    for g in gs
+        gs.push(g)
+    print(gs.len())
+    mut o := [1, 2, 3]
+    for x in o.sorted()
+        o.push(x)
+    print(o)
+    mut w := [1, 2, 3]
+    for x in w.sorted()
+        w.pop()
+    print(w)

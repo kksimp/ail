@@ -1,0 +1,57 @@
+fn inc(n int) int
+    n + 1
+
+fn dbl(n int) int
+    n * 2
+
+fn compose(f fn(int) int, g fn(int) int) fn(int) int
+    return f
+
+fn apply_all(fs List[fn(int) int], x int) List[int]
+    [f(x) for f in fs]
+
+fn run(name str, f fn(str) str) str
+    f(name)
+
+fn up(s str) str
+    s.to_upper()
+
+fn hello()
+    print("hello")
+
+fn call_twice(f fn())
+    f()
+    f()
+
+struct Handler
+    name str
+    act fn(int) int
+
+fn Handler.fire(self, x int) int
+    (self.act)(x)
+
+fn pick(flag bool) fn(int) int
+    if flag
+        return inc
+    dbl
+
+fn main()
+    print(apply_all([inc, dbl, inc], 5))
+    print(run("abc", up))
+    call_twice(hello)
+    h := Handler(name: "d", act: dbl)
+    print(h.fire(21))
+    m := {"inc": inc, "dbl": dbl}
+    print(m["dbl"](4))
+    f := compose(inc, dbl)
+    print(f(1))
+    print(pick(true)(1))
+    hs := [Handler(name: "a", act: inc), Handler(name: "b", act: dbl)]
+    for x in hs
+        print("{x.name} {x.fire(10)}")
+    mut total := 0
+    for i in 0..200000
+        s := "x{i}"
+        total += m["inc"](s.len())
+        total += hs[i % 2].fire(i)
+    print(total)

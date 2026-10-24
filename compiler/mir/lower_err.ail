@@ -232,6 +232,7 @@ fn Lower.is_error_expr(self, e ast.Expr) bool
         Call(callee, _, _) => is_error_callee(callee)
         Member(recv, _, _) => is_error_type_name(recv)
         Method(recv, name, _, _) => is_error_type_name(recv)
+            or is_module_error(recv, name)
             or is_net_error(recv, name)
             or method_returns_error(recv, name)
         Name(n, _) => is_error_variant(n) or local_is_error(n)
@@ -316,12 +317,25 @@ fn Lower.fallible_call(self, e ast.Expr) bool
                     s.fails
                 TypeArgs(n, _, _) => generic_fails(callee_key(n))
                 _ => false
-        Method(
-            recv,
-            name,
-            _,
-            _,
-        ) => os_fails(recv, name) or method_fails(recv, name) or net_fails(recv, name)
+        Method(recv, name, _, _) => os_fails(recv, name)
+            or method_fails(recv, name)
+            or net_fails(recv, name)
+            or generic_member_fails(recv, name)
+        _ => false
+
+## `G[A].f(...)` of a generic type whose function `f` can fail.
+fn Lower.generic_member_fails(self, recv ast.Expr, name str) bool
+    match recv
+        TypeArgs(n, _, _) =>
+            if n == "List"
+                return generic_fails("List.{name}")
+            g := generic_type_key(n) else return false
+            generic_fails("{g}.{name}")
+        Name(n, _) =>
+            if lookup(n) != none
+                return false
+            t := gen.tsubst.get(n) else return false
+            t.elem() != none and generic_fails("List.{name}")
         _ => false
 
 ## The signature key of `x.name(...)` when `x` is an imported module or a local
@@ -336,6 +350,15 @@ fn Lower.method_key(self, recv ast.Expr, name str) str?
         return "{t}.{name}"
     if en := enum_ref(recv)
         return "{en}.{name}"
+    # `S(...).f(...)`: a method of the struct a constructor call builds.
+    match recv
+        Call(c, _, _) =>
+            match c
+                Name(n, _) =>
+                    if k := type_key(n)
+                        return "{k}.{name}"
+                _ => name
+        _ => name
     match recv_ty(recv)?
         Struct(s) => "{s}.{name}"
         Enum(s) => "{s}.{name}"
@@ -398,6 +421,9 @@ fn Lower.unit_fails(self) bool
 ## An error value as the last expression of a function that can fail is its
 ## error (err.decl.3): leave with it. False when `e` isn't one.
 fn Lower.tail_error(mut self, e ast.Expr) bool
+    # A failing call as the result passes its errors on (err.type.6).
+    if fails and fallible_call(e)
+        note_inferred_err(error_type_of_call(e))
     fails and is_error_expr(e) and lower_fail_return(e, tail_pos)
 
 ## `return E(...)` in a function that can fail: build the error, record its
@@ -414,6 +440,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
         problem(pos, "returning an error from a function that can't fail")
         return true
     v := lower_value(e, none) else return true
+    note_inferred_err(v.ty)
     msg := display_call(v) else
         problem(pos, "an error type needs a message in the native subset (err.msg.1)")
         return true
@@ -427,6 +454,7 @@ fn Lower.lower_fail_return(mut self, value ast.Expr?, pos ast.Pos) bool
 ## failure (left in the error slot) or its value is this function's result.
 fn Lower.return_fallible_call(mut self, e ast.Expr, pos ast.Pos) bool
     v := lower_expr(e, ret) else return true
+    note_inferred_err(error_type_of_call(e))
     defer_all()
     if ret.is_unit()
         finish(return_of(-1))
@@ -832,6 +860,17 @@ fn Lower.error_type_of_call(self, e ast.Expr) Ty
                 TypeArgs(n, _, _) => fn_errs.get(callee_key(n)) else Ty.Unknown
                 _ => Ty.Unknown
         Method(recv, name, _, _) =>
+            match recv
+                TypeArgs(n, _, _) =>
+                    if n == "List"
+                        return fn_errs.get("List.{name}") else Ty.Unknown
+                    if g := generic_type_key(n)
+                        return fn_errs.get("{g}.{name}") else Ty.Unknown
+                Name(n, _) =>
+                    if lookup(n) == none and gen.tsubst.get(n) != none
+                        if et := fn_errs.get("List.{name}")
+                            return et
+                _ => name
             if os_fails(recv, name)
                 m := os_module(recv)
                 if m == "task"
@@ -857,22 +896,35 @@ fn Lower.display_call(mut self, v Val) int?
         Enum(k) => k
         Tuple => return tuple_text(v)
         Bytes => return call("rt.bytes_show", [v.id], Ty.Str)
+        Ref => return if text_ok(v.ty) then ref_text(v.ty, v.id) else none
         Any(t) => return any_text(t, v)
         List(_) => return if has_tuple(v.ty) then tuple_text(v) else none
         _ => return none
     if sigs.contains("{key}.to_str")
         return call("{key}.to_str", [v.id], Ty.Str)
     # No `to_str` and no message: the default text of trait.auto.2.
+    # A type of displayable fields gets one text function; a recursive one the
+    # nested default of ADR 0864.
+    mut seen := Set[str]()
+    if displayable(v.ty, mut seen)
+        return text_fn_call(key, v)
     nested_default(key, v)
 
 ## The text of an error type with no message: its default form,
 ## `Name(field: value, ...)` for a struct and `Enum.Variant(field: value)`
 ## for an enum (trait.auto.2), for fields of `int`, `float`, `bool`, `str`, and structs and enums of those.
+## The name a default text shows for type `key`: a generic instance as its
+## generic's name (`Pair[int, str]` shows `Pair`), a standard module's type
+## without `std.`.
+fn shown_type(key str) str
+    base := key.split("[")[0]
+    base.strip_prefix("std.") else base
+
 fn Lower.default_error_text(mut self, key str, v Val) int?
     if cases := enums.get(key)
         return default_enum_text(key, cases, v)
     slots := structs.get(key) else return none
-    fields_text("{shown_key(key)}(", slots, v.id, 0)
+    fields_text("{shown_type(shown_key(key))}(", slots, v.id, 0)
 
 ## `head` then each of `slots` read from `obj` (the first at slot `skip`),
 ## as `name: value` pairs, then `)`.
@@ -883,7 +935,8 @@ fn Lower.fields_text(mut self, head str, slots List[Slot], obj int, skip int) in
         acc = call("rt.str_cat", [acc, piece], Ty.Str)
         f := load(obj, k + skip, slots[k].ty)
         text := match slots[k].ty
-            Int | Sized(_) => call("rt.fmt_int", [f], Ty.Str)
+            Sized(kk) => call(if kk == "u64" then "rt.fmt_u64" else "rt.fmt_int", [f], Ty.Str)
+            Int => call("rt.fmt_int", [f], Ty.Str)
             Float => call("rt.fmt_float", [f], Ty.Str)
             F32 => call("rt.fmt_f32", [f], Ty.Str)
             Bool => call("rt.fmt_bool", [f], Ty.Str)
@@ -909,7 +962,7 @@ fn Lower.nested_text(mut self, key str, obj int) int
     slots := structs.get(key) else return -1
     if err_msgs.contains(key) or sigs.contains("{key}.to_str")
         return -1
-    fields_text("{shown_key(key)}(", slots, obj, 0) else -1
+    fields_text("{shown_type(shown_key(key))}(", slots, obj, 0) else -1
 
 ## The default text of an enum value: a chain of tests on the variant index.
 fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
@@ -927,7 +980,7 @@ fn Lower.default_enum_text(mut self, key str, cases List[Case], v Val) int?
             seal(no)
             cur = yes
         text := if cases[k].fields.len()
-            == 0 then str_value("{shown_key(key)}.{cases[k].name}") else (fields_text("{shown_key(key)}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
+            == 0 then str_value("{shown_type(shown_key(key))}.{cases[k].name}") else (fields_text("{shown_type(shown_key(key))}.{cases[k].name}(", cases[k].fields, v.id, 1) else return none)
         jump(join, [text])
         if no >= 0
             cur = no
@@ -960,7 +1013,8 @@ fn Lower.note_inferred_set(mut self, key str, r ast.TypeRef)
 ## of them agree, that is the function's error type, so `else err` can read its fields.
 fn Lower.note_inferred_err(mut self, t Ty)
     cur_t := infer_errs.get(fname) else return
-    if cur_t == Ty.Unit
+    # `Unit`: a callee whose set isn't known yet (lower_gtd_infer.ail).
+    if cur_t == Ty.Unit or t == Ty.Unit
         return
     if t.is_unknown() or (not cur_t.is_unknown() and cur_t != t)
         infer_errs[fname] = Ty.Unit

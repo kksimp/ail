@@ -182,7 +182,8 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     slots := structs[n]
     # std.net.17: `net.Response(...)` may leave `all_headers` out; it is empty.
     left_out := n == NET_RESPONSE and args.len() + 1 == slots.len()
-    if args.len() != slots.len() and not left_out
+    partial := std_partial(n, args)
+    if args.len() != slots.len() and not left_out and not partial
         return unsupported(pos, "`{n}(...)` without every field")
     mut vs := [-1 for _ in slots]
     for k in 0..args.len()
@@ -195,6 +196,8 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
         t := slots[at].ty
         v := lower_value(a.value, t)?
         vs[at] = copy_if_place(a.value, Val(id: convert(v, t, expr_pos(a.value)), ty: t))
+    if partial and not fill_private(slots, mut vs, pos)
+        return none
     if left_out
         for k in 0..vs.len()
             if vs[k] < 0
@@ -221,7 +224,7 @@ fn Lower.store(mut self, obj int, k int, v int)
 
 ## `x.f` on a struct.
 fn Lower.lower_member(mut self, recv ast.Expr, name str, pos ast.Pos) Val?
-    r := deref(lower_value(recv, none)?)
+    r := deref_use(lower_value(recv, none)?, pos)
     if xs := tuple_elems(r.ty)
         return tuple_member(r, xs, name, pos)
     n := struct_name(r.ty) else return unsupported(pos, "`.{name}` on `{r.ty.name()}`")
@@ -247,7 +250,7 @@ fn Lower.assign_member(
     at ast.Pos,
 )
     held := lower_value(recv, none) else return
-    r := deref(held)
+    r := deref_use(held, pos)
     if xs := tuple_elems(r.ty)
         assign_tuple_elem(r, xs, name, op, value, pos, at)
         return
@@ -285,7 +288,8 @@ fn Lower.self_value(mut self) int
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
     if ordered := label_ordered_method(key, args)
         return struct_call(key, recv, ordered, pos)
-    rcv := take_receiver()
+    mut rcv := take_receiver()
+    rcv.ref_obj = ref_of(rcv.ref_obj, recv)
     if not sigs.contains(key)
         instance_method(key)
     if bad.contains(key)
@@ -294,6 +298,17 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         return none
     if gen.fns.contains(key) and recv == none
         return generic_call(key, key, [], args, pos, none)
+    if r := recv
+        if is_generic_method(key)
+            return generic_method_call(key, r, args, pos)
+        if key.ends_with(".cmp") and args.len() == 1 and not sigs.contains(key)
+            # The derived `cmp` of `impl Ord for T` with no body (trait.std.2).
+            other := lower_value(args[0].value, r.ty)?
+            return lower_cmp(r, other, pos)
+        if key.ends_with(".to_str") and args.len() == 0 and not sigs.contains(key)
+            # The default text of a struct or enum with no `to_str` (trait.auto.2).
+            t := display_call(r) else return unsupported(pos, "`.to_str()` on `{r.ty.name()}`")
+            return Val(id: t, ty: Ty.Str)
     if key == "{PROC_OUTPUT}.ok" or key == "{PROC_OUTPUT}.text"
         return proc_output_method(key, recv, args, pos)
     if key.starts_with("net.")
@@ -333,7 +348,9 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         v := lower_value(a.value, t)?
         vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
+    busy := ref_enter(rcv, key)
     res := Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    ref_leave(rcv, busy)
     cells_back(cells)
     res
 
@@ -474,8 +491,8 @@ fn Lower.lower_member_expr(
     e ast.Expr,
     want Ty?,
 ) Val?
-    if g := generic_enum_ref(recv)
-        return generic_variant(g, name, none, pos, want)
+    if g := generic_member_ref(recv)
+        return generic_member(g, recv, name, none, pos, want)
     if en := enum_ref(recv)
         return variant_member(en, name, pos)
     if key := qualified(e)

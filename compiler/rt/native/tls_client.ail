@@ -223,7 +223,7 @@ fn tc_set_keys(st int, read bool, secret int)
     kdh_expand_label(hl, sec, "key", 0, 0, klen, key)
     kdh_expand_label(hl, sec, "iv", 0, 0, 12, iv)
     if suite != 4867
-        ak := alloc_raw(24 + 64 * 15, KIND_BYTES)
+        ak := alloc_raw(AK_SIZE, KIND_BYTES)
         aes_setup(ak, key, klen)
         store64(st + (if read then TS_RAK else TS_WAK), ak)
     store64(st + (if read then TS_RSEQ else TS_WSEQ), 0)

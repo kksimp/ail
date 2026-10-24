@@ -1,0 +1,47 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `ref` cells in use (own.ref.7, ADR 0193): while a `mut self` method runs on
+## a struct reached through a `ref`, bit 9 of the object's header word is set,
+## and a use of the cell through any copy of the reference traps. The
+## collector keeps the bit (it changes only bit 8).
+
+REFCELL_BUSY := 512
+
+# The object is passed as a `List[int]` only to take its address with
+# `list_addr`: any heap object's pointer works the same (native-abi.md §6).
+
+## Whether a `mut` access to object `o` is in progress.
+fn refcell_busy(o List[int]) bool
+    load64(list_addr(o) - 8).bit_and(REFCELL_BUSY) != 0
+
+## Mark `o` in use; the old mark, for `refcell_leave`.
+fn refcell_enter(o List[int]) int
+    p := list_addr(o)
+    h := load64(p - 8)
+    store64(p - 8, h.bit_or(REFCELL_BUSY))
+    h.bit_and(REFCELL_BUSY)
+
+## Put back the mark `refcell_enter` returned.
+fn refcell_leave(o List[int], old int)
+    p := list_addr(o)
+    h := load64(p - 8)
+    store64(p - 8, h.bit_and(-1 - REFCELL_BUSY).bit_or(old))
+
+## The text of a `ref` (own.ref.6): while its cell's text is being built,
+## bit 10 is set, so a cycle back to it shows `ref ...`.
+REFCELL_SHOWN := 1024
+
+## Mark `o` as being shown: 1 when it already was (a cycle), else 0.
+fn refcell_show(o List[int]) int
+    p := list_addr(o)
+    h := load64(p - 8)
+    if h.bit_and(REFCELL_SHOWN) != 0
+        return 1
+    store64(p - 8, h.bit_or(REFCELL_SHOWN))
+    0
+
+## Clear the mark `refcell_show` set.
+fn refcell_unshow(o List[int])
+    p := list_addr(o)
+    store64(p - 8, load64(p - 8).bit_and(-1 - REFCELL_SHOWN))

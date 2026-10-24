@@ -685,5 +685,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0863](0863-native-std-ui-through-the-app-host.md) | Native `std.ui` and widgets render through the `std.app` host: one window path for edit, pdf and Garlic; Mac first | Accepted | 2026-10-23 |
 | [0865](0865-no-double-work.md) | One implementation (native only), one checker (AIL), one Mac gate per batch, generated files once: no double work | Accepted | 2026-10-23 |
 | [0868](0868-ai-first-tooling-after-rust-removal.md) | AI-first tooling after Rust removal: `ail ask`, `uhwhatnow?` ranked typed holes, edit impact, native time travel, tool-checked contracts, token-priced diagnostics, native sandbox, live attach; zero cost when unused | Accepted | 2026-10-23 |
+| [0869](0869-http-proxy-from-the-environment.md) | HTTP proxies from the environment in the native `std.net` client: `HTTP_PROXY`, `HTTPS_PROXY` through `CONNECT`, `NO_PROXY` | Accepted | 2026-10-23 |
 | [0866](0866-native-composite-map-keys.md) | Native maps and sets take struct, tuple, enum and list keys, hashed by the key's shape *(delegated)* | Accepted | 2026-10-23 |
 | [0867](0867-native-unique-values-and-drop.md) | Native unique values and `Drop`: ownership flags on the defer machinery *(delegated)* | Accepted | 2026-10-23 |

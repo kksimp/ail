@@ -25,6 +25,31 @@ struct Held
 fn new_lazy(from int) Lazy
     Lazy(from: from, fns: {}, held: {}, names: Set[str]())
 
+## The sources without the prelude's when the program's root module declares
+## a struct or enum the prelude's modules declare too (a program's own `Json`): its name
+## wins, as it does in the interpreter, where the prelude's types are in a
+## module of their own.
+fn shadow_free(input List[Source], lazy int) List[Source]
+    if lazy >= input.len()
+        return input
+    mut user := Set[str]()
+    for k in 0..lazy
+        # Only the root module's: the prelude is a source of the root module.
+        if input[k].module != input[lazy].module
+            continue
+        for s in input[k].prog.structs
+            user.add(s.name)
+        for e in input[k].prog.enums
+            user.add(e.name)
+    for k in lazy..input.len()
+        for s in input[k].prog.structs
+            if user.contains(s.name)
+                return input[..lazy]
+        for e in input[k].prog.enums
+            if user.contains(e.name)
+                return input[..lazy]
+    input
+
 ## Record the quiet sources' top-level names.
 fn Lower.note_lazy_names(mut self, srcs List[Source])
     for k in lazy.from..srcs.len()
@@ -104,6 +129,6 @@ pub fn prelude_text(text str) str
     mut out := List[str]()
     for line in text.lines()
         if m := line.strip_prefix("## @module ")
-            keep = ["json", "jsonderive", "default", "derive"].contains(m.trim())
+            keep = ["json", "jsonderive", "default", "derive", "argsderive"].contains(m.trim())
         out.push(if keep then line else "")
     "{out.join("\n")}\n"

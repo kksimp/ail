@@ -65,6 +65,8 @@ struct Recv
     mutable bool
     ## The receiver expression, to assign a `mut self` cell back to (lower_cell.ail).
     expr ast.Expr?
+    ## The object of a `ref` receiver, or -1 (own.ref.7).
+    ref_obj int
 
 ## Record that `f`, declared as `key`, takes `mut self`.
 fn Lower.note_mut_self(mut self, f ast.FnDecl, key str)
@@ -80,7 +82,13 @@ fn Lower.set_receiver(mut self, recv ast.Expr, key str)
 
 ## The noted receiver, cleared so a call nested in an argument doesn't see it.
 fn Lower.take_receiver(mut self) Recv
-    r := Recv(path: traits.recv_path, mutable: traits.recv_mut, expr: traits.recv_expr)
+    r := Recv(
+        path: traits.recv_path,
+        mutable: traits.recv_mut,
+        expr: traits.recv_expr,
+        ref_obj: traits.ref_obj,
+    )
+    traits.ref_obj = -1
     traits.recv_expr = none
     traits.recv_path = []
     traits.recv_mut = false

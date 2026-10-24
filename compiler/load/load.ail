@@ -6,6 +6,7 @@
 ##
 ## Spec rules: mod.unit.1-5, mod.use.1-6, mod.vis.1, json.prelude.1.
 use ast
+use fix
 use mir
 use pkg
 use syntax
@@ -84,6 +85,22 @@ DERIVE_NAMES := ["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveErro
 ## Read the program at `arg`, a file or a package directory, with every module
 ## it imports. `std` is the directory of the standard modules in AIL.
 pub fn load(arg str, std str) Loaded ! LoadError
+    load_full(arg, std, Map[str, str](), Map[str, str]())
+
+## `load`, with the texts the program's own derive generators wrote, by
+## `TYPE.TRAIT` (ct.derive.1-4): the caller runs them natively and loads
+## again. A text `@@err MESSAGE` is the generator's `DeriveError`, one
+## `@@fx REASONS` a generator that isn't compile-time-safe (ct.derive.3).
+pub fn load_derived(arg str, std str, user Map[str, str]) Loaded ! LoadError
+    load_full(arg, std, user, Map[str, str]())
+
+## `load` with the text of some files given instead of read from disk, by
+## path (`ail edit` checks the edited state before anything is written).
+pub fn load_with(arg str, std str, over Map[str, str]) Loaded ! LoadError
+    load_full(arg, std, Map[str, str](), over)
+
+## `load` with both: generator texts `user` and file texts `over`.
+fn load_full(arg str, std str, user Map[str, str], over Map[str, str]) Loaded ! LoadError
     mut root := "."
     mut root_files := List[str]()
     if arg.ends_with(".ail")
@@ -95,14 +112,20 @@ pub fn load(arg str, std str) Loaded ! LoadError
         root_files = ail_files(arg)
         if root_files.len() == 0
             return LoadError("{arg} has no .ail files (mod.unit.5)")
-    load_package(root, root_files, std)
+    load_package(root, root_files, std, user, over)
 
 ## The `.ail` files directly in `dir`, sorted (mod.unit.1).
 fn ail_files(dir str) List[str]
     names := fs.list_dir(dir) else return []
     [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail")]
 
-fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
+fn load_package(
+    root str,
+    root_files List[str],
+    std str,
+    user Map[str, str],
+    over Map[str, str],
+) Loaded ! LoadError
     # The manifests come first: they say where each package is (mod.pkg.1-3).
     packages := pkg.read(root)
     mut files := List[ast.SourceFile]()
@@ -119,7 +142,11 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
             if (files.len() + 1) * FILE_LINES >= PRELUDE_LINE
                 return LoadError("the program has more than {files.len()} files")
             shown := std_shown(p, std)
-            src := fs.read_text(p) else return LoadError("can't read {shown}")
+            mut src := ""
+            if given := over.get(p)
+                src = given
+            else
+                src = fs.read_text(p) else return LoadError("can't read {shown}")
             base := files.len() * FILE_LINES
             lexed := syntax.lex(src)
             mut toks := shift(lexed.tokens, base)
@@ -152,7 +179,7 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
     first.texts = sources
     mut done := first
     if diags.len() == 0 and first.diags.len() == 0 and wanted(tokens)
-        done = expand_derives(first, tokens, files, std, packages)?
+        done = expand_derives(first, tokens, files, std, user, packages)?
     packages.finish(mut done.program, mut done.diags, mut done.texts)
     done
 
@@ -369,4 +396,33 @@ fn one_per_line(diags List[syntax.Diag]) List[syntax.Diag]
         same_line := kept.len() > 0 and kept[kept.len() - 1].pos.line == d.pos.line
         if d.rule.starts_with("lex.str.") or not same_line
             kept.push(d)
+            continue
+        prev := kept[kept.len() - 1]
+        if prev.fixed and d.fixed and explicit(prev.edits) and explicit(d.edits) and apart(
+            prev.edits,
+            d.edits,
+        )
+            mut joined := prev.edits
+            joined.extend(d.edits)
+            kept[kept.len() - 1].edits = joined
     kept
+
+fn explicit(edits List[fix.Edit]) bool
+    for e in edits
+        if e.old != none or e.anchor != "exact"
+            return false
+    true
+
+fn apart(xs List[fix.Edit], ys List[fix.Edit]) bool
+    for x in xs
+        for y in ys
+            if overlaps(x, y)
+                return false
+    true
+
+fn overlaps(a fix.Edit, b fix.Edit) bool
+    ka := a.pos.line * 100000 + a.pos.col
+    ea := a.end.line * 100000 + a.end.col
+    kb := b.pos.line * 100000 + b.pos.col
+    eb := b.end.line * 100000 + b.end.col
+    ka <= eb and kb <= ea

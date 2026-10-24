@@ -1,0 +1,8 @@
+external a
+external b
+exited 
+ping
+pong 1
+ping
+pong 3
+ping

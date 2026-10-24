@@ -21,6 +21,8 @@ fn Lower.nested_default(mut self, key str, v Val) int?
     r
 
 fn Lower.gen_text(mut self, fkey str, t Ty)
+    if gen_ref_text(fkey, t)
+        return
     key := enum_name(t) else struct_name(t) else ""
     ps := begin_fn(fkey, Ty.Str, [t])
     text_open.push(key)

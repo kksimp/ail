@@ -32,4 +32,20 @@ fn Lower.frame_name(self) str
                 return "{tk.owner}({if f.params.len() > 0 then ".." else ""})"
         return "{tk.owner}()"
     dots := if blocks[0].params.len() > 0 then ".." else ""
-    "{fname}({dots})"
+    "{plain_name(fname)}({dots})"
+
+## `f` for the instance `f[int]` of a generic function, as the interpreter
+## names its frames (trace.frame.1).
+pub fn plain_name(name str) str
+    if not name.contains("[")
+        return name
+    mut out := List[str]()
+    mut depth := 0
+    for c in name.chars()
+        if c == '['
+            depth += 1
+        elif c == ']'
+            depth -= 1
+        elif depth == 0
+            out.push(c.to_str())
+    out.join("")

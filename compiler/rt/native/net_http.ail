@@ -673,7 +673,12 @@ fn http_exchange_on(
     port := load64(u + 16)
     timeout := if spec == 0 then NET_DEFAULT_MS else load64(spec + 8)
     cms := if spec == 0 then 0 else load64(spec + 16)
+    px := proxy_find(scheme, host, port, url, at)
+    if failed()
+        return 0
     key := "{scheme}://{host}:{port}"
+    if px != 0
+        key = "{key} via {str_at(load64(px))}:{load64(px + 8)}"
     again := method == "GET"
         or method == "HEAD"
         or method == "PUT"
@@ -683,7 +688,15 @@ fn http_exchange_on(
     if not fresh and not http_closes(if spec == 0 then 0 else load64(spec))
         h = pool_take(key)
     reused := h != 0
-    if h == 0
+    if h == 0 and px != 0
+        h = net_dial_ms(
+            str_at(load64(px)),
+            load64(px + 8),
+            url,
+            if cms > 0 then cms else timeout,
+            at,
+        )
+    elif h == 0
         h = net_dial_ms(host, port, url, if cms > 0 then cms else timeout, at)
     if h == 0
         return 0
@@ -691,6 +704,9 @@ fn http_exchange_on(
     store64(o + NET_TIMEOUT, timeout)
     tms := if spec == 0 then 0 else load64(spec + 48)
     store64(o + NET_DEADLINE, if tms > 0 then time_mono_ms() + tms else 0)
+    if scheme == "https" and not reused and px != 0
+        if not proxy_tunnel(h, host, port, px, url, at)
+            return 0
     if scheme == "https" and not reused
         te := tc_connect(o, host)
         if te != 0
@@ -713,8 +729,16 @@ fn http_exchange_on(
     sb_reset()
     sb_text(method)
     sb_byte(32)
+    # Through a proxy a plain request names its whole URL (RFC 9112 3.2.2).
+    if px != 0 and scheme == "http"
+        sb_text("http://")
+        sb_text(str_at(load64(u + 32)))
     sb_text(str_at(load64(u + 24)))
     sb_text(" HTTP/1.1\r\n")
+    if px != 0 and scheme == "http" and load64(str_addr(str_at(load64(px + 16)))) > 0
+        sb_text("Proxy-Authorization: ")
+        sb_text(str_at(load64(px + 16)))
+        sb_text("\r\n")
     if not http_given(hdrs, "host")
         sb_text("Host: ")
         sb_text(host)
