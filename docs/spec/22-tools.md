@@ -1043,6 +1043,13 @@ the replay writes again), `io.exit`, `std.random` (repeated by the seed),
 from `proc.start`, a socket, a listener) is recorded as
 `"uncaptured":true`, and a replay that reaches it stops with a trap
 `replay.cap.2`.
+**replay.nat.1** — The native `ail run --record` and `--replay`
+(`AIL_INSTRUMENT=record`, ADR 0873) capture the calls of `replay.cap.1`
+whose result is unit, an int, a bool, a string, bytes or an optional string.
+Any other call of those modules (a list, struct or map result, a handle, and
+every `std.net` call) is recorded as `"uncaptured":true`, runs live, and traps
+`replay.cap.2` in a replay. `ail test --record` and `--replay` are not native
+yet.
 **replay.run.1** — `ail run --replay R [FILE]` runs `FILE` (by default the
 recording's program) with the recording's arguments and seed, and answers
 each captured call from R instead of running it: nothing is read, written,
@@ -1059,7 +1066,7 @@ a type the program doesn't have traps the same way.
 ```ail pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
 ```
 
-```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.run.1,replay.run.2
+```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.nat.1,replay.run.1,replay.run.2
 ```
 
 ```ail pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3

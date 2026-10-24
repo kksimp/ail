@@ -1,0 +1,552 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Record and replay (ADR 0873, replay.rec.1-5, replay.cap.1-2, replay.run.1-3,
+## replay.nat.1). A program built with `AIL_INSTRUMENT=record` calls `rec_FN`
+## in place of the runtime function `FN` for each captured call. With
+## `$AIL_RECORD` set, `rec_FN` runs the call and appends its result to that
+## file as a JSON line; with `$AIL_REPLAY` set, it answers from the file and
+## runs nothing; with neither it just runs the call. The wrapper of a call
+## that takes no `at` text is told its place by `rec_at` just before.
+##
+## The state block (global slot 57) is: mode (0 live, 1 record, 2 replay),
+## the output descriptor, the output buffer, its length, the replay position,
+## the bytes written, whether `{"truncated":true}` was written, the path of the
+## program text of the call in progress, then its line and column. Slot 58
+## holds the recording being replayed, as a string the collector can see.
+
+REC := 57
+REC_TEXT := 58
+
+REC_MODE := 0
+REC_FD := 8
+REC_BUF := 16
+REC_LEN := 24
+REC_POS := 32
+REC_BYTES := 40
+REC_CUT := 48
+REC_PATH := 56
+REC_LINE := 64
+REC_COL := 72
+
+## The most the recording holds (replay.rec.4).
+REC_LIMIT := 67108864
+
+fn rec_state() int
+    s := load64(global(REC))
+    if s != 0
+        return s
+    s = sys_mmap(4096)
+    if s < 0
+        return 0
+    store64(global(REC), s)
+    out := os_env_get("AIL_RECORD")
+    if out != ""
+        p := os_cstr(OS_PATH_A, out)
+        if p != 0
+            fd := os_open(p, os_open_flags(2), 438)
+            buf := sys_mmap(65536 + 16)
+            if fd >= 0 and buf > 0
+                store64(s + REC_MODE, 1)
+                store64(s + REC_FD, fd)
+                store64(s + REC_BUF, buf)
+        return s
+    given := os_env_get("AIL_REPLAY")
+    if given != ""
+        text := os_fs_read_text(given)
+        if os_ok()
+            store64(global(REC_TEXT), str_addr(text))
+            store64(s + REC_MODE, 2)
+            # The first line is the header.
+            n := load64(str_addr(text))
+            mut i := 0
+            while i < n and load8(str_addr(text) + 16 + i) != 10
+                i += 1
+            store64(s + REC_POS, i)
+    s
+
+fn rec_mode() int
+    s := rec_state()
+    if s == 0
+        return 0
+    load64(s + REC_MODE)
+
+## Where the next captured call is: the program's path, line and column.
+fn rec_at(path str, line int, col int)
+    s := rec_state()
+    if s != 0
+        store64(s + REC_PATH, str_addr(path))
+        store64(s + REC_LINE, line)
+        store64(s + REC_COL, col)
+
+# ---- writing ----
+
+fn rec_flush(s int)
+    n := load64(s + REC_LEN)
+    if n > 0
+        os_write_all(load64(s + REC_FD), load64(s + REC_BUF), n)
+        store64(s + REC_BYTES, load64(s + REC_BYTES) + n)
+        store64(s + REC_LEN, 0)
+
+fn rec_byte(s int, b int)
+    n := load64(s + REC_LEN)
+    store8(load64(s + REC_BUF) + n, b)
+    store64(s + REC_LEN, n + 1)
+    if n + 1 >= 65536
+        rec_flush(s)
+
+fn rec_text(s int, t str)
+    p := str_addr(t)
+    for i in 0..load64(p)
+        rec_byte(s, load8(p + 16 + i))
+
+fn rec_int(s int, n int)
+    scratch := load64(s + REC_BUF) + 65536
+    for i in 0..(write_int(scratch, n))
+        rec_byte(s, load8(scratch + i))
+
+fn rec_hex(s int, d int)
+    rec_byte(s, if d < 10 then 48 + d else 87 + d)
+
+## `t` as a JSON string (control bytes as `\u00XX`).
+fn rec_json(s int, t str)
+    p := str_addr(t)
+    rec_byte(s, 34)
+    for i in 0..load64(p)
+        c := load8(p + 16 + i)
+        if c == 34 or c == 92
+            rec_byte(s, 92)
+            rec_byte(s, c)
+        elif c == 10
+            rec_text(s, "\\n")
+        elif c == 9
+            rec_text(s, "\\t")
+        elif c == 13
+            rec_text(s, "\\r")
+        elif c < 32
+            rec_text(s, "\\u00")
+            rec_hex(s, c / 16)
+            rec_hex(s, c % 16)
+        else
+            rec_byte(s, c)
+    rec_byte(s, 34)
+
+## Start the line of a call, unless the recording is full (replay.rec.4).
+fn rec_begin(name str, res int) int
+    s := rec_state()
+    if s == 0 or load64(s + REC_MODE) != 1
+        return 0
+    if load64(s + REC_BYTES) + load64(s + REC_LEN) > REC_LIMIT
+        if load64(s + REC_CUT) == 0
+            store64(s + REC_CUT, 1)
+            rec_text(s, "\{\"truncated\":true}\n")
+            rec_flush(s)
+        return 0
+    rec_text(s, "\{\"call\":")
+    rec_json(s, name)
+    rec_text(s, ",\"line\":")
+    rec_int(s, load64(s + REC_LINE))
+    rec_text(s, ",\"col\":")
+    rec_int(s, load64(s + REC_COL))
+    if res != 0
+        rec_text(s, ",\"result\":")
+    s
+
+fn rec_end(s int)
+    rec_text(s, "}\n")
+    rec_flush(s)
+
+## The failure in the error slot, as `{"fail":KIND,"path":PATH}` (an `fs.IoError`).
+fn rec_fail(s int)
+    e := load64(err_addr(1))
+    rec_text(s, "\{\"fail\":")
+    rec_json(s, str_at(load64(e + 8)))
+    rec_text(s, ",\"path\":")
+    rec_json(s, str_at(load64(e)))
+    rec_text(s, "}")
+
+fn rec_w_unit(name str, fails int)
+    s := rec_begin(name, 1)
+    if s != 0
+        if fails != 0 and failed()
+            rec_fail(s)
+        else
+            rec_text(s, "null")
+        rec_end(s)
+
+fn rec_w_int(name str, r int)
+    s := rec_begin(name, 1)
+    if s != 0
+        rec_int(s, r)
+        rec_end(s)
+
+fn rec_w_bool(name str, r bool)
+    s := rec_begin(name, 1)
+    if s != 0
+        rec_text(s, if r then "true" else "false")
+        rec_end(s)
+
+fn rec_w_str(name str, r str, fails int)
+    s := rec_begin(name, 1)
+    if s != 0
+        if fails != 0 and failed()
+            rec_fail(s)
+        else
+            rec_json(s, r)
+        rec_end(s)
+
+## An optional `str`: the pointer is 0 for `none`.
+fn rec_w_opt(name str, r str)
+    s := rec_begin(name, 1)
+    if s != 0
+        if str_addr(r) == 0
+            rec_text(s, "\{\"none\":true}")
+        else
+            rec_json(s, r)
+        rec_end(s)
+
+fn rec_w_bytes(name str, r str)
+    s := rec_begin(name, 1)
+    if s != 0
+        p := str_addr(r)
+        rec_text(s, "\{\"bytes\":\"")
+        for i in 0..load64(p)
+            c := load8(p + 16 + i)
+            rec_hex(s, c / 16)
+            rec_hex(s, c % 16)
+        rec_text(s, "\"}")
+        rec_end(s)
+
+# ---- reading ----
+
+## A mismatch or a missing call (replay.run.3).
+fn rec_stop(rule str, a str, x str, b str, y str, c str)
+    s := rec_state()
+    flush()
+    out_str(str_at(load64(s + REC_PATH)))
+    out_byte(58)
+    out_int(load64(s + REC_LINE))
+    out_byte(58)
+    out_int(load64(s + REC_COL))
+    out_str(": trap[")
+    out_str(rule)
+    out_str("]: ")
+    out_str(a)
+    out_str(x)
+    out_str(b)
+    out_str(y)
+    out_str(c)
+    out_byte(10)
+    flush_to(2)
+    sys_exit(1)
+
+## A call the native build doesn't capture (replay.nat.1): a replay stops at it (replay.cap.2).
+fn rec_guard(name str)
+    s := rec_begin(name, 0)
+    if s != 0
+        # Recorded as a call without a result: the call runs, a replay can't answer it.
+        rec_text(s, ",\"uncaptured\":true}\n")
+        rec_flush(s)
+    if rec_mode() == 2
+        rec_stop(
+            "replay.cap.2",
+            "`",
+            name,
+            "` isn't captured by the native build, so a replay can't answer it",
+            "",
+            "",
+        )
+
+## The value of the recording's next call, which must be `name`: the address of its `result`.
+fn rec_next(name str) int
+    s := rec_state()
+    tp := load64(global(REC_TEXT))
+    d := tp + 16
+    n := load64(tp)
+    mut pos := load64(s + REC_POS)
+    while pos < n and (load8(d + pos) == 10 or load8(d + pos) == 13 or load8(d + pos) == 32)
+        pos += 1
+    if pos >= n or load8(d + pos + 2) != 99
+        rec_stop(
+            "replay.run.3",
+            "the recording has no call left, but the program called `",
+            name,
+            "`",
+            "",
+            "",
+        )
+    # `{"call":"NAME","line":L,"col":C,"result":V}`
+    q := d + pos + 9
+    mut i := 0
+    while load8(q + i) != 34
+        i += 1
+    want := os_str_from(q, i)
+    if not str_eq(want, name)
+        rec_stop(
+            "replay.run.3",
+            "the recording's next effect is `",
+            want,
+            "`, but the program called `",
+            name,
+            "`",
+        )
+    mut e := q + i
+    while not (load8(e) == 34 and load8(e + 1) == 114 and load8(e + 2) == 101 and load8(e + 3) == 115 and load8(e + 8) == 58)
+        e += 1
+    p := e + 9
+    mut j := p
+    while j < d + n and load8(j) != 10
+        j += 1
+    store64(s + REC_POS, j - d)
+    p
+
+fn rec_failed(p int) bool
+    load8(p) == 123 and load8(p + 2) == 102
+
+## The string at `q`, which is a quote: unescaped.
+fn rec_string(q int) str
+    sb_reset()
+    mut i := q + 1
+    while load8(i) != 34
+        c := load8(i)
+        if c == 92
+            i += 1
+            e := load8(i)
+            if e == 110
+                sb_byte(10)
+            elif e == 116
+                sb_byte(9)
+            elif e == 114
+                sb_byte(13)
+            elif e == 117
+                mut v := 0
+                for k in 1..5
+                    h := load8(i + k)
+                    v = v * 16 + (if h <= 57 then h - 48 else h - 87)
+                sb_add_char(v)
+                i += 4
+            else
+                sb_byte(e)
+        else
+            sb_byte(c)
+        i += 1
+    sb_str()
+
+## Stop a failing call's replay: the `fs.IoError` the recording holds.
+fn rec_raise(p int, at str)
+    kind := rec_string(p + 8)
+    # `,"path":` follows the kind string.
+    mut k := p + 9
+    while load8(k) != 34
+        k += 1
+    path := rec_string(k + 9)
+    mut num := K_OTHER
+    for c in 1..11
+        if str_eq(kind_name(c), kind)
+            num = c
+    os_error(path, num, at)
+
+fn rec_r_unit(name str, at str)
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise(p, at)
+
+fn rec_r_int(name str) int
+    p := rec_next(name)
+    mut i := p
+    mut neg := false
+    if load8(i) == 45
+        neg = true
+        i += 1
+    mut v := 0
+    while load8(i) >= 48 and load8(i) <= 57
+        v = v * 10 + load8(i) - 48
+        i += 1
+    if neg then 0 - v else v
+
+fn rec_r_bool(name str) bool
+    load8(rec_next(name)) == 116
+
+fn rec_r_str(name str, at str) str
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise(p, at)
+        return ""
+    rec_string(p)
+
+## An optional `str`: `none` is the pointer 0.
+fn rec_r_opt(name str) str
+    p := rec_next(name)
+    if load8(p) == 123
+        return str_at(0)
+    rec_string(p)
+
+fn rec_r_bytes(name str, at str) str
+    p := rec_next(name)
+    if rec_failed(p)
+        rec_raise(p, at)
+        return ""
+    sb_reset()
+    mut i := p + 10
+    while load8(i) != 34
+        h := load8(i)
+        l := load8(i + 1)
+        sb_byte((if h <= 57 then h - 48 else h - 87) * 16 + (if l <= 57 then l - 48 else l - 87))
+        i += 2
+    sb_str()
+
+# ---- the captured calls ----
+
+fn rec_fs_exists(path str) bool
+    if rec_mode() == 2
+        return rec_r_bool("fs.exists")
+    r := fs_exists(path)
+    rec_w_bool("fs.exists", r)
+    r
+
+fn rec_fs_read_text(path str, at str) str
+    if rec_mode() == 2
+        return rec_r_str("fs.read_text", at)
+    r := fs_read_text(path, at)
+    rec_w_str("fs.read_text", r, 1)
+    r
+
+fn rec_fs_read_bytes(path str, at str) str
+    if rec_mode() == 2
+        return rec_r_bytes("fs.read_bytes", at)
+    r := fs_read_bytes(path, at)
+    rec_w_bytes("fs.read_bytes", r)
+    r
+
+fn rec_fs_write_text(path str, text str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.write_text", at)
+        return
+    fs_write_text(path, text, at)
+    rec_w_unit("fs.write_text", 1)
+
+fn rec_fs_write_bytes(path str, data str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.write_bytes", at)
+        return
+    fs_write_bytes(path, data, at)
+    rec_w_unit("fs.write_bytes", 1)
+
+fn rec_fs_append_text(path str, text str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.append_text", at)
+        return
+    fs_append_text(path, text, at)
+    rec_w_unit("fs.append_text", 1)
+
+fn rec_fs_append_bytes(path str, data str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.append_bytes", at)
+        return
+    fs_append_bytes(path, data, at)
+    rec_w_unit("fs.append_bytes", 1)
+
+fn rec_fs_remove(path str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.remove", at)
+        return
+    fs_remove(path, at)
+    rec_w_unit("fs.remove", 1)
+
+fn rec_fs_make_dir(path str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.make_dir", at)
+        return
+    fs_make_dir(path, at)
+    rec_w_unit("fs.make_dir", 1)
+
+fn rec_fs_rename(from str, to str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.rename", at)
+        return
+    fs_rename(from, to, at)
+    rec_w_unit("fs.rename", 1)
+
+fn rec_fs_copy(from str, to str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.copy", at)
+        return
+    fs_copy(from, to, at)
+    rec_w_unit("fs.copy", 1)
+
+fn rec_env_get(name str) str
+    if rec_mode() == 2
+        return rec_r_opt("env.get")
+    r := env_get(name)
+    rec_w_opt("env.get", r)
+    r
+
+fn rec_env_home() str
+    if rec_mode() == 2
+        return rec_r_opt("env.home")
+    r := env_home()
+    rec_w_opt("env.home", r)
+    r
+
+fn rec_env_cwd() str
+    if rec_mode() == 2
+        return rec_r_str("env.cwd", "")
+    r := env_cwd()
+    rec_w_str("env.cwd", r, 0)
+    r
+
+fn rec_env_program() str
+    if rec_mode() == 2
+        return rec_r_str("env.program", "")
+    r := env_program()
+    rec_w_str("env.program", r, 0)
+    r
+
+fn rec_io_read_line() str
+    if rec_mode() == 2
+        return rec_r_opt("io.read_line")
+    r := io_read_line()
+    rec_w_opt("io.read_line", r)
+    r
+
+fn rec_io_read_all() str
+    if rec_mode() == 2
+        return rec_r_str("io.read_all", "")
+    r := io_read_all()
+    rec_w_str("io.read_all", r, 0)
+    r
+
+fn rec_io_read_bytes() str
+    if rec_mode() == 2
+        return rec_r_bytes("io.read_bytes", "")
+    r := io_read_bytes()
+    rec_w_bytes("io.read_bytes", r)
+    r
+
+fn rec_time_now_ms() int
+    if rec_mode() == 2
+        return rec_r_int("time.now_ms")
+    r := time_now_ms()
+    rec_w_int("time.now_ms", r)
+    r
+
+fn rec_time_sleep_ms(ms int)
+    if rec_mode() == 2
+        rec_r_unit("time.sleep_ms", "")
+        return
+    time_sleep_ms(ms)
+    rec_w_unit("time.sleep_ms", 0)
+
+fn rec_tz_system() str
+    if rec_mode() == 2
+        return rec_r_str("tz.system", "")
+    r := tz_system()
+    rec_w_str("tz.system", r, 0)
+    r
+
+fn rec_proc_which(name str) int
+    if rec_mode() == 2
+        return str_addr(rec_r_opt("proc.which"))
+    r := proc_which(name)
+    rec_w_opt("proc.which", str_at(r))
+    r
