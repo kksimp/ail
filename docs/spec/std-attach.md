@@ -3,7 +3,8 @@
 Chapter key: `attach`
 
 > **Status:** Drafted (ADR 0884, amending ADR 0879). The field attribute, its
-> check and the protocol functions are built; the listener, the app wrapper and the `ail run` default are not yet.
+> check, the protocol functions, the listener and the app wrapper are built;
+> generating `observe` impls and the `ail run` default are not yet.
 
 A running program tells an attached agent its state directly, read-only.
 
@@ -39,6 +40,12 @@ fn main()
     print(p.count)
 ```
 
+**attach.observe.4** — `attach.Observe` is the trait of types that report
+their observed values: `observed(self) List[Observed]`, whose default reports
+none. With attach on, the compiler writes the `impl` of a type with `@observe`
+fields (not built yet); a type may also write it by hand. With attach off
+nothing is generated. *(ADR 0884)*
+
 ## The protocol
 
 `use std.attach` provides the protocol as pure functions: `Observed`,
@@ -72,4 +79,43 @@ fn main()
     s := screen.Screen(w: 10.0, h: 10.0, items: [])
     print(attach.answer("\{\"q\":\"observe\",\"token\":\"k\"}", "k", tr, s, ""))
     print(attach.answer("\{\"q\":\"observe\"}", "k", tr, s, ""))
+```
+
+## The listener
+
+**attach.wire.1** — `attach.serve.run(mut app)` listens on `127.0.0.1` only,
+on a free port, and publishes `{"addr":"127.0.0.1:PORT","token":"..."}` in
+`$TMPDIR/ail-attach-PORT.json` (`/tmp` without `TMPDIR`), created empty,
+restricted to mode 0600, then filled; the file is removed when the window
+closes. The token is 24 random bytes in hex. Nothing listens until `run` is
+called. *(ADR 0884)*
+
+**attach.wire.6** — The listener thread never reads program state. It posts
+each request line to the app's inbox as an `external` event from `attach`,
+and the app answers between its other events with the observed values (the
+`Observe` trait), the screen of its view tree (`std.screen.view`) and the
+protocol reply. A client that sends nothing for 5 seconds is dropped. *(ADR 0884)*
+
+```ail skip=bootstrap rules=attach.wire.1,attach.wire.6
+use std.app
+use std.attach
+use std.attach.serve
+
+struct Shop
+    n int
+
+impl app.App for Shop
+    fn update(mut self, ev app.Event)
+        n += 1
+
+    fn view(self) app.Node
+        app.label("hi")
+
+impl attach.Observe for Shop
+    fn observed(self) List[attach.Observed]
+        [attach.observed("n", "int", "{n}")]
+
+fn main() !
+    mut s := Shop(n: 0)
+    serve.run(mut s)?
 ```

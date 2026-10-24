@@ -107,3 +107,10 @@ pub fn answer(line str, token str, tr Tracker, sc screen.Screen, heap str) str
             return failure("no heap summary is available")
         return "\{\"v\":1,\"heap\":{text(heap)}}"
     failure("unknown query {text(q)}; the queries are observe, screen and heap, and all of them only read")
+
+## A type that can report its observed values (attach.observe.4). The compiler
+## writes the `impl` for a type with `@observe` fields when attach is on; a
+## type with none can take the default, which reports nothing.
+pub trait Observe
+    fn observed(self) List[Observed]
+        []
