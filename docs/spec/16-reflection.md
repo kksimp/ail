@@ -85,7 +85,7 @@ fn main()
 
 **refl.run.1** — [definitional] There is no run-time reflection. No operation yields a
 value's type, type name, fields or variants at run time, and a value of
-`any Trait` can't be converted to its concrete type. *(ADR 0229)*
+`any Trait` can't be converted to its concrete type. *(ADR 0229, ADR 0877)*
 
 ```ail rules=refl.run.1
 trait Shape

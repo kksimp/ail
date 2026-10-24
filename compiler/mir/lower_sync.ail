@@ -227,11 +227,40 @@ fn Lower.unwind_loop(mut self)
         run_exit(tk.exits[i])
         i -= 1
 
-## A block ends: the groups it opened wait for their tasks.
-fn Lower.end_scope_exits(mut self)
+## Where an expression starts: its leftmost operand.
+@allow("expr.match.3") fn group_end_expr(e ast.Expr) ast.Pos
+    match e
+        Call(callee, _, _) => group_end_expr(callee)
+        Method(recv, _, _, _) => group_end_expr(recv)
+        Member(recv, _, _) => group_end_expr(recv)
+        Index(recv, _, _) => group_end_expr(recv)
+        Binary(_, lhs, _, _) => group_end_expr(lhs)
+        _ => expr_pos(e)
+
+## Where a statement starts, for the statements that can end a block.
+@allow("expr.match.3") fn group_end_at(s ast.Stmt) ast.Pos?
+    match s
+        Let(_, p, _, _, _) => p
+        LetTuple(_, _, p) => p
+        Eval(e) => group_end_expr(e)
+        Assign(target, _, _, _) => group_end_expr(target)
+        Handle(e, _) => group_end_expr(e)
+        While(_, _, p) => p
+        For(_, _, _, _, _, _, p) => p
+        With(_, _, _, _, p) => p
+        Unsafe(_, p) => p
+        Return(_, p) => p
+        _ => none
+
+## A block ends: the groups it opened wait for their tasks. A deadlock there
+## traps at the block's last statement, the end of the wait (conc.task.7).
+fn Lower.end_scope_exits(mut self, last ast.Pos?)
     while tk.exits.len() > 0 and tk.exits[tk.exits.len() - 1].depth == scopes.len()
-        act := tk.exits[tk.exits.len() - 1]
+        mut act := tk.exits[tk.exits.len() - 1]
         tk.exits.pop()
+        if act.group
+            if at := last
+                act.pos = at
         if not done()
             run_exit(act)
 

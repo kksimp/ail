@@ -1,5 +1,5 @@
 # garlic
-(root)  91 items
+(root)  93 items
 attach  10 items
 css  31 items
 draw  16 items
@@ -10,9 +10,11 @@ html  32 items
 image  74 items
 images  6 items
 jsdom  8 items
+look  3 items
 page  43 items
 std.app  46 items
 std.net.jar  14 items
+std.screen  10 items
 svg  19 items
-tabstrip  21 items
+tabstrip  30 items
 ws  18 items

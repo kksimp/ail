@@ -592,12 +592,15 @@ fn run_case(at str, exp str) str?
         return none
     "needs a .out, .rules, .trap or .err file"
 
+## Stems listed one per line in `path`; `#` starts a comment line.
+fn stem_list(path str) List[str]
+    text := fs.read_text(path) else ""
+    [l.trim() for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")]
+
 fn Gate.case_dir(mut self, dir str)
-    text := fs.read_text("tests/native/golden/pending.txt") else ""
-    pending_cases := [
-        l.trim()
-        for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")
-    ]
+    pending_cases := stem_list("tests/native/golden/pending.txt")
+    # tests/cases/native_only.txt: features Rust is never taught (ADR 0865)
+    native_only := stem_list("tests/cases/native_only.txt")
     mut names := fs.list_dir(dir) else []
     names.sort()
     for name in names
@@ -608,6 +611,8 @@ fn Gate.case_dir(mut self, dir str)
         # (`ail test --coverage`, `--update`): named here, not checked.
         if pending_cases.contains(name.replace(".ail", ""))
             print("PENDING {at}")
+            continue
+        if native_only.contains(name.replace(".ail", ""))
             continue
         if why := run_case(at, "{dir}/{name.replace(".ail", "")}.")
             red(at, why)
@@ -745,9 +750,12 @@ fn prop_run(extra List[str], path str) str
 ## with and without `--symbols`, and rejects a program with errors (api.out.5).
 fn Gate.api_outlines(mut self)
     mut files := List[str]()
+    native_only := stem_list("tests/cases/native_only.txt")
     for dir in ["examples", "tests/cases"]
         for name in fs.list_dir(dir) else []
             stem := name.replace(".ail", "")
+            if native_only.contains(stem)
+                continue
             if name.ends_with(".ail") and (dir == "examples" or fs.exists("{dir}/{stem}.out"))
                 files.push("{dir}/{name}")
     for path in files
