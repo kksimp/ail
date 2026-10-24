@@ -443,18 +443,30 @@ fn win_find(name str) int
             sep = true
     a := os_scratch(OS_WIN_A)
     if sep
-        if not win_wide(a, WIN_PATH_UNITS, c)
-            return 0
-        at := win_attrs(a)
-        if at >= 0 and at.bit_and(16) == 0
-            return c
-        if at < 0
+        # A name with a directory: itself if it is a file with an extension; one with none (`./ail`) is
+        # looked for with `.exe`, `.cmd` and `.bat`, as `cmd.exe` would (a script of that name is no program here).
+        mut last := 0
+        mut dot := false
+        for i in 0..n
+            b := load8(np + 16 + i)
+            if b == 47 or b == 92
+                last = i + 1
+                dot = false
+            elif b == 46
+                dot = true
+        if dot
+            if not win_wide(a, WIN_PATH_UNITS, c)
+                return 0
+            at := win_attrs(a)
+            if at >= 0 and at.bit_and(16) == 0
+                return c
+        for k in 0..3
             d := alloc(n + 5, KIND_BYTES)
             copy_bytes(d, c, n)
             store8(d + n, 46)
-            store8(d + n + 1, 101)
-            store8(d + n + 2, 120)
-            store8(d + n + 3, 101)
+            store8(d + n + 1, if k == 0 then 101 else if k == 1 then 99 else 98)
+            store8(d + n + 2, if k == 0 then 120 else if k == 1 then 109 else 97)
+            store8(d + n + 3, if k == 0 then 101 else if k == 1 then 100 else 116)
             store8(d + n + 4, 0)
             if win_wide(a, WIN_PATH_UNITS, d)
                 at2 := win_attrs(a)
