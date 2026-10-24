@@ -710,6 +710,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0897](0897-ail-check-perf.md) | `ail check --perf`: speed hints that share the optimizer's facts | Proposed | 2026-10-24 |
 | [0898](0898-ail-database-engine.md) | A database engine and its shell, as a showcase program | Proposed | 2026-10-24 |
 | [0899](0899-ail-media-and-image-editor.md) | A media player or image editor, as a showcase program | Proposed | 2026-10-24 |
+| [0900](0900-refuse-rust-only-routes.md) | `./ail` refuses `test --native` and `selftest --test` (Rust-only routes) | Accepted | 2026-10-24 |
 | [0881](0881-ail-ask.md) | `ail ask`: semantic questions (who writes a field, what calls a function, which effects reach it) answered from the checker's graph | Accepted | 2026-10-24 |
 | [0882](0882-edit-impact.md) | Edit impact: which tests and effects an edit touches (`ail edit --impact`, `ail ask --affected`, `ail test --affected`) | Accepted | 2026-10-24 |
 | [0885](0885-contracts-checked-by-fuzzing.md) | Contracts checked by fuzzing: `ail test --contracts` gives a counterexample for a failing `requires` or `ensures` | Accepted | 2026-10-24 |

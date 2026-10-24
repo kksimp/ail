@@ -1,0 +1,69 @@
+## `ail check --errors FILE` (err.paths.1, ADR 0286): for every function, the error
+## types it can fail with and each place where it fails, passes a failure on or
+## handles one, as JSON.
+use check
+use load
+
+pub fn errors_command(rest List[str], std str) int
+    json := rest.contains("--json")
+    files := [a for a in rest if not a.starts_with("--")]
+    if files.len() != 1
+        io.eprint("usage: ail check --errors [--json] FILE")
+        return 2
+    path := files[0]
+    loaded := load.load(path, std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
+            return 2
+    prog := loaded.program
+    api := new_api(prog, Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: analysis.symbols,
+        weak_symbols: analysis.weak_symbols,
+    ))
+    mut functions := List[J]()
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if outside(f.pos) or not is_top(f)
+            continue
+        paths := [p for p in analysis.fail_paths if p.func == i]
+        mut fails := false
+        mut fails_with := List[str]()
+        if e := analysis.errors.get(i)
+            fails = true
+            fails_with = e
+        if not fails and paths.len() == 0
+            continue
+        ordered := paths.sorted(by: |p| p.pos.line * 100000 + p.pos.col)
+        items := [path_json(p) for p in ordered]
+        mut kvs := [kv("id", J.Str(api.fn_ids[i])), kv("name", J.Str(f.name)), kv("line", J.Int(f.pos.line))]
+        if fails
+            kvs.push(kv("fails_with", strs(fails_with)))
+        kvs.push(kv("paths", J.Arr(items)))
+        functions.push(J.Obj(kvs))
+    top := J.Obj([
+        kv("api", J.Int(API_VERSION)),
+        kv("file", J.Str(path)),
+        kv("functions", J.Arr(functions)),
+    ])
+    print(write_json(top, false, 0))
+    0
+
+fn path_json(p check.FailPath) J
+    mut kvs := [kv("line", J.Int(p.pos.line)), kv("col", J.Int(p.pos.col)), kv("kind", J.Str(p.kind))]
+    if p.how != ""
+        kvs.push(kv("how", J.Str(p.how)))
+    if p.call != ""
+        kvs.push(kv("call", J.Str(p.call)))
+    kvs.push(kv("errors", strs(p.errors)))
+    if p.context
+        kvs.push(kv("context", J.Bool(true)))
+    J.Obj(kvs)
