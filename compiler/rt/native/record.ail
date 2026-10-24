@@ -9,15 +9,15 @@
 ## runs nothing; with neither it just runs the call. The wrapper of a call
 ## that takes no `at` text is told its place by `rec_at` just before.
 ##
-## The state block (global slot 57) is: mode (0 live, 1 record, 2 replay),
+## The state block (global slot 59) is: mode (0 live, 1 record, 2 replay),
 ## the output descriptor, the output buffer, its length, the replay position,
 ## the bytes written, whether `{"truncated":true}` was written, the path of the
 ## program text of the call in progress, then its line and column, then the cursor
-## of a result being read. Slot 58
+## of a result being read. Slot 60
 ## holds the recording being replayed, as a string the collector can see.
 
-REC := 57
-REC_TEXT := 58
+REC := 59
+REC_TEXT := 60
 
 REC_MODE := 0
 REC_FD := 8

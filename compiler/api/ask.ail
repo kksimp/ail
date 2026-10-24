@@ -1,0 +1,356 @@
+## `ail ask PROGRAM QUESTION...` (api.ask.1-6, ADR 0868 item 1): semantic
+## questions answered from the checker's own graph of the program (every
+## use of a declaration, every write the ownership rules saw, every function's
+## effects), with no grep and no file reading.
+##
+##     ail ask app.ail who writes field Cart.total
+##     ail ask app.ail what calls pay
+##     ail ask app.ail which effects reach main
+use ast
+use check
+use load
+
+ASK_USAGE := "usage: ail ask PROGRAM QUESTION... [--json]   e.g. ail ask app.ail who writes field total\n  questions: who writes F | who reads F | what calls f | what does f call | which effects reach f | who uses T"
+
+## Words a question may have around its subject and verb; they say nothing.
+ASK_FILLER := [
+    "who",
+    "what",
+    "which",
+    "does",
+    "do",
+    "is",
+    "are",
+    "the",
+    "of",
+    "to",
+    "a",
+    "an",
+    "field",
+    "fields",
+    "function",
+    "fn",
+    "method",
+    "type",
+    "that",
+    "from",
+    "reach",
+    "reaches",
+    "in",
+    "on",
+    "by",
+    "and",
+    "all",
+    "variable",
+    "value",
+    "constant",
+    "const",
+]
+
+enum Ask
+    Writes
+    Reads
+    Callers
+    Callees
+    Effects
+    Uses
+
+## The question's verb (api.ask.1), by the words it may be written with.
+fn ask_verb(w str) Ask?
+    match w
+        "writes" | "write" | "sets" | "set" | "changes" | "change" | "mutates" | "mutate" | "modifies" | "modify" | "assigns" | "assign" => Ask.Writes
+        "reads" | "read" | "gets" | "get" => Ask.Reads
+        "calls" | "call" | "callers" | "caller" | "invokes" | "invoke" => Ask.Callers
+        "callees" | "callee" => Ask.Callees
+        "effects" | "effect" => Ask.Effects
+        "uses" | "use" | "references" | "reference" | "refs" => Ask.Uses
+        _ => none
+
+## One place the answer points at.
+struct Site
+    ## The id of the function it is in, `` outside one.
+    within str
+    ## What is written, read or called there.
+    target str
+    ## `write`, `init` (a field set by a struct literal), `read`, `call` or `use`.
+    kind str
+    pos ast.Pos
+
+struct Graph
+    prog ast.Program
+    analysis check.Analysis
+    refs List[Ref]
+    ## Every declaration, as (position, id).
+    decls List[(ast.Pos, str)]
+    fn_ids List[str]
+    writes Set[int]
+
+fn Graph.fn_index(self, id str) int?
+    for i in 0..fn_ids.len()
+        if fn_ids[i] == id
+            return i
+    none
+
+fn Graph.within_id(self, r Ref) str
+    if r.within >= 0 and r.within < fn_ids.len()
+        return fn_ids[r.within]
+    ""
+
+## The declared ids a name can mean, for the kinds of declaration `prefixes`
+## lists: `x` is `field:P.x`, `f` is `fn:f` or `method:T.f`, and a full id
+## names itself (api.ask.1).
+fn Graph.candidates(self, name str, prefixes List[str]) List[str]
+    mut out := List[str]()
+    for d in decls
+        id := d.1
+        mut kind_ok := false
+        for p in prefixes
+            if id.starts_with(p)
+                kind_ok = true
+        if not kind_ok
+            continue
+        rest := id.split(":")[1..].join(":")
+        if id == name or rest == name or rest.ends_with(".{name}")
+            if not out.contains(id)
+                out.push(id)
+    out
+
+fn ask_site_text(g Graph, s Site, path str) str
+    where := query_file_of(g.prog, s.pos.line)
+    file := if where.0 == "" then path else where.0
+    at := "{file}:{where.1}:{s.pos.col}"
+    from := if s.within == "" then "(top level)" else s.within
+    if s.kind == "callee"
+        return "{s.target}  {at}"
+    "{from}  {at}  {s.kind}"
+
+fn ask_site_json(g Graph, s Site, path str) J
+    where := query_file_of(g.prog, s.pos.line)
+    file := if where.0 == "" then path else where.0
+    J.Obj([
+        kv("in", J.Str(s.within)),
+        kv("target", J.Str(s.target)),
+        kv("kind", J.Str(s.kind)),
+        kv("file", J.Str(file)),
+        kv("line", J.Int(where.1)),
+        kv("col", J.Int(s.pos.col)),
+    ])
+
+fn ref_kind(g Graph, r Ref) str
+    if r.label
+        return "init"
+    if g.writes.contains(pk(r.pos))
+        return "write"
+    if r.id.starts_with("fn:") or r.id.starts_with("method:")
+        return "call"
+    if r.id.starts_with("field:") or r.id.starts_with("const:")
+        return "read"
+    "use"
+
+## The sites that use `id` in the way the question asks (api.ask.2-4).
+fn Graph.sites(self, id str, q Ask) List[Site]
+    mut out := List[Site]()
+    for r in refs.sorted(by: |x| (x.pos.line, x.pos.col))
+        if r.id != id
+            continue
+        k := ref_kind(self, r)
+        mut keep := true
+        match q
+            Ask.Writes => keep = k == "write" or k == "init"
+            Ask.Reads => keep = k == "read"
+            Ask.Callers => keep = k == "call"
+            Ask.Uses => keep = true
+            _ => keep = false
+        if keep
+            site := Site(within: within_id(r), target: id, kind: k, pos: r.pos)
+            if out.len() == 0 or out[out.len() - 1].pos != site.pos or out[out.len() - 1].kind != k
+                out.push(site)
+    out
+
+## The functions `id` calls, each once, at its first call (api.ask.4).
+fn Graph.callees(self, id str) List[Site]
+    mut out := List[Site]()
+    i := fn_index(id) else return out
+    mut seen := Set[str]()
+    for r in refs
+        if r.within == i and (r.id.starts_with("fn:") or r.id.starts_with("method:")) and ref_kind(
+            self,
+            r,
+        ) == "call"
+            if not seen.contains(r.id)
+                seen.add(r.id)
+                out.push(Site(within: id, target: r.id, kind: "callee", pos: r.pos))
+    out
+
+## The effects of `id`, and for each the chain of callees that carry it down to
+## the function that has it of its own (api.ask.5).
+fn Graph.effect_chain(self, id str, effect str, mut seen Set[str]) List[str]
+    seen.add(id)
+    for c in callees(id)
+        if seen.contains(c.target)
+            continue
+        if j := fn_index(c.target)
+            if j < analysis.effects.len() and analysis.effects[j].contains(effect)
+                tail := effect_chain(c.target, effect, mut seen)
+                mut chain := [id]
+                chain.extend(tail)
+                return chain
+    [id]
+
+fn Graph.effects_of(self, id str) List[str]
+    i := fn_index(id) else return []
+    if i < analysis.effects.len()
+        return analysis.effects[i]
+    []
+
+## Splits the question into its verb and subject (api.ask.1).
+fn parse_question(words List[str])(Ask, str, bool)?
+    mut q := none_ask()
+    mut subject := ""
+    mut before := false
+    mut verb_at := -1
+    for i in 0..words.len()
+        w := words[i]
+        if v := ask_verb(w.to_lower())
+            if q == none
+                q = v
+                verb_at = i
+    v := q else return none
+    for i in 0..words.len()
+        w := words[i]
+        if i == verb_at or ask_verb(w.to_lower()) != none or ASK_FILLER.contains(w.to_lower())
+            continue
+        subject = w
+        before = i < verb_at
+    # "what does f call": the subject comes before the verb.
+    mut kind := v
+    if v == Ask.Callers
+        and before
+        and (words.contains("does") or words.contains("do") or words.contains("Does"))
+        kind = Ask.Callees
+    if subject == ""
+        return none
+    (kind, subject, before)
+
+fn none_ask() Ask?
+    none
+
+fn clean_word(w str) str
+    mut s := w.trim()
+    s = s.replace("`", "")
+    s = s.replace("?", "")
+    s = s.replace(",", "")
+    s
+
+fn kind_prefixes(q Ask) List[str]
+    match q
+        Ask.Writes | Ask.Reads => ["field:", "const:"]
+        Ask.Callers | Ask.Callees | Ask.Effects => ["fn:", "method:"]
+        Ask.Uses => ["type:", "trait:", "variant:", "field:", "const:", "fn:", "method:"]
+
+fn kind_noun(q Ask) str
+    match q
+        Ask.Writes | Ask.Reads => "field"
+        Ask.Callers | Ask.Callees | Ask.Effects => "function"
+        Ask.Uses => "declaration"
+
+## `ail ask PROGRAM QUESTION...`; the exit status: 0 answered, 1 nothing
+## found, 2 an error (api.ask.6).
+pub fn ask_command(args List[str], std str) int
+    mut json := false
+    mut rest := List[str]()
+    for a in args
+        if a == "--json"
+            json = true
+        elif a.starts_with("--")
+            io.eprint("error: unknown option `{a}`\n{ASK_USAGE}")
+            return 2
+        else
+            rest.push(a)
+    if rest.len() < 2
+        io.eprint(ASK_USAGE)
+        return 2
+    path := rest[0]
+    words := [clean_word(w) for x in rest[1..] for w in x.split(" ") if clean_word(w) != ""]
+    asked := parse_question(words) else
+        io.eprint("error: can't read the question `{rest[1..].join(" ")}` (api.ask.1)\n{ASK_USAGE}")
+        return 2
+    q := asked.0
+    loaded := load.load(path, std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            io.eprint("error: {path} has errors, so it can't be asked about; fix them first (api.ask.6)")
+            return 2
+    prog := loaded.program
+    api := new_whole_api(prog, Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: analysis.symbols,
+        weak_symbols: analysis.weak_symbols,
+    ))
+    mut decls := List[(ast.Pos, str)]()
+    flatten_decls(api.items(), mut decls)
+    mut writes := Set[int]()
+    for p in analysis.writes
+        writes.add(pk(p))
+    g := Graph(
+        prog: prog,
+        analysis: analysis,
+        refs: collect_refs(prog, analysis.symbols, analysis.weak_symbols).refs,
+        decls: decls,
+        fn_ids: api.fn_ids,
+        writes: writes,
+    )
+    ids := g.candidates(asked.1, kind_prefixes(q))
+    if ids.len() == 0
+        io.eprint("error: no {kind_noun(q)} named `{asked.1}` in {path} (api.ask.1)")
+        return 2
+    mut out := List[str]()
+    mut objs := List[J]()
+    mut total := 0
+    for id in ids
+        mut sites := List[Site]()
+        mut lines := List[str]()
+        match q
+            Ask.Effects =>
+                for e in g.effects_of(id)
+                    mut seen := Set[str]()
+                    chain := g.effect_chain(id, e, mut seen)
+                    lines.push("{e}: {chain.join(" > ")}")
+                    sites.push(Site(
+                        within: id,
+                        target: e,
+                        kind: chain.join(" > "),
+                        pos: ast.Pos(line: 0, col: 0),
+                    ))
+            Ask.Callees => sites = g.callees(id)
+            _ => sites = g.sites(id, q)
+        total += sites.len()
+        if json
+            mut items := List[J]()
+            for s in sites
+                if q == Ask.Effects
+                    items.push(J.Obj([kv("effect", J.Str(s.target)), kv("via", J.Str(s.kind))]))
+                else
+                    items.push(ask_site_json(g, s, path))
+            objs.push(J.Obj([kv("target", J.Str(id)), kv("answers", J.Arr(items))]))
+        else
+            out.push("{id}  ({sites.len()})")
+            if q == Ask.Effects
+                for l in lines
+                    out.push("  {l}")
+            else
+                for s in sites
+                    out.push("  {ask_site_text(g, s, path)}")
+    if json
+        print(write_json(J.Arr(objs), false, 0))
+    else
+        print(out.join("\n"))
+    if total == 0 then 1 else 0

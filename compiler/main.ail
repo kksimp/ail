@@ -141,6 +141,8 @@ fn main() !
             io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "api" =>
             api_cmd(args[1..])
+        "ask" =>
+            io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
             cli_run(args[1..])
         "prepare" =>
