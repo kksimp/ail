@@ -7,7 +7,7 @@ batch head fbf9a99, Linux x86-64, four cores, about 15 s for the whole tree.
 | source | tests | match | DIFFER | not in the native subset yet | skipped (property tests, files the interpreter rejects) |
 |---|---:|---:|---:|---:|---:|
 | examples | 16 | 0 | 0 | 14 | 2 |
-| bootstrap/tests/cases | 87 | 9 | 0 | 11 | 67 |
+| tests/cases | 87 | 9 | 0 | 11 | 67 |
 | tools | 152 | 3 | 0 | 124 | 25 |
 | all | 255 | 12 | 0 | 149 | 94 |
 

@@ -24,7 +24,7 @@
 //! `AIL_FUZZ_SEED` (default 1); `AIL_FUZZ_MODULE=NAME` picks one template. A
 //! failing input is minimised and saved with its program as `NAME-seed-N.ail`
 //! under `$AIL_FUZZ_OUT`; `run.log` there records the seeds of every run.
-//! Each finding becomes a case in `bootstrap/tests/cases/` (fuzz.policy.1).
+//! Each finding becomes a case in `tests/cases/` (fuzz.policy.1).
 
 #[path = "fuzz/progs.rs"]
 #[allow(dead_code)]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit bootstrap/tests/cases (ADR 0725; rules-audit check 6).
+"""Audit tests/cases (ADR 0725; rules-audit check 6).
 
     python3 -I tools/cases-audit.py ROOT
 

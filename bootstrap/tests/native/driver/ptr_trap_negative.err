@@ -1,3 +1,0 @@
-bootstrap/tests/native/driver/ptr_trap_negative.ail:6:17: trap[unsafe.hw.2]: `hw.at` of the negative address -8
-  6 |         p := hw.at(0 - 8, 0)
-    |                 ^

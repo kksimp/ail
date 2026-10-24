@@ -1,3 +1,0 @@
-# The self-hosted compiler's syntax tree (ADR 0376), used as a dependency.
-package ast_round_trip
-dep ast path ../../../../../compiler/ast

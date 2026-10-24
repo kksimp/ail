@@ -2,7 +2,7 @@
 
 Non-normative design note, 2026-10-21 (lane 245, fix round three).
 
-`ail fix` resolves 151 of the 250 mistakes in `bootstrap/tests/mistakes/`
+`ail fix` resolves 151 of the 250 mistakes in `tests/mistakes/`
 (60.4%), with no wrong fixes. This round went through every unresolved class
 of three or more programs. None has a single correct rewrite, so none was
 implemented. This note records why, so nobody retries them without new
@@ -59,7 +59,7 @@ from strings or nested lists).
   one (for example `expr.name.1` suggests `io.read_line()`); a rewrite is only
   safe when the help is the only correct reading of the error.
 - A new fixable rule with one correct answer. Candidates have to be checked
-  against `bootstrap/src/fixable.txt` and the `ail fix` edit model
+  against `compiler/explain/fixable.txt` and the `ail fix` edit model
   (`bootstrap/src/diag.rs`, AfterExpr anchors, ADR 0695).
 - A new mistakes corpus. The 250 programs were written to fail in known ways;
   a rewrite that fits them may not fit real code.

@@ -108,7 +108,10 @@ std API still needs its own ADR first.
    support.
 8. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
    and Metal, then NPUs; weaker atomic orderings (OQ-097).
-9. **Last:** the Rust-free rebuild of `tools/edit` compared with
+9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
+   [ADR 0874](decisions/0874-purity-driven-speed-optimizations.md): memoization by a cost
+   model, pure-call CSE and hoisting, merging only where it is faster.
+10. **Last:** the Rust-free rebuild of `tools/edit` compared with
    [editor-baseline.md](design/editor-baseline.md); a drag race of Garlic
    against Chrome and Firefox on a fixed set of real sites (page load, first
    paint, scrolling, memory and tokens per agent task); then the Python

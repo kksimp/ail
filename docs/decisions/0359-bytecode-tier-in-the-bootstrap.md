@@ -1,6 +1,6 @@
 # 0359. Add a bytecode tier to the bootstrap interpreter
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0873](0873-rust-only-features-after-rust-removal.md)
 - **Date:** 2026-10-20
 - **Decided by:** Designer
 - **Topic:** interpreter performance; 23 — Compiler architecture

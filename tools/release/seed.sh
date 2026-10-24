@@ -19,7 +19,7 @@ sums="$out/seeds.sha256"; : > "$sums"
 for pair in aarch64-macos:aarch64-macos x86_64-linux:x86_64-linux aarch64-linux:aarch64-linux x86_64-windows.exe:x86_64-windows; do
     name="ail-seed-${pair%%:*}"; target="${pair##*:}"
     echo "seed: building $name ..." >&2
-    "$stage2" build compiler/main.ail compiler/rt/native "$target" 0 0 bootstrap/src/std > "$out/$name.hex"
+    "$stage2" build compiler/main.ail compiler/rt/native "$target" 0 0 std > "$out/$name.hex"
     perl -ne 'chomp; print pack("H*", $_)' < "$out/$name.hex" > "$out/$name"
     chmod +x "$out/$name"
     if command -v sha256sum >/dev/null 2>&1; then sum="$(sha256sum "$out/$name" | cut -d' ' -f1)"

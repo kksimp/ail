@@ -908,5 +908,5 @@ fn main()
 
 ```ail skip=context rules=trait.impl.4
 # An impl outside the package that declares the trait or the type is rejected. An example
-# needs two packages; the bootstrap's package tests cover it (bootstrap/tests/cases/packages).
+# needs two packages; the bootstrap's package tests cover it (tests/cases/packages).
 ```

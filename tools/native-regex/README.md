@@ -6,8 +6,8 @@ build with `ail run` on the same input: stdout and exit code. Each mode prints t
 
 | Mode | What it runs |
 |---|---|
-| `tools/native-regex/run.sh` | `vectors.ail` over `bootstrap/tests/regex/vectors.txt` (370 lines: searches with groups, `ALL`, `REPLACE`, `REPLACE_FIRST`, `SPLIT`, `ERR`) |
-| `tools/native-regex/run.sh cases` | each `bootstrap/tests/cases/*regex*.ail`, built and run both ways |
+| `tools/native-regex/run.sh` | `vectors.ail` over `tests/regex/vectors.txt` (370 lines: searches with groups, `ALL`, `REPLACE`, `REPLACE_FIRST`, `SPLIT`, `ERR`) |
+| `tools/native-regex/run.sh cases` | each `tests/cases/*regex*.ail`, built and run both ways |
 | `tools/native-regex/run.sh fuzz [N [SEED]]` | `gen.py` writes N random vectors (RE2-subset patterns, flags, classes, malformed patterns); the same `vectors.ail` runs them |
 
 `vectors.ail` prints one line per vector: the span and text of a

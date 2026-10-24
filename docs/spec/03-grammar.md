@@ -163,7 +163,7 @@ enum Role
 Blocks with `error=` must report their rule, and `rules=` lists the rules a
 block demonstrates (ADR 0498). Where a rule describes how the checker
 reports, the block shows one reported case; the rest of the rule is checked
-by the mistakes corpus (`bootstrap/tests/mistakes/`).
+by the mistakes corpus (`tests/mistakes/`).
 
 ```ail rules=gram.attr.5
 enum Role

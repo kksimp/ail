@@ -2,8 +2,8 @@
 """Untested spec rules (ADR 0463). Measurement only (ADR 0070).
 
 A rule counts as tested when its id appears in a file that tests it: a case in
-bootstrap/tests/cases/ or tests/*/ (as .rules, .err, .trap or inside the
-program), an example, or a Rust test under bootstrap/tests/. Ranges like
+tests/cases/ or tests/*/ (as .rules, .err, .trap or inside the
+program), an example, or a Rust test under tests/. Ranges like
 `err.prop.1-4` count every id they span. Prints a table by chapter and, with
 --list, every untested id. Exit 0 always: this reports, the lanes fix.
 
@@ -16,7 +16,7 @@ import os, re, sys, time
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFINE = re.compile(r"^\*\*([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\*\*", re.M)
 MENTION = re.compile(r"\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)\.(\d+)(?:[-–](\d+))?")
-TEST_DIRS = ["bootstrap/tests", "examples", "tools/edit", "compiler", "tools/fuzz"]
+TEST_DIRS = ["tests", "examples", "tools/edit", "compiler", "tools/fuzz"]
 TEXT_EXT = {".ail", ".rules", ".err", ".trap", ".rs", ".out", ".test", ".stderr", ".expected", ".md", ".sh", ".txt"}
 
 
