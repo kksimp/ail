@@ -2649,6 +2649,82 @@ fn Gate.std(mut self, tmp str)
     if seen <= 50
         self.red("std call gate", "found only {seen} public std functions: the scan is broken")
 
+## ail run --deterministic, --schedule and --seed on the native runtime (conc.sched.1-3, eff.det.1-3,
+## ADRs 0186, 0207, 0322, 0873): sched.ail runs tasks one at a time.
+fn native_run(args List[str]) proc.Output ! proc.ProcError
+    proc.run("./ail", args, "", 600000)
+
+fn Gate.sched(mut self)
+    # conc.sched.3: a fixed order that repeats and matches the expected output.
+    order := "tests/sched/order.ail"
+    first := native_run(["run", "--deterministic", order]) else return
+    if first.status != 0 or first.out != slurp("tests/sched/order.out")
+        red("--deterministic order", "exit {first.status}\n{first.out}{first.err}")
+    for _ in 0..2
+        again := native_run(["run", "--deterministic", order]) else return
+        if again.out != first.out
+            red("--deterministic repeat", again.out)
+    fixed := native_run(["run", "--schedule=fixed", order]) else return
+    if fixed.out != first.out
+        red("--schedule=fixed", fixed.out)
+    # conc.sched.1: a seed replays, and different seeds find a lost update that seed 1 does not.
+    race := "tests/schedule/race.ail"
+    fail_seed := "2"
+    bad := native_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
+    if bad.status != 1
+        or not bad.out.contains("left is 1, right is 2")
+        or not bad.out.ends_with("\{\"summary\":true,\"passed\":0,\"failed\":1,\"schedule_seed\":{fail_seed}}\n")
+        red("schedule seed {fail_seed}", "exit {bad.status}\n{bad.out}")
+    for _ in 0..2
+        again := native_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
+        if again.out != bad.out
+            red("schedule replay", again.out)
+    passed := native_run(["test", "--json", "--schedule=random:1", race]) else return
+    if passed.status != 0
+        or not passed.out.ends_with("\{\"summary\":true,\"passed\":1,\"failed\":0}\n")
+        red("schedule seed 1", "exit {passed.status}\n{passed.out}")
+    human := native_run(["test", "--schedule=random:{fail_seed}", race]) else return
+    want(
+        "schedule prints the seed",
+        human.out,
+        ["schedule seed {fail_seed}: replay with `ail test --schedule=random:{fail_seed} "],
+    )
+    nonsense := native_run(["test", "--schedule=sometimes", race]) else return
+    if nonsense.status != 2
+        red("schedule sometimes", "exit {nonsense.status}, want 2")
+    # conc.cancel.3-4, conc.atomic.7: cancel trees pass every seed.
+    for seed in 1..9
+        x := native_run([
+            "test",
+            "--schedule=random:{seed}",
+            "tests/schedule/cancel.ail",
+        ]) else return
+        if x.status != 0 or not x.out.ends_with("4 passed, 0 failed\n")
+            red("schedule cancel seed {seed}", x.out)
+    # conc.task.7: a deadlock still traps, from any task that finds it.
+    for case in ["conc_deadlock", "conc_for_channel_deadlock"]
+        d := native_run(["run", "--deterministic", "tests/cases/{case}.ail"]) else return
+        if d.status != 1 or not d.err.contains("trap[conc.task.7]")
+            red("deterministic {case}", "exit {d.status}\n{d.err}")
+    # std.random.3, eff.det.3: --seed repeats; eff.det.1-2: --deterministic denies clock, proc, random.
+    unseeded := "tests/deterministic/unseeded.ail"
+    s11 := native_run(["run", "--seed", "11", unseeded]) else return
+    s11b := native_run(["run", "--seed", "11", unseeded]) else return
+    s12 := native_run(["run", "--seed", "12", unseeded]) else return
+    if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
+        red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
+    for program in [
+        unseeded,
+        "tests/deterministic/clock.ail",
+        "tests/deterministic/proc.ail",
+    ]
+        e := native_run(["run", "--deterministic", program]) else return
+        if e.status != 2 or not e.err.contains("eff.cap.1")
+            red("--deterministic {program}", "exit {e.status}\n{e.err}")
+    sx := native_run(["run", "--seed", "x", unseeded]) else return
+    if sx.status != 2 or not sx.err.contains("std.random.3")
+        red("--seed x", "exit {sx.status}\n{sx.err}")
+
 fn main() !
     args := env.args()
     all := [
@@ -2666,6 +2742,7 @@ fn main() !
         "pe",
         "asm",
         "std",
+        "sched",
     ]
     suites := if args.len() == 0 then all else args
     tmp := temp_dir()
@@ -2683,6 +2760,7 @@ fn main() !
             "contracts" => g.contracts()
             "snapshot" => g.snapshot(tmp)
             "misc" => g.misc(tmp)
+            "sched" => g.sched()
             "docs" => g.docs()
             "fmt" => g.fmt(tmp)
             "budget" => g.budget(tmp)

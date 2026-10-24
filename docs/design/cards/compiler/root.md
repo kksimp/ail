@@ -51,6 +51,7 @@ fn parse_with(module str, path str, text str, names Set[str]) mir.Source [io]
 CACHE_KEEP := 64
 fn cache_dir() str [env]
 fn tree_stamp(tag str, root str) str [fs io]
+fn sched_points() bool [env]
 fn cache_key(file str, target str, ms str, mb str) str [env fs io]
 fn cache_trim(dir str) [fs io proc]
 fn cli_prepare(file str) str [clock env fs io proc]
@@ -63,4 +64,4 @@ fn check_cmd(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1042); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1053); dropped: private items, doc comments

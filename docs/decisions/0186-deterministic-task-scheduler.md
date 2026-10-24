@@ -70,6 +70,17 @@ cost is one `Option` check when a block ends and when printing
 - Follow-up: `ail run --schedule random:SEED` to shake out order
   dependence (`conc.task.9`) cheaply on the same machinery.
 
+## Native port (2026-10-24)
+
+The native runtime has the same scheduler (`compiler/rt/native/sched.ail`,
+ADR 0873): `ail run --deterministic` and `--schedule` set `AIL_DETERMINISTIC`
+and `AIL_SCHEDULE`, which the task runtime reads when its pool is made, so a
+program that asks for neither pays nothing. Exactly one thread holds the
+turn; a blocked thread registers the word it sleeps on and a change to that
+word (`det_wake`) puts it back in the line, which reproduces the order above.
+Workers are still OS threads (they need their own stacks), so a deterministic
+run holds at most 64 live tasks.
+
 ## Rejected alternatives
 
 - B: too invasive for the shared evaluator, and slower for every program.

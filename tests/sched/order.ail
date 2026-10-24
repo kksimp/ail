@@ -1,0 +1,21 @@
+# conc.sched.3, conc.task.9: under --deterministic a new task runs at once, its spawner resumes
+# next, and the output is the same on every run.
+
+fn work(name str, ch Channel[int], n int)
+    for i in 0..n
+        print("{name} {i}")
+        ch.send(i)
+
+fn main() !
+    ch := Channel[int](1)
+    g := TaskGroup()
+    g.add(spawn work("a", ch, 3))
+    print("spawned a")
+    g.add(spawn work("b", ch, 2))
+    print("spawned b")
+    mut sum := 0
+    for _ in 0..5
+        v := ch.recv() else 0
+        sum += v
+    g.wait_all()?
+    print("sum {sum}")
