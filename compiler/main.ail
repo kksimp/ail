@@ -913,7 +913,7 @@ fn cache_key(file str, target str, ms str, mb str) str
     root := path.dir(file)
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-2 {target} {ms} {mb} {file} {sched_points()}",
+        "ail-native-cache-2 {target} {ms} {mb} {file} {sched_points()} {env.get("AIL_INSTRUMENT") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         tree_stamp("std", std),
