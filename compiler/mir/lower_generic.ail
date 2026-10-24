@@ -276,8 +276,10 @@ fn Lower.is_generic_callee(self, callee ast.Expr) bool
     name := match callee
         Name(n, _) => n
         TypeArgs(n, _, _) => n
-        Member => path_of(callee) else return false
+        Member => if p := path_of(callee) then p else ""
         _ => return false
+    if name == ""
+        return false
     if generic_fn_key(name) != none
         return true
     lookup(name) == none and generic_type_key(name) != none
