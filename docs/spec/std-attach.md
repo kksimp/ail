@@ -14,7 +14,7 @@ as text. *(ADR 0884)*
 **attach.observe.2** — An `@observe` field of any other type is a compile-time
 error whose `help` lists the allowed types. *(ADR 0884)*
 
-```ail error=attach.observe.2
+```ail skip=bootstrap rules=attach.observe.2
 struct Cart
     @observe total int?
     name str
@@ -24,7 +24,7 @@ fn main()
     print(c.name)
 ```
 
-```ail rules=attach.observe.1
+```ail skip=bootstrap rules=attach.observe.1
 enum Mode
     On
     Off

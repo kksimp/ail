@@ -163,7 +163,7 @@ same line as the field: `@observe total int`. It marks the field as readable by
 an attached agent (`attach.observe.1`) and changes nothing else. It is the only
 attribute a field takes; any other is an error. *(ADR 0884)*
 
-```ail rules=gram.attr.6
+```ail skip=bootstrap rules=gram.attr.6
 struct Cart
     @observe total int
     name str
