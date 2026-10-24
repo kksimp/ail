@@ -1,0 +1,31 @@
+use std.attach
+
+enum Mode
+    On
+    Off
+
+struct Cart
+    @observe total int
+    @observe tags List[str]
+    @observe mode Mode
+    @observe flags List[Mode]
+    @observe price float
+    @observe open bool
+    note str
+
+impl attach.Observe for Cart
+
+fn main()
+    c := Cart(total: 3, tags: ["a", "b"], mode: Mode.Off, flags: [Mode.On], price: 2.5, open: true, note: "x")
+    got := c.observed()
+    assert_eq(got.len(), 6)
+    assert_eq(got[0].name, "total")
+    assert_eq(got[0].ty, "int")
+    assert_eq(got[0].value, "3")
+    assert_eq(got[1].value, "[\"a\",\"b\"]")
+    assert_eq(got[2].value, "\"Off\"")
+    assert_eq(got[3].ty, "List[Mode]")
+    assert_eq(got[3].value, "[\"On\"]")
+    assert_eq(got[4].value, "2.5")
+    assert_eq(got[5].value, "true")
+    print("ok")
