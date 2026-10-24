@@ -115,7 +115,10 @@ pub fn token_path(port str) str
 ## removed when the window closes (attach.wire.1).
 pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
     l := net.listen("127.0.0.1:0") else err
-        return app.AppError(kind: "attach", message: "can't listen: {err}")
+        # Without a listener (a Windows program has no native sockets yet) the window still runs, just not drivable.
+        io.eprint("attach: can't listen ({err}); running the window without the attach server")
+        app.run(mut a)?
+        return
     addr := l.addr()
     port := addr.split(":").last() else addr
     path := token_path(port)
