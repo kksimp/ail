@@ -12,8 +12,11 @@ Chapter key: `lex`
 **lex.kw.1** — These words are reserved keywords and MUST NOT be used as
 names: `and any as break continue defer elif else ensures enum error extern
 false fn for if impl in invariant match move mut none not or par pub ref requires
-return self spawn struct todo trait true unique unsafe use while with`.
-*(ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305)*
+return self spawn struct todo trait true uhwhatnow unique unsafe use while with`.
+`uhwhatnow?`, with no space before the `?`, is one keyword token, the hole
+that asks (`expr.hole.3`); where `uhwhatnow` alone stands as an expression,
+the error carries a fix that adds the `?`.
+*(ADR 0114, ADR 0120, ADR 0147, ADR 0210, ADR 0237, ADR 0301, ADR 0305, ADR 0872)*
 
 ```ail error=lex.kw.1
 fn main()
@@ -34,18 +37,6 @@ after `extern` or `use` (`ffi.decl.1–2`). *(ADR 0114)*
 fn main()
     c := 1
     print(c)
-```
-
-**lex.kw.3** — `uhwhatnow?`, with no space before the `?`, is one keyword
-token, the hole that asks (`expr.hole.3`). `uhwhatnow` alone is reserved: it
-MUST NOT be used as a name, and where it stands as an expression the error
-carries a fix that adds the `?`. *(ADR 0868)*
-
-```ail skip=bootstrap error=lex.kw.3
-fn main()
-    n := 2
-    print(n)
-    x := uhwhatnow      # error: written with its `?`
 ```
 
 ## Names

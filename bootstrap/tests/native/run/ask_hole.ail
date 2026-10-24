@@ -1,4 +1,4 @@
-## `uhwhatnow?` (expr.hole.3, lex.kw.3): it checks with a ranked warning,
+## `uhwhatnow?` (expr.hole.3, lex.kw.1): it checks with a ranked warning,
 ## runs until reached, and its trap names the hole.
 struct Cart
     total int

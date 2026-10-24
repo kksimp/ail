@@ -551,7 +551,7 @@ program still runs: `area` is never called.
 **expr.hole.2** — Evaluating a hole MUST trap (`err.trap.1`). *(ADR 0147)*
 
 **expr.hole.3** — `uhwhatnow?` is the hole that asks: one keyword token
-(`lex.kw.3`) with the type and trap of `todo` (`expr.hole.1–2`). Its warning
+(`lex.kw.1`) with the type and trap of `todo` (`expr.hole.1–2`). Its warning
 MUST rank what in scope fits the expected type, best first: locals, innermost
 first; then fields of `self`, written bare; then fields of other locals; then
 calls of the local's methods and of the module's own non-generic functions,
@@ -563,7 +563,7 @@ value fits when its type is the expected type, or the expected type is `T?` and
 the value is a `T`. The warning lists at most eight candidates, each with a fix
 that writes it in place of the hole. Where no type is expected, or nothing
 fits, it says so and lists the locals as `todo` does. The trap names the
-`uhwhatnow?`. *(ADR 0868)*
+`uhwhatnow?`. *(ADR 0872)*
 
 ```ail skip=bootstrap rules=expr.hole.3
 struct Cart

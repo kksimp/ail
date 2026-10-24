@@ -1,19 +1,21 @@
-# NNNN. `uhwhatnow?`: how the hole that asks ranks what fits
+# 0872. `uhwhatnow?`: how the hole that asks ranks what fits
 
-- **Status:** Accepted (number pending from the integrator; rename this file then)
+- **Status:** Accepted
 - **Date:** 2026-10-24
-- **Decided by:** AI (delegated, ADR 0076)
+- **Decided by:** Designer (2026-10-23, the name and the token, ADR 0868); the candidates, ranking and output by AI (delegated, ADR 0076)
+- **Amends:** [ADR 0147](0147-typed-holes-todo.md) (typed holes), [ADR 0868](0868-ai-first-tooling-after-rust-removal.md) item 2
+- **Spec rules:** `expr.hole.3`, `lex.kw.1`
 - **Topic:** 20 — AI semantic API
 
 ## Context
 
-ADR 0868 item 2 (designer) makes `uhwhatnow?` a typed hole whose warning ranks the
+[ADR 0868](0868-ai-first-tooling-after-rust-removal.md) item 2 (designer) makes `uhwhatnow?` a typed hole whose warning ranks the
 in-scope values and calls that fit. It leaves open what counts as a candidate, the
 ranking order, the output form, and how the warning relates to `--budget` (item 6).
 
 ## Decision
 
-- **Token.** `uhwhatnow?` is one keyword token (`lex.kw.3`). `uhwhatnow` alone is
+- **Token.** `uhwhatnow?` is one keyword token (`lex.kw.1`). `uhwhatnow` alone is
   reserved: as an expression it gets a fix that adds the `?`; as a name (`uhwhatnow :=`,
   `uhwhatnow(`) it gets a plain reserved-name error, since adding `?` there would not help.
 - **Candidates and rank** (`expr.hole.3`), best first:
