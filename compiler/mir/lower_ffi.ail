@@ -62,7 +62,10 @@ fn Lower.lower_extern_dyn(mut self, f ast.FnDecl, name str, params List[int])
     mut floats := 0
     for t in sig.params
         if t == Ty.F32
-            problem(f.pos, "`extern c fn {f.name}`: an `f32` parameter isn't in the native subset yet")
+            problem(
+                f.pos,
+                "`extern c fn {f.name}`: an `f32` parameter isn't in the native subset yet",
+            )
             return
         if t == Ty.Float
             floats += 1

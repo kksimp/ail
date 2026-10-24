@@ -250,7 +250,16 @@ fn dynamic_entry(mut out List[int], tag int, value int)
     put(mut out, value, 8)
 
 ## A non-load program header.
-fn phdr(mut out List[int], kind int, flags int, offset int, vaddr int, filesz int, memsz int, align int)
+fn phdr(
+    mut out List[int],
+    kind int,
+    flags int,
+    offset int,
+    vaddr int,
+    filesz int,
+    memsz int,
+    align int,
+)
     put(mut out, kind, 4)
     put(mut out, flags, 4)
     put(mut out, offset, 8)

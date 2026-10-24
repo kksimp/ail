@@ -943,7 +943,8 @@ fn Gen.call_out(mut self, i mir.Inst)
         # (no leading `_`, ADR 0870); macOS names start with `_`. A name of
         # the other target's kind traps if ever reached.
         sym := i.name.replace("libsys.", "")
-        if (os == MACOS and not sym.starts_with("_")) or (os != MACOS and not codegen.linux_import(sym))
+        if (os == MACOS and not sym.starts_with("_"))
+            or (os != MACOS and not codegen.linux_import(sym))
             a.brk()
         else
             imports.push(sym)
