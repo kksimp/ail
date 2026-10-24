@@ -256,11 +256,27 @@ native_effects=
 if [ "${1:-}" = effects ]; then
     native_effects=1; files=0
     for a in "${@:2}"; do
-        case "$a" in --json) ;; -*) native_effects= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_effects=; fi ;; esac
+        case "$a" in --json|--parallel) ;; -*) native_effects= ;; *) if [ -f "$a" ]; then files=$((files + 1)); else native_effects=; fi ;; esac
     done
     [ "$files" = 1 ] || native_effects=
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+# Routes only the Rust bootstrap could run are refused (ADR 0900): `test --native` compared native builds with the
+# interpreter, and `selftest --test NAME` ran one cargo test. `AIL_RUST=1` still reaches the Rust `ail` until it is deleted.
+if [ "${AIL_RUST:-}" != 1 ]; then
+    if [ "${1:-}" = test ]; then
+        for a in "${@:2}"; do
+            [ "$a" = --native ] && die "\`ail test --native\` is retired: \`ail test\` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)"
+        done
+    fi
+    if [ "${1:-}" = selftest ] && [ "${2:-}" = --test ]; then
+        die "\`ail selftest --test NAME\` ran one cargo test and is retired: name a gate suite, as \`ail selftest cases\`, or run \`ail test FILE\` (ADR 0900)"
+    fi
+fi
+native_errors=
+if [ "${1:-}" = check ]; then
+    for a in "${@:2}"; do [ "$a" = --errors ] && native_errors=1; done
+fi
+if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         # The published seed is stage 0: it builds the native CLI (ADR 0855, D4); there is no cargo fallback.
@@ -295,6 +311,7 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
     if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
     if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
+    if [ -n "$native_errors" ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-errors "$@"; fi
     if [ "$1" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; then
         # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).
         bopts=(); copts=(); prev=

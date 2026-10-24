@@ -9,6 +9,7 @@ pub struct gfx.Hit  ## The screen rectangle of a link, in page pixels.
     pub h float
     pub href str
     pub node int  ## The form control's node for a click that uses it, else -1.
+    pub anchor int  ## The link's node (the `a` element) for a link's rectangle, else -1.
 pub struct gfx.Scene  ## A laid-out page: its drawing operations, links and size.
     pub ops List[draw.Op]
     pub hits List[gfx.Hit]
@@ -33,4 +34,4 @@ pub fn gfx.layout_with(d html.Doc, url str, width float, sheet css.Sheet, sizes 
 pub fn gfx.layout_measured(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]], meas Map[str, float], editing int) gfx.Scene  ## `layout_with` using the run widths in `meas` (`probe_key`), drawing text
 ```
 
-trimmed to fit 2000 tokens (~788); dropped: private items
+trimmed to fit 2000 tokens (~820); dropped: private items

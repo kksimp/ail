@@ -5,13 +5,13 @@ entry: main in main.ail
 
 ## a64 (73 items)
 
-## api (206 items)
+## api (208 items)
 
 ## ast (129 items)
 
 ## budget (27 items)
 
-## check (343 items)
+## check (347 items)
 
 ## codegen (55 items)
 
@@ -29,7 +29,7 @@ entry: main in main.ail
 
 ## fmt (63 items)
 
-## load (100 items)
+## load (102 items)
 
 ## mir (479 items)
 
