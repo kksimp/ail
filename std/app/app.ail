@@ -429,10 +429,13 @@ pub fn host_path() str ! AppError
         message: "set AIL_APP_HOST to the app host program",
     )
     p := "{root}/tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost"
+    w := "{root}/tools/app-host/windows/build/AILAppHost.exe"
+    if fs.exists(w)
+        return w
     if not fs.exists(p)
         return AppError(
             kind: "no_host",
-            message: "{p} is missing; build it with tools/app-host/macos/run.sh",
+            message: "{p} is missing; build it with tools/app-host/macos/run.sh (Windows: tools/app-host/windows/run.ps1)",
         )
     p
 

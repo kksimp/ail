@@ -98,6 +98,9 @@ fn env_threads() int
     v
 
 fn hw_cores() int
+    if target() == 3
+        c := import_call("GetActiveProcessorCount", 65535, 0, 0, 0)
+        return if c < 1 then 1 else if c > 8 then 8 else c
     if target() == 2
         c := import_call("_sysconf", 58, 0, 0, 0)
         return if c < 1 then 1 else if c > 8 then 8 else c
@@ -127,7 +130,8 @@ fn pool() int
     if q < 0
         fail(1, 0, 0)
     store64(q + P_TARGET, cores())
-    stacks := sys_mmap_lazy(MAXW * STACK_SZ)
+    # Windows threads run on stacks the system makes (`start_thread`).
+    stacks := if target() == 3 then 0 else sys_mmap_lazy(MAXW * STACK_SZ)
     if stacks < 0
         fail(1, 0, 0)
     store64(global(STACKS), stacks)
@@ -185,6 +189,9 @@ fn task_start(rec int)
 
 ## Worker `idx`: its stack's low page is a guard, then a new thread.
 fn start_thread(p int, idx int)
+    if target() == 3
+        win_start_thread(p, idx)
+        return
     base := load64(global(STACKS)) + idx * STACK_SZ
     k := if target() == 0 then 10 else if target() == 1 then 226 else 74
     guard := if target() == 2 then 16384 else 4096
@@ -219,7 +226,7 @@ fn thread_entry(idx int) int
 
 ## Where `restart` puts worker `k`'s stack pointer.
 fn stack_top(p int, k int) int
-    if target() == 2
+    if target() == 2 or target() == 3
         return load64(p + P_TOP + 8 * k)
     load64(global(STACKS)) + (k + 1) * STACK_SZ - 64
 
@@ -573,6 +580,9 @@ fn out_atomic_bool(cell int)
 ## Give the CPU away while waiting for another thread.
 fn yield_cpu()
     t := target()
+    if t == 3
+        import_call("SwitchToThread", 0, 0, 0, 0)
+        return
     if t == 2
         import_call("_sched_yield", 0, 0, 0, 0)
         return
@@ -630,6 +640,8 @@ fn gc_start_world()
 fn stack_end_self() int
     if load64(global(MULTI)) == 0 or worker_index() < 0
         return load64(global(STACK_TOP))
+    if target() == 3
+        return load64(load64(global(TASKS)) + P_TOP + 8 * worker_index())
     load64(global(STACKS)) + (worker_index() + 1) * STACK_SZ
 
 ## Mark from the other threads' published stacks and registers, and from
@@ -647,8 +659,10 @@ fn gc_scan_threads()
     for t in 0..n
         if t != me
             s := load64(p + P_PARK + 8 * t)
-            top := if t
+            mut top := if t
                 == 0 then load64(global(STACK_TOP)) else load64(global(STACKS)) + t * STACK_SZ
+            if target() == 3 and t > 0
+                top = load64(p + P_TOP + 8 * (t - 1))
             gc_scan_range(p + P_REGS + 80 * t, p + P_REGS + 80 * t + 80)
             gc_scan_range(s, top)
 
@@ -875,3 +889,34 @@ fn group_cancel(g int)
     store64(g + 24, 1)
     for i in 0..load64(g)
         task_cancel(load64(load64(g + 16) + 8 * i))
+
+# ---- Windows threads (win.ail) ----
+
+## Start worker `idx`. The new thread learns its index from `P_NEWT + 8`,
+## which it reads before it lets go of the word at `P_NEWT` (one start at a time).
+fn win_start_thread(p int, idx int)
+    while atomic_cas(p + P_NEWT, 0, 1) != 0
+        import_call("SwitchToThread", 0, 0, 0, 0)
+    store64(p + P_NEWT + 8, idx)
+    # STACK_SIZE_PARAM_IS_A_RESERVATION: STACK_SZ bytes of address space, committed as used.
+    h := import_call("CreateThread", 0, STACK_SZ, fn_addr("rt.win_thread_entry"), 0, 0, 0)
+    if h == 0
+        err_begin()
+        out_str("CreateThread failed, error ")
+        out_int(import_call("GetLastError", 0, 0, 0, 0))
+        out_byte(10)
+        err_end()
+        fail(1, 0, 0)
+    import_call("CloseHandle", h, 0, 0, 0)
+
+## The start routine of a worker thread. Win64 hands it one argument in rcx,
+## which this ignores, so it does not matter that the compiled code reads its
+## arguments elsewhere; it never returns.
+fn win_thread_entry() int
+    p := load64(global(TASKS))
+    idx := load64(p + P_NEWT + 8)
+    store64(p + P_TID + 8 * idx, import_call("GetCurrentThreadId", 0, 0, 0, 0))
+    store64(p + P_TOP + 8 * idx, sp())
+    atomic_store(p + P_NEWT, 0)
+    worker_main(idx)
+    0

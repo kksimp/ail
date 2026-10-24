@@ -44,9 +44,9 @@ operations: standard handles, output, and process exit, at least.
    code generator, with a cited rule for each trap that Windows cannot
    provide.
 5. **A bounded set of imports.** The first set is `GetStdHandle`,
-   `WriteFile`, `ExitProcess`, `VirtualAlloc`, `VirtualFree`, and
-   `GetCommandLineW`. Adding an import means adding its name to the
-   program's `PeDll` list and to this ADR.
+   `WriteFile`, `ExitProcess`, `VirtualAlloc`, `VirtualFree`,
+   `GetCommandLineW`, and `GetEnvironmentStringsW`. Adding an import means
+   adding its name to the program's `PeDll` list and to this ADR.
 
 ## Rejected alternatives
 

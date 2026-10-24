@@ -4,7 +4,7 @@ Chapter key: `std`
 
 > **Status:** Drafted. Specified and implemented in the bootstrap interpreter
 > (ADR 0838). Native builds wait for native `proc.start` (std.app.10). The
-> macOS host is `tools/app-host/macos`; Windows and Linux hosts are future
+> macOS host is `tools/app-host/macos`, Windows `tools/app-host/windows`; Linux is future
 > work.
 
 An app is a value whose type implements `app.App`. It says what the window
@@ -98,8 +98,8 @@ before a `close`). *(ADR 0838)*
 
 **std.app.10** — `run` finds the host with `host_path() str ! AppError`:
 the environment variable `AIL_APP_HOST`, else `AIL_ROOT/tools/app-host/
-macos/build/AIL App Host.app/Contents/MacOS/AILAppHost`, where the `ail`
-command sets `AIL_ROOT` to its own directory. The host is started with
+macos/build/AIL App Host.app/Contents/MacOS/AILAppHost`, or `AIL_ROOT/tools/app-host/windows/build/AILAppHost.exe` when that exists,
+where the `ail` command sets `AIL_ROOT` to its own directory. The host is started with
 `proc.start` (`std.proc.4`), which native builds don't compile yet, so a
 program that uses `run` runs on the interpreter. *(ADR 0838)*
 

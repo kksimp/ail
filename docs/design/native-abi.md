@@ -541,7 +541,7 @@ of the runtime of a program whose source mentions `spawn `, `par for` or
 - **Globals** 16–24: `TASKS` (the pool block), `MULTI` (1 once the pool
   exists: `alloc` then takes `ALLOC_LOCK`), `ALLOC_LOCK`, `OUT_LOCK`,
   `OUT_OWNER` and `OUT_DEPTH` (the reentrant output lock), `STACKS`. The image
-  has 64 slots.
+  has 72 slots (64–71 are unused scratch slots, which `tests/native/driver/mem_write_read` writes).
 - **Task record** (8-byte words): 0 state (0 queued or running, 2 done,
   3 trapped), 1 function id, 2 result, 3 next in the queue, 4–6 the trap's
   kind and operands, 7 its head string, 8 its operator, 9 its source

@@ -32,6 +32,13 @@ pub struct Instr
     owner str
     np int
     descs List[ValDesc]
+    ## `trace`: `ail run --trace` (trace.run.1-4, trace.run.6): call and return events on standard error.
+    trace bool
+    ## `nocontracts`: `ail run --no-contracts` (contract.run.3): no condition is evaluated.
+    nocontracts bool
+    ## `traceeffects`: effect, spawn and wait events (trace.run.3); `tracejson`: events as JSON objects.
+    effects bool
+    tjson bool
     ## `watch=NAME`: the variable whose assignments are events (`--watch`, trace.watch.1).
     watch str
     ids Map[str, int]
@@ -112,6 +119,10 @@ fn new_instr() Instr
         owner: "",
         np: 0,
         descs: [],
+        trace: modes.split(",").contains("trace"),
+        nocontracts: modes.split(",").contains("nocontracts"),
+        effects: modes.split(",").contains("traceeffects"),
+        tjson: modes.split(",").contains("tracejson"),
         watch: watch_name(modes),
         ids: {},
         sites: [],
@@ -161,6 +172,9 @@ fn Lower.instr_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
         instr.sp = call("rt.vals_enter", [], Ty.Int)
         instr.owner = fname
         instr.np = nvars
+    if instr.trace and not (is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path))
+        trace_call(f, tys, params)
+        trace_requires(f, fname)
     if not instr.calls or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
         return
     call(
@@ -233,15 +247,192 @@ fn Lower.vals_spill(mut self)
     for k in 0..d.names.len()
         store(instr.sp, k + 1, read_var(order[k].key, cur))
 
-## Before each `return` of a function with a spill: drop it from the table.
+## Before each `return` of a function with a spill: drop it from the table; of a traced one: the
+## return event.
 fn Lower.instr_end(mut self)
-    if instr.sp < 0 or instr.owner != fname
+    if instr.owner != fname
+        return
+    if instr.trace
+        instr.owner = ""
+        trace_returns()
+    if instr.sp < 0
         return
     instr.sp = -1
     for b in 0..blocks.len()
         if blocks[b].term.kind == "return"
             cur = b
             call("rt.vals_leave", [], Ty.Unit)
+
+## A value in an event: cut to 60 bytes, escaped in JSON (trace.val.1-2).
+fn Lower.trace_value(mut self, v Val, pos ast.Pos)
+    call("rt.tr_mark", [], Ty.Unit)
+    describe(v, pos)
+    call("rt.tr_vend", [], Ty.Unit)
+
+## `s` as the inside of a JSON string.
+fn jq(s str) str
+    s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+
+## Where `pos` is: `LINE:COL`, or `FILE:LINE:COL` outside the first file; as JSON `"line":L,"col":C`.
+fn Lower.trace_at(self, pos ast.Pos) str
+    if instr.tjson
+        f := if file == 0 then "" else "\"file\":\"{jq(src_paths[file])}\","
+        return "{f}\"line\":{pos.line},\"col\":{pos.col}"
+    root := if file == 0 then "" else "{src_paths[file]}:"
+    "{root}{pos.line}:{pos.col}"
+
+## `trace: call NAME(a = 1) at LINE:COL`, on standard error (trace.run.2).
+fn Lower.trace_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
+    instr.owner = fname
+    call("rt.tr_call_open", [], Ty.Unit)
+    mut labels := List[str]()
+    if f.receiver != none
+        labels.push("self")
+    for p in f.params
+        labels.push(p.name)
+    mut first := true
+    if instr.tjson
+        say("\{\"api\":1,\"trace\":\"call\",\"fn\":\"{plain_name(fname)}\",\"depth\":")
+        call("rt.tr_depth_out", [], Ty.Unit)
+        say(",\"args\":\{")
+    else
+        say("call {plain_name(fname)}(")
+    for i in 0..params.len().min(labels.len())
+        if not vals_printable(tys[i], structs)
+            continue
+        if not first
+            say(if instr.tjson then "," else ", ")
+        first = false
+        if instr.tjson
+            say("\"{labels[i]}\":\"")
+            trace_value(Val(id: params[i], ty: tys[i]), f.pos)
+            say("\"")
+        else
+            say("{labels[i]} = ")
+            trace_value(Val(id: params[i], ty: tys[i]), f.pos)
+    say(if instr.tjson then "}," else ") at ")
+    call("rt.tr_site", [konst(f.pos.line, Ty.Int), konst(f.pos.col, Ty.Int)], Ty.Unit)
+    say(if instr.tjson then "}\n" else "\n")
+    call("rt.tr_close", [], Ty.Unit)
+
+## Before each `return` of a traced function: `trace: NAME returned VALUE`. Only values
+## that print without a loop are shown; a list or map shows as `…`.
+fn Lower.trace_returns(mut self)
+    for b in 0..blocks.len()
+        t := blocks[b].term
+        if t.kind != "return"
+            continue
+        cur = b
+        call("rt.tr_ret_open", [], Ty.Unit)
+        if instr.tjson
+            say("\{\"api\":1,\"trace\":\"return\",\"fn\":\"{plain_name(fname)}\",\"depth\":")
+            call("rt.tr_depth_out", [], Ty.Unit)
+            say(",\"value\":\"")
+        else
+            say("{plain_name(fname)} returned ")
+        if t.value < 0 or ret.is_unit()
+            say("()")
+        elif flat_printable(ret, structs)
+            trace_value(Val(id: t.value, ty: ret), ast.Pos(line: 1, col: 1))
+        else
+            say("…")
+        say(if instr.tjson then "\"}\n" else "\n")
+        call("rt.tr_ret_done", [], Ty.Unit)
+
+## trace.run.3: `trace: effect fs.read_text("x") at L:C`, before the call `rt` (`rt.fs_read_text`)
+## of the OS module runs with the values `vs`.
+fn Lower.trace_effect(mut self, rtname str, tys List[Ty], vs List[int], pos ast.Pos)
+    if not instr.effects or is_rt or unchecked or not instr_owned(path)
+        return
+    name := rtname.slice(3, rtname.len())
+    parts := name.split("_")
+    if not CAPTURED.contains(parts[0])
+        and parts[0] != "net"
+        and parts[0] != "serve"
+        and parts[0] != "open"
+        return
+    what := "{parts[0]}.{parts[1..].join("_")}"
+    call("rt.tr_event_open", [konst(2, Ty.Int), konst(0, Ty.Int)], Ty.Unit)
+    if instr.tjson
+        say("\{\"api\":1,\"trace\":\"effect\",\"call\":\"{what}\",\"args\":[")
+    else
+        say("effect {what}(")
+    for i in 0..vs.len().min(tys.len())
+        if i > 0
+            say(if instr.tjson then "," else ", ")
+        if instr.tjson
+            say("\"")
+        if vals_printable(tys[i], structs)
+            trace_value(Val(id: vs[i], ty: tys[i]), pos)
+        else
+            say("…")
+        if instr.tjson
+            say("\"")
+    say(if instr.tjson then "]," else ") at ")
+    say(trace_at(pos))
+    say(if instr.tjson then "}\n" else "\n")
+    call("rt.tr_close", [], Ty.Unit)
+
+## trace.run.3: `trace: spawn NAME(args) at L:C` before the task starts, `wait Task#N` when it is waited.
+fn Lower.trace_spawn(mut self, key str, tys List[Ty], vs List[int], rec int, pos ast.Pos)
+    if not instr.effects or is_rt or unchecked or not instr_owned(path)
+        return
+    call("rt.tr_task_new", [rec], Ty.Unit)
+    call("rt.tr_event_open", [konst(3, Ty.Int), konst(0, Ty.Int)], Ty.Unit)
+    if instr.tjson
+        say("\{\"api\":1,\"trace\":\"spawn\",\"task\":\"{plain_name(key)}(")
+    else
+        say("spawn {plain_name(key)}(")
+    for i in 0..vs.len().min(tys.len())
+        if i > 0
+            say(", ")
+        if vals_printable(tys[i], structs)
+            trace_value(Val(id: vs[i], ty: tys[i]), pos)
+        else
+            say("…")
+    say(if instr.tjson then ")\"," else ") at ")
+    say(trace_at(pos))
+    say(if instr.tjson then "}\n" else "\n")
+    call("rt.tr_close", [], Ty.Unit)
+
+fn Lower.trace_wait(mut self, rec int, pos ast.Pos)
+    if not instr.effects or is_rt or unchecked or not instr_owned(path)
+        return
+    call("rt.tr_event_open", [konst(4, Ty.Int), konst(0, Ty.Int)], Ty.Unit)
+    say(if instr.tjson then "\{\"api\":1,\"trace\":\"wait\",\"task\":\"Task#" else "wait Task#")
+    call("rt.tr_task_no", [rec], Ty.Unit)
+    say(if instr.tjson then "\"," else " at ")
+    say(trace_at(pos))
+    say(if instr.tjson then "}\n" else "\n")
+    call("rt.tr_close", [], Ty.Unit)
+
+## trace.run.3: `trace: contract NAME requires `COND`: held` for a condition just evaluated to `v`.
+fn Lower.trace_contract(mut self, label str, kind str, c ast.Contract, v int)
+    if not instr.trace or is_rt or not instr_owned(path)
+        return
+    call("rt.tr_event_open", [konst(5, Ty.Int), konst(1, Ty.Int)], Ty.Unit)
+    if instr.tjson
+        say("\{\"api\":1,\"trace\":\"contract\",\"fn\":\"{plain_name(label)}\",\"kind\":\"{kind}\",\"cond\":\"{jq(c.text)}\",\"held\":")
+        call("rt.tr_verdict", [v], Ty.Unit)
+        say(",")
+        say(trace_at(c.pos))
+        say("}\n")
+    else
+        say("contract {plain_name(label)} {kind} `{c.text}`: ")
+        call("rt.tr_verdict", [v], Ty.Unit)
+        say("\n")
+    call("rt.tr_close", [], Ty.Unit)
+
+fn flat_printable(t Ty, structs Map[str, List[Slot]]) bool
+    match t
+        Int | Float | Bool | Str | Char | Enum(_) => true
+        Struct(n) =>
+            slots := structs.get(n) else return false
+            for sl in slots
+                if not flat_printable(sl.ty, structs)
+                    return false
+            true
+        _ => false
 
 ## The `vd.N` describers: print `(a = 1, b = 2); c = 3`.
 fn Lower.gen_describers(mut self)

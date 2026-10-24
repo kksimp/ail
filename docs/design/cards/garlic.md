@@ -1,18 +1,24 @@
 # garlic
 entry: main in garlic.ail
-tests: 119 (`ail test` lists them)
+tests: 133 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
     dep image path ../pdf/image caps fs
 
-## (root) (93 items)
+## (root) (96 items)
 
 ## attach (10 items)
 
 ## css (31 items)
 
 ## draw (16 items)
+
+## extract (20 items)
+
+## flows (8 items)
+
+## forms (9 items)
 
 ## garlicjs.syntax (89 items)
 
@@ -22,6 +28,8 @@ ail.pkg:
 
 ## html (32 items)
 
+## hush (8 items)
+
 ## image (74 items)
 
 ## images (6 items)
@@ -30,7 +38,7 @@ ail.pkg:
 
 ## look (3 items)
 
-## page (43 items)
+## page (44 items)
 
 ## std.app (46 items)
 
@@ -44,4 +52,4 @@ ail.pkg:
 
 ## ws (18 items)
 
-trimmed to fit 4000 tokens (~245); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~282); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

@@ -114,3 +114,174 @@ fn trace_frames_n(lead int)
         if load64(global(VALS)) != 0
             out_str(" (--verbose shows every frame and value)")
         out_byte(10)
+
+## `ail run --trace` (trace.run.1-4, rt/native/instr.ail): the start of a call event, `trace: ` and
+## the indent of its depth (`main` is 1); a JSON event has no lead.
+fn tr_call_open()
+    w := tr_state()
+    if w == 0
+        return
+    store64(w + 32, load64(w + 32) + 1)
+    tr_open(KIND_CALL)
+    tr_lead(true)
+
+fn tr_ret_open()
+    tr_open(KIND_RETURN)
+    tr_lead(true)
+
+## The start of an event of `kind` that is not indented (effect, spawn, wait), or is by the depth (contract).
+fn tr_event_open(kind int, indented bool)
+    tr_open(kind)
+    tr_lead(indented)
+
+fn tr_lead(indented bool)
+    if tr_is_json()
+        return
+    out_str("trace: ")
+    w := tr_state()
+    if not indented or w == 0
+        return
+    mut n := load64(w + 32) - 1
+    if n > 20
+        n = 20
+    for _ in 0..n
+        out_str("  ")
+
+## The call depth, for a JSON event.
+fn tr_depth_out()
+    w := tr_state()
+    out_int(if w == 0 then 0 else load64(w + 32))
+
+## The end of a return event: the depth is one less.
+fn tr_ret_done()
+    tr_close()
+    w := tr_state()
+    if w != 0 and load64(w + 32) > 0
+        store64(w + 32, load64(w + 32) - 1)
+
+## `held` or `FAILED`, or the JSON boolean.
+fn tr_verdict(ok bool)
+    if tr_is_json()
+        out_str(if ok then "true" else "false")
+    else
+        out_str(if ok then "held" else "FAILED")
+
+## Where a value starts in the event being written, and its end: the value is cut to 60 bytes with a
+## `…` (trace.val.2) and, in a JSON event, escaped as the inside of a string.
+fn tr_mark()
+    w := tr_state()
+    if w != 0
+        store64(w + 112, load64(global(OUT_LEN)))
+
+fn tr_vend()
+    w := tr_state()
+    if w == 0
+        return
+    mark := load64(w + 112)
+    n := load64(global(OUT_LEN))
+    if n < mark
+        return
+    base := load64(global(OUT_BUF)) + mark
+    mut len := n - mark
+    if len > 60
+        mut cut := 60
+        while cut > 0 and load8(base + cut).bit_and(192) == 128
+            cut -= 1
+        len = cut
+        store64(global(OUT_LEN), mark + cut)
+        out_byte(226)
+        out_byte(128)
+        out_byte(166)
+        len += 3
+    if not tr_is_json()
+        return
+    tmp := alloc(len + 8, 13)
+    for i in 0..len
+        store8(tmp + i, load8(base + i))
+    store64(global(OUT_LEN), mark)
+    for i in 0..len
+        c := load8(tmp + i)
+        if c == 34 or c == 92
+            out_byte(92)
+            out_byte(c)
+        elif c == 10
+            out_str("\\n")
+        elif c == 13
+            out_str("\\r")
+        elif c == 9
+            out_str("\\t")
+        elif c < 32
+            out_str("\\u00")
+            out_byte(48 + c / 16)
+            out_byte(if c % 16 < 10 then 48 + c % 16 else 87 + c % 16)
+        else
+            out_byte(c)
+
+## A task's number in the events: assigned at its `spawn` (the first is 1), found by its record.
+fn tr_task_new(rec int)
+    w := tr_state()
+    if w == 0
+        return
+    n := load64(w + 120) + 1
+    store64(w + 120, n)
+    mut k := rec / 16 % 1024
+    while load64(w + 128 + 16 * k) != 0
+        k = (k + 1) % 1024
+    store64(w + 128 + 16 * k, rec)
+    store64(w + 136 + 16 * k, n)
+
+fn tr_task_no(rec int)
+    w := tr_state()
+    if w == 0
+        return
+    mut k := rec / 16 % 1024
+    for _ in 0..1024
+        r := load64(w + 128 + 16 * k)
+        if r == rec
+            out_int(load64(w + 136 + 16 * k))
+            return
+        if r == 0
+            break
+        k = (k + 1) % 1024
+    out_byte(63)
+
+## The position of the call that made the function calling this, `LINE:COL`, or `FILE:LINE:COL`
+## outside the first file; `line` and `col` (the function's own) when the call table doesn't know it.
+## The JSON form is `"line":L,"col":C` after `"file":"F",` outside the first file.
+fn tr_site(line int, col int)
+    tr_site_at(load64(frame_ptr()), line, col)
+
+fn tr_site_at(fp int, line int, col int)
+    json := tr_is_json()
+    tab := code_tab()
+    n := load64(tab)
+    base := tab - load64(tab + 8)
+    ents := tab + 24
+    k := trace_find(ents, n, load64(fp + 8) - base)
+    mut l := line
+    mut c := col
+    if k >= 0
+        names := ents + 16 * n
+        w0 := load64(ents + 16 * k)
+        w1 := load64(ents + 16 * k + 8)
+        file := load64(names + 16 * w1.shr(32) + 8)
+        l = w0.shr(32)
+        c = w1.bit_and(4294967295)
+        if file != 0
+            f := str_at(tab + file)
+            if json
+                out_str("\"file\":\"")
+                p := str_addr(f)
+                out_bytes(p + 16, load64(p) - 1)
+                out_str("\",")
+            else
+                out_str(f)
+    if json
+        out_str("\"line\":")
+        out_int(l)
+        out_str(",\"col\":")
+        out_int(c)
+    else
+        out_int(l)
+        out_byte(58)
+        out_int(c)
