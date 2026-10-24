@@ -197,14 +197,15 @@ fn Checker.error_names(self, errors List[Ty]) List[str]
     match e
         Call(callee, _, _) =>
             match callee
-                Name(n, _) => n
-                TypeArgs(n, _, _) => n
-                _ => ""
+                Name(n, _) => return n
+                TypeArgs(n, _, _) => return n
+                _ => return ""
         Method(recv, name, _, _) =>
             match recv
-                Name(r, _) => "{r}.{name}"
-                _ => ".{name}"
-        _ => ""
+                Name(r, _) => return "{r}.{name}"
+                _ => return ".{name}"
+        _ => return ""
+    ""
 
 ## Remember a failure path of the function being checked (err.paths.1); final pass only.
 fn Checker.note_path(

@@ -42,8 +42,8 @@ pub fn errors_command(rest List[str], std str) int
             fails_with = e
         if not fails and paths.len() == 0
             continue
-        sorted := paths.sorted(by: |p| p.pos.line * 100000 + p.pos.col)
-        items := [path_json(p) for p in sorted]
+        ordered := paths.sorted(by: |p| p.pos.line * 100000 + p.pos.col)
+        items := [path_json(p) for p in ordered]
         mut kvs := [kv("id", J.Str(api.fn_ids[i])), kv("name", J.Str(f.name)), kv("line", J.Int(f.pos.line))]
         if fails
             kvs.push(kv("fails_with", strs(fails_with)))
