@@ -1,0 +1,13 @@
+enum Mode
+    On
+    Off
+
+struct Panel
+    @observe count int
+    @observe tags List[str]
+    @observe mode Mode
+    note str
+
+fn main()
+    p := Panel(count: 2, tags: ["a"], mode: Mode.On, note: "x")
+    print("{p.count} {p.tags.len()} {p.note}")
