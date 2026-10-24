@@ -1,6 +1,6 @@
 # 0890. Optimizer roadmap: speed passes to match C at -O2 and -O3
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-24
 - **Decided by:** AI (delegated, ADR 0076; criterion: speed is the goal here, per ADR 0874)
 - **Topic:** 23 — Implementation (native optimizer)
@@ -83,6 +83,16 @@ shared pass list. Each lands with a perfbench before/after and a golden test.
 8. **Tail calls** to self and mutual tail calls as jumps.
 
 Every pass keeps traps and their order. A pass that can't prove that skips the code.
+
+## Pass 1a: inline allocation fast path
+
+`inline_module` (`compiler/mir/inline.ail`) inlines `rt.alloc_z`, `rt.alloc_raw`, `rt.alloc`
+and `rt.obj_new` although they call `rt.alloc_slow`: their fast path (free list or bump
+pointer, no collection or time check due) is straight-line code, and a constant size folds the
+size class away. The slow path stays a call. `rt.list_new` and the other list makers stay
+calls because the list passes find them by name. The change is in MIR, so x86-64 and ARM64
+get it together (ADR 0008). Measured on binarytrees, fasta and fannkuch on ail-linux (A/B,
+same checkout with and without the commit); results below once run.
 
 ## Rationale
 
