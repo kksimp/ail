@@ -1,13 +1,16 @@
 # garlic
-(root)  93 items
+(root)  96 items
 attach  10 items
 css  31 items
 draw  16 items
+extract  20 items
+flows  8 items
 forms  9 items
 garlicjs.syntax  89 items
 garlicjs.vm  246 items
 gfx  45 items
 html  32 items
+hush  8 items
 image  74 items
 images  6 items
 jsdom  8 items
