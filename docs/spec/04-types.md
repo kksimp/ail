@@ -207,7 +207,7 @@ ADR 0037)*
 
 ```ail fragment
 struct User
-    id i64
+    id int
     name str
     email str?
 ```
