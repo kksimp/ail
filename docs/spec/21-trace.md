@@ -84,13 +84,14 @@ budget is 60 characters in trace lines and in the default trap report, and
 
 ## Watch
 
-**trace.run.6** — Natively, `ail run --trace` and `--trace=calls` build the program with
-the events (only then does it cost anything) and write the `call` and `return`
-events of trace.run.2, in the human form, to standard error as the program runs, then
-the summary (trace.run.4). A call's position is the call's, `main`'s its own. A
-value is shown whole (no cut, trace.val.2); a returned list or map is `…`. `effect`,
-`spawn`, `wait` and `contract` events, `--json` and the cut are not native yet:
-`--trace=effects` is an error (exit 2). *(ADR 0868)*
+**trace.run.6** — Natively, `ail run --trace` builds the program with the events asked for
+(only then does it cost anything) and writes them to standard error as the program runs, then
+the summary (trace.run.4), in the text form or, with `--json`, as the JSON objects of
+trace.run.1. `calls` gives the `call` and `return` events (trace.run.2) and a `contract` event
+for each condition checked; `effects` gives the `effect` events of the OS and network modules,
+and `spawn` and `wait` (`Task#N`, numbered from 1 in spawn order). A call's position is the
+call's, `main`'s its own. A value is cut to 60 bytes and ends in `…` (trace.val.2); a returned
+list or map is `…`, and a cut list or map does not say how many elements are left. *(ADR 0868)*
 
 **trace.watch.1** — `ail run --watch NAME FILE` shows, after each
 assignment whose target is rooted in a variable called `NAME` (`NAME = e`,
@@ -370,7 +371,7 @@ fn main()
     print(double(3))
 ```
 
-```ail skip=bootstrap tool=run,--trace=effects,FILE expect=effect rules=trace.run.3
+```ail tool=run,--trace=effects,FILE expect=effect rules=trace.run.3
 use std.time
 
 fn main()

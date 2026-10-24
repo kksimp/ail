@@ -696,6 +696,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0884](0884-observe-field-and-attach-protocol.md) | `@observe` marks a struct field; attach speaks JSON lines on loopback with a 0600 token file | Accepted | 2026-10-24 |
 | [0877](0877-no-downcast-of-any-trait.md) | No downcasting of `any Trait`: an enum is the checked way to hold one of several known types (resolves OQ-094) | Accepted | 2026-10-24 |
 | [0880](0880-budgeted-diagnostic-forms.md) | Token-priced diagnostics: one-line and expanded forms under `--budget` (ADR 0868 item 6) | Accepted | 2026-10-24 |
+| [0888](0888-std-app-windows-host.md) | `std.app` host for Windows: WinForms and GDI+ in C#, built with the framework csc | Accepted | 2026-10-24 |
 | [0883](0883-native-max-steps.md) | Native `--max-steps` on the instrumentation layer | Accepted | 2026-10-24 |
 | [0886](0886-native-values-mode.md) | Native `ail run --values`: frame values in a trap | Accepted | 2026-10-24 |
 | [0878](0878-screen-model-for-std-app.md) | The screen model: what every std.app program shows, for agents (display list first, pixels for canvas, budgeted queries) | Accepted | 2026-10-24 |
