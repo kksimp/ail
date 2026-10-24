@@ -1,0 +1,105 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Fused elementwise chains (std.tensor.20, ADR 0815 amendment 2026-10-24): a
+## chain such as `(x * x + x) * 0.5 - x` over `float` or `f32` tensors of one
+## shape runs 1024 elements at a time, one operator per tight loop over the
+## chunk, so no operator writes a full temporary. Each element gets the same
+## IEEE operation, rounded to `f32` after each one for `f32`, in the same order
+## as the unfused calls, so the result is bit-identical.
+##
+## The plan is an object of 4-word nodes after a count word: `0 tensor`,
+## `1 scalar` (word 1 the `float`), `2 op` (word 1 the operator, words 2 and 3
+## the node indices of the operands).
+
+FUSE_CHUNK := 1024
+
+fn fuse_new(n int) int
+    f := alloc(8 + 32 * n + 8, TENSOR_OBJ)
+    store64(f, n)
+    f
+
+fn fuse_set(f int, i int, kind int, x int, a int, b int)
+    p := f + 8 + 32 * i
+    store64(p, kind)
+    store64(p + 8, x)
+    store64(p + 16, a)
+    store64(p + 24, b)
+
+fn fuse_set_f(f int, i int, x float)
+    p := f + 8 + 32 * i
+    store64(p, 1)
+    storef(p + 8, x)
+
+## Whether every tensor of the plan is a `float` or `f32` tensor of the first
+## one's shape and kind; otherwise the caller runs the operators one by one,
+## each with its own checks and position.
+fn fuse_ok(f int) bool
+    mut first := 0
+    for i in 0..load64(f)
+        p := f + 8 + 32 * i
+        if load64(p) != 0
+            continue
+        t := load64(p + 8)
+        if load64(t) < 1
+            return false
+        if first == 0
+            first = t
+        elif load64(t) != load64(first) or not same_shape(t, first)
+            return false
+    first != 0
+
+## The scalar of a node, rounded to `f32` beside an `f32` tensor.
+fn fuse_scalar(p int, r int) float
+    x := loadf(p + 8)
+    if r != 0
+        return f32_round(x)
+    x
+
+## The `cnt` elements from `lo` of node `i`: a pointer into a leaf's data, or
+## `out` (the node's own buffer in `bufs` when `dest` is 0).
+fn fuse_eval(f int, bufs int, i int, lo int, cnt int, dest int, r int) int
+    p := f + 8 + 32 * i
+    if load64(p) == 0
+        return tensor_data(load64(p + 8)) + 8 * lo
+    op := load64(p + 8)
+    a := load64(p + 16)
+    b := load64(p + 24)
+    mut out := dest
+    if dest == 0
+        out = bufs + 8 * FUSE_CHUNK * i
+    pa := f + 8 + 32 * a
+    pb := f + 8 + 32 * b
+    if load64(pa) == 1
+        y := fuse_eval(f, bufs, b, lo, cnt, 0, r)
+        vec_scal(op, out, y, cnt, r, 1, fuse_scalar(pa, r))
+    elif load64(pb) == 1
+        x := fuse_eval(f, bufs, a, lo, cnt, 0, r)
+        vec_scal(op, out, x, cnt, r, 0, fuse_scalar(pb, r))
+    else
+        x := fuse_eval(f, bufs, a, lo, cnt, 0, r)
+        y := fuse_eval(f, bufs, b, lo, cnt, 0, r)
+        vec_zip(op, out, x, y, cnt, r)
+    out
+
+## The tensor that node `root` of a plan `fuse_ok` accepted computes.
+fn tensor_fused(f int, root int) int
+    mut first := 0
+    for i in 0..load64(f)
+        p := f + 8 + 32 * i
+        if load64(p) == 0 and first == 0
+            first = load64(p + 8)
+    kind := load64(first)
+    rank := load64(first + 8)
+    n := load64(first + 16)
+    t := tensor_new(kind, rank, n)
+    tensor_copy_words(t + 32, first + 32, rank)
+    r := if kind == 2 then 1 else 0
+    bufs := alloc(8 * FUSE_CHUNK * load64(f) + 8, KIND_ATOMIC)
+    out := tensor_data(t)
+    mut lo := 0
+    while lo < n
+        cnt := if n - lo < FUSE_CHUNK then n - lo else FUSE_CHUNK
+        fuse_eval(f, bufs, root, lo, cnt, out + 8 * lo, r)
+        lo += cnt
+    t

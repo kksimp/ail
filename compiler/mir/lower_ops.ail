@@ -218,16 +218,28 @@ fn Lower.lower_binary_expr(
         And => short_circuit(true, lhs, rhs)
         Or => short_circuit(false, lhs, rhs)
         _ =>
-            if is_none_lit(lhs) or is_none_lit(rhs)
-                return lower_none_cmp(o, lhs, rhs, pos)
-            if is_int_lit(lhs)
-                # Lower the other side first to learn the type: a literal has no effects.
-                b := lower_value(rhs, operand_want(o, want))?
-                a := lower_value(lhs, b.ty)?
-                return binary(o, a, b, pos)
-            a := lower_value(lhs, operand_want(o, want))?
-            b := lower_value(rhs, a.ty)?
-            binary(o, a, b, pos)
+            if fused := try_fuse(o, lhs, rhs, pos, want)
+                return fused
+            lower_binary_plain(o, lhs, rhs, pos, want)
+
+fn Lower.lower_binary_plain(
+    mut self,
+    o ast.BinOp,
+    lhs ast.Expr,
+    rhs ast.Expr,
+    pos ast.Pos,
+    want Ty?,
+) Val?
+    if is_none_lit(lhs) or is_none_lit(rhs)
+        return lower_none_cmp(o, lhs, rhs, pos)
+    if is_int_lit(lhs)
+        # Lower the other side first to learn the type: a literal has no effects.
+        b := lower_value(rhs, operand_want(o, want))?
+        a := lower_value(lhs, b.ty)?
+        return binary(o, a, b, pos)
+    a := lower_value(lhs, operand_want(o, want))?
+    b := lower_value(rhs, a.ty)?
+    binary(o, a, b, pos)
 
 ## A method of an `int`: `to_float`, `abs`, `min`, `max`, the bit operations.
 fn Lower.int_method(mut self, r Val, name str, npos ast.Pos, vs List[Val]) Val?
