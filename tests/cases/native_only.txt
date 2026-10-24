@@ -11,3 +11,5 @@ maps_trap_msg_struct
 trap_contract_values
 trap_deep
 trap_snapshot
+tool_explain_chapters
+tool_explain_rules
