@@ -1,4 +1,4 @@
-api 43 0
+api 49 0
 budget 7 0
 conc 45 1
 contract 18 2
@@ -21,13 +21,13 @@ native 32 0
 own 39 2
 plat 8 0
 refl 4 0
-replay 10 0
+replay 11 0
 run 6 0
 snap 6 0
-std 241 1
+std 249 1
 test 24 0
 trace 19 0
 trait 43 4
 type 117 10
 unsafe 21 0
-all 980 53
+all 995 53

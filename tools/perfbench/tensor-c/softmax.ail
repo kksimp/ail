@@ -1,0 +1,15 @@
+# Softmax over the rows of a 512x512 tensor, 100 rounds each for float and f32 (softmax.c is the C twin).
+fn main()
+    n := 512
+    x := tensor.from([((i * 7919) % 1009).to_float() * 0.01 for i in 0..n * n], [n, n])
+    f := x.to_f32()
+    mut hits := 0
+    mut mass := 0
+    for r in 0..100
+        y := x.softmax()
+        z := f.softmax().to_float()
+        hits += y.argmax(1).sum() + z.argmax(1).sum()
+        mass += y.sum(1).map(|s| s * 1000.0).round().sum()
+            + z.sum(1).map(|s| s * 1000.0).round().sum()
+    print(hits)
+    print(mass)
