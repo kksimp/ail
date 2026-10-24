@@ -2301,13 +2301,9 @@ fn Gate.git_deps(mut self, tmp str)
         or not st.err.contains("ail pkg update geo")
         or not slurp(lock).contains(second)
         red("git dep stale lock", "exit {st.status}\n{st.err}")
-    if gd_ail(
-        dir,
-        dir,
-        "",
-        "run app",
-    ).out != "12\nfalse\n" or not slurp(lock).contains("rev {first} commit {first}")
-        red("git dep relock", slurp(lock))
+    rl := gd_ail(dir, dir, "", "run app")
+    if rl.out != "12\nfalse\n" or not slurp(lock).contains("rev {first} commit {first}")
+        red("git dep relock", "exit {rl.status}\n{rl.out}{rl.err}\n{slurp(lock)}")
     # eff.cap.4: grants apply to git dependencies as to path ones.
     gd_manifest(dir, url, "rev {first}")
     cp := gd_ail(dir, dir, "", "check app")
@@ -2332,7 +2328,8 @@ fn Gate.git_deps(mut self, tmp str)
     ur := gd_ail(dir2, dir2, "", "run app")
     want("git dep unreachable", ur.err, ["error[mod.pkg.7]: can't fetch dependency `geo`"])
     gd_manifest(dir2, url2, "tag v1 caps fs")
-    sh_run("mkdir -p {dir2}/empty")
+    # A PATH without git: the shell tools `./ail` itself uses are linked in, git is not.
+    sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
     ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
     want("git dep no git", ng.err, ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"])
     nu := gd_ail(dir2, "{dir2}/app", "", "pkg update nope")
