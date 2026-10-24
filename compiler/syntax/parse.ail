@@ -1132,14 +1132,14 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
         expect_sym(")", "`)` or `,` in the function type", "type.fn.1")?
         if at_sym("->")
             # The result type follows `)` directly, as in a declaration (gram.fn.2).
-            at := here()
+            op := here()
             error_fix(
                 "gram.fn.2",
-                at,
+                op,
                 "there is no `->` in a function type; the result type follows `)` directly",
                 "write `fn(int) int`",
                 "remove the `->`",
-                [fix.delete(at, after_on_line(at, 2))],
+                [fix.delete(op, after_on_line(op, 2))],
             )
             return none
         mut ret := absent[ast.TypeRef]()
@@ -1169,17 +1169,24 @@ fn Parser.named_type(mut self, expected str, rule str) ast.TypeRef?
 fn Parser.field_decl(mut self, rule str) ast.Field?
     field_pub(rule)
     if at_kw("fn")
-        at := here()
+        fn_pos := here()
         msg := "methods aren't declared inside a struct"
         help := "declare the method after the struct, with the type's name: `fn Name.method(self) T`"
         # Methods are the last members, so they move out where they stand.
         mut moved := fix_none()
-        if member_owner != "" and at.col == 5
+        if member_owner != "" and fn_pos.col == 5
             moved = methods_out(i, member_owner)
         if edits := moved
-            error_fix(rule, at, msg, help, "move the methods after the struct and name the type in each", edits)
+            error_fix(
+                rule,
+                fn_pos,
+                msg,
+                help,
+                "move the methods after the struct and name the type in each",
+                edits,
+            )
         else
-            error_text(rule, at, msg, help, "")
+            error_text(rule, fn_pos, msg, help, "")
         return none
     f := take_name("a field name", rule)?
     if at_sym(":")
