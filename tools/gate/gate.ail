@@ -522,16 +522,33 @@ fn slurp(p str) str
 ## `ail ARGS` through the built binary with AIL_BINARY set, as cargo sets it:
 ## programs that start `ail` themselves (std.app hosts) use this binary.
 fn ail_run(args List[str]) proc.Output ! proc.ProcError
+    if (env.get("GATE_NATIVE") else "") == "1"
+        return proc.run("sh", cat(["-c", "exec \"$PWD/ail\" \"$@\"", "sh"], args))
     script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
     proc.run("sh", cat(["-c", script, "sh"], args))
 
+## The cases suite's native run (`GATE_CASES_NATIVE=1`, the report the Mac gate can print) goes through `./ail`,
+## each case under a 60 second alarm so one hang is one red case, not a stuck gate (item 309).
+fn case_run(native bool, args List[str]) proc.Output ! proc.ProcError
+    if native or (env.get("GATE_CASES_NATIVE") else "") == "1"
+        script := "perl -e 'alarm 60; exec @ARGV' \"$PWD/ail\" \"$@\""
+        return proc.run("sh", cat(["-c", script, "sh"], args))
+    ail_run(args)
+
+## tests/cases/native_only.txt: the stems of cases that use features only the native CLI has. Only these go
+## native where the suite runs on the Rust binary (ADR 0865: the bootstrap learns nothing new).
+fn native_only() List[str]
+    text := fs.read_text("tests/cases/native_only.txt") else return []
+    [l.trim() for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")]
+
 fn run_case(at str, exp str) str?
+    native := native_only().contains(path.stem(at))
     out_file := "{exp}out"
     want_out := if fs.exists(out_file) then slurp(out_file) else ""
     if fs.exists("{exp}stderr")
         # trace.run.1: `ail run` with the options in NAME.args, one line.
         flags := slurp("{exp}args").words()
-        r := ail_run(cat(cat(["run"], flags), [at])) else return "could not start ail"
+        r := case_run(native, cat(cat(["run"], flags), [at])) else return "could not start ail"
         want := slurp("{exp}stderr").replace("$FILE", at)
         if r.status == 2 or r.err != want
             return "standard error differs\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -539,7 +556,7 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}test")
-        r := ail_run(["test", "--json", at]) else return "could not start ail"
+        r := case_run(native, ["test", "--json", at]) else return "could not start ail"
         want := slurp("{exp}test")
         want_exit := if want.contains("\"status\":\"fail\"") then 1 else 0
         if r.status != want_exit or r.out != want
@@ -547,7 +564,7 @@ fn run_case(at str, exp str) str?
         return none
     if fs.exists("{exp}err")
         flags := slurp("{exp}args").words()
-        r := ail_run(cat(cat(["run"], flags), [at])) else return "could not start ail"
+        r := case_run(native, cat(cat(["run"], flags), [at])) else return "could not start ail"
         want := slurp("{exp}err").replace("$FILE", at)
         if r.status != 1 or r.err != want
             return "expected exit 1 and this report\n--- expected\n{want}--- actual (exit {r.status})\n{r.err}"
@@ -555,7 +572,7 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}trap")
-        r := ail_run(["run", at]) else return "could not start ail"
+        r := case_run(native, ["run", at]) else return "could not start ail"
         rule := slurp("{exp}trap").trim()
         if r.status != 1 or not r.err.contains("trap[{rule}]")
             return "expected trap[{rule}] (exit 1), got {r.status}\n{r.err}"
@@ -563,14 +580,14 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists(out_file)
-        r := ail_run(["run", at]) else return "could not start ail"
+        r := case_run(native, ["run", at]) else return "could not start ail"
         if r.status != 0
             return "exit {r.status}\n{r.err}"
         if r.out != want_out
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}rules")
-        r := ail_run(["check", "--json", at]) else return "could not start ail"
+        r := case_run(native, ["check", "--json", at]) else return "could not start ail"
         want_exit := if r.err.contains("\"severity\":\"error\"") then 2 else 0
         if r.status != want_exit
             return "expected exit {want_exit}, got {r.status}\n{r.err}"

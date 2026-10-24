@@ -1,2 +1,5 @@
+# Cases that use features only the native CLI has (ADR 0865). tools/gate/gate.ail runs these stems on ./ail,
+# not the Rust binary, against the same goldens. One stem per line.
 attach_observe_ok
 attach_observe_bad_type
+tool_replay_check

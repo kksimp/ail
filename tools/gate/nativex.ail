@@ -169,6 +169,17 @@ fn Run.batch(mut self)
         if b.status != 0 or hex_of_file(exe) != hex
             red("batch build", "{sample[k]}: the batch build differs from `ail build`")
 
+## The first line where `want` and `got` differ, so a gate log that shows only the head of a failure still names it.
+fn first_diff(want str, got str, want_status int, got_status int) str
+    w := want.lines()
+    g := got.lines()
+    for i in 0..w.len().max(g.len())
+        a := if i < w.len() then w[i] else "<end>"
+        b := if i < g.len() then g[i] else "<end>"
+        if a != b
+            return "line {i + 1}: golden `{a}`, native `{b}`; exit {want_status} vs {got_status}"
+    "same lines, exit {want_status} vs {got_status}"
+
 ## One program of tests/native/run against `ail run`: stdout, exit status, and the trap report.
 fn nx_match(
     case str,
@@ -202,7 +213,7 @@ fn nx_match(
         want_status := status.trim().to_int() else 1
         if want_out == got.out and want_status == got.status
             return none
-        return "{case}: differs from its golden\n--- golden (exit {want_status}):\n{want_out}\n--- native (exit {got.status}):\n{got.out}{got.err}"
+        return "{case}: differs from its golden: {first_diff(want_out, got.out, want_status, got.status)}\n--- golden (exit {want_status}):\n{want_out}\n--- native (exit {got.status}):\n{got.out}{got.err}"
     "{case}: no golden in tests/native/golden: run `ail run tools/gate/goldens.ail freeze {stem}`"
 
 ## ADR 0814: the chunk's programs built in one `build-many` run, so the compiler loads once.
