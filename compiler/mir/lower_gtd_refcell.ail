@@ -35,3 +35,9 @@ fn Lower.ref_enter(mut self, rcv Recv, key str) int
 fn Lower.ref_leave(mut self, rcv Recv, old int)
     if old >= 0
         call("rt.refcell_leave", [rcv.ref_obj, old], Ty.Unit)
+
+## The `ref` object noted for this call's receiver `recv`, or -1 when the note
+## is stale: left by a `ref` use that wasn't the receiver, maybe in another function.
+fn ref_of(obj int, recv Val?) int
+    r := recv else return -1
+    if r.id == obj then obj else -1

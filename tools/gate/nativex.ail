@@ -290,7 +290,11 @@ fn Run.executables(mut self, target str, runner str)
                 kept.push(c)
         cases = kept
     # golden/pending.txt: programs whose native output is known wrong; named, not checked.
-    pending := [l.trim() for l in (fs.read_text("bootstrap/tests/native/golden/pending.txt") else "").lines() if not l.trim().is_empty() and not l.starts_with("#")]
+    pending := [
+        l.trim()
+        for l in (fs.read_text("bootstrap/tests/native/golden/pending.txt") else "").lines() if not l.trim().is_empty()
+            and not l.starts_with("#")
+    ]
     if not pending.is_empty()
         mut live := List[str]()
         for c in cases
@@ -533,7 +537,10 @@ fn Run.limits(mut self, target str, runner str)
             elif got.out != want_out
                 red(label, "stdout differs")
             elif trap_message(got.err) != slurp("bootstrap/tests/native/limits/{name}.trap").trim()
-                red(label, "trap line differs:\n{trap_message(got.err)}\n{slurp("bootstrap/tests/native/limits/{name}.trap").trim()}")
+                red(
+                    label,
+                    "trap line differs:\n{trap_message(got.err)}\n{slurp("bootstrap/tests/native/limits/{name}.trap").trim()}",
+                )
     checks += 1
     bad := sh("AIL_TIMEOUT_MS=soon {runner} {tmp}/limit-spin-false")
     if bad.status != 2

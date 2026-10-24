@@ -288,7 +288,8 @@ fn Lower.self_value(mut self) int
 fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.Pos) Val?
     if ordered := label_ordered_method(key, args)
         return struct_call(key, recv, ordered, pos)
-    rcv := take_receiver()
+    mut rcv := take_receiver()
+    rcv.ref_obj = ref_of(rcv.ref_obj, recv)
     if not sigs.contains(key)
         instance_method(key)
     if bad.contains(key)

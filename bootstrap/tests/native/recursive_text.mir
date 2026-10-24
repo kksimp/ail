@@ -9,49 +9,10 @@ fn main() unit
     v4 int = const 0
     store v3, v4 +0
     store v3, v0 +8
-    v6 int = load v3 +0
-    v8 bool = eq v6, v4
-    branch v8, b2(), b3()
-  b1(v5 str):
+    v5 str = call text.Tree(v3)
     call rt.out_str(v5)
     call rt.out_nl()
     return
-  b2:
-    v9 str = str #0
-    v10 str = str #1
-    v11 str = call rt.str_cat(v9, v10)
-    v12 int = load v3 +8
-    v13 str = call rt.fmt_int(v12)
-    v14 str = call rt.str_cat(v11, v13)
-    v15 str = str #2
-    v16 str = call rt.str_cat(v14, v15)
-    jump b1(v16)
-  b3:
-    v17 str = str #3
-    v18 str = str #4
-    v19 str = call rt.str_cat(v17, v18)
-    v20 List[Tree] = load v3 +8
-    v21 int = len v20
-    v25 str = str #5
-    jump b4(v4, v25)
-  b4(v22 int, v23 str):
-    v26 bool = lt v22, v21
-    branch v26, b5(), b6()
-  b5:
-    v27 str = call rt.text_sep(v22)
-    v28 Tree = get v20, v22
-    v29 str = call text.Tree(v28)
-    v30 str = call rt.str_cat(v23, v27)
-    v31 str = call rt.str_cat(v30, v29)
-    v33 int = add v22, v0
-    jump b4(v33, v31)
-  b6:
-    v34 str = str #6
-    v35 str = call rt.str_cat(v23, v34)
-    v36 str = call rt.str_cat(v19, v35)
-    v37 str = str #2
-    v38 str = call rt.str_cat(v36, v37)
-    jump b1(v38)
 
 fn text.Tree(v0 Tree) str
   b0(v0 Tree):
