@@ -19,7 +19,7 @@ entry: main in main.ail
 
 ## doc (18 items)
 
-## edit (45 items)
+## edit (51 items)
 
 ## explain (37 items)
 

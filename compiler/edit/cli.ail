@@ -27,10 +27,6 @@ USAGE := [
 ## apply in order to the file or package at PATH, every changed file is
 ## formatted, the program is checked, and the answer is the diagnostics of
 ## the new state. A port of `command` in `bootstrap/src/edit.rs`.
-##
-## The check is still syntax only: the semantic checker's driver (loading a
-## package, the prelude) is not in AIL yet, so a note on standard error says
-## so and `--test` and `rename` are refused (RR-1, RR-4).
 pub fn command(args List[str], std str) int
     mut dry := false
     mut show_diff := false
@@ -85,7 +81,7 @@ pub fn command(args List[str], std str) int
                 io.eprint("error: the edits are a JSON list of objects (edit.in.1)")
                 return 2
     package := is_dir(path)
-    mut work := Work(root: path, package: package, paths: [], texts: [], err: "")
+    mut work := Work(root: path, package: package, paths: [], texts: [], err: "", std: std)
     for f in files_of(path)
         text := fs.read_text(f) else err
             io.eprint("error: can't read {f}: {err.kind}")
