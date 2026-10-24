@@ -527,6 +527,26 @@ fn serve_idle_scan(h int, out int)
 
 ## Wait up to `ms` for any of the `n` poll entries at `pf`.
 fn serve_poll(pf int, n int, ms int) int
+    if not det_on()
+        return serve_poll_raw(pf, n, ms)
+    # On a deterministic schedule the others run between polls (see `net_wait`).
+    mut left := ms
+    while true
+        r := serve_poll_raw(pf, n, 0)
+        if r != 0 or ms == 0
+            return r
+        if det_relax()
+            continue
+        if left == 0
+            return 0
+        r2 := serve_poll_raw(pf, n, 1)
+        if r2 != 0
+            return r2
+        if left > 0
+            left -= 1
+    0
+
+fn serve_poll_raw(pf int, n int, ms int) int
     ts := alloc_raw(16, KIND_BYTES)
     while true
         mut r := 0

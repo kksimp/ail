@@ -50,3 +50,6 @@ fn det_wake(a int)
 
 fn det_yield()
     return
+
+fn det_relax() bool
+    false

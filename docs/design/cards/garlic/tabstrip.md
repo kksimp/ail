@@ -16,7 +16,17 @@ pub struct tabstrip.Theme  ## The colors of the strip; a theme is one of these.
     pub menu int
     pub menu_text int
     pub menu_hot int
-pub fn tabstrip.dark() tabstrip.Theme
+    pub flat bool  ## Flat tabs share the strip evenly and are told apart by `sep` lines (as Safari does); otherwise pills.
+    pub sep int
+pub fn tabstrip.clove() tabstrip.Theme  ## Clove: dark, violet accent, pill tabs (the look Kaleb chose, 2026-10-24).
+pub fn tabstrip.safari() tabstrip.Theme  ## Safari-style dark: neutral grays, a blue accent, flat tabs.
+pub fn tabstrip.round(mut ops List[std.app.Op], x float, y float, w float, h float, r float, c int) [mutates]  ## A rectangle with round corners of radius `r`, one point-high band at a time.
+pub tabstrip.NAV_W := 112.0  ## The toolbar's buttons (back, forward, reload) as a canvas of `NAV_W` by `NAV_H`.
+pub tabstrip.NAV_H := 40.0
+pub fn tabstrip.nav(th tabstrip.Theme, can_back bool, can_forward bool) List[std.app.Op]
+pub fn tabstrip.nav_hit(x float) str  ## Which button a click at `x` on the toolbar canvas hit: `back`, `forward`, `reload` or "".
+pub tabstrip.STATUS_H := 26.0  ## The status line below the page, `width` wide and `STATUS_H` high.
+pub fn tabstrip.status(th tabstrip.Theme, line str, width float) List[std.app.Op]
 pub tabstrip.BAR_H := 36.0  ## The strip's height without a menu, a menu row's height and the menu's width.
 pub tabstrip.ROW_H := 26.0
 pub tabstrip.MENU_W := 210.0
@@ -30,11 +40,12 @@ pub struct tabstrip.Hit  ## What a click landed on: `kind` is `tab`, `close`, `p
     pub kind str
     pub k int
 fn tabstrip.miss() tabstrip.Hit
-pub fn tabstrip.tab_w(n int, width float) float  ## A tab's width when `n` tabs share a strip `width` wide.
-pub fn tabstrip.tab_x(k int, n int, width float) float
+pub fn tabstrip.tab_w(n int, width float, flat bool) float  ## A tab's width when `n` tabs share a strip `width` wide.
+pub fn tabstrip.flat_w(n int, width float) float  ## Flat tabs: the strip shared evenly, up to 360 points each.
+pub fn tabstrip.tab_x(k int, n int, width float, flat bool) float
 pub fn tabstrip.menu_rows(k int, n int, closed int) List[str]  ## The rows of the menu for tab `k` of `n`, `closed` being how many tabs
 pub fn tabstrip.height(menu_rows_n int) float  ## The height the canvas needs: the bar, plus the open menu below it.
-pub fn tabstrip.hit(x float, y float, n int, width float, menu_n int, menu_x float) tabstrip.Hit  ## What a click at (x, y) landed on. `menu_n` rows are open at `menu_x`.
+pub fn tabstrip.hit(x float, y float, n int, width float, flat bool, menu_n int, menu_x float) tabstrip.Hit  ## What a click at (x, y) landed on. `menu_n` rows are open at `menu_x`.
 fn tabstrip.text(x float, y float, s str, fg int, bold bool, size float) std.app.Op
 pub fn tabstrip.draw(th tabstrip.Theme, items List[tabstrip.Item], cur int, width float, menu List[str], menu_x float) List[std.app.Op]  ## The display list: the tabs (the shown one lifted, with an accent line), a
 ```
