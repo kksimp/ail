@@ -1011,7 +1011,8 @@ fn Gate.cli_effects(mut self, tmp str)
         "extern c fn abs(n int) int\n\nfn main()\n    unsafe\n        print(abs(-3))\n",
     ) else return
     b := ail_run(["build", main, "-o", "{dir}/main.out", "--no-cache"]) else return
-    if b.status != 1 or not b.err.contains("error[ffi.native.1]") or fs.exists("{dir}/main.out")
+    # ffi.native.1, ADR 0870: a C function outside the libc subset builds (it binds at the first call).
+    if b.status != 0 or not fs.exists("{dir}/main.out")
         red("build extern c fn", "exit {b.status}\n{b.err}")
     sh_run("rm -rf {dir}")
 

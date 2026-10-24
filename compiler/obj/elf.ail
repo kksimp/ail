@@ -16,6 +16,8 @@ pub X86_64 := 62
 pub AARCH64 := 183
 
 pub fn elf(img codegen.Image, machine int) List[int]
+    if img.imports.len() > 0
+        return elf_dynamic(img, machine)
     code_off := EHDR + 2 * PHDR
     data_off := align_up(code_off + img.code.len(), 16)
     size := data_off + img.data.len()
@@ -106,6 +108,9 @@ fn patch(mut out List[int], at int, v int, n int)
         out[at + i] = v.shr(8 * i).bit_and(255)
 
 fn header(mut out List[int], machine int, entry int)
+    header_n(mut out, machine, entry, 2)
+
+fn header_n(mut out List[int], machine int, entry int, nphdr int)
     out.extend([127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     put(mut out, 2, 2)
     put(mut out, machine, 2)
@@ -116,7 +121,7 @@ fn header(mut out List[int], machine int, entry int)
     put(mut out, 0, 4)
     put(mut out, EHDR, 2)
     put(mut out, PHDR, 2)
-    put(mut out, 2, 2)
+    put(mut out, nphdr, 2)
     put(mut out, 64, 2)
     put(mut out, 0, 2)
     put(mut out, 0, 2)
@@ -131,3 +136,126 @@ fn segment(mut out List[int], flags int, offset int, vaddr int, filesz int, mems
     put(mut out, filesz, 8)
     put(mut out, memsz, 8)
     put(mut out, PAGE, 8)
+
+## The dynamic linker of a dynamic executable, by machine.
+fn interpreter(machine int) str
+    if machine == AARCH64 then "/lib/ld-linux-aarch64.so.1" else "/lib64/ld-linux-x86-64.so.2"
+
+## A NUL-terminated string's bytes.
+fn cstr(s str) List[int]
+    mut b := codegen.utf8(s)
+    b.push(0)
+    b
+
+## A dynamic ELF executable (ffi.load.1, ADR 0870): the same two segments as
+## `elf`, plus an interpreter, a C library dependency and one weak function
+## symbol per import, bound by a `GLOB_DAT` relocation into the import's
+## pointer slot (the 8 bytes after the globals). The entry stays `rt_start`,
+## which does not go through libc's start-up: the loader has already
+## initialised libc. Only a program that calls an `extern c fn` outside the
+## runtime's libc subset has imports, so every other program stays static.
+fn elf_dynamic(img codegen.Image, machine int) List[int]
+    nphdr := 6
+    interp := cstr(interpreter(machine))
+    nsym := img.imports.len() + 1
+    # .dynstr: "", the C library, then each import.
+    mut dynstr := [0]
+    needed := dynstr.len()
+    soname := 6
+    dynstr.extend(cstr("libc.so.{soname}"))
+    mut name_at := List[int]()
+    for n in img.imports
+        name_at.push(dynstr.len())
+        dynstr.extend(cstr(n))
+    # .dynsym: the null symbol, then the imports (STB_WEAK, STT_FUNC, undefined).
+    mut dynsym := List[int]()
+    for _ in 0..24
+        dynsym.push(0)
+    for k in 0..img.imports.len()
+        put(mut dynsym, name_at[k], 4)
+        dynsym.push(34)
+        dynsym.push(0)
+        put(mut dynsym, 0, 2)
+        put(mut dynsym, 0, 8)
+        put(mut dynsym, 0, 8)
+    # DT_HASH: one bucket, empty chains (the program defines no symbols).
+    mut hash := List[int]()
+    put(mut hash, 1, 4)
+    put(mut hash, nsym, 4)
+    put(mut hash, 0, 4)
+    for _ in 0..nsym
+        put(mut hash, 0, 4)
+    # Offsets of the pieces, from the start of the file.
+    interp_off := EHDR + nphdr * PHDR
+    hash_off := align_up(interp_off + interp.len(), 8)
+    sym_off := align_up(hash_off + hash.len(), 8)
+    str_off := sym_off + dynsym.len()
+    rela_off := align_up(str_off + dynstr.len(), 8)
+    rela_len := 24 * img.imports.len()
+    dyn_off := rela_off + rela_len
+    dyn_len := 16 * 11
+    code_off := align_up(dyn_off + dyn_len, 16)
+    data_off := align_up(code_off + img.code.len(), 16)
+    size := data_off + img.data.len()
+    bss := align_up(BASE + size, PAGE)
+    code := link(img, BASE + code_off, BASE + data_off, bss)
+    glob_dat := if machine == AARCH64 then 1025 else 6
+    mut out := List[int]()
+    header_n(mut out, machine, BASE + code_off + img.entry, nphdr)
+    # PT_PHDR, PT_INTERP, the two loads, PT_DYNAMIC and PT_GNU_STACK.
+    phdr(mut out, 6, 4, EHDR, BASE + EHDR, nphdr * PHDR, nphdr * PHDR, 8)
+    phdr(mut out, 3, 4, interp_off, BASE + interp_off, interp.len(), interp.len(), 1)
+    segment(mut out, 5, 0, BASE, size, size)
+    segment(mut out, 6, 0, bss, 0, 8 * (img.globals + img.imports.len()))
+    phdr(mut out, 2, 4, dyn_off, BASE + dyn_off, dyn_len, dyn_len, 8)
+    phdr(mut out, 1685382481, 6, 0, 0, 0, 0, 16)
+    while out.len() < interp_off
+        out.push(0)
+    out.extend(interp)
+    while out.len() < hash_off
+        out.push(0)
+    out.extend(hash)
+    while out.len() < sym_off
+        out.push(0)
+    out.extend(dynsym)
+    out.extend(dynstr)
+    while out.len() < rela_off
+        out.push(0)
+    for k in 0..img.imports.len()
+        put(mut out, bss + 8 * (img.globals + k), 8)
+        put(mut out, (k + 1).shl(32) + glob_dat, 8)
+        put(mut out, 0, 8)
+    dynamic_entry(mut out, 1, needed)
+    dynamic_entry(mut out, 4, BASE + hash_off)
+    dynamic_entry(mut out, 5, BASE + str_off)
+    dynamic_entry(mut out, 6, BASE + sym_off)
+    dynamic_entry(mut out, 10, dynstr.len())
+    dynamic_entry(mut out, 11, 24)
+    dynamic_entry(mut out, 7, BASE + rela_off)
+    dynamic_entry(mut out, 8, rela_len)
+    dynamic_entry(mut out, 9, 24)
+    dynamic_entry(mut out, 24, 0)
+    dynamic_entry(mut out, 0, 0)
+    while out.len() < code_off
+        out.push(0)
+    out.extend(code)
+    while out.len() < data_off
+        out.push(0)
+    out.extend(img.data)
+    symbols(mut out, img, BASE + code_off, code_off)
+    out
+
+fn dynamic_entry(mut out List[int], tag int, value int)
+    put(mut out, tag, 8)
+    put(mut out, value, 8)
+
+## A non-load program header.
+fn phdr(mut out List[int], kind int, flags int, offset int, vaddr int, filesz int, memsz int, align int)
+    put(mut out, kind, 4)
+    put(mut out, flags, 4)
+    put(mut out, offset, 8)
+    put(mut out, vaddr, 8)
+    put(mut out, vaddr, 8)
+    put(mut out, filesz, 8)
+    put(mut out, memsz, 8)
+    put(mut out, align, 8)
