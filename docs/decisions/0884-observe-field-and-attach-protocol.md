@@ -32,7 +32,7 @@ ADR 0879 fixes what `@observe` and attach do, and gives the form `@observe cart_
 
 ## Rationale
 
-The designer approved the field form in ADR 0879, and it is also the cheapest in tokens. Computed values (a sum or count) are not covered; if they are needed, the accessor form (Option B) is the candidate, and that is the designer's call.
+The designer approved the field form in ADR 0879, and it is also the cheapest in tokens. Computed values (a sum or count) are not covered; the accessor form (Option B) is the candidate and is [OQ-140](../open-questions.md), the designer's call.
 
 ## Consequences
 
