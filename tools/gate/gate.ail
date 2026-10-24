@@ -698,7 +698,7 @@ fn Gate.cli_checks(mut self)
         prop_run(["--trace", "--trace-limit", "1"], tp),
         ["\"trace\":\"dropped\""],
     )
-    h := ail_run(["test", "--trace=calls", tp]) else return
+    h := native_run(["test", "--trace=calls", tp]) else return
     want("test --trace=calls human", h.out, ["  trace: call fails()"])
     # fix.note.1: a duplicate declaration points at the first.
     for pair in [
@@ -731,7 +731,7 @@ fn Gate.cli_checks(mut self)
         red("trace run", traced_run.err)
 
 fn prop_run(extra List[str], path str) str
-    r := ail_run(cat(cat(["test", "--json"], extra), [path])) else return ""
+    r := native_run(cat(cat(["test", "--json"], extra), [path])) else return ""
     r.out
 
 ## `ail api` (ADR 0150) outlines every example and every accepted case,
@@ -1190,7 +1190,7 @@ fn Gate.snapshot(mut self, tmp str)
     f := "{d}/p.ail"
     fs.write_text(f, program) else return
     fs.write_text("{d}/p.out", "old\n") else return
-    r := ail_run(["test", "--update", f]) else return
+    r := native_run(["test", "--update", f]) else return
     want("snapshot update", r.out, [
         "-    assert_eq(greet(\"bo\"), \"hello\")\n",
         "+    assert_eq(greet(\"bo\"), \"hi, bo!\")\n",
@@ -1200,13 +1200,13 @@ fn Gate.snapshot(mut self, tmp str)
         red("snapshot update", "exit {r.status}\n{r.out}")
     if slurp(f) != updated or slurp("{d}/p.out") != "hi, x!\n"
         red("snapshot update", "files not rewritten:\n{slurp(f)}")
-    again := ail_run(["test", "--update", f]) else return
+    again := native_run(["test", "--update", f]) else return
     if not again.out.starts_with("updated 0 snapshots in 0 files\n")
         red("snapshot update again", again.out)
     # snap.update.6: `--dry-run` writes nothing; `--json` lists each change.
     sh_run("rm -rf {d}; mkdir -p {d}")
     fs.write_text(f, program) else return
-    j := ail_run(["test", "--update", "--dry-run", "--json", f]) else return
+    j := native_run(["test", "--update", "--dry-run", "--json", f]) else return
     if slurp(f) != program
         red("snapshot dry-run", "wrote the file")
     want("snapshot --json", j.out, [
@@ -1218,7 +1218,7 @@ fn Gate.snapshot(mut self, tmp str)
     sh_run("rm -rf {d}; mkdir -p {d}")
     src := "@test fn loops()\n    for i in 0..3\n        assert_eq(i * 2, 0)\n\n@test fn named()\n    want := 3\n    assert_eq(1 + 1, want)\n"
     fs.write_text(f, src) else return
-    c := ail_run(["test", "--update", f]) else return
+    c := native_run(["test", "--update", f]) else return
     if c.status != 1
         red("snapshot conflict", "exit {c.status}\n{c.out}")
     want("snapshot conflict", c.out, [
@@ -1520,11 +1520,11 @@ fn Gate.limits(mut self, tmp str)
             u = ail_run(args) else return
         if u.status != 2 or not u.err.contains("run.limit.4")
             red("limit usage {args}", "exit {u.status}\n{u.err}")
-    c := ail_run(["test", "--coverage=lines", "{case}/coverage_two_fns.ail"]) else return
+    c := native_run(["test", "--coverage=lines", "{case}/coverage_two_fns.ail"]) else return
     if c.status != 0
         red("coverage", "exit {c.status}\n{c.err}{c.out}")
     want("coverage", c.out, ["coverage ", ": lines 3/5 (60%), functions 1/2", "  not run: 11-12"])
-    cj := ail_run(["test", "--json", "--coverage", "{case}/coverage_two_fns.ail"]) else return
+    cj := native_run(["test", "--json", "--coverage", "{case}/coverage_two_fns.ail"]) else return
     line := cj.out.lines().last() else ""
     if not line.starts_with("\{\"coverage\":true,\"file\":")
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
