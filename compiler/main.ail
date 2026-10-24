@@ -264,7 +264,7 @@ fn compile_to(file str, out_arg str, target_arg str, ms str, mb str)
     target := if target_arg == "" then host_target() else target_arg
     out := if out_arg == "" then path.stem(file) else out_arg
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb))
+    exe := path.join(dir, "{cache_key(file, target, ms, mb)}{exe_ext(target)}")
     if cached_copy(exe, out, target)
         return
     fs.make_dir(dir) else err
@@ -913,6 +913,12 @@ fn sched_points() bool
 
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
+## Windows runs only files named `.exe`.
+fn exe_ext(target str) str
+    if target.ends_with("windows")
+        return ".exe"
+    ""
+
 fn cache_key(file str, target str, ms str, mb str) str
     dir := compiler_dir()
     root := path.dir(file)
@@ -945,7 +951,7 @@ fn cli_prepare(file str) str
 fn cli_prepare_with(file str, ms str, mb str) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb))
+    exe := path.join(dir, "{cache_key(file, target, ms, mb)}{exe_ext(target)}")
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err
