@@ -633,8 +633,11 @@ fn env_cwd() str
         else
             r = syscall(92, fd, 50, buf, 0, 0, 0)
             os_close(fd)
-            if r >= 0
+            # F_GETPATH still names a removed directory: check it exists.
+            if r >= 0 and os_access(buf) == 0
                 r = os_c_len(buf) + 1
+            else
+                r = -1
     else
         r = syscall(os_pick(79, 17, 0), buf, 4096, 0, 0, 0, 0)
     if r <= 0
