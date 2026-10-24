@@ -828,6 +828,8 @@ fn win_ps_round(ps int, ms int)
 # lives in another DLL the PE writer does not import from yet.
 
 P_WTMP := 20736
+# The task pool block's `P_LIVE` (task.ail), which this file may not name: it is linked without the tasks.
+WP_LIVE := 32
 P_TID := 3072
 P_NEWT := 3584
 
@@ -867,32 +869,8 @@ fn win_worker_index() int
     if p == 0
         return -1
     me := import_call("GetCurrentThreadId", 0, 0, 0, 0)
-    n := load64(p + P_LIVE)
+    n := load64(p + WP_LIVE)
     for i in 0..n
         if load64(p + P_TID + 8 * i) == me
             return i
     -1
-
-## Start worker `idx`. The new thread learns its index from `P_NEWT + 8`,
-## which it reads before it lets go of the word at `P_NEWT` (one start at a time).
-fn win_start_thread(p int, idx int)
-    while atomic_cas(p + P_NEWT, 0, 1) != 0
-        import_call("SwitchToThread", 0, 0, 0, 0)
-    store64(p + P_NEWT + 8, idx)
-    # STACK_SIZE_PARAM_IS_A_RESERVATION: STACK_SZ bytes of address space, committed as used.
-    h := import_call("CreateThread", 0, STACK_SZ, fn_addr("rt.win_thread_entry"), 0, 65536, 0)
-    if h == 0
-        fail(1, 0, 0)
-    import_call("CloseHandle", h, 0, 0, 0)
-
-## The start routine of a worker thread. Win64 hands it one argument in rcx,
-## which this ignores, so it does not matter that the compiled code reads its
-## arguments elsewhere; it never returns.
-fn win_thread_entry() int
-    p := load64(global(TASKS))
-    idx := load64(p + P_NEWT + 8)
-    store64(p + P_TID + 8 * idx, import_call("GetCurrentThreadId", 0, 0, 0, 0))
-    store64(p + P_TOP + 8 * idx, sp())
-    atomic_store(p + P_NEWT, 0)
-    worker_main(idx)
-    0
