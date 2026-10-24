@@ -386,7 +386,7 @@ with every program, provides `rt.init`, `rt.exit`, `rt.alloc`, `rt.trap`,
 loops that fill a list, ADR 0579); `print` writes its pieces straight into
 the buffer instead of building a string. List indexing and `len` are inline.
 The runtime is written over the primitives of `compiler/rt/native/prim.ail`
-(`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
+(`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `loadf32`, `storef32` (one packed single, widened and narrowed exactly; ADR 0875), `syscall`,
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
 `f32_round`, `target`), which the code generator expands inline and only runtime code may
 call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.

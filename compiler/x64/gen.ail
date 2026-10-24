@@ -1212,6 +1212,18 @@ fn Gen.prim(mut self, i mir.Inst)
         "storef" =>
             v := xmm(i.args[i.args.len() - 1], X0)
             a.vmovsd_mr(address(i), v)
+        "loadf32" =>
+            # One packed single (ADR 0875), widened exactly.
+            mem := address(i)
+            d := out_xmm(i.dst, X0)
+            a.vmovss_rm(d, mem)
+            a.vcvtss2sd(d, d, d)
+            put_xmm(i.dst, d)
+        "storef32" =>
+            # The `float` (a rounded `f32` value, or rounded here) as a single.
+            v := xmm(i.args[i.args.len() - 1], X0)
+            a.vcvtsd2ss(X1, v, v)
+            a.vmovss_mr(address(i), X1)
         "pload8" | "pload16" | "pload32" | "pload64" =>
             # A raw pointer's read (ADR 0835): the width in the name, the
             # result zero-extended. Never moved, merged or dropped.
