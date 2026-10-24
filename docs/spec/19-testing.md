@@ -297,6 +297,14 @@ fn main()
     print(1)
 ```
 
+**test.cover.4** — The native `ail test --coverage` builds the tests with
+`AIL_INSTRUMENT=lines`: each statement of the program's own files starts with
+a hit of its site (compiler/mir/lower_instr.ail, `rt/native/instr.ail`), the
+build writes the site table to `$AIL_INSTRUMENT_SITES`, and a run appends the
+ids hit to `$AIL_INSTRUMENT_OUT`, else `EXE.hits`, when it exits or traps. A
+build without the variable has no site and no table. `main` of the file is
+not counted (the test build replaces it). *(ADR 0868)*
+
 ## Checked examples for the attribute and property rules
 
 Each block runs `ail test` or checks the program, with the options on its fence (test.attr.1-4, test.prop.1, 3-5).

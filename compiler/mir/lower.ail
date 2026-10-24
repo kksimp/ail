@@ -165,6 +165,8 @@ struct Lower
     ## The failure blocks of the `else` parts being lowered, innermost last:
     ## a `?` on an optional inside an `else` value goes there (err.prop.4).
     else_targets List[int]
+    ## Instrumentation sites, when asked for (lower_instr.ail).
+    instr Instr
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -300,6 +302,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         gen: new_gen(),
         lazy: new_lazy(lazy),
         else_targets: [],
+        instr: new_instr(),
     )
     l.note_lazy_names(srcs)
     for src in srcs
@@ -350,6 +353,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     l.gen_unchecked()
     l.enter_file(0)
     l.gen_dispatch()
+    l.instr_finish()
     l.gen_drops()
     l.gen_copies()
     l.gen_enum_eqs()
@@ -1002,6 +1006,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
         s := body[i]
         if done()
             dead_block()
+        instr_stmt(s)
         if (want or top_unit_fails) and i == body.len() - 1
             if e := final_expr(s)
                 if tail_error(e)

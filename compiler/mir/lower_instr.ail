@@ -1,0 +1,66 @@
+## Native instrumentation (ADR 0868 item 4, test.cover.1): with
+## `AIL_INSTRUMENT=lines` in the environment, each statement of the
+## program's own files starts with a call of `rt.instr_hit(ID)`
+## (rt/native/instr.ail). The site table goes to the file
+## `$AIL_INSTRUMENT_SITES`, one `ID<TAB>PATH<TAB>LINE<TAB>FN<TAB>FIRST` line
+## per site (FIRST is 1 for a function's first statement). Without the
+## variable nothing is emitted: no call, no table.
+use ast
+
+pub struct Instr
+    on bool
+    ids Map[str, int]
+    sites List[str]
+    started Set[str]
+
+fn new_instr() Instr
+    modes := env.get("AIL_INSTRUMENT") else ""
+    Instr(
+        on: modes.split(",").contains("lines"),
+        ids: {},
+        sites: [],
+        started: Set[str](),
+    )
+
+## A file the program owns: not the prelude, a generated file or the std.
+fn instr_owned(p str) bool
+    not p.starts_with("<") and not p.starts_with("gen:") and not p.contains("bootstrap/src/std/")
+
+## The start of statement `s` is a site.
+fn Lower.instr_stmt(mut self, s ast.Stmt)
+    if not instr.on or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    line := instr_line(s)
+    key := "{path}:{line}"
+    id := instr.ids.get(key) else instr.sites.len()
+    first := not instr.started.contains(fname)
+    if id == instr.sites.len()
+        instr.ids[key] = id
+        instr.sites.push("{id}\t{path}\t{line}\t{fname}\t{if first then 1 else 0}")
+    elif first
+        instr.sites.push("{id}\t{path}\t{line}\t{fname}\t1")
+    instr.started.add(fname)
+    call("rt.instr_hit", [konst(id, Ty.Int)], Ty.Unit)
+
+## Write the site table.
+fn Lower.instr_finish(mut self)
+    out := env.get("AIL_INSTRUMENT_SITES") else ""
+    if instr.on and out != ""
+        fs.write_text(out, "{instr.sites.join("\n")}\n") else err
+            problem(ast.Pos(line: 1, col: 1), "can't write {out}")
+
+fn instr_line(s ast.Stmt) int
+    match s
+        Let(_, pos, _, _, _) => pos.line
+        Assign(_, _, _, pos) => pos.line
+        While(_, _, pos) => pos.line
+        For(_, _, _, _, _, _, pos) => pos.line
+        Break(pos) => pos.line
+        Continue(pos) => pos.line
+        Return(_, pos) => pos.line
+        Eval(value) => expr_pos(value).line
+        Handle(value, _) => expr_pos(value).line
+        Defer(_, pos) => pos.line
+        With(_, _, _, _, pos) => pos.line
+        Unsafe(_, pos) => pos.line
+        LetTuple(_, _, pos) => pos.line

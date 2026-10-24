@@ -1233,11 +1233,111 @@ fn report(vs List[Verdict], json bool, src List[str]) int
         print("{passed} passed, {failed} failed{more}")
     if failed > 0 then 1 else 0
 
+## ---- Coverage (test.cover.1-3) ----
+
+struct FileCover
+    file str
+    lines Set[int]
+    hit_lines Set[int]
+    fns Set[str]
+    hit_fns Set[str]
+
+## The ids in the hits file, as a set (the runtime appends one id per line per run).
+fn hit_ids(path str) Set[int]
+    mut ids := Set[int]()
+    text := fs.read_text(path) else return ids
+    for l in text.lines()
+        n := l.to_int() else continue
+        ids.add(n)
+    ids
+
+## Per-file coverage from the site table the build wrote and the ids the runs hit. `copy` is the
+## rewritten source (its first `lead` lines were added, and only its first `orig_len` lines are the
+## file's own), `scratch` the copied package directory when there is one, and `skip` the names of
+## the functions that are not the program's own (the tests, their wrappers).
+fn collect_cover(
+    sites str,
+    hits str,
+    file str,
+    copy str,
+    lead int,
+    orig_len int,
+    scratch str,
+    dir str,
+    skip Set[str],
+) List[FileCover]
+    ids := hit_ids(hits)
+    mut files := List[FileCover]()
+    mut at := Map[str, int]()
+    text := fs.read_text(sites) else return files
+    for l in text.lines()
+        c := l.split("\t")
+        if c.len() < 5
+            continue
+        id := c[0].to_int() else continue
+        mut line := c[2].to_int() else continue
+        name := c[3]
+        if skip.contains(name) or name == "main" or name.starts_with("ail_run_")
+            continue
+        mut shown := c[1]
+        if c[1] == copy
+            line -= lead
+            if line < 1 or line > orig_len
+                continue
+            shown = file
+        elif not scratch.is_empty() and c[1].starts_with("{scratch}/")
+            shown = "{dir}/{c[1].slice(scratch.len() + 1, c[1].len())}"
+        if not at.contains(shown)
+            at[shown] = files.len()
+            files.push(FileCover(
+                file: shown,
+                lines: Set[int](),
+                hit_lines: Set[int](),
+                fns: Set[str](),
+                hit_fns: Set[str](),
+            ))
+        k := at[shown]
+        files[k].lines.add(line)
+        if c[4] == "1"
+            files[k].fns.add(name)
+        if ids.contains(id)
+            files[k].hit_lines.add(line)
+            if c[4] == "1"
+                files[k].hit_fns.add(name)
+    files
+
+## The unexecuted lines as inclusive ranges, in file order.
+fn missed_ranges(c FileCover) List[Span]
+    mut out := List[Span]()
+    for line in c.lines.sorted()
+        if c.hit_lines.contains(line)
+            continue
+        if out.len() > 0 and out[out.len() - 1].last + 1 == line
+            out[out.len() - 1].last = line
+        else
+            out.push(Span(first: line, last: line))
+    out
+
+## One file's coverage line, or JSON line (test.cover.2-3).
+fn print_cover(c FileCover, json bool, detail bool)
+    total := c.lines.len()
+    hit := c.hit_lines.len()
+    ranges := missed_ranges(c)
+    if json
+        parts := ["[{r.first},{r.last}]" for r in ranges]
+        print("\{\"coverage\":true,\"file\":{json_str(c.file)},\"lines\":{total},\"lines_hit\":{hit},\"functions\":{c.fns.len()},\"functions_hit\":{c.hit_fns.len()},\"missed\":[{parts.join(",")}]}")
+        return
+    pct := if total == 0 then 100 else hit * 100 / total
+    print("coverage {c.file}: lines {hit}/{total} ({pct}%), functions {c.hit_fns.len()}/{c.fns.len()}")
+    if detail and ranges.len() > 0
+        shown := [if r.first == r.last then "{r.first}" else "{r.first}-{r.last}" for r in ranges]
+        print("  not run: {shown.join(", ")}")
+
 fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--cases N] [--seed S] [--coverage[=lines]] FILE")
     io.exit(2)
     2
 
@@ -1248,8 +1348,11 @@ fn main() !
     mut has_seed := false
     mut seed_given := 0
     mut want := ""
+    mut cover := ""
     for a in env.args()
-        if want == "--cases"
+        if a == "--coverage" or a == "--coverage=lines"
+            cover = a
+        elif want == "--cases"
             cases = a.to_int() else usage()
             want = ""
         elif want == "--seed"
@@ -1305,7 +1408,10 @@ fn main() !
     if not mf.tests.is_empty()
         # The directory is copied so the modules' tests can be made `pub` without touching the tree.
         # Beside the directory, so its package's relative `dep ... path ../x` lines still find their modules.
-        made := proc.run("mktemp", ["-d", "{if dir.is_empty() then "." else dir}/../.ail-test-XXXXXX"])? "running mktemp"
+        made := proc.run("mktemp", [
+            "-d",
+            "{if dir.is_empty() then "." else dir}/../.ail-test-XXXXXX",
+        ])? "running mktemp"
         scratch = made.out.trim()
         _ := proc.run("cp", [
             "-R",
@@ -1330,7 +1436,20 @@ fn main() !
             write_modules(scratch, mf, mdropped)? "writing the modules"
         last_lead = rw.lead
         fs.write_text(copy, rw.text)? "writing {copy}"
-        b := proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
+        b := if cover.is_empty()
+            proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
+        else
+            # test.cover.1: the build counts the statements run (rt/native/instr.ail).
+            proc.run("env", [
+                "AIL_INSTRUMENT=lines",
+                "AIL_INSTRUMENT_SITES={exe}.sites",
+                ail_path(),
+                "build",
+                "--no-cache",
+                copy,
+                "-o",
+                exe,
+            ])? "running ail build"
         if b.status == 0
             built = true
             break
@@ -1377,6 +1496,8 @@ fn main() !
         if not progressed
             blocked = if outside.is_empty() then "the build failed" else outside
             break
+    if not cover.is_empty()
+        _ := proc.run("rm", ["-f", "{exe}.hits"]) else io.exit(2)
     for i in 0..found.tests.len()
         t := found.tests[i]
         if dropped.contains(i)
@@ -1435,8 +1556,26 @@ fn main() !
             v := run_one(exe, slot, 0)
             verdicts.push(plain(name, v.status, v.message))
     code := report(verdicts, json, text.lines())
+    if not cover.is_empty() and built
+        mut skip := Set[str]()
+        for t in found.tests
+            skip.add(t.name)
+        for mt in mf.tests
+            skip.add(mt.t.name)
+        for c in collect_cover(
+            "{exe}.sites",
+            "{exe}.hits",
+            file,
+            copy,
+            last_lead,
+            lines.len(),
+            scratch,
+            dir,
+            skip,
+        )
+            print_cover(c, json, cover == "--coverage=lines")
     if scratch.is_empty()
-        _ := proc.run("rm", ["-f", copy, exe]) else io.exit(code)
+        _ := proc.run("rm", ["-f", copy, exe, "{exe}.sites", "{exe}.hits"]) else io.exit(code)
     else
         _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)
     io.exit(code)

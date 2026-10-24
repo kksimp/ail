@@ -1,0 +1,73 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Native instrumentation (ADR 0868 item 4, test.cover.1). A program built
+## with `AIL_INSTRUMENT=lines` calls `instr_hit(ID)` at the start of each
+## statement; `ID` numbers the sites in the table the compiler writes
+## (lower_instr.ail). The hits are one byte each in a table that global slot
+## 56 points to, made at the first hit: the word at its start is one past the
+## highest id hit, the bytes follow. `sys_exit` calls `instr_dump`, which
+## appends the ids hit, one per line, to `$AIL_INSTRUMENT_OUT`, else `EXE.hits`. A
+## program built without the flag never calls `instr_hit`, so the table is
+## never made and `instr_dump` returns at once.
+
+INSTR_TAB := 56
+
+## The most sites a program can have; later ids are not recorded.
+INSTR_CAP := 4194304
+
+fn instr_hit(id int)
+    mut t := load64(global(INSTR_TAB))
+    if t == 0
+        t = sys_mmap(INSTR_CAP + 8)
+        if t < 0
+            return
+        store64(global(INSTR_TAB), t)
+    if id < INSTR_CAP
+        store8(t + 8 + id, 1)
+        if id >= load64(t)
+            store64(t, id + 1)
+
+## Append the ids hit to `$AIL_INSTRUMENT_OUT`, else to `EXE.hits` beside the
+## program (its `argv[0]`), so that several runs add up.
+fn instr_dump()
+    t := load64(global(INSTR_TAB))
+    if t <= 0 or target() == 3
+        return
+    store64(global(INSTR_TAB), 0)
+    buf := sys_mmap(65536 + 8192)
+    if buf < 0
+        return
+    named := os_env_get("AIL_INSTRUMENT_OUT")
+    mut p := 0
+    if named == ""
+        a0 := load64(load64(global(ARGV)))
+        n := os_c_len(a0)
+        if n > 4000
+            return
+        for i in 0..n
+            store8(buf + 65536 + i, load8(a0 + i))
+        suffix := ".hits"
+        q := str_addr(suffix) + 16
+        for i in 0..5
+            store8(buf + 65536 + n + i, load8(q + i))
+        store8(buf + 65536 + n + 5, 0)
+        p = buf + 65536
+    else
+        p = os_cstr(OS_PATH_A, named)
+    if p == 0
+        return
+    fd := os_open(p, os_open_flags(2), 438)
+    if fd < 0
+        return
+    mut n := 0
+    for id in 0..load64(t)
+        if load8(t + 8 + id) != 0
+            n += write_int(buf + n, id)
+            store8(buf + n, 10)
+            n += 1
+            if n > 65000
+                os_write_all(fd, buf, n)
+                n = 0
+    os_write_all(fd, buf, n)
+    os_close(fd)
