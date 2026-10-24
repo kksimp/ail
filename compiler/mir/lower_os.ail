@@ -230,6 +230,7 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
             vs.push(convert(v, f.params[i], expr_pos(a.value)))
     for i in args.len()..f.params.len()
         vs.push(konst(0, f.params[i]))
+    trace_effect(f.rt, f.params, vs, pos)
     if f.fails
         vs.push(trace_line(pos))
     if f.rt == "rt.io_exit" or f.rt == "rt.time_sleep_ms"
