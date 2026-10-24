@@ -112,6 +112,11 @@ latter:
 - qualified variant patterns from every member type (`ParseError.Empty =>`),
   plus a pattern for a whole error type;
 - `match` with success and error arms.
+**Measured 2026-10-24** (the corpus, `examples/`, `tools/` and `compiler/`, about
+148,000 lines): no `match` on a specific error variant follows an `else err`
+(errors are tested by field, e.g. `err.kind == "timed_out"`), and about eight
+places reach a field through an optional that `a?.b` would shorten. Both stay
+open until a program needs them; the ADR 0029 measurement is then rerun.
 
 ## OQ-030 — What is an error type?
 **Partly resolved:** error types are declared with `error`
@@ -271,12 +276,7 @@ every current need is an impl); (b) a module-level `@generate(f)` whose items
 appear in `ail api --expanded` like derives. *Owner: AI under ADR 0076.*
 
 ## OQ-094 — Downcasting `any Trait`
-`refl.run.1` gives no way to recover the concrete type of an `any Trait`
-value. Options: (a) none (recommended for now: an enum is the checked way to
-hold one of several known types, and `match` is exhaustive); (b) a checked
-`x as T?` returning `none` on a mismatch (needs a type tag per value, which
-`any Trait` already has as its method table); (c) a trait method the author
-writes. *Owner: designer (it changes what `any Trait` promises).*
+**Resolved** by the designer on 2026-10-24: no downcast; enums are the checked way (ADR text in [pending-no-downcast-of-any-trait.md](decisions/pending-no-downcast-of-any-trait.md) until it is numbered).
 
 ## OQ-095 — Compile-time evaluation limits
 `ct.eval.3` sets 100,000,000 steps and 1 GiB per constant or derive.

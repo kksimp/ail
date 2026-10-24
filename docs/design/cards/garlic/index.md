@@ -14,4 +14,5 @@ page  43 items
 std.app  46 items
 std.net.jar  14 items
 svg  19 items
+tabstrip  21 items
 ws  18 items
