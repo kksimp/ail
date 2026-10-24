@@ -159,6 +159,45 @@ fn Lower.trap_close(mut self, pos ast.Pos)
     call("rt.trap_end", [str_value("{excerpt(line, pos.line, pos.col)}{trap_frame(pos)}")], Ty.Unit)
     finish(unreachable_term())
 
+## `trap_close` for `--values` (trace.frame.3): after the excerpt, `  values: a = 1, b = 2`, the
+## arguments the condition `text` names, in name order.
+fn Lower.trap_close_values(mut self, pos ast.Pos, text str, args List[NameKey])
+    src := src_lines[file]
+    line := if pos.line >= 1 and pos.line <= src.len() then src[pos.line - 1] else ""
+    mut named := List[NameKey]()
+    for a in args
+        if word_in(text, a.name)
+            mut at := named.len()
+            while at > 0 and named[at - 1].name > a.name
+                at -= 1
+            named.insert(at, a)
+    call("rt.out_byte", [konst(10, Ty.Int)], Ty.Unit)
+    call("rt.out_str", [str_value(excerpt(line, pos.line, pos.col))], Ty.Unit)
+    mut extra := 0
+    if named.len() > 0
+        say("  values: ")
+        for k in 0..named.len()
+            if k > 0
+                say(", ")
+            say("{named[k].name} = ")
+            describe(Val(id: read_var(named[k].key, cur), ty: var_ty[named[k].key]), pos)
+        say("\n")
+        extra = 1
+    call("rt.trap_rest", [str_value(trap_frame(pos)), konst(extra, Ty.Int)], Ty.Unit)
+    finish(unreachable_term())
+
+## Whether `w` is a whole word of `text`.
+fn word_in(text str, w str) bool
+    mut cur := ""
+    for c in "{text} ".chars()
+        if c == '_' or c.is_alnum()
+            cur = "{cur}{c}"
+        else
+            if cur == w
+                return true
+            cur = ""
+    false
+
 ## Branch on `cond`: the current block continues when it holds; the
 ## returned block is the failure, which the caller fills and ends.
 fn Lower.check_branch(mut self, cond int) int
@@ -208,6 +247,9 @@ fn Lower.req_trap(
         say(", and neither do its own `requires` lines")
     where := if callee_file != caller_file then "{src_paths[callee_file]}:" else ""
     say(" (contract at {where}{c.pos.line}:{c.pos.col})")
+    if instr.vals
+        trap_close_values(pos, c.text, args)
+        return
     trap_close(pos)
 
 ## contract.req.1: before a call of `key` with the arguments `args_v`, each

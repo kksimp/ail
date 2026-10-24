@@ -257,6 +257,8 @@ fn kind_noun(q Ask) str
 ## `ail ask PROGRAM QUESTION...`; the exit status: 0 answered, 1 nothing
 ## found, 2 an error (api.ask.6).
 pub fn ask_command(args List[str], std str) int
+    if args.contains("--affected")
+        return affected_command(args, std)
     mut json := false
     mut rest := List[str]()
     for a in args
@@ -354,3 +356,65 @@ pub fn ask_command(args List[str], std str) int
     else
         print(out.join("\n"))
     if total == 0 then 1 else 0
+
+## Load and check `path`; the errors shown and `none` when it has any (api.ask.6).
+fn checked(path str, std str)(load.Loaded, check.Analysis)?
+    loaded := load.load(path, std) else err
+        io.eprint("error: {err.message}")
+        return none
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            io.eprint("error: {path} has errors, so it can't be compared; fix them first (api.impact.3)")
+            return none
+    (loaded, analysis)
+
+## `ail ask PROGRAM --affected [--rev REV] [--json]` (api.impact.3): the tests
+## the program's changes since git revision REV (default `HEAD`) can affect,
+## one name per line, with `--json` the whole impact. `ail test --affected`
+## runs these. Exit status 0 on success, 2 for an error.
+fn affected_command(args List[str], std str) int
+    mut json := false
+    mut rev := "HEAD"
+    mut paths := List[str]()
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        i += 1
+        match a
+            "--affected" => continue
+            "--json" => json = true
+            "--rev" =>
+                if i >= args.len()
+                    io.eprint("error: `--rev` needs a git revision (api.impact.3)")
+                    return 2
+                rev = args[i]
+                i += 1
+            _ =>
+                if a.starts_with("--")
+                    io.eprint("error: unknown option `{a}`\n{ASK_USAGE}")
+                    return 2
+                paths.push(a)
+    if paths.len() != 1
+        io.eprint("usage: ail ask PROGRAM --affected [--rev REV] [--json]")
+        return 2
+    path := paths[0]
+    got := at_revision(rev, path) else err
+        io.eprint("error: {err.message} (api.impact.3)")
+        return 2
+    mut code := 2
+    if old := checked(got.0, std)
+        if new := checked(path, std)
+            result := impact_between(old.0, old.1, new.0, new.1)
+            if json
+                print(impact_json(result))
+            else
+                for t in result.tests
+                    print(t)
+            code = 0
+    _ := proc.run("rm", ["-rf", got.1]) else return code
+    code

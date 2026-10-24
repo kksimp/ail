@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """`ail fix` in AIL (compiler fixrun) against the Rust `ail fix` on copies of the given files.
 
-  AIL_RUST=bootstrap/target/release/ail AIL_COMPILER=./compiler-native tools/fix/run-parity.py FILE...
+  AIL_RUST=PATH_TO_RUST_BINARY AIL_COMPILER=./compiler-native tools/fix/run-parity.py FILE...
 """
 import subprocess, sys, shutil, os, tempfile
-R=os.environ.get("AIL_RUST", "bootstrap/target/release/ail"); A=os.environ.get("AIL_COMPILER", "compiler-native")
+R=os.environ["AIL_RUST"]; A=os.environ.get("AIL_COMPILER", "compiler-native")
 bad=n=0
 files=sys.argv[1:]
 for f in files:

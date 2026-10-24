@@ -65,13 +65,6 @@ fn tdata_w(t int) int
     vec_widen(w, d, n)
     w
 
-## Copy `n` bytes from `src` to `dst`.
-fn copy_bytes(dst int, src int, n int)
-    for i in 0..n / 8
-        store64(dst + 8 * i, load64(src + 8 * i))
-    for i in n / 8 * 8..n
-        store8(dst + i, load8(src + i))
-
 ## `[a, b, c]` of the words at `p`, as `Debug` prints a list of sizes.
 fn put_sizes(p int, n int)
     sb_byte(91)

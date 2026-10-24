@@ -12,7 +12,7 @@ fn main() !
         if not name.ends_with(".ail")
             continue
         r := proc.run(
-            "{here}/../bootstrap/target/release/ail",
+            env.get("AIL") else "{here}/../ail",
             ["check", "--json", "{data}/{name}"],
         )? "checking {name}"
         mut errors := 0
