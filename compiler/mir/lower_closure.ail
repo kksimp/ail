@@ -207,6 +207,33 @@ fn Lower.call_member_value(mut self, callee ast.Expr, args List[ast.Arg], pos as
         return unsupported(pos, "this call")
     call_value(f, args, expr_pos(callee))
 
+## The rule a message names at its start, `std.regex.2: ...`: dotted lowercase words ending in a number.
+fn message_rule(head str) str
+    i := head.find(": ") else return ""
+    id := head.slice(0, i)
+    parts := id.split(".")
+    if parts.len() < 3 or (parts[parts.len() - 1].to_int() else -1) < 0
+        return ""
+    for c in id.chars()
+        if not (c.is_digit() or c == '.' or c == '_' or (c.is_alpha() and c.code() < 128 and c == c.to_lower()))
+            return ""
+    id
+
+## The rule of `unreachable(message)`: the one the message's literal start names (std traps are
+## written `unreachable("std.regex.2: ...")`), else err.model.2.
+fn unreachable_rule(e ast.Expr) str
+    mut lead := ""
+    match e
+        Str(t, _) => lead = t
+        Interp(parts, _) =>
+            if parts.len() > 0
+                match parts[0]
+                    Lit(t) => lead = t
+                    Hole | Fmt => lead = ""
+        Bytes | Int | Float | Char | Bool | NoneLit | Hole | Name | TypeArgs | Unary | If | Match | MapLit | SetLit | TupleLit | NewRef | Comp | Range | ListLit | Call | Method | Member | Index | Binary | Try | OrElse => lead = ""
+    r := message_rule(lead)
+    if r.is_empty() then "err.model.2" else r
+
 ## `unreachable(message)` (err.model.2): a trap that ends the block.
 fn Lower.lower_unreachable(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if args.len() != 1 or args[0].label != none
@@ -215,7 +242,7 @@ fn Lower.lower_unreachable(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if m.ty != Ty.Str
         return unsupported(expr_pos(args[0].value), "`unreachable` of a `{m.ty.name()}`")
     mut i := inst(-1, "utrap", [m.id])
-    i.site = site("err.model.2", "unreachable", "", pos)
+    i.site = site(unreachable_rule(args[0].value), "unreachable", "", pos)
     emit_void(i)
     finish(unreachable_term())
     Val(id: -1, ty: Ty.Unit)

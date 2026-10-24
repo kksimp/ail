@@ -21,8 +21,8 @@ impl app.App for Watcher
 
 fn main() !
     mut w := Watcher(got: [])
-    host := path.join(path.dir(env.program()), "../app/inbox_host.ail")
-    ail := env.get("AIL_BINARY") else "ail"
+    host := "tests/app/inbox_host.ail"
+    ail := env.get("AIL") else "ail"
     inbox := app.new_inbox()
     g := TaskGroup()
     g.add(spawn poster(inbox))
