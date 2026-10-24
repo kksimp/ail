@@ -516,6 +516,12 @@ class HostForm : Form
         Text = title;
         string s = tree.Shape();
         string wantFocus = focus;
+        // The first line to the program is `start`, ahead of any `resize` the layout causes.
+        if (!started)
+        {
+            started = true;
+            Outbox.Send("start");
+        }
         if (s != shape)
         {
             string keep = ActiveControl != null && ActiveControl.Tag is string ? (string)ActiveControl.Tag : "";
@@ -524,7 +530,7 @@ class HostForm : Form
             Controls.Clear();
             byId.Clear();
             leaves.Clear();
-            Control root = Build(tree);
+            Control root = Build(tree, true);
             root.Dock = DockStyle.Fill;
             Controls.Add(root);
             ResumeLayout(true);
@@ -539,11 +545,6 @@ class HostForm : Form
         {
             Control c;
             if (byId.TryGetValue(wantFocus, out c) && !c.Focused) c.Focus();
-        }
-        if (!started)
-        {
-            started = true;
-            Outbox.Send("start");
         }
     }
 
@@ -586,7 +587,7 @@ class HostForm : Form
         return false;
     }
 
-    Control Build(Node n)
+    Control Build(Node n, bool root = false, bool parentVertical = true)
     {
         switch (n.Kind)
         {
@@ -631,14 +632,16 @@ class HostForm : Form
             case "Spacer":
                 return new Panel { Margin = new Padding(0), Size = new Size(1, 1), Dock = DockStyle.Fill };
             default:
-                return BuildBox(n);
+                return BuildBox(n, root, parentVertical);
         }
     }
 
-    Control BuildBox(Node n)
+    Control BuildBox(Node n, bool root, bool parentVertical)
     {
         bool vertical = n.Kind == "Column";
-        var t = new TableLayoutPanel { Margin = new Padding(0), Padding = new Padding(0), AutoSize = true, Dock = DockStyle.Fill };
+        // The window's own box fills it; a nested box takes its content's size unless it grows.
+        bool auto = !root && !Grows(n, parentVertical);
+        var t = new TableLayoutPanel { Margin = new Padding(0), Padding = new Padding(0), AutoSize = auto, Dock = DockStyle.Fill };
         t.GrowStyle = TableLayoutPanelGrowStyle.FixedSize;
         int count = n.Kids.Count;
         if (vertical) { t.ColumnCount = 1; t.RowCount = count; t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); }
@@ -648,7 +651,7 @@ class HostForm : Form
         for (int i = 0; i < count; i++)
         {
             Node k = n.Kids[i];
-            Control c = Build(k);
+            Control c = Build(k, false, vertical);
             bool g = Grows(k, vertical);
             SizeType st = g ? SizeType.Percent : SizeType.AutoSize;
             float amount = g ? 100f / grow : 0;
