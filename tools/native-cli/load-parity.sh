@@ -32,6 +32,8 @@ for f in files:
         a, b = json.loads(got.split("\n", 1)[0]), json.loads(want.split("\n", 1)[0])
     except ValueError:
         bad += 1; print("BAD   ", f, "(no program)"); continue
+    # Fields only the native program carries, empty (`asks`, expr.hole.3), aren't differences.
+    a = {k: v for k, v in a.items() if k in b or v not in (None, [])}
     if a != b:
         bad += 1
         k = next((k for k in b if a.get(k) != b[k]), "?")
