@@ -2656,9 +2656,9 @@ fn native_run(args List[str]) proc.Output ! proc.ProcError
 
 fn Gate.sched(mut self)
     # conc.sched.3: a fixed order that repeats and matches the expected output.
-    order := "bootstrap/tests/sched/order.ail"
+    order := "tests/sched/order.ail"
     first := native_run(["run", "--deterministic", order]) else return
-    if first.status != 0 or first.out != slurp("bootstrap/tests/sched/order.out")
+    if first.status != 0 or first.out != slurp("tests/sched/order.out")
         red("--deterministic order", "exit {first.status}\n{first.out}{first.err}")
     for _ in 0..2
         again := native_run(["run", "--deterministic", order]) else return
@@ -2668,7 +2668,7 @@ fn Gate.sched(mut self)
     if fixed.out != first.out
         red("--schedule=fixed", fixed.out)
     # conc.sched.1: a seed replays, and different seeds find a lost update that seed 1 does not.
-    race := "bootstrap/tests/schedule/race.ail"
+    race := "tests/schedule/race.ail"
     fail_seed := "2"
     bad := native_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
     if bad.status != 1
@@ -2697,17 +2697,17 @@ fn Gate.sched(mut self)
         x := native_run([
             "test",
             "--schedule=random:{seed}",
-            "bootstrap/tests/schedule/cancel.ail",
+            "tests/schedule/cancel.ail",
         ]) else return
         if x.status != 0 or not x.out.ends_with("4 passed, 0 failed\n")
             red("schedule cancel seed {seed}", x.out)
     # conc.task.7: a deadlock still traps, from any task that finds it.
     for case in ["conc_deadlock", "conc_for_channel_deadlock"]
-        d := native_run(["run", "--deterministic", "bootstrap/tests/cases/{case}.ail"]) else return
+        d := native_run(["run", "--deterministic", "tests/cases/{case}.ail"]) else return
         if d.status != 1 or not d.err.contains("trap[conc.task.7]")
             red("deterministic {case}", "exit {d.status}\n{d.err}")
     # std.random.3, eff.det.3: --seed repeats; eff.det.1-2: --deterministic denies clock, proc, random.
-    unseeded := "bootstrap/tests/deterministic/unseeded.ail"
+    unseeded := "tests/deterministic/unseeded.ail"
     s11 := native_run(["run", "--seed", "11", unseeded]) else return
     s11b := native_run(["run", "--seed", "11", unseeded]) else return
     s12 := native_run(["run", "--seed", "12", unseeded]) else return
@@ -2715,8 +2715,8 @@ fn Gate.sched(mut self)
         red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
     for program in [
         unseeded,
-        "bootstrap/tests/deterministic/clock.ail",
-        "bootstrap/tests/deterministic/proc.ail",
+        "tests/deterministic/clock.ail",
+        "tests/deterministic/proc.ail",
     ]
         e := native_run(["run", "--deterministic", program]) else return
         if e.status != 2 or not e.err.contains("eff.cap.1")
