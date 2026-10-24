@@ -50,6 +50,8 @@ struct Parser
     aliases Set[str]
     ## The lines of `pub` markers (`Program.public`).
     public Set[int]
+    ## Where each `uhwhatnow?` is (`Program.asks`, expr.hole.3).
+    asks List[ast.Pos]
     generic_names Set[str]
     ## Parsing an `ensures` condition, and its `old(e)` calls (contract.ens.3).
     in_ensures bool
@@ -133,6 +135,7 @@ fn new_parser(tokens List[Token], generic List[str]) Parser
         in_interp: false,
         aliases: Set[str](),
         public: Set[int](),
+        asks: [],
         generic_names: Set[str](),
         in_ensures: false,
         olds: [],
@@ -172,6 +175,7 @@ pub fn parse_with(tokens List[Token], extra Set[str]) Parsed
         unsafe_allowed: none,
         driver_allowed: [],
         generated: [],
+        asks: p.asks,
     )
     Parsed(program: program, diags: p.diags)
 
@@ -2034,6 +2038,10 @@ fn Parser.primary(mut self) ast.Expr?
             if k == "todo"
                 i += 1
                 return ast.Expr.Hole(pos)
+            if k == "uhwhatnow?"
+                i += 1
+                asks.push(pos)
+                return ast.Expr.Hole(pos)
             if k == "self"
                 i += 1
                 return ast.Expr.Name(name: "self", pos: pos)
@@ -2196,6 +2204,7 @@ fn Parser.sub_expression(mut self, code List[Token]) ast.Expr?
         sub.unexpected("`}` after the interpolated expression", "lex.str.2")
     clean := sub.diags.len() == 0
     diags.extend(sub.diags)
+    asks.extend(sub.asks)
     if clean then e else none
 
 ## The none of any optional type, where nothing else names the type (a local

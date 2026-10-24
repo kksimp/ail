@@ -103,7 +103,7 @@ fn main() !
                 if args.len() > 2
                     print("== {path}")
                 for t in tests
-                    print("{t.name} {t.fn_name} fence={t.fence} expected=[{t.expected.join(", ")}]")
+                    print("{t.name} {t.fn_name} fence={t.fence} lines={[ "{n}" for n in doc.expected_lines(t) ].join(",")} expected=[{t.expected.join(", ")}]")
                 aug := doc.augment(text, tests)
                 print(aug.text)
                 print(aug.origin)

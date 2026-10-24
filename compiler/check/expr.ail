@@ -476,6 +476,8 @@ fn Checker.none_unknown(mut self, at ast.Pos) Ty
 ## `todo`, a typed hole (expr.hole.1): it takes the expected type, or an
 ## unknown one, and warns with what the gap needs.
 fn Checker.hole(mut self, at ast.Pos, expect Ty?) Ty
+    if is_ask(at)
+        return ask_hole(at, expect)
     mut names := List[str]()
     for l in locals
         if l.ty == Ty.Unknown
