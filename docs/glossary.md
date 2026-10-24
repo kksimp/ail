@@ -184,7 +184,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Property test** | A `@test` with parameters: `ail test` runs it on generated inputs from a replayable seed and shrinks a failure to the smallest failing input (ADR 0198–0199). |
 | **Pure function** | A function marked `@pure`: it has no `io`, `unsafe`, `spawn` or capability, though it may fail or take `mut` parameters (ADR 0164). |
 | **Qualified name** | An item named through its module, `geo.Point`; the bootstrap renames every imported item to its module path plus its name (ADR 0156). |
-| **Random schedule** | `--schedule=random:SEED` for `ail test` and `ail run`: the interpreter switches tasks at points picked from `SEED`, so a race shows up under some seeds and replays exactly under the same one (`conc.sched.1–2`, ADR 0322). |
+| **Random schedule** | `--schedule=random:SEED` for `ail test` and `ail run`: the scheduler (`compiler/rt/native/sched.ail`) switches tasks at points picked from `SEED`, so a race shows up under some seeds and replays exactly under the same one (`conc.sched.1–2`, ADR 0322). |
 | **Raw string** | `r"..."` or `r"""..."""`: a string literal with no escapes or interpolation (ADR 0135). |
 | **Receiver** | The value a method is called on, written `self` (read-only) or `mut self` (mutable) in the method's declaration (ADR 0072). |
 | **Recording (replay)** | A JSON-lines file of every effect result of one run (files, environment, input, processes, network, clock), written by `--record R`; `--replay R` answers the program's effects from it so the run repeats exactly (ADR 0398). |

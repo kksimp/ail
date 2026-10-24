@@ -40,3 +40,13 @@ fn task_check(at str)
 
 fn task_block_on(ch int)
     return
+
+## Deterministic scheduling needs tasks (sched.ail).
+fn det_on() bool
+    false
+
+fn det_wake(a int)
+    return
+
+fn det_yield()
+    return

@@ -2,4 +2,4 @@ use std.proc
 
 fn main()
     out := proc.run("echo", ["hi"]) else return
-    print(out.stdout)
+    print(out.out)

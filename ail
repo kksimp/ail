@@ -54,6 +54,27 @@ install_private_rust() {
     echo "ail: Rust $pin installed" >&2
 }
 
+# conc.sched.1: `--schedule=fixed|random[:SEED]` of `run` and `test` becomes AIL_SCHEDULE, which the build (switch points at
+# atomic operations) and the runtime (sched.ail) read; a random schedule without a seed picks one and prints it.
+case "${1:-}" in run | test)
+    sched_rest=()
+    for a in "$@"; do
+        case "$a" in
+            --schedule=*)
+                w="${a#--schedule=}"
+                case "$w" in
+                    fixed) export AIL_SCHEDULE=fixed ;;
+                    random) w="random:$(( $(date +%s) % 1000000 ))"; echo "schedule seed ${w#random:}: replay with --schedule=$w" >&2; export AIL_SCHEDULE="$w" ;;
+                    random:*[!0-9]* | random:) die "\`$a\` isn't a schedule; use \`--schedule=random\` or \`--schedule=random:SEED\` with a non-negative SEED (conc.sched.1)" ;;
+                    random:*) export AIL_SCHEDULE="$w" ;;
+                    *) die "\`$a\` isn't a schedule; use \`--schedule=random\` or \`--schedule=random:SEED\` with a non-negative SEED (conc.sched.1)" ;;
+                esac ;;
+            *) sched_rest+=("$a") ;;
+        esac
+    done
+    set -- "${sched_rest[@]}" ;;
+esac
+
 # Package options for the native loader (mod.pkg.7-8, compiler/pkg/git.ail): `run` and `test` write
 # `ail.lock`, `--deterministic` refuses a stale one, `--deny net` fetches nothing.
 case "${1:-}" in run | test) export AIL_PKG_WRITE_LOCK=1 ;; esac
@@ -124,6 +145,11 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 case "$v" in "" | *[!0-9]*) break ;; esac
                 budget_opts="$budget_opts --from $v"; k=$((k + 2)) ;;
             --json) budget_opts="$budget_opts --json"; k=$((k + 1)) ;;
+            --deterministic) export AIL_DETERMINISTIC=1; det_run=1; k=$((k + 1)) ;;
+            --seed)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]*) die "\`--seed\` needs an integer, e.g. \`--seed 42\` (std.random.3)" ;; esac
+                export AIL_SEED="$v"; k=$((k + 2)) ;;
             "" | -*) break ;;
             *) native_run=1; run_file="$a"; k=$((k + 1)); break ;;
         esac
@@ -192,6 +218,14 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ "$1" = check ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-program "$@"; fi
     AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program "$run_file" || exit $?
+    # eff.det.1: `--deterministic` denies the capabilities a run could differ by.
+    if [ "${det_run:-}" = 1 ]; then
+        det_effects="$(AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" effects --json "$run_file" 2>/dev/null || true)"
+        det_main="$(printf '%s' "$det_effects" | sed -n 's/.*"fn:main":\[\([^]]*\)\].*/\1/p')"
+        for det_cap in clock net proc random; do
+            case "$det_main" in *"\"$det_cap\""*) echo "error[eff.cap.1]: \`main\` reaches the \`$det_cap\` capability, which \`--deterministic\` denies (eff.det.1)" >&2; exit 2 ;; esac
+        done
+    fi
     prep_err="$(mktemp)"
     # shellcheck disable=SC2086
     if exe="$(AIL_COMPILER="$root/compiler" "$native" prepare $run_opts "$run_file" 2>"$prep_err")"; then

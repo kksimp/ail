@@ -368,6 +368,9 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     # without editing this list; `prim`, `core` and `math` come first.
     mut names := ["prim.ail", "core.ail", "math.ail"]
     for name in fs.list_dir(dir)?.sorted()
+        # The deterministic scheduler links with the task runtime (sched.ail).
+        if name == "sched.ail" and not tasks
+            continue
         if name.ends_with(".ail") and not names.contains(name) and name != skip
             names.push(name)
     for name in names
@@ -909,6 +912,12 @@ fn tree_stamp(tag str, root str) str
             lines.push("{tag} {f} {hash.sha256(text)}")
     lines.join("\n")
 
+## `--schedule=random` builds atomic operations with switch points (conc.sched.1); the build
+## cache tells those executables apart. Other builds pay nothing.
+fn sched_points() bool
+    s := env.get("AIL_SCHEDULE") else ""
+    s.starts_with("random")
+
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
 fn cache_key(file str, target str, ms str, mb str) str
@@ -916,7 +925,7 @@ fn cache_key(file str, target str, ms str, mb str) str
     root := path.dir(file)
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-2 {target} {ms} {mb} {file}",
+        "ail-native-cache-2 {target} {ms} {mb} {file} {sched_points()}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         tree_stamp("std", std),

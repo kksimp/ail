@@ -60,6 +60,17 @@ syntax, so tokens don't apply; there is no runtime cost without the flag
 - A seed's interleaving can change when the program changes; the seed
   replays the same program.
 
+## Native port (2026-10-24)
+
+`sched.ail` implements Option A natively with the same draws (spawn coin,
+yield coin, seeded pick of the next task). A seed replays the same program
+on every target, but not the interpreter's interleaving. Yield points are in
+the runtime calls (spawn, wait, cancel, channel send and receive, mutex
+methods, `task.check()`); atomic operations are inline, so a build made for
+`--schedule=random` (`AIL_SCHEDULE` set at compile time; part of the build
+cache key) calls `rt.det_yield` before each one. `ail test` reads the seed
+back from the environment for its report (`conc.sched.2`).
+
 ## Rejected alternatives
 
 - Record and replay: large, and real threads still differ between runs.
