@@ -289,9 +289,12 @@ fn main()
 ```
 
 **run.limit.3** — `--max-steps N` stops a run that has run more than `N`
-steps, with `trap[run.limit.3]`. A step is one statement run, or one turn of
-a `while` loop. Steps count the same on every machine, so a limit found once
-reproduces the same trap. `ail test` counts per test. *(ADR 0288)*
+steps, with `trap[run.limit.3]` at the statement that passed it. A step is one
+statement of the program's own files run; a `while` turn adds none of its own,
+and the std's statements are not counted. The program is built with the
+counter in it only when the flag is given (ADR 0883). Steps count the same on
+every machine, so a limit found once reproduces the same trap. `ail test`
+counts per test. *(ADR 0288, ADR 0883)*
 
 ```ail tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
 fn main()
@@ -382,7 +385,7 @@ The memory limit is checked when the heap takes a new chunk and counts the
 heap bytes in use. The time limit is checked every 256 allocations and when
 the heap takes a chunk. A `while` loop also checks it, but only in an executable
 built with `--timeout` (ADR 0727); so without that, a loop that never allocates is not stopped. The
-limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
+limit is wall-clock time on a clock that doesn't go back. On macOS the clock is read with
 `gettimeofday`. *(ADR 0726, ADR 0727)*
 
 ```ail tool=build,--max-memory,16,FILE rules=run.limit.6

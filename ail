@@ -157,7 +157,11 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
                 v="${run_args[$((k + 1))]-}"
                 [ -n "$v" ] || die "\`$a\` needs a recording file, e.g. \`$a r.json\` (replay.rec.1)"
                 if [ "$a" = --record ]; then export AIL_RECORD="$v"; rec_run=1; else export AIL_REPLAY="$v"; rep_run=1; fi
-                export AIL_INSTRUMENT=record; k=$((k + 2)) ;;
+                export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}record"; k=$((k + 2)) ;;
+            --max-steps)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!0-9]* | 0) die "\`--max-steps\` needs a positive number of steps (run.limit.4)" ;; esac
+                export AIL_MAX_STEPS="$v" AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}steps"; k=$((k + 2)) ;;
             --deterministic) export AIL_DETERMINISTIC=1; det_run=1; k=$((k + 1)) ;;
             --seed)
                 v="${run_args[$((k + 1))]-}"

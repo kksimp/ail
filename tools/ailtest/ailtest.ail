@@ -1088,8 +1088,10 @@ fn started(exe str, arg str, envs List[str]) !proc.Output
 ## ---- Record and replay of tests (replay.rec.1, replay.run.1, replay.nat.1) ----
 
 ## The environment of one test's process: the trace limit, and the file its calls go to or come from.
-fn test_env(lim str, rec str, rep str, seed int) List[str]
+fn test_env(lim str, rec str, rep str, seed int, steps str) List[str]
     mut envs := List[str]()
+    if not steps.is_empty()
+        envs.push("AIL_MAX_STEPS={steps}")
     if not lim.is_empty()
         envs.push("AIL_TRACE_LIMIT={lim}")
     if not rec.is_empty()
@@ -1131,15 +1133,16 @@ fn rec_prepare(
     head str,
     secs Map[str, str],
     lim str,
+    steps str,
 ) !List[str]
     tmp := "{exe}.rec"
     if mode == "record"
         fs.write_text(tmp, "")? "writing {tmp}"
-        return test_env(lim, tmp, "", seed)
+        return test_env(lim, tmp, "", seed, steps)
     if mode == "replay"
         fs.write_text(tmp, "{head}\n{secs.get(name) else ""}")? "writing {tmp}"
-        return test_env(lim, "", tmp, seed)
-    test_env(lim, "", "", 0)
+        return test_env(lim, "", tmp, seed, steps)
+    test_env(lim, "", "", 0, steps)
 
 ## The recorded lines of the test NAME when it failed, as a section of the recording (replay.rec.2).
 fn rec_section(mode str, exe str, name str, v Verdict) str
@@ -1921,6 +1924,7 @@ fn main() !
     mut want := ""
     mut trace := false
     mut trace_limit := ""
+    mut max_steps := ""
     mut rec_mode := ""
     mut rec_file := ""
     for a in env.args()
@@ -1941,6 +1945,11 @@ fn main() !
             trace_limit = a
             want = ""
         elif a == "--trace-limit"
+            want = a
+        elif want == "--max-steps"
+            max_steps = a
+            want = ""
+        elif a == "--max-steps"
             want = a
         elif want == "--record" or want == "--replay"
             rec_mode = want.slice(2, want.len())
@@ -2067,6 +2076,7 @@ fn main() !
                 if coverage.is_empty() then "" else "lines",
                 if trace then "tests" else "",
                 if rec_mode.is_empty() then "" else "record",
+                if max_steps.is_empty() then "" else "steps",
             ] if m != ""
         ].join(",")
         b := if modes.is_empty()
@@ -2161,6 +2171,7 @@ fn main() !
                     rec_head,
                     rec_secs,
                     trace_limit,
+                    max_steps,
                 )?
                 v := run_doc(
                     exe,
@@ -2194,6 +2205,7 @@ fn main() !
                     rec_head,
                     rec_secs,
                     trace_limit,
+                    max_steps,
                 )?
                 v := run_one(exe, slot, last_lead, envs)
                 rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v)}"
@@ -2249,7 +2261,7 @@ fn main() !
                     slot += 1
             if rec_mode == "replay" and not rec_secs.contains(name)
                 continue
-            envs := rec_prepare(rec_mode, exe, name, rec_seed_n, rec_head, rec_secs, trace_limit)?
+            envs := rec_prepare(rec_mode, exe, name, rec_seed_n, rec_head, rec_secs, trace_limit, max_steps)?
             v := run_one(exe, slot, 0, envs)
             rec_out = "{rec_out}{rec_section(rec_mode, exe, name, v)}"
             verdicts.push(plain(name, v.status, v.message))

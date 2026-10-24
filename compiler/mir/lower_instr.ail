@@ -12,6 +12,8 @@ pub struct Instr
     calls bool
     ## `record`: captured calls go through the recorder (lower_record.ail).
     rec bool
+    ## `steps`: each statement counts toward `--max-steps` (run.limit.3).
+    steps bool
     ## `tests`: calls, but not those of the test runner's own `main` and `ail_*` helpers.
     tests bool
     ids Map[str, int]
@@ -25,6 +27,7 @@ fn new_instr() Instr
         calls: modes.split(",").contains("calls") or modes.split(",").contains("tests"),
         tests: modes.split(",").contains("tests"),
         rec: modes.split(",").contains("record"),
+        steps: modes.split(",").contains("steps"),
         ids: {},
         sites: [],
         started: Set[str](),
@@ -39,9 +42,18 @@ fn instr_owned(p str) bool
 
 ## The start of statement `s` is a site.
 fn Lower.instr_stmt(mut self, s ast.Stmt)
-    if not instr.on or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+    if not (instr.on or instr.steps)
+        or is_rt
+        or unchecked
+        or fname.ends_with(".nc")
+        or not instr_owned(path)
         return
     line := instr_line(s)
+    if instr.steps
+        col := instr_col(s)
+        call("rt.instr_step", [str_value(path), konst(line, Ty.Int), konst(col, Ty.Int)], Ty.Unit)
+    if not instr.on
+        return
     key := "{path}:{line}"
     id := instr.ids.get(key) else instr.sites.len()
     first := not instr.started.contains(fname)
@@ -102,3 +114,19 @@ fn instr_line(s ast.Stmt) int
         With(_, _, _, _, pos) => pos.line
         Unsafe(_, pos) => pos.line
         LetTuple(_, _, pos) => pos.line
+
+fn instr_col(s ast.Stmt) int
+    match s
+        Let(_, pos, _, _, _) => pos.col
+        Assign(_, _, _, pos) => pos.col
+        While(_, _, pos) => pos.col
+        For(_, _, _, _, _, _, pos) => pos.col
+        Break(pos) => pos.col
+        Continue(pos) => pos.col
+        Return(_, pos) => pos.col
+        Eval(value) => expr_pos(value).col
+        Handle(value, _) => expr_pos(value).col
+        Defer(_, pos) => pos.col
+        With(_, _, _, _, pos) => pos.col
+        Unsafe(_, pos) => pos.col
+        LetTuple(_, _, pos) => pos.col
