@@ -1093,6 +1093,7 @@ fn run_one(exe str, slot int, lead int) Verdict
 ## `doctests` command (compiler/doc); `names` maps each generated function to `doc:Name`.
 struct Augmented
     lines List[str]
+    fences Map[str, int]
     names Map[str, str]
     where Map[str, List[int]]
     note str
@@ -1118,21 +1119,24 @@ fn ensure_native_cli() bool
     m.status == 0
 
 fn doc_augment(file str) Augmented
-    none_found := Augmented(lines: [], names: {}, where: {}, note: "")
+    none_found := Augmented(lines: [], names: {}, where: {}, fences: {}, note: "")
     if not ensure_native_cli()
-        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't build")
+        return Augmented(lines: [], names: {}, where: {}, fences: {}, note: "the native CLI for doc examples didn't build")
     r := proc.run(native_cli(), ["doctests", file]) else
-        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't run")
+        return Augmented(lines: [], names: {}, where: {}, fences: {}, note: "the native CLI for doc examples didn't run")
     if r.status != 0
-        return Augmented(lines: [], names: {}, where: {}, note: "doc examples: {short(r.err)}")
+        return Augmented(lines: [], names: {}, where: {}, fences: {}, note: "doc examples: {short(r.err)}")
     out := r.out.split("\n")
     mut names := Map[str, str]()
     mut where := Map[str, List[int]]()
+    mut fences := Map[str, int]()
     mut i := 0
     while i < out.len() and out[i].contains(" doc_example_") and out[i].starts_with("doc:")
         parts := out[i].split(" ")
         names[parts[1]] = parts[0]
         for part in parts
+            if f := part.strip_prefix("fence=")
+                fences[parts[0]] = f.to_int() else 0
             if csv := part.strip_prefix("lines=")
                 where[parts[1]] = [n.to_int() else 0 for n in csv.split(",") if not n.is_empty()]
         i += 1
@@ -1142,7 +1146,7 @@ fn doc_augment(file str) Augmented
     mut end := out.len()
     while end > i and (out[end - 1].is_empty() or out[end - 1].starts_with("["))
         end -= 1
-    Augmented(lines: out[i..end], names: names, where: where, note: "")
+    Augmented(lines: out[i..end], names: names, where: where, fences: fences, note: "")
 
 ## The lines a doc example's output must equal: its `# =>` lines (test.doc.2).
 fn doc_expected(lines List[str], t TestFn) List[str]
@@ -1637,7 +1641,7 @@ fn cover_report(file str, fns List[List[int]], hits Set[int], json bool, lines b
         out = "{out}\n  not run: {texts.join(", ")}"
     out
 
-fn report(vs List[Verdict], json bool, src List[str]) int
+fn report(vs List[Verdict], json bool, src List[str], at_pos Map[str, (int, int)]) int
     mut passed := 0
     mut failed := 0
     mut skipped := 0
@@ -1652,7 +1656,9 @@ fn report(vs List[Verdict], json bool, src List[str]) int
         if json
             extra := if v.cases > 0 then ",\"cases\":{v.cases},\"seed\":{unsigned_text(v.seed)}" else ""
             input := if v.input.is_empty() then "" else ",\"input\":{json_str(v.input)}"
-            at := if w := where_at(v.message) then ",\"line\":{w.0},\"col\":{w.1}" else ""
+            mut at := if w := where_at(v.message) then ",\"line\":{w.0},\"col\":{w.1}" else ""
+            if at.is_empty() and v.status == "pass" and at_pos.contains(v.name)
+                at = ",\"line\":{at_pos[v.name].0},\"col\":{at_pos[v.name].1}"
             print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(v.message)}{extra}{input}}")
         elif v.status == "pass"
             print("ok {v.name}{tail}")
@@ -1727,6 +1733,7 @@ fn main() !
     mut lines := text.lines()
     mut doc_names := Map[str, str]()
     mut doc_where := Map[str, List[int]]()
+    mut at_pos := Map[str, (int, int)]()
     mut has_docs := false
     for l in lines
         if l.trim() == "## ```ail"
@@ -1740,6 +1747,8 @@ fn main() !
             lines = aug.lines
             doc_names = aug.names
             doc_where = aug.where
+            for fname in aug.fences.keys()
+                at_pos[fname] = (aug.fences[fname], 1)
     mut cov_fns := List[List[int]]()
     mut cov_lines := Set[int]()
     if not coverage.is_empty()
@@ -1749,6 +1758,10 @@ fn main() !
                 cov_lines.add(l)
     found := find_tests(lines)
     w := World(decls: parse_decls(lines))
+    for t in found.tests
+        if t.header < lines.len()
+            col := (lines[t.header].find(t.name) else 0) + 1
+            at_pos[t.name] = (t.header + 1, col)
     mut verdicts := List[Verdict]()
     for s in found.skipped
         verdicts.push(plain(s.name, "skip", s.why))
@@ -1759,7 +1772,7 @@ fn main() !
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
     if found.tests.len() == 0 and mf.tests.is_empty()
-        code := report(verdicts, json, text.lines())
+        code := report(verdicts, json, text.lines(), at_pos)
         if not coverage.is_empty() and not cov_fns.is_empty()
             print(cover_report(file, cov_fns, Set[int](), json, coverage == "lines"))
         io.exit(code)
@@ -1906,7 +1919,7 @@ fn main() !
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
-    code := report(verdicts, json, text.lines())
+    code := report(verdicts, json, text.lines(), at_pos)
     if not coverage.is_empty() and not cov_fns.is_empty()
         mut hits := Set[int]()
         for v in verdicts

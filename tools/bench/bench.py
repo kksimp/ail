@@ -277,8 +277,8 @@ def main():
                            "python_twin": py_tok})
 
     # Speed.
-    after_bin = root / "bootstrap/target/release/ail"
-    before_bin = before_root / "bootstrap/target/release/ail"
+    after_bin = root / "ail"
+    before_bin = before_root / "ail"
     hello = root / "examples/hello.ail"
     speed_progs = [p for p in progs if p["speed"]]
     speed_rows = []

@@ -7,7 +7,8 @@
 ## `NATIVEX RED (N failures)`. With no argument every test runs. qemu cases run when
 ## `qemu-aarch64-static` or `qemu-aarch64` is installed.
 
-BIN := "bootstrap/target/release/ail"
+## The wrapper, not the Rust binary: the native CLI (rebuilt when compiler/ changes), so a standalone run never uses a stale binary.
+BIN := "./ail"
 
 struct Run
     fails int

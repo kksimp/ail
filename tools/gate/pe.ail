@@ -5,7 +5,7 @@
 ##   ail run tools/gate/pe.ail
 ## Prints only failures; the last line is `PE GREEN (N checks)` or `PE RED (N failures)`.
 
-BIN := "bootstrap/target/release/ail"
+BIN := "./ail"
 
 struct Run
     fails int
