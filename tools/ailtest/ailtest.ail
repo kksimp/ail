@@ -1077,14 +1077,98 @@ fn run_prop(w World, lead int, exe str, slot int, t TestFn, cases int, seed int)
     Prop(status: "pass", message: "", cases: cases, input: "")
 
 ## Run the test binary on `arg`, with the trace limit `lim` (trace.run.4) when there is one.
-fn started(exe str, arg str, lim str) !proc.Output
-    if lim.is_empty()
+fn started(exe str, arg str, envs List[str]) !proc.Output
+    if envs.is_empty()
         return proc.run(exe, [arg], none, RUN_LIMIT_MS)?
-    proc.run("env", ["AIL_TRACE_LIMIT={lim}", exe, arg], none, RUN_LIMIT_MS)?
+    mut argv := envs
+    argv.push(exe)
+    argv.push(arg)
+    proc.run("env", argv, none, RUN_LIMIT_MS)?
 
-fn run_one(exe str, slot int, lead int, lim str) Verdict
+## ---- Record and replay of tests (replay.rec.1, replay.run.1, replay.nat.1) ----
+
+## The environment of one test's process: the trace limit, and the file its calls go to or come from.
+fn test_env(lim str, rec str, rep str, seed int, steps str) List[str]
+    mut envs := List[str]()
+    if not steps.is_empty()
+        envs.push("AIL_MAX_STEPS={steps}")
+    if not lim.is_empty()
+        envs.push("AIL_TRACE_LIMIT={lim}")
+    if not rec.is_empty()
+        envs.push("AIL_RECORD={rec}")
+        envs.push("AIL_SEED={seed}")
+    if not rep.is_empty()
+        envs.push("AIL_REPLAY={rep}")
+        envs.push("AIL_SEED={seed}")
+    envs
+
+fn rec_header(file str, seed int) str
+    "\{\"ail_record\":1,\"program\":{json_str(file)},\"args\":[],\"seed\":{seed},\"limit\":67108864}"
+
+## A recording's sections: each `{"test":NAME}` line and the call lines after it.
+fn rec_sections(text str) Map[str, str]
+    mut out := Map[str, str]()
+    mut name := ""
+    for l in text.lines()
+        if l.starts_with("\{\"test\":\"")
+            name = l.slice(9, l.len() - 2)
+            out[name] = ""
+        elif not name.is_empty()
+            out[name] = "{out[name]}{l}\n"
+    out
+
+fn rec_seed(text str) int
+    head := text.lines().first() else ""
+    at := head.find("\"seed\":") else return 0
+    rest := head.slice(at + 7, head.len())
+    end := rest.find(",") else rest.len()
+    rest.slice(0, end).to_int() else 0
+
+## The environment for the test NAME under `--record` or `--replay`, with its recording file written first.
+fn rec_prepare(
+    mode str,
+    exe str,
+    name str,
+    seed int,
+    head str,
+    secs Map[str, str],
+    lim str,
+    steps str,
+) !List[str]
+    tmp := "{exe}.rec"
+    if mode == "record"
+        fs.write_text(tmp, "")? "writing {tmp}"
+        return test_env(lim, tmp, "", seed, steps)
+    if mode == "replay"
+        fs.write_text(tmp, "{head}\n{secs.get(name) else ""}")? "writing {tmp}"
+        return test_env(lim, "", tmp, seed, steps)
+    test_env(lim, "", "", 0, steps)
+
+## `line` with the `"line":N` of each call line moved up by `lead`, the lines the runner added at the top.
+fn rec_unlead(body str, lead int) str
+    if lead == 0
+        return body
+    mut out := List[str]()
+    for l in body.lines()
+        at := l.find("\"line\":") else
+            out.push(l)
+            continue
+        rest := l.slice(at + 7, l.len())
+        end := rest.find(",") else rest.len()
+        n := rest.slice(0, end).to_int() else 0
+        out.push("{l.slice(0, at + 7)}{n - lead}{rest.slice(end, rest.len())}")
+    "{out.join("\n")}\n"
+
+## The recorded lines of the test NAME when it failed, as a section of the recording (replay.rec.2).
+fn rec_section(mode str, exe str, name str, v Verdict, lead int) str
+    if mode != "record" or v.status != "fail"
+        return ""
+    body := fs.read_text("{exe}.rec") else ""
+    "\{\"test\":{json_str(name)}}\n{rec_unlead(body, lead)}"
+
+fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := started(exe, arg, lim) else
+    r := started(exe, arg, envs) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status == 0
         return Verdict(
@@ -1133,9 +1217,19 @@ fn ensure_native_cli() bool
 fn doc_augment(file str) Augmented
     none_found := Augmented(lines: [], names: {}, where: {}, note: "")
     if not ensure_native_cli()
-        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't build")
+        return Augmented(
+            lines: [],
+            names: {},
+            where: {},
+            note: "the native CLI for doc examples didn't build",
+        )
     r := proc.run(native_cli(), ["doctests", file]) else
-        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't run")
+        return Augmented(
+            lines: [],
+            names: {},
+            where: {},
+            note: "the native CLI for doc examples didn't run",
+        )
     if r.status != 0
         return Augmented(lines: [], names: {}, where: {}, note: "doc examples: {short(r.err)}")
     out := r.out.split("\n")
@@ -1171,9 +1265,17 @@ fn debug_list(xs List[str]) str
         parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
     "[{parts.join(", ")}]"
 
-fn run_doc(exe str, slot int, lead int, expected List[str], update bool, orig List[int], lim str) Verdict
+fn run_doc(
+    exe str,
+    slot int,
+    lead int,
+    expected List[str],
+    update bool,
+    orig List[int],
+    envs List[str],
+) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := started(exe, arg, lim) else
+    r := started(exe, arg, envs) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status != 0
         return plain("", "fail", describe(r.err, lead))
@@ -1188,9 +1290,17 @@ fn run_doc(exe str, slot int, lead int, expected List[str], update bool, orig Li
     if same
         return plain("", "pass", "")
     if update and not orig.is_empty()
-        csv := [ "{n}" for n in orig ].join(",")
+        csv := ["{n}" for n in orig].join(",")
         rec := SnapRec(line: orig[0], col: -1, text: "{csv}\n{r.out}")
-        return Verdict(name: "", status: "pass", message: "", cases: 0, seed: 0, input: "", snaps: [rec])
+        return Verdict(
+            name: "",
+            status: "pass",
+            message: "",
+            cases: 0,
+            seed: 0,
+            input: "",
+            snaps: [rec],
+        )
     plain(
         "",
         "fail",
@@ -1493,12 +1603,18 @@ fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
         model := dl[first - 1]
         mark := model.find("# =>") else continue
         prefix := model.slice(0, mark)
-        replaced := [ if l.is_empty() then "{prefix}# =>" else "{prefix}# => {l}" for l in output.lines() ]
+        replaced := [
+            if l.is_empty() then "{prefix}# =>" else "{prefix}# => {l}"
+            for l in output.lines()
+        ]
         mut before := List[str]()
         for n in nums
             if n >= 1 and n <= dl.len()
                 before.push(dl[n - 1])
-        if before.len() == replaced.len() and [b.trim_end() for b in before] == [b.trim_end() for b in replaced]
+        if before.len() == replaced.len() and [b.trim_end() for b in before] == [
+            b.trim_end()
+            for b in replaced
+        ]
             continue
         mut kept := List[str]()
         for i in 0..dl.len()
@@ -1507,7 +1623,13 @@ fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
             elif not nums.contains(i + 1)
                 kept.push(dl[i])
         dl = kept
-        sorted.push(SnapChange(kind: "doc", line: first, col: 1, old: before.join("\n"), new: replaced.join("\n")))
+        sorted.push(SnapChange(
+            kind: "doc",
+            line: first,
+            col: 1,
+            old: before.join("\n"),
+            new: replaced.join("\n"),
+        ))
     new = dl.join("\n")
     sorted = sorted.sorted(by: |c| (c.line, c.col))
     mut out := ""
@@ -1817,6 +1939,9 @@ fn main() !
     mut want := ""
     mut trace := false
     mut trace_limit := ""
+    mut max_steps := ""
+    mut rec_mode := ""
+    mut rec_file := ""
     for a in env.args()
         if want == "--cases"
             cases = a.to_int() else usage()
@@ -1836,6 +1961,17 @@ fn main() !
             want = ""
         elif a == "--trace-limit"
             want = a
+        elif want == "--max-steps"
+            max_steps = a
+            want = ""
+        elif a == "--max-steps"
+            want = a
+        elif want == "--record" or want == "--replay"
+            rec_mode = want.slice(2, want.len())
+            rec_file = a
+            want = ""
+        elif a == "--record" or a == "--replay"
+            want = a
         elif a == "--dry-run"
             dry = true
         elif a == "--coverage"
@@ -1848,9 +1984,29 @@ fn main() !
             files.push(a)
     if not want.is_empty()
         io.exit(usage())
+    if rec_mode == "replay" and files.is_empty()
+        # replay.run.1: the recording's own program.
+        rhead := (fs.read_text(rec_file) else "").lines().first() else ""
+        pat := rhead.find("\"program\":\"") else 0
+        prest := rhead.slice(pat + 11, rhead.len())
+        files.push(prest.slice(0, prest.find("\"") else 0))
     if files.len() != 1 or (dry and not update)
         io.exit(usage())
     file := files[0]
+    mut rec_head := ""
+    mut rec_secs := Map[str, str]()
+    mut rec_seed_n := 0
+    mut rec_out := ""
+    if rec_mode == "replay"
+        rtext := fs.read_text(rec_file) else
+            io.eprint("error: can't read the recording {rec_file} (replay.run.1)")
+            io.exit(2)
+        rec_head = rtext.lines().first() else ""
+        rec_secs = rec_sections(rtext)
+        rec_seed_n = rec_seed(rtext)
+    elif rec_mode == "record"
+        rec_seed_n = (env.get("AIL_SEED") else "").to_int() else time.now_ms()
+        rec_head = rec_header(file, rec_seed_n)
     checked := proc.run(ail_path(), ["check", file])? "running ail check"
     if checked.status != 0 and not checked.err.contains("error[mod.main.1]")
         io.eprint(checked.err)
@@ -1934,6 +2090,8 @@ fn main() !
             for m in [
                 if coverage.is_empty() then "" else "lines",
                 if trace then "tests" else "",
+                if rec_mode.is_empty() then "" else "record",
+                if max_steps.is_empty() then "" else "steps",
             ] if m != ""
         ].join(",")
         b := if modes.is_empty()
@@ -2016,15 +2174,56 @@ fn main() !
             for j in 0..i
                 if not dropped.contains(j)
                     slot += 1
+            vname := if doc_names.contains(t.name) then doc_names[t.name] else t.name
+            if rec_mode == "replay" and not rec_secs.contains(vname)
+                continue
             if doc_names.contains(t.name)
-                v := run_doc(exe, slot, last_lead, doc_expected(lines, t), update, doc_where.get(t.name) else [], trace_limit)
-                verdicts.push(Verdict(name: doc_names[t.name], status: v.status, message: v.message, cases: 0, seed: 0, input: "", snaps: v.snaps))
+                envs := rec_prepare(
+                    rec_mode,
+                    exe,
+                    vname,
+                    rec_seed_n,
+                    rec_head,
+                    rec_secs,
+                    trace_limit,
+                    max_steps,
+                )?
+                v := run_doc(
+                    exe,
+                    slot,
+                    last_lead,
+                    doc_expected(lines, t),
+                    update,
+                    doc_where.get(t.name) else [],
+                    envs,
+                )
+                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
+                verdicts.push(Verdict(
+                    name: doc_names[t.name],
+                    status: v.status,
+                    message: v.message,
+                    cases: 0,
+                    seed: 0,
+                    input: "",
+                    snaps: v.snaps,
+                ))
                 if trace and v.status == "fail"
                     traces[doc_names[t.name]] = take_trace(exe)
                 elif trace
                     take_trace(exe)
             elif t.params.is_empty()
-                v := run_one(exe, slot, last_lead, trace_limit)
+                envs := rec_prepare(
+                    rec_mode,
+                    exe,
+                    vname,
+                    rec_seed_n,
+                    rec_head,
+                    rec_secs,
+                    trace_limit,
+                    max_steps,
+                )?
+                v := run_one(exe, slot, last_lead, envs)
+                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
                 if trace and v.status == "fail"
                     traces[t.name] = take_trace(exe)
                 elif trace
@@ -2075,8 +2274,14 @@ fn main() !
             for j in 0..mi
                 if not mdropped.contains(j)
                     slot += 1
-            v := run_one(exe, slot, 0, trace_limit)
+            if rec_mode == "replay" and not rec_secs.contains(name)
+                continue
+            envs := rec_prepare(rec_mode, exe, name, rec_seed_n, rec_head, rec_secs, trace_limit, max_steps)?
+            v := run_one(exe, slot, 0, envs)
+            rec_out = "{rec_out}{rec_section(rec_mode, exe, name, v, 0)}"
             verdicts.push(plain(name, v.status, v.message))
+    if rec_mode == "record"
+        fs.write_text(rec_file, "{rec_head}\n{rec_out}")? "writing the recording {rec_file}"
     if update
         mut recs := List[SnapRec]()
         for v in verdicts
@@ -2111,6 +2316,7 @@ fn main() !
             "{exe}.sites",
             "{exe}.hits",
             "{exe}.trace",
+            "{exe}.rec",
         ]) else io.exit(code)
     else
         _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)

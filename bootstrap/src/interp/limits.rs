@@ -8,12 +8,11 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-/// What `--timeout`, `--max-memory`, `--max-steps` and `--coverage` ask for.
+/// What `--timeout`, `--max-memory` and `--coverage` ask for.
 #[derive(Default, Clone, Copy)]
 pub struct Config {
     pub timeout_ms: Option<u64>,
     pub memory_mb: Option<u64>,
-    pub steps: Option<u64>,
     pub coverage: bool,
 }
 
@@ -42,7 +41,7 @@ fn config() -> Config {
 /// Whether any limit or coverage is on (the interpreter's `hook`).
 pub(super) fn active() -> bool {
     let c = config();
-    c.timeout_ms.is_some() || c.memory_mb.is_some() || c.steps.is_some() || c.coverage
+    c.timeout_ms.is_some() || c.memory_mb.is_some() || c.coverage
 }
 
 /// The resident memory of this process in MB, where the platform tells us.
@@ -138,17 +137,6 @@ impl<'a, W: Write> Interp<'a, W> {
                 .into());
             }
         }
-        if let Some(max) = c.steps {
-            self.steps += 1;
-            if self.steps > max {
-                return Err(Trap {
-                    rule: "run.limit.3",
-                    pos,
-                    message: format!("run took more than --max-steps {max} steps (a step is one statement run)"),
-                }
-                .into());
-            }
-        }
         if c.coverage && pos.line != self.cov_last {
             self.cov_last = pos.line;
             HITS.lock().unwrap().insert(pos.line);
@@ -159,9 +147,6 @@ impl<'a, W: Write> Interp<'a, W> {
     /// Take back the step a bytecode `Hit` took for a statement it then
     /// hands to the walker's `stmt`, which takes it again (ADR 0364).
     pub(super) fn unhit(&mut self) {
-        if config().steps.is_some() {
-            self.steps -= 1;
-        }
     }
 
     /// Reset the step count for the next test (run.limit.3).

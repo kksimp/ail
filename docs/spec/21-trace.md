@@ -153,6 +153,22 @@ fn main()
     print(x)
 ```
 
+**trace.watch.5** — Natively, `ail run --watch NAME FILE` builds the program with
+the watch (only then does it cost anything) and shows trace.watch.1's events on
+standard error, `watch: NAME = VALUE at LINE:COL`, then the summary line
+(trace.run.4); over `--replay R` (replay.run.1) the same run is repeated exactly,
+so it answers "when did `NAME` become 0?" on a recorded run. The events are the
+assignments and `mut NAME := e` of trace.watch.1; a builtin mutating method,
+an element write's note (trace.watch.4) and a `mut` argument followed into a callee
+(trace.watch.3) are not shown yet. *(ADRs 0868, 0886)*
+
+```ail tool=run,--watch,n,FILE expect="watch: n = 0" rules=trace.watch.5
+fn main()
+    mut n := 3
+    n -= 3
+    print(n)
+```
+
 ## Tracing tests
 
 **trace.test.1** — `ail test --trace[=calls|effects|all]` (and `--trace-limit`,
@@ -249,6 +265,17 @@ frame. *(ADRs 0641, 0642)*
 reports the callee's frame, then the caller at the inlined call, as if the
 call had been made. *(ADR 0643)*
 
+**trace.frame.3** — `ail run --values FILE` builds the program so that its
+own functions keep their arguments and locals where a trap can print them. The
+trap then reports each frame as the interpreter does (trace.snap.2,
+trace.snap.3): `  at LINE:COL in NAME(a = 1, b = 2); c = 3` (the arguments,
+then `; ` and the locals in scope at the statement that was running, in
+declaration order; the values of types the runtime can print), a contract
+trap's `  values: ` line (the arguments the condition names, in name order),
+and `  … N more frames (--verbose shows every frame and value)`. A build
+without `--values` prints no values (trace.frame.1) and costs nothing for
+them. *(ADR 0886, ADR 0641)*
+
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
 
@@ -289,11 +316,14 @@ fn main()
 ```
 
 **run.limit.3** — `--max-steps N` stops a run that has run more than `N`
-steps, with `trap[run.limit.3]`. A step is one statement run, or one turn of
-a `while` loop. Steps count the same on every machine, so a limit found once
-reproduces the same trap. `ail test` counts per test. *(ADR 0288)*
+steps, with `trap[run.limit.3]` at the statement that passed it. A step is one
+statement of the program's own files run; a `while` turn adds none of its own,
+and the std's statements are not counted. The program is built with the
+counter in it only when the flag is given (ADR 0883). Steps count the same on
+every machine, so a limit found once reproduces the same trap. `ail test`
+counts per test. *(ADR 0288, ADR 0883)*
 
-```ail tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
+```ail skip=bootstrap tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
 fn main()
     mut n := 0
     while true
@@ -382,7 +412,7 @@ The memory limit is checked when the heap takes a new chunk and counts the
 heap bytes in use. The time limit is checked every 256 allocations and when
 the heap takes a chunk. A `while` loop also checks it, but only in an executable
 built with `--timeout` (ADR 0727); so without that, a loop that never allocates is not stopped. The
-limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
+limit is wall-clock time on a clock that doesn't go back. On macOS the clock is read with
 `gettimeofday`. *(ADR 0726, ADR 0727)*
 
 ```ail tool=build,--max-memory,16,FILE rules=run.limit.6

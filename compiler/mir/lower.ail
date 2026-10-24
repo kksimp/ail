@@ -960,6 +960,7 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
     if problems.len() > fn_problems or fn_failed
         facts.moves = []
         return
+    instr_end()
     mut func := elide_moves(
         Func(
             name: name,
@@ -1034,6 +1035,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
         lower_stmt(s)
+        instr_after(s)
     defer_exit()
     end_scope_exits(if body.len() > 0 then group_end_at(body[body.len() - 1]) else none)
     scopes.pop()
