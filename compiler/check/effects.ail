@@ -320,6 +320,67 @@ fn Checker.check_pure(self) List[Diag]
             break
     out
 
+## The capabilities `--deny` takes (eff.cap.2).
+CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
+
+## What `--deterministic` denies (eff.det.1).
+DETERMINISTIC_DENY := ["clock", "net", "proc", "random"]
+
+## What `--deterministic` denies (eff.det.1).
+pub fn deterministic_deny() List[str]
+    DETERMINISTIC_DENY
+
+## `--deny LIST` (eff.cap.2): the capabilities, sorted and without repeats, and the usage error
+## text (empty when the list is fine).
+pub fn parse_deny(list str)(List[str], str)
+    mut out := List[str]()
+    for raw in list.split(",")
+        name := raw.trim()
+        if name == "all"
+            for c in CAPABILITIES
+                out.push(c)
+        elif CAPABILITIES.contains(name)
+            out.push(name)
+        else
+            rule := if [
+                "io",
+                "fail",
+                "mutates",
+                "unsafe",
+                "spawn",
+            ].contains(name) then "eff.cap.3" else "eff.cap.2"
+            return ([], "`{name}` is not a capability; `--deny` takes a comma-separated list of {CAPABILITIES.join(", ")} or `all` ({rule})")
+    mut uniq := List[str]()
+    for c in out.sorted()
+        if not uniq.contains(c)
+            uniq.push(c)
+    (uniq, "")
+
+## eff.cap.1: `main` must not reach a denied capability. One diagnostic per
+## capability, naming the chain of calls.
+fn Checker.check_denied(self) List[Diag]
+    if denied.len() == 0
+        return []
+    mut main := -1
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if f.name == "main" and f.owner == none and f.within == ast.Within.TopLevel
+            main = i
+    if main < 0
+        return []
+    fx := infer_effects(prog, facts())
+    mut out := List[Diag]()
+    for e in fx.sets[main]
+        if denied.contains(e)
+            out.push(
+                new_diag(
+                    "eff.cap.1",
+                    prog.fns[main].pos,
+                    "the program reaches the denied capability `{e}`: {fx.chain(prog, main, e)}",
+                ).with_help("remove the call, or run without denying `{e}`"),
+            )
+    out
+
 ## `has effects io and fs via f -> save -> fs.write_text`, grouping effects
 ## that come from the same chain.
 fn reasons(prog ast.Program, fx Effects, i int, bad List[str]) str
@@ -660,3 +721,32 @@ fn std_fn_effects(fx Facts, key int, recv ast.Expr, n str) List[str]?
     match e
         Name(m, _) => [d for d in prog.enums if d.name == m].len() > 0
         _ => false
+
+## `ail effects FILE [--json]` (eff.infer.6): every program function's effect set by
+## stable id, `fn:NAME` or `method:Type.name`, the prelude's left out. Functions that
+## share an id are merged.
+pub fn effects_report(p ast.Program, json bool) str
+    sets := analyze(p, true).effects
+    mut ids := Map[str, List[str]]()
+    for i in 0..p.fns.len()
+        f := p.fns[i]
+        if is_prelude_line(f.pos.line)
+            continue
+        id := if f.owner == none
+            and f.within == ast.Within.TopLevel then "fn:{f.name}" else "method:{display_name(p, f)}"
+        mut set := ids.get(id) else []
+        for e in sets[i]
+            if not set.contains(e)
+                set.push(e)
+        ids[id] = set.sorted()
+    names := ids.keys().sorted()
+    if json
+        items := [
+            "{Json.Str(n).to_text()}:[{[Json.Str(e).to_text() for e in ids[n]].join(",")}]"
+            for n in names
+        ]
+        return "\{\"ail_api\":1,\"effects\":\{{items.join(",")}}}\n"
+    mut out := ""
+    for n in names
+        out = "{out}{n} \{{ids[n].join(", ")}}\n"
+    out

@@ -112,6 +112,11 @@ latter:
 - qualified variant patterns from every member type (`ParseError.Empty =>`),
   plus a pattern for a whole error type;
 - `match` with success and error arms.
+**Measured 2026-10-24** (the corpus, `examples/`, `tools/` and `compiler/`, about
+148,000 lines): no `match` on a specific error variant follows an `else err`
+(errors are tested by field, e.g. `err.kind == "timed_out"`), and about eight
+places reach a field through an optional that `a?.b` would shorten. Both stay
+open until a program needs them; the ADR 0029 measurement is then rerun.
 
 ## OQ-030 — What is an error type?
 **Partly resolved:** error types are declared with `error`
@@ -271,12 +276,7 @@ every current need is an impl); (b) a module-level `@generate(f)` whose items
 appear in `ail api --expanded` like derives. *Owner: AI under ADR 0076.*
 
 ## OQ-094 — Downcasting `any Trait`
-`refl.run.1` gives no way to recover the concrete type of an `any Trait`
-value. Options: (a) none (recommended for now: an enum is the checked way to
-hold one of several known types, and `match` is exhaustive); (b) a checked
-`x as T?` returning `none` on a mismatch (needs a type tag per value, which
-`any Trait` already has as its method table); (c) a trait method the author
-writes. *Owner: designer (it changes what `any Trait` promises).*
+**Resolved** by [ADR 0877](decisions/0877-no-downcast-of-any-trait.md) (option a: no downcast; an enum is the checked way).
 
 ## OQ-095 — Compile-time evaluation limits
 `ct.eval.3` sets 100,000,000 steps and 1 GiB per constant or derive.
@@ -509,3 +509,25 @@ doubled memory, so it was reverted.
 Recommendation: **a** for the compiler now, then **b**, which helps user
 programs too. Do **c** only if measurement shows shared-then-read lists
 dominating. Measure with callgrind on stage 1 and `tools/perfbench`.
+
+## OQ-140 — Computed values for `@observe` (ADR 0884)
+
+`@observe` marks a struct field (ADR 0879, ADR 0884), so an agent can read what
+the program stores but not what it computes (a cart total from its lines, a
+count of selected items). A program that wants such a value today stores it in
+a field and keeps it up to date by hand.
+
+- **a.** Leave it: fields only. Pro: smallest form, nothing to check beyond the
+  field's type, stale values are the program's own bug. Con: duplicated state
+  that can drift.
+- **b.** The accessor form: `@observe fn Cart.total(self) int`, a method with
+  only `self` and no effects, observed under its name. Pro: derived values,
+  read-only by type, no grammar beyond `gram.attr.1-2`. Con: three lines per
+  value, and a second way to observe.
+- **c.** `@observe` on a field with a computing expression (`@observe total int
+  = lines.sum()`). Pro: short. Con: new field grammar, and the expression runs
+  on every query.
+
+Recommendation: **b**, added next to the field form when a real program needs a
+computed value; **a** until then. Needs the designer, because it extends the
+approved syntax (ADR 0879 item 1).

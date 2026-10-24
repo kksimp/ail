@@ -1,8 +1,8 @@
 #!/bin/bash
 cd "$(git rev-parse --show-toplevel)"
 export RUSTUP_HOME=${RUSTUP_HOME:-$PWD/.toolchain/rustup} CARGO_HOME=${CARGO_HOME:-$PWD/.toolchain/cargo}
-A=bootstrap/target/release/ail
-for pair in tools/edit:edit bootstrap/src/std:std tools/garlic:garlic tools/garlic/js:garlic-js tools/pdf:pdf compiler:compiler; do
+A=./ail
+for pair in tools/edit:edit std:std tools/garlic:garlic tools/garlic/js:garlic-js tools/pdf:pdf compiler:compiler; do
   d=${pair%%:*}; n=${pair##*:}
   # Write through a temporary file so a failing generator never commits an empty card.
   $A api --card $d > /tmp/card.$$ && mv /tmp/card.$$ docs/design/cards/$n.md || { echo "card failed: $d" >&2; exit 1; }

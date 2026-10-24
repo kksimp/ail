@@ -1,0 +1,51 @@
+struct P
+    x int
+    y int
+
+enum Dir
+    N
+    E
+
+enum Shape
+    Dot
+    Circle(r int)
+    Rect(w int, h int)
+
+fn main()
+    mut m := Map[P, str]()
+    m[P(x: 1, y: 2)] = "a"
+    m[P(x: 3, y: 4)] = "b"
+    m[P(x: 1, y: 2)] = "c"
+    print(m.len())
+    print(m[P(x: 1, y: 2)])
+    print(m.contains(P(x: 3, y: 4)))
+    print(m.contains(P(x: 9, y: 9)))
+    mut t := Map[(int, int), int]()
+    t[(1, 2)] = 5
+    t[(1, 2)] += 1
+    print(t[(1, 2)])
+    mut s := Set[List[int]]()
+    s.add([1, 2])
+    s.add([1, 2])
+    s.add([3])
+    print(s.len())
+    print(s.contains([3]))
+    mut d := Map[Dir, int]()
+    d[Dir.N] = 1
+    d[Dir.E] = 2
+    print(d[Dir.E])
+    mut sh := Map[Shape, int]()
+    sh[Shape.Dot] = 0
+    sh[Shape.Circle(3)] = 1
+    sh[Shape.Rect(w: 2, h: 3)] = 2
+    sh[Shape.Circle(3)] += 10
+    print(sh[Shape.Circle(3)])
+    print(sh[Shape.Rect(w: 2, h: 3)])
+    print(sh.contains(Shape.Rect(w: 3, h: 2)))
+    mut p := P(x: 7, y: 8)
+    mut k := Map[P, int]()
+    k[p] = 1
+    p.x = 100
+    print(k.contains(P(x: 7, y: 8)))
+    print(k.contains(p))
+    print(k.len())

@@ -1,6 +1,6 @@
 # 0363. The bytecode tier compiles method and trait calls, data construction, `match`, interpolation and `?`
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0873](0873-rust-only-features-after-rust-removal.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076), within the designer's ADR 0359
 - **Topic:** interpreter performance; 23 — Compiler architecture

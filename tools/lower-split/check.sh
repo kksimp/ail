@@ -7,7 +7,7 @@
 set -uo pipefail
 ail="$1"; out="$2"
 mkdir -p "$out/before" "$out/after"
-progs=$( (ls bootstrap/tests/native/*.ail bootstrap/tests/native/run/*.ail tools/perfbench/programs/*.ail tools/perfbench/agent/*.ail 2>/dev/null) | sort -u)
+progs=$( (ls tests/native/*.ail tests/native/run/*.ail tools/perfbench/programs/*.ail tools/perfbench/agent/*.ail 2>/dev/null) | sort -u)
 
 dump() {
     local dir="$1"

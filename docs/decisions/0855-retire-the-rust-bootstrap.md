@@ -25,11 +25,11 @@ removal every program, including the tools, runs natively.
 2. `ail prepare FILE` is `run` without the start and prints the executable's path.
    `./ail` execs that path, so the program keeps the terminal; the native std has
    no process-replacing call yet, and `ail run` run directly relays the output at exit.
-3. `./ail` uses the native CLI for `run FILE ARGS` when `AIL_NATIVE_CLI=1`
-   (the default flips once the Mac gate runs through it, then `AIL_RUST=1` selects the
-   Rust one). Commands the native CLI lacks still go to the Rust `ail`; each later change
-   moves one command (`check`, `explain`, `api`, `test`, `fmt`, ...) and the Rust code
-   is deleted only after a whole chain is green without it.
+3. The native CLI is the default for `./ail` (item 252): `run [--timeout MS] [--max-memory MB] FILE ARGS`,
+   `check`, `fix`, `test`, `api` (outline, `--text`, `--pretty`, `--symbols`), `build` and `fmt`; `selftest` with no argument is the native gate (`tools/gate/mac-gate.sh`; `AIL_SELFTEST=cargo` keeps the cargo tests). `AIL_RUST=1` or a pinned `AIL_BINARY`
+   is the one way to the Rust `ail` and its interpreter (step B removed `AIL_NATIVE_CLI` and `AIL_INTERP`). A program outside the native subset (`native.subset.1`) is an error, not a fallback.
+   Commands and options the native CLI lacks (`run` with `--record --replay --max-steps --parallel`; `diff`, `--deterministic --seed --deny --unsafe` are native) still go to
+   the Rust `ail`; each later change moves one and the Rust code is deleted only after a whole chain is green without it.
 4. The first native `ail` comes from a **seed**: a release asset of the private
    repository (`ail-seed-ARCH-OS`; first release `seed-2026.10.22`), built by `tools/release/seed.sh` on the
    designer's Mac (macOS, Linux x86-64 and ARM64, Windows x86-64) after the fixed point holds. `tools/release/fetch-seed.sh`

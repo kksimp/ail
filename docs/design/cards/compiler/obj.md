@@ -13,7 +13,13 @@ fn obj.symbols(mut out List[int], img codegen.Image, text_addr int, text_off int
 fn obj.elf_section(mut out List[int], name int, kind int, flags int, addr int, offset int, size int, linked int, info int, align int, entsize int) [mutates]
 fn obj.patch(mut out List[int], at int, v int, n int) [mutates]  ## Overwrite `n` little-endian bytes at `at`.
 fn obj.header(mut out List[int], machine int, entry int) [mutates]
+fn obj.header_n(mut out List[int], machine int, entry int, nphdr int) [mutates]
 fn obj.segment(mut out List[int], flags int, offset int, vaddr int, filesz int, memsz int) [mutates]  ## A `PT_LOAD` program header; `flags` is R 4, W 2, X 1.
+fn obj.interpreter(machine int) str  ## The dynamic linker of a dynamic executable, by machine.
+fn obj.cstr(s str) List[int]  ## A NUL-terminated string's bytes.
+fn obj.elf_dynamic(img codegen.Image, machine int) List[int]  ## A dynamic ELF executable (ffi.load.1, ADR 0870): the same two segments as
+fn obj.dynamic_entry(mut out List[int], tag int, value int) [mutates]
+fn obj.phdr(mut out List[int], kind int, flags int, offset int, vaddr int, filesz int, memsz int, align int) [mutates]  ## A non-load program header.
 pub fn obj.link(img codegen.Image, code int, data int, bss int) List[int]  ## The code with every relocation patched, for code at address `code`,
 fn obj.address(img codegen.Image, sym str, code int, data int, bss int) int  ## The address of a symbol.
 fn obj.read32(bytes List[int], at int) int

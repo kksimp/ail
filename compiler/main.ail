@@ -15,6 +15,7 @@
 #                                         `ail build`)
 #   ail run compiler load FILE...         the program of `ail api --ast --program FILE` (ADR 0855)
 #   ail run compiler check-program [--json] FILE|DIR   `ail check` (ADR 0855)
+#   ail run compiler api [--outline] FILE [--text | --pretty]   `ail api` (ADR 0855)
 #   ail run compiler run FILE [ARGS...]   the native CLI's `ail run` (ADR 0855)
 #   ail run compiler prepare FILE         builds FILE into the cache and prints the executable's path
 #   ail run compiler build-many RT TARGET MS MB STD FILE...
@@ -22,24 +23,28 @@
 #                                         used by the selftest), each under a line `== PATH`
 # With several files, each output starts with a line `== PATH`.
 use a64
+use api
 use ast
 use budget
 use check
 use doc
 use edit
 use fix
+use fixrun
 use fmt
 use derive
 use explain
 use load
 use mir
 use obj
+use pkg
 use syntax
+use watch
 use x64
 
 fn main() !
     args := env.args()
-    if args.len() == 0 or (args.len() < 2 and args[0] != "explain")
+    if args.len() == 0 or (args.len() < 2 and args[0] != "explain" and args[0] != "diff")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
         io.exit(2)
     match args[0]
@@ -48,16 +53,18 @@ fn main() !
                 check_dump(path, args.len() > 2)?
         "fixes" =>
             # Test support: the unsettled edits in args[2] settled against args[1].
-            print(fix.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
+            print(fixrun.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
+        "fix" =>
+            io.exit(load.fix_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "fixrun" =>
             # Test support: `ail fix` with the Rust tool as the checker (tools/fix/parity.py).
-            io.exit(fix.run_with_rust(args[1..]))
+            io.exit(fixrun.run_with_rust(args[1..]))
         "fmt" =>
             io.exit(fmt.command(args[1..]))
         "edit" =>
-            io.exit(edit.command(args[1..]))
+            io.exit(edit.command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "budget" =>
-            # `budget [--budget [N]] [--from K] [--json] -- EXE ARGS...`: EXE under a budget (budget.out.1-6).
+            # `budget [COMMAND] [--budget [N]] [--from K] [--json] -- EXE ARGS...`: EXE under a budget (budget.out.1-7); COMMAND picks the default (budget.out.5).
             cut := args.index_of("--") else args.len()
             mut opts := args[1..cut]
             json := opts.contains("--json")
@@ -88,7 +95,7 @@ fn main() !
                 if args.len() > 2
                     print("== {path}")
                 for t in tests
-                    print("{t.name} {t.fn_name} fence={t.fence} expected=[{t.expected.join(", ")}]")
+                    print("{t.name} {t.fn_name} fence={t.fence} lines={[ "{n}" for n in doc.expected_lines(t) ].join(",")} expected=[{t.expected.join(", ")}]")
                 aug := doc.augment(text, tests)
                 print(aug.text)
                 print(aug.origin)
@@ -129,6 +136,19 @@ fn main() !
             load_dump(args[1..])
         "check-program" =>
             check_cmd(args[1..])
+        "pkg" =>
+            io.exit(pkg.command(args[1..]))
+        "effects" =>
+            io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "api" =>
+            api_cmd(args[1..])
+        "diff" =>
+            io.exit(api.semantic_diff_command(args[1..], path.join(
+                path.dir(compiler_dir()),
+                "std",
+            )))
+        "ask" =>
+            io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
             cli_run(args[1..])
         "prepare" =>
@@ -161,7 +181,7 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]"
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
 ## A positive whole number (run.limit.4).
 fn positive(v str) bool
@@ -188,6 +208,8 @@ fn build_cli(rest List[str])
     mut target := ""
     mut ms := "0"
     mut mb := "0"
+    mut cached := true
+    mut attach := false
     mut i := 0
     while i < rest.len()
         a := rest[i]
@@ -208,8 +230,9 @@ fn build_cli(rest List[str])
             # unsafe.hw.1: the checker, run first, took it; the lowering needs nothing.
             i += 1
         elif a == "--no-cache"
-            i += 1
-            continue
+            cached = false
+        elif a == "--attach"
+            attach = true
         elif file == "" and not a.starts_with("-")
             file = a
         else
@@ -219,7 +242,17 @@ fn build_cli(rest List[str])
     if file == ""
         io.eprint(BUILD_USAGE)
         io.exit(2)
-    compile_to(file, out, target, ms, mb)
+    if cached
+        compile_to(file, out, target, ms, mb, attach)
+    else
+        compile_fresh(
+            file,
+            if out == "" then path.stem(file) else out,
+            if target == "" then host_target() else target,
+            ms,
+            mb,
+            attach,
+        )
 
 ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
 fn compiler_dir() str
@@ -234,23 +267,59 @@ fn compiler_dir() str
 
 ## Build `file` for `target` (the host's when empty) into `out` (by default
 ## the file's name in the current directory) with the run limits `ms` and `mb`.
-fn compile_to(file str, out_arg str, target_arg str, ms str, mb str)
-    mut out := out_arg
-    mut target := target_arg
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool)
+    target := if target_arg == "" then host_target() else target_arg
+    out := if out_arg == "" then path.stem(file) else out_arg
+    dir := cache_dir()
+    exe := path.join(dir, cache_key(file, target, ms, mb, attach))
+    if cached_copy(exe, out, target)
+        return
+    fs.make_dir(dir) else err
+        io.eprint("error[native.build.5]: can't make {dir}")
+    tmp := "{exe}.{time.now_ms()}.tmp"
+    compile_fresh(file, tmp, target, ms, mb, attach)
+    fs.rename(tmp, exe) else err
+        io.eprint("error[native.build.5]: can't store {exe}")
+        io.exit(2)
+    cache_trim(dir)
+    if not cached_copy(exe, out, target)
+        io.eprint("error[native.build.5]: can't write {out}")
+        io.exit(2)
+
+## Copy the cached executable `exe` to `out`; false when there is none
+## (native.build.5).
+fn cached_copy(exe str, out str, target str) bool
+    data := fs.read_bytes(exe) else return false
+    fs.write_bytes(out, data) else return false
+    if not target.ends_with("windows")
+        _ := proc.run("chmod", ["755", out]) else return false
+    true
+
+## `compile_to` without the cache.
+fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
     dir := compiler_dir()
-    if target == ""
-        target = host_target()
-    if out == ""
-        out = path.stem(file)
     rt := runtime_with(path.join(dir, "rt/native"), file, ms, mb) else err
         io.eprint("error[native.build.3]: can't read the runtime: {err}")
         io.exit(2)
         return
-    std := path.join(path.dir(dir), "bootstrap/src/std")
+    std := path.join(path.dir(dir), "std")
+    over := if attach then watch.shim(fs.read_text(file) else "") else ""
+    if over != ""
+        # A shim that doesn't build leaves the program as written, with a warning.
+        shimmed := lower_file_with(file, rt, std, over) else shim_err
+            io.eprint("warning[attach.run.2]: attach is off for this run: {shim_err}")
+            compile_fresh(file, out, target, ms, mb, false)
+            return
+        finish_build(shimmed, file, out, target)
+        return
     m := lower_file(file, rt, std) else err
         io.eprint("error[native.build.3]: {err}")
         io.exit(1)
         return
+    finish_build(m, file, out, target)
+
+## The executable of `m` for `target`, written to `out`.
+fn finish_build(m mir.Module, file str, out str, target str)
     hex := executable_hex(m, file, target)
     exe := bytes.from_hex(hex.replace("\n", "")) else
         io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
@@ -304,14 +373,18 @@ fn runtime(dir str, path str) !ast.Program
 ## runtime links only into a program that may use tasks (ADR 0599).
 fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
-    src := imported_text(path, source_text(path)?, "{dir}/../../../bootstrap/src/std")
+    src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
-    tasks := mir.uses_tasks(src) or mentions_ui(src)
+    # `--parallel` may put any loop on the pool (conc.par.8).
+    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on()
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
     mut names := ["prim.ail", "core.ail", "math.ail"]
     for name in fs.list_dir(dir)?.sorted()
+        # The deterministic scheduler links with the task runtime (sched.ail).
+        if name == "sched.ail" and not tasks
+            continue
         if name.ends_with(".ail") and not names.contains(name) and name != skip
             names.push(name)
     for name in names
@@ -405,12 +478,23 @@ fn runtime_syntax(path str, text str)
 ## outside the native subset are printed as `ail check` prints
 ## diagnostics, and the run fails.
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module
+    lower_file_with(path, rt, std, "")
+
+## `lower_file` with the root file's text given when `over` isn't empty (the
+## attach shim).
+fn lower_file_with(path str, rt ast.Program?, std str, over str) !mir.Module
     mut srcs := List[mir.Source]()
     mut root := path
     if path.ends_with(".ail")
         cut := path.split("/")
         root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
-        srcs.push(parse_source("", path)?)
+        if over != ""
+            mut names := prelude_generic_names()
+            for n in syntax.generic_names(syntax.lex(over).tokens).sorted()
+                names.add(n)
+            srcs.push(parse_with("", path, over, names))
+        else
+            srcs.push(parse_source("", path)?)
     else
         mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
@@ -418,52 +502,77 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
                 files.push("{path}/{name}")
         srcs.extend(parse_module("", files)?)
     mut loaded := Set[str]()
-    # The package root each source was read from: a dependency's modules
-    # resolve against its own root and manifest (mod.pkg.3).
-    mut roots := [root for _ in srcs]
+    # Packages (mod.pkg.1-6): a dependency's modules load under its name and
+    # resolve their imports against its own root and manifest (mod.pkg.3).
+    packages := pkg.read(root)
     mut k := 0
     while k < srcs.len()
-        for imp in mir.imports_of(srcs[k].prog).sorted()
-            if loaded.contains(imp)
+        for ui in 0..srcs[k].prog.uses.len()
+            u := srcs[k].prog.uses[ui]
+            parts := [i.name for i in u.path]
+            if parts.len() == 0
                 continue
-            loaded.add(imp)
-            if imp.starts_with("std.")
+            imp := parts.join(".")
+            if parts[0] == "std"
+                if loaded.contains(imp)
+                    continue
+                loaded.add(imp)
                 # A standard module in AIL: one file under the std directory.
-                if std != ""
+                if std != "" and mir.STD_AIL.contains(imp)
                     srcs.push(parse_source(imp, std_file(std, imp))?)
-                    roots.push(root)
                 continue
-            from := roots[k]
-            parts := imp.split(".")
-            mut mroot := from
-            mut dir := "{from}/{imp.replace(".", "/")}"
-            if dep := manifest_dep(from, parts[0])
-                # `dep NAME path DIR`: `use NAME.m` is `DIR/m` (mod.pkg.2).
-                mroot = "{from}/{dep}"
-                dir = if parts.len() == 1 then mroot else "{mroot}/{parts[1..].join("/")}"
+            t := packages.target(srcs[k].module, parts)
+            if t.undeclared
+                continue
+            if loaded.contains(t.module)
+                continue
+            loaded.add(t.module)
             mut files := List[str]()
-            for name in fs.list_dir(dir)?.sorted()
+            for name in fs.list_dir(t.dir)?.sorted()
                 if name.ends_with(".ail")
-                    files.push("{dir}/{name}")
-            before := srcs.len()
-            srcs.extend(parse_module(imp, files)?)
-            for _ in before..srcs.len()
-                roots.push(mroot)
+                    files.push("{t.dir}/{name}")
+            srcs.extend(parse_module(t.module, files)?)
         k += 1
-    derived := derived_sources()?
-    srcs.extend(derived.sources)
+    # A generic type of another module starts type arguments after `m.Name`
+    # (gen.infer.2): parse again the files that name one, knowing every
+    # module's generic names.
+    mut generics := Set[str]()
+    for src in srcs
+        for n in syntax.generic_names(syntax.lex(src.text).tokens).sorted()
+            generics.add(n)
+    for i in 0..srcs.len()
+        if srcs[i].path != "<prelude>" and [
+            n
+            for n in generics.sorted() if srcs[i].text.contains(".{n}[")
+        ].len() > 0
+            srcs[i] = parse_with(srcs[i].module, srcs[i].path, srcs[i].text, generics)
+    # Imports name modules by their place in the program (`shapes` in package
+    # `geo` is `geo.shapes`), keeping the name the file uses for them.
+    for i in 0..srcs.len()
+        for ui in 0..srcs[i].prog.uses.len()
+            u := srcs[i].prog.uses[ui]
+            parts := [x.name for x in u.path]
+            if parts.len() == 0 or parts[0] == "std"
+                continue
+            t := packages.target(srcs[i].module, parts)
+            if t.module == parts.join(".") or t.undeclared
+                continue
+            mut alias := ast.Ident(name: parts[parts.len() - 1], pos: u.pos)
+            if given := u.alias
+                alias = given
+            srcs[i].prog.uses[ui] = ast.Use(
+                path: [ast.Ident(name: n, pos: u.pos) for n in t.module.split(".")],
+                alias: alias,
+                pos: u.pos,
+            )
     srcs.extend(derive_builtin(srcs))
     srcs.extend(derive_user(srcs, rt, std))
     lazy := srcs.len()
-    # Without the Rust front end's file, the prelude's JSON and `Default`
-    # modules come from the embedded copy, for the programs that name them
-    # (json.prelude.1, ADR 0808).
-    mut prelude := derived.prelude
-    if prelude == none and mentions_prelude(srcs)
-        prelude = mir.PRELUDE_EMBED
-    if text := prelude
-        srcs.push(parse_text("", "<prelude>", mir.prelude_text(text)))
-    m := mir.lower_package_with(srcs, rt, lazy) else err
+    # The prelude's JSON and `Default` modules come from the embedded copy,
+    # for the programs that name them (json.prelude.1, ADR 0808).
+    if mentions_prelude(srcs)
+        srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
+    m := mir.lower_package_par(srcs, rt, lazy, proven_loop_keys(path, std)) else err
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -483,26 +592,37 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
         )
     m
 
+## Whether `ail run --parallel` asked for the independent loops on the pool
+## (conc.par.8); `--deterministic` keeps every loop on one thread (conc.par.9).
+fn parallel_on() bool
+    on := env.get("AIL_PARALLEL") else ""
+    det := env.get("AIL_DETERMINISTIC") else ""
+    on == "1" and det == ""
+
+## The `file:line:col` of every loop of the program that `conc.par.2-4`
+## prove independent, when `--parallel` is on.
+fn proven_loop_keys(file str, std str) Set[str]
+    mut keys := Set[str]()
+    if not parallel_on()
+        return keys
+    loaded := load.load(file, std) else return keys
+    if loaded.diags.len() > 0
+        return keys
+    for at in check.proven_loops(loaded.program)
+        found := load.locate(loaded.program.files, at)
+        keys.add("{found.0}:{found.1.line}:{found.1.col}")
+    keys
+
 ## Whether a source names a module of the prelude written in AIL: the test
-## `ail build` makes before it writes the prelude into the derived file.
+## `ail build` makes before it adds the embedded prelude.
 fn mentions_prelude(srcs List[mir.Source]) bool
     for s in srcs
         if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
-        if s.text.contains("@derive") or s.text.contains("TypeInfo")
+        if s.text.contains("@derive") or s.text.contains("TypeInfo") or s.text.contains("FromArgs")
             return true
     false
-
-## The directory of dependency `name` in the manifest `ROOT/ail.pkg`:
-## its `dep NAME path DIR` line (mod.pkg.2). `none` without one.
-fn manifest_dep(root str, name str) str?
-    text := fs.read_text("{root}/ail.pkg") else return none
-    for line in text.lines()
-        w := line.split(" ")
-        if w.len() >= 4 and w[0] == "dep" and w[1] == name and w[2] == "path"
-            return w[3]
-    none
 
 ## The file of standard module `imp` (`std.csv`, `std.net.http`) under `std`.
 fn std_file(std str, imp str) str
@@ -511,36 +631,8 @@ fn std_file(std str, imp str) str
         return "{std}/{parts[0]}/{parts[0]}.ail"
     "{std}/{parts.join("/")}.ail"
 
-## The methods derive generators wrote (ct.gen.1), which `ail build` puts
-## in the file named by `AIL_DERIVED` (ADR 0807): for each deriving `impl`,
-## a line `@@derive MODULE TYPE.TRAIT` (`-` for the root module), then the
-## generated text. Each text is a source `gen:impl:TYPE.TRAIT` of its
-## module whose functions are methods of `TYPE`. A last block `@@prelude`
-## is the prelude, for its JSON and `Default` modules (ADR 0808).
-fn derived_sources() !Derived
-    mut out := Derived(sources: [], prelude: none)
-    path := env.get("AIL_DERIVED") else return out
-    mut text := fs.read_text(path)?
-    parts := text.split("@@prelude\n")
-    if parts.len() > 1
-        out.prelude = parts[1]
-        text = parts[0]
-    mut lines := text.lines()
-    lines.push("@@derive")
-    mut head := List[str]()
-    mut body := List[str]()
-    for line in lines
-        if not line.starts_with("@@derive")
-            body.push(line)
-            continue
-        if head.len() == 3
-            out.sources.push(derived_source(head[1], head[2], body))
-        head = line.split(" ")
-        body = []
-    out
-
-## The methods of the `impl`s the built-in generators derive (ADR 0850) that
-## `ail build`'s file doesn't carry, each as a source of its module.
+## The methods of the `impl`s the built-in generators derive (ADR 0850),
+## each as a source of its module.
 fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
     mut have := Set[str]()
     for s in srcs
@@ -552,7 +644,11 @@ fn derive_builtin(srcs List[mir.Source]) List[mir.Source]
         if e.problem != ""
             io.eprint("{srcs[e.file].path}:{e.pos.line}:{e.pos.col}: error[ct.derive.4]: {derive_failure(e.label)}: {e.problem}")
             io.exit(1)
-        out.push(derived_source(if e.module == "" then "-" else e.module, e.label, e.text.lines()))
+        out.push(derived_source(
+            if e.module == "" then "-" else e.module,
+            e.label,
+            derive.tidy(e.text).lines(),
+        ))
     out
 
 ## The methods of the `impl`s of traits with a user-written `@derive(f)`
@@ -566,12 +662,12 @@ fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
     for s in srcs
         have.add(s.path)
     mut jobs := List[derive.Job]()
-    for j in derive.user_jobs([s.module for s in srcs], [s.prog for s in srcs])
+    for j in derive.user_jobs([s.module for s in srcs], documented(srcs))
         if not have.contains("gen:impl:{j.label}")
             jobs.push(j)
     if jobs.len() == 0
         return []
-    texts := run_generators(srcs, jobs, rt)
+    texts := run_generators(srcs, jobs, rt, false)
     mut out := List[mir.Source]()
     for k in 0..jobs.len()
         j := jobs[k]
@@ -581,12 +677,17 @@ fn derive_user(srcs List[mir.Source], rt ast.Program?, std str) List[mir.Source]
         out.push(derived_source(
             if j.module == "" then "-" else j.module,
             j.label,
-            texts[k].lines(),
+            derive.tidy(texts[k]).lines(),
         ))
     out
 
 ## The text each job's generator wrote, in order, or `@@err MESSAGE`.
-fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?) List[str]
+fn run_generators(
+    srcs List[mir.Source],
+    jobs List[derive.Job],
+    rt ast.Program?,
+    quiet bool,
+) List[str]
     mut calls := List[str]()
     mut by_module := Map[str, List[str]]()
     for k in 0..jobs.len()
@@ -618,6 +719,9 @@ fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?)
     mut prelude := mir.prelude_text(mir.PRELUDE_EMBED)
     all.push(parse_text("", "<prelude>", prelude))
     m := mir.lower_package_with(all, rt, from) else err
+        if quiet
+            # `ail check` reports the generators' own problems itself.
+            return []
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -654,6 +758,11 @@ fn run_generators(srcs List[mir.Source], jobs List[derive.Job], rt ast.Program?)
             texts.push(body)
     texts
 
+## The sources' programs with their `##` docs, which a generator reads in
+## `FieldInfo.doc` (refl.info.1, ct.derive.5).
+fn documented(srcs List[mir.Source]) List[ast.Program]
+    [doc.attach(s.prog, s.text) for s in srcs]
+
 ## "`Trait` can't be derived for `Type`" for the label `Type.Trait`.
 fn derive_failure(label str) str
     parts := label.split(".")
@@ -674,10 +783,42 @@ fn user_main_renamed(s mir.Source) mir.Source
             prog.fns[i].name = "user_main"
     mir.Source(module: s.module, path: s.path, text: s.text, prog: prog)
 
-## What `ail build` passes besides the program's files.
-struct Derived
-    sources List[mir.Source]
-    prelude str?
+## `ail check`'s texts of the program's own derive generators, by
+## `TYPE.TRAIT`, for `load.load_derived`: `@@err MESSAGE` for a generator's
+## `DeriveError`, `@@fx REASONS` for one that isn't compile-time-safe
+## (ct.derive.3), which isn't run. Empty when the program has none, or when
+## the generators don't build (the checker reports why).
+fn user_derive_texts(loaded load.Loaded, path_arg str) Map[str, str]
+    mut srcs := List[mir.Source]()
+    for k in 0..loaded.program.files.len()
+        f := loaded.program.files[k]
+        if k < loaded.texts.len() and f.path.ends_with(".ail")
+            srcs.push(parse_text(f.module, f.path, loaded.texts[k]))
+    mut out := Map[str, str]()
+    if srcs.len() == 0
+        return out
+    jobs := derive.user_jobs([s.module for s in srcs], documented(srcs))
+    if jobs.len() == 0
+        return out
+    names := [
+        if j.trait_module == "" then j.generator else "{j.trait_module}.{j.generator}"
+        for j in jobs
+    ]
+    fx := check.generator_effects(loaded.program, names)
+    mut safe := List[derive.Job]()
+    for k in 0..jobs.len()
+        if fx[k] != ""
+            out[jobs[k].label] = "@@fx {fx[k]}"
+        else
+            safe.push(jobs[k])
+    if safe.len() == 0
+        return out
+    rt := runtime_with(path.join(compiler_dir(), "rt/native"), path_arg, "0", "0") else return out
+    texts := run_generators(srcs, safe, rt, true)
+    for k in 0..texts.len()
+        if k < safe.len()
+            out[safe[k].label] = texts[k]
+    out
 
 ## The generated text `body` of the `impl` `label` (`TYPE.TRAIT`) in
 ## `module`, each `fn m` written `fn TYPE.m`, so lines stay where the
@@ -723,13 +864,16 @@ fn mentions_ui(text str) bool
 
 ## One file, parsed; syntax errors are printed and the run fails.
 fn parse_source(module str, path str) !mir.Source
-    parse_text(module, path, fs.read_text(path)?)
+    srcs := parse_module(module, [path])?
+    srcs[0]
 
 ## The files of one module, parsed together: a generic name declared in one
 ## file starts type arguments in the others (gen.infer.2).
 fn parse_module(module str, paths List[str]) !List[mir.Source]
     mut texts := List[str]()
-    mut names := Set[str]()
+    # The root module sees the prelude's generic functions too
+    # (`load_json[T](path)`, json.load.1).
+    mut names := if module == "" then prelude_generic_names() else Set[str]()
     for path in paths
         text := fs.read_text(path)?
         texts.push(text)
@@ -737,13 +881,23 @@ fn parse_module(module str, paths List[str]) !List[mir.Source]
             names.add(n)
     [parse_with(module, paths[k], texts[k], names) for k in 0..paths.len()]
 
+fn prelude_generic_names() Set[str]
+    syntax.generic_names(syntax.lex(mir.prelude_text(mir.PRELUDE_EMBED)).tokens)
+
 ## Text from `path`, parsed; syntax errors are printed and the run fails.
 fn parse_text(module str, path str, text str) mir.Source
     parse_with(module, path, text, Set[str]())
 
+## The generic functions of the prelude's `jsonderive` module (`mir/prelude_embed.ail`): the
+## prelude is not in the file's tokens here, so `load_json[T](...)` needs them named.
+PRELUDE_GENERIC := ["load_json", "print_json"]
+
 fn parse_with(module str, path str, text str, names Set[str]) mir.Source
     lexed := syntax.lex(text)
-    parsed := syntax.parse_with(lexed.tokens, names)
+    mut generic := names
+    for n in PRELUDE_GENERIC
+        generic.add(n)
+    parsed := syntax.parse_with(lexed.tokens, generic)
     mut diags := lexed.diags
     diags.extend(parsed.diags)
     report := syntax.report_text(path, text, diags)
@@ -804,14 +958,20 @@ fn tree_stamp(tag str, root str) str
             lines.push("{tag} {f} {hash.sha256(text)}")
     lines.join("\n")
 
+## `--schedule=random` builds atomic operations with switch points (conc.sched.1); the build
+## cache tells those executables apart. Other builds pay nothing.
+fn sched_points() bool
+    s := env.get("AIL_SCHEDULE") else ""
+    s.starts_with("random")
+
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
-fn cache_key(file str, target str) str
+fn cache_key(file str, target str, ms str, mb str, attach bool) str
     dir := compiler_dir()
     root := path.dir(file)
-    std := path.join(path.dir(dir), "bootstrap/src/std")
+    std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-1 {target} {file}",
+        "ail-native-cache-2 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
         tree_stamp("std", std),
@@ -832,15 +992,19 @@ fn cache_trim(dir str)
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str
+    cli_prepare_with(file, "0", "0", false)
+
+## `cli_prepare` with the run limits baked in (`--timeout MS`, `--max-memory MB`).
+fn cli_prepare_with(file str, ms str, mb str, attach bool) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target))
+    exe := path.join(dir, cache_key(file, target, ms, mb, attach))
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_to(file, tmp, target, "0", "0")
+    compile_fresh(file, tmp, target, ms, mb, attach)
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -848,18 +1012,44 @@ fn cli_prepare(file str) str
     exe
 
 fn cli_prepare_cmd(rest List[str])
-    if rest.len() != 1
-        io.eprint("usage: ail prepare FILE")
+    usage := "usage: ail prepare [--timeout MS] [--max-memory MB] FILE"
+    mut ms := "0"
+    mut mb := "0"
+    mut file := ""
+    mut i := 0
+    while i < rest.len()
+        a := rest[i]
+        has := i + 1 < rest.len()
+        if a == "--timeout" and has and positive(rest[i + 1])
+            ms = rest[i + 1]
+            i += 1
+        elif a == "--max-memory" and has and positive(rest[i + 1])
+            mb = rest[i + 1]
+            i += 1
+        elif file == "" and not a.starts_with("-")
+            file = a
+        else
+            io.eprint(usage)
+            io.exit(2)
+        i += 1
+    if file == ""
+        io.eprint(usage)
         io.exit(2)
-    print(cli_prepare(rest[0]))
+    print(cli_prepare_with(file, ms, mb, false))
 
 ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn cli_run(rest List[str])
     if rest.len() < 1
         io.eprint("usage: ail run FILE [ARGS...]")
         io.exit(2)
-    exe := cli_prepare(rest[0])
-    out := proc.run(exe, rest[1..]) else err
+    # attach.run.1: on by default for `ail run`; `--no-attach` turns it off.
+    attach := rest[0] != "--no-attach"
+    args := if attach then rest else rest[1..]
+    if args.len() < 1
+        io.eprint("usage: ail run [--no-attach] FILE [ARGS...]")
+        io.exit(2)
+    exe := cli_prepare_with(args[0], "0", "0", attach)
+    out := proc.run(exe, args[1..]) else err
         io.eprint("error[native.build.3]: can't start {exe}: {err}")
         io.exit(2)
         return
@@ -878,7 +1068,7 @@ fn chop(s str) str
 
 ## `load FILE...`: the loaded program as `ail api --ast --program` prints it.
 fn load_dump(files List[str])
-    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
+    std := path.join(path.dir(compiler_dir()), "std")
     for f in files
         if files.len() > 1
             print("== {f}")
@@ -893,21 +1083,162 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    json := rest.contains("--json")
-    paths := [a for a in rest if not a.starts_with("--")]
+    usage := "usage: ail check [--json] [--deny LIST] [--deterministic] FILE|DIR"
+    mut json := false
+    mut driver := false
+    mut deny := List[str]()
+    mut paths := List[str]()
+    mut i := 0
+    while i < rest.len()
+        a := rest[i]
+        has := i + 1 < rest.len()
+        if a == "--json"
+            json = true
+        elif a == "--unsafe" and has and rest[i + 1] == "driver"
+            driver = true
+            i += 1
+        elif a == "--deterministic"
+            deny.extend(check.deterministic_deny())
+        elif a == "--deny" and has
+            parsed := check.parse_deny(rest[i + 1])
+            if parsed.1 != ""
+                io.eprint("error: {parsed.1}")
+                io.exit(2)
+            deny.extend(parsed.0)
+            i += 1
+        elif not a.starts_with("--")
+            paths.push(a)
+        else
+            io.eprint(usage)
+            io.exit(2)
+        i += 1
     if paths.len() != 1
-        io.eprint("usage: ail check [--json] FILE|DIR")
+        io.eprint(usage)
         io.exit(2)
-    std := path.join(path.dir(compiler_dir()), "bootstrap/src/std")
-    loaded := load.load(paths[0], std) else err
+    std := path.join(path.dir(compiler_dir()), "std")
+    mut loaded := load.load(paths[0], std) else err
         io.eprint("error: {err.message}")
         io.exit(2)
         return
+    if [d for d in loaded.diags if not d.rule.starts_with("ct.")].len() == 0
+        user := user_derive_texts(loaded, paths[0])
+        if user.len() > 0
+            loaded = load.load_derived(paths[0], std, user) else loaded
     mut found := [load.shown_syntax(d) for d in loaded.diags]
     if loaded.diags.len() == 0
-        found = [load.shown_check(d) for d in check.check_program(loaded.program).diags]
+        mut program := loaded.program
+        if driver
+            # unsafe.hw.1: `--unsafe driver` lets the root package reach hardware.
+            program.driver_allowed.push("")
+        found = [
+            load.shown_check(d)
+            for d in check.analyze_denying(program, false, deny).report.diags
+        ]
     if found.len() > 0
         io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
     for d in found
         if not d.warning
             io.exit(2)
+
+## `api [--outline] FILE [--text | --pretty]`: the outline of one file
+## (api.out.1-5). `--symbols`, `--expanded`, packages and the queries stay
+## with the Rust `ail api` for now.
+## `ail api --tokens FILE`, `--ast FILE` and `--ast --program FILE|DIR` (api.tok.1, api.ast.1-3):
+## the lexer's tokens, the parser's tree and the loaded program.
+fn api_syntax(rest List[str])
+    usage := "usage: ail api (--tokens | --ast) FILE\n       ail api --ast --program DIR|FILE"
+    tree := rest.contains("--ast")
+    whole := rest.contains("--program")
+    files := [a for a in rest if not a.starts_with("--")]
+    mut known := true
+    for a in rest
+        if a.starts_with("--") and a != "--ast" and a != "--tokens" and a != "--program"
+            known = false
+    if files.len() != 1 or not known or (whole and not tree)
+        io.eprint(usage)
+        io.exit(2)
+    file := files[0]
+    if whole
+        std := path.join(path.dir(compiler_dir()), "std")
+        loaded := load.load(file, std) else err
+            io.eprint("error: {err.message}")
+            io.exit(2)
+            return
+        print(loaded.program.to_json().to_text())
+        for d in loaded.diags
+            print("{d.pos.line}:{d.pos.col} diag {d.rule}")
+        return
+    text := fs.read_text(file) else err
+        io.eprint("error: can't read {file}: {err.kind}")
+        io.exit(2)
+        return
+    lexed := syntax.lex(text)
+    if tree
+        print(syntax.ast_text(lexed, syntax.parse(lexed.tokens)))
+    else
+        print(syntax.tokens_text(lexed))
+
+fn api_cmd(rest List[str])
+    usage := "usage: ail api [--outline] FILE [--text | --pretty] [--symbols]"
+    if rest.contains("--tokens") or rest.contains("--ast")
+        api_syntax(rest)
+        return
+    if rest.contains("--diff")
+        io.exit(api.diff_command(rest, path.join(path.dir(compiler_dir()), "std")))
+    if rest.contains("--locals") or rest.contains("--type") or rest.contains("--refs")
+        io.exit(api.query_command(rest, path.join(path.dir(compiler_dir()), "std")))
+    if rest.contains("--card")
+        io.exit(api.card_command(rest, path.join(path.dir(compiler_dir()), "std")))
+    mut form := api.Form.Plain
+    mut expanded := false
+    mut symbols := false
+    mut json := false
+    mut files := List[str]()
+    for a in rest
+        match a
+            "--outline" => continue
+            "--json" => json = true
+            "--expanded" => expanded = true
+            "--text" => form = api.Form.Text
+            "--pretty" => form = api.Form.Pretty
+            "--symbols" => symbols = true
+            _ =>
+                if a.starts_with("--") or files.len() > 0
+                    io.eprint(usage)
+                    io.exit(2)
+                files.push(a)
+    if files.len() != 1
+        io.eprint(usage)
+        io.exit(2)
+    std := path.join(path.dir(compiler_dir()), "std")
+    if not files[0].ends_with(".ail")
+        io.exit(api.package_command(files[0], form, std))
+    loaded := load.load(files[0], std) else err
+        io.eprint("error: {err.message}")
+        io.exit(2)
+        return
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    mut analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
+            io.exit(2)
+    prog := doc.attach(loaded.program, loaded.texts[0])
+    facts := api.Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: analysis.symbols,
+        weak_symbols: analysis.weak_symbols,
+    )
+    out := if expanded then api.outline_expanded(
+        prog,
+        facts,
+        loaded.texts,
+        files[0],
+        form,
+        symbols,
+    ) else api.outline(prog, facts, files[0], form, symbols)
+    if out != ""
+        print(out.strip_suffix("\n") else out)

@@ -1,0 +1,156 @@
+## Test support for `tools/fix/parity.sh`: settle the unsettled edits the Rust
+## checker wrote (one tab-separated line per edit) against a source file, and
+## print what survives in the form the script derives from `ail check --json`.
+use ast
+use fix
+
+fn unescape(s str) str
+    mut out := ""
+    cs := s.chars()
+    mut i := 0
+    while i < cs.len()
+        c := cs[i]
+        i += 1
+        if c == '\\' and i < cs.len()
+            d := cs[i]
+            i += 1
+            if d == 'n'
+                out = "{out}\n"
+            elif d == 't'
+                out = "{out}\t"
+            else
+                out = "{out}{d}"
+        else
+            out = "{out}{c}"
+    out
+
+fn escape(s str) str
+    mut out := ""
+    for c in s.chars()
+        if c == '\\'
+            out = "{out}\\\\"
+        elif c == '\n'
+            out = "{out}\\n"
+        elif c == '\t'
+            out = "{out}\\t"
+        else
+            out = "{out}{c}"
+    out
+
+fn anchor_of(name str) str
+    match name
+        "AfterBlock" => "after_block"
+        "LineEnd" => "line_end"
+        "AfterExpr" => "after_expr"
+        "Call" => "call"
+        "CallNamed" => "call_named"
+        "Brackets" => "brackets"
+        "Chain" => "chain"
+        "TrimBefore" => "trim_before"
+        "Operands" => "operands"
+        "CFor" => "c_for"
+        "EmptyDecl" => "empty_decl"
+        _ => "exact"
+
+fn pos_of(line str, col str) ast.Pos
+    l := line.to_int() else 0
+    c := col.to_int() else 0
+    ast.Pos(line: l, col: c)
+
+## One line per fix that settles: `LINE:COL:` of its diagnostic, then its edits.
+pub fn settled(src str, dump str) str
+    lines := fix.split_lines(src)
+    mut out := ""
+    mut keys := List[str]()
+    mut fixes := List[fix.Fix]()
+    for row in dump.split("\n")
+        f := row.split("\t")
+        if f.len() < 10
+            continue
+        key := "{f[0]}:{f[1]}:{f[2]}"
+        old := if f[8] == "\u{1}" then none else unescape(f[8])
+        e := fix.Edit(
+            pos: pos_of(f[4], f[5]),
+            end: pos_of(f[6], f[7]),
+            old: old,
+            anchor: anchor_of(f[3]),
+            text: unescape(f[9]),
+        )
+        mut at_key := -1
+        for k in 0..keys.len()
+            if keys[k] == key
+                at_key = k
+        if at_key < 0
+            keys.push(key)
+            fixes.push(fix.Fix(title: "", edits: [e]))
+        else
+            fixes[at_key].edits.push(e)
+    for k in 0..keys.len()
+        parts := keys[k].split(":")
+        done := fix.settle_fixes([fixes[k]], lines)
+        if done.len() == 1
+            mut es := List[str]()
+            for e in done[0].edits
+                es.push("{e.pos.line}:{e.pos.col}-{e.end.line}:{e.end.col}={escape(e.text)}")
+            out = "{out}{parts[0]}:{parts[1]}:{es.join(";")}\n"
+    out
+
+fn num_of(j Json, key str) int
+    n := j.get(key)?.as_num() else return 0.0.to_int()
+    n.to_int()
+
+fn edits_of(f Json) List[fix.Edit]
+    mut out := List[fix.Edit]()
+    arr := f.get("edits")?.as_arr() else return out
+    for e in arr
+        t := e.str("text") else ""
+        out.push(fix.Edit(
+            pos: ast.Pos(line: num_of(e, "line"), col: num_of(e, "col")),
+            end: ast.Pos(line: num_of(e, "end_line"), col: num_of(e, "end_col")),
+            old: none,
+            anchor: "exact",
+            text: t,
+        ))
+    out
+
+## A check by the Rust tool, for `fixrun`: writes `src` to `path`, runs
+## `RUST check` on it, and reads the diagnostics from its JSON lines.
+## The Rust tool is the program named by `AIL_RUST`.
+pub fn rust_diagnose(path str, src str, json bool) Diagnosis
+    rust := env.get("AIL_RUST") else "ail"
+    fs.write_text(path, src) else err
+        return Diagnosis(found: [], report: "")
+    run := proc.run(rust, ["check", path, "--json"]) else err
+        return Diagnosis(found: [], report: "")
+    mut found := List[Found]()
+    for line in run.err.lines()
+        d := parse_json(line) else continue
+        sev := d.str("severity") else "error"
+        mut fixes := List[fix.Fix]()
+        arr := d.get("fixes")?.as_arr() else []
+        for f in arr
+            fixes.push(fix.Fix(title: f.str("title") else "", edits: edits_of(f)))
+        found.push(Found(
+            rule: d.str("rule") else "",
+            pos: ast.Pos(line: num_of(d, "line"), col: num_of(d, "col")),
+            warning: sev == "warning",
+            fixes: fixes,
+        ))
+    mut report := run.err
+    if not json
+        text := proc.run(rust, ["check", path]) else err
+            return Diagnosis(found: found, report: "")
+        report = text.err
+    Diagnosis(found: found, report: report)
+
+## `ail fix` with the Rust tool as the checker, for `tools/fix/parity.py`.
+pub fn run_with_rust(args List[str]) int
+    mut r := begin(args)
+    if r.code >= 0
+        return r.code
+    json := args.contains("--json")
+    for round in 1..MAX_ROUNDS + 1
+        if not step(mut r, rust_diagnose(r.path, r.src, json))
+            break
+    canonicalize(mut r)
+    finish(mut r, rust_diagnose(r.path, r.src, json))

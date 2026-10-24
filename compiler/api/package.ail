@@ -1,0 +1,102 @@
+## `ail api DIR [--text | --pretty]` (api.pkg.1-4), as `package_outline` in
+## `bootstrap/src/api.rs`: the outline of a package directory, every module's
+## declarations in one list ordered by file then position. An item's `id` is
+## prefixed with its module, and it gains `module` and `file` keys after the
+## single-file ones; `line` counts from the top of its own file.
+use ast
+use check
+use doc
+use load
+
+## The file of the program that holds `line`, as an index; `-1` for the prelude.
+fn pkg_file_at(p ast.Program, line int) int
+    if line >= 1073741824
+        return -1
+    mut at := -1
+    for i in 0..p.files.len()
+        if p.files[i].base < line
+            at = i
+    at
+
+## `item` and its members with lines counted from the top of their file, and
+## with the module and file it is in (api.pkg.1).
+fn pkg_shift(item Item, base int) Item
+    mut it := item
+    it.line = if item.line > base then item.line - base else 0
+    mut groups := List[Group]()
+    for g in item.members
+        groups.push(Group(key: g.key, items: [pkg_shift(m, base) for m in g.items]))
+    it.members = groups
+    it
+
+fn pkg_localize(prog ast.Program, item Item) Item
+    at := pkg_file_at(prog, item.line)
+    if at < 0
+        return item
+    f := prog.files[at]
+    mut it := pkg_shift(item, f.base)
+    it.extra.push(kv("module", J.Str(f.module)))
+    it.extra.push(kv("file", J.Str(f.path)))
+    it
+
+## The outline of the package `dir` in `form`.
+pub fn package_outline(prog ast.Program, facts Facts, dir str, form Form) str
+    api := new_whole_api(prog, facts)
+    # `items` are in position order, which is file order, before the lines are made local.
+    items := [pkg_localize(prog, it) for it in api.items()]
+    match form
+        Text =>
+            mut lines := List[str]()
+            mut file := ""
+            for it in items
+                here := it.extra_text("file") else file
+                if here != file
+                    file = here
+                    lines.push("# {file}")
+                it.text(0, mut lines)
+            if lines.len() == 0
+                return ""
+            "{lines.join("\n")}\n"
+        Plain | Pretty =>
+            top := J.Obj([
+                kv("api", J.Int(API_VERSION)),
+                kv("package", J.Str(dir)),
+                kv("items", J.Arr([it.json() for it in items])),
+            ])
+            "{write_json(top, form == Form.Pretty, 0)}\n"
+
+## `ail api DIR`; the exit status. Doc comments are attached file by file.
+pub fn package_command(dir str, form Form, std str) int
+    loaded := load.load(dir, std) else err
+        io.eprint("error: {err.message}")
+        return 2
+    mut found := [load.shown_syntax(d) for d in loaded.diags]
+    analysis := check.analyze(loaded.program, true)
+    if loaded.diags.len() == 0
+        found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    for d in found
+        if not d.warning
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            return 2
+    mut by_line := Map[int, str]()
+    for i in 0..loaded.program.files.len()
+        f := loaded.program.files[i]
+        if f.path.ends_with(".ail")
+            lines := doc.by_line(loaded.texts[i])
+            for l in lines.keys()
+                by_line[f.base + l] = lines[l]
+    prog := doc.attach_lines(loaded.program, by_line)
+    out := package_outline(
+        prog,
+        Facts(
+            effects: analysis.effects,
+            errors: analysis.errors,
+            symbols: Map[int, str](),
+            weak_symbols: Map[int, str](),
+        ),
+        dir,
+        form,
+    )
+    if out != ""
+        print(out.strip_suffix("\n") else out)
+    0

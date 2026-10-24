@@ -1,0 +1,46 @@
+struct Stack[T]
+    items List[T]
+
+fn Stack.new() Self
+    Stack(items: [])
+
+fn Stack.push(mut self, x T)
+    self.items.push(x)
+
+fn Stack.peek(self) T?
+    n := self.items.len()
+    if n == 0
+        return none
+    self.items[n - 1]
+
+struct Pair[A, B]
+    first A
+    second B
+
+fn Pair.swap(self) Pair[B, A]
+    Pair(first: self.second, second: self.first)
+
+fn Pair.with_first[C](self, c C) Pair[C, B]
+    Pair(first: c, second: self.second)
+
+enum Tree[T]
+    Leaf
+    Node(left Tree[T], value T, right Tree[T])
+
+fn depth[T](t Tree[T]) int
+    match t
+        Leaf => 0
+        Node(l, _, r) => 1 + depth(l).max(depth(r))
+
+fn main()
+    mut s := Stack[int].new()
+    s.push(3)
+    s.push(7)
+    print("{s.peek()} {s}")
+    names := Stack[str].new()
+    print(names.peek())
+    p := Pair(first: 1, second: "one")
+    print(p.swap())
+    print(p.with_first(true))
+    t := Tree[int].Node(left: Tree[int].Leaf, value: 1, right: Tree[int].Leaf)
+    print(depth(t))

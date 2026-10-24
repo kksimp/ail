@@ -35,6 +35,9 @@ pub struct Program
     ## program without one run with `--unsafe driver` (unsafe.hw.1).
     pub driver_allowed List[str]
     pub generated List[Generated]
+    ## Where each `uhwhatnow?` hole is (expr.hole.3); a `todo` isn't listed.
+    ## Optional so a program dump without it still reads (json.derive.2).
+    pub asks List[Pos]?
 
 ## One source file of a package: its lines are numbered from `base + 1`.
 pub struct SourceFile
@@ -109,6 +112,8 @@ pub struct Field
     pub pos Pos
     pub doc str?
     pub ty TypeRef
+    ## Marked `@observe`: an attached agent may read it (attach.observe.1).
+    pub observe bool
 
 pub struct EnumDecl
     pub name str

@@ -9,10 +9,12 @@ use std.env
 use std.io
 use std.fs
 use std.net
+use std.proc
 use std.net.jar
 use std.compress
 use std.time
 use std.app
+use std.screen
 use html
 use page
 use css
@@ -20,7 +22,11 @@ use draw
 use gfx
 use jsdom
 use images
+use attach
 use ws
+use look
+use tabstrip
+use svg
 
 ## The keys, as `--keys` prints them.
 KEYS := [
@@ -1396,6 +1402,10 @@ fn rpc_id(j Json) str
 struct Guard
     allow List[str]
     log List[str]
+    ## Sites allowed at launch, on top of the tabs' (`--allow`).
+    fixed List[str]
+    ## The user said yes to the one send now being retried.
+    ok_once bool
 
 ## The host of `url`: "example.com" for "https://example.com:8080/a".
 fn host_of(url str) str
@@ -1412,6 +1422,22 @@ fn Guard.permits(self, url str) bool
 fn sends(name str) bool
     name == "submit"
 
+## The answer to a `tools/call` request `id` whose result is `text`.
+fn rpc_reply(id str, text str) str
+    "\{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":\{\"content\":[\{\"type\":\"text\",\"text\":{page.quote(text)}}]}}"
+
+## The answer of the `screen` tool (std.screen.2, std.screen.4) over `sc`.
+fn look_answer(sc screen.Screen, a Json) str
+    budget := (a.num("budget") else 0.0).to_int()
+    x := a.num("x")
+    y := a.num("y")
+    if px := x
+        if py := y
+            if rw := a.num("w")
+                return sc.describe(px, py, rw, a.num("h") else 1.0, budget)
+            return sc.what_is_at(px, py)
+    sc.find(a.str("role") else "", a.str("color") else "", a.str("text") else "", budget)
+
 ## One tool call of the `--serve` server: the text it answers with. `g`
 ## refuses sites it doesn't permit, holds an action that sends data until
 ## it is repeated with `confirm`, and logs every call.
@@ -1421,7 +1447,7 @@ fn Browser.tool(mut self, mut g Guard, name str, a Json) str
         return "refused: the agent may not open `{a.str("url") else ""}`; allowed sites: {g.allow.join(", ")}"
     if not g.permits(url)
         return "refused: the agent may not use `{host_of(url)}`; allowed sites: {g.allow.join(", ")}"
-    if name == "act" and sends(a.str("do") else "") and not (a.flag("confirm", false))
+    if name == "act" and sends(a.str("do") else "") and not (a.flag("confirm", false) or g.ok_once)
         return "confirm required: `{a.str("do") else ""}` sends data to {url}. Repeat it with \"confirm\":true if the user wants that."
     match name
         "open" =>
@@ -1435,7 +1461,7 @@ fn Browser.tool(mut self, mut g Guard, name str, a Json) str
             act("find", a.str("text") else "")
             answer()
         "extract" => pg.text()
-        "screenshot" =>
+        "screenshot" | "screen" =>
             images.prefetch(
                 doc,
                 page.base_of(doc, url),
@@ -1446,6 +1472,8 @@ fn Browser.tool(mut self, mut g Guard, name str, a Json) str
                 mut bits,
             )
             s := gfx.layout_with(doc, url, 960.0, sheet, sizes)
+            if name == "screen"
+                return look_answer(look.of(s, 960.0, 640.0, 0.0), a)
             mut lines := ["canvas {s.bg.to_hex()} height {s.height.round()}"]
             for op in s.ops
                 lines.push(op_line(op))
@@ -1454,7 +1482,7 @@ fn Browser.tool(mut self, mut g Guard, name str, a Json) str
         _ => "unknown tool `{name}`: open, observe, act, find, extract, screenshot or log"
 
 ## The tool list, with `<` and `>` for the braces of the JSON.
-TOOLS_SRC := """[<"name":"open","description":"Open a URL; answers with the page model.","inputSchema":<"type":"object","properties":<"url":<"type":"string">>,"required":["url"]>>,<"name":"observe","description":"The page model: nodes with ids, roles, names and boxes.","inputSchema":<"type":"object","properties":<>>>,<"name":"act","description":"Do one action: follow, click, type, submit, check, select, back, forward, scroll, reload. Give link, id or row (a number) and text where needed.","inputSchema":<"type":"object","properties":<"do":<"type":"string">,"link":<"type":"integer">,"id":<"type":"integer">,"row":<"type":"integer">,"text":<"type":"string">>,"required":["do"]>>,<"name":"find","description":"Scroll to text on the page.","inputSchema":<"type":"object","properties":<"text":<"type":"string">>,"required":["text"]>>,<"name":"extract","description":"The page as plain text.","inputSchema":<"type":"object","properties":<>>>,<"name":"log","description":"What this session did, one line per call.","inputSchema":<"type":"object","properties":<>>>,<"name":"screenshot","description":"The pixel layout as drawing operations.","inputSchema":<"type":"object","properties":<>>>]"""
+TOOLS_SRC := """[<"name":"open","description":"Open a URL; answers with the page model.","inputSchema":<"type":"object","properties":<"url":<"type":"string">>,"required":["url"]>>,<"name":"observe","description":"The page model: nodes with ids, roles, names and boxes.","inputSchema":<"type":"object","properties":<>>>,<"name":"act","description":"Do one action: follow, click, type, submit, check, select, back, forward, scroll, reload. Give link, id or row (a number) and text where needed.","inputSchema":<"type":"object","properties":<"do":<"type":"string">,"link":<"type":"integer">,"id":<"type":"integer">,"row":<"type":"integer">,"text":<"type":"string">>,"required":["do"]>>,<"name":"find","description":"Scroll to text on the page.","inputSchema":<"type":"object","properties":<"text":<"type":"string">>,"required":["text"]>>,<"name":"extract","description":"The page as plain text.","inputSchema":<"type":"object","properties":<>>>,<"name":"watch","description":"Tell me when the page changes: url (else the live tab), contains (text to wait for), every (seconds).","inputSchema":<"type":"object","properties":<"url":<"type":"string">,"contains":<"type":"string">,"every":<"type":"integer">>>>,<"name":"unwatch","description":"Stop watch id.","inputSchema":<"type":"object","properties":<"id":<"type":"integer">>,"required":["id"]>>,<"name":"watches","description":"The watches in force.","inputSchema":<"type":"object","properties":<>>>,<"name":"events","description":"What the watches saw change since the last call.","inputSchema":<"type":"object","properties":<>>>,<"name":"schedule","description":"Run one tool later: tool, arguments, in (seconds). It follows the same site and confirm rules.","inputSchema":<"type":"object","properties":<"tool":<"type":"string">,"arguments":<"type":"object">,"in":<"type":"integer">>,"required":["tool","in"]>>,<"name":"schedules","description":"The jobs waiting to run.","inputSchema":<"type":"object","properties":<>>>,<"name":"unschedule","description":"Cancel job id.","inputSchema":<"type":"object","properties":<"id":<"type":"integer">>,"required":["id"]>>,<"name":"log","description":"What this session did, one line per call.","inputSchema":<"type":"object","properties":<>>>,<"name":"screen","description":"Ask about what is drawn: x,y (what is there), x,y,w,h (a region), role, color or text (find). budget limits tokens.","inputSchema":<"type":"object","properties":<"x":<"type":"number">,"y":<"type":"number">,"w":<"type":"number">,"h":<"type":"number">,"role":<"type":"string">,"color":<"type":"string">,"text":<"type":"string">,"budget":<"type":"integer">>>>,<"name":"screenshot","description":"The pixel layout as drawing operations.","inputSchema":<"type":"object","properties":<>>>]"""
 
 fn tools_json() str
     TOOLS_SRC.replace("<", "\{").replace(">", "}")
@@ -1486,7 +1514,7 @@ fn Browser.rpc(mut self, mut g Guard, line str) str
 ## `--serve`: an MCP server on stdio, one JSON-RPC message per line, so an
 ## agent drives the browser with the tools of `Browser.tool`.
 fn Browser.serve(mut self, allow List[str])
-    mut g := Guard(allow, log: [])
+    mut g := Guard(allow, log: [], fixed: [], ok_once: false)
     while true
         line := io.read_line() else break
         if line.trim() == ""
@@ -1574,7 +1602,7 @@ fn Gui.new(b Browser, w float, h float, cell_w float, cell_h float) Gui
         area_w: w,
         area_h: h,
         pixel: false,
-        scene: gfx.Scene(ops: [], hits: [], height: 0.0, bg: 0xffffff, probes: []),
+        scene: gfx.Scene(ops: [], hits: [], height: 0.0, bg: 0xffffff, probes: [], bits: {}),
         scene_stamp: -1,
         scene_w: 0.0,
         scene_url: "",
@@ -1622,6 +1650,9 @@ fn Gui.refresh(mut self)
         scene_edit = b.editing()
         scene_stamp = b.stamp
         scene_w = area_w
+        for k in scene.bits.keys()
+            if not b.bits.contains(k)
+                b.bits[k] = scene.bits[k]
         for k in b.bits.keys()
             if not sent.contains(k)
                 fresh.add(k)
@@ -1806,14 +1837,203 @@ struct Garlic
     ## `g`, which is swapped in and out by `switch`.
     tabs List[Gui]
     cur int
+    ## The tabs closed so far, newest last, for Cmd-Shift-T.
+    closed List[tabstrip.Item]
+    ## The open tab menu: the tab it is for (-1 for none) and its left edge;
+    ## `strip_w` is the strip canvas's width.
+    menu_tab int
+    menu_x float
+    strip_w float
     ## The address field's text.
     url_text str
     ## The control to give the keyboard focus; cleared by the next event.
     want str
+    ## The attach server's side (`--attach`): its bridge, the rules an agent
+    ## session follows and the number of calls it made; `attached` is false
+    ## without `--attach`.
+    attached bool
+    bridge attach.Bridge
+    guard Guard
+    where str
+    calls int
+    ## Watches agents set, what they have seen and not yet read, and the
+    ## seconds the timer has counted.
+    ## An agent call waiting for the user's yes or no: the request, what it
+    ## wants, and the site if it is a site.
+    pending str
+    asks str
+    ask_site str
+    watches List[attach.Watch]
+    events List[str]
+    seconds int
+    next_watch int
+    jobs List[attach.Job]
 
 fn Garlic.new(b Browser, w float, h float, cell_w float, cell_h float) Garlic
     g := Gui.new(b, w, h, cell_w, cell_h)
-    Garlic(g, tabs: [g], cur: 0, url_text: b.url, want: "")
+    Garlic(
+        g,
+        tabs: [g],
+        cur: 0,
+        closed: [],
+        menu_tab: -1,
+        menu_x: 0.0,
+        strip_w: w,
+        url_text: b.url,
+        want: "",
+        attached: false,
+        bridge: attach.Bridge.new(),
+        guard: Guard(allow: [], log: [], fixed: [], ok_once: false),
+        where: "",
+        calls: 0,
+        pending: "",
+        asks: "",
+        ask_site: "",
+        watches: [],
+        events: [],
+        seconds: 0,
+        next_watch: 1,
+        jobs: [],
+    )
+
+## Answers one MCP request from an attached agent: the sites it may use are
+## the ones the tabs show plus those allowed at launch, and the answer goes
+## back through the bridge.
+fn Garlic.agent_call(mut self, body str)
+    mut sites := guard.fixed
+    for t in tabs
+        sites.push(host_of(t.b.url))
+    sites.push(host_of(g.b.url))
+    guard.allow = sites
+    j := parse_json(body) else err
+        bridge.replies.send(g.b.rpc(mut guard, body))
+        return
+    calls += 1
+    params := j.need("params") else err
+        bridge.replies.send(g.b.rpc(mut guard, body))
+        return
+    name := params.str("name") else ""
+    args := params.need("arguments") else err
+        params
+    if j.str("method") == "tools/call" and WATCH_TOOLS.contains(name)
+        guard.log.push("{name}")
+        bridge.replies.send(rpc_reply(rpc_id(j), watch_tool(name, args)))
+        return
+    answer := g.b.rpc(mut guard, body)
+    guard.ok_once = false
+    if answer.contains("confirm required:")
+        pending = body
+        asks = "send data from {g.b.url} ({name})"
+        ask_site = ""
+        g.b.message = "An agent wants to {asks}: Allow or Deny"
+        return
+    if answer.contains("refused: the agent may not")
+        site := host_of(if name == "open" then (args.str("url") else "") else g.b.url)
+        if site != "" and ["open", "act", "find"].contains(name)
+            pending = body
+            asks = "use {site}"
+            ask_site = site
+            g.b.message = "An agent wants to {asks}: Allow or Deny"
+            return
+    bridge.replies.send(answer)
+
+## The user's answer to a pending agent request: allowed, the request runs
+## again with that one permission; denied, the agent is told so.
+fn Garlic.decide(mut self, allowed bool)
+    if pending == ""
+        return
+    body := pending
+    pending = ""
+    if not allowed
+        guard.log.push("denied: {asks}")
+        id := rpc_id(parse_json(body) else Json.Null)
+        bridge.replies.send(rpc_reply(id, "denied: the user did not allow the agent to {asks}"))
+        return
+    guard.log.push("allowed: {asks}")
+    if ask_site != ""
+        guard.fixed.push(ask_site)
+    else
+        guard.ok_once = true
+    agent_call(body)
+
+## The tools that set and read watches; the window answers them, not the page.
+WATCH_TOOLS := {"watch", "unwatch", "watches", "events", "schedule", "schedules", "unschedule"}
+
+## One watch tool call, as text. `watch` takes `url` (else the live tab),
+## `contains` and `every` (seconds, default 30); `events` returns the changes
+## seen since the last call.
+fn Garlic.watch_tool(mut self, name str, args Json) str
+    match name
+        "watch" =>
+            url := args.str("url") else ""
+            if url != "" and not guard.permits(url)
+                return "refused: the agent may not watch `{url}`"
+            w := attach.Watch.start(
+                next_watch,
+                url,
+                args.str("contains") else "",
+                (args.num("every") else 30.0).to_int(),
+                seconds,
+                if url == "" then g.b.pg.text() else watched_text(url),
+            )
+            next_watch += 1
+            watches.push(w)
+            "watching {w.line()}"
+        "unwatch" =>
+            id := (args.num("id") else 0.0).to_int()
+            watches = [w for w in watches if w.id != id]
+            "stopped watch {id}"
+        "watches" => [w.line() for w in watches].join("\n")
+        "schedule" =>
+            call := args.str("tool") else ""
+            if call == "" or WATCH_TOOLS.contains(call)
+                return "schedule needs `tool` (open, observe, act, find, extract, screenshot) and `in` seconds"
+            inner := args.need("arguments") else err
+                Json.Obj([])
+            job := attach.Job(
+                id: next_watch,
+                due: seconds + (args.num("in") else 0.0).to_int(),
+                tool: call,
+                args: inner.to_text(),
+            )
+            next_watch += 1
+            jobs.push(job)
+            "scheduled {job.line(seconds)}"
+        "schedules" => [j.line(seconds) for j in jobs].join("\n")
+        "unschedule" =>
+            id := (args.num("id") else 0.0).to_int()
+            jobs = [j for j in jobs if j.id != id]
+            "cancelled job {id}"
+        _ =>
+            out := events.join("\n")
+            events = []
+            if out == "" then "no changes" else out
+
+fn watched_text(url str) str
+    Browser.new(url, 100, 32).pg.text()
+
+## One timer tick (once a second): looks at each watch that is due and
+## notes what changed.
+fn Garlic.tick(mut self)
+    seconds += 1
+    due := [j for j in jobs if j.due <= seconds]
+    jobs = [j for j in jobs if j.due > seconds]
+    for j in due
+        mut sites := guard.fixed
+        for t in tabs
+            sites.push(host_of(t.b.url))
+        sites.push(host_of(g.b.url))
+        guard.allow = sites
+        answer := g.b.rpc(mut guard, j.request())
+        events.push("job {j.id} ({j.tool}) ran: {answer.slice(0, answer.chars().len().min(160))}")
+    for k in 0..watches.len()
+        if seconds < watches[k].due
+            continue
+        text := if watches[k].url == "" then g.b.pg.text() else watched_text(watches[k].url)
+        change := watches[k].look(text, seconds)
+        if change != ""
+            events.push(change)
+            g.b.message = change
 
 ## Makes tab `k` the one shown.
 fn Garlic.switch(mut self, k int)
@@ -1841,24 +2061,117 @@ fn Garlic.new_tab(mut self)
     g = fresh_gui
     want = "url"
 
-## Closes the shown tab (the last one stays).
-fn Garlic.close_tab(mut self)
-    if tabs.len() < 2
+## The shown tab's page, or tab `k`'s, as the strip lists it.
+fn Garlic.item(self, k int) tabstrip.Item
+    t := if k == cur then g else tabs[k]
+    tabstrip.Item(title: t.b.pg.title, url: t.b.url)
+
+## Closes tab `k` and remembers it for `reopen` (the last tab stays).
+fn Garlic.close_at(mut self, k int)
+    if tabs.len() < 2 or k < 0 or k >= tabs.len()
         return
-    tabs.remove_at(cur)
+    it := item(k)
+    if it.url != ""
+        closed.push(it)
+    tabs[cur] = g
+    tabs.remove_at(k)
+    if k < cur
+        cur -= 1
     cur = cur.min(tabs.len() - 1)
     g = tabs[cur]
     g.refresh()
 
-## The tab strip: one button per tab, titled by its page.
-fn Garlic.strip(self) List[app.Node]
-    mut out := List[app.Node]()
-    for k in 0..tabs.len()
-        t := if k == cur then g else tabs[k]
-        title := if t.b.pg.title == "" then "New tab" else t.b.pg.title
-        mark := if k == cur then "> " else ""
-        out.push(app.button("tab:{k}", "{mark}{title.slice(0, title.chars().len().min(18))}"))
-    out
+## Closes the shown tab (the last one stays).
+fn Garlic.close_tab(mut self)
+    close_at(cur)
+
+## Closes every tab but `k`, from the right so `k` keeps its place until last.
+fn Garlic.close_others(mut self, k int)
+    mut n := tabs.len() - 1
+    mut keep := k
+    while n >= 0
+        if n < keep
+            break
+        if n != keep
+            close_at(n)
+        n -= 1
+    while keep > 0
+        close_at(0)
+        keep -= 1
+
+## Closes the tabs to the right of tab `k`.
+fn Garlic.close_right(mut self, k int)
+    while tabs.len() > k + 1
+        close_at(tabs.len() - 1)
+
+## Opens the tab closed last in a new tab, as Cmd-Shift-T does.
+fn Garlic.reopen(mut self)
+    if closed.len() == 0
+        return
+    it := closed[closed.len() - 1]
+    closed.remove_at(closed.len() - 1)
+    new_tab()
+    g.open(it.url)
+    want = ""
+
+## The rows of the open tab menu; none when no menu is open.
+fn Garlic.menu_rows(self) List[str]
+    if menu_tab < 0
+        return []
+    tabstrip.menu_rows(menu_tab, tabs.len(), closed.len())
+
+## Does what row `r` of the tab menu says.
+fn Garlic.menu_pick(mut self, r int)
+    rows := menu_rows()
+    k := menu_tab
+    menu_tab = -1
+    if r < 0 or r >= rows.len()
+        return
+    match rows[r]
+        "Close tab" => close_at(k)
+        "Close other tabs" => close_others(k)
+        "Close tabs to the right" => close_right(k)
+        "Reopen closed tab" => reopen()
+        _ => menu_tab = -1
+
+## A click on the tab strip.
+fn Garlic.strip_click(mut self, ev app.Event)
+    h := tabstrip.hit(ev.x, ev.y, tabs.len(), strip_w, theme().flat, menu_rows().len(), menu_x)
+    if h.kind == "menu"
+        menu_pick(h.k)
+        return
+    menu_tab = -1
+    if h.kind == "plus"
+        new_tab()
+    elif h.kind == "tab" and ev.text == "right"
+        menu_tab = h.k
+        menu_x = ev.x.min((strip_w - tabstrip.MENU_W).max(0.0))
+    elif h.kind == "close" or (h.kind == "tab" and ev.text == "other")
+        close_at(h.k)
+    elif h.kind == "tab"
+        switch(h.k)
+
+## The line that tells the user an agent can drive this window; empty
+## without `--attach`.
+fn Garlic.agent_line(self) str
+    if not attached
+        return ""
+    "Agent attached at {where}: {calls} calls so far; {watches.len()} watches, {events.len()} unread changes"
+
+## The look: Safari-style dark.
+fn theme() tabstrip.Theme
+    tabstrip.safari()
+
+## The tab strip: a canvas of its own (see `tabstrip`).
+fn Garlic.strip(self) app.Node
+    items := [item(k) for k in 0..tabs.len()]
+    rows := menu_rows()
+    app.canvas(
+        "tabs",
+        0.0,
+        tabstrip.height(rows.len()),
+        tabstrip.draw(theme(), items, cur, strip_w, rows, menu_x),
+    )
 
 impl app.App for Garlic
     fn update(mut self, ev app.Event)
@@ -1867,11 +2180,32 @@ impl app.App for Garlic
         g.sent = g.sent.union(g.fresh)
         g.fresh = {}
         match ev.kind
-            "resize" => g.resize(ev.dx, ev.dy, ev.cell_w, ev.cell_h)
-            "click" => g.click(ev.x, ev.y)
-            "scroll" => g.scroll(ev.dy)
+            "resize" =>
+                if ev.id == "tabs"
+                    strip_w = ev.dx
+                else
+                    g.resize(ev.dx, ev.dy, ev.cell_w, ev.cell_h)
+            "click" =>
+                if ev.id == "tabs"
+                    strip_click(ev)
+                elif ev.id == "nav"
+                    match tabstrip.nav_hit(ev.x)
+                        "back" => g.b.go_back()
+                        "forward" => g.b.go_forward()
+                        "reload" => g.b.reload()
+                        _ => menu_tab = -1
+                else
+                    menu_tab = -1
+                    g.click(ev.x, ev.y)
+            "scroll" =>
+                if ev.id != "tabs"
+                    g.scroll(ev.dy)
             "key" =>
-                if (ev.meta and ev.text == "l") or (ev.text == "g" and g.b.reading())
+                if ev.meta and ev.shift and (ev.text == "t" or ev.text == "T")
+                    reopen()
+                elif ev.text == "escape" and menu_tab >= 0
+                    menu_tab = -1
+                elif (ev.meta and ev.text == "l") or (ev.text == "g" and g.b.reading())
                     want = "url"
                 elif ev.meta and ev.text == "r"
                     g.b.reload()
@@ -1890,14 +2224,21 @@ impl app.App for Garlic
                 else
                     g.key(ev.text, ev.alt, ev.shift)
             "edit" => url_text = ev.text
+            "external" =>
+                if ev.id == "mcp"
+                    agent_call(ev.text)
+                elif ev.id == "tick"
+                    tick()
             "submit" => g.open(url_text)
             "press" =>
                 if ev.id == "back"
                     g.b.go_back()
                 elif ev.id == "reload"
                     g.b.reload()
-                elif ev.id == "newtab"
-                    new_tab()
+                elif ev.id == "agent_allow"
+                    decide(true)
+                elif ev.id == "agent_deny"
+                    decide(false)
                 elif ev.id.starts_with("tab:")
                     switch(ev.id.slice(4, ev.id.chars().len()).to_int() else cur)
             _ => url_text = url_text
@@ -1907,18 +2248,27 @@ impl app.App for Garlic
 
     fn view(self) app.Node
         bar := app.row([
-            app.button("back", "Back"),
-            app.button("reload", "Reload"),
-            app.button("newtab", "+"),
+            app.canvas("nav", tabstrip.NAV_W, tabstrip.NAV_H, tabstrip.nav(theme(), true, true)),
             app.field("url", url_text, "Enter a web address"),
         ])
         ## A canvas of 0 by 0 fills the window; the host reports its size.
-        app.column([
-            app.row(strip()),
-            bar,
-            app.canvas("page", 0.0, 0.0, [to_app(op, g) for op in g.display()]),
-            app.label(g.status()),
-        ])
+        mut rows := [strip(), bar]
+        if attached
+            rows.push(app.label(agent_line()))
+        if pending != ""
+            rows.push(app.row([
+                app.label("The agent wants to {asks}."),
+                app.button("agent_allow", "Allow"),
+                app.button("agent_deny", "Deny"),
+            ]))
+        rows.push(app.canvas("page", 0.0, 0.0, [to_app(op, g) for op in g.display()]))
+        rows.push(app.canvas(
+            "status",
+            0.0,
+            tabstrip.STATUS_H,
+            tabstrip.status(theme(), g.status(), strip_w),
+        ))
+        app.column(rows)
 
     fn title(self) str
         "{g.b.pg.title} - Garlic"
@@ -1978,13 +2328,52 @@ GUI_H := 600.0
 GUI_CELL_W := 7.8
 GUI_CELL_H := 16.0
 
-fn app_main(b Browser, pixel bool) !
+fn app_main(b Browser, pixel bool, attached bool, sites str) !
     mut a := Garlic.new(b, GUI_W, GUI_H, GUI_CELL_W, GUI_CELL_H)
     a.g.pixel = pixel
     a.g.refresh()
+    if attached
+        attached_main(mut a, sites)?
+        return
     app.run(mut a) else err
         print("garlic: no native window ({err.message}); the page as text:")
         print(a.g.b.pg.text())
+
+## Posts a `tick` event every second until `stop` is set.
+fn ticker(inbox app.Inbox, stop Atomic[int])
+    while stop.load() == 0
+        time.sleep_ms(1000)
+        inbox.post(app.external("tick", ""))
+
+## The attach server's task (a local function, which `spawn` needs natively).
+fn serve(srv net.Server, inbox app.Inbox, bridge attach.Bridge, token str)
+    attach.serve_loop(srv, inbox, bridge, token)
+
+## `--attach`: the window as `app_main` runs it, with the attach server on
+## 127.0.0.1 (a free port), its address and token in `~/.garlic-attach.json`
+## for the agents on this machine.
+fn attached_main(mut a Garlic, sites str) !
+    srv := net.serve("127.0.0.1:0")?
+    token := attach.make_token()
+    path := "{env.get("HOME") else "."}/.garlic-attach.json"
+    where := "http://{srv.addr()}/mcp"
+    fs.write_text(path, "\{\"url\":\"{where}\",\"token\":\"{token}\"}\n")?
+    mode := proc.run("chmod", ["600", path], none, none) else err
+        print("garlic: could not restrict {path}: {err}")
+        return
+    a.attached = true
+    a.where = where
+    a.guard.fixed = [h for h in sites.split(",") if h != ""]
+    inbox := app.new_inbox()
+    g := TaskGroup()
+    g.add(spawn serve(srv, inbox, a.bridge, token))
+    stop := Atomic(0)
+    g.add(spawn ticker(inbox, stop))
+    print("garlic: agents attach at {where}; the token is in {path}")
+    app.run_with(mut a, app.host_path()?, [], inbox) else err
+        print("garlic: no native window ({err.message})")
+    stop.add(1)
+    srv.shutdown()
 
 ## The value after flag `name` (`--width 60`), or none.
 fn flag(args List[str], name str) str?
@@ -2124,7 +2513,12 @@ fn main() !
     else
         # The window is the std.app host's (ADR 0838); `--app` is the old
         # spelling of the default.
-        app_main(b, not args.contains("--cells")) else err
+        app_main(
+            b,
+            not args.contains("--cells"),
+            args.contains("--attach"),
+            flag(args, "--allow") else "",
+        ) else err
             print("garlic: {err}")
 
 # ---- Tests -------------------------------------------------------------
@@ -2538,13 +2932,12 @@ fn clicked(x float, y float) app.Event
     outlines := app.script(mut a, [resized(480.0, 96.0)])
     top := outlines[0].split("\n")
     assert_eq(top[0], "column")
-    assert_eq(top[1], "  row")
-    assert(top[2].starts_with("    [> "))
-    assert(top[4].starts_with("    [Back] #back"))
-    assert(top[7].contains("#url"))
-    assert(top[8].starts_with("  canvas #page"))
+    assert(top[1].starts_with("  canvas #tabs"))
+    assert(outlines[0].contains("\n  row\n    canvas #nav"))
+    assert(outlines[0].contains("#url"))
+    assert(outlines[0].contains("\n  canvas #page"))
     assert(outlines[0].contains("str 0.0,32.0 \"# Garlic\" mono 13.0 dcdcaa"))
-    assert(top[top.len() - 1].starts_with("  \""))
+    assert(outlines[0].contains("\n  canvas #status"))
     link := a.g.b.pg.boxes[a.g.b.pg.links[0]]
     shown := app.script(mut a, [clicked(
         link.col.to_float() * 8.0 + 1.0,
@@ -2554,7 +2947,11 @@ fn clicked(x float, y float) app.Event
     assert(a.url_text.ends_with("second.html"))
     assert(shown[0].contains("<{a.url_text}> #url"))
     assert_eq(a.title(), "Second page - Garlic")
-    app.script(mut a, [app.press("back")])
+    mut back := app.event("click")
+    back.id = "nav"
+    back.x = 20.0
+    back.y = 20.0
+    app.script(mut a, [back])
     assert_eq(a.g.b.pg.title, "Garlic test page")
 
 @test fn the_address_field_opens_urls_and_cmd_l_focuses_it()
@@ -2927,6 +3324,16 @@ fn bench(args List[str])
             draw.Op.Str(_, _, _, _, _, _, _, _, _) => 0
     assert_eq(got, [[37.0, 29.0], [74.0, 58.0]])
 
+@test fn the_screen_model_names_links_and_colours()
+    d := html.parse("<p><a href=\"/pay\">Pay now</a></p><button>Go</button>")
+    scene := gfx.layout_with(d, "https://shop.example/", 400.0, css.parse("", 0), {})
+    sc := look.of(scene, 400.0, 300.0, 0.0)
+    found := sc.find("link", "", "pay", 0)
+    assert(found.contains("link 'Pay now', blue"))
+    assert(found.contains("links to https://shop.example/pay"))
+    assert(sc.find("control", "", "", 0).contains("'Go'"))
+    assert_eq(sc.find("link", "", "nothing here", 0), "nothing")
+
 @test fn back_and_forward_show_kept_pages_without_a_fetch()
     mut b := Browser.new("{testdata()}/index.html", 60, 12)
     first := b.url
@@ -2997,7 +3404,8 @@ fn bench(args List[str])
         want.push(op_line(op))
     assert_eq(native.out.trim(), want.join("\n"))
     assert(native.out.contains("canvas #0a0a0f"))
-    assert(native.out.contains("sans 14.0 #6b6b80 GitHub"))
+    # The nav's SVG-only GitHub link draws its icon (#676), not its aria-label.
+    assert(native.out.contains("pic 829.0,15.0 18.0x18.0 svg:"))
 
 ## The `Str` and `Rect` operations of `s` as `text@x,y` and `rect@x,y wxh`.
 fn flat(s gfx.Scene) List[str]
@@ -3138,7 +3546,7 @@ fn flat(s gfx.Scene) List[str]
     assert_eq(a.g.b.pg.title, "Garlic test page")
     a.switch(1)
     assert_eq(a.g.b.pg.title, "Second page")
-    assert_eq(a.strip().len(), 2)
+    assert_eq(a.item(1).title, "Second page")
     a.close_tab()
     assert_eq((a.tabs.len(), a.g.b.pg.title), (1, "Garlic test page"))
 
@@ -3258,7 +3666,7 @@ fn flat(s gfx.Scene) List[str]
 
 @test fn serve_answers_mcp_requests()
     mut b := Browser.empty("about:blank", 80, 24)
-    mut g := Guard(allow: ["*"], log: [])
+    mut g := Guard(allow: ["*"], log: [], fixed: [], ok_once: false)
     init := b.rpc(mut g, "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}")
     assert(init.contains("\"serverInfo\""))
     assert_eq(b.rpc(mut g, "\{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"), "")
@@ -3276,14 +3684,14 @@ fn flat(s gfx.Scene) List[str]
 
 @test fn serve_enforces_site_permission_confirmation_and_logs()
     mut b := Browser.empty("about:blank", 80, 24)
-    mut g := Guard(allow: ["example.com"], log: [])
+    mut g := Guard(allow: ["example.com"], log: [], fixed: [], ok_once: false)
     no := b.rpc(
         mut g,
         "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"https://evil.test/x\"}}}",
     )
     assert(no.contains("refused"))
     assert_eq(host_of("https://example.com:8080/a"), "example.com")
-    mut open := Guard(allow: ["*"], log: [])
+    mut open := Guard(allow: ["*"], log: [], fixed: [], ok_once: false)
     b.rpc(
         mut open,
         "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{testdata()}/form.html\"}}}",
@@ -3294,3 +3702,200 @@ fn flat(s gfx.Scene) List[str]
     )
     assert(held.contains("confirm required"))
     assert_eq(open.log.len(), 2)
+
+@test fn an_attached_agent_drives_the_window_through_the_inbox()
+    b := Browser.new("{testdata()}/form.html", 80, 24)
+    mut a := Garlic.new(b, 800.0, 600.0, 7.5, 15.0)
+    a.attached = true
+    a.where = "http://127.0.0.1:1/mcp"
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":\{\"name\":\"observe\",\"arguments\":\{}}}",
+    ))
+    answer := a.bridge.replies.recv() else "none"
+    assert(answer.contains("Search form"))
+    assert_eq(a.calls, 1)
+    assert(a.agent_line().contains("1 calls"))
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"https://elsewhere.test/\"}}}",
+    ))
+    assert(a.pending != "")
+    a.update(app.press("agent_deny"))
+    refused := a.bridge.replies.recv() else "none"
+    assert(refused.contains("denied"))
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":\{\"name\":\"log\",\"arguments\":\{}}}",
+    ))
+    assert((a.bridge.replies.recv() else "").contains("open https://elsewhere.test/"))
+
+@test fn the_attach_token_must_match()
+    tok := attach.make_token()
+    assert(tok.chars().len() >= 24)
+    assert(tok != attach.make_token())
+
+@test fn a_watch_reports_changes_and_appearances()
+    mut w := attach.Watch.start(1, "", "", 5, 0, "one")
+    assert_eq(w.look("one", 3), "")
+    assert_eq(w.look("one", 5), "")
+    assert_eq(w.look("two", 10), "watch 1: the page changed")
+    mut k := attach.Watch.start(2, "", "Sold out", 1, 0, "in stock")
+    assert_eq(k.look("In stock", 1), "")
+    assert_eq(k.look("SOLD OUT today", 2), "watch 2: `Sold out` appeared")
+    assert_eq(k.look("back", 3), "watch 2: `Sold out` disappeared")
+
+@test fn agents_set_watches_and_read_their_events_through_the_window()
+    b := Browser.new("{testdata()}/form.html", 80, 24)
+    mut a := Garlic.new(b, 800.0, 600.0, 7.5, 15.0)
+    a.attached = true
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":\{\"name\":\"watch\",\"arguments\":\{\"contains\":\"Brand new\",\"every\":1}}}",
+    ))
+    assert((a.bridge.replies.recv() else "").contains("watching 1"))
+    a.update(app.external("tick", ""))
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"events\",\"arguments\":\{}}}",
+    ))
+    assert((a.bridge.replies.recv() else "").contains("no changes"))
+    a.g.b.pg = lay("Brand new text", 40)
+    a.update(app.external("tick", ""))
+    a.update(app.external("tick", ""))
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":\{\"name\":\"events\",\"arguments\":\{}}}",
+    ))
+    assert((a.bridge.replies.recv() else "").contains("appeared"))
+
+@test fn a_scheduled_action_runs_when_due_and_follows_the_rules()
+    b := Browser.new("{testdata()}/form.html", 80, 24)
+    mut a := Garlic.new(b, 800.0, 600.0, 7.5, 15.0)
+    a.attached = true
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":\{\"name\":\"schedule\",\"arguments\":\{\"tool\":\"extract\",\"arguments\":\{},\"in\":2}}}",
+    ))
+    assert((a.bridge.replies.recv() else "").contains("scheduled"))
+    a.update(app.external("tick", ""))
+    assert_eq(a.jobs.len(), 1)
+    a.update(app.external("tick", ""))
+    assert_eq(a.jobs.len(), 0)
+    assert(a.events.len() == 1)
+    assert(a.events[0].contains("job"))
+    a.update(app.external(
+        "mcp",
+        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"schedule\",\"arguments\":\{\"tool\":\"open\",\"arguments\":\{\"url\":\"https://elsewhere.test/\"},\"in\":1}}}",
+    ))
+    a.bridge.replies.recv()
+    a.update(app.external("tick", ""))
+    assert(a.events[1].contains("refused"))
+
+@test fn the_user_decides_on_an_agents_site_and_send_requests()
+    b := Browser.new("{testdata()}/form.html", 80, 24)
+    mut a := Garlic.new(b, 800.0, 600.0, 7.5, 15.0)
+    a.attached = true
+    open := "\{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{testdata()}/index.html\"}}}"
+    a.update(app.external("mcp", open.replace(
+        "{testdata()}/index.html",
+        "https://elsewhere.test/",
+    )))
+    assert(a.pending != "")
+    assert_eq(a.ask_site, "elsewhere.test")
+    assert(app.outline(a.view()).contains("#agent_allow"))
+    a.update(app.press("agent_deny"))
+    assert_eq(a.pending, "")
+    assert((a.bridge.replies.recv() else "").contains("denied"))
+    ## a yes allows the site and runs the call again (the fetch itself may fail)
+    a.update(app.external("mcp", open.replace(
+        "{testdata()}/index.html",
+        "https://elsewhere.test/",
+    )))
+    a.update(app.press("agent_allow"))
+    assert(a.guard.fixed.contains("elsewhere.test"))
+    got := a.bridge.replies.recv() else ""
+    assert(got != "")
+
+@test fn svg_shapes_become_pixels()
+    d := html.parse("<svg viewBox='0 0 4 4' width=4 height=4><rect x=0 y=0 width=2 height=4 fill='#ff0000'/></svg>")
+    ids := d.all("svg")
+    bm := svg.render(d, ids[0], 4, 4, 0) else
+        assert(false)
+        return
+    assert_eq(bm.w, 4)
+    raw := bytes.from_base64(bm.data) else
+        assert(false)
+        return
+    assert_eq(raw.len(), 64)
+    assert_eq(raw[0].to_int(), 255)
+    assert_eq(raw[3].to_int(), 255)
+    assert_eq(raw[11].to_int(), 0)
+
+@test fn inline_svg_icons_are_drawn_as_pictures()
+    src := "<body style='margin:0'><p>Go <svg width=16 height=16 viewBox='0 0 16 16'><path d='M2 2h12v12H2z' fill='#00ff00'/></svg> now</p></body>"
+    s := pixels(src, 300.0)
+    mut found := false
+    for op in s.ops
+        match op
+            Pic(_, _, w, h, p) => if p.starts_with("svg:") and w == 16.0 and h == 16.0
+                found = true
+            Rect(_, _, _, _, _) | Text(_, _, _, _, _, _, _) | Str(
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+            ) => found = found
+    assert(found)
+    assert_eq(s.bits.len(), 1)
+
+@test fn closing_tabs_remembers_them_for_reopen()
+    b := Browser.new("{testdata()}/index.html", 60, 12)
+    mut a := Garlic.new(b, 600.0, 300.0, 7.5, 15.0)
+    a.new_tab()
+    a.g.open("{testdata()}/second.html")
+    a.new_tab()
+    assert_eq(a.tabs.len(), 3)
+    a.close_at(1)
+    assert_eq((a.tabs.len(), a.cur, a.closed.len()), (2, 1, 1))
+    a.reopen()
+    assert_eq((a.tabs.len(), a.g.b.pg.title, a.closed.len()), (3, "Second page", 0))
+
+@test fn close_others_and_close_right_keep_the_right_tabs()
+    b := Browser.new("{testdata()}/index.html", 60, 12)
+    mut a := Garlic.new(b, 600.0, 300.0, 7.5, 15.0)
+    a.new_tab()
+    a.g.open("{testdata()}/second.html")
+    a.new_tab()
+    a.new_tab()
+    a.close_right(1)
+    assert_eq(a.tabs.len(), 2)
+    a.close_others(1)
+    assert_eq((a.tabs.len(), a.g.b.pg.title), (1, "Second page"))
+
+@test fn the_strip_menu_and_middle_click_close_tabs()
+    b := Browser.new("{testdata()}/index.html", 60, 12)
+    mut a := Garlic.new(b, 600.0, 300.0, 7.5, 15.0)
+    a.new_tab()
+    a.new_tab()
+    mut ev := app.event("click")
+    ev.id = "tabs"
+    ev.x = tabstrip.tab_x(1, 3, a.strip_w, true) + 20.0
+    ev.y = 20.0
+    ev.text = "other"
+    a.update(ev)
+    assert_eq(a.tabs.len(), 2)
+    ev.text = "right"
+    ev.x = tabstrip.tab_x(0, 2, a.strip_w, true) + 20.0
+    a.update(ev)
+    assert_eq(a.menu_tab, 0)
+    ev.text = "left"
+    ev.y = tabstrip.BAR_H + 4.0 + 3.0
+    ev.x = a.menu_x + 5.0
+    a.update(ev)
+    assert_eq((a.tabs.len(), a.menu_tab), (1, -1))

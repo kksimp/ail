@@ -1,0 +1,78 @@
+## Facts the checker records for `ail api --locals/--type/--refs` (api.loc.1,
+## api.type.1, ADR 0258), as `bootstrap/src/check/facts.rs` and the recording
+## in `bootstrap/src/check.rs`. Recording is off except for `analyze(p, true)`.
+use ast
+
+## A local name and its type, as the checker left it when the name went out
+## of scope (or the function ended).
+pub struct LocalFact
+    pub name str
+    ## The type as written in a diagnostic, `?` when it is not known.
+    pub ty str
+    pub mutable bool
+    ## `param`, `move param`, `self`, `loop` or `binding`.
+    pub kind str
+    ## Where the name is written; `none` for `self`.
+    pub at ast.Pos?
+    ## Where a `:=` binding's name is written (it is in scope after it).
+    pub decl ast.Pos?
+    ## The first position the name is in scope from: its declaration for a
+    ## `:=` binding, the first statement of the block it scopes otherwise.
+    pub anchor ast.Pos
+
+fn kind_text(k LocalKind) str
+    match k
+        ParamLocal => "param"
+        MoveParam => "move param"
+        SelfParam => "self"
+        LoopVar => "loop"
+        Binding => "binding"
+
+## Record the locals from `mark` up, which are about to go out of scope
+## (api.loc.1).
+fn Checker.record_locals(mut self, mark int)
+    if record
+        for i in mark..locals.len()
+            l := locals[i]
+            anchor := l.decl else anchors.get(i) else continue
+            fact_locals.push(LocalFact(
+                name: l.name,
+                ty: ty_name(l.ty),
+                mutable: l.mutable,
+                kind: kind_text(l.how),
+                at: bound.get(i),
+                decl: l.decl,
+                anchor: anchor,
+            ))
+        if anchored > mark
+            anchored = mark
+        for k in anchors.keys()
+            if k >= mark
+                anchors.remove(k)
+        for k in bound.keys()
+            if k >= mark
+                bound.remove(k)
+
+## Locals below `mark` with no declaration of their own (parameters, loop
+## variables, pattern names) are in scope from the first statement of the
+## block that starts here (api.loc.2).
+fn Checker.anchor_locals(mut self, mark int, stmts List[ast.Stmt])
+    if record
+        if stmts.len() > 0
+            first := stmt_pos(stmts[0])
+            for i in anchored..mark
+                if anchors.get(i) == none
+                    anchors[i] = first
+        if anchored < mark
+            anchored = mark
+
+## A write to `e` (an assigned, `mut`-passed or `mut self` place) writes every
+## field on its path: `a.b[i].c` writes `c`, `b` and, through value semantics, nothing above.
+@allow("expr.match.3") fn Checker.record_write(mut self, e ast.Expr)
+    if record
+        match e
+            Member(recv, _, name_pos) =>
+                fact_writes.push(name_pos)
+                record_write(recv)
+            Index(recv, _, _) => record_write(recv)
+            _ => return

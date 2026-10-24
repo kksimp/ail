@@ -1,0 +1,17 @@
+# std.env.2-4, std.env.6, std.env.1, std.time.1-2.
+fn main()
+    print((env.get("AIL_TEST_DIR") else "unset").ends_with("d1"))
+    print(env.get("AIL_SURELY_NOT_SET") else "unset")
+    print(env.get("AIL_TEST_") else "prefix is not a name")
+    home := env.home() else "no home"
+    print(home.len() > 0)
+    print(env.cwd().len() > 0)
+    print(env.program().len() > 0)
+    print(env.args().len())
+    before := time.now_ms()
+    time.sleep_ms(30)
+    time.sleep_ms(0)
+    after := time.now_ms()
+    print(after - before >= 30)
+    print(after - before < 5000)
+    print(before > 1700000000000)

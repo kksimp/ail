@@ -1,0 +1,3 @@
+{"first":1,"second":["x"]}
+{"first":"a","second":{"first":true,"second":2.5}}
+{"tag":"t","value":null,"all":{"a":1}}

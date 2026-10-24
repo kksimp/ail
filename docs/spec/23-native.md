@@ -23,7 +23,13 @@ expected (trait.any.3), and a method call on an `any Trait` value runs the
 method of the value's type (trait.any.1). Impls for other types, generic
 impls in an `any` are reported under native.subset.1. A struct or enum
 with no `to_str`, and an `any Trait` value, print as the interpreter prints
-them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`.
+them (trait.auto.2) when their fields are `int`, `float`, `bool` or `str`,
+or lists, maps, sets, options or other such values of them, including types
+that hold themselves. Generic types have methods (`Stack[int].new()`,
+`Pair[A, B].with_first[C]`, `Tree[T].Leaf`), `Self` names the implementing
+type in a trait's signatures (trait.res.1), a trait's functions can be called
+through the trait name (`Shape.area(x)`), and a user `impl Eq` or `impl Ord`
+with its own `eq` or `cmp` is what `==` and `<` use (trait.derive.1, expr.cmp.1).
 *(ADRs 0536, 0616)*
 
 **native.subset.3** — A read-only argument or receiver of a struct, list or `any Trait` type that
@@ -443,17 +449,16 @@ fn main()
     print(line)
 ```
 **native.test.1** — `ail test --native [PATH...]` takes files and directories
-(by default `examples`, `bootstrap/tests/cases` and `tools`) and, for every
+(by default `examples`, `tests/cases` and `tools`) and, for every
 `@test` function with no parameters in a file that has one, builds the
 function natively (native.build.3), runs it as its own process, and compares
 the result with `ail test` in the interpreter. A passing native run exits 0.
 *(ADR 0679)*
 **native.test.2** — The native build is of a rewritten copy of the file: `@test`
-marks go, `assert(c)` and `assert_eq(a, b)` become a check of `c` and of
-`(a) == (b)` that prints the original line and exits with status 1, and the
-copy's `main` is a dispatcher. The rewrite keeps every line number, so a
-construct the backend refuses is reported at its place in the original file.
-*(ADR 0679)*
+marks go and the copy's `main` is a dispatcher. `assert` and `assert_eq`
+lower natively and trap as test.assert.1 says. The runner maps lines back, so
+a construct the backend refuses is reported at its place in the original file.
+*(ADR 0679, ADR 0858)*
 **native.test.3** — A test the backend refuses (native.subset.1) is reported
 as not in the native subset yet, with the first blocking construct and its
 line. The same holds for a test whose file has a refused construct outside any
@@ -556,4 +561,44 @@ fn main()
 ```ail norun rules=native.test.5
 fn main()
     print("ok")
+```
+
+## Instrumentation
+
+**native.instr.1** — A native build is instrumented only when the environment of
+`ail build` has `AIL_INSTRUMENT` (a comma list of `lines`, `calls`, `tests`). Without it
+the program has no instrumentation call and no table. *(ADR 0871)*
+
+```ail rules=native.instr.1
+fn main()
+    print("no instrumentation without AIL_INSTRUMENT")
+```
+
+**native.instr.2** — `lines`: each statement of the program's own files (not the
+prelude, `std`, generated code or the runtime) starts with a hit of its site. The build
+writes the sites to `$AIL_INSTRUMENT_SITES`, one `ID<TAB>PATH<TAB>LINE<TAB>FN<TAB>FIRST`
+line each. When the program exits or traps it appends the ids hit, one per line, to
+`$AIL_INSTRUMENT_OUT`, else to `EXE.hits`. *(ADR 0871)*
+
+```ail rules=native.instr.2
+fn square(n int) int
+    n * n
+
+fn main()
+    print(square(3))
+```
+
+**native.instr.3** — `calls`: each function of the program's own files starts a
+`call<TAB>FN<TAB>LINE<TAB>COL` event with `<TAB>NAME=VALUE` for each argument that is a
+number, a `bool` or a `str` (cut at 60 bytes). At most `$AIL_TRACE_LIMIT` (default 1000)
+events are kept; a last line gives the count dropped. The events go to `$AIL_TRACE_OUT`,
+else `EXE.trace`. `tests` is `calls` without the test runner's `main` and `ail_*` helpers.
+*(ADR 0871)*
+
+```ail rules=native.instr.3
+fn greet(name str) str
+    "hi {name}"
+
+fn main()
+    print(greet("bo"))
 ```

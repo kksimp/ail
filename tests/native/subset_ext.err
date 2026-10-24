@@ -1,0 +1,1 @@
+tests/native/subset_ext.ail:12:4: error[native.subset.1]: `nine` has more than 8 float parameters

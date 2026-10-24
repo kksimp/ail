@@ -12,9 +12,34 @@ pub struct Report
     ## Lines of generated code's `impl` whose functions are gapped.
     pub gapped_lines List[int]
 
+## What `ail api` reads besides the diagnostics: each function's checked
+## effect set (api.out.4) and the error types of each fallible function
+## (err.api.1), by function index.
+pub struct Analysis
+    pub report Report
+    pub effects List[List[str]]
+    pub errors Map[int, List[str]]
+    ## What each use of a declared name refers to (api.ref.1), by `pos_key`.
+    pub symbols Map[int, str]
+    pub weak_symbols Map[int, str]
+    ## What `ail api --locals/--type` select from (api.loc.1, api.type.1).
+    pub locals List[LocalFact]
+    pub exprs List[(ast.Pos, str)]
+    ## The name positions of every field a write reaches (`ail ask`, api.ask.2).
+    pub writes List[ast.Pos]
+
 ## Every pass of `check_with` this checker has, in its order.
 pub fn check_program(p ast.Program) Report
+    analyze(p, false).report
+
+## `check_program`, and with `full` the facts `ail api` outlines.
+pub fn analyze(p ast.Program, full bool) Analysis
+    analyze_denying(p, full, [])
+
+## The checker after every declaration and function body has been checked.
+fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     mut c := new_checker(p)
+    c.denied = denied
     c.list_param = c.new_param("T", [])
     c.collect_traits()
     c.collect_types()
@@ -45,23 +70,68 @@ pub fn check_program(p ast.Program) Report
             c.diags = c.diags[..saved]
             if c.inferred == before
                 break
+    c.record = full
     for i in 0..p.fns.len()
         c.check_fn(i)
+    c.record = false
+    c
+
+## The `for` loops `conc.par.2-4` prove independent, which `ail run --parallel`
+## puts on the pool (conc.par.8): their positions.
+pub fn proven_loops(p ast.Program) List[ast.Pos]
+    c := checked_fns(p, false, [])
+    c.proven_loops()
+
+## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
+pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
+    mut c := checked_fns(p, full, denied)
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_denied())
+    c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
+    c.diags.extend(check_observe(p))
     c.diags.extend(c.check_contract_effects())
     c.diags.extend(c.check_constants())
     c.diags.extend(c.check_par())
     c.diags.extend(c.check_par_comps())
     c.remap_generated()
-    Report(
+    report := Report(
         diags: c.diags,
         gapped: c.gapped.sorted(),
         gapped_structs: c.gapped_structs.sorted(),
         gapped_consts: c.gapped_consts.sorted(),
         gapped_lines: c.gapped_impl_lines(),
+    )
+    if not full
+        return Analysis(
+            report: report,
+            effects: [],
+            errors: Map[int, List[str]](),
+            symbols: Map[int, str](),
+            weak_symbols: Map[int, str](),
+            locals: [],
+            exprs: [],
+            writes: [],
+        )
+    mut errors := Map[int, List[str]]()
+    for i in 0..p.fns.len()
+        # Every file of a package, and generated code (`api --card`, `--expanded`), but not the prelude.
+        if p.fns[i].pos.line >= 1073741824
+            continue
+        match c.sigs[i].ret
+            Res(_, errs) => errors[i] = c.error_names(c.errs_of(errs))
+            _ => continue
+    Analysis(
+        report: report,
+        effects: infer_effects(p, c.facts()).sets,
+        errors: errors,
+        symbols: c.symbols,
+        weak_symbols: c.weak_symbols,
+        locals: c.fact_locals,
+        exprs: c.fact_exprs,
+        writes: c.fact_writes,
     )
 
 ## The diagnostics of the declaration passes only (slice 1).
@@ -181,6 +251,8 @@ fn Checker.check_fn(mut self, idx int)
     scope = fn_scopes[idx]
     self_ty = fn_self[idx]
     locals = []
+    anchored = 0
+    anchors = Map[int, ast.Pos]()
     pending = []
     loop_depth = 0
     unsafe_depth = 0
@@ -208,12 +280,19 @@ fn Checker.check_fn(mut self, idx int)
             mismatch("expr.block.2", at, sig.ret, got)
         else
             mut d := new_diag("expr.block.2", at, msg)
+            declared := match sig.ret
+                Res(ok, _) => ok
+                _ => sig.ret
+            if declared == Ty.Int and got == Ty.Float
+                # Two candidates, the likelier first; neither is applied, since each is a choice.
+                d = d.with_help("convert the value with `x.to_int()`, or declare the return type `float` instead")
             if r := f.ret
                 d = d.with_note(r.pos, "the return type is declared here")
             diags.push(d)
     end_fn(idx)
 
 fn Checker.end_fn(mut self, idx int)
+    record_locals(0)
     scope = []
     self_ty = none
     if gap_now
@@ -276,6 +355,7 @@ fn Checker.push_params(mut self, f ast.FnDecl, sig Sig)
 ## statement always leaves (expr.block.3).
 fn Checker.block(mut self, stmts List[ast.Stmt], expect Ty?, need bool) Ty
     mark := locals.len()
+    anchor_locals(mark, stmts)
     mut ty := Ty.Unit
     mut leaves := false
     for i in 0..stmts.len()
@@ -681,6 +761,8 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
 ## Check a new local name against the no-shadowing rules; true if it can be
 ## added (expr.bind.4-5).
 fn Checker.declare(mut self, n str, at ast.Pos) bool
+    if record
+        bound[locals.len()] = at
     if l := local(n)
         mut d := new_diag("expr.bind.4", at, "`{n}` is already declared in this function")
         if first := l.decl
@@ -793,6 +875,7 @@ fn Checker.end_scope(mut self, mark int)
             )
         else
             k += 1
+    record_locals(mark)
     locals = locals[..mark]
 
 fn Checker.condition(mut self, cond ast.Expr)
@@ -1108,6 +1191,7 @@ fn Checker.settle_by_assign(mut self, target ast.Expr, op ast.BinOp?, value ast.
 ## Report if `e` isn't a mutable place (own.place.1). `rule` is the rule for
 ## this context; without one, it is chosen by the kind of root.
 fn Checker.require_mutable(mut self, e ast.Expr, rule str?, action str)
+    record_write(e)
     # own.ref.4: a `ref` cell's contents are mutable through any copy.
     if writes_through_ref(e, rule == "trait.method.3")
         ref_writes.add(pos_key(expr_pos(e)))

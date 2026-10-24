@@ -51,10 +51,8 @@ fn entry_help(message str) str
         return "this isn't native yet (bytes and some std functions); `ail run` runs it"
     if message.contains("`char` patterns")
         return "`char` matches aren't native yet; compare with `==` in an `if`, or use `ail run`"
-    if message.contains("error struct")
-        or message.contains("error enum")
-        or message.contains("unique struct")
-        return "error and unique types aren't native yet; `ail run` runs them"
+    if message.contains("error struct") or message.contains("error enum")
+        return "error types aren't native yet; `ail run` runs them"
     if message.contains("attribute `@test`")
         return "tests aren't part of a native build; run them with `ail test` or `ail test --native`"
     if message.contains("methods of traits and `impl` blocks") or message.starts_with("trait `")

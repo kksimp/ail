@@ -47,6 +47,8 @@ struct Lower
     err_msgs Map[str, str]
     ## The error type of each function that can fail, when it names one.
     fn_errs Map[str, Ty]
+    ## Functions whose error set is inferred (`fn f() !`), to the error type their `?` calls give so far (lower_err.ail).
+    infer_errs Map[str, Ty]
     ## The type the next block's final expression should have (consumed by `lower_block`).
     tail_want Ty?
     ## Where the function's last expression begins: the trace line of an error it ends in.
@@ -95,6 +97,8 @@ struct Lower
     loops List[Loop]
     ## Tasks (lower_task.ail, ADR 0599).
     tk TaskState
+    ## Set while the one-at-a-time arm of a fused tensor chain is lowered.
+    nofuse bool
     ## The structs' fields (ADR 0392).
     structs Map[str, List[Slot]]
     ## The struct whose method is being lowered, else "".
@@ -104,6 +108,11 @@ struct Lower
     borrowed Set[str]
     ## The generated `copy.T` functions asked for, by name.
     copy_tys Map[str, Ty]
+    ## Unique types and their releases (lower_unique.ail).
+    uniq UniqState
+    unw Unwind
+    ## Where each `uhwhatnow?` hole is, `FILE:LINE:COL` (expr.hole.3).
+    asks Set[str]
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -123,6 +132,8 @@ struct Lower
     problem_files List[int]
     ## The functions with contracts, by key, and the file of every function.
     contracted Map[str, ast.FnDecl]
+    ## What an impl method inherits from its trait's method (contract.inh.1-3).
+    inh Inherit
     ## The structs with `invariant` lines, and the file of each.
     invariants Map[str, List[ast.Contract]]
     inv_file Map[str, int]
@@ -135,6 +146,7 @@ struct Lower
     unchecked bool
     unchecked_list List[str]
     unchecked_seen Set[str]
+    auto_par Set[str]
     ## The `ensures` of the function being lowered, its label, and the keys
     ## of its receiver, parameters and `old(e)` values.
     ens List[ast.Contract]
@@ -145,6 +157,8 @@ struct Lower
     ## the variants without fields that have a shared object.
     enums Map[str, List[Case]]
     eq_tys Map[str, Ty]
+    ## The types whose default text is being expanded (ADR 0864).
+    text_open List[str]
     singletons List[VariantRef]
     ## Program globals by key (ADR 0604), and the constants computed into
     ## them at start-up.
@@ -153,9 +167,13 @@ struct Lower
     ## Generic declarations and their instances (ADR 0536).
     gen Gen
     lazy Lazy
+    ## The next cell of `rt.ffi_addr` (ADR 0870).
+    ffi_k int
     ## The failure blocks of the `else` parts being lowered, innermost last:
     ## a `?` on an optional inside an `else` value goes there (err.prop.4).
     else_targets List[int]
+    ## Instrumentation sites, when asked for (lower_instr.ail).
+    instr Instr
 
 ## The primitives of the runtime (native-abi.md §6), with their result types.
 PRIMS := {
@@ -165,6 +183,8 @@ PRIMS := {
     "store8": "unit",
     "loadf": "float",
     "storef": "unit",
+    "loadf32": "float",
+    "storef32": "unit",
     "syscall": "int",
     "global": "int",
     "str_addr": "int",
@@ -213,12 +233,23 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
 ## `lower_package` with the sources from `lazy` on the prelude's, lowered
 ## as the program reaches them (ADR 0808).
 pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
-    srcs := with_error_owners(input)
+    lower_package_par(input, rt, lazy, Set[str]())
+
+## `lower_package_with` that also runs the loops named by `pooled` as `par for`
+## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
+pub fn lower_package_par(
+    input List[Source],
+    rt ast.Program?,
+    lazy int,
+    pooled Set[str],
+) Module ! Problems
+    srcs := with_error_owners(shadow_free(input, lazy))
     mut l := Lower(
         path: srcs[0].path,
         file_paths: [src.path for src in srcs],
         err_msgs: {"fs.IoError": "", "IoError": ""},
         fn_errs: {},
+        infer_errs: {},
         tail_want: none,
         tail_pos: ast.Pos(line: 1, col: 1),
         fails: false,
@@ -252,10 +283,14 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         nvars: 0,
         loops: [],
         tk: new_task_state(),
+        nofuse: false,
         structs: {},
         self_ty: "",
         borrowed: Set[str](),
         copy_tys: {},
+        uniq: new_uniq(),
+        unw: new_unwind(),
+        asks: ask_keys(srcs),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
@@ -266,6 +301,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         const_home: {},
         problem_files: [],
         contracted: {},
+        inh: Inherit(of: {}, label: {}, ens_from: none, ens_n: 0, ens_origin: ""),
         invariants: {},
         inv_file: {},
         inv_key: "",
@@ -274,23 +310,28 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         unchecked: false,
         unchecked_list: [],
         unchecked_seen: Set[str](),
+        auto_par: pooled,
         ens: [],
         ens_label: "",
         ens_vars: [],
         ens_nargs: 0,
         enums: {},
         eq_tys: {},
+        text_open: [],
         singletons: [],
         globals: {},
         global_consts: [],
         gen: new_gen(),
         lazy: new_lazy(lazy),
+        ffi_k: 0,
         else_targets: [],
+        instr: new_instr(),
     )
     l.note_lazy_names(srcs)
     for src in srcs
         l.file_aliases.push(aliases_of(src.prog))
         l.file_prefix.push(if src.module == "" then "" else "{src.module}.")
+    l.share_gen_aliases(srcs)
     if r := rt
         l.declare_all(r, "rt.")
     l.tk.on = l.sigs.contains("rt.task_new")
@@ -321,10 +362,11 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         l.quiet_lazy(k, before)
     l.stamp_problems()
     l.gen_const_init()
+    l.settle_inferred(srcs, lazy)
     for k in 0..lazy.min(srcs.len())
         l.enter_file(k)
         l.path = srcs[k].path
-        for f in program_fns(srcs[k].prog)
+        for f in inferred_first(l, program_fns(srcs[k].prog), l.prefix)
             if not is_test(f)
                 l.lower_fn(f)
         l.stamp_problems()
@@ -334,6 +376,8 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
     l.gen_unchecked()
     l.enter_file(0)
     l.gen_dispatch()
+    l.instr_finish()
+    l.gen_drops()
     l.gen_copies()
     l.gen_enum_eqs()
     l.gen_init_enums()
@@ -442,6 +486,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
             continue
         before := problems.len()
         declare_fn(f, pre)
+        note_inherited(f, prog, pre)
         if problems.len() > before
             bad.add(fn_key(f, pre))
             sigs.remove(fn_key(f, pre))
@@ -449,14 +494,7 @@ fn Lower.declare_all(mut self, prog ast.Program, pre str)
     self_ty = ""
 
 fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
-    if f.ext != none and not ffi_known(f)
-        problems.push(Problem(
-            rule: "ffi.native.1",
-            pos: f.pos,
-            message: "`extern c fn {f.name}`: `ail build` links only a fixed libc subset (`ail run` can call any C function)",
-        ))
-        return
-    if declare_generic_fn(f, pre)
+    if declare_generic_fn(anon_generic(f), pre)
         return
     mut params := List[Ty]()
     self_ty = if o := f.owner then owner_key(o.name, pre) else ""
@@ -518,6 +556,7 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
     if can_fail
         if r := f.ret
             fn_errs[fn_key(f, pre)] = error_ty_of(r)
+            note_inferred_set(fn_key(f, pre), r)
     if pre != "rt."
         fn_decl[fn_key(f, pre)] = f
         fn_file[fn_key(f, pre)] = file
@@ -551,7 +590,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                 "str" => Ty.Str
                 "bytes" => Ty.Bytes
                 "char" => Ty.Char
-                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "f32" => scalar_ty(name)
+                "i8" | "i16" | "i32" | "u8" | "u16" | "u32" | "u64" | "f32" => scalar_ty(name)
                 "List" =>
                     if args.len() != 1
                         return none
@@ -563,7 +602,9 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                         or is_enum(e)
                         or is_shared_opt(e)
                         or e.is_coll()
+                        or e.is_tensor()
                         or e.is_ref()
+                        or e.is_fn()
                         return Ty.List(e)
                     none
                 "Atomic" =>
@@ -784,6 +825,7 @@ fn Lower.declare(mut self, name str, ty Ty, v int)
     if v >= 0 and names[v] == ""
         names[v] = name
     write_var(key, cur, v)
+    uniq_declared(name)
 
 fn Lower.lookup(self, name str) str?
     mut i := scopes.len() - 1
@@ -839,6 +881,7 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
     self_ty = ""
     mut k := 0
     if f.owner != none
+        self_ty = owner
         if recv := f.receiver
             self_ty = owner
             declare_self(recv, sig.params[0], params[0])
@@ -858,6 +901,8 @@ fn Lower.lower_fn_as(mut self, f ast.FnDecl, name str, key str, owner str)
         return
     if not unchecked
         enter_contracts(f, key)
+    uniq_params(f)
+    instr_call(f, sig.params, params)
     want := not ret.is_unit()
     if want
         tail_want = ret
@@ -920,6 +965,7 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
     if problems.len() > fn_problems or fn_failed
         facts.moves = []
         return
+    instr_end()
     mut func := elide_moves(
         Func(
             name: name,
@@ -948,10 +994,13 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
 fn Lower.convert(mut self, v Val, want Ty, pos ast.Pos) int
     if want.opt_inner() != none and not v.ty.is_unknown()
         return convert_opt(v, want, pos)
+    if settle_by_want(v, want)
+        return v.id
     if want.is_unknown() or v.ty.is_unknown()
         # A type outside the subset, already reported.
         fn_failed = true
-    elif not same_ty(v.ty, want)
+    elif not same_ty(v.ty, want) and not (is_rt and want.is_fn() and v.ty == Ty.Int)
+        # The runtime calls a function address it kept as an `int` (unwind.ail).
         problem(pos, "expected `{want.name()}`, found `{v.ty.name()}`")
     v.id
 
@@ -976,12 +1025,14 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
         s := body[i]
         if done()
             dead_block()
+        instr_stmt(s)
         if (want or top_unit_fails) and i == body.len() - 1
             if e := final_expr(s)
                 if tail_error(e)
                     continue
                 if want
                     result = lower_expr(e, tail) else Val(id: -2, ty: Ty.Unit)
+                    uniq_take(e)
                     continue
             # An `unsafe` block gives its last expression's value.
             if want
@@ -989,8 +1040,9 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
         lower_stmt(s)
+        instr_after(s)
     defer_exit()
-    end_scope_exits()
+    end_scope_exits(if body.len() > 0 then group_end_at(body[body.len() - 1]) else none)
     scopes.pop()
     if result.id == -2
         return none
@@ -1054,7 +1106,12 @@ fn str_to_int_recv(e ast.Expr) ast.Expr?
 ## `s.to_int() else ...` (err.else.1-2) in any position: the parse, then the
 ## `else` when it fails, a fallback value or a statement that leaves.
 fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.Pos) Val?
-    s := lower_value(recv, Ty.Str)?
+    # A `?` in `recv` (`env.get("PORT")?.to_int()`) also runs the `else` (err.prop.4).
+    fail := new_block()
+    else_targets.push(fail)
+    got := lower_value(recv, Ty.Str)
+    else_targets.pop()
+    s := got?
     if not (s.ty == Ty.Str)
         problem(pos, "`.to_int()` on `{s.ty.name()}`")
         return none
@@ -1063,7 +1120,6 @@ fn Lower.lower_str_to_int_else(mut self, recv ast.Expr, other ast.Else, pos ast.
     join := new_block()
     r := new_value(Ty.Int, "")
     blocks[join].params.push(r)
-    fail := new_block()
     branch(ok, join, [n], fail, [])
     seal(fail)
     cur = fail
@@ -1095,7 +1151,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
-            if is_par
+            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return
@@ -1138,7 +1194,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
             note_statement(e)
             if is_pop_call(e) and lower_pop_stmt(e) != none
                 return
-            lower_expr(e, Ty.Unit)
+            uniq_discard(e, lower_expr(e, Ty.Unit))
         Handle(value, other) => lower_handle(value, other)
         Defer(st, _) => defer_note(st)
         With(m, var, _, body, pos) => lower_with(m, var, body, pos)
@@ -1148,6 +1204,12 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
 ## A list read from a variable or an element is copied when it is bound
 ## or assigned, so the two stay independent (own.val.1, native-abi.md §4).
 fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
+    if is_uniq(v.ty)
+        return uniq_move(e, v)
+    if is_branchy(e) and place_tail(e, true)
+        if v.ty.is_coll()
+            return copy_coll(v)
+        return if needs_copy(v.ty) then copy_value(v) else v.id
     if v.ty.is_coll() and is_place(e)
         return note_move(e, v, copy_coll(v))
     if not needs_copy(v.ty) or not is_place(e)
@@ -1157,6 +1219,8 @@ fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
 ## A returned list or struct is copied when it belongs to someone else: a
 ## field, an element, a parameter or a `for` variable (own.val.1).
 fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
+    if is_uniq(v.ty)
+        return uniq_move(e, v)
     if not needs_copy(v.ty)
         return v.id
     match e
@@ -1164,6 +1228,7 @@ fn Lower.copy_if_borrowed(mut self, e ast.Expr, v Val) int
         Name(n, _) =>
             key := lookup(n) else return copy_value(v)
             if borrowed.contains(key) then copy_value(v) else v.id
+        If | Match => if place_tail(e, false) then copy_value(v) else v.id
         _ => v.id
 
 ## A copy of the list `v`, deep through nested lists (own.val.1).
@@ -1205,8 +1270,11 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
                 ty2 := settle_var(target, ty, r)
                 v = copy_if_place(value, Val(id: convert(r, ty2, pos), ty: ty2))
             note_assigned(key, value)
+            uniq_replace(key)
             write_var(key, cur, assign_param(key, ty, v, pos))
         Index(recv, index, ipos) =>
+            if assign_after_rhs(target, op, value, pos)
+                return
             l := lower_value(recv, none) else return
             if l.ty.is_coll()
                 lower_map_assign(l, index, op, value, pos, ipos)
@@ -1223,6 +1291,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             else
                 r := lower_value(value, elem) else return
                 v = copy_if_place(value, Val(id: convert(r, elem, pos), ty: elem))
+            uniq_drop_elem(l.id, i.id, elem, ipos)
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
@@ -1378,11 +1447,23 @@ fn Lower.lower_for(
 
 ## Whether a loop body may change the list it iterates (so the loop needs
 ## a copy: `for x in xs` sees the list as it was, expr.loop.3).
+## A path such as `dom[id].children` may be a field of `self`, which any
+## call in the body can change through an implicit `mut self`, so for a
+## path every call counts too ("#call").
 fn mutates(body List[ast.Stmt], iter ast.Expr) bool
-    name := match iter
+    match iter
+        Name(n, _) => block_mutates(body, n)
+        Index(_, _, _) | Member(_, _, _) =>
+            root := path_root(iter) else return false
+            block_mutates(body, root) or block_mutates(body, "#call")
+        _ => false
+
+fn path_root(e ast.Expr) str?
+    match e
         Name(n, _) => n
-        _ => return false
-    block_mutates(body, name)
+        Index(r, _, _) => path_root(r)
+        Member(r, _, _) => path_root(r)
+        _ => none
 
 fn block_mutates(body List[ast.Stmt], name str) bool
     for s in body
@@ -1419,10 +1500,11 @@ fn args_mutate(args List[ast.Arg], name str) bool
 ## argument naming it, counts as a change.
 fn expr_mutates(e ast.Expr, name str) bool
     match e
-        Method(recv, m, _, args) => root_is(recv, name) and m != "len"
+        Method(recv, m, _, args) => name == "#call"
+            or root_is(recv, name) and m != "len"
             or args_mutate(args, name)
             or expr_mutates(recv, name)
-        Call(_, args, _) => args_mutate(args, name)
+        Call(_, args, _) => name == "#call" or args_mutate(args, name)
         Binary(_, a, b, _) => expr_mutates(a, name) or expr_mutates(b, name)
         Unary(_, a, _) => expr_mutates(a, name)
         Index(r, i, _) => expr_mutates(r, name) or expr_mutates(i, name)
@@ -1532,6 +1614,8 @@ fn Lower.lower_name(mut self, name str, pos ast.Pos, want Ty?) Val?
 
 ## A call `f(...)`, or a variant built by calling it.
 fn Lower.lower_call_expr(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos, want Ty?) Val?
+    if ordered := label_ordered(callee, args)
+        return lower_call_expr(callee, ordered, pos, want)
     if is_generic_callee(callee)
         return lower_generic_callee(callee, args, pos, want)
     if v := call_variant(callee, want)
@@ -1677,6 +1761,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
             and not is_pending_opt(elem)
             and not elem.is_coll()
             and not elem.is_ref()
+            and not elem.is_fn()
             and not elem.is_tensor()
             return unsupported(pos, "a list of `{elem.name()}`")
         vs.push(convert(Val(id: copy_if_place(x, v), ty: v.ty), elem, pos))
@@ -1696,6 +1781,8 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Name(name, npos) =>
             if name == "print" and not is_rt
                 return lower_print(args, pos)
+            if (name == "assert" or name == "assert_eq") and not is_rt and lookup(name) == none
+                return lower_assert(name, args, pos)
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(none, args, pos)
             if is_rt and PRIMS.contains(name)
@@ -1750,10 +1837,12 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                     continue
                 v := lower_value(a.value, sig.params[i])?
                 retype_arg(a.value, v, sig.params[i])
+                uniq_arg(a)
                 vs.push(shield_arg(args, i, Val(
                     id: convert(v, sig.params[i], expr_pos(a.value)),
                     ty: v.ty,
                 )))
+            check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
             res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
             cells_back(cells)
@@ -1761,7 +1850,7 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
         Member =>
             if k := type_name(callee)
                 return new_struct(k, args, pos)
-            unsupported(pos, "this call")
+            call_member_value(callee, args, pos)
         TypeArgs(name, targs, tpos) =>
             if name == "Atomic" and tk.on and not is_rt
                 return lower_atomic_new(targs, args, pos)
@@ -1834,6 +1923,8 @@ fn Lower.lower_print_body(mut self, args List[ast.Arg], pos ast.Pos) Val?
     Val(id: -1, ty: Ty.Unit)
 
 fn out_fn(t Ty) str
+    if t == Ty.Sized("u64")
+        return "rt.out_u64"
     match t
         Int | Sized(_) => "rt.out_int"
         Float | F32 => float_out_fn(t)
@@ -1853,6 +1944,8 @@ fn out_fn(t Ty) str
         _ => ""
 
 fn Lower.out(mut self, v Val, pos ast.Pos) Val?
+    if v.ty == Ty.List(Ty.Sized("u64"))
+        return out_text(v, pos)
     if v.ty.opt_inner() != none
         return out_opt(v, pos)
     if v.ty.is_coll()
@@ -1891,6 +1984,10 @@ fn Lower.lower_method(
     args List[ast.Arg],
     want Ty?,
 ) Val?
+    if rest := trait_call_args(recv, args)
+        return lower_method(args[0].value, name, npos, rest, want)
+    if ta := module_type_args(recv)
+        return lower_method(ta, name, npos, args, want)
     # std.env.1
     if name == "args" and args.len() == 0 and is_module(recv, "env")
         t := Ty.List(Ty.Str)
@@ -1911,21 +2008,24 @@ fn Lower.lower_method(
         return lower_chan_select(args, npos)
     if is_module(recv, "mem")
         return lower_mem_call(name, npos, args)
-    if g := generic_enum_ref(recv)
-        return generic_variant(g, name, args, npos, none)
+    if g := generic_member_ref(recv)
+        return generic_member(g, recv, name, args, npos, none)
     if en := enum_ref(recv)
         if case_index(en, name) >= 0
             return new_variant(VariantRef(en: en, k: case_index(en, name)), args, npos)
         return struct_call("{en}.{name}", none, args, expr_pos(recv))
     if a := assoc_owner(recv)
+        assoc_instance(recv, name)
         return struct_call("{a}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))
+    if cal := qualified_generic_callee(recv, name, npos)
+        return lower_generic_callee(cal, args, npos, want)
     if m := module_name(recv)
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, expr_pos(recv))
-    r := deref(lower_value(recv, none)?)
+    r := deref_use(lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
     if chan_elem(r.ty) != none
@@ -1993,7 +2093,7 @@ fn Lower.module_name(self, e ast.Expr) str?
 ## Whether `e` names module `m` (not a local or a field of that name).
 fn Lower.is_module(self, e ast.Expr, m str) bool
     match e
-        Name(n, _) => n == m and lookup(n) == none and self_slot(n) < 0
+        Name(n, _) => (n == m or std_alias(n) == m) and lookup(n) == none and self_slot(n) < 0
         _ => false
 
 ## An empty list typed by its first `push` (type.coll.6): the variable takes

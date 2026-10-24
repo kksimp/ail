@@ -1,0 +1,17 @@
+# Constructs once outside the native subset (native.subset.1); the last of them,
+# a unique struct, lowers now (ADR 0867).
+struct Point
+    x int
+    y int
+
+fn label(p Point) str
+    "{p.x}"
+
+fn main()
+    s := "n = {1}"
+    print(s)
+    m := {"a": 1}
+    print(m == {"a": 1})
+
+unique struct Lock
+    id int

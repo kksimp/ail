@@ -95,10 +95,6 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
         }
     }
     for f in prog.fns.iter().filter(|f| f.top_level() && f.owner.is_none() && f.is_test()) {
-        if !super::replay::wants(&f.name) {
-            continue;
-        }
-        super::replay::begin_test(&f.name);
         it.depth = 0;
         // run.limit.1-3: each test gets the whole time, memory and step allowance.
         let _watch = limits::watch();
@@ -111,7 +107,6 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
             it.out.get_mut().clear();
             let errput = take_errs(&mut it.errs);
             super::trace::capture_end();
-            super::replay::end_test(failure.is_some());
             outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, errput, prop: Some(info), snapshot: None, trace: Vec::new() });
             continue;
         }
@@ -149,7 +144,6 @@ pub fn run_tests(prog: &Program, resolved: &Resolved, cases: u64, seed: Option<u
         let errput = take_errs(&mut it.errs);
         let events = super::trace::capture_end();
         let trace = if failure.is_some() { events } else { Vec::new() };
-        super::replay::end_test(failure.is_some());
         outcomes.push(Outcome { name: f.name.clone(), pos, failure, output, errput, prop: None, snapshot, trace });
     }
     outcomes

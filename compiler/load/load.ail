@@ -6,7 +6,9 @@
 ##
 ## Spec rules: mod.unit.1-5, mod.use.1-6, mod.vis.1, json.prelude.1.
 use ast
+use fix
 use mir
+use pkg
 use syntax
 
 ## Each file's lines are numbered from a multiple of this (modules.rs).
@@ -34,9 +36,14 @@ pub struct Loaded
 STD_MODULES := [
     ("std.app", "app/app.ail"),
     ("std.args", "args/args.ail"),
+    ("std.attach", "attach/attach.ail"),
+    ("std.attach.serve", "attach/serve.ail"),
     ("std.csv", "csv/csv.ail"),
     ("std.log", "log/log.ail"),
     ("std.net.http", "net/http.ail"),
+    ("std.screen", "screen/screen.ail"),
+    ("std.screen.pixels", "screen/pixels.ail"),
+    ("std.screen.view", "screen/view.ail"),
     ("std.net.jar", "net/jar.ail"),
     ("std.time.date", "time/date.ail"),
     ("std.ui.widgets", "ui/widgets.ail"),
@@ -83,6 +90,22 @@ DERIVE_NAMES := ["TypeInfo", "TypeKind", "FieldInfo", "VariantInfo", "DeriveErro
 ## Read the program at `arg`, a file or a package directory, with every module
 ## it imports. `std` is the directory of the standard modules in AIL.
 pub fn load(arg str, std str) Loaded ! LoadError
+    load_full(arg, std, Map[str, str](), Map[str, str]())
+
+## `load`, with the texts the program's own derive generators wrote, by
+## `TYPE.TRAIT` (ct.derive.1-4): the caller runs them natively and loads
+## again. A text `@@err MESSAGE` is the generator's `DeriveError`, one
+## `@@fx REASONS` a generator that isn't compile-time-safe (ct.derive.3).
+pub fn load_derived(arg str, std str, user Map[str, str]) Loaded ! LoadError
+    load_full(arg, std, user, Map[str, str]())
+
+## `load` with the text of some files given instead of read from disk, by
+## path (`ail edit` checks the edited state before anything is written).
+pub fn load_with(arg str, std str, over Map[str, str]) Loaded ! LoadError
+    load_full(arg, std, Map[str, str](), over)
+
+## `load` with both: generator texts `user` and file texts `over`.
+fn load_full(arg str, std str, user Map[str, str], over Map[str, str]) Loaded ! LoadError
     mut root := "."
     mut root_files := List[str]()
     if arg.ends_with(".ail")
@@ -94,14 +117,22 @@ pub fn load(arg str, std str) Loaded ! LoadError
         root_files = ail_files(arg)
         if root_files.len() == 0
             return LoadError("{arg} has no .ail files (mod.unit.5)")
-    load_package(root, root_files, std)
+    load_package(root, root_files, std, user, over)
 
 ## The `.ail` files directly in `dir`, sorted (mod.unit.1).
 fn ail_files(dir str) List[str]
     names := fs.list_dir(dir) else return []
     [path.join(dir, n) for n in names.sorted() if n.ends_with(".ail")]
 
-fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
+fn load_package(
+    root str,
+    root_files List[str],
+    std str,
+    user Map[str, str],
+    over Map[str, str],
+) Loaded ! LoadError
+    # The manifests come first: they say where each package is (mod.pkg.1-3).
+    packages := pkg.read(root)
     mut files := List[ast.SourceFile]()
     mut tokens := List[syntax.Token]()
     mut sources := List[str]()
@@ -116,7 +147,11 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
             if (files.len() + 1) * FILE_LINES >= PRELUDE_LINE
                 return LoadError("the program has more than {files.len()} files")
             shown := std_shown(p, std)
-            src := fs.read_text(p) else return LoadError("can't read {shown}")
+            mut src := ""
+            if given := over.get(p)
+                src = given
+            else
+                src = fs.read_text(p) else return LoadError("can't read {shown}")
             base := files.len() * FILE_LINES
             lexed := syntax.lex(src)
             mut toks := shift(lexed.tokens, base)
@@ -131,13 +166,13 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
                             seen.add(dotted)
                             queue.push((dotted, [path.join(std, sf)]))
                     continue
-                target_module := imp.join(".")
-                if seen.contains(target_module)
+                t := packages.target(module, imp)
+                if t.undeclared or seen.contains(t.module)
                     continue
-                seen.add(target_module)
-                found := ail_files(path.join(root, imp.join("/")))
+                seen.add(t.module)
+                found := ail_files(t.dir)
                 if found.len() > 0
-                    queue.push((target_module, found))
+                    queue.push((t.module, found))
             tokens.extend(toks)
             sources.push(src)
             files.push(ast.SourceFile(path: shown, module: module, base: base))
@@ -145,11 +180,13 @@ fn load_package(root str, root_files List[str], std str) Loaded ! LoadError
         tok: syntax.Tok.Eof,
         pos: ast.Pos(line: files.len() * FILE_LINES, col: 1),
     ))
-    mut first := assemble(tokens, files, diags, std)?
+    mut first := assemble(tokens, files, diags, std, packages)?
     first.texts = sources
+    mut done := first
     if diags.len() == 0 and first.diags.len() == 0 and wanted(tokens)
-        return expand_derives(first, tokens, files, std)
-    first
+        done = expand_derives(first, tokens, files, std, user, packages)?
+    packages.finish(mut done.program, mut done.diags, mut done.texts)
+    done
 
 ## The standard module `dotted` written in AIL: its file under the std directory.
 fn std_file(dotted str) str?
@@ -173,6 +210,7 @@ fn at_line(d syntax.Diag, base int) syntax.Diag
         fixed: d.fixed,
         help: d.help,
         fix: d.fix,
+        edits: d.edits,
     )
 
 ## The tokens with every line moved down by `base`, in interpolations too.
@@ -232,6 +270,7 @@ fn assemble(
     files List[ast.SourceFile],
     diags List[syntax.Diag],
     std str,
+    packages pkg.Packages,
 ) Loaded ! LoadError
     mut all := prelude_tokens(tokens)
     all.extend(tokens)
@@ -241,7 +280,7 @@ fn assemble(
     prog.files = files
     mut found := diags
     found.extend(parsed.diags)
-    resolve(prog, one_per_line(found))
+    resolve(prog, one_per_line(found), packages)
 
 ## contract.inh.1: an implementation's method inherits the contracts of the
 ## trait's method of the same name.
@@ -362,4 +401,33 @@ fn one_per_line(diags List[syntax.Diag]) List[syntax.Diag]
         same_line := kept.len() > 0 and kept[kept.len() - 1].pos.line == d.pos.line
         if d.rule.starts_with("lex.str.") or not same_line
             kept.push(d)
+            continue
+        prev := kept[kept.len() - 1]
+        if prev.fixed and d.fixed and explicit(prev.edits) and explicit(d.edits) and apart(
+            prev.edits,
+            d.edits,
+        )
+            mut joined := prev.edits
+            joined.extend(d.edits)
+            kept[kept.len() - 1].edits = joined
     kept
+
+fn explicit(edits List[fix.Edit]) bool
+    for e in edits
+        if e.old != none or e.anchor != "exact"
+            return false
+    true
+
+fn apart(xs List[fix.Edit], ys List[fix.Edit]) bool
+    for x in xs
+        for y in ys
+            if overlaps(x, y)
+                return false
+    true
+
+fn overlaps(a fix.Edit, b fix.Edit) bool
+    ka := a.pos.line * 100000 + a.pos.col
+    ea := a.end.line * 100000 + a.end.col
+    kb := b.pos.line * 100000 + b.pos.col
+    eb := b.end.line * 100000 + b.end.col
+    ka <= eb and kb <= ea

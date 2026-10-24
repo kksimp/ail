@@ -1,0 +1,143 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Lazy binding of an `extern c fn` outside the libc subset (ffi.load.1-3,
+## ADR 0870). On its first call the function's library is opened with
+## `dlopen` and its symbol found with `dlsym`; the address is kept in a cell,
+## so later calls cost one load. Only a program with such a function reaches
+## this file, and only then does the executable import `dlopen` and `dlsym`
+## (a dynamic ELF on Linux, libSystem on macOS).
+
+## The global slot holding the cell table: one word per extern function, 0
+## until bound.
+FFI_TAB := 57
+## Why the last bind failed: 0 none, 1 the library, 2 the symbol, 3 Windows.
+FFI_ST := 58
+
+## `RTLD_NOW`.
+RTLD_NOW := 2
+
+fn ffi_dlopen(path int) int
+    t := target()
+    if t == 2
+        return import_call("_dlopen", path, RTLD_NOW, 0, 0)
+    if t == 3
+        return 0
+    import_call("dlopen", path, RTLD_NOW, 0, 0)
+
+fn ffi_dlsym(handle int, name int) int
+    t := target()
+    if t == 2
+        return import_call("_dlsym", handle, name, 0, 0)
+    if t == 3
+        return 0
+    import_call("dlsym", handle, name, 0, 0)
+
+## Open the library at `pre + (lib?) + name + suf`; 0 when it can't.
+fn ffi_try(pre str, lib_prefix bool, name str, suf str) int
+    sb_reset()
+    sb_text(pre)
+    if lib_prefix
+        sb_text("lib")
+    sb_text(name)
+    sb_text(suf)
+    c := mem_cstr(sb_str())
+    h := ffi_dlopen(c)
+    mem_free(c)
+    h
+
+## Whether `name` is used as written: it has a `/` or a `.` (ffi.load.1).
+fn ffi_literal(name str) bool
+    a := str_addr(name)
+    n := load64(a)
+    for i in 0..n
+        c := load8(a + 16 + i)
+        if c == 47 or c == 46
+            return true
+    false
+
+fn ffi_has_lib_prefix(name str) bool
+    a := str_addr(name)
+    load64(a) >= 3 and load8(a + 16) == 108 and load8(a + 17) == 105 and load8(a + 18) == 98
+
+## The handle of library `name`, as the platform spells shared libraries.
+fn ffi_open_lib(name str) int
+    if ffi_literal(name)
+        return ffi_try("", false, name, "")
+    mut k := 0
+    while k < 2
+        if k == 1 and ffi_has_lib_prefix(name)
+            break
+        if target() == 2
+            h := ffi_try("", k == 1, name, ".dylib")
+            if h != 0
+                return h
+            h2 := ffi_try("/usr/lib/", k == 1, name, ".dylib")
+            if h2 != 0
+                return h2
+            h3 := ffi_try("/opt/homebrew/lib/", k == 1, name, ".dylib")
+            if h3 != 0
+                return h3
+        else
+            for suf in [".so", ".so.6", ".so.1", ".so.0", ".so.2", ".so.3"]
+                h := ffi_try("", k == 1, name, suf)
+                if h != 0
+                    return h
+        k += 1
+    0
+
+## The address bound to extern function `k`, or 0 with `FFI_ST` set.
+fn ffi_addr(k int, lib str, has_lib bool, name str) int
+    tab := load64(global(FFI_TAB))
+    if tab == 0
+        tab = mem_alloc(8 * 4096)
+        store64(global(FFI_TAB), tab)
+    a := load64(tab + 8 * k)
+    if a != 0
+        return a
+    store64(global(FFI_ST), 0)
+    if target() == 3
+        store64(global(FFI_ST), 3)
+        return 0
+    mut handle := 0
+    if has_lib
+        handle = ffi_open_lib(lib)
+        if handle == 0
+            store64(global(FFI_ST), 1)
+            return 0
+    else
+        # The running program's own symbols, libc included.
+        handle = ffi_dlopen(0)
+    c := mem_cstr(name)
+    p := ffi_dlsym(handle, c)
+    mem_free(c)
+    if p == 0
+        store64(global(FFI_ST), 2)
+        return 0
+    store64(tab + 8 * k, p)
+    p
+
+fn ffi_status() int
+    load64(global(FFI_ST))
+
+## The message of a failed bind (ffi.load.1-3).
+fn ffi_load_msg(st int, lib str, has_lib bool, name str) int
+    sb_reset()
+    if st == 3
+        sb_text("C calls are not supported on Windows yet (ffi.load.3)")
+    elif st == 1
+        sb_text("can't load the library `")
+        sb_text(lib)
+        sb_text("`")
+    else
+        sb_text("the library ")
+        if has_lib
+            sb_text("`")
+            sb_text(lib)
+            sb_text("`")
+        else
+            sb_text("(the program)")
+        sb_text(" has no symbol `")
+        sb_text(name)
+        sb_text("`")
+    str_addr(sb_str())

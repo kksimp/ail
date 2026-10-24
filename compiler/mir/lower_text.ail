@@ -10,9 +10,11 @@ fn Lower.text_ext_ok(mut self, t Ty) bool?
     if inner := t.opt_inner()
         return text_ok(inner)
     match t
-        Char | Bytes => true
+        Char | Bytes | Tensor(_) => true
         Map(k, v) => text_ok(k) and text_ok(v)
         Set(e) => text_ok(e)
+        Ref(inner) => ref_text_ok(inner)
+        Any(tr) => any_text_ok(tr)
         _ => none
 
 ## The text of `x`, a value of a type `text_ext_ok` accepts.
@@ -22,8 +24,11 @@ fn Lower.text_ext(mut self, t Ty, x int) int
     match t
         Char => call("rt.char_quoted", [x], Ty.Str)
         Bytes => call("rt.bytes_quoted", [x], Ty.Str)
+        Tensor(_) => call("rt.tensor_text", [x], Ty.Str)
         Map(k, v) => table_text(x, k, v)
         Set(e) => table_text(x, e, none)
+        Ref => ref_text(t, x)
+        Any(tr) => any_text(tr, Val(id: x, ty: t)) else str_value("")
         _ => str_value("")
 
 ## `none`, or the text of the value inside the optional `x`.

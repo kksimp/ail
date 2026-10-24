@@ -76,6 +76,10 @@ fn Lower.lower_interp_value(mut self, parts List[ast.InterpPart], pos ast.Pos) V
 
 ## The text form of a value (type.str.3), as a `str` value.
 fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
+    if v.ty == Ty.Sized("u64")
+        return call("rt.fmt_u64", [v.id], Ty.Str)
+    if v.ty == Ty.List(Ty.Sized("u64"))
+        return value_text(v.ty, v.id)
     match v.ty
         Str => v.id
         Bytes => call("rt.bytes_show", [v.id], Ty.Str)
@@ -84,16 +88,15 @@ fn Lower.text_of(mut self, v Val, pos ast.Pos) int?
         F32 => call("rt.fmt_f32", [v.id], Ty.Str)
         Bool => call("rt.fmt_bool", [v.id], Ty.Str)
         Char => call("rt.str_char", [v.id], Ty.Str)
-        Tensor(e) =>
-            if e == Ty.F32
-                problem(pos, "not in the native subset yet: the text of a `Tensor[f32]`")
-                return none
-            call("rt.tensor_text", [v.id], Ty.Str)
+        Tensor(_) => call("rt.tensor_text", [v.id], Ty.Str)
         List(e) =>
             if e == Ty.Int
                 return call("rt.fmt_int_list", [v.id], Ty.Str)
             if s := display_call(v)
                 return s
+            # A list of strings, floats, bools or sized numbers: its elements in order (type.str.3).
+            if e == Ty.Str or e == Ty.Float or e == Ty.Bool or e.is_sized()
+                return list_text(v.id, e)
             problem(pos, "not in the native subset yet: the text of a `{v.ty.name()}`")
             none
         _ =>

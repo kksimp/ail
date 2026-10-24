@@ -26,6 +26,7 @@ fn Checker.param_assoc_call(mut self, tn str, n str, at ast.Pos, args List[ast.A
         if f := assoc_fn(tr, n)
             binds := [Bind(param: trait_self[tr], ty: Ty.Param(p))]
             assoc_calls[pos_key(at)] = tr
+            symbols[pos_key(at)] = "method:{prog.traits[tr].name}.{n}"
             return check_call("{tn}.{n}", sigs[f], binds, args, none, at, expect)
     args_only(args)
     mut offer := -1
@@ -93,6 +94,7 @@ fn Checker.impl_assoc_call(
     if e := explicit
         binds = zip_binds(info.params, [x.ty for x in e])
     targets[pos_key(at)] = f
+    symbols[pos_key(at)] = "method:{def_name(d)}.{n}"
     check_call("{def_name(d)}.{n}", sig, binds, args, none, at, expect)
 
 ## `List[T].n(args)` on a builtin type that implements a trait with an
@@ -133,6 +135,7 @@ fn Checker.builtin_assoc_call(
         sig.generics = info.params
         sig.owner = info.params.len()
     targets[pos_key(at)] = f
+    symbols[pos_key(at)] = "method:{show(ty)}.{n}"
     t := check_call("{show(ty)}.{n}", sig, binds, args, none, at, expect)
     assoc_calls[pos_key(at)] = tr
     t

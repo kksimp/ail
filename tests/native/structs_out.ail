@@ -1,0 +1,13 @@
+# Structs once outside the native subset (ADR 0392); unique ones lower too now (ADR 0867).
+struct Box[T]
+    item T
+
+unique struct Checked
+    n int
+
+struct Point
+    x int
+
+fn main()
+    p := Point(x: 1)
+    print(p)

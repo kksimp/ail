@@ -94,6 +94,17 @@ pub struct Checker
     ## typed by their first use, its return type, loop depth, and how many
     ## `else` values enclose the expression and caught an optional `?`.
     pub locals List[Local]
+    ## `ail api --locals/--type` facts (api.loc.1, api.type.1): recorded only
+    ## by the last pass of `analyze(p, true)`. `anchors` and `bound` are by
+    ## local index; locals below `anchored` have an anchor.
+    pub record bool
+    pub anchored int
+    pub anchors Map[int, ast.Pos]
+    pub bound Map[int, ast.Pos]
+    pub fact_locals List[LocalFact]
+    pub fact_exprs List[(ast.Pos, str)]
+    ## Where a field is written, through a place `require_mutable` accepted.
+    pub fact_writes List[ast.Pos]
     pub pending List[Pending]
     pub fn_ret Ty
     pub loop_depth int
@@ -119,6 +130,13 @@ pub struct Checker
     ## function a call runs, the trait whose implementations it may run, the
     ## standard module of `m.f(...)`, and `ui.Window` methods (eff.infer.3-5).
     pub targets Map[int, int]
+    ## What each use of a declared name refers to, by `pos_key` of the name:
+    ## `fn:f`, `method:T.m`, `variant:E.V`, `field:S.f`, `type:T`, `const:C`
+    ## (api.ref.1). `weak_symbols` hold the uses a symbol overrides.
+    pub symbols Map[int, str]
+    pub weak_symbols Map[int, str]
+    ## The capabilities `--deny` rejects in `main` (eff.cap.1).
+    pub denied List[str]
     ## Declared functions named as values, by the name's position, with the
     ## function's index (type.fn.2).
     pub fn_values Map[int, int]
@@ -207,6 +225,13 @@ pub fn new_checker(p ast.Program) Checker
         in_requires: false,
         requires_pos: none,
         locals: [],
+        record: false,
+        anchored: 0,
+        anchors: Map[int, ast.Pos](),
+        bound: Map[int, ast.Pos](),
+        fact_locals: [],
+        fact_exprs: [],
+        fact_writes: [],
         pending: [],
         fn_ret: Ty.Unit,
         loop_depth: 0,
@@ -222,6 +247,9 @@ pub fn new_checker(p ast.Program) Checker
         unsafe_depth: 0,
         declared_fns: Set[int](),
         targets: Map[int, int](),
+        symbols: Map[int, str](),
+        weak_symbols: Map[int, str](),
+        denied: [],
         fn_values: Map[int, int](),
         trait_calls: Map[int, int](),
         assoc_calls: Map[int, int](),

@@ -1,0 +1,18 @@
+# std.tensor.20: chains of `+ - * /` over names and float literals run fused,
+# chunk by chunk, with the unfused results (float and f32, scalars on either side).
+fn main()
+    x := tensor.from([(i % 17).to_float() * 0.25 for i in 0..5000]).to_f32()
+    y := (x * x + x) * 0.5 - x
+    print(y.sum())
+    print(y.to_float().sum())
+    z := tensor.from([(i % 17).to_float() * 0.25 for i in 0..3000])
+    w := 2.0 - z / 4.0 * z + 1.5
+    print(w.sum())
+    print((z + z * z).to_list().len())
+    q := tensor.from([1.0, 2.0, 3.0], [3])
+    print((q + q) * q)
+    r := tensor.from([1.0, 2.0], [2, 1])
+    print((q + r) * 2.0 - q)
+    e := tensor.from([0.1, 0.2, 0.3])
+    f := e.to_f32()
+    print(f * 3.0 + f / 7.0 - 0.1)

@@ -6,13 +6,21 @@
 ##
 ##   +0 element kind (0 int, 1 float, 2 f32: a float holding a value rounded
 ##      to f32, as the interpreter's packed 4-byte elements read back)  +8 rank  +16 element count
-##   +24 pointer to the elements (8 bytes each, kind 11: no pointers)
+##   +24 pointer to the elements (kind 11: no pointers): 8 bytes each, or 4 bytes
+##       (singles) when the element kind is 2 (ADR 0875)
 ##   +32 the sizes of the axes, one word each
 ##
 ## Tensors are never changed after they are built, so copying one shares it.
 ## The elements are in row-major order, as in the interpreter.
 
 TENSOR_OBJ := 4
+
+## Bytes per element: a `Tensor[f32]` packs four-byte singles (ADR 0875), the
+## other kinds take a word.
+fn esz(kind int) int
+    if kind == 2
+        return 4
+    8
 
 ## A tensor of `rank` axes and `n` elements, zeroed; the sizes are the
 ## caller's to store.
@@ -21,11 +29,41 @@ fn tensor_new(kind int, rank int, n int) int
     store64(t, kind)
     store64(t + 8, rank)
     store64(t + 16, n)
+    store64(t + 24, alloc(esz(kind) * n + 8, KIND_ATOMIC))
+    t
+
+## `tensor_new` for a kernel that writes `float`s a word each, also for `f32`:
+## `tensor_pack` narrows the result when it is done.
+fn tensor_new_w(kind int, rank int, n int) int
+    t := alloc(32 + 8 * rank, TENSOR_OBJ)
+    store64(t, kind)
+    store64(t + 8, rank)
+    store64(t + 16, n)
     store64(t + 24, alloc(8 * n + 8, KIND_ATOMIC))
+    t
+
+## A tensor made by `tensor_new_w` with its elements packed: an `f32` one
+## narrows its words in place (each is an `f32` value already), the rest
+## are as they are.
+fn tensor_pack(t int) int
+    if load64(t) == 2
+        d := tensor_data(t)
+        vec_narrow(d, d, load64(t + 16))
     t
 
 fn tensor_data(t int) int
     load64(t + 24)
+
+## The elements a word each: the data itself, or for an `f32` tensor a widened
+## copy (the kernels that read `float`s a word each take their input so).
+fn tdata_w(t int) int
+    d := tensor_data(t)
+    if load64(t) != 2
+        return d
+    n := load64(t + 16)
+    w := alloc(8 * n + 8, KIND_ATOMIC)
+    vec_widen(w, d, n)
+    w
 
 ## `[a, b, c]` of the words at `p`, as `Debug` prints a list of sizes.
 fn put_sizes(p int, n int)
@@ -44,10 +82,10 @@ fn tensor_copy_words(dst int, src int, n int)
 fn tensor_from(xs List[int], kind int) int
     q := list_addr(xs)
     n := load64(q)
-    t := tensor_new(kind, 1, n)
+    t := tensor_new_w(kind, 1, n)
     store64(t + 32, n)
     tensor_copy_words(tensor_data(t), load64(q + 16), n)
-    t
+    tensor_pack(t)
 
 ## The message of `tensor.from(xs, shape)` failing (std.tensor.2), a string
 ## object, or 0 when `shape` is fine for `xs`.
@@ -115,11 +153,11 @@ fn tensor_zeros(shape List[int], kind int) int
     mut count := 1
     for i in 0..rank
         count = count * load64(d + 8 * i)
-    t := tensor_new(kind, rank, count)
+    t := tensor_new_w(kind, rank, count)
     tensor_copy_words(t + 32, d, rank)
     for i in 0..count
         store64(tensor_data(t) + 8 * i, 0)
-    t
+    tensor_pack(t)
 
 ## `tensor.from(xs, shape)` once `tensor_shape_fault` found nothing wrong.
 fn tensor_from_shape(xs List[int], kind int, shape List[int]) int
@@ -127,10 +165,10 @@ fn tensor_from_shape(xs List[int], kind int, shape List[int]) int
     sp := list_addr(shape)
     rank := load64(sp)
     n := load64(q)
-    t := tensor_new(kind, rank, n)
+    t := tensor_new_w(kind, rank, n)
     tensor_copy_words(t + 32, load64(sp + 16), rank)
     tensor_copy_words(tensor_data(t), load64(q + 16), n)
-    t
+    tensor_pack(t)
 
 ## `t.to_list()`: the elements as a list (the words are the same for `int`
 ## and `float`).
@@ -139,7 +177,7 @@ fn tensor_to_list(t int) List[int]
     xs := list_alloc(n, 8)
     q := list_addr(xs)
     store64(q, n)
-    tensor_copy_words(load64(q + 16), tensor_data(t), n)
+    tensor_copy_words(load64(q + 16), tdata_w(t), n)
     xs
 
 ## `t.shape()`: the sizes of the axes.
@@ -161,8 +199,8 @@ fn tensor_eq(a int, b int) bool
     for i in 0..rank
         if load64(a + 32 + 8 * i) != load64(b + 32 + 8 * i)
             return false
-    da := tensor_data(a)
-    db := tensor_data(b)
+    da := tdata_w(a)
+    db := tdata_w(b)
     if load64(a) >= 1
         for i in 0..n
             if loadf(da + 8 * i) != loadf(db + 8 * i)
@@ -179,7 +217,7 @@ fn tensor_text(t int) str
     rank := load64(t + 8)
     sb_reset()
     sb_text("tensor.from([")
-    d := tensor_data(t)
+    d := tdata_w(t)
     for i in 0..n
         if i > 0
             sb_text(", ")
@@ -235,6 +273,53 @@ fn vec_zip(op int, out int, a int, b int, n int, r int)
         if r != 0
             y = f32_round(y)
         storef(out + 8 * i, y)
+
+# ---- packed `f32` kernels (ADR 0875) ----
+#
+# The same operations on four-byte singles. A `float` operation on two singles
+# rounded once to `f32` is the single-precision operation (a double holds a
+# product, sum, difference or quotient of two singles exactly enough that
+# rounding twice equals rounding once), so these are bit for bit the `r` forms
+# above. The backend replaces them with assembled loops where it has them.
+
+## `out[i] = a[i]` widened to a double, for `i < n` (singles to words).
+fn vec_widen(out int, a int, n int)
+    for i in 0..n
+        storef(out + 8 * i, loadf32(a + 4 * i))
+
+## `out[i] = a[i]` narrowed to a single, for `i < n` (words to singles; `a`
+## holds values of `f32` already, or they are rounded here).
+fn vec_narrow(out int, a int, n int)
+    for i in 0..n
+        storef32(out + 4 * i, loadf(a + 8 * i))
+
+## `out[i] = a[i] op b[i]` for `i < n`.
+fn vec_zip32(op int, out int, a int, b int, n int)
+    for i in 0..n
+        storef32(out + 4 * i, float_op(op, loadf32(a + 4 * i), loadf32(b + 4 * i)))
+
+## `out[i] = a[i] op s`, or `s op a[i]` when `left` is 1 (`s` is an `f32` value).
+fn vec_scal32(op int, out int, a int, n int, left int, s float)
+    for i in 0..n
+        x := loadf32(a + 4 * i)
+        if left == 1
+            storef32(out + 4 * i, float_op(op, s, x))
+        else
+            storef32(out + 4 * i, float_op(op, x, s))
+
+## `c[i] = c[i] + x * b[i]` for `i < n`; the product and the sum each rounded.
+fn vec_axpy32(c int, b int, n int, x float)
+    for i in 0..n
+        q := f32_round(x * loadf32(b + 4 * i))
+        storef32(c + 4 * i, loadf32(c + 4 * i) + q)
+
+## One row of an `f32` matrix product: `c[j]` is the sum over `p < k`, in order
+## from 0.0, of `a[p] * b[p * n + j]`, each product and sum rounded.
+fn vec_mm32(c int, a int, b int, n int, k int)
+    for j in 0..n
+        storef32(c + 4 * j, 0.0)
+    for p in 0..k
+        vec_axpy32(c, b + 4 * p * n, n, loadf32(a + 4 * p))
 
 ## `out[i] = a[i] op s`, or `s op a[i]` when `left` is 1.
 fn vec_scal(op int, out int, a int, n int, r int, left int, s float)
@@ -369,7 +454,8 @@ fn tensor_dot_fault(a int, b int) int
 ## The elements of `t` stretched to the shape `dims` of `rank` axes and `n`
 ## elements (std.tensor.4), as a new block of words.
 fn tensor_expand(t int, dims int, rank int, n int) int
-    out := alloc(8 * n + 8, KIND_ATOMIC)
+    kind := load64(t)
+    out := alloc(esz(kind) * n + 8, KIND_ATOMIC)
     stride := alloc(8 * rank + 8, KIND_ATOMIC)
     idx := alloc(8 * rank + 8, KIND_ATOMIC)
     src := tensor_data(t)
@@ -382,7 +468,10 @@ fn tensor_expand(t int, dims int, rank int, n int) int
         k -= 1
     mut off := 0
     for i in 0..n
-        store64(out + 8 * i, load64(src + 8 * off))
+        if kind == 2
+            storef32(out + 4 * i, loadf32(src + 4 * off))
+        else
+            store64(out + 8 * i, load64(src + 8 * off))
         mut j := rank - 1
         while j >= 0
             c := load64(idx + 8 * j) + 1
@@ -421,8 +510,11 @@ fn tensor_zip(a int, b int, op int) int
     t := tensor_new(kind, rank, n)
     tensor_copy_words(t + 32, dims, rank)
     out := tensor_data(t)
-    if kind >= 1
-        vec_zip(op, out, da, db, n, if kind == 2 then 1 else 0)
+    if kind == 2
+        vec_zip32(op, out, da, db, n)
+        return t
+    if kind == 1
+        vec_zip(op, out, da, db, n, 0)
         return t
     for i in 0..n
         if not int_op(op, load64(da + 8 * i), load64(db + 8 * i), out + 8 * i)
@@ -438,7 +530,10 @@ fn tensor_scalar_f(a int, s float, op int, left bool) int
     tensor_copy_words(t + 32, a + 32, rank)
     da := tensor_data(a)
     out := tensor_data(t)
-    vec_scal(op, out, da, n, if kind == 2 then 1 else 0, if left then 1 else 0, elem_round(kind, s))
+    if kind == 2
+        vec_scal32(op, out, da, n, if left then 1 else 0, f32_round(s))
+        return t
+    vec_scal(op, out, da, n, 0, if left then 1 else 0, s)
     t
 
 ## The same for an `int` scalar; 0 on overflow.
@@ -466,7 +561,9 @@ fn tensor_neg(a int) int
     da := tensor_data(a)
     out := tensor_data(t)
     for i in 0..n
-        if kind >= 1
+        if kind == 2
+            storef32(out + 4 * i, -loadf32(da + 4 * i))
+        elif kind == 1
             storef(out + 8 * i, -loadf(da + 8 * i))
         else
             x := load64(da + 8 * i)
@@ -504,11 +601,11 @@ fn sum16(p int, q int, n int, stride int, s int) float
 
 ## `t.sum()` of a `float` tensor (std.tensor.5).
 fn tensor_sum_f(a int) float
-    sum16(tensor_data(a), 0, load64(a + 16), 1, alloc(128, KIND_ATOMIC))
+    sum16(tdata_w(a), 0, load64(a + 16), 1, alloc(128, KIND_ATOMIC))
 
 ## `a.dot(b)` of `float` tensors of one shape (std.tensor.5).
 fn tensor_dot_f(a int, b int) float
-    sum16(tensor_data(a), tensor_data(b), load64(a + 16), 1, alloc(128, KIND_ATOMIC))
+    sum16(tdata_w(a), tdata_w(b), load64(a + 16), 1, alloc(128, KIND_ATOMIC))
 
 ## A 1-element `int` tensor holding `v`, as `sum` and `dot` of `int` tensors
 ## return it; 0 stands for an overflow.
@@ -557,6 +654,11 @@ fn tensor_transpose(a int) int
     store64(t + 40, m)
     da := tensor_data(a)
     out := tensor_data(t)
+    if load64(a) == 2
+        for i in 0..m
+            for j in 0..n
+                storef32(out + 4 * (j * m + i), loadf32(da + 4 * (i * n + j)))
+        return t
     for i in 0..m
         for j in 0..n
             store64(out + 8 * (j * m + i), load64(da + 8 * (i * n + j)))
@@ -606,10 +708,13 @@ fn tensor_matmul(a int, b int) int
     da := tensor_data(a)
     db := tensor_data(b)
     out := tensor_data(t)
-    if kind >= 1
-        r := if kind == 2 then 1 else 0
+    if kind == 2
         for i in 0..m
-            vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, r)
+            vec_mm32(out + 4 * i * n, da + 4 * i * k, db, n, k)
+        return t
+    if kind == 1
+        for i in 0..m
+            vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, 0)
         return t
     box := alloc(8, KIND_ATOMIC)
     for i in 0..m
@@ -631,16 +736,16 @@ fn tensor_activate(a int, kind int) int
     ek := load64(a)
     n := load64(a + 16)
     rank := load64(a + 8)
-    t := tensor_new(ek, rank, n)
+    t := tensor_new_w(ek, rank, n)
     tensor_copy_words(t + 32, a + 32, rank)
-    da := tensor_data(a)
+    da := tdata_w(a)
     out := tensor_data(t)
     r := ek == 2
     if kind == 1
         for i in 0..n
             y := 1.0 / (1.0 + float_exp(0.0 - loadf(da + 8 * i)))
             storef(out + 8 * i, if r then f32_round(y) else y)
-        return t
+        return tensor_pack(t)
     for i in 0..n
         x := loadf(da + 8 * i)
         mut y := 0.0
@@ -652,7 +757,7 @@ fn tensor_activate(a int, kind int) int
         else
             y = float_tanh(x)
         storef(out + 8 * i, if r then f32_round(y) else y)
-    t
+    tensor_pack(t)
 
 ## The message of the fault `softmax` raises (std.tensor.24), or 0.
 fn tensor_softmax_fault(a int) int
@@ -674,9 +779,9 @@ fn tensor_softmax(a int) int
     n := load64(a + 16)
     rank := load64(a + 8)
     w := load64(a + 32 + 8 * (rank - 1))
-    t := tensor_new(ek, rank, n)
+    t := tensor_new_w(ek, rank, n)
     tensor_copy_words(t + 32, a + 32, rank)
-    da := tensor_data(a)
+    da := tdata_w(a)
     out := tensor_data(t)
     mut base := 0
     while base < n
@@ -693,7 +798,7 @@ fn tensor_softmax(a int) int
         for j in 0..w
             storef(out + 8 * (base + j), elem_round(ek, loadf(out + 8 * (base + j)) / total))
         base += w
-    t
+    tensor_pack(t)
 
 ## `t.to_f32()` (std.tensor.22): each element rounded to `f32`.
 fn tensor_to_f32(a int) int
@@ -701,10 +806,7 @@ fn tensor_to_f32(a int) int
     rank := load64(a + 8)
     t := tensor_new(2, rank, n)
     tensor_copy_words(t + 32, a + 32, rank)
-    da := tensor_data(a)
-    out := tensor_data(t)
-    for i in 0..n
-        storef(out + 8 * i, f32_round(loadf(da + 8 * i)))
+    vec_narrow(tensor_data(t), tensor_data(a), n)
     t
 
 ## `t.to_float()` on a `Tensor[f32]`: the elements, widened exactly.
@@ -713,7 +815,7 @@ fn tensor_to_float(a int) int
     rank := load64(a + 8)
     t := tensor_new(1, rank, n)
     tensor_copy_words(t + 32, a + 32, rank)
-    tensor_copy_words(tensor_data(t), tensor_data(a), n)
+    vec_widen(tensor_data(t), tensor_data(a), n)
     t
 
 # Reductions (std.tensor.11): kind 0 `sum`, 1 `max`, 2 `mean`.
@@ -780,14 +882,14 @@ fn tensor_reduce(a int, kind int, axis int, has int) int
         for i in axis + 1..rank
             after = after * load64(a + 32 + 8 * i)
         out_rank = rank - 1
-    t := tensor_new(ek, out_rank, before * after)
+    t := tensor_new_w(ek, out_rank, before * after)
     if has != 0
         mut at := 0
         for i in 0..rank
             if i != axis
                 store64(t + 32 + 8 * at, load64(a + 32 + 8 * i))
                 at += 1
-    da := tensor_data(a)
+    da := tdata_w(a)
     out := tensor_data(t)
     s := alloc(128, KIND_ATOMIC)
     for b in 0..before
@@ -818,13 +920,15 @@ fn tensor_reduce(a int, kind int, axis int, has int) int
                 for k in 0..n
                     if not int_op(0, load64(r), load64(base + 8 * k * after), r)
                         return 0
-    t
+    tensor_pack(t)
 
 ## The first element of a 1-element tensor, as `int` and as `float`.
 fn tensor_first_i(t int) int
     load64(tensor_data(t))
 
 fn tensor_first_f(t int) float
+    if load64(t) == 2
+        return loadf32(tensor_data(t))
     loadf(tensor_data(t))
 
 ## The message of a shape failing std.tensor.2 on its own (`tensor.zeros(shape)`,
@@ -879,7 +983,7 @@ fn tensor_reshape(t int, shape List[int]) int
     n := load64(t + 16)
     r := tensor_new(load64(t), rank, n)
     tensor_copy_words(r + 32, load64(sp + 16), rank)
-    tensor_copy_words(tensor_data(r), tensor_data(t), n)
+    copy_bytes(tensor_data(r), tensor_data(t), esz(load64(t)) * n)
     r
 
 # ---- rows and items (std.tensor.15) ----
@@ -926,7 +1030,8 @@ fn tensor_rows_between(t int, a int, b int, drop int) int
         store64(r + 32, b - a)
     for k in 1..rank
         store64(r + 32 + 8 * (k - drop), load64(t + 32 + 8 * k))
-    tensor_copy_words(tensor_data(r), tensor_data(t) + 8 * a * row, (b - a) * row)
+    sz := esz(load64(t))
+    copy_bytes(tensor_data(r), tensor_data(t) + sz * a * row, sz * (b - a) * row)
     r
 
 ## `t[i]` once `tensor_row_fault` found nothing wrong.
@@ -1017,7 +1122,7 @@ fn tensor_arg(a int, max int, axis int, has int) int
             if i != axis
                 store64(t + 32 + 8 * at, load64(a + 32 + 8 * i))
                 at += 1
-    da := tensor_data(a)
+    da := tdata_w(a)
     out := tensor_data(t)
     for b in 0..before
         for c in 0..after
@@ -1066,14 +1171,14 @@ fn tensor_clamp(a int, lo float, hi float) int
     n := load64(a + 16)
     rank := load64(a + 8)
     ek := load64(a)
-    t := tensor_new(ek, rank, n)
+    t := tensor_new_w(ek, rank, n)
     tensor_copy_words(t + 32, a + 32, rank)
     mut l := lo
     mut h := hi
     if ek == 2
         l = f32_round(lo)
         h = f32_round(hi)
-    da := tensor_data(a)
+    da := tdata_w(a)
     out := tensor_data(t)
     for i in 0..n
         x := loadf(da + 8 * i)
@@ -1084,13 +1189,13 @@ fn tensor_clamp(a int, lo float, hi float) int
             if r > h
                 r = h
         storef(out + 8 * i, r)
-    t
+    tensor_pack(t)
 
 ## `t.round()` failing (std.tensor.19): the first element that is not a finite `int`
 ## value, or 0.
 fn tensor_round_fault(a int) int
     n := load64(a + 16)
-    da := tensor_data(a)
+    da := tdata_w(a)
     for i in 0..n
         x := loadf(da + 8 * i)
         r := x.round()
@@ -1108,7 +1213,7 @@ fn tensor_round(a int) int
     rank := load64(a + 8)
     t := tensor_new(0, rank, n)
     tensor_copy_words(t + 32, a + 32, rank)
-    da := tensor_data(a)
+    da := tdata_w(a)
     out := tensor_data(t)
     for i in 0..n
         store64(out + 8 * i, loadf(da + 8 * i).round().to_int())
@@ -1151,11 +1256,11 @@ fn tensor_conv2d(a int, k int) int
     oh := h - kh + 1
     ow := w - kw + 1
     ek := load64(a)
-    t := tensor_new(ek, 2, oh * ow)
+    t := tensor_new_w(ek, 2, oh * ow)
     store64(t + 32, oh)
     store64(t + 40, ow)
-    di := tensor_data(a)
-    dk := tensor_data(k)
+    di := tdata_w(a)
+    dk := tdata_w(k)
     out := tensor_data(t)
     for oy in 0..oh
         for ox in 0..ow
@@ -1168,7 +1273,7 @@ fn tensor_conv2d(a int, k int) int
                     else
                         s = s + p
             storef(out + 8 * (oy * ow + ox), s)
-    t
+    tensor_pack(t)
 
 # ---- top2 (std.tensor.23) ----
 
@@ -1208,7 +1313,7 @@ fn tensor_top2_fault(a int, axis int) int
     for i in axis + 1..rank
         after = after * load64(a + 32 + 8 * i)
     slot := alloc(16, KIND_ATOMIC)
-    da := tensor_data(a)
+    da := tdata_w(a)
     for b in 0..before
         for c in 0..after
             if not top2_row(da + 8 * (b * n * after + c), n, after, slot)
@@ -1229,14 +1334,14 @@ fn tensor_top2(a int, axis int, which int) int
     for i in axis + 1..rank
         after = after * load64(a + 32 + 8 * i)
     ek := load64(a)
-    t := tensor_new(if which == 2 then ek else 0, rank - 1, before * after)
+    t := tensor_new_w(if which == 2 then ek else 0, rank - 1, before * after)
     mut at := 0
     for i in 0..rank
         if i != axis
             store64(t + 32 + 8 * at, load64(a + 32 + 8 * i))
             at += 1
     slot := alloc(16, KIND_ATOMIC)
-    da := tensor_data(a)
+    da := tdata_w(a)
     out := tensor_data(t)
     for b in 0..before
         for c in 0..after
@@ -1252,4 +1357,4 @@ fn tensor_top2(a int, axis int, which int) int
             else
                 m := loadf(base + 8 * best * after) - loadf(base + 8 * second * after)
                 storef(r, if ek == 2 then f32_round(m) else m)
-    t
+    tensor_pack(t)

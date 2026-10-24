@@ -17,13 +17,24 @@ fn sb_kind(k int)
         sb_text("u8")
     elif k == 4
         sb_text("u16")
-    else
+    elif k == 5
         sb_text("u32")
+    elif k == 6
+        sb_text("u64")
+    else
+        sb_text("int")
+
+## A value of kind `k` in a message: unsigned for `u64`.
+fn sb_value(v int, k int)
+    if k == 6
+        put_u64(v)
+    else
+        put_int(v)
 
 ## `a OP b`: `op` is the code of lower_sized.ail's `arith_code`.
-fn sb_expr(a int, b int, op int)
+fn sb_expr(a int, b int, op int, k int)
     sb_text("`")
-    put_int(a)
+    sb_value(a, k)
     if op == 0
         sb_text(" + ")
     elif op == 1
@@ -34,16 +45,17 @@ fn sb_expr(a int, b int, op int)
         sb_text(" / ")
     else
         sb_text(" % ")
-    put_int(b)
+    sb_value(b, k)
     sb_text("`")
 
 ## `300` doesn't fit in `u8`: `v` is the value, `k` the target's code.
 fn sized_msg(v int, k int) int
     sb_reset()
     sb_text("`")
-    put_int(v)
+    # A kind of 16 or more says the value is a `u64`; the target is `k - 16`.
+    sb_value(v, if k >= 16 then 6 else 0)
     sb_text("` doesn't fit in `")
-    sb_kind(k)
+    sb_kind(if k >= 16 then k - 16 else k)
     sb_text("`")
     str_addr(sb_str())
 
@@ -79,7 +91,7 @@ fn ptr_align_msg(a int, width int, write int) int
 ## `200 + 100` overflows `u8` (expr.arith.1, expr.arith.3).
 fn sized_over_msg(a int, b int, op int, k int) int
     sb_reset()
-    sb_expr(a, b, op)
+    sb_expr(a, b, op, k)
     sb_text(" overflows `")
     sb_kind(k)
     sb_text("`")
@@ -89,7 +101,7 @@ fn sized_over_msg(a int, b int, op int, k int) int
 fn sized_zero_msg(a int, b int, op int, k int) int
     sb_reset()
     sb_text("division by zero in ")
-    sb_expr(a, b, op)
+    sb_expr(a, b, op, k)
     str_addr(sb_str())
 
 ## `-(-128)` overflows `i8` (type.num.14).
@@ -130,3 +142,25 @@ fn int_to_f32(v int) float
     for _ in 0..shift
         x = x * 2.0
     f32_round(if neg then 0.0 - x else x)
+
+## `xs.sum()` of a list of a sized integer of kind `k` between `lo` and `hi` (type.coll.12):
+## a partial sum outside the type traps.
+fn list_sum_sized(xs List[int], lo int, hi int, k int, head str, tail str) int
+    p := list_addr(xs)
+    data := load64(p + 16)
+    mut s := 0
+    for i in 0..load64(p)
+        s += load64(data + 8 * i)
+        if s < lo or s > hi
+            flush()
+            out_str(head)
+            sb_reset()
+            sb_text("`sum` overflows `")
+            sb_kind(k)
+            sb_text("`\n")
+            out_str(sb_str())
+            trap_tail(tail)
+            trace_frames(tail)
+            flush_to(2)
+            sys_exit(1)
+    s

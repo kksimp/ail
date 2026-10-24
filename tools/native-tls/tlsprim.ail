@@ -2,7 +2,7 @@
 ## next to the real runtime in a temporary compiler directory, never shipped.
 ## `tlsprim_call(op, args)` runs one TLS primitive on hex arguments (`-` is
 ## empty, fields separated by spaces) and returns its output as hex, so the
-## vectors of bootstrap/src/net/crypto/testdata can be checked natively.
+## vectors of tests/data/net/crypto can be checked natively.
 
 fn tlsprim_nibble(c int) int
     if c >= 48 and c <= 57
@@ -108,7 +108,7 @@ fn tlsprim_call(op str, args str) str
     if op == "aesgcm"
         n := f[3][1]
         klen := f[0][1]
-        ak := alloc_raw(24 + 64 * 15, KIND_BYTES)
+        ak := alloc_raw(AK_SIZE, KIND_BYTES)
         aes_setup(ak, f[0][0], klen)
         out := alloc_raw(n + 16, KIND_BYTES)
         aes_gcm_seal(ak, f[1][0], f[2][0], f[2][1], f[3][0], n, out)

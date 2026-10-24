@@ -1,6 +1,0 @@
-# The text of a `List[int]` (type.str.3): `[1, -2, 3]`, `[]` when empty.
-fn main()
-    a := [1, -2, 300]
-    e := List[int]()
-    print("{a} {e} {[i * i for i in 0..4]}")
-    print("n={a.len()} a={a}")

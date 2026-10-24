@@ -1,0 +1,10 @@
+/walk: 4
+/walk/.hidden/h
+/walk/a.txt
+/walk/a/b/c.txt
+/walk/a/z
+/walk/a: 2
+/walk/a/b/c.txt
+/walk/a/z
+failed: not_dir /walk/a.txt
+failed: not_found /walk/nope

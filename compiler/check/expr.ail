@@ -7,6 +7,17 @@ use fix
 ## resolves bare variants, empty lists and type arguments. `need` says
 ## whether the value is used (expr.if.4).
 @allow("expr.match.3") fn Checker.expr(mut self, e ast.Expr, expect Ty?, need bool) Ty
+    t := expr_of(e, expect, need)
+    if record
+        text := ty_name(t)
+        match e
+            Method(_, _, name_pos, _) => fact_exprs.push((name_pos, text))
+            Member(_, _, name_pos) => fact_exprs.push((name_pos, text))
+            _ => 0
+        fact_exprs.push((expr_pos(e), text))
+    t
+
+@allow("expr.match.3") fn Checker.expr_of(mut self, e ast.Expr, expect Ty?, need bool) Ty
     match e
         Str => Ty.Str
         Bytes => Ty.Bytes
@@ -152,6 +163,7 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
     if l := local(n)
         return l.ty
     if i := consts.get(n)
+        symbols[pos_key(at)] = "const:{n}"
         if gapped_consts.contains(i)
             gap("a gapped constant")
         return const_type(i)
@@ -222,9 +234,14 @@ fn Checker.name(mut self, n str, at ast.Pos, expect Ty?) Ty
 
 ## `m` used as a value where `m` is a standard module (std.use.2).
 fn Checker.module_as_value(mut self, n str, at ast.Pos) bool
-    if std_module(n) == none
-        return false
-    err_help("std.use.2", at, "`{n}` is a module, not a value", "call one of its functions")
+    module := std_module(n) else return false
+    example := std_functions(module).first() else "f"
+    err_help(
+        "std.use.2",
+        at,
+        "`{n}` is a module, not a value",
+        "call one of its functions, e.g. `{n}.{example}(...)`",
+    )
     true
 
 ## The type of constant `i`, typing it first if needed (mod.const.3).
@@ -414,6 +431,7 @@ fn Checker.bare_variant(mut self, n str, at ast.Pos, expect Ty?) VariantRef?
         if v := variant_index(e, n)
             found.push(VariantRef(enum_index: e, variant: v))
     if found.len() == 1
+        weak_symbols[pos_key(at)] = "variant:{prog.enums[found[0].enum_index].name}.{n}"
         return found[0]
     mut owners := List[str]()
     if found.len() > 1
@@ -458,6 +476,8 @@ fn Checker.none_unknown(mut self, at ast.Pos) Ty
 ## `todo`, a typed hole (expr.hole.1): it takes the expected type, or an
 ## unknown one, and warns with what the gap needs.
 fn Checker.hole(mut self, at ast.Pos, expect Ty?) Ty
+    if is_ask(at)
+        return ask_hole(at, expect)
     mut names := List[str]()
     for l in locals
         if l.ty == Ty.Unknown
@@ -1238,10 +1258,11 @@ fn Checker.literal_pattern(mut self, t Ty, pat ast.Pattern, mut cov Coverage)
             else
                 cov.literals.push(lit)
         Variant(_, n, _, at) =>
-            err(
+            err_help(
                 "expr.match.4",
                 at,
                 "`{n}` is a variant pattern, but the value matched is {show(t)}",
+                "a name in a pattern is a variant, not a variable: test the matched value with a guard, e.g. `_ if n > 0 =>`",
             )
         # expr.match.12: a range covers some values, never all, so it marks
         # nothing as seen.
@@ -1338,6 +1359,7 @@ fn Checker.pattern(mut self, e int, args List[Ty], pat ast.Pattern, mut cov Cove
                     d = d.did_you_mean(n, s)
                 diags.push(d)
                 return []
+            symbols[pos_key(at)] = "variant:{decl.name}.{n}"
             if cov.wildcard or cov.variants[v]
                 err("expr.match.5", at, "this arm can never match; `{n}` is already covered")
             else

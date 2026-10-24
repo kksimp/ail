@@ -539,7 +539,7 @@ fn each_let(b List[ast.Stmt]) List[LetOf]
     out
 
 ## The blocks directly inside `s` (not nested deeper).
-fn each_block(s ast.Stmt) List[List[ast.Stmt]]
+pub fn each_block(s ast.Stmt) List[List[ast.Stmt]]
     mut out := List[List[ast.Stmt]]()
     match s
         Let(_, _, _, value, o) =>
@@ -963,6 +963,26 @@ fn Checker.check_par(self) List[Diag]
             if h := v.help
                 d = d.with_help(h)
             out.push(d)
+    out
+
+## The positions of the `for` loops (not `for mut`) of the user's functions
+## that the judge finds independent (conc.par.8).
+fn Checker.proven_loops(self) List[ast.Pos]
+    cx := par_context()
+    mut out := List[ast.Pos]()
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        body := f.body else continue
+        for s in loops(body)
+            match s
+                For(_, _, _, mutable, _, _, _) =>
+                    if mutable
+                        continue
+                Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => continue
+            if v := judge(cx, f, s)
+                if not v.sequential
+                    out.push(v.pos)
     out
 
 ## A `[e par for x in xs]` comprehension (conc.par.12).

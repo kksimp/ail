@@ -1,0 +1,323 @@
+## Package manifests (mod.pkg.1-3, mod.pkg.6, eff.cap.2, unsafe.block.3,
+## unsafe.hw.1), as `parse` in `bootstrap/src/packages.rs`: an `ail.pkg` is a
+## `package NAME [caps LIST] [unsafe allow|driver]` line, then one
+## `dep NAME path DIR|git URL rev|tag PIN [caps LIST] [unsafe ...]` line per
+## dependency. Positions in what `parse` returns are local to the file.
+use ast
+use syntax
+
+## The capabilities `caps` can grant (eff.cap.1).
+pub CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
+
+## A `git` dependency's source: `git URL` and its `rev` or `tag` pin (mod.pkg.6).
+pub struct Source
+    pub url str
+    ## `rev` or `tag`
+    pub kind str
+    pub pin str
+
+pub struct Dep
+    pub name str
+    pub pos ast.Pos
+    ## `path DIR`; none for a git dependency or an error.
+    pub dir str?
+    pub git Source?
+    pub caps List[str]
+    ## `unsafe allow` on the line (unsafe.block.3).
+    pub unsafe_ok bool
+    ## `unsafe driver` on the line (unsafe.hw.1).
+    pub driver_ok bool
+
+pub struct Manifest
+    ## The `package` line's name and where it is; none for an empty file.
+    pub name str?
+    pub name_pos ast.Pos
+    pub caps List[str]?
+    pub unsafe_ok bool
+    pub driver_ok bool
+    pub deps List[Dep]
+
+pub struct Parsed
+    pub manifest Manifest
+    pub diags List[syntax.Diag]
+
+struct Word
+    text str
+    pos ast.Pos
+
+fn diag(rule str, at ast.Pos, msg str, help str) syntax.Diag
+    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "", edits: [])
+
+fn is_space(c char) bool
+    c == ' ' or c == '\t' or c == '\r' or c == '\u{b}' or c == '\u{c}'
+
+## The words of one line, with their columns: whitespace separates them,
+## `"..."` quotes one, and `#` starts a comment (mod.pkg.2).
+fn words(line str, n int, mut diags List[syntax.Diag]) List[Word]
+    chars := line.chars()
+    mut out := List[Word]()
+    mut i := 0
+    while i < chars.len()
+        if is_space(chars[i])
+            i += 1
+            continue
+        at := ast.Pos(line: n, col: i + 1)
+        if chars[i] == '#'
+            break
+        if chars[i] == '"'
+            mut close := -1
+            for j in i + 1..chars.len()
+                if chars[j] == '"'
+                    close = j
+                    break
+            if close < 0
+                diags.push(diag("mod.pkg.2", at, "this quoted word has no closing `\"`", ""))
+                break
+            out.push(Word(text: chars[i + 1..close].join(""), pos: at))
+            i = close + 1
+            continue
+        start := i
+        while i < chars.len() and not is_space(chars[i])
+            i += 1
+        out.push(Word(text: chars[start..i].join(""), pos: at))
+    out
+
+fn is_name(s str) bool
+    chars := s.chars()
+    if chars.len() == 0
+        return false
+    first := chars[0]
+    if not (is_lower(first) or first == '_')
+        return false
+    for c in chars[1..]
+        if not (is_lower(c) or is_digit(c) or c == '_')
+            return false
+    true
+
+fn is_lower(c char) bool
+    c >= 'a' and c <= 'z'
+
+fn is_digit(c char) bool
+    c >= '0' and c <= '9'
+
+## `fs,env`, `all` or `none` (eff.cap.2): the capabilities, sorted.
+fn caps(list str, at ast.Pos, mut diags List[syntax.Diag]) List[str]
+    if list == "none"
+        return []
+    mut out := List[str]()
+    for name in list.split(",")
+        if name == "all"
+            for c in CAPABILITIES
+                if not out.contains(c)
+                    out.push(c)
+        elif CAPABILITIES.contains(name)
+            if not out.contains(name)
+                out.push(name)
+        else
+            diags.push(diag(
+                "eff.cap.2",
+                at,
+                "`{name}` is not a capability",
+                "`caps` takes a comma-separated list of {CAPABILITIES.join(", ")}, or `all` or `none`",
+            ))
+    out.sorted()
+
+## The value of key `key` among a line's pairs, with the key's position.
+struct Pair
+    key str
+    value str
+    pos ast.Pos
+
+fn find_pair(pairs List[Pair], key str) Pair?
+    for p in pairs
+        if p.key == key
+            return p
+    none
+
+## Parse a manifest (mod.pkg.2-3, mod.pkg.6). Positions are local.
+pub fn parse(src str) Parsed
+    mut named := false
+    mut name := ""
+    mut name_pos := ast.Pos(line: 0, col: 0)
+    mut m_caps := none
+    mut m_unsafe := false
+    mut m_driver := false
+    mut deps := List[Dep]()
+    mut diags := List[syntax.Diag]()
+    mut names := Set[str]()
+    lines := src.lines()
+    for li in 0..lines.len()
+        ws := words(lines[li], li + 1, mut diags)
+        if ws.len() == 0
+            continue
+        kw := ws[0].text
+        kw_pos := ws[0].pos
+        if not named and kw != "package"
+            diags.push(diag(
+                "mod.pkg.2",
+                kw_pos,
+                "an `ail.pkg` starts with `package NAME`",
+                "add a first line such as `package app`",
+            ))
+            named = true
+            name = ""
+            name_pos = kw_pos
+        allowed := match kw
+            "package" => ["caps", "unsafe"]
+            "dep" => ["path", "git", "rev", "tag", "caps", "unsafe"]
+            _ =>
+                diags.push(diag(
+                    "mod.pkg.2",
+                    kw_pos,
+                    "`{kw}` is not a manifest line",
+                    "a line is `package NAME ...` or `dep NAME ...`",
+                ))
+                continue
+        if ws.len() < 2
+            diags.push(diag("mod.pkg.2", kw_pos, "`{kw}` needs a name", "write `{kw} NAME ...`"))
+            continue
+        dep_name := ws[1].text
+        dep_pos := ws[1].pos
+        if not is_name(dep_name)
+            diags.push(diag(
+                "mod.pkg.2",
+                dep_pos,
+                "`{dep_name}` is not a package name",
+                "a package name is lowercase letters, digits and `_`, like a module directory",
+            ))
+        mut keys := List[Pair]()
+        mut k := 2
+        while k < ws.len()
+            key := ws[k].text
+            kpos := ws[k].pos
+            if k + 1 >= ws.len()
+                diags.push(diag("mod.pkg.2", kpos, "`{key}` needs a value", "write `{key} VALUE`"))
+                k += 2
+                continue
+            value := ws[k + 1].text
+            if not allowed.contains(key)
+                diags.push(diag(
+                    "mod.pkg.2",
+                    kpos,
+                    "`{key}` is not a key of a `{kw}` line",
+                    "the keys are {allowed.join(", ")}",
+                ))
+            elif find_pair(keys, key) != none
+                diags.push(diag("mod.pkg.2", kpos, "`{key}` is given twice on this line", ""))
+                # The later pair replaces the earlier, as a map insert does.
+                mut kept := List[Pair]()
+                for p in keys
+                    if p.key != key
+                        kept.push(p)
+                kept.push(Pair(key: key, value: value, pos: kpos))
+                keys = kept
+            else
+                keys.push(Pair(key: key, value: value, pos: kpos))
+            k += 2
+        # unsafe.block.3, unsafe.hw.1: `driver` allows everything `allow` does, and hardware access.
+        mut unsafe_ok := false
+        mut driver_ok := false
+        if u := find_pair(keys, "unsafe")
+            if u.value == "allow"
+                unsafe_ok = true
+            elif u.value == "driver"
+                unsafe_ok = true
+                driver_ok = true
+            else
+                diags.push(diag(
+                    "unsafe.block.3",
+                    u.pos,
+                    "`unsafe {u.value}` is not an unsafe setting",
+                    "write `unsafe allow` to let this package contain `unsafe` code, or `unsafe driver` to let it reach hardware as well",
+                ))
+        mut grant := none
+        if c := find_pair(keys, "caps")
+            grant = caps(c.value, c.pos, mut diags)
+        if kw == "package"
+            if named and name != ""
+                diags.push(diag("mod.pkg.2", kw_pos, "an `ail.pkg` has one `package` line", ""))
+                continue
+            named = true
+            name = dep_name
+            name_pos = dep_pos
+            m_caps = grant
+            m_unsafe = unsafe_ok
+            m_driver = driver_ok
+            continue
+        if names.contains(dep_name) or dep_name == "std"
+            msg := if dep_name
+                == "std" then "`std` is the standard library, not a package name" else "`{dep_name}` is declared twice"
+            diags.push(diag("mod.pkg.4", dep_pos, msg, "give each dependency its own name"))
+            continue
+        names.add(dep_name)
+        mut git := none
+        mut dir := none
+        p := find_pair(keys, "path")
+        g := find_pair(keys, "git")
+        if pp := p
+            if gp := g
+                diags.push(diag(
+                    "mod.pkg.3",
+                    gp.pos,
+                    "a dependency has either `path` or `git`, not both",
+                    "",
+                ))
+            else
+                for kk in ["rev", "tag"]
+                    if x := find_pair(keys, kk)
+                        diags.push(diag(
+                            "mod.pkg.6",
+                            x.pos,
+                            "`{kk}` pins a `git` dependency, not a `path` one",
+                            "",
+                        ))
+                dir = pp.value
+        elif gp := g
+            rev := find_pair(keys, "rev")
+            tag := find_pair(keys, "tag")
+            if r := rev
+                if tag == none
+                    git = Source(url: gp.value, kind: "rev", pin: r.value)
+            elif t := tag
+                git = Source(url: gp.value, kind: "tag", pin: t.value)
+            if git == none
+                diags.push(diag(
+                    "mod.pkg.6",
+                    gp.pos,
+                    "a `git` dependency needs exactly one of `rev` and `tag`",
+                    "pin it with `rev COMMIT` or `tag TAG`",
+                ))
+        else
+            diags.push(diag(
+                "mod.pkg.3",
+                dep_pos,
+                "dependency `{dep_name}` has no `path` or `git`",
+                "write `dep {dep_name} path DIR`",
+            ))
+        deps.push(Dep(
+            name: dep_name,
+            pos: dep_pos,
+            dir: dir,
+            git: git,
+            caps: grant else [],
+            unsafe_ok: unsafe_ok,
+            driver_ok: driver_ok,
+        ))
+    if not named
+        diags.push(diag(
+            "mod.pkg.2",
+            ast.Pos(line: 1, col: 1),
+            "an `ail.pkg` starts with `package NAME`",
+            "add a first line such as `package app`",
+        ))
+    Parsed(
+        manifest: Manifest(
+            name: if named then name else none,
+            name_pos: name_pos,
+            caps: m_caps,
+            unsafe_ok: m_unsafe,
+            driver_ok: m_driver,
+            deps: deps,
+        ),
+        diags: diags,
+    )

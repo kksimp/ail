@@ -1,0 +1,33 @@
+## std.net.18: the handler form, with a declared function as the handler,
+## and std.net.17: repeated headers both ways.
+use std.net
+use std.net.http
+
+fn greet(r net.Request) net.Response
+    if r.path == "/cookies"
+        return net.Response(
+            status: 200,
+            headers: {"x-a": "ignored"},
+            body: "cookies",
+            all_headers: {
+                "set-cookie": ["a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT", "b=2"],
+                "x-a": ["1", "2"],
+            },
+        )
+    name := r.query.get("name") else "world"
+    net.Response(status: 200, headers: {"content-type": "text/plain"}, body: "hello {name}")
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn http.run(srv, greet)
+    base := "http://{srv.addr()}"
+    print(net.get("{base}/?name=ail")?.body)
+    print(net.get("{base}/?name=again")?.body)
+    r := net.get("{base}/cookies")?
+    print(r.headers["x-a"])
+    print(r.all_headers["x-a"])
+    for c in r.all_headers["set-cookie"]
+        print(c)
+    print(r.all_headers.get("nothing") else [])
+    srv.close()
+    t.wait()?

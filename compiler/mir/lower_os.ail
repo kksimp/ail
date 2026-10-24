@@ -152,7 +152,10 @@ fn Lower.lower_std_call(mut self, m str, name str, npos ast.Pos, args List[ast.A
         a := args[k]
         if a.label != none or a.mutable
             return unsupported(npos, "this call of `{m}.{name}`")
-        v := lower_value(a.value, sig.params[k])?
+        mut v := lower_value(a.value, sig.params[k])?
+        # `bytes` has a `str`'s layout (native-abi.md §2): `hash.sha256(b"abc")` hashes it as is.
+        if v.ty == Ty.Bytes and sig.params[k] == Ty.Str
+            v = Val(id: op("copy", [v.id], Ty.Str), ty: Ty.Str)
         vs.push(convert(v, sig.params[k], expr_pos(a.value)))
     if m == "random" and name == "int"
         ok := check_branch(op("le", [vs[0], vs[1]], Ty.Bool))
@@ -197,7 +200,12 @@ fn Lower.lower_os_method(mut self, m str, name str, npos ast.Pos, args List[ast.
         return lower_hw_call(name, npos, args)
     if m == "bytes" and name == "zeros"
         return lower_bytes_zeros(args, npos)
+    # A struct of the module built in place: `proc.Output(status: 0, ...)`.
+    if structs.contains("{m}.{name}")
+        return new_struct("{m}.{name}", args, npos)
     f := os_lookup(m, name) else
+        if structs.contains("{m}.{name}")
+            return new_struct("{m}.{name}", args, npos)
         return unsupported(npos, "`{m}.{name}`")
     if name == "exit"
         v := os_call(f, args, npos)?
@@ -226,6 +234,8 @@ fn Lower.os_call(mut self, f OsFn, args List[ast.Arg], pos ast.Pos) Val?
         vs.push(trace_line(pos))
     if f.rt == "rt.io_exit" or f.rt == "rt.time_sleep_ms"
         os_range_check(f.rt == "rt.io_exit", vs[0], pos)
+    if instr.rec
+        return rec_call(f, vs, pos)
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)
 
 ## The argument checks of `io.exit` (status 0 to 255, std.io.4) and
@@ -270,7 +280,12 @@ fn Lower.fmt_text(mut self, v Val, spec ast.FormatSpec, pos ast.Pos) Val?
     mut text := -1
     match v.ty
         Int | Sized(_) =>
-            text = call(if spec.hex then "rt.fmt_hex" else "rt.fmt_int", [v.id], Ty.Str)
+            u := if v.ty == Ty.Sized("u64") then "u" else ""
+            text = call(
+                if spec.hex then "rt.fmt_hex{if u == "" then "" else "_u"}" else "rt.fmt_{if u == "" then "int" else "u64"}",
+                [v.id],
+                Ty.Str,
+            )
         Float | F32 =>
             if n >= 0
                 text = call("rt.fmt_float_fixed", [v.id, konst(n, Ty.Int)], Ty.Str)

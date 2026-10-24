@@ -137,7 +137,7 @@ diagnostics are printed and the exit code is 2, as for api.out.5. A missing
 path or a bad option is exit code 2.
 
 **api.card.5** — `docs/design/cards/edit.md` and `std.md` are the output for
-`tools/edit` and `bootstrap/src/std`; `cargo test --test api_card` fails
+`tools/edit` and `std`; `cargo test --test api_card` fails
 when either differs from the command's output. Regenerate with
 `./ail api --card tools/edit > docs/design/cards/edit.md`.
 
@@ -316,7 +316,8 @@ shown, after the records.
 **budget.out.4** — The note counts the records not shown by kind and gives
 the number `K` of the first one not shown; `--from K` with the same command
 and budget skips the first `K` records in rank order. With `--json` the note
-is one line `{"budget","from","shown","total","tokens","omitted","next"}`,
+is one line `{"budget","from","shown","full","total","tokens","omitted","next"}`
+(`full` counts the records shown in full, `budget.out.7`),
 `next` being `null` when nothing is left. The note is written to the stream
 of the first record not shown.
 
@@ -328,6 +329,30 @@ of the first record not shown.
 **budget.out.6** — A record is never cut, so a command whose whole output is
 one line (`ail api FILE`, `ail explain --json`) is shown whole; its text forms
 (`--text`) split into records.
+
+**budget.out.7** — Each record has an expanded form, the whole record, and a
+one-line form, its first line (for a diagnostic, `FILE:L:C: severity[rule]:
+message`). When the output doesn't fit, the first record shown is expanded,
+the rest are counted against the budget in their one-line form, and then
+records are expanded in rank order while the budget lasts; the expanded
+records come first. The note says which records are in one line and gives
+`--from K`, which shows record `K + 1` expanded. A JSON line is its own
+one-line form ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 6, [ADR 0880](../decisions/0880-budgeted-diagnostic-forms.md)).
+
+```ail skip=bootstrap tool=check,--budget,200,FILE expect=full status=2 rules=budget.out.7
+fn main()
+    x := 1
+    x = 2
+    y := 3
+    y = 4
+    z := 5
+    z = 6
+    print(x + y + z)
+```
+
+The first error is shown with its source line, help, note and fix; the other
+two as their first lines; the note ends
+`records 1-3 of 3 shown, 2-3 in one line (~285 tokens in all); --from 1 shows 2 in full`.
 
 ## Snapshot updating
 **snap.update.1** — `ail test --update FILE` runs the tests of `FILE` as
@@ -468,6 +493,149 @@ lines first ([ADR 0731](../decisions/0731-api-diff-output-and-budget.md)).
 
 ```ail pkg=api_diff_pair tool=api,--diff,bad/a.ail,new/a.ail status=2 expect=api.diff.4 rules=api.diff.4
 ```
+## Semantic questions
+
+`ail ask PROGRAM QUESTION...` answers a question about a program from the
+checker's graph of it, with no grep and no file reading
+([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 1,
+[ADR 0881](../decisions/0881-ail-ask.md)).
+
+**api.ask.1** — The question is plain words after the program: `who writes
+field total`, `what calls pay`, `what does main call`, `which effects reach
+main`, `who uses Cart?`. The verb picks the question (`writes`, `reads`,
+`calls`, `callees`, `effects`, `uses`); filler words (`who`, `what`, `which`,
+`does`, `field`, `the`, ...) and a trailing `?` say nothing; the last other
+word is the subject. A subject names a declaration by its id (`field:Cart.total`),
+its qualified name (`Cart.total`) or its bare name (`total`); a bare name that
+fits several declarations answers for each. Exit status is 0 when there are
+answers, 1 when there are none, 2 for an error. `--json` prints the answers
+as JSON.
+
+**api.ask.2** — `writes` lists every place that sets a field, `reads` every
+place that only reads it, each with its function, file, line and column. A
+write is an assignment, a `mut` argument, or a `mut self` or built-in mutating
+method called on a place that reaches the field (`a.b.c = x` writes `c` and
+`b`); a field named in a struct literal is an `init`. Anything else that
+names the field is a read.
+
+**api.ask.3** — `calls` lists the functions that call the subject, each call
+once, and `callees` lists the functions the subject calls, each at its first
+call.
+
+**api.ask.4** — `effects` lists the effects of the subject function (`eff.infer.1`),
+and for each the chain of calls down to the function that has the effect of
+its own: `io: fn:main > fn:pay` says `main` has `io` through `pay`, which has
+it itself.
+
+**api.ask.5** — `uses` lists every use of the subject: a type in a signature,
+field or expression, a function or method call, a field access, a constant or
+variant.
+
+**api.ask.6** — A program that has errors can't be asked about: the errors
+are shown and the status is 2, as `api.diff.4`. A subject that names no
+declaration of the right kind, or a question with no known verb, is an error
+(status 2) that says so.
+
+```ail skip=bootstrap tool=ask,FILE,who,writes,field,total expect=fn:add rules=api.ask.1,api.ask.2
+struct Cart
+    total int
+fn add(mut c Cart, n int)
+    c.total += n
+fn main()
+    mut c := Cart(total: 0)
+    add(mut c, 5)
+    print(c.total)
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,reads,field,total? expect=fn:main rules=api.ask.2
+struct Cart
+    total int
+fn main()
+    c := Cart(total: 3)
+    print(c.total)
+```
+
+```ail skip=bootstrap tool=ask,FILE,what,calls,show expect=fn:pay rules=api.ask.3
+fn show(n int) str
+    "{n}"
+fn pay(n int) str
+    show(n)
+fn main()
+    print(pay(1))
+```
+
+```ail skip=bootstrap tool=ask,FILE,what,does,main,call expect=fn:pay rules=api.ask.3
+fn pay(n int) int
+    n + 1
+fn main()
+    print(pay(1))
+```
+
+```ail skip=bootstrap tool=ask,FILE,which,effects,reach,main expect=fn:log rules=api.ask.4
+fn log(s str)
+    print(s)
+fn main()
+    log("hi")
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,uses,Cart expect=type:Cart rules=api.ask.5
+struct Cart
+    total int
+fn size(c Cart) int
+    c.total
+fn main()
+    print(size(Cart(total: 1)))
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,writes,field,nosuch status=2 expect=api.ask.1 rules=api.ask.1
+struct Cart
+    total int
+fn main()
+    print(Cart(total: 1).total)
+```
+
+```ail skip=bootstrap tool=ask,FILE,who,writes,field,total status=2 expect=api.ask.6 rules=api.ask.6
+struct Cart
+    total int
+fn main()
+    print(missing)
+```
+
+## Edit impact
+
+What an edit can break, from the same graph as `ail ask`
+([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 3,
+[ADR 0882](../decisions/0882-edit-impact.md)).
+
+**api.impact.1** — A declaration is *changed* when it is new or its text
+differs from before, ignoring blank lines, comments, doc comments and
+attributes. The declarations compared are functions, methods, types, traits
+and constants.
+
+**api.impact.2** — A function is *affected* when it is a changed function, or
+names a changed declaration (a call, a field or variant of a changed type, a
+constant), or calls an affected function. A function that fills in a trait's
+method also reaches the callers of that trait method. The result is
+conservative: it may name a test the change can't alter, but never misses one
+that it can.
+
+**api.impact.3** — `ail ask PROGRAM --affected [--rev REV]` prints the name of
+every affected `@test` function, one per line: the changes are those of the
+program as written now against the same path at git revision `REV` (default
+`HEAD`), as `api.diff.1` reads a revision. `--json` prints the whole impact
+(`api.impact.4`) instead. Both versions must check without errors, and an
+unknown revision is an error: exit status 2.
+
+**api.impact.4** — The impact is the changed declarations, the affected
+functions, the affected tests and the *effects* changes: each function whose
+effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
+`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`.
+
+```ail skip=bootstrap tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
+fn main()
+    print(1)
+```
+
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that
@@ -827,6 +995,12 @@ are renamed over it.
 **edit.out.4** — `--test` runs `ail test PATH` after an edit that was
 written without errors, and its report and exit status follow the summary.
 
+**edit.out.5** — `--impact` adds the edit's impact (`api.impact.1-4`) after the
+summary: the declarations it changed, the tests it can affect and the
+effects it changed. It is computed from the program before and after the edit,
+so it costs nothing when the flag is absent. With `--json` the summary line
+has an `impact` member.
+
 ```ail pkg=edit_ops tool=edit,--dry-run,main.ail stdin=edits.json expect=file; rules=edit.in.1,edit.id.1,edit.op.1,edit.op.2,edit.op.3,edit.op.4,edit.op.5,edit.op.6,edit.out.1,edit.out.2,edit.out.3
 ```
 
@@ -837,6 +1011,9 @@ written without errors, and its report and exit status follow the summary.
 ```
 
 ```ail pkg=edit_ops tool=edit,--test,main.ail stdin=hunk.txt expect=passed, rules=edit.in.3,edit.id.3,edit.op.7,edit.out.4
+```
+
+```ail skip=bootstrap pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
 ```
 
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5
@@ -911,6 +1088,21 @@ the replay writes again), `io.exit`, `std.random` (repeated by the seed),
 from `proc.start`, a socket, a listener) is recorded as
 `"uncaptured":true`, and a replay that reaches it stops with a trap
 `replay.cap.2`.
+**replay.nat.1** — The native `ail run --record` and `--replay`
+(`AIL_INSTRUMENT=record`, ADR 0873) capture every call of `replay.cap.1`.
+A result that is a list of strings (`fs.list_dir`, `fs.walk`, `fs.glob`), a
+struct (`fs.metadata`, `proc.run`, `net.get` and the other responses) or a map
+(`env.vars`) is written as in `replay.rec.3`. A handle is written by number and
+never used again by the replay: a connection, listener, server or body
+answers each call on it from the recording. A child process (`proc.start`,
+`proc.wait`, `proc.kill`) is written with the lines of its output streams,
+`{"stream":N,"out"|"err":LINE}` and `{"stream":N,"end":"out"|"err"}`, after its
+`proc.start`; a replay fills the same channels and drops what is sent to its
+input. A call the build can't capture is written as `"uncaptured":true` and
+traps `replay.cap.2` in a replay. `ail test --record` and `--replay` run each
+test in its own process, record into `{"test":NAME}` sections, and replay only
+the tests the recording holds (`replay.rec.5`: each starts from the recording's
+seed).
 **replay.run.1** — `ail run --replay R [FILE]` runs `FILE` (by default the
 recording's program) with the recording's arguments and seed, and answers
 each captured call from R instead of running it: nothing is read, written,
@@ -924,17 +1116,17 @@ function, or none left) traps with `replay.run.3`, naming the call the
 recording expected and where it was recorded; a recorded result that names
 a type the program doesn't have traps the same way.
 
-```ail pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
+```ail skip=bootstrap pkg=replay_env tool=run,--record,out.json,main.ail expect=nobody rules=replay.rec.1,replay.rec.5
 ```
 
-```ail pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.run.1,replay.run.2
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,r.json expect=first rules=replay.rec.2,replay.rec.3,replay.cap.1,replay.nat.1,replay.run.1,replay.run.2
 ```
 
-```ail pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,other.json,main.ail status=1 expect=replay.run.3 rules=replay.run.3
 ```
 
-```ail pkg=replay_env tool=run,--replay,h.json status=1 expect=replay.cap.2 rules=replay.cap.2
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,h.json status=1 expect=replay.cap.2 rules=replay.cap.2
 ```
 
-```ail pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
+```ail skip=bootstrap pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
 ```

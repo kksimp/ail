@@ -1,0 +1,38 @@
+## Token-priced diagnostics (budget.out.7, ADR 0868 item 6): every record has
+## an expanded form, the whole record, and a one-line form, its first line (a
+## diagnostic's `FILE:L:C: severity[rule]: message`). Under a budget, as many
+## records as fit are shown in one line, then the best-ranked are expanded
+## while the budget lasts.
+
+## How many records are shown, and how many of them in full (from the start).
+struct Pick
+    shown int
+    full int
+
+## The one-line form of a record: its first line.
+fn one_line(text str) str
+    cut := text.find("\n") else return text
+    text.slice(0, cut + 1)
+
+## The records from `from` that `tokens` covers, with `used` already spent
+## (budget.out.1, budget.out.7). The first is always shown, in full.
+fn choose(recs List[Record], from int, tokens int, used int) Pick
+    total := recs.len()
+    start := from.min(total)
+    mut spent := used
+    mut shown := start
+    for k in start..total
+        text := if k == start then recs[k].text else one_line(recs[k].text)
+        cost := estimate_tokens(text)
+        if spent + cost > tokens and shown > start
+            break
+        spent += cost
+        shown += 1
+    mut full := if shown > start then start + 1 else start
+    while full < shown
+        extra := estimate_tokens(recs[full].text) - estimate_tokens(one_line(recs[full].text))
+        if spent + extra > tokens
+            break
+        spent += extra
+        full += 1
+    Pick(shown: shown, full: full)

@@ -1,0 +1,33 @@
+## Whether derive generators are compile-time-safe (ct.derive.3, ADR 0227):
+## the loader asks before it runs a program's own generators natively. The
+## program is typed once for the facts effect inference reads (eff.infer.1-6).
+use ast
+
+## For each of `names` (a free function, qualified in a module), "" when it
+## has no forbidden effect, else what it has: `has effect `io` via
+## derive_loud -> print`.
+pub fn generator_effects(p ast.Program, names List[str]) List[str]
+    mut c := new_checker(p)
+    c.list_param = c.new_param("T", [])
+    c.collect_traits()
+    c.collect_types()
+    c.collect_impls()
+    c.resolve_fields()
+    c.collect_fns()
+    c.collect_consts()
+    for i in 0..p.fns.len()
+        c.check_fn(i)
+    fx := infer_effects(p, c.facts())
+    mut out := List[str]()
+    for n in names
+        mut found := -1
+        for i in 0..p.fns.len()
+            f := p.fns[i]
+            if found < 0 and f.name == n and f.owner == none and f.within == ast.Within.TopLevel
+                found = i
+        if found < 0
+            out.push("")
+            continue
+        bad := [e for e in fx.sets[found] if impure(e)]
+        out.push(if bad.len() > 0 then reasons(p, fx, found, bad) else "")
+    out

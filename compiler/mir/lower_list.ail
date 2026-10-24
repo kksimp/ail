@@ -68,6 +68,7 @@ fn Lower.lower_list_edit(
         call("rt.list_extend", [r.id, ys, size], Ty.Unit)
         return unit
     if name == "clear" and vs.len() == 0
+        uniq_clear(r)
         call("rt.list_clear", [r.id], Ty.Unit)
         return unit
     if name == "reverse" and vs.len() == 0
@@ -164,6 +165,18 @@ fn Lower.lower_list_edit(
             return Val(id: call("rt.list_sum_float", [r.id], Ty.Float), ty: Ty.Float)
         if e == Ty.F32
             return Val(id: call("rt.list_sum_f32", [r.id], Ty.Float), ty: Ty.F32)
+        if e.is_sized() and sized_kind(e) != "u64"
+            k := sized_kind(e)
+            texts := trap_texts("expr.arith.1", npos)
+            sargs := [
+                r.id,
+                konst(sized_lo(k), Ty.Int),
+                konst(sized_hi(k), Ty.Int),
+                konst(sized_code(k), Ty.Int),
+                texts[0],
+                texts[1],
+            ]
+            return Val(id: call("rt.list_sum_sized", sargs, Ty.Int), ty: e)
         if e != Ty.Int
             return unsupported(npos, "`.sum()` on `{r.ty.name()}`")
         texts := trap_texts("expr.arith.1", npos)
@@ -345,6 +358,9 @@ fn Lower.list_method(
         and (e == Ty.Int or e == Ty.Float or e == Ty.Bool)
         kind := konst(if e == Ty.Bool then 2 else if e == Ty.Float then 1 else 0, Ty.Int)
         return Val(id: call("rt.list_join_text", [r.id, vs[0].id, kind], Ty.Str), ty: Ty.Str)
+    if name == "join" and vs.len() == 1 and vs[0].ty == Ty.Str
+        if j := join_shown(r, e, vs[0].id)
+            return j
     if name == "cmp" and vs.len() == 1
         return list_cmp_method(r, vs[0], npos)
     if is_list_edit(name)

@@ -18,7 +18,7 @@ fn ail(args: &[&str], system: bool) -> Output {
 fn programs() -> Vec<String> {
     let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/.."));
     let mut out = vec!["tools/edit/edit.ail".to_string()];
-    for dir in ["examples", "bootstrap/tests/cases"] {
+    for dir in ["examples", "tests/cases"] {
         let mut files: Vec<String> = std::fs::read_dir(root.join(dir))
             .unwrap()
             .filter_map(|e| e.ok())

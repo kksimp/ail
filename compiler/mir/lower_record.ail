@@ -1,0 +1,101 @@
+## Record and replay (ADR 0873, replay.nat.1): with `AIL_INSTRUMENT=record`,
+## a captured call of the OS modules goes to its `rt.rec_FN` wrapper
+## (rt/native/record.ail), told its place by `rt.rec_at` first. The calls
+## the runtime has no wrapper for run as they are, after `rt.rec_guard`,
+## which stops a replay at them (replay.cap.2). Without the mode nothing
+## changes.
+use ast
+
+## The runtime functions that have a `rec_` wrapper.
+RECORDED := [
+    "fs_exists",
+    "fs_read_text",
+    "fs_read_bytes",
+    "fs_write_text",
+    "fs_write_bytes",
+    "fs_append_text",
+    "fs_append_bytes",
+    "fs_remove",
+    "fs_make_dir",
+    "fs_rename",
+    "fs_copy",
+    "env_get",
+    "env_home",
+    "env_cwd",
+    "env_program",
+    "io_read_line",
+    "io_read_all",
+    "io_read_bytes",
+    "time_now_ms",
+    "time_sleep_ms",
+    "tz_system",
+    "proc_which",
+    "fs_list_dir",
+    "fs_walk",
+    "fs_glob",
+    "fs_metadata",
+    "env_vars",
+    "tz_offset",
+    "proc_run",
+    "proc_run_bytes",
+    "proc_start",
+    "proc_wait_child",
+    "proc_kill_child",
+]
+
+## The modules whose calls a recording covers (replay.cap.1).
+CAPTURED := ["fs", "env", "io", "time", "tz", "proc"]
+
+## The call of `f` with arguments `vs`, as the mode asks.
+fn Lower.rec_call(mut self, f OsFn, vs List[int], pos ast.Pos) Val
+    name := f.rt.slice(3, f.rt.len())
+    parts := name.split("_")
+    if not CAPTURED.contains(parts[0]) or name == "io_exit"
+        return Val(id: call(f.rt, vs, f.ret), ty: f.ret)
+    if RECORDED.contains(name)
+        at := [str_value(path), konst(pos.line, Ty.Int), konst(pos.col, Ty.Int)]
+        call("rt.rec_at", at, Ty.Unit)
+        return Val(id: call("rt.rec_{name}", vs, f.ret), ty: f.ret)
+    at := [str_value(path), konst(pos.line, Ty.Int), konst(pos.col, Ty.Int)]
+    call("rt.rec_at", at, Ty.Unit)
+    call("rt.rec_guard", [str_value("{parts[0]}.{parts[1..].join("_")}")], Ty.Unit)
+    Val(id: call(f.rt, vs, f.ret), ty: f.ret)
+
+## The runtime functions of `std.net` that have a `rec_` wrapper (record_net.ail).
+RECORDED_NET := [
+    "net_listen",
+    "net_connect",
+    "net_connect_tls",
+    "net_get",
+    "net_post",
+    "net_request",
+    "net_open",
+    "net_get_bytes",
+    "net_post_bytes",
+    "net_request_bytes",
+    "net_read",
+    "net_read_bytes",
+    "net_write",
+    "net_read_line",
+    "net_set_timeout",
+    "net_peer",
+    "net_close",
+    "net_addr",
+    "net_accept",
+    "serve_accept",
+    "serve_shutdown",
+    "serve_respond",
+    "serve_respond_bytes",
+    "open_read",
+    "open_close",
+]
+
+## The call of the `std.net` function `f` with the values `vs`, as the mode asks.
+fn Lower.rec_net_call(mut self, f NetFn, vs List[int], pos ast.Pos) Val
+    name := f.rt.slice(3, f.rt.len())
+    at := [str_value(path), konst(pos.line, Ty.Int), konst(pos.col, Ty.Int)]
+    call("rt.rec_at", at, Ty.Unit)
+    if RECORDED_NET.contains(name)
+        return Val(id: call("rt.rec_{name}", vs, f.ret), ty: f.ret)
+    call("rt.rec_guard", [str_value("net.{name}")], Ty.Unit)
+    Val(id: call(f.rt, vs, f.ret), ty: f.ret)

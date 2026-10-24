@@ -1,0 +1,1 @@
+# Programs whose native output is known wrong (the golden is the interpreter's); the checks skip them and name the owner.

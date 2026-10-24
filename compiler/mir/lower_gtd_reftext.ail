@@ -1,0 +1,56 @@
+## The text of a `ref` (own.ref.6): `ref ` and its contents' text, built by
+## one function per type, `text.ref.T`. A cell met again while its own text
+## is being built shows `ref ...` (the runtime marks it, `rt.refcell_show`).
+use ast
+
+## Whether a `ref T` has a text: `T` has one. A `T` reached again through a
+## `ref` inside its own fields counts as having one, as the cycle stops at
+## run time.
+fn Lower.ref_text_ok(mut self, inner Ty) bool
+    key := struct_name(inner) else enum_name(inner) else return text_ok(inner)
+    if traits.ref_seen.contains(key)
+        return true
+    traits.ref_seen.add(key)
+    ok := text_ok(inner)
+    traits.ref_seen.remove(key)
+    ok
+
+## The text of `ref` value `x` of type `t`: a call of `text.ref.T`.
+fn Lower.ref_text(mut self, t Ty, x int) int
+    inner := ref_inner(t) else return str_value("")
+    call(text_fn("ref.{inner.name()}", t), [x], Ty.Str)
+
+fn ref_inner(t Ty) Ty?
+    match t
+        Ref(inner) => inner
+        _ => none
+
+## The body of `text.ref.T` (from `gen_text`): `false` when `t` isn't a `ref`.
+fn Lower.gen_ref_text(mut self, fkey str, t Ty) bool
+    inner := ref_inner(t) else return false
+    ps := begin_fn(fkey, Ty.Str, [t])
+    o := ps[0]
+    again := call("rt.refcell_show", [o], Ty.Int)
+    cycle := new_block()
+    body := new_block()
+    branch(op("ne", [again, konst(0, Ty.Int)], Ty.Bool), cycle, [], body, [])
+    seal(cycle)
+    seal(body)
+    cur = cycle
+    finish(return_of(str_value("ref ...")))
+    cur = body
+    # Inline, as `text.T` may be asked for after its pass has run.
+    key := struct_name(inner) else enum_name(inner) else ""
+    mut text := -1
+    if key != "" and not sigs.contains("{key}.to_str") and not err_msgs.contains(key)
+        text = nested_default(key, Val(id: o, ty: inner)) else str_value("")
+    else
+        text = value_text(inner, o)
+    call("rt.refcell_unshow", [o], Ty.Unit)
+    finish(return_of(call("rt.str_cat", [str_value("ref "), text], Ty.Str)))
+    for blk in 0..blocks.len()
+        sealed[blk] = true
+    end_fn(fkey, ast.Pos(line: 1, col: 1))
+    # The `text.T` it asked for, as their pass has run.
+    gen_texts()
+    true

@@ -29,8 +29,9 @@ fn Lower.declare_enum_names(mut self, prog ast.Program)
             declare_generic_enum(e)
         else
             enums["{prefix}{e.name}"] = []
+            declare_unique_enum(e, prog, "{prefix}{e.name}")
 
-## The prelude's `enum Ordering` (trait.std.2), registered once per program
+## The prelude's `enum Ordering` (trait.std.1). registered once per program
 ## unless the program declares an `Ordering` of its own: the Rust front end
 ## adds it to the program it runs, but the native compiler reads only source.
 fn Lower.declare_prelude_enums(mut self)
@@ -280,6 +281,8 @@ fn Lower.value_compare(mut self, o ast.BinOp, a Val, b Val, pos ast.Pos) Val
     quiet := Val(id: konst(0, Ty.Bool), ty: Ty.Bool)
     name := op_name(o)
     if name != "eq" and name != "ne"
+        if a.ty.elem() != none
+            return tuple_compare(o, a, b, pos)
         problem(pos, "`{op_symbol(o)}` on `{a.ty.name()}` isn't in the native subset yet")
         return quiet
     mut seen := Set[str]()
@@ -391,7 +394,7 @@ fn Lower.eq_fn(mut self, t Ty) str
 ## Whether `==` on `t` is in the subset: numbers, strings, enums, structs
 ## and lists of those (reported at `pos`, naming enum `outer`, otherwise).
 fn Lower.comparable(mut self, t Ty, pos ast.Pos, outer str, mut seen Set[str]) bool
-    if is_number(t) or t == Ty.Str or t == Ty.Bytes or t.is_ref()
+    if is_number(t) or t == Ty.Str or t == Ty.Bytes or t.is_ref() or t.is_tensor()
         return true
     if user_eq(t) != none
         return true
@@ -450,8 +453,12 @@ fn Lower.gen_enum_eqs(mut self)
             done.add(name)
             more = true
             t := eq_tys[name]
-            if name.starts_with("lt.")
+            if name.starts_with("text.")
+                gen_text(name, t)
+            elif name.starts_with("lt.")
                 gen_lt(name, t)
+            elif name.starts_with("cmp.")
+                gen_cmp(name, t)
             elif inner := t.opt_inner()
                 gen_opt_eq(name, t, inner)
             elif t.is_coll()
@@ -599,6 +606,8 @@ fn Lower.field_eq(mut self, t Ty, x int, y int) int
         return call("rt.str_eq", [x, y], Ty.Bool)
     if t == Ty.Bytes
         return call("rt.bytes_eq", [x, y], Ty.Bool)
+    if t.is_tensor()
+        return call("rt.tensor_eq", [x, y], Ty.Bool)
     if t.opt_inner() != none
         return opt_compare(false, Val(id: x, ty: t), Val(id: y, ty: t), ast.Pos(line: 1, col: 1)).id
     if t.elem() != none or struct_name(t) != none or tuple_elems(t) != none or is_map_like(t)

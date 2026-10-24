@@ -15,7 +15,11 @@ pub fn check.has_attr(ast.FnDecl, str) bool
 pub fn check.module_at(ast.Program, ast.Pos) str
 pub fn check.hidden(ast.Program, ast.Pos, ast.Pos) bool
 pub struct check.Report
+pub struct check.Analysis
 pub fn check.check_program(ast.Program) check.Report [env io]
+pub fn check.analyze(ast.Program, bool) check.Analysis [env io]
+pub fn check.proven_loops(ast.Program) List[ast.Pos] [env io]
+pub fn check.analyze_denying(ast.Program, bool, List[str]) check.Analysis [env io]
 pub fn check.check_declarations(ast.Program) List[check.Diag] [env io]
 pub enum check.Need
 pub struct check.Builtin
@@ -45,13 +49,20 @@ pub fn check.new_checker(ast.Program) check.Checker
 pub check.COVERED_RULES := ...
 pub struct check.Skip
 pub fn check.skipped(ast.Program, check.Report) List[check.Skip]
+pub fn check.generator_effects(ast.Program, List[str]) List[str] [env io]
 pub struct check.Note
 pub struct check.Diag
 pub fn check.new_diag(str, ast.Pos, str) check.Diag
+pub fn check.shifted(fix.Edit, int) fix.Edit
+pub fn check.fix_json(fix.Fix) str
+pub fn check.deterministic_deny() List[str]
+pub fn check.parse_deny(str) (List[str], str)
+pub fn check.effects_report(ast.Program, bool) str [env io]
 pub struct check.VariantRef
 pub struct check.Agree
 pub struct check.Binding
 pub struct check.Coverage
+pub struct check.LocalFact
 pub fn check.method_rename(check.Ty, str) str?
 pub fn check.method_help(check.Ty, str) str?
 pub struct check.NameWord
@@ -79,6 +90,8 @@ pub fn check.was_were(int) str
 pub fn check.suggest(str, List[str]) str?
 pub fn check.edit_distance(str, str) int
 pub fn check.foreign_type_word(str) str?
+pub fn check.check_observe(ast.Program) List[check.Diag]
+pub fn check.each_block(ast.Stmt) List[List[ast.Stmt]]
 pub struct check.SigFix
 pub fn check.std_module_names() List[str]
 pub enum check.Ty
@@ -89,4 +102,4 @@ pub fn check.sort_errors(List[check.Ty]) List[check.Ty]
 pub fn check.subst_all(List[check.Ty], List[check.Bind]) List[check.Ty]
 ```
 
-trimmed to fit 2000 tokens (~1056); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1301); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

@@ -70,6 +70,64 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
    loop invariants and static proof (OQ-060), downcasting `any Trait`
    (OQ-094).
 
+## After Rust removal: AI-first tooling (designer, 2026-10-23)
+
+Order per [ADR 0868](decisions/0868-ai-first-tooling-after-rust-removal.md); each is native and costs nothing when unused:
+`ail ask` semantic queries; `uhwhatnow?`, a hole that ranks the candidates that fit; edit impact
+(`ail test --affected`); native time-travel record and replay; token-priced diagnostics
+(one line or expanded, chosen by `--budget`); a native sandbox (capabilities plus CPU,
+memory and time caps); live attach to running binaries; contracts checked or fuzzed by tools
+(lower priority).
+
+## Backlog queue after Rust removal (designer, 2026-10-23)
+
+Starts when the interpreter is gone. Lanes are grouped by the code they touch, so
+two lanes never edit the same area: the lanes run in parallel, and the items in
+one lane run in the order shown. A feature that changes the language or a public
+std API still needs its own ADR first.
+
+1. **Checker and diagnostics** (`compiler/check/`, `compiler/explain/`):
+   `uhwhatnow?` (ranked typed holes); diagnostics in one-line and expanded forms chosen by `--budget`;
+   then the open language questions OQ-029, OQ-042, OQ-050, OQ-094.
+2. **Compiler graph tools** (`compiler/api/`, `compiler/edit/`): `ail ask`; edit
+   impact and `ail test --affected`; contracts checked or fuzzed by tools, with
+   OQ-060 (lower priority).
+   Then the AI-first tools the designer chose on 2026-10-24, in this order, each
+   with its own ADR (0891-0897) and no cost when unused (ADR 0868):
+   `ail context SYM --budget N`; `@tool` functions served by `ail serve --mcp`;
+   `ail try` (a patch checked and tested in memory); effect changes in `ail diff`;
+   `ail infer` (suggested `requires`/`ensures`); `ail test --mutate`; `ail check --perf`
+   (shares facts with the optimizer).
+3. **Native runtime** (`compiler/rt/`): time-travel record and replay; the
+   agent sandbox (capabilities plus CPU, memory and time caps); live attach.
+4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
+   ([ADR 0878](decisions/0878-screen-model-for-std-app.md)), Garlic first, then every
+   GUI program; `@observe` and live attach ([ADR 0879](decisions/0879-observe-and-live-attach.md)).
+5. **Garlic interface** (`tools/garlic/` window and chrome): closing tabs, and
+   a redesign that looks as polished as Chrome or Firefox but has its own look.
+6. **Garlic agent features** (`tools/garlic/` page model and agent server):
+   the agent server and attach channel; watches and scheduled actions; trust
+   rules; grounding; forms as schema; extraction; quiet pages; waiting; intent
+   maps; page memory; opt-in action replay; form diff before submit; site
+   memory. Parity fixes for real sites are interleaved.
+7. **Packages and networking** (`std/net`, packages): hardware AES-GCM, proxy
+   support.
+8. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
+   and Metal, then NPUs; weaker atomic orderings (OQ-097).
+9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
+   [ADR 0874](decisions/0874-purity-driven-speed-optimizations.md): memoization by a cost
+   model, pure-call CSE and hoisting, merging only where it is faster.
+   Then two showcase programs the designer chose (2026-10-24), each with its own ADR:
+   a database engine with its shell (file format, index, query language; an
+   optimizer benchmark against C using contracts, `ail test --mutate` and
+   `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
+   (SIMD, multi-core and tensor speed; ADR 0899).
+10. **Last:** the Rust-free rebuild of `tools/edit` compared with
+   [editor-baseline.md](design/editor-baseline.md); a drag race of Garlic
+   against Chrome and Firefox on a fixed set of real sites (page load, first
+   paint, scrolling, memory and tokens per agent task); then the Python
+   on-ramp (OQ-119).
+
 ## Documentation roadmap
 
 - `ail doc`: a documentation tool written in AIL that replaces plain Markdown

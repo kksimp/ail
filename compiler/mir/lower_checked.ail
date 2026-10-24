@@ -99,6 +99,8 @@ fn Lower.sized_checked(mut self, r Val, code int, vs List[Val]) Val?
     if vs.len() == 1 and not same_ty(vs[0].ty, r.ty)
         return none
     k := sized_kind(r.ty)
+    if k == "u64"
+        return u64_checked(r, code, vs)
     a := r.id
     b := if vs.len() == 1 then vs[0].id else a
     t := Ty.Opt(r.ty)

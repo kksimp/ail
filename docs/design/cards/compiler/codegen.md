@@ -57,6 +57,7 @@ pub fn codegen.f64_sym(x float) str  ## The symbol of a float constant in the re
 pub struct codegen.Sites  ## The module's sites, shared by reference: a code generator keeps one per
     pub list List[mir.Site]
 pub fn codegen.add_f64(mut img codegen.Image, x float) str [mutates]  ## A float constant in the read-only data; gives its symbol.
+pub fn codegen.linux_import(sym str) bool  ## Whether `sym` (a `libsys.` name without its prefix) is a libc function a
 pub fn codegen.import_slot(mut img codegen.Image, sym str) int [mutates]  ## The slot of import `sym`, added on first use.
 pub fn codegen.align(mut bytes List[int], n int) [mutates]
 pub fn codegen.push64(mut bytes List[int], v int) [mutates]
@@ -71,4 +72,4 @@ pub fn codegen.wrap_block(f mir.Func, order List[int], dom List[List[bool]], blo
 pub fn codegen.div_magic(d int) List[int]  ## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
 ```
 
-trimmed to fit 2000 tokens (~1403); dropped: private items
+trimmed to fit 2000 tokens (~1444); dropped: private items

@@ -39,7 +39,7 @@ P_PARK := 2048
 P_REGS := 4096
 # The mutexes each thread holds from `lock` (a list through the mutex records).
 P_HELD := 12288
-POOL_SZ := 16384
+POOL_SZ := 24576
 # Heap kinds of the blocks tasks use: every word may be a pointer, except an
 # atomic cell, which is `KIND_ATOMIC` (heap.ail).
 KIND_TASK := 12
@@ -131,6 +131,7 @@ fn pool() int
     if stacks < 0
         fail(1, 0, 0)
     store64(global(STACKS), stacks)
+    det_init(q)
     store64(global(TASKS), q)
     hset(H_FASTLIM, 0)
     store64(global(MULTI), 1)
@@ -158,6 +159,9 @@ fn task_new(id int) int
 ## start one while fewer than the target are running.
 fn task_start(rec int)
     p := pool()
+    if load64(p + P_DET + D_MODE) != 0
+        det_spawn(p, rec)
+        return
     lock(p + P_LOCK)
     tail := load64(p + P_TAIL)
     if tail == 0
@@ -223,6 +227,9 @@ fn stack_top(p int, k int) int
 ## none. Entered by `clone` and by `restart` after a trap.
 fn worker_main(idx int)
     p := load64(global(TASKS))
+    if load64(p + P_DET + D_MODE) != 0
+        det_worker(idx)
+        return
     while true
         # Between tasks is a safe point: park if a collection wants the world.
         if atomic_load(global(GC_REQ)) != 0
@@ -258,8 +265,10 @@ fn worker_main(idx int)
 fn finish_task(rec int, state int)
     atomic_xchg(rec + T_STATE, state)
     futex_wake(rec + T_STATE, 2147483647)
+    det_wake(rec + T_STATE)
     atomic_add(global(TASKS_LIVE), -1)
     atomic_add(global(CHAN_EPOCH), 1)
+    det_wake(global(CHAN_EPOCH))
 
 ## Called first by `trap`: on a worker, the trap ends the task and the
 ## worker goes on with the next one; on the main thread it returns and the
@@ -288,13 +297,17 @@ fn on_trap(kind int, a int, b int, head str, op str, tail str)
         unlock(global(OUT_LOCK))
     store64(p + P_CUR + 8 * k, 0)
     finish_task(rec, 3)
+    if load64(p + P_DET + D_MODE) != 0
+        det_end(p + P_DET, k + 1)
     restart(stack_top(p, k), k)
 
 ## `t.wait()?` in `main`: sleep until the task ends, then its result word; a
 ## trapped task ends the program as the interpreter's uncaught `Trapped`
 ## does (conc.task.6, native.task.1).
 fn task_wait(rec int, at1 str, at2 str) int
-    wait_done(rec)
+    det_yield()
+    if wait_done_dl(rec, true)
+        return 0
     if atomic_load(rec + T_STATE) == 3
         report_trapped(rec, at1, at2)
     if atomic_load(rec + T_STATE) == 4
@@ -305,7 +318,9 @@ fn task_wait(rec int, at1 str, at2 str) int
 ## `t.wait() else ...`: the result, or, when the task trapped, the failure
 ## `Trapped(rule, message)` in the error slot (conc.task.6) and 0.
 fn task_try(rec int, at str, own int) int
-    wait_done(rec)
+    det_yield()
+    if wait_done_dl(rec, true)
+        return 0
     if atomic_load(rec + T_STATE) == 4
         err_restore(load64(rec + T_RESULT))
         return 0
@@ -363,14 +378,21 @@ fn trapped_error(rec int, at str)
 
 ## Sleep until the task has ended, trapped or not.
 fn wait_done(rec int)
+    wait_done_dl(rec, false)
+
+## `wait_done`; with `report` the main task gives up when every task is
+## blocked (conc.task.7): true, with the message in `CHAN_FAULT`.
+fn wait_done_dl(rec int, report bool) bool
+    mut dead := false
     if atomic_load(rec + T_STATE) == 0
         k := worker_index()
         if k >= 0
             wait_enter()
-        while atomic_load(rec + T_STATE) == 0
-            prog_wait(rec + T_STATE, 0, "a task to finish", false)
+        while atomic_load(rec + T_STATE) == 0 and not dead
+            dead = prog_wait(rec + T_STATE, 0, "a task to finish", report)
         if k >= 0
             wait_leave()
+    dead
 
 ## A worker is about to sleep in `wait`: it stops counting as running, and
 ## a replacement starts if work is queued and nobody could take it.
@@ -454,6 +476,9 @@ fn dispatch(id int, rec int)
 ## record, `lo` and `hi` from its task record's arguments 0 to 2, then
 ## 3 words (sum, lowest and highest running sum) per accumulator.
 fn par_worth(lo int, hi int) bool
+    # conc.par.9: a deterministic run keeps every loop on one thread.
+    if det_on()
+        return false
     t := load64(pool() + P_TARGET)
     hi > lo and hi - lo > 0 and hi - lo >= 2 * t
 
@@ -618,6 +643,7 @@ fn gc_scan_threads()
     gc_scan_range(p, p + P_PARK)
     # Each thread's text builder (fmt.ail) points at a heap buffer.
     gc_scan_range(p + P_SB, p + P_SB + 24 * (n + 1))
+    gc_scan_range(p + P_ERR, p + P_ERR + 24 * (n + 1))
     for t in 0..n
         if t != me
             s := load64(p + P_PARK + 8 * t)
@@ -680,6 +706,7 @@ fn mutex_leave(m int)
 
 ## `m.get()`.
 fn mutex_get(m int) int
+    det_yield()
     mutex_enter(m, false)
     v := load64(m + M_VAL)
     mutex_leave(m)
@@ -687,12 +714,14 @@ fn mutex_get(m int) int
 
 ## `m.set(v)`.
 fn mutex_set(m int, v int)
+    det_yield()
     mutex_enter(m, false)
     store64(m + M_VAL, v)
     mutex_leave(m)
 
 ## `m.swap(v)`: the old value.
 fn mutex_swap(m int, v int) int
+    det_yield()
     mutex_enter(m, false)
     old := load64(m + M_VAL)
     store64(m + M_VAL, v)
@@ -701,6 +730,7 @@ fn mutex_swap(m int, v int) int
 
 ## `m.lock()`: the value, or 0 with the trap message left in `CHAN_FAULT`.
 fn mutex_lock(m int) int
+    det_yield()
     if mutex_enter(m, true) == 0
         return mutex_fault("`lock` while already holding the mutex")
     v := load64(m + M_VAL)
@@ -709,6 +739,7 @@ fn mutex_lock(m int) int
 
 ## `m.unlock(v)`: 0, or the message of the trap.
 fn mutex_unlock(m int, v int) int
+    det_yield()
     lock(m + M_LOCK)
     if load64(m + M_OWN) != thread_id()
         unlock(m + M_LOCK)
@@ -718,6 +749,7 @@ fn mutex_unlock(m int, v int) int
     store64(m + M_OWN, 0)
     store64(m + M_WAKE, (load64(m + M_WAKE) + 1).bit_and(4294967295))
     futex_wake(m + M_WAKE, 1000000)
+    det_wake(m + M_WAKE)
     atomic_add(global(CHAN_EPOCH), 1)
     unlock(m + M_LOCK)
     0
@@ -746,7 +778,8 @@ fn group_wait(g int, at str)
     mut bad := 0
     for i in 0..n
         rec := load64(load64(g + 16) + 8 * i)
-        wait_done(rec)
+        if wait_done_dl(rec, true)
+            return
         if bad == 0 and atomic_load(rec + T_STATE) == 3
             bad = rec
     store64(g + 8, 1)
@@ -760,7 +793,8 @@ fn group_end(g int)
     mut bad := 0
     for i in 0..n
         rec := load64(load64(g + 16) + 8 * i)
-        wait_done(rec)
+        if wait_done_dl(rec, true)
+            return
         if bad == 0 and atomic_load(rec + T_STATE) == 3
             bad = rec
     if bad != 0 and load64(g + 8) == 0
@@ -793,6 +827,7 @@ fn held_release(slot int)
         store64(m + M_OWN, 0)
         store64(m + M_WAKE, (load64(m + M_WAKE) + 1).bit_and(4294967295))
         futex_wake(m + M_WAKE, 1000000)
+        det_wake(m + M_WAKE)
         atomic_add(global(CHAN_EPOCH), 1)
         unlock(m + M_LOCK)
 
@@ -812,6 +847,7 @@ fn task_cancelled() bool
 
 ## `task.check()`: the failure `Cancelled` once the running task is cancelled.
 fn task_check(at str)
+    det_yield()
     if task_cancelled()
         err_set("the task was cancelled", at)
 
@@ -824,6 +860,7 @@ fn task_block_on(ch int)
 
 ## `t.cancel()`: the task and every task it started, however deep.
 fn task_cancel(rec int)
+    det_yield()
     atomic_xchg(rec + T_CANC, 1)
     b := atomic_load(rec + T_BLK)
     if b != 0

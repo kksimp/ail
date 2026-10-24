@@ -1,0 +1,95 @@
+# net.open and Body.read_bytes (std.net.25): a body read in pieces whatever its
+# framing, closing early, and reading after close. Every reply says
+# `Connection: close` (or is HTTP/1.0): the server closes after each, and a
+# client that pooled one would retry on a new connection and leave the server
+# one accept short, hanging `t.wait()`.
+use std.net
+
+fn port_of(addr str) int
+    parts := addr.split(":")
+    n := parts[1].to_int() else 0
+    n
+
+fn serve_raw(l net.Listener, replies List[str])
+    for r in replies
+        s := l.accept() else err
+            print("accept {err.kind}")
+            return
+        req := s.read_line() else err
+            print("read {err.kind}")
+            return
+        if req == none
+            return
+        # The rest of the request head.
+        for _ in 0..16
+            line := s.read_line() else err
+                break
+            if line == ""
+                break
+        s.write(r) else err
+            print("write {err.kind}")
+        s.close()
+
+fn show(url str, label str)
+    b := net.open("GET", url, net.options()) else err
+        print("{label} open {err.kind}")
+        return
+    print("{label} {b.status} {b.headers.get("x-n")}")
+    mut total := ""
+    mut pieces := 0
+    for _ in 0..40
+        d := b.read_bytes(4) else err
+            print("{label} read {err.kind}")
+            return
+        if d.len() == 0
+            break
+        pieces += 1
+        total = "{total}{d.hex()}"
+    print("{label} {pieces} {total}")
+    again := b.read_bytes(4) else err
+        print("{label} again {err.kind}")
+        return
+    print("{label} after end {again.len()}")
+    b.close()
+    z := b.read_bytes(4) else err
+        print("{label} closed {err.kind}")
+        return
+    print(z.len())
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    base := "http://127.0.0.1:{port_of(l.addr())}"
+    replies := [
+        "HTTP/1.1 200 OK\r\nx-n: len\r\nContent-Length: 10\r\nConnection: close\r\n\r\n0123456789",
+        "HTTP/1.1 200 OK\r\nx-n: chunk\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n6;ext=1\r\n world\r\n0\r\nTrailer: x\r\n\r\n",
+        "HTTP/1.0 200 OK\r\nx-n: eof\r\n\r\nuntil the end",
+        "HTTP/1.1 204 No Content\r\nx-n: none\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 200 OK\r\nx-n: cut\r\nContent-Length: 20\r\nConnection: close\r\n\r\nshort",
+    ]
+    t := spawn serve_raw(l, replies)
+    show("{base}/a", "len")
+    show("{base}/b", "chunk")
+    show("{base}/c", "eof")
+    show("{base}/d", "none")
+    show("{base}/e", "cut")
+    t.wait()?
+    l.close()
+    # An early close, then a fresh request.
+    l2 := net.listen("127.0.0.1:0")?
+    base2 := "http://127.0.0.1:{port_of(l2.addr())}"
+    t2 := spawn serve_raw(
+        l2,
+        ["HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nabcdef"],
+    )
+    b := net.open("GET", "{base2}/x", net.options()) else err
+        print("open {err.kind}")
+        return
+    first := b.read_bytes(2)?
+    print(first.hex())
+    b.close()
+    t2.wait()?
+    l2.close()
+    bad := net.open("GET", "http://127.0.0.1:1/", net.options()) else err
+        print("refused {err.kind}")
+        return
+    print(bad.status)

@@ -45,7 +45,7 @@ pub struct derive.Expansion  ## The text a generator wrote for one `impl`.
 fn derive.generator_of(trait_name str) str  ## The prelude traits whose generators are built in.
 fn derive.last(name str) str
 pub fn derive.expand(modules List[str], progs List[ast.Program]) List[derive.Expansion]  ## Every deriving `impl` of the program: `modules[k]` is the module of
-fn derive.run(gen str, info derive.TypeInfo) str ! derive.DeriveError [fail]
+fn derive.run(gen str, info derive.TypeInfo, facts derive.ObserveFacts) str ! derive.DeriveError [fail]
 fn derive.unqualify(text str, module str) str  ## `text` with the module's own prefix `a.b.` removed from its names: the
 fn derive.type_info(modules List[str], progs List[ast.Program], name str, module str) derive.TypeInfo?  ## The `TypeInfo` of the struct or enum `name`, preferring one declared in
 fn derive.field_infos(prog ast.Program, fields List[ast.Field], module str) List[derive.FieldInfo]
@@ -64,4 +64,14 @@ fn derive.quote(s str) str  ## An AIL string literal holding `s` exactly.
 fn derive.list_of(items List[str], elem str) str
 fn derive.field_expr(f derive.FieldInfo) str
 fn derive.info_expr(t derive.TypeInfo) str  ## The `TypeInfo(...)` expression for `t`, as the bootstrap writes it.
+derive.MAX_WIDTH := 100  ## Longest line the formatter leaves alone (ADR 0857).
+pub fn derive.tidy(text str) str  ## `text` as the bootstrap's formatter leaves it for the shapes generators
+fn derive.wrap_call(line str) List[str]
+pub struct derive.ObserveFacts  ## The fields of struct `name` marked `@observe`, in order; the variant names
+    pub fields List[str]
+    pub enums Map[str, List[str]]
+pub fn derive.observe_facts(progs List[ast.Program], name str) derive.ObserveFacts
+fn derive.value_lines(ty str, expr str, var str, facts derive.ObserveFacts, n int, pad str) List[str] ! derive.DeriveError [fail]  ## Statements that set `var` (already declared `mut var := ""`) to the JSON
+fn derive.list_item(ty str) str?
+pub fn derive.derive_observe(t derive.TypeInfo, facts derive.ObserveFacts) str ! derive.DeriveError [fail]
 ```

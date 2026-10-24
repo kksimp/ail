@@ -455,6 +455,8 @@ PS_PROG := 128
 PS_CMD := 136
 PS_INLOCK := 144
 PS_RAW := 152
+## The child's number in a recording, 0 when none is made (record.ail).
+PS_SEQ := 168
 PS_SIZE := 184
 # The `source` word of a channel record (chan.ail).
 CH_SOURCE := 48
@@ -463,7 +465,10 @@ CH_SOURCE := 48
 fn ps_push(ps int, ch int, p int, n int)
     s := str_new(n, 0)
     copy_bytes(s + 16, p, n)
-    chan_push(ch, os_lossy(s))
+    line := os_lossy(s)
+    chan_push(ch, line)
+    if load64(ps + PS_SEQ) != 0
+        rec_stream_line(load64(ps + PS_SEQ), if ch == load64(ps + PS_OUTCH) then 0 else 1, line)
     store64(ps + PS_PROG, load64(ps + PS_PROG) + 1)
 
 ## Queue the complete lines of stream `k` (0 output, 1 error), and with `last`
@@ -494,6 +499,8 @@ fn ps_eof(ps int, k int)
     ps_lines(ps, k, true)
     store64(ps + PS_OUT + 8 * k, -1)
     chan_mark_closed(load64(ps + PS_OUTCH + 8 * k))
+    if load64(ps + PS_SEQ) != 0
+        rec_stream_end(load64(ps + PS_SEQ), k)
     store64(ps + PS_PROG, load64(ps + PS_PROG) + 1)
 
 ## One nonblocking read of stream `k`, under the lock: 1 when it read, 0 when

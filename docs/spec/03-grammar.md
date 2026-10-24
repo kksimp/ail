@@ -158,12 +158,27 @@ enum Role
         _ => false
 ```
 
+**gram.attr.6** — `@observe` may precede a field in a struct body, on the
+same line as the field: `@observe total int`. It marks the field as readable by
+an attached agent (`attach.observe.1`) and changes nothing else. It is the only
+attribute a field takes; any other is an error. *(ADR 0884)*
+
+```ail skip=bootstrap rules=gram.attr.6
+struct Cart
+    @observe total int
+    name str
+
+fn main()
+    c := Cart(total: 3, name: "tea")
+    print(c.total)
+```
+
 ## Runnable examples for the rules above
 
 Blocks with `error=` must report their rule, and `rules=` lists the rules a
 block demonstrates (ADR 0498). Where a rule describes how the checker
 reports, the block shows one reported case; the rest of the rule is checked
-by the mistakes corpus (`bootstrap/tests/mistakes/`).
+by the mistakes corpus (`tests/mistakes/`).
 
 ```ail rules=gram.attr.5
 enum Role

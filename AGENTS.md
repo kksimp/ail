@@ -35,9 +35,11 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   both pass, open a pull request for the branch and merge it through GitHub.
   GitHub deletes the branch on merge (repository setting). There's no
   GitHub-hosted testing.
-- A change to the Rust checker (`bootstrap/src/check*`) ports to
-  `compiler/check/` in the same branch: the selftest `self_hosted_check`
-  requires the two to agree ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md)).
+- **One checker:** checker changes go in `compiler/check/` only. The selftest
+  `self_hosted_check` lets the AIL checker report more than the Rust one, for
+  the rules in `tests/checker_known_new.txt`, and never less
+  ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md), amended
+  by the no-double-work rules).
 - **Native lowering ([ADR 0823](docs/decisions/0823-lower-ail-feature-files.md)):**
   a native feature lives in its own `compiler/mir/lower_*.ail` file. It may
   add at most one dispatch line and one state field to `lower.ail`. Only a

@@ -1,0 +1,9 @@
+# An f32 elementwise chain on 2^22 elements, 50 rounds (f32_chain.c is the C twin).
+fn main()
+    n := 4194304
+    x := tensor.from([(i % 17).to_float() * 0.25 for i in 0..n]).to_f32()
+    mut total := 0.0
+    for r in 0..50
+        y := (x * x + x) * 0.5 - x
+        total += y.to_float().sum()
+    print(total)

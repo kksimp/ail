@@ -19,7 +19,7 @@ fn tuple_elems(t Ty) List[Ty]?
 ## table or a function value is not (its copy would share state).
 fn tuple_elem_ok(t Ty) bool
     match t
-        Map(_, _) | Set(_) | Tensor(_) | Fn(_, _) | Unit | Unknown => false
+        Map(_, _) | Set(_) | Fn(_, _) | Unit | Unknown => false
         _ => true
 
 ## `(A, B)` written as a type, if it is in the subset.
@@ -245,6 +245,7 @@ fn Lower.orderable(self, t Ty, mut seen Set[str]) bool
         return true
     match t
         Int | Bool | Char | Sized(_) | Str | Bytes | Float => true
+        List(e) => orderable(e, mut seen)
         _ => false
 
 fn Lower.can_order(self, t Ty) bool
@@ -286,7 +287,7 @@ fn Lower.elem_lt(mut self, t Ty, x int, y int) int
     if t == Ty.Bytes
         c := call("rt.bytes_cmp", [x, y], Ty.Int)
         return op("lt", [c, konst(0, Ty.Int)], Ty.Bool)
-    if structural(t)
+    if structural(t) or t.elem() != none
         return call(lt_fn(t), [x, y], Ty.Bool)
     if t == Ty.Float
         # `x < y`, or `y` is NaN and `x` is not.
@@ -309,6 +310,42 @@ fn Lower.elem_lt(mut self, t Ty, x int, y int) int
         cur = join
         return r
     op("lt", [x, y], Ty.Bool)
+
+## `lt.List[E](a, b)`: the first element that differs decides; a prefix is less.
+fn Lower.gen_list_lt(mut self, fkey str, t Ty, e Ty)
+    ps := begin_fn(fkey, Ty.Bool, [t, t])
+    a := ps[0]
+    b := ps[1]
+    yes := new_block()
+    no := new_block()
+    la := op("len", [a], Ty.Int)
+    lb := op("len", [b], Ty.Int)
+    head := new_block()
+    i := new_value(Ty.Int, "")
+    blocks[head].params.push(i)
+    jump(head, [konst(0, Ty.Int)])
+    cur = head
+    body := new_block()
+    done := new_block()
+    # `i` runs to the shorter length.
+    short := op("lt", [i, la], Ty.Bool)
+    both := new_block()
+    branch(short, both, [], done, [])
+    cur = both
+    branch(op("lt", [i, lb], Ty.Bool), body, [], done, [])
+    cur = body
+    x := op("get", [a, i], e)
+    y := op("get", [b, i], e)
+    l1 := new_block()
+    branch(elem_lt(e, x, y), yes, [], l1, [])
+    cur = l1
+    l2 := new_block()
+    branch(elem_lt(e, y, x), no, [], l2, [])
+    cur = l2
+    jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
+    cur = done
+    branch(op("lt", [la, lb], Ty.Bool), yes, [], no, [])
+    end_eq(fkey, yes, no)
 
 ## `lt.(A, B)(a, b)`: the first element that differs decides.
 fn Lower.gen_tuple_lt(mut self, fkey str, t Ty, xs List[Ty])
@@ -341,7 +378,7 @@ fn Lower.text_ok(mut self, t Ty) bool
         return ext
     match t
         Int | Sized(_) | Float | F32 | Bool | Str | Bytes => true
-        Struct | Enum =>
+        Struct | Enum | Any(_) =>
             mut seen := Set[str]()
             displayable(t, mut seen)
         _ => false
@@ -350,23 +387,37 @@ fn Lower.text_ok(mut self, t Ty) bool
 ## `to_str`, or fields of scalars, `List[int]` and displayable records (not
 ## itself recursive).
 fn Lower.displayable(mut self, t Ty, mut seen Set[str]) bool
+    if inner := t.opt_inner()
+        return displayable(inner, mut seen)
+    if n := any_of(t)
+        return any_displayable(n, mut seen)
     key := match t
         Struct(k) => k
         Enum(k) => k
         _ => return match t
             Int | Sized(_) | Float | F32 | Bool | Str | Bytes => true
             List(e) => displayable(e, mut seen)
-            _ => text_ext_ok(t) else false
+            Char => true
+            Map(k, v) => displayable(k, mut seen) and displayable(v, mut seen)
+            Set(e) => displayable(e, mut seen)
+            Tuple(xs) => tuple_displayable(xs, mut seen)
+            _ => displayable_other(t, mut seen)
     if sigs.contains("{key}.to_str")
         return true
     # `seen` is the path of types being checked: a type that holds itself has
-    # no finite inline text, so it needs a `to_str`.
+    # no finite inline text, so its use inside itself calls `text.T` (ADR 0864).
     if seen.contains(key)
-        return false
+        return true
     seen.add(key)
     ok := displayable_fields(key, mut seen)
     seen.remove(key)
     ok
+
+## An optional keeps `seen` (its inner type may be the one being checked); the rest ask `text_ext_ok`.
+fn Lower.displayable_other(mut self, t Ty, mut seen Set[str]) bool
+    if inner := t.opt_inner()
+        return displayable(inner, mut seen)
+    text_ext_ok(t) else false
 
 fn Lower.displayable_fields(mut self, key str, mut seen Set[str]) bool
     if cases := enums.get(key)
@@ -381,6 +432,19 @@ fn Lower.displayable_fields(mut self, key str, mut seen Set[str]) bool
             return false
     true
 
+fn Lower.tuple_displayable(mut self, xs List[Ty], mut seen Set[str]) bool
+    for x in xs
+        if not displayable(x, mut seen)
+            return false
+    true
+
+## Whether every implementation of trait `n` has a text form.
+fn Lower.any_displayable(mut self, n str, mut seen Set[str]) bool
+    for s in traits.impls.get(n) else []
+        if not displayable(Ty.Struct(s), mut seen)
+            return false
+    true
+
 ## Whether a list type holds a tuple somewhere, so that its text is made here
 ## (lists of plain numbers and strings print through the runtime).
 fn has_tuple(t Ty) bool
@@ -391,12 +455,14 @@ fn has_tuple(t Ty) bool
     if t.opt_inner() != none or t.is_coll()
         return true
     match t
-        Struct | Enum | Bytes => true
+        Struct | Enum | Bytes | Ref | Tensor => true
         _ => false
 
 ## The text of a value of a type `text_ok` accepts, as inside a tuple or a
 ## list: strings in quotes, `(1, "a")`, `[(1, "a")]`.
 fn Lower.value_text(mut self, t Ty, x int) int
+    if t == Ty.Sized("u64")
+        return call("rt.fmt_u64", [x], Ty.Str)
     match t
         Int | Sized(_) => call("rt.fmt_int", [x], Ty.Str)
         Float => call("rt.fmt_float", [x], Ty.Str)
@@ -406,7 +472,7 @@ fn Lower.value_text(mut self, t Ty, x int) int
         Bytes => call("rt.bytes_show", [x], Ty.Str)
         Tuple(xs) => tuple_text_of(xs, x)
         List(e) => list_text(x, e)
-        Struct | Enum => display_call(Val(id: x, ty: t)) else str_value("")
+        Struct | Enum | Any(_) => display_call(Val(id: x, ty: t)) else str_value("")
         _ => text_ext(t, x)
 
 ## `(a, b)` of the elements of tuple object `obj`.
@@ -658,5 +724,7 @@ fn Lower.gen_lt(mut self, fkey str, t Ty)
             end_fn(fkey, ast.Pos(line: 1, col: 1))
             return
         gen_tuple_lt(fkey, t, [sl.ty for sl in structs[s]])
+    elif e := t.elem()
+        gen_list_lt(fkey, t, e)
     else
         gen_enum_lt(fkey, t, enum_name(t) else "")

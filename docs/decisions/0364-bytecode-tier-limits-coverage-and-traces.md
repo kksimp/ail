@@ -1,6 +1,6 @@
 # 0364. Run limits, coverage and call and effect traces run on the bytecode tier
 
-- **Status:** Accepted; `--watch` part amended by [0471](0471-watch-on-the-bytecode-tier.md) (`--watch` runs on the tier)
+- **Status:** Superseded by [ADR 0873](0873-rust-only-features-after-rust-removal.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076), within the designer's ADR 0359
 - **Topic:** interpreter performance; tracing; run limits

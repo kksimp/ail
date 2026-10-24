@@ -1,0 +1,30 @@
+## One construct per `native.subset.1` help form (ADR 0722). Every one of them is native
+## now, so this is a .mir golden; the help-lines check uses tuples_subset.ail.
+struct Job
+    name str
+
+enum Maybe
+    Some
+    None
+
+fn lines_of(s str) int
+    s.lines().len()
+
+fn same(a str, b str) bool
+    a == b
+
+fn label(n int) str
+    "n is {n}"
+
+fn loop_by_index(mut xs List[List[int]]) int
+    mut total := 0
+    for mut x in xs
+        x.push(1)
+    total
+
+fn with_map() int
+    m := Map[str, int]()
+    m.len()
+
+fn main()
+    print(lines_of("a\nb"))

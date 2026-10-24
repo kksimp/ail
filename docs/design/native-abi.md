@@ -287,7 +287,7 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 **Global slots.** The runtime's globals are 64 eight-byte slots (`global(k)`,
 `Image.globals`): 0-15 `core.ail`, 16-31 the heap and collector, 32-39
 `os.ail` (status, scratch area, output descriptor, input buffer, terminal
-flag), 40 `net.ail` (the table of sockets, ADR 0830), 41 `net_http.ail` (the pool of idle HTTP connections, std.net.19), 42 `tls_client.ail` (the cache of trusted roots, ADR 0852), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), the rest free (the concurrency slots of #194 take 16-24, channels 25-30). Each slot is a
+flag), 40 `net.ail` (the table of sockets, ADR 0830), 41 `net_http.ail` (the pool of idle HTTP connections, std.net.19), 42 `tls_client.ail` (the cache of trusted roots, ADR 0852), 44 `memtab.ail` (the table of `std.mem` blocks, unsafe.ptr.5-6), 48 `unwind.ail` (cleanups on a trap, own.uniq.3), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), 56 `instr.ail` (the hit table of an instrumented build, native.instr.2), the rest free (the concurrency slots of #194 take 16-24, channels 25-30). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
 `bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
@@ -386,7 +386,7 @@ with every program, provides `rt.init`, `rt.exit`, `rt.alloc`, `rt.trap`,
 loops that fill a list, ADR 0579); `print` writes its pieces straight into
 the buffer instead of building a string. List indexing and `len` are inline.
 The runtime is written over the primitives of `compiler/rt/native/prim.ail`
-(`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `syscall`,
+(`load64`, `store64`, `load8`, `store8`, `loadf`, `storef`, `loadf32`, `storef32` (one packed single, widened and narrowed exactly; ADR 0875), `syscall`,
 `global`, `str_addr`, `list_addr`, `list_at`, `float_bits`, `bits_float`,
 `f32_round`, `target`), which the code generator expands inline and only runtime code may
 call. Its float text is lane 122's algorithm (ADR 0409), on lists of limbs.
@@ -478,6 +478,18 @@ initialised libc and its thread-local storage. It is not enough for libc's
 buffered stdio, so `rt_exit` calls `fflush(0)` through the dynamic symbol when
 libc is linked, before the `exit` syscall. This is an open risk until a
 differential test with `printf` passes on both Linux ARM64 and macOS.
+
+**As built (ADR 0870).** An `extern c fn` outside the runtime's libc subset is
+bound on its first call by `rt.ffi_addr` (`compiler/rt/native/ffi_load.ail`):
+`dlopen` of the library, `dlsym` of the symbol, the address kept in a cell of
+the table in global slot 57. The body then makes an `icall` named `c`, which
+the x86-64 generator brackets with a save and restore of `xmm8`-`xmm13`. The
+executable imports only `dlopen` and `dlsym`. On Linux `obj/elf.ail` writes a
+dynamic ELF in that case (`PT_INTERP`, `DT_NEEDED` libc, `DT_BIND_NOW`, two weak
+`GLOB_DAT` relocations into the import slots after the globals); the import
+call is `call [slot]` on x86-64 and `adrp`/`ldr`/`blr` on ARM64. On macOS the
+imports are `_dlopen` and `_dlsym` in the bind table of §11. Programs that
+call only the libc subset still have no `PT_INTERP`.
 
 **Memory.** `mem.alloc`, `mem.cstr` and `mem.free` call libc `malloc` and
 `free` when libc is linked, so a block can cross the boundary in either

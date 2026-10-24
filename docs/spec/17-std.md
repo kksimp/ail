@@ -1064,6 +1064,20 @@ fn main()
     print(a.status + b.status)
 ```
 
+**std.net.30** — Proxies: when `HTTP_PROXY` (for `http://`) or `HTTPS_PROXY` (for `https://`) is set (the lowercase name wins) and the host doesn't match `NO_PROXY` (comma-separated hosts and domain suffixes, an optional `:port`, `*` for all), the request goes through that `http://[user:pass@]host[:port]` proxy: `http` as an absolute-form request with a `Proxy-Authorization: Basic` header when the proxy URL has a user, `https` through a `CONNECT` tunnel with TLS to the origin. Loopback hosts never use a proxy. A proxy that can't be reached fails with the `std.net.27` kinds; one that answers `CONNECT` with anything but 2xx fails with kind `protocol`; a variable that isn't an `http://` proxy URL fails with kind `bad_url`. The native client only. *(ADR 0869)*
+
+```ail norun rules=std.net.30
+use std.net
+
+fn main()
+    # With HTTP_PROXY=http://127.0.0.1:3128 in the environment, this asks the
+    # proxy for http://example.test/a; with NO_PROXY=example.test it doesn't.
+    r := net.get("http://example.test/a") else err
+        print(err.kind)
+        return
+    print(r.status)
+```
+
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
 **std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*

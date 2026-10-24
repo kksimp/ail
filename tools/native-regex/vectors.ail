@@ -1,6 +1,6 @@
 ## Runs a vector file through std.regex and prints what each line gives, so
 ## `ail run` and a native build can be compared byte for byte (lane 232).
-## The file is `bootstrap/tests/regex/vectors.txt` or a fuzz file in the same
+## The file is `tests/regex/vectors.txt` or a fuzz file in the same
 ## format (see tools/native-regex/README.md):
 ##   ail run tools/native-regex/vectors.ail FILE
 use std.regex
@@ -48,7 +48,7 @@ fn replace_line(first bool, re regex.Regex, text str, rep str) str
     regex.replace(re, text, rep)
 
 fn main() !
-    file := env.args().first() else "bootstrap/tests/regex/vectors.txt"
+    file := env.args().first() else "tests/regex/vectors.txt"
     for line in fs.read_text(file)?.lines()
         if line == "" or line.starts_with("#")
             continue

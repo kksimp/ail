@@ -1,19 +1,21 @@
 # compiler
 entry: main in main.ail
 
-## (root) (45 items)
+## (root) (56 items)
 
-## a64 (60 items)
+## a64 (73 items)
+
+## api (206 items)
 
 ## ast (129 items)
 
-## budget (24 items)
+## budget (27 items)
 
-## check (323 items)
+## check (343 items)
 
-## codegen (54 items)
+## codegen (55 items)
 
-## derive (32 items)
+## derive (40 items)
 
 ## doc (18 items)
 
@@ -21,18 +23,24 @@ entry: main in main.ail
 
 ## explain (37 items)
 
-## fix (80 items)
+## fix (54 items)
+
+## fixrun (26 items)
 
 ## fmt (63 items)
 
-## load (90 items)
+## load (100 items)
 
-## mir (398 items)
+## mir (477 items)
 
-## obj (58 items)
+## obj (64 items)
 
-## syntax (105 items)
+## pkg (44 items)
 
-## x64 (75 items)
+## syntax (110 items)
 
-trimmed to fit 4000 tokens (~172); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+## watch (3 items)
+
+## x64 (87 items)
+
+trimmed to fit 4000 tokens (~209); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)

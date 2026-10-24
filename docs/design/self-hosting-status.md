@@ -80,8 +80,8 @@ manifest checks eff.cap.4–5 (ADR 0740).
 | Corpus | Programs |
 |---|---|
 | `examples/` | every `.ail` |
-| `bootstrap/tests/cases/`, including `packages/` | every case the front end accepts |
-| `bootstrap/tests/mistakes/` (the `ail fix` corpus) | 140 |
+| `tests/cases/`, including `packages/` | every case the front end accepts |
+| `tests/mistakes/` (the `ail fix` corpus) | 140 |
 | `tools/perfbench/programs/` | 6 |
 | `tools/tokbench/corpus/programs/` (agent corpus) | 20 |
 | `tools/edit`, `compiler` | 2 |

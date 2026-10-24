@@ -79,6 +79,12 @@ pub fn add_f64(mut img Image, x float) str
         push64(mut img.data, bits)
     sym
 
+## Whether `sym` (a `libsys.` name without its prefix) is a libc function a
+## Linux executable imports through the dynamic loader (ADR 0870). Every other
+## name is for Windows or macOS, and traps on Linux if ever reached.
+pub fn linux_import(sym str) bool
+    sym == "dlopen" or sym == "dlsym"
+
 ## The slot of import `sym`, added on first use.
 pub fn import_slot(mut img Image, sym str) int
     for k in 0..img.imports.len()
@@ -123,7 +129,13 @@ pub fn add_trap_texts(mut img Image, m mir.Module, k int, op str)
     site := m.sites[k]
     path := if site.file < m.files.len() then m.files[site.file] else m.path
     lines := if site.file < m.file_lines.len() then m.file_lines[site.file] else m.lines
-    add_str(mut img, "d:h{k}", "{path}:{site.line}:{site.col}: trap[{site.rule}]: ")
+    # `std.unreachable`: the runtime prints the rule from the message (rt kind 17).
+    head := "{path}:{site.line}:{site.col}: trap["
+    add_str(
+        mut img,
+        "d:h{k}",
+        if site.rule == "std.unreachable" then head else "{head}{site.rule}]: ",
+    )
     line := if site.line >= 1 and site.line <= lines.len() then lines[site.line - 1] else ""
     excerpt := mir.excerpt(line, site.line, site.col)
     # The stack's innermost lines: the trapping function and the functions
@@ -179,7 +191,7 @@ pub fn add_call_table(mut img Image, m mir.Module)
         name := key.slice(cut + 1, key.chars().len())
         offs.push(base + strs.len())
         dots := if (takes.get(name) else false) then ".." else ""
-        add_text(mut strs, "{name}({dots})")
+        add_text(mut strs, "{mir.plain_name(name)}({dots})")
         if file == 0 or file >= m.files.len()
             offs.push(0)
         else
@@ -201,7 +213,7 @@ fn add_text(mut out List[int], s str)
 fn frame_line(m mir.Module, site mir.Site) str
     root := if site.file == 0 or site.file >= m.files.len() then "" else "{m.files[site.file]}:"
     dots := if params_of(m, site.func) then ".." else ""
-    "  at {root}{site.line}:{site.col} in {site.func}({dots})"
+    "  at {root}{site.line}:{site.col} in {mir.plain_name(site.func)}({dots})"
 
 ## Whether function `name` takes parameters (its frame prints `(..)`).
 fn params_of(m mir.Module, name str) bool

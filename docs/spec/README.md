@@ -65,8 +65,8 @@ line says what to expect:
 | ```` ```ail rules=ID,ID ```` | Demonstrates the listed rules (ADR 0498). Every rule of the types, expressions, std, effects and tools chapters must be demonstrated; `AIL_LIST_UNCOVERED=1 ./ail selftest --test spec -- --nocapture` lists the rest. |
 | ```` ```ail flags=A,B ```` | Checked with those `ail check` flags, such as `--deterministic` or `--deny fs`. Not run. |
 | ```` ```ail tool=A,B,FILE expect=TEXT ```` | Runs `ail A B FILE` on the block and requires `TEXT` in stdout (ADR 0500). `DIR` is the block's directory. |
-| ```` ```ail pkg=DIR status=N ```` | With `tool=`: `DIR` is a copy of the case package `bootstrap/tests/cases/packages/DIR`, and the tool must exit N. |
-| ```` ```ail fixture=DIR ```` | Checks the case fixture `bootstrap/tests/cases/DIR`, which must report each rule in `rules=` (ADR 0500). |
+| ```` ```ail pkg=DIR status=N ```` | With `tool=`: `DIR` is a copy of the case package `tests/cases/packages/DIR`, and the tool must exit N. |
+| ```` ```ail fixture=DIR ```` | Checks the case fixture `tests/cases/DIR`, which must report each rule in `rules=` (ADR 0500). |
 
 A program that checks clean and has a `main` is also run on both interpreter
 tiers, and both must print the same output (ADR 0499). Blocks marked `norun`,
@@ -104,6 +104,8 @@ aren't run.
 | 17 | [Standard modules](17-std.md) | `std` | Drafted (partial) |
 | std | [Standard library: json](std-json.md) | `json` | Drafted |
 | std | [Standard library: regex](std-regex.md) | `std` | Drafted |
+| std | [Standard library: screen](std-screen.md) | `std` | Drafted |
+| attach | [Attach and `@observe`](std-attach.md) | `attach` | Drafted |
 | std | [Standard library: HTTP server](std-net-http.md) | `http` | Drafted |
 | std | [Standard library: native windows](std-app.md) | `std` | Drafted |
 

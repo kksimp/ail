@@ -5,17 +5,13 @@
 ## private items are checked here.
 use ast
 use check
+use pkg
 use syntax
 
 ## What an import name refers to.
 enum Target
     Module(name str)
     Std
-
-## Where an import path leads (packages.rs `Target`).
-struct Found
-    module str
-    undeclared bool
 
 ## The resolver's state: the items and imports of the whole program, and the
 ## declaration being walked (its module, file and type parameters).
@@ -34,7 +30,7 @@ struct Resolver
     diags List[syntax.Diag]
 
 fn diag(rule str, at ast.Pos, msg str, help str) syntax.Diag
-    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "")
+    syntax.Diag(rule: rule, pos: at, msg: msg, fixed: false, help: help, fix: "", edits: [])
 
 fn qualified(module str, name str) str
     if module == ""
@@ -76,14 +72,10 @@ fn params_of(o ast.Owner) List[str]
         return names_of(ps)
     []
 
-## Where the import path `path`, written in a file of module `from`, leads. With no
-## package manifests, a module is its dotted path (packages.rs `target`).
-fn target_of(from str, path List[str]) Found
-    Found(module: path.join("."), undeclared: false)
-
 ## Resolve the loaded `prog`: report the imports' mistakes, rename every
 ## item and rewrite every reference. Returns the program and the diagnostics.
-@allow("expr.match.3") fn resolve(prog ast.Program, diags List[syntax.Diag]) Loaded
+@allow("expr.match.3")
+fn resolve(prog ast.Program, diags List[syntax.Diag], packages pkg.Packages) Loaded
     mut out := prog
     mut found := diags
     mut modules := List[str]()
@@ -142,7 +134,7 @@ fn target_of(from str, path List[str]) Found
             ))
         # The standard modules, and their errors (std.use.1-3), are the checker's.
         head := u.path[0]
-        reach := target_of(module, [p.name for p in u.path])
+        reach := packages.target(module, [p.name for p in u.path])
         mut target := none
         if head.name == "std" and std_module_known(dotted)
             target = Target.Module(dotted)

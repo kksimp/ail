@@ -1,0 +1,22 @@
+struct S
+    sets List[List[int]]
+
+enum E
+    Set(v List[int])
+    Inf(j int)
+
+fn S.of(self, e E) List[int]
+    match e
+        Set(v) => v
+        Inf(j) => sets[j]
+
+fn S.wait(self, e E) List[int]
+    mut errs := List[int]()
+    errs = of(e)
+    errs.push(99)
+    errs
+
+fn main()
+    s := S(sets: [[1], [2]])
+    r := s.wait(E.Inf(0))
+    print("{r} {s.sets}")

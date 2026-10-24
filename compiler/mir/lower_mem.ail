@@ -1,9 +1,10 @@
 ## `std.mem` and the fixed libc subset in native builds (ADR 0844, ffi.native.1,
 ## unsafe.mem.1-3). Blocks come from the runtime's own page allocator, not the
-## collected heap, and `free` returns them. Out-of-block and freed accesses are
-## not checked (native-abi.md, Memory). `extern c fn` of a name in `FFI_NAMES`
-## with the declared C signature is a function whose body calls the runtime's
-## `rt.ffi_NAME`; any other symbol stays `ffi.native.1`.
+## collected heap, and `free` returns them. Out-of-block and freed accesses
+## trap through the table of `memtab.ail` (unsafe.ptr.5-6, unsafe.mem.2).
+## `extern c fn` of a name in `FFI_NAMES` with the declared C signature is a
+## function whose body calls the runtime's `rt.ffi_NAME`; any other symbol
+## stays `ffi.native.1`.
 use ast
 
 ## The C functions the runtime provides, with their declared parameter and
@@ -44,9 +45,12 @@ fn ffi_known(f ast.FnDecl) bool
 fn Lower.lower_extern(mut self, f ast.FnDecl, name str, params List[int])
     if f.ext == none
         return
-    r := call("rt.ffi_{f.name}", params, ret)
-    finish(return_of(if ret.is_unit() then -1 else r))
-    end_fn(name, f.pos)
+    if ffi_known(f)
+        r := call("rt.ffi_{f.name}", params, ret)
+        finish(return_of(if ret.is_unit() then -1 else r))
+        end_fn(name, f.pos)
+    else
+        lower_extern_dyn(f, name, params)
 
 ## `mem.NAME(args)` (unsafe.mem.1-3).
 fn Lower.lower_mem_call(mut self, name str, npos ast.Pos, args List[ast.Arg]) Val?
@@ -74,6 +78,15 @@ fn Lower.lower_mem_call(mut self, name str, npos ast.Pos, args List[ast.Arg]) Va
             op("ne", [a.id, konst(0, Ty.Int)], Ty.Bool),
             "unsafe.mem.2",
             "rt.mem_free_null_msg",
+            [],
+            npos,
+        )
+        # unsafe.mem.2: a block of the program's own is freed once.
+        st := call("rt.memtab_free", [a.id], Ty.Int)
+        ptr_trap_unless(
+            op("ne", [st, konst(2, Ty.Int)], Ty.Bool),
+            "unsafe.mem.2",
+            "rt.memtab_double_msg",
             [],
             npos,
         )

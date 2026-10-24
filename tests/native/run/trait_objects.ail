@@ -1,0 +1,77 @@
+trait Named
+    fn name(self) str
+
+trait Shape
+    fn area(self) int
+    fn label(self) str
+        "shape of area {self.area()}"
+
+trait Solid
+    fn volume(self, h int) int
+
+struct Sq
+    s int
+
+struct Rect
+    w int
+    h int
+
+impl Shape for Sq
+    fn area(self) int
+        self.s * self.s
+
+impl Shape for Rect
+    fn area(self) int
+        self.w * self.h
+    fn label(self) str
+        "rect {self.w}x{self.h}"
+
+impl Named for Sq
+    fn name(self) str
+        "sq"
+
+impl Solid for Sq
+    fn volume(self, h int) int
+        self.area() * h
+
+fn describe[T Shape + Named](x T) str
+    "{x.name()}: {x.label()}"
+
+fn total(shapes List[any Shape]) int
+    mut t := 0
+    for s in shapes
+        t += s.area()
+    t
+
+fn biggest(a any Shape, b any Shape) any Shape
+    if a.area() >= b.area()
+        return a
+    b
+
+trait Counter
+    fn zero() Self
+    fn inc(self) Self
+
+impl Counter for int
+    fn zero() int
+        0
+    fn inc(self) int
+        self + 1
+
+fn count_to[T Counter](n int) T
+    mut c := T.zero()
+    for _ in 0..n
+        c = c.inc()
+    c
+
+fn main()
+    print(describe(Sq(s: 3)))
+    mut xs := List[any Shape]()
+    xs.push(Sq(s: 2))
+    xs.push(Rect(w: 2, h: 5))
+    print(total(xs))
+    print(Sq(s: 2).volume(3))
+    b := biggest(Sq(s: 2), Rect(w: 2, h: 5))
+    print(b.label())
+    print(Rect(w: 1, h: 2).label())
+    print(count_to[int](4))

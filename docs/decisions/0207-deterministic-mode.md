@@ -49,6 +49,13 @@ flag. The criteria tie on tokens and speed.
 - Task scheduling will need its own rule when `spawn` lands (ADR 0095).
 - Hash values are never visible (ADR 0133), so map order can't leak.
 
+## Native port (2026-10-24)
+
+`ail run --deterministic` checks `main`'s effects with `ail effects` before
+building (`eff.cap.1`), exports `AIL_DETERMINISTIC=1` so the task runtime
+runs one task at a time (`conc.sched.3`), and `--seed S` exports `AIL_SEED`,
+which `std.random` reads at its first call (`std.random.3`).
+
 ## Rejected alternatives
 
 - Option B: no meaning for programs to rely on.

@@ -1,8 +1,0 @@
-## A type that holds itself has no inline text form: printing one is reported
-## (native.subset.1), not an endless expansion of its fields.
-enum Tree
-    Leaf(n int)
-    Node(kids List[Tree])
-
-fn main()
-    print(Tree.Leaf(1))

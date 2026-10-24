@@ -1,0 +1,43 @@
+## The `requires` of a call through `any T` (contract.req.1, contract.inh.1),
+## checked at the call, so the trap names the caller's line, as `ail run`
+## does: one check per implementation that has conditions, chosen by the
+## value's tag; the dispatcher `any.T.m` checks nothing.
+
+use ast
+
+## True when `key` is a dispatcher, whose implementations' conditions were
+## checked here.
+fn Lower.any_requires(mut self, key str, args_v List[int], pos ast.Pos) bool
+    d := traits.dispatch.get(key) else return false
+    name := d[1]
+    impls := traits.impls.get(d[0]) else return true
+    mut has := false
+    for s in impls
+        m := "{s}.{name}"
+        if contracted.contains(m)
+            has = true
+    if not has
+        return true
+    tag := load(args_v[0], 0, Ty.Int)
+    done := new_block()
+    for k in 0..impls.len()
+        m := "{impls[k]}.{name}"
+        target := sigs.get(m) else continue
+        if not contracted.contains(m)
+            continue
+        yes := new_block()
+        no := new_block()
+        branch(op("eq", [tag, konst(k, Ty.Int)], Ty.Bool), yes, [], no, [])
+        seal(yes)
+        seal(no)
+        cur = yes
+        mut vs := [load(args_v[0], 1, target.params[0])]
+        for j in 1..args_v.len()
+            vs.push(args_v[j])
+        check_requires(m, vs, pos)
+        jump(done, [])
+        cur = no
+    jump(done, [])
+    seal(done)
+    cur = done
+    true

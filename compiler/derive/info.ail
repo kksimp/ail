@@ -25,6 +25,7 @@ fn generator_of(trait_name str) str
         "FromJson" => "derive_from_json"
         "Default" => "derive_default"
         "FromArgs" => "derive_from_args"
+        "Observe" => "derive_observe"
         _ => ""
 
 fn last(name str) str
@@ -43,7 +44,9 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
         for imp in progs[k].impls
             trait_name := last(imp.trait_name)
             gen := generator_of(trait_name)
-            if gen == "" or imp.methods.len() > 0 or declared.contains(trait_name)
+            if gen == ""
+                or imp.methods.len() > 0
+                or (declared.contains(trait_name) and gen != "derive_observe")
                 continue
             type_name := last(imp.target.name)
             info := type_info(modules, progs, type_name, modules[k]) else continue
@@ -55,7 +58,8 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
                 text: "",
                 problem: "",
             )
-            text := run(gen, info) else err
+            facts := observe_facts(progs, type_name)
+            text := run(gen, info, facts) else err
                 e.problem = err.message
                 out.push(e)
                 continue
@@ -63,8 +67,9 @@ pub fn expand(modules List[str], progs List[ast.Program]) List[Expansion]
             out.push(e)
     out
 
-fn run(gen str, info TypeInfo) str ! DeriveError
+fn run(gen str, info TypeInfo, facts ObserveFacts) str ! DeriveError
     match gen
+        "derive_observe" => derive_observe(info, facts)
         "derive_to_json" => derive_to_json(info)
         "derive_from_json" => derive_from_json(info)
         "derive_default" => derive_default(info)
@@ -253,3 +258,66 @@ fn info_expr(t TypeInfo) str
         "VariantInfo",
     )
     "TypeInfo(name: {quote(t.name)}, id: {quote(t.id)}, module: {quote(t.module)}, kind: TypeKind.{kind}, is_error: {t.is_error}, params: {params}, fields: {fields}, variants: {variants})"
+
+## Longest line the formatter leaves alone (ADR 0857).
+MAX_WIDTH := 100
+
+## `text` as the bootstrap's formatter leaves it for the shapes generators
+## write: a statement `[return|x :=] Name(a, b, ...)` longer than 100
+## columns has one argument per line and a trailing comma. Other lines are
+## kept; the real formatter replaces this when it is written in AIL.
+pub fn tidy(text str) str
+    mut out := List[str]()
+    for line in text.lines()
+        for l in wrap_call(line)
+            out.push(l)
+    "{out.join("\n")}\n"
+
+fn wrap_call(line str) List[str]
+    if line.chars().len() <= MAX_WIDTH or not line.ends_with(")")
+        return [line]
+    open := line.find("(") else return [line]
+    head := line.slice(0, open)
+    if head.contains("\"") or head.contains("[") or head.contains("\{")
+        return [line]
+    chars := line.chars()
+    mut depth := 0
+    mut in_str := false
+    mut args := List[str]()
+    mut cur := List[char]()
+    mut k := open + 1
+    while k < chars.len() - 1
+        c := chars[k]
+        if in_str
+            cur.push(c)
+            if c == '\\'
+                k += 1
+                cur.push(chars[k])
+            elif c == '"'
+                in_str = false
+        elif c == '"'
+            in_str = true
+            cur.push(c)
+        elif c == '(' or c == '[' or c == '{'
+            depth += 1
+            cur.push(c)
+        elif c == ')' or c == ']' or c == '}'
+            depth -= 1
+            cur.push(c)
+        elif c == ',' and depth == 0
+            args.push(cur.join("").trim())
+            cur = []
+        else
+            cur.push(c)
+        k += 1
+    tail := cur.join("").trim()
+    if tail != ""
+        args.push(tail)
+    if args.len() < 2 or depth != 0
+        return [line]
+    indent := line.slice(0, line.chars().len() - line.trim_start().chars().len())
+    mut out := ["{head}("]
+    for a in args
+        out.push("{indent}    {a},")
+    out.push("{indent})")
+    out

@@ -7,13 +7,28 @@
 ## connection at a time and reads its request to the end, so a slow client
 ## holds the task that accepts it (a pool of tasks, as `http.serve` has, is
 ## not held up); a malformed request is answered here with its 4xx or 5xx and
-## never shown. Every response closes its connection: there is no keep-alive
-## yet (std.net.22). The socket object of an `Exchange` has `NET_KIND` 2 and
-## the request's method in `NET_ADDR`.
+## never shown. A connection that may carry another request stays open after
+## its response (std.net.22): it waits, unclaimed, in the socket table with
+## `NET_STREAM` its server's handle (negative while a request is on it) and
+## `NET_TIMEOUT` its deadline, and `accept` polls it with the listener. The
+## socket object of an `Exchange` has `NET_KIND` 2 and the request's method
+## in `NET_ADDR`.
 
 SERVE_MAX_BODY := 16777216
 SERVE_REQUEST_MS := 10000
 SERVE_EXCHANGE := 2
+# A connection that kept alive waits this long for its next request (std.net.22).
+SERVE_IDLE_MS := 15000
+# A flag of a connection whose current request may be followed by another.
+SERVE_KEEP := 4
+# Flags of a parked connection: bytes of a request have arrived (so a stall
+# is a 408, not a silent close), and its `100 Continue` has been sent.
+SERVE_PENDING := 8
+SERVE_CONT := 16
+# A connection accepted that has sent nothing yet.
+SERVE_FRESH := 32
+## How long a graceful shutdown waits before closing idle connections.
+SERVE_SHUT_GRACE_MS := 25
 
 ## Append `n` (not negative) in decimal to the text being built.
 fn serve_num(n int)
@@ -223,6 +238,10 @@ fn serve_bad(st int, status int, msg str) int
 ## path, query, headers) and `st`: word 1 the framing (0 length, 1 chunked),
 ## word 2 the length, word 3 whether `Expect: 100-continue`. 0, or a status
 ## with its message in word 0 of `st`.
+## `s` in lower case.
+fn http_lower_str(s str) str
+    http_lower(str_addr(s) + 16, load64(str_addr(s)))
+
 fn serve_head(p int, end int, req int, st int) int
     if os_utf8_chars(p, end) < 0
         return serve_bad(st, 400, "the request head is not UTF-8")
@@ -330,6 +349,10 @@ fn serve_head(p int, end int, req int, st int) int
         if n < 0 or n > SERVE_MAX_BODY
             return serve_bad(st, 413, "the request body is too large")
         store64(st + 16, n)
+    cn2 := map_find(headers, str_addr("connection"))
+    store64(st + 32, 0)
+    if http11 and (cn2 == 0 or not net_has(http_lower_str(str_at(load64(cn2 + 16))), "close"))
+        store64(st + 32, 1)
     ex := map_find(headers, str_addr("expect"))
     store64(st + 24, 0)
     if ex != 0
@@ -386,70 +409,57 @@ fn serve_chunks(p int, n int, body int, used int, st int) int
 ## Read the request on connection object `o` (handle `c`, listener `server`):
 ## the `net.Request`, or 0 after the connection was answered with an error or
 ## dropped.
-fn serve_request(c int, o int, server int) int
-    store64(o + NET_TIMEOUT, SERVE_REQUEST_MS)
+## What the bytes buffered on connection `c` (object `o`, server `server`)
+## make of a request: the request when it is complete, -1 when more must
+## arrive, or 0 when the connection was refused or dropped.
+fn serve_try(c int, o int, server int) int
     st := cz_words(5)
     req := obj_new(64, 4)
+    len := load64(o + NET_LEN) - load64(o + NET_POS)
+    base := load64(o + NET_BUF) + load64(o + NET_POS)
     mut end := -1
-    while end < 0
-        len := load64(o + NET_LEN) - load64(o + NET_POS)
-        base := load64(o + NET_BUF) + load64(o + NET_POS)
-        if len > 0
-            end = serve_head_end(base, len)
-        if end >= 0
-            break
+    if len > 0
+        end = serve_head_end(base, len)
+    if end < 0
         if len > HTTP_MAX_HEAD
             serve_refuse(o, 431, "the request head is too large")
             return 0
         if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
             serve_end(o)
             return 0
-        r := net_fill(o)
-        if r == -110
-            serve_refuse(o, 408, "the request took too long")
-            return 0
-        if r < 0
-            serve_end(o)
-            return 0
+        return -1
     if end > HTTP_MAX_HEAD
         serve_refuse(o, 431, "the request head is too large")
         return 0
-    base0 := load64(o + NET_BUF) + load64(o + NET_POS)
-    status := serve_head(base0, end, req, st)
+    status := serve_head(base, end, req, st)
     if status != 0
         serve_refuse(o, status, str_at(load64(st)))
         return 0
-    if load64(st + 24) != 0
+    if load64(st + 24) != 0 and load64(o + NET_FLAGS).bit_and(SERVE_CONT) == 0
+        store64(o + NET_FLAGS, load64(o + NET_FLAGS).bit_or(SERVE_CONT))
         serve_send(o, str_addr("HTTP/1.1 100 Continue\r\n\r\n") + 16, 25)
     start := end + 4
     framing := load64(st + 8)
     want := load64(st + 16)
     body := hb_new()
     used := alloc_raw(8, KIND_BYTES)
-    while true
-        len := load64(o + NET_LEN) - load64(o + NET_POS)
-        base := load64(o + NET_BUF) + load64(o + NET_POS)
-        if framing == 0
-            if len >= start + want
-                hb_add(body, base + start, want)
-                break
-        else
-            res := serve_chunks(base + start, len - start, body, used, st)
-            if res == 1
-                break
-            if res > 1
-                serve_refuse(o, res, str_at(load64(st)))
-                return 0
-        if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
-            serve_end(o)
+    if framing == 0
+        if len < start + want
+            return serve_more(o)
+        hb_add(body, base + start, want)
+    else
+        res := serve_chunks(base + start, len - start, body, used, st)
+        if res > 1
+            serve_refuse(o, res, str_at(load64(st)))
             return 0
-        r := net_fill(o)
-        if r == -110
-            serve_refuse(o, 408, "the request took too long")
-            return 0
-        if r < 0
-            serve_end(o)
-            return 0
+        if res == 0
+            return serve_more(o)
+    # Another request may follow only when the client wants it and sent
+    # nothing past this one.
+    used_len := if framing == 0 then start + want else start + load64(used)
+    keep := load64(st + 32) != 0 and len == used_len
+    flags := load64(o + NET_FLAGS).bit_and(-61)
+    store64(o + NET_FLAGS, if keep then flags.bit_or(SERVE_KEEP) else flags)
     bp := load64(body)
     bn := load64(body + 8)
     raw := str_new(bn, bn)
@@ -463,15 +473,149 @@ fn serve_request(c int, o int, server int) int
     store64(o + NET_ADDR, load64(req))
     req
 
+## The request is incomplete: -1 to wait for more, or 0 if the client has
+## already closed its side.
+fn serve_more(o int) int
+    if load64(o + NET_FLAGS).bit_and(NET_EOF) != 0
+        serve_end(o)
+        return 0
+    -1
+
+## Whether bytes have already arrived on connection `o`: a request on its
+## way, which a graceful shutdown still answers (std.net.24).
+fn serve_ready(o int) bool
+    pf := alloc_raw(8, KIND_BYTES)
+    store64(pf, load64(o + NET_FD).bit_and(4294967295).bit_or(1.shl(32)))
+    serve_poll(pf, 1, 0) > 0 and load8(pf + 6) != 0
+
+## Close the connections parked on server `h` that have no request under
+## way (all of them when `all`, for `close`).
+fn serve_idle_drop(h int, all bool)
+    t := load64(global(NET_TAB))
+    if t == 0
+        return
+    for i in 1..load64(t)
+        o := net_obj(i)
+        if o != 0 and load64(o + NET_KIND) == NET_CONN and load64(o + NET_STREAM) == h
+            if all or (load64(o + NET_FLAGS).bit_and(SERVE_PENDING) == 0 and not serve_ready(o))
+                if atomic_cas(o + NET_STREAM, h, 0) == h
+                    serve_end(o)
+
+## The handles of the connections parked on server `h` into `out` (a count,
+## then the handles). One past its deadline is closed, with a 408 when a
+## request was under way (std.net.10).
+fn serve_idle_scan(h int, out int)
+    store64(out, 0)
+    t := load64(global(NET_TAB))
+    if t == 0
+        return
+    now := time_mono_ms()
+    for i in 1..load64(t)
+        o := net_obj(i)
+        if o != 0 and load64(o + NET_KIND) == NET_CONN and load64(o + NET_STREAM) == h
+            if load64(o + NET_TIMEOUT) <= now
+                if atomic_cas(o + NET_STREAM, h, 0) == h
+                    if load64(o + NET_FLAGS).bit_and(SERVE_PENDING.bit_or(SERVE_FRESH)) != 0
+                        store64(o + NET_TIMEOUT, 5000)
+                        serve_refuse(o, 408, "the request took too long")
+                    else
+                        serve_end(o)
+                continue
+            n := load64(out)
+            store64(out + 8 + 8 * n, i)
+            store64(out, n + 1)
+
+## Wait up to `ms` for any of the `n` poll entries at `pf`.
+fn serve_poll(pf int, n int, ms int) int
+    if not det_on()
+        return serve_poll_raw(pf, n, ms)
+    # On a deterministic schedule the others run between polls (see `net_wait`).
+    deadline := if ms < 0 then -1 else time_mono_ms() + ms
+    while true
+        r := serve_poll_raw(pf, n, 0)
+        if r != 0 or ms == 0
+            return r
+        if deadline >= 0 and time_mono_ms() >= deadline
+            return 0
+        if det_relax()
+            continue
+        r2 := serve_poll_raw(pf, n, 1)
+        if r2 != 0
+            return r2
+    0
+
+fn serve_poll_raw(pf int, n int, ms int) int
+    ts := alloc_raw(16, KIND_BYTES)
+    while true
+        mut r := 0
+        if target() == 1
+            store64(ts, ms / 1000)
+            store64(ts + 8, ms % 1000 * 1000000)
+            r = syscall(73, pf, n, ts, 0, 0, 0)
+        else
+            r = syscall(if target() == 2 then 230 else 7, pf, n, ms, 0, 0, 0)
+        if r != -4
+            return r
+    0
+
+## Park connection `c` of server `h` until `ms` from now.
+fn serve_park(h int, o int, ms int)
+    store64(o + NET_KIND, NET_CONN)
+    store64(o + NET_TIMEOUT, time_mono_ms() + ms)
+    atomic_store(o + NET_STREAM, h)
+
+## Read what has arrived on parked connection `c` of server `h`: the request
+## as an exchange when it is complete, else 0 (it stays parked, or is gone).
+fn serve_idle_take(h int, c int) int
+    o := net_obj(c)
+    if o == 0 or atomic_cas(o + NET_STREAM, h, 0 - h) != h
+        return 0
+    if net_wait(load64(o + NET_FD), 1, 0) <= 0
+        atomic_store(o + NET_STREAM, h)
+        return 0
+    deadline := load64(o + NET_TIMEOUT)
+    store64(o + NET_TIMEOUT, 5000)
+    if net_fill(o) < 0
+        serve_end(o)
+        return 0
+    flags := load64(o + NET_FLAGS).bit_and(-33)
+    store64(o + NET_FLAGS, flags.bit_or(SERVE_PENDING))
+    req := serve_try(c, o, h)
+    if req == 0
+        return 0
+    if req < 0
+        # Progress: the client has another SERVE_REQUEST_MS from now.
+        serve_park(h, o, SERVE_REQUEST_MS)
+        return 0
+    ex := obj_new(16, 4)
+    store64(ex, req)
+    store64(ex + 8, c)
+    ex
+
+## Fail `accept` with `closed`.
+fn serve_closed(at str) int
+    net_closed("server", at)
+
 ## `srv.accept()` (std.net.9): the next complete request as a `net.Exchange`.
+## A connection that has not sent a whole request is parked, so a slow client
+## doesn't hold up the others (std.net.10).
 fn serve_accept(h int, at str) int
     sa := alloc_raw(32, KIND_BYTES)
     lenp := alloc_raw(8, KIND_BYTES)
+    mut shut_at := 0
     while true
         o := net_obj(h)
         if o == 0
-            return net_closed("server", at)
+            serve_idle_drop(h, true)
+            return serve_closed(at)
         fd := load64(o + NET_FD)
+        shut := load64(o + NET_FLAGS).bit_and(NET_SHUT) != 0
+        # Bytes a client sent just before the shutdown may not have reached
+        # the socket yet: idle connections get SERVE_SHUT_GRACE_MS first.
+        if shut and shut_at == 0
+            shut_at = time_mono_ms()
+        if shut and time_mono_ms() - shut_at >= SERVE_SHUT_GRACE_MS
+            serve_idle_drop(h, false)
         store64(lenp, 16)
         r := net_sys_accept(fd, sa, lenp)
         if r >= 0
@@ -481,23 +625,40 @@ fn serve_accept(h int, at str) int
                 store64(p, 1)
                 syscall(105, r, 65535, 4130, p, 4, 0)
             c := net_add(r, NET_CONN, net_addr_text(sa), "")
-            req := serve_request(c, net_obj(c), h)
-            if req != 0
-                ex := obj_new(16, 4)
-                store64(ex, req)
-                store64(ex + 8, c)
-                return ex
+            co := net_obj(c)
+            store64(co + NET_FLAGS, SERVE_FRESH)
+            serve_park(h, co, SERVE_REQUEST_MS)
             continue
         if r == -4
             continue
         if r != -11 and r != -35
             return net_fail("", net_errno_kind(-r), "can't accept a connection", at)
-        if load64(o + NET_FLAGS).bit_and(NET_SHUT) != 0
+        # A cancelled task ends its wait (std.net.9).
+        if task_cancelled()
+            return serve_closed(at)
+        t := load64(global(NET_TAB))
+        ids := alloc_raw(16 + 8 * load64(t), KIND_BYTES)
+        serve_idle_scan(h, ids)
+        n := load64(ids)
+        if shut and n == 0
             net_close(h)
-            return net_closed("server", at)
-        w := net_wait(fd, 1, 50)
+            return serve_closed(at)
+        # Wait for a new connection or bytes on a parked one.
+        pf := alloc_raw(8 * (n + 1), KIND_BYTES)
+        store64(pf, fd.bit_and(4294967295).bit_or(1.shl(32)))
+        for k in 0..n
+            po := net_obj(load64(ids + 8 + 8 * k))
+            pfd := if po == 0 then -1 else load64(po + NET_FD)
+            store64(pf + 8 * (k + 1), pfd.bit_and(4294967295).bit_or(1.shl(32)))
+        w := serve_poll(pf, n + 1, 50)
         if w < 0
             return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
+        if w > 0
+            for k in 0..n
+                if load8(pf + 8 * (k + 1) + 6) != 0
+                    ex := serve_idle_take(h, load64(ids + 8 + 8 * k))
+                    if ex != 0
+                        return ex
     0
 
 ## `srv.shutdown()` and `req.stop()` (std.net.24): stop listening once the
@@ -543,9 +704,16 @@ fn serve_line(name str, value str, st int, at str) bool
         if c == 13 or c == 10 or c == 0
             net_fail("", "bad_request", "the value of header `{name}` has a line break", at)
             return false
-    if serve_ieq(k + 16, kn, str_addr("content-length") + 16, 14)
-        or serve_ieq(k + 16, kn, str_addr("connection") + 16, 10)
-        or serve_ieq(k + 16, kn, str_addr("transfer-encoding") + 16, 17)
+    if serve_ieq(k + 16, kn, str_addr("connection") + 16, 10)
+        if net_has(http_lower_str(value), "close")
+            cz_wr(st, 1, 1)
+        return true
+    if serve_ieq(k + 16, kn, str_addr("content-length") + 16, 14) or serve_ieq(
+        k + 16,
+        kn,
+        str_addr("transfer-encoding") + 16,
+        17,
+    )
         return true
     if serve_ieq(k + 16, kn, str_addr("content-type") + 16, 12)
         store64(st, 1)
@@ -572,7 +740,7 @@ fn serve_answer(h int, status int, headers int, all int, body int, at str)
     sb_byte(32)
     sb_text(serve_reason(status))
     sb_text("\r\n")
-    st := cz_words(1)
+    st := cz_words(2)
     for i in 0..http_slots(headers)
         e := http_slot(headers, i)
         if load64(e) != -1
@@ -596,14 +764,31 @@ fn serve_answer(h int, status int, headers int, all int, body int, at str)
         sb_text("Content-Length: ")
         serve_num(if nobody then 0 else bn)
         sb_text("\r\n")
-    sb_text("Connection: close\r\n\r\n")
+    # Keep the connection for the next request (std.net.22) unless the client
+    # or the response asked to close, the response is interim, or the server
+    # is shutting down.
+    sv := 0 - load64(o + NET_STREAM)
+    so := net_obj(sv)
+    keep := load64(o + NET_FLAGS).bit_and(SERVE_KEEP) != 0 and cz_rd(
+        st,
+        1,
+    ) == 0 and status / 100 != 1 and so != 0 and load64(so + NET_FLAGS).bit_and(NET_SHUT) == 0
+    sb_text(if keep then "Connection: keep-alive\r\n\r\n" else "Connection: close\r\n\r\n")
     if not nobody and str_at(load64(o + NET_ADDR)) != "HEAD"
         sb_bytes(body + 16, bn)
     out := sb_str()
     r := serve_send(o, str_addr(out) + 16, load64(str_addr(out)))
-    serve_end(o)
     if r < 0
+        serve_end(o)
         net_io_fail(o, r, at)
+        return
+    if not keep
+        serve_end(o)
+        return
+    # Park it: nothing is buffered, and `accept` finds it by `NET_STREAM`.
+    store64(o + NET_POS, 0)
+    store64(o + NET_LEN, 0)
+    serve_park(sv, o, SERVE_IDLE_MS)
 
 fn serve_respond(h int, r int, at str)
     serve_answer(h, load64(r), load64(r + 8), load64(r + 24), load64(r + 16), at)

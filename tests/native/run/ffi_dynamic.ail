@@ -1,0 +1,47 @@
+# Calls of C functions outside the native libc subset: bound on the first call
+# with dlopen and dlsym (ffi.load.1-2, ADR 0870).
+use std.mem
+
+extern c "m" fn cbrt(x float) float
+extern c "libm" fn ldexp(x float, e i32) float
+extern c "m" fn fmax(a float, b float) float
+extern c fn labs(x int) int
+extern c fn isalpha(c i32) i32
+extern c fn strtol(s *u8, end *u8, base i32) int
+extern c fn strcmp(a *u8, b *u8) i32
+extern c fn isdigit(c i32) i32
+extern c fn tolower(c i32) i32
+
+fn compare(a str, b str) i32
+    unsafe
+        p := mem.cstr(a)
+        q := mem.cstr(b)
+        r := strcmp(p, q)
+        mem.free(p)
+        mem.free(q)
+        r
+
+fn parse(text str, base i32) int
+    unsafe
+        p := mem.cstr(text)
+        n := strtol(p, mem.null(), base)
+        mem.free(p)
+        n
+
+fn main()
+    unsafe
+        print(cbrt(0.125))
+        print(ldexp(1.5, 4))
+        print(fmax(2.5, -1.0))
+        print(labs(-123456789012))
+        print(isalpha(65) != 0)
+        print(isalpha(48) != 0)
+        print(isdigit(55) != 0)
+        print(tolower(81))
+    print(parse("  -42", 10))
+    print(parse("ff", 16))
+    print(compare("apple", "apple"))
+    print(compare("a", "b") < 0)
+    # Called again: the bound address is reused.
+    unsafe
+        print(cbrt(8.0) + cbrt(64.0))

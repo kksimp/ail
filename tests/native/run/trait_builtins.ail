@@ -1,0 +1,48 @@
+trait Summary
+    fn summary(self) str
+
+impl Summary for List[T]
+    fn summary(self) str
+        "list of {self.len()}"
+
+impl Summary for float
+    fn summary(self) str
+        "float {self}"
+
+impl Summary for bool
+    fn summary(self) str
+        if self then "yes" else "no"
+
+impl Summary for str
+    fn summary(self) str
+        "str {self.len()}"
+
+trait Animal
+    fn name(self) str
+
+trait Pet Animal
+    fn owner(self) str
+    fn tag(self) str
+        "{self.name()} owned by {self.owner()}"
+
+struct Dog
+    owner_name str
+
+impl Animal for Dog
+    fn name(self) str
+        "dog"
+
+impl Pet for Dog
+    fn owner(self) str
+        self.owner_name
+
+fn tag_of[T Pet](p T) str
+    p.tag()
+
+fn main()
+    print([1, 2, 3].summary())
+    print(2.5.summary())
+    print(true.summary())
+    print("abc".summary())
+    d := Dog(owner_name: "kim")
+    print(tag_of(d))

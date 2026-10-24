@@ -93,7 +93,7 @@ fn Checker.consume(mut self, e ast.Expr, t Ty)
                     "own.uniq.1",
                     expr_pos(e),
                     "this value is unique and belongs to `{root}`, so it can't be copied out of it",
-                    "move the whole of `{root}`, or use the value where it is",
+                    take_out_help(e, root),
                 )
 
 ## own.move.2: an argument to a `move` parameter is marked `move`, and only
@@ -241,3 +241,12 @@ fn Checker.defer_stmt(mut self, inner ast.Stmt, at ast.Pos)
     t := stmt(inner, none, false)
     if is_stmt_eval(inner)
         reject_unhandled(t, stmt_pos(inner))
+
+## own.uniq.9: an element is borrowed where it is; `pop`, `remove_at` and a map's `remove` take one out.
+@allow("expr.match.3") fn Checker.take_out_help(mut self, e ast.Expr, root str) str
+    match e
+        Index(recv, _, _) =>
+            if is_map_ty(quiet_type(recv))
+                return "take it out with `{root}.remove(k)`, which gives a `T?`, or use it where it is"
+            "take it out with `{root}.pop()` or `{root}.remove_at(i)`, or use it where it is"
+        _ => "move the whole of `{root}`, or use the value where it is"

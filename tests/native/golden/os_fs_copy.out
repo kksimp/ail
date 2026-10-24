@@ -1,0 +1,17 @@
+copied R/copy/src/a.txt to R/copy/dest.txt
+alpha
+copied R/copy/src/sub/b.txt to R/copy/old.txt
+bravo
+line
+copied R/copy/src to R/copy/deep/er/tree
+R/copy/deep/er/tree/a.txt
+R/copy/deep/er/tree/sub/b.txt
+bravo
+line
+copied R/copy/src to R/copy/deep/er/tree
+copy R/copy/nope failed: not_found R/copy/nope
+copy R/copy/src/a.txt failed: is_dir R/copy/src
+copy R/copy/src failed: other R/copy/src/inside
+copy R/copy/src failed: other R/copy/src
+copy R/copy/src failed: exists R/copy/dest.txt
+false

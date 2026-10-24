@@ -1,7 +1,7 @@
 ## The instruction encoders of the native backend (bootstrap/tests/native_asm.rs, ported):
 ## compiler/x64/asm.ail against GNU objdump and compiler/a64/asm.ail against llvm-mc
 ## (ADR 0385, ADR 0388; ADR 0010 allows them in tests only). Each driver in
-## bootstrap/tests/native/asm/ prints `intent|bytes` per case; the module under test is
+## tests/native/asm/ prints `intent|bytes` per case; the module under test is
 ## copied next to it. Run from the repository root:
 ##   ail run tools/gate/asm.ail
 ## Prints only failures; the last line is `ASM GREEN (N checks)` or `ASM RED (N failures)`.
@@ -218,7 +218,7 @@ fn x86(tmp str) List[str]
     driven := run_driver(
         "x64",
         "compiler/x64/asm.ail",
-        "bootstrap/tests/native/asm/x64_encoder.ail",
+        "tests/native/asm/x64_encoder.ail",
         "{tmp}/x64",
     )
     if not driven.err.is_empty()
@@ -248,7 +248,7 @@ fn a64(tmp str) List[str]
     driven := run_driver(
         "a64",
         "compiler/a64/asm.ail",
-        "bootstrap/tests/native/asm/a64_encoder.ail",
+        "tests/native/asm/a64_encoder.ail",
         "{tmp}/a64",
     )
     if not driven.err.is_empty()

@@ -1,0 +1,5 @@
+# A u64 above int max does not convert to int (type.num.15).
+fn main()
+    m := 0.to_u64().wrapping_sub(1.to_u64())
+    print("before")
+    print(m.to_int())

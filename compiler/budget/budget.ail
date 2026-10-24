@@ -250,22 +250,19 @@ pub fn apply(b Budget, stdout str, stderr str, json bool) List[str]
     mut used := 0
     for s in summaries
         used += estimate_tokens(s.text)
-    mut shown := b.from.min(total)
+    # At least one record is shown, so a large one can't stall `--from`.
+    pick := choose(recs, b.from, b.tokens, used)
+    shown := pick.shown
     mut o := ""
     mut e := ""
-    for k in shown..total
-        cost := estimate_tokens(recs[k].text)
-        # At least one record is shown, so a large one can't stall `--from`.
-        if used + cost > b.tokens and shown > b.from
-            break
-        used += cost
-        shown += 1
+    for k in b.from.min(total)..shown
+        text := if k < pick.full then recs[k].text else one_line(recs[k].text)
         if recs[k].stderr
-            e = "{e}{recs[k].text}"
+            e = "{e}{text}"
         else
-            o = "{o}{recs[k].text}"
+            o = "{o}{text}"
     # Everything fit after all (one record over the budget): unchanged.
-    if b.from == 0 and shown == total
+    if b.from == 0 and shown == total and pick.full == total
         return [stdout, stderr]
     for s in summaries
         if s.stderr
@@ -297,7 +294,7 @@ pub fn apply(b Budget, stdout str, stderr str, json bool) List[str]
         first_left_stderr = recs[shown].stderr
     elif total > 0
         first_left_stderr = recs[0].stderr
-    msg := note(b, total, shown, total_tokens, sorted, json)
+    msg := note(b, total, shown, pick.full, total_tokens, sorted, json)
     if first_left_stderr
         e = "{e}{msg}"
     else
@@ -313,22 +310,27 @@ fn plural(k str, n int) str
     "{n} {name}{s}"
 
 ## The closing note (budget.out.4).
-fn note(b Budget, total int, shown int, tokens int, counts List[Count], json bool) str
+fn note(b Budget, total int, shown int, full int, tokens int, counts List[Count], json bool) str
     has_next := shown < total
+    start := b.from.min(total)
     if json
         mut omitted := List[str]()
         for c in counts
             omitted.push("\"{c.kind}\":{c.n}")
         nxt := if has_next then "{shown}" else "null"
-        return "\{\"budget\":{b.tokens},\"from\":{b.from},\"shown\":{shown - b.from.min(total)},\"total\":{total},\"tokens\":{tokens},\"omitted\":\{{omitted.join(",")}},\"next\":{nxt}}\n"
+        return "\{\"budget\":{b.tokens},\"from\":{b.from},\"shown\":{shown - start},\"full\":{full - start},\"total\":{total},\"tokens\":{tokens},\"omitted\":\{{omitted.join(",")}},\"next\":{nxt}}\n"
     mut left := List[str]()
     for c in counts
         left.push(plural(c.kind, c.n))
     lt := if left.len() == 0 then "nothing" else left.join(", ")
     nxt := if has_next then "; continue with --from {shown}" else ""
+    # budget.out.7: which records are in one line, and the handle that expands the next.
+    lines := if full < shown then ", {full + 1}-{shown} in one line" else ""
+    more := if full < shown then "; --from {full} shows {full + 1} in full" else ""
     if b.from >= total
         return "[budget {b.tokens}: no records from {b.from}; the output has {total}]\n"
-    "[budget {b.tokens}: records {b.from.min(total) + 1}-{shown} of {total} shown (~{tokens} tokens in all); not shown: {lt}{nxt}]\n"
+    left_text := if left.len() == 0 then "" else "; not shown: {lt}"
+    "[budget {b.tokens}: records {start + 1}-{shown} of {total} shown{lines} (~{tokens} tokens in all){left_text}{nxt}{more}]\n"
 
 ## Run `exe ARGS` as a child with the budget applied to its output
 ## (budget.out.1). The exit status is the child's. Standard input is not

@@ -23,14 +23,19 @@ STD_MODULES := [
 ]
 
 ## The standard modules written in AIL (std.ui.19), compiled like a user's
-## own: their source is in `bootstrap/src/std`, and each is a module of the
+## own: their source is in `std`, and each is a module of the
 ## program under its dotted path (`std.csv`).
-STD_AIL := [
+pub STD_AIL := [
     "std.app",
     "std.args",
+    "std.attach",
+    "std.attach.serve",
     "std.csv",
     "std.log",
     "std.net.http",
+    "std.screen",
+    "std.screen.pixels",
+    "std.screen.view",
     "std.net.jar",
     "std.regex",
     "std.time.date",
@@ -86,13 +91,14 @@ fn path_of(e ast.Expr) str?
 ## The key of the struct a written name means here: `T` in this module or
 ## `m.T` through an import (mod.use.2).
 fn Lower.type_key(self, name str) str?
-    parts := name.split(".")
+    mut parts := name.split(".")
     if parts.len() > 1
+        parts[0] = std_alias(parts[0]) else parts[0]
         # A type of a standard module the runtime implements (`net.Options`).
         if STD_MODULES.contains(parts[0])
             and aliases.get(parts[0]) == none
-            and structs.contains(name)
-            return name
+            and structs.contains(parts.join("."))
+            return parts.join(".")
         m := aliases.get(parts[0])?
         key := "{m}.{parts[1..].join(".")}"
         return if structs.contains(key) then key else none
