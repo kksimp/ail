@@ -1783,12 +1783,18 @@ fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]
                 print("  input: {v.input}")
         else
             print("skip {v.name}: {v.message}")
+    # conc.sched.2: a failure under a random schedule names the seed that replays it.
+    sched := env.get("AIL_SCHEDULE") else ""
+    seed := if failed > 0 and sched.starts_with("random:") then sched.slice(7, sched.len()) else ""
     if json
         more := if skipped > 0 then ",\"skipped\":{skipped}" else ""
-        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}}")
+        at := if seed.is_empty() then "" else ",\"schedule_seed\":{seed}"
+        print("\{\"summary\":true,\"passed\":{passed},\"failed\":{failed}{more}{at}}")
     else
         more := if skipped > 0 then ", {skipped} skipped" else ""
         print("{passed} passed, {failed} failed{more}")
+        if not seed.is_empty()
+            print("schedule seed {seed}: replay with `ail test --schedule=random:{seed} FILE`")
     if failed > 0 then 1 else 0
 
 fn seed_for(name str, has_seed bool, given int) int

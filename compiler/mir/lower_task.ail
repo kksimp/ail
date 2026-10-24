@@ -819,6 +819,9 @@ fn Lower.lower_atomic_method(
             return unsupported(npos, "this method call")
         v := lower_value(a.value, elem)?
         vs.push(convert(v, elem, expr_pos(a.value)))
+    # conc.sched.1: a random schedule may switch tasks at every atomic operation.
+    if (env.get("AIL_SCHEDULE") else "").starts_with("random")
+        call("rt.det_yield", [], Ty.Unit)
     if name == "load" and vs.len() == 0
         return Val(id: prim_op("atomic_load", [cell], elem), ty: elem)
     if name == "store" and vs.len() == 1
