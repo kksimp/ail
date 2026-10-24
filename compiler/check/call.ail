@@ -1572,11 +1572,16 @@ fn Checker.private_literal(mut self, s int, at ast.Pos)
 fn Checker.private_fn(mut self, i int, at ast.Pos)
     f := prog.fns[i]
     if f.within == ast.Within.TopLevel and hidden(prog, f.pos, at)
+        full := full_name(f)
+        # As written in its own module: `Account.audit`, not `lib.Account.audit`.
+        module := module_at(prog, f.pos)
+        local := if full.starts_with("{module}.")
+            and module != "" then full.chars()[module.len() + 1..].join("") else full
         err_help(
             "mod.vis.1",
             at,
-            "`{full_name(f)}` is private to its module",
-            "mark it `pub` to use it here",
+            "`{full}` is private to its module",
+            "mark it `pub fn {local}` to use it here",
         )
 
 ## ---- Comprehensions (comprehension.rs) ----

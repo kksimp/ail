@@ -6,6 +6,7 @@ ast  129 items
 budget  24 items
 check  330 items
 codegen  54 items
+cover  4 items
 derive  35 items
 doc  18 items
 edit  45 items
