@@ -34,13 +34,13 @@ fn parallel_report(loaded Loaded, path str, json bool) str
     at := |p| place(loaded.program.files, path, p)
     if json
         items := [
-            "\{\"at\":{Json.Str(at(r.pos)).to_text()},\"fn\":{Json.Str(r.func).to_text()},\"var\":{Json.Str(r.var).to_text()},\"par\":{r.par},\"verdict\":\"{r.verdict}\",\"rule\":\"{r.rule}\",\"reason\":{Json.Str(r.reason).to_text()},\"reason_at\":{Json.Str(at(r.at)).to_text()}}"
+            "\{\"at\":{Json.Str(at(r.pos)).to_text()},\"fn\":{Json.Str(r.func).to_text()},\"var\":{Json.Str(r.var).to_text()},\"par\":{r.is_par},\"verdict\":\"{r.verdict}\",\"rule\":\"{r.rule}\",\"reason\":{Json.Str(r.reason).to_text()},\"reason_at\":{Json.Str(at(r.at)).to_text()}}"
             for r in rows
         ]
         return "\{\"ail_api\":1,\"loops\":[{items.join(",")}]}\n"
     mut out := ""
     for r in rows
-        kw := if r.par then "par for" else "for"
+        kw := if r.is_par then "par for" else "for"
         near := if r.at == r.pos then "" else " at {at(r.at)}"
         out = "{out}{at(r.pos)} {r.func} {kw} {r.var}: {r.verdict} ({r.rule}: {r.reason}{near})\n"
     out

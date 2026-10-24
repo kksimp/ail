@@ -994,7 +994,7 @@ pub struct ParRow
     pub pos ast.Pos
     pub func str
     pub var str
-    pub par bool
+    pub is_par bool
     ## `parallel`, `asserted` or `sequential`.
     pub verdict str
     pub rule str
@@ -1022,7 +1022,7 @@ fn Checker.parallel_rows(self) List[ParRow]
                     pos: v.pos,
                     func: id,
                     var: v.var,
-                    par: v.is_par,
+                    is_par: v.is_par,
                     verdict: word,
                     rule: v.rule,
                     reason: v.reason,
