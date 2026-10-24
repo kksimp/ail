@@ -11,7 +11,18 @@ use load
 SDIFF_USAGE := "usage: ail diff OLD NEW [--json] [--no-tests]   (two files, or two package directories)\n       ail diff --rev REV PATH [--json] [--no-tests]   (PATH as of git revision REV against now)"
 
 ## Item keys compared by diff.out.2; the rest repeat the signature.
-SDIFF_KEYS := ["signature", "pub", "effects", "fails_with", "requires", "ensures", "inherits", "default", "doc", "body"]
+SDIFF_KEYS := [
+    "signature",
+    "pub",
+    "effects",
+    "fails_with",
+    "requires",
+    "ensures",
+    "inherits",
+    "default",
+    "doc",
+    "body",
+]
 
 ## The most lines a body hunk shows (diff.out.7).
 HUNK_LINES := 12
@@ -105,7 +116,7 @@ fn sd_hex8(n int) str
 ## A short hash of a declaration's source lines after `line`, up to `next`
 ## (0: the end of its file), without trailing blank and comment lines, and
 ## those lines without their indent.
-fn sd_body(prog ast.Program, texts List[str], line int, next int) (str, List[str])
+fn sd_body(prog ast.Program, texts List[str], line int, next int)(str, List[str])
     mut fi := -1
     mut i := prog.files.len()
     while i > 0 and fi < 0
@@ -245,15 +256,26 @@ fn sd_side(path_arg str, run_tests bool, std str) SSide ! DiffError
 
 ## Each test's outcome, from `ail test --json` in a child (diff.out.4); false
 ## when the tests could not be run.
-fn sd_tests(path_arg str) (bool, List[STest])
+fn sd_tests(path_arg str)(bool, List[STest])
     ail := env.get("AIL") else return (false, [])
     root := path.dir(ail)
-    ran := proc.run(ail, ["run", "--timeout", "10000", path.join(root, "tools/ailtest/ailtest.ail"), "--json", path_arg]) else return (false, [])
+    ran := proc.run(ail, [
+        "run",
+        "--timeout",
+        "10000",
+        path.join(root, "tools/ailtest/ailtest.ail"),
+        "--json",
+        path_arg,
+    ]) else return (false, [])
     mut tests := List[STest]()
     for line in ran.out.lines()
         j := parse_json(line) else continue
         name := j.str("test") else continue
-        tests.push(STest(name: name, passed: j.text("status", "") == "pass", message: j.text("message", "")))
+        tests.push(STest(
+            name: name,
+            passed: j.text("status", "") == "pass",
+            message: j.text("message", ""),
+        ))
     (true, tests)
 
 fn sd_shown(v str) str
@@ -320,7 +342,7 @@ fn sd_failing(tests List[STest]) int
     n
 
 ## The report and the number of changes (diff.out.2-5).
-fn sd_render(old str, new str, a SSide, b SSide, json bool) (str, int)
+fn sd_render(old str, new str, a SSide, b SSide, json bool)(str, int)
     mut lines := List[str]()
     mut added := 0
     mut removed := 0

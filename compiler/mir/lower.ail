@@ -237,7 +237,12 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
 
 ## `lower_package_with` that also runs the loops named by `pooled` as `par for`
 ## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
-pub fn lower_package_par(input List[Source], rt ast.Program?, lazy int, pooled Set[str]) Module ! Problems
+pub fn lower_package_par(
+    input List[Source],
+    rt ast.Program?,
+    lazy int,
+    pooled Set[str],
+) Module ! Problems
     srcs := with_error_owners(shadow_free(input, lazy))
     mut l := Lower(
         path: srcs[0].path,

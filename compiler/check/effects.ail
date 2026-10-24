@@ -332,7 +332,7 @@ pub fn deterministic_deny() List[str]
 
 ## `--deny LIST` (eff.cap.2): the capabilities, sorted and without repeats, and the usage error
 ## text (empty when the list is fine).
-pub fn parse_deny(list str) (List[str], str)
+pub fn parse_deny(list str)(List[str], str)
     mut out := List[str]()
     for raw in list.split(",")
         name := raw.trim()
@@ -342,7 +342,13 @@ pub fn parse_deny(list str) (List[str], str)
         elif CAPABILITIES.contains(name)
             out.push(name)
         else
-            rule := if ["io", "fail", "mutates", "unsafe", "spawn"].contains(name) then "eff.cap.3" else "eff.cap.2"
+            rule := if [
+                "io",
+                "fail",
+                "mutates",
+                "unsafe",
+                "spawn",
+            ].contains(name) then "eff.cap.3" else "eff.cap.2"
             return ([], "`{name}` is not a capability; `--deny` takes a comma-separated list of {CAPABILITIES.join(", ")} or `all` ({rule})")
     mut uniq := List[str]()
     for c in out.sorted()
