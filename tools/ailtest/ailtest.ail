@@ -16,6 +16,9 @@
 ## functions), and shrinks a failing input. A parameter of another type
 ## (`bytes`, a type from another module) makes the test `skip`. The exit status is 0 if every test that ran passed.
 ##   ail run tools/ailtest/ailtest.ail [--json] [--cases N] [--seed S] FILE
+## `--contracts` fuzzes every function's `requires` and `ensures` and reports a counterexample (contract.fuzz.1).
+## `--affected [--since REV]` runs only the tests that the changes since git revision REV
+## (default `HEAD`) can reach, from `ail ask FILE --affected` (test.affected.1).
 ## Rewriting follows bootstrap/src/native_test.rs (native.test.2).
 
 ## The compiler to drive: `$AIL`, else `./ail`.
@@ -238,6 +241,91 @@ fn bad_params(text str, decls Map[str, Decl]) str
         if not r.is_empty()
             return r
     ""
+
+## The text between the parentheses opened at `open` of `sig`, and what follows the closing one.
+fn paren_parts(sig str, open int) (str, str)?
+    cs := sig.chars()
+    mut depth := 0
+    for j in open..cs.len()
+        if cs[j] == '('
+            depth += 1
+        elif cs[j] == ')'
+            depth -= 1
+            if depth == 0
+                return (sig.slice(open + 1, j), sig.slice(j + 1, cs.len()).trim())
+    none
+
+struct Synth
+    lines List[str]
+    names Set[str]
+    skipped List[Skipped]
+
+## The effects of function `name`, from `ail effects --json` text; `none` when it isn't listed.
+fn effects_of(json str, name str) str?
+    key := "\"fn:{name}\":["
+    at := json.find(key) else return none
+    rest := json.slice(at + key.len(), json.len())
+    end := rest.find("]") else return none
+    rest.slice(0, end)
+
+## contract.fuzz.1-3: a property test for each free function that has `requires` or
+## `ensures` lines. It skips an input that fails the `requires`, and calls the
+## function, whose own `ensures` then traps on a counterexample, which the
+## property machinery shrinks. A method, a generic function and a function with a `mut`
+## or `move` parameter are left alone.
+fn contract_tests(lines List[str], effects str) Synth
+    mut out := Synth(lines: [], names: Set[str](), skipped: [])
+    mut i := 0
+    while i < lines.len()
+        l := lines[i]
+        i += 1
+        text := (l.strip_prefix("pub ") else l)
+        if not text.starts_with("fn ")
+            continue
+        sig := text.slice(3, text.len())
+        open := sig.find("(") else continue
+        name := sig.slice(0, open).trim()
+        if name.is_empty() or name.contains(".") or name.contains("[")
+            continue
+        parts := paren_parts(sig, open) else continue
+        mut conds := List[str]()
+        mut has_ensures := false
+        mut j := i
+        while j < lines.len() and indent(lines[j]) > 0
+            c := lines[j].trim()
+            if c.starts_with("requires ")
+                conds.push(c.slice(9, c.len()))
+            elif c.starts_with("ensures ")
+                has_ensures = true
+            else
+                break
+            j += 1
+        if conds.is_empty() and not has_ensures
+            continue
+        params := parse_params(parts.0)
+        mut plain := true
+        for p in params
+            if p.name == "mut" or p.name == "move"
+                plain = false
+        if not plain
+            continue
+        # contract.fuzz.3: a function with effects is not called with generated inputs.
+        fx := effects_of(effects, name) else ""
+        if fx != ""
+            out.skipped.push(Skipped(name: "contract_{name}", why: "has effects ({fx.replace("\"", "")}), so it isn't run with generated inputs"))
+            continue
+        args := [p.name for p in params].join(", ")
+        fallible := parts.1.contains("!")
+        call := if fallible then "_ := {name}({args}) else return" else "_ := {name}({args})"
+        test_name := "contract_{name}"
+        out.names.add(test_name)
+        out.lines.push("")
+        out.lines.push("@test fn {test_name}({parts.0})")
+        for c in conds
+            out.lines.push("    if not ({c})")
+            out.lines.push("        return")
+        out.lines.push("    {call}")
+    out
 
 ## Every plain `@test fn NAME()` and the property tests.
 fn find_tests(lines List[str]) Found
@@ -1922,8 +2010,19 @@ fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]
 fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
+## The tests that changes since git revision `since` can reach (`ail ask FILE --affected`).
+fn affected_names(file str, since str) List[str]
+    r := proc.run(ail_path(), ["ask", file, "--affected", "--rev", since]) else err
+        io.eprint("error: can't run `ail ask`: {err}")
+        io.exit(2)
+        return []
+    if r.status != 0
+        io.eprint(r.err)
+        io.exit(2)
+    [l.trim() for l in r.out.lines() if l.trim() != ""]
+
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
@@ -1939,11 +2038,23 @@ fn main() !
     mut want := ""
     mut trace := false
     mut trace_limit := ""
+    mut affected := false
+    mut since := "HEAD"
+    mut contracts := false
     mut max_steps := ""
     mut rec_mode := ""
     mut rec_file := ""
     for a in env.args()
-        if want == "--cases"
+        if want == "--since"
+            since = a
+            want = ""
+        elif a == "--affected"
+            affected = true
+        elif a == "--contracts"
+            contracts = true
+        elif a == "--since"
+            want = a
+        elif want == "--cases"
             cases = a.to_int() else usage()
             want = ""
         elif want == "--seed"
@@ -2028,15 +2139,53 @@ fn main() !
             lines = aug.lines
             doc_names = aug.names
             doc_where = aug.where
-    found := find_tests(lines)
+    mut synth := Set[str]()
+    mut skipped_contracts := List[Skipped]()
+    if contracts
+        fxr := proc.run(ail_path(), ["effects", "--json", file])? "running ail effects"
+        made := contract_tests(lines, fxr.out)
+        if made.names.is_empty() and made.skipped.is_empty()
+            print("no contracts to check")
+            io.exit(0)
+        for k in made.skipped
+            skipped_contracts.push(k)
+        lines.extend(made.lines)
+        synth = made.names
+    mut found := find_tests(lines)
+    if contracts
+        # contract.fuzz.1: only the generated checks run.
+        mut only := List[TestFn]()
+        for t in found.tests
+            if synth.contains(t.name)
+                only.push(t)
+            else
+                found.left_out.push(Span(first: t.first, last: t.last))
+        found.tests = only
+        found.skipped = [k for k in found.skipped if synth.contains(k.name)]
+    if affected
+        # test.affected.1: only the tests the changes since `since` can reach; the
+        # rest are left out of the build like a test the backend can't build.
+        names := affected_names(file, since)
+        mut keep := List[TestFn]()
+        for t in found.tests
+            if names.contains(t.name)
+                keep.push(t)
+            else
+                found.left_out.push(Span(first: t.first, last: t.last))
+        io.eprint("affected: {keep.len()} of {found.tests.len()} tests")
+        found.tests = keep
     w := World(decls: parse_decls(lines))
     mut verdicts := List[Verdict]()
     for s in found.skipped
         verdicts.push(plain(s.name, "skip", s.why))
+    for s in skipped_contracts
+        verdicts.push(plain(s.name, "skip", s.why))
     if not doc_note.is_empty()
         verdicts.push(plain("doc examples", "skip", doc_note))
     dir := path.dir(file)
-    mf := module_tests(lines, dir)
+    mut mf := module_tests(lines, dir)
+    if contracts
+        mf = ModFiles(tests: [], skipped: [], lines: Map[str, List[str]]())
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
     if found.tests.len() == 0 and mf.tests.is_empty()
