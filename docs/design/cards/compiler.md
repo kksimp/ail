@@ -31,7 +31,7 @@ entry: main in main.ail
 
 ## load (100 items)
 
-## mir (477 items)
+## mir (478 items)
 
 ## obj (64 items)
 
@@ -39,7 +39,7 @@ entry: main in main.ail
 
 ## syntax (110 items)
 
-## watch (3 items)
+## watch (4 items)
 
 ## x64 (87 items)
 

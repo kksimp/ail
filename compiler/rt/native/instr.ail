@@ -28,7 +28,7 @@ TRACE_HEAD := 48
 fn instr_table() int
     mut t := load64(global(INSTR_TAB))
     if t == 0
-        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP + 32)
+        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP + 128)
         if t < 0
             return 0
         store64(global(INSTR_TAB), t)
@@ -161,18 +161,7 @@ fn instr_dump()
                     store8(buf + w, 10)
                     os_write_all(fd, buf, w + 1)
                 os_close(fd)
-    shown := load64(t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP + 16)
-    dropped := load64(t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP + 24)
-    if shown + dropped > 0
-        flush()
-        out_str("trace: summary: ")
-        out_int(shown)
-        out_str(" events shown, ")
-        out_int(dropped)
-        out_str(" dropped (watch ")
-        out_int(shown + dropped)
-        out_str(")\n")
-        flush_to(2)
+    tr_summary(t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP)
     # No site was hit (a `steps` or `record` build): no hits file, and none beside the source.
     if load64(t) == 0
         return
@@ -221,26 +210,89 @@ fn instr_step(path str, line int, col int)
         flush_to(2)
         sys_exit(1)
 
-## `--watch NAME` (trace.watch.1, ADR 0868): a build with `watch=NAME` calls this before the
-## text of each event, which goes to standard error. It says whether the event is within the
-## limit (`$AIL_TRACE_LIMIT`, default 1000); the count of events shown and dropped follows
-## the step count in the table, and `instr_dump` ends the run with the summary.
-fn watch_open() bool
+## Events of `ail run --trace` and `--watch` (trace.run.1-4, trace.watch.1) go to standard error,
+## live, one line each. The words after the step count in the table are: events shown,
+## events dropped, the call depth, the count of each kind (7 words), the limit plus one.
+KIND_CALL := 0
+KIND_RETURN := 1
+KIND_WATCH := 6
+
+## The state words of the events.
+fn tr_state() int
     t := instr_table()
     if t <= 0
+        return 0
+    t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP
+
+## The start of an event of kind `kind`: it is counted; within the limit
+## (`$AIL_TRACE_LIMIT`, default 1000) the text that follows goes to standard error,
+## else it is written nowhere (output descriptor -1). `tr_close` ends it.
+fn tr_open(kind int) bool
+    w := tr_state()
+    if w == 0
         return false
-    w := t + 8 + INSTR_CAP + TRACE_HEAD + TRACE_CAP + 16
-    given := os_env_get("AIL_TRACE_LIMIT")
-    limit := if given == "" then 1000 else str_to_int(given)
-    if load64(w) >= limit
-        store64(w + 8, load64(w + 8) + 1)
-        return false
-    store64(w, load64(w) + 1)
+    if load64(w + 96) == 0
+        given := os_env_get("AIL_TRACE_LIMIT")
+        store64(w + 96, (if given == "" then 1000 else str_to_int(given)) + 1)
+    store64(w + 40 + 8 * kind, load64(w + 40 + 8 * kind) + 1)
     flush()
+    if load64(w + 16) >= load64(w + 96) - 1
+        store64(w + 24, load64(w + 24) + 1)
+        store64(global(OUT_FD), 0 - 1)
+        return false
+    store64(w + 16, load64(w + 16) + 1)
     store64(global(OUT_FD), 2)
     true
 
-## The end of an event.
-fn watch_close()
-    flush_to(2)
+## The end of an event: its text is written and output is back on standard output.
+fn tr_close()
+    flush_to(if load64(global(OUT_FD)) == 2 then 2 else 0 - 1)
     store64(global(OUT_FD), 1)
+
+## `--watch NAME` (trace.watch.1, ADR 0868): a build with `watch=NAME` calls this before the
+## text of each event; it says whether the event is within the limit.
+fn watch_open() bool
+    tr_open(KIND_WATCH)
+
+fn watch_close()
+    tr_close()
+
+## The last line of a run with events (trace.run.4).
+fn tr_summary(w int)
+    shown := load64(w + 16)
+    dropped := load64(w + 24)
+    if shown + dropped == 0
+        return
+    flush()
+    out_str("trace: summary: ")
+    out_int(shown)
+    out_str(" events shown, ")
+    out_int(dropped)
+    out_str(" dropped (")
+    mut first := true
+    for k in 0..7
+        n := load64(w + 40 + 8 * k)
+        if n > 0
+            if not first
+                out_str(", ")
+            first = false
+            out_str(tr_kind(k))
+            out_byte(32)
+            out_int(n)
+    out_str(")\n")
+    flush_to(2)
+
+fn tr_kind(k int) str
+    if k == 0
+        return "call"
+    if k == 1
+        return "return"
+    if k == 2
+        return "effect"
+    if k == 3
+        return "spawn"
+    if k == 4
+        return "wait"
+    if k == 5
+        return "contract"
+    "watch"

@@ -754,12 +754,12 @@ fn Gate.cli_checks(mut self)
         ["run --trace-limit many", "trace.run.4"],
         ["run --watch", "trace.watch.1"],
     ]
-        d := ail_run(cat(pair[0].words(), [hello])) else return
+        d := native_run(cat(pair[0].words(), [hello])) else return
         if d.status != 2 or not d.err.contains(pair[1]) or not d.out.is_empty()
             red("trace options {pair[0]}", "exit {d.status}\n{d.err}")
     # trace.run.2: a trace goes to standard error; standard output is unchanged.
-    plain_run := ail_run(["run", hello]) else return
-    traced_run := ail_run(["run", "--trace", hello]) else return
+    plain_run := native_run(["run", hello]) else return
+    traced_run := native_run(["run", "--trace", hello]) else return
     if plain_run.out != traced_run.out or not traced_run.err.contains("trace: summary:")
         red("trace run", traced_run.err)
 
@@ -1141,7 +1141,7 @@ fn Gate.contracts(mut self)
         "contract_ensures_trap",
         [":4:5: trap[contract.ens.1]: `divide` ensures `result * b == a`, but it returned 3 at 5:5 with a = 7, b = 2"],
     )
-    n := ail_run(["run", "--no-contracts", case_path("contract_ensures_trap")]) else return
+    n := native_run(["run", "--no-contracts", case_path("contract_ensures_trap")]) else return
     if n.status != 0 or n.out != "4\n3\n"
         red("--no-contracts", "exit {n.status}\n{n.out}{n.err}")
     api_has(
@@ -1301,11 +1301,11 @@ fn Gate.misc(mut self, tmp str)
     if s11.status != 0 or s11.out != s11b.out or s11.out == s12.out
         red("--seed repeats", "{s11.out}|{s11b.out}|{s12.out}\n{s11.err}")
     for program in [unseeded, "tests/deterministic/clock.ail", "tests/deterministic/proc.ail"]
-        d := ail_run(["run", "--deterministic", program]) else return
+        d := native_run(["run", "--deterministic", program]) else return
         if d.status != 2 or not d.err.contains("eff.cap.1")
             red("--deterministic {program}", "exit {d.status}\n{d.err}")
-    h1 := ail_run(["run", "--deterministic", "examples/hello.ail"]) else return
-    h2 := ail_run(["run", "--deterministic", "examples/hello.ail"]) else return
+    h1 := native_run(["run", "--deterministic", "examples/hello.ail"]) else return
+    h2 := native_run(["run", "--deterministic", "examples/hello.ail"]) else return
     if h1.status != 0 or h1.out != h2.out
         red("--deterministic hello", h1.err)
     sx := ail_run(["run", "--seed", "x", unseeded]) else return
