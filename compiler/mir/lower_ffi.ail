@@ -1,0 +1,99 @@
+## An `extern c fn` outside the libc subset (ffi.load.1-3, ADR 0870): its body
+## binds the function on the first call (`rt.ffi_addr`: `dlopen` of the library
+## and `dlsym` of the symbol, kept in a cell), traps with `ffi.load.1` or
+## `ffi.load.2` when it can't, and calls the address as C does (System V or
+## AAPCS64: integers and pointers in the integer registers, `float`s in the
+## float registers, narrow results extended again, ffi.map.1-2).
+use ast
+
+## The cells `rt.ffi_addr` keeps: more `extern c fn`s than this aren't bound.
+FFI_CELLS := 4096
+
+## The address of the function, binding it if it is not yet, or a trap.
+fn Lower.ffi_bound(mut self, lib str?, name str, pos ast.Pos) int
+    k := ffi_k
+    ffi_k += 1
+    libv := str_value(lib else "")
+    hasv := konst(if lib != none then 1 else 0, Ty.Bool)
+    namev := str_value(name)
+    a := call("rt.ffi_addr", [konst(k, Ty.Int), libv, hasv, namev], Ty.Int)
+    ok := op("ne", [a, konst(0, Ty.Int)], Ty.Bool)
+    fail := new_block()
+    check(ok, fail)
+    good := cur
+    seal(fail)
+    cur = fail
+    st := call("rt.ffi_status", [], Ty.Int)
+    msg := call("rt.ffi_load_msg", [st, libv, hasv, namev], Ty.Int)
+    lib_block := new_block()
+    rest := new_block()
+    branch(op("eq", [st, konst(1, Ty.Int)], Ty.Bool), lib_block, [], rest, [])
+    seal(lib_block)
+    seal(rest)
+    cur = lib_block
+    ffi_trap("ffi.load.1", msg, pos)
+    cur = rest
+    win_block := new_block()
+    sym_block := new_block()
+    branch(op("eq", [st, konst(3, Ty.Int)], Ty.Bool), win_block, [], sym_block, [])
+    seal(win_block)
+    seal(sym_block)
+    cur = win_block
+    ffi_trap("ffi.load.3", msg, pos)
+    cur = sym_block
+    ffi_trap("ffi.load.2", msg, pos)
+    cur = good
+    a
+
+fn Lower.ffi_trap(mut self, rule str, msg int, pos ast.Pos)
+    mut t := inst(-1, "trap", [msg, msg])
+    t.imm = 15
+    t.site = site(rule, "tensor", "", pos)
+    emit_void(t)
+    finish(unreachable_term())
+
+## The body of an `extern c fn` the runtime doesn't provide.
+fn Lower.lower_extern_dyn(mut self, f ast.FnDecl, name str, params List[int])
+    sig := sigs.get(name) else return
+    if ffi_k >= FFI_CELLS
+        problem(f.pos, "`extern c fn {f.name}`: more than {FFI_CELLS} C functions in one program")
+        return
+    mut ints := 0
+    mut floats := 0
+    for t in sig.params
+        if t == Ty.F32
+            problem(f.pos, "`extern c fn {f.name}`: an `f32` parameter isn't in the native subset yet")
+            return
+        if t == Ty.Float
+            floats += 1
+        else
+            ints += 1
+    if sig.ret == Ty.F32
+        problem(f.pos, "`extern c fn {f.name}`: an `f32` result isn't in the native subset yet")
+        return
+    if ints > 6 or floats > 8
+        problem(f.pos, "`extern c fn {f.name}` takes more arguments than the C registers hold")
+        return
+    lib := if e := f.ext then e.lib else none
+    addr := ffi_bound(lib, f.name, f.pos)
+    mut args := [addr]
+    args.extend(params)
+    mut i := inst(-1, "icall", args)
+    i.name = "c"
+    if not is_rt
+        i.imm = call_pos(file, f.pos.line, f.pos.col)
+    if sig.ret.is_unit()
+        emit_void(i)
+        finish(return_of(-1))
+    else
+        r := emit(i, sig.ret)
+        finish(return_of(ffi_result(r, sig.ret)))
+    end_fn(name, f.pos)
+
+## A C result as the declared type (ffi.map.2): the upper bits of a narrow
+## integer are unspecified, and a `bool` is its low byte.
+fn Lower.ffi_result(mut self, r int, t Ty) int
+    match t
+        Bool => op("ne", [op("band", [r, konst(255, Ty.Int)], Ty.Int), konst(0, Ty.Int)], Ty.Bool)
+        Sized(k) => sized_wrap(k, r)
+        _ => r

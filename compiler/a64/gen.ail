@@ -939,12 +939,13 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.blr(S2)
     elif i.name.starts_with("libsys.")
         # An import: through the pointer slot dyld binds (native-abi.md §11).
-        # Other targets have no libSystem: the call traps if ever reached.
-        # The Windows runtime arms import kernel32 names (no leading `_`).
-        if os != MACOS or not i.name.starts_with("libsys._")
+        # On Linux the slot is bound by the dynamic loader to a libc symbol
+        # (no leading `_`, ADR 0870); macOS names start with `_`. A name of
+        # the other target's kind traps if ever reached.
+        sym := i.name.replace("libsys.", "")
+        if (os == MACOS and not sym.starts_with("_")) or (os != MACOS and not codegen.linux_import(sym))
             a.brk()
         else
-            sym := i.name.replace("libsys.", "")
             imports.push(sym)
             a.adr_sym(S0, "imp:{sym}")
             a.ldr(S0, S0, 0)
