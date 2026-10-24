@@ -9,7 +9,7 @@ Start here. Documentation is plain Markdown ([ADR 0003](decisions/0003-documenta
 | [quick-reference.md](quick-reference.md) | AIL on one page, for people and AI agents writing programs (non-normative) |
 | [status.md](status.md) | What is decided, specified, implemented, and tested, at a glance |
 | [roadmap.md](roadmap.md) | Phased development plan |
-| Note | Design documents dated before the Rust removal (ADR XXXX) may mention `cargo`, `./ail selftest` or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842). |
+| Note | Design documents dated before the Rust removal (ADR 0889) may mention `cargo`, `./ail selftest` or `bootstrap/`; they are history. The gate is `tools/gate/mac-gate.sh` (ADR 0842). |
 | [open-questions.md](open-questions.md) | Unresolved design questions, with options, pros, cons, and recommendations |
 | [decisions/](decisions/README.md) | Architecture Decision Records: one per decision, including rejected alternatives |
 | [spec/](spec/README.md) | Normative language specification with stable rule IDs |

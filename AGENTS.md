@@ -12,7 +12,7 @@ garbage-collected, memory-safe systems programming language designed so that
 humans and AI agents are both first-class programmers. Source files use `.ail`.
 The CLI is `ail` (`ail build`, `ail run`, `ail test`, `ail fmt`, `ail check`).
 
-The project is past **Stage 2**: the Rust bootstrap (ADR 0023) is removed (ADR XXXX).
+The project is past **Stage 2**: the Rust bootstrap (ADR 0023) is removed (ADR 0889).
 The front end, checker, formatter, tools and native backend are written in AIL
 (`compiler/`), and `ail` is a native executable that builds itself from a pinned
 seed. The core design is done ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md))
@@ -38,7 +38,7 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - **One checker:** checker changes go in `compiler/check/` only. The Rust
   checker is gone, so the parity gate of
   [ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md) is retired
-  (ADR XXXX).
+  (ADR 0889).
 - **Native only ([ADR 0865](docs/decisions/0865-no-double-work.md)):**
   new features get no interpreter code. Native-only cases are listed in
   `tests/cases/native_only.txt`.
@@ -162,9 +162,9 @@ tools/
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
-  fix/                    fix tooling for compiler/fix/ (the parity scripts against Rust leave with it, ADR XXXX)
-  fmt/                    formatter checks for compiler/fmt/ (parity against Rust removed, ADR XXXX)
-  explain/                `ail explain` checks for compiler/explain/ (parity against Rust removed, ADR XXXX)
+  fix/                    fix tooling for compiler/fix/ (the parity scripts against Rust leave with it, ADR 0889)
+  fmt/                    formatter checks for compiler/fmt/ (parity against Rust removed, ADR 0889)
+  explain/                `ail explain` checks for compiler/explain/ (parity against Rust removed, ADR 0889)
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
@@ -208,6 +208,6 @@ tools/
   handles that must be waited (ADRs 0095–0096). **Modules** are directories,
   `pub` exports, and `use a.b` imports with qualified access (ADRs 0097–0099).
 - The front end and the optimising backend are written **in AIL** (ADR 0022).
-  The Rust bootstrap (ADR 0023) was removed in ADR XXXX; the pinned seed is the
+  The Rust bootstrap (ADR 0023) was removed in ADR 0889; the pinned seed is the
   only way to build from nothing (ADR 0855).
 - See `docs/decisions/README.md` for the full list.

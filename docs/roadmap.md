@@ -37,7 +37,7 @@ These are recommendations only. Each will be put to the designer as a question.
    **Done** (2026-10-20): `ail fmt`, ADRs 0169–0170, style in
    [design/formatting.md](design/formatting.md).
 
-## Rust bootstrap removed (ADR XXXX)
+## Rust bootstrap removed (ADR 0889)
 
 `bootstrap/`, the interpreter, `cargo` and the private Rust toolchain
 ([ADR 0087](decisions/0087-private-rust-toolchain.md)) are gone; `./ail` fetches a
@@ -65,7 +65,7 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
    in-house TLS for `std.net` (ADR 0360, done: ADRs 0366–0369); follow-ups:
    hardware AES-GCM and proxy support.
 4. **Rust-free check (designer, 2026-10-20):** now that the toolchain no longer
-   needs Rust (ADR XXXX), rebuild `tools/edit` with the
+   needs Rust (ADR 0889), rebuild `tools/edit` with the
    self-hosted toolchain and compare it with the Rust-bootstrap baseline in
    [editor-baseline.md](design/editor-baseline.md) (start-up, `ail check`
    time, test time, tokens, memory, and keystroke/redraw latency).

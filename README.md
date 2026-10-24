@@ -11,7 +11,7 @@ compiler that answers structured questions about your program.
 main.ail      ail build · ail run · ail test · ail fmt · ail check
 ```
 
-> **Status:** Stage 2 complete, Rust bootstrap removed (ADR XXXX). `ail` is native
+> **Status:** Stage 2 complete, Rust bootstrap removed (ADR 0889). `ail` is native
 > and builds itself. See [docs/status.md](docs/status.md).
 
 ## Try it

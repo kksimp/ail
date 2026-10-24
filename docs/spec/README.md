@@ -41,7 +41,7 @@ Rules for rule IDs:
 5. Compiler diagnostics and the AI semantic API will cite rule IDs.
 6. Implementation limits (a construct the current implementation doesn't
    support yet) use the code `bootstrap.unsupported` (kept as the code's name
-   after the Rust bootstrap's removal, ADR XXXX). That is not a rule ID. The
+   after the Rust bootstrap's removal, ADR 0889). That is not a rule ID. The
    diagnostic names the spec rule of the unsupported construct.
 
 ### Examples and conformance tests
@@ -58,7 +58,7 @@ line says what to expect:
 | ```` ```ail ```` | A whole program: must check without errors (warnings are fine). |
 | ```` ```ail fragment ```` | A snippet. Column-0 declarations (`struct`, `enum`, `error`, `unique`, `fn`, `trait`, `impl`, `const`, `use`, `type`, `@attribute`, `pub`, and `#` comments before them) stay top level; every other line goes into a generated `fn main()`. Must then check without errors. |
 | ```` ```ail error=RULE ```` | Must report `RULE` among its errors. Handled as `fragment` when it has no `fn main`. |
-| ```` ```ail skip=bootstrap ```` | Retired with the Rust bootstrap (ADR XXXX): existing tags are removed, or kept for a feature the native toolchain doesn't implement yet. Counted, not run. |
+| ```` ```ail skip=bootstrap ```` | Retired with the Rust bootstrap (ADR 0889): existing tags are removed, or kept for a feature the native toolchain doesn't implement yet. Counted, not run. |
 | ```` ```ail skip=context ```` | An illustration that uses declarations the chapter doesn't show. Counted, not run. Prefer making the example self-contained. |
 | ```` ```ail excerpt ```` | Outside `docs/spec/`: an incomplete snippet whose point is one line or one step. Not checked by `tools/check-doc-snippets.py`. Every other `ail` or `ail fragment` block in the docs must check. |
 | ```` ```ail skip=bootstrap rules=ID ```` | Counted for the rules it cites, not checked or run (ADR 0498): the feature is specified but not yet built. |
@@ -70,7 +70,7 @@ line says what to expect:
 | ```` ```ail fixture=DIR ```` | Checks the case fixture `tests/cases/DIR`, which must report each rule in `rules=` (ADR 0500). |
 
 A program that checks clean and has a `main` is also built and run natively and
-must print the same output as its `.out` golden (ADR 0499, amended by ADR XXXX). Blocks marked `norun`,
+must print the same output as its `.out` golden (ADR 0499, amended by ADR 0889). Blocks marked `norun`,
 `flags=`, `tool=` or `fixture=` are not run that way.
 
 An unknown tag fails the suite. Blocks in other languages (`text`, `ebnf`)

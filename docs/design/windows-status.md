@@ -6,7 +6,7 @@ A step that fails stays on the list: note the output and the ADR it cites.
 Windows is a first-class target (AGENTS.md, settled constraints). The Mac gate
 (ADR 0842) is the merge gate, so this list is for the designer's check on Windows.
 
-1. `powershell -ExecutionPolicy Bypass -File .\ail.ps1 test` — after the Rust removal (ADR XXXX) the first run fetches the pinned native seed (ADR 0855) instead of installing Rust; expect no `FAILED`. (Step text to be reworked on `ail-win` when D5 lands.)
+1. `powershell -ExecutionPolicy Bypass -File .\ail.ps1 test` — after the Rust removal (ADR 0889) the first run fetches the pinned native seed (ADR 0855) instead of installing Rust; expect no `FAILED`. (Step text to be reworked on `ail-win` when D5 lands.)
 2. `.\ail.ps1 run examples\hello.ail` — expect the text in `examples\hello.out`.
 3. `.\ail.ps1 run bootstrap\tests\cases\std_path.ail` — expect `bootstrap\tests\cases\std_path.out`. Covers `std.path` separators (ADR 0504).
 4. `.\ail.ps1 run bootstrap\tests\cases\std_proc_which.ail` — expect `true` and a `not_found` ProcError. Covers process lookup (ADR 0505).
