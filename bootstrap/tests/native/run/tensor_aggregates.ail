@@ -1,0 +1,53 @@
+# std.tensor.9: tensors in tuples, optionals, map values, lists, structs and enums.
+struct P
+    t tensor.Tensor[float]
+    n int
+
+enum E
+    A(t tensor.Tensor[int])
+    B
+
+error struct Big
+    n int
+
+fn pair(x tensor.Tensor[float]) (tensor.Tensor[float], int)
+    (x * 2.0, 3)
+
+fn pick(x tensor.Tensor[float], ok bool) tensor.Tensor[float]?
+    if ok then x else none
+
+fn chk(x tensor.Tensor[float]) tensor.Tensor[float] ! Big
+    if x.len() > 5
+        return Big(n: 1)
+    x
+
+fn main()
+    x := tensor.from([1.0, 2.0, 3.0])
+    q := x * 2.0
+    p := P(t: x, n: 1)
+    print(p)
+    print("{x} and {p.t.sum()}")
+    print("{x.to_f32()}")
+    print(pair(x))
+    print(pair(x) == pair(x))
+    if v := pick(x, true)
+        print(v)
+    print(pick(x, false))
+    print(pick(x, true) == pick(x, true))
+    c := chk(x) else q
+    print(c)
+    e := E.A(tensor.from([1, 2]))
+    print(e)
+    s := [x, q]
+    print(s)
+    print(s.contains(q))
+    print(x)
+    print(p == P(t: x, n: 1))
+    print(p == P(t: q, n: 1))
+    mut lt := List[tensor.Tensor[float]]()
+    lt.push(x)
+    print(lt)
+    m := {"k": x, "j": q}
+    print(m["k"].sum())
+    print(m.get("zz"))
+    print(m)

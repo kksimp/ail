@@ -92,9 +92,11 @@ fn Lower.list_contains_eq(mut self, l Val, e Ty, x int) Val?
     cur = head
     body := new_block()
     branch(op("lt", [i, n], Ty.Bool), body, [], join, [konst(0, Ty.Bool)])
+    seal(body)
     cur = body
     step := new_block()
     branch(field_eq(e, op("get", [l.id, i], e), x), join, [konst(1, Ty.Bool)], step, [])
+    seal(step)
     cur = step
     jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
     seal(head)
