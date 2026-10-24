@@ -182,7 +182,7 @@ if [ "${1:-}" = effects ]; then
     done
     [ "$files" = 1 ] || native_effects=
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         # The published seed builds the native CLI (ADR 0855); the Rust `ail` only when no seed can be had.
@@ -213,7 +213,7 @@ if [ "$native_on" = 1 ] && { [ -n "$native_api" ] || [ -n "$native_effects" ] ||
         [ -z "$file" ] || AIL_ROOT="$root" AIL_COMPILER="$root/compiler" "$native" check-program $unsafe_driver "$file" || exit $?
         shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
     fi
-    if [ "$1" = explain ] || [ "$1" = edit ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
+    if [ "$1" = explain ] || [ "$1" = edit ] || [ "$1" = ask ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
     if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
     if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
     if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi

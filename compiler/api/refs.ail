@@ -46,7 +46,15 @@ pub fn references(
     weak Map[int, str],
     own_file bool,
 ) List[Ref]
-    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [], cur: -1)
+    mut r := Refs(
+        prog: prog,
+        symbols: symbols,
+        weak: weak,
+        found: [],
+        generics: [],
+        names: [],
+        cur: -1,
+    )
     r.program()
     limit := if own_file then 1048576 else 1073741824
     kept := [x for x in r.found if x.pos.line <= limit]
@@ -67,7 +75,15 @@ pub struct Found
     pub names List[(ast.Pos, str)]
 
 pub fn collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) Found
-    mut r := Refs(prog: prog, symbols: symbols, weak: weak, found: [], generics: [], names: [], cur: -1)
+    mut r := Refs(
+        prog: prog,
+        symbols: symbols,
+        weak: weak,
+        found: [],
+        generics: [],
+        names: [],
+        cur: -1,
+    )
     r.program()
     Found(refs: [x for x in r.found if x.pos.line < 1073741824], names: r.names)
 
