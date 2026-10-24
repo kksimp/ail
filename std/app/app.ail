@@ -429,12 +429,15 @@ pub fn host_path() str ! AppError
         message: "set AIL_APP_HOST to the app host program",
     )
     p := "{root}/tools/app-host/macos/build/AIL App Host.app/Contents/MacOS/AILAppHost"
-    if not fs.exists(p)
+    if fs.exists(p)
+        return p
+    q := "{root}/tools/app-host/linux/build/ail-app-host"
+    if not fs.exists(q)
         return AppError(
             kind: "no_host",
-            message: "{p} is missing; build it with tools/app-host/macos/run.sh",
+            message: "no host is built; run tools/app-host/macos/run.sh (macOS) or tools/app-host/linux/run.sh (Linux)",
         )
-    p
+    q
 
 ## Runs `a` in a window (std.app.6-10): starts the host, sends the view
 ## tree whenever it changes and passes each event to `update`, until the
