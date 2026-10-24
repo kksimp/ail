@@ -28,7 +28,7 @@ TRACE_HEAD := 48
 fn instr_table() int
     mut t := load64(global(INSTR_TAB))
     if t == 0
-        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP + 96)
+        t = sys_mmap(INSTR_CAP + 8 + TRACE_HEAD + TRACE_CAP + 128)
         if t < 0
             return 0
         store64(global(INSTR_TAB), t)
@@ -212,7 +212,7 @@ fn instr_step(path str, line int, col int)
 
 ## Events of `ail run --trace` and `--watch` (trace.run.1-4, trace.watch.1) go to standard error,
 ## live, one line each. The words after the step count in the table are: events shown,
-## events dropped, the call depth, the count of each kind (KINDS), the limit plus one.
+## events dropped, the call depth, the count of each kind (7 words), the limit plus one.
 KIND_CALL := 0
 KIND_RETURN := 1
 KIND_WATCH := 6
@@ -231,12 +231,12 @@ fn tr_open(kind int) bool
     w := tr_state()
     if w == 0
         return false
-    if load64(w + 88) == 0
+    if load64(w + 96) == 0
         given := os_env_get("AIL_TRACE_LIMIT")
-        store64(w + 88, (if given == "" then 1000 else str_to_int(given)) + 1)
+        store64(w + 96, (if given == "" then 1000 else str_to_int(given)) + 1)
     store64(w + 40 + 8 * kind, load64(w + 40 + 8 * kind) + 1)
     flush()
-    if load64(w + 16) >= load64(w + 88) - 1
+    if load64(w + 16) >= load64(w + 96) - 1
         store64(w + 24, load64(w + 24) + 1)
         store64(global(OUT_FD), 0 - 1)
         return false
