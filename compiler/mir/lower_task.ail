@@ -692,10 +692,10 @@ fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], po
     done := new_block()
     seq := new_block()
     join := new_block()
-    # An explicit `par for` passes weight 0 (conc.par.8); a loop the compiler
-    # chose also needs enough work to repay the pool (conc.par.12).
-    weight := konst(if auto then plan.work else 0, Ty.Int)
-    branch(call("rt.par_worth", [lo, hi, weight], Ty.Bool), par_blk, [], seq, [])
+    # A written `par for` needs only the iteration count (conc.par.8); a loop the
+    # compiler chose also needs enough work to repay the pool (conc.par.12).
+    weight := konst(plan.work, Ty.Int)
+    branch(call("rt.par_worth", [lo, hi, weight, konst(if auto then 1 else 0, Ty.Int)], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
     cur = par_blk
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)

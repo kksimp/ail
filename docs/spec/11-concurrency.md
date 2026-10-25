@@ -513,7 +513,9 @@ threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
 **conc.par.12** — A loop the compiler chose (not a written `par for`) also runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
-a call 8). The result and the trap are the sequential ones either way. *(ADR 0911)*
+a call 8). An iteration of at least 4096 operations sends any loop of two or more
+iterations to the pool, whatever the worker count. The result and the trap are
+the sequential ones either way. *(ADR 0911)*
 
 **conc.par.9** — The pool has one thread per hardware thread, at most 8,
 unless the environment variable `AIL_THREADS` sets the number. With one
