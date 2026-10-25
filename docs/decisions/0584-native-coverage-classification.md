@@ -1,6 +1,7 @@
 # 0584. Native coverage: status rules, construct keys and counting
 
 - **Status:** Accepted
+- **Amended by:** [ADR 0906](0906-retire-native-coverage-tracker.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture

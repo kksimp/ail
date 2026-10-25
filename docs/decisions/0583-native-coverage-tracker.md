@@ -1,6 +1,7 @@
 # 0583. A native coverage tracker: which programs `ail build` handles, and why the rest fail
 
 - **Status:** Accepted
+- **Amended by:** [ADR 0906](0906-retire-native-coverage-tracker.md)
 - **Date:** 2026-10-20
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture
