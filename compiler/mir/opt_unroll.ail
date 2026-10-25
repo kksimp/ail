@@ -2,7 +2,10 @@
 ## that calls itself gets a copy of its own body at each of those calls, so
 ## a recursion of depth d makes about d / 2 calls and each pair shares the
 ## callee-saved saves, the frame and the stack check. The copy's own
-## recursive calls stay calls. `AIL_OPT_OFF=unroll` turns it off.
+## recursive calls stay calls, and carry the frame they were inlined into, so a
+## trap's stack still lists every source frame (trace.frame.2): the code
+## generators give such a call one call-table row per frame, and
+## `trace_frames` prints them all. `AIL_OPT_OFF=unroll` turns it off.
 
 ## Functions with at most this many instructions are unrolled.
 UNROLL_LIMIT := 60
@@ -13,7 +16,9 @@ UNROLL_CALLS := 3
 ## Inline the body of `f` into each of its own direct calls, once. Returns
 ## whether anything changed.
 pub fn unroll_self(mut f Func, mut sites List[Site]) bool
-    if f.name.starts_with("rt.") or opt_off("unroll")
+    # `AIL_INSTRUMENT` builds (`--values`, `--trace`) keep one frame per call.
+    instr := env.get("AIL_INSTRUMENT") else ""
+    if f.name.starts_with("rt.") or opt_off("unroll") or instr != ""
         return false
     mut n := 0
     mut calls := Set[int]()
@@ -29,6 +34,10 @@ pub fn unroll_self(mut f Func, mut sites List[Site]) bool
                 if i.dst < 0
                     return false
                 calls.add(i.dst)
+            elif i.op == "call" and i.imm != 0
+                # A call to another function would lose its site when
+                # `mark_recursion` clears it, and with it the extra frame.
+                return false
     if calls.len() == 0 or calls.len() > UNROLL_CALLS or n > UNROLL_LIMIT
         return false
     body := f

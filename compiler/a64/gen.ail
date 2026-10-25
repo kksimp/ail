@@ -971,6 +971,17 @@ fn Gen.call_out(mut self, i mir.Inst)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
         calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: f.name))
+        # A call copied in by inlining (trace.frame.2) also stands for the
+        # frames it was inlined into: a row for each, innermost first.
+        if i.site >= 0
+            mut fs := sites.list[i.site]
+            while fs.from >= 0
+                fs = sites.list[fs.from]
+                calls.push(codegen.CallRow(
+                    off: a.here(),
+                    pos: mir.call_pos(fs.file, fs.line, fs.col),
+                    func: fs.func,
+                ))
     if room > 0
         adjust_sp("add", room)
         sp_shift = 0

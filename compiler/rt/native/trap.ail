@@ -49,6 +49,52 @@ fn trace_lead(tail str) int
             lines += 1
     lines - 2
 
+## The first and one past the last row that share row `k`'s return address.
+fn trace_run_start(ents int, k int) int
+    off := load64(ents + 16 * k).bit_and(4294967295)
+    mut r := k
+    while r > 0 and load64(ents + 16 * (r - 1)).bit_and(4294967295) == off
+        r -= 1
+    r
+
+fn trace_run_end(ents int, n int, k int) int
+    off := load64(ents + 16 * k).bit_and(4294967295)
+    mut r := k + 1
+    while r < n and load64(ents + 16 * r).bit_and(4294967295) == off
+        r += 1
+    r
+
+## One frame line for row `r`; `ra` is the frame's return address when its
+## `--values` spill may be printed (trace.frame.3), else 0.
+fn trace_row(tab int, ents int, names int, r int, ra int)
+    w0 := load64(ents + 16 * r)
+    w1 := load64(ents + 16 * r + 8)
+    fn_row := names + 16 * w1.shr(32)
+    file := load64(fn_row + 8)
+    out_str("  at ")
+    if file != 0
+        out_str(str_at(tab + file))
+    out_int(w0.shr(32))
+    out_byte(58)
+    out_int(w1.bit_and(4294967295))
+    out_str(" in ")
+    name := str_at(tab + load64(fn_row))
+    # `--values` (trace.frame.3): the caller's own spill, in place of the `(..)`.
+    if ra != 0
+        sp := vals_find(ra)
+        if sp != 0 and load64(sp) != 0
+            np := str_addr(name)
+            mut nl := load64(np)
+            while nl > 0 and load8(np + 16 + nl - 1) != 40
+                nl -= 1
+            if nl > 0
+                out_bytes(np + 16, nl - 1)
+                vals_print(ra)
+                out_byte(10)
+                return
+    out_str(name)
+    out_byte(10)
+
 ## Print the callers of the function that trapped, after `tail`'s frames.
 fn trace_frames(tail str)
     trace_frames_n(trace_lead(tail))
@@ -63,8 +109,9 @@ fn trace_frames_n(lead int)
     mut total := lead
     mut p := frame_ptr()
     while p != 0
-        if trace_find(ents, n, load64(p + 8) - base) >= 0
-            total += 1
+        k := trace_find(ents, n, load64(p + 8) - base)
+        if k >= 0
+            total += trace_run_end(ents, n, k) - trace_run_start(ents, k)
         p = trace_next(p)
     verbose := vals_verbose()
     limit := if total > LINES and not verbose then LINES - 1 - lead else total
@@ -73,35 +120,16 @@ fn trace_frames_n(lead int)
     while p != 0 and shown < limit
         k := trace_find(ents, n, load64(p + 8) - base)
         if k >= 0
-            w0 := load64(ents + 16 * k)
-            w1 := load64(ents + 16 * k + 8)
-            fn_row := names + 16 * w1.shr(32)
-            file := load64(fn_row + 8)
-            out_str("  at ")
-            if file != 0
-                out_str(str_at(tab + file))
-            out_int(w0.shr(32))
-            out_byte(58)
-            out_int(w1.bit_and(4294967295))
-            out_str(" in ")
-            name := str_at(tab + load64(fn_row))
-            # `--values` (trace.frame.3): the caller's own spill, in place of the `(..)`.
-            sp := vals_find(load64(p))
-            if sp != 0 and load64(sp) != 0
-                np := str_addr(name)
-                mut nl := load64(np)
-                while nl > 0 and load8(np + 16 + nl - 1) != 40
-                    nl -= 1
-                if nl > 0
-                    out_bytes(np + 16, nl - 1)
-                    vals_print(load64(p))
-                    out_byte(10)
-                    shown += 1
-                    p = trace_next(p)
-                    continue
-            out_str(name)
-            out_byte(10)
-            shown += 1
+            # A call's rows share its return address: the call, then each
+            # frame the compiler inlined it into (trace.frame.2).
+            end := trace_run_end(ents, n, k)
+            mut r := trace_run_start(ents, k)
+            mut head := true
+            while r < end and shown < limit
+                trace_row(tab, ents, names, r, if head then load64(p) else 0)
+                head = false
+                shown += 1
+                r += 1
         p = trace_next(p)
     if total > LINES and not verbose
         # The ellipsis, U+2026, as UTF-8.
