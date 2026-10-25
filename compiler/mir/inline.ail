@@ -18,7 +18,7 @@ pub fn inline_module(mut out Module)
     mut leaves := Set[str]()
     mut bodies := Map[str, Func]()
     for f in out.funcs
-        if inlinable(f)
+        if inlinable(f) and not opt_off("inline")
             leaves.add(f.name)
             bodies[f.name] = f
     inline_alloc_chain(mut out, by_name, mut leaves, mut bodies)
@@ -36,20 +36,28 @@ pub fn inline_module(mut out Module)
             simplify_in(mut f)
         merge_blocks_in(mut f)
         if f.name.starts_with("rt.")
-            f = forward_loads(f)
+            f = forwarded(f)
         else
-            f = forward_loads(fill_loops(
+            f = forwarded(fill_loops(
                 kept_lengths(bce(mark_nonneg(f), reserve, grow_only), reserve and grow_only),
-                fills,
+                fills and not opt_off("fill"),
             ))
-            fold_addresses(mut f)
-        fold_prim_addresses(mut f)
+            if not opt_off("fold")
+                fold_addresses(mut f)
+        if not opt_off("fold")
+            fold_prim_addresses(mut f)
         out.funcs[k] = f
         if not f.name.starts_with("rt.")
             out.funcs[k] = rewrite_nonneg(out.funcs[k])
-    pure_calls(mut out)
-    memoize(mut out)
-    reuse_lists(mut out)
+    if not opt_off("pure")
+        pure_calls(mut out)
+    if not opt_off("memo")
+        memoize(mut out)
+    if not opt_off("reuse")
+        reuse_lists(mut out)
+
+fn forwarded(f Func) Func
+    if opt_off("forward") then f else forward_loads(f)
 
 ## The heap's allocation entry points (ADR 0890, pass 1a). Each has a
 ## straight-line fast path and calls `rt.alloc_slow` otherwise, so none is a
@@ -251,4 +259,4 @@ fn rename(mut g Func, repl List[int])
         g.blocks[b].term = t
 
 fn kept_lengths(f Func, on bool) Func
-    if on then keep_lengths(f) else f
+    if on and not opt_off("keep") then keep_lengths(f) else f

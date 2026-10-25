@@ -349,7 +349,9 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
         vs.push(shield_arg_on(rcv, args, i, Val(id: convert(v, t, expr_pos(a.value)), ty: v.ty)))
     check_requires(key, vs, pos)
     busy := ref_enter(rcv, key)
+    instr_watch_cells(cells)
     res := Val(id: user_call(key, vs, sig.ret, pos, key), ty: sig.ret)
+    instr_watch_cells_end(cells)
     ref_leave(rcv, busy)
     cells_back(cells)
     res
