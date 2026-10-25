@@ -71,7 +71,7 @@ fn main()
 declaration, with the declaration's names, so generated code that mentions
 it resolves at the deriving `impl` (`ct.gen.2`). *(ADR 0229)*
 
-```ail skip=bootstrap rules=refl.info.3
+```ail rules=refl.info.3
 struct Pair
     first List[Map[str, int]]
     second int
