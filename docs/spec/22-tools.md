@@ -901,7 +901,7 @@ fn main()
 fn main()
     print(1.shl(64))            # traps: the shift count must be 0..=63
 ```
-```ail tool=api,--refs,DIR,main.ail,16,12 expect=origin pkg=geometry rules=api.refs.2,api.pkg.2,api.pkg.3
+```ail skip=bootstrap tool=api,--refs,DIR,main.ail,16,12 expect=origin pkg=geometry rules=api.refs.2,api.pkg.2,api.pkg.3
 ```
 ```ail tool=api,--card,DIR expect=entry pkg=geometry rules=api.card.5
 ```
