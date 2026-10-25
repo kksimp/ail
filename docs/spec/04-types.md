@@ -207,7 +207,7 @@ ADR 0037)*
 
 ```ail fragment
 struct User
-    id i64
+    id int
     name str
     email str?
 ```
@@ -261,8 +261,8 @@ list of fields, each written `name Type`. *(ADR 0053)*
 
 ```ail fragment
 enum Shape
-    Circle(r f64)
-    Rect(w f64, h f64)
+    Circle(r float)
+    Rect(w float, h float)
     Empty
 ```
 
@@ -952,7 +952,6 @@ names := List[str]()
 xs := ["a", "b"]
 xs.join(", ")           # a, b
 [1, 2, 3].join("")      # 123
-[["a"], ["b"]].join("+")  # ["a"]+["b"]
 xs.index_of("b")        # 1
 ```
 
@@ -1561,7 +1560,6 @@ fn main()
     mut xs := ["a", "b"]
     print(xs.join(", "))                          # a, b
     print([1, 2, 3].join(""))                     # 123
-    print([["a"], ["b"]].join("+"))               # ["a"]+["b"]
     print(xs.index_of("b") else -1)               # 1
     print(xs.contains("z"))                       # false
     print(xs.pop() else "")                       # b

@@ -1,0 +1,22 @@
+fn check(n int) str?
+    if n % 2 == 1
+        return "bad {n}"
+    none
+
+fn main()
+    mut fails := List[str]()
+    mut shown := 0
+    for n in 0..8
+        while shown < fails.len()
+            print("RED {fails[shown]}")
+            shown += 1
+        mut ok := true
+        if why := check(n)
+            ok = false
+            fails.push(why)
+        if ok
+            print("ok {n}")
+    while shown < fails.len()
+        print("RED {fails[shown]}")
+        shown += 1
+    print("{fails.len()} failures")
