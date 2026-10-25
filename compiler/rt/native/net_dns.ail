@@ -97,14 +97,13 @@ fn dns_answer(m int, n int, id int) int
 
 ## Ask the server at `ns` (an IPv4 address) for `host`: its address, or -1.
 fn dns_ask(ns int, host str) int
-    fd := syscall(os_pick(41, 198, 97), 2, 2, 0, 0, 0, 0)
+    fd := net_sys_dgram()
     if fd < 0
         return -1
-    syscall(os_pick(72, 25, 92), fd, 4, 2048, 0, 0, 0)
     sa := net_sockaddr(ns, 53)
     c := net_sys_connect(fd, sa)
     if c < 0 and c != -115
-        os_close(fd)
+        net_sys_close(fd)
         return -1
     q := alloc_raw(320, KIND_BYTES)
     id := (time_now_ms() * 40503 + ns).bit_and(65535)
@@ -124,26 +123,32 @@ fn dns_ask(ns int, host str) int
                 t0 := time_now_ms()
                 if net_wait(fd, 1, DNS_TIMEOUT_MS - waited) <= 0
                     break
-                r := os_read(fd, ans, 1536)
+                r := net_sys_recv(fd, ans, 1536)
                 if r > 0
                     ip = dns_answer(ans, r, id)
                     if ip < 0 and load8(ans + 3).bit_and(15) != 0 and r >= 12
                         tries = DNS_TRIES
                         break
                 waited += time_now_ms() - t0 + 1
-    os_close(fd)
+    net_sys_close(fd)
     ip
 
-## The IPv4 address of `host` from the name servers of `/etc/resolv.conf`
-## (the first three), or -1.
-fn net_dns(host str) int
-    if load64(str_addr(host)) == 0
-        return -1
+## The text of the resolver configuration at `buf` (8192 bytes): `/etc/resolv.conf`, or on Windows
+## the system's DNS servers written as `nameserver` lines (1.1.1.1 and 8.8.8.8 when it has none);
+## the length, or -1.
+fn dns_conf_read(buf int) int
+    if target() == 3
+        n := wnet_resolv(buf)
+        if n > 0
+            return n
+        text := "nameserver 1.1.1.1\nnameserver 8.8.8.8\n"
+        t := str_addr(text)
+        copy_bytes(buf, t + 16, load64(t))
+        return load64(t)
     path := os_cstr(OS_PATH_A, DNS_CONF)
     fd := os_open(path, 0, 0)
     if fd < 0
         return -1
-    buf := alloc_raw(8192, KIND_BYTES)
     mut n := 0
     while n < 8192
         r := os_read(fd, buf + n, 8192 - n)
@@ -151,6 +156,17 @@ fn net_dns(host str) int
             break
         n += r
     os_close(fd)
+    n
+
+## The IPv4 address of `host` from the name servers of `/etc/resolv.conf`
+## (the first three), or -1.
+fn net_dns(host str) int
+    if load64(str_addr(host)) == 0
+        return -1
+    buf := alloc_raw(8192, KIND_BYTES)
+    n := dns_conf_read(buf)
+    if n < 0
+        return -1
     mut asked := 0
     mut i := 0
     while i < n and asked < 3
