@@ -621,7 +621,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     m
 
 ## Source bytes past which the loop proof is skipped (ADR 0911).
-PROOF_MAX_BYTES := 3000000
+PROOF_MAX_BYTES := 1500000
 
 ## Whether the independent loops may go to the pool (conc.par.8): by default,
 ## unless `AIL_PARALLEL=0`; `--deterministic` keeps every loop on one thread

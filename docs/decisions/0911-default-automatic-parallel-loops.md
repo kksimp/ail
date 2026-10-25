@@ -31,8 +31,14 @@ iterations as workers", so a 16-iteration loop of one add would pay a dispatch.
    effect sets of ADR 0163 and its own cost model; it gets its own ADR.
 
 5. **Bounded proof.** The native build does not type-check, so the proof loads
-   and checks the program a second time. A program over 3 MB of source (about
-   60k lines, the compiler itself) skips it and runs its loops in order.
+   and checks the program a second time. A program over 1.5 MB of source (about
+   30k lines; the compiler is 2.4 MB) skips it and runs its loops in order.
+
+   A cache of the proof is not needed: `cache_key` already hashes every source
+   file, so an unchanged program skips the whole build; only a changed program
+   pays for the proof. Trade-off: a very large app (over 1.5 MB) gets no
+   automatic loops until the build reuses a checked program; its `par for`
+   still works.
 
 ## Rejected alternatives
 
