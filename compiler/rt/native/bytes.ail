@@ -24,23 +24,22 @@ fn bytes_from_hex(h str) str
         i += 1
     str_at(p)
 
-## `for b in bytes`: the bytes as a list of `u8` (one word each).
+## `for b in bytes`: the bytes as a list of `u8` (one byte each, ADR 0907).
 fn bytes_list(b str) List[int]
     p := str_addr(b)
     n := load64(p)
-    xs := list_new(n)
-    for i in 0..n
-        list_push(xs, load8(p + 16 + i))
+    xs := list_alloc(n, 1)
+    q := list_addr(xs)
+    copy_bytes(load64(q + 16), p + 16, n)
+    store64(q, n)
     xs
 
 ## `bytes.from_list(xs)` (type.bytes.7): the bytes of a `List[u8]`.
 fn bytes_from_list(xs List[int]) str
     q := list_addr(xs)
     n := load64(q)
-    items := load64(q + 16)
     p := str_new(n, n)
-    for i in 0..n
-        store8(p + 16 + i, load64(items + 8 * i))
+    copy_bytes(p + 16, load64(q + 16), n)
     str_at(p)
 
 ## `b[i]`, after the caller checked the bounds (type.bytes.3).
