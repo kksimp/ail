@@ -542,8 +542,8 @@ fn ail_run(args List[str]) proc.Output ! proc.ProcError
 
 ## A case goes through `./ail` (the default; `GATE_RUST=1` sends the cases not in native_only.txt to the Rust binary),
 ## each under a 60 second alarm so one hang is one red case, not a stuck gate (item 309).
-fn case_run(native bool, args List[str]) proc.Output ! proc.ProcError
-    if native or native() or (env.get("GATE_CASES_NATIVE") else "") == "1"
+fn case_run(force_native bool, args List[str]) proc.Output ! proc.ProcError
+    if force_native or native() or (env.get("GATE_CASES_NATIVE") else "") == "1"
         script := "perl -e 'alarm 60; exec @ARGV' \"$PWD/ail\" \"$@\""
         return proc.run("sh", cat(["-c", script, "sh"], args))
     rust_run(args)
