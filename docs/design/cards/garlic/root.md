@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 104 (`ail test` lists them)
+tests: 106 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -68,6 +68,9 @@ TOOLS_SRC := ...
 fn tools_json() str
 struct Gui
 fn address(str) str [fs io]
+SEARCH_ENGINES := ...
+fn is_query(str) bool
+fn search_url(str) str
 MEASURE_RUNS := 5000
 fn id_tag(float, float, int) List[draw.Op]
 struct Garlic
@@ -106,4 +109,4 @@ fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 fn flat(gfx.Scene) List[str]
 ```
 
-trimmed to fit 2000 tokens (~1456); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1481); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
