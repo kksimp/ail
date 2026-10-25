@@ -636,6 +636,34 @@ fn main()
     print(1)
 ```
 
+## New projects
+
+**tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
+(`package NAME`, [mod.pkg.1](12-modules.md)) and `main.ail`: a `greet`
+function, a `main` that prints its result and a `@test` that checks it, so
+`ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
+commands. `NAME` starts with a lowercase letter and holds lowercase letters,
+digits, `_` and `-`; any other name, and any `NAME` that already exists as a
+file or directory, is refused with exit status 2, and nothing is created or
+changed. *(ADR 0903)*
+
+**tool.new.2** — The generated `main.ail` passes `ail check`, `ail fmt --check`
+and its own `@test`. *(ADR 0903)*
+
+```ail rules=tool.new.1,tool.new.2
+## demo: say what this program does.
+
+## The greeting for `who`.
+fn greet(who str) str
+    "Hello, {who}!"
+
+fn main()
+    print(greet("world"))
+
+@test fn greets()
+    assert_eq(greet("ail"), "Hello, ail!")
+```
+
 ## Examples
 Conformance examples (ADR 0002). Each `tool=` block runs the named tool on the
 example (`FILE` is the example, `DIR` its package directory) and checks that
@@ -901,7 +929,7 @@ fn main()
 fn main()
     print(1.shl(64))            # traps: the shift count must be 0..=63
 ```
-```ail tool=api,--refs,DIR,main.ail,16,12 expect=origin pkg=geometry rules=api.refs.2,api.pkg.2,api.pkg.3
+```ail skip=bootstrap tool=api,--refs,DIR,main.ail,16,12 expect=origin pkg=geometry rules=api.refs.2,api.pkg.2,api.pkg.3
 ```
 ```ail tool=api,--card,DIR expect=entry pkg=geometry rules=api.card.5
 ```
@@ -1049,7 +1077,7 @@ fn adds()
     assert_eq(1 + 1, 3)
 ```
 
-```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
+```ail skip=bootstrap pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
 ```
 ## Record and replay
 **replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does

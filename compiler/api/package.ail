@@ -40,7 +40,7 @@ fn pkg_localize(prog ast.Program, item Item) Item
     it
 
 ## The outline of the package `dir` in `form`.
-pub fn package_outline(prog ast.Program, facts Facts, dir str, form Form) str
+pub fn package_outline(prog ast.Program, facts Facts, dir str, form Form, symbols bool) str
     api := new_whole_api(prog, facts)
     # `items` are in position order, which is file order, before the lines are made local.
     items := [pkg_localize(prog, it) for it in api.items()]
@@ -58,15 +58,32 @@ pub fn package_outline(prog ast.Program, facts Facts, dir str, form Form) str
                 return ""
             "{lines.join("\n")}\n"
         Plain | Pretty =>
-            top := J.Obj([
+            mut pairs := [
                 kv("api", J.Int(API_VERSION)),
                 kv("package", J.Str(dir)),
                 kv("items", J.Arr([it.json() for it in items])),
-            ])
+            ]
+            if symbols
+                mut listed := List[J]()
+                for r in references(prog, facts.symbols, facts.weak_symbols, false)
+                    at := pkg_file_at(prog, r.pos.line)
+                    mut file := ""
+                    mut line := r.pos.line
+                    if at >= 0
+                        file = prog.files[at].path
+                        line = r.pos.line - prog.files[at].base
+                    listed.push(J.Obj([
+                        kv("id", J.Str(r.id)),
+                        kv("line", J.Int(line)),
+                        kv("col", J.Int(r.pos.col)),
+                        kv("file", J.Str(file)),
+                    ]))
+                pairs.push(kv("references", J.Arr(listed)))
+            top := J.Obj(pairs)
             "{write_json(top, form == Form.Pretty, 0)}\n"
 
 ## `ail api DIR`; the exit status. Doc comments are attached file by file.
-pub fn package_command(dir str, form Form, std str) int
+pub fn package_command(dir str, form Form, std str, symbols bool) int
     loaded := load.load(dir, std) else err
         io.eprint("error: {err.message}")
         return 2
@@ -91,11 +108,12 @@ pub fn package_command(dir str, form Form, std str) int
         Facts(
             effects: analysis.effects,
             errors: analysis.errors,
-            symbols: Map[int, str](),
-            weak_symbols: Map[int, str](),
+            symbols: analysis.symbols,
+            weak_symbols: analysis.weak_symbols,
         ),
         dir,
         form,
+        symbols,
     )
     if out != ""
         print(out.strip_suffix("\n") else out)

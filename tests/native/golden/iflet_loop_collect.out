@@ -1,0 +1,9 @@
+ok 0
+RED bad 1
+ok 2
+RED bad 3
+ok 4
+RED bad 5
+ok 6
+RED bad 7
+4 failures
