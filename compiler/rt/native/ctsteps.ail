@@ -1,0 +1,40 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The step limit of a constant (ct.eval.3, ADR 0226). A native program
+## computes its constants before `main` (`init.consts`, lower_const.ail); the
+## functions a constant calls run as `.ct` copies whose statements call
+## `ctsteps_step` (lower_ctsteps.ail). Its state is in three program globals:
+## the steps the current constant has run, the limit (0 until read), and the
+## constant's name. A program whose constants call nothing never calls this.
+
+## The default limit: 100,000,000 statements per constant.
+CTSTEPS_MAX := 100000000
+
+## One statement run by the constant `name`, at `path:line:col`; `count` and
+## `limit` are the addresses of its counter and limit.
+fn ctsteps_step(count int, limit int, name str, path str, line int, col int)
+    n := load64(count) + 1
+    store64(count, n)
+    mut max := load64(limit)
+    if max == 0
+        given := os_env_get("AIL_CT_MAX_STEPS")
+        max = if given == "" then CTSTEPS_MAX else str_to_int(given)
+        if max <= 0
+            max = CTSTEPS_MAX
+        store64(limit, max)
+    if n <= max
+        return
+    flush()
+    out_str(path)
+    out_byte(58)
+    out_int(line)
+    out_byte(58)
+    out_int(col)
+    out_str(": trap[ct.eval.3]: computing the constant `")
+    out_str(name)
+    out_str("` took more than ")
+    out_int(max)
+    out_str(" evaluation steps (a step is one statement run); simplify it or compute it at run time\n")
+    flush_to(2)
+    sys_exit(1)
