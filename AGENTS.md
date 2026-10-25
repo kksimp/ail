@@ -12,8 +12,9 @@ garbage-collected, memory-safe systems programming language designed so that
 humans and AI agents are both first-class programmers. Source files use `.ail`.
 The CLI is `ail` (`ail build`, `ail run`, `ail test`, `ail fmt`, `ail check`).
 
-The project is in **Stage 2: bootstrap front end and interpreter** (Rust,
-ADR 0023). The core design is done ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md))
+The project is in **Stage 2: native self-hosting**. The Rust bootstrap and its
+interpreter are deleted (D5, ADR 0865); the compiler is written in AIL and builds itself from a
+published seed (ADR 0855). The core design is done ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md))
 and the remaining design topics continue alongside. The first milestone is
 `./ail run examples/hello.ail` on macOS. Every implemented behaviour must
 cite its spec rule ID in code and in diagnostics.
@@ -35,11 +36,9 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   both pass, open a pull request for the branch and merge it through GitHub.
   GitHub deletes the branch on merge (repository setting). There's no
   GitHub-hosted testing.
-- **One checker:** checker changes go in `compiler/check/` only. The selftest
-  `self_hosted_check` lets the AIL checker report more than the Rust one, for
-  the rules in `tests/checker_known_new.txt`, and never less
-  ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md), amended
-  by the no-double-work rules).
+- **One checker:** checker changes go in `compiler/check/` only. There is no
+  Rust checker to compare with any more; `tests/checker_known_new.txt` is history
+  ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md)).
 - **Native lowering ([ADR 0823](docs/decisions/0823-lower-ail-feature-files.md)):**
   a native feature lives in its own `compiler/mir/lower_*.ail` file. It may
   add at most one dispatch line and one state field to `lower.ail`. Only a
@@ -134,7 +133,7 @@ LICENSE, NOTICE           Apache 2.0 with a Runtime Library Exception (ADR 0510)
 docs/
   README.md               documentation index (start here)
   vision.md               goals and design philosophy (from the founding brief)
-  quick-reference.md      AIL on one page for writing programs (keep it in step with the bootstrap)
+  quick-reference.md      AIL on one page for writing programs (keep it in step with the compiler)
   language-card.md        the whole language within the token budget, for agents
   roadmap.md              phased development plan
   status.md               what is decided, specified, implemented, tested
@@ -204,6 +203,7 @@ tools/
 - **Concurrency:** colorless tasks (no async/await), scope-bound, with unique
   handles that must be waited (ADRs 0095–0096). **Modules** are directories,
   `pub` exports, and `use a.b` imports with qualified access (ADRs 0097–0099).
-- Bootstrap front end and interpreter are in **Rust**. The optimising backend
-  is written **in AIL** (ADR 0022, ADR 0023).
+- The compiler, checker, tools and optimising backend are written **in AIL**
+  (ADR 0022); the Rust bootstrap (ADR 0023) is deleted, and the published seed
+  builds the first native `ail` (ADR 0855).
 - See `docs/decisions/README.md` for the full list.

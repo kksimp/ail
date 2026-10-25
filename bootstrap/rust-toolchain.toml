@@ -1,5 +1,0 @@
-# Pinned Rust for the bootstrap (ADR 0087). The ./ail launcher installs this
-# version privately into .toolchain/ unless the system Rust already matches.
-[toolchain]
-channel = "1.99.0"
-profile = "minimal"

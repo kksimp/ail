@@ -30,7 +30,7 @@ missing_goldens() {
 }
 run goldens missing_goldens
 # A union that missed a hunk leaves markers that still build when they sit in docs (BN, 2026-10-24).
-markers() { ! git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!tests" ":!bootstrap/tests"; }
+markers() { ! git grep -n "^<<<<<<< \|^>>>>>>> " -- . ":!tests"; }
 run markers markers
 run rules tools/rules-audit.sh
 for p in links dupes snippets; do run doc-$p python3 tools/check-doc-$p.py; done

@@ -1,5 +1,5 @@
 ## Test driver for the ARM64 encoder (`compiler/a64/asm.ail`, ADR 0388),
-## run by bootstrap/tests/native_asm.rs. The harness copies the module to
+## run by the `asm` gate suite (tools/gate/asm.ail). The harness copies the module to
 ## `a64/asm/` next to this file as `main.ail`, runs it, and checks each line
 ## `intent|words` against the disassembly of the 32-bit words by llvm-mc.
 ## `intent` is the instruction as the encoder was asked for it, in the

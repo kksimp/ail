@@ -1,5 +1,3 @@
-fmt plain bootstrap/src/prelude.ail	d11bd8c8a51f9a6b	0	62b9ff2d9fea886e
-fmt long bootstrap/src/prelude.ail	d11bd8c8a51f9a6b	2	6e340b9cffb37a98
 fmt plain compiler/a64/asm.ail	c4d415e63464ff57	0	7e3b1ede2c2e1915
 fmt long compiler/a64/asm.ail	c4d415e63464ff57	0	a59b4b6d5aec545c
 fmt plain compiler/a64/gen.ail	46013af390a12e10	0	e74bab53647b3420

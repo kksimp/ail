@@ -1,4 +1,4 @@
-## The spec conformance harness (ADR 0002) in AIL: bootstrap/tests/spec.rs, ported.
+## The spec conformance harness (ADR 0002) in AIL.
 ## Every fenced `ail` block of docs/spec/*.md and the other documents agents load is
 ## checked as its fence line says (docs/spec/README.md). Run from the repository root:
 ##   ail run tools/gate/spec.ail
