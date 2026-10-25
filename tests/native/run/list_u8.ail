@@ -63,3 +63,12 @@ fn main()
     print(sq.windows(2).len())
     sq.clear()
     print(sq.len())
+    mut bb := List[u8]()
+    for i in 0..300
+        bb.push((i % 200).to_u8())
+    for i in 0..300
+        bb[i] = ((i * 7) % 251).to_u8()
+    after := [i for i in 0..4]
+    print(bb[299])
+    print(bb[1])
+    print(after)

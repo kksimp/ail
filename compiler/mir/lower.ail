@@ -1303,6 +1303,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
                 r := lower_value(value, elem) else return
                 v = copy_if_place(value, Val(id: convert(r, elem, pos), ty: elem))
             uniq_drop_elem(l.id, i.id, elem, ipos)
+            v = slot_val(v, elem)
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
