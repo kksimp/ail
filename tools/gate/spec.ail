@@ -307,7 +307,7 @@ fn main() !
                 and not has_main(b.code) then wrap_fragment(b.code) else b.code
             file := "{tmp}/{stem}_{b.line}.ail"
             fs.write_text(file, code)? "writing {file}"
-            r := ail_in(root, cat(["check", "--json"], cat(b.flags, [file])), "")
+            r := ail_in(root, cat(["check"], cat(b.flags, ["--json", file])), "")
             mut errors := List[str]()
             for l in r.err.lines()
                 if l.contains("\"severity\":\"error\"")
