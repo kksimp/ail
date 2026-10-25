@@ -275,6 +275,22 @@ fn watch_open() bool
 fn watch_close()
     tr_close()
 
+## The identity of the watched variable for a callee that holds it through a `mut` parameter
+## (trace.watch.3): the object of a struct, list or map, or the cell a scalar is passed in.
+fn watch_set(id int)
+    w := tr_state()
+    if w != 0
+        store64(w + 16520, id)
+
+## `watch_open` for an event of a parameter: only when the parameter is the watched variable.
+fn watch_open_alias(id int) bool
+    w := tr_state()
+    if w == 0 or id == 0
+        return false
+    if load64(w + 16520) != id
+        return false
+    watch_open()
+
 ## The last line of a run with events (trace.run.4).
 fn tr_summary(w int)
     shown := load64(w + 16)

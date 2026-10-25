@@ -26,6 +26,8 @@ pub struct Instr
     ## `values`: each function keeps its arguments and locals where a trap's stack can print
     ## them (`--values`, trace.frame.3; rt/native/vals.ail).
     vals bool
+    ## `verbose`: `--verbose` (trace.snap.3): every frame, each local on its own line.
+    verbose bool
     ## The spill object of the function being lowered (-1 for none), its name, and how many
     ## of the names declared by then are its parameters.
     sp int
@@ -41,6 +43,13 @@ pub struct Instr
     tjson bool
     ## `watch=NAME`: the variable whose assignments are events (`--watch`, trace.watch.1).
     watch str
+    ## The element write of the statement being lowered that is shown with a note
+    ## (trace.watch.4): `wpos` identifies the operation (the method name's or the assignment's
+    ## position, line 0 for none) and `wat` is the position the event shows. `noted` is set
+    ## once the event was written, so `instr_after` does not write it twice.
+    wpos ast.Pos
+    wat ast.Pos
+    noted bool
     ids Map[str, int]
     sites List[str]
     started Set[str]
@@ -59,43 +68,208 @@ fn watch_root(e ast.Expr) ast.Expr
         Member(r, _, _) => watch_root(r)
         _ => e
 
+## Whether statement `s` writes one element of the watched variable (trace.watch.4): `NAME[i] = e`,
+## or a method call on it. Sets `wpos` and `wat` for the lowering of the operation.
+fn Lower.watch_stmt(mut self, s ast.Stmt)
+    instr.noted = false
+    instr.wpos = ast.Pos(line: 0, col: 0)
+    if is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    match s
+        Assign(target, _, _, pos) =>
+            match target
+                Index(recv, _, _) =>
+                    match recv
+                        Name(n, np) =>
+                            if n == instr.watch
+                                instr.wpos = pos
+                                instr.wat = np
+                        _ => instr.wpos = instr.wpos
+                _ => instr.wpos = instr.wpos
+        Eval(e) =>
+            match e
+                Method(recv, _, npos, _) =>
+                    match recv
+                        Name(n, _) =>
+                            if n == instr.watch
+                                instr.wpos = npos
+                                instr.wat = npos
+                        _ => instr.wpos = instr.wpos
+                _ => instr.wpos = instr.wpos
+        _ => instr.wpos = instr.wpos
+
+## Whether the operation at `pos` is the one `watch_stmt` found.
+fn Lower.watch_here(self, pos ast.Pos) bool
+    instr.wpos.line != 0 and instr.wpos.line == pos.line and instr.wpos.col == pos.col
+
+## What an element write adds to a watch event (trace.watch.4): `OP ELEM at LABEL AT, AT2`.
+struct WNote
+    kind str
+    elem Val?
+    label str
+    at Val?
+    at2 Val?
+
+## `watch: NAME = VALUE at POS`, or as JSON, when `opened` (the runtime's answer for the event
+## budget): `frame` is the function that wrote and `via` the name it holds the variable under,
+## each empty for none (trace.watch.1-4). Text and JSON follow the interpreter's.
+fn Lower.watch_event(mut self, opened int, r Val, pos ast.Pos, frame str, via str, note WNote?)
+    on := new_block()
+    cont := new_block()
+    branch(opened, on, [], cont, [])
+    seal(on)
+    cur = on
+    if instr.tjson
+        say("\{\"api\":1,\"trace\":\"watch\",\"name\":\"{jq(instr.watch)}\",\"value\":\"")
+        watch_value(r, pos)
+        say("\"")
+        if frame != ""
+            say(",\"frame\":\"{jq(frame)}\"")
+        if via != ""
+            say(",\"via\":\"{jq(via)}\"")
+        if n := note
+            say(",\"op\":\"{n.kind}\"")
+            if e := n.elem
+                say(",\"element\":\"")
+                watch_value(e, pos)
+                say("\"")
+            if a := n.at
+                say(",\"{n.label}\":\"")
+                watch_value(a, pos)
+                if b := n.at2
+                    say(", ")
+                    watch_value(b, pos)
+                say("\"")
+        say(",{trace_at(pos)}")
+        say("}\n")
+    else
+        say("watch: {instr.watch} = ")
+        describe(r, pos)
+        say(" at {trace_at(pos)}")
+        if frame != ""
+            say(" in {frame}")
+        if via != ""
+            say(" (as `{via}`)")
+        if n := note
+            say(" [{n.kind}")
+            if e := n.elem
+                say(" ")
+                describe(e, pos)
+            if a := n.at
+                say(" at {n.label} ")
+                describe(a, pos)
+                if b := n.at2
+                    say(", ")
+                    describe(b, pos)
+            say("]")
+        say("\n")
+    call("rt.watch_close", [], Ty.Unit)
+    jump(cont, [])
+    seal(cont)
+    cur = cont
+
+## A value of a JSON watch event: escaped as the inside of a string, cut at 1000 bytes.
+fn Lower.watch_value(mut self, v Val, pos ast.Pos)
+    call("rt.tr_mark", [], Ty.Unit)
+    describe(v, pos)
+    call("rt.tr_vend_long", [], Ty.Unit)
+
+## The element write of the watched statement at `pos` on `r` (trace.watch.4), written when `when`
+## (a Bool value; -1 for always) holds.
+fn Lower.watch_note_if(mut self, pos ast.Pos, when int, r Val, note WNote)
+    if not watch_here(pos) or not vals_printable(r.ty, structs)
+        return
+    yes := new_block()
+    join := new_block()
+    if when >= 0
+        branch(when, yes, [], join, [])
+    else
+        jump(yes, [])
+    seal(yes)
+    cur = yes
+    watch_event(call("rt.watch_open", [], Ty.Bool), r, instr.wat, "", "", note)
+    instr.noted = true
+    jump(join, [])
+    seal(join)
+    cur = join
+
+## `watch_note_if` for a write that always happens.
+fn Lower.watch_note(mut self, pos ast.Pos, r Val, kind str, elem Val, label str, at Val)
+    watch_note_if(pos, 0 - 1, r, WNote(kind: kind, elem: elem, label: label, at: at, at2: none))
+
+## An element write with no element, such as `reverse`.
+fn Lower.watch_plain(mut self, pos ast.Pos, r Val, kind str)
+    watch_note_if(pos, 0 - 1, r, WNote(kind: kind, elem: none, label: "", at: none, at2: none))
+
 ## After the statement `s`, an assignment to the watched variable is an event:
 ## `watch: NAME = VALUE at LINE:COL`, on standard error (trace.watch.1, trace.watch.5).
 fn Lower.instr_after(mut self, s ast.Stmt)
     if instr.watch == "" or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
         return
     mut pos := ast.Pos(line: 0, col: 0)
+    mut rn := ""
     match s
         Let(n, p, m, _, _) =>
             if n == instr.watch and m
                 pos = p
+                rn = n
         Assign(target, _, _, _) =>
             r := watch_root(target)
             match r
                 Name(n, p) =>
-                    if n == instr.watch
-                        pos = p
+                    pos = p
+                    rn = n
                 _ => pos = pos
         _ => pos = pos
-    if pos.line == 0
+    if pos.line == 0 or instr.noted
         return
-    key := lookup(instr.watch) else return
+    key := lookup(rn) else return
     ty := var_ty.get(key) else return
     if not vals_printable(ty, structs)
         return
-    on := new_block()
-    cont := new_block()
-    branch(call("rt.watch_open", [], Ty.Bool), on, [], cont, [])
-    seal(on)
-    cur = on
-    root := if file == 0 then "" else "{src_paths[file]}:"
-    say("watch: {instr.watch} = ")
-    describe(Val(id: read_var(key, cur), ty: ty), pos)
-    say(" at {root}{pos.line}:{pos.col}\n")
-    call("rt.watch_close", [], Ty.Unit)
-    jump(cont, [])
-    seal(cont)
-    cur = cont
+    # A `mut` parameter follows the watched variable only while the call passed it (trace.watch.3).
+    object := facts.mut_ptr.get("{fname}|{key}") else 0 - 1
+    if object < 0 and rn != instr.watch
+        return
+    if object < 0 and watch_object(ty)
+        call("rt.watch_set", [read_var(key, cur)], Ty.Unit)
+    mut opened := 0
+    mut frame := ""
+    mut via := ""
+    if object >= 0
+        opened = call("rt.watch_open_alias", [object], Ty.Bool)
+        frame = plain_name(fname)
+        if rn != instr.watch
+            via = rn
+    else
+        opened = call("rt.watch_open", [], Ty.Bool)
+        if instr.tjson
+            frame = plain_name(fname)
+    watch_event(opened, Val(id: read_var(key, cur), ty: ty), pos, frame, via, none)
+
+## Whether a value of type `t` is one object a callee can reach through a `mut` parameter.
+fn watch_object(t Ty) bool
+    match t
+        Struct(_) | List(_) | Map(_, _) | Set(_) => true
+        _ => false
+
+## Before a call with scalar cells: the cell the watched variable is passed in is the one a callee
+## follows (trace.watch.3). `instr_watch_cells_end` clears it after the call.
+fn Lower.instr_watch_cells(mut self, cells List[Cell])
+    if instr.watch == "" or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    wk := lookup(instr.watch) else return
+    for c in cells
+        if c.key == wk
+            call("rt.watch_set", [c.cell], Ty.Unit)
+
+fn Lower.instr_watch_cells_end(mut self, cells List[Cell])
+    if instr.watch == "" or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    wk := lookup(instr.watch) else return
+    for c in cells
+        if c.key == wk
+            call("rt.watch_set", [konst(0, Ty.Int)], Ty.Unit)
 
 ## A name in scope, with its declaration number.
 struct Pair
@@ -114,7 +288,8 @@ fn new_instr() Instr
         tests: modes.split(",").contains("tests"),
         rec: modes.split(",").contains("record"),
         steps: modes.split(",").contains("steps"),
-        vals: modes.split(",").contains("values"),
+        vals: modes.split(",").contains("values") or modes.split(",").contains("verbose"),
+        verbose: modes.split(",").contains("verbose"),
         sp: -1,
         owner: "",
         np: 0,
@@ -124,6 +299,9 @@ fn new_instr() Instr
         effects: modes.split(",").contains("traceeffects"),
         tjson: modes.split(",").contains("tracejson"),
         watch: watch_name(modes),
+        wpos: ast.Pos(line: 0, col: 0),
+        wat: ast.Pos(line: 0, col: 0),
+        noted: false,
         ids: {},
         sites: [],
         started: Set[str](),
@@ -138,6 +316,8 @@ fn instr_owned(p str) bool
 
 ## The start of statement `s` is a site.
 fn Lower.instr_stmt(mut self, s ast.Stmt)
+    if instr.watch != ""
+        watch_stmt(s)
     if instr.sp >= 0 and instr.owner == fname
         vals_spill()
     if not (instr.on or instr.steps)
@@ -169,7 +349,8 @@ fn Lower.instr_call(mut self, f ast.FnDecl, tys List[Ty], params List[int])
     if instr.tests and (fname == "main" or fname.starts_with("ail_"))
         return
     if instr.vals and not (is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path))
-        instr.sp = call("rt.vals_enter", [], Ty.Int)
+        enter := if instr.verbose then "rt.vals_enter_verbose" else "rt.vals_enter"
+        instr.sp = call(enter, [], Ty.Int)
         instr.owner = fname
         instr.np = nvars
     if instr.trace and not (is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path))
@@ -449,7 +630,10 @@ fn Lower.gen_describers(mut self)
             describe(Val(id: load(x, k + 1, d.tys[k]), ty: d.tys[k]), pos)
         say(")")
         for k in d.np..d.names.len()
-            say(if k == d.np then "; " else ", ")
+            if instr.verbose
+                say("\n      ")
+            else
+                say(if k == d.np then "; " else ", ")
             say("{d.names[k]} = ")
             describe(Val(id: load(x, k + 1, d.tys[k]), ty: d.tys[k]), pos)
         finish(return_of(-1))

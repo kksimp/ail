@@ -58,6 +58,9 @@ fn limits_init()
     mb := lim_env("AIL_MAX_MEMORY_MB", "megabytes", lim_baked_mb())
     if os_env_get("AIL_GC_STATS") != ""
         hset(25, 1)
+    verify := os_env_get("AIL_GC_VERIFY")
+    if verify != ""
+        gv_setup(verify)
     if mb > 0
         store64(global(LIM_CAP), mb * 1048576)
     if ms > 0
@@ -96,6 +99,8 @@ fn limits_check()
         out_str("trap[run.limit.1]: run took longer than --timeout ")
         out_int(load64(global(LIM_MS)))
         out_str(" ms (raise it, or find the loop)\n")
+        # The snapshot (run.limit.1, trace.snap.1): where the run was, as the other traps show it.
+        trace_frames_n(0)
         flush_to(2)
         sys_exit(1)
 
@@ -120,3 +125,33 @@ fn limits_trap()
 fn limits_pages()
     if load64(global(LIM_DEADLINE)) != 0
         limits_check()
+
+## `AIL_GC_VERIFY`: "1" checks at each collection; "lo,hi,stride" also checks
+## during allocation (gc.ail). Every allocation then takes the counted path.
+fn gv_setup(v str)
+    hset(26, 1)
+    hset(H_FASTLIM, 0)
+    p := str_addr(v)
+    n := load64(p)
+    mut lo := 0
+    mut hi := 0
+    mut stride := 0
+    mut at := 0
+    mut i := 0
+    while i < n
+        c := load8(p + 16 + i)
+        if c == 44
+            at += 1
+        elif c >= 48 and c <= 57
+            if at == 0
+                lo = lo * 10 + c - 48
+            elif at == 1
+                hi = hi * 10 + c - 48
+            else
+                stride = stride * 10 + c - 48
+        i += 1
+    if at == 2 and stride > 0
+        hset(26, 2)
+        hset(28, lo)
+        hset(29, hi)
+        hset(30, stride)

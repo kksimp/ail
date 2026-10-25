@@ -28,6 +28,7 @@ STD_MODULES := [
 pub STD_AIL := [
     "std.app",
     "std.args",
+    "std.bigint",
     "std.attach",
     "std.attach.serve",
     "std.csv",
@@ -35,10 +36,12 @@ pub STD_AIL := [
     "std.net.http",
     "std.screen",
     "std.screen.pixels",
+    "std.screen.cells",
     "std.screen.view",
     "std.net.jar",
     "std.regex",
     "std.time.date",
+    "std.toml",
     "std.ui",
     "std.ui.widgets",
 ]
