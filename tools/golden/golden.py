@@ -78,6 +78,7 @@ def run(binary, args, cwd=None, tmp=None, stdin=None, stderr=True):
     # The Rust diagnostics for generated code print the line with the second file's base added
     # (`f.ail:1048580:44`, `T:1048580:44` once the scratch path is normalised); the native ones print the line (`4:44`), which is right.
     out = re.sub(r":(\d{7,10}):(\d+)", lambda m: ":%d:%s" % (int(m.group(1)) - 1048576, m.group(2)) if 1048576 <= int(m.group(1)) < 1073741824 else m.group(0), out)
+    out = re.sub(r'"line":(\d{7,10})', lambda m: '"line":%d' % (int(m.group(1)) - 1048576) if 1048576 <= int(m.group(1)) < 1073741824 else m.group(0), out)
     # Likewise the parameter flag `"observe":false` (`@observe`, ADR 0879).
     out = out.replace(',"observe":false', "").replace('"observe":false,', "")
     LAST[threading.get_ident()] = out
