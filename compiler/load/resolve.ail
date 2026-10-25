@@ -1,5 +1,5 @@
 ## Name resolution across modules (mod.use.1-6, mod.vis.1), as `resolve` in
-## `bootstrap/src/modules.rs`: the items of every module are renamed to their
+## `77592931:bootstrap/src/modules.rs`: the items of every module are renamed to their
 ## qualified names (`a.b.Point`) and every reference is rewritten to match, so
 ## the checker sees one program whose names are unique. Imports and access to
 ## private items are checked here.

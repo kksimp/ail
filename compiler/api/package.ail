@@ -1,5 +1,5 @@
 ## `ail api DIR [--text | --pretty]` (api.pkg.1-4), as `package_outline` in
-## `bootstrap/src/api.rs`: the outline of a package directory, every module's
+## `77592931:bootstrap/src/api.rs`: the outline of a package directory, every module's
 ## declarations in one list ordered by file then position. An item's `id` is
 ## prefixed with its module, and it gains `module` and `file` keys after the
 ## single-file ones; `line` counts from the top of its own file.

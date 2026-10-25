@@ -56,7 +56,7 @@ A rule is tested when its id appears in a case, example or Rust test; spec examp
 
 ## Documentation snippets (lane 198, 2026-10-21)
 
-The spec harness (the gate's spec suite, ADR 0842; formerly `bootstrap/tests/spec.rs`) also
+The spec harness (the gate's spec suite, ADR 0842; formerly `77592931:bootstrap/tests/spec.rs`) also
 checks the `ail` fences of the documents agents load. Counts for the
 documents with fences:
 
@@ -83,7 +83,7 @@ lands the feature.
 
 Converted by lane 254: `trait.op.2` is a checked `error=` block (`impl Shl`, which
 trait.op.1 doesn't allow). `ct.eval.3` stays `norun`, since its limit is a run-time
-trap the gate can't assert; `bootstrap/tests/ct_limit.rs` checks the same trap. `own.ref.2`
+trap the gate can't assert; `77592931:bootstrap/tests/ct_limit.rs` checks the same trap. `own.ref.2`
 and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 `skip=bootstrap`: the bootstrap still reports `gram.syntax.1`.
 
@@ -145,7 +145,7 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `10-traits.md:770` | norun | `trait.res.2` | A built-in or inherent method wins over a default method of a prelude trait with the same name, so the call below uses the struct's own method. | unowned |
 | `10-traits.md:851` | norun | `trait.any.5` | `any Shape` satisfies the constraint Shape only when every method can be called through it (trait.any.4); the rule is checked by the example for trait.any.4 abo | unowned |
 | `10-traits.md:904` | skip=context | `trait.auto.5` | Hash has no methods; a type is Hash when its Eq is automatic or derived by an empty impl. The map and set examples in chapter 17 use it as a key. | unowned |
-| `10-traits.md:909` | skip=context | `trait.impl.4` | An impl outside the package that declares the trait or the type is rejected. An example needs two packages; the bootstrap's package tests cover it (bootstrap/te | unowned |
+| `10-traits.md:909` | skip=context | `trait.impl.4` | An impl outside the package that declares the trait or the type is rejected. An example needs two packages; the bootstrap's package tests cover it (77592931:bootstrap/te | unowned |
 | `11-concurrency.md:396` | norun | `conc.select.1` | norun: the order of the two streams depends on how the child process races, so the output varies between runs | 223 |
 | `11-concurrency.md:592` | norun | `conc.task.7` | traps on purpose: the deadlock trap is a run-time result, not printed output | 223 |
 | `11-concurrency.md:666` | norun | `conc.mm.1` | [definitional] a memory-model rule with no observable output | 223 |
@@ -194,8 +194,8 @@ and `ct.const.4` were already `error=` blocks (#290). `lex.kw.1` stays
 | `20-contracts.md:316` | norun | `contract.ens.1` | a violated ensures traps at run time, so the block is checked and not run | 223 |
 | `20-contracts.md:337` | norun | `contract.inv.2` | a violated invariant traps at run time, so the block is checked and not run | 223 |
 | `20-contracts.md:348` | norun | `contract.inv.3` | a violated invariant traps at run time, so the block is checked and not run | 223 |
-| `21-trace.md:367` | norun | `run.limit.5` | the limits are read from the environment at native start; the gate runs `ail` only, and bootstrap/tests/native.rs checks it | 223 |
-| `21-trace.md:374` | norun | `run.limit.6` | a native program past a limit prints a trap; the gate runs `ail` only, and bootstrap/tests/native.rs checks it | 223 |
+| `21-trace.md:367` | norun | `run.limit.5` | the limits are read from the environment at native start; the gate runs `ail` only, and 77592931:bootstrap/tests/native.rs checks it | 223 |
+| `21-trace.md:374` | norun | `run.limit.6` | a native program past a limit prints a trap; the gate runs `ail` only, and 77592931:bootstrap/tests/native.rs checks it | 223 |
 | `22-tools.md:732` | norun | `expr.bit.2` | not run: traps on purpose, needs input or a host resource, or prints tool output | unowned |
 | `23-native.md:356` | norun | `native.build.2` | needs `ail build` and a native toolchain; the gate runs only `ail check` | 223 |
 | `23-native.md:361` | norun | `native.build.4` | needs `ail build` and a native toolchain; the gate runs only `ail check` | 223 |
@@ -232,7 +232,7 @@ their own blocks (`mod.unit.1`, `mod.const.*`, `mod.use.3`, `mod.use.4`, `mod.us
 `mod.unit.4`, `mod.vis.2`, `mod.main.2`). The rules that need a directory tree, a manifest
 or a git cache (`mod.unit.2`, `mod.unit.5`, `mod.use.5`, `mod.pkg.*`, `mod.vis.3`) are cited
 by `skip=context` blocks that show the layout. Their checks are the package cases in
-`tests/cases/packages/` and `bootstrap/tests/git_deps.rs`, not the spec gate.
+`tests/cases/packages/` and `77592931:bootstrap/tests/git_deps.rs`, not the spec gate.
 Chapter 13 (unsafe, 15 rules, lane 223): all cited. Runtime traps (`unsafe.ptr.4`–`6`, `unsafe.mem.2`, `unsafe.mem.3`) are `norun`. `unsafe.block.3` (manifest opt-in) is a `skip=context` block with the package cases named. `unsafe.block.1` is shown by the valid block example, since the bootstrap reports the disallowed case as `unsafe.op.1`.
 
 Chapter 14 (FFI, 12 rules, lane 223): all cited. `ffi.decl.1` (`use c "header.h"`) is `skip=bootstrap`: specified, not built. `ffi.native.1` has a runnable block (`isdigit`, outside the libc subset, bound at its first call, ADR 0870) and a `norun` one that prints a process id. The load traps (`ffi.load.1`–`3`) are `norun`. `ffi.load.3` is Windows-only behaviour and is shown by a `norun` block.
@@ -247,14 +247,14 @@ Bootstrap skips (`skip=bootstrap`) are bootstrap bugs, not spec changes (integra
 `tools/rules-audit.sh` check 2 found 87 rules at the batch head. Three rounds have sorted them:
 
 - **Definitional, 10.** Marked `[definitional]` in the spec (spec README, rule 2; ADR 0673) and skipped by the audit: `conc.mm.1`, `conc.task.9`, `plat.ptr.1`, `plat.ptr.2`, `plat.ptr.3`, `plat.endian.1`, `plat.target.1`, `refl.run.1`, `type.opt.1`, `own.borrow.2`.
-- **Cited, 55.** 28 were implemented in AIL std sources (`std/**/*.ail`, `tools/native/prelude.ail`), which the audit did not scan; it now does. 18 more were cited at the code that implements them (PR #244): `json.type.1`, `json.parse.2`, `json.print.2`, `json.prelude.1`, `err.trap.2`, `conc.atomic.2`, `type.num.12`, `type.str.12`, `own.uniq.7`, `std.mem.1`, `std.regex.23`, `test.run.6`, `edit.out.3`, `native.build.4`, `plat.isa.1`, `plat.isa.2`, `ffi.link.1`, `unsafe.block.4`. The follow-up adds nine: `mod.vis.3`, `eff.det.2`, `eff.det.3`, `fix.edit.6`, `ct.eval.1`, `trait.op.2`, and `explain.cover.1`-`3` (the audit now reads comments in `bootstrap/tests/explain_coverage.rs`, which enforce them).
+- **Cited, 55.** 28 were implemented in AIL std sources (`std/**/*.ail`, `tools/native/prelude.ail`), which the audit did not scan; it now does. 18 more were cited at the code that implements them (PR #244): `json.type.1`, `json.parse.2`, `json.print.2`, `json.prelude.1`, `err.trap.2`, `conc.atomic.2`, `type.num.12`, `type.str.12`, `own.uniq.7`, `std.mem.1`, `std.regex.23`, `test.run.6`, `edit.out.3`, `native.build.4`, `plat.isa.1`, `plat.isa.2`, `ffi.link.1`, `unsafe.block.4`. The follow-up adds nine: `mod.vis.3`, `eff.det.2`, `eff.det.3`, `fix.edit.6`, `ct.eval.1`, `trait.op.2`, and `explain.cover.1`-`3` (the audit now reads comments in `77592931:bootstrap/tests/explain_coverage.rs`, which enforce them).
 - **Still uncited, 22.**
   - *Not implemented, 8:* `native.bce.1`-`4` (no bounds-check or overflow-check removal in `compiler/mir`); `ct.eval.3` (constants have a statement-step limit, ADR 0742; the memory limit and a derive's limits are still missing); `ct.eval.4` (optional reuse of compile-time results, a MAY rule); `plat.isa.3` (no start-up check of the CPU feature level); `own.copy.1` (no report of deep-copy sites found).
   - *Enforced by a test that does not exist yet, 1:* `native.build.1` (needs the `ail test --native` differential runner, lane 209).
   - *Implementation not located, 13:* `api.pkg.4`, `conc.race.1`, `ct.const.4`, `err.type.3`, `err.type.4`, `gen.anon.2`, `gram.help.2`, `own.borrow.1`, `type.enum.4`, `type.num.3`, `type.num.4`, `type.opt.8`, `unsafe.op.2`. Each needs a search of the owning code by someone who knows it, and the searches here were not exhaustive.
   - *Possible mis-citation:* `check.rs` reports the nested-optional error with `type.opt.7`; spec `type.opt.8` describes that rule. The owner should decide which ID the diagnostic carries.
 
-Check 1 (cited but not in the spec) has three pre-existing entries that lane 207 did not change: `expr.lit.3` (`compiler/mir/lower.ail`), `plat.win.1` (`compiler/rt/native/os.ail`) and `std.tz.4` (`bootstrap/src/interp/tz.rs`).
+Check 1 (cited but not in the spec) has three pre-existing entries that lane 207 did not change: `expr.lit.3` (`compiler/mir/lower.ail`), `plat.win.1` (`compiler/rt/native/os.ail`) and `std.tz.4` (`77592931:bootstrap/src/interp/tz.rs`).
 ## Check 2 after lane 244 (2026-10-21)
 
 Lane 207's "not implemented" entry for `native.bce.1`-`4` was stale: `compiler/mir/bce.ail`

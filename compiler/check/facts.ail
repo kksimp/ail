@@ -1,6 +1,6 @@
 ## Facts the checker records for `ail api --locals/--type/--refs` (api.loc.1,
-## api.type.1, ADR 0258), as `bootstrap/src/check/facts.rs` and the recording
-## in `bootstrap/src/check.rs`. Recording is off except for `analyze(p, true)`.
+## api.type.1, ADR 0258), as `77592931:bootstrap/src/check/facts.rs` and the recording
+## in `77592931:bootstrap/src/check.rs`. Recording is off except for `analyze(p, true)`.
 use ast
 
 ## A local name and its type, as the checker left it when the name went out

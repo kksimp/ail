@@ -1,5 +1,5 @@
 ## `ail api --expanded` (ct.gen.4, ADR 0228, ADR 0308), as
-## `bootstrap/src/api/expanded.rs`: the methods derive generators wrote, with
+## `77592931:bootstrap/src/api/expanded.rs`: the methods derive generators wrote, with
 ## their origin and text, and which `impl`s are built-in derives, listed by
 ## name (OQ-096 option b).
 use ast

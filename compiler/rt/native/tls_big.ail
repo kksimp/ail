@@ -5,7 +5,7 @@
 ## slice 3, ADR 0368): a number is a `List[int]` of limbs of 28 bits, least
 ## significant first, all of one length `k`. Montgomery arithmetic modulo an
 ## odd `m`. Only public values go through here (certificates, signatures,
-## public keys), so the code is not constant time, like bootstrap/src/net/
+## public keys), so the code is not constant time, like 77592931:bootstrap/src/net/
 ## crypto/bignum.rs, whose results it must equal.
 ##
 ## A Montgomery context is a list of lists: `[m, R^2 mod m, [-1/m mod 2^28],

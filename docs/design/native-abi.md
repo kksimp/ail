@@ -290,7 +290,7 @@ block and the stack top; the runtime's slots are 0-63 and the program's constant
 flag), 40 `net.ail` (the table of sockets, ADR 0830), 41 `net_http.ail` (the pool of idle HTTP connections, std.net.19), 42 `tls_client.ail` (the cache of trusted roots, ADR 0852), 44 `memtab.ail` (the table of `std.mem` blocks, unsafe.ptr.5-6), 48 `unwind.ail` (cleanups on a trap, own.uniq.3), 45-47, 49-51 and 55 `limits.ail` (run limits, ADR 0726), 52-54 `fmt.ail` (the byte builder), 56 `instr.ail` (the hit table of an instrumented build, native.instr.2), the rest free (the concurrency slots of #194 take 16-24, channels 25-30). Each slot is a
 constant `NAME := N` read as `global(NAME)`; two names may share a slot only
 if the doc comment says it `shares` it (`TRAP_LEN` and `PARSE_OK`).
-`bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
+`77592931:bootstrap/tests/native_globals.rs` fails on two names in one slot, a slot
 past `Image.globals`, an undeclared name, or a code generator constant of
 the same name with another value.
 
@@ -505,7 +505,7 @@ C, and the differential harness runs them under the interpreter only.
 
 **Runtime Code.** The call stubs, the GOT slots and `rt_exit`'s flush belong
 to the executable and fall under the Runtime Exception (ADR 0510); the
-interpreter's `dlopen` glue (`bootstrap/src/interp/ffi.rs`) is toolchain code
+interpreter's `dlopen` glue (`77592931:bootstrap/src/interp/ffi.rs`) is toolchain code
 and does not.
 
 **Order of work (lane 120 and lane 122).** (1) `compiler/rt/` switches its

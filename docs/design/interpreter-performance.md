@@ -232,7 +232,7 @@ values, and every name is a `String`; each needs a change across `lexer.rs`,
 
 Run programs (`ail run`, system allocator) are unchanged within noise:
 interp 120 → 116 ms, json 6.6 → 6.6, sheet 13.7 → 14.2, loops 277 → 288.
-`bootstrap/tests/front_end_alloc.rs` checks that `ail check` and `ail api
+`77592931:bootstrap/tests/front_end_alloc.rs` checks that `ail check` and `ail api
 --symbols` print the same bytes with and without the front-end allocator
 (`AIL_SYSTEM_ALLOC=1`) on every example and test case.
 

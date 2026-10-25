@@ -1,5 +1,5 @@
 ## Types as written, resolved to `Ty` (ADR 0377): `resolve_type`,
-## `resolve_ret` and their diagnostics, as in `bootstrap/src/check.rs`.
+## `resolve_ret` and their diagnostics, as in `77592931:bootstrap/src/check.rs`.
 use ast
 use fix
 

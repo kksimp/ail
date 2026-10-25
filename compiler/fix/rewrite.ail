@@ -1,7 +1,7 @@
 ## Anchored edits that read the source line (fix.edit.2, ADR 0335): the operands
 ## around an operator, a C-style `for` header and a typed empty collection.
 ## Each is dropped, not guessed, when the line isn't a plain case. A port of
-## `bootstrap/src/diag/rewrite.rs`. Positions here are 0-based character
+## `77592931:bootstrap/src/diag/rewrite.rs`. Positions here are 0-based character
 ## indexes into a line.
 use ast
 

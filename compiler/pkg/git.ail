@@ -1,4 +1,4 @@
-## Git dependencies and `ail.lock` (mod.pkg.6-9), as `bootstrap/src/packages/git.rs`
+## Git dependencies and `ail.lock` (mod.pkg.6-9), as `77592931:bootstrap/src/packages/git.rs`
 ## (ADRs 0355-0357). The toolchain fetches a `git` dependency with the system
 ## `git` into `$AIL_HOME/deps/NAME-COMMIT` (`~/.ail/deps` without `AIL_HOME`):
 ## a plain, read-only tree without `.git`, never updated in place (mod.pkg.7).

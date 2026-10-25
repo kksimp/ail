@@ -34,7 +34,7 @@ language card is untouched. `tools/perfbench` shows no difference beyond noise (
 - **Foreign syntax is named once** (`gram.foreign.1`): `def`, `class`, `import`,
   `async`, `try`, `switch`, `pass`, `new`, `x++`, `<>`, `::`, `Point{...}`,
   braces, `:` after a header, `//`, `\`, `f"..."`, and calls such as `len(xs)`,
-  `str(n)`, `range(n)`, `println(x)`. The tables are in `bootstrap/src/foreign.rs`.
+  `str(n)`, `range(n)`, `println(x)`. The tables are in `77592931:bootstrap/src/foreign.rs`.
 - **One report per cause** (`gram.rec.1–3`): a whole 2-space or tab-indented
   file is one diagnostic with a re-indenting fix; an unclosed bracket doesn't
   cascade; `x = 1` doesn't make every later `x` an error; `p.y` no longer
@@ -171,7 +171,7 @@ First diagnostic of each program (help truncated at 90 characters).
 ## Lane 147: fixes for the bit operators (expr.bit.1)
 
 `&` and `^` are reported as `gram.foreign.1` with a fix that rewrites
-`l & r` as `l.bit_and(r)` and `l ^ r` as `l.bit_xor(r)` (`bootstrap/src/fix/bit.rs`,
+`l & r` as `l.bit_and(r)` and `l ^ r` as `l.bit_xor(r)` (`77592931:bootstrap/src/fix/bit.rs`,
 `diag/rewrite.rs` `Anchor::Operands`). The rewrite applies only when both
 operands are whole atoms of the line, so `a & 1 + 2` keeps its error: it
 could change precedence. Corpus: 143 programs, 90 fixed (63%), up from 140
@@ -192,17 +192,17 @@ another module's. Corpus: 146 programs, 90 fixed (62%). `regex.search` (a
 Python name) is `std.use.2` with no fix; the help lists the real functions.
 
 Braces in strings (lane 147, from the whole-task study): `lex.str.2` for an
-empty `{}` or an unclosed `{` now has a fix that writes `\{` (`bootstrap/src/fix/string.rs`).
+empty `{}` or an unclosed `{` now has a fix that writes `\{` (`77592931:bootstrap/src/fix/string.rs`).
 A `}` after the escaped brace stays literal. Corpus: 148 programs, 92 fixed (62%).
 
 Named arguments (lane 147, ADR 0454): a positional argument after a named one
 is `expr.call.3` with a fix that names it with the parameter it fills
-(`bootstrap/src/fix/named.rs`); a duplicate parameter gets a help and no fix,
+(`77592931:bootstrap/src/fix/named.rs`); a duplicate parameter gets a help and no fix,
 since which of the two arguments is meant is a choice. Corpus: 150 programs,
 93 fixed (62%).
 
 Whole-number float defaults (lane 147): `n else 2.0` where `int` is expected
-is `err.else.1` with a fix to `2` (`bootstrap/src/fix/number.rs`; the anchored edit
+is `err.else.1` with a fix to `2` (`77592931:bootstrap/src/fix/number.rs`; the anchored edit
 matches `2.0` only). Corpus: 151 programs, 94 fixed (62%). The whole-task t2 slip
 is a different error: `doc.num` gives `float`, so `retries + 1` ends in `float`
 under `!int`. Its fix is a choice (`.to_int()`, or `!float`), so none is applied.
