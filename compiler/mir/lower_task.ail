@@ -505,7 +505,7 @@ fn scan_place(mut sc ParScan, e ast.Expr)
         _ => sc.bad = true
 
 ## `n` operations per run of the innermost loop; the total stays far from `int`.
-fn bump(mut sc ParScan, n int)
+fn scan_cost(mut sc ParScan, n int)
     if sc.work < 1000000000
         sc.work += n * sc.mult
 
@@ -522,12 +522,12 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
                     Hole(x) => scan_expr(mut sc, x)
                     Fmt(x, _) => scan_expr(mut sc, x)
         Call(callee, args, _) =>
-            bump(mut sc, 8)
+            scan_cost(mut sc, 8)
             match callee
                 Name => scan_args(mut sc, args)
                 _ => sc.bad = true
         Method(recv, name, _, args) =>
-            bump(mut sc, 2)
+            scan_cost(mut sc, 2)
             if not READ_ONLY.contains(name)
                 r := root_name(recv) else
                     sc.bad = true
@@ -536,7 +536,7 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
             scan_expr(mut sc, recv)
             scan_args(mut sc, args)
         Index(r, i, _) =>
-            bump(mut sc, 2)
+            scan_cost(mut sc, 2)
             scan_expr(mut sc, r)
             scan_expr(mut sc, i)
         Unary(o, x, _) =>
@@ -544,7 +544,7 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
                 Spawn => sc.bad = true
                 Neg | Not => scan_expr(mut sc, x)
         Binary(_, a, b, _) =>
-            bump(mut sc, 1)
+            scan_cost(mut sc, 1)
             scan_expr(mut sc, a)
             scan_expr(mut sc, b)
         ListLit(items, _) =>
@@ -647,7 +647,14 @@ fn root_of(e ast.Expr) str
 ## enough and nothing in a chunk traps; else the loop in order, which is its
 ## meaning (conc.par.5) and, after a trap or an accumulator that would
 ## overflow, the only way to report the sequential trap (conc.par.11).
-fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos, auto bool)
+fn Lower.lower_par_for(
+    mut self,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    pos ast.Pos,
+    auto bool,
+)
     plan := par_plan(var, iter, body, pos) else
         lower_for(var, iter, body, false, pos)
         return
@@ -695,7 +702,8 @@ fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], po
     # A written `par for` needs only the iteration count (conc.par.8); a loop the
     # compiler chose also needs enough work to repay the pool (conc.par.12).
     weight := konst(plan.work, Ty.Int)
-    branch(call("rt.par_worth", [lo, hi, weight, konst(if auto then 1 else 0, Ty.Int)], Ty.Bool), par_blk, [], seq, [])
+    chosen := konst(if auto then 1 else 0, Ty.Int)
+    branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
     cur = par_blk
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)
