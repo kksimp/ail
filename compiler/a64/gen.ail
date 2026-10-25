@@ -889,7 +889,7 @@ fn Gen.push(mut self, i mir.Inst)
     a.ldr(S1, l, 16)
     if float
         a.str_d_idx(r, S1, S2)
-    elif f.vals[v].elem_bytes() == 1
+    elif i.name == "rt.list_pushb"
         a.strb_idx(r, S1, S2)
     else
         a.str_idx(r, S1, S2)
