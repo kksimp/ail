@@ -510,11 +510,21 @@ fn tensor_zip(a int, b int, op int) int
     t := tensor_new(kind, rank, n)
     tensor_copy_words(t + 32, dims, rank)
     out := tensor_data(t)
-    if kind == 2
-        vec_zip32(op, out, da, db, n)
-        return t
-    if kind == 1
-        vec_zip(op, out, da, db, n, 0)
+    if kind >= 1
+        if n >= 262144
+            env := tensor_env()
+            store64(env, 1)
+            store64(env + 8, kind)
+            store64(env + 16, out)
+            store64(env + 24, da)
+            store64(env + 32, db)
+            store64(env + 40, op)
+            if tensor_par(env, 0, n, n)
+                return t
+        if kind == 2
+            vec_zip32(op, out, da, db, n)
+        else
+            vec_zip(op, out, da, db, n, 0)
         return t
     for i in 0..n
         if not int_op(op, load64(da + 8 * i), load64(db + 8 * i), out + 8 * i)
@@ -530,10 +540,23 @@ fn tensor_scalar_f(a int, s float, op int, left bool) int
     tensor_copy_words(t + 32, a + 32, rank)
     da := tensor_data(a)
     out := tensor_data(t)
+    lf := if left then 1 else 0
+    sv := if kind == 2 then f32_round(s) else s
+    if n >= 262144
+        env := tensor_env()
+        store64(env, 2)
+        store64(env + 8, kind)
+        store64(env + 16, out)
+        store64(env + 24, da)
+        store64(env + 40, op)
+        store64(env + 48, lf)
+        storef(env + 56, sv)
+        if tensor_par(env, 0, n, n)
+            return t
     if kind == 2
-        vec_scal32(op, out, da, n, if left then 1 else 0, f32_round(s))
+        vec_scal32(op, out, da, n, lf, sv)
         return t
-    vec_scal(op, out, da, n, 0, if left then 1 else 0, s)
+    vec_scal(op, out, da, n, 0, lf, sv)
     t
 
 ## The same for an `int` scalar; 0 on overflow.
@@ -776,13 +799,23 @@ fn tensor_matmul(a int, b int) int
     da := tensor_data(a)
     db := tensor_data(b)
     out := tensor_data(t)
-    if kind == 2
+    if kind >= 1
+        if m * n * k >= 262144 and m > 1
+            env := tensor_env()
+            store64(env, 0)
+            store64(env + 8, kind)
+            store64(env + 16, out)
+            store64(env + 24, da)
+            store64(env + 32, db)
+            store64(env + 40, n)
+            store64(env + 48, k)
+            if tensor_par(env, 0, m, m * n * k)
+                return t
         for i in 0..m
-            vec_mm32(out + 4 * i * n, da + 4 * i * k, db, n, k)
-        return t
-    if kind == 1
-        for i in 0..m
-            vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, 0)
+            if kind == 2
+                vec_mm32(out + 4 * i * n, da + 4 * i * k, db, n, k)
+            else
+                vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, 0)
         return t
     box := alloc(8, KIND_ATOMIC)
     for i in 0..m
