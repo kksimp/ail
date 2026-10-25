@@ -31,7 +31,7 @@ entry: main in main.ail
 
 ## load (102 items)
 
-## mir (492 items)
+## mir (490 items)
 
 ## obj (64 items)
 
