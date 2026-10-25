@@ -3,7 +3,7 @@ entry: main in main.ail
 
 ## (root) (58 items)
 
-## a64 (74 items)
+## a64 (92 items)
 
 ## api (211 items)
 
@@ -43,6 +43,6 @@ entry: main in main.ail
 
 ## watch (4 items)
 
-## x64 (88 items)
+## x64 (109 items)
 
 trimmed to fit 4000 tokens (~219); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
