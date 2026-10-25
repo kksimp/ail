@@ -12,11 +12,10 @@ ref="${2:-}"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 if [ -n "$ref" ]; then
-  git archive "$ref" compiler bootstrap/src | tar -x -C "$tmp"
+  git archive "$ref" compiler std | tar -x -C "$tmp"
 else
   cp -r compiler "$tmp/compiler"
-  mkdir -p "$tmp/bootstrap"
-  cp -r bootstrap/src "$tmp/bootstrap/src"
+  cp -r std "$tmp/std"
 fi
 cp tools/native-tls/tlsprim.ail "$tmp/compiler/rt/native/tlsprim.ail"
 python3 - "$tmp/compiler/rt/native/hash.ail" <<'PY'

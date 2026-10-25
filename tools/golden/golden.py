@@ -13,11 +13,9 @@ compares. No Rust binary is needed to check.
 
 A case named in tests/golden/known.txt is a known divergence (the native side does something the
 frozen Rust one can't) and is skipped. `check` also takes `--match TEXT`.
-TOOL is explain, fmt, fix, api, edit or all. `compare` runs the matching cases with both binaries (`--ref`, `--bin`) and prints the text
-of each difference, to see why a `check` failed while a reference binary still exists.
-`--bin` is the `ail` to run (default `./ail`;
-freeze it with `--bin "AIL_RUST=1 ./ail"` until the Rust binary is gone, afterwards with the
-native one, to refresh a golden on purpose). A row is `case<TAB>input hash<TAB>exit
+TOOL is explain, fmt, fix, api, edit or all. `compare` runs the matching cases with two binaries (`--ref`, `--bin`) and prints the text
+of each difference, to see why a `check` failed.
+`--bin` is the `ail` to run (default `./ail`); refresh a golden on purpose by freezing with it. A row is `case<TAB>input hash<TAB>exit
 status<TAB>output hash`. The input hash is of the files the case reads, so a row whose
 input has changed since the freeze is stale: it is skipped and counted, and it is a
 failure only with `--strict` (refreeze to bring it up to date). Last line:

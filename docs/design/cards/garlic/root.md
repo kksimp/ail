@@ -100,7 +100,7 @@ fn marks_svg(gfx.Scene, float) str
 fn main() ! [app clock env fail fs io net net.serve proc random spawn]
 fn tree(str) str
 fn lay(str, int) page.Page
-fn testdata() str [env fs io]
+fn testdata() str [env]
 fn show_ops(List[draw.Op]) List[str]
 fn resized(float, float) std.app.Event
 fn clicked(float, float) std.app.Event
@@ -114,4 +114,4 @@ fn flat(gfx.Scene) List[str]
 fn fwd_slashes(str) str
 ```
 
-trimmed to fit 2000 tokens (~1546); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1544); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

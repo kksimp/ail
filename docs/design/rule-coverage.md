@@ -287,15 +287,9 @@ or reason.
 
 | rule | owner | reason |
 |---|---|---|
-| `ct.eval.4` | 238 | optional reuse of compile-time results is a MAY rule; not built; cannot be enforced yet, see OQ-135 |
 | `err.type.4` | unowned | match exhaustiveness on an inferred error set; lane 223 marks its example `skip=bootstrap` |
-| `gen.anon.2` | 238 | `ail fmt` keeps `[T Ord]` as written; the anonymous canonical form is not built (checked by running fmt); cannot be enforced yet, see OQ-135 |
-| `own.copy.1` | 238 | no report of deep-copy sites in a performance report; cannot be enforced yet, see OQ-135 |
-| `plat.isa.3` | unowned | no start-up check of the CPU feature level in the native runtime |
-| `type.enum.4` | 238 | `ail fmt` keeps `Shape.Circle` where the qualifier can be omitted (checked by running fmt); cannot be enforced yet, see OQ-135 |
-| `conc.race.1` | unowned | a guarantee of the conc.share checks; no citation located |
-| `gram.help.2` | unowned | the fix loop's clean-result rule; the site is not located |
-| `native.bce.4` | unowned | overflow-check removal in loops; not located in `compiler/mir/bce.ail` |
-| `own.borrow.1` | unowned | a parameter's access lasts for the call; the site is not located |
-| `type.num.3` | unowned | literal default typing (`int`, `float`); the site is not located |
+| `ffi.decl.1` | RR-4 | its spec block is `skip=bootstrap`; the native CLI builds C declarations (nativex `ffi_*` programs), so a runnable block is still to be written |
+| `mod.vis.3` | RR-4 | its spec block shows a directory layout (`skip=context`); the package cases in tests/cases/packages check it |
+| `test.run.5` | RR-4 | its spec block is `skip=bootstrap`; `ail test` prints the trap snapshot natively (tools/ailtest), the block needs un-skipping after a native run |
+| `trace.snap.4` | RR-4 | its spec block is `skip=bootstrap`; `run --json` trap output is native (tools/trapjson.awk), the block needs un-skipping after a native run |
 

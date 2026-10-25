@@ -5,8 +5,7 @@
 #
 # First deletes remote branches that are already merged into main. Then checks
 # out BRANCH into .verify/BRANCH (a temporary git worktree), runs the
-# bootstrap's self-tests and the examples there, and prints PASS or FAIL.
-# Reuses the private Rust toolchain in .toolchain/ (ADR 0087).
+# gate there (tools/gate/mac-gate.sh), and prints PASS or FAIL.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -30,7 +29,6 @@ mkdir -p "$(dirname "$wt")"
 git -C "$root" worktree add --quiet --detach "$wt" "origin/$branch"
 echo "testing $(git -C "$wt" log -1 --format='%h %s')"
 
-export AIL_TOOLCHAIN_DIR="$root/.toolchain"
 status=0
 "$wt/ail" selftest || status=1
 for example in "$wt"/examples/*.ail; do

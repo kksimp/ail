@@ -2,15 +2,6 @@
 
 ## fixrun
 ```
-fn fixrun.unescape(s str) str
-fn fixrun.escape(s str) str
-fn fixrun.anchor_of(name str) str
-fn fixrun.pos_of(line str, col str) ast.Pos
-pub fn fixrun.settled(src str, dump str) str  ## One line per fix that settles: `LINE:COL:` of its diagnostic, then its edits.
-fn fixrun.num_of(j Json, key str) int
-fn fixrun.edits_of(f Json) List[fix.Edit]
-pub fn fixrun.rust_diagnose(path str, src str, json bool) fixrun.Diagnosis [env fs io proc]  ## A check by the Rust tool, for `fixrun`: writes `src` to `path`, runs
-pub fn fixrun.run_with_rust(args List[str]) int [env fs io proc]  ## `ail fix` with the Rust tool as the checker, for `tools/fix/parity.py`.
 fixrun.MAX_ROUNDS := 5  ## Rounds of fix-and-recheck before giving up (fix.apply.2).
 pub struct fixrun.Found  ## A diagnostic as `ail fix` sees it: its rule, position, whether it is a
     pub rule str

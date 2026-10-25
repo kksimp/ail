@@ -95,8 +95,13 @@ get it together (ADR 0008). Measured on binarytrees, fasta and fannkuch on ail-l
 same checkout with and without the commit). Result (2026-10-25, Mac): no change, instruction
 counts within 0.1M on all six programs. The hot functions of binarytrees, fannkuch and fasta
 have no allocation calls: binarytrees' time is the recursive `make`/`check` and two
-`list_push` per node. The inlining was removed again (2026-10-25): it gained nothing and
-enlarged every function that builds a struct or list, and the Mac gate got slower. Pass 1 as a
+`list_push` per node. The inlining was removed again (2026-10-25, #880): it gained nothing and
+enlarged every function that builds a struct or list, and the gate got slower. Measured on
+ail-linux, stage 1 and stage 2 of the self-host, alone: with it 127.9 s (71.8 s and 56.1 s) and
+a 9,674,760-byte stage-1 binary; without it 58.7 s (35.7 s and 23.0 s) and 7,924,864 bytes.
+The recursion pass (below) costs no compile time: `AIL_OPT_OFF=unroll` gives 58.8 s and
+7,898,288 bytes. Lesson: a pass that inlines a large body at every call site needs a
+compile-time and size check as well as a speed check. Pass 1 as a
 speed lever is replaced by the codegen items below; escape analysis (1b) waits for a profile
 that shows allocation.
 

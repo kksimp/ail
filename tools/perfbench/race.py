@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drag-race harness (drag.*, ADR 0460). Measurement only (ADR 0070).
 
-Times the same program in AIL (interpreter, bytecode tier), AIL native
+Times the same program in `ail run` (native, through the build cache), AIL native
 (`ail build`, once lane 120 lands it), C (`clang -O2` and `gcc -O2`) and
 Python, then prints one table: min and median wall seconds per column and
 ratios to C and to Python (below 1 beats it).
@@ -15,7 +15,7 @@ import argparse, os, platform, shutil, statistics, subprocess, sys, tempfile, ti
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-AIL = os.path.join(ROOT, "bootstrap", "target", "release", "ail")
+AIL = os.path.join(ROOT, "ail")
 CORPUS = os.path.join(ROOT, "tools", "tokbench", "corpus", "programs")
 DEFAULT_SET = [
     "examples/interp.ail", "examples/json.ail", "examples/sheet.ail",

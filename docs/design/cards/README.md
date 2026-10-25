@@ -1,7 +1,7 @@
 # Program cards
 
 Output of `ail api --card` ([ADR 0310](../../decisions/0310-ail-api-card-format.md)),
-checked in as examples and kept fresh by `cargo test --test api_card`
+checked in as examples and kept fresh by the `api_card` gate suite
 (`api.card.5`). Regenerate from the repository root:
 
 ```sh
@@ -24,7 +24,7 @@ are cl100k tokens from `tools/tokbench/run.sh` (ADR 0703).
 | [compiler.md](compiler.md) | `compiler` | 2,661 | The native compiler |
 
 `tools/perfbench` and `tools/self-compile` have no `.ail` files, so they have no
-card. `bootstrap/tests/api_card.rs` checks that every card here matches a fresh run.
+card. The `api_card` gate suite checks that every card here matches a fresh run.
 
 At a 2,000-token budget, garlic (131), garlic-js (96), pdf (109), compiler (116),
 edit (90) and std (786) all drop to names only; the signatures do not fit. ADR 0703
@@ -43,7 +43,7 @@ An agent reads a package's index, then the one module it needs:
 
 Each package has an `index.md` and one file per module under `<package>/`
 (`root.md` is the package's own module). They are checked by
-`cargo test --test api_card` (`api.card.6`, `api.card.7`), at a 2,000-token
+the `api_card` gate suite (`api.card.6`, `api.card.7`), at a 2,000-token
 budget. Regenerate them with this loop from the repository root:
 
 ```sh
