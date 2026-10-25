@@ -168,13 +168,17 @@ for f in "$tests"/*.ail; do
     if ! build_with "$out/stage2" "$f" "$exe"; then
         fail=$((fail + 1)); failed+=("$name (build)"); continue
     fi
-    want_out=$(./ail run "$f" 2> "$out/want.err"); want_rc=$?
-    got_out=$("$exe" 2> "$out/got.err"); got_rc=$?
+    want_out=$(./ail run "$f" 2> "$out/want.err" < /dev/null); want_rc=$?
+    got_out=$("$exe" 2> "$out/got.err" < /dev/null); got_rc=$?
     if [ "$want_out" == "$got_out" ] && [ "$want_rc" == "$got_rc" ] &&
         [ "$(head -1 "$out/want.err")" == "$(head -1 "$out/got.err")" ]; then
         pass=$((pass + 1))
     else
         fail=$((fail + 1)); failed+=("$name (output)")
+        # What differs, so the report says why (ail run first, then the built program).
+        { echo "- $name: rc $want_rc vs $got_rc"
+          diff <(printf '%s\n%s\n' "$want_out" "$(head -3 "$out/want.err")") <(printf '%s\n%s\n' "$got_out" "$(head -3 "$out/got.err")") | head -8
+        } | sed 's/^/    /' >> "$report"
     fi
     rm -f "$exe" "$exe.hex" "$exe.err"
 done
