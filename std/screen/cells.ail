@@ -1,0 +1,49 @@
+## std.screen.cells (spec std.screen.15, ADR 0878): the screen model of a
+## program that draws a grid of character cells (`std.ui.widgets` runs), such
+## as the editor and the PDF viewer. The boxes are exact (`conf` 1.0); the unit
+## is one cell, so a run at column 4 of row 2 is at x 4, y 2.
+
+use std.screen
+use std.ui.widgets
+
+fn hash(row int, col int) int
+    (row * 4001 + col) % 900000
+
+## The background that covers the most cells: the page, which gets no box.
+fn page_bg(runs List[widgets.Run]) int
+    mut count := Map[int, int]()
+    mut best := 0
+    mut best_n := -1
+    for r in runs
+        n := (count.get(r.bg) else 0) + r.text.chars().len()
+        count[r.bg] = n
+        if n > best_n
+            best = r.bg
+            best_n = n
+    best
+
+## The items of `runs`, in paint order: a `box` for each run on a background
+## other than the page's, a `text` for each run with visible text, and a
+## `caret` at (`cursor_col`, `cursor_row`) when that is on the grid.
+pub fn of_cells(
+    cols int,
+    rows int,
+    runs List[widgets.Run],
+    cursor_col int,
+    cursor_row int,
+) screen.Screen
+    page := page_bg(runs)
+    mut items := List[screen.Item]()
+    for r in runs
+        n := r.text.chars().len()
+        if n == 0
+            continue
+        x := r.col.to_float()
+        y := r.row.to_float()
+        if r.bg != page
+            items.push(screen.item(2000000 + hash(r.row, r.col), "box", "", r.bg, x, y, n.to_float(), 1.0))
+        if r.text.trim() != ""
+            items.push(screen.item(3000000 + hash(r.row, r.col), "text", r.text, r.fg, x, y, n.to_float(), 1.0))
+    if cursor_col >= 0 and cursor_row >= 0 and cursor_col < cols and cursor_row < rows
+        items.push(screen.item(8000000, "caret", "", 0x000000, cursor_col.to_float(), cursor_row.to_float(), 1.0, 1.0))
+    screen.Screen(w: cols.to_float(), h: rows.to_float(), items: items)
