@@ -1,0 +1,15 @@
+# Cases where the native `ail` knowingly differs from the Rust binary the goldens were frozen from.
+# A case whose name contains a line below is not checked (tools/golden/golden.py).
+#
+# Native-only features: the Rust parser never learned them (ADR 0865), so it exits 2.
+attach_observe
+derive_generated_invalid
+derive_generator_effects
+derive_junk_text
+derive_json_unbounded
+derive_generator_fails
+# Rust adds a `method:TRAIT.self` reference next to the call of a trait method through
+# an implicit `self`; it names no declaration, and the native references omit it.
+--symbols tests/cases/implicit_self.ail
+--symbols tests/cases/trait_super_bounds.ail
+--symbols tests/cases/bytecode_methods.ail

@@ -11,6 +11,8 @@ compares. No Rust binary is needed to check.
   tools/golden/golden.py compare TOOL --ref CMD --bin CMD [--match TEXT] [--limit N]
   tools/golden/golden.py check  TOOL... [--bin CMD] [--jobs N] [--limit N] [--strict]
 
+A case named in tests/golden/known.txt is a known divergence (the native side does something the
+frozen Rust one can't) and is skipped. `check` also takes `--match TEXT`.
 TOOL is explain, fmt, fix, api, edit or all. `compare` runs the matching cases with both binaries (`--ref`, `--bin`) and prints the text
 of each difference, to see why a `check` failed while a reference binary still exists.
 `--bin` is the `ail` to run (default `./ail`;
@@ -189,6 +191,14 @@ def load(tool):
     return rows
 
 
+def known_cases():
+    """tests/golden/known.txt: a case whose name has one of these lines is a known divergence, not checked."""
+    path = os.path.join(GOLDEN, "known.txt")
+    if not os.path.exists(path):
+        return []
+    return [l.strip() for l in open(path).read().splitlines() if l.strip() and not l.startswith("#")]
+
+
 def main():
     args = sys.argv[1:]
     if not args or args[0] not in ("freeze", "check", "compare"):
@@ -267,6 +277,9 @@ def main():
             print(f"GOLDEN {tool} RED (no golden: tools/golden/golden.py freeze {tool})")
             status = 1
             continue
+        cases = [c for c in cases if match in c[0]]
+        known = [c for c in cases if any(k in c[0] for k in known_cases())]
+        cases = [c for c in cases if c not in known]
         todo = [c for c in cases if c[0] in rows and rows[c[0]][0] == c[1]]
         stale = len(cases) - len(todo)
         with ThreadPoolExecutor(jobs) as ex:
@@ -283,7 +296,7 @@ def main():
             print(f"GOLDEN {tool} RED ({fails} failures, {len(todo)} checked, {stale} stale)")
             status = 1
         else:
-            print(f"GOLDEN {tool} GREEN ({len(todo)} checked, {stale} stale)")
+            print(f"GOLDEN {tool} GREEN ({len(todo)} checked, {stale} stale, {len(known)} known divergences)")
     return status
 
 
