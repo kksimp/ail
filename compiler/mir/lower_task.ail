@@ -602,7 +602,11 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     for n in sc.names.sorted()
         if n == var
             continue
-        key := lookup(n) else continue
+        key := lookup(n) else
+            # A field of `self` is not in the chunk's scope: run in order.
+            if self_slot(n) >= 0
+                return none
+            continue
         ty := var_ty[key]
         if sc.decls.contains(n)
             return none
