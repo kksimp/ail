@@ -232,6 +232,10 @@ fn http_status(line str) int
         return -1
     v
 
+## Whether the failure pending is a connection that closed or reset (kind `closed`).
+fn http_conn_lost() bool
+    net_has(str_at(load64(err_addr(0))), "kind: \"closed\"")
+
 ## Add the header `name: value` to the maps of a response.
 fn http_header(headers int, all int, name str, value str)
     e := map_find(headers, str_addr(name))
@@ -788,6 +792,11 @@ fn http_exchange_on(
         line := net_read_line(h, at)
         if failed()
             net_close(h)
+            # A pooled connection the server closed (reset on the write
+            # or the first read) is not the request's failure (std.net.19).
+            if reused and again and not seen and http_conn_lost()
+                err_clear()
+                return -1
             return 0
         if str_addr(line) == 0
             net_close(h)
