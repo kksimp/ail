@@ -7,7 +7,7 @@
 #   1. cited but not in the spec: a rule ID named in a comment or a string
 #      literal of compiler/ that docs/spec/ does not define;
 #   2. spec rules never cited: a rule in docs/spec/ that no comment or string
-#      literal in compiler/ names (`[removed in ...]`
+#      literal in compiler/ names and no spec block the spec suite runs lists in `rules=` (`[removed in ...]`
 #      rules are skipped; they stay in place by the spec README, rule 2;
 #      `[definitional]` rules describe the language and need no code);
 #   3. diagnostics with no `ail explain` entry: a rule ID emitted as a string
@@ -91,6 +91,15 @@ for path in sources:
         for m in QUOTED.finditer(line):
             cited.setdefault(m.group(1), set()).add(rel)
             emitted.setdefault(m.group(1), set()).add(rel)
+
+# A spec block that the spec suite runs (no `skip=`) and names rules with `rules=` is a conformance test of them (ADR 0002).
+for path in sorted((root / "docs" / "spec").glob("*.md")):
+    for m in re.finditer(r"^```ail ([^\n]*)$", path.read_text(encoding="utf-8"), re.M):
+        info = m.group(1)
+        named = re.search(r"rules=(\S+)", info)
+        if named and "skip=" not in info:
+            for rule in named.group(1).split(","):
+                cited.setdefault(rule, set()).add(str(path.relative_to(root)))
 
 problems = 0
 
