@@ -306,7 +306,7 @@ static class Fonts
         if (!cache.TryGetValue(key, out f))
         {
             FontStyle st = (bold ? FontStyle.Bold : 0) | (italic ? FontStyle.Italic : 0) | (underline ? FontStyle.Underline : 0);
-            f = new Font(family == "sans" ? "Segoe UI" : "Consolas", s, st, GraphicsUnit.Pixel);
+            f = new Font(family == "sans" ? "Segoe UI" : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
             cache[key] = f;
         }
         return f;
