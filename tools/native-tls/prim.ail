@@ -55,7 +55,7 @@ fn main()
         kv := line.split(" ")
         certs[kv[0]] = kv[1]
     # NAMES|HOST|WANT: WANT is "ok", a message, or "~part" for a substring.
-    # Mirrors bootstrap/src/net/x509/tests.rs (NOW is 2027-01-01).
+    # Mirrors the former Rust x509 tests (NOW is 2027-01-01).
     cases := [
         "leaf,inter|example.test|ok", "leaf,inter|EXAMPLE.test.|ok", "leaf,inter|a.wild.test|ok",
         "leaf,inter|127.0.0.1|ok", "leaf,inter|::1|ok", "leaf,inter|[::1]|ok",

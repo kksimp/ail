@@ -5,9 +5,9 @@
 #
 # Checks six things and exits 1 when any is not empty:
 #   1. cited but not in the spec: a rule ID named in a comment or a string
-#      literal of bootstrap/src or compiler/ that docs/spec/ does not define;
+#      literal of compiler/ that docs/spec/ does not define;
 #   2. spec rules never cited: a rule in docs/spec/ that no comment or string
-#      literal in bootstrap/src or compiler/ names (`[removed in ...]`
+#      literal in compiler/ names (`[removed in ...]`
 #      rules are skipped; they stay in place by the spec README, rule 2;
 #      `[definitional]` rules describe the language and need no code);
 #   3. diagnostics with no `ail explain` entry: a rule ID emitted as a string
@@ -15,14 +15,14 @@
 #   4. `ail explain` entries with no example: a rule whose explanation has no
 #      `example` (checked through `ail explain RULE --json`);
 #   5. std functions with no spec mention: a function in the MODULES table of
-#      bootstrap/src/stdlib.rs that docs/spec/ never names (tools/card-spec-audit.py,
+#      compiler/check/stdlib.ail that docs/spec/ never names (tools/card-spec-audit.py,
 #      ADR 0698);
 #   6. test cases: duplicate programs (same program modulo names, same
 #      companion files) and diagnostic cases with no `.rules` file
 #      (tools/cases-audit.py, ADR 0725).
 #
 # Ranges such as `eff.cap.4-5` count as citations of each ID in the range.
-# Self-setting-up (ADR 0071): the first `./ail explain` builds the bootstrap
+# Self-setting-up (ADR 0071): the first `./ail explain` builds the native CLI
 # when it is stale. Needs only python3, which both platforms already have.
 set -euo pipefail
 
@@ -74,20 +74,16 @@ for path in sorted((root / "docs" / "spec").glob("*.md")):
 # 2. Citations in code: comments name rules, string literals emit them.
 cited = {}  # rule -> set of files that cite it (comments or literals)
 emitted = {}  # rule -> set of files that emit it as a literal
-sources = (list((root / "bootstrap" / "src").rglob("*.rs")) + list((root / "bootstrap" / "src").rglob("*.ail"))
-           + [root / "tools" / "gate" / "gate.ail"] + list((root / "compiler").rglob("*.ail")) + list((root / "std").rglob("*.ail"))
+sources = ([root / "tools" / "gate" / "gate.ail"] + list((root / "compiler").rglob("*.ail")) + list((root / "std").rglob("*.ail"))
            + list((root / "tools" / "ailtest").rglob("*.ail")))
 for path in sources:
     rel = str(path.relative_to(root))
     for line in path.read_text(encoding="utf-8").splitlines():
-        if path.suffix == ".rs":
-            comment = line[line.index("//"):] if "//" in line else ""
-        else:
-            comment = line if line.lstrip().startswith("#") else ""
+        comment = line if line.lstrip().startswith("#") else ""
         if comment:
             for m in RULE.finditer(comment):
                 for rule in expand(m):
-                    # gate.ail is read for its explain suite (explain_coverage.rs's port) only.
+                    # gate.ail is read for its explain suite only.
                     if rel != "tools/gate/gate.ail" or rule.startswith("explain.cover."):
                         cited.setdefault(rule, set()).add(rel)
         if rel == "tools/gate/gate.ail":
@@ -125,7 +121,7 @@ for line in section.splitlines():
         if not owner or not reason:
             incomplete.append(rule)
 report(
-    "2. spec rules never cited in bootstrap/src, compiler/, std/ or tools/ailtest/ (after exemptions)",
+    "2. spec rules never cited in compiler/, std/ or tools/ailtest/ (after exemptions)",
     [f"{r}  ({spec[r]})" for r in sorted(set(spec) - set(cited) - removed) if r not in exempt],
 )
 report("2a. exemptions for rules that are now cited (remove the row)", sorted(r for r in exempt if r in cited))

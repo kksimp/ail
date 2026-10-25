@@ -1,14 +1,16 @@
-## The gate in AIL (RR-4, ADR 0855): drives `ail` over the suites the Rust
-## selftest checks for programs, without cargo, and prints only what failed.
+## The gate in AIL (RR-4, ADR 0855): drives `./ail` over the suites and prints only what failed.
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
-## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
-## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net`, `spec` (the files of those names; `net` starts tools/gate/net_server.py, `spec` runs tools/gate/spec.ail), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
-## PDF reader), `std` (the AIL std sources check, format and are called), `selfhost` (tools/self-host/run.sh, only when named).
+## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively and prints it), `cases`, `explain`, `fix`,
+## `cli`, `mistakes`, `contracts`, `snapshot`, `misc`, `docs`, `fmt`, `budget`, `limits`, `diff`, `build_cache`,
+## `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net` (starts tools/gate/net_server.py), `spec` (runs
+## tools/gate/spec.ail), `tools` (the editor, Garlic and the PDF reader), `std` (the AIL std sources check, format and are
+## called), `selfhost` (tools/self-host/run.sh, only when named).
 ## The native run programs are tools/gate/goldens.ail and nativex.
 ## Run it through tools/gate/mac-gate.sh, or with AIL_APP_HOST set to a missing path: a std.app program
 ## (examples/app_todo.ail) would otherwise open the host's window and wait for ever.
 ## No argument runs every suite but `selfhost`. The last line is `GATE GREEN` or
 ## `GATE RED (N failures)`; the exit status is 0 only for green.
+
 
 ## Examples without a `native_` name that the native backend takes today
 ## (the list tools/gate/goldens.ail keeps). The others find files
@@ -94,7 +96,7 @@ fn Gate.selfhost(mut self)
     if r.status != 0
         red("selfhost", r.out.lines().last() else "failed")
 
-## The tools written in AIL (bootstrap/tests/tools.rs, ported). Each check
+## The tools written in AIL. Each check
 ## runs `ail` from `root` (the repository) and compares its output.
 fn cat(a List[str], b List[str]) List[str]
     mut r := a
@@ -525,43 +527,27 @@ fn Gate.tools(mut self, tmp str)
     garlic_js(root)
     garlic_serve_dir(root)
 
-## The end-to-end cases (bootstrap/tests/cases.rs, ported): `examples/` and
+## The end-to-end cases: `examples/` and
 ## `tests/cases/` hold NAME.ail with one expectation file beside
 ## it, and `cases/packages/NAME/` a package with expected.EXT files. `at` is
 ## the path `ail` gets; `exp` the expectation path up to the extension.
 fn slurp(p str) str
     fs.read_text(p) else ""
 
-## Suites run on `./ail`; `GATE_RUST=1` (mac-gate.sh sets it for the suites that still have native reds)
-## sends them to the Rust binary. `GATE_NATIVE=1` is the same as the default.
-fn native() bool
-    (env.get("GATE_RUST") else "") != "1" or (env.get("GATE_NATIVE") else "") == "1"
-
-## `ail ARGS` through the Rust binary with AIL_BINARY set, as cargo sets it.
-fn rust_run(args List[str]) proc.Output ! proc.ProcError
-    script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
-    proc.run("sh", cat(["-c", script, "sh"], args))
-
 ## `ail ARGS`: programs that start `ail` themselves (std.app hosts) find it through AIL.
 fn ail_run(args List[str]) proc.Output ! proc.ProcError
-    if not native()
-        return rust_run(args)
     proc.run("sh", cat(
         ["-c", "exec perl -e 'alarm 120; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"],
         args,
     ))
 
-## A case goes through `./ail` (the default; `GATE_RUST=1` sends the cases not in native_only.txt to the Rust binary),
-## each under an alarm (`alarm_for`) so one hang is one red case, not a stuck gate (item 309).
-fn case_run(force_native bool, args List[str]) proc.Output ! proc.ProcError
-    if force_native or native() or (env.get("GATE_CASES_NATIVE") else "") == "1"
-        secs := alarm_for(path.stem(args.last() else ""))
-        script := "perl -e 'alarm {secs}; exec @ARGV' \"$PWD/ail\" \"$@\""
-        return proc.run("sh", cat(["-c", script, "sh"], args))
-    rust_run(args)
+## A case goes through `./ail`, each under an alarm (`alarm_for`) so one hang is one red case, not a stuck gate (item 309).
+fn case_run(args List[str]) proc.Output ! proc.ProcError
+    secs := alarm_for(path.stem(args.last() else ""))
+    script := "perl -e 'alarm {secs}; exec @ARGV' \"$PWD/ail\" \"$@\""
+    proc.run("sh", cat(["-c", script, "sh"], args))
 
-## tests/cases/native_only.txt: the stems of cases that use features only the native CLI has. Only these go
-## native where the suite runs on the Rust binary (ADR 0865: the bootstrap learns nothing new).
+## tests/cases/native_only.txt: the stems of cases that use features only the native CLI has.
 fn native_only() List[str]
     text := fs.read_text("tests/cases/native_only.txt") else return []
     [l.trim() for l in text.lines() if not l.trim().is_empty() and not l.starts_with("#")]
@@ -575,13 +561,12 @@ fn sched(at str) List[str]
     []
 
 fn run_case(at str, exp str) str?
-    native := native_only().contains(path.stem(at))
     out_file := "{exp}out"
     want_out := if fs.exists(out_file) then slurp(out_file) else ""
     if fs.exists("{exp}stderr")
         # trace.run.1: `ail run` with the options in NAME.args, one line.
         flags := slurp("{exp}args").words()
-        r := case_run(native, cat(
+        r := case_run(cat(
             cat(cat(["run"], sched(at)), flags),
             [at],
         )) else return "could not start ail"
@@ -592,7 +577,7 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}test")
-        r := case_run(native, ["test", "--json", at]) else return "could not start ail"
+        r := case_run(["test", "--json", at]) else return "could not start ail"
         want := slurp("{exp}test")
         want_exit := if want.contains("\"status\":\"fail\"") then 1 else 0
         if r.status != want_exit or r.out != want
@@ -600,7 +585,7 @@ fn run_case(at str, exp str) str?
         return none
     if fs.exists("{exp}err")
         flags := slurp("{exp}args").words()
-        r := case_run(native, cat(
+        r := case_run(cat(
             cat(cat(["run"], sched(at)), flags),
             [at],
         )) else return "could not start ail"
@@ -611,7 +596,7 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}trap")
-        r := case_run(native, cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
+        r := case_run(cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         rule := slurp("{exp}trap").trim()
         if r.status != 1 or not r.err.contains("trap[{rule}]")
             return "expected trap[{rule}] (exit 1), got {r.status}\n{r.err}"
@@ -619,14 +604,14 @@ fn run_case(at str, exp str) str?
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists(out_file)
-        r := case_run(native, cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
+        r := case_run(cat(cat(["run"], sched(at)), [at])) else return "could not start ail"
         if r.status != 0
             return "exit {r.status}\n{r.err}"
         if r.out != want_out
             return "output differs\n--- expected\n{want_out}--- actual\n{r.out}"
         return none
     if fs.exists("{exp}rules")
-        r := case_run(native, ["check", "--json", at]) else return "could not start ail"
+        r := case_run(["check", "--json", at]) else return "could not start ail"
         want_exit := if r.err.contains("\"severity\":\"error\"") then 2 else 0
         if r.status != want_exit
             return "expected exit {want_exit}, got {r.status}\n{r.err}"
@@ -891,10 +876,10 @@ fn spec_rules() Set[str]
                     out.add(id)
     out
 
-## The IDs that appear as string literals in the Rust sources.
+## The IDs that appear as string literals in the compiler's sources.
 fn emitted_rules() Set[str]
     mut out := Set[str]()
-    for path in fs.glob("bootstrap/src/**/*.rs")
+    for path in fs.glob("compiler/**/*.ail")
         parts := slurp(path).split("\"")
         for i in 0..parts.len()
             if i % 2 == 1 and not parts[i].contains(" ") and id_shaped(parts[i])
@@ -969,7 +954,7 @@ fn Gate.explain_coverage(mut self)
             "mean explain entry is {mean} characters; longest is {longest_id} ({longest})",
         )
 
-## `ail fix` (bootstrap/tests/fix.rs, ported; fix.apply.1-4): each
+## `ail fix` (fix.apply.1-4): each
 ## tests/fix/NAME.ail is fixed in a scratch copy; the result must equal
 ## NAME.fixed, check clean, and be stable.
 fn Gate.fix(mut self, tmp str)
@@ -1084,7 +1069,7 @@ fn Gate.cli_effects(mut self, tmp str)
         red("build extern c fn", "exit {b.status}\n{b.err}")
     sh_run("rm -rf {dir}")
 
-## The mistakes corpus (bootstrap/tests/mistakes.rs, ported; gram.help.2,
+## The mistakes corpus (gram.help.2,
 ## ADR 0262): the first rule names the mistake, every error has a `help`,
 ## and `ail fix` yields NAME.fixed (check clean, stable) when it exists.
 fn rule_of(line str) str
@@ -1141,7 +1126,7 @@ fn Gate.mistakes(mut self, tmp str)
         red("mistakes", "`ail fix` resolves only {fixed_count} of {total}")
 
 ## `requires`, `ensures`, `old`, inheritance and invariants end to end
-## (bootstrap/tests/contracts.rs, ported).
+##.
 fn case_path(name str) str
     "tests/cases/{name}.ail"
 
@@ -1245,7 +1230,7 @@ fn Gate.contracts(mut self)
         ["requires k > 0 (inherited)"],
     )
 
-## `ail test --update` (bootstrap/tests/snapshot.rs, ported; snap.update.1-6).
+## `ail test --update` (snap.update.1-6).
 fn Gate.snapshot(mut self, tmp str)
     program := "## Doubles.\n##\n## ```ail\n## print(double(2))\n## # => 5\n## ```\nfn double(x int) int\n    x * 2\n\nfn greet(n str) str\n    \"hi, \{n}!\"\n\n@test fn greets()\n    assert_eq(greet(\"bo\"), \"hello\")\n    assert_eq(double(-2), 7)\n    assert_eq([double(1), 3], [0])\n\nfn main()\n    print(greet(\"x\"))\n"
     updated := "## Doubles.\n##\n## ```ail\n## print(double(2))\n## # => 4\n## ```\nfn double(x int) int\n    x * 2\n\nfn greet(n str) str\n    \"hi, \{n}!\"\n\n@test fn greets()\n    assert_eq(greet(\"bo\"), \"hi, bo!\")\n    assert_eq(double(-2), -4)\n    assert_eq([double(1), 3], [2, 3])\n\nfn main()\n    print(greet(\"x\"))\n"
@@ -1360,9 +1345,9 @@ fn Gate.misc(mut self, tmp str)
     sh_run("rm -rf {dir}")
     # conc.sched.1-2: a seed picks the task switch points, so a failing interleaving replays.
     race := "tests/schedule/race.ail"
-    # The native scheduler maps seeds to switch points differently: seed 2 loses the update there, seed 1 on Rust.
-    fail_seed := if native() then "2" else "1"
-    pass_seed := if native() then "1" else "2"
+    # The native scheduler maps seeds to switch points differently: seed 2 loses the update there.
+    fail_seed := "2"
+    pass_seed := "1"
     first := ail_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
     if first.status != 1
         or not first.out.contains("left is 1, right is 2")
@@ -1587,14 +1572,8 @@ fn Gate.limits(mut self, tmp str)
     if not line.starts_with("\{\"coverage\":true,\"file\":")
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
         red("coverage --json", cj.out)
-    # Native traps show their values only under `--values` (ADR 0886); the interpreter always does.
-    k := ail_run(
-        if native() then [
-            "test",
-            "--values",
-            "{case}/limit_test_contract.ail",
-        ] else ["test", "{case}/limit_test_contract.ail"],
-    ) else return
+    # Native traps show their values only under `--values` (ADR 0886).
+    k := ail_run(["test", "--values", "{case}/limit_test_contract.ail"]) else return
     if k.status != 1
         red("test contract", "exit {k.status}")
     want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
@@ -1602,11 +1581,9 @@ fn Gate.limits(mut self, tmp str)
     want("test contract json", kj.out, ["\"snapshot\":\""])
 
 ## `ail diff OLD NEW` (diff.rs, ported; diff.out.1-7, ADRs 0396, 0399).
-## The binary the suites call: `./ail`, or the Rust one under `GATE_RUST=1`.
+## The binary the suites call.
 fn bin_path(root str) str
-    if native()
-        return "{root}/ail"
-    "{root}/bootstrap/target/release/ail"
+    "{root}/ail"
 
 fn Gate.diff(mut self, tmp str)
     old_src := "fn add(a int, b int) int\n    a + b\n\nfn gone() int\n    1\n\nfn same() int\n    2\n\n@test fn adds()\n    assert(add(1, 2) == 3)\n\nfn main()\n    print(add(1, 2))\n"
@@ -2437,7 +2414,7 @@ fn owner_ok(owner str) bool
                 return false
     true
 
-## bootstrap/tests/native.rs, ported to tools/gate/nativex.ail (B6). It prints only
+## ported to tools/gate/nativex.ail (B6). It prints only
 ## failures and ends with `NATIVEX GREEN` or `NATIVEX RED`.
 ## Native-only features (ADR 0865) build here, so nativex runs on `./ail` with no AIL_BINARY.
 fn Gate.nativex(mut self)
@@ -2450,7 +2427,7 @@ fn Gate.nativex(mut self)
     if r.status != 0 or not r.out.contains("NATIVEX GREEN")
         red("nativex", "{r.out}{r.err}")
 
-## bootstrap/tests/native_globals.rs, ported to tools/gate/globals.ail (B6).
+## ported to tools/gate/globals.ail (B6).
 fn Gate.globals(mut self)
     r := ail_run(["run", "tools/gate/globals.ail"]) else
         red("globals", "could not start tools/gate/globals.ail")
@@ -2458,7 +2435,7 @@ fn Gate.globals(mut self)
     if r.status != 0 or not r.out.contains("GLOBALS GREEN")
         red("globals", "{r.out}{r.err}")
 
-## bootstrap/tests/native_pe.rs, ported to tools/gate/pe.ail (B6).
+## ported to tools/gate/pe.ail (B6).
 fn Gate.pe(mut self)
     r := ail_run(["run", "tools/gate/pe.ail"]) else
         red("pe", "could not start tools/gate/pe.ail")
@@ -2466,7 +2443,7 @@ fn Gate.pe(mut self)
     if r.status != 0 or not r.out.contains("PE GREEN")
         red("pe", "{r.out}{r.err}")
 
-## bootstrap/tests/native_asm.rs, ported to tools/gate/asm.ail (B6).
+## ported to tools/gate/asm.ail (B6).
 fn Gate.asm(mut self)
     r := ail_run(["run", "tools/gate/asm.ail"]) else
         red("asm", "could not start tools/gate/asm.ail")
