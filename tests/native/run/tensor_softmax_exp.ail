@@ -1,0 +1,16 @@
+# std.tensor.13: softmax rows, `exp(x - max)` in order. Rows of odd widths, tiny and huge
+# arguments, a row that spans |x| = 700 and a row with an infinity all take the same
+# path as one element at a time.
+fn show(t tensor.Tensor[float])
+    print(t.to_list())
+
+fn main()
+    a := tensor.from([0.0, 1.0, -1.0, 0.5, 2.5, -0.25, 3.0, 1.0e-10, -1.0e-10, 0.34, 0.35, 0.7, 1.1, -0.7, -1.1, 5.0, -5.0], [1, 17])
+    show(a.softmax())
+    b := tensor.from([0.0, -300.0, -699.0, -701.0, -720.0, -745.0, -800.0, -0.5, -1.0e-9], [1, 9])
+    show(b.softmax())
+    c := tensor.from([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], [4, 3])
+    show(c.softmax())
+    d := tensor.from([(i % 23).to_float() * 0.37 - 4.0 for i in 0..40], [2, 20])
+    show(d.softmax())
+    show(d.to_f32().softmax().to_float())
