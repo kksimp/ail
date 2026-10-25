@@ -16,7 +16,7 @@ MACHO_PAGE := 16384
 HEADER := 32
 
 ## The executable, signed with `ident` as its identifier.
-pub fn macho(img codegen.Image, ident str) List[int]
+pub fn macho(img codegen.Image, ident str) List[u8]
     bind := bind_info(img)
     cmds := load_commands([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bind.len(), 0, 0, 0, 0])
     code_off := align_up(HEADER + cmds.len(), 16)
@@ -27,17 +27,17 @@ pub fn macho(img codegen.Image, ident str) List[int]
     link_off := text_size
     # __LINKEDIT: the symbol table, its strings, the bind table, the signature.
     names := img.funcs.keys().sorted(by: |n| img.funcs[n])
-    mut strtab := [0]
-    mut syms := List[int]()
+    mut strtab := [0.to_u8()]
+    mut syms := List[u8]()
     for n in names
         put(mut syms, strtab.len(), 4)
         # N_SECT, section 1 (__text), no description
-        syms.push(14)
-        syms.push(1)
+        syms.push(14.to_u8())
+        syms.push(1.to_u8())
         put(mut syms, 0, 2)
         put(mut syms, MACHO_BASE + code_off + img.funcs[n], 8)
         strtab.extend(codegen.utf8(n))
-        strtab.push(0)
+        strtab.push(0.to_u8())
     pad_to(mut strtab, align_up(strtab.len(), 8))
     str_off := link_off + syms.len()
     bind_off := str_off + strtab.len()
@@ -48,7 +48,7 @@ pub fn macho(img codegen.Image, ident str) List[int]
     sig_size := 20 + cd_size
     link_size := sig_off + sig_size - link_off
     code := link(img, MACHO_BASE + code_off, MACHO_BASE + data_off, bss)
-    mut out := List[int]()
+    mut out := List[u8]()
     put(mut out, 4277009103, 4)
     put(mut out, 16777228, 4)
     put(mut out, 0, 4)
@@ -95,41 +95,41 @@ COMMANDS := 11
 
 ## The bind table: each import's pointer slot in __DATA (segment 2), bound to
 ## the symbol of libSystem (dylib ordinal 1). Empty without imports.
-fn bind_info(img codegen.Image) List[int]
-    mut b := List[int]()
+fn bind_info(img codegen.Image) List[u8]
+    mut b := List[u8]()
     if img.imports.len() == 0
         return b
-    b.push(17)
+    b.push(17.to_u8())
     for k in 0..img.imports.len()
         # SET_SYMBOL_TRAILING_FLAGS_IMM 0, the name; SET_TYPE_IMM pointer;
         # SET_SEGMENT_AND_OFFSET_ULEB 2, the offset; DO_BIND.
-        b.push(64)
+        b.push(64.to_u8())
         b.extend(codegen.utf8(img.imports[k]))
-        b.push(0)
-        b.push(81)
-        b.push(114)
+        b.push(0.to_u8())
+        b.push(81.to_u8())
+        b.push(114.to_u8())
         uleb(mut b, 8 * (img.globals + k))
-        b.push(144)
-    b.push(0)
+        b.push(144.to_u8())
+    b.push(0.to_u8())
     pad_to(mut b, align_up(b.len(), 8))
     b
 
-fn uleb(mut b List[int], n int)
+fn uleb(mut b List[u8], n int)
     mut v := n
     while v >= 128
-        b.push(v.bit_and(127) + 128)
+        b.push((v.bit_and(127) + 128).to_u8())
         v = v.shr(7)
-    b.push(v)
+    b.push(v.to_u8())
 
 ## The load commands, from the layout `v`: the sizes and offsets of
 ## __TEXT, __bss, __LINKEDIT, the entry, the signature, the code and the
 ## constants. Called once with zeros to learn their size.
-fn load_commands(v List[int]) List[int]
+fn load_commands(v List[int]) List[u8]
     text_size := v[0]
     bss_size := v[1]
     link_off := v[2]
     link_size := v[3]
-    mut c := List[int]()
+    mut c := List[u8]()
     segment64(mut c, "__PAGEZERO", 0, MACHO_BASE, 0, 0, 0, 0)
     segment64(mut c, "__TEXT", MACHO_BASE, text_size, 0, text_size, 5, 2)
     section(mut c, "__text", "__TEXT", MACHO_BASE + v[7], v[8], v[7], 2, 2147484672)
@@ -202,20 +202,20 @@ fn load_commands(v List[int]) List[int]
     c
 
 ## LC_LOAD_DYLINKER-shaped: a command with one string at offset `at`.
-fn dylib_name(mut c List[int], cmd int, name str, at int, size int)
+fn dylib_name(mut c List[u8], cmd int, name str, at int, size int)
     put(mut c, cmd, 4)
     put(mut c, size, 4)
     put(mut c, at, 4)
     text(mut c, name, size - at)
 
 ## `s` padded with zeros to `n` bytes.
-fn text(mut c List[int], s str, n int)
+fn text(mut c List[u8], s str, n int)
     bytes := codegen.utf8(s)
     for i in 0..n
-        c.push(if i < bytes.len() then bytes[i] else 0)
+        c.push(if i < bytes.len() then bytes[i] else 0.to_u8())
 
 fn segment64(
-    mut c List[int],
+    mut c List[u8],
     name str,
     vmaddr int,
     vmsize int,
@@ -236,7 +236,7 @@ fn segment64(
     put(mut c, nsects, 4)
     put(mut c, 0, 4)
 
-fn section(mut c List[int], name str, seg str, addr int, size int, offset int, align int, flags int)
+fn section(mut c List[u8], name str, seg str, addr int, size int, offset int, align int, flags int)
     text(mut c, name, 16)
     text(mut c, seg, 16)
     put(mut c, addr, 8)
@@ -250,18 +250,18 @@ fn section(mut c List[int], name str, seg str, addr int, size int, offset int, a
     put(mut c, 0, 4)
     put(mut c, 0, 4)
 
-fn pad_to(mut out List[int], n int)
+fn pad_to(mut out List[u8], n int)
     while out.len() < n
-        out.push(0)
+        out.push(0.to_u8())
 
 ## Big-endian, as code signatures are.
-fn put_be(mut out List[int], v int, n int)
+fn put_be(mut out List[u8], v int, n int)
     for i in 0..n
-        out.push(v.shr(8 * (n - 1 - i)).bit_and(255))
+        out.push(v.shr(8 * (n - 1 - i)).bit_and(255).to_u8())
 
 ## Append an ad hoc signature: a superblob holding one code directory that
 ## hashes each 4 KiB page of the file so far.
-fn sign(mut out List[int], name List[int], slots int, text_size int)
+fn sign(mut out List[u8], name List[u8], slots int, text_size int)
     limit := out.len()
     cd_size := 88 + name.len() + 1 + 32 * slots
     put_be(mut out, 4208856256, 4)
@@ -280,7 +280,7 @@ fn sign(mut out List[int], name List[int], slots int, text_size int)
     put_be(mut out, 0, 4)
     put_be(mut out, slots, 4)
     put_be(mut out, limit, 4)
-    out.extend([32, 2, 0, 12])
+    out.extend(bytes_of([32, 2, 0, 12]))
     for _ in 0..4
         put_be(mut out, 0, 4)
     put_be(mut out, 0, 8)
@@ -289,7 +289,7 @@ fn sign(mut out List[int], name List[int], slots int, text_size int)
     # CS_EXECSEG_MAIN_BINARY
     put_be(mut out, 1, 8)
     out.extend(name)
-    out.push(0)
+    out.push(0.to_u8())
     for k in 0..slots
         from := 4096 * k
         to := if from + 4096 < limit then from + 4096 else limit
