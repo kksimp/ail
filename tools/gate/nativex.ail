@@ -316,6 +316,14 @@ fn Run.executables(mut self, target str, runner str)
             if not pending.contains(stem_of(c))
                 live.push(c)
         cases = live
+    # A dynamic ELF (dlopen/dlsym of an `extern c fn` outside the libc subset, ADR 0870) under qemu-user needs the
+    # target's own dynamic loader; without it qemu exits 255 with nothing printed. The host runs these cases.
+    if target.contains("aarch64-linux") and not fs.exists("/usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1")
+        mut static_only := List[str]()
+        for c in cases
+            if not ["ffi_dynamic", "ffi_missing_library", "ffi_missing_symbol"].contains(stem_of(c))
+                static_only.push(c)
+        cases = static_only
     stride := (env.get("NX_STRIDE") else "1").to_int() else 1
     if stride > 1
         mut sampled := List[str]()
