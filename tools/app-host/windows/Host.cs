@@ -298,16 +298,9 @@ static class Fonts
     static readonly Dictionary<string, Font> cache = new Dictionary<string, Font>();
     public const float CellSize = 13;
 
-    /// The UI face: Segoe UI Variable (Windows 11) when installed, else Segoe UI.
-    public static readonly string Sans = Installed("Segoe UI Variable Text") ? "Segoe UI Variable Text" : "Segoe UI";
-
-    static bool Installed(string family)
-    {
-        using (var fams = new InstalledFontCollection())
-            foreach (FontFamily f in fams.Families)
-                if (string.Equals(f.Name, family, StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
-    }
+    /// The UI face. Segoe UI Variable is a variable font that GDI+ measures and draws at different widths
+    /// in bold and italic, so the static Segoe UI stays.
+    public const string Sans = "Segoe UI";
 
     public static Font Get(string family, double size, bool bold, bool italic, bool underline)
     {
@@ -368,8 +361,8 @@ class CanvasView : Control
     {
         Graphics g = e.Graphics;
         g.Clear(BackColor);
-        // Smooth, unhinted ClearType text like a browser's; rectangles stay pixel-exact, slanted lines are anti-aliased.
-        g.TextRenderingHint = TextRenderingHint.ClearType;
+        // ClearType text; rectangles stay pixel-exact, slanted lines are anti-aliased.
+        g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         g.SmoothingMode = SmoothingMode.None;
         g.PixelOffsetMode = PixelOffsetMode.Half;
         g.InterpolationMode = InterpolationMode.HighQualityBicubic;
@@ -890,7 +883,7 @@ static class Program
         using (var bmp = new Bitmap(1, 1))
         using (var g = Graphics.FromImage(bmp))
         {
-            g.TextRenderingHint = TextRenderingHint.ClearType;
+            g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
             foreach (object r in runs)
             {
                 Font f = Fonts.Get(Json.Text(Json.Get(r, "font")), Json.Num(Json.Get(r, "size")),
