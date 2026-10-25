@@ -11,3 +11,6 @@ derive_junk_text
 --symbols tests/cases/implicit_self.ail
 --symbols tests/cases/trait_super_bounds.ail
 --symbols tests/cases/bytecode_methods.ail
+# Native `api` loads a package with its manifest and vendored modules, so it rejects
+# caps_denied (eff.cap.4-5, api.out.5); the Rust `api` of one file didn't enforce capabilities.
+packages/caps_denied
