@@ -1,7 +1,0 @@
-use std.env
-
-fn home_dir() str
-    env.cwd()
-
-fn main()
-    print(home_dir().len() > 0)

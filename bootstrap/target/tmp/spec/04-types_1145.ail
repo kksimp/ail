@@ -1,3 +1,0 @@
-fn main()
-    s := "abc"
-    print(s[0])                                   # error: str has no indexing

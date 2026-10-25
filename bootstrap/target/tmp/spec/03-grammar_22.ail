@@ -1,4 +1,0 @@
-fn main()
-    mut n := 3
-    n++
-    print(n)

@@ -1,3 +1,0 @@
-fn main()
-    x := 1
-    x = 2                              # a program with errors has no outline

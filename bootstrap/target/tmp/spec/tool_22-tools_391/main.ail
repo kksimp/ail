@@ -1,3 +1,0 @@
-# A pair of program versions for the `ail diff` spec examples (diff.out.1-6).
-fn main()
-    print("diff fixture")

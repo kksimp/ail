@@ -1,9 +1,0 @@
-use std.fs
-
-fn main() !
-    fs.write_text("fs_a.txt", "one\n")?
-    fs.append_text("fs_a.txt", "two\n")?
-    print(fs.read_text("fs_a.txt")?)  # one, two
-    print(fs.exists("fs_a.txt"))      # true
-    fs.remove("fs_a.txt")?
-    print(fs.exists("fs_a.txt"))      # false

@@ -1,5 +1,0 @@
-@inline fn hash(x u64) u64
-    x * 31
-
-fn main()
-    print("")

@@ -1,7 +1,0 @@
-fn main()
-    c := 'f'
-    print(c.to_digit(16) else 0)                  # 15
-    print(c.to_digit(10))                         # none
-    print(c.code())                               # 102
-    print(char.from_code(0x41))                   # A
-    print(char.from_code(0xD800))                 # none: a surrogate

@@ -1,6 +1,0 @@
-use std.path as pth
-use std.env
-
-fn main()
-    print(pth.ext("notes.txt"))       # txt: `as` names the module
-    print(env.args().len())           # qualified function access

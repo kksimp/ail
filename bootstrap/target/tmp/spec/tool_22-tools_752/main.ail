@@ -1,8 +1,0 @@
-fn add(a int, b int) int
-    a + b + 0
-
-fn gone() int
-    1
-
-fn main()
-    print(add(1, 2))

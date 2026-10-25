@@ -1,6 +1,0 @@
-use std.time.date
-
-fn main()
-    now := date.now()                                # reads the clock: --deterministic rejects it
-    later := now.add_ms(1000)
-    print(later.before(now))

@@ -1,8 +1,0 @@
-fn add(a int, b int) int
-    a + b
-
-@test fn add_commutes(a int, b int)
-    assert_eq(add(a, b), add(b, a))
-
-fn main()
-    print("")

@@ -1,7 +1,0 @@
-use std.fs
-
-fn save(text str) ! fs.IoError
-    fs.write_text("out.txt", text)
-
-fn main() !
-    save("hi")?

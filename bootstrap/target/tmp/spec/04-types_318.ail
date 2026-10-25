@@ -1,5 +1,0 @@
-fn lift(v int?) int??
-    v
-
-fn main()
-    print(lift(none))

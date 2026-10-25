@@ -1,8 +1,0 @@
-struct Box[T]
-    item T
-
-@test fn bad(b Box[int])
-    assert(true)
-
-fn main()
-    print("x")

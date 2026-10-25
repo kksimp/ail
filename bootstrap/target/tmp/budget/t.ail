@@ -1,5 +1,0 @@
-@test fn a()
-    assert(1 == 1)
-
-@test fn b()
-    assert(1 == 2)

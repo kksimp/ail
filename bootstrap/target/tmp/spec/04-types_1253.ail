@@ -1,3 +1,0 @@
-fn main()
-    xs := [1, 2, 3]
-    print(xs[-1])                                 # error: a negative index literal

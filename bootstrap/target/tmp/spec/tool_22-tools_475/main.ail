@@ -1,7 +1,0 @@
-## Adds two numbers.
-fn add(a int, b int) int
-    a + b
-fn log(msg str)
-    print(msg)
-fn main()
-    log("{add(1, 2)}")

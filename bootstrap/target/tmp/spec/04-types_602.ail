@@ -1,3 +1,0 @@
-fn main()
-    b := b"abc"
-    print(b[3])                          # traps: index 3 is not below b.len()

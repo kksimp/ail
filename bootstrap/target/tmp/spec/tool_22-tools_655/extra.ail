@@ -1,7 +1,0 @@
-# A second root-module file: its names are shared with main.ail (mod.unit.1).
-# The root's own `Point` doesn't clash with `geo.Point`.
-struct Point
-    label str
-
-fn root_point() Point
-    Point(label: "root")

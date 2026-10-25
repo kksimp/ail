@@ -1,4 +1,0 @@
-fn log(msg str)
-    print(msg)
-fn main()
-    log("hi")

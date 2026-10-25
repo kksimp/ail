@@ -1,5 +1,0 @@
-fn show(tag str, n int, scale int) str
-    "{tag}:{n * scale}"
-
-fn main()
-    print(show("a", scale: 3, n: 4))

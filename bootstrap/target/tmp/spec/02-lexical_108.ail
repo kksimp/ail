@@ -1,5 +1,0 @@
-
-fn main()
-    msg := "Hello, {name}! You have {count} new messages."
-    a := "\{x}"          # the text {x}
-    b := "{{x}}"         # compile-time error: a literal brace is \{

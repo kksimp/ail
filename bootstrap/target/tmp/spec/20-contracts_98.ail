@@ -1,6 +1,0 @@
-fn log(mut lines List[str], line str)
-    ensures lines.len() > 0
-    lines.push(line)
-
-fn main()
-    print("")

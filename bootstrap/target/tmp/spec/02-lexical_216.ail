@@ -1,4 +1,0 @@
-
-fn main()
-    n := 1
-    print("{n:03}")      # compile-time error: write {n:0>3}

@@ -1,7 +1,0 @@
-use std.proc
-
-fn main() !
-    if proc.which("sort") == none
-        return
-    r := proc.run("sort", [], "b\na\n", 2000)?
-    print(r.out)

@@ -1,4 +1,0 @@
-fn main()
-    n := 3
-    if n                      # error: the condition must be bool
-        print(n)

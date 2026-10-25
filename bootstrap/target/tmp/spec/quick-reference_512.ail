@@ -1,6 +1,0 @@
-fn main()
-    perm := [1, 0]
-    mut out := [0, 0]
-    par for i in 0..2
-        out[perm[i]] = i * 10    # par asserts perm has no repeats
-    print(out)

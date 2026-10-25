@@ -1,7 +1,0 @@
-fn main()
-    x := 9223372036854775807
-    print(x.checked_add(1))        # none
-    print(x.wrapping_add(1))       # -9223372036854775808
-    print(x.saturating_add(1))     # 9223372036854775807
-    print((-5).checked_div(0))     # none: a zero divisor
-    print(255.to_hex())            # ff

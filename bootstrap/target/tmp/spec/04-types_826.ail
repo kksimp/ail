@@ -1,5 +1,0 @@
-
-fn main()
-    mut counts := Map[str, int]()
-    for w in ["a", "b", "a"]
-        counts[w] += 1      # {"a": 2, "b": 1}

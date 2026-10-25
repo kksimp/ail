@@ -1,6 +1,0 @@
-
-fn main()
-    x := 9223372036854775807
-    x.checked_add(1)        # none
-    x.wrapping_add(1)       # -9223372036854775808
-    x.saturating_add(1)     # 9223372036854775807

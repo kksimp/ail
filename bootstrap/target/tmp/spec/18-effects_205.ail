@@ -1,2 +1,0 @@
-fn main()
-    print("io is not a capability")     # clean: printing is never denied

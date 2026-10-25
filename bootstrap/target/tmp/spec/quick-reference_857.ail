@@ -1,5 +1,0 @@
-@pure fn area(w int, h int) int   # error if it reaches print or a capability
-    w * h
-
-fn main()
-    print("")

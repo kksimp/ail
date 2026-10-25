@@ -1,3 +1,0 @@
-fn main()
-    xs := [1, 2]
-    print(len(xs))            # error: the help names xs.len()

@@ -1,9 +1,0 @@
-fn main()
-    c := 'f'
-    print(c.is_alpha())                           # true
-    print('7'.is_digit())                         # true
-    print(' '.is_space())                         # true
-    print('A'.is_upper())                         # true
-    print('a'.to_upper())                         # A
-    print('ß'.to_upper())                         # ß: a multi-character mapping is unchanged
-    print(c == 'f')                               # true

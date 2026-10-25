@@ -1,2 +1,0 @@
-{"fns":[{"attrs":[],"owner":null,"name":"main","pos":{"line":1.0,"col":4.0},"doc":null,"generics":[],"receiver":null,"params":[],"ret":null,"body":[],"within":"TopLevel","contracts":[],"inherits":null,"unsafe_fn":false,"ext":null}],"structs":[],"enums":[],"traits":[],"impls":[],"consts":[],"uses":[],"public":[],"files":[],"grants":[],"generated":[]}
-2:17 diag expr.prec.2

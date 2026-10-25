@@ -1,9 +1,0 @@
-fn largest[T Ord](items List[T]) T
-    mut best := items[0]
-    for item in items
-        if item > best
-            best = item
-    best
-
-fn main()
-    print("")

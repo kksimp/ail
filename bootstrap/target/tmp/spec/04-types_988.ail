@@ -1,5 +1,0 @@
-fn mixed(a i8, b i64) i64
-    a + b                          # error: no implicit widening between i8 and i64
-
-fn main()
-    print("")

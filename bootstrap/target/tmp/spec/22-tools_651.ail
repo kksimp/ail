@@ -1,2 +1,0 @@
-fn main()
-    print(1.shl(64))            # traps: the shift count must be 0..=63

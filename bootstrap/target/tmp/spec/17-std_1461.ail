@@ -1,7 +1,0 @@
-use std.compress
-
-fn main()
-    text := compress.inflate([1, 2, 3]) else err
-        print(err.kind)               # corrupt: malformed data
-        ""
-    print(text.len())

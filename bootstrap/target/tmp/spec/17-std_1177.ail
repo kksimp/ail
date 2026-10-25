@@ -1,6 +1,0 @@
-use std.fs
-use std.path as path_mod
-
-fn main()
-    print(fs.exists("no-such-file-here"))
-    print(path_mod.base("a/b.txt"))   # b.txt

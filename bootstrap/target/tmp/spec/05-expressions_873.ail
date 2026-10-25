@@ -1,7 +1,0 @@
-enum Shape
-    Rect(w int, h int)
-
-fn main()
-    s := Shape.Rect(w: 1, h: 2)
-    match s
-        Rect(w) => print(w)       # error: one pattern per field

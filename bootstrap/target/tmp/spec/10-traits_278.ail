@@ -1,8 +1,0 @@
-struct Version
-    major int
-    minor int
-
-impl Ord for Version     # compares major, then minor
-
-fn main()
-    print("")

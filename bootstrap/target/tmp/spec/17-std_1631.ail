@@ -1,3 +1,0 @@
-fn main()
-    data := io.read_bytes()                 # reads the rest of standard input, undecoded
-    print(data.len())

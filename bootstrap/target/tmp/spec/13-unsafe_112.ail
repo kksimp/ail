@@ -1,9 +1,0 @@
-use std.mem
-
-fn main()
-    unsafe
-        xs := mem.alloc(4, 0)
-        for i in 0..4
-            xs.offset(i).write(i * 10)
-        print(xs.offset(2).read())
-        mem.free(xs)

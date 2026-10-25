@@ -1,3 +1,0 @@
-fn main() !
-    print("a")
-    p := proc.start("/home/user/ail/bootstrap/target/release/ail", ["version"])?

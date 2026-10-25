@@ -1,8 +1,0 @@
-use std.regex
-
-fn main()
-    date := regex.compile(r"(?P<y>\d{4})-(?P<m>\d\d)") else return
-    print(regex.find(date, "on 2026-10-20"))                # regex.Match(start: 3, end: 10, text: "2026-10")
-    print(regex.replace(date, "2026-10", "$m/$y"))          # 10/2026
-    sep := regex.compile(r",\s*") else return
-    print(regex.split(sep, "a, b,c"))                       # ["a", "b", "c"]

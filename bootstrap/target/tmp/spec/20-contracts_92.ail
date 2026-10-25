@@ -1,6 +1,0 @@
-fn g(result int) int
-    ensures result > 0
-    result
-
-fn main()
-    print("")

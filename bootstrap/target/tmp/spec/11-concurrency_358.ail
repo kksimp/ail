@@ -1,4 +1,0 @@
-fn main()
-    m := Mutex(0)
-    with m as x
-        print(x)

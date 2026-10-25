@@ -1,5 +1,0 @@
-fn main()
-    t := true
-    f := false
-    print(t and f)                                # false
-    print(t or f)                                 # true

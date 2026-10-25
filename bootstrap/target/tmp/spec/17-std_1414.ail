@@ -1,4 +1,0 @@
-use std.random
-
-fn main()
-    print(random.int(1, 6))          # ail run --deterministic rejects this program

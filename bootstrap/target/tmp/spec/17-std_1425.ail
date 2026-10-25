@@ -1,5 +1,0 @@
-fn main()
-    xs := tensor.from([1, 2, 3], [3])
-    print(xs.sum())                 # 6: int sums add in index order
-    print(xs.dot(xs))               # 14
-    print(xs.add(xs).to_list())     # [2, 4, 6]

@@ -1,6 +1,0 @@
-unique struct Conn
-    id int
-
-fn main()
-    pool := [Conn(id: 1)]
-    first := pool.first()

@@ -1,7 +1,0 @@
-fn main()
-    print(-7 / 2)                     # -3: rounds toward zero
-    print(-7 % 2)                     # -1: the sign of a
-    print(7 % -1)                     # 0 for every a
-    a := -7
-    b := 2
-    print(a == (a / b) * b + a % b)   # true

@@ -1,7 +1,0 @@
-use std.net
-
-fn main() !
-    srv := net.serve("127.0.0.1:0")?
-    print(srv.addr())
-    ex := srv.accept()?
-    ex.respond(net.Response(status: 200, headers: {}, body: "ok"))?

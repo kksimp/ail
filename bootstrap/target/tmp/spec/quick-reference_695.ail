@@ -1,8 +1,0 @@
-fn main() !
-    text := fs.read_text("in.txt")?          # str ! fs.IoError
-    fs.write_text("out.txt", text)?           # also append_text
-    names := fs.list_dir(".")?                # sorted names
-    srcs := fs.glob("src/**/*.ail")            # also fs.walk(dir)?: every file, sorted
-    r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
-    print("{r.status} {r.out} {r.err}")      # proc.Output
-    s := proc.run("sort", [], text, 5000)?     # input, then a time limit (kind timed_out)

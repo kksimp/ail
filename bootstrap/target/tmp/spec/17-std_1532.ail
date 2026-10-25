@@ -1,8 +1,0 @@
-use std.net
-
-fn main() !
-    mut o := net.options()
-    o.headers["accept"] = "text/plain"
-    o.max_redirects = 0               # a redirect is returned, not followed
-    r := net.request("GET", "https://example.com/", o)?
-    print(r.status)

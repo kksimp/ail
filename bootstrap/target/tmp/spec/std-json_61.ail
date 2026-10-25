@@ -1,6 +1,0 @@
-fn main()
-    mut doc := parse_json("\{\"id\": \"t1\", \"hours\": 2}") else return
-    print(doc.str("id"))       # t1
-    print(doc.str("hours"))    # none
-    doc.set("done", Json.Bool(true))
-    print(doc.to_text())       # {"id":"t1","hours":2.0,"done":true}

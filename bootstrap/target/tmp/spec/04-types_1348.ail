@@ -1,3 +1,0 @@
-fn main()
-    m := Map[float, int]()                        # error: float is not Hash
-    print(m.len())

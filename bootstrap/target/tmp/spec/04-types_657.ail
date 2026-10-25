@@ -1,4 +1,0 @@
-
-fn main()
-    ports := {"http": 80, "https": 443}
-    primes := [2, 3, 5, 7]

@@ -1,6 +1,0 @@
-struct Node
-    value int
-    children List[ref Node]
-
-fn main()
-    print("")

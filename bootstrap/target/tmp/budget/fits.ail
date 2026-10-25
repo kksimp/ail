@@ -1,8 +1,0 @@
-fn f() int
-    todo
-
-fn g() int
-    todo
-
-fn main()
-    print(nope)

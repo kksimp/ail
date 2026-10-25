@@ -1,4 +1,0 @@
-use geo
-
-fn main()
-    print(geo.zero())

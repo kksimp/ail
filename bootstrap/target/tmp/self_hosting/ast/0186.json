@@ -1,5 +1,0 @@
-{"fns":[{"attrs":[],"owner":null,"name":"main","pos":{"line":1.0,"col":4.0},"doc":null,"generics":[],"receiver":null,"params":[],"ret":null,"body":[{"kind":"Let","name":"y","pos":{"line":3.0,"col":5.0},"mutable":false,"value":{"kind":"Binary","op":"And","lhs":{"kind":"Bool","value":true,"pos":{"line":3.0,"col":10.0}},"rhs":{"kind":"Bool","value":false,"pos":{"line":3.0,"col":18.0}},"pos":{"line":3.0,"col":15.0}},"otherwise":null},{"kind":"Let","name":"z","pos":{"line":4.0,"col":5.0},"mutable":false,"value":{"kind":"Int","value":"1","pos":{"line":4.0,"col":10.0}},"otherwise":null},{"kind":"Let","name":"w","pos":{"line":4.0,"col":13.0},"mutable":false,"value":{"kind":"Int","value":"2","pos":{"line":4.0,"col":18.0}},"otherwise":null}],"within":"TopLevel","contracts":[],"inherits":null,"unsafe_fn":false,"ext":null}],"structs":[],"enums":[],"traits":[],"impls":[],"consts":[],"uses":[],"public":[],"files":[],"grants":[],"generated":[]}
-4:11 diag lex.stmt.3
-2:5 diag expr.bind.1
-3:15 diag expr.op.1
-7:5 diag expr.if.1

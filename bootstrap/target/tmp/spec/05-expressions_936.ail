@@ -1,6 +1,0 @@
-fn main()
-    big := 9223372036854775807
-    print(big.checked_add(1))         # none: the checked form reports overflow
-    print(big.wrapping_add(1))        # explicit wrapping
-    print(big.saturating_add(1))      # explicit saturation
-    print(3 + 4)                      # the proven-safe add needs no check at run time

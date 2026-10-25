@@ -1,4 +1,0 @@
-
-fn main()
-    counts := {"b": 2, "a": 2, "c": 5}
-    top := counts.keys().sorted().sorted(by: |k| -counts[k]).take(2)   # ["c", "a"]

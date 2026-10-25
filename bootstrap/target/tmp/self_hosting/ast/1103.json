@@ -1,4 +1,0 @@
-{"fns":[],"structs":[],"enums":[],"traits":[],"impls":[],"consts":[],"uses":[],"public":[],"files":[],"grants":[],"generated":[]}
-2:9 diag lex.block.3
-3:5 diag lex.block.1
-3:5 diag expr.if.1

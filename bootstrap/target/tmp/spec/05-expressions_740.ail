@@ -1,2 +1,0 @@
-fn main()
-    break                     # error: no enclosing loop

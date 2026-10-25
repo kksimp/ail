@@ -1,7 +1,0 @@
-fn main()
-    x := -0.4
-    print(x.round())             # -0.0: floor, ceil, round, sqrt keep the sign of zero
-    print(2.5.round())           # 3.0: halves round away from zero
-    print(9.0.sqrt())            # 3.0
-    print(3.9.to_int())          # 3: truncates toward zero
-    print(7.to_float())          # 7.0

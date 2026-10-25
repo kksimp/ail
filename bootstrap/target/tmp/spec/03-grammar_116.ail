@@ -1,5 +1,0 @@
-@deprecated("use hash") fn old_hash(x u64) u64
-    x * 17
-
-fn main()
-    print("")

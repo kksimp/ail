@@ -1,7 +1,0 @@
-fn square(x int) int
-    x * x
-
-fn main()
-    xs := [n for n in 1..=64]
-    squares := [square(x) par for x in xs]
-    print("{squares[0]} {squares[63]}")

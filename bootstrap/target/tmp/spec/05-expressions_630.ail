@@ -1,5 +1,0 @@
-fn scale(n int, by int) int
-    n * by
-
-fn main()
-    print(scale(4, "3"))      # error: the argument is str, not int

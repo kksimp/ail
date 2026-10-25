@@ -1,7 +1,0 @@
-fn main()
-    a := 300.to_u16()
-    b := a.to_u32() * 2
-    print(b)                       # 600
-    c := 0.5.to_f32() + 1
-    print(c)                       # 1.5
-    print(3.to_float())            # 3.0

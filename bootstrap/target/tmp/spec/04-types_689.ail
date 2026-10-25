@@ -1,5 +1,0 @@
-
-fn main()
-    seen := Set[int]()
-    counts := Map[str, int]()
-    names := List[str]()

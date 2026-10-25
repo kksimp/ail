@@ -1,9 +1,0 @@
-error enum Oops
-    Bad
-
-fn risky() int ! Oops
-    return Oops.Bad
-
-fn main()
-    n := risky()
-    print(n)

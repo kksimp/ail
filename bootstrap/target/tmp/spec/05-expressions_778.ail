@@ -1,8 +1,0 @@
-fn main()
-    print(2 + 3 * 4)                  # 14
-    print(-2 * 3)                     # -6: unary minus binds tighter
-    print(not false and true)         # true
-    print(false or true and false)    # false: and binds tighter than or
-    mut k := 1
-    k += 4
-    print(k.abs())                    # 5: a method call always has ()

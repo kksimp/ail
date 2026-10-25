@@ -1,5 +1,0 @@
-fn label(j Json) str
-    j.get("user")?.str("name") else "anonymous"
-
-fn main()
-    print(label(Json.Null))   # anonymous

@@ -1,7 +1,0 @@
-fn show(x int) int
-    print(x)
-    x
-
-fn main()
-    ys := [show(x) par for x in [1, 2, 3]]
-    print(ys)

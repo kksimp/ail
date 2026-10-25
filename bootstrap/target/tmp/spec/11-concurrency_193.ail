@@ -1,8 +1,0 @@
-fn work(id int)
-    print("work {id}")
-
-fn main() !
-    g := TaskGroup()
-    for i in 1..=3
-        g.add(spawn work(i))
-    g.wait_all()?

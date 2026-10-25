@@ -1,4 +1,0 @@
-fn main()
-    xs := [1, 2]
-    ys := [x * 2 for x in xs if x]    # error: the condition must be bool
-    print(ys)

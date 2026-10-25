@@ -1,5 +1,0 @@
-fn main()
-    n := 3
-    kind := if n > 2          # error: a value-producing if needs an else
-        "big"
-    print(kind)

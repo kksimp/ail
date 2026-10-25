@@ -1,8 +1,0 @@
-fn mean(xs List[int]) int
-    mut total := 0
-    for x in xs
-        total += x
-    total / xs.len()
-
-@test fn empty_is_zero()
-    assert_eq(mean([]), 0)

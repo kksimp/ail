@@ -1,3 +1,0 @@
-fn main()
-    for mut x in [1, 2, 3]    # error: a list literal is not a mutable place
-        x += 1

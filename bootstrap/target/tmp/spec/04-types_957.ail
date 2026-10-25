@@ -1,9 +1,0 @@
-fn low() i8
-    -128                           # the literal is an i8 because the return type is i8
-
-fn byte(n u8) u8
-    n
-
-fn main()
-    print(low())                   # -128
-    print(byte(255))               # 255

@@ -1,8 +1,0 @@
-error enum Oops
-    Bad
-
-fn f() Oops ! Oops
-    Oops.Bad
-
-fn main()
-    print("")

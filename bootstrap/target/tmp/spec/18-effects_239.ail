@@ -1,4 +1,0 @@
-use std.time
-
-fn main()
-    print(time.now_ms() > 0)         # error: the clock is denied in deterministic mode

@@ -1,2 +1,0 @@
-fn main()
-    print(path.ext("notes.txt"))   # txt

@@ -1,4 +1,0 @@
-fn main()
-    # A trap on purpose: building a 2 GiB string exceeds the 2^30-byte limit.
-    s := "x".repeat(2147483648)
-    print(s.len())

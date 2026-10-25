@@ -1,5 +1,0 @@
-use geo
-
-fn main()
-    p := geo.origin()
-    print("{p.x}")

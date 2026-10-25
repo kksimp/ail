@@ -1,6 +1,0 @@
-fn work(x int) int
-    x
-
-fn main()
-    t := spawn work(1)
-    print("never waited")

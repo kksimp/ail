@@ -1,8 +1,0 @@
-fn main()
-    a := tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
-    print(a * 2.0 - a)        # tensor.from([1.0, 2.0, 3.0, 4.0], [2, 2])
-    print(a.sum(0))           # tensor.from([4.0, 6.0])
-    print(a.transpose().max(1))   # tensor.from([3.0, 4.0])
-    print(a.matmul(a))        # tensor.from([7.0, 10.0, 15.0, 22.0], [2, 2])
-    print(a.map(|x| x * 2.0).sum())   # 20.0
-    print(tensor.from([1, 2, 3]).dot(tensor.from([4, 5, 6])))   # 32

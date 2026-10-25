@@ -1,4 +1,0 @@
-
-fn main()
-    n := "héllo".len()        # 5
-    b := "héllo".byte_len()   # 6

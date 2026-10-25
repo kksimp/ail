@@ -1,3 +1,0 @@
-fn main()
-    total := 1
-    print(totl)               # error: no visible name `totl`

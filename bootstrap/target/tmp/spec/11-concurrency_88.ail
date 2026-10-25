@@ -1,5 +1,0 @@
-fn main()
-    total := Atomic(0)
-    par for i in 0..1000
-        total.add(i)
-    print(total.load())

@@ -1,7 +1,0 @@
-fn main()
-    n := 3
-    v := if n > 2
-        3
-    else
-        none
-    print(v)

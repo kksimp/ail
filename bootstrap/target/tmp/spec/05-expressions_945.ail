@@ -1,3 +1,0 @@
-fn main()
-    big := 9223372036854775807
-    print(big + 1)                    # traps: the result doesn't fit in int

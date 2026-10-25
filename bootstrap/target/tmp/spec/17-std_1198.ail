@@ -1,7 +1,0 @@
-use std.fs
-
-fn main()
-    text := fs.read_text(".") else err
-        print("{err.kind}")          # is_dir
-        ""
-    print(text.len())                # 0

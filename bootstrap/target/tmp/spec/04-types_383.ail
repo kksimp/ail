@@ -1,6 +1,0 @@
-fn half(n int) int?
-    x := if n % 2 == 0 then n / 2 else none
-    x
-
-fn main()
-    print("")

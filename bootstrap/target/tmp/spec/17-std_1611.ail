@@ -1,5 +1,0 @@
-use std.tz
-
-fn main()
-    print(tz.system().len() > 0)                     # "UTC" on Windows until the registry reader lands
-    print(tz.offset("UTC", 0) else 0)                # 0

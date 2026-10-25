@@ -1,2 +1,0 @@
-pub fn banner(s str) str
-    "== {s} =="

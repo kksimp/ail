@@ -1,4 +1,0 @@
-
-fn main()
-    magic := b"\x89PNG\r\n\x1a\n"        # eight bytes
-    req := b"GET / HTTP/1.1\r\n\r\n"

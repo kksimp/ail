@@ -1,2 +1,0 @@
-{"fns":[{"attrs":[],"owner":null,"name":"main","pos":{"line":1.0,"col":4.0},"doc":null,"generics":[],"receiver":null,"params":[],"ret":null,"body":[{"kind":"Let","name":"a","pos":{"line":2.0,"col":5.0},"mutable":false,"value":{"kind":"Int","value":"6","pos":{"line":2.0,"col":10.0}},"otherwise":null}],"within":"TopLevel","contracts":[],"inherits":null,"unsafe_fn":false,"ext":null}],"structs":[],"enums":[],"traits":[],"impls":[],"consts":[],"uses":[],"public":[],"files":[],"grants":[],"generated":[]}
-3:13 diag gram.foreign.1

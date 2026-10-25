@@ -1,3 +1,0 @@
-fn main()
-    b := b"ab"
-    b[0] = 0x63                          # bytes are immutable: no element assignment

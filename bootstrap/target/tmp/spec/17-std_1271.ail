@@ -1,8 +1,0 @@
-use std.path
-
-fn main()
-    print(path.dir("examples/logscan.ail"))      # examples
-    print(path.dir("/x"))                        # /
-    print(path.dir("plain"))                     # .
-    print(path.join("", "data"))                 # data
-    print(path.join("a", "/abs"))                # /abs

@@ -1,5 +1,0 @@
-fn main()
-    x := 1.5
-    match x                   # error: a float literal pattern
-        1.5 => print("x")
-        _ => print("other")

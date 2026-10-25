@@ -1,6 +1,0 @@
-pub struct Point         # `pub` exports; everything else is private
-    pub x int            # fields too; a private field means only this
-    y int                # module can build a `Point`
-
-fn main()
-    print("")

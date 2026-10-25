@@ -1,3 +1,0 @@
-fn main()
-    xs := []
-    print(xs.len())                               # error: the element type is never determined

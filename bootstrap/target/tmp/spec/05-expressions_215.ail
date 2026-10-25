@@ -1,6 +1,0 @@
-fn sign(n int) str
-    if n < 0 then "negative" else "non-negative"
-
-fn main()
-    print(sign(-2))
-    print("{if 3 > 2 then "big" else "small"}")

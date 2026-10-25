@@ -1,5 +1,0 @@
-fn clamp[T Ord](x T, lo T, hi T) T
-    x.max(lo).min(hi)
-
-fn main()
-    print("")

@@ -1,8 +1,0 @@
-GREETING := greet("ail")
-
-fn greet(name str) str
-    print("greeting {name}")
-    "hello {name}"
-
-fn main()
-    print(GREETING)

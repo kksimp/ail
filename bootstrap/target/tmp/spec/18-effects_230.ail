@@ -1,6 +1,0 @@
-fn main()
-    mut counts := Map[str, int]()
-    for w in ["b", "a", "b"]
-        counts[w] += 1
-    for k in counts.keys()           # insertion order: no clock, random, proc or net
-        print("{k}: {counts[k]}")

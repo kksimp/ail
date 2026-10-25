@@ -1,7 +1,0 @@
-use std.time.date
-
-fn main()
-    z := date.at(0, "No/Such_Zone") else err
-        print(err)                                   # DateError: the zone is unknown
-        return
-    print(z.iso())

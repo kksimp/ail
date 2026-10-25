@@ -1,8 +1,0 @@
-error enum Oops
-    Bad
-
-fn first(xs List[int]) int ! Oops
-    return xs.max()
-
-fn main()
-    print("")

@@ -1,7 +1,0 @@
-
-fn main()
-    "2.5E-3".to_float()     # 0.0025
-    "1e999".to_float()      # inf
-    "-0".to_float()         # -0.0
-    "+1".to_float()         # none
-    ".5".to_float()         # none

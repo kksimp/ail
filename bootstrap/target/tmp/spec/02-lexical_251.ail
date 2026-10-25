@@ -1,5 +1,0 @@
-
-fn main()
-    lo := -9223372036854775808     # valid: the minimum int
-    hi := 9223372036854775808      # compile-time error: doesn't fit int
-    big := 1e999                   # compile-time error: overflows float

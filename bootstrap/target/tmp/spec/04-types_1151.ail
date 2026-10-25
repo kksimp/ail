@@ -1,9 +1,0 @@
-fn main()
-    parts := "a,,b".split(",")
-    print(parts.len())                            # 3: empty pieces are kept
-    print("a/b/c".split('/').len())               # 3: a char separator
-    print("-42".to_int())                         # -42
-    print("4x".to_int())                          # none
-    print("x".to_int() else 0)                    # 0
-    print("path/to".contains('/'))                # true
-    print("pre-body".starts_with("pre-"))         # true

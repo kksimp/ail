@@ -1,9 +1,0 @@
-
-fn main()
-    mut seen := Set[str]()
-    first := seen.add("a")  # true
-    again := seen.add("a")  # false: already there
-    mut ages := {"ann": 31, "bob": 27}
-    ages.get("cy")          # none
-    for k in ages.keys()
-        print("{k}: {ages[k]}")

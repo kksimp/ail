@@ -1,7 +1,0 @@
-fn bump(mut xs List[int])
-    xs.push(1)
-
-fn main()
-    mut ys := List[int]()
-    bump(mut ys)
-    print(ys.len())

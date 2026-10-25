@@ -1,9 +1,0 @@
-struct Pos
-    row int
-    col int
-
-
-fn main()
-    Pos(row, col)          # shorthand: locals named row and col
-    Pos(row: r, col: c)    # named
-    Pos(r, c)              # error: row and col are both int

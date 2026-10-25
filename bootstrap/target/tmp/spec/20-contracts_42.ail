@@ -1,6 +1,0 @@
-fn f(x int) int
-    requires x + 1
-    x
-
-fn main()
-    print("")

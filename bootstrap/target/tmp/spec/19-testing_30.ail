@@ -1,8 +1,0 @@
-fn double(x int) int
-    x * 2
-
-@test fn doubles()
-    assert_eq(double(4), 8)
-
-fn main()
-    print("")

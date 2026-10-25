@@ -1,7 +1,0 @@
-use std.fs
-
-fn main() !
-    fs.write_bytes("spec-bytes.bin", b"\x00\xffhi")?
-    print(fs.read_bytes("spec-bytes.bin")?)
-    fs.append_bytes("spec-bytes.bin", b"!")?
-    print(fs.read_bytes("spec-bytes.bin")?)
