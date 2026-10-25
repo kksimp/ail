@@ -838,6 +838,17 @@ fn list_alloc(cap int, size int) List[int]
 fn list_new(cap int) List[int]
     list_alloc(cap, 8)
 
+## The most elements `list_new_for` and `list_reserve` make room for: 8 MiB worth
+## of them, whatever their size.
+fn list_most(size int) int
+    if size == 8
+        return 1048576
+    if size == 1
+        return 8388608
+    if size == 2
+        return 4194304
+    2097152
+
 ## A list made with room for a loop's pushes (`list_reserve` would regrow
 ## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
 ## iterations' worth (2^20 words, 2^23 bytes).
@@ -864,7 +875,7 @@ fn fill(p int, n int, v int, size int)
 
 fn list_new_for(lo int, hi int, per int, size int) List[int]
     mut want := hi - lo
-    most := 8388608 / size
+    most := list_most(size)
     if want > most
         want = most
     if want < 0
@@ -897,7 +908,7 @@ fn list_reserve(xs List[int], lo int, hi int, per int, size int)
         return
     p := list_addr(xs)
     mut want := hi - lo
-    most := 8388608 / size
+    most := list_most(size)
     if want > most
         want = most
     need := load64(p) + want * per
