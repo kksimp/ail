@@ -7,7 +7,8 @@ Chapter key: `ct`
 > generated code. The bootstrap implements `ct.const.1–3` (with `if`,
 > `match` and `?` in a constant left to a function, `bootstrap.unsupported`),
 > `ct.derive.1–4` and `ct.gen.1–4` (ADRs 0306–0309). `ct.eval.3`'s step limit is counted for
-> constants, in statements run (ADR 0742); its memory limit and a derive's
+> constants, in statements run (ADR 0742; natively through `.ct` copies of the
+> functions a constant calls, so run-time code is unchanged); its memory limit and a derive's
 > limits aren't counted yet. `ct.eval.4` is not implemented yet. Design
 > notes: [compile-time-execution.md](../design/compile-time-execution.md),
 > [metaprogramming.md](../design/metaprogramming.md).

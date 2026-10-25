@@ -113,6 +113,8 @@ struct Lower
     unw Unwind
     ## Where each `uhwhatnow?` hole is, `FILE:LINE:COL` (expr.hole.3).
     asks Set[str]
+    ## The `.ct` copies of the functions constants call (ct.eval.3, lower_ctsteps.ail).
+    ctsteps CtSteps
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -291,6 +293,7 @@ pub fn lower_package_par(
         uniq: new_uniq(),
         unw: new_unwind(),
         asks: ask_keys(srcs),
+        ctsteps: new_ct_steps(),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
@@ -372,6 +375,7 @@ pub fn lower_package_par(
         l.stamp_problems()
     l.gen_instances()
     l.lower_lazy(srcs)
+    l.gen_ct_copies()
     l.enter_file(0)
     l.gen_unchecked()
     l.enter_file(0)
@@ -729,7 +733,7 @@ fn Lower.call(mut self, name str, args List[int], ty Ty) int
 ## nearly exhausted (err.trap.1, ADR 0535). `shown` names the callee.
 fn Lower.user_call(mut self, name str, args List[int], ty Ty, pos ast.Pos, shown str) int
     mut i := inst(-1, "call", args)
-    i.name = name
+    i.name = ct_call(name, pos)
     i.site = site("err.trap.1", "call", shown, pos)
     # The call position for a trap's stack (trace.frame.1). A constant's
     # initialiser runs before `main` here, but is lazy in the interpreter,
@@ -1032,6 +1036,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
         if done()
             dead_block()
         instr_stmt(s)
+        ct_stmt(s)
         if (want or top_unit_fails) and i == body.len() - 1
             if e := final_expr(s)
                 if tail_error(e)
@@ -1301,6 +1306,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
+            watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
         Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos, pos)
         _ => problem(pos, "this assignment target isn't in the native subset yet")
 
@@ -1850,7 +1856,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 )))
             check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
+            instr_watch_cells(cells)
             res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            instr_watch_cells_end(cells)
             cells_back(cells)
             res
         Member =>

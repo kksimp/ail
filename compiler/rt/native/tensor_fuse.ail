@@ -105,12 +105,27 @@ fn tensor_fused(f int, root int) int
     t := tensor_new(kind, rank, n)
     tensor_copy_words(t + 32, first + 32, rank)
     r := if kind == 2 then 1 else 0
+    out := tensor_data(t)
+    units := (n + FUSE_CHUNK - 1) / FUSE_CHUNK
+    if n >= 65536
+        env := tensor_env()
+        store64(env, 3)
+        store64(env + 8, kind)
+        store64(env + 16, out)
+        store64(env + 24, f)
+        store64(env + 32, root)
+        store64(env + 40, n)
+        if tensor_par(env, 0, units, n * load64(f))
+            return t
+    fuse_range(f, root, out, kind, n, 0, units)
+    t
+
+## The chunks `ulo..uhi` (of `FUSE_CHUNK` elements) of a fused chain into `out`.
+fn fuse_range(f int, root int, out int, kind int, n int, ulo int, uhi int)
+    r := if kind == 2 then 1 else 0
     sz := esz(kind)
     bufs := alloc(sz * FUSE_CHUNK * load64(f) + 8, KIND_ATOMIC)
-    out := tensor_data(t)
-    mut lo := 0
-    while lo < n
+    for u in ulo..uhi
+        lo := u * FUSE_CHUNK
         cnt := if n - lo < FUSE_CHUNK then n - lo else FUSE_CHUNK
         fuse_eval(f, bufs, root, lo, cnt, out + sz * lo, r)
-        lo += cnt
-    t

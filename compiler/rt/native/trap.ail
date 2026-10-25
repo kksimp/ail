@@ -66,7 +66,8 @@ fn trace_frames_n(lead int)
         if trace_find(ents, n, load64(p + 8) - base) >= 0
             total += 1
         p = trace_next(p)
-    limit := if total > LINES then LINES - 1 - lead else total
+    verbose := vals_verbose()
+    limit := if total > LINES and not verbose then LINES - 1 - lead else total
     mut shown := 0
     p = frame_ptr()
     while p != 0 and shown < limit
@@ -102,7 +103,7 @@ fn trace_frames_n(lead int)
             out_byte(10)
             shown += 1
         p = trace_next(p)
-    if total > LINES
+    if total > LINES and not verbose
         # The ellipsis, U+2026, as UTF-8.
         out_str("  ")
         out_byte(226)
@@ -174,6 +175,13 @@ fn tr_mark()
         store64(w + 112, load64(global(OUT_LEN)))
 
 fn tr_vend()
+    tr_vend_n(60)
+
+## `tr_vend` for a watch event's value: cut at 1000 bytes (trace.val.2).
+fn tr_vend_long()
+    tr_vend_n(1000)
+
+fn tr_vend_n(limit int)
     w := tr_state()
     if w == 0
         return
@@ -183,8 +191,8 @@ fn tr_vend()
         return
     base := load64(global(OUT_BUF)) + mark
     mut len := n - mark
-    if len > 60
-        mut cut := 60
+    if len > limit
+        mut cut := limit
         while cut > 0 and load8(base + cut).bit_and(192) == 128
             cut -= 1
         len = cut

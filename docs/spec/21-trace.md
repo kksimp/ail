@@ -167,9 +167,15 @@ the watch (only then does it cost anything) and shows trace.watch.1's events on
 standard error, `watch: NAME = VALUE at LINE:COL`, then the summary line
 (trace.run.4); over `--replay R` (replay.run.1) the same run is repeated exactly,
 so it answers "when did `NAME` become 0?" on a recorded run. The events are the
-assignments and `mut NAME := e` of trace.watch.1; a builtin mutating method,
-an element write's note (trace.watch.4) and a `mut` argument followed into a callee
-(trace.watch.3) are not shown yet. *(ADRs 0868, 0886)*
+assignments and `mut NAME := e` of trace.watch.1; the element writes of
+trace.watch.4 `push`, `pop`, `insert`, `remove_at`, `swap`, `extend`, `clear`, `reverse`,
+`sort`, `NAME[i] = e`, `NAME[k] = e`, and a map's `remove` and a set's `add` and `remove`
+(only when they change it) end in their note (`[push 3 at index 2]`, `[swap at index 0, 2]`,
+`[add 3]`); and a `mut` argument or `mut self`
+that holds the watched variable is followed into the callee (trace.watch.3), the event
+ending in ` in FN` and ` (as \`p\`)` when the callee's name differs. With `--json` each
+event is the one-line object of trace.watch.4's JSON form (`{"api":1,"trace":"watch",...}`).
+*(ADRs 0868, 0886)*
 
 ```ail tool=run,--watch,n,FILE expect=watch: rules=trace.watch.5
 fn main()
@@ -283,7 +289,8 @@ declaration order; the values of types the runtime can print), a contract
 trap's `  values: ` line (the arguments the condition names, in name order),
 and `  … N more frames (--verbose shows every frame and value)`. A build
 without `--values` prints no values (trace.frame.1) and costs nothing for
-them. *(ADR 0886, ADR 0641)*
+them. `--verbose` implies `--values` and, as trace.snap.3 says, shows every frame, with each
+local on its own line: `      NAME = VALUE`. *(ADR 0886, ADR 0641)*
 
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
