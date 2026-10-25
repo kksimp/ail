@@ -1227,6 +1227,7 @@ fn api_cmd(rest List[str])
     mut form := api.Form.Plain
     mut expanded := false
     mut symbols := false
+    # `--json`: a rejected program's diagnostics as JSON lines (api.out.5); the outline is JSON anyway.
     mut json := false
     mut files := List[str]()
     for a in rest
