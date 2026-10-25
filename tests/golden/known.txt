@@ -14,3 +14,6 @@ derive_junk_text
 # Native `api` loads a package with its manifest and vendored modules, so it rejects
 # caps_denied (eff.cap.4-5, api.out.5); the Rust `api` of one file didn't enforce capabilities.
 packages/caps_denied
+# Rust fmt wrote `t(int, str)` for a tuple type after a parameter name (item 282, fixed natively in #773).
+fmt plain tools/ailtest/cases/types.ail
+fmt long tools/ailtest/cases/types.ail
