@@ -123,7 +123,12 @@ pub fn query_command(rest List[str], std str) int
     col := at[1].to_int() else
         io.eprint(QUERY_USAGE)
         return 2
-    src := fs.read_text(file) else err
+    # `DIR FILE` with FILE relative to DIR reads DIR/FILE (api.pkg.2).
+    mut at_file := file
+    inside := if target.ends_with("/") then "{target}{file}" else "{target}/{file}"
+    if not fs.exists(file) and fs.exists(inside)
+        at_file = inside
+    src := fs.read_text(at_file) else err
         io.eprint("error: can't read {file}: {err}")
         return 2
     loaded := load.load(target, std) else err
@@ -215,8 +220,10 @@ fn token_at(lines List[str], line int, col int) Token?
 fn file_base(prog ast.Program, path str, target str) int
     if target == path
         return 0
+    # `DIR FILE`: FILE may be written relative to DIR (api.pkg.2), as `main.ail`.
+    inside := if target.ends_with("/") then "{target}{path}" else "{target}/{path}"
     for f in prog.files
-        if f.path == path
+        if f.path == path or f.path == inside
             return f.base
     0
 
