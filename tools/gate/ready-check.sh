@@ -13,8 +13,8 @@ red() { fails=$((fails+1)); echo "RED $1"; }
 ail=$(echo "$files" | grep '\.ail$' | grep -v '^tests/' || true)
 if [ -n "$ail" ]; then
   # shellcheck disable=SC2086
-  ./ail fmt --check $ail >/tmp/ready-fmt.$$ 2>&1 || { red "fmt: run ./ail fmt on"; grep '^--- ' /tmp/ready-fmt.$$ | cut -c5-; }
-  rm -f /tmp/ready-fmt.$$
+  ./ail fmt --check $ail >"${TMPDIR:-/tmp}/ready-fmt.$$" 2>&1 || { red "fmt: run ./ail fmt on"; grep '^--- ' "${TMPDIR:-/tmp}/ready-fmt.$$" | cut -c5-; }
+  rm -f "${TMPDIR:-/tmp}/ready-fmt.$$"
   case "$ail" in *compiler/*) ./ail check compiler >/dev/null 2>&1 || red "./ail check compiler";; esac
   case "$ail" in *tools/garlic/*) ./ail check tools/garlic >/dev/null 2>&1 || red "./ail check tools/garlic";; esac
 fi
