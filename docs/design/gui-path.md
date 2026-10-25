@@ -32,7 +32,7 @@ AIL, that reaches the platform through `extern c` (ADRs 0103–0105) inside
 | Linux | Wayland (`wl_surface`, `xdg_shell`, `wl_shm`) first, X11 (`libX11` or raw protocol over a socket) as fallback | software framebuffer in shared memory; xkbcommon for keymaps | libc is linked only when C is used (ADR 0105), which a GUI program does |
 
 The cell grid, dirty-cell diffing and key translation are already pure
-logic (`bootstrap/src/ui.rs`) and port directly to AIL. The font becomes an
+logic (`77592931:bootstrap/src/ui.rs`) and port directly to AIL. The font becomes an
 AIL constant table generated from an MIT-licensed bitmap font, then real
 outline fonts through the platform text APIs.
 

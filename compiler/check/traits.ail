@@ -1,5 +1,5 @@
 ## `impl` blocks and which types implement which traits (ADR 0377), as in
-## `bootstrap/src/check/traits.rs` (trait.impl.1-6, trait.auto.1-5,
+## `77592931:bootstrap/src/check/traits.rs` (trait.impl.1-6, trait.auto.1-5,
 ## trait.std.2, trait.super.2, trait.derive.1).
 use ast
 

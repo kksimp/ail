@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## Certificate chain verification for the native TLS client (ADR 0836 slice 3,
-## ADR 0368-0369), ported from bootstrap/src/net/x509/verify.rs with its rules
+## ADR 0368-0369), ported from 77592931:bootstrap/src/net/x509/verify.rs with its rules
 ## and its messages: dates, key usage, the host name, a path to a trusted root
 ## found by issuer name and checked by signature, CA flags, path lengths and
 ## name constraints. A certificate is a `List[int]` of tls_x509.ail.

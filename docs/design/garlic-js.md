@@ -395,7 +395,7 @@ it comes later for speed, and these frames will move onto it).
   (Playwright's build 1194) gave them with the page at
   `https://example.test/dir/page.html`. `--test-page DIR` compares them.
 - `vm/jsmath.ail` has `@test`s for the math functions.
-- `bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
+- `77592931:bootstrap/tests/tools.rs` (`garlic_js_parses_and_runs_its_suites`) runs
   all of these in `./ail selftest`.
 
 Real pages lean on indirect and direct `eval`, function source text,

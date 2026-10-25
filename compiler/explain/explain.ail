@@ -1,6 +1,6 @@
 ## `ail explain [RULE] [--json]` in AIL (explain.list.1, explain.show.1,
 ## explain.cover.4; ADRs 0146, 0336, 0670, 0746), ported from
-## `bootstrap/src/explain.rs` and byte-identical to it: a spec rule's text, the
+## `77592931:bootstrap/src/explain.rs` and byte-identical to it: a spec rule's text, the
 ## ADRs it cites and the nearest example. The Rust one embeds the specification
 ## at build time; this one reads `docs/spec/*.md`, the ADR index and the
 ## fixable list from the repository, `AIL_ROOT` or the parent of `AIL_COMPILER`

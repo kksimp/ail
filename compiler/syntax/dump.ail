@@ -18,7 +18,7 @@ pub fn diag_lines(diags List[Diag], mut out List[str])
 ## One syntax diagnostic per line (gram.rec.1, ADR 0263): the leftmost one
 ## on a line is kept and the others on that line are dropped. String errors
 ## (lex.str.*) are independent and always kept, as in the Rust front end
-## (bootstrap/src/modules.rs, one_per_line).
+## (77592931:bootstrap/src/modules.rs, one_per_line).
 pub fn one_per_line(diags List[Diag]) List[Diag]
     mut out := List[Diag]()
     for d in diags
@@ -89,7 +89,7 @@ pub fn ast_text(lexed Lexed, parsed Parsed) str
     out.join("\n")
 
 ## The syntax diagnostics of one file as `ail check` prints them (the text
-## form of bootstrap/src/diag.rs `to_text`), or "" when there are none.
+## form of 77592931:bootstrap/src/diag.rs `to_text`), or "" when there are none.
 pub fn report_text(path str, text str, diags List[Diag]) str
     lines := text.split("\n")
     mut out := List[str]()

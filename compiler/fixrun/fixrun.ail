@@ -1,6 +1,6 @@
 ## `ail fix FILE [--dry-run] [--json]` (fix.apply.1-4, ADR 0203): apply the
 ## machine-applicable fixes that diagnostics carry (ADR 0145), re-check, and
-## repeat until nothing fixable is left. A port of `bootstrap/src/fix.rs`.
+## repeat until nothing fixable is left. A port of `77592931:bootstrap/src/fix.rs`.
 ## The check itself comes in as a function (`Diagnose`), so this module needs
 ## neither the loader nor the checker.
 use ast

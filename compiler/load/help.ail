@@ -1,5 +1,5 @@
 ## The help a diagnostic gets when its rule gives none, as `default_help` in
-## `bootstrap/src/diag.rs`. Generated from that table; keep them in step.
+## `77592931:bootstrap/src/diag.rs`. Generated from that table; keep them in step.
 
 @allow("expr.match.3") fn default_help(rule str) str?
     match rule

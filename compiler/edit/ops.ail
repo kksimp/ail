@@ -1,5 +1,5 @@
 ## The edit operations (edit.op.1-7) and the compact input form (edit.in.3).
-## A port of the second half of `bootstrap/src/edit.rs`. An operation that
+## A port of the second half of `77592931:bootstrap/src/edit.rs`. An operation that
 ## fails leaves `Work.err` set; the caller stops at the first one.
 use api
 use check

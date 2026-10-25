@@ -3,7 +3,7 @@
 ##
 ## Strict DER reading, ASN.1 times, PEM and base64 for the native TLS client's
 ## certificate checks (ADR 0836 slice 3, ADR 0368), over raw addresses like
-## bootstrap/src/net/x509/der.rs, whose rules it keeps: minimal lengths, no
+## 77592931:bootstrap/src/net/x509/der.rs, whose rules it keeps: minimal lengths, no
 ## indefinite lengths, no high tag numbers, minimal non-negative integers.
 
 DER_BOOLEAN := 1

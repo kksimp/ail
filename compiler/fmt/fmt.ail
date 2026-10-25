@@ -1,5 +1,5 @@
 ## `ail fmt` in AIL (ADR 0169): the canonical layout of AIL source, ported
-## from the Rust formatter (`bootstrap/src/fmt.rs`) and byte-identical to it
+## from the Rust formatter (`77592931:bootstrap/src/fmt.rs`) and byte-identical to it
 ## on the whole repository. The style is described, rule by rule, in
 ## `docs/design/formatting.md`; the `fmt.*` IDs cited here are that file's.
 ##

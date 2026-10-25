@@ -1,5 +1,5 @@
 ## The syntax tree of an AIL program, shared by the parser and the checker
-## written in AIL (ADR 0376). It mirrors `bootstrap/src/ast.rs`, and its JSON
+## written in AIL (ADR 0376). It mirrors `77592931:bootstrap/src/ast.rs`, and its JSON
 ## (the derived `ToJson`/`FromJson`) is the shape `ail api --ast` prints
 ## (api.ast.1).
 
