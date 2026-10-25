@@ -349,7 +349,7 @@ static Node *decode_node(const JVal *d) {
 
 static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
     PangoFontDescription *d = pango_font_description_new();
-    pango_font_description_set_family(d, !strcmp(family, "sans") ? "Sans" : "Monospace");
+    pango_font_description_set_family(d, !strcmp(family, "sans") ? "Sans" : !strcmp(family, "serif") ? "Serif" : "Monospace");
     pango_font_description_set_absolute_size(d, (size > 0 ? size : 13) * PANGO_SCALE);
     pango_font_description_set_weight(d, bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
     pango_font_description_set_style(d, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);

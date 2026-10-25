@@ -14,8 +14,15 @@ func color(_ c: Int) -> NSColor {
 
 func font(_ family: String, _ size: Double, bold: Bool, italic: Bool) -> NSFont {
     let s = CGFloat(size > 0 ? size : 13)
-    var f = family == "sans" ? NSFont.systemFont(ofSize: s, weight: bold ? .bold : .regular)
-        : NSFont.monospacedSystemFont(ofSize: s, weight: bold ? .bold : .regular)
+    let w: NSFont.Weight = bold ? .bold : .regular
+    var f: NSFont
+    switch family {
+    case "sans": f = NSFont.systemFont(ofSize: s, weight: w)
+    case "serif":
+        let sys = NSFont.systemFont(ofSize: s, weight: w)
+        f = sys.fontDescriptor.withDesign(.serif).flatMap { NSFont(descriptor: $0, size: s) } ?? sys
+    default: f = NSFont.monospacedSystemFont(ofSize: s, weight: w)
+    }
     if italic { f = NSFontManager.shared.convert(f, toHaveTrait: .italicFontMask) }
     return f
 }
