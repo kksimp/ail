@@ -12,10 +12,9 @@ garbage-collected, memory-safe systems programming language designed so that
 humans and AI agents are both first-class programmers. Source files use `.ail`.
 The CLI is `ail` (`ail build`, `ail run`, `ail test`, `ail fmt`, `ail check`).
 
-The project is past **Stage 2**: the Rust bootstrap (ADR 0023) is removed (ADR 0889).
-The front end, checker, formatter, tools and native backend are written in AIL
-(`compiler/`), and `ail` is a native executable that builds itself from a pinned
-seed. The core design is done ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md))
+The project is in **Stage 2: native self-hosting**. The Rust bootstrap and its
+interpreter are deleted (D5, ADR 0904); the compiler is written in AIL and builds itself from a
+published seed (ADR 0855). The core design is done ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md))
 and the remaining design topics continue alongside. The first milestone is
 `./ail run examples/hello.ail` on macOS (met). Every implemented behaviour must
 cite its spec rule ID in code and in diagnostics.
@@ -30,17 +29,17 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   on the designer's Mac is the gate (the integrator runs it for every chain).
   Lanes do not open their own Mac sessions. Builds and tests run only on the
   designer's machines (the Mac, `ail-linux`, `ail-win`), never in a cloud
-  container. There is no `cargo` and no `./ail selftest`; the gate and
-  `ail test` are the test entry points.
+  container. There is no cargo; `./ail selftest` is the native gate suites
+  (ADR 0865) and `ail test` runs a program's tests.
 - **Merging ([ADR 0109](docs/decisions/0109-merge-via-pull-requests.md)):** when
   the gate passes, open a pull request for the branch and merge it through GitHub.
   GitHub deletes the branch on merge (repository setting).
-- **One checker:** checker changes go in `compiler/check/` only. The Rust
-  checker is gone, so the parity gate of
-  [ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md) is retired
-  (ADR 0889).
-- **Native only ([ADR 0865](docs/decisions/0865-no-double-work.md)):**
-  new features get no interpreter code. Native-only cases are listed in
+- **One checker:** checker changes go in `compiler/check/` only. There is no
+  Rust checker to compare with any more; `tests/checker_known_new.txt` is history
+  ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md), amended
+  by [ADR 0904](docs/decisions/0904-rust-bootstrap-deleted.md)).
+- **Native only ([ADR 0865](docs/decisions/0865-no-double-work.md)):** new
+  features get no interpreter code. Native-only cases are listed in
   `tests/cases/native_only.txt`.
 - **Native lowering ([ADR 0823](docs/decisions/0823-lower-ail-feature-files.md)):**
   a native feature lives in its own `compiler/mir/lower_*.ail` file. It may
@@ -136,7 +135,7 @@ LICENSE, NOTICE           Apache 2.0 with a Runtime Library Exception (ADR 0510)
 docs/
   README.md               documentation index (start here)
   vision.md               goals and design philosophy (from the founding brief)
-  quick-reference.md      AIL on one page for writing programs (keep it in step with the bootstrap)
+  quick-reference.md      AIL on one page for writing programs (keep it in step with the compiler)
   language-card.md        the whole language within the token budget, for agents
   roadmap.md              phased development plan
   status.md               what is decided, specified, implemented, tested
@@ -145,14 +144,13 @@ docs/
   decisions/              Architecture Decision Records (ADRs), one per decision
   spec/                   normative language specification with rule IDs
   design/                 non-normative design notes, research, and constraints
-ail                       command-line entry point; fetches the pinned seed and runs the native `ail` (ADR 0855)
+ail                       command-line entry point; builds the native CLI from the published seed (ADR 0855)
 ail.ps1                   the same entry point for Windows
-compiler/                 the front end, checker, tools and native backend written in AIL (ADR 0022)
-std/                      the standard library in AIL
-seeds.sha256              checksums of the pinned native seeds `./ail` fetches (ADR 0855)
+compiler/                 the front end, checker and native backend written in AIL (ADR 0022)
 examples/                 example programs; NAME.out holds the expected output
 tools/
   gate/mac-gate.sh         the Mac gate; prints only failures (ADR 0842)
+  gate/ready-check.sh      what a lane runs before READY: fmt, check, bash -n on the files it changed
   app-host/macos/          the std.app host: SwiftUI, built by run.sh (ADR 0838)
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
@@ -162,15 +160,15 @@ tools/
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
-  fix/                    fix tooling for compiler/fix/ (the parity scripts against Rust leave with it, ADR 0889)
-  fmt/                    formatter checks for compiler/fmt/ (parity against Rust removed, ADR 0889)
-  explain/                `ail explain` checks for compiler/explain/ (parity against Rust removed, ADR 0889)
+  fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against its frozen goldens
+  golden/                 golden.py: explain, fmt, fix, api and edit against outputs frozen from the Rust binary (tests/golden/), so they check with no Rust binary (D0)
+  explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against its frozen goldens
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
   native-coverage/        which native subset constructs block the examples
   native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
-  native-tls/             the native TLS primitives against recorded test vectors (ADR 0836)
+  native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
   pdf/                    PDF reader, searcher and viewer written in AIL (ADR 0520)
   perfbench/              drag-race programs: AIL, C and Python twins
@@ -207,7 +205,7 @@ tools/
 - **Concurrency:** colorless tasks (no async/await), scope-bound, with unique
   handles that must be waited (ADRs 0095–0096). **Modules** are directories,
   `pub` exports, and `use a.b` imports with qualified access (ADRs 0097–0099).
-- The front end and the optimising backend are written **in AIL** (ADR 0022).
-  The Rust bootstrap (ADR 0023) was removed in ADR 0889; the pinned seed is the
-  only way to build from nothing (ADR 0855).
+- The compiler, checker, tools and optimising backend are written **in AIL**
+  (ADR 0022); the Rust bootstrap (ADR 0023) is deleted, and the published seed
+  builds the first native `ail` (ADR 0855).
 - See `docs/decisions/README.md` for the full list.

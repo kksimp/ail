@@ -1,4 +1,4 @@
-## The native backend's integration tests (bootstrap/tests/native.rs, ported), driven
+## The native backend's integration tests, driven
 ## through the native compiler (`NATIVE_COMPILER=PATH`, else built first, and a failed build is red; `NATIVEX_INTERP=1`
 ## keeps `ail run compiler`) and `ail build`. `NX_JOBS=N` sets the processes (default: one per
 ## core). Run from the repository root:
@@ -169,6 +169,17 @@ fn Run.batch(mut self)
         if b.status != 0 or hex_of_file(exe) != hex
             red("batch build", "{sample[k]}: the batch build differs from `ail build`")
 
+## The first line where `want` and `got` differ, so a gate log that shows only the head of a failure still names it.
+fn first_diff(want str, got str, want_status int, got_status int) str
+    w := want.lines()
+    g := got.lines()
+    for i in 0..w.len().max(g.len())
+        a := if i < w.len() then w[i] else "<end>"
+        b := if i < g.len() then g[i] else "<end>"
+        if a != b
+            return "line {i + 1}: golden `{a}`, native `{b}`; exit {want_status} vs {got_status}"
+    "same lines, exit {want_status} vs {got_status}"
+
 ## One program of tests/native/run against `ail run`: stdout, exit status, and the trap report.
 fn nx_match(
     case str,
@@ -202,7 +213,7 @@ fn nx_match(
         want_status := status.trim().to_int() else 1
         if want_out == got.out and want_status == got.status
             return none
-        return "{case}: differs from its golden\n--- golden (exit {want_status}):\n{want_out}\n--- native (exit {got.status}):\n{got.out}{got.err}"
+        return "{case}: differs from its golden: {first_diff(want_out, got.out, want_status, got.status)}\n--- golden (exit {want_status}):\n{want_out}\n--- native (exit {got.status}):\n{got.out}{got.err}"
     "{case}: no golden in tests/native/golden: run `ail run tools/gate/goldens.ail freeze {stem}`"
 
 ## ADR 0814: the chunk's programs built in one `build-many` run, so the compiler loads once.
@@ -305,6 +316,15 @@ fn Run.executables(mut self, target str, runner str)
             if not pending.contains(stem_of(c))
                 live.push(c)
         cases = live
+    # A dynamic ELF (dlopen/dlsym of an `extern c fn` outside the libc subset, ADR 0870) under qemu-user needs the
+    # target's own dynamic loader; without it qemu exits 255 with nothing printed. The host runs these cases.
+    if target.contains("aarch64-linux")
+        and not fs.exists("/usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1")
+        mut static_only := List[str]()
+        for c in cases
+            if not ["ffi_dynamic", "ffi_missing_library", "ffi_missing_symbol"].contains(stem_of(c))
+                static_only.push(c)
+        cases = static_only
     stride := (env.get("NX_STRIDE") else "1").to_int() else 1
     if stride > 1
         mut sampled := List[str]()
@@ -618,6 +638,12 @@ fn Run.drivers(mut self)
                 "differs from its frozen output\n--- frozen (exit {want_status}):\n{slurp("{base}.out")}{want_err.join("\n")}\n--- native (exit {got.status}):\n{got.out}{got_err.join("\n")}",
             )
 
+## $TMPDIR without its trailing `/` (macOS sets one): a `//` in a scratch path
+## stops goldens that replace the root from matching normalized paths.
+fn tmp_base() str
+    base := env.get("TMPDIR") else "/tmp"
+    if base.len() > 1 and base.ends_with("/") then base.slice(0, base.len() - 1) else base
+
 fn main() !
     args := env.args()
     if args.len() > 0 and args[0] == "--chunk"
@@ -627,7 +653,7 @@ fn main() !
     # `NATIVE_COMPILER`, else a fresh `ail build compiler/main.ail` (run again with it set).
     if (env.get("NATIVE_COMPILER") else "").is_empty()
         and (env.get("NATIVEX_INTERP") else "").is_empty()
-        built := "{env.get("TMPDIR") else "/tmp"}/ail-nativex-compiler"
+        built := "{tmp_base()}/ail-nativex-compiler"
         b := sh("{BIN} build compiler/main.ail -o {built}")
         if b.status == 0
             again := proc.run("sh", [
@@ -660,7 +686,7 @@ fn main() !
     ]
     suites := if args.len() == 0 then all else args
     root := sh("pwd").out.trim()
-    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-nativex"
+    tmp := "{tmp_base()}/ail-nativex"
     sh("rm -rf {tmp}; mkdir -p {tmp}")
     mut r := Run(fails: 0, checks: 0, root: root, tmp: tmp)
     q := qemu()

@@ -44,7 +44,7 @@ Native macOS window (needs the SwiftUI host, ADR 0838): `tools/app-host/macos/ru
 Network behaviour (cookies on redirects, the final address, gzip, sheets with cookie and Referer) is checked against a scripted site with `tools/garlic/netcheck/check.sh` (`GARLIC=path` runs it against a native build).
 ## Agents: `garlic --serve`
 
-An MCP server on stdio (JSON-RPC, one message per line). Tools: `open`, `observe`, `act`, `find`, `extract`, `screenshot` (the pixel layout as drawing operations). Same page model and actions as `--session`. `ail build tools/garlic/garlic.ail` builds natively; the dumps match the interpreter's and run about 5x faster.
+An MCP server on stdio (JSON-RPC, one message per line). Tools: `open`, `observe`, `act`, `find`, `extract`, `screen` (what is drawn, as items an agent can ask about by point, region, role, colour or text, within a token budget; `std.screen`, ADR 0878), `screenshot` (the pixel layout as drawing operations). Same page model and actions as `--session`. `ail build tools/garlic/garlic.ail` builds natively; the dumps match the interpreter's and run about 5x faster.
 
 Trust rules in `--serve`: `--allow host,host` limits the sites an agent may open or use (default `*`); an `act` that sends data (`submit`) is held until repeated with `"confirm":true`; the `log` tool returns what the session did.
 
@@ -55,3 +55,10 @@ Trust rules in `--serve`: `--allow host,host` limits the sites an agent may open
 Watches and scheduled actions (attached sessions): `watch` (`url` or the live tab, `contains`, `every` seconds), `watches`, `unwatch`, `events` (changes seen since the last call); `schedule` (`tool`, `arguments`, `in` seconds), `schedules`, `unschedule`. A one-second timer posts to the window through the inbox; scheduled calls follow the same site and confirm rules as live ones, and their results appear in `events`.
 
 In the window, an attached agent's request to use a site it may not, or to send data (`submit`), waits for the user: an "Allow / Deny" row appears and the agent's call stays open until one is pressed. Allow on a site adds it for the session; Allow on a send permits that one send.
+
+## Quiet pages, extraction and forms for agents
+
+- Cookie banners, ads and trackers are hidden by default (`tools/garlic/hush`, lists in AIL); `--noisy` shows them.
+- `--tables` (JSON), `--csv N` (table N as CSV), `--reader` (main content, title and token count) and `--extract "Price,Stock"` (values by label) read structure out of a page; the MCP tools are `tables`, `reader` and `fields`.
+- `--forms` lists the forms as a schema; the action `fill:{"Label": value}` fills by label and submits.
+- `--at X,Y` and `--where TEXT|ROLE` ground a point or a word in the page model.

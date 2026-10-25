@@ -18,7 +18,7 @@ pub fn inline_module(mut out Module)
     mut leaves := Set[str]()
     mut bodies := Map[str, Func]()
     for f in out.funcs
-        if inlinable(f)
+        if inlinable(f) and not opt_off("inline")
             leaves.add(f.name)
             bodies[f.name] = f
     reserve := by_name.contains("rt.list_reserve")
@@ -28,37 +28,53 @@ pub fn inline_module(mut out Module)
     fills := by_name.contains("rt.fill")
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
-        mut budget := INLINE_BUDGET
-        mut changed := true
-        while changed and budget > 0
-            changed = false
-            for b in 0..f.blocks.len()
-                at := first_call(f.blocks[b], leaves, f.name)
-                if at >= 0
-                    callee := bodies[f.blocks[b].insts[at].name]
-                    inline_call(mut f, b, at, callee, mut out.sites)
-                    budget -= 1
-                    changed = true
-                    break
-        if budget < INLINE_BUDGET
+        budget := expand_calls(mut f, leaves, bodies, mut out.sites)
+        unrolled := unroll_self(mut f, mut out.sites)
+        if budget < INLINE_BUDGET or unrolled
             simplify_in(mut f)
             fold_in(mut f)
             simplify_in(mut f)
         merge_blocks_in(mut f)
         if f.name.starts_with("rt.")
-            f = forward_loads(f)
+            f = forwarded(f)
         else
-            f = forward_loads(fill_loops(
+            f = forwarded(fill_loops(
                 kept_lengths(bce(mark_nonneg(f), reserve, grow_only), reserve and grow_only),
-                fills,
+                fills and not opt_off("fill"),
             ))
-            fold_addresses(mut f)
-        fold_prim_addresses(mut f)
+            if not opt_off("fold")
+                fold_addresses(mut f)
+        if not opt_off("fold")
+            fold_prim_addresses(mut f)
         out.funcs[k] = f
         if not f.name.starts_with("rt.")
             out.funcs[k] = rewrite_nonneg(out.funcs[k])
-    pure_calls(mut out)
-    reuse_lists(mut out)
+    if not opt_off("pure")
+        pure_calls(mut out)
+    if not opt_off("memo")
+        memoize(mut out)
+    if not opt_off("reuse")
+        reuse_lists(mut out)
+
+fn forwarded(f Func) Func
+    if opt_off("forward") then f else forward_loads(f)
+
+## Inline the calls of `f` that name a function in `leaves`, at most
+## `INLINE_BUDGET` of them; returns the budget left.
+fn expand_calls(mut f Func, leaves Set[str], bodies Map[str, Func], mut sites List[Site]) int
+    mut budget := INLINE_BUDGET
+    mut changed := true
+    while changed and budget > 0
+        changed = false
+        for b in 0..f.blocks.len()
+            at := first_call(f.blocks[b], leaves, f.name)
+            if at >= 0
+                callee := bodies[f.blocks[b].insts[at].name]
+                inline_call(mut f, b, at, callee, mut sites)
+                budget -= 1
+                changed = true
+                break
+    budget
 
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
@@ -90,7 +106,7 @@ fn first_call(blk Block, leaves Set[str], self_name str) int
 ## each `return` jumps to a new block, holding the rest of `b`, whose
 ## parameter is the call's value. The callee's checks are copied with a
 ## link to the call, a frame of the stack a trap prints (trace.frame.2).
-fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
+pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     nv := g.vals.len()
     nb := g.blocks.len()
     rest := nb + callee.blocks.len()
@@ -115,11 +131,16 @@ fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     mut tail := List[Inst]()
     for k in at + 1..g.blocks[b].insts.len()
         tail.push(g.blocks[b].insts[k])
-    cont := Block(
-        params: if call.dst >= 0 then [call.dst] else [],
-        insts: tail,
-        term: g.blocks[b].term,
-    )
+    mut cont_params := if call.dst >= 0 then [call.dst] else []
+    if call.dst >= 0 and callee.ret.name() != g.vals[call.dst].name()
+        # `rt.obj_new` returns an `int` that its caller sees as a struct, a
+        # string or an enum: the block takes the `int` and a `copy` retypes it.
+        raw := g.vals.len()
+        g.vals.push(callee.ret)
+        g.names.push("")
+        tail.insert(0, inst(call.dst, "copy", [raw]))
+        cont_params = [raw]
+    cont := Block(params: cont_params, insts: tail, term: g.blocks[b].term)
     mut head := List[Inst]()
     for k in 0..at
         head.push(g.blocks[b].insts[k])
@@ -207,4 +228,4 @@ fn rename(mut g Func, repl List[int])
         g.blocks[b].term = t
 
 fn kept_lengths(f Func, on bool) Func
-    if on then keep_lengths(f) else f
+    if on and not opt_off("keep") then keep_lengths(f) else f

@@ -46,12 +46,9 @@ fn text.Tree(v0 Tree) str
   b5:
     v23 str = call rt.text_sep(v18)
     v24 Tree = get v16, v18
-    v25 str = call text.Tree(v24)
-    v26 str = call rt.str_cat(v19, v23)
-    v27 str = call rt.str_cat(v26, v25)
-    v28 int = const 1
-    v29 int = add v18, v28
-    jump b4(v29, v27)
+    v37 int = load v24 +0
+    v39 bool = eq v37, v3
+    branch v39, b8(), b9()
   b6:
     v30 str = str #6
     v31 str = call rt.str_cat(v19, v30)
@@ -59,3 +56,43 @@ fn text.Tree(v0 Tree) str
     v33 str = str #2
     v34 str = call rt.str_cat(v32, v33)
     jump b1(v34)
+  b7(v36 str):
+    v26 str = call rt.str_cat(v19, v23)
+    v27 str = call rt.str_cat(v26, v36)
+    v28 int = const 1
+    v29 int = add v18, v28
+    jump b4(v29, v27)
+  b8:
+    v40 str = str #0
+    v41 str = str #1
+    v42 str = call rt.str_cat(v40, v41)
+    v43 int = load v24 +8
+    v44 str = call rt.fmt_int(v43)
+    v45 str = call rt.str_cat(v42, v44)
+    v46 str = str #2
+    v47 str = call rt.str_cat(v45, v46)
+    jump b7(v47)
+  b9:
+    v50 str = call rt.str_cat(v13, v14)
+    v51 List[Tree] = load v24 +8
+    v52 int = len v51
+    jump b10(v3, v21)
+  b10(v53 int, v54 str):
+    v57 bool = lt v53, v52
+    branch v57, b11(), b12()
+  b11:
+    v58 str = call rt.text_sep(v53)
+    v59 Tree = get v51, v53
+    v60 str = call text.Tree(v59)
+    v61 str = call rt.str_cat(v54, v58)
+    v62 str = call rt.str_cat(v61, v60)
+    v63 int = const 1
+    v64 int = add v53, v63
+    jump b10(v64, v62)
+  b12:
+    v65 str = str #6
+    v66 str = call rt.str_cat(v54, v65)
+    v67 str = call rt.str_cat(v50, v66)
+    v68 str = str #2
+    v69 str = call rt.str_cat(v67, v68)
+    jump b7(v69)

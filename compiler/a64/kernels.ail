@@ -14,6 +14,13 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_zip"
         or name == "rt.vec_scal"
         or name == "rt.vec_mm"
+        or name == "rt.vec_zip32"
+        or name == "rt.vec_scal32"
+        or name == "rt.vec_mm32"
+        or name == "rt.vec_widen"
+        or name == "rt.vec_narrow"
+        or name == "rt.vec_sum16"
+        or name == "rt.vec_sum16_32"
         or is_aes_kernel(name)
 
 ## Add the kernel `name` to `img`.
@@ -23,8 +30,16 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_axpy" => kernel_axpy(mut a)
         "rt.vec_zip" => kernel_zip(mut a)
         "rt.vec_mm" => kernel_mm(mut a)
+        "rt.vec_zip32" => kernel_zip32(mut a)
+        "rt.vec_scal32" => kernel_scal32(mut a)
+        "rt.vec_mm32" => kernel_mm32(mut a)
+        "rt.vec_widen" => kernel_widen(mut a)
+        "rt.vec_narrow" => kernel_narrow(mut a)
+        "rt.vec_sum16" => kernel_sum16(mut a, false)
+        "rt.vec_sum16_32" => kernel_sum16(mut a, true)
         "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
-        _ => kernel_scal(mut a)
+        "rt.vec_scal" => kernel_scal(mut a)
+        _ => unreachable("a64: unknown kernel {name}")
     a.resolve_labels()
     base := img.code.len()
     img.funcs[name] = base
@@ -282,4 +297,310 @@ fn mm_body(mut a Asm, single bool)
     a.alu_ri("sub", 6, 6, 1)
     a.b(tail)
     a.bind(done)
+    a.ret()
+
+# ---- packed `f32` kernels (ADR 0875): four singles at a time ----
+#
+# A single-precision operation is the correctly rounded `f32` result, which is
+# what the scalar definitions in `tensor.ail` give. No fused multiply-add.
+
+## x8 = n / 4 (quads), x9 = n % 4.
+fn split_quads(mut a Asm, n int)
+    a.shift_ri("lsr", 8, n, 2)
+    a.shift_ri("lsl", 9, 8, 2)
+    a.alu_rr("sub", 9, n, 9)
+
+## One loop of `rt.vec_zip32`: `out[i] = a[i] op b[i]` on singles. x1 = out,
+## x2 = a, x3 = b, x4 = n.
+fn zip32_loop(mut a Asm, op str)
+    split_quads(mut a, 4)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.cbz(8, scalar)
+    a.ldr_q_post(1, 2)
+    a.ldr_q_post(2, 3)
+    a.vop4(op, 1, 1, 2)
+    a.str_q_post(1, 1)
+    a.alu_ri("sub", 8, 8, 1)
+    a.b(vloop)
+    a.bind(scalar)
+    a.cbz(9, done)
+    a.ldr_s(1, 2, 0)
+    a.ldr_s(2, 3, 0)
+    a.fop_s(op, 1, 1, 2)
+    a.str_s(1, 1, 0)
+    a.alu_ri("add", 1, 1, 4)
+    a.alu_ri("add", 2, 2, 4)
+    a.alu_ri("add", 3, 3, 4)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(scalar)
+    a.bind(done)
+    a.ret()
+
+## `rt.vec_zip32(op, out, a, b, n)`: x0 = op (0 `+`, 1 `-`, 2 `*`, 3 `/`).
+fn kernel_zip32(mut a Asm)
+    mut next := a.label()
+    for k in 0..4
+        next = a.label()
+        a.cmp_ri(0, k)
+        a.b_cond(NE, next)
+        zip32_loop(mut a, zip_op(k))
+        a.bind(next)
+    a.brk()
+
+## One loop of `rt.vec_scal32`: `out[i] = a[i] op s`, or `s op a[i]` when
+## `left`, on singles. x1 = out, x2 = a, x3 = n; d0 holds s as a double.
+fn scal32_loop(mut a Asm, op str, left bool)
+    a.fop1("fcvt_sd", 0, 0)
+    a.vdup4(5, 0)
+    split_quads(mut a, 3)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.cbz(8, scalar)
+    a.ldr_q_post(1, 2)
+    if left
+        a.vop4(op, 1, 5, 1)
+    else
+        a.vop4(op, 1, 1, 5)
+    a.str_q_post(1, 1)
+    a.alu_ri("sub", 8, 8, 1)
+    a.b(vloop)
+    a.bind(scalar)
+    a.cbz(9, done)
+    a.ldr_s(1, 2, 0)
+    if left
+        a.fop_s(op, 1, 0, 1)
+    else
+        a.fop_s(op, 1, 1, 0)
+    a.str_s(1, 1, 0)
+    a.alu_ri("add", 1, 1, 4)
+    a.alu_ri("add", 2, 2, 4)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(scalar)
+    a.bind(done)
+    a.ret()
+
+## `rt.vec_scal32(op, out, a, n, left; s)`: x0 = op, x4 = left.
+fn kernel_scal32(mut a Asm)
+    mut next := a.label()
+    for k in 0..4
+        for l in 0..2
+            next = a.label()
+            a.cmp_ri(0, k)
+            a.b_cond(NE, next)
+            a.cmp_ri(4, l)
+            a.b_cond(NE, next)
+            scal32_loop(mut a, zip_op(k), l == 1)
+            a.bind(next)
+    a.brk()
+
+## `rt.vec_widen(out, a, n)`: `out[i]` (a double) = `a[i]` (a single), four at
+## a time. x0 = out, x1 = a, x2 = n.
+fn kernel_widen(mut a Asm)
+    split_quads(mut a, 2)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.cbz(8, scalar)
+    a.ldr_q_post(1, 1)
+    a.vcvtl(2, 1)
+    a.vcvtl2(3, 1)
+    a.str_q_post(2, 0)
+    a.str_q_post(3, 0)
+    a.alu_ri("sub", 8, 8, 1)
+    a.b(vloop)
+    a.bind(scalar)
+    a.cbz(9, done)
+    a.ldr_s(1, 1, 0)
+    a.fop1("fcvt_ds", 1, 1)
+    a.str_d(1, 0, 0)
+    a.alu_ri("add", 1, 1, 4)
+    a.alu_ri("add", 0, 0, 8)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(scalar)
+    a.bind(done)
+    a.ret()
+
+## `rt.vec_narrow(out, a, n)`: `out[i]` (a single) = `a[i]` (a double) rounded,
+## four at a time; `out` may be `a`. x0 = out, x1 = a, x2 = n.
+fn kernel_narrow(mut a Asm)
+    split_quads(mut a, 2)
+    vloop := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(vloop)
+    a.cbz(8, scalar)
+    a.ldr_q_post(1, 1)
+    a.ldr_q_post(2, 1)
+    a.vcvtn(3, 1)
+    a.vcvtn2(3, 2)
+    a.str_q_post(3, 0)
+    a.alu_ri("sub", 8, 8, 1)
+    a.b(vloop)
+    a.bind(scalar)
+    a.cbz(9, done)
+    a.ldr_d(1, 1, 0)
+    a.fop1("fcvt_sd", 1, 1)
+    a.str_s(1, 0, 0)
+    a.alu_ri("add", 1, 1, 8)
+    a.alu_ri("add", 0, 0, 4)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(scalar)
+    a.bind(done)
+    a.ret()
+
+## `rt.vec_mm32(c, a, b, n, k)`: one row of an `f32` matrix product. `c[j]` for
+## `j < n` is the sum over `p < k`, in order from 0.0, of `a[p] * b[p * n + j]`,
+## each product and sum rounded to `f32` (no fused multiply-add). Sixteen
+## columns at a time keep their sums in four registers across the `p` loop,
+## then four, then one. x0 = c, x1 = a, x2 = b, x3 = n, x4 = k.
+fn kernel_mm32(mut a Asm)
+    a.shift_ri("lsl", 12, 3, 2)
+    a.mov_rr(7, 0)
+    a.mov_rr(6, 3)
+    a.mov_rr(10, 2)
+    wide := a.label()
+    quads := a.label()
+    scalar := a.label()
+    done := a.label()
+    a.bind(wide)
+    a.cmp_ri(6, 16)
+    a.b_cond(LT, quads)
+    a.mov_rr(8, 1)
+    a.mov_rr(9, 4)
+    a.mov_rr(11, 10)
+    for k in 0..4
+        a.vzero(k)
+    ploop := a.label()
+    pdone := a.label()
+    a.bind(ploop)
+    a.cbz(9, pdone)
+    a.ldr_s(16, 8, 0)
+    a.vdup4(16, 16)
+    a.alu_ri("add", 8, 8, 4)
+    for k in 0..4
+        a.ldr_q(4 + k, 11, 16 * k)
+    for k in 0..4
+        a.vop4("fmul", 4 + k, 4 + k, 16)
+    for k in 0..4
+        a.vop4("fadd", k, k, 4 + k)
+    a.alu_rr("add", 11, 11, 12)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(ploop)
+    a.bind(pdone)
+    for k in 0..4
+        a.str_q(k, 7, 16 * k)
+    a.alu_ri("add", 7, 7, 64)
+    a.alu_ri("add", 10, 10, 64)
+    a.alu_ri("sub", 6, 6, 16)
+    a.b(wide)
+    a.bind(quads)
+    a.cmp_ri(6, 4)
+    a.b_cond(LT, scalar)
+    a.mov_rr(8, 1)
+    a.mov_rr(9, 4)
+    a.mov_rr(11, 10)
+    a.vzero(0)
+    qloop := a.label()
+    qdone := a.label()
+    a.bind(qloop)
+    a.cbz(9, qdone)
+    a.ldr_s(16, 8, 0)
+    a.vdup4(16, 16)
+    a.alu_ri("add", 8, 8, 4)
+    a.ldr_q(4, 11, 0)
+    a.vop4("fmul", 4, 4, 16)
+    a.vop4("fadd", 0, 0, 4)
+    a.alu_rr("add", 11, 11, 12)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(qloop)
+    a.bind(qdone)
+    a.str_q(0, 7, 0)
+    a.alu_ri("add", 7, 7, 16)
+    a.alu_ri("add", 10, 10, 16)
+    a.alu_ri("sub", 6, 6, 4)
+    a.b(quads)
+    a.bind(scalar)
+    a.cbz(6, done)
+    a.mov_rr(8, 1)
+    a.mov_rr(9, 4)
+    a.mov_rr(11, 10)
+    a.vzero(0)
+    sloop := a.label()
+    sdone := a.label()
+    a.bind(sloop)
+    a.cbz(9, sdone)
+    a.ldr_s(1, 8, 0)
+    a.alu_ri("add", 8, 8, 4)
+    a.ldr_s(2, 11, 0)
+    a.fop_s("fmul", 1, 1, 2)
+    a.fop_s("fadd", 0, 0, 1)
+    a.alu_rr("add", 11, 11, 12)
+    a.alu_ri("sub", 9, 9, 1)
+    a.b(sloop)
+    a.bind(sdone)
+    a.str_s(0, 7, 0)
+    a.alu_ri("add", 7, 7, 4)
+    a.alu_ri("add", 10, 10, 4)
+    a.alu_ri("sub", 6, 6, 1)
+    a.b(scalar)
+    a.bind(done)
+    a.ret()
+
+## `rt.vec_sum16(p, q, n, s)` and `rt.vec_sum16_32(p, n, s)`: the 16 partial
+## sums of std.tensor.5 over the first `n` (a multiple of 16) elements of `p`,
+## or of the products with `q` (doubles), halved down to four; the four sums go
+## to `s[0..3]`. `vec_sum16_32` reads singles from `p` and widens them. Lane
+## `i` of a block of 16 is element `i`, two lanes in each of v0..v7; the product
+## and the sum are each rounded. x0 = p, x1 = q, x2 = n, x3 = s (`_32`: x0 = p,
+## x1 = n, x2 = s).
+fn kernel_sum16(mut a Asm, single bool)
+    if single
+        a.mov_rr(3, 2)
+        a.mov_rr(2, 1)
+    for k in 0..8
+        a.vzero(k)
+    plain := a.label()
+    pl := a.label()
+    dl := a.label()
+    fin := a.label()
+    if not single
+        a.cbz(1, plain)
+        a.bind(dl)
+        a.cbz(2, fin)
+        for k in 0..8
+            a.ldr_q_post(16, 0)
+            a.ldr_q_post(17, 1)
+            a.vop("fmul", 16, 16, 17)
+            a.vop("fadd", k, k, 16)
+        a.alu_ri("sub", 2, 2, 16)
+        a.b(dl)
+    a.bind(plain)
+    a.bind(pl)
+    a.cbz(2, fin)
+    for g in 0..4
+        if single
+            a.ldr_q_post(16, 0)
+            a.vcvtl(17, 16)
+            a.vcvtl2(18, 16)
+            a.vop("fadd", 2 * g, 2 * g, 17)
+            a.vop("fadd", 2 * g + 1, 2 * g + 1, 18)
+        else
+            for j in 0..2
+                a.ldr_q_post(16, 0)
+                a.vop("fadd", 2 * g + j, 2 * g + j, 16)
+    a.alu_ri("sub", 2, 2, 16)
+    a.b(pl)
+    a.bind(fin)
+    for k in 0..4
+        a.vop("fadd", k, k, k + 4)
+    a.vop("fadd", 0, 0, 2)
+    a.vop("fadd", 1, 1, 3)
+    a.str_q(0, 3, 0)
+    a.str_q(1, 3, 16)
     a.ret()

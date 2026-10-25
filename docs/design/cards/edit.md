@@ -134,6 +134,7 @@ struct Hit
 fn search_text(str, str, str) List[Hit]
 fn jtext(Json) str
 fn json_pairs(Json) str
+fn trap_text_hits(str, str) List[Hit]
 fn trace_hits(str, str, str) List[Hit]
 fn failure_hits(str, str) List[Hit]
 fn parse_coverage(str) Set[int]
@@ -153,6 +154,20 @@ fn font_flag(List[str]) int
 fn print_screen(Editor, List[str]) [clock env fs io proc ui]
 fn bench(mut Editor) [clock io mutates]
 fn main() ! [clock env fail fs io proc ui]
+```
+
+## std.screen
+```
+pub struct std.screen.Item
+pub struct std.screen.Screen
+pub fn std.screen.item(int, str, str, int, float, float, float, float) std.screen.Item
+pub fn std.screen.color_name(int) str
+pub fn std.screen.lines(List[std.screen.Item], int) str
+```
+
+## std.screen.cells
+```
+pub fn std.screen.cells.of_cells(int, int, List[std.ui.widgets.Run], int, int) std.screen.Screen
 ```
 
 ## std.ui.widgets
@@ -180,4 +195,4 @@ pub themes.NAMES := ...
 pub fn themes.named(str) Map[str, int]?
 ```
 
-trimmed to fit 4000 tokens (~1869); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 4000 tokens (~2047); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

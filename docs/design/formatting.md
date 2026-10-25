@@ -19,7 +19,9 @@ starting with a closing bracket is indented one level less.
 - none after `(` `[` `{` `.` `@`, and none before `)` `]` `}` `,` `.` `:` `?`;
 - none around `..` and `..=` (`xs[1..]`, `0..n`);
 - none before `(` or `[` that follows an operand: a call, index, or type
-  arguments (`f(x)`, `xs[0]`, `List[int]()`, `largest[T Ord](...)`);
+  arguments (`f(x)`, `xs[0]`, `List[int]()`, `largest[T Ord](...)`). In a function
+  header's parameter list a name followed by `(` and a space in the source is a
+  parameter with a tuple type, and keeps its space (`fn f(a int, t (int, str))`);
 - none after a prefix `-` (`-x`, `f(-1)`) or a prefix `!` in a type (`!Json`).
   `T ! E` keeps its spaces. Since the two `!`s differ only by where they sit
   in a type, the formatter keeps the source's choice of "no space after `!`".

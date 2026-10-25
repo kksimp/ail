@@ -84,6 +84,15 @@ budget is 60 characters in trace lines and in the default trap report, and
 
 ## Watch
 
+**trace.run.6** — Natively, `ail run --trace` builds the program with the events asked for
+(only then does it cost anything) and writes them to standard error as the program runs, then
+the summary (trace.run.4), in the text form or, with `--json`, as the JSON objects of
+trace.run.1. `calls` gives the `call` and `return` events (trace.run.2) and a `contract` event
+for each condition checked; `effects` gives the `effect` events of the OS and network modules,
+and `spawn` and `wait` (`Task#N`, numbered from 1 in spawn order). A call's position is the
+call's, `main`'s its own. A value is cut to 60 bytes and ends in `…` (trace.val.2); a returned
+list or map is `…`, and a cut list or map does not say how many elements are left. *(ADR 0868)*
+
 **trace.watch.1** — `ail run --watch NAME FILE` shows, after each
 assignment whose target is rooted in a variable called `NAME` (`NAME = e`,
 `NAME op= e`, `NAME.f = e`, `NAME[i] = e`) and after each `mut NAME := e`,
@@ -151,6 +160,28 @@ fn main()
     mut x := 1
     bump(mut x)
     print(x)
+```
+
+**trace.watch.5** — Natively, `ail run --watch NAME FILE` builds the program with
+the watch (only then does it cost anything) and shows trace.watch.1's events on
+standard error, `watch: NAME = VALUE at LINE:COL`, then the summary line
+(trace.run.4); over `--replay R` (replay.run.1) the same run is repeated exactly,
+so it answers "when did `NAME` become 0?" on a recorded run. The events are the
+assignments and `mut NAME := e` of trace.watch.1; the element writes of
+trace.watch.4 `push`, `pop`, `insert`, `remove_at`, `swap`, `extend`, `clear`, `reverse`,
+`sort`, `NAME[i] = e`, `NAME[k] = e`, and a map's `remove` and a set's `add` and `remove`
+(only when they change it) end in their note (`[push 3 at index 2]`, `[swap at index 0, 2]`,
+`[add 3]`); and a `mut` argument or `mut self`
+that holds the watched variable is followed into the callee (trace.watch.3), the event
+ending in ` in FN` and ` (as \`p\`)` when the callee's name differs. With `--json` each
+event is the one-line object of trace.watch.4's JSON form (`{"api":1,"trace":"watch",...}`).
+*(ADRs 0868, 0886)*
+
+```ail tool=run,--watch,n,FILE expect=watch: rules=trace.watch.5
+fn main()
+    mut n := 3
+    n -= 3
+    print(n)
 ```
 
 ## Tracing tests
@@ -233,7 +264,10 @@ fn main()
 
 **trace.snap.4** — With `--json`, the trap is one JSON object on standard
 error with `"severity":"trap"`, the rule, position and message, the source
-line, the condition's values, and the stack. *(ADR 0267)*
+line, the condition's values, and the stack. Natively `./ail` builds the program with
+`--values --verbose` and `tools/trapjson.awk` turns the report into that object, so
+the arguments and locals of every frame are given as in the interpreter's. Without
+`--trace`, `--json` is the only option that does this; with it, trace.run.1 applies. *(ADR 0267)*
 
 **trace.frame.1** — An executable built by `ail build` reports a trap with
 the stack the interpreter reports (trace.snap.2, trace.snap.3), without the
@@ -247,7 +281,21 @@ frame. *(ADRs 0641, 0642)*
 
 **trace.frame.2** — A check that the compiler copied into a caller by inlining
 reports the callee's frame, then the caller at the inlined call, as if the
-call had been made. *(ADR 0643)*
+call had been made. A call that the compiler copied in from an inlined function
+(a function's own recursive call, ADR 0890) reports the frames it was inlined into
+after its own, so the stack lists every source frame. *(ADRs 0643, 0890)*
+
+**trace.frame.3** — `ail run --values FILE` builds the program so that its
+own functions keep their arguments and locals where a trap can print them. The
+trap then reports each frame as the interpreter does (trace.snap.2,
+trace.snap.3): `  at LINE:COL in NAME(a = 1, b = 2); c = 3` (the arguments,
+then `; ` and the locals in scope at the statement that was running, in
+declaration order; the values of types the runtime can print), a contract
+trap's `  values: ` line (the arguments the condition names, in name order),
+and `  … N more frames (--verbose shows every frame and value)`. A build
+without `--values` prints no values (trace.frame.1) and costs nothing for
+them. `--verbose` implies `--values` and, as trace.snap.3 says, shows every frame, with each
+local on its own line: `      NAME = VALUE`. *(ADR 0886, ADR 0641)*
 
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
@@ -289,11 +337,14 @@ fn main()
 ```
 
 **run.limit.3** — `--max-steps N` stops a run that has run more than `N`
-steps, with `trap[run.limit.3]`. A step is one statement run, or one turn of
-a `while` loop. Steps count the same on every machine, so a limit found once
-reproduces the same trap. `ail test` counts per test. *(ADR 0288)*
+steps, with `trap[run.limit.3]` at the statement that passed it. A step is one
+statement of the program's own files run; a `while` turn adds none of its own,
+and the std's statements are not counted. The program is built with the
+counter in it only when the flag is given (ADR 0883). Steps count the same on
+every machine, so a limit found once reproduces the same trap. `ail test`
+counts per test. *(ADR 0288, ADR 0883)*
 
-```ail tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
+```ail skip=bootstrap tool=run,--max-steps,1000,FILE status=1 expect=run.limit.3 rules=run.limit.3
 fn main()
     mut n := 0
     while true
@@ -382,7 +433,7 @@ The memory limit is checked when the heap takes a new chunk and counts the
 heap bytes in use. The time limit is checked every 256 allocations and when
 the heap takes a chunk. A `while` loop also checks it, but only in an executable
 built with `--timeout` (ADR 0727); so without that, a loop that never allocates is not stopped. The
-limit is wall-clock time on a clock that doesn't go back. `--max-steps` has no native form. On macOS the clock is read with
+limit is wall-clock time on a clock that doesn't go back. On macOS the clock is read with
 `gettimeofday`. *(ADR 0726, ADR 0727)*
 
 ```ail tool=build,--max-memory,16,FILE rules=run.limit.6

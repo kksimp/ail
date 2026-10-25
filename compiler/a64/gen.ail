@@ -215,8 +215,22 @@ fn Gen.prologue(mut self)
         unreachable("a64: frame of {frame} bytes is too large")
     adjust_sp("sub", frame)
     if wrap < 0
-        for k in 0..saved.len()
-            save(saved[k], 8 * k, true)
+        save_saved(true)
+
+## Save or restore the callee-saved registers at the frame's start, two
+## general registers at a time with `stp`/`ldp` (ADR 0890).
+fn Gen.save_saved(mut self, store bool)
+    mut k := 0
+    while k < saved.len()
+        if k + 1 < saved.len() and saved[k] < FB and saved[k + 1] < FB and 8 * k <= 504
+            if store
+                a.stp_off(saved[k], saved[k + 1], SP, 8 * k)
+            else
+                a.ldp_off(saved[k], saved[k + 1], SP, 8 * k)
+            k += 2
+        else
+            save(saved[k], 8 * k, store)
+            k += 1
 
 fn Gen.save(mut self, r int, off int, store bool)
     if r >= FB
@@ -231,8 +245,7 @@ fn Gen.save(mut self, r int, off int, store bool)
 
 fn Gen.epilogue(mut self, block int)
     if wrap < 0 or region[block]
-        for k in 0..saved.len()
-            save(saved[k], 8 * k, false)
+        save_saved(false)
     a.mov_rr(SP, FP)
     a.pop_pair(FP, LR)
     a.ret()
@@ -440,8 +453,7 @@ fn Gen.gen_block(mut self, b int)
             if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0
                 masked = fused - 1
     if b == wrap
-        for k in 0..saved.len()
-            save(saved[k], 8 * k, true)
+        save_saved(true)
     hole_moves(b, false)
     for k in 0..n
         if k != fused and k != masked
@@ -581,7 +593,10 @@ fn Gen.compare(mut self, i mir.Inst) int
 fn Gen.stub(mut self, kind int, x int, y int, site int, op str) int
     l := a.label()
     # An atomic add's overflow has its own message (conc.atomic.5).
-    k := if kind == 0 and sites.list[site].rule == "conc.atomic.5" then 16 else kind
+    mut k := if kind == 0 and sites.list[site].rule == "conc.atomic.5" then 16 else kind
+    # A std module's `unreachable("RULE: why")` names its own rule.
+    if kind == 14 and sites.list[site].rule == "std.unreachable"
+        k = 17
     stubs.push(Stub(label: l, kind: k, a: x, b: y, site: site, op: op))
     l
 
@@ -956,6 +971,17 @@ fn Gen.call_out(mut self, i mir.Inst)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
         calls.push(codegen.CallRow(off: a.here(), pos: i.imm, func: f.name))
+        # A call copied in by inlining (trace.frame.2) also stands for the
+        # frames it was inlined into: a row for each, innermost first.
+        if i.site >= 0
+            mut fs := sites.list[i.site]
+            while fs.from >= 0
+                fs = sites.list[fs.from]
+                calls.push(codegen.CallRow(
+                    off: a.here(),
+                    pos: mir.call_pos(fs.file, fs.line, fs.col),
+                    func: fs.func,
+                ))
     if room > 0
         adjust_sp("add", room)
         sp_shift = 0
@@ -1016,6 +1042,18 @@ fn Gen.prim(mut self, i mir.Inst)
             else
                 a.ldr_d(d, pl.base, pl.off)
             put_fpr(i.dst, d)
+        "loadf32" =>
+            # One packed single (ADR 0875), widened exactly.
+            pl := address(i)
+            d := out_fpr(i.dst, X0)
+            a.ldr_s(d, pl.base, pl.off)
+            a.fop1("fcvt_ds", d, d)
+            put_fpr(i.dst, d)
+        "storef32" =>
+            pl := address(i)
+            v := fpr(i.args[i.args.len() - 1], X0)
+            a.fop1("fcvt_sd", X1, v)
+            a.str_s(X1, pl.base, pl.off)
         "store64" =>
             pl := address(i)
             v := gpr(i.args[i.args.len() - 1], S1)

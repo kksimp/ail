@@ -10,8 +10,7 @@ cd "$(dirname "$0")/../.."
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 cp -r compiler "$tmp/compiler"
-mkdir -p "$tmp/bootstrap"
-cp -r bootstrap/src "$tmp/bootstrap/src"
+cp -r std "$tmp/std"
 cp tools/native-tls/tlsprim.ail "$tmp/compiler/rt/native/tlsprim.ail"
 python3 - "$tmp/compiler/rt/native/hash.ail" <<'PY'
 import sys
@@ -27,13 +26,15 @@ PY
 nbuild() { AIL_ROOT="$PWD" AIL_COMPILER="$tmp/compiler" .native/ail build "$@"; }
 vectors="tests/data/net/crypto/crosscheck.txt tests/data/net/crypto/signatures.txt tests/data/net/x509/chain.txt tools/native-tls/vectors384.txt"
 prog=tools/native-tls/prim.ail
+exe=
 case "$(uname -sm)" in
   "Darwin arm64") host=aarch64-macos ;;
   "Linux aarch64"|"Linux arm64") host=aarch64-linux ;;
+  MINGW*|MSYS*|CYGWIN*) host=x86_64-windows; exe=.exe ;;
   *) host=x86_64-linux ;;
 esac
-nbuild "$prog" --target "$host" -o "$tmp/x64" > /dev/null
-"$tmp/x64" $vectors | tee "$tmp/out"
+nbuild "$prog" --target "$host" -o "$tmp/x64$exe" > /dev/null
+"$tmp/x64$exe" $vectors | tee "$tmp/out"
 grep -q ' 0 failed' "$tmp/out"
 qemu=$(command -v qemu-aarch64-static || command -v qemu-aarch64 || true)
 if [ -n "$qemu" ]; then

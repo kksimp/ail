@@ -1,4 +1,4 @@
-## The instruction encoders of the native backend (bootstrap/tests/native_asm.rs, ported):
+## The instruction encoders of the native backend:
 ## compiler/x64/asm.ail against GNU objdump and compiler/a64/asm.ail against llvm-mc
 ## (ADR 0385, ADR 0388; ADR 0010 allows them in tests only). Each driver in
 ## tests/native/asm/ prints `intent|bytes` per case; the module under test is
@@ -7,7 +7,7 @@
 ## Prints only failures; the last line is `ASM GREEN (N checks)` or `ASM RED (N failures)`.
 ## A missing tool skips its half with a message.
 
-BIN := "bootstrap/target/release/ail"
+BIN := "./ail"
 
 struct Case
     intent str

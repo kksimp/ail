@@ -1,6 +1,7 @@
 # 0023. The bootstrap front end and interpreter are written in Rust
 
 - **Status:** Accepted
+- **Amended by:** [ADR 0904](0904-rust-bootstrap-deleted.md)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 23 — Compiler architecture

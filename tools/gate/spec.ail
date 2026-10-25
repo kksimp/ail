@@ -1,4 +1,4 @@
-## The spec conformance harness (ADR 0002) in AIL: bootstrap/tests/spec.rs, ported.
+## The spec conformance harness (ADR 0002) in AIL.
 ## Every fenced `ail` block of docs/spec/*.md and the other documents agents load is
 ## checked as its fence line says (docs/spec/README.md). Run from the repository root:
 ##   ail run tools/gate/spec.ail
@@ -63,12 +63,12 @@ fn cat(a List[str], b List[str]) List[str]
     r.extend(b)
     r
 
-## `ail ARGS` in `cwd`, with AIL_BINARY set; stdin comes from `stdin_file` when it isn't empty.
+## `ail ARGS` in `cwd`; stdin comes from `stdin_file` when it isn't empty.
 fn ail_in(cwd str, args List[str], stdin_file str) proc.Output
     root := repo_root()
-    bin := "{root}/bootstrap/target/release/ail"
+    bin := "{root}/ail"
     redirect := if stdin_file.is_empty() then "</dev/null" else "<{stdin_file}"
-    script := "cd \"$0\" && AIL_BINARY={bin} exec {bin} \"$@\" {redirect}"
+    script := "cd \"$0\" && exec {bin} \"$@\" {redirect}"
     r := proc.run("sh", cat(["-c", script, cwd], args)) else return proc.Output(
         status: 127,
         out: "",
@@ -212,26 +212,32 @@ fn id_chars(id str) bool
             return false
     true
 
-## Runs a program under both interpreter tiers (ADR 0361); an error text if they differ.
+## Runs a program with `ail run`; an error text if it fails. The bytecode tier is gone (ADR 0873), so there is one tier to compare.
 fn run_both_tiers(file str) str?
     src := slurp(file)
     if src.contains("ui.open(")
         return none
     dir := parent_of(file)
-    mut outs := List[str]()
-    for tier in [List[str](), ["--no-bytecode"]]
-        r := ail_in(dir, cat(cat(["run"], tier), [file]), "")
-        if r.status != 0
-            return "`ail run {tier.join(" ")}` failed:\n{r.err}"
-        outs.push(r.out)
-    if outs[0] != outs[1]
-        return "bytecode and tree-walk tiers print different output"
+    r := ail_in(dir, ["run", file], "")
+    if r.status != 0
+        return "`ail run` failed:\n{r.err}"
     none
+
+fn show_fail(f str)
+    fl := f.lines()
+    print("RED {fl[0]}")
+    for i in 1..fl.len()
+        if i <= 3
+            print(fl[i])
 
 fn main() !
     root := repo_root()
-    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail"
-    mk1 := proc.run("sh", ["-c", "rm -rf {tmp}; mkdir -p {tmp}"]) else return
+    # A directory of its own per run, so two gates at once don't clash.
+    mk1 := proc.run("mktemp", [
+        "-d",
+        "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail.XXXXXX",
+    ]) else return
+    tmp := mk1.out.trim()
     mut files := fs.glob("docs/spec/*.md")
     files.sort()
     for extra in [
@@ -254,7 +260,12 @@ fn main() !
     mut skipped := 0
     mut fails := List[str]()
     mut covered := Set[str]()
+    mut shown := 0
     for b in blocks
+        # print each failure as soon as it is known, so a stopped run still lists them
+        while shown < fails.len()
+            show_fail(fails[shown])
+            shown += 1
         if b.kind == "skip"
             skipped += 1
             for r in b.rules
@@ -300,7 +311,7 @@ fn main() !
                 and not has_main(b.code) then wrap_fragment(b.code) else b.code
             file := "{tmp}/{stem}_{b.line}.ail"
             fs.write_text(file, code)? "writing {file}"
-            r := ail_in(root, cat(["check", "--json"], cat(b.flags, [file])), "")
+            r := ail_in(root, cat(["check"], cat(b.flags, ["--json", file])), "")
             mut errors := List[str]()
             for l in r.err.lines()
                 if l.contains("\"severity\":\"error\"")
@@ -331,12 +342,9 @@ fn main() !
         if not covered.contains(pair[0]) and BATCH_CHAPTERS.contains(pair[1])
             fails.push("{pair[1]} {pair[0]}: no runnable example")
     mk4 := proc.run("rm", ["-rf", tmp]) else return
-    for f in fails
-        fl := f.lines()
-        print("RED {fl[0]}")
-        for i in 1..fl.len()
-            if i <= 3
-                print(fl[i])
+    while shown < fails.len()
+        show_fail(fails[shown])
+        shown += 1
     if fails.is_empty()
         print("SPEC GREEN ({run} checked, {skipped} skipped)")
     else

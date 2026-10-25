@@ -41,6 +41,13 @@ fn task_check(at str)
 fn task_block_on(ch int)
     return
 
+## Tensor kernels (ADR 0876) run on the calling thread.
+fn tensor_env() int
+    alloc(128, KIND_ATOMIC)
+
+fn tensor_par(env int, lo int, hi int, work int) bool
+    false
+
 ## Deterministic scheduling needs tasks (sched.ail).
 fn det_on() bool
     false
@@ -50,3 +57,6 @@ fn det_wake(a int)
 
 fn det_yield()
     return
+
+fn det_relax() bool
+    false

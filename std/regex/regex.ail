@@ -1,5 +1,5 @@
 ## std.regex natively (spec std.regex.1-25, ADRs 0438 and 0819): the pattern
-## parser and the Pike VM of `bootstrap/src/regex`, written in AIL and compiled
+## parser and the Pike VM of the former Rust regex engine, written in AIL and compiled
 ## with the program, so native builds match in time proportional to pattern
 ## times text (std.regex.4). The interpreter keeps the Rust engine; the two
 ## agree on every vector (`tools/native-regex`). Offsets are characters.

@@ -1,141 +1,118 @@
-# The AIL command-line tool (bootstrap edition) for Windows. From the repository root:
+# The AIL command-line tool for Windows. From the repository root:
 #
 #   .\ail.ps1 run examples\hello.ail     check and run a program
 #   .\ail.ps1 check FILE                 check without running (add --json for tools)
-#   .\ail.ps1 selftest                   build and run the bootstrap's own tests
+#   .\ail.ps1 selftest                   the native gate (tools\gate\gate.ail's suites)
 #
 # If scripts are blocked: powershell -ExecutionPolicy Bypass -File .\ail.ps1 run examples\hello.ail
 #
-# Rust (ADR 0087): if the system Rust doesn't exactly match the version pinned in
-# bootstrap\rust-toolchain.toml, that version is installed privately into
-# .toolchain\ on first run. Nothing outside this repository is changed.
-# Like ./ail (ADR 0855): run, build, check FILE, test FILE, fmt, fix, api, effects and pkg are done by the native CLI
-# (compiler\main.ail built into .native\ail.exe). With no Rust binary built, the published seed is downloaded and
-# verified (tools\release\fetch-seed.ps1) and builds it, so no cargo is needed. AIL_RUST=1 keeps the Rust `ail`.
-# Status: tested under PowerShell 7 on Linux; not yet tested on Windows itself.
+# Like ./ail (ADR 0855): the native CLI (compiler\main.ail built into .native\ail.exe) does run, build, check,
+# test FILE, fmt, fix, diff, explain, edit, ask, api, effects and pkg. The published seed (stage 0), downloaded and
+# verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --record/--replay/--budget`.
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
+# The native CLI splits paths on `/`; Windows takes `/` too, so hand it paths that way.
+function Fwd([string]$p) { $p -replace '\\', '/' }
 # std.app.10: a program finds the app host built under the toolchain.
-$env:AIL_ROOT = $root
-$bootstrap = Join-Path $root 'bootstrap'
-$manifest = Join-Path $bootstrap 'Cargo.toml'
-$pin = (Select-String -Path (Join-Path $bootstrap 'rust-toolchain.toml') -Pattern '^channel\s*=\s*"(.*)"').Matches[0].Groups[1].Value
-$toolDir = if ($env:AIL_TOOLCHAIN_DIR) { $env:AIL_TOOLCHAIN_DIR } else { Join-Path $root '.toolchain' }
+$env:AIL_ROOT = (Fwd $root)
 # Windows PowerShell 5.1 doesn't define $IsLinux/$IsMacOS, so they read as false there.
 $onWindows = -not ($IsLinux -or $IsMacOS)
 $exe = if ($onWindows) { '.exe' } else { '' }
-$binary = Join-Path (Join-Path (Join-Path $bootstrap 'target') 'release') "ail$exe"
-
-# A test run pins the binary it is testing (AIL_BINARY): a program that starts `ail` itself isn't rebuilt under it.
-if ($args.Count -gt 0 -and $args[0] -ne 'selftest' -and $env:AIL_BINARY -and (Test-Path $env:AIL_BINARY)) {
-    & $env:AIL_BINARY @args
-    exit $LASTEXITCODE
-}
-
 function Fail([string]$message) {
     [Console]::Error.WriteLine("ail: $message")
     exit 2
 }
 
-function Get-HostTriple {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-    if ($onWindows) {
-        # The GNU toolchain links with its bundled tools, so Visual Studio isn't needed on x64.
-        if ($arch -eq 'X64') { return 'x86_64-pc-windows-gnu' }
-        if ($arch -eq 'Arm64') { return 'aarch64-pc-windows-msvc' }
-    } elseif ($IsLinux) {
-        if ($arch -eq 'X64') { return 'x86_64-unknown-linux-gnu' }
-        if ($arch -eq 'Arm64') { return 'aarch64-unknown-linux-gnu' }
-    } elseif ($IsMacOS -and $arch -eq 'Arm64') {
-        return 'aarch64-apple-darwin'
-    }
-    Fail "unsupported host architecture: $arch"
+$cmd = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
+# A path that exists is handed on with forward slashes (see Fwd).
+$rest = @($args | Select-Object -Skip 1 | ForEach-Object { if ("$_" -and (Test-Path -LiteralPath "$_" -ErrorAction SilentlyContinue)) { Fwd "$_" } else { $_ } })
+function Add-Instrument([string]$what) {
+    $env:AIL_INSTRUMENT = if ($env:AIL_INSTRUMENT) { "$($env:AIL_INSTRUMENT),$what" } else { $what }
 }
 
-function Install-PrivateRust {
-    $triple = Get-HostTriple
-    [Console]::Error.WriteLine("ail: installing Rust $pin privately into .toolchain (first run only; takes a few minutes) ...")
-    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ail-rust-" + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $tmp | Out-Null
-    $init = Join-Path $tmp "rustup-init$exe"
-    $url = "https://static.rust-lang.org/rustup/dist/$triple/rustup-init$exe"
-    try {
-        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $init
-        Invoke-WebRequest -UseBasicParsing -Uri "$url.sha256" -OutFile "$init.sha256"
-    } catch {
-        Fail "couldn't download $url"
+# Tracing and recording belong to `run` and `test` (trace.run.1, replay.rec.1).
+if ($cmd -notin 'run', 'test') {
+    foreach ($a in $rest) {
+        if ("$a" -in '--trace', '--trace-limit', '--watch', '--verbose' -or "$a" -like '--trace=*' -or "$a" -like '--watch=*') {
+            [Console]::Error.WriteLine("error[trace.run.1]: the tracing options (``$a``) work with ``ail run`` and ``ail test`` (trace.run.1)"); exit 2
+        }
+        if ("$a" -in '--record', '--replay') {
+            [Console]::Error.WriteLine("error[replay.rec.1]: ``$a`` works with ``ail run`` and ``ail test`` and a file name (replay.rec.1)"); exit 2
+        }
     }
-    $expected = ((Get-Content "$init.sha256" -Raw).Trim() -split '\s+')[0].ToLower()
-    $actual = (Get-FileHash -Algorithm SHA256 $init).Hash.ToLower()
-    if ($expected -ne $actual) { Fail 'rustup-init checksum mismatch; not installing' }
-    if (-not $onWindows) { & chmod +x $init }
-    $log = Join-Path $tmp 'install.log'
-    & $init -y --no-modify-path --profile minimal --default-toolchain $pin --default-host $triple *> $log
-    if ($LASTEXITCODE -ne 0) {
-        Get-Content $log | ForEach-Object { [Console]::Error.WriteLine($_) }
-        Fail 'Rust installation failed'
-    }
-    Remove-Item -Recurse -Force $tmp
-    [Console]::Error.WriteLine("ail: Rust $pin installed")
 }
 
 # Package options for the native loader (mod.pkg.7-8): `run` and `test` write ail.lock, `--deterministic` refuses a stale one,
 # `--deny net` fetches nothing.
-if ($args.Count -gt 0 -and $args[0] -in 'run', 'test') { $env:AIL_PKG_WRITE_LOCK = '1' }
+if ($cmd -in 'run', 'test') { $env:AIL_PKG_WRITE_LOCK = '1' }
 for ($i = 0; $i -lt $args.Count; $i++) {
     if ($args[$i] -eq '--deterministic') { $env:AIL_PKG_FROZEN = '1' }
     if ($i -gt 0 -and $args[$i - 1] -eq '--deny' -and "$($args[$i])" -like '*net*') { $env:AIL_PKG_OFFLINE = '1' }
 }
 
-# Which commands the native CLI does (the same conditions as ./ail).
-$cmd = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
-$rest = @($args | Select-Object -Skip 1)
-$nativeOn = ($env:AIL_RUST -ne '1') -and ($env:AIL_NATIVE_CLI -ne '0') -and (-not $env:AIL_BINARY -or $env:AIL_NATIVE_CLI -eq '1')
+# `run`'s options before the file (the same set as ./ail).
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
-$runFile = $null; $runSkip = 0
-if ($cmd -eq 'run' -and $nativeOn) {
+$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @()
+if ($cmd -eq 'run') {
     $k = 0
-    while ($k -lt $rest.Count) {
+    :scan while ($k -lt $rest.Count) {
         $a = [string]$rest[$k]
-        if ($a -in '--timeout', '--max-memory') {
-            if ($k + 1 -ge $rest.Count -or "$($rest[$k + 1])" -notmatch '^\d+$') { break }
-            $k += 2
-        } elseif ($a.StartsWith('-')) { break }
-        else { $runFile = $a; $k++; break }
+        $v = if ($k + 1 -lt $rest.Count) { [string]$rest[$k + 1] } else { '' }
+        switch -Regex ($a) {
+            '^(--timeout|--max-memory)$' {
+                if ($v -notmatch '^\d+$') { break scan }
+                $runOpts += @($a, $v); $k += 2; continue
+            }
+            '^--(budget|from|json|record|replay)$' { Fail "``$a`` is not native on Windows yet (run it on Linux or macOS)" }
+            '^--max-steps$' {
+                if ($v -notmatch '^[1-9]\d*$') { Fail '`--max-steps` needs a positive number of steps (run.limit.4)' }
+                $env:AIL_MAX_STEPS = $v; Add-Instrument 'steps'; $k += 2; continue
+            }
+            '^--watch$' {
+                if ($v -notmatch '^[A-Za-z0-9_]+$') { Fail '`--watch` needs a variable name, e.g. `--watch total` (trace.watch.1)' }
+                Add-Instrument "watch=$v"; $k += 2; continue
+            }
+            '^--no-contracts$' { Add-Instrument 'nocontracts'; $k++; continue }
+            '^--trace(=calls|=all)?$' { Add-Instrument 'trace'; $k++; continue }
+            '^--trace=effects$' { Fail '`--trace=effects` is not native yet: effect events come with the next trace step (trace.run.6)' }
+            '^--trace=' { Fail "``$a`` isn't a trace kind: use ``--trace``, ``--trace=calls``, ``--trace=effects`` or ``--trace=all`` (trace.run.1)" }
+            '^--trace-limit$' {
+                if ($v -notmatch '^[1-9]\d*$') { Fail '`--trace-limit` needs a positive number of events (trace.run.4)' }
+                $env:AIL_TRACE_LIMIT = $v; $k += 2; continue
+            }
+            '^--verbose$' { $k++; continue }
+            '^--values$' { Add-Instrument 'values'; $k++; continue }
+            '^--deterministic$' { $env:AIL_DETERMINISTIC = '1'; $checkOpts += '--deterministic'; $k++; continue }
+            '^--deny$' {
+                if (-not $v) { Fail '`--deny` needs a list of capabilities, e.g. `--deny fs,proc`' }
+                $checkOpts += @('--deny', $v); $k += 2; continue
+            }
+            '^--parallel$' { $env:AIL_PARALLEL = '1'; $k++; continue }
+            '^--unsafe$' {
+                if ($v -ne 'driver') { break scan }
+                $checkOpts += @('--unsafe', 'driver'); $k += 2; continue
+            }
+            '^--seed$' {
+                if ($v -notmatch '^\d+$') { Fail '`--seed` needs an integer, e.g. `--seed 42` (std.random.3)' }
+                $env:AIL_SEED = $v; $k += 2; continue
+            }
+            '^(-.*)?$' { break scan }
+            default { $runFile = $a; $k++; break scan }
+        }
     }
     $runSkip = $k
 }
-$route = $nativeOn -and (
-    $runFile -or $cmd -in 'build', 'pkg', 'fmt', 'fix' -or
-    ($cmd -eq 'check' -and ((& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
-    ($cmd -eq 'test' -and (& $isFile $rest[0])) -or
-    ($cmd -in 'api', 'effects' -and (@($rest | Where-Object { & $isFile $_ }).Count -eq 1)))
-if ($cmd -eq 'build' -and ($rest -contains '--derived-out')) { $route = $false }
 
-# Pick cargo: the system's if it matches the pin, otherwise the private copy.
-function Get-Cargo {
-    $systemRust = $null
-    if ((Get-Command cargo -ErrorAction SilentlyContinue) -and (Get-Command rustc -ErrorAction SilentlyContinue)) {
-        $systemRust = ((& rustc --version) -split ' ')[1]
-    }
-    if ($systemRust -eq $pin) { return 'cargo' }
-    $env:RUSTUP_HOME = Join-Path $toolDir 'rustup'
-    $env:CARGO_HOME = Join-Path $toolDir 'cargo'
-    $env:RUSTUP_TOOLCHAIN = $pin
-    $cargoBin = Join-Path $env:CARGO_HOME 'bin'
-    $c = Join-Path $cargoBin "cargo$exe"
-    if (-not (Test-Path $c)) {
-        Install-PrivateRust
-    } else {
-        $installed = & (Join-Path $cargoBin "rustup$exe") toolchain list 2>$null
-        if (-not ($installed | Where-Object { $_ -like "$pin*" })) {
-            & (Join-Path $cargoBin "rustup$exe") toolchain install --profile minimal $pin
-            if ($LASTEXITCODE -ne 0) { Fail "couldn't install Rust $pin" }
-        }
-    }
-    return $c
-}
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'api'
+$route = (
+    $runFile -or $native1 -or
+    ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
+        ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
+        (& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
+    ($cmd -eq 'test' -and (& $isFile $rest[0])) -or
+    ($cmd -eq 'effects' -and (@($rest | Where-Object { & $isFile $_ }).Count -eq 1)))
+if ($cmd -eq 'build' -and ($rest -contains '--derived-out')) { $route = $false }
 
 if ($route) {
     $nativeDir = Join-Path $root '.native'
@@ -143,50 +120,68 @@ if ($route) {
     $stale = -not (Test-Path $native)
     if (-not $stale) {
         $t = (Get-Item $native).LastWriteTimeUtc
-        $newer = Get-ChildItem -Recurse -File -Filter *.ail -Path (Join-Path $root 'compiler'), (Join-Path $bootstrap 'src\std') -ErrorAction SilentlyContinue |
+        $newer = Get-ChildItem -Recurse -File -Filter *.ail -Path (Join-Path $root 'compiler'), (Join-Path $root 'std') -ErrorAction SilentlyContinue |
             Where-Object { $_.LastWriteTimeUtc -gt $t } | Select-Object -First 1
         $stale = [bool]$newer
     }
     if ($stale) {
+        # The published seed is stage 0: it builds the native CLI (ADR 0855).
         New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
-        $log = "$native.log"
-        $mainAil = Join-Path $root 'compiler\main.ail'
-        $rc = 1
-        # A built Rust ail is used as it is; otherwise the verified seed, and cargo only when no seed is published for this host.
-        if (-not (Test-Path $binary)) {
-            & (Join-Path $PSScriptRoot 'tools\release\fetch-seed.ps1')
-        }
         $seed = Join-Path $nativeDir "seed$exe"
-        if ((Test-Path $binary) -or -not (Test-Path $seed)) {
-            if (-not (Test-Path $binary)) {
-                & (Get-Cargo) build --quiet --release --manifest-path $manifest
-                if ($LASTEXITCODE -ne 0) { Fail 'no seed for this host and building the bootstrap failed; see ADR 0855' }
+        $tagFile = Join-Path $nativeDir 'seed.tag'
+        $wantTag = (Get-Content (Join-Path $root 'tools\release\SEED_TAG') -TotalCount 1 -ErrorAction SilentlyContinue)
+        $haveTag = if (Test-Path $tagFile) { (Get-Content $tagFile -TotalCount 1) } else { '' }
+        if (-not (Test-Path $seed) -or $haveTag -ne $wantTag) {
+            & (Join-Path $PSScriptRoot 'tools\release\fetch-seed.ps1')
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $seed)) {
+                Set-Content -NoNewline -Encoding ascii $tagFile $wantTag
+            } else {
+                Remove-Item -Force $seed -ErrorAction SilentlyContinue
             }
-            $env:AIL_RUST = '1'; & $binary build $mainAil -o "$native.new" 2> $log; $rc = $LASTEXITCODE; Remove-Item Env:AIL_RUST
-        } else {
-            & $seed build $mainAil -o "$native.new" 2> $log; $rc = $LASTEXITCODE
         }
-        if ($rc -ne 0) { Get-Content $log | ForEach-Object { [Console]::Error.WriteLine($_) }; Fail "couldn't build the native CLI" }
+        if (-not (Test-Path $seed)) {
+            Fail 'no seed for this host: sign in with gh or set GITHUB_TOKEN, then rerun (tools\release\fetch-seed.ps1; ADR 0855)'
+        }
+        $log = "$native.log"
+        $mainAil = Fwd (Join-Path $root 'compiler\main.ail')
+        & $seed build $mainAil -o "$native.new" 2> $log
+        if ($LASTEXITCODE -ne 0) { Get-Content $log | ForEach-Object { [Console]::Error.WriteLine($_) }; Fail "the seed couldn't build the native CLI" }
         Remove-Item -Force $log -ErrorAction SilentlyContinue
         Move-Item -Force "$native.new" $native
     }
-    $env:AIL_COMPILER = Join-Path $root 'compiler'
+    $env:AIL_COMPILER = Fwd (Join-Path $root 'compiler')
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
-    if (-not $env:AIL) { $env:AIL = Join-Path $root 'ail.cmd' }
+    if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
     switch ($cmd) {
-        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects' } { & $native $cmd @rest; exit $LASTEXITCODE }
-        'check' { & $native check-program @rest; exit $LASTEXITCODE }
-        'test' { & $native run (Join-Path $root 'tools\ailtest\ailtest.ail') @rest; exit $LASTEXITCODE }
+        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'diff', 'explain', 'edit', 'ask' } { & $native $cmd @rest; exit $LASTEXITCODE }
+        'check' {
+            if ($rest[0] -in '--budget', '--from') {
+                # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).
+                $bopts = @(); $copts = @(); $prev = ''
+                foreach ($a in $rest) {
+                    if ($prev -eq '--budget' -and "$a" -match '^\d+$') { $bopts += $a; $prev = ''; continue }
+                    if ($prev -eq '--from') { $bopts += $a; $prev = ''; continue }
+                    $prev = ''
+                    if ($a -in '--budget', '--from') { $bopts += $a; $prev = $a }
+                    elseif ($a -eq '--json') { $bopts += $a; $copts += $a }
+                    else { $copts += $a }
+                }
+                & $native budget check @bopts -- $native check-program @copts; exit $LASTEXITCODE
+            }
+            & $native check-program @rest; exit $LASTEXITCODE
+        }
+        'test' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
         'build' {
             # The native CLI's build doesn't check: check the file (the first operand) first.
             $f = $rest | Where-Object { (& $isFile $_) -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1
-            if ($f) { & $native check-program $f; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+            $unsafe = @()
+            for ($j = 0; $j -lt $rest.Count - 1; $j++) { if ($rest[$j] -eq '--unsafe' -and $rest[$j + 1] -eq 'driver') { $unsafe = @('--unsafe', 'driver') } }
+            if ($f) { & $native check-program @unsafe $f; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
             & $native build @rest; exit $LASTEXITCODE
         }
         'run' {
-            & $native check-program $runFile
+            & $native check-program @checkOpts $runFile
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            $runOpts = @($rest | Select-Object -First ($runSkip - 1))
             $errFile = New-TemporaryFile
             $prep = & $native prepare @runOpts $runFile 2> $errFile
             if ($LASTEXITCODE -eq 0) {
@@ -200,20 +195,23 @@ if ($route) {
     }
 }
 
-$cargo = Get-Cargo
-
-if ($args.Count -gt 0 -and $args[0] -eq 'selftest') {
-    & $cargo test --quiet --release --manifest-path $manifest @($args | Select-Object -Skip 1)
+# `ail selftest` with no arguments is the native gate (ADR 0865): tools\gate\win-gate.ps1 runs gate.ail's suites with the
+# native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers.
+if ($cmd -eq 'selftest') {
+    if ($rest.Count -eq 0) { & (Join-Path $root 'tools\gate\win-gate.ps1'); exit $LASTEXITCODE }
+    if ($rest[0] -eq '--fuzz') {
+        if ($rest.Count -lt 2) { Fail 'usage: ail selftest --fuzz N [SEED]' }
+        $n = [string]$rest[1]; $seedNo = if ($rest.Count -gt 2 -and "$($rest[2])" -match '^\d+$') { [string]$rest[2] } else { '1' }
+        [Console]::Error.WriteLine("fuzz: $n inputs per fuzzer from seed $seedNo")
+        & (Join-Path $root 'ail.ps1') run (Fwd (Join-Path $root 'tools\fuzz\suite.ail')) $n $seedNo
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & (Join-Path $root 'ail.ps1') run (Fwd (Join-Path $root 'tools\fuzz\modules.ail')) $n $seedNo
+        exit $LASTEXITCODE
+    }
+    # Gate suites by name (tools\gate\gate.ail), as the gate runs them.
+    & (Join-Path $root 'ail.ps1') run (Fwd (Join-Path $root 'tools\gate\gate.ail')) @rest
     exit $LASTEXITCODE
 }
 
-if (-not (Test-Path $binary)) { [Console]::Error.WriteLine('ail: building the bootstrap (first run only) ...') }
-& $cargo build --quiet --release --manifest-path $manifest
-if ($LASTEXITCODE -ne 0) {
-    if ($onWindows -and (Get-HostTriple) -eq 'aarch64-pc-windows-msvc') {
-        Fail 'building failed; on Windows ARM64 the Visual Studio Build Tools (C++ workload) are required'
-    }
-    Fail 'building the bootstrap failed'
-}
-& $binary @args
-exit $LASTEXITCODE
+# Everything else has no native form.
+Fail "`ail $cmd` has no native form; run `.\ail.ps1` with a command from docs/quick-reference.md"

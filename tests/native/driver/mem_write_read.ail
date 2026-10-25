@@ -1,10 +1,11 @@
-# Writes and reads back through every width and type in unused runtime global slots (0x410000 + 56..61 slots).
+# Writes and reads back through every width and type in scratch runtime global slots (the globals + slots 64..71, unused by the runtime).
 # Native only: `ail run` has nothing mapped there.
 use std.hw
 
 fn main()
-    base := 4260304
     unsafe
+        # The globals' address is the second program header's p_vaddr (it moves with the program's size); slots 64+ are scratch.
+        base := hw.at(4194440, 0).read() + 512
         q := hw.at(base, 0)
         q.write(0)
         hw.at(base, 0.to_u8()).write(171.to_u8())

@@ -15,7 +15,7 @@ sha="$(git -C "$t/repo" rev-parse HEAD)"
 printf 'package app\ndep geo git file://%s/repo rev %s\n' "$t" "$sha" > "$t/app/ail.pkg"
 printf 'use geo.shapes\nfn main()\n    print(shapes.hi())\n' > "$t/app/main.ail"
 AIL_PKG_FROZEN=1 ./ail run compiler load "$t/app/main.ail" 2>&1 | grep -q 'mod.pkg.8' || { echo "FAIL frozen without a lock"; exit 1; }
-AIL_PKG_WRITE_LOCK=1 tools/native-cli/load-parity.sh "$t/app/main.ail"
+AIL_PKG_WRITE_LOCK=1 ./ail run compiler load "$t/app/main.ail" >/dev/null
 grep -q "commit $sha" "$t/app/ail.lock" || { echo "FAIL lock not written"; exit 1; }
 AIL_PKG_FROZEN=1 AIL_PKG_OFFLINE=1 ./ail run compiler load "$t/app/main.ail" 2>&1 | grep -q 'mod.pkg' && { echo "FAIL locked cache refused"; exit 1; }
 [ "$(AIL_NATIVE_CLI=1 ./ail run "$t/app/main.ail" 2>&1)" = hi ] || { echo "FAIL native run"; exit 1; }

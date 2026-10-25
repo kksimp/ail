@@ -7,10 +7,9 @@
 #   tools/bench/run.sh --runs 10          # more timing runs per program
 #   tools/bench/run.sh --json             # machine-readable output
 #
-# Builds the bootstrap at REV (in a temporary git worktree, removed on exit) and
+# Builds the native CLI at REV (in a temporary git worktree, removed on exit) and
 # at the working tree, then prints one table. Python and C twins are timed when
-# present; the C twins need a C compiler (cc). Rust comes from the private
-# toolchain in .toolchain/ (ADR 0087). Uses the Python from tools/tokbench.
+# present; the C twins need a C compiler (cc). Uses the Python from tools/tokbench.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -35,7 +34,6 @@ fi
 git -C "$root" rev-parse --verify -q "$before^{commit}" >/dev/null || {
     echo "bench: unknown revision: $before" >&2; exit 2; }
 
-export AIL_TOOLCHAIN_DIR="${AIL_TOOLCHAIN_DIR:-$root/.toolchain}"
 scratch="$(mktemp -d)"
 wt="$scratch/before"
 cleanup() {

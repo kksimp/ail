@@ -60,26 +60,36 @@ fn fuse_scalar(p int, r int) float
 ## `out` (the node's own buffer in `bufs` when `dest` is 0).
 fn fuse_eval(f int, bufs int, i int, lo int, cnt int, dest int, r int) int
     p := f + 8 + 32 * i
+    sz := if r != 0 then 4 else 8
     if load64(p) == 0
-        return tensor_data(load64(p + 8)) + 8 * lo
+        return tensor_data(load64(p + 8)) + sz * lo
     op := load64(p + 8)
     a := load64(p + 16)
     b := load64(p + 24)
     mut out := dest
     if dest == 0
-        out = bufs + 8 * FUSE_CHUNK * i
+        out = bufs + sz * FUSE_CHUNK * i
     pa := f + 8 + 32 * a
     pb := f + 8 + 32 * b
     if load64(pa) == 1
         y := fuse_eval(f, bufs, b, lo, cnt, 0, r)
-        vec_scal(op, out, y, cnt, r, 1, fuse_scalar(pa, r))
+        if r != 0
+            vec_scal32(op, out, y, cnt, 1, fuse_scalar(pa, r))
+        else
+            vec_scal(op, out, y, cnt, 0, 1, fuse_scalar(pa, r))
     elif load64(pb) == 1
         x := fuse_eval(f, bufs, a, lo, cnt, 0, r)
-        vec_scal(op, out, x, cnt, r, 0, fuse_scalar(pb, r))
+        if r != 0
+            vec_scal32(op, out, x, cnt, 0, fuse_scalar(pb, r))
+        else
+            vec_scal(op, out, x, cnt, 0, 0, fuse_scalar(pb, r))
     else
         x := fuse_eval(f, bufs, a, lo, cnt, 0, r)
         y := fuse_eval(f, bufs, b, lo, cnt, 0, r)
-        vec_zip(op, out, x, y, cnt, r)
+        if r != 0
+            vec_zip32(op, out, x, y, cnt)
+        else
+            vec_zip(op, out, x, y, cnt, 0)
     out
 
 ## The tensor that node `root` of a plan `fuse_ok` accepted computes.
@@ -95,11 +105,27 @@ fn tensor_fused(f int, root int) int
     t := tensor_new(kind, rank, n)
     tensor_copy_words(t + 32, first + 32, rank)
     r := if kind == 2 then 1 else 0
-    bufs := alloc(8 * FUSE_CHUNK * load64(f) + 8, KIND_ATOMIC)
     out := tensor_data(t)
-    mut lo := 0
-    while lo < n
-        cnt := if n - lo < FUSE_CHUNK then n - lo else FUSE_CHUNK
-        fuse_eval(f, bufs, root, lo, cnt, out + 8 * lo, r)
-        lo += cnt
+    units := (n + FUSE_CHUNK - 1) / FUSE_CHUNK
+    if n >= 65536
+        env := tensor_env()
+        store64(env, 3)
+        store64(env + 8, kind)
+        store64(env + 16, out)
+        store64(env + 24, f)
+        store64(env + 32, root)
+        store64(env + 40, n)
+        if tensor_par(env, 0, units, n * load64(f))
+            return t
+    fuse_range(f, root, out, kind, n, 0, units)
     t
+
+## The chunks `ulo..uhi` (of `FUSE_CHUNK` elements) of a fused chain into `out`.
+fn fuse_range(f int, root int, out int, kind int, n int, ulo int, uhi int)
+    r := if kind == 2 then 1 else 0
+    sz := esz(kind)
+    bufs := alloc(sz * FUSE_CHUNK * load64(f) + 8, KIND_ATOMIC)
+    for u in ulo..uhi
+        lo := u * FUSE_CHUNK
+        cnt := if n - lo < FUSE_CHUNK then n - lo else FUSE_CHUNK
+        fuse_eval(f, bufs, root, lo, cnt, out + sz * lo, r)

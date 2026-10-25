@@ -113,6 +113,8 @@ struct Lower
     unw Unwind
     ## Where each `uhwhatnow?` hole is, `FILE:LINE:COL` (expr.hole.3).
     asks Set[str]
+    ## The `.ct` copies of the functions constants call (ct.eval.3, lower_ctsteps.ail).
+    ctsteps CtSteps
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -146,6 +148,7 @@ struct Lower
     unchecked bool
     unchecked_list List[str]
     unchecked_seen Set[str]
+    auto_par Set[str]
     ## The `ensures` of the function being lowered, its label, and the keys
     ## of its receiver, parameters and `old(e)` values.
     ens List[ast.Contract]
@@ -182,6 +185,8 @@ PRIMS := {
     "store8": "unit",
     "loadf": "float",
     "storef": "unit",
+    "loadf32": "float",
+    "storef32": "unit",
     "syscall": "int",
     "global": "int",
     "str_addr": "int",
@@ -230,6 +235,16 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
 ## `lower_package` with the sources from `lazy` on the prelude's, lowered
 ## as the program reaches them (ADR 0808).
 pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
+    lower_package_par(input, rt, lazy, Set[str]())
+
+## `lower_package_with` that also runs the loops named by `pooled` as `par for`
+## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
+pub fn lower_package_par(
+    input List[Source],
+    rt ast.Program?,
+    lazy int,
+    pooled Set[str],
+) Module ! Problems
     srcs := with_error_owners(shadow_free(input, lazy))
     mut l := Lower(
         path: srcs[0].path,
@@ -278,6 +293,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         uniq: new_uniq(),
         unw: new_unwind(),
         asks: ask_keys(srcs),
+        ctsteps: new_ct_steps(),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
@@ -297,6 +313,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         unchecked: false,
         unchecked_list: [],
         unchecked_seen: Set[str](),
+        auto_par: pooled,
         ens: [],
         ens_label: "",
         ens_vars: [],
@@ -358,6 +375,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         l.stamp_problems()
     l.gen_instances()
     l.lower_lazy(srcs)
+    l.gen_ct_copies()
     l.enter_file(0)
     l.gen_unchecked()
     l.enter_file(0)
@@ -461,6 +479,8 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
     for c in prog.consts
         if is_const_expr(c.value)
+            if pre == "rt." and consts.contains("rt.{c.name}")
+                problem(c.pos, "runtime constant `{c.name}` is defined in two runtime files")
             consts["{pre}{c.name}"] = c.value
             const_home["{pre}{c.name}"] = file
         elif pre != "rt."
@@ -537,6 +557,10 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
             Ty.Unknown
         rty = t
+    # Codegen keys functions by name, so a second runtime definition would
+    # silently replace the first, whatever its types (#771, `win_write`).
+    if pre == "rt." and sigs.contains(fn_key(f, pre))
+        problem(f.pos, "runtime function `{f.name}` is defined in two runtime files")
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
     note_mut_self(f, fn_key(f, pre))
     if can_fail
@@ -709,7 +733,7 @@ fn Lower.call(mut self, name str, args List[int], ty Ty) int
 ## nearly exhausted (err.trap.1, ADR 0535). `shown` names the callee.
 fn Lower.user_call(mut self, name str, args List[int], ty Ty, pos ast.Pos, shown str) int
     mut i := inst(-1, "call", args)
-    i.name = name
+    i.name = ct_call(name, pos)
     i.site = site("err.trap.1", "call", shown, pos)
     # The call position for a trap's stack (trace.frame.1). A constant's
     # initialiser runs before `main` here, but is lazy in the interpreter,
@@ -951,6 +975,7 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
     if problems.len() > fn_problems or fn_failed
         facts.moves = []
         return
+    instr_end()
     mut func := elide_moves(
         Func(
             name: name,
@@ -1011,6 +1036,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
         if done()
             dead_block()
         instr_stmt(s)
+        ct_stmt(s)
         if (want or top_unit_fails) and i == body.len() - 1
             if e := final_expr(s)
                 if tail_error(e)
@@ -1025,8 +1051,9 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
         lower_stmt(s)
+        instr_after(s)
     defer_exit()
-    end_scope_exits()
+    end_scope_exits(if body.len() > 0 then group_end_at(body[body.len() - 1]) else none)
     scopes.pop()
     if result.id == -2
         return none
@@ -1135,7 +1162,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
-            if is_par
+            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return
@@ -1279,6 +1306,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
+            watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
         Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos, pos)
         _ => problem(pos, "this assignment target isn't in the native subset yet")
 
@@ -1292,7 +1320,7 @@ LIM_TICK_SLOT := 45
 ## A `while` loop's safepoint (run.limit.6): while a time limit is on, each
 ## turn calls the runtime, which reads the clock every 256 turns. It is
 ## emitted only when `ail build --timeout` baked a limit in.
-fn Lower.poll_limits(mut self)
+fn Lower.poll_limits(mut self, pos ast.Pos)
     # Only a build with a baked time limit pays for it (ADR 0727).
     if not sigs.contains("rt.lim_loop_polls")
         return
@@ -1303,7 +1331,8 @@ fn Lower.poll_limits(mut self)
     branch(on, slow, [], rest, [])
     seal(slow)
     cur = slow
-    call("rt.limits_poll", [], Ty.Unit)
+    # The call position puts the loop in the trap's stack (run.limit.1, trace.snap.1).
+    call_at("rt.limits_poll", [], Ty.Unit, pos)
     jump(rest, [])
     seal(rest)
     cur = rest
@@ -1312,7 +1341,7 @@ fn Lower.lower_while(mut self, cond ast.Expr, body List[ast.Stmt])
     head := new_block()
     jump(head, [])
     cur = head
-    poll_limits()
+    poll_limits(expr_pos(cond))
     forever := match cond
         Bool(v, _) => v
         _ => false
@@ -1828,7 +1857,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 )))
             check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
+            instr_watch_cells(cells)
             res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            instr_watch_cells_end(cells)
             cells_back(cells)
             res
         Member =>
@@ -2003,10 +2034,15 @@ fn Lower.lower_method(
         return struct_call("{a}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))
+    if cal := qualified_generic_callee(recv, name, npos)
+        return lower_generic_callee(cal, args, npos, want)
     if m := module_name(recv)
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, expr_pos(recv))
+    if name == "sum" and args.len() == 0
+        if ws := tensor_widen_sum(recv)
+            return ws
     r := deref_use(lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)

@@ -66,18 +66,22 @@ fn Lower.lower_list_edit(
             return unsupported(npos, "`.extend()` of a `{vs[0].ty.name()}` onto a `{r.ty.name()}`")
         ys := copy_if_place(args[0].value, vs[0])
         call("rt.list_extend", [r.id, ys, size], Ty.Unit)
+        watch_plain(npos, r, "extend")
         return unit
     if name == "clear" and vs.len() == 0
         uniq_clear(r)
         call("rt.list_clear", [r.id], Ty.Unit)
+        watch_plain(npos, r, "clear")
         return unit
     if name == "reverse" and vs.len() == 0
         call("rt.list_reverse", [r.id, size], Ty.Unit)
+        watch_plain(npos, r, "reverse")
         return unit
     if name == "remove_at" and vs.len() == 1
         # The read checks the index (type.coll.4); the call then removes it.
         v := checked("get", [r.id, vs[0].id], bounds_site(npos), e)
         call("rt.list_remove_at", [r.id, vs[0].id, size], Ty.Unit)
+        watch_note(npos, r, "remove_at", Val(id: v, ty: e), "index", vs[0])
         return Val(id: v, ty: e)
     if name == "insert" and vs.len() == 2
         item := Val(id: copy_if_place(args[1].value, vs[1]), ty: vs[1].ty)
@@ -100,6 +104,7 @@ fn Lower.lower_list_edit(
         if e.is_float()
             w = list_prim("float_bits", [x], Ty.Int)
         call("rt.list_insert", [r.id, i, w, size], Ty.Unit)
+        watch_note(npos, r, "insert", Val(id: x, ty: e), "index", vs[0])
         return unit
     if name == "pop" and vs.len() == 0
         # As a value: the removed last element as a `T?`. The statement form
@@ -147,6 +152,7 @@ fn Lower.lower_list_edit(
         call("rt.list_sort", [target, konst(k, Ty.Int)], Ty.Unit)
         if name == "sorted"
             return Val(id: target, ty: r.ty)
+        watch_plain(npos, r, "sort")
         return unit
     if is_set_op(name) and vs.len() == 1
         return set_op(r, name, vs[0], npos)
@@ -155,6 +161,8 @@ fn Lower.lower_list_edit(
         checked("get", [r.id, vs[0].id], bounds_site(npos), e)
         checked("get", [r.id, vs[1].id], bounds_site(npos), e)
         call("rt.list_swap", [r.id, vs[0].id, vs[1].id, size], Ty.Unit)
+        sw := WNote(kind: "swap", elem: none, label: "index", at: vs[0], at2: vs[1])
+        watch_note_if(npos, 0 - 1, r, sw)
         return unit
     if name == "take" and vs.len() == 1
         n := convert(vs[0], Ty.Int, npos)
@@ -275,9 +283,11 @@ fn Lower.lower_pop_stmt(mut self, e ast.Expr) Val?
     recv := match e
         Method(r, _, _, _) => r
         _ => return none
+    npos := match e
+        Method(_, _, p, _) => p
+        _ => return none
     l := lower_value(recv, none)?
-    if l.ty.elem() == none
-        return none
+    elem := l.ty.elem() else return none
     n := op("len", [l.id], Ty.Int)
     has := op("lt", [konst(0, Ty.Int), n], Ty.Bool)
     yes := new_block()
@@ -285,7 +295,13 @@ fn Lower.lower_pop_stmt(mut self, e ast.Expr) Val?
     branch(has, yes, [], join, [])
     seal(yes)
     cur = yes
-    call("rt.list_drop_last", [l.id], Ty.Unit)
+    if watch_here(npos)
+        last := op("sub", [n, konst(1, Ty.Int)], Ty.Int)
+        gone := Val(id: op("get", [l.id, last], elem), ty: elem)
+        call("rt.list_drop_last", [l.id], Ty.Unit)
+        watch_note(npos, l, "pop", gone, "index", Val(id: last, ty: Ty.Int))
+    else
+        call("rt.list_drop_last", [l.id], Ty.Unit)
     jump(join, [])
     seal(join)
     cur = join
@@ -372,7 +388,11 @@ fn Lower.list_method(
             retype(recv, Ty.List(el))
         # A list pushed from a place is copied: lists are values (ADR 0060).
         item := Val(id: copy_if_place(args[0].value, vs[0]), ty: vs[0].ty)
-        call(push_fn(el), [r.id, convert(item, el, npos)], Ty.Unit)
+        pushed := convert(item, el, npos)
+        call(push_fn(el), [r.id, pushed], Ty.Unit)
+        if watch_here(npos)
+            last := op("sub", [op("len", [r.id], Ty.Int), konst(1, Ty.Int)], Ty.Int)
+            watch_note(npos, r, "push", Val(id: pushed, ty: el), "index", Val(id: last, ty: Ty.Int))
         return Val(id: -1, ty: Ty.Unit)
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 

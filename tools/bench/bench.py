@@ -73,8 +73,13 @@ def count_tokens(tokbench, root, paths):
     """Map file path -> mean token count, from tokbench --json."""
     if not paths:
         return {}
-    out = subprocess.run([tokbench, "--json", *paths], cwd=root, capture_output=True,
-                         text=True, check=True).stdout
+    p = subprocess.run([tokbench, "--json", *paths], cwd=root, capture_output=True, text=True)
+    if p.returncode != 0:
+        # No tokenizer files (offline machine): report speed without token counts.
+        print("bench: token counts skipped: tokbench exited %d: %s"
+              % (p.returncode, p.stderr.strip()[-300:]), file=sys.stderr)
+        return {}
+    out = p.stdout
     # The wrapper may print setup lines before the JSON array.
     start = re.search(r"^\[", out, re.M)
     rows = [] if start is None else json.loads(out[start.start():])
@@ -277,8 +282,8 @@ def main():
                            "python_twin": py_tok})
 
     # Speed.
-    after_bin = root / "bootstrap/target/release/ail"
-    before_bin = before_root / "bootstrap/target/release/ail"
+    after_bin = root / "ail"
+    before_bin = before_root / "ail"
     hello = root / "examples/hello.ail"
     speed_progs = [p for p in progs if p["speed"]]
     speed_rows = []

@@ -1,0 +1,27 @@
+# Self-recursive calls inlined once (ADR 0890): same results as the plain
+# recursion, for two self calls, one, and a call in a loop.
+fn fib(n int) int
+    if n < 2
+        return n
+    fib(n - 1) + fib(n - 2)
+
+fn sum_to(n int) int
+    if n == 0
+        return 0
+    n + sum_to(n - 1)
+
+fn depth(xs List[int], i int) int
+    if i >= xs.len()
+        return 0
+    mut best := 0
+    for k in i + 1..xs.len()
+        d := depth(xs, k)
+        if d > best
+            best = d
+    best + xs[i]
+
+fn main()
+    print(fib(20))
+    print(fib(1))
+    print(sum_to(100))
+    print(depth([3, 1, 4, 1, 5], 0))

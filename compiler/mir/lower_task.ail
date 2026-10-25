@@ -82,6 +82,7 @@ pub fn uses_tasks(text str) bool
         or text.contains("TaskGroup")
         or text.contains("proc.start")
         or text.contains("std.app")
+        or text.contains("tensor.")
 
 ## `fn main() !`: no result and no error type of its own. The only `?` the
 ## subset knows is `t.wait()?`, which ends the program on a trap.
@@ -113,7 +114,11 @@ fn Lower.lower_spawn_let(mut self, name str, pos ast.Pos, value ast.Expr)
     inner := match value
         Unary(_, x, _) => x
         _ => value
-    h := lower_spawn(inner, pos) else
+    # The trace names the `spawn` keyword, not the start of the statement.
+    at := match value
+        Unary(_, _, p) => p
+        _ => pos
+    h := lower_spawn(inner, at) else
         declare(name, Ty.Unknown, -1)
         return
     declare(name, Ty.Int, h.id)
@@ -158,6 +163,7 @@ fn Lower.spawn_call(
     if args.len() != sig.params.len()
         return unsupported(cpos, "this call")
     rec := call("rt.task_new", [konst(tk.sites.len(), Ty.Int)], Ty.Int)
+    mut traced := List[int]()
     for k in 0..args.len()
         a := args[k]
         if a.label != none
@@ -166,8 +172,10 @@ fn Lower.spawn_call(
         id := convert(v, sig.params[k], expr_pos(a.value))
         # A task works on its own copy of a list (conc.share.1).
         w := copy_if_place(a.value, Val(id: id, ty: sig.params[k]))
+        traced.push(w)
         at := op("add", [rec, konst(T_ARGS + 8 * k, Ty.Int)], Ty.Int)
         prim_op(if sig.params[k].is_float() then "storef" else "store64", [at, w], Ty.Unit)
+    trace_spawn(key, sig.params, traced, rec, pos)
     call("rt.task_start", [rec], Ty.Unit)
     tk.sites.push(TaskSite(func: key, params: sig.params, ret: sig.ret, loop: -1))
     Val(id: rec, ty: Ty.Int)
@@ -189,6 +197,7 @@ fn Lower.lower_wait(mut self, inner ast.Expr, pos ast.Pos) Val?
                         h := read_var(key, cur)
                         at1 := trace_line(npos)
                         at2 := trace_line(pos)
+                        trace_wait(h, npos)
                         w := call("rt.task_wait", [h, at1, at2], Ty.Int)
                         chan_deadlock_trap(npos)
                         mut v := Val(id: w, ty: res)
@@ -218,6 +227,7 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
     res := tk.rets.get(key)?
     h := read_var(key, cur)
     own := tk.fails.contains(key)
+    trace_wait(h, npos)
     wt := if res.is_unit() or res.is_float() then Ty.Int else res
     w := call("rt.task_try", [h, trace_line(npos), konst(if own then 1 else 0, Ty.Int)], wt)
     chan_deadlock_trap(npos)
@@ -235,14 +245,37 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
     )
 
 ## `print` holds the output buffer's lock while a program runs tasks, so a
-## line from one task isn't split by another's.
+## line from one task isn't split by another's. The values are worked out
+## first: `print(t.wait()?)` must not hold the lock while it waits for a task
+## that prints or traps.
 fn Lower.lower_print(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if not tk.on
         return lower_print_body(args, pos)
+    if args.len() != 1
+        return unsupported(pos, "this `print`")
+    mut shown := List[Val]()
+    mut ipos := pos
+    match args[0].value
+        Interp(parts, at) =>
+            ipos = at
+            for p in parts
+                match p
+                    Lit(_) => shown.push(Val(id: -1, ty: Ty.Unit))
+                    Hole(x) => shown.push(lower_value(x, none)?)
+                    Fmt(x, _) => shown.push(lower_value(x, none)?)
+        _ => shown.push(lower_value(args[0].value, none)?)
     call("rt.out_lock", [], Ty.Unit)
-    r := lower_print_body(args, pos)
+    match args[0].value
+        Interp(parts, _) =>
+            for k in 0..parts.len()
+                match parts[k]
+                    Lit(text) => call("rt.out_str", [str_value(text)], Ty.Unit)
+                    Hole(_) => out(shown[k], ipos)?
+                    Fmt(_, spec) => lower_fmt_print(shown[k], spec, ipos)?
+        _ => out(shown[0], pos)?
+    call("rt.out_nl", [], Ty.Unit)
     call("rt.out_unlock", [], Ty.Unit)
-    r
+    Val(id: -1, ty: Ty.Unit)
 
 # ---- the functions that run tasks ----
 
@@ -319,6 +352,16 @@ fn Lower.build_task_fns(mut self)
         finish(return_of(-1))
         synth_end(ps)
     ps := synth_begin("rt.dispatch", [Ty.Int, Ty.Int])
+    # The tensor kernels' chunks (task.ail, ADR 0876).
+    tyes := new_block()
+    tno := new_block()
+    sealed[tyes] = true
+    sealed[tno] = true
+    branch(op("eq", [ps[0], konst(1073741824, Ty.Int)], Ty.Bool), tyes, [], tno, [])
+    cur = tyes
+    call("rt.tensor_chunk", [ps[1]], Ty.Unit)
+    finish(return_of(-1))
+    cur = tno
     for k in 0..tk.sites.len()
         yes := new_block()
         no := new_block()

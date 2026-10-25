@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # The Mac gate in one command, printing only what failed (ADR 0842).
-#   tools/gate/mac-gate.sh [--full]    from the repository root, on the branch under test
+#   tools/gate/mac-gate.sh    from the repository root, on the branch under test
 # Native only (ADR 0865): runs gate.ail's suites, which build and run everything with
 # the native compiler, and prints one line per failing test plus the first 3 lines of
-# its message. The cargo selftest (the interpreter and Rust-internal tests) runs only
-# with --full, and the self-host stage T only on request (gate.ail selfhost). Silence means green:
+# its message. The self-host stage T runs only on request (gate.ail selfhost). Silence means green:
 # the last line is `GATE GREEN` or `GATE RED (N failures)`. Full logs stay in
 # $TMPDIR/ail-gate/*.log for a look when a failure needs more.
 set -u
-full=0; [ "${1:-}" = "--full" ] && full=1
 cd "$(git rev-parse --show-toplevel)"
 # A std.app program (examples/app_todo.ail) would open the host's window and wait for ever on this Mac:
 # a host path that doesn't exist makes `app.run` fail at once instead.
@@ -21,8 +19,6 @@ run() { # run NAME CMD...
   echo "RED $name"
   grep -E "^test .* FAILED|panicked at|differs from|^error|disagreement|Symbol not found" "$out/$name.log" | head -8 | cut -c1-200
 }
-# The cargo copies of the ported suites are deleted (B6's list); --full runs what is left.
-[ "$full" = 1 ] && run selftest ./ail selftest --no-fail-fast
 # Self-host stage 1: the native compiler must build from compiler/main.ail. nativex reuses it
 # (NATIVE_COMPILER), so this is not an extra build; a failure is red here and in nativex.
 if ./ail build compiler/main.ail -o "$out/native-compiler" >"$out/selfhost1.log" 2>&1; then
@@ -31,14 +27,11 @@ else
   fails=$((fails+1)); echo "RED selfhost stage 1: ./ail build compiler/main.ail"; head -8 "$out/selfhost1.log" | cut -c1-200
 fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
-# The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
-# the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
-suites="examples tools cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
-[ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
-# Until step D, the cases suite still runs `ail run` through the Rust binary (AIL_BINARY), whose
-# `ail explain` embeds docs/spec: keep it in step with the tree, or a spec change reads as a diff.
-run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
-run gate_ail ./ail run tools/gate/gate.ail $suites
+# The parallel suite checked the interpreter's thread-pool log (AIL_PAR_LOG) and is dropped with the interpreter; native `par` is
+# nativex's par_basic and par_overflow.
+# D3/D5: every suite runs on ./ail; there is no Rust binary and no cargo.
+native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain contracts api_card edit net spec pe asm tools api_queries misc limits native_misc nativex globals snapshot budget replay"
+run gate_native perl -e 'alarm 4800; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }

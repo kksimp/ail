@@ -300,7 +300,7 @@ The checks below are single files, so each one runs or fails on its own. Rules
 that need a directory tree, a manifest or a git cache are cited by `skip=context`
 blocks that show the layout; their checks are the package cases in
 `tests/cases/packages/` (each folder's `expected.rules` names the rule
-IDs it reports) and `bootstrap/tests/git_deps.rs`.
+IDs it reports) and the `git_deps` gate suite.
 
 ```ail error=mod.unit.1
 fn f() int

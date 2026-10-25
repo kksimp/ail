@@ -267,3 +267,23 @@ sequential result (`conc.par.1`), where OpenMP gives a data race or wraps.
 Single-thread programs are unchanged (no measurable difference on the ten
 classics; the fasta binary grew from 20304 to 21992 bytes, from the lock and
 thread-identity checks added to `alloc`, `print` and `trap`).
+
+## Baseline for ADR 0890 (2026-10-25, x86-64)
+
+`ail build` against `gcc -O2` and `gcc -O3` (`-ffp-contract=off -lm`), at the `.args`
+sizes, min of 7 wall seconds, on an idle i5-7500T at 2.7 GHz (3 cores), gcc 13.3, main
+3276adcc. Every output matches `NAME.out`. No clang on this machine.
+
+| program | AIL | gcc -O2 | gcc -O3 | AIL/O2 | AIL/O3 |
+|---|---:|---:|---:|---:|---:|
+| binarytrees | 0.212 | 0.131 | 0.092 | 1.62 | 2.32 |
+| fannkuch | 0.344 | 0.243 | 0.229 | 1.42 | 1.50 |
+| fasta | 0.092 | 0.055 | 0.056 | 1.68 | 1.64 |
+| matmul | 0.110 | 0.071 | 0.071 | 1.55 | 1.54 |
+| collatz | 0.304 | 0.265 | 0.266 | 1.15 | 1.14 |
+| sieve | 0.323 | 0.265 | 0.266 | 1.22 | 1.21 |
+| nbody | 0.103 | 0.082 | 0.080 | 1.25 | 1.29 |
+
+The gap to -O2 is 1.15x to 1.7x now, against 1.2x to 5x in the first race above. gcc -O3 only
+pulls away on binarytrees (2.3x, it inlines the recursion). The allocation fast path is not
+the gap: binarytrees', fannkuch's and fasta's hot code has no allocation calls (ADR 0890).

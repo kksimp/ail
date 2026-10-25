@@ -37,12 +37,12 @@ These are recommendations only. Each will be put to the designer as a question.
    **Done** (2026-10-20): `ail fmt`, ADRs 0169–0170, style in
    [design/formatting.md](design/formatting.md).
 
-## Rust bootstrap removed (ADR 0889)
+## Rust bootstrap deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md))
 
 `bootstrap/`, the interpreter, `cargo` and the private Rust toolchain
-([ADR 0087](decisions/0087-private-rust-toolchain.md)) are gone; `./ail` fetches a
-pinned native seed ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md)).
-The notes below that name the bootstrap, `tools/verify.sh` with selftests or the
+([ADR 0087](decisions/0087-private-rust-toolchain.md)) are gone; `./ail` builds from
+the published seed ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md)). Notes
+below that name the bootstrap, the interpreter, `tools/verify.sh` selftests or the
 bytecode tier are history. The remaining plan is "After Rust removal" and the
 backlog queue below.
 
@@ -62,10 +62,12 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
    (ADR 0359; slices 1–4 are ADRs 0361–0364).
    Native runtime and ABI (lane 122, ADRs 0404–0409): [native-abi.md](design/native-abi.md); `compiler/rt/rt.ail` has number text, strings, lists and traps on a machine model; syscalls and entry wait for the encoders.
 3. **Dependencies:** git dependencies and `ail.lock` (no registry, ADR 0383);
-   in-house TLS for `std.net` (ADR 0360, done: ADRs 0366–0369); follow-ups:
-   hardware AES-GCM and proxy support.
-4. **Rust-free check (designer, 2026-10-20):** now that the toolchain no longer
-   needs Rust (ADR 0889), rebuild `tools/edit` with the
+   in-house TLS for `std.net` (ADR 0360, done: ADRs 0366–0369); hardware
+   AES-GCM (AES-NI and PCLMULQDQ on x86-64, the crypto extension on ARM64,
+   detected through AT_HWCAP on Linux) and proxy support
+   ([ADR 0869](decisions/0869-http-proxy-from-the-environment.md)) are done.
+4. **Rust-free check (designer, 2026-10-20):** now that the shipped toolchain
+   no longer needs Rust (ADR 0904), rebuild `tools/edit` with the
    self-hosted toolchain and compare it with the Rust-bootstrap baseline in
    [editor-baseline.md](design/editor-baseline.md) (start-up, `ail check`
    time, test time, tokens, memory, and keystroke/redraw latency).
@@ -101,6 +103,12 @@ std API still needs its own ADR first.
 2. **Compiler graph tools** (`compiler/api/`, `compiler/edit/`): `ail ask`; edit
    impact and `ail test --affected`; contracts checked or fuzzed by tools, with
    OQ-060 (lower priority).
+   Then the AI-first tools the designer chose on 2026-10-24, in this order, each
+   with its own ADR (0891-0897) and no cost when unused (ADR 0868):
+   `ail context SYM --budget N`; `@tool` functions served by `ail serve --mcp`;
+   `ail try` (a patch checked and tested in memory); effect changes in `ail diff`;
+   `ail infer` (suggested `requires`/`ensures`); `ail test --mutate`; `ail check --perf`
+   (shares facts with the optimizer).
 3. **Native runtime** (`compiler/rt/`): time-travel record and replay; the
    agent sandbox (capabilities plus CPU, memory and time caps); live attach.
 4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
@@ -113,13 +121,19 @@ std API still needs its own ADR first.
    rules; grounding; forms as schema; extraction; quiet pages; waiting; intent
    maps; page memory; opt-in action replay; form diff before submit; site
    memory. Parity fixes for real sites are interleaved.
-7. **Packages and networking** (`std/net`, packages): hardware AES-GCM, proxy
-   support.
+7. **Packages and networking** (`std/net`, packages): done (hardware
+   AES-GCM, proxy support, git dependencies and `ail.lock` in the native
+   loader).
 8. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
    and Metal, then NPUs; weaker atomic orderings (OQ-097).
 9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
    [ADR 0874](decisions/0874-purity-driven-speed-optimizations.md): memoization by a cost
    model, pure-call CSE and hoisting, merging only where it is faster.
+   Then two showcase programs the designer chose (2026-10-24), each with its own ADR:
+   a database engine with its shell (file format, index, query language; an
+   optimizer benchmark against C using contracts, `ail test --mutate` and
+   `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
+   (SIMD, multi-core and tensor speed; ADR 0899).
 10. **Last:** the Rust-free rebuild of `tools/edit` compared with
    [editor-baseline.md](design/editor-baseline.md); a drag race of Garlic
    against Chrome and Firefox on a fixed set of real sites (page load, first

@@ -98,6 +98,9 @@ fn env_threads() int
     v
 
 fn hw_cores() int
+    if target() == 3
+        c := import_call("GetActiveProcessorCount", 65535, 0, 0, 0)
+        return if c < 1 then 1 else if c > 8 then 8 else c
     if target() == 2
         c := import_call("_sysconf", 58, 0, 0, 0)
         return if c < 1 then 1 else if c > 8 then 8 else c
@@ -127,7 +130,8 @@ fn pool() int
     if q < 0
         fail(1, 0, 0)
     store64(q + P_TARGET, cores())
-    stacks := sys_mmap_lazy(MAXW * STACK_SZ)
+    # Windows threads run on stacks the system makes (`start_thread`).
+    stacks := if target() == 3 then 0 else sys_mmap_lazy(MAXW * STACK_SZ)
     if stacks < 0
         fail(1, 0, 0)
     store64(global(STACKS), stacks)
@@ -185,6 +189,9 @@ fn task_start(rec int)
 
 ## Worker `idx`: its stack's low page is a guard, then a new thread.
 fn start_thread(p int, idx int)
+    if target() == 3
+        win_start_thread(p, idx)
+        return
     base := load64(global(STACKS)) + idx * STACK_SZ
     k := if target() == 0 then 10 else if target() == 1 then 226 else 74
     guard := if target() == 2 then 16384 else 4096
@@ -219,7 +226,7 @@ fn thread_entry(idx int) int
 
 ## Where `restart` puts worker `k`'s stack pointer.
 fn stack_top(p int, k int) int
-    if target() == 2
+    if target() == 2 or target() == 3
         return load64(p + P_TOP + 8 * k)
     load64(global(STACKS)) + (k + 1) * STACK_SZ - 64
 
@@ -469,6 +476,72 @@ fn is_trap_mark(a int) bool
 fn dispatch(id int, rec int)
     todo
 
+# ---- tensor kernels on the pool (ADR 0876) ----
+
+## The job of a tensor kernel: 16 words the caller fills (word 0 the job).
+fn tensor_env() int
+    alloc(128, KIND_ENV)
+
+## Run the job `env` over the units `lo..hi` on the pool, in chunks, and wait.
+## False (nothing run) when the job is small (`work`, about the element
+## operations), the loop is short, or the run is deterministic (conc.par.9);
+## the caller then runs it in order. The units are independent, so the result
+## is bit for bit the sequential one (std.tensor.7, std.tensor.20).
+fn tensor_par(env int, lo int, hi int, work int) bool
+    if work < TENSOR_PAR_MIN or hi - lo < 2 or det_on()
+        return false
+    if load64(pool() + P_TARGET) < 2
+        return false
+    grp := par_start(TENSOR_TASK, env, lo, hi)
+    par_wait(grp)
+    true
+
+TENSOR_PAR_MIN := 262144
+TENSOR_TASK := 1073741824
+
+## One chunk (`rt.dispatch` of `TENSOR_TASK`): the job in the record's first
+## argument, over the units of arguments 1 and 2.
+fn tensor_chunk(rec int)
+    env := load64(rec + T_ARGS)
+    lo := load64(rec + T_ARGS + 8)
+    hi := load64(rec + T_ARGS + 16)
+    job := load64(env)
+    kind := load64(env + 8)
+    out := load64(env + 16)
+    da := load64(env + 24)
+    db := load64(env + 32)
+    if job == 0
+        # Rows `lo..hi` of a matrix product: n = word 5, k = word 6.
+        n := load64(env + 40)
+        k := load64(env + 48)
+        for i in lo..hi
+            if kind == 2
+                vec_mm32(out + 4 * i * n, da + 4 * i * k, db, n, k)
+            else
+                vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, 0)
+    elif job == 1
+        # Elements `lo..hi` of `a op b`: op = word 5.
+        op := load64(env + 40)
+        if kind == 2
+            vec_zip32(op, out + 4 * lo, da + 4 * lo, db + 4 * lo, hi - lo)
+        else
+            vec_zip(op, out + 8 * lo, da + 8 * lo, db + 8 * lo, hi - lo, 0)
+    elif job == 3
+        # Chunks `lo..hi` of a fused chain: plan = word 3, root = 4, n = 5.
+        fuse_range(da, db, out, kind, load64(env + 40), lo, hi)
+    elif job == 4
+        # Rows `lo..hi` of a softmax: row width = word 5.
+        softmax_rows(kind, da, out, load64(env + 40), lo, hi)
+    else
+        # Elements `lo..hi` of `a op s`: op = word 5, left = word 6, s = word 7.
+        op := load64(env + 40)
+        left := load64(env + 48)
+        s := loadf(env + 56)
+        if kind == 2
+            vec_scal32(op, out + 4 * lo, da + 4 * lo, hi - lo, left, s)
+        else
+            vec_scal(op, out + 8 * lo, da + 8 * lo, hi - lo, 0, left, s)
+
 # ---- parallel loops (ADR 0601) ----
 
 ## Whether `par for lo..hi` goes to the pool: at least twice as many
@@ -573,6 +646,9 @@ fn out_atomic_bool(cell int)
 ## Give the CPU away while waiting for another thread.
 fn yield_cpu()
     t := target()
+    if t == 3
+        import_call("SwitchToThread", 0, 0, 0, 0)
+        return
     if t == 2
         import_call("_sched_yield", 0, 0, 0, 0)
         return
@@ -630,6 +706,8 @@ fn gc_start_world()
 fn stack_end_self() int
     if load64(global(MULTI)) == 0 or worker_index() < 0
         return load64(global(STACK_TOP))
+    if target() == 3
+        return load64(load64(global(TASKS)) + P_TOP + 8 * worker_index())
     load64(global(STACKS)) + (worker_index() + 1) * STACK_SZ
 
 ## Mark from the other threads' published stacks and registers, and from
@@ -647,8 +725,10 @@ fn gc_scan_threads()
     for t in 0..n
         if t != me
             s := load64(p + P_PARK + 8 * t)
-            top := if t
+            mut top := if t
                 == 0 then load64(global(STACK_TOP)) else load64(global(STACKS)) + t * STACK_SZ
+            if target() == 3 and t > 0
+                top = load64(p + P_TOP + 8 * (t - 1))
             gc_scan_range(p + P_REGS + 80 * t, p + P_REGS + 80 * t + 80)
             gc_scan_range(s, top)
 
@@ -875,3 +955,34 @@ fn group_cancel(g int)
     store64(g + 24, 1)
     for i in 0..load64(g)
         task_cancel(load64(load64(g + 16) + 8 * i))
+
+# ---- Windows threads (win.ail) ----
+
+## Start worker `idx`. The new thread learns its index from `P_NEWT + 8`,
+## which it reads before it lets go of the word at `P_NEWT` (one start at a time).
+fn win_start_thread(p int, idx int)
+    while atomic_cas(p + P_NEWT, 0, 1) != 0
+        import_call("SwitchToThread", 0, 0, 0, 0)
+    store64(p + P_NEWT + 8, idx)
+    # STACK_SIZE_PARAM_IS_A_RESERVATION: STACK_SZ bytes of address space, committed as used.
+    h := import_call("CreateThread", 0, STACK_SZ, fn_addr("rt.win_thread_entry"), 0, 0, 0)
+    if h == 0
+        err_begin()
+        out_str("CreateThread failed, error ")
+        out_int(import_call("GetLastError", 0, 0, 0, 0))
+        out_byte(10)
+        err_end()
+        fail(1, 0, 0)
+    import_call("CloseHandle", h, 0, 0, 0)
+
+## The start routine of a worker thread. Win64 hands it one argument in rcx,
+## which this ignores, so it does not matter that the compiled code reads its
+## arguments elsewhere; it never returns.
+fn win_thread_entry() int
+    p := load64(global(TASKS))
+    idx := load64(p + P_NEWT + 8)
+    store64(p + P_TID + 8 * idx, import_call("GetCurrentThreadId", 0, 0, 0, 0))
+    store64(p + P_TOP + 8 * idx, sp())
+    atomic_store(p + P_NEWT, 0)
+    worker_main(idx)
+    0

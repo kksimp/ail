@@ -8,9 +8,9 @@ Rules (first match wins):
   1. `bootstrap/target/...` is a build output, not a citation: reported under
      "manual" (D3/D4 own the scripts that still call it), never rewritten.
   2. `bootstrap/tests/X` where `tests/X` exists becomes `tests/X`.
-  3. Anything else under `bootstrap/` becomes `TAG:bootstrap/...`, which
-     `git show TAG:bootstrap/src/check.rs` resolves (TAG is the git tag the
-     removal ADR names; default `rust-last`).
+  3. Anything else under `bootstrap/` becomes `REF:bootstrap/...`, which
+     `git show REF:bootstrap/src/check.rs` resolves (REF is the commit before the D5
+     deletion, `0995686f` (ADR 0904); `--tag` overrides).
 
 Code files (.ail, .sh, .py, .rs, .toml and the like) are rewritten only on
 whole-line `#` comments; a citation in code or a trailing comment could be a
@@ -18,7 +18,7 @@ live path, so it is listed under "manual". Markdown and text files are
 rewritten everywhere.
 
 Skipped: docs/decisions/ (ADRs are history), the `.git` directory, binary
-files, this script. Rewriting is idempotent: a path already prefixed `TAG:`
+files, this script. Rewriting is idempotent: a path already prefixed `REF:`
 is left alone.
 """
 import argparse, difflib, os, re, subprocess, sys
@@ -51,7 +51,7 @@ def rewrite(m, tag, manual, where):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--apply", action="store_true", help="write the files (default: dry run)")
-    ap.add_argument("--tag", default="rust-last", help="git tag of the last tree with bootstrap/")
+    ap.add_argument("--tag", default="0995686f", help="git ref of the last tree with bootstrap/ (default: the parent of the D5 deletion)")
     a = ap.parse_args()
     manual, changed, edits = [], 0, 0
     for p in files():

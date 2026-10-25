@@ -1,0 +1,49 @@
+# The native gate on Windows in one command, printing only what failed (the PowerShell twin of mac-gate.sh, ADR 0842).
+#   tools\gate\win-gate.ps1            from the repository root, on the branch under test (or: .\ail.ps1 selftest)
+# Runs gate.ail's suites, which build and run everything with the native compiler, and prints one line per failing
+# suite plus the first lines of its message. Silence means green: the last line is `GATE GREEN` or `GATE RED (N failures)`.
+# Full logs stay in $env:TEMP\ail-gate\*.log. Windows is tracked, not gating: some suites need Unix tools (sh, tar,
+# git behaviour) and fail here for that reason, which the failure list says by cause.
+$ErrorActionPreference = 'Continue'
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+Set-Location $root
+# A std.app program would open the host's window and wait for ever: a host path that doesn't exist makes `app.run` fail at once.
+if (-not $env:AIL_APP_HOST) { $env:AIL_APP_HOST = 'C:/nonexistent/ail-app-host' }
+$out = Join-Path $env:TEMP 'ail-gate'
+New-Item -ItemType Directory -Force -Path $out | Out-Null
+$ail = Join-Path $root 'ail.ps1'
+$fails = 0
+$pattern = '^test .* FAILED|panicked at|differs from|^error|disagreement|FAIL '
+
+function Run([string]$name, [string[]]$cmdArgs) {
+    $log = Join-Path $out "$name.log"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $ail @cmdArgs *> $log
+    if ($LASTEXITCODE -eq 0) { return }
+    $script:fails++
+    "RED $name"
+    Select-String -Path $log -Pattern $pattern | Select-Object -First 8 | ForEach-Object { $_.Line.Substring(0, [Math]::Min(200, $_.Line.Length)) }
+}
+
+# Self-host stage 1: the native compiler must build from compiler/main.ail. .native\ail.exe is that very build (the seed
+# made it), so nativex reuses it (NATIVE_COMPILER) and there is no extra 25-minute build here.
+$native = Join-Path $root '.native\ail.exe'
+if (Test-Path $native) {
+    $env:NATIVE_COMPILER = $native
+} else {
+    Run 'selfhost1' @('build', 'compiler/main.ail', '-o', (Join-Path $out 'native-compiler.exe'))
+    $env:NATIVE_COMPILER = Join-Path $out 'native-compiler.exe'
+}
+# The program suites.
+$suites = 'examples tools cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm snapshot budget replay'.Split(' ')
+if ($args.Count -gt 0) { $suites = $args }
+Run 'gate_ail' (@('run', 'tools/gate/gate.ail') + $suites)
+# Every native binary must start.
+$hello = Join-Path $out 'hello.exe'
+& powershell -NoProfile -ExecutionPolicy Bypass -File $ail build tests/native/run/arith.ail -o $hello *> $null
+if ($LASTEXITCODE -ne 0) { $fails++; 'RED native build of arith.ail' }
+else {
+    & $hello *> $null
+    if ($LASTEXITCODE -ne 0) { $fails++; 'RED native binaries do not start' }
+}
+if ($fails -eq 0) { 'GATE GREEN' } else { "GATE RED ($fails failures); logs in $out" }
+exit ([int]($fails -gt 0))

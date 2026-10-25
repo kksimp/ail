@@ -1,5 +1,5 @@
 ## Test driver for the x86-64 encoder (`compiler/x64/asm.ail`, ADR 0385),
-## run by bootstrap/tests/native_asm.rs. The harness copies the module to
+## run by the `asm` gate suite (tools/gate/asm.ail). The harness copies the module to
 ## `x64/asm/` next to this file as `main.ail`, runs it, and checks each line
 ## `intent|bytes` against objdump's disassembly of the bytes. `intent` is the
 ## instruction as the encoder was asked for it, in objdump's Intel syntax.

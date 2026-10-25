@@ -1,0 +1,115 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## Frame values in a trap (`ail run --values`, ADR 0884, trace.frame.3). A program
+## built with `AIL_INSTRUMENT=values` gives each function of its own files a
+## spill object, `[describer, nparams, v1, v2, ...]`, that it keeps up to date at
+## the start of each statement, and registers it under its frame pointer in a
+## table (global slot 61) with `vals_enter`; `vals_leave` drops it at each return. The
+## describer is a function the compiler made for the locals then in scope: it
+## prints `(a = 1, b = 2); c = 3`. A trap's stack then prints `NAME` and the
+## description for each frame whose spill is in the table, in place of the
+## `(..)` of trace.frame.1. The table is a direct-mapped array of
+## `(frame pointer, spill)` pairs, scanned by the collector so the values live.
+
+VALS := 61
+VALS_N := 65536
+
+## How many names a spill holds (VALS_SLOTS in mir/lower_instr.ail).
+VALS_SLOTS := 32
+
+fn vals_table() int
+    t := load64(global(VALS))
+    if t == 0
+        t = alloc(VALS_N * 16 + 16, 13)
+        store64(global(VALS), t)
+    t
+
+fn vals_slot(t int, fp int) int
+    t + (fp / 16 % VALS_N) * 16
+
+## Whether the program was built with `--verbose`: the word after the table says so.
+fn vals_verbose() bool
+    t := load64(global(VALS))
+    t != 0 and load64(t + VALS_N * 16) != 0
+
+## `vals_enter` of a `--verbose` build.
+## The frame pointer is read here, not in `vals_enter`, which would see this function's frame.
+fn vals_enter_verbose() int
+    fp := load64(frame_ptr())
+    store64(vals_table() + VALS_N * 16, 1)
+    vals_enter_at(fp)
+
+## A function begins: its spill goes under its frame pointer, the caller's of this one.
+fn vals_enter() int
+    vals_enter_at(load64(frame_ptr()))
+
+fn vals_enter_at(fp int) int
+    sp := alloc(8 * (VALS_SLOTS + 1), 13)
+    e := vals_slot(vals_table(), fp)
+    store64(e, fp)
+    store64(e + 8, sp)
+    sp
+
+## A function returns.
+fn vals_leave()
+    fp := load64(frame_ptr())
+    t := load64(global(VALS))
+    if t != 0
+        e := vals_slot(t, fp)
+        if load64(e) == fp
+            store64(e, 0)
+            store64(e + 8, 0)
+
+## The spill of the frame `fp`, or 0.
+fn vals_find(fp int) int
+    t := load64(global(VALS))
+    if t == 0
+        return 0
+    e := vals_slot(t, fp)
+    if load64(e) == fp
+        return load64(e + 8)
+    0
+
+fn vals_describe(f fn(int), sp int)
+    f(sp)
+
+## Print the description of the frame `fp`; whether it had one.
+fn vals_print(fp int) bool
+    sp := vals_find(fp)
+    if sp == 0 or load64(sp) == 0
+        return false
+    vals_describe(load64(sp), sp)
+    true
+
+## The frame of the function that trapped: the first one up the stack with a spill.
+fn vals_innermost() int
+    mut p := frame_ptr()
+    while p != 0
+        if vals_find(p) != 0
+            return p
+        p = trace_next(p)
+    0
+
+## The text of a trap after its excerpt: `tail` with the values of the trapping frame in its
+## last line, when the program was built with `--values`.
+fn trap_tail(tail str)
+    fp := vals_innermost()
+    if fp == 0
+        out_str(tail)
+        return
+    p := str_addr(tail)
+    n := load64(p)
+    # The last line is `  at L:C in NAME(..)\n` (or `()`): keep it up to the `(`.
+    mut cut := n - 1
+    while cut > 0 and load8(p + 16 + cut - 1) != 10
+        cut -= 1
+    mut paren := n - 1
+    while paren > cut and load8(p + 16 + paren) != 40
+        paren -= 1
+    if paren <= cut
+        out_str(tail)
+        return
+    out_bytes(p + 16, paren)
+    vals_print(fp)
+    out_byte(10)

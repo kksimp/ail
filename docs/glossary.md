@@ -27,7 +27,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Bit operation** | An `int` method that works on the 64-bit two's complement bits: `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl`, `shr` (expr.bit.1-2, ADR 0465). |
 | **Block parameter** | A MIR value defined on entry to a block; each edge into the block passes one argument per parameter, in place of phi nodes (ADR 0222, ADR 0384). |
 | **Bootstrap backend** | An existing code generator (e.g. LLVM) used temporarily, before AIL's custom backend exists. Never used (ADR 0010). |
-| **Bytecode tier** | (Removed with the Rust bootstrap, ADR 0889.) The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |
+| **Bytecode tier** | (Removed with the Rust bootstrap, ADR 0904.) The second evaluator in the bootstrap: each function's body compiled on its first call to register code that works on the tree walker's environment; the walker stays the oracle, and `--no-bytecode` turns the tier off (ADRs 0359, 0361). |
 | **Bytes** | The built-in `bytes` type: an immutable sequence of `u8` for binary data, written `b"..."` (ADR 0412, `type.bytes.1`). Not text: `str` is UTF-8 text, and `b.text()` or `b.to_str()` read bytes as text. |
 | **Cancellation** | Asking a task to stop with `t.cancel()` or `g.cancel()`: the task sees `task.cancelled()`, `task.check()` fails with `Cancelled`, and blocking calls return early (a `send` on a full channel drops its value); a cancel reaches every task the task started; the scope still waits for it (`conc.cancel.1–4`, ADRs 0321, 0351). |
 | **Canonical layout** | The one layout `ail fmt` writes for a given token sequence; examples and docs use it (ADR 0169, [formatting.md](design/formatting.md)). |
@@ -98,7 +98,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Gap (checker)** | A construct the AIL checker in `compiler/check/` doesn't type yet. The function that uses it is left out of the comparison with `ail check`, and its value is unknown (ADR 0378). |
 | **Garlic** | The web browser written in AIL (`tools/garlic`): text mode first, with a page model for agents. See [garlic-browser.md](design/garlic-browser.md). |
 | **Graceful shutdown** | A server stop that refuses new connections and lets requests already arriving finish ([ADR 0640](decisions/0640-samesite-and-graceful-shutdown.md)). |
-| **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`. |
+| **Host (std.app)** | The program that draws a `std.app` view tree with the platform's own controls and sends back events over JSON lines; generic, it knows no app (`std.app.7-10`, ADR 0838). The macOS host is `tools/app-host/macos`, the Linux host `tools/app-host/linux`, the Windows host `tools/app-host/windows` (ADR 0888). |
 | **Keep-alive** | A connection that stays open for more requests after the first response, instead of sending `Connection: close` ([ADR 0639](decisions/0639-http-server-keep-alive.md)). |
 | **Lifetime hole** | A gap in a value's live interval, where it is dead between two uses (for example, across another branch). Linear-scan allocation with holes lets other values use the register there (ADR 0391). |
 | **Module fuzzer** | A template program in `tests/fuzz/modules/` that `fuzz_modules.rs` fills with seeded adversarial inputs (text, JSON, hex bytes, regexes, dates, HTTP) and runs on both tiers and, once it exists, natively (ADR 0461). |
@@ -142,7 +142,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Mutable value semantics** | The model where every assignment or pass yields an observably independent value, and mutation happens only through owned variables or `mut` parameters (ADR 0060). |
 | **Mutex** | `Mutex[T]`, a value shared between tasks: `get`, `set` and `swap` are indivisible, and `with m as mut x` (or `lock`/`unlock`) brackets a read-modify-write (ADR 0189, ADR 0301). |
 | **Native subset** | The constructs the native backend compiles (native.subset.1): free functions over numbers, string literals and lists of numbers; anything else is reported before code is made (ADR 0384). |
-| **Native test runner** | `ail test --native`: builds each `@test` function natively and checks its verdict against the interpreter, which is the oracle ([ADR 0679](decisions/0679-native-test-runner.md)). |
+| **Native test runner** | `ail test`: builds each `@test` function natively and runs it; the comparison with the interpreter was retired ([ADR 0679](decisions/0679-native-test-runner.md), [ADR 0900](decisions/0900-refuse-rust-only-routes.md)). |
 | **Nested optional** | `T??`: an optional whose content is an optional. `none` is the outermost level; `else`, `?` and `if v := e` peel one level (`type.opt.6–8`, ADR 0209). |
 | **net.serve** | The capability to listen for connections, held in addition to `net` (`std.net.14`, ADR 0422). |
 | **Normative** | Part of the binding specification. Contrast with non-normative notes and rationale. |
@@ -197,7 +197,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **Rematerialisation** | Rebuilding a constant at each use instead of keeping it in a register; the native allocator gives constants no location (ADR 0386). |
 | **Root module** | The module that declares `main`: the `.ail` files directly in the package root for `ail run DIR`, or the single file for `ail run FILE` (ADR 0153). |
 | **Root store** | The set of root certificates a TLS client trusts as the end of a certificate chain: the platform's (or `SSL_CERT_FILE`'s) for `std.net` (ADR 0368). |
-| **Rust removal** | Step D5 of ADR 0855: deleting `bootstrap/`, the interpreter and the Rust toolchain. `./ail` then runs a pinned native seed (ADR 0889). |
+| **Rust removal** | Step D5 of ADR 0855: deleting `bootstrap/`, the interpreter and the Rust toolchain. `./ail` then runs a pinned native seed (ADR 0904). |
 | **Rule ID** | A stable identifier for a normative spec rule, formatted `<chapter>.<section>.<n>` (e.g. `plat.ptr.1`). See ADR 0002. |
 | **Run limit** | `--timeout`, `--max-memory` or `--max-steps`: a run that exceeds one traps with `run.limit.*` and a snapshot (ADR 0288). |
 | **Runtime dispatch** | Choosing among code paths at run time based on detected CPU features. |
@@ -206,9 +206,9 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 | **`Self`** | In a trait, the implementing type; in a method or `impl`, the type it belongs to, with its type parameters (ADR 0128). |
 | **Semantic diff** | `ail diff OLD NEW`: what changed between two versions by meaning (declarations by id, diagnostics, test outcomes), not by text (ADR 0396). |
 | **SeqCst** | Sequentially consistent ordering: all threads observe atomic operations in a single global order. |
-| **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR 0889; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
+| **Self-hosted front end** | The lexer, parser and checker written in AIL under `compiler/`, now the only front end (the Rust one was removed, ADR 0904; Stage 3, ADR 0022). Its syntax tree is `compiler/ast/` (ADR 0376). |
 | **SIMD** | Single Instruction, Multiple Data: vector instructions (NEON and SVE on ARM; SSE, AVX2 and AVX-512 on x86). |
-| **Site cache** | (Removed with the Rust interpreter, ADR 0889.) A per-AST-node cache in the bootstrap interpreter (keyed by the node's address, valid because the program is immutable) that remembers a resolved call target, method, string literal or field slot. It never changes behaviour (ADR 0220). |
+| **Site cache** | (Removed with the Rust interpreter, ADR 0904.) A per-AST-node cache in the bootstrap interpreter (keyed by the node's address, valid because the program is immutable) that remembers a resolved call target, method, string literal or field slot. It never changes behaviour (ADR 0220). |
 | **Sized number** | One of `i8 i16 i32 u8 u16 u32 u64 f32`: the numeric types besides `int` (`i64`) and `float` (`f64`). Literals take their type from context, and nothing converts implicitly (ADRs 0194–0195). |
 | **Snapshot (expectation)** | An expected value written in a test: a literal in `assert_eq`, a doc example's `# =>` lines, or a `NAME.out` file. `ail test --update` rewrites stale ones and prints the diff (ADR 0395). |
 | **Span-free fingerprint** | The hash of an item's HIR with spans replaced by offsets relative to the item, so moving code doesn't invalidate cached results (ADR 0224). |

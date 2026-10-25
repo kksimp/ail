@@ -14,6 +14,7 @@ use std.net.jar
 use std.compress
 use std.time
 use std.app
+use std.screen
 use html
 use page
 use css
@@ -23,6 +24,11 @@ use jsdom
 use images
 use attach
 use ws
+use look
+use forms
+use extract
+use hush
+use flows
 use tabstrip
 use svg
 
@@ -60,6 +66,12 @@ struct Browser
     height int
     back List[str]
     message str
+    ## The page's console lines and requests since it loaded (the last `LOG_KEEP` of each).
+    console_log List[str]
+    net_log List[str]
+    ## The steps done since the page was opened, as `flows` replays them, and where flows are kept.
+    trail List[str]
+    flows_file str
     prompt Prompt
     last_find str
     ## Whether the page model lists only the viewport's nodes (`--viewport`).
@@ -108,7 +120,7 @@ MAX_KEPT := 16
 ## The headers Garlic sends: who it is, and that it wants HTML.
 fn options() net.Options
     mut o := net.options()
-    o.headers["user-agent"] = "Garlic/0.1 (AIL; text)"
+    o.headers["user-agent"] = "Garlic/0.1 (AIL; text)" # keep equal to USER_AGENT in js/vm/dom.ail
     o.headers["accept"] = "text/html,application/xhtml+xml;q=0.9,text/plain;q=0.8,*/*;q=0.5"
     o.headers["accept-language"] = "en"
     o.headers["accept-encoding"] = "gzip, deflate"
@@ -147,6 +159,11 @@ MAX_HOPS := 10
 
 ## Replies to a page's `fetch` and XMLHttpRequest asks, per load.
 MAX_REPLIES := 32
+
+## How many console lines and requests the page model keeps, and how many
+## one-second rounds `wait` lets the page's timers run.
+LOG_KEEP := 20
+MAX_WAIT_ROUNDS := 10
 
 ## `fetch_with`, also telling where redirects ended. Every hop sends the
 ## cookies the jar holds for it and stores the ones it sets, so a login that
@@ -206,7 +223,7 @@ fn fetch_got(
         if method == "GET" and w.status == 200
             keep_cached(url, w, now, mut cache)
         return Got(url: w.url, text: w.text, ok: true)
-    file := (url.strip_prefix("file://") else url).split("?")[0].split("#")[0]
+    file := page.file_path(url).split("?")[0].split("#")[0]
     data := fs.read_bytes(file) else err
         return Got(url, error_page(url, "{err}"), false)
     Got(url, decode(data, ""), true)
@@ -527,6 +544,8 @@ struct Loaded
     doc html.Doc
     ## The page's engine, when scripts ran and are still listening.
     js jsdom.Session?
+    ## What the scripts logged and requested while the page loaded.
+    out jsdom.Outcome
 
 ## Fetches and parses `target`, then runs its scripts (unless `--no-js`),
 ## which change the tree or send the browser on to another page.
@@ -552,7 +571,12 @@ fn load_doc(
         at = got.url
         mut d := html.parse(got.text)
         if env.args().contains("--no-js")
-            next := refresh_target(d, at, false) else return Loaded(url: at, doc: d, js: none)
+            next := refresh_target(d, at, false) else return Loaded(
+                url: at,
+                doc: d,
+                js: none,
+                out: quiet(),
+            )
             at = next
             m = "GET"
             b = ""
@@ -576,6 +600,7 @@ fn load_doc(
             cookies: [],
             asks: [],
             sockets: [],
+            net: [],
         )
         if d.all("script").len() > 0
             ran := jsdom.start(
@@ -601,7 +626,7 @@ fn load_doc(
             # without scripts (HTML §4.12.2).
             next = refresh_target(d, at, true) else ""
             if next == ""
-                return Loaded(url: at, doc: d, js: session)
+                return Loaded(url: at, doc: d, js: session, out: out)
             m = "GET"
             b = ""
         else
@@ -609,7 +634,7 @@ fn load_doc(
             b = out.body
         at = next
     last := fetch_got(at, m, b, via, true, false, mut cj, mut cache)
-    Loaded(url: last.url, doc: html.parse(last.text), js: none)
+    Loaded(url: last.url, doc: html.parse(last.text), js: none, out: quiet())
 
 ## What page scripts asked the browser for, answered against the live engine
 ## `live`; the scripts never run again. `fetch` and XMLHttpRequest requests
@@ -636,6 +661,7 @@ fn serve_page(
         mut more := quiet()
         if asks.len() > 0
             ask := asks.remove_at(0)
+            out.net.push("{ask.method} {ask.url}")
             more = live.reply(mut d, ask.id, script_reply(ask, at, mut cj), 1000.0)
         elif ops.len() > 0
             op := ops.remove_at(0)
@@ -654,6 +680,7 @@ fn serve_page(
             out.method = more.method
             out.body = more.body
         out.console.extend(more.console)
+        out.net.extend(more.net)
         out.cookies.extend(more.cookies)
         out.changes += more.changes
         asks.extend(more.asks)
@@ -673,6 +700,7 @@ fn quiet() jsdom.Outcome
         cookies: [],
         asks: [],
         sockets: [],
+        net: [],
     )
 
 ## One WebSocket operation of the page: connects (as a page does: with its
@@ -794,6 +822,10 @@ fn Browser.empty(url str, width int, height int) Browser
         height,
         back: [],
         message: "",
+        console_log: [],
+        net_log: [],
+        trail: [],
+        flows_file: flows.default_path(),
         prompt: Status,
         last_find: "",
         viewport_only: false,
@@ -887,8 +919,52 @@ fn Browser.pump(mut self)
     mut s := js else return
     out := serve_page(mut s, mut doc, quiet(), url, mut cj, mut socks)
     js = s
+    record(out)
     if not js_went(out)
         relayout()
+
+## Remembers what the page logged and requested, for the page model.
+fn Browser.record(mut self, out jsdom.Outcome)
+    console_log.extend(out.console)
+    net_log.extend(out.net)
+    if console_log.len() > LOG_KEEP
+        console_log = console_log[console_log.len() - LOG_KEEP..]
+    if net_log.len() > LOG_KEEP
+        net_log = net_log[net_log.len() - LOG_KEEP..]
+
+## Lets the page's timers, requests and sockets run for one second of its
+## clock. True when something happened (a change, a request or a log line) or a
+## timer is still waiting.
+fn Browser.settle(mut self) bool
+    mut s := js else return false
+    mut out := serve_page(mut s, mut doc, s.idle(mut doc, 1000.0), url, mut cj, mut socks)
+    js = s
+    record(out)
+    if not js_went(out)
+        relayout()
+    out.changes > 0
+        or out.net.len() > 0
+        or out.console.len() > 0
+        or out.sockets.len() > 0
+        or s.pending() > 0
+
+## `wait:idle` runs the page until it has nothing more to do (at most
+## `MAX_WAIT_ROUNDS` seconds of its clock); `wait:text=T` runs it until `T`
+## is on the page.
+fn Browser.wait(mut self, arg str)
+    want := if arg.starts_with("text=") then arg.slice(5, arg.chars().len()) else ""
+    for _ in 0..MAX_WAIT_ROUNDS
+        if want != "" and pg.text().to_lower().contains(want.to_lower())
+            message = "found `{want}`"
+            return
+        if not settle()
+            break
+    if want == ""
+        message = "idle"
+    elif pg.text().to_lower().contains(want.to_lower())
+        message = "found `{want}`"
+    else
+        message = "`{want}` did not appear"
 
 ## Fetches the current page again, asking the server about any kept copy.
 fn Browser.reload(mut self)
@@ -902,7 +978,12 @@ fn Browser.load(mut self, target str, method str, body str)
     refer = ""
     url = loaded.url
     doc = loaded.doc
+    if not env.args().contains("--noisy")
+        hush.apply(mut doc)
     js = loaded.js
+    console_log = []
+    net_log = []
+    record(loaded.out)
     sheet = linked_sheets(doc, url, mut cj, mut cache)
     pg = page.layout_with(doc, url, width, sheet)
     stamp += 1
@@ -1096,6 +1177,7 @@ fn Browser.js_click(mut self, id int) bool
     mut s := js else return false
     out := serve_page(mut s, mut doc, s.click(mut doc, id, 1000.0), url, mut cj, mut socks)
     js = s
+    record(out)
     if js_went(out)
         return true
     if s.prevented
@@ -1139,6 +1221,7 @@ fn Browser.type_into(mut self, id int, text str)
             mut socks,
         )
         js = s
+        record(out)
         if not js_went(out)
             relayout()
         return
@@ -1223,6 +1306,7 @@ fn Browser.submit(mut self, id int)
         mut s := js else return
         out := serve_page(mut s, mut doc, s.submit(mut doc, id, 1000.0), url, mut cj, mut socks)
         js = s
+        record(out)
         if not js_went(out)
             relayout()
         return
@@ -1300,6 +1384,7 @@ fn Browser.act(mut self, name str, arg str) bool
     eq := arg.find("=") else arg.chars().len()
     id := arg.slice(0, eq).to_int() else -1
     rest := arg.slice((eq + 1).min(arg.chars().len()), arg.chars().len())
+    step := step_for(name, arg, id)
     match name
         "follow" => follow(arg.to_int() else 0)
         "click" => activate(id)
@@ -1307,6 +1392,11 @@ fn Browser.act(mut self, name str, arg str) bool
         "submit" => submit(id)
         "check" => check(id)
         "select" => choose(id, rest)
+        "fill" => fill(arg)
+        "wait" => wait(arg)
+        "set" => set(arg)
+        "save" => save_flow(arg)
+        "run" => run_flow(arg)
         "open" => go(arg)
         "back" => go_back()
         "forward" => go_forward()
@@ -1315,11 +1405,162 @@ fn Browser.act(mut self, name str, arg str) bool
         "scroll" => scroll_to(arg.to_int() else 0)
         "reload" => reload()
         _ =>
-            message = "unknown action `{name}`: try follow, click, type, submit, check, select, open, back, forward, find, scroll or reload"
+            message = "unknown action `{name}`: try follow, click, type, submit, check, select, fill, set, wait, save, run, open, back, forward, find, scroll or reload"
             return false
+    note_step(name, step)
     if prompt != Status
         prompt = Status
     true
+
+## `set:{"label": value, ...}`: like `fill`, but does not submit.
+fn Browser.set(mut self, spec str)
+    set_fields(spec, false)
+
+## `fill:{"label": value, ...}`: sets each field named by its label (see the
+## `forms` schema) and submits the form of the last one. A label no field
+## matches stops it before anything is typed.
+fn Browser.fill(mut self, spec str)
+    set_fields(spec, true)
+
+## `fill` without the submit: sets the fields by label. False, with a message, when
+## the spec is not a JSON object or a label matches no field.
+fn Browser.set_fields(mut self, spec str, send bool) bool
+    j := parse_json(spec) else
+        message = "fill needs a JSON object of label: value"
+        return false
+    members := j.as_obj() else
+        message = "fill needs a JSON object of label: value"
+        return false
+    mut pairs := List[(str, str)]()
+    for m in members
+        v := match m.value
+            Str(t) => t
+            Bool(b) => "{b}"
+            Num(n) => if n == n.floor() then "{n.to_int()}" else "{n}"
+            Null | Arr(_) | Obj(_) => ""
+        pairs.push((m.key, v))
+    mut missing := List[str]()
+    steps := forms.plan(doc, pairs, mut missing)
+    if missing.len() > 0
+        message = "no field is labelled: {missing.join(", ")}; see the forms schema"
+        return false
+    for st in steps
+        match st.kind
+            "type" => type_into(st.id, st.arg)
+            "check" => check(st.id)
+            "select" => choose(st.id, st.arg)
+            _ =>
+                if send
+                    submit(st.id)
+    true
+
+## Activates the link, button or control whose visible name is `name` (ignoring
+## case; else the first whose name contains it). The name of a node is what the
+## page model calls it.
+fn Browser.press(mut self, name str) bool
+    id := named_target(name) else
+        message = "nothing here is named `{name}`"
+        return false
+    activate(id)
+    true
+
+fn Browser.named_target(self, name str) int?
+    want := name.to_lower()
+    mut partial := -1
+    for t in pg.targets
+        bx := pg.boxes[t]
+        low := bx.name.to_lower()
+        if low == want
+            return bx.id
+        if partial < 0 and low != "" and low.contains(want)
+            partial = bx.id
+    if partial >= 0
+        return partial
+    none
+
+## The page's own name for node `id`, for a flow step.
+fn Browser.name_of(self, id int) str
+    t := target(id) else return ""
+    t.name
+
+## The flow step an action stands for, worked out before it runs (the page and
+## its node numbers are about to change); "" for actions a flow doesn't keep.
+fn Browser.step_for(self, name str, arg str, id int) str
+    label := if id >= 0 then forms.field_label(doc, id) else ""
+    value := arg.slice((arg.find("=") else -1) + 1, arg.chars().len())
+    match name
+        "open" => "open {arg}"
+        "follow" => "press {name_of_link(arg.to_int() else 0)}"
+        "click" => "press {name_of(id)}"
+        "fill" => "fill {arg}"
+        "set" => "set {arg}"
+        "wait" => "wait {arg}"
+        "type" | "select" => "set \{{page.quote(label)}:{page.quote(value)}}"
+        "check" =>
+            now := doc.attr(id, "checked") == none or page.input_type(doc, id) == "radio"
+            "set \{{page.quote(label)}:{now}}"
+        "submit" => "submit {if label != "" then label else name_of(id)}"
+        _ => ""
+
+## Adds `step` to the trail (an `open` starts a new one).
+fn Browser.note_step(mut self, name str, step str)
+    if step == ""
+        return
+    if name == "open"
+        trail = [step]
+    elif trail.len() > 0
+        trail.push(step)
+
+fn Browser.name_of_link(self, n int) str
+    if n < 1 or n > pg.links.len()
+        return ""
+    pg.boxes[pg.links[n - 1]].name
+
+## Saves the trail as flow `name` for this site.
+fn Browser.save_flow(mut self, name str)
+    if trail.len() < 1 or name == ""
+        message = "nothing to save: open a page and act on it first, and name the flow"
+        return
+    flows.save(flows_file, host_of(url), name, trail) else err
+        message = "could not save the flow: {err}"
+        return
+    message = "saved flow `{name}` ({trail.len()} steps)"
+
+## Replays flow `name`, stopping at the first step that does not work.
+fn Browser.run_flow(mut self, name str)
+    f := flows.find(flows.load(flows_file), host_of(url), name) else
+        message = "no flow named `{name}` for this site"
+        return
+    mut done := 0
+    for step in f.steps
+        if not run_step(step)
+            message = "flow `{name}` stopped at step {done + 1} (`{step}`): {message}"
+            return
+        done += 1
+    trail = f.steps
+    message = "ran flow `{name}` ({done} steps)"
+
+fn Browser.run_step(mut self, step str) bool
+    parts := flows.split_step(step)
+    match parts.0
+        "open" =>
+            go(parts.1)
+            true
+        "set" => set_fields(parts.1, false)
+        "fill" => set_fields(parts.1, true)
+        "press" => press(parts.1)
+        "submit" =>
+            id := named_target(parts.1) else
+                message = "nothing here is named `{parts.1}`"
+                return false
+            submit(id)
+            true
+        "wait" =>
+            wait(parts.1)
+            true
+        _ =>
+            message = "unknown step"
+            false
 
 ## The page model, within the token budget if one is set, with the last
 ## action's message.
@@ -1329,9 +1570,16 @@ fn Browser.model(self) str
     with_message(pg.to_json(scroll, view(), viewport_only))
 
 fn Browser.with_message(self, j str) str
-    if message == ""
+    mut extra := ""
+    if message != ""
+        extra = ",\"message\":{page.quote(message)}"
+    if console_log.len() > 0
+        extra = "{extra},\"console\":[{[page.quote(l) for l in console_log].join(",")}]"
+    if net_log.len() > 0
+        extra = "{extra},\"network\":[{[page.quote(l) for l in net_log].join(",")}]"
+    if extra == ""
         return j
-    j.replace(",\"nodes\":[", ",\"message\":{page.quote(message)},\"nodes\":[")
+    j.replace(",\"nodes\":[", "{extra},\"nodes\":[")
 
 ## The page model as a diff from the last one sent on this page: the nodes
 ## that are new or changed (`visible` included), and the ids `removed`.
@@ -1373,6 +1621,14 @@ fn Browser.act_from(mut self, j Json)
     for key in ["url", "text"]
         if t := j.str(key)
             arg = if j.num("id") != none then "{arg}={t}" else t
+    if name == "wait"
+        arg = if j.str("text") != none and not j.flag(
+            "idle",
+            false,
+        ) then "text={j.str("text") else ""}" else "idle"
+    if name == "fill"
+        if f := j.get("fields")
+            arg = f.to_text()
     act(name, arg)
 
 ## `--session`: reads one JSON action per line on stdin and answers each
@@ -1418,11 +1674,23 @@ fn Guard.permits(self, url str) bool
 
 ## Whether `do` sends data: it needs `"confirm":true` to run.
 fn sends(name str) bool
-    name == "submit"
+    name == "submit" or name == "fill" or name == "run"
 
 ## The answer to a `tools/call` request `id` whose result is `text`.
 fn rpc_reply(id str, text str) str
     "\{\"jsonrpc\":\"2.0\",\"id\":{id},\"result\":\{\"content\":[\{\"type\":\"text\",\"text\":{page.quote(text)}}]}}"
+
+## The answer of the `screen` tool (std.screen.2, std.screen.4) over `sc`.
+fn look_answer(sc screen.Screen, a Json) str
+    budget := (a.num("budget") else 0.0).to_int()
+    x := a.num("x")
+    y := a.num("y")
+    if px := x
+        if py := y
+            if rw := a.num("w")
+                return sc.describe(px, py, rw, a.num("h") else 1.0, budget)
+            return sc.what_is_at(px, py)
+    sc.find(a.str("role") else "", a.str("color") else "", a.str("text") else "", budget)
 
 ## One tool call of the `--serve` server: the text it answers with. `g`
 ## refuses sites it doesn't permit, holds an action that sends data until
@@ -1447,7 +1715,17 @@ fn Browser.tool(mut self, mut g Guard, name str, a Json) str
             act("find", a.str("text") else "")
             answer()
         "extract" => pg.text()
-        "screenshot" =>
+        "forms" => forms.schema(doc)
+        "flows" => flows.list_json(
+            flows.load(flows_file),
+            if a.flag("all", false) then "" else host_of(url),
+        )
+        "tables" => extract.tables_json(doc)
+        "reader" => extract.reader_json(doc)
+        "fields" => extract.fields_json(doc, a.str("text") else "")
+        "at" => pg.at_json(a.int("x") else 0, a.int("y") else 0)
+        "where" => pg.where_json(a.str("text") else "")
+        "screenshot" | "screen" =>
             images.prefetch(
                 doc,
                 page.base_of(doc, url),
@@ -1458,6 +1736,8 @@ fn Browser.tool(mut self, mut g Guard, name str, a Json) str
                 mut bits,
             )
             s := gfx.layout_with(doc, url, 960.0, sheet, sizes)
+            if name == "screen"
+                return look_answer(look.of(s, 960.0, 640.0, 0.0), a)
             mut lines := ["canvas {s.bg.to_hex()} height {s.height.round()}"]
             for op in s.ops
                 lines.push(op_line(op))
@@ -1466,7 +1746,7 @@ fn Browser.tool(mut self, mut g Guard, name str, a Json) str
         _ => "unknown tool `{name}`: open, observe, act, find, extract, screenshot or log"
 
 ## The tool list, with `<` and `>` for the braces of the JSON.
-TOOLS_SRC := """[<"name":"open","description":"Open a URL; answers with the page model.","inputSchema":<"type":"object","properties":<"url":<"type":"string">>,"required":["url"]>>,<"name":"observe","description":"The page model: nodes with ids, roles, names and boxes.","inputSchema":<"type":"object","properties":<>>>,<"name":"act","description":"Do one action: follow, click, type, submit, check, select, back, forward, scroll, reload. Give link, id or row (a number) and text where needed.","inputSchema":<"type":"object","properties":<"do":<"type":"string">,"link":<"type":"integer">,"id":<"type":"integer">,"row":<"type":"integer">,"text":<"type":"string">>,"required":["do"]>>,<"name":"find","description":"Scroll to text on the page.","inputSchema":<"type":"object","properties":<"text":<"type":"string">>,"required":["text"]>>,<"name":"extract","description":"The page as plain text.","inputSchema":<"type":"object","properties":<>>>,<"name":"watch","description":"Tell me when the page changes: url (else the live tab), contains (text to wait for), every (seconds).","inputSchema":<"type":"object","properties":<"url":<"type":"string">,"contains":<"type":"string">,"every":<"type":"integer">>>>,<"name":"unwatch","description":"Stop watch id.","inputSchema":<"type":"object","properties":<"id":<"type":"integer">>,"required":["id"]>>,<"name":"watches","description":"The watches in force.","inputSchema":<"type":"object","properties":<>>>,<"name":"events","description":"What the watches saw change since the last call.","inputSchema":<"type":"object","properties":<>>>,<"name":"schedule","description":"Run one tool later: tool, arguments, in (seconds). It follows the same site and confirm rules.","inputSchema":<"type":"object","properties":<"tool":<"type":"string">,"arguments":<"type":"object">,"in":<"type":"integer">>,"required":["tool","in"]>>,<"name":"schedules","description":"The jobs waiting to run.","inputSchema":<"type":"object","properties":<>>>,<"name":"unschedule","description":"Cancel job id.","inputSchema":<"type":"object","properties":<"id":<"type":"integer">>,"required":["id"]>>,<"name":"log","description":"What this session did, one line per call.","inputSchema":<"type":"object","properties":<>>>,<"name":"screenshot","description":"The pixel layout as drawing operations.","inputSchema":<"type":"object","properties":<>>>]"""
+TOOLS_SRC := """[<"name":"open","description":"Open a URL; answers with the page model.","inputSchema":<"type":"object","properties":<"url":<"type":"string">>,"required":["url"]>>,<"name":"observe","description":"The page model: nodes with ids, roles, names and boxes.","inputSchema":<"type":"object","properties":<>>>,<"name":"act","description":"Do one action: follow, click, type, submit, check, select, fill, wait (idle:true, or text to wait for), back, forward, scroll, reload. Give link, id or row (a number) and text where needed.","inputSchema":<"type":"object","properties":<"do":<"type":"string">,"link":<"type":"integer">,"id":<"type":"integer">,"row":<"type":"integer">,"text":<"type":"string">>,"required":["do"]>>,<"name":"find","description":"Scroll to text on the page.","inputSchema":<"type":"object","properties":<"text":<"type":"string">>,"required":["text"]>>,<"name":"extract","description":"The page as plain text.","inputSchema":<"type":"object","properties":<>>>,<"name":"forms","description":"The page's forms as a schema: each field's label, type, name, required, value and options, and the submit buttons. Fill one with act do=fill and fields, an object of label to value; it then submits.","inputSchema":<"type":"object","properties":<>>>,<"name":"tables","description":"The page's tables as JSON: caption, header and rows of cell text.","inputSchema":<"type":"object","properties":<>>>,<"name":"reader","description":"The main content only (navigation, footers and forms dropped) with title and a token count.","inputSchema":<"type":"object","properties":<>>>,<"name":"fields","description":"Values found by label: text is a comma-separated list of labels; each answers its value or null.","inputSchema":<"type":"object","properties":<"text":<"type":"string">>,"required":["text"]>>,<"name":"flows","description":"Saved flows for this site (all:true for every site): named step lists. act do=save text=NAME saves what you did since opening the page; act do=run text=NAME replays it.","inputSchema":<"type":"object","properties":<"all":<"type":"boolean">>>>,<"name":"at","description":"The box under a point of the page model: x is the column, y the row.","inputSchema":<"type":"object","properties":<"x":<"type":"integer">,"y":<"type":"integer">>,"required":["x","y"]>>,<"name":"where","description":"The boxes whose role is the text or whose name contains it, with their positions.","inputSchema":<"type":"object","properties":<"text":<"type":"string">>,"required":["text"]>>,<"name":"watch","description":"Tell me when the page changes: url (else the live tab), contains (text to wait for), every (seconds).","inputSchema":<"type":"object","properties":<"url":<"type":"string">,"contains":<"type":"string">,"every":<"type":"integer">>>>,<"name":"unwatch","description":"Stop watch id.","inputSchema":<"type":"object","properties":<"id":<"type":"integer">>,"required":["id"]>>,<"name":"watches","description":"The watches in force.","inputSchema":<"type":"object","properties":<>>>,<"name":"events","description":"What the watches saw change since the last call.","inputSchema":<"type":"object","properties":<>>>,<"name":"schedule","description":"Run one tool later: tool, arguments, in (seconds). It follows the same site and confirm rules.","inputSchema":<"type":"object","properties":<"tool":<"type":"string">,"arguments":<"type":"object">,"in":<"type":"integer">>,"required":["tool","in"]>>,<"name":"schedules","description":"The jobs waiting to run.","inputSchema":<"type":"object","properties":<>>>,<"name":"unschedule","description":"Cancel job id.","inputSchema":<"type":"object","properties":<"id":<"type":"integer">>,"required":["id"]>>,<"name":"log","description":"What this session did, one line per call.","inputSchema":<"type":"object","properties":<>>>,<"name":"screen","description":"Ask about what is drawn: x,y (what is there), x,y,w,h (a region), role, color or text (find). budget limits tokens.","inputSchema":<"type":"object","properties":<"x":<"type":"number">,"y":<"type":"number">,"w":<"type":"number">,"h":<"type":"number">,"role":<"type":"string">,"color":<"type":"string">,"text":<"type":"string">,"budget":<"type":"integer">>>>,<"name":"screenshot","description":"The pixel layout as drawing operations.","inputSchema":<"type":"object","properties":<>>>]"""
 
 fn tools_json() str
     TOOLS_SRC.replace("<", "\{").replace(">", "}")
@@ -1574,6 +1854,8 @@ struct Gui
     fresh Set[str]
     ## Text widths the host measured, by `gfx.probe_key` (std.app.13).
     meas Map[str, float]
+    ## Whether the node numbers an agent uses are drawn over the page (Cmd-I).
+    ids bool
 
 fn Gui.new(b Browser, w float, h float, cell_w float, cell_h float) Gui
     mut g := Gui(
@@ -1596,6 +1878,7 @@ fn Gui.new(b Browser, w float, h float, cell_w float, cell_h float) Gui
         sent: {},
         fresh: {},
         meas: {},
+        ids: false,
     )
     g.resize(w, h, cell_w, cell_h)
     g
@@ -1717,7 +2000,32 @@ fn address(text str) str
     t := text.trim()
     if t == "" or page.scheme(t) != "" or t.starts_with("/") or fs.exists(t)
         return t
+    if is_query(t)
+        return search_url(t)
     "https://{t}"
+
+## The search engines the address field knows: prefix word, results URL.
+## DuckDuckGo's HTML endpoint is the default because it needs no script.
+SEARCH_ENGINES := [
+    ("ddg", "https://html.duckduckgo.com/html/?q="),
+    ("b", "https://www.bing.com/search?q="),
+    ("y", "https://search.yahoo.com/search?p="),
+    ("g", "https://www.google.com/search?q="),
+]
+
+## Text with a space, or with no dot (and not `localhost`), is a search; a
+## known engine prefix (`b rust`) always is.
+fn is_query(t str) bool
+    if t.contains(" ")
+        return true
+    not t.contains(".") and not t.starts_with("localhost")
+
+## The results URL for a typed query: `ddg|b|y|g words` picks an engine.
+fn search_url(t str) str
+    for e in SEARCH_ENGINES
+        rest := t.strip_prefix("{e.0} ") else continue
+        return "{e.1}{urlencode(rest.trim())}"
+    "{SEARCH_ENGINES[0].1}{urlencode(t)}"
 
 ## The URL field was submitted: opens it.
 fn Gui.open(mut self, text str)
@@ -1809,8 +2117,50 @@ fn Gui.find_text(mut self, needle str)
 ## What the page area shows, as drawing operations.
 fn Gui.display(self) List[draw.Op]
     if pixel
-        return draw.shift(self.marked(), scene.bg, area_w, area_h, top)
-    draw.display_list(b.pg, b.scroll, rows, cols, b.focus, cell_w, cell_h)
+        mut ops := self.marked()
+        if ids
+            ops.extend(id_marks())
+        return draw.shift(ops, scene.bg, area_w, area_h, top)
+    mut ops := draw.display_list(b.pg, b.scroll, rows, cols, b.focus, cell_w, cell_h)
+    if ids
+        ops.extend(id_marks())
+    ops
+
+## One node number as a yellow tag with its digits, its top left corner at (x, y).
+fn id_tag(x float, y float, id int) List[draw.Op]
+    label := "{id}"
+    w := label.chars().len().to_float() * 7.0 + 6.0
+    [draw.Op.Rect(x: x, y: y, w: w, h: 14.0, color: 0xffdd33), draw.Op.Str(
+        x: x + 3.0,
+        y: y + 1.0,
+        text: label,
+        font: "mono",
+        size: 11.0,
+        fg: 0x000000,
+        bold: true,
+        italic: false,
+        underline: false,
+    )]
+
+## The node number of every link and control on the page, as the page model and
+## the agent's actions name them (`Cmd-I` shows them to the person watching).
+fn Gui.id_marks(self) List[draw.Op]
+    mut out := List[draw.Op]()
+    if pixel
+        for h in scene.hits
+            id := if h.node >= 0 then h.node else h.anchor
+            if id >= 0
+                out.extend(id_tag(h.x, h.y - 2.0, id))
+        return out
+    for t in b.pg.targets
+        bx := b.pg.boxes[t]
+        if bx.row >= b.scroll and bx.row < b.scroll + rows
+            out.extend(id_tag(
+                bx.col.to_float() * cell_w,
+                (bx.row - b.scroll).to_float() * cell_h,
+                bx.id,
+            ))
+    out
 
 ## The native window as a `std.app` app (docs/design/garlic-browser.md,
 ## "Native window"): an address bar with back and reload above the page, and
@@ -2120,7 +2470,7 @@ fn Garlic.menu_pick(mut self, r int)
 
 ## A click on the tab strip.
 fn Garlic.strip_click(mut self, ev app.Event)
-    h := tabstrip.hit(ev.x, ev.y, tabs.len(), strip_w, menu_rows().len(), menu_x)
+    h := tabstrip.hit(ev.x, ev.y, tabs.len(), strip_w, theme().flat, menu_rows().len(), menu_x)
     if h.kind == "menu"
         menu_pick(h.k)
         return
@@ -2142,7 +2492,11 @@ fn Garlic.agent_line(self) str
         return ""
     "Agent attached at {where}: {calls} calls so far; {watches.len()} watches, {events.len()} unread changes"
 
-## The tab strip: a canvas of its own (see `tabs`).
+## The look: Safari-style dark.
+fn theme() tabstrip.Theme
+    tabstrip.safari()
+
+## The tab strip: a canvas of its own (see `tabstrip`).
 fn Garlic.strip(self) app.Node
     items := [item(k) for k in 0..tabs.len()]
     rows := menu_rows()
@@ -2150,7 +2504,7 @@ fn Garlic.strip(self) app.Node
         "tabs",
         0.0,
         tabstrip.height(rows.len()),
-        tabstrip.draw(tabstrip.dark(), items, cur, strip_w, rows, menu_x),
+        tabstrip.draw(theme(), items, cur, strip_w, rows, menu_x),
     )
 
 impl app.App for Garlic
@@ -2163,11 +2517,17 @@ impl app.App for Garlic
             "resize" =>
                 if ev.id == "tabs"
                     strip_w = ev.dx
-                else
+                elif ev.id == "page" or ev.id == ""
                     g.resize(ev.dx, ev.dy, ev.cell_w, ev.cell_h)
             "click" =>
                 if ev.id == "tabs"
                     strip_click(ev)
+                elif ev.id == "nav"
+                    match tabstrip.nav_hit(ev.x)
+                        "back" => g.b.go_back()
+                        "forward" => g.b.go_forward()
+                        "reload" => g.b.reload()
+                        _ => menu_tab = -1
                 else
                     menu_tab = -1
                     g.click(ev.x, ev.y)
@@ -2187,6 +2547,8 @@ impl app.App for Garlic
                     g.b.go_back()
                 elif ev.meta and ev.text == "]"
                     g.b.go_forward()
+                elif ev.meta and ev.text == "i"
+                    g.ids = not g.ids
                 elif ev.meta and ev.text == "f"
                     g.b.prompt = Find("")
                 elif ev.meta and ev.text == "t"
@@ -2222,8 +2584,7 @@ impl app.App for Garlic
 
     fn view(self) app.Node
         bar := app.row([
-            app.button("back", "Back"),
-            app.button("reload", "Reload"),
+            app.canvas("nav", tabstrip.NAV_W, tabstrip.NAV_H, tabstrip.nav(theme(), true, true)),
             app.field("url", url_text, "Enter a web address"),
         ])
         ## A canvas of 0 by 0 fills the window; the host reports its size.
@@ -2237,7 +2598,12 @@ impl app.App for Garlic
                 app.button("agent_deny", "Deny"),
             ]))
         rows.push(app.canvas("page", 0.0, 0.0, [to_app(op, g) for op in g.display()]))
-        rows.push(app.label(g.status()))
+        rows.push(app.canvas(
+            "status",
+            0.0,
+            tabstrip.STATUS_H,
+            tabstrip.status(theme(), g.status(), strip_w),
+        ))
         app.column(rows)
 
     fn title(self) str
@@ -2351,11 +2717,16 @@ fn flag(args List[str], name str) str?
     if at + 1 < args.len() then args[at + 1] else none
 
 fn usage()
-    print("usage: ail run tools/garlic/garlic.ail [--width N] [--height N] [--follow N | --find TEXT | --do ACTION:ARG]... [--viewport] [--budget TOKENS] [--diff] [--no-js] [--console] [--print | --json | --links | --session | --pixels-dump [--pixel-width N] | --keys] URL|FILE (options may come before or after it)")
+    print("usage: ail run tools/garlic/garlic.ail [--width N] [--height N] [--follow N | --find TEXT | --do ACTION:ARG]... [--viewport] [--budget TOKENS] [--diff] [--no-js] [--console] [--print | --json | --links | --session | --pixels-dump [--pixel-width N] | --marks FILE.svg [--pixel-width N] | --keys] URL|FILE (options may come before or after it)")
 
 ## Flags that take a value, so the address is the first argument that is
 ## neither a flag nor a value.
 VALUE_FLAGS := {
+    "--marks",
+    "--csv",
+    "--extract",
+    "--at",
+    "--where",
     "--allow",
     "--width",
     "--height",
@@ -2365,6 +2736,17 @@ VALUE_FLAGS := {
     "--budget",
     "--pixel-width",
 }
+
+## The command-line target: words (`"ddg ail language"`) search like the
+## address field; URLs, existing files and anything else stay as given.
+fn cli_target(t str) str
+    if t != ""
+        and page.scheme(t) == ""
+        and not fs.exists(t)
+        and is_query(t)
+        and not t.starts_with("/")
+        return search_url(t)
+    t
 
 fn target_of(args List[str]) str
     mut k := 0
@@ -2432,6 +2814,68 @@ fn pixels_dump(mut b Browser, width float)
             == 0 then "failed" else (if b.bits.contains(at) then "decoded" else "too big to decode")
         print("image {at} {dims[0]}x{dims[1]} {state}")
 
+## Text for an XML attribute or element.
+fn xml_esc(t str) str
+    t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+## `--marks FILE.svg`: the pixel layout as an SVG with every link and control
+## boxed and tagged with the node number the page model and actions use (a
+## set-of-marks picture). Images are drawn as labelled placeholders.
+fn write_marks(mut b Browser, path str, width float) !
+    images.prefetch(
+        b.doc,
+        page.base_of(b.doc, b.url),
+        b.url,
+        b.cj,
+        image_options(),
+        mut b.sizes,
+        mut b.bits,
+    )
+    s := gfx.layout_with(b.doc, b.url, width, b.sheet, b.sizes)
+    fs.write_text(path, marks_svg(s, width))?
+    print("wrote {path}: {s.hits.len()} boxes")
+
+fn marks_svg(s gfx.Scene, width float) str
+    mut out := List[str]()
+    out.push("<svg xmlns='http://www.w3.org/2000/svg' width='{width.round()}' height='{s.height.round()}'>")
+    out.push("<rect width='100%' height='100%' fill='#{s.bg.to_hex().pad_left(6, '0')}'/>")
+    for op in s.ops
+        match op
+            Rect(
+                x,
+                y,
+                w,
+                h,
+                c,
+            ) => out.push("<rect x='{x.round()}' y='{y.round()}' width='{w.round()}' height='{h.round()}' fill='#{c.to_hex().pad_left(6, '0')}'/>")
+            Str(
+                x,
+                y,
+                t,
+                _,
+                size,
+                fg,
+                _,
+                _,
+                _,
+            ) => out.push("<text x='{x.round()}' y='{(y + size).round()}' font-size='{size.round()}' fill='#{fg.to_hex().pad_left(6, '0')}'>{xml_esc(t)}</text>")
+            Pic(
+                x,
+                y,
+                w,
+                h,
+                _,
+            ) => out.push("<rect x='{x.round()}' y='{y.round()}' width='{w.round()}' height='{h.round()}' fill='none' stroke='#888' stroke-dasharray='4'/>")
+            Text(_, _, _, _, _, _, _) => out = out
+    for h in s.hits
+        id := if h.node >= 0 then h.node else h.anchor
+        if id >= 0
+            out.push("<rect x='{h.x.round()}' y='{h.y.round()}' width='{h.w.round()}' height='{h.h.round()}' fill='none' stroke='#e0a800' stroke-width='2'/>")
+            out.push("<rect x='{h.x.round()}' y='{(h.y - 14.0).round()}' width='{"{id}".chars().len() * 8 + 6}' height='14' fill='#ffdd33'/>")
+            out.push("<text x='{(h.x + 3.0).round()}' y='{(h.y - 3.0).round()}' font-size='11' font-weight='bold' fill='#000'>{id}</text>")
+    out.push("</svg>")
+    out.join("\n")
+
 fn main() !
     args := env.args()
     if args.len() > 0 and args[0] == "--bench"
@@ -2450,7 +2894,7 @@ fn main() !
         mut srv := Browser.empty("about:blank", width, height)
         srv.serve((flag(args, "--allow") else "*").split(","))
         return
-    mut b := Browser.new(target_of(args), width, height)
+    mut b := Browser.new(cli_target(target_of(args)), width, height)
     b.viewport_only = args.contains("--viewport")
     b.diff = args.contains("--diff")
     b.budget = (flag(args, "--budget") else "0").to_int() else 0
@@ -2468,12 +2912,36 @@ fn main() !
                 (at + 1).min(spec.chars().len()),
                 spec.chars().len(),
             ))
-    if args.contains("--pixels-dump")
+    if args.contains("--marks")
+        write_marks(
+            mut b,
+            flag(args, "--marks") else "marks.svg",
+            (flag(args, "--pixel-width") else "960").to_float() else 960.0,
+        )?
+    elif args.contains("--pixels-dump")
         pixels_dump(mut b, (flag(args, "--pixel-width") else "960").to_float() else 960.0)
     elif args.contains("--session")
         b.session()
     elif args.contains("--print")
         print(b.pg.text())
+    elif args.contains("--tables")
+        print(extract.tables_json(b.doc))
+    elif args.contains("--csv")
+        print(extract.table_csv(b.doc, (flag(args, "--csv") else "0").to_int() else 0))
+    elif args.contains("--reader")
+        print(extract.reader_json(b.doc))
+    elif args.contains("--extract")
+        print(extract.fields_json(b.doc, flag(args, "--extract") else ""))
+    elif args.contains("--forms")
+        print(forms.schema(b.doc))
+    elif args.contains("--at")
+        xy := (flag(args, "--at") else "0,0").split(",")
+        print(b.pg.at_json(
+            (xy[0].to_int() else 0),
+            if xy.len() > 1 then (xy[1].to_int() else 0) else 0,
+        ))
+    elif args.contains("--where")
+        print(b.pg.where_json(flag(args, "--where") else ""))
     elif args.contains("--json")
         print(b.model())
     elif args.contains("--links")
@@ -2689,15 +3157,9 @@ fn lay(src str, width int) page.Page
     assert_eq(page.resolve("https://a.org", "p"), "https://a.org/p")
     assert_eq(page.resolve("site/index.html", "b.html"), "site/b.html")
 
-## `tools/garlic/testdata`, from the repository root or `bootstrap/`.
+## `tools/garlic/testdata`, from the repository root (the gate's directory).
 fn testdata() str
-    if fs.exists("tools/garlic/testdata")
-        return "{env.cwd()}/tools/garlic/testdata"
-    # From `bootstrap/` (the selftest's directory): the parent, without `..`,
-    # so page addresses compare equal after URL resolution.
-    cwd := env.cwd()
-    up := cwd.rfind("/") else 0
-    "{cwd.slice(0, up)}/tools/garlic/testdata"
+    "{env.cwd()}/tools/garlic/testdata"
 
 @test fn browser_follows_links_and_goes_back()
     dir := testdata()
@@ -2896,6 +3358,14 @@ fn clicked(x float, y float) app.Event
     e.y = y
     e
 
+@test fn resizes_of_the_other_canvases_leave_the_page_layout_alone()
+    b := Browser.new("{testdata()}/index.html", 60, 12)
+    mut a := Garlic.new(b, 960.0, 600.0, 8.0, 16.0)
+    mut e := resized(112.0, 40.0)
+    e.id = "nav"
+    app.script(mut a, [resized(480.0, 96.0), e])
+    assert_eq((a.g.b.width, a.g.b.height), (60, 7))
+
 @test fn the_app_shows_the_page_and_follows_links_by_click()
     b := Browser.new("{testdata()}/index.html", 60, 12)
     mut a := Garlic.new(b, 960.0, 600.0, 8.0, 16.0)
@@ -2903,11 +3373,11 @@ fn clicked(x float, y float) app.Event
     top := outlines[0].split("\n")
     assert_eq(top[0], "column")
     assert(top[1].starts_with("  canvas #tabs"))
-    assert(outlines[0].contains("\n  row\n    [Back] #back"))
+    assert(outlines[0].contains("\n  row\n    canvas #nav"))
     assert(outlines[0].contains("#url"))
     assert(outlines[0].contains("\n  canvas #page"))
     assert(outlines[0].contains("str 0.0,32.0 \"# Garlic\" mono 13.0 dcdcaa"))
-    assert(top[top.len() - 1].starts_with("  \""))
+    assert(outlines[0].contains("\n  canvas #status"))
     link := a.g.b.pg.boxes[a.g.b.pg.links[0]]
     shown := app.script(mut a, [clicked(
         link.col.to_float() * 8.0 + 1.0,
@@ -2917,7 +3387,11 @@ fn clicked(x float, y float) app.Event
     assert(a.url_text.ends_with("second.html"))
     assert(shown[0].contains("<{a.url_text}> #url"))
     assert_eq(a.title(), "Second page - Garlic")
-    app.script(mut a, [app.press("back")])
+    mut back := app.event("click")
+    back.id = "nav"
+    back.x = 20.0
+    back.y = 20.0
+    app.script(mut a, [back])
     assert_eq(a.g.b.pg.title, "Garlic test page")
 
 @test fn the_address_field_opens_urls_and_cmd_l_focuses_it()
@@ -2989,6 +3463,42 @@ fn node_with(b Browser, tag str, attr str, value str) int
     b.act("back", "")
     assert_eq(b.pg.title, "Search form")
 
+@test fn forms_are_listed_as_a_schema_and_filled_by_label()
+    mut b := Browser.new("{testdata()}/form.html", 80, 30)
+    schema := forms.schema(b.doc)
+    assert(schema.contains("\"label\":\"Query\",\"type\":\"text\",\"name\":\"q\""))
+    assert(schema.contains("\"label\":\"Exact\",\"type\":\"checkbox\""))
+    assert(schema.contains("\{\"text\":\"French\",\"value\":\"fr\",\"selected\":false}"))
+    assert(schema.contains("\"label\":\"Search\""))
+    b.act("fill", "\{\"missing\": 1}")
+    assert(b.message.contains("no field is labelled: missing"))
+    assert_eq(b.pg.title, "Search form")
+    assert(b.act("fill", "\{\"query\": \"garlic bread\", \"exact\": true, \"lang\": \"French\"}"))
+    assert_eq(b.pg.title, "Results")
+    assert(b.url.ends_with("/result.html?q=garlic+bread&src=garlic&exact=on&sort=new&lang=fr&note=hi"))
+
+@test fn a_saved_flow_replays_by_label_on_a_fresh_browser()
+    path := "{env.get("TMPDIR") else "/tmp"}/garlic-flow-test-{time.now_ms()}.json"
+    mut b := Browser.new("{testdata()}/form.html", 80, 30)
+    b.flows_file = path
+    b.act("open", "{testdata()}/form.html")
+    b.act("type", "{node_with(b, "input", "id", "q")}=leek")
+    b.act("check", "{node_with(b, "input", "name", "exact")}")
+    b.act("save", "search leek")
+    assert(b.message.starts_with("saved flow `search leek` (3 steps)"))
+    saved := fs.read_text(path) else ""
+    assert(saved.contains("Query") and saved.contains("leek"))
+    mut c := Browser.new("{testdata()}/index.html", 80, 30)
+    c.flows_file = path
+    c.act("run", "search leek")
+    assert_eq(c.message, "ran flow `search leek` (3 steps)")
+    assert(c.pg.text().contains("[leek"))
+    assert(c.pg.text().contains("[x] Exact"))
+    c.act("run", "no such flow")
+    assert(c.message.starts_with("no flow named"))
+    fs.remove(path) else err
+        assert(false)
+
 @test fn enter_in_a_field_types_then_submits()
     mut b := Browser.new("{testdata()}/form.html", 80, 30)
     b.key("tab", false, false)
@@ -3011,6 +3521,31 @@ fn node_with(b Browser, tag str, attr str, value str) int
         ),
         "who=a+b%26c",
     )
+
+@test fn the_address_field_searches_for_words()
+    assert_eq(address("rust lang"), "https://html.duckduckgo.com/html/?q=rust+lang")
+    assert_eq(address("b rust lang"), "https://www.bing.com/search?q=rust+lang")
+    assert_eq(address("y cats"), "https://search.yahoo.com/search?p=cats")
+    assert_eq(address("projects.voltare.us/x"), "https://projects.voltare.us/x")
+
+@test fn the_command_line_searches_for_words_but_keeps_files_and_urls()
+    assert_eq(cli_target("b ail language"), "https://www.bing.com/search?q=ail+language")
+    assert_eq(cli_target("https://example.com/a b"), "https://example.com/a b")
+    assert_eq(cli_target("{testdata()}/index.html"), "{testdata()}/index.html")
+    assert_eq(cli_target("missing.html"), "missing.html")
+
+@test fn marks_box_and_number_every_link_and_control()
+    s := gfx.layout(
+        html.parse("<p><a href=/x>go</a></p><input name=q>"),
+        "file:///t.html",
+        400.0,
+        css.parse("", 0),
+    )
+    doc := marks_svg(s, 400.0)
+    assert(doc.starts_with("<svg "))
+    assert(doc.contains("stroke='#e0a800'"))
+    assert(doc.contains("go</text>"))
+    assert_eq(xml_esc("a<b&\"c"), "a&lt;b&amp;&quot;c")
 
 @test fn urlencode_escapes_utf8()
     assert_eq(urlencode("a b~é€/"), "a+b%7E%C3%A9%E2%82%AC%2F")
@@ -3080,7 +3615,7 @@ fn node_with(b Browser, tag str, attr str, value str) int
     assert_eq(b.answer().split("\"id\":").len(), 1)
 
 @test fn budgets_keep_the_viewport_then_key_nodes()
-    pg := Browser.new("/dev/null", 60, 4).pg
+    pg := Browser.empty("", 60, 4).pg
     assert(pg.to_json_budget(0, 4, 400).contains("\"omitted\":0"))
     ## A fixed URL, so the budget doesn't depend on where the checkout is.
     index := fs.read_text("{testdata()}/index.html") else ""
@@ -3290,6 +3825,16 @@ fn bench(args List[str])
             draw.Op.Str(_, _, _, _, _, _, _, _, _) => 0
     assert_eq(got, [[37.0, 29.0], [74.0, 58.0]])
 
+@test fn the_screen_model_names_links_and_colours()
+    d := html.parse("<p><a href=\"/pay\">Pay now</a></p><button>Go</button>")
+    scene := gfx.layout_with(d, "https://shop.example/", 400.0, css.parse("", 0), {})
+    sc := look.of(scene, 400.0, 300.0, 0.0)
+    found := sc.find("link", "", "pay", 0)
+    assert(found.contains("link 'Pay now', blue"))
+    assert(found.contains("links to https://shop.example/pay"))
+    assert(sc.find("control", "", "", 0).contains("'Go'"))
+    assert_eq(sc.find("link", "", "nothing here", 0), "nothing")
+
 @test fn back_and_forward_show_kept_pages_without_a_fetch()
     mut b := Browser.new("{testdata()}/index.html", 60, 12)
     first := b.url
@@ -3339,19 +3884,14 @@ fn bench(args List[str])
             _ => out = out
     out
 
+## Compares a native Garlic with the interpreter's layout. A native build of
+## Garlic takes minutes, far past the test runner's 30 s per test, so the test
+## only runs when the gate has built one and names it in `GARLIC_NATIVE_EXE`
+## (`./ail build tools/garlic/garlic.ail -o EXE`).
 @test fn the_native_build_draws_the_same_pixels_as_the_interpreter()
-    root := testdata().replace("/tools/garlic/testdata", "")
-    exe := "{env.cwd()}/garlic-native-test"
-    built := proc.run(
-        "{root}/ail",
-        ["build", "{root}/tools/garlic/garlic.ail", "-o", exe],
-        none,
-        600000,
-    )?
-    assert(built.ok())
+    exe := env.get("GARLIC_NATIVE_EXE") else return
     html_file := "{testdata()}/voltare-full.html"
-    native := proc.run(exe, [html_file, "--pixels-dump"], none, 60000)?
-    fs.remove(exe) else return
+    native := proc.run(exe, [html_file, "--pixels-dump"], none, 25000)?
     b := Browser.new(html_file, 100, 32)
     mut want := List[str]()
     s := gfx.layout(b.doc, b.url, 960.0, b.sheet)
@@ -3490,6 +4030,38 @@ fn flat(s gfx.Scene) List[str]
     g.key("enter", false, false)
     assert(g.b.url.contains("q=hi"))
 
+@test fn at_and_where_ground_a_point_and_a_word_in_the_model()
+    b := Browser.new("{testdata()}/index.html", 60, 12)
+    link := b.pg.boxes[b.pg.links[0]]
+    got := b.pg.at_json(link.col + 1, link.row)
+    assert(got.contains("\"role\":\"link\""))
+    assert(got.contains("\"link\":1"))
+    assert_eq(b.pg.at_json(59, 11), "null")
+    found := b.pg.where_json("second")
+    assert(found.starts_with("\{\"matches\":[\{"))
+    assert(found.contains("\"role\":\"link\""))
+    assert_eq(b.pg.where_json("no such thing here"), "\{\"matches\":[]}")
+    assert(b.pg.where_json("LINK").contains("\"role\":\"link\""))
+
+@test fn the_id_overlay_tags_links_and_controls_with_their_node_numbers()
+    b := Browser.new("{testdata()}/form.html", 80, 30)
+    mut g := Gui.new(b, 640.0, 400.0, 8.0, 16.0)
+    plain := g.display().len()
+    g.ids = true
+    assert(g.display().len() > plain)
+    q := node_with(b, "input", "id", "q")
+    assert(g.id_marks().len() >= 2 * b.pg.targets.len())
+    mut p := Gui.new(Browser.new("{testdata()}/index.html", 60, 12), 640.0, 400.0, 8.0, 16.0)
+    p.pixel = true
+    p.refresh()
+    link := p.b.pg.boxes[p.b.pg.links[0]]
+    mut seen := false
+    for h in p.scene.hits
+        if h.anchor == link.id
+            seen = true
+    assert(seen)
+    assert(q >= 0)
+
 @test fn tabs_keep_their_own_pages_and_switch_back()
     b := Browser.new("{testdata()}/index.html", 60, 12)
     mut a := Garlic.new(b, 600.0, 300.0, 7.5, 15.0)
@@ -3532,6 +4104,14 @@ fn flat(s gfx.Scene) List[str]
     assert_eq(page.referrer("file:///tmp/p.html", "https://b.com/"), "")
     assert_eq(page.referrer("", "https://b.com/"), "")
 
+@test fn a_file_url_names_a_path_also_on_a_windows_drive()
+    assert_eq(page.file_path("file:///tmp/p.html"), "/tmp/p.html")
+    assert_eq(page.file_path("file:///C:/Users/a/p.html"), "C:/Users/a/p.html")
+    assert_eq(page.file_path("file://D:/x.html"), "D:/x.html")
+    assert_eq(page.file_path("/tmp/p.html"), "/tmp/p.html")
+    assert_eq(page.file_path("file:///tmp/a:b.html"), "/tmp/a:b.html")
+    assert_eq(page.resolve("file:///C:/site/a.html", "b.png"), "file:///C:/site/b.png")
+
 @test fn base_href_changes_where_relative_links_start()
     d := html.parse("<base href=/other/><a href=x.html>x</a><img src=p.png>")
     assert_eq(page.base_of(d, "https://a.test/dir/page.html"), "https://a.test/other/")
@@ -3564,6 +4144,20 @@ fn flat(s gfx.Scene) List[str]
     b.act("click", "{node_with(b, "button", "id", "go")}")
     assert_eq(b.pg.title, "Events test")
     assert(b.pg.text().contains("submit stopped for leek"))
+
+@test fn wait_runs_the_pages_timers_and_the_model_lists_its_console()
+    mut b := Browser.new("{testdata()}/wait.html", 80, 30)
+    assert(b.pg.text().contains("starting"))
+    assert(b.model().contains("\"console\":[\"loaded\"]"))
+    assert(b.act("wait", "text=all done"))
+    assert(b.pg.text().contains("all done"))
+    assert_eq(b.message, "found `all done`")
+    assert(b.model().contains("\"console\":[\"loaded\",\"half\"]"))
+    assert(b.act("wait", "idle"))
+    assert_eq(b.message, "idle")
+    mut c := Browser.new("{testdata()}/wait.html", 80, 30)
+    c.act("wait", "text=never shown")
+    assert_eq(c.message, "`never shown` did not appear")
 
 @test fn an_uncancelled_script_form_still_submits()
     mut b := Browser.new("{testdata()}/script.html", 80, 30)
@@ -3620,6 +4214,11 @@ fn flat(s gfx.Scene) List[str]
     )
     assert(flat(s).contains("below@0,84"))
 
+## A path as it can sit inside a JSON string: Windows backslashes become
+## slashes, which every Garlic file open accepts.
+fn fwd_slashes(p str) str
+    p.replace("\\", "/")
+
 @test fn serve_answers_mcp_requests()
     mut b := Browser.empty("about:blank", 80, 24)
     mut g := Guard(allow: ["*"], log: [], fixed: [], ok_once: false)
@@ -3633,7 +4232,7 @@ fn flat(s gfx.Scene) List[str]
     )
     call := b.rpc(
         mut g,
-        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{testdata()}/form.html\"}}}",
+        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{fwd_slashes(testdata())}/form.html\"}}}",
     )
     assert(call.contains("\"content\""))
     assert(call.contains("textbox"))
@@ -3650,7 +4249,7 @@ fn flat(s gfx.Scene) List[str]
     mut open := Guard(allow: ["*"], log: [], fixed: [], ok_once: false)
     b.rpc(
         mut open,
-        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{testdata()}/form.html\"}}}",
+        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{fwd_slashes(testdata())}/form.html\"}}}",
     )
     held := b.rpc(
         mut open,
@@ -3841,13 +4440,13 @@ fn flat(s gfx.Scene) List[str]
     a.new_tab()
     mut ev := app.event("click")
     ev.id = "tabs"
-    ev.x = tabstrip.tab_x(1, 3, a.strip_w) + 20.0
+    ev.x = tabstrip.tab_x(1, 3, a.strip_w, true) + 20.0
     ev.y = 20.0
     ev.text = "other"
     a.update(ev)
     assert_eq(a.tabs.len(), 2)
     ev.text = "right"
-    ev.x = tabstrip.tab_x(0, 2, a.strip_w) + 20.0
+    ev.x = tabstrip.tab_x(0, 2, a.strip_w, true) + 20.0
     a.update(ev)
     assert_eq(a.menu_tab, 0)
     ev.text = "left"

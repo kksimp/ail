@@ -7,25 +7,31 @@ fn main() ! [clock env fail fs io proc]
     fails with JsonError | fs.IoError
 BUILD_USAGE := ...
 fn positive(v str) bool
-fn host_target() str [io proc]
+fn fwd(p str) str [env]
+fn host_target() str [env io proc]
 fn build_cli(rest List[str]) [clock env fs io proc]
 fn compiler_dir() str [env io]
-fn compile_to(file str, out_arg str, target_arg str, ms str, mb str) [clock env fs io proc]
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool) [clock env fs io proc]
 fn cached_copy(exe str, out str, target str) bool [fs io proc]
-fn compile_fresh(file str, out str, target str, ms str, mb str) [clock env fs io proc]
+fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool) [clock env fs io proc]
+fn finish_build(m mir.Module, file str, out str, target str) [fs io proc]
 fn check_dump(path str, many bool) ! [env fail fs io]
     fails with JsonError | fs.IoError
-fn runtime(dir str, path str) !ast.Program [fail fs io]
+fn runtime(dir str, path str) !ast.Program [env fail fs io]
     fails with fs.IoError
-fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [fail fs io]
+fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [env fail fs io]
     fails with fs.IoError
 fn source_text(path str) !str [fail fs io]
     fails with fs.IoError
-fn imported_text(file str, text str, std str) str [fs io]
+fn imported_text(file_arg str, text str, std str) str [env fs io]
 fn executable_hex(m mir.Module, path str, target str) str [io]
 fn runtime_syntax(path str, text str) [io]
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
+fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module [clock env fail fs io proc]
+    fails with fs.IoError
+fn parallel_on() bool [env]
+fn proven_loop_keys(file str, std str) Set[str] [clock env fs io proc]
 fn mentions_prelude(srcs List[mir.Source]) bool
 fn std_file(std str, imp str) str
 fn derive_builtin(srcs List[mir.Source]) List[mir.Source] [io]
@@ -52,16 +58,18 @@ CACHE_KEEP := 64
 fn cache_dir() str [env]
 fn tree_stamp(tag str, root str) str [fs io]
 fn sched_points() bool [env]
-fn cache_key(file str, target str, ms str, mb str) str [env fs io]
+fn exe_ext(target str) str
+fn cache_key(file str, target str, ms str, mb str, attach bool) str [env fs io]
 fn cache_trim(dir str) [fs io proc]
 fn cli_prepare(file str) str [clock env fs io proc]
-fn cli_prepare_with(file str, ms str, mb str) str [clock env fs io proc]
+fn cli_prepare_with(file str, ms str, mb str, attach bool) str [clock env fs io proc]
 fn cli_prepare_cmd(rest List[str]) [clock env fs io proc]
 fn cli_run(rest List[str]) [clock env fs io proc]
 fn chop(s str) str
 fn load_dump(files List[str]) [clock env fs io proc]
 fn check_cmd(rest List[str]) [clock env fs io proc]
+fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1053); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1218); dropped: private items, doc comments

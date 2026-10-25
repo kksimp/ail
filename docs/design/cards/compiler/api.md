@@ -6,8 +6,21 @@ pub fn api.ask_command(args List[str], std str) int [clock env fs io proc]  ## `
 pub fn api.estimate_tokens(s str) int  ## A cheap token estimate (api.card.3): a run of letters or digits costs one
 pub fn api.card_command(rest List[str], std str) int [clock env fs io proc]  ## `ail api --card ...`; the exit status. `rest` holds the arguments, `--card`
 pub fn api.public_decls(prog ast.Program, facts api.Facts, whole bool) List[api.Decl]  ## The public declarations of `prog` (api.diff.2).
-pub fn api.render_diff(old str, new str, a List[api.Decl], b List[api.Decl], json bool) (str, int)  ## The report of `a` (OLD) against `b` (NEW), and how many declarations
+pub fn api.render_diff(old str, new str, a List[api.Decl], b List[api.Decl], json bool, budget int) (str, int)  ## The report of `a` (OLD) against `b` (NEW), and how many declarations
 pub fn api.diff_command(args List[str], std str) int [clock env fs io proc]  ## `ail api --diff ...` with its arguments after `--diff`; the exit status:
+pub fn api.errors_command(rest List[str], std str) int [clock env fs io proc]
+pub struct api.Impact  ## What an edit touches.
+    pub changed List[str]  ## Declarations whose text changed, or that are new.
+    pub affected List[str]  ## Functions that are, or reach, a changed declaration.
+    pub tests List[str]  ## The affected `@test` functions, in source order.
+    pub effects List[api.EffectChange]  ## Functions whose effects differ, with the effects before and after.
+pub struct api.EffectChange
+    pub id str
+    pub old List[str]
+    pub new List[str]
+pub fn api.impact_between(old load.Loaded, old_analysis check.Analysis, new load.Loaded, new_analysis check.Analysis) api.Impact  ## What changed between `old` and `new` can reach (api.impact.1-3).
+pub fn api.impact_text(i api.Impact) str  ## The impact as text lines (api.impact.4).
+pub fn api.impact_json(i api.Impact) str  ## The impact as a JSON object (api.impact.4).
 pub api.API_VERSION := 1  ## The version of the output shape (api.out.1).
 pub enum api.Form  ## How the outline is written.
     Plain  ## JSON on one line, the default.
@@ -20,8 +33,8 @@ pub struct api.Facts  ## What the checker knows about the program, besides its d
     pub weak_symbols Map[int, str]
 pub fn api.outline(prog ast.Program, facts api.Facts, path str, form api.Form, symbols bool) str  ## The outline of `prog` for the file `path`, in `form`; `symbols` and
 pub fn api.outline_expanded(prog ast.Program, facts api.Facts, texts List[str], path str, form api.Form, symbols bool) str  ## `outline` with `--expanded` (ct.gen.4); `texts` are the program's file sources.
-pub fn api.package_outline(prog ast.Program, facts api.Facts, dir str, form api.Form) str  ## The outline of the package `dir` in `form`.
-pub fn api.package_command(dir str, form api.Form, std str) int [clock env fs io proc]  ## `ail api DIR`; the exit status. Doc comments are attached file by file.
+pub fn api.package_outline(prog ast.Program, facts api.Facts, dir str, form api.Form, symbols bool) str  ## The outline of the package `dir` in `form`.
+pub fn api.package_command(dir str, form api.Form, std str, symbols bool) int [clock env fs io proc]  ## `ail api DIR`; the exit status. Doc comments are attached file by file.
 pub fn api.query_command(rest List[str], std str) int [clock env fs io proc]  ## `ail api --locals|--type|--refs [DIR] FILE LINE COL [--pretty]`; the exit
 pub struct api.Ref  ## One use: the id of the declaration and where the name is written.
     pub id str
@@ -33,6 +46,7 @@ pub struct api.Found  ## Every reference of `prog` unsorted, without the prelude
     pub refs List[api.Ref]
     pub names List[(ast.Pos, str)]
 pub fn api.collect_refs(prog ast.Program, symbols Map[int, str], weak Map[int, str]) api.Found
+pub fn api.semantic_diff_command(args List[str], std str) int [clock env fs io proc]  ## `ail diff ARGS`; the exit status: 0 when nothing changed, 1 when something did, 2 for an error.
 ```
 
-trimmed to fit 2000 tokens (~1033); dropped: private items
+trimmed to fit 2000 tokens (~1412); dropped: private items

@@ -1,6 +1,7 @@
 # 0087. The bootstrap uses a pinned Rust toolchain installed privately inside the repository
 
 - **Status:** Accepted
+- **Amended by:** [ADR 0904](0904-rust-bootstrap-deleted.md)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 23 — Compiler architecture (bootstrap); project tooling

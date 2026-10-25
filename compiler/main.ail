@@ -30,7 +30,6 @@ use check
 use doc
 use edit
 use fix
-use fixrun
 use fmt
 use derive
 use explain
@@ -38,26 +37,22 @@ use load
 use mir
 use obj
 use pkg
+use scaffold
 use syntax
+use watch
 use x64
 
 fn main() !
     args := env.args()
-    if args.len() == 0 or (args.len() < 2 and args[0] != "explain")
+    if args.len() == 0 or (args.len() < 2 and args[0] != "explain" and args[0] != "diff")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
         io.exit(2)
     match args[0]
         "check" =>
             for path in args[1..]
                 check_dump(path, args.len() > 2)?
-        "fixes" =>
-            # Test support: the unsettled edits in args[2] settled against args[1].
-            print(fixrun.settled(fs.read_text(args[1])?, fs.read_text(args[2])?))
         "fix" =>
             io.exit(load.fix_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
-        "fixrun" =>
-            # Test support: `ail fix` with the Rust tool as the checker (tools/fix/parity.py).
-            io.exit(fixrun.run_with_rust(args[1..]))
         "fmt" =>
             io.exit(fmt.command(args[1..]))
         "edit" =>
@@ -100,6 +95,8 @@ fn main() !
                 print(aug.origin)
         "explain" =>
             io.exit(explain.command(args[1..]))
+        "new" =>
+            io.exit(scaffold.command(args[1..]))
         "tokens" =>
             for path in args[1..]
                 if args.len() > 2
@@ -139,8 +136,15 @@ fn main() !
             io.exit(pkg.command(args[1..]))
         "effects" =>
             io.exit(load.effects_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
+        "check-errors" =>
+            io.exit(api.errors_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "api" =>
             api_cmd(args[1..])
+        "diff" =>
+            io.exit(api.semantic_diff_command(args[1..], path.join(
+                path.dir(compiler_dir()),
+                "std",
+            )))
         "ask" =>
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
@@ -175,15 +179,25 @@ fn main() !
             io.eprint("unknown command {args[0]}")
             io.exit(2)
 
-BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--timeout MS] [--max-memory MB]"
+BUILD_USAGE := "usage: ail build FILE [-o OUT] [--target x86_64-linux|aarch64-linux|aarch64-macos] [--no-cache] [--attach] [--timeout MS] [--max-memory MB]"
 
 ## A positive whole number (run.limit.4).
 fn positive(v str) bool
     n := v.to_int() else return false
     n > 0
 
+## `p` with `/` for each `\\` on Windows, where the compiler splits paths on
+## `/` and the shell hands it backslashes.
+fn fwd(p str) str
+    if (env.get("OS") else "") == "Windows_NT"
+        return p.replace("\\", "/")
+    p
+
 ## The target `ail build` makes by default: the host's, from `uname`.
 fn host_target() str
+    # Windows sets `OS`; it has no `uname`.
+    if (env.get("OS") else "") == "Windows_NT"
+        return "x86_64-windows"
     out := proc.run("uname", ["-sm"]) else
         return "x86_64-linux"
     match out.out.trim()
@@ -203,6 +217,7 @@ fn build_cli(rest List[str])
     mut ms := "0"
     mut mb := "0"
     mut cached := true
+    mut attach := false
     mut i := 0
     while i < rest.len()
         a := rest[i]
@@ -224,6 +239,8 @@ fn build_cli(rest List[str])
             i += 1
         elif a == "--no-cache"
             cached = false
+        elif a == "--attach"
+            attach = true
         elif file == "" and not a.starts_with("-")
             file = a
         else
@@ -234,7 +251,7 @@ fn build_cli(rest List[str])
         io.eprint(BUILD_USAGE)
         io.exit(2)
     if cached
-        compile_to(file, out, target, ms, mb)
+        compile_to(file, out, target, ms, mb, attach)
     else
         compile_fresh(
             file,
@@ -242,6 +259,7 @@ fn build_cli(rest List[str])
             if target == "" then host_target() else target,
             ms,
             mb,
+            attach,
         )
 
 ## The `compiler/` directory: `AIL_COMPILER`, or `compiler` under `AIL_ROOT`.
@@ -257,17 +275,17 @@ fn compiler_dir() str
 
 ## Build `file` for `target` (the host's when empty) into `out` (by default
 ## the file's name in the current directory) with the run limits `ms` and `mb`.
-fn compile_to(file str, out_arg str, target_arg str, ms str, mb str)
+fn compile_to(file str, out_arg str, target_arg str, ms str, mb str, attach bool)
     target := if target_arg == "" then host_target() else target_arg
     out := if out_arg == "" then path.stem(file) else out_arg
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb))
+    exe := path.join(dir, "{cache_key(file, target, ms, mb, attach)}{exe_ext(target)}")
     if cached_copy(exe, out, target)
         return
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb)
+    compile_fresh(file, tmp, target, ms, mb, attach)
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -286,17 +304,30 @@ fn cached_copy(exe str, out str, target str) bool
     true
 
 ## `compile_to` without the cache.
-fn compile_fresh(file str, out str, target str, ms str, mb str)
+fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
     dir := compiler_dir()
     rt := runtime_with(path.join(dir, "rt/native"), file, ms, mb) else err
         io.eprint("error[native.build.3]: can't read the runtime: {err}")
         io.exit(2)
         return
     std := path.join(path.dir(dir), "std")
+    over := if attach then watch.shim(fs.read_text(file) else "") else ""
+    if over != ""
+        # A shim that doesn't build leaves the program as written, with a warning.
+        shimmed := lower_file_with(file, rt, std, over) else shim_err
+            io.eprint("warning[attach.run.2]: attach is off for this run: {shim_err}")
+            compile_fresh(file, out, target, ms, mb, false)
+            return
+        finish_build(shimmed, file, out, target)
+        return
     m := lower_file(file, rt, std) else err
         io.eprint("error[native.build.3]: {err}")
         io.exit(1)
         return
+    finish_build(m, file, out, target)
+
+## The executable of `m` for `target`, written to `out`.
+fn finish_build(m mir.Module, file str, out str, target str)
     hex := executable_hex(m, file, target)
     exe := bytes.from_hex(hex.replace("\n", "")) else
         io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
@@ -352,7 +383,8 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
     src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
-    tasks := mir.uses_tasks(src) or mentions_ui(src)
+    # `--parallel` may put any loop on the pool (conc.par.8).
+    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on()
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -389,7 +421,8 @@ fn source_text(path str) !str
 ## imports, transitively, so the runtime choice sees a task or a channel in a
 ## module as well as in the main file. A module that can't be read is skipped
 ## (the build reports it).
-fn imported_text(file str, text str, std str) str
+fn imported_text(file_arg str, text str, std str) str
+    file := fwd(file_arg)
     mut root := "."
     if file.ends_with(".ail")
         cut := file.split("/")
@@ -454,12 +487,24 @@ fn runtime_syntax(path str, text str)
 ## outside the native subset are printed as `ail check` prints
 ## diagnostics, and the run fails.
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module
+    lower_file_with(path, rt, std, "")
+
+## `lower_file` with the root file's text given when `over` isn't empty (the
+## attach shim).
+fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
+    path := fwd(path_arg)
     mut srcs := List[mir.Source]()
     mut root := path
     if path.ends_with(".ail")
         cut := path.split("/")
         root = if cut.len() > 1 then cut[..cut.len() - 1].join("/") else "."
-        srcs.push(parse_source("", path)?)
+        if over != ""
+            mut names := prelude_generic_names()
+            for n in syntax.generic_names(syntax.lex(over).tokens).sorted()
+                names.add(n)
+            srcs.push(parse_with("", path, over, names))
+        else
+            srcs.push(parse_source("", path)?)
     else
         mut files := List[str]()
         for name in fs.list_dir(path)?.sorted()
@@ -537,7 +582,7 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
     # for the programs that name them (json.prelude.1, ADR 0808).
     if mentions_prelude(srcs)
         srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
-    m := mir.lower_package_with(srcs, rt, lazy) else err
+    m := mir.lower_package_par(srcs, rt, lazy, proven_loop_keys(path, std)) else err
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -557,6 +602,27 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module
         )
     m
 
+## Whether `ail run --parallel` asked for the independent loops on the pool
+## (conc.par.8); `--deterministic` keeps every loop on one thread (conc.par.9).
+fn parallel_on() bool
+    on := env.get("AIL_PARALLEL") else ""
+    det := env.get("AIL_DETERMINISTIC") else ""
+    on == "1" and det == ""
+
+## The `file:line:col` of every loop of the program that `conc.par.2-4`
+## prove independent, when `--parallel` is on.
+fn proven_loop_keys(file str, std str) Set[str]
+    mut keys := Set[str]()
+    if not parallel_on()
+        return keys
+    loaded := load.load(file, std) else return keys
+    if loaded.diags.len() > 0
+        return keys
+    for at in check.proven_loops(loaded.program)
+        found := load.locate(loaded.program.files, at)
+        keys.add("{found.0}:{found.1.line}:{found.1.col}")
+    keys
+
 ## Whether a source names a module of the prelude written in AIL: the test
 ## `ail build` makes before it adds the embedded prelude.
 fn mentions_prelude(srcs List[mir.Source]) bool
@@ -564,7 +630,12 @@ fn mentions_prelude(srcs List[mir.Source]) bool
         if s.text.contains("json") or s.text.contains("Json") or s.text.contains("Default")
             return true
         # A derive generator reads a `TypeInfo` (refl.info.1).
-        if s.text.contains("@derive") or s.text.contains("TypeInfo") or s.text.contains("FromArgs")
+        if s.text.contains("@derive")
+            or s.text.contains("TypeInfo")
+            or s.text.contains("FieldInfo")
+            or s.text.contains("VariantInfo")
+            or s.text.contains("DeriveError")
+            or s.text.contains("FromArgs")
             return true
     false
 
@@ -908,16 +979,26 @@ fn sched_points() bool
     s := env.get("AIL_SCHEDULE") else ""
     s.starts_with("random")
 
+## Windows runs only files named `.exe`.
+fn exe_ext(target str) str
+    if target.ends_with("windows")
+        return ".exe"
+    ""
+
 ## The key of building `file` for `target`: everything that decides the
 ## executable's bytes.
-fn cache_key(file str, target str, ms str, mb str) str
+fn cache_key(file str, target str, ms str, mb str, attach bool) str
     dir := compiler_dir()
     root := path.dir(file)
+    # `ail.lock` names the commit of every git dependency, whose files live in the cache outside `root`.
+    # (`file` may be the package directory itself.)
+    lock := "{fs.read_text(path.join(root, "ail.lock")) else ""}{fs.read_text(path.join(file, "ail.lock")) else ""}"
     std := path.join(path.dir(dir), "std")
     parts := [
-        "ail-native-cache-2 {target} {ms} {mb} {file} {sched_points()} {env.get("AIL_INSTRUMENT") else ""}",
+        "ail-native-cache-3 {target} {ms} {mb} {attach} {file} {sched_points()} {parallel_on()} {env.get("AIL_INSTRUMENT") else ""} {env.get("AIL_OPT_OFF") else ""}",
         tree_stamp("backend", dir),
         tree_stamp("program", root),
+        "lock {hash.sha256(lock)}",
         tree_stamp("std", std),
     ]
     hash.sha256(parts.join("\n"))
@@ -936,19 +1017,19 @@ fn cache_trim(dir str)
 
 ## The cached executable of `file` for the host, built first when missing.
 fn cli_prepare(file str) str
-    cli_prepare_with(file, "0", "0")
+    cli_prepare_with(file, "0", "0", false)
 
 ## `cli_prepare` with the run limits baked in (`--timeout MS`, `--max-memory MB`).
-fn cli_prepare_with(file str, ms str, mb str) str
+fn cli_prepare_with(file str, ms str, mb str, attach bool) str
     target := host_target()
     dir := cache_dir()
-    exe := path.join(dir, cache_key(file, target, ms, mb))
+    exe := path.join(dir, "{cache_key(file, target, ms, mb, attach)}{exe_ext(target)}")
     if fs.exists(exe)
         return exe
     fs.make_dir(dir) else err
         io.eprint("error[native.build.5]: can't make {dir}")
     tmp := "{exe}.{time.now_ms()}.tmp"
-    compile_fresh(file, tmp, target, ms, mb)
+    compile_fresh(file, tmp, target, ms, mb, attach)
     fs.rename(tmp, exe) else err
         io.eprint("error[native.build.5]: can't store {exe}")
         io.exit(2)
@@ -956,9 +1037,10 @@ fn cli_prepare_with(file str, ms str, mb str) str
     exe
 
 fn cli_prepare_cmd(rest List[str])
-    usage := "usage: ail prepare [--timeout MS] [--max-memory MB] FILE"
+    usage := "usage: ail prepare [--no-attach] [--timeout MS] [--max-memory MB] FILE"
     mut ms := "0"
     mut mb := "0"
+    mut attach := true
     mut file := ""
     mut i := 0
     while i < rest.len()
@@ -970,6 +1052,8 @@ fn cli_prepare_cmd(rest List[str])
         elif a == "--max-memory" and has and positive(rest[i + 1])
             mb = rest[i + 1]
             i += 1
+        elif a == "--no-attach"
+            attach = false
         elif file == "" and not a.starts_with("-")
             file = a
         else
@@ -979,15 +1063,21 @@ fn cli_prepare_cmd(rest List[str])
     if file == ""
         io.eprint(usage)
         io.exit(2)
-    print(cli_prepare_with(file, ms, mb))
+    print(cli_prepare_with(file, ms, mb, attach))
 
 ## `run FILE [ARGS...]`: the program's output and exit status are passed on.
 fn cli_run(rest List[str])
     if rest.len() < 1
         io.eprint("usage: ail run FILE [ARGS...]")
         io.exit(2)
-    exe := cli_prepare(rest[0])
-    out := proc.run(exe, rest[1..]) else err
+    # attach.run.1: on by default for `ail run`; `--no-attach` turns it off.
+    attach := rest[0] != "--no-attach"
+    args := if attach then rest else rest[1..]
+    if args.len() < 1
+        io.eprint("usage: ail run [--no-attach] FILE [ARGS...]")
+        io.exit(2)
+    exe := cli_prepare_with(args[0], "0", "0", attach)
+    out := proc.run(exe, args[1..]) else err
         io.eprint("error[native.build.3]: can't start {exe}: {err}")
         io.exit(2)
         return
@@ -1021,11 +1111,37 @@ fn load_dump(files List[str])
 ## diagnostics go to stderr as `ail check` prints them; the exit status is 2
 ## when the program is rejected.
 fn check_cmd(rest List[str])
-    json := rest.contains("--json")
-    driver := rest.contains("--unsafe") and rest.contains("driver")
-    paths := [a for a in rest if not a.starts_with("--") and (a != "driver" or not driver)]
+    usage := "usage: ail check [--json] [--deny LIST] [--deterministic] FILE|DIR"
+    mut json := false
+    mut driver := false
+    mut deny := List[str]()
+    mut paths := List[str]()
+    mut i := 0
+    while i < rest.len()
+        a := rest[i]
+        has := i + 1 < rest.len()
+        if a == "--json"
+            json = true
+        elif a == "--unsafe" and has and rest[i + 1] == "driver"
+            driver = true
+            i += 1
+        elif a == "--deterministic"
+            deny.extend(check.deterministic_deny())
+        elif a == "--deny" and has
+            parsed := check.parse_deny(rest[i + 1])
+            if parsed.1 != ""
+                io.eprint("error: {parsed.1}")
+                io.exit(2)
+            deny.extend(parsed.0)
+            i += 1
+        elif not a.starts_with("--")
+            paths.push(a)
+        else
+            io.eprint(usage)
+            io.exit(2)
+        i += 1
     if paths.len() != 1
-        io.eprint("usage: ail check [--json] FILE|DIR")
+        io.eprint(usage)
         io.exit(2)
     std := path.join(path.dir(compiler_dir()), "std")
     mut loaded := load.load(paths[0], std) else err
@@ -1042,7 +1158,10 @@ fn check_cmd(rest List[str])
         if driver
             # unsafe.hw.1: `--unsafe driver` lets the root package reach hardware.
             program.driver_allowed.push("")
-        found = [load.shown_check(d) for d in check.check_program(program).diags]
+        found = [
+            load.shown_check(d)
+            for d in check.analyze_denying(program, false, deny).report.diags
+        ]
     if found.len() > 0
         io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
     for d in found
@@ -1052,8 +1171,46 @@ fn check_cmd(rest List[str])
 ## `api [--outline] FILE [--text | --pretty]`: the outline of one file
 ## (api.out.1-5). `--symbols`, `--expanded`, packages and the queries stay
 ## with the Rust `ail api` for now.
+## `ail api --tokens FILE`, `--ast FILE` and `--ast --program FILE|DIR` (api.tok.1, api.ast.1-3):
+## the lexer's tokens, the parser's tree and the loaded program.
+fn api_syntax(rest List[str])
+    usage := "usage: ail api (--tokens | --ast) FILE\n       ail api --ast --program DIR|FILE"
+    tree := rest.contains("--ast")
+    whole := rest.contains("--program")
+    files := [a for a in rest if not a.starts_with("--")]
+    mut known := true
+    for a in rest
+        if a.starts_with("--") and a != "--ast" and a != "--tokens" and a != "--program"
+            known = false
+    if files.len() != 1 or not known or (whole and not tree)
+        io.eprint(usage)
+        io.exit(2)
+    file := files[0]
+    if whole
+        std := path.join(path.dir(compiler_dir()), "std")
+        loaded := load.load(file, std) else err
+            io.eprint("error: {err.message}")
+            io.exit(2)
+            return
+        print(loaded.program.to_json().to_text())
+        for d in loaded.diags
+            print("{d.pos.line}:{d.pos.col} diag {d.rule}")
+        return
+    text := fs.read_text(file) else err
+        io.eprint("error: can't read {file}: {err.kind}")
+        io.exit(2)
+        return
+    lexed := syntax.lex(text)
+    if tree
+        print(syntax.ast_text(lexed, syntax.parse(lexed.tokens)))
+    else
+        print(syntax.tokens_text(lexed))
+
 fn api_cmd(rest List[str])
     usage := "usage: ail api [--outline] FILE [--text | --pretty] [--symbols]"
+    if rest.contains("--tokens") or rest.contains("--ast")
+        api_syntax(rest)
+        return
     if rest.contains("--diff")
         io.exit(api.diff_command(rest, path.join(path.dir(compiler_dir()), "std")))
     if rest.contains("--locals") or rest.contains("--type") or rest.contains("--refs")
@@ -1063,10 +1220,13 @@ fn api_cmd(rest List[str])
     mut form := api.Form.Plain
     mut expanded := false
     mut symbols := false
+    # `--json`: a rejected program's diagnostics as JSON lines (api.out.5); the outline is JSON anyway.
+    mut json := false
     mut files := List[str]()
     for a in rest
         match a
             "--outline" => continue
+            "--json" => json = true
             "--expanded" => expanded = true
             "--text" => form = api.Form.Text
             "--pretty" => form = api.Form.Pretty
@@ -1081,18 +1241,23 @@ fn api_cmd(rest List[str])
         io.exit(2)
     std := path.join(path.dir(compiler_dir()), "std")
     if not files[0].ends_with(".ail")
-        io.exit(api.package_command(files[0], form, std))
-    loaded := load.load(files[0], std) else err
+        io.exit(api.package_command(files[0], form, std, symbols))
+    mut loaded := load.load(files[0], std) else err
         io.eprint("error: {err.message}")
         io.exit(2)
         return
+    if expanded and [d for d in loaded.diags if not d.rule.starts_with("ct.")].len() == 0
+        # ct.gen.4: the program's own derive generators run, as for `check`, so their code is listed.
+        user := user_derive_texts(loaded, files[0])
+        if user.len() > 0
+            loaded = load.load_derived(files[0], std, user) else loaded
     mut found := [load.shown_syntax(d) for d in loaded.diags]
     mut analysis := check.analyze(loaded.program, true)
     if loaded.diags.len() == 0
         found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
     for d in found
         if not d.warning
-            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
             io.exit(2)
     prog := doc.attach(loaded.program, loaded.texts[0])
     facts := api.Facts(

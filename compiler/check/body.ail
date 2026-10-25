@@ -27,6 +27,8 @@ pub struct Analysis
     pub exprs List[(ast.Pos, str)]
     ## The name positions of every field a write reaches (`ail ask`, api.ask.2).
     pub writes List[ast.Pos]
+    ## Each function's failure paths (err.paths.1).
+    pub fail_paths List[FailPath]
 
 ## Every pass of `check_with` this checker has, in its order.
 pub fn check_program(p ast.Program) Report
@@ -34,7 +36,12 @@ pub fn check_program(p ast.Program) Report
 
 ## `check_program`, and with `full` the facts `ail api` outlines.
 pub fn analyze(p ast.Program, full bool) Analysis
+    analyze_denying(p, full, [])
+
+## The checker after every declaration and function body has been checked.
+fn checked_fns(p ast.Program, full bool, denied List[str]) Checker
     mut c := new_checker(p)
+    c.denied = denied
     c.list_param = c.new_param("T", [])
     c.collect_traits()
     c.collect_types()
@@ -69,11 +76,29 @@ pub fn analyze(p ast.Program, full bool) Analysis
     for i in 0..p.fns.len()
         c.check_fn(i)
     c.record = false
+    c
+
+## The `for` loops `conc.par.2-4` prove independent, which `ail run --parallel`
+## puts on the pool (conc.par.8): their positions.
+pub fn proven_loops(p ast.Program) List[ast.Pos]
+    c := checked_fns(p, false, [])
+    c.proven_loops()
+
+## The `for` loops of the program with their parallel verdicts (conc.par.6): `ail effects --parallel`.
+pub fn parallel_rows(p ast.Program) List[ParRow]
+    c := checked_fns(p, false, [])
+    c.parallel_rows()
+
+## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
+pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
+    mut c := checked_fns(p, full, denied)
     c.check_drop_impls()
     c.diags.extend(check_moves(p, c.moved))
     c.diags.extend(c.check_pure())
+    c.diags.extend(c.check_denied())
     c.diags.extend(c.check_grants())
     c.diags.extend(check_handles(p))
+    c.diags.extend(check_observe(p))
     c.diags.extend(c.check_contract_effects())
     c.diags.extend(c.check_constants())
     c.diags.extend(c.check_par())
@@ -96,6 +121,7 @@ pub fn analyze(p ast.Program, full bool) Analysis
             locals: [],
             exprs: [],
             writes: [],
+            fail_paths: [],
         )
     mut errors := Map[int, List[str]]()
     for i in 0..p.fns.len()
@@ -114,6 +140,7 @@ pub fn analyze(p ast.Program, full bool) Analysis
         locals: c.fact_locals,
         exprs: c.fact_exprs,
         writes: c.fact_writes,
+        fail_paths: c.fail_paths,
     )
 
 ## The diagnostics of the declaration passes only (slice 1).
@@ -532,6 +559,12 @@ fn Checker.return_stmt(mut self, value ast.Expr?, at ast.Pos)
     t := expr(v, want, true)
     consume(v, t)
     if accepts(want, t)
+        if is_error_type(t)
+            note_path(expr_pos(v), "return", "", none, [t], false)
+        else
+            match t
+                Res(_, errs) => note_path(expr_pos(v), "return", "", v, errs_of(errs), false)
+                _ => 0
         return
     want_res := is_res(want)
     if not want_res and is_error_type(t)
@@ -665,6 +698,16 @@ fn Checker.handle_has_value(mut self, value ast.Expr, vt Ty, what str)
                 err_help("err.else.1", at, text, h)
             else
                 err("err.else.1", at, text)
+    match vt
+        Opt | Res =>
+            mut how := "block"
+            match o
+                Fallback => how = "default"
+                Leave => how = "leave"
+                Handler => how = "block"
+            kind := if fails then "handle" else "absent"
+            note_path(at, kind, how, value, errors, false)
+        _ => 0
     match o
         Fallback(d) =>
             if ok == Ty.Unit

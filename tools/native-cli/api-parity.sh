@@ -1,20 +1,8 @@
 #!/usr/bin/env bash
-# The native `ail api` against the Rust one (ADR 0855): stdout and exit status for each
-# FILE with the flags in $API_FLAGS (default none).
-#   tools/native-cli/api-parity.sh [FILE...]    default: examples/*.ail tests/cases/*.ail
-set -uo pipefail
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$root"
-export AIL_ROOT="$root"
-files=("$@")
-[ ${#files[@]} -gt 0 ] || files=(examples/*.ail tests/cases/*.ail)
-native="${NATIVE:-$(mktemp -d)/ail-native}"
-[ -x "$native" ] || ./ail build compiler/main.ail -o "$native" > /dev/null 2>&1 || { echo "api-parity: the native CLI doesn't build" >&2; exit 2; }
-bad=0
-for f in "${files[@]}"; do
-    want=$(./ail api ${API_FLAGS:-} "$f" 2>/dev/null; echo "rc=$?")
-    got=$("$native" api ${API_FLAGS:-} "$f" 2>/dev/null; echo "rc=$?")
-    if [ "$want" != "$got" ]; then bad=$((bad + 1)); echo "DIFF $f"; fi
-done
-echo "$((${#files[@]} - bad))/${#files[@]} equal"
-[ "$bad" -eq 0 ]
+# `ail api` against its frozen goldens (the outline modes, --symbols, --tokens, --ast and --diff on examples and cases).
+# The Rust binary is not needed: the cases were frozen from it into tests/golden/ (tools/golden/golden.py).
+#   tools/native-cli/api-parity.sh [ail]    the `ail` to check (default: ./ail)
+set -u
+cd "$(git rev-parse --show-toplevel)"
+bin="$(cd "$(dirname "${1:-./ail}")" && pwd)/$(basename "${1:-./ail}")"
+exec python3 tools/golden/golden.py check api --bin "$bin"

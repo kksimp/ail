@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 97 (`ail test` lists them)
+tests: 108 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -20,6 +20,8 @@ fn fetch_with(str, str, str, mut std.net.jar.Jar) str [clock fs io mutates net]
 struct Got
 MAX_HOPS := 10
 MAX_REPLIES := 32
+LOG_KEEP := 20
+MAX_WAIT_ROUNDS := 10
 fn fetch_got(str, str, str, str, bool, bool, mut std.net.jar.Jar, mut Map[str, Cached]) Got [clock fs io mutates net]
 fn fresh_until(Map[str, str], int, int) int
 fn keep_cached(str, Walked, int, mut Map[str, Cached]) [mutates]
@@ -61,14 +63,20 @@ struct Guard
 fn host_of(str) str
 fn sends(str) bool
 fn rpc_reply(str, str) str
+fn look_answer(std.screen.Screen, Json) str
 TOOLS_SRC := ...
 fn tools_json() str
 struct Gui
 fn address(str) str [fs io]
+SEARCH_ENGINES := ...
+fn is_query(str) bool
+fn search_url(str) str
 MEASURE_RUNS := 5000
+fn id_tag(float, float, int) List[draw.Op]
 struct Garlic
 WATCH_TOOLS := ...
 fn watched_text(str) str [clock env fs io net random]
+fn theme() tabstrip.Theme
 impl std.app.App for Garlic
 fn to_app(draw.Op, Gui) std.app.Op
 GUI_W := 960.0
@@ -82,13 +90,17 @@ fn attached_main(mut Garlic, str) ! [clock env fail fs io mutates net net.serve 
 fn flag(List[str], str) str?
 fn usage() [io]
 VALUE_FLAGS := ...
+fn cli_target(str) str [fs io]
 fn target_of(List[str]) str
 fn op_line(draw.Op) str
 fn pixels_dump(mut Browser, float) [clock fs io mutates net]
+fn xml_esc(str) str
+fn write_marks(mut Browser, str, float) ! [clock fail fs io mutates net]
+fn marks_svg(gfx.Scene, float) str
 fn main() ! [app clock env fail fs io net net.serve proc random spawn]
 fn tree(str) str
 fn lay(str, int) page.Page
-fn testdata() str [env fs io]
+fn testdata() str [env]
 fn show_ops(List[draw.Op]) List[str]
 fn resized(float, float) std.app.Event
 fn clicked(float, float) std.app.Event
@@ -99,6 +111,7 @@ fn bench_run(int, str, html.Doc, css.Sheet) int
 fn bench(List[str]) [clock fs io]
 fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 fn flat(gfx.Scene) List[str]
+fn fwd_slashes(str) str
 ```
 
-trimmed to fit 2000 tokens (~1400); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1544); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

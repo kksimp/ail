@@ -1,0 +1,304 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## The Windows socket layer of the native runtime (ADR 0598): Winsock (ws2_32) behind the `net_sys_*`
+## functions of `net.ail`, which on Windows (`target()` 3) call the `wnet_*` functions here. They give
+## what the Linux system calls give: a result of zero or more, or the negative Linux `errno`
+## (`wnet_err`), so `net_errno_kind` and the loops above need no new cases. A socket is the SOCKET
+## itself, always non-blocking; `net_sys_recv` and `net_sys_close` replace `os_read` and `os_close`
+## on it. `sockaddr_in` has the same layout as on Linux.
+##
+## No global slots: the Winsock start-up flag and its WSADATA sit in the scratch area of `os.ail`.
+
+OS_WIN_WSA := 63488
+OS_WIN_WSADATA := 63552
+
+## Start Winsock once (version 2.2).
+fn wnet_init()
+    f := os_scratch(OS_WIN_WSA)
+    if load64(f) == 0
+        import_call("WSAStartup", 514, os_scratch(OS_WIN_WSADATA), 0, 0)
+        store64(f, 1)
+
+## The negative Linux `errno` for a WSA error code (0 when `code` is 0).
+fn wnet_errno(code int) int
+    if code == 0
+        return 0
+    if code == 10004
+        return -4
+    if code == 10035
+        return -11
+    if code == 10036
+        return -115
+    if code == 10037
+        return -114
+    if code == 10038
+        return -88
+    if code == 10048
+        return -98
+    if code == 10049
+        return -99
+    if code == 10050
+        return -100
+    if code == 10051
+        return -101
+    if code == 10052
+        return -102
+    if code == 10053
+        return -103
+    if code == 10054
+        return -104
+    if code == 10055
+        return -105
+    if code == 10056
+        return -106
+    if code == 10057
+        return -107
+    if code == 10058
+        return -32
+    if code == 10060
+        return -110
+    if code == 10061
+        return -111
+    if code == 10064
+        return -112
+    if code == 10065
+        return -113
+    if code == 10013
+        return -13
+    if code == 10022
+        return -22
+    if code == 10014
+        return -14
+    if code == 10024
+        return -24
+    -5
+
+## The negative Linux `errno` of the last Winsock error on this thread.
+fn wnet_err() int
+    code := import_call("WSAGetLastError", 0, 0, 0, 0)
+    wnet_errno(code)
+
+## The signed value of the 32-bit `int` a Winsock call returns in eax (its upper half is zero).
+fn wnet_i32(r int) int
+    if r >= 2147483648 and r < 4294967296
+        return r - 4294967296
+    r
+
+## A result below zero from a call that returns -1 (SOCKET_ERROR) when it fails.
+fn wnet_ret(r int) int
+    v := wnet_i32(r)
+    if v < 0
+        return wnet_err()
+    v
+
+## A new IPv4 socket of `kind` (1 stream, 2 datagram), non-blocking: the socket, or a negative `errno`.
+fn wnet_socket(kind int) int
+    wnet_init()
+    s := import_call("socket", 2, kind, 0, 0)
+    if s == -1
+        return wnet_err()
+    wnet_nonblock(s)
+    s
+
+fn wnet_nonblock(s int) int
+    one := alloc_z(8, KIND_BYTES, 1)
+    store64(one, 1)
+    # FIONBIO
+    wnet_ret(import_call("ioctlsocket", s, 2147772030, one, 0))
+
+fn wnet_connect(s int, sa int) int
+    r := wnet_ret(import_call("connect", s, sa, 16, 0))
+    # A non-blocking connect that has begun is WSAEWOULDBLOCK here, EINPROGRESS (115) to the callers.
+    if r == -11
+        return -115
+    r
+
+fn wnet_bind(s int, sa int) int
+    wnet_ret(import_call("bind", s, sa, 16, 0))
+
+fn wnet_listen(s int) int
+    wnet_ret(import_call("listen", s, 128, 0, 0))
+
+## The connection accepted on `s`: the socket (non-blocking), or a negative `errno`.
+fn wnet_accept(s int, sa int, lenp int) int
+    r := import_call("accept", s, sa, lenp, 0)
+    if r == -1
+        return wnet_err()
+    wnet_nonblock(r)
+    r
+
+fn wnet_sockname(s int, sa int, lenp int, peer bool) int
+    if peer
+        return wnet_ret(import_call("getpeername", s, sa, lenp, 0))
+    wnet_ret(import_call("getsockname", s, sa, lenp, 0))
+
+fn wnet_send(s int, p int, n int) int
+    wnet_ret(import_call("send", s, p, n, 0))
+
+## Read up to `n` bytes: the count, 0 at the end of the stream, or a negative `errno`.
+fn wnet_recv(s int, p int, n int) int
+    want := if n > 1073741824 then 1073741824 else n
+    wnet_ret(import_call("recv", s, p, want, 0))
+
+fn wnet_close(s int)
+    import_call("closesocket", s, 0, 0, 0)
+
+fn wnet_shutdown(s int)
+    # SD_SEND
+    import_call("shutdown", s, 1, 0, 0)
+
+## The outcome of a connect: SO_ERROR as a positive Linux `errno`, or 0.
+fn wnet_soerr(s int) int
+    eb := alloc_z(16, KIND_BYTES, 1)
+    store64(eb + 8, 4)
+    # SOL_SOCKET, SO_ERROR
+    if wnet_i32(import_call("getsockopt", s, 65535, 4103, eb, eb + 8)) < 0
+        return 0 - wnet_err()
+    0 - wnet_errno(load8(eb) + 256 * load8(eb + 1) + 65536 * load8(eb + 2))
+
+## Wait on the `n` entries at `pf`, in the layout of Linux `struct pollfd` (the descriptor in the low 32
+## bits, the events at bit 32, the revents written at bit 48; 1 readable, 4 writable, 8 error, 16
+## hang-up, 32 invalid): the number ready, 0 on timeout, or a negative `errno`.
+fn wnet_poll(pf int, n int, ms int) int
+    wnet_init()
+    arr := alloc_z(16 * n + 16, KIND_BYTES, 1)
+    for i in 0..n
+        e := load64(pf + 8 * i)
+        fd := e.bit_and(4294967295)
+        a := arr + 16 * i
+        # A descriptor below zero is ignored (INVALID_SOCKET).
+        store64(a, if fd >= 2147483648 then -1 else fd)
+        ev := e.shr(32).bit_and(65535)
+        mut w := 0
+        if ev.bit_and(1) != 0
+            w += 256
+        if ev.bit_and(4) != 0
+            w += 16
+        store8(a + 8, w % 256)
+        store8(a + 9, w / 256)
+    r := wnet_i32(import_call("WSAPoll", arr, n, ms, 0))
+    if r < 0
+        return wnet_err()
+    for i in 0..n
+        a := arr + 16 * i
+        rev := load8(a + 10) + 256 * load8(a + 11)
+        mut o := 0
+        if rev.bit_and(768) != 0
+            o += 1
+        if rev.bit_and(48) != 0
+            o += 4
+        if rev.bit_and(1) != 0
+            o += 8
+        if rev.bit_and(2) != 0
+            o += 16
+        if rev.bit_and(4) != 0
+            o += 32
+        e := load64(pf + 8 * i)
+        store64(pf + 8 * i, e.bit_and(281474976710655).bit_or(o.shl(48)))
+    r
+
+## Wait for a non-blocking connect on `s`: 1 when it finished (well or not, `wnet_soerr` says which),
+## 0 on timeout, or a negative `errno`. `WSAPoll` does not report a refused connection on every Windows,
+## `select` does (as an exception).
+fn wnet_connect_wait(s int, ms int) int
+    wnet_init()
+    wset := alloc_z(528, KIND_BYTES, 1)
+    eset := alloc_z(528, KIND_BYTES, 1)
+    store8(wset, 1)
+    store64(wset + 8, s)
+    store8(eset, 1)
+    store64(eset + 8, s)
+    mut tv := 0
+    if ms >= 0
+        tv = alloc_z(16, KIND_BYTES, 1)
+        sec := ms / 1000
+        usec := ms % 1000 * 1000
+        for k in 0..4
+            store8(tv + k, sec.shr(8 * k).bit_and(255))
+            store8(tv + 4 + k, usec.shr(8 * k).bit_and(255))
+    r := wnet_i32(import_call("select", 0, 0, wset, eset, tv))
+    if r < 0
+        return wnet_err()
+    if r == 0
+        return 0
+    1
+
+## One descriptor: 1 ready, 0 timed out, or a negative `errno` (see `net_poll`).
+fn wnet_poll1(s int, events int, ms int) int
+    pf := alloc_z(8, KIND_BYTES, 1)
+    store64(pf, s.bit_and(4294967295).bit_or(events.shl(32)))
+    r := wnet_poll(pf, 1, ms)
+    if r <= 0
+        return r
+    1
+
+# ---- names and trust (Windows has no /etc) ----
+
+## "nameserver " at `buf`.
+fn wnet_put_ns(buf int)
+    store8(buf, 110)
+    store8(buf + 1, 97)
+    store8(buf + 2, 109)
+    store8(buf + 3, 101)
+    store8(buf + 4, 115)
+    store8(buf + 5, 101)
+    store8(buf + 6, 114)
+    store8(buf + 7, 118)
+    store8(buf + 8, 101)
+    store8(buf + 9, 114)
+    store8(buf + 10, 32)
+
+## Fill `buf` with `nameserver A.B.C.D` lines for the system's DNS servers (`GetNetworkParams`), as a
+## resolv.conf would; the length.
+fn wnet_resolv(buf int) int
+    sz := alloc_z(8, KIND_BYTES, 1)
+    store64(sz, 4096)
+    info := alloc_z(4112, KIND_BYTES, 1)
+    if import_call("GetNetworkParams", info, sz, 0, 0) != 0
+        return 0
+    mut out := 0
+    # FIXED_INFO.DnsServerList at 272: Next (8), the address text (16), the mask (16), a context.
+    mut node := info + 272
+    mut count := 0
+    while node != 0 and count < 8
+        a := node + 8
+        n := os_c_len(a)
+        if n > 0 and n < 16 and out + n + 13 < 8000
+            wnet_put_ns(buf + out)
+            copy_bytes(buf + out + 11, a, n)
+            store8(buf + out + 11 + n, 10)
+            out += 12 + n
+        node = load64(node)
+        count += 1
+    out
+
+## The trusted roots of Windows (the ROOT store): each certificate's DER bytes are copied, kept alive from
+## `anchor` as `tc_certs` does, and parsed by `x_parse`; the number of roots in `out`.
+fn wnet_roots(mut out List[List[int]], anchor int) int
+    name := alloc_z(16, KIND_BYTES, 1)
+    win_put16(name, 0, 82)
+    win_put16(name, 1, 79)
+    win_put16(name, 2, 79)
+    win_put16(name, 3, 84)
+    store := import_call("CertOpenSystemStoreW", 0, name, 0, 0)
+    if store == 0
+        return 0
+    mut ctx := 0
+    while out.len() < 1000
+        ctx = import_call("CertEnumCertificatesInStore", store, ctx, 0, 0)
+        if ctx == 0
+            break
+        der := load64(ctx + 8)
+        len := load8(ctx + 16) + 256 * load8(ctx + 17) + 65536 * load8(ctx + 18)
+        copy := alloc_raw(len, KIND_BYTES)
+        copy_bytes(copy, der, len)
+        c := x_parse(copy, len)
+        if c[X_ERR] == 0
+            k := out.len()
+            store64(anchor + 8 + 16 * k, copy)
+            store64(anchor + 16 + 16 * k, len)
+            store64(anchor, k + 1)
+            out.push(c)
+    import_call("CertCloseStore", store, 0, 0, 0)
+    out.len()
