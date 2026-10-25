@@ -152,7 +152,7 @@ pub fn parse(text str) BigInt ! BigIntError
     mut end := s.len()
     while end > 0
         start := if end > 9 then end - 9 else 0
-        limbs.push(s.slice(start, end).as_int() else 0)
+        limbs.push(s.slice(start, end).to_int() else 0)
         end = start
     make(neg, limbs)
 
