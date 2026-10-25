@@ -1,4 +1,4 @@
-## A diagnostic, as `bootstrap/src/diag.rs` builds it: a rule, a position,
+## A diagnostic, as `77592931:bootstrap/src/diag.rs` builds it: a rule, a position,
 ## a message, and an optional help and notes.
 use ast
 use fix

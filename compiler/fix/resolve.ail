@@ -1,5 +1,5 @@
 ## Settling anchored edits against the source (fix.edit.2), a port of
-## `Edit::resolve` and its helpers in `bootstrap/src/diag.rs`. An edit that
+## `Edit::resolve` and its helpers in `77592931:bootstrap/src/diag.rs`. An edit that
 ## doesn't match its anchor resolves to `none` and its fix is dropped.
 use ast
 

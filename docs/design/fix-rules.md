@@ -60,7 +60,7 @@ from strings or nested lists).
   safe when the help is the only correct reading of the error.
 - A new fixable rule with one correct answer. Candidates have to be checked
   against `compiler/explain/fixable.txt` and the `ail fix` edit model
-  (`bootstrap/src/diag.rs`, AfterExpr anchors, ADR 0695).
+  (`77592931:bootstrap/src/diag.rs`, AfterExpr anchors, ADR 0695).
 - A new mistakes corpus. The 250 programs were written to fail in known ways;
   a rewrite that fits them may not fit real code.
 

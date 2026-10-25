@@ -1,4 +1,4 @@
-## Packages (mod.pkg.1-6, eff.cap.4-5), as `bootstrap/src/packages.rs`: a package
+## Packages (mod.pkg.1-6, eff.cap.4-5), as `77592931:bootstrap/src/packages.rs`: a package
 ## root may hold an `ail.pkg`; every package of the dependency graph is read
 ## before any source file, a dependency's modules are loaded under its name
 ## (`use geo.shapes` is `DIR/shapes`), and a dependency resolves its own

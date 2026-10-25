@@ -1,5 +1,5 @@
 ## Machine-applicable fixes (fix.edit.1-4, fix.edit.6, ADR 0145, ADR 0335), ported from the
-## `Edit` and `Fix` types of `bootstrap/src/diag.rs`. A checker proposes an
+## `Edit` and `Fix` types of `77592931:bootstrap/src/diag.rs`. A checker proposes an
 ## edit by position or by an anchor rule, without the source text; `resolve`
 ## settles anchors against the source lines, and a fix with an anchor that
 ## doesn't match is dropped rather than reported wrong.

@@ -2,7 +2,7 @@
 ## under the Runtime Exception (see LICENSE).
 ##
 ## X.509 certificate parsing for the native TLS client (ADR 0836 slice 3, ADR
-## 0368), ported from bootstrap/src/net/x509/mod.rs with its rules and its
+## 0368), ported from 77592931:bootstrap/src/net/x509/mod.rs with its rules and its
 ## messages. A certificate is a `List[int]` of X_SIZE words (the X_* indexes)
 ## that point into its DER bytes, which stay where they are; `x[X_ERR]` is the
 ## address of a message string if the certificate is malformed, else 0.

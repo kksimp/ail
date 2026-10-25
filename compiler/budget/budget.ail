@@ -1,5 +1,5 @@
 ## `--budget N [--from K]` on every command (budget.out.1-6, ADR 0394), ported
-## from `bootstrap/src/budget.rs`: the command runs as a child process, its
+## from `77592931:bootstrap/src/budget.rs`: the command runs as a child process, its
 ## output is split into records, and about N tokens of them are shown, most
 ## severe first, with counts for the rest and the `--from` handle that continues.
 

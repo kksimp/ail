@@ -1,5 +1,5 @@
 ## `ail api --card [--budget N] [--json] [--module NAME | --index] DIR|FILE`
-## (api.card.1-7, ADR 0310), as `bootstrap/src/api/card.rs`: a program's own
+## (api.card.1-7, ADR 0310), as `77592931:bootstrap/src/api/card.rs`: a program's own
 ## card, the whole program in one read under a token budget. The card is the
 ## outline of `ail api` per module, plus the entry point, the tests, the
 ## manifest and the examples. Over budget it drops, in this order: private

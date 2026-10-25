@@ -25,7 +25,7 @@ A zero-field value (`no_fields`, unit-like variants) needs no allocation at all:
 
 ## What changes
 
-Roughly 140 match sites across 16 files under `bootstrap/src/interp/` and
+Roughly 140 match sites across 16 files under `77592931:bootstrap/src/interp/` and
 `interp.rs`: `interp.rs` 41, `bytecode.rs` 22 (lane 190's file), `stdlib.rs` 20,
 `prop.rs` 8, `ui.rs` 8, `netsock.rs` 7, `json.rs` 6, `parallel.rs` 6, `regex.rs` 5,
 `replay.rs` 4, the rest 1-2 each. Most are mechanical (`&f[i]` still works through

@@ -205,7 +205,7 @@ final pull request against `main`.
 | 6 | Effects inference, `@pure`, capability denial (`ail run --deny`) | large | new `check/effects.rs`, `main.rs`, ADRs | none; capability names come from the §4 table; 2 integrates the display |
 | 7 | `ail test`, `@test`, `assert`, `assert_eq` | medium | `parser.rs` (attributes), `main.rs`, `prelude.ail`, `interp.rs` | none |
 | 8 | Formatter `ail fmt` (roadmap refinement 4) | large | new `fmt.rs`, `lexer.rs` (comment tokens), `main.rs`, ADR | none |
-| 9 | Spec conformance harness; OQ-041 format specs by measurement; language card | medium | `bootstrap/tests/spec.rs`, `docs/spec/*`, `lexer.rs`, `check.rs`, `interp.rs`, ADRs, `docs/language-card.md` | none |
+| 9 | Spec conformance harness; OQ-041 format specs by measurement; language card | medium | `77592931:bootstrap/tests/spec.rs`, `docs/spec/*`, `lexer.rs`, `check.rs`, `interp.rs`, ADRs, `docs/language-card.md` | none |
 | 10 | Interpreter performance: perfbench and slot-resolved locals | medium | `tools/perfbench/`, `interp.rs` | none |
 
 The designer chose "modules and formatter too" for the buildout, so lanes 3
