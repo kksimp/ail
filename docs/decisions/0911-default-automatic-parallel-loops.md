@@ -1,6 +1,6 @@
 # 0911. Native code runs proven independent loops in parallel by default, past a work threshold
 
-- **Status:** Proposed (number to be confirmed by the integrator)
+- **Status:** Proposed
 - **Date:** 2026-10-25
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25
 - **Topic:** 11 — Concurrency; 25 — Optimization strategy
