@@ -133,7 +133,7 @@ fn open_fail(co int, e int, why str, at str) int
     net_io_fail(co, e, at)
 
 fn net_close_conn(co int)
-    os_close(load64(co + NET_FD))
+    net_sys_close(load64(co + NET_FD))
     store64(co + NET_FD, -1)
 
 ## `b.read_bytes(max)`: the next 1 to `max` bytes of the body, none at its end.

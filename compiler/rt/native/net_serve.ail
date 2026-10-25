@@ -129,8 +129,8 @@ fn serve_send(o int, p int, n int) int
 ## Stop sending on `o` and close it.
 fn serve_end(o int)
     fd := load64(o + NET_FD)
-    syscall(os_pick(48, 210, 134), fd, 1, 0, 0, 0, 0)
-    os_close(fd)
+    net_sys_shutdown(fd)
+    net_sys_close(fd)
     store64(o + NET_FD, -1)
 
 ## Answer a connection the server is dropping: best effort, then close.
@@ -545,6 +545,8 @@ fn serve_poll(pf int, n int, ms int) int
     0
 
 fn serve_poll_raw(pf int, n int, ms int) int
+    if target() == 3
+        return wnet_poll(pf, n, ms)
     ts := alloc_raw(16, KIND_BYTES)
     while true
         mut r := 0
@@ -619,11 +621,7 @@ fn serve_accept(h int, at str) int
         store64(lenp, 16)
         r := net_sys_accept(fd, sa, lenp)
         if r >= 0
-            syscall(os_pick(72, 25, 92), r, 4, if target() == 2 then 4 else 2048, 0, 0, 0)
-            if target() == 2
-                p := alloc_raw(8, KIND_BYTES)
-                store64(p, 1)
-                syscall(105, r, 65535, 4130, p, 4, 0)
+            net_sys_accepted(r)
             c := net_add(r, NET_CONN, net_addr_text(sa), "")
             co := net_obj(c)
             store64(co + NET_FLAGS, SERVE_FRESH)
