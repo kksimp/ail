@@ -136,8 +136,6 @@ fmt plain compiler/fix/resolve.ail	f0d0c455412b8c0a	0	97e11df3ff29465a
 fmt long compiler/fix/resolve.ail	f0d0c455412b8c0a	0	4204629697afb333
 fmt plain compiler/fix/rewrite.ail	b7a9bfdfcc37aa67	0	0263f015bf88f36d
 fmt long compiler/fix/rewrite.ail	b7a9bfdfcc37aa67	0	ac9fa3d93db98257
-fmt plain compiler/fixrun/dump.ail	11d6dc4a5baf6789	0	33ddab718fa6026c
-fmt long compiler/fixrun/dump.ail	11d6dc4a5baf6789	0	70d7e961498cd288
 fmt plain compiler/fixrun/fixrun.ail	21073ccf036395ec	0	75af3d2e31fcc56b
 fmt long compiler/fixrun/fixrun.ail	21073ccf036395ec	0	ce58a0c6c37b4126
 fmt plain compiler/fmt/cli.ail	471d0160dfda7fe2	0	ca0d9ff69179e361

@@ -14,7 +14,7 @@ build with `ail run` on the same input: stdout and exit code. Each mode prints t
 search (capture groups are compared through `REPLACE` templates until `regex.captures` builds natively), the spans of `find_all`, the replaced or split text, or the full
 `RegexError` (`kind`, `at`, `rule`, `message`) of a pattern that does not
 compile. It makes no claim about what is right: the Rust engine is checked
-against the vector file's expectations by `cargo test` (`regex::vectors`), and
+against the vector file's expectations by the `regex` cases, and
 this harness checks that a second engine agrees with it.
 
 A disagreement keeps both outputs in `$OUT` (a temporary directory, printed).

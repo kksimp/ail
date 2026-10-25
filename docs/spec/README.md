@@ -46,7 +46,7 @@ Rules for rule IDs:
 ### Examples and conformance tests
 
 Every fenced block tagged `ail` in a chapter is a **conformance test**
-(ADR 0002). `bootstrap/tests/spec.rs` runs `ail check --json` on each one
+(ADR 0002). the `spec` gate suite (`tools/gate/spec.ail`) runs `ail check --json` on each one
 during `./ail selftest` and reports failures by chapter and line. The
 same rules apply to `docs/quick-reference.md` and `docs/language-card.md`, where a block
 without `fn main` is a fragment without a tag (to save tokens). The fence

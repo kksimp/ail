@@ -19,7 +19,7 @@
 ## `--contracts` fuzzes every function's `requires` and `ensures` and reports a counterexample (contract.fuzz.1).
 ## `--affected [--since REV]` runs only the tests that the changes since git revision REV
 ## (default `HEAD`) can reach, from `ail ask FILE --affected` (test.affected.1).
-## Rewriting follows bootstrap/src/native_test.rs (native.test.2).
+## Rewriting follows native.test.2.
 
 ## The compiler to drive: `$AIL`, else `./ail`.
 fn ail_path() str
