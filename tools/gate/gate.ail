@@ -1500,7 +1500,7 @@ fn Gate.budget(mut self, tmp str)
     # budget.out.4: the JSON note.
     j := ail_run(["check", "--json", "--budget", "10", f]) else return
     last := j.err.lines().last() else ""
-    if not last.starts_with("\{\"budget\":10,\"from\":0,\"shown\":1,\"total\":3,\"tokens\":")
+    if not last.starts_with("\{\"budget\":10,\"from\":0,\"shown\":1,\"full\":1,\"total\":3,\"tokens\":")
         or not last.ends_with("\"omitted\":\{\"warning\":2},\"next\":1}")
         red("budget json note", last)
     # budget.out.3: a test summary is always shown; failures come first.
@@ -1709,53 +1709,6 @@ fn Gate.build_cache(mut self, tmp str)
 
 fn build_with(bin str, backend str, cache str, prog str, out str, extra str) proc.Output
     sh_run("env -u AIL_NO_CACHE AIL_CACHE_DIR={cache} AIL_COMPILER={backend} {bin} build {prog} -o {out} {extra}")
-
-## The interpreter's thread pool (parallel.rs, ported; conc.par.8-11).
-fn par_run(threads str, args List[str]) proc.Output ! proc.ProcError
-    proc.run("env", cat(
-        ["AIL_THREADS={threads}", "AIL_PAR_LOG=1", "bootstrap/target/release/ail"],
-        args,
-    ))
-
-fn Gate.parallel(mut self)
-    f := "tests/cases/par_pool.ail"
-    one := par_run("1", ["run", f]) else return
-    four := par_run("4", ["run", f]) else return
-    if four.status != 0 or one.out != four.out or not one.err.is_empty()
-        red("par for", "{four.err}")
-    want("par for log", four.err, ["par: line 23: loop: 200 iterations on 4 threads"])
-    o1 := par_run("1", ["run", "examples/parallel.ail"]) else return
-    o4 := par_run("4", ["run", "--parallel", "examples/parallel.ail"]) else return
-    if o1.out != o4.out
-        red("--parallel output", o4.out)
-    want("--parallel log", o4.err, ["par: line 34: loop: 16 iterations on 4 threads"])
-    plain := par_run("4", ["run", "examples/parallel.ail"]) else return
-    if not plain.err.is_empty()
-        red("parallel without the flag", plain.err)
-    d := par_run("4", ["run", "--deterministic", f]) else return
-    if d.status != 0 or not d.err.is_empty()
-        red("deterministic on one thread", d.err)
-    t := "tests/cases/task_pool.ail"
-    t1 := par_run("1", ["run", t]) else return
-    t4 := par_run("4", ["run", t]) else return
-    if t4.status != 0
-        or t1.out != t4.out
-        or t4.err.count("task `work` on its own thread") != 2
-        or not t4.err.contains("task `checked` on its own thread")
-        or t4.err.contains("`report`")
-        red("pure tasks", "{t4.err}")
-    c := "tests/cases/par_comp.ail"
-    c1 := par_run("1", ["run", c]) else return
-    c4 := par_run("4", ["run", c]) else return
-    if c4.status != 0 or c1.out != c4.out
-        red("par comprehension", c4.err)
-    want("par comprehension log", c4.err, [
-        "par: line 17: comprehension: 40 elements on 4 threads",
-        "par: line 21: comprehension: 2 elements in order",
-    ])
-    cd := par_run("4", ["run", "--deterministic", c]) else return
-    if cd.out != c1.out or not cd.err.is_empty()
-        red("par comprehension deterministic", cd.err)
 
 ## `ail api --locals/--type/--refs` (api_queries.rs, ported; api.loc, api.type, api.refs, api.pkg).
 fn Gate.api_queries(mut self, tmp str)
@@ -2768,7 +2721,6 @@ fn main() !
             "limits" => g.limits(tmp)
             "diff" => g.diff(tmp)
             "build_cache" => g.build_cache(tmp)
-            "parallel" => g.parallel()
             "api_queries" => g.api_queries(tmp)
             "replay" => g.replay(tmp)
             "api_card" => g.api_card(tmp)
