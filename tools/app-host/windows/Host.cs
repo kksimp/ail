@@ -298,6 +298,10 @@ static class Fonts
     static readonly Dictionary<string, Font> cache = new Dictionary<string, Font>();
     public const float CellSize = 13;
 
+    /// The UI face. Segoe UI Variable is a variable font that GDI+ measures and draws at different widths
+    /// in bold and italic, so the static Segoe UI stays.
+    public const string Sans = "Segoe UI";
+
     public static Font Get(string family, double size, bool bold, bool italic, bool underline)
     {
         float s = size > 0 ? (float)size : 13;
@@ -306,7 +310,7 @@ static class Fonts
         if (!cache.TryGetValue(key, out f))
         {
             FontStyle st = (bold ? FontStyle.Bold : 0) | (italic ? FontStyle.Italic : 0) | (underline ? FontStyle.Underline : 0);
-            f = new Font(family == "sans" ? "Segoe UI" : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
+            f = new Font(family == "sans" ? Sans : family == "serif" ? "Georgia" : "Consolas", s, st, GraphicsUnit.Pixel);
             cache[key] = f;
         }
         return f;
@@ -356,10 +360,12 @@ class CanvasView : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         Graphics g = e.Graphics;
-        g.Clear(Color.White);
+        g.Clear(BackColor);
+        // ClearType text; rectangles stay pixel-exact, slanted lines are anti-aliased.
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         g.SmoothingMode = SmoothingMode.None;
-        g.InterpolationMode = InterpolationMode.HighQualityBilinear;
+        g.PixelOffsetMode = PixelOffsetMode.Half;
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
         var saved = new Stack<GraphicsState>();
         foreach (Op op in Ops)
         {
@@ -382,7 +388,12 @@ class CanvasView : Control
             if (stroke != null)
             {
                 using (var p = new Pen(Rgb(stroke.Color), stroke.Width > 0 ? (float)stroke.Width : 1))
+                {
+                    bool slanted = stroke.X1 != stroke.X2 && stroke.Y1 != stroke.Y2;
+                    g.SmoothingMode = slanted ? SmoothingMode.AntiAlias : SmoothingMode.None;
                     g.DrawLine(p, (float)stroke.X1, (float)stroke.Y1, (float)stroke.X2, (float)stroke.Y2);
+                    g.SmoothingMode = SmoothingMode.None;
+                }
                 continue;
             }
             var pic = op as PicOp;
@@ -483,6 +494,113 @@ class CanvasView : Control
     }
 }
 
+// ---- Look ----------------------------------------------------------------
+
+/// The window's colors, taken from the app's own first canvas fill (its bar or page
+/// background) so native controls and the title bar match what the app draws.
+class Look
+{
+    public Color Bg, Fg, FieldBg, FieldHot, Accent;
+    public bool Dark;
+
+    public static Look From(Node tree)
+    {
+        Color? bg = FirstFill(tree);
+        Color c = bg.HasValue ? bg.Value : Color.FromArgb(0xf3, 0xf3, 0xf3);
+        bool dark = c.GetBrightness() < 0.5f;
+        var l = new Look { Bg = c, Dark = dark };
+        l.Fg = dark ? Color.FromArgb(0xf2, 0xf2, 0xf7) : Color.FromArgb(0x1f, 0x1f, 0x1f);
+        l.FieldBg = Mix(c, dark ? Color.White : Color.FromArgb(0xff, 0xff, 0xff), dark ? 0.10f : 1f);
+        l.FieldHot = Mix(c, dark ? Color.White : Color.Black, dark ? 0.18f : 0.08f);
+        l.Accent = dark ? Color.FromArgb(0x0a, 0x84, 0xff) : Color.FromArgb(0x00, 0x67, 0xc0);
+        return l;
+    }
+
+    public string Key() { return Bg.ToArgb().ToString("x8"); }
+
+    static Color Mix(Color a, Color b, float t)
+    {
+        return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+    }
+
+    static Color? FirstFill(Node n)
+    {
+        if (n.Kind == "Canvas")
+        {
+            foreach (Op op in n.Ops) { var f = op as FillOp; if (f != null) return CanvasView.Rgb(f.Color); }
+            return null;
+        }
+        foreach (Node k in n.Kids) { Color? c = FirstFill(k); if (c.HasValue) return c; }
+        return null;
+    }
+
+    /// True when the tree has a canvas that fills the window, which then needs no frame.
+    public static bool Edge(Node n)
+    {
+        if (n.Kind == "Canvas" && (n.W <= 0 || n.H <= 0)) return true;
+        foreach (Node k in n.Kids) if (Edge(k)) return true;
+        return false;
+    }
+}
+
+/// A text box set in a rounded, borderless pill that lights up with the accent while focused.
+class FieldBox : Panel
+{
+    public readonly TextBox Box = new TextBox();
+    readonly Look look;
+    bool hot;
+
+    public FieldBox(Look l, string fontFamily)
+    {
+        look = l;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        Height = 32;
+        Margin = new Padding(4, 0, 8, 0);
+        Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        Box.BorderStyle = BorderStyle.None;
+        Box.Font = new Font(fontFamily, 14, FontStyle.Regular, GraphicsUnit.Pixel);
+        Box.BackColor = l.FieldBg;
+        Box.ForeColor = l.Fg;
+        Box.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        Box.Left = 12;
+        Box.Width = Width - 24;
+        Box.Top = (Height - Box.Height) / 2;
+        Box.Enter += delegate { Invalidate(); };
+        Box.Leave += delegate { Invalidate(); };
+        Controls.Add(Box);
+        MouseEnter += delegate { hot = true; Invalidate(); };
+        MouseLeave += delegate { hot = false; Invalidate(); };
+        Click += delegate { Box.Focus(); };
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        Graphics g = e.Graphics;
+        g.Clear(look.Bg);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        Color fill = Box.Focused || !hot ? look.FieldBg : look.FieldHot;
+        Box.BackColor = fill;
+        var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+        using (var path = Round(r, Height / 2f))
+        {
+            using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+            if (Box.Focused) using (var p = new Pen(look.Accent, 1.5f)) g.DrawPath(p, path);
+            else if (!look.Dark) using (var p = new Pen(Color.FromArgb(0xd0, 0xd0, 0xd0), 1f)) g.DrawPath(p, path);
+        }
+    }
+
+    static GraphicsPath Round(RectangleF r, float d)
+    {
+        var p = new GraphicsPath();
+        p.AddArc(r.X, r.Y, d, d, 180, 90);
+        p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+}
+
 // ---- Window --------------------------------------------------------------
 
 class HostForm : Form
@@ -496,15 +614,45 @@ class HostForm : Form
     readonly Dictionary<string, List<string>> edits = new Dictionary<string, List<string>>();
     readonly Dictionary<string, Control> byId = new Dictionary<string, Control>();
     readonly List<Control> leaves = new List<Control>();
+    Look look = Look.From(new Node());
+
+    [DllImport("dwmapi.dll")]
+    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int val, int size);
 
     public HostForm()
     {
         Text = "AIL";
         ClientSize = new Size(1000, 720);
         MinimumSize = new Size(340, 240);
-        Font = SystemFonts.MessageBoxFont;
+        Font = new Font(Fonts.Sans, 14, FontStyle.Regular, GraphicsUnit.Pixel);
         StartPosition = FormStartPosition.CenterScreen;
         Padding = new Padding(8);
+        BackColor = look.Bg;
+        ForeColor = look.Fg;
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Chrome();
+    }
+
+    /// Dark or light title bar in the window's own color (Windows 10 1809+ and 11; ignored elsewhere).
+    void Chrome()
+    {
+        if (!IsHandleCreated) return;
+        try
+        {
+            int dark = look.Dark ? 1 : 0;
+            if (DwmSetWindowAttribute(Handle, 20, ref dark, 4) != 0) DwmSetWindowAttribute(Handle, 19, ref dark, 4);
+            int cap = look.Bg.R | (look.Bg.G << 8) | (look.Bg.B << 16);
+            int txt = look.Fg.R | (look.Fg.G << 8) | (look.Fg.B << 16);
+            DwmSetWindowAttribute(Handle, 35, ref cap, 4);  // DWMWA_CAPTION_COLOR
+            DwmSetWindowAttribute(Handle, 34, ref cap, 4);  // DWMWA_BORDER_COLOR
+            DwmSetWindowAttribute(Handle, 36, ref txt, 4);  // DWMWA_TEXT_COLOR
+        }
+        catch (DllNotFoundException) { }
+        catch (EntryPointNotFoundException) { }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -516,7 +664,8 @@ class HostForm : Form
     public void ShowView(string title, string focus, Node tree)
     {
         Text = title;
-        string s = tree.Shape();
+        Look next = Look.From(tree);
+        string s = tree.Shape() + "|" + next.Key();
         string wantFocus = focus;
         // The first line to the program is `start`, ahead of any `resize` the layout causes.
         if (!started)
@@ -529,7 +678,15 @@ class HostForm : Form
             string keep = ActiveControl != null && ActiveControl.Tag is string ? (string)ActiveControl.Tag : "";
             if (wantFocus.Length == 0) wantFocus = keep;
             SuspendLayout();
+            look = next;
+            BackColor = look.Bg;
+            ForeColor = look.Fg;
+            Padding = Look.Edge(tree) ? new Padding(0) : new Padding(8);
+            Chrome();
+            var old = new Control[Controls.Count];
+            Controls.CopyTo(old, 0);
             Controls.Clear();
+            foreach (Control o in old) o.Dispose();
             byId.Clear();
             leaves.Clear();
             Control root = Build(tree, true);
@@ -609,18 +766,29 @@ class HostForm : Form
         switch (n.Kind)
         {
             case "Label":
-                var l = new Label { Text = n.Text, AutoSize = true, Margin = new Padding(3) };
+                var l = new Label { Text = n.Text, AutoSize = true, Margin = new Padding(8, 6, 8, 6), ForeColor = look.Fg, BackColor = look.Bg };
                 leaves.Add(l);
                 return l;
             case "Button":
-                var b = new Button { Text = n.Text, AutoSize = true, Tag = n.Id, Margin = new Padding(3) };
+                var b = new Button
+                {
+                    Text = n.Text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Tag = n.Id, Margin = new Padding(4, 3, 4, 3),
+                    Padding = new Padding(10, 3, 10, 3), FlatStyle = FlatStyle.Flat, UseVisualStyleBackColor = false,
+                    BackColor = look.FieldBg, ForeColor = look.Fg, Cursor = Cursors.Hand
+                };
+                b.FlatAppearance.BorderSize = look.Dark ? 0 : 1;
+                b.FlatAppearance.BorderColor = Color.FromArgb(0xd0, 0xd0, 0xd0);
+                b.FlatAppearance.MouseOverBackColor = look.FieldHot;
+                b.FlatAppearance.MouseDownBackColor = look.Accent;
                 string bid = n.Id;
                 b.Click += delegate { Outbox.Send("press", "id", bid); };
                 byId[n.Id] = b;
                 leaves.Add(b);
                 return b;
             case "Field":
-                var t = new TextBox { Tag = n.Id, Dock = DockStyle.Fill, Margin = new Padding(3), MinimumSize = new Size(120, 0) };
+                var box = new FieldBox(look, Fonts.Sans) { MinimumSize = new Size(120, 0) };
+                var t = box.Box;
+                t.Tag = n.Id;
                 string fid = n.Id;
                 t.TextChanged += delegate
                 {
@@ -639,9 +807,9 @@ class HostForm : Form
                 SetHint(t, n.Hint);
                 byId[n.Id] = t;
                 leaves.Add(t);
-                return t;
+                return box;
             case "Toggle":
-                var c = new CheckBox { Text = n.Text, AutoSize = true, Checked = n.On, Tag = n.Id, Margin = new Padding(3) };
+                var c = new CheckBox { Text = n.Text, AutoSize = true, Checked = n.On, Tag = n.Id, Margin = new Padding(8, 6, 8, 6), ForeColor = look.Fg, BackColor = look.Bg };
                 string tid = n.Id;
                 c.CheckedChanged += delegate { if (!quiet) Outbox.Send("toggle", "id", tid, "text", c.Checked ? "on" : "off"); };
                 byId[n.Id] = c;
@@ -667,7 +835,7 @@ class HostForm : Form
         bool vertical = n.Kind == "Column";
         // The window's own box fills it; a nested box takes its content's size unless it grows.
         bool auto = !root && !Grows(n, parentVertical);
-        var t = new TableLayoutPanel { Margin = new Padding(0), Padding = new Padding(0), AutoSize = auto, Dock = DockStyle.Fill };
+        var t = new TableLayoutPanel { Margin = new Padding(0), Padding = new Padding(0), AutoSize = auto, Dock = DockStyle.Fill, BackColor = look.Bg };
         t.GrowStyle = TableLayoutPanelGrowStyle.FixedSize;
         int count = n.Kids.Count;
         if (vertical) { t.ColumnCount = 1; t.RowCount = count; t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); }
@@ -716,11 +884,14 @@ static class Program
         using (var g = Graphics.FromImage(bmp))
         {
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            // A run that ends in a space (the text before a bold or linked word) must count it.
+            var fmt = new StringFormat(StringFormat.GenericTypographic);
+            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
             foreach (object r in runs)
             {
                 Font f = Fonts.Get(Json.Text(Json.Get(r, "font")), Json.Num(Json.Get(r, "size")),
                                    Json.Flag(Json.Get(r, "bold")), Json.Flag(Json.Get(r, "italic")), false);
-                float w = g.MeasureString(Json.Text(Json.Get(r, "text")), f, 100000, StringFormat.GenericTypographic).Width;
+                float w = g.MeasureString(Json.Text(Json.Get(r, "text")), f, 100000, fmt).Width;
                 widths.Add(w.ToString("0.000", CultureInfo.InvariantCulture));
             }
         }
