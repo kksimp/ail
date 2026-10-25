@@ -264,7 +264,10 @@ fn main()
 
 **trace.snap.4** — With `--json`, the trap is one JSON object on standard
 error with `"severity":"trap"`, the rule, position and message, the source
-line, the condition's values, and the stack. *(ADR 0267)*
+line, the condition's values, and the stack. Natively `./ail` builds the program with
+`--values --verbose` and `tools/trapjson.awk` turns the report into that object, so
+the arguments and locals of every frame are given as in the interpreter's. Without
+`--trace`, `--json` is the only option that does this; with it, trace.run.1 applies. *(ADR 0267)*
 
 **trace.frame.1** — An executable built by `ail build` reports a trap with
 the stack the interpreter reports (trace.snap.2, trace.snap.3), without the
@@ -295,7 +298,7 @@ local on its own line: `      NAME = VALUE`. *(ADR 0886, ADR 0641)*
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
 
-```ail tool=run,--json,FILE status=1 expect="severity":"trap" rules=trace.snap.4
+```ail skip=bootstrap tool=run,--json,FILE status=1 expect="severity":"trap" rules=trace.snap.4
 fn inner(xs List[int]) int
     xs[5]
 

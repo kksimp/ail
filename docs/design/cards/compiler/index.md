@@ -1,7 +1,7 @@
 # compiler
 (root)  58 items
-a64  74 items
-api  208 items
+a64  92 items
+api  211 items
 ast  129 items
 budget  27 items
 check  347 items
@@ -12,7 +12,7 @@ edit  51 items
 explain  37 items
 fix  54 items
 fixrun  26 items
-fmt  63 items
+fmt  64 items
 load  102 items
 mir  486 items
 obj  64 items
@@ -20,4 +20,4 @@ pkg  44 items
 scaffold  2 items
 syntax  110 items
 watch  4 items
-x64  88 items
+x64  109 items

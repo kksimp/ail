@@ -37,13 +37,15 @@ fn main()
     print("{r} {time.now_ms() - start}")
 AIL
 ./ail check "$tmp/bench.ail" > /dev/null
+exe=
 case "$(uname -sm)" in
   "Darwin arm64") host=aarch64-macos ;;
   "Linux aarch64"|"Linux arm64") host=aarch64-linux ;;
+  MINGW*|MSYS*|CYGWIN*) host=x86_64-windows; exe=.exe ;;
   *) host=x86_64-linux ;;
 esac
-AIL_ROOT="$PWD" AIL_COMPILER="$tmp/compiler" .native/ail build "$tmp/bench.ail" --target "$host" -o "$tmp/bench" > /dev/null
-out=$("$tmp/bench" "$mib")
+AIL_ROOT="$PWD" AIL_COMPILER="$tmp/compiler" .native/ail build "$tmp/bench.ail" --target "$host" -o "$tmp/bench$exe" > /dev/null
+out=$("$tmp/bench$exe" "$mib")
 ms="${out##* }"
 [ "${out%% *}" = ok ] || { echo "FAIL: $out"; exit 1; }
 # Seal plus open is two passes over the data.

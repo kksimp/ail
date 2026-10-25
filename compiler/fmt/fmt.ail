@@ -39,6 +39,8 @@ struct FTok
     end_line int
     ## Whitespace followed it in the source (decides prefix `!`, fmt.space).
     space_after bool
+    ## A `(` that opens a tuple type after a parameter name (`t (int, str)`), not a call.
+    tuple_ty bool
 
 fn FTok.sym(self, s str) bool
     kind == SYM and text == s
@@ -60,7 +62,7 @@ fn FTok.ends_operand(self) bool
         or (kind == SYM and (text == ")" or text == "]" or text == "}" or text == "?"))
 
 fn comma_tok() FTok
-    FTok(text: ",", kind: SYM, line: 0, end_line: 0, space_after: true)
+    FTok(text: ",", kind: SYM, line: 0, end_line: 0, space_after: true, tuple_ty: false)
 
 ## A statement: the tokens between two `Newline`s (lex.stmt.1-2).
 struct Logical
@@ -311,7 +313,10 @@ fn new_formatter(src str, tokens List[syntax.Token], comments List[syntax.Commen
                     line: t.pos.line,
                     end_line: sl.end_line,
                     space_after: sl.space_after,
+                    tuple_ty: false,
                 ))
+    for k in 0..logicals.len()
+        mark_param_tuples(mut logicals[k].toks)
     # fmt.attr: an attributes-only line joins the item below it, unless a comment sits between.
     mut merged := List[Logical]()
     for l in logicals
@@ -328,6 +333,30 @@ fn new_formatter(src str, tokens List[syntax.Token], comments List[syntax.Commen
                 continue
         merged.push(l)
     Formatter(lines: lines, logicals: merged, comments: comments, out: [])
+
+## fmt.space: in a function header's parameter list, `name (A, B)` is a name and
+## its tuple type, so the space stays; elsewhere `name(...)` is a call.
+fn mark_param_tuples(mut toks List[FTok])
+    mut i := 0
+    while i < toks.len() and toks[i].sym("@")
+        i = attribute_end(toks, i)
+    if i < toks.len() and toks[i].kind == KW and toks[i].text == "pub"
+        i += 1
+    if i >= toks.len() or toks[i].kind != KW or toks[i].text != "fn"
+        return
+    mut depth := 0
+    for j in i..toks.len()
+        if toks[j].sym("(")
+            and depth >= 1
+            and j >= 2
+            and toks[j - 1].kind == WORD
+            and (toks[j - 2].sym(",") or toks[j - 2].sym("("))
+            and toks[j - 1].space_after
+            toks[j].tuple_ty = true
+        if toks[j].opens()
+            depth += 1
+        elif toks[j].closes()
+            depth -= 1
 
 fn is_indent(t syntax.Tok) bool
     match t
@@ -589,6 +618,8 @@ fn spaced(before FTok?, a FTok, b FTok) bool
     # `fn(int) int`, a function type (type.fn.1).
     if a.kind == KW and a.text == "fn" and b.sym("(")
         return false
+    if b.tuple_ty
+        return true
     if b.sym("(") or b.sym("[")
         return not a.ends_operand()
     true

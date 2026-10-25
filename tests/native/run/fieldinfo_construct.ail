@@ -1,0 +1,10 @@
+# refl.info.3: a program builds FieldInfo and VariantInfo values itself (plain data).
+struct Pair
+    first List[Map[str, int]]
+    second int
+
+fn main()
+    f := FieldInfo(name: "first", type_text: "List[Map[str, int]]", public: false, doc: "")
+    print("{f.name} has type {f.type_text}")
+    v := VariantInfo(name: "Gone", fields: [f])
+    print("{v.name} {v.fields.len()}")

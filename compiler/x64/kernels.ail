@@ -20,6 +20,7 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_scal32"
         or name == "rt.vec_sum16"
         or name == "rt.vec_sum16_32"
+        or name == "rt.vec_exp"
         or name == "rt.fill"
         or is_aes_kernel(name)
 
@@ -36,6 +37,7 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_scal32" => kernel_scal32(mut a)
         "rt.vec_sum16" => kernel_sum16(mut a, false)
         "rt.vec_sum16_32" => kernel_sum16(mut a, true)
+        "rt.vec_exp" => kernel_exp(mut a)
         "rt.fill" => kernel_fill(mut a)
         "rt.aes_hw_ok" | "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
         _ => kernel_scal(mut a)
@@ -541,5 +543,154 @@ fn kernel_sum16(mut a Asm, single bool)
     a.vpd256_rrr("fadd", 1, 1, 3)
     a.vpd256_rrr("fadd", 0, 0, 1)
     a.vmovupd_mr(at(RCX, 0), 0)
+    a.vzeroupper()
+    a.ret()
+
+# ---- `exp` of doubles, four at a time (ADR 0876) ----
+
+## The constants of `float_exp` as doubles' bits, 32 bytes each on the kernel's
+## stack frame in this order: |x| mask, 700, 2^-28, ln2/2, 1.5 ln2, 1, 2, 0.5,
+## 1/ln2, ln2 hi, ln2 lo, the five polynomial coefficients, -1, and the integer 1023.
+VX_CONSTS := [
+    9223372036854775807,
+    4649368480934526976,
+    4481081629233643520,
+    4599914934686071279,
+    4607361305248770931,
+    4607182418800017408,
+    4611686018427387904,
+    4602678819172646912,
+    4609176140021203710,
+    4604418534311723008,
+    4461442080421002358,
+    4595172819793696062,
+    -4654820494858601069,
+    4544508515198557740,
+    -4702957295668925455,
+    4496342204012209360,
+    -4616189618054758400,
+    1023,
+]
+
+VX_ABS := 0
+VX_C700 := 1
+VX_TINY := 2
+VX_HALFLN2 := 3
+VX_LN2X1P5 := 4
+VX_ONE := 5
+VX_TWO := 6
+VX_HALF := 7
+VX_INVLN2 := 8
+VX_LN2HI := 9
+VX_LN2LO := 10
+VX_P1 := 11
+VX_P2 := 12
+VX_P3 := 13
+VX_P4 := 14
+VX_P5 := 15
+VX_NEG1 := 16
+VX_K1023 := 17
+
+fn vx(i int) Mem
+    at(RSP, 32 * i)
+
+## `rt.vec_exp(out, a, n) int`: `out[i] = exp(a[i])` (`float_exp`, fdlibm, step for
+## step, no fused multiply-add) for as many leading quads as have all four
+## arguments in `|x| < 700`; the count done comes back, and the caller finishes
+## the rest (a NaN or huge argument included) with `float_exp`. A lane with
+## `|x| <= ln2/2` runs the general formula with `k = 0`, which is the same
+## number as the short path (`lo = 0`, `r = hi = x`); one with `|x| < 2^-28` gets
+## `1 + x`. rdi = out, rsi = a, rdx = n. ymm0..ymm7 are the work (xmm6 and xmm7
+## are saved), the constants live on the stack.
+fn kernel_exp(mut a Asm)
+    a.alu_ri("sub", RSP, 608)
+    a.vmovups_mr128(at(RSP, 576), 6)
+    a.vmovups_mr128(at(RSP, 592), 7)
+    for i in 0..18
+        a.mov_ri(RAX, VX_CONSTS[i])
+        for j in 0..4
+            a.mov_mr(at(RSP, 32 * i + 8 * j), RAX)
+    a.mov_ri(RCX, 0)
+    loop := a.label()
+    cont := a.label()
+    end := a.label()
+    a.bind(loop)
+    a.alu_ri("cmp", RDX, 4)
+    a.jcc(CC_B, end)
+    a.vmovupd_rm(0, at(RSI, 0))
+    a.vlogic256_rrm(84, 1, 0, vx(VX_ABS))
+    # All four lanes in range, else stop here.
+    a.vcmppd_rrm(2, 1, vx(VX_C700), 17)
+    a.vmovmskpd(R8, 2)
+    a.alu_ri("cmp", R8, 15)
+    a.jcc(CC_E, cont)
+    a.jmp(end)
+    a.bind(cont)
+    # s1 = x > 0 ? 1 : -1 (ymm5); ymm2 = the mask x > 0.
+    a.vpd_rrr(87, 3, 3, 3)
+    a.vcmppd_rrr(2, 0, 3, 30)
+    a.vmovupd_rm(5, vx(VX_NEG1))
+    a.vmovupd_rm(6, vx(VX_ONE))
+    a.vblendvpd(5, 5, 6, 2)
+    # kf for |x| >= 1.5 ln2: floor(x/ln2 + 0.5) above zero, ceil(x/ln2 - 0.5) below (ymm2).
+    a.vpd256_rrm("fmul", 3, 0, vx(VX_INVLN2))
+    a.vpd256_rrm("fadd", 4, 3, vx(VX_HALF))
+    a.vroundpd(4, 4, 9)
+    a.vpd256_rrm("fsub", 3, 3, vx(VX_HALF))
+    a.vroundpd(3, 3, 10)
+    a.vblendvpd(2, 3, 4, 2)
+    # |x| < 1.5 ln2: kf = s1; then |x| <= ln2/2: kf = 0 (ymm3).
+    a.vcmppd_rrm(3, 1, vx(VX_LN2X1P5), 17)
+    a.vblendvpd(3, 2, 5, 3)
+    a.vcmppd_rrm(4, 1, vx(VX_HALFLN2), 18)
+    a.vlogic256_rrr(85, 3, 4, 3)
+    # hi = x - kf ln2hi (ymm4), lo = kf ln2lo (ymm5), r = hi - lo (ymm6), t = r r (ymm7).
+    a.vpd256_rrm("fmul", 4, 3, vx(VX_LN2HI))
+    a.vpd256_rrr("fsub", 4, 0, 4)
+    a.vpd256_rrm("fmul", 5, 3, vx(VX_LN2LO))
+    a.vpd256_rrr("fsub", 6, 4, 5)
+    a.vpd256_rrr("fmul", 7, 6, 6)
+    # q = p1 + t (p2 + t (p3 + t (p4 + t p5))); c = r - t q (ymm1).
+    a.vpd256_rrm("fmul", 1, 7, vx(VX_P5))
+    a.vpd256_rrm("fadd", 1, 1, vx(VX_P4))
+    a.vpd256_rrr("fmul", 1, 7, 1)
+    a.vpd256_rrm("fadd", 1, 1, vx(VX_P3))
+    a.vpd256_rrr("fmul", 1, 7, 1)
+    a.vpd256_rrm("fadd", 1, 1, vx(VX_P2))
+    a.vpd256_rrr("fmul", 1, 7, 1)
+    a.vpd256_rrm("fadd", 1, 1, vx(VX_P1))
+    a.vpd256_rrr("fmul", 1, 7, 1)
+    a.vpd256_rrr("fsub", 1, 6, 1)
+    # y = 1 - ((lo - r c / (2 - c)) - hi) (ymm2).
+    a.vpd256_rrr("fmul", 2, 6, 1)
+    a.vmovupd_rm(7, vx(VX_TWO))
+    a.vpd256_rrr("fsub", 7, 7, 1)
+    a.vpd256_rrr("fdiv", 2, 2, 7)
+    a.vpd256_rrr("fsub", 2, 5, 2)
+    a.vpd256_rrr("fsub", 2, 2, 4)
+    a.vmovupd_rm(7, vx(VX_ONE))
+    a.vpd256_rrr("fsub", 2, 7, 2)
+    # y * 2^k: the exponent bits (k + 1023) << 52.
+    a.vcvtpd2dq(4, 3)
+    a.vpmovsxdq(4, 4)
+    a.vpaddq_rrm(4, 4, vx(VX_K1023))
+    a.vpsllq(4, 4, 52)
+    a.vpd256_rrr("fmul", 2, 2, 4)
+    # |x| < 2^-28: 1 + x.
+    a.vlogic256_rrm(84, 1, 0, vx(VX_ABS))
+    a.vcmppd_rrm(3, 1, vx(VX_TINY), 17)
+    a.vpd256_rrm("fadd", 5, 0, vx(VX_ONE))
+    a.vblendvpd(3, 2, 5, 3)
+    a.vmovupd_mr(at(RDI, 0), 3)
+    a.alu_ri("add", RDI, 32)
+    a.alu_ri("add", RSI, 32)
+    a.alu_ri("add", RCX, 4)
+    a.alu_ri("sub", RDX, 4)
+    a.jmp(loop)
+    a.bind(end)
+    a.mov_rr(RAX, RCX)
+    a.vmovups_rm128(6, at(RSP, 576))
+    a.vmovups_rm128(7, at(RSP, 592))
+    a.alu_ri("add", RSP, 608)
     a.vzeroupper()
     a.ret()

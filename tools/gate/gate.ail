@@ -2441,7 +2441,12 @@ fn Gate.spec(mut self)
         red("spec", "could not start tools/gate/spec.ail")
         return
     if r.status != 0
-        red("spec", r.out)
+        errl := r.err.lines()
+        mut tail := List[str]()
+        for i in 0..errl.len()
+            if i < 8
+                tail.push(errl[i])
+        red("spec", "{r.out}\nspec.ail exit {r.status}; stderr:\n{tail.join("\n")}")
 
 ## The native runtime's tests, the refusals of ADR 0900, and the native subset table
 ## (native_runtime.rs, native_test.rs, native_subset_table.rs, ported).

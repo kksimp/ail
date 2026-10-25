@@ -21,6 +21,7 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_narrow"
         or name == "rt.vec_sum16"
         or name == "rt.vec_sum16_32"
+        or name == "rt.vec_exp"
         or is_aes_kernel(name)
 
 ## Add the kernel `name` to `img`.
@@ -37,6 +38,7 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_narrow" => kernel_narrow(mut a)
         "rt.vec_sum16" => kernel_sum16(mut a, false)
         "rt.vec_sum16_32" => kernel_sum16(mut a, true)
+        "rt.vec_exp" => kernel_exp(mut a)
         "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
         "rt.vec_scal" => kernel_scal(mut a)
         _ => unreachable("a64: unknown kernel {name}")
@@ -603,4 +605,142 @@ fn kernel_sum16(mut a Asm, single bool)
     a.vop("fadd", 1, 1, 3)
     a.str_q(0, 3, 0)
     a.str_q(1, 3, 16)
+    a.ret()
+
+# ---- `exp` of doubles, two at a time (ADR 0876) ----
+
+## NEON words for `vins3` / `vins2` (base + registers): `fcmgt`, `fcmge`, `frintm`,
+## `frintp`, `fabs`, `fneg`, `fcvtzs`, `bsl`, `bic`, `eor`, `add` on `v.2d` (`.16b`
+## for the bit operations), `mov`, `shl #52`, `dup vd.2d, xn` and `mov xd, vn.d[i]`.
+VX_FCMGT := 1860232192
+VX_FCMGE := 1851843584
+VX_FRINTM := 1315018752
+VX_FRINTP := 1323403264
+VX_FABS := 1323366400
+VX_FNEG := 1860237312
+VX_FCVTZS := 1323415552
+VX_BSL := 1851792384
+VX_BIC := 1314921472
+VX_EOR := 1847598080
+VX_ADD := 1323336704
+VX_MOV := 1319115776
+VX_SHL52 := 1333023744
+VX_DUP := 1309150208
+VX_UMOV0 := 1309162496
+VX_UMOV1 := 1310211072
+
+## The constants of `float_exp`, as doubles' bits: 700, 2^-28, ln2/2, 1.5 ln2, 1, 2,
+## 0.5, 1/ln2, ln2 hi, ln2 lo, then the five polynomial coefficients.
+VX_CONSTS := [
+    4649368480934526976,
+    4481081629233643520,
+    4599914934686071279,
+    4607361305248770931,
+    4607182418800017408,
+    4611686018427387904,
+    4602678819172646912,
+    4609176140021203710,
+    4604418534311723008,
+    4461442080421002358,
+    4595172819793696062,
+    -4654820494858601069,
+    4544508515198557740,
+    -4702957295668925455,
+    4496342204012209360,
+]
+
+## `rt.vec_exp(out, a, n) int`: `out[i] = exp(a[i])` (`float_exp`, fdlibm, step for
+## step, no fused multiply-add) for as many leading pairs as have both
+## arguments in `|x| < 700`; the count done comes back, and the caller finishes
+## the rest (a NaN or huge argument included) with `float_exp`. A lane with
+## `|x| <= ln2/2` runs the general formula with `k = 0`, which is the same
+## number as the short path (`lo = 0`, `r = hi = x`); one with `|x| < 2^-28`
+## gets `1 + x`. x0 = out, x1 = a, x2 = n; v16..v31 hold the constants
+## (v16 700, v17 2^-28, v18 ln2/2, v19 1.5 ln2, v20 1, v21 2, v22 0.5,
+## v23 1/ln2, v24 ln2 hi, v25 ln2 lo, v26..v30 the coefficients, v31 the
+## integer 1023), v0..v7 the work.
+fn kernel_exp(mut a Asm)
+    for k in 0..15
+        a.mov_ri(9, VX_CONSTS[k])
+        a.vins2(VX_DUP, 16 + k, 9)
+    a.mov_ri(9, 1023)
+    a.vins2(VX_DUP, 31, 9)
+    a.mov_ri(3, 0)
+    loop := a.label()
+    cont := a.label()
+    end := a.label()
+    a.bind(loop)
+    a.cmp_ri(2, 2)
+    a.b_cond(LT, end)
+    a.ldr_q(0, 1, 0)
+    a.vins2(VX_FABS, 1, 0)
+    # Both lanes in range, else stop here: the compare masks are all ones.
+    a.vins3(VX_FCMGT, 2, 16, 1)
+    a.vins2(VX_UMOV0, 9, 2)
+    a.vins2(VX_UMOV1, 10, 2)
+    a.alu_rr("and", 9, 9, 10)
+    a.alu_ri("add", 9, 9, 1)
+    a.cbz(9, cont)
+    a.b(end)
+    a.bind(cont)
+    # s1 = x > 0 ? 1 : -1 (v5); v2 = the mask x > 0.
+    a.vins3(VX_EOR, 3, 3, 3)
+    a.vins3(VX_FCMGT, 2, 0, 3)
+    a.vins3(VX_MOV, 5, 2, 2)
+    a.vins2(VX_FNEG, 6, 20)
+    a.vins3(VX_BSL, 5, 20, 6)
+    # kf for |x| >= 1.5 ln2: floor(x/ln2 + 0.5) above zero, ceil(x/ln2 - 0.5) below (v2).
+    a.vop("fmul", 3, 23, 0)
+    a.vop("fadd", 4, 3, 22)
+    a.vins2(VX_FRINTM, 4, 4)
+    a.vop("fsub", 3, 3, 22)
+    a.vins2(VX_FRINTP, 3, 3)
+    a.vins3(VX_BSL, 2, 4, 3)
+    # |x| < 1.5 ln2: kf = s1; then |x| <= ln2/2: kf = 0 (v3).
+    a.vins3(VX_FCMGT, 3, 19, 1)
+    a.vins3(VX_BSL, 3, 5, 2)
+    a.vins3(VX_FCMGE, 4, 18, 1)
+    a.vins3(VX_BIC, 3, 3, 4)
+    # hi = x - kf ln2hi (v4), lo = kf ln2lo (v5), r = hi - lo (v6), t = r r (v7).
+    a.vop("fmul", 4, 3, 24)
+    a.vop("fsub", 4, 0, 4)
+    a.vop("fmul", 5, 3, 25)
+    a.vop("fsub", 6, 4, 5)
+    a.vop("fmul", 7, 6, 6)
+    # q = p1 + t (p2 + t (p3 + t (p4 + t p5))); c = r - t q (v1).
+    a.vop("fmul", 1, 7, 30)
+    a.vop("fadd", 1, 1, 29)
+    a.vop("fmul", 1, 7, 1)
+    a.vop("fadd", 1, 1, 28)
+    a.vop("fmul", 1, 7, 1)
+    a.vop("fadd", 1, 1, 27)
+    a.vop("fmul", 1, 7, 1)
+    a.vop("fadd", 1, 1, 26)
+    a.vop("fmul", 1, 7, 1)
+    a.vop("fsub", 1, 6, 1)
+    # y = 1 - ((lo - r c / (2 - c)) - hi) (v2).
+    a.vop("fmul", 2, 6, 1)
+    a.vop("fsub", 7, 21, 1)
+    a.vop("fdiv", 2, 2, 7)
+    a.vop("fsub", 2, 5, 2)
+    a.vop("fsub", 2, 2, 4)
+    a.vop("fsub", 2, 20, 2)
+    # y * 2^k: the exponent bits (k + 1023) << 52.
+    a.vins2(VX_FCVTZS, 4, 3)
+    a.vins3(VX_ADD, 4, 4, 31)
+    a.vins2(VX_SHL52, 4, 4)
+    a.vop("fmul", 2, 2, 4)
+    # |x| < 2^-28: 1 + x.
+    a.vins2(VX_FABS, 1, 0)
+    a.vins3(VX_FCMGT, 3, 17, 1)
+    a.vop("fadd", 5, 20, 0)
+    a.vins3(VX_BSL, 3, 5, 2)
+    a.str_q(3, 0, 0)
+    a.alu_ri("add", 0, 0, 16)
+    a.alu_ri("add", 1, 1, 16)
+    a.alu_ri("add", 3, 3, 2)
+    a.alu_ri("sub", 2, 2, 2)
+    a.b(loop)
+    a.bind(end)
+    a.mov_rr(0, 3)
     a.ret()

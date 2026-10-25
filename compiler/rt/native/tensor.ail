@@ -897,8 +897,30 @@ fn tensor_softmax(a int) int
     softmax_rows(ek, da, out, w, 0, rows)
     tensor_pack(t)
 
-## Rows `lo..hi` of `w` words each of a softmax (std.tensor.13).
+## `out[i] = exp(a[i])` for the leading `i` where every argument has `|x| < 700`,
+## in pairs or quads (an assembled kernel on targets that have one); how many
+## it did. `out` may be `a`.
+fn vec_exp(out int, a int, n int) int
+    for i in 0..n
+        storef(out + 8 * i, float_exp(loadf(a + 8 * i)))
+    n
+
+## `exp` of the `n` doubles at `p`, in place: the kernel where it can, and
+## `float_exp` for the rest.
+fn exp_in_place(p int, n int)
+    mut i := 0
+    while i < n
+        i += vec_exp(p + 8 * i, p + 8 * i, n - i)
+        if i < n
+            m := if n - i < 4 then n - i else 4
+            for k in 0..m
+                storef(p + 8 * (i + k), float_exp(loadf(p + 8 * (i + k))))
+            i += m
+
+## Rows `lo..hi` of `w` words each of a softmax (std.tensor.13): `exp(x - top)`
+## summed in order, then each divided by the sum.
 fn softmax_rows(ek int, da int, out int, w int, lo int, hi int)
+    r := if ek == 2 then 1 else 0
     for row in lo..hi
         base := row * w
         mut top := 0.0 - fm_inf()
@@ -906,13 +928,12 @@ fn softmax_rows(ek int, da int, out int, w int, lo int, hi int)
             x := loadf(da + 8 * (base + j))
             if x > top
                 top = x
+        vec_scal(1, out + 8 * base, da + 8 * base, w, 0, 0, top)
+        exp_in_place(out + 8 * base, w)
         mut total := 0.0
         for j in 0..w
-            e := float_exp(loadf(da + 8 * (base + j)) - top)
-            storef(out + 8 * (base + j), e)
-            total += e
-        for j in 0..w
-            storef(out + 8 * (base + j), elem_round(ek, loadf(out + 8 * (base + j)) / total))
+            total += loadf(out + 8 * (base + j))
+        vec_scal(3, out + 8 * base, out + 8 * base, w, r, 0, total)
 
 ## `t.to_f32()` (std.tensor.22): each element rounded to `f32`.
 fn tensor_to_f32(a int) int
@@ -1241,20 +1262,48 @@ fn tensor_arg(a int, max int, axis int, has int) int
     for b in 0..before
         for c in 0..after
             base := da + 8 * (b * n * after + c)
-            mut best := 0
-            for k in 1..n
-                if ek == 0
-                    x := load64(base + 8 * k * after)
-                    y := load64(base + 8 * best * after)
-                    if (max != 0 and x > y) or (max == 0 and x < y)
-                        best = k
-                else
-                    x := loadf(base + 8 * k * after)
-                    y := loadf(base + 8 * best * after)
-                    if (max != 0 and x > y) or (max == 0 and x < y)
-                        best = k
-            store64(out + 8 * (b * after + c), best)
+            store64(out + 8 * (b * after + c), arg_scan(base, n, 8 * after, ek, max))
     t
+
+## The index of the first largest (`max` non-zero) or smallest of `n` elements
+## `step` bytes apart from `p`: `int` when `ek` is 0, else `float` (a NaN never
+## replaces the best so far, and a NaN first element is never replaced).
+fn arg_scan(p int, n int, step int, ek int, max int) int
+    mut best := 0
+    mut q := p + step
+    if ek == 0
+        mut bv := load64(p)
+        if max != 0
+            for k in 1..n
+                x := load64(q)
+                if x > bv
+                    bv = x
+                    best = k
+                q += step
+        else
+            for k in 1..n
+                x := load64(q)
+                if x < bv
+                    bv = x
+                    best = k
+                q += step
+        return best
+    mut fv := loadf(p)
+    if max != 0
+        for k in 1..n
+            x := loadf(q)
+            if x > fv
+                fv = x
+                best = k
+            q += step
+    else
+        for k in 1..n
+            x := loadf(q)
+            if x < fv
+                fv = x
+                best = k
+            q += step
+    best
 
 ## A float as Rust's `Display` writes it, for a fault message: `1` for `1.0`.
 fn put_display_float(x float)
