@@ -1621,6 +1621,126 @@ fn main()
     print(rows.len())
 ```
 
+## Configuration files: `std.toml`
+
+**std.toml.1** — `use std.toml` provides `parse(text str) Json ! TomlError`,
+which reads a TOML 1.0 document into the `Json` value ([std-json](std-json.md)):
+tables are `Obj` (members in document order), arrays are `Arr`, strings are
+`Str` and booleans are `Bool`, so `get`, `at`, `as_str` and the other `Json`
+accessors read it. *(ADR 0901)*
+
+**std.toml.2** — Basic strings (`"..."`, `"""..."""`) take the escapes `\b \t
+\n \f \r \" \\ \uXXXX \UXXXXXXXX`; in a `"""` string a backslash at the end
+of a line drops the break and the blanks after it. Literal strings (`'...'`,
+`'''...'''`) take no escapes. A line break right after an opening `"""` or
+`'''` is dropped. *(ADR 0901)*
+
+**std.toml.3** — Integers (decimal, `0x`, `0o`, `0b`, `_` between digits, a
+leading `+` or `-`) and floats read as `Num`, so an integer beyond 2^53 loses
+precision. A date, time or date-time (`1979-05-27`, `07:32:00`,
+`1979-05-27 07:32:00Z`) is kept as the `Str` of its TOML spelling. *(ADR 0901)*
+
+**std.toml.4** — A key is bare (letters, digits, `_`, `-`), `"quoted"` or
+`'literal'`; dots between parts name nested tables (`a.b = 1`). *(ADR 0901)*
+
+**std.toml.5** — `[a.b]` opens a table, creating the tables on its path.
+`[[a]]` appends a new table to the array of tables `a`; a path through an array
+of tables goes into its last table. *(ADR 0901)*
+
+**std.toml.6** — Arrays may span lines, hold comments and end in a comma, and
+may mix types. An inline table `{ k = v, ... }` is a table on one line.
+*(ADR 0901)*
+
+**std.toml.7** — A key set twice in a table, a table opened on a name that
+holds a value, and a key path through a value that is not a table fail with
+`TomlError`. *(ADR 0901)*
+
+**std.toml.8** — `TomlError` is an error with `why str` and `line int`
+(1-based, the line where the parser stopped); its text is `WHY (line N)`. An
+unterminated string, an invalid escape, an invalid number and a missing value
+are further causes. *(ADR 0901)*
+
+```ail skip=bootstrap rules=std.toml.1,std.toml.2,std.toml.3,std.toml.4,std.toml.5,std.toml.6
+use std.toml
+
+fn main() !
+    src := "name = \"a\\tb\"\nport = 8080\nlit = 'c:\\x'\nx.y = [1,\n 2, ]\npt = \{ k = true }\n[db]\nhost = \"h\"\n[[db.node]]\nid = 1\n"
+    doc := toml.parse(src)?
+    print(doc.str("name") else "")
+    print(doc.str("lit") else "")
+    print(doc.num("port") else 0.0)
+    print((doc.get("x") else Json.Null).to_text())
+    print((doc.get("pt") else Json.Null).to_text())
+    db := doc.get("db") else Json.Null
+    print(db.str("host") else "")
+    print((db.get("node") else Json.Null).to_text())
+```
+
+```ail skip=bootstrap rules=std.toml.7,std.toml.8
+use std.toml
+
+fn main()
+    doc := toml.parse("a = 1\na = 2\n") else err
+        print(err)   # duplicate key 'a' (line 2)
+        Json.Null
+    print(doc.to_text())
+```
+
+## Integers of any size: `std.bigint`
+
+**std.bigint.1** — `use std.bigint` provides `struct BigInt`, an integer of
+any size. Its operations never overflow; they are limited by memory only.
+*(ADR 0902)*
+
+**std.bigint.2** — `from_int(n int) BigInt` and `parse(text str) BigInt !
+BigIntError`. `parse` takes decimal digits with an optional leading `-` or
+`+`; leading zeros are allowed and `-0` is zero. *(ADR 0902)*
+
+**std.bigint.3** — `BigInt.to_text() str` is the decimal text with a leading
+`-` for a negative value. `BigInt.as_int() int?` is `none` when the value does
+not fit in an `int`. *(ADR 0902)*
+
+**std.bigint.4** — `add`, `sub` and `mul` take a `BigInt` and give a `BigInt`.
+`cmp(o)` gives -1, 0 or 1. `negate()` and `abs()` give a `BigInt`. *(ADR 0902)*
+
+**std.bigint.5** — `divmod(o) QuoRem ! BigIntError` divides toward zero:
+`quo` is the quotient and `rem` has the sign of the dividend, so
+`quo * o + rem` is the dividend. *(ADR 0902)*
+
+**std.bigint.6** — `pow(n int) BigInt ! BigIntError` is `self` to the power
+`n >= 0`; `pow(0)` is 1. *(ADR 0902)*
+
+**std.bigint.7** — `factorial(n int) BigInt ! BigIntError` is `n!` for `n >= 0`.
+*(ADR 0902)*
+
+**std.bigint.8** — `is_zero()` and `is_negative()` give `bool`; zero is never
+negative. *(ADR 0902)*
+
+**std.bigint.9** — `BigIntError` is an error with `why str`. Its causes are `no
+digits`, `invalid digit 'C'`, `division by zero`, `negative exponent` and
+`negative factorial`. *(ADR 0902)*
+
+```ail skip=bootstrap rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
+use std.bigint
+
+fn main() !
+    a := bigint.parse("123456789012345678901234567890")?
+    b := bigint.from_int(-7)
+    print(a.add(b).to_text())
+    print(a.mul(b).to_text())
+    print(a.cmp(b))
+    qr := a.divmod(b)?
+    print("{qr.quo.to_text()} {qr.rem.to_text()}")
+    print(bigint.from_int(2).pow(70)?.to_text())
+    print(bigint.factorial(25)?.to_text())
+    print(a.as_int() else 0)
+    print(b.is_zero() or not b.is_negative())
+    bad := bigint.parse("1x") else err
+        print(err)   # invalid digit 'x'
+        b
+    print(bad.to_text())
+```
+
 ## Command-line arguments: `std.args`
 
 **std.args.1** — `use std.args` provides the spec makers `flag(name, short,

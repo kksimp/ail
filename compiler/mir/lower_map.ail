@@ -505,14 +505,12 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 n0 := rawop("load64", [r.id], Ty.Int)
                 return Val(id: op("eq", [n0, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
             if name == "add" and vs.len() == 1
-                return Val(
-                    id: call(
-                        "rt.map_add",
-                        [r.id, stored_key(args[0].value, vs[0], et, npos)],
-                        Ty.Bool,
-                    ),
-                    ty: Ty.Bool,
-                )
+                kid := stored_key(args[0].value, vs[0], et, npos)
+                added := call("rt.map_add", [r.id, kid], Ty.Bool)
+                ev := Val(id: kid, ty: et)
+                note := WNote(kind: "add", elem: ev, label: "", at: none, at2: none)
+                watch_note_if(npos, added, r, note)
+                return Val(id: added, ty: Ty.Bool)
             if name == "sorted"
                 and vs.len() == 0
                 and (et == Ty.Int or et == Ty.Str or et == Ty.Char)
@@ -525,10 +523,12 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                     ty: Ty.Bool,
                 )
             if name == "remove" and vs.len() == 1
-                return Val(
-                    id: call("rt.map_remove", [r.id, convert(vs[0], et, npos)], Ty.Bool),
-                    ty: Ty.Bool,
-                )
+                kid := convert(vs[0], et, npos)
+                gone := call("rt.map_remove", [r.id, kid], Ty.Bool)
+                ev := Val(id: kid, ty: et)
+                note := WNote(kind: "remove", elem: ev, label: "", at: none, at2: none)
+                watch_note_if(npos, gone, r, note)
+                return Val(id: gone, ty: Ty.Bool)
         _ => return none
     unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
 

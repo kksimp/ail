@@ -82,6 +82,7 @@ pub fn uses_tasks(text str) bool
         or text.contains("TaskGroup")
         or text.contains("proc.start")
         or text.contains("std.app")
+        or text.contains("tensor.")
 
 ## `fn main() !`: no result and no error type of its own. The only `?` the
 ## subset knows is `t.wait()?`, which ends the program on a trap.
@@ -346,6 +347,16 @@ fn Lower.build_task_fns(mut self)
         finish(return_of(-1))
         synth_end(ps)
     ps := synth_begin("rt.dispatch", [Ty.Int, Ty.Int])
+    # The tensor kernels' chunks (task.ail, ADR 0876).
+    tyes := new_block()
+    tno := new_block()
+    sealed[tyes] = true
+    sealed[tno] = true
+    branch(op("eq", [ps[0], konst(1073741824, Ty.Int)], Ty.Bool), tyes, [], tno, [])
+    cur = tyes
+    call("rt.tensor_chunk", [ps[1]], Ty.Unit)
+    finish(return_of(-1))
+    cur = tno
     for k in 0..tk.sites.len()
         yes := new_block()
         no := new_block()
