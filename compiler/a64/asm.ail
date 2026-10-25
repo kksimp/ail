@@ -317,6 +317,32 @@ pub fn Asm.ldrb_idx(mut self, t int, n int, m int)
 pub fn Asm.strb_idx(mut self, t int, n int, m int)
     word(rrr(941647872, t, n, m))
 
+## `ldrh`/`strh` and `ldr`/`str` of a 32-bit register (zero-extending on a
+## load) at `[xn, #k * size]` (k < 4096) and `[xn, xm, lsl #1]` or `lsl #2`.
+pub fn Asm.ldrh_off(mut self, t int, n int, k int)
+    word(2034237440 + k * 1024 + n * 32 + t)
+
+pub fn Asm.strh_off(mut self, t int, n int, k int)
+    word(2030043136 + k * 1024 + n * 32 + t)
+
+pub fn Asm.ldr_w_off(mut self, t int, n int, k int)
+    word(3107979264 + k * 1024 + n * 32 + t)
+
+pub fn Asm.str_w_off(mut self, t int, n int, k int)
+    word(3103784960 + k * 1024 + n * 32 + t)
+
+pub fn Asm.ldrh_idx(mut self, t int, n int, m int)
+    word(rrr(2019588096, t, n, m))
+
+pub fn Asm.strh_idx(mut self, t int, n int, m int)
+    word(rrr(2015393792, t, n, m))
+
+pub fn Asm.ldr_w_idx(mut self, t int, n int, m int)
+    word(rrr(3093329920, t, n, m))
+
+pub fn Asm.str_w_idx(mut self, t int, n int, m int)
+    word(rrr(3089135616, t, n, m))
+
 ## `stp a, b, [sp, #-16]!` and `ldp a, b, [sp], #16`.
 pub fn Asm.push_pair(mut self, a int, b int)
     word(2843738112 + 126 * 32768 + b * 1024 + SP * 32 + a)

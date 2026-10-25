@@ -117,8 +117,7 @@ fn clean(f Func, defs List[Def], v int, marks List[bool]) bool
     true
 
 fn is_push(i Inst) bool
-    i.op == "call"
-        and (i.name == "rt.list_push" or i.name == "rt.list_pushf" or i.name == "rt.list_pushb")
+    i.op == "call" and is_push_name(i.name)
 
 # ---- accesses an earlier access or push already vouches for ----
 
@@ -148,6 +147,8 @@ GROWS := [
     "rt.list_push",
     "rt.list_pushf",
     "rt.list_pushb",
+    "rt.list_pushw",
+    "rt.list_pushd",
     "rt.list_copy",
     "rt.list_copy_deep",
     "rt.list_join",
@@ -293,7 +294,7 @@ fn reserve_lists(f Func) Func
                 if at < 0
                     lists.push(x)
                     per.push(0)
-                    size.push(if i.name == "rt.list_pushb" then 1 else 8)
+                    size.push(push_bytes(i.name))
                     at = lists.len() - 1
                 per[at] += 1
         for k in 0..lists.len()

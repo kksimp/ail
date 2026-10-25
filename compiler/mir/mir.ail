@@ -194,6 +194,18 @@ pub struct Inst
 pub fn Inst.elem_off(self) int
     fimm.to_int()
 
+## The bytes per element of the list that push callee `name` fills: a
+## `List[u8]` or `List[bool]` 1, a `List[u16]` 2, a `List[u32]` 4, else 8.
+pub fn is_push_name(name str) bool
+    name == "rt.list_push" or name == "rt.list_pushf" or push_bytes(name) < 8
+
+pub fn push_bytes(name str) int
+    match name
+        "rt.list_pushb" => 1
+        "rt.list_pushw" => 2
+        "rt.list_pushd" => 4
+        _ => 8
+
 pub fn inst(dst int, op str, args List[int]) Inst
     Inst(dst: dst, op: op, args: args, imm: 0, fimm: 0.0, name: "", site: -1)
 
