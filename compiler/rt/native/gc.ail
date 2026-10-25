@@ -199,7 +199,38 @@ fn gv_tick()
     if hs(26) == 2 and c >= hs(28) and c < hs(29) and (c - hs(28)) % hs(30) == 0
         gc_verify()
 
+## Every free list: each node lies in a page of its class, on a block boundary,
+## with a zero header. A dangling write into a freed block breaks the chain
+## word it holds, so this finds that write at the next check.
+fn gc_verify_chains()
+    base := hs(H_BASE)
+    top := hs(H_TOP)
+    pt := hs(H_PAGES)
+    for idx in 1..37
+        mut node := hs(H_HEADS + idx)
+        mut prev := base + 16
+        mut steps := 0
+        while node != 0
+            if node < base or node >= top
+                gc_bad_header(prev, prev, 0, 4)
+            pi := (node - base) / PAGE
+            t := load64(pt + 8 * pi)
+            pb := base + pi * PAGE
+            csz := t.shr(16).bit_and(65535)
+            if t.bit_and(255) != 1 or t.shr(8).bit_and(255) != idx
+                gc_bad_header(prev, prev, csz, 5)
+            if (node - pb) % csz != 0
+                gc_bad_header(prev, prev, csz, 6)
+            if load64(node) != 0
+                gc_bad_header(node, prev, csz, 7)
+            prev = node
+            node = load64(node + 8)
+            steps += 1
+            if steps > 100000000
+                gc_bad_header(prev, prev, csz, 8)
+
 fn gc_verify()
+    gc_verify_chains()
     base := hs(H_BASE)
     pt := hs(H_PAGES)
     top_i := (hs(H_TOP) - base) / PAGE
