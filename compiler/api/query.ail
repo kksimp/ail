@@ -142,6 +142,10 @@ pub fn query_command(rest List[str], std str) int
         if not d.warning
             io.eprint(load.report(loaded.program.files, loaded.texts, found, json))
             return 2
+    # api.pkg.2: a file the package doesn't load is an error.
+    if target != file and not file_loaded(loaded.program, file, target)
+        io.eprint("error: {file} is not part of the package {target}: no root file imports its module (api.pkg.2)")
+        return 2
     lines := src.lines()
     base := file_base(loaded.program, file, target)
     head := [
@@ -216,15 +220,34 @@ fn token_at(lines List[str], line int, col int) Token?
         b += 1
     Token(start: a + 1, end: b + 2, text: chars[a..b + 1].join(""))
 
+## `./a/b` is `a/b`.
+fn plain_path(p str) str
+    mut out := p
+    while out.starts_with("./")
+        out = out.slice(2, out.chars().len())
+    out
+
+## The index of the file `path` among the program's files, or `-1`: as written,
+## relative to the package `target`, or the same file under another spelling.
+fn find_file(prog ast.Program, path str, target str) int
+    inside := plain_path(if target.ends_with("/") then "{target}{path}" else "{target}/{path}")
+    want := plain_path(path)
+    for i in 0..prog.files.len()
+        have := plain_path(prog.files[i].path)
+        if have == want or have == inside
+            return i
+    -1
+
+fn file_loaded(prog ast.Program, path str, target str) bool
+    find_file(prog, path, target) >= 0
+
 ## The index of the file `path` in the program: where its lines start (api.pkg.2).
 fn file_base(prog ast.Program, path str, target str) int
     if target == path
         return 0
-    # `DIR FILE`: FILE may be written relative to DIR (api.pkg.2), as `main.ail`.
-    inside := if target.ends_with("/") then "{target}{path}" else "{target}/{path}"
-    for f in prog.files
-        if f.path == path or f.path == inside
-            return f.base
+    i := find_file(prog, path, target)
+    if i >= 0
+        return prog.files[i].base
     0
 
 fn query_file_of(prog ast.Program, line int)(str, int)
