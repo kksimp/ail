@@ -232,8 +232,9 @@ fn show_fail(f str)
 
 fn main() !
     root := repo_root()
-    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail"
-    mk1 := proc.run("sh", ["-c", "rm -rf {tmp}; mkdir -p {tmp}"]) else return
+    # A directory of its own per run, so two gates at once don't clash.
+    mk1 := proc.run("mktemp", ["-d", "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail.XXXXXX"]) else return
+    tmp := mk1.out.trim()
     mut files := fs.glob("docs/spec/*.md")
     files.sort()
     for extra in [
