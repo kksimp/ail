@@ -150,6 +150,7 @@ compiler/                 the front end, checker and native backend written in A
 examples/                 example programs; NAME.out holds the expected output
 tools/
   gate/mac-gate.sh         the Mac gate; prints only failures (ADR 0842)
+  gate/ready-check.sh      what a lane runs before READY: fmt, check, bash -n on the files it changed
   app-host/macos/          the std.app host: SwiftUI, built by run.sh (ADR 0838)
   bench/                  before and after tables for tokens and speed (tools/bench/run.sh)
   check-doc-links.py      checks that relative links in the Markdown docs resolve
