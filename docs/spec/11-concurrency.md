@@ -503,11 +503,17 @@ sequentially, and finishes a parallel loop before the statement after it
 starts, so it is scope-bound like `conc.task.4`. *(ADR 0238)*
 
 **conc.par.8** — A `par for` loop that `conc.par.5` accepts runs on the
-thread pool. With `ail run --parallel`, so does every loop `conc.par.2–4`
-prove independent. A loop on the pool must also write only list elements
-and `int` accumulators, each accumulator by one `+=` outside nested loops;
-any other loop, a loop that captures a handle or a `ref`, and a loop with
-fewer than twice as many iterations as the pool has threads, runs in order. *(ADR 0272, ADR 0275)*
+thread pool. So does every loop `conc.par.2–4` prove independent, unless
+`AIL_PARALLEL=0` or the run is deterministic (`conc.par.9`). A loop on the pool
+must also write only list elements and `int` accumulators, each accumulator by
+one `+=` outside nested loops; any other loop, a loop that captures a handle
+or a `ref`, and a loop with fewer than twice as many iterations as the pool has
+threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
+
+**conc.par.12** — A loop the compiler chose (not a written `par for`) also runs
+in order unless its iterations together cost at least 65536 operations, where
+one iteration costs the operations of its body (nested loops count 16 times,
+a call 8). The result and the trap are the sequential ones either way. *(ADR 0911)*
 
 **conc.par.9** — The pool has one thread per hardware thread, at most 8,
 unless the environment variable `AIL_THREADS` sets the number. With one

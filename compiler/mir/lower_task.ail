@@ -37,6 +37,9 @@ struct ParSite
     pos ast.Pos
     ## The function that holds the loop (a stack names it, not the chunk).
     owner str
+    ## Static work of one iteration in operations (`ParScan.work`), for the
+    ## cost model of a loop the compiler chose to run in parallel (conc.par.12).
+    work int
 
 pub struct TaskState
     ## Whether the task runtime is linked (so `print` takes the output lock).
@@ -390,6 +393,9 @@ struct ParScan
     other Set[str]
     ## Names whose value a method call or `mut` argument may change.
     mutated Set[str]
+    ## Operations one iteration costs: nested loops count 16 times (conc.par.12).
+    work int
+    mult int
     ## A construct the parallel version doesn't take.
     bad bool
 
@@ -401,6 +407,8 @@ fn new_scan() ParScan
         adds: {},
         other: Set[str](),
         mutated: Set[str](),
+        work: 0,
+        mult: 1,
         bad: false,
     )
 
@@ -468,12 +476,16 @@ fn scan_stmt(mut sc ParScan, s ast.Stmt, depth int)
                     scan_place(mut sc, r)
                 _ => sc.bad = true
         While(cond, body, _) =>
+            sc.mult = sc.mult * 16
             scan_expr(mut sc, cond)
             scan_block(mut sc, body, depth + 1)
+            sc.mult = sc.mult / 16
         For(_, var, _, _, iter, body, _) =>
             scan_expr(mut sc, iter)
             sc.decls.add(var)
+            sc.mult = sc.mult * 16
             scan_block(mut sc, body, depth + 1)
+            sc.mult = sc.mult / 16
         Break(_) =>
             if depth == 0
                 sc.bad = true
@@ -492,6 +504,11 @@ fn scan_place(mut sc ParScan, e ast.Expr)
             scan_place(mut sc, r)
         _ => sc.bad = true
 
+## `n` operations per run of the innermost loop; the total stays far from `int`.
+fn bump(mut sc ParScan, n int)
+    if sc.work < 1000000000
+        sc.work += n * sc.mult
+
 fn scan_expr(mut sc ParScan, e ast.Expr)
     match e
         Int | Float | Bool | Str => return
@@ -505,10 +522,12 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
                     Hole(x) => scan_expr(mut sc, x)
                     Fmt(x, _) => scan_expr(mut sc, x)
         Call(callee, args, _) =>
+            bump(mut sc, 8)
             match callee
                 Name => scan_args(mut sc, args)
                 _ => sc.bad = true
         Method(recv, name, _, args) =>
+            bump(mut sc, 2)
             if not READ_ONLY.contains(name)
                 r := root_name(recv) else
                     sc.bad = true
@@ -517,6 +536,7 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
             scan_expr(mut sc, recv)
             scan_args(mut sc, args)
         Index(r, i, _) =>
+            bump(mut sc, 2)
             scan_expr(mut sc, r)
             scan_expr(mut sc, i)
         Unary(o, x, _) =>
@@ -524,6 +544,7 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
                 Spawn => sc.bad = true
                 Neg | Not => scan_expr(mut sc, x)
         Binary(_, a, b, _) =>
+            bump(mut sc, 1)
             scan_expr(mut sc, a)
             scan_expr(mut sc, b)
         ListLit(items, _) =>
@@ -614,6 +635,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         body: body,
         pos: pos,
         owner: fname,
+        work: sc.work + 1,
     )
 
 fn root_of(e ast.Expr) str
@@ -625,7 +647,7 @@ fn root_of(e ast.Expr) str
 ## enough and nothing in a chunk traps; else the loop in order, which is its
 ## meaning (conc.par.5) and, after a trap or an accumulator that would
 ## overflow, the only way to report the sequential trap (conc.par.11).
-fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos)
+fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos, auto bool)
     plan := par_plan(var, iter, body, pos) else
         lower_for(var, iter, body, false, pos)
         return
@@ -670,7 +692,10 @@ fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], po
     done := new_block()
     seq := new_block()
     join := new_block()
-    branch(call("rt.par_worth", [lo, hi], Ty.Bool), par_blk, [], seq, [])
+    # An explicit `par for` passes weight 0 (conc.par.8); a loop the compiler
+    # chose also needs enough work to repay the pool (conc.par.12).
+    weight := konst(if auto then plan.work else 0, Ty.Int)
+    branch(call("rt.par_worth", [lo, hi, weight], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
     cur = par_blk
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)

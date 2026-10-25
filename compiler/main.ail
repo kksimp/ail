@@ -384,7 +384,7 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
     # `--parallel` may put any loop on the pool (conc.par.8).
-    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on()
+    tasks := mir.uses_tasks(src) or mentions_ui(src) or proven_loop_keys(path, "{dir}/../../../std").len() > 0
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -602,12 +602,13 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
         )
     m
 
-## Whether `ail run --parallel` asked for the independent loops on the pool
-## (conc.par.8); `--deterministic` keeps every loop on one thread (conc.par.9).
+## Whether the independent loops may go to the pool (conc.par.8): by default,
+## unless `AIL_PARALLEL=0`; `--deterministic` keeps every loop on one thread
+## (conc.par.9).
 fn parallel_on() bool
-    on := env.get("AIL_PARALLEL") else ""
+    off := env.get("AIL_PARALLEL") else ""
     det := env.get("AIL_DETERMINISTIC") else ""
-    on == "1" and det == ""
+    off != "0" and det == ""
 
 ## The `file:line:col` of every loop of the program that `conc.par.2-4`
 ## prove independent, when `--parallel` is on.

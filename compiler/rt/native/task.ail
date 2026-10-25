@@ -544,16 +544,24 @@ fn tensor_chunk(rec int)
 
 # ---- parallel loops (ADR 0601) ----
 
+## Operations (`ParScan.work` per iteration) a compiler-chosen parallel loop
+## needs in all, about 50 microseconds, so a pool dispatch repays itself.
+PAR_MIN_WORK := 65536
+
 ## Whether `par for lo..hi` goes to the pool: at least twice as many
 ## iterations as workers (conc.par.8). A chunk function takes the environment
 ## record, `lo` and `hi` from its task record's arguments 0 to 2, then
 ## 3 words (sum, lowest and highest running sum) per accumulator.
-fn par_worth(lo int, hi int) bool
+fn par_worth(lo int, hi int, work int) bool
     # conc.par.9: a deterministic run keeps every loop on one thread.
     if det_on()
         return false
     t := load64(pool() + P_TARGET)
-    hi > lo and hi - lo > 0 and hi - lo >= 2 * t
+    if not (hi > lo and hi - lo >= 2 * t)
+        return false
+    # conc.par.12: a loop the compiler chose runs on the pool only when its
+    # iterations together cost `PAR_MIN_WORK` operations; `work` 0 is `par for`.
+    work == 0 or hi - lo >= PAR_MIN_WORK / work
 
 ## `n` zeroed words: the values a loop body reads and the accumulators.
 fn env_new(n int) int

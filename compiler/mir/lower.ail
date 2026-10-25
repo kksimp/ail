@@ -1162,11 +1162,12 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
+            auto := not is_par
             if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return
-                lower_par_for(var, iter, body, pos)
+                lower_par_for(var, iter, body, pos, auto)
                 return
             lower_for(var, iter, body, mutable, pos)
         Break(pos) =>
