@@ -472,24 +472,6 @@ api --pretty examples/tool_fmt_check.ail	d57f497396af02e7	0	68e5067dec80b317
 api --symbols examples/tool_fmt_check.ail	d57f497396af02e7	0	092f5cd8d4d54f2a
 api --tokens examples/tool_fmt_check.ail	d57f497396af02e7	0	f1e9a8b21949b0e2
 api --ast examples/tool_fmt_check.ail	d57f497396af02e7	0	282f61511eade5ff
-api  examples/tool_garlic_pages.ail	23a903387bfb8c45	0	842a4bf8331a1961
-api --text examples/tool_garlic_pages.ail	23a903387bfb8c45	0	1e9620d4533eadcc
-api --pretty examples/tool_garlic_pages.ail	23a903387bfb8c45	0	521ed93a09ab4bf0
-api --symbols examples/tool_garlic_pages.ail	23a903387bfb8c45	0	014449492a17fbeb
-api --tokens examples/tool_garlic_pages.ail	23a903387bfb8c45	0	adabf88e3a8491fd
-api --ast examples/tool_garlic_pages.ail	23a903387bfb8c45	0	4c2b29e3f9b63722
-api  examples/tool_pdf_grep.ail	0645ebf740da1fec	0	c819f3a16fa653be
-api --text examples/tool_pdf_grep.ail	0645ebf740da1fec	0	1e9620d4533eadcc
-api --pretty examples/tool_pdf_grep.ail	0645ebf740da1fec	0	d9fc4276ac658e96
-api --symbols examples/tool_pdf_grep.ail	0645ebf740da1fec	0	97f362cd5f14c238
-api --tokens examples/tool_pdf_grep.ail	0645ebf740da1fec	0	12e74aa733be1a26
-api --ast examples/tool_pdf_grep.ail	0645ebf740da1fec	0	8236991a88531392
-api  examples/tool_pdf_text.ail	dc356db02a4792cd	0	7f6281dda123cfaf
-api --text examples/tool_pdf_text.ail	dc356db02a4792cd	0	1e9620d4533eadcc
-api --pretty examples/tool_pdf_text.ail	dc356db02a4792cd	0	28c9c856491283d7
-api --symbols examples/tool_pdf_text.ail	dc356db02a4792cd	0	303cf90247102e8c
-api --tokens examples/tool_pdf_text.ail	dc356db02a4792cd	0	15daf3ca1f4a57e8
-api --ast examples/tool_pdf_text.ail	dc356db02a4792cd	0	15d762700f15e942
 api  examples/tool_replay_check.ail	52455f88cdc2ff6c	0	6a60e7c2ab1008ad
 api --text examples/tool_replay_check.ail	52455f88cdc2ff6c	0	1e9620d4533eadcc
 api --pretty examples/tool_replay_check.ail	52455f88cdc2ff6c	0	c29ce029ec377366
@@ -5026,14 +5008,6 @@ api --diff  examples/tool_explain_rules.ail examples/tool_fix_preview.ail	f88f61
 api --diff --json examples/tool_explain_rules.ail examples/tool_fix_preview.ail	f88f61ccad08450c	0	8064ec03fd18c7a3
 api --diff  examples/tool_fix_preview.ail examples/tool_fmt_check.ail	f3954b0cdc781a2e	0	1da7cd571ff6c0f4
 api --diff --json examples/tool_fix_preview.ail examples/tool_fmt_check.ail	f3954b0cdc781a2e	0	c596bd1e27808d2b
-api --diff  examples/tool_fmt_check.ail examples/tool_garlic_pages.ail	04818fb32acf7fed	0	1da7cd571ff6c0f4
-api --diff --json examples/tool_fmt_check.ail examples/tool_garlic_pages.ail	04818fb32acf7fed	0	2931658b07639edf
-api --diff  examples/tool_garlic_pages.ail examples/tool_pdf_grep.ail	eebb91ca14ea4909	0	1da7cd571ff6c0f4
-api --diff --json examples/tool_garlic_pages.ail examples/tool_pdf_grep.ail	eebb91ca14ea4909	0	121a1fc9ba1c1359
-api --diff  examples/tool_pdf_grep.ail examples/tool_pdf_text.ail	cdebb548aa88da1e	0	1da7cd571ff6c0f4
-api --diff --json examples/tool_pdf_grep.ail examples/tool_pdf_text.ail	cdebb548aa88da1e	0	b676244e230f14c2
-api --diff  examples/tool_pdf_text.ail examples/tool_replay_check.ail	cefc6f1b1f75b1ba	0	1da7cd571ff6c0f4
-api --diff --json examples/tool_pdf_text.ail examples/tool_replay_check.ail	cefc6f1b1f75b1ba	0	ef8af208db343830
 api --diff  examples/tool_replay_check.ail examples/tool_test_coverage.ail	7061db716c64a7b9	0	1da7cd571ff6c0f4
 api --diff --json examples/tool_replay_check.ail examples/tool_test_coverage.ail	7061db716c64a7b9	0	3fa86819e730ffad
 api --diff  examples/tool_test_coverage.ail examples/tool_test_summary.ail	3b93469b17239354	0	1da7cd571ff6c0f4

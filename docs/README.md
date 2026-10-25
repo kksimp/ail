@@ -23,8 +23,6 @@ Design notes:
   on matching or beating C for systems and allocation-heavy code.
 - [design/automatic-parallelism.md](design/automatic-parallelism.md): using
   every core, SIMD and NPUs automatically without changing results.
-- [design/editor-baseline.md](design/editor-baseline.md): editor numbers on
-  the Rust bootstrap, for the Rust-free rebuild check (roadmap milestone 8).
 - [design/toolchain-constraints.md](design/toolchain-constraints.md): hard
   external limits on a fully custom toolchain.
 - [design/ai-author-wishlist.md](design/ai-author-wishlist.md): what would
@@ -53,11 +51,6 @@ Design notes:
   write AIL from the quick reference.
 - [design/program-measurements-r2.md](design/program-measurements-r2.md):
   three 500–800 line programs in AIL, Python, TypeScript, Rust and Go.
-- [design/garlic-browser.md](design/garlic-browser.md): Garlic, a web
-  browser written in AIL: architecture, text-mode first milestone, the page
-  model agents read, JavaScript and dependencies.
-- [design/pdf-viewer.md](design/pdf-viewer.md): the PDF reader and viewer
-  in AIL that searches the text layer without OCR, and what pixels need.
 - [design/gui-path.md](design/gui-path.md): how `std.ui`'s window layer
   moves from the bootstrap's crate shim to platform APIs through `extern c`.
 - [design/semantic-api.md](design/semantic-api.md): the machine-readable
@@ -67,8 +60,6 @@ Design notes:
   and per-dependency capability grants.
 - [design/formatting.md](design/formatting.md): the canonical layout `ail fmt`
   writes.
-- [design/garlic-js.md](design/garlic-js.md): the JavaScript engine of the
-  Garlic browser, written in AIL: lexer, parser, testing, plan.
 - [design/compile-time-execution.md](design/compile-time-execution.md),
   [design/metaprogramming.md](design/metaprogramming.md),
   [design/reflection.md](design/reflection.md),
@@ -86,8 +77,7 @@ Design notes:
   where AIL's tokens go per construct against Python, and the round-3 changes.
 
 Tools:
-- [tools/edit/](../tools/edit/edit.ail): the AIL code editor, written in AIL
-  (headless core plus a `std.ui` window front end).
+- Apps (Garlic browser, Garlic Press PDF viewer, ail-edit code editor, Clove) live in their own repositories: see the repository layout in AGENTS.md.
 - [tools/perfbench/](../tools/perfbench/run.sh): interpreter timing. Run
   `tools/perfbench/run.sh [RUNS]`; results in
   [design/interpreter-performance.md](design/interpreter-performance.md).

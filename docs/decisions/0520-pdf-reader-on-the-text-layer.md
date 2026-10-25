@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076; the designer delegated this batch's decisions on 2026-10-20)
 - **Topic:** Tooling
 - **Spec rules:** none (a tool, not language behaviour)
-- **Files:** `tools/pdf/`, `bootstrap/tests/tools.rs`, [design note](../design/pdf-viewer.md)
+- **Files:** `tools/pdf/`, `bootstrap/tests/tools.rs`, [design note](https://github.com/kksimp/garlic-press/blob/main/docs/pdf-viewer.md)
 
 ## Context
 
@@ -62,7 +62,7 @@ speed (criterion 4) is the cost, and it falls to the native backend.
   becomes `bytes`; when `std.compress.unzlib` returns `bytes`, it replaces
   `inflate_zlib`, which stays as its differential test.
 - A pixel view needs a surface, glyph rasterisation and image decoders in
-  the window layer ([design note](../design/pdf-viewer.md#what-the-window-layer-needs-for-pixels)).
+  the window layer ([design note](https://github.com/kksimp/garlic-press/blob/main/docs/pdf-viewer.md#what-the-window-layer-needs-for-pixels)).
 
 ## Rejected alternatives
 

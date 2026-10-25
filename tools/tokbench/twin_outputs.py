@@ -8,7 +8,6 @@ the program's own folder. So each pair runs from a mirror tree with the same
 depth as the repository:
 
   MIRROR/ail                                  wrapper for this checkout's launcher
-  MIRROR/tools/garlic, pdf                    symlinks to the real tool directories
   MIRROR/tools/tokbench/corpus/agent-r5/data  symlink to the fixture data
   MIRROR/examples                             symlink to the repository examples
   MIRROR/agent-data/                          a copy of examples/agent-data, passed as the data argument
@@ -79,8 +78,6 @@ def build_mirror(m):
     wrapper = m / "ail"
     wrapper.write_text(f'#!/usr/bin/env bash\nexec "{ROOT}/ail" "$@"\n')
     wrapper.chmod(0o755)
-    link(m / "tools/garlic", ROOT / "tools/garlic")
-    link(m / "tools/pdf", ROOT / "tools/pdf")
     link(m / "tools/tokbench/corpus/agent-r5/data", AGENT_DATA)
     link(m / "examples", ROOT / "examples")
     copy_dir(ROOT / "examples/agent-data", m / "agent-data")

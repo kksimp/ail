@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** Tooling, standard library (pixel layer)
 - **Spec rules:** none yet (a tool module; rules come when it moves into `std.ui`)
-- **Files:** `tools/pdf/image/image.ail`, `tools/pdf/image/font.ail`, [design note](../design/pdf-viewer.md#the-pixel-layer-adr-0513)
+- **Files:** `tools/pdf/image/image.ail`, `tools/pdf/image/font.ail`, [design note](https://github.com/kksimp/garlic-press/blob/main/docs/pdf-viewer.md#the-pixel-layer-adr-0513)
 
 ## Context
 

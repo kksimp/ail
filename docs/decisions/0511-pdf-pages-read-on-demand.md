@@ -5,7 +5,7 @@
 - **Decided by:** Designer (direction: speed, and agents knowing what is on screen; card "Speed and lazy first, then OCR", 2026-10-20), details AI (delegated, ADR 0076)
 - **Topic:** Tooling
 - **Spec rules:** none (a tool, not language behaviour)
-- **Files:** `tools/pdf/reader/model.ail`, `tools/pdf/pdf.ail`, `tools/pdf/view/view.ail`, [design note](../design/pdf-viewer.md#only-what-is-asked-for-is-read-adr-0511)
+- **Files:** `tools/pdf/reader/model.ail`, `tools/pdf/pdf.ail`, `tools/pdf/view/view.ail`, [design note](https://github.com/kksimp/garlic-press/blob/main/docs/pdf-viewer.md#only-what-is-asked-for-is-read-adr-0511)
 
 ## Context
 
