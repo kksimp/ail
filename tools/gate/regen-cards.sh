@@ -1,6 +1,5 @@
 #!/bin/bash
 cd "$(git rev-parse --show-toplevel)"
-export RUSTUP_HOME=${RUSTUP_HOME:-$PWD/.toolchain/rustup} CARGO_HOME=${CARGO_HOME:-$PWD/.toolchain/cargo}
 A=./ail
 for pair in tools/edit:edit std:std tools/garlic:garlic tools/garlic/js:garlic-js tools/pdf:pdf compiler:compiler; do
   d=${pair%%:*}; n=${pair##*:}
