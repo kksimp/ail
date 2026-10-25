@@ -2476,7 +2476,13 @@ fn main() !
             with_main = false
             progressed = true
         if not progressed
-            blocked = if outside.is_empty() then "the build failed" else outside
+            # An unparsed failure still says why: the first line the build wrote, and its exit status.
+            mut why_text := "the build failed (exit {b.status})"
+            for l in "{b.err}\n{b.out}".lines()
+                if not l.trim().is_empty()
+                    why_text = "the build failed (exit {b.status}): {short(l.trim())}"
+                    break
+            blocked = if outside.is_empty() then why_text else outside
             break
     if not coverage.is_empty()
         _ := proc.run("rm", ["-f", "{exe}.hits"]) else io.exit(2)
