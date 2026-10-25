@@ -538,7 +538,10 @@ fn rust_run(args List[str]) proc.Output ! proc.ProcError
 fn ail_run(args List[str]) proc.Output ! proc.ProcError
     if not native()
         return rust_run(args)
-    proc.run("sh", cat(["-c", "exec perl -e 'alarm 120; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"], args))
+    proc.run("sh", cat(
+        ["-c", "exec perl -e 'alarm 120; exec @ARGV' \"$PWD/ail\" \"$@\"", "sh"],
+        args,
+    ))
 
 ## A case goes through `./ail` (the default; `GATE_RUST=1` sends the cases not in native_only.txt to the Rust binary),
 ## each under a 60 second alarm so one hang is one red case, not a stuck gate (item 309).
@@ -1576,7 +1579,13 @@ fn Gate.limits(mut self, tmp str)
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
         red("coverage --json", cj.out)
     # Native traps show their values only under `--values` (ADR 0886); the interpreter always does.
-    k := ail_run(if native() then ["test", "--values", "{case}/limit_test_contract.ail"] else ["test", "{case}/limit_test_contract.ail"]) else return
+    k := ail_run(
+        if native() then [
+            "test",
+            "--values",
+            "{case}/limit_test_contract.ail",
+        ] else ["test", "{case}/limit_test_contract.ail"],
+    ) else return
     if k.status != 1
         red("test contract", "exit {k.status}")
     want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
