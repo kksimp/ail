@@ -898,8 +898,9 @@ fn tensor_softmax(a int) int
     tensor_pack(t)
 
 ## `out[i] = exp(a[i])` for the leading `i` where every argument has `|x| < 700`,
-## in pairs or quads (an assembled kernel on targets that have one); how many
-## it did. `out` may be `a`.
+## in quads (an AVX2 kernel on x86-64; the NEON pair kernel was slower than
+## scalar `float_exp` on the Mac, so ARM64 runs this body); how many it did.
+## `out` may be `a`.
 fn vec_exp(out int, a int, n int) int
     for i in 0..n
         storef(out + 8 * i, float_exp(loadf(a + 8 * i)))

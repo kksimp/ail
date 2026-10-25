@@ -444,14 +444,6 @@ pub fn Asm.fmov_xd(mut self, d int, n int)
 pub fn Asm.fmov_dx(mut self, d int, n int)
     word(2657550336 + n * 32 + d)
 
-## A NEON instruction word with three vector registers or two (`d`, `n`), for
-## the encodings that have no wrapper of their own (the `exp` kernel).
-pub fn Asm.vins3(mut self, base int, d int, n int, m int)
-    word(rrr(base, d, n, m))
-
-pub fn Asm.vins2(mut self, base int, d int, n int)
-    word(base + n * 32 + d)
-
 # ---- control ----
 
 pub fn Asm.b(mut self, l int)
