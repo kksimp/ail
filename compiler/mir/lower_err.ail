@@ -924,12 +924,14 @@ fn Lower.display_call(mut self, v Val) int?
 SHOWN_STD_AIL := [
     "std.app.",
     "std.args.",
+    "std.bigint.",
     "std.csv.",
     "std.log.",
     "std.net.http.",
     "std.screen.",
     "std.net.jar.",
     "std.time.date.",
+    "std.toml.",
     "std.ui.widgets.",
 ]
 

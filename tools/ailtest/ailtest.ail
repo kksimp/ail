@@ -2123,6 +2123,9 @@ fn report(
                 shown := excerpt(src, w.0, w.1)
                 if not shown.is_empty()
                     print(shown)
+            # trace.snap.1: the call stack of a trap, as the JSON snapshot carries it.
+            if not v.frames.is_empty() and v.message.starts_with("trap[")
+                print(v.frames)
             seen := traces.get(v.name) else []
             for e in seen
                 t := trace_text(e)
@@ -2162,8 +2165,17 @@ fn affected_names(file str, since str) List[str]
         io.exit(2)
     [l.trim() for l in r.out.lines() if l.trim() != ""]
 
+## The `ail build` arguments: `extra` options, the time limit baked in (run.limit.1), the copy and the executable.
+fn build_args(extra List[str], timeout str, copy str, exe str) List[str]
+    mut a := ["build"]
+    a.extend(extra)
+    if not timeout.is_empty()
+        a.extend(["--timeout", timeout])
+    a.extend([copy, "-o", exe])
+    a
+
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
@@ -2183,6 +2195,8 @@ fn main() !
     mut since := "HEAD"
     mut contracts := false
     mut max_steps := ""
+    mut timeout := ""
+    mut values := false
     mut rec_mode := ""
     mut rec_file := ""
     for a in env.args()
@@ -2218,6 +2232,18 @@ fn main() !
             want = ""
         elif a == "--max-steps"
             want = a
+        elif want == "--timeout"
+            # run.limit.1, run.limit.4: each test gets the whole allowance, in its own process.
+            if (a.to_int() else 0) < 1
+                io.eprint("error[run.limit.4]: `--timeout` needs a positive whole number of milliseconds")
+                io.exit(2)
+            timeout = a
+            want = ""
+        elif a == "--timeout"
+            want = a
+        elif a == "--values"
+            # trace.frame.3, ADR 0886: the traps of the tests show the values in scope.
+            values = true
         elif want == "--record" or want == "--replay"
             rec_mode = want.slice(2, want.len())
             rec_file = a
@@ -2391,22 +2417,17 @@ fn main() !
                 if trace then "tests" else "",
                 if rec_mode.is_empty() then "" else "record",
                 if max_steps.is_empty() then "" else "steps",
+                if values then "values" else "",
             ] if m != ""
         ].join(",")
-        b := if modes.is_empty()
-            proc.run(ail_path(), ["build", copy, "-o", exe])? "running ail build"
-        else
-            # native.instr.2-3, test.cover.4, trace.test.1: the build counts the statements run and notes the calls (rt/native/instr.ail).
-            proc.run("env", [
-                "AIL_INSTRUMENT={modes}",
-                "AIL_INSTRUMENT_SITES={exe}.sites",
-                ail_path(),
-                "build",
-                "--no-cache",
-                copy,
-                "-o",
-                exe,
-            ])? "running ail build"
+        # native.instr.2-3, test.cover.4, trace.test.1: the build counts the statements run and notes the calls (rt/native/instr.ail).
+        mut prog := ail_path()
+        mut cmd := List[str]()
+        if not modes.is_empty()
+            prog = "env"
+            cmd = ["AIL_INSTRUMENT={modes}", "AIL_INSTRUMENT_SITES={exe}.sites", ail_path()]
+        cmd.extend(build_args(if modes.is_empty() then List[str]() else ["--no-cache"], timeout, copy, exe))
+        b := proc.run(prog, cmd)? "running ail build"
         if b.status == 0
             built = true
             break
