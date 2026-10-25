@@ -288,6 +288,7 @@ const AIL_MODULES: &[(&str, &str, &str)] = &[
     ("std.net.jar", "<std>/net/jar.ail", include_str!("std/net/jar.ail")),
     ("std.screen", "<std>/screen/screen.ail", include_str!("std/screen/screen.ail")),
     ("std.screen.pixels", "<std>/screen/pixels.ail", include_str!("std/screen/pixels.ail")),
+    ("std.screen.cells", "<std>/screen/cells.ail", include_str!("std/screen/cells.ail")),
     ("std.screen.view", "<std>/screen/view.ail", include_str!("std/screen/view.ail")),
     ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
     ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),

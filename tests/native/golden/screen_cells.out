@@ -1,0 +1,4 @@
+text 0,0 20x1
+box 0,1 10x1
+text 0,1 10x1
+caret 5,0 1x1

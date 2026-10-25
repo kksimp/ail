@@ -140,3 +140,27 @@ fn main()
     for it in view.of_ops(ops, 0.0, 0.0)
         print("{it.role} {it.x} {it.y}")
 ```
+
+## Programs that draw a character grid
+
+**std.screen.15** — `use std.screen.cells` provides `of_cells(cols, rows,
+runs, cursor_col, cursor_row)`, the `Screen` of a grid of `std.ui.widgets`
+runs, in cell units (a run at column 4 of row 2 is at x 4, y 2). Each run on a
+background other than the page's (the background covering the most cells) is a
+`box`; each run with visible text is a `text` with the run's colour; the caret is
+a `caret` of one cell. All are exact (`conf` 1.0), so no pixel classifier is
+needed. The editor (`--print --screen`) and the PDF viewer (`view --screen`)
+print `describe` of it. *(ADR 0878)*
+
+```ail skip=bootstrap rules=std.screen.15
+use std.screen.cells
+use std.ui.widgets
+
+fn main()
+    runs := [
+        widgets.Run(col: 0, row: 0, text: "hello", fg: 0x202020, bg: 0xffffff, bold: false),
+        widgets.Run(col: 0, row: 1, text: "status", fg: 0xffffff, bg: 0x007acc, bold: false),
+    ]
+    s := cells.of_cells(20, 2, runs, 5, 0)
+    print(s.find("box", "", "", 0))
+```
