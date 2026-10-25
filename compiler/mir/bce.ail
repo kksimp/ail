@@ -133,7 +133,9 @@ fn earlier(dom List[List[bool]], a At, c At) bool
 
 ## Whether no operation in the module makes a list shorter (native.subset.1
 ## has `push` and no `pop`, `clear` or `remove`). Any other `rt.list_`
-## function a program calls is assumed to, which turns the next pass off.
+## function a program calls is assumed to, which turns the next pass off: a new
+## runtime helper that only reads or grows (`list_most`) belongs in `GROWS`, or
+## push loops stop keeping their length and filling (ADR 0816).
 pub fn lists_only_grow(m Module) bool
     for f in m.funcs
         for blk in f.blocks
@@ -158,6 +160,7 @@ GROWS := [
     "rt.list_new_for",
     "rt.list_alloc",
     "rt.list_grow",
+    "rt.list_most",
 ]
 
 ## Where lists never shrink, `xs[i]` can't fail if an access to `xs[i]` came
