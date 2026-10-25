@@ -43,6 +43,10 @@ final class Model: ObservableObject {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ n: Notification) {
         NSApp.setActivationPolicy(.regular)
+        // AIL_APP_ICON names a PNG for the Dock icon (run.sh sets it for Garlic).
+        if let path = ProcessInfo.processInfo.environment["AIL_APP_ICON"], let img = NSImage(contentsOfFile: path) {
+            NSApp.applicationIconImage = img
+        }
         NSApp.activate(ignoringOtherApps: true)
         // A window restored from another display's position can open off screen.
         DispatchQueue.main.async {
