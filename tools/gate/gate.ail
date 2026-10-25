@@ -807,9 +807,8 @@ fn Gate.cases(mut self)
     cli_checks()
     api_outlines()
 
-## `ail explain` and `ail fix` coverage (bootstrap/tests/explain_coverage.rs,
-## ported): every rule a diagnostic can carry has a spec entry, the spec cites
-## only rules that exist, src/fixable.txt matches the fixes the corpora
+## `ail explain` and `ail fix` coverage: every rule a diagnostic can carry has a spec entry, the spec cites
+## only rules that exist, compiler/explain/fixable.txt matches the fixes the corpora
 ## produce, and an explain entry stays short (explain.cover.1-4).
 fn is_lower_us(c char) bool
     k := c.code()

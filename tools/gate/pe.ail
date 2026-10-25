@@ -1,4 +1,4 @@
-## The Windows PE writer (bootstrap/tests/native_pe.rs, ported): the sample program's image,
+## The Windows PE writer: the sample program's image,
 ## built by `ail run compiler pe-sample sample`, has the PE32+ structure and the kernel32
 ## imports the codegen calls (ADR 0597, ADR 0598). The Wine checks run when `wine` is installed.
 ## Run from the repository root:

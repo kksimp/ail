@@ -1,4 +1,4 @@
-## The native runtime's global slots (bootstrap/tests/native_globals.rs, ported). Every name
+## The native runtime's global slots. Every name
 ## passed to `global(NAME)` in compiler/rt/native/ is a constant with its own slot below the
 ## image's `globals` count; two names share a slot only when the later one's doc comment says
 ## `shares`; a code generator constant of the same name has the same value. Run from the
