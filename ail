@@ -113,7 +113,7 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
         case "$a" in
             --timeout | --max-memory)
                 v="${run_args[$((k + 1))]-}"
-                case "$v" in "" | *[!0-9]*) break ;; esac
+                case "$v" in "" | *[!0-9]* | 0 | 0[0-9]*) die "\`$a\` needs a positive whole number (run.limit.4)" ;; esac
                 run_opts="$run_opts $a $v"; k=$((k + 2)) ;;
             --budget)
                 v="${run_args[$((k + 1))]-}"
