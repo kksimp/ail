@@ -219,7 +219,7 @@ fn Lower.lower_slice(mut self, l Val, lo ast.Expr?, hi ast.Expr?, inclusive bool
     emit_void(t)
     finish(unreachable_term())
     cur = good
-    size := konst(if elem == Ty.Bool then 1 else 8, Ty.Int)
+    size := konst(elem.elem_bytes(), Ty.Int)
     v := Val(id: call("rt.list_slice", [l.id, a, end, size], l.ty), ty: l.ty)
     if needs_copy(elem)
         return Val(id: copy_value(v), ty: l.ty)

@@ -1250,7 +1250,7 @@ fn Lower.copy_list(mut self, v Val) int
         depth += 1
         t = t.elem() else Ty.Unknown
     # A `List[bool]` holds bytes (native-abi.md §2).
-    bytes := konst(if t == Ty.Bool then 1 else 8, Ty.Int)
+    bytes := konst(t.elem_bytes(), Ty.Int)
     if depth == 0
         return call("rt.list_copy", [v.id, bytes], v.ty)
     call("rt.list_copy_deep", [v.id, konst(depth, Ty.Int), bytes], v.ty)
