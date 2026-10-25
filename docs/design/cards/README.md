@@ -34,7 +34,7 @@ An agent reads a package's index, then the one module it needs:
 
 ```sh
 ./ail api --card --index std                      # one line per module
-./ail api --card --budget 2000 --module math std   # one module
+./ail api --card --budget 2000 --module app std   # one module
 ```
 
 Each package has an `index.md` and one file per module under `<package>/`
