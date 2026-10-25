@@ -6,9 +6,8 @@ examples/, the agent-tool corpus and tools/perfbench/programs.
 
 Speed: min wall time over --runs runs of each program, with its NAME.args
 passed after the file and its working directory set to the program's own
-directory. Columns: the "before" bootstrap (bytecode tier), the "after"
-bootstrap (bytecode tier), the "after" bootstrap with --no-bytecode (tree
-walker), the Python twin and the C twin where they exist. Lower is better.
+directory. Columns: the "before" build, the "after" build, the Python twin and
+the C twin where they exist. Lower is better.
 
 Correctness gate: a program is compared only when every run it takes part in
 exits 0 and prints what the after binary prints. A program that fails the gate
@@ -110,14 +109,6 @@ def timed(cmd, cwd, runs):
     return min(times), statistics.median(times), first[0], first[1], stable
 
 
-def supports_no_bytecode(binary, hello, root):
-    """True when this binary accepts --no-bytecode (ADR 0361)."""
-    p = subprocess.run([str(binary), "run", "--no-bytecode", str(hello)], cwd=root,
-                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL)
-    return p.returncode == 0
-
-
 def compile_c(src, workdir):
     """Compile a C twin with cc -O2; None when there is no compiler or it fails."""
     exe = Path(workdir) / (src.stem + "_c")
@@ -162,7 +153,7 @@ def measure_speed(prog, ctx):
     work = ail.parent
     pargs = program_args(ail)
     row = {"program": prog["key"], "group": prog["group"], "notes": [],
-           "before_s": None, "after_s": None, "walk_s": None, "py_s": None, "c_s": None,
+           "before_s": None, "after_s": None, "py_s": None, "c_s": None,
            "output": "-"}
 
     # After: the reference output every other column is checked against.
@@ -187,15 +178,6 @@ def measure_speed(prog, ctx):
         else:
             row["output"] = "same"
             row["before_s"] = bmin
-
-    # Walker: a timing only when it prints what after prints.
-    if ctx["walk_ok"]:
-        wmin, _, wrc, wout, _ = timed([str(ctx["after_bin"]), "run", "--no-bytecode", str(ail), *pargs],
-                                      work, ctx["runs"])
-        if wrc == 0 and wout == aout:
-            row["walk_s"] = wmin
-        else:
-            row["notes"].append("walker output differs or exits non-zero")
 
     # Python twin: must print what after prints.
     py = ail.with_suffix(".py")
@@ -233,7 +215,6 @@ def group_summary(rows, group):
 
     return {
         "after_before": ratio("after_s", "before_s"),
-        "after_walker": ratio("after_s", "walk_s"),
         "after_python": ratio("after_s", "py_s"),
         "after_c": ratio("after_s", "c_s"),
     }
@@ -284,13 +265,11 @@ def main():
     # Speed.
     after_bin = root / "ail"
     before_bin = before_root / "ail"
-    hello = root / "examples/hello.ail"
     speed_progs = [p for p in progs if p["speed"]]
     speed_rows = []
     with tempfile.TemporaryDirectory() as workdir:
         ctx = {"root": root, "before_root": before_root, "after_bin": after_bin,
-               "before_bin": before_bin, "walk_ok": supports_no_bytecode(after_bin, hello, root),
-               "runs": args.runs, "workdir": workdir}
+               "before_bin": before_bin, "runs": args.runs, "workdir": workdir}
         for p in speed_progs:
             speed_rows.append(measure_speed(p, ctx))
 
@@ -336,11 +315,9 @@ def main():
     print()
     print("Speed (min wall seconds; ratios are after / other, below 1.00 is faster)")
     print_table(
-        ["program", "before", "after", "walker", "python", "c", "a/b", "a/walker", "a/py", "a/c", "output"],
-        [[r["program"], fmt_s(r["before_s"]), fmt_s(r["after_s"]), fmt_s(r["walk_s"]),
-          fmt_s(r["py_s"]), fmt_s(r["c_s"]),
+        ["program", "before", "after", "python", "c", "a/b", "a/py", "a/c", "output"],
+        [[r["program"], fmt_s(r["before_s"]), fmt_s(r["after_s"]), fmt_s(r["py_s"]), fmt_s(r["c_s"]),
           fmt_ratio(r["after_s"] / r["before_s"] if r["before_s"] and r["after_s"] else None),
-          fmt_ratio(r["after_s"] / r["walk_s"] if r["walk_s"] and r["after_s"] else None),
           fmt_ratio(r["after_s"] / r["py_s"] if r["py_s"] and r["after_s"] else None),
           fmt_ratio(r["after_s"] / r["c_s"] if r["c_s"] and r["after_s"] else None),
           r["output"]] for r in speed_rows if not r["excluded"]])
@@ -351,8 +328,7 @@ def main():
     for g in GROUPS:
         s = group_stats[g]
         parts = []
-        for key, name in [("after_before", "a/b"), ("after_walker", "a/walker"),
-                          ("after_python", "a/py"), ("after_c", "a/c")]:
+        for key, name in [("after_before", "a/b"), ("after_python", "a/py"), ("after_c", "a/c")]:
             ratio, n = s[key]
             parts.append(f"{name} {fmt_ratio(ratio)} (n={n})")
         print(f"  {labels[g]:<26} " + "   ".join(parts))
