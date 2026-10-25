@@ -1575,7 +1575,8 @@ fn Gate.limits(mut self, tmp str)
     if not line.starts_with("\{\"coverage\":true,\"file\":")
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
         red("coverage --json", cj.out)
-    k := ail_run(["test", "{case}/limit_test_contract.ail"]) else return
+    # Native traps show their values only under `--values` (ADR 0886); the interpreter always does.
+    k := ail_run(if native() then ["test", "--values", "{case}/limit_test_contract.ail"] else ["test", "{case}/limit_test_contract.ail"]) else return
     if k.status != 1
         red("test contract", "exit {k.status}")
     want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
