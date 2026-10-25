@@ -282,12 +282,12 @@ fix  tests/mistakes/def_keyword.ail	fa4b4e515517a894	0	ff57d023c9a6b777
 fix --dry-run tests/mistakes/def_keyword.ail	fa4b4e515517a894	0	afbec3651cc1351e
 fix --dry-run --json tests/mistakes/def_keyword.ail	fa4b4e515517a894	0	fd35b5bea26a3de9
 fix --json tests/mistakes/def_keyword.ail	fa4b4e515517a894	0	3f0ec0c51ede70be
-fix  tests/mistakes/derive_non_json_field.ail	0f76f7af51f10b44	1	f77d870bd9c317ba
-fix --dry-run tests/mistakes/derive_non_json_field.ail	0f76f7af51f10b44	1	5935f8e554c40377
+fix  tests/mistakes/derive_non_json_field.ail	0f76f7af51f10b44	1	93976d7c0cbe4f85
+fix --dry-run tests/mistakes/derive_non_json_field.ail	0f76f7af51f10b44	1	950c750a1ec2d7bb
 fix --dry-run --json tests/mistakes/derive_non_json_field.ail	0f76f7af51f10b44	1	60a44d30a577c9a4
 fix --json tests/mistakes/derive_non_json_field.ail	0f76f7af51f10b44	1	bf9a7bbe33cd6cc5
-fix  tests/mistakes/derive_non_json_field_from.ail	9a5ce3a2b1922c74	1	912f40490f62d0b8
-fix --dry-run tests/mistakes/derive_non_json_field_from.ail	9a5ce3a2b1922c74	1	36708d13789bae0a
+fix  tests/mistakes/derive_non_json_field_from.ail	9a5ce3a2b1922c74	1	61ce51c5566ffac8
+fix --dry-run tests/mistakes/derive_non_json_field_from.ail	9a5ce3a2b1922c74	1	2ce3655375a1fc00
 fix --dry-run --json tests/mistakes/derive_non_json_field_from.ail	9a5ce3a2b1922c74	1	2581b43c1aa2670d
 fix --json tests/mistakes/derive_non_json_field_from.ail	9a5ce3a2b1922c74	1	397b9f5d0c099c46
 fix  tests/mistakes/dict_literal_colon_type.ail	bd0c2cfc7539123d	0	eb62583ce834dc9f
