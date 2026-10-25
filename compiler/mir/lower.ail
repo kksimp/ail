@@ -1306,6 +1306,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
+            watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
         Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos, pos)
         _ => problem(pos, "this assignment target isn't in the native subset yet")
 
@@ -1855,7 +1856,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 )))
             check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
+            instr_watch_cells(cells)
             res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            instr_watch_cells_end(cells)
             cells_back(cells)
             res
         Member =>
