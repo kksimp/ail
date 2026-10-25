@@ -12,7 +12,7 @@ edit  51 items
 explain  37 items
 fix  54 items
 fixrun  26 items
-fmt  63 items
+fmt  64 items
 load  102 items
 mir  486 items
 obj  64 items
