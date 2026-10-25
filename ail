@@ -269,7 +269,32 @@ if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     if [ "$1" = diff ]; then shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" diff "$@"; fi
     if [ "$1" = explain ] || [ "$1" = edit ] || [ "$1" = ask ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
     if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
-    if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
+    if [ "$1" = api ]; then
+        shift
+        bdiff=
+        for a in "$@"; do [ "$a" = --diff ] && bdiff=1; done
+        if [ -n "$bdiff" ]; then
+            # `ail api --diff ... --budget [N] [--from K]`: the native diff under the budget (api.diff.5, budget.out.1-7).
+            bopts=(api --diff); aopts=(); prev=
+            for a in "$@"; do
+                case "$prev:$a" in
+                    --budget:*[!0-9]* | --budget:) ;;
+                    --budget:* | --from:*) bopts+=("$a"); prev=; continue ;;
+                esac
+                prev=
+                case "$a" in
+                    --budget | --from) bopts+=("$a"); prev="$a" ;;
+                    --diff) ;;
+                    --json) bopts+=("$a"); aopts+=("$a") ;;
+                    *) aopts+=("$a") ;;
+                esac
+            done
+            case " ${bopts[*]} " in
+                *" --budget "* | *" --from "*) AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget "${bopts[@]}" -- "$native" api --diff "${aopts[@]}" ;;
+            esac
+        fi
+        AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"
+    fi
     if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ -n "$native_errors" ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-errors "$@"; fi
