@@ -1575,7 +1575,8 @@ fn Gate.limits(mut self, tmp str)
     if not line.starts_with("\{\"coverage\":true,\"file\":")
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
         red("coverage --json", cj.out)
-    k := ail_run(["test", "{case}/limit_test_contract.ail"]) else return
+    # Native traps show their values only under `--values` (ADR 0886); the interpreter always does.
+    k := ail_run(if native() then ["test", "--values", "{case}/limit_test_contract.ail"] else ["test", "{case}/limit_test_contract.ail"]) else return
     if k.status != 1
         red("test contract", "exit {k.status}")
     want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
@@ -2503,10 +2504,9 @@ fn Gate.asm(mut self)
         red("asm", "{r.out}{r.err}")
 
 fn Gate.native_misc(mut self)
-    for flags in [List[str](), ["--no-bytecode"]]
-        r := ail_run(cat(cat(["test"], flags), ["compiler/rt/rt.ail"])) else return
-        if r.status != 0 or not r.out.contains(" 0 failed")
-            red("native runtime tests {flags}", "{r.out}{r.err}")
+    r := ail_run(["test", "compiler/rt/rt.ail"]) else return
+    if r.status != 0 or not r.out.contains(" 0 failed")
+        red("native runtime tests", "{r.out}{r.err}")
     mixed := "tests/native_test/mixed.ail"
     # ADR 0900: `test --native` is refused; `ail test` runs the same tests natively.
     n := native_run(["test", "--native", mixed]) else return

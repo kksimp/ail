@@ -1,0 +1,9 @@
+# std.tensor.5, std.tensor.22: `x.to_float().sum()` of a `Tensor[f32]` is the double sum of
+# the widened elements, in the same order as the widened copy would give.
+fn main()
+    a := tensor.from([(i % 17).to_float() * 0.1 for i in 0..37]).to_f32()
+    print(a.to_float().sum())
+    print(a.to_float().sum() == a.to_float().to_list().sum())
+    b := tensor.from([1.5, 2.5, 3.5]).to_f32()
+    print(b.to_float().sum())
+    print(b.sum())
