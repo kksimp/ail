@@ -92,7 +92,21 @@ pointer, no collection or time check due) is straight-line code, and a constant 
 size class away. The slow path stays a call. `rt.list_new` and the other list makers stay
 calls because the list passes find them by name. The change is in MIR, so x86-64 and ARM64
 get it together (ADR 0008). Measured on binarytrees, fasta and fannkuch on ail-linux (A/B,
-same checkout with and without the commit); results below once run.
+same checkout with and without the commit). Result (2026-10-25, Mac): no change, instruction
+counts within 0.1M on all six programs. The hot functions of binarytrees, fannkuch and fasta
+have no allocation calls: binarytrees' time is the recursive `make`/`check` and two
+`list_push` per node. The pass stays (it removes real calls, and the self-host passes) but
+pass 1 as a speed lever is replaced by the codegen items below.
+
+## Pass 2 first slice: ARM64 call and global overheads
+
+Read from the ARM64 disassembly of binarytrees: every recursive call pays a five-instruction
+stack check (`adrp`, `add #0`, `ldr`, `cmp sp`, `b.lo`) and every call saves and restores
+the callee-saved registers with one `str`/`ldr` each. (a) `adr_sym` of `globals` skips its
+`add`: the globals start on a page in every object writer, so the add is always `#0`.
+(b) The callee-saved registers are saved and restored in pairs with `stp`/`ldp`.
+x86-64 already checks the stack with one `cmp rsp, [mem]` and has no pair form to use, so
+nothing is owed there (ADR 0008).
 
 ## Rationale
 
