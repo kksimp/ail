@@ -1,0 +1,12 @@
+use std.screen.cells
+use std.ui.widgets
+
+fn main()
+    runs := [
+        widgets.Run(col: 0, row: 0, text: "hello world and more", fg: 0x202020, bg: 0xffffff, bold: false),
+        widgets.Run(col: 0, row: 1, text: "status bar", fg: 0xffffff, bg: 0x007acc, bold: false),
+        widgets.Run(col: 0, row: 2, text: "  ", fg: 0x202020, bg: 0xffffff, bold: false),
+    ]
+    s := cells.of_cells(20, 3, runs, 5, 0)
+    for it in s.items
+        print("{it.role} {it.x.to_int()},{it.y.to_int()} {it.w.to_int()}x{it.h.to_int()}")
