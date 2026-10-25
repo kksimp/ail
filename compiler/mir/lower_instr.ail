@@ -102,39 +102,104 @@ fn Lower.watch_stmt(mut self, s ast.Stmt)
 fn Lower.watch_here(self, pos ast.Pos) bool
     instr.wpos.line != 0 and instr.wpos.line == pos.line and instr.wpos.col == pos.col
 
-## The start of an element-write event on `r` (trace.watch.4): `watch: NAME = VALUE at L:C [`, then
-## the caller writes the note and calls `watch_end` with the block returned. Returns the block to
-## continue in.
-fn Lower.watch_start(mut self, r Val) int
+## What an element write adds to a watch event (trace.watch.4): `OP ELEM at LABEL AT, AT2`.
+struct WNote
+    kind str
+    elem Val?
+    label str
+    at Val?
+    at2 Val?
+
+## `watch: NAME = VALUE at POS`, or as JSON, when `opened` (the runtime's answer for the event
+## budget): `frame` is the function that wrote and `via` the name it holds the variable under,
+## each empty for none (trace.watch.1-4). Text and JSON follow the interpreter's.
+fn Lower.watch_event(mut self, opened int, r Val, pos ast.Pos, frame str, via str, note WNote?)
     on := new_block()
     cont := new_block()
-    branch(call("rt.watch_open", [], Ty.Bool), on, [], cont, [])
+    branch(opened, on, [], cont, [])
     seal(on)
     cur = on
-    root := if file == 0 then "" else "{src_paths[file]}:"
-    say("watch: {instr.watch} = ")
-    describe(r, instr.wat)
-    say(" at {root}{instr.wat.line}:{instr.wat.col} [")
-    cont
-
-fn Lower.watch_end(mut self, cont int)
-    say("]\n")
+    if instr.tjson
+        say("\{\"api\":1,\"trace\":\"watch\",\"name\":\"{jq(instr.watch)}\",\"value\":\"")
+        watch_value(r, pos)
+        say("\"")
+        if frame != ""
+            say(",\"frame\":\"{jq(frame)}\"")
+        if via != ""
+            say(",\"via\":\"{jq(via)}\"")
+        if n := note
+            say(",\"op\":\"{n.kind}\"")
+            if e := n.elem
+                say(",\"element\":\"")
+                watch_value(e, pos)
+                say("\"")
+            if a := n.at
+                say(",\"{n.label}\":\"")
+                watch_value(a, pos)
+                if b := n.at2
+                    say(", ")
+                    watch_value(b, pos)
+                say("\"")
+        say(",{trace_at(pos)}")
+        say("}\n")
+    else
+        say("watch: {instr.watch} = ")
+        describe(r, pos)
+        say(" at {trace_at(pos)}")
+        if frame != ""
+            say(" in {frame}")
+        if via != ""
+            say(" (as `{via}`)")
+        if n := note
+            say(" [{n.kind}")
+            if e := n.elem
+                say(" ")
+                describe(e, pos)
+            if a := n.at
+                say(" at {n.label} ")
+                describe(a, pos)
+                if b := n.at2
+                    say(", ")
+                    describe(b, pos)
+            say("]")
+        say("\n")
     call("rt.watch_close", [], Ty.Unit)
     jump(cont, [])
     seal(cont)
     cur = cont
-    instr.noted = true
 
-## `[OP ELEM at LABEL INDEX]` for the operation at `pos` on `r`, when it is the watched statement's.
-fn Lower.watch_note(mut self, pos ast.Pos, r Val, kind str, elem Val, label str, at Val)
+## A value of a JSON watch event: escaped as the inside of a string, cut at 1000 bytes.
+fn Lower.watch_value(mut self, v Val, pos ast.Pos)
+    call("rt.tr_mark", [], Ty.Unit)
+    describe(v, pos)
+    call("rt.tr_vend_long", [], Ty.Unit)
+
+## The element write of the watched statement at `pos` on `r` (trace.watch.4), written when `when`
+## (a Bool value; -1 for always) holds.
+fn Lower.watch_note_if(mut self, pos ast.Pos, when int, r Val, note WNote)
     if not watch_here(pos) or not vals_printable(r.ty, structs)
         return
-    cont := watch_start(r)
-    say("{kind} ")
-    describe(elem, pos)
-    say(" at {label} ")
-    describe(at, pos)
-    watch_end(cont)
+    yes := new_block()
+    join := new_block()
+    if when >= 0
+        branch(when, yes, [], join, [])
+    else
+        jump(yes, [])
+    seal(yes)
+    cur = yes
+    watch_event(call("rt.watch_open", [], Ty.Bool), r, instr.wat, "", "", note)
+    instr.noted = true
+    jump(join, [])
+    seal(join)
+    cur = join
+
+## `watch_note_if` for a write that always happens.
+fn Lower.watch_note(mut self, pos ast.Pos, r Val, kind str, elem Val, label str, at Val)
+    watch_note_if(pos, 0 - 1, r, WNote(kind: kind, elem: elem, label: label, at: at, at2: none))
+
+## An element write with no element, such as `reverse`.
+fn Lower.watch_plain(mut self, pos ast.Pos, r Val, kind str)
+    watch_note_if(pos, 0 - 1, r, WNote(kind: kind, elem: none, label: "", at: none, at2: none))
 
 ## After the statement `s`, an assignment to the watched variable is an event:
 ## `watch: NAME = VALUE at LINE:COL`, on standard error (trace.watch.1, trace.watch.5).
@@ -168,29 +233,19 @@ fn Lower.instr_after(mut self, s ast.Stmt)
         return
     if object < 0 and watch_object(ty)
         call("rt.watch_set", [read_var(key, cur)], Ty.Unit)
-    on := new_block()
-    cont := new_block()
     mut opened := 0
+    mut frame := ""
+    mut via := ""
     if object >= 0
         opened = call("rt.watch_open_alias", [object], Ty.Bool)
+        frame = plain_name(fname)
+        if rn != instr.watch
+            via = rn
     else
         opened = call("rt.watch_open", [], Ty.Bool)
-    branch(opened, on, [], cont, [])
-    seal(on)
-    cur = on
-    root := if file == 0 then "" else "{src_paths[file]}:"
-    say("watch: {instr.watch} = ")
-    describe(Val(id: read_var(key, cur), ty: ty), pos)
-    say(" at {root}{pos.line}:{pos.col}")
-    if object >= 0
-        say(" in {plain_name(fname)}")
-        if rn != instr.watch
-            say(" (as `{rn}`)")
-    say("\n")
-    call("rt.watch_close", [], Ty.Unit)
-    jump(cont, [])
-    seal(cont)
-    cur = cont
+        if instr.tjson
+            frame = plain_name(fname)
+    watch_event(opened, Val(id: read_var(key, cur), ty: ty), pos, frame, via, none)
 
 ## Whether a value of type `t` is one object a callee can reach through a `mut` parameter.
 fn watch_object(t Ty) bool
