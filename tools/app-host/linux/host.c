@@ -151,7 +151,7 @@ static JVal *jparse(const char **p) {
     } else if (**p == '-' || (**p >= '0' && **p <= '9')) {
         char *end;
         v->kind = J_NUM;
-        v->num = strtod(*p, &end);
+        v->num = g_ascii_strtod(*p, &end);
         *p = end;
     } else {
         jfree(v);
@@ -200,7 +200,11 @@ static Ev ev_new(const char *kind) {
     return e;
 }
 static void ev_str(Ev *e, const char *k, const char *v) { g_string_append_printf(e->s, ",\"%s\":", k); esc(e->s, v); }
-static void ev_num(Ev *e, const char *k, double v) { g_string_append_printf(e->s, ",\"%s\":%.3f", k, v); }
+static void ev_num(Ev *e, const char *k, double v) {
+    char b[G_ASCII_DTOSTR_BUF_SIZE];
+    g_ascii_formatd(b, sizeof b, "%.3f", v); /* never a decimal comma */
+    g_string_append_printf(e->s, ",\"%s\":%s", k, b);
+}
 static void ev_bool(Ev *e, const char *k, gboolean v) { g_string_append_printf(e->s, ",\"%s\":%s", k, v ? "true" : "false"); }
 static void ev_send(Ev *e) {
     g_string_append(e->s, "}\n");
@@ -247,6 +251,8 @@ static void node_free(Node *n) {
 }
 
 /* Bitmaps are kept by id so a later view can omit the data (std.app.3). */
+static gboolean debug = FALSE; /* AIL_HOST_DEBUG=1 logs canvas sizes and ops to stderr */
+
 static GHashTable *bitmaps; /* id -> cairo_surface_t* */
 
 static void bitmap_store(const char *id, int w, int h, const char *b64) {
@@ -373,7 +379,8 @@ static void answer_measure(const JVal *runs) {
         PangoRectangle ink, logical;
         pango_layout_get_extents(l, &ink, &logical);
         if (i) g_string_append_c(out, ',');
-        g_string_append_printf(out, "%.3f", logical.width / (double)PANGO_SCALE);
+        char b[G_ASCII_DTOSTR_BUF_SIZE];
+        g_string_append(out, g_ascii_formatd(b, sizeof b, "%.3f", logical.width / (double)PANGO_SCALE));
         g_object_unref(l);
         pango_font_description_free(d);
     }
@@ -415,6 +422,12 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
     gtk_render_background(gtk_widget_get_style_context(wd), cr, 0, 0, gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd));
     PangoContext *pc = gtk_widget_get_pango_context(wd);
     int depth = 0;
+    if (debug) {
+        double cx1, cy1, cx2, cy2;
+        cairo_clip_extents(cr, &cx1, &cy1, &cx2, &cy2);
+        fprintf(stderr, "draw canvas %s alloc %dx%d ops %d clip %.0f,%.0f-%.0f,%.0f\n", cid(wd),
+                gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd), n->nops, cx1, cy1, cx2, cy2);
+    }
     for (int i = 0; i < n->nops; i++) {
         const Op *op = &n->ops[i];
         switch (op->kind) {
@@ -472,6 +485,7 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
             break;
         }
         case O_CLIP:
+            if (debug) fprintf(stderr, "  op %d clip %.0f,%.0f %.0fx%.0f\n", i, op->x, op->y, op->w, op->h);
             cairo_save(cr);
             depth++;
             cairo_rectangle(cr, op->x, op->y, op->w, op->h);
@@ -608,8 +622,41 @@ static GtkWidget *window, *content = NULL;
 static Node *current = NULL;
 static GHashTable *by_id; /* id -> GtkWidget* for the focus */
 
+/* The texts of the edits sent for a field since the program last answered with a value it chose
+ * itself (as in the Windows host). A view that echoes an edit sent before the newest one is out of
+ * date, since typing has gone on: it must not overwrite the box. One that echoes the newest edit is
+ * in step. Any other value is the program's own choice and wins. */
+static GHashTable *edits; /* id -> GPtrArray of char* */
+
+static void edit_note(const char *id, const char *text) {
+    GPtrArray *a = g_hash_table_lookup(edits, id);
+    if (!a) {
+        a = g_ptr_array_new_with_free_func(g_free);
+        g_hash_table_insert(edits, g_strdup(id), a);
+    }
+    g_ptr_array_add(a, g_strdup(text));
+}
+
+/* TRUE when `text` is an echo of an edit, so the box keeps what it has. */
+static gboolean edit_echo(const char *id, const char *text) {
+    GPtrArray *a = g_hash_table_lookup(edits, id);
+    if (!a || a->len == 0) return FALSE;
+    for (int at = (int)a->len - 1; at >= 0; at--) {
+        if (strcmp(g_ptr_array_index(a, at), text)) continue;
+        if ((guint)at == a->len - 1) {
+            g_ptr_array_set_size(a, 0);
+            g_hash_table_insert(last_sent, g_strdup(id), g_strdup(text));
+        } else {
+            g_ptr_array_remove_range(a, 0, at + 1);
+        }
+        return TRUE;
+    }
+    g_ptr_array_set_size(a, 0);
+    return FALSE;
+}
+
 static void sync_fields(const Node *n) {
-    if (n->kind == N_FIELD) {
+    if (n->kind == N_FIELD && !edit_echo(n->id, n->text)) {
         const char *last = g_hash_table_lookup(last_sent, n->id);
         if (!last || strcmp(last, n->text)) {
             g_hash_table_insert(last_sent, g_strdup(n->id), g_strdup(n->text));
@@ -626,6 +673,7 @@ static void on_changed(GtkEditable *e, gpointer d) {
     if (suppress) return;
     const char *t = gtk_entry_get_text(GTK_ENTRY(e));
     g_hash_table_insert(field_text, g_strdup(cid(GTK_WIDGET(e))), g_strdup(t));
+    edit_note(cid(GTK_WIDGET(e)), t);
     Ev ev = ev_new("edit");
     ev_str(&ev, "id", cid(GTK_WIDGET(e)));
     ev_str(&ev, "text", t);
@@ -649,6 +697,7 @@ static void set_id(GtkWidget *w, const char *id) {
 }
 
 static void canvas_size(GtkWidget *w, const Node *n) {
+    if (debug) fprintf(stderr, "canvas %s w %.0f h %.0f ops %d\n", n->id, n->w, n->h, n->nops);
     gtk_widget_set_size_request(w, n->w > 0 ? (int)n->w : -1, n->h > 0 ? (int)n->h : -1);
     gtk_widget_set_hexpand(w, n->w <= 0);
     gtk_widget_set_vexpand(w, n->h <= 0);
@@ -869,6 +918,8 @@ int main(int argc, char **argv) {
     field_text = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     last_sent = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     by_id = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    edits = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref);
+    debug = g_getenv("AIL_HOST_DEBUG") != NULL;
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "AIL");
