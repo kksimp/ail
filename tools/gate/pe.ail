@@ -5,7 +5,7 @@
 ##   ail run tools/gate/pe.ail
 ## Prints only failures; the last line is `PE GREEN (N checks)` or `PE RED (N failures)`.
 
-BIN := "bootstrap/target/release/ail"
+BIN := "./ail"
 
 struct Run
     fails int
@@ -30,7 +30,7 @@ fn sh(script str) proc.Output
 
 ## The bytes an `ail run compiler` command prints as hex lines.
 fn image(args str) bytes?
-    r := sh("{BIN} run compiler {args} 2>/dev/null")
+    r := sh("{BIN} run compiler/main.ail {args} 2>/dev/null")
     if r.status != 0
         return none
     bytes.from_hex(r.out.words().join(""))

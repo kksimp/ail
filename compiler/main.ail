@@ -1242,11 +1242,21 @@ fn api_cmd(rest List[str])
         io.exit(2)
     std := path.join(path.dir(compiler_dir()), "std")
     if not files[0].ends_with(".ail")
+<<<<<<< HEAD
         io.exit(api.package_command(files[0], form, std, symbols))
     loaded := load.load(files[0], std) else err
+=======
+        io.exit(api.package_command(files[0], form, std))
+    mut loaded := load.load(files[0], std) else err
+>>>>>>> pr800
         io.eprint("error: {err.message}")
         io.exit(2)
         return
+    if expanded and [d for d in loaded.diags if not d.rule.starts_with("ct.")].len() == 0
+        # ct.gen.4: the program's own derive generators run, as for `check`, so their code is listed.
+        user := user_derive_texts(loaded, files[0])
+        if user.len() > 0
+            loaded = load.load_derived(files[0], std, user) else loaded
     mut found := [load.shown_syntax(d) for d in loaded.diags]
     mut analysis := check.analyze(loaded.program, true)
     if loaded.diags.len() == 0
