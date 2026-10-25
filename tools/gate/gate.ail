@@ -1187,7 +1187,10 @@ fn Gate.contracts(mut self)
         e := ail_run(["explain", rule]) else return
         if e.status != 0
             red("explain {rule}", "exit {e.status}")
-    trap_has("contract old trap", "contract_old_trap", [
+    old := native_run(["run", "--values", case_path("contract_old_trap")]) else return
+    if old.status != 1
+        red("contract old trap", "exit {old.status}, want 1\n{old.err}")
+    want("contract old trap", old.err, [
         "`Counter.add` ensures `n == old(n) + k`, but it returned at 4:5 with self = Counter(n: 4), k = 2",
         "values: self = Counter(n: 4), old(n) = 1, k = 2",
     ])
@@ -1409,8 +1412,8 @@ fn Gate.fmt(mut self, tmp str)
                 red("fmt {f}", "not in canonical layout")
             checked += 1
             continue
-        # std.ui programs open a real window; only their formatting is checked.
-        if source.contains("ui.open(")
+        # std.ui and std.app programs open a real window; only their formatting is checked.
+        if source.contains("ui.open(") or source.contains("use std.app")
             checked += 1
             continue
         copy := "{dir}/{name}"
