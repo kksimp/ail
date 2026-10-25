@@ -694,6 +694,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0867](0867-native-unique-values-and-drop.md) | Native unique values and `Drop`: ownership flags on the defer machinery *(delegated)* | Accepted | 2026-10-23 |
 | [0873](0873-rust-only-features-after-rust-removal.md) | Rust-only features: native record/replay and deterministic scheduler; the bytecode tier goes | Accepted | 2026-10-24 |
 | [0874](0874-purity-driven-speed-optimizations.md) | Purity-driven speed optimizations: memoization by cost model, pure-call CSE and hoisting, merging only for speed | Accepted | 2026-10-24 |
+| [0875](0875-packed-f32-tensors.md) | Native `Tensor[f32]` stores 4-byte floats (designer) | Accepted | 2026-10-24 |
+| [0876](0876-tensor-simd-and-multicore.md) | Tensor kernels use SIMD, then all cores, automatically; deterministic runs stay bit-identical | Accepted | 2026-10-24 |
 | [0884](0884-observe-field-and-attach-protocol.md) | `@observe` marks a struct field; attach speaks JSON lines on loopback with a 0600 token file | Accepted | 2026-10-24 |
 | [0877](0877-no-downcast-of-any-trait.md) | No downcasting of `any Trait`: an enum is the checked way to hold one of several known types (resolves OQ-094) | Accepted | 2026-10-24 |
 | [0880](0880-budgeted-diagnostic-forms.md) | Token-priced diagnostics: one-line and expanded forms under `--budget` (ADR 0868 item 6) | Accepted | 2026-10-24 |
