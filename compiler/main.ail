@@ -1242,13 +1242,8 @@ fn api_cmd(rest List[str])
         io.exit(2)
     std := path.join(path.dir(compiler_dir()), "std")
     if not files[0].ends_with(".ail")
-<<<<<<< HEAD
         io.exit(api.package_command(files[0], form, std, symbols))
-    loaded := load.load(files[0], std) else err
-=======
-        io.exit(api.package_command(files[0], form, std))
     mut loaded := load.load(files[0], std) else err
->>>>>>> pr800
         io.eprint("error: {err.message}")
         io.exit(2)
         return
