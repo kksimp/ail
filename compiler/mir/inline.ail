@@ -21,7 +21,6 @@ pub fn inline_module(mut out Module)
         if inlinable(f) and not opt_off("inline")
             leaves.add(f.name)
             bodies[f.name] = f
-    inline_alloc_chain(mut out, by_name, mut leaves, mut bodies)
     reserve := by_name.contains("rt.list_reserve")
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
@@ -59,42 +58,6 @@ pub fn inline_module(mut out Module)
 
 fn forwarded(f Func) Func
     if opt_off("forward") then f else forward_loads(f)
-
-## The heap's allocation entry points (ADR 0890, pass 1a). Each has a
-## straight-line fast path and calls `rt.alloc_slow` otherwise, so none is a
-## leaf. `rt.obj_new` is what a struct, tuple or enum object is built with. Inlined, a constant size folds the size class away and the fast
-## path costs no call. `rt.list_new` and the other list makers stay calls:
-## the list passes (`reserve`, `reuse_lists`) look for them by name.
-ALLOC_CHAIN := ["rt.alloc_z", "rt.alloc_raw", "rt.alloc", "rt.obj_new"]
-
-## Make each function of `ALLOC_CHAIN` inlinable, with the earlier ones
-## already inlined into it.
-fn inline_alloc_chain(
-    mut out Module,
-    by_name Map[str, int],
-    mut leaves Set[str],
-    mut bodies Map[str, Func],
-)
-    for name in ALLOC_CHAIN
-        if not by_name.contains(name)
-            continue
-        mut f := out.funcs[by_name[name]]
-        left := expand_calls(mut f, leaves, bodies, mut out.sites)
-        if left == 0
-            continue
-        simplify_in(mut f)
-        fold_in(mut f)
-        simplify_in(mut f)
-        merge_blocks_in(mut f)
-        mut back := false
-        for blk in f.blocks
-            for t in blk.term.targets
-                if t == 0
-                    back = true
-        if back
-            continue
-        leaves.add(name)
-        bodies[name] = f
 
 ## Inline the calls of `f` that name a function in `leaves`, at most
 ## `INLINE_BUDGET` of them; returns the budget left.
