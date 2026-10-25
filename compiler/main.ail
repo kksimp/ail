@@ -38,6 +38,7 @@ use load
 use mir
 use obj
 use pkg
+use scaffold
 use syntax
 use watch
 use x64
@@ -101,6 +102,8 @@ fn main() !
                 print(aug.origin)
         "explain" =>
             io.exit(explain.command(args[1..]))
+        "new" =>
+            io.exit(scaffold.command(args[1..]))
         "tokens" =>
             for path in args[1..]
                 if args.len() > 2
