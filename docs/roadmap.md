@@ -67,9 +67,9 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
    detected through AT_HWCAP on Linux) and proxy support
    ([ADR 0869](decisions/0869-http-proxy-from-the-environment.md)) are done.
 4. **Rust-free check (designer, 2026-10-20):** now that the shipped toolchain
-   no longer needs Rust (ADR 0904), rebuild `tools/edit` with the
+   no longer needs Rust (ADR 0904), rebuild ail-edit (its own repository) with the
    self-hosted toolchain and compare it with the Rust-bootstrap baseline in
-   [editor-baseline.md](design/editor-baseline.md) (start-up, `ail check`
+   editor-baseline.md (in kksimp/ail-edit, `docs/`) (start-up, `ail check`
    time, test time, tokens, memory, and keystroke/redraw latency).
 5. **Hardware:** accelerator backends for `std.tensor` (allowed by ADR 0381; CPU slice gaps first, then Vulkan and Metal, then NPUs) and weaker
    atomic orderings (OQ-097).
@@ -114,9 +114,9 @@ std API still needs its own ADR first.
 4. **std.app and its host** (`std/app`, `tools/app-host/`): the screen model
    ([ADR 0878](decisions/0878-screen-model-for-std-app.md)), Garlic first, then every
    GUI program; `@observe` and live attach ([ADR 0879](decisions/0879-observe-and-live-attach.md)).
-5. **Garlic interface** (`tools/garlic/` window and chrome): closing tabs, and
+5. **Garlic interface** (kksimp/garlic window and chrome): closing tabs, and
    a redesign that looks as polished as Chrome or Firefox but has its own look.
-6. **Garlic agent features** (`tools/garlic/` page model and agent server):
+6. **Garlic agent features** (kksimp/garlic page model and agent server):
    the agent server and attach channel; watches and scheduled actions; trust
    rules; grounding; forms as schema; extraction; quiet pages; waiting; intent
    maps; page memory; opt-in action replay; form diff before submit; site
@@ -134,8 +134,8 @@ std API still needs its own ADR first.
    optimizer benchmark against C using contracts, `ail test --mutate` and
    `ail check --perf`; ADR 0898), and a media player or image editor on `std.app`
    (SIMD, multi-core and tensor speed; ADR 0899).
-10. **Last:** the Rust-free rebuild of `tools/edit` compared with
-   [editor-baseline.md](design/editor-baseline.md); a drag race of Garlic
+10. **Last:** the Rust-free rebuild of ail-edit compared with
+   editor-baseline.md (in kksimp/ail-edit, `docs/`); a drag race of Garlic
    against Chrome and Firefox on a fixed set of real sites (page load, first
    paint, scrolling, memory and tokens per agent task); then the Python
    on-ramp (OQ-119).

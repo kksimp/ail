@@ -3,7 +3,7 @@
 # an AIL program with it. From the repository root:
 #   tools/app-host/macos/run.sh                      # build only
 #   tools/app-host/macos/run.sh examples/app_todo.ail
-#   tools/app-host/macos/run.sh --native tools/garlic/garlic.ail URL   # compiled, not interpreted
+#   tools/app-host/macos/run.sh --native ../garlic/garlic.ail URL   # compiled, not interpreted
 # Needs the Xcode command line tools (swiftc); no third-party packages.
 set -euo pipefail
 
@@ -41,10 +41,10 @@ PLIST
         "$here"/Sources/*.swift -o "$exe"
 fi
 
-# Garlic's Dock icon (tools/garlic/icon); the host reads AIL_APP_ICON.
+# Garlic's Dock icon (../garlic/icon); the host reads AIL_APP_ICON.
 for a in "$@"; do
     case "$a" in
-        */garlic/garlic.ail|garlic.ail) export AIL_APP_ICON="$root/tools/garlic/icon/garlic-512.png" ;;
+        */garlic/garlic.ail|garlic.ail) export AIL_APP_ICON="$root/../garlic/icon/garlic-512.png" ;;
     esac
 done
 

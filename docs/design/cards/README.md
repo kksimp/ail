@@ -5,7 +5,7 @@ checked in as examples and kept fresh by the `api_card` gate suite
 (`api.card.5`). Regenerate from the repository root:
 
 ```sh
-./ail api --card tools/edit > docs/design/cards/edit.md
+./ail api --card compiler > docs/design/cards/compiler.md
 ./ail api --card std > docs/design/cards/std.md
 ```
 
@@ -16,11 +16,7 @@ are cl100k tokens from `tools/tokbench/run.sh` (ADR 0703).
 
 | Card | Source | cl100k tokens at 4,000 | For |
 |---|---|---:|---|
-| [edit.md](edit.md) | `tools/edit` | 2,272 | Editing the code editor |
 | [std.md](std.md) | `std` | 786 | The standard library |
-| [garlic.md](garlic.md) | `tools/garlic` | 3,036 | The text browser's modules |
-| [garlic-js.md](garlic-js.md) | `tools/garlic/js` | 1,803 | Garlic's JavaScript engine |
-| [pdf.md](pdf.md) | `tools/pdf` | 109 (names only) | The PDF viewer |
 | [compiler.md](compiler.md) | `compiler` | 2,661 | The native compiler |
 
 `tools/perfbench` and `tools/self-compile` have no `.ail` files, so they have no
@@ -37,8 +33,8 @@ A card that meets 2,000 needs a split per module: see below.
 An agent reads a package's index, then the one module it needs:
 
 ```sh
-./ail api --card --index tools/garlic                       # one line per module
-./ail api --card --budget 2000 --module html tools/garlic   # one module
+./ail api --card --index std                      # one line per module
+./ail api --card --budget 2000 --module app std   # one module
 ```
 
 Each package has an `index.md` and one file per module under `<package>/`
@@ -47,7 +43,7 @@ the `api_card` gate suite (`api.card.6`, `api.card.7`), at a 2,000-token
 budget. Regenerate them with this loop from the repository root:
 
 ```sh
-for d in garlic:tools/garlic garlic-js:tools/garlic/js pdf:tools/pdf compiler:compiler edit:tools/edit std:std; do
+for d in compiler:compiler std:std; do
   name=${d%%:*}; dir=${d#*:}; mkdir -p docs/design/cards/$name
   ./ail api --card --index $dir > docs/design/cards/$name/index.md
   ./ail api --card --index $dir | tail -n +2 | awk '{print $1}' | while read m; do
@@ -58,9 +54,7 @@ done
 ```
 
 Sizes are `tools/tokbench` means (the five-tokenizer average). Every module card is
-under 2,000; the largest are `garlic/root.md` (1,830), `compiler/a64.md` (1,779)
-and `compiler/x64.md` (1,779). `tools/edit`'s root module (149 items) is the one
-exception that cannot fit its signatures: its card gives the count only (84).
+under 2,000; the largest are `compiler/a64.md` (1,779) and `compiler/x64.md` (1,779).
 
 Garlic, one module at a time: the full package card at 8,000 tokens is 6,310
 (mean). The index (55) plus `garlic/html.md` (1,160) is 1,215, about 81% less,

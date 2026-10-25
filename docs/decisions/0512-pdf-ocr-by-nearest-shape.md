@@ -5,7 +5,7 @@
 - **Decided by:** Designer (goal: scanned PDFs searchable by recognising text pixels, 2026-10-20; card "Speed and lazy first, then OCR"; card "DejaVu plus OFL fonts" for the reference shapes), details AI (delegated, ADR 0076)
 - **Topic:** Tooling
 - **Spec rules:** none (a tool, not language behaviour)
-- **Files:** `tools/pdf/ocr/`, `tools/pdf/pdf.ail`, `tools/pdf/view/view.ail`, `tools/pdf/reader/model.ail`, [design note](../design/pdf-viewer.md#ocr-of-scanned-pages-adr-0512)
+- **Files:** `tools/pdf/ocr/`, `tools/pdf/pdf.ail`, `tools/pdf/view/view.ail`, `tools/pdf/reader/model.ail`, [design note](https://github.com/kksimp/garlic-press/blob/main/docs/pdf-viewer.md#ocr-of-scanned-pages-adr-0512)
 
 ## Context
 
