@@ -32,7 +32,10 @@ pub fn command(args List[str]) int
     fs.write_text("{name}/ail.pkg", "package {name}\n") else err
         io.eprint("error: {err.kind}")
         return 1
-    fs.write_text("{name}/main.ail", "## {name}: say what this program does.\n\n## The greeting for `who`.\nfn greet(who str) str\n    \"Hello, \{who}!\"\n\nfn main()\n    print(greet(\"world\"))\n\n@test fn greets()\n    assert_eq(greet(\"ail\"), \"Hello, ail!\")\n") else err
+    fs.write_text(
+        "{name}/main.ail",
+        "## {name}: say what this program does.\n\n## The greeting for `who`.\nfn greet(who str) str\n    \"Hello, \{who}!\"\n\nfn main()\n    print(greet(\"world\"))\n\n@test fn greets()\n    assert_eq(greet(\"ail\"), \"Hello, ail!\")\n",
+    ) else err
         io.eprint("error: {err.kind}")
         return 1
     print("created {name}/ (ail.pkg, main.ail)")
