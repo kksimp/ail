@@ -476,6 +476,72 @@ fn is_trap_mark(a int) bool
 fn dispatch(id int, rec int)
     todo
 
+# ---- tensor kernels on the pool (ADR 0876) ----
+
+## The job of a tensor kernel: 16 words the caller fills (word 0 the job).
+fn tensor_env() int
+    alloc(128, KIND_ENV)
+
+## Run the job `env` over the units `lo..hi` on the pool, in chunks, and wait.
+## False (nothing run) when the job is small (`work`, about the element
+## operations), the loop is short, or the run is deterministic (conc.par.9);
+## the caller then runs it in order. The units are independent, so the result
+## is bit for bit the sequential one (std.tensor.7, std.tensor.20).
+fn tensor_par(env int, lo int, hi int, work int) bool
+    if work < TENSOR_PAR_MIN or hi - lo < 2 or det_on()
+        return false
+    if load64(pool() + P_TARGET) < 2
+        return false
+    grp := par_start(TENSOR_TASK, env, lo, hi)
+    par_wait(grp)
+    true
+
+TENSOR_PAR_MIN := 262144
+TENSOR_TASK := 1073741824
+
+## One chunk (`rt.dispatch` of `TENSOR_TASK`): the job in the record's first
+## argument, over the units of arguments 1 and 2.
+fn tensor_chunk(rec int)
+    env := load64(rec + T_ARGS)
+    lo := load64(rec + T_ARGS + 8)
+    hi := load64(rec + T_ARGS + 16)
+    job := load64(env)
+    kind := load64(env + 8)
+    out := load64(env + 16)
+    da := load64(env + 24)
+    db := load64(env + 32)
+    if job == 0
+        # Rows `lo..hi` of a matrix product: n = word 5, k = word 6.
+        n := load64(env + 40)
+        k := load64(env + 48)
+        for i in lo..hi
+            if kind == 2
+                vec_mm32(out + 4 * i * n, da + 4 * i * k, db, n, k)
+            else
+                vec_mm(out + 8 * i * n, da + 8 * i * k, db, n, k, 0)
+    elif job == 1
+        # Elements `lo..hi` of `a op b`: op = word 5.
+        op := load64(env + 40)
+        if kind == 2
+            vec_zip32(op, out + 4 * lo, da + 4 * lo, db + 4 * lo, hi - lo)
+        else
+            vec_zip(op, out + 8 * lo, da + 8 * lo, db + 8 * lo, hi - lo, 0)
+    elif job == 3
+        # Chunks `lo..hi` of a fused chain: plan = word 3, root = 4, n = 5.
+        fuse_range(da, db, out, kind, load64(env + 40), lo, hi)
+    elif job == 4
+        # Rows `lo..hi` of a softmax: row width = word 5.
+        softmax_rows(kind, da, out, load64(env + 40), lo, hi)
+    else
+        # Elements `lo..hi` of `a op s`: op = word 5, left = word 6, s = word 7.
+        op := load64(env + 40)
+        left := load64(env + 48)
+        s := loadf(env + 56)
+        if kind == 2
+            vec_scal32(op, out + 4 * lo, da + 4 * lo, hi - lo, left, s)
+        else
+            vec_scal(op, out + 8 * lo, da + 8 * lo, hi - lo, 0, left, s)
+
 # ---- parallel loops (ADR 0601) ----
 
 ## Whether `par for lo..hi` goes to the pool: at least twice as many

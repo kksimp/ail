@@ -7,10 +7,30 @@
 ## bit-sliced code of tls_aes.ail runs instead.
 
 ## 1 when the CPU has the instructions the kernels use. x86-64 assembles this
-## as a CPUID check; here, ARM64 on macOS (every core there has AES and PMULL).
-## Linux ARM64 stays on the bit-sliced code until it reads the capabilities.
+## as a CPUID check; here, ARM64 on macOS (every core there has AES and PMULL)
+## and ARM64 on Linux, which reads the kernel's AT_HWCAP.
 fn aes_hw_ok() int
-    if target() == 2 then 1 else 0
+    t := target()
+    if t == 2
+        return 1
+    if t == 1
+        return aes_hw_linux_arm()
+    0
+
+## Linux ARM64: AT_HWCAP (16) of the auxiliary vector, which follows the
+## environment's NULL on the initial stack, has HWCAP_AES (bit 3) and
+## HWCAP_PMULL (bit 4) set.
+fn aes_hw_linux_arm() int
+    mut e := os_envp()
+    while load64(e) != 0
+        e += 8
+    mut a := e + 8
+    while load64(a) != 0
+        if load64(a) == 16
+            caps := load64(a + 8)
+            return if caps.bit_and(24) == 24 then 1 else 0
+        a += 16
+    0
 
 ## Never called while `aes_hw_ok` is 0; the bodies only keep the signature.
 ## Encrypt `n` independent 16-byte blocks at `src` into `dst` with the
