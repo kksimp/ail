@@ -32,7 +32,7 @@ is `0.0` fills the space left in that direction. The builders
 **std.app.3** — `enum Op` is a canvas's display list, drawn in order, in
 points from the canvas's top-left corner, colors `0xRRGGBB`:
 `Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
-`mono`, `sans` or `serif`; `(x, y)` is the text's top-left corner),
+`mono`, `sans` or `serif`, ADR 0905; `(x, y)` is the text's top-left corner),
 `Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
 `Pic(x, y, w, h, src)` (an image file path or URL),
 `Bitmap(x, y, w, h, id, pw, ph, data)` (a `pw` by `ph` image scaled to the
