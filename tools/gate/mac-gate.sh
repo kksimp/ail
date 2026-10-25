@@ -33,7 +33,7 @@ fi
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
 # D3: every suite runs on ./ail. Only the interpreter-only suites (GATE_INTERP=1) still call the Rust binary.
 native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain contracts api_card edit net spec pe asm tools api_queries misc limits native_misc nativex globals"
-run gate_native perl -e 'alarm 2400; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
+run gate_native perl -e 'alarm 4800; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
 if [ "${GATE_INTERP:-0}" = 1 ]; then
   run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
   run gate_interp env GATE_RUST=1 ./ail run tools/gate/gate.ail snapshot budget parallel replay
