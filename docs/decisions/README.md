@@ -720,3 +720,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0881](0881-ail-ask.md) | `ail ask`: semantic questions (who writes a field, what calls a function, which effects reach it) answered from the checker's graph | Accepted | 2026-10-24 |
 | [0882](0882-edit-impact.md) | Edit impact: which tests and effects an edit touches (`ail edit --impact`, `ail ask --affected`, `ail test --affected`) | Accepted | 2026-10-24 |
 | [0885](0885-contracts-checked-by-fuzzing.md) | Contracts checked by fuzzing: `ail test --contracts` gives a counterexample for a failing `requires` or `ensures` | Accepted | 2026-10-24 |
+| [0890](0890-optimizer-roadmap-to-match-c.md) | Optimizer roadmap to match C at -O2/-O3: allocation, register allocation, inlining, loop opts, range analysis, auto-vectorization, maps, tail calls; speed-only per ADR 0874 *(delegated)* | Accepted | 2026-10-24 |

@@ -21,6 +21,7 @@ pub fn inline_module(mut out Module)
         if inlinable(f) and not opt_off("inline")
             leaves.add(f.name)
             bodies[f.name] = f
+    inline_alloc_chain(mut out, by_name, mut leaves, mut bodies)
     reserve := by_name.contains("rt.list_reserve")
         and by_name.contains("rt.list_rows_min")
         and by_name.contains("rt.list_new_for")
@@ -28,19 +29,9 @@ pub fn inline_module(mut out Module)
     fills := by_name.contains("rt.fill")
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
-        mut budget := INLINE_BUDGET
-        mut changed := true
-        while changed and budget > 0
-            changed = false
-            for b in 0..f.blocks.len()
-                at := first_call(f.blocks[b], leaves, f.name)
-                if at >= 0
-                    callee := bodies[f.blocks[b].insts[at].name]
-                    inline_call(mut f, b, at, callee, mut out.sites)
-                    budget -= 1
-                    changed = true
-                    break
-        if budget < INLINE_BUDGET
+        budget := expand_calls(mut f, leaves, bodies, mut out.sites)
+        unrolled := unroll_self(mut f, mut out.sites)
+        if budget < INLINE_BUDGET or unrolled
             simplify_in(mut f)
             fold_in(mut f)
             simplify_in(mut f)
@@ -68,6 +59,59 @@ pub fn inline_module(mut out Module)
 
 fn forwarded(f Func) Func
     if opt_off("forward") then f else forward_loads(f)
+
+## The heap's allocation entry points (ADR 0890, pass 1a). Each has a
+## straight-line fast path and calls `rt.alloc_slow` otherwise, so none is a
+## leaf. `rt.obj_new` is what a struct, tuple or enum object is built with. Inlined, a constant size folds the size class away and the fast
+## path costs no call. `rt.list_new` and the other list makers stay calls:
+## the list passes (`reserve`, `reuse_lists`) look for them by name.
+ALLOC_CHAIN := ["rt.alloc_z", "rt.alloc_raw", "rt.alloc", "rt.obj_new"]
+
+## Make each function of `ALLOC_CHAIN` inlinable, with the earlier ones
+## already inlined into it.
+fn inline_alloc_chain(
+    mut out Module,
+    by_name Map[str, int],
+    mut leaves Set[str],
+    mut bodies Map[str, Func],
+)
+    for name in ALLOC_CHAIN
+        if not by_name.contains(name)
+            continue
+        mut f := out.funcs[by_name[name]]
+        left := expand_calls(mut f, leaves, bodies, mut out.sites)
+        if left == 0
+            continue
+        simplify_in(mut f)
+        fold_in(mut f)
+        simplify_in(mut f)
+        merge_blocks_in(mut f)
+        mut back := false
+        for blk in f.blocks
+            for t in blk.term.targets
+                if t == 0
+                    back = true
+        if back
+            continue
+        leaves.add(name)
+        bodies[name] = f
+
+## Inline the calls of `f` that name a function in `leaves`, at most
+## `INLINE_BUDGET` of them; returns the budget left.
+fn expand_calls(mut f Func, leaves Set[str], bodies Map[str, Func], mut sites List[Site]) int
+    mut budget := INLINE_BUDGET
+    mut changed := true
+    while changed and budget > 0
+        changed = false
+        for b in 0..f.blocks.len()
+            at := first_call(f.blocks[b], leaves, f.name)
+            if at >= 0
+                callee := bodies[f.blocks[b].insts[at].name]
+                inline_call(mut f, b, at, callee, mut sites)
+                budget -= 1
+                changed = true
+                break
+    budget
 
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
@@ -99,7 +143,7 @@ fn first_call(blk Block, leaves Set[str], self_name str) int
 ## each `return` jumps to a new block, holding the rest of `b`, whose
 ## parameter is the call's value. The callee's checks are copied with a
 ## link to the call, a frame of the stack a trap prints (trace.frame.2).
-fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
+pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     nv := g.vals.len()
     nb := g.blocks.len()
     rest := nb + callee.blocks.len()
@@ -124,11 +168,16 @@ fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     mut tail := List[Inst]()
     for k in at + 1..g.blocks[b].insts.len()
         tail.push(g.blocks[b].insts[k])
-    cont := Block(
-        params: if call.dst >= 0 then [call.dst] else [],
-        insts: tail,
-        term: g.blocks[b].term,
-    )
+    mut cont_params := if call.dst >= 0 then [call.dst] else []
+    if call.dst >= 0 and callee.ret.name() != g.vals[call.dst].name()
+        # `rt.obj_new` returns an `int` that its caller sees as a struct, a
+        # string or an enum: the block takes the `int` and a `copy` retypes it.
+        raw := g.vals.len()
+        g.vals.push(callee.ret)
+        g.names.push("")
+        tail.insert(0, inst(call.dst, "copy", [raw]))
+        cont_params = [raw]
+    cont := Block(params: cont_params, insts: tail, term: g.blocks[b].term)
     mut head := List[Inst]()
     for k in 0..at
         head.push(g.blocks[b].insts[k])

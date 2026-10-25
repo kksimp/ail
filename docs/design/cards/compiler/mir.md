@@ -14,6 +14,7 @@ pub fn mir.fold_in(mut mir.Func) [mutates]
 pub fn mir.rpo(mir.Func) List[int]
 pub fn mir.forward_loads(mir.Func) mir.Func
 pub fn mir.inline_module(mut mir.Module) [env mutates]
+pub fn mir.inline_call(mut mir.Func, int, int, mir.Func, mut List[mir.Site]) [mutates]
 pub fn mir.merge_blocks(mir.Func) mir.Func
 pub fn mir.merge_blocks_in(mut mir.Func) [mutates]
 pub struct mir.Def
@@ -69,6 +70,7 @@ pub fn mir.call_line(int) int
 pub fn mir.call_col(int) int
 pub fn mir.mark_nonneg(mir.Func) mir.Func
 pub fn mir.rewrite_nonneg(mir.Func) mir.Func
+pub fn mir.unroll_self(mut mir.Func, mut List[mir.Site]) bool [env mutates]
 pub mir.PRELUDE_EMBED := ...
 pub fn mir.pure_calls(mut mir.Module) [mutates]
 pub fn mir.keep_lengths(mir.Func) mir.Func
@@ -86,4 +88,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1283); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1345); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

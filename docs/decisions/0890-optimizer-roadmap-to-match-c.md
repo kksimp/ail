@@ -1,0 +1,145 @@
+# 0890. Optimizer roadmap: speed passes to match C at -O2 and -O3
+
+- **Status:** Accepted
+- **Date:** 2026-10-24
+- **Decided by:** AI (delegated, ADR 0076; criterion: speed is the goal here, per ADR 0874)
+- **Topic:** 23 — Implementation (native optimizer)
+- **Spec rules:** none (every pass keeps observable behaviour, traps included)
+
+## Context
+
+The designer wants AIL to compete hard with C at `-O2` and `-O3`. ADR 0874 limits the
+optimizer to passes that increase speed; binary size and compile time (within reason) don't
+count. Pure-call CSE and loop hoisting landed in `compiler/mir/purecse.ail`; memoization is
+a separate PR. Tensors (packed f32, SIMD, multi-core) belong to the tensor lane, and RR-3
+owns pure CSE and memoization, so this ADR doesn't touch them.
+
+Known gaps, from [native-performance.md](../design/native-performance.md) (the last full
+table against `gcc -O2`; a fresh table comes from the baseline job below):
+
+| Program class | Gap vs gcc -O2 | Cause |
+|---|---|---|
+| binarytrees | 5x | allocation per node, values live across calls spill |
+| fasta | 2.7x | list and `str` allocation, `rt.alloc` call per object |
+| fannkuch | 2.5x | a list per permutation, loop scalars spilled (5 callee-saved regs) |
+| matmul | 2.3x | `b[k][j]` row check, `n` spilled, no unroll or vector code |
+| collatz, mandelbrot, spectralnorm | 1.2–1.4x | loop structure, copies, divide by 2 |
+| wordfreq | 6.5x | hashing, probe not inlined |
+| nbody, sieve | 1.1–1.4x, 1.0x | near parity |
+
+Mechanisms AIL has that C compilers lack, and which make passes simpler or stronger:
+
+- **Value semantics:** a `List` value has no aliases, so every load and store is
+  alias-free without `restrict`. Vectorization and load/store motion need no alias proof.
+- **Effect-proven purity** (ADR 0874): calls can be CSE'd, hoisted, reordered.
+- **Checked arithmetic and bounds** are explicit trap sites, so range facts from a guard
+  hold on the whole dominated region.
+
+## Options considered
+
+### Option A — ranked passes by measured gap, one PR each (chosen)
+- **Pros:** each PR has a perfbench number; small diffs fit the merge queue.
+- **Cons:** slower to reach a "complete" optimizer than a big-bang rewrite.
+
+### Option B — SSA rewrite with a general sparse-conditional pipeline first
+- **Pros:** clean base for later passes.
+- **Cons:** a rewrite that gains nothing until later; MIR is already SSA with block params.
+
+### Option C — only vectorization and unrolling (the `-O3` flags)
+- **Pros:** visible wins on matmul and float loops.
+- **Cons:** leaves binarytrees, fasta and wordfreq (the biggest gaps) untouched.
+
+## Decision
+
+Build the following passes, in this order, each as its own file `compiler/mir/opt_*.ail`
+(or a target file for allocator and codegen work) with at most one dispatch line in the
+shared pass list. Each lands with a perfbench before/after and a golden test.
+
+1. **Allocation.** (a) Inline bump-pointer allocation with the slow path out of line
+   (today `rt.alloc` is a call plus checks per object). (b) Escape analysis for lists and
+   records: a value that never leaves its function is built on the stack or in a region, and
+   a constant-length small list becomes scalars (scalar replacement). Value semantics makes
+   the escape proof local. Targets: binarytrees, fasta, fannkuch.
+2. **Register allocation.** Live-range splitting at calls (a value that lives across a
+   call is split so only the call-crossing part is in a callee-saved register or slot, the
+   rest stays in a caller-saved register), spill-slot coalescing, and better loop-carried
+   scalar handling. Targets: fannkuch, binarytrees, matmul's spilled `n`.
+3. **Inlining.** Raise it from leaf-only (`INLINE_LIMIT` 40) to a call-graph cost model:
+   inline non-leaf small functions and single-call-site functions, bottom up, with a
+   size budget per function. Targets: callback-heavy and method-heavy code.
+4. **Scalar loop optimizations.** General LICM (beyond pure calls), induction-variable
+   strength reduction, division and modulo by constants as multiply-shift, signed divide by a
+   power of two as shift plus fix, unrolling of small counted loops, and loop peeling for
+   the first check. Targets: collatz, mandelbrot, spectralnorm.
+5. **Range analysis.** Extend `nonneg.ail` and `bce.ail` into one interval analysis over
+   MIR so overflow checks inside guarded loops disappear and row checks (`b[k][j]`) hoist.
+6. **Auto-vectorization** of counted loops over `List[float]`, `List[int]`, `List[u8]`
+   with no loop-carried dependence, using the alias-free guarantee, for SSE/AVX2 on
+   x86-64-v3 and NEON on ARM64 in lockstep (ADR 0008). Reductions use the existing
+   exactness rules (no float reassociation; integer reductions only, unless a `par`/tensor
+   op already permits it). Coordinated with the tensor lane's SIMD kernels so the code
+   generator support is written once.
+7. **Maps.** Cached hash in the string object, combined find-or-insert, and inlined probe.
+8. **Tail calls** to self and mutual tail calls as jumps.
+
+Every pass keeps traps and their order. A pass that can't prove that skips the code.
+
+## Pass 1a: inline allocation fast path
+
+`inline_module` (`compiler/mir/inline.ail`) inlines `rt.alloc_z`, `rt.alloc_raw`, `rt.alloc`
+and `rt.obj_new` although they call `rt.alloc_slow`: their fast path (free list or bump
+pointer, no collection or time check due) is straight-line code, and a constant size folds the
+size class away. The slow path stays a call. `rt.list_new` and the other list makers stay
+calls because the list passes find them by name. The change is in MIR, so x86-64 and ARM64
+get it together (ADR 0008). Measured on binarytrees, fasta and fannkuch on ail-linux (A/B,
+same checkout with and without the commit). Result (2026-10-25, Mac): no change, instruction
+counts within 0.1M on all six programs. The hot functions of binarytrees, fannkuch and fasta
+have no allocation calls: binarytrees' time is the recursive `make`/`check` and two
+`list_push` per node. The pass stays (it removes real calls, and the self-host passes) but
+pass 1 as a speed lever is replaced by the codegen items below.
+
+## Pass 2 first slice: ARM64 call and global overheads
+
+Read from the ARM64 disassembly of binarytrees: every recursive call pays a five-instruction
+stack check (`adrp`, `add #0`, `ldr`, `cmp sp`, `b.lo`) and every call saves and restores
+the callee-saved registers with one `str`/`ldr` each. (a) `adr_sym` of `globals` skips its
+`add`: the globals start on a page in every object writer, so the add is always `#0`.
+(b) The callee-saved registers are saved and restored in pairs with `stp`/`ldp`.
+x86-64 already checks the stack with one `cmp rsp, [mem]` and has no pair form to use, so
+nothing is owed there (ADR 0008).
+
+## Pass 3 first slice: self-recursive calls inlined once
+
+`compiler/mir/opt_unroll.ail`: a user function of at most 60 instructions with one to three
+direct self calls gets a copy of its own body at each of those calls (the copy's own
+recursive calls stay calls). A recursion of depth d then makes about d / 2 calls, and each
+pair shares the frame, the callee-saved saves and the stack check. gcc -O3 does this
+(binarytrees is 2.3x of -O3 against 1.6x of -O2). Trap sites keep their frames, so traces
+are unchanged. `AIL_OPT_OFF=unroll` turns it off, so one binary gives the A/B.
+
+## Rationale
+
+The listed gaps point at allocation and register pressure first, not at `-O3` loop
+transformations: the program classes furthest from C are bound by allocation and spills,
+so vectorization alone would leave AIL slower on four of nine programs. The alias-free and
+purity facts give AIL a path past C, not just to parity, on loops where C must emit
+runtime alias checks or can't prove a call pure.
+
+## Measurement protocol
+
+- On ail-linux only. Baseline (item 0): `tools/perfbench` programs at the large sizes
+  in `tools/perfbench/large.py` against `gcc -O2`, `gcc -O3`, `clang -O2`, `clang -O3`
+  (all `-ffp-contract=off`), min of 7, plus instructions retired (callgrind) at the
+  `.args` sizes. The table goes into `docs/design/native-performance.md`.
+- A pass lands only with a before/after on the programs it targets and no regression
+  over 3% elsewhere.
+- Tensor programs and parallel runs stay with their lanes.
+
+## Rejected alternatives
+
+- **PGO or runtime profiling:** needs a profile step in every build; revisit after the
+  static passes.
+- **A second IR (a full SSA/LLVM-style pipeline):** ADR 0010 forbids LLVM, and the MIR is
+  already SSA.
+- **Float reassociation for vectorized reductions:** changes output bits and breaks the
+  interpreter-parity tests.

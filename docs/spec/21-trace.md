@@ -281,7 +281,9 @@ frame. *(ADRs 0641, 0642)*
 
 **trace.frame.2** — A check that the compiler copied into a caller by inlining
 reports the callee's frame, then the caller at the inlined call, as if the
-call had been made. *(ADR 0643)*
+call had been made. A call that the compiler copied in from an inlined function
+(a function's own recursive call, ADR 0890) reports the frames it was inlined into
+after its own, so the stack lists every source frame. *(ADRs 0643, 0890)*
 
 **trace.frame.3** — `ail run --values FILE` builds the program so that its
 own functions keep their arguments and locals where a trap can print them. The

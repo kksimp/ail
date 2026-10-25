@@ -324,10 +324,23 @@ pub fn Asm.push_pair(mut self, a int, b int)
 pub fn Asm.pop_pair(mut self, a int, b int)
     word(2831155200 + 2 * 32768 + b * 1024 + SP * 32 + a)
 
-## The address of symbol `sym`: `adrp` and `add`, fixed when it is laid out.
+## `stp a, b, [n, #off]` and `ldp a, b, [n, #off]` (signed offset, a multiple
+## of 8 from 0 to 504).
+pub fn Asm.stp_off(mut self, a int, b int, n int, off int)
+    word(2835349504 + off / 8 * 32768 + b * 1024 + n * 32 + a)
+
+pub fn Asm.ldp_off(mut self, a int, b int, n int, off int)
+    word(2839543808 + off / 8 * 32768 + b * 1024 + n * 32 + a)
+
+## The address of symbol `sym`: `adrp` and `add`, fixed when it is laid out
+## (`adrp` alone for the page-aligned `globals`).
 pub fn Asm.adr_sym(mut self, d int, sym str)
     fixups.push(Fixup(at: code.len(), kind: "adrp", label: -1, sym: sym))
     word(2415919104 + d)
+    # The globals start on a page (`bss` in each object writer is aligned up
+    # to a page), so the page address is the address: no `add` (ADR 0890).
+    if sym == "globals"
+        return
     fixups.push(Fixup(at: code.len(), kind: "add12", label: -1, sym: sym))
     word(2432696320 + d * 32 + d)
 
