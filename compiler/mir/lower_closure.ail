@@ -242,11 +242,14 @@ fn Lower.lower_unreachable(mut self, args List[ast.Arg], pos ast.Pos) Val?
     if m.ty != Ty.Str
         return unsupported(expr_pos(args[0].value), "`unreachable` of a `{m.ty.name()}`")
     mut i := inst(-1, "utrap", [m.id])
-    # A literal `unreachable("RULE: why")` traps as RULE (#759); any other std module message
-    # gets its rule read at run time (std.unreachable, std.regex.7, 24; #764).
-    mut rule := unreachable_rule(args[0].value)
-    if rule == "err.model.2" and fname.starts_with("std.")
-        rule = "std.unreachable"
+    # In a std module a literal `unreachable("RULE: why")` traps as RULE (#759) and any other
+    # message gets its rule read at run time (std.unreachable, std.regex.7, 24; #764). Elsewhere,
+    # the prelude included, it is err.model.2 (json_fields).
+    mut rule := "err.model.2"
+    if fname.starts_with("std.")
+        rule = unreachable_rule(args[0].value)
+        if rule == "err.model.2"
+            rule = "std.unreachable"
     i.site = site(rule, "unreachable", "", pos)
     emit_void(i)
     finish(unreachable_term())

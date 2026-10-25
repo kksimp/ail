@@ -475,6 +475,8 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
     for c in prog.consts
         if is_const_expr(c.value)
+            if pre == "rt." and consts.contains("rt.{c.name}")
+                problem(c.pos, "runtime constant `{c.name}` is defined in two runtime files")
             consts["{pre}{c.name}"] = c.value
             const_home["{pre}{c.name}"] = file
         elif pre != "rt."
@@ -551,6 +553,10 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
             Ty.Unknown
         rty = t
+    # Codegen keys functions by name, so a second runtime definition would
+    # silently replace the first, whatever its types (#771, `win_write`).
+    if pre == "rt." and sigs.contains(fn_key(f, pre))
+        problem(f.pos, "runtime function `{f.name}` is defined in two runtime files")
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
     note_mut_self(f, fn_key(f, pre))
     if can_fail
@@ -1295,6 +1301,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
+            watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
         Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos, pos)
         _ => problem(pos, "this assignment target isn't in the native subset yet")
 
@@ -1844,7 +1851,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 )))
             check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
+            instr_watch_cells(cells)
             res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            instr_watch_cells_end(cells)
             cells_back(cells)
             res
         Member =>

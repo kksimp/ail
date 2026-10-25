@@ -162,8 +162,6 @@ fn Lower.trap_close(mut self, pos ast.Pos)
 ## `trap_close` for `--values` (trace.frame.3): after the excerpt, `  values: a = 1, b = 2`, the
 ## arguments the condition `text` names, in name order.
 fn Lower.trap_close_values(mut self, pos ast.Pos, text str, args List[NameKey])
-    src := src_lines[file]
-    line := if pos.line >= 1 and pos.line <= src.len() then src[pos.line - 1] else ""
     mut named := List[NameKey]()
     for a in args
         if word_in(text, a.name)
@@ -171,20 +169,75 @@ fn Lower.trap_close_values(mut self, pos ast.Pos, text str, args List[NameKey])
             while at > 0 and named[at - 1].name > a.name
                 at -= 1
             named.insert(at, a)
+    trap_close_listed(pos, [a.name for a in named], named)
+
+## `trap_close_values` with the values given: `labels[k]` names the value of `keys[k]`.
+fn Lower.trap_close_listed(mut self, pos ast.Pos, labels List[str], keys List[NameKey])
+    src := src_lines[file]
+    line := if pos.line >= 1 and pos.line <= src.len() then src[pos.line - 1] else ""
     call("rt.out_byte", [konst(10, Ty.Int)], Ty.Unit)
     call("rt.out_str", [str_value(excerpt(line, pos.line, pos.col))], Ty.Unit)
     mut extra := 0
-    if named.len() > 0
+    if keys.len() > 0
         say("  values: ")
-        for k in 0..named.len()
+        for k in 0..keys.len()
             if k > 0
                 say(", ")
-            say("{named[k].name} = ")
-            describe(Val(id: read_var(named[k].key, cur), ty: var_ty[named[k].key]), pos)
+            say("{labels[k]} = ")
+            describe(Val(id: read_var(keys[k].key, cur), ty: var_ty[keys[k].key]), pos)
         say("\n")
         extra = 1
     call("rt.trap_rest", [str_value(trap_frame(pos)), konst(extra, Ty.Int)], Ty.Unit)
     finish(unreachable_term())
+
+## The `old(..)` texts of a condition, in the order they are written.
+fn old_texts(text str) List[str]
+    mut out := List[str]()
+    parts := text.split("old(")
+    for i in 1..parts.len()
+        mut depth := 1
+        mut inner := ""
+        for c in parts[i].chars()
+            if c == '('
+                depth += 1
+            elif c == ')'
+                depth -= 1
+            if depth == 0
+                break
+            inner = "{inner}{c}"
+        out.push("old({inner})")
+    out
+
+## The values a failed `ensures` shows with `--values`, as the interpreter does: `self` when the
+## condition reads one of its fields, then each `old(..)`, the arguments it names, then `result`.
+fn Lower.ens_values(mut self, c ast.Contract)(List[str], List[NameKey])
+    mut labels := List[str]()
+    mut keys := List[NameKey]()
+    first := if ens_vars.len() > 0 and ens_vars[0].name == "self" then 1 else 0
+    if first == 1
+        mut mentioned := word_in(c.text, "self")
+        if slots := structs.get(self_ty)
+            for sl in slots
+                if word_in(c.text, sl.name)
+                    mentioned = true
+        if mentioned
+            labels.push("self")
+            keys.push(ens_vars[0])
+    texts := old_texts(c.text)
+    for j in 0..c.olds.len()
+        for v in ens_vars
+            if v.name == c.olds[j].name
+                labels.push(if texts.len() == c.olds.len() then texts[j] else v.name)
+                keys.push(v)
+    for k in first..ens_nargs
+        if word_in(c.text, ens_vars[k].name)
+            labels.push(ens_vars[k].name)
+            keys.push(ens_vars[k])
+    if word_in(c.text, "result")
+        if rk := scopes[0].get("result")
+            labels.push("result")
+            keys.push(NameKey(name: "result", key: rk))
+    (labels, keys)
 
 ## Whether `w` is a whole word of `text`.
 fn word_in(text str, w str) bool
@@ -240,6 +293,7 @@ fn Lower.req_trap(
     callee_file int,
     caller_file int,
 )
+    trace_contract(label, "requires", c, konst(0, Ty.Bool))
     trap_open("contract.req.1", pos)
     say("`{label}` requires `{c.text}`{origin}, but it was called with ")
     describe_args(args, pos)
@@ -257,7 +311,7 @@ fn Lower.req_trap(
 ## lines weaken the trait's (contract.inh.1): the call is fine when all of the
 ## trait's hold or all of its own do.
 fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
-    if unchecked or any_requires(key, args_v, pos)
+    if unchecked or instr.nocontracts or any_requires(key, args_v, pos)
         return
     f := contracted.get(key) else return
     mut reqs := List[ast.Contract]()
@@ -333,11 +387,25 @@ fn Lower.check_requires(mut self, key str, args_v List[int], pos ast.Pos)
     scopes = saved
     self_ty = saved_self
 
+## The `requires` of `f` that held, traced on entry so they follow the call event:
+## the checks themselves run at the call site, and a failing one traps there.
+fn Lower.trace_requires(mut self, f ast.FnDecl, key str)
+    if instr.nocontracts
+        return
+    unchecked = true
+    for c in f.contracts
+        if not c.is_ensures
+            v := lower_value(c.cond, Ty.Bool) else continue
+            trace_contract(key, "requires", c, v.id)
+    unchecked = false
+
 # ---- ensures ----
 
 ## On entry to `f`: take the `old(e)` values of its `ensures` lines
 ## (contract.ens.3) and remember what the checks at each return need.
 fn Lower.enter_contracts(mut self, f ast.FnDecl, key str)
+    if instr.nocontracts
+        return
     if r := f.receiver
         if r.mutable and self_ty != "" and invariants.contains(self_ty)
             inv_key = self_ty
@@ -384,7 +452,7 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
     # The return value is computed; the `defer`red statements run before the
     # function leaves (own.defer.1).
     defer_all()
-    if (ens.len() == 0 and inv_key == "") or unchecked
+    if (ens.len() == 0 and inv_key == "") or unchecked or instr.nocontracts
         return
     saved := scopes
     scopes = [Map[str, str]()]
@@ -411,6 +479,7 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
         c := ens[i]
         scopes = if i < inh.ens_n then their_scope else own_scope
         v := lower_value(c.cond, Ty.Bool) else break
+        trace_contract(ens_label, "ensures", c, v.id)
         ok := check_branch(v.id)
         trap_open("contract.ens.1", c.pos)
         origin := if i < inh.ens_n then inh.ens_origin else ""
@@ -420,7 +489,11 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
             describe(Val(id: rv, ty: ret), c.pos)
         say(" at {at.line}:{at.col} with ")
         describe_args([ens_vars[k] for k in 0..ens_nargs], c.pos)
-        trap_close(c.pos)
+        if instr.vals
+            shown := ens_values(c)
+            trap_close_listed(c.pos, shown.0, shown.1)
+        else
+            trap_close(c.pos)
         cur = ok
     unchecked = false
     scopes = saved
@@ -434,7 +507,7 @@ fn Lower.check_ensures(mut self, rv int, at ast.Pos)
 ## lines. `by` is "" for a value just built at `pos`, else the method that
 ## returned at `at` and changed it.
 fn Lower.check_invariants(mut self, key str, obj int, pos ast.Pos, by str, at ast.Pos)
-    if unchecked
+    if unchecked or instr.nocontracts
         return
     list := invariants.get(key) else return
     if inv_file[key] != file
@@ -454,6 +527,7 @@ fn Lower.check_invariants(mut self, key str, obj int, pos ast.Pos, by str, at as
     unchecked = true
     for c in list
         v := lower_value(c.cond, Ty.Bool) else break
+        trace_contract(name, "invariant", c, v.id)
         ok := check_branch(v.id)
         if by == ""
             trap_open("contract.inv.2", c.pos)

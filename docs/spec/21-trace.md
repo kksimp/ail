@@ -84,6 +84,15 @@ budget is 60 characters in trace lines and in the default trap report, and
 
 ## Watch
 
+**trace.run.6** — Natively, `ail run --trace` builds the program with the events asked for
+(only then does it cost anything) and writes them to standard error as the program runs, then
+the summary (trace.run.4), in the text form or, with `--json`, as the JSON objects of
+trace.run.1. `calls` gives the `call` and `return` events (trace.run.2) and a `contract` event
+for each condition checked; `effects` gives the `effect` events of the OS and network modules,
+and `spawn` and `wait` (`Task#N`, numbered from 1 in spawn order). A call's position is the
+call's, `main`'s its own. A value is cut to 60 bytes and ends in `…` (trace.val.2); a returned
+list or map is `…`, and a cut list or map does not say how many elements are left. *(ADR 0868)*
+
 **trace.watch.1** — `ail run --watch NAME FILE` shows, after each
 assignment whose target is rooted in a variable called `NAME` (`NAME = e`,
 `NAME op= e`, `NAME.f = e`, `NAME[i] = e`) and after each `mut NAME := e`,
@@ -158,9 +167,13 @@ the watch (only then does it cost anything) and shows trace.watch.1's events on
 standard error, `watch: NAME = VALUE at LINE:COL`, then the summary line
 (trace.run.4); over `--replay R` (replay.run.1) the same run is repeated exactly,
 so it answers "when did `NAME` become 0?" on a recorded run. The events are the
-assignments and `mut NAME := e` of trace.watch.1; a builtin mutating method,
-an element write's note (trace.watch.4) and a `mut` argument followed into a callee
-(trace.watch.3) are not shown yet. *(ADRs 0868, 0886)*
+assignments and `mut NAME := e` of trace.watch.1; the element writes of
+trace.watch.4 `push`, `pop`, `insert`, `remove_at`, `NAME[i] = e`, `NAME[k] = e` and a map's
+`remove` end in their note (`[push 3 at index 2]`); and a `mut` argument or `mut self`
+that holds the watched variable is followed into the callee (trace.watch.3), the event
+ending in ` in FN` and ` (as \`p\`)` when the callee's name differs. The other mutating
+methods (`swap`, `extend`, `clear`, `reverse`, `sort`, a set's `add` and `remove`) and the
+JSON form are not shown yet. *(ADRs 0868, 0886)*
 
 ```ail tool=run,--watch,n,FILE expect=watch: rules=trace.watch.5
 fn main()
@@ -274,7 +287,8 @@ declaration order; the values of types the runtime can print), a contract
 trap's `  values: ` line (the arguments the condition names, in name order),
 and `  … N more frames (--verbose shows every frame and value)`. A build
 without `--values` prints no values (trace.frame.1) and costs nothing for
-them. *(ADR 0886, ADR 0641)*
+them. `--verbose` implies `--values` and, as trace.snap.3 says, shows every frame, with each
+local on its own line: `      NAME = VALUE`. *(ADR 0886, ADR 0641)*
 
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.

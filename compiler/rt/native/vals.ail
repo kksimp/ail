@@ -21,12 +21,22 @@ VALS_SLOTS := 32
 fn vals_table() int
     t := load64(global(VALS))
     if t == 0
-        t = alloc(VALS_N * 16, 13)
+        t = alloc(VALS_N * 16 + 16, 13)
         store64(global(VALS), t)
     t
 
 fn vals_slot(t int, fp int) int
     t + (fp / 16 % VALS_N) * 16
+
+## Whether the program was built with `--verbose`: the word after the table says so.
+fn vals_verbose() bool
+    t := load64(global(VALS))
+    t != 0 and load64(t + VALS_N * 16) != 0
+
+## `vals_enter` of a `--verbose` build.
+fn vals_enter_verbose() int
+    store64(vals_table() + VALS_N * 16, 1)
+    vals_enter()
 
 ## A function begins: its spill goes under its frame pointer, the caller's of this one.
 fn vals_enter() int
