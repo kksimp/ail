@@ -1348,24 +1348,27 @@ fn Gate.misc(mut self, tmp str)
     sh_run("rm -rf {dir}")
     # conc.sched.1-2: a seed picks the task switch points, so a failing interleaving replays.
     race := "tests/schedule/race.ail"
-    first := ail_run(["test", "--json", "--schedule=random:1", race]) else return
+    # The native scheduler maps seeds to switch points differently: seed 2 loses the update there, seed 1 on Rust.
+    fail_seed := if native() then "2" else "1"
+    pass_seed := if native() then "1" else "2"
+    first := ail_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
     if first.status != 1
         or not first.out.contains("left is 1, right is 2")
-        or not first.out.ends_with("\{\"summary\":true,\"passed\":0,\"failed\":1,\"schedule_seed\":1}\n")
-        red("schedule seed 1", "exit {first.status}\n{first.out}")
+        or not first.out.ends_with("\{\"summary\":true,\"passed\":0,\"failed\":1,\"schedule_seed\":{fail_seed}}\n")
+        red("schedule seed {fail_seed}", "exit {first.status}\n{first.out}")
     for _ in 0..3
-        again := ail_run(["test", "--json", "--schedule=random:1", race]) else return
+        again := ail_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
         if again.out != first.out
             red("schedule replay", again.out)
-    passed := ail_run(["test", "--json", "--schedule=random:2", race]) else return
+    passed := ail_run(["test", "--json", "--schedule=random:{pass_seed}", race]) else return
     if passed.status != 0
         or not passed.out.ends_with("\{\"summary\":true,\"passed\":1,\"failed\":0}\n")
-        red("schedule seed 2", "exit {passed.status}\n{passed.out}")
-    human := ail_run(["test", "--schedule=random:1", race]) else return
+        red("schedule seed {pass_seed}", "exit {passed.status}\n{passed.out}")
+    human := ail_run(["test", "--schedule=random:{fail_seed}", race]) else return
     want(
         "schedule prints the seed",
         human.out,
-        ["schedule seed 1: replay with `ail test --schedule=random:1 "],
+        ["schedule seed {fail_seed}: replay with `ail test --schedule=random:{fail_seed} "],
     )
     bad := ail_run(["test", "--schedule=sometimes", race]) else return
     if bad.status != 2

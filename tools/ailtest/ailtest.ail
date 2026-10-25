@@ -64,6 +64,8 @@ struct Verdict
     input str
     snaps List[SnapRec]
     frames str
+    ## test.run.2: what the test wrote, `  | ` standard output and `  ! ` standard error lines.
+    shown str
 
 fn plain(name str, status str, message str) Verdict
     Verdict(
@@ -75,6 +77,7 @@ fn plain(name str, status str, message str) Verdict
         input: "",
         snaps: [],
         frames: "",
+        shown: "",
     )
 
 fn indent(l str) int
@@ -579,7 +582,12 @@ fn short(msg str) str
 
 ## The first line of a trap or failure, as `trap[RULE]: text at L:C`.
 fn describe(err str, lead int) str
-    first := err.lines().first() else ""
+    mut first := err.lines().first() else ""
+    # Lines the test wrote to standard error come before the trap report.
+    for l in err.lines()
+        if l.contains(": trap[")
+            first = l
+            break
     if idx := first.find(": trap[")
         head := first.slice(0, idx)
         parts := head.split(":")
@@ -601,6 +609,18 @@ fn remap_at(msg str, origin List[int]) str
     if w.0 < 1 or w.0 > origin.len() or origin[w.0 - 1] <= 0
         return msg
     "{msg.slice(0, cut)} at {origin[w.0 - 1]}:{w.1}"
+
+## What a failed test wrote (test.run.2): standard output as `  | LINE`, then standard error as
+## `  ! LINE`, without the trap report, its frames or the snapshot records.
+fn shown_of(out str, err str) str
+    mut lines := List[str]()
+    for l in out.lines()
+        lines.push("  | {l}")
+    for l in err.lines()
+        if l.contains(": trap[") or l.starts_with("  at ") or l.starts_with("ail-snapshot ")
+            continue
+        lines.push("  ! {l}")
+    lines.join("\n")
 
 ## The call-stack lines of a trap report, `  at L:C in fn()`, with the copy's lead lines taken off.
 fn frames_of(err str, lead int) str
@@ -1323,6 +1343,7 @@ fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
             input: "",
             snaps: snap_records(r.err),
             frames: "",
+            shown: "",
         )
     if r.status == 4
         return plain("", "fail", "error: no such test")
@@ -1335,6 +1356,7 @@ fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
         input: "",
         snaps: [],
         frames: frames_of(r.err, lead),
+        shown: shown_of(r.out, r.err),
     )
 
 ## ---- Doc examples (test.doc.1-3) ----
@@ -1481,6 +1503,7 @@ fn run_doc(
             input: "",
             snaps: [rec],
             frames: "",
+            shown: "",
         )
     plain(
         "",
@@ -2107,6 +2130,8 @@ fn report(
                     print("  {t}")
             if not v.input.is_empty()
                 print("  input: {v.input}")
+            if not v.shown.is_empty()
+                print(v.shown)
         else
             print("skip {v.name}: {v.message}")
     # conc.sched.2: a failure under a random schedule names the seed that replays it.
@@ -2481,6 +2506,7 @@ fn main() !
                     input: "",
                     snaps: v.snaps,
                     frames: v.frames,
+                    shown: v.shown,
                 ))
                 if trace and v.status == "fail"
                     traces[doc_names[t.name]] = take_trace(exe)
@@ -2512,6 +2538,7 @@ fn main() !
                     input: "",
                     snaps: v.snaps,
                     frames: v.frames,
+                    shown: v.shown,
                 ))
             else
                 p := run_prop(
@@ -2532,6 +2559,7 @@ fn main() !
                     input: p.input,
                     snaps: [],
                     frames: "",
+                    shown: "",
                 ))
     mut kept := 0
     for j in 0..found.tests.len()
