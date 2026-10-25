@@ -506,7 +506,12 @@ class Look
     public static Look From(Node tree)
     {
         Color? bg = FirstFill(tree);
-        Color c = bg.HasValue ? bg.Value : Color.FromArgb(0xf3, 0xf3, 0xf3);
+        return Over(bg.HasValue ? bg.Value : Color.FromArgb(0xf3, 0xf3, 0xf3));
+    }
+
+    /// The look of controls sitting on a surface of colour `c`.
+    public static Look Over(Color c)
+    {
         bool dark = c.GetBrightness() < 0.5f;
         var l = new Look { Bg = c, Dark = dark };
         l.Fg = dark ? Color.FromArgb(0xf2, 0xf2, 0xf7) : Color.FromArgb(0x1f, 0x1f, 0x1f);
@@ -523,7 +528,7 @@ class Look
         return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
     }
 
-    static Color? FirstFill(Node n)
+    public static Color? FirstFill(Node n)
     {
         if (n.Kind == "Canvas")
         {
@@ -831,6 +836,16 @@ class HostForm : Form
     }
 
     Control BuildBox(Node n, bool root, bool parentVertical)
+    {
+        // A box whose canvases are painted in one colour is a surface of that colour (a toolbar under a darker tab strip).
+        Look outer = look;
+        Color? surface = root ? null : Look.FirstFill(n);
+        if (surface.HasValue) look = Look.Over(surface.Value);
+        try { return BuildBoxIn(n, root, parentVertical); }
+        finally { look = outer; }
+    }
+
+    Control BuildBoxIn(Node n, bool root, bool parentVertical)
     {
         bool vertical = n.Kind == "Column";
         // The window's own box fills it; a nested box takes its content's size unless it grows.
