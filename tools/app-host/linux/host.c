@@ -1,0 +1,940 @@
+/* The generic GTK 3 host for std.app on Linux (ADR 0838). It draws whatever
+ * view tree the AIL program sends on standard input and reports what the user
+ * does on standard output, newline-delimited JSON with "v":1 on the first line
+ * each way (spec std.app.7-9). It knows nothing about any one app, and speaks
+ * the same protocol as tools/app-host/macos. Needs GTK 3 only (no other
+ * packages): build with run.sh.
+ */
+#include <gtk/gtk.h>
+#include <gdk/gdkkeysyms.h>
+#include <math.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* ---- JSON (std.app.7-8): just enough to read a view line ---- */
+
+typedef enum { J_NULL, J_BOOL, J_NUM, J_STR, J_ARR, J_OBJ } JKind;
+typedef struct JVal JVal;
+struct JVal {
+    JKind kind;
+    double num;
+    char *str;       /* J_STR */
+    int n;           /* J_ARR, J_OBJ: element count */
+    char **keys;     /* J_OBJ */
+    JVal **vals;     /* J_ARR, J_OBJ */
+};
+
+static void jfree(JVal *v) {
+    if (!v) return;
+    free(v->str);
+    for (int i = 0; i < v->n; i++) {
+        if (v->keys) free(v->keys[i]);
+        jfree(v->vals[i]);
+    }
+    free(v->keys);
+    free(v->vals);
+    free(v);
+}
+
+static void jws(const char **p) { while (**p == ' ' || **p == '\t' || **p == '\r' || **p == '\n') (*p)++; }
+
+static void put_utf8(GString *s, unsigned c) { g_string_append_unichar(s, c ? c : 0xfffd); }
+
+static unsigned hex4(const char *p) {
+    unsigned v = 0;
+    for (int i = 0; i < 4; i++) {
+        char c = p[i];
+        v <<= 4;
+        if (c >= '0' && c <= '9') v |= c - '0';
+        else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
+        else return 0xfffd;
+    }
+    return v;
+}
+
+static char *jstring(const char **p) {
+    GString *s = g_string_new("");
+    (*p)++; /* opening quote */
+    while (**p && **p != '"') {
+        if (**p == '\\') {
+            (*p)++;
+            switch (**p) {
+            case 'n': g_string_append_c(s, '\n'); break;
+            case 't': g_string_append_c(s, '\t'); break;
+            case 'r': g_string_append_c(s, '\r'); break;
+            case 'b': g_string_append_c(s, '\b'); break;
+            case 'f': g_string_append_c(s, '\f'); break;
+            case 'u': {
+                unsigned c = hex4(*p + 1);
+                *p += 4;
+                if (c >= 0xd800 && c < 0xdc00 && (*p)[1] == '\\' && (*p)[2] == 'u') {
+                    unsigned lo = hex4(*p + 3);
+                    if (lo >= 0xdc00 && lo < 0xe000) {
+                        c = 0x10000 + ((c - 0xd800) << 10) + (lo - 0xdc00);
+                        *p += 6;
+                    }
+                }
+                put_utf8(s, c);
+                break;
+            }
+            case 0: goto done;
+            default: g_string_append_c(s, **p); break;
+            }
+            (*p)++;
+        } else {
+            g_string_append_c(s, **p);
+            (*p)++;
+        }
+    }
+done:
+    if (**p == '"') (*p)++;
+    return g_string_free(s, FALSE);
+}
+
+static JVal *jparse(const char **p) {
+    jws(p);
+    JVal *v = calloc(1, sizeof *v);
+    if (**p == '{') {
+        v->kind = J_OBJ;
+        (*p)++;
+        jws(p);
+        int cap = 0;
+        while (**p && **p != '}') {
+            jws(p);
+            if (**p != '"') { jfree(v); return NULL; }
+            char *k = jstring(p);
+            jws(p);
+            if (**p != ':') { free(k); jfree(v); return NULL; }
+            (*p)++;
+            JVal *c = jparse(p);
+            if (!c) { free(k); jfree(v); return NULL; }
+            if (v->n == cap) {
+                cap = cap ? cap * 2 : 8;
+                v->keys = realloc(v->keys, cap * sizeof *v->keys);
+                v->vals = realloc(v->vals, cap * sizeof *v->vals);
+            }
+            v->keys[v->n] = k;
+            v->vals[v->n++] = c;
+            jws(p);
+            if (**p == ',') (*p)++;
+        }
+        if (**p == '}') (*p)++;
+    } else if (**p == '[') {
+        v->kind = J_ARR;
+        (*p)++;
+        jws(p);
+        int cap = 0;
+        while (**p && **p != ']') {
+            JVal *c = jparse(p);
+            if (!c) { jfree(v); return NULL; }
+            if (v->n == cap) {
+                cap = cap ? cap * 2 : 8;
+                v->vals = realloc(v->vals, cap * sizeof *v->vals);
+            }
+            v->vals[v->n++] = c;
+            jws(p);
+            if (**p == ',') (*p)++;
+        }
+        if (**p == ']') (*p)++;
+    } else if (**p == '"') {
+        v->kind = J_STR;
+        v->str = jstring(p);
+    } else if (!strncmp(*p, "true", 4)) {
+        v->kind = J_BOOL; v->num = 1; *p += 4;
+    } else if (!strncmp(*p, "false", 5)) {
+        v->kind = J_BOOL; v->num = 0; *p += 5;
+    } else if (!strncmp(*p, "null", 4)) {
+        *p += 4;
+    } else if (**p == '-' || (**p >= '0' && **p <= '9')) {
+        char *end;
+        v->kind = J_NUM;
+        v->num = g_ascii_strtod(*p, &end);
+        *p = end;
+    } else {
+        jfree(v);
+        return NULL;
+    }
+    return v;
+}
+
+static JVal *jget(const JVal *o, const char *k) {
+    if (!o || o->kind != J_OBJ) return NULL;
+    for (int i = 0; i < o->n; i++) if (!strcmp(o->keys[i], k)) return o->vals[i];
+    return NULL;
+}
+static double jnum(const JVal *o, const char *k) { JVal *v = jget(o, k); return v && (v->kind == J_NUM || v->kind == J_BOOL) ? v->num : 0; }
+static const char *jstr(const JVal *o, const char *k) { JVal *v = jget(o, k); return v && v->kind == J_STR ? v->str : ""; }
+static gboolean jflag(const JVal *o, const char *k) { return jnum(o, k) != 0; }
+
+/* ---- Output: events to standard output, one JSON object per line (std.app.8) ---- */
+
+static gboolean greeted = FALSE;
+
+static void esc(GString *s, const char *t) {
+    g_string_append_c(s, '"');
+    for (const unsigned char *p = (const unsigned char *)t; *p; p++) {
+        switch (*p) {
+        case '"': g_string_append(s, "\\\""); break;
+        case '\\': g_string_append(s, "\\\\"); break;
+        case '\n': g_string_append(s, "\\n"); break;
+        case '\r': g_string_append(s, "\\r"); break;
+        case '\t': g_string_append(s, "\\t"); break;
+        default:
+            if (*p < 0x20) g_string_append_printf(s, "\\u%04x", *p);
+            else g_string_append_c(s, *p);
+        }
+    }
+    g_string_append_c(s, '"');
+}
+
+typedef struct { GString *s; } Ev;
+
+static Ev ev_new(const char *kind) {
+    Ev e = { g_string_new("{") };
+    if (!greeted) { g_string_append(e.s, "\"v\":1,"); greeted = TRUE; }
+    g_string_append(e.s, "\"kind\":");
+    esc(e.s, kind);
+    return e;
+}
+static void ev_str(Ev *e, const char *k, const char *v) { g_string_append_printf(e->s, ",\"%s\":", k); esc(e->s, v); }
+static void ev_num(Ev *e, const char *k, double v) {
+    char b[G_ASCII_DTOSTR_BUF_SIZE];
+    g_ascii_formatd(b, sizeof b, "%.3f", v); /* never a decimal comma */
+    g_string_append_printf(e->s, ",\"%s\":%s", k, b);
+}
+static void ev_bool(Ev *e, const char *k, gboolean v) { g_string_append_printf(e->s, ",\"%s\":%s", k, v ? "true" : "false"); }
+static void ev_send(Ev *e) {
+    g_string_append(e->s, "}\n");
+    fwrite(e->s->str, 1, e->s->len, stdout);
+    fflush(stdout);
+    g_string_free(e->s, TRUE);
+}
+static void send_simple(const char *kind) { Ev e = ev_new(kind); ev_send(&e); }
+static void send_id(const char *kind, const char *id) { Ev e = ev_new(kind); ev_str(&e, "id", id); ev_send(&e); }
+
+/* ---- The view tree (std.app.2-3) ---- */
+
+typedef enum { O_STR, O_FILL, O_STROKE, O_PIC, O_BITMAP, O_CLIP, O_UNCLIP } OpKind;
+typedef struct {
+    OpKind kind;
+    double x, y, w, h, x2, y2, size, width;
+    int color;
+    char *text, *font;   /* O_STR: text, font; O_PIC: text is src; O_BITMAP: text is the id */
+    gboolean bold, italic, underline;
+} Op;
+
+typedef enum { N_LABEL, N_BUTTON, N_FIELD, N_TOGGLE, N_COLUMN, N_ROW, N_SPACER, N_CANVAS } NodeKind;
+typedef struct Node Node;
+struct Node {
+    NodeKind kind;
+    char *id, *text, *hint;   /* text: label text, caption or field value */
+    gboolean on;
+    double w, h;
+    Op *ops;
+    int nops;
+    Node **kids;
+    int nkids;
+    GtkWidget *widget;
+};
+
+static void node_free(Node *n) {
+    if (!n) return;
+    free(n->id); free(n->text); free(n->hint);
+    for (int i = 0; i < n->nops; i++) { free(n->ops[i].text); free(n->ops[i].font); }
+    free(n->ops);
+    for (int i = 0; i < n->nkids; i++) node_free(n->kids[i]);
+    free(n->kids);
+    free(n);
+}
+
+/* Bitmaps are kept by id so a later view can omit the data (std.app.3). */
+static gboolean debug = FALSE; /* AIL_HOST_DEBUG=1 logs canvas sizes and ops to stderr */
+
+static GHashTable *bitmaps; /* id -> cairo_surface_t* */
+
+static void bitmap_store(const char *id, int w, int h, const char *b64) {
+    if (!*b64 || w <= 0 || h <= 0) return;
+    gsize len;
+    guchar *data = g_base64_decode(b64, &len);
+    if (len == (gsize)w * h * 4) {
+        cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+        cairo_surface_flush(s);
+        guchar *dst = cairo_image_surface_get_data(s);
+        int stride = cairo_image_surface_get_stride(s);
+        for (int y = 0; y < h; y++) {
+            guint32 *row = (guint32 *)(dst + y * stride);
+            for (int x = 0; x < w; x++) {
+                const guchar *p = data + (y * w + x) * 4;
+                guint a = p[3];
+                row[x] = (a << 24) | (((p[0] * a + 127) / 255) << 16) | (((p[1] * a + 127) / 255) << 8) | ((p[2] * a + 127) / 255);
+            }
+        }
+        cairo_surface_mark_dirty(s);
+        g_hash_table_replace(bitmaps, g_strdup(id), s);
+    }
+    g_free(data);
+}
+
+static Node *decode_node(const JVal *d) {
+    Node *n = calloc(1, sizeof *n);
+    n->id = strdup(""); n->text = strdup(""); n->hint = strdup("");
+    const char *k = jstr(d, "kind");
+    if (!strcmp(k, "Label")) { n->kind = N_LABEL; free(n->text); n->text = strdup(jstr(d, "text")); }
+    else if (!strcmp(k, "Button")) { n->kind = N_BUTTON; free(n->id); n->id = strdup(jstr(d, "id")); free(n->text); n->text = strdup(jstr(d, "caption")); }
+    else if (!strcmp(k, "Field")) {
+        n->kind = N_FIELD;
+        free(n->id); n->id = strdup(jstr(d, "id"));
+        free(n->text); n->text = strdup(jstr(d, "value"));
+        free(n->hint); n->hint = strdup(jstr(d, "hint"));
+    } else if (!strcmp(k, "Toggle")) {
+        n->kind = N_TOGGLE;
+        free(n->id); n->id = strdup(jstr(d, "id"));
+        free(n->text); n->text = strdup(jstr(d, "caption"));
+        n->on = jflag(d, "on");
+    } else if (!strcmp(k, "Column") || !strcmp(k, "Row")) {
+        n->kind = k[0] == 'C' ? N_COLUMN : N_ROW;
+        JVal *kids = jget(d, "kids");
+        if (kids && kids->kind == J_ARR) {
+            n->kids = calloc(kids->n ? kids->n : 1, sizeof *n->kids);
+            for (int i = 0; i < kids->n; i++) n->kids[n->nkids++] = decode_node(kids->vals[i]);
+        }
+    } else if (!strcmp(k, "Spacer")) { n->kind = N_SPACER; }
+    else if (!strcmp(k, "Canvas")) {
+        n->kind = N_CANVAS;
+        free(n->id); n->id = strdup(jstr(d, "id"));
+        n->w = jnum(d, "w"); n->h = jnum(d, "h");
+        JVal *ops = jget(d, "ops");
+        if (ops && ops->kind == J_ARR) {
+            n->ops = calloc(ops->n ? ops->n : 1, sizeof *n->ops);
+            for (int i = 0; i < ops->n; i++) {
+                const JVal *o = ops->vals[i];
+                const char *ok = jstr(o, "kind");
+                Op op = { 0 };
+                op.text = strdup(""); op.font = strdup("");
+                if (!strcmp(ok, "Str")) {
+                    op.kind = O_STR; op.x = jnum(o, "x"); op.y = jnum(o, "y");
+                    free(op.text); op.text = strdup(jstr(o, "text"));
+                    free(op.font); op.font = strdup(jstr(o, "font"));
+                    op.size = jnum(o, "size"); op.color = (int)jnum(o, "fg");
+                    op.bold = jflag(o, "bold"); op.italic = jflag(o, "italic"); op.underline = jflag(o, "underline");
+                } else if (!strcmp(ok, "Fill")) {
+                    op.kind = O_FILL; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h"); op.color = (int)jnum(o, "color");
+                } else if (!strcmp(ok, "Stroke")) {
+                    op.kind = O_STROKE; op.x = jnum(o, "x1"); op.y = jnum(o, "y1"); op.x2 = jnum(o, "x2"); op.y2 = jnum(o, "y2");
+                    op.color = (int)jnum(o, "color"); op.width = jnum(o, "width");
+                } else if (!strcmp(ok, "Pic")) {
+                    op.kind = O_PIC; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
+                    free(op.text); op.text = strdup(jstr(o, "src"));
+                } else if (!strcmp(ok, "Bitmap")) {
+                    op.kind = O_BITMAP; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
+                    free(op.text); op.text = strdup(jstr(o, "id"));
+                    bitmap_store(op.text, (int)jnum(o, "pw"), (int)jnum(o, "ph"), jstr(o, "data"));
+                } else if (!strcmp(ok, "Clip")) {
+                    op.kind = O_CLIP; op.x = jnum(o, "x"); op.y = jnum(o, "y"); op.w = jnum(o, "w"); op.h = jnum(o, "h");
+                } else if (!strcmp(ok, "Unclip")) {
+                    op.kind = O_UNCLIP;
+                } else { free(op.text); free(op.font); continue; }
+                n->ops[n->nops++] = op;
+            }
+        }
+    } else { n->kind = N_LABEL; free(n->text); n->text = g_strdup_printf("unknown node %s", k); }
+    return n;
+}
+
+/* ---- Fonts (std.app.5, std.app.13) ---- */
+
+static PangoFontDescription *font_desc(const char *family, double size, gboolean bold, gboolean italic) {
+    PangoFontDescription *d = pango_font_description_new();
+    pango_font_description_set_family(d, !strcmp(family, "sans") ? "Sans" : "Monospace");
+    pango_font_description_set_absolute_size(d, (size > 0 ? size : 13) * PANGO_SCALE);
+    pango_font_description_set_weight(d, bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
+    pango_font_description_set_style(d, italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
+    return d;
+}
+
+/* The size of one character of `mono` at 13 points (std.app.5). */
+static void cell_size(PangoContext *pc, double *w, double *h) {
+    PangoFontDescription *d = font_desc("mono", 13, FALSE, FALSE);
+    PangoFontMetrics *m = pango_context_get_metrics(pc, d, NULL);
+    *w = pango_font_metrics_get_approximate_char_width(m) / (double)PANGO_SCALE;
+    *h = ceil((pango_font_metrics_get_ascent(m) + pango_font_metrics_get_descent(m)) / (double)PANGO_SCALE);
+    pango_font_metrics_unref(m);
+    pango_font_description_free(d);
+}
+
+/* std.app.13: the advance width of each requested run, sent back as one `measured` event. */
+static void answer_measure(const JVal *runs) {
+    GtkWidget *w = gtk_label_new("");
+    PangoContext *pc = gtk_widget_get_pango_context(w);
+    GString *out = g_string_new("");
+    for (int i = 0; runs && runs->kind == J_ARR && i < runs->n; i++) {
+        const JVal *r = runs->vals[i];
+        PangoFontDescription *d = font_desc(jstr(r, "font"), jnum(r, "size"), jflag(r, "bold"), jflag(r, "italic"));
+        PangoLayout *l = pango_layout_new(pc);
+        pango_layout_set_font_description(l, d);
+        pango_layout_set_text(l, jstr(r, "text"), -1);
+        PangoRectangle ink, logical;
+        pango_layout_get_extents(l, &ink, &logical);
+        if (i) g_string_append_c(out, ',');
+        char b[G_ASCII_DTOSTR_BUF_SIZE];
+        g_string_append(out, g_ascii_formatd(b, sizeof b, "%.3f", logical.width / (double)PANGO_SCALE));
+        g_object_unref(l);
+        pango_font_description_free(d);
+    }
+    Ev e = ev_new("measured");
+    ev_str(&e, "text", out->str);
+    ev_send(&e);
+    g_string_free(out, TRUE);
+    g_object_ref_sink(w);
+    g_object_unref(w);
+}
+
+/* ---- Canvas drawing and input (std.app.3-4) ---- */
+
+static void set_color(cairo_t *cr, int c) {
+    cairo_set_source_rgb(cr, ((c >> 16) & 0xff) / 255.0, ((c >> 8) & 0xff) / 255.0, (c & 0xff) / 255.0);
+}
+
+static GHashTable *pics; /* path -> GdkPixbuf* (or a NULL marker for a failed load) */
+
+static void unref_pic(gpointer p) { if (p) g_object_unref(p); }
+
+static GdkPixbuf *load_pic(const char *src) {
+    if (g_hash_table_contains(pics, src)) return g_hash_table_lookup(pics, src);
+    char *path = g_str_has_prefix(src, "file://") ? g_filename_from_uri(src, NULL, NULL) : g_strdup(src);
+    GdkPixbuf *pb = path ? gdk_pixbuf_new_from_file(path, NULL) : NULL;
+    g_free(path);
+    g_hash_table_insert(pics, g_strdup(src), pb);
+    return pb;
+}
+
+static void placeholder(cairo_t *cr, const Op *op) {
+    cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.25);
+    cairo_rectangle(cr, op->x, op->y, op->w, op->h);
+    cairo_fill(cr);
+}
+
+static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
+    Node *n = data;
+    gtk_render_background(gtk_widget_get_style_context(wd), cr, 0, 0, gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd));
+    PangoContext *pc = gtk_widget_get_pango_context(wd);
+    int depth = 0;
+    if (debug) {
+        double cx1, cy1, cx2, cy2;
+        cairo_clip_extents(cr, &cx1, &cy1, &cx2, &cy2);
+        fprintf(stderr, "draw canvas %s alloc %dx%d ops %d clip %.0f,%.0f-%.0f,%.0f\n", cid(wd),
+                gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd), n->nops, cx1, cy1, cx2, cy2);
+    }
+    for (int i = 0; i < n->nops; i++) {
+        const Op *op = &n->ops[i];
+        switch (op->kind) {
+        case O_FILL:
+            set_color(cr, op->color);
+            cairo_rectangle(cr, op->x, op->y, op->w, op->h);
+            cairo_fill(cr);
+            break;
+        case O_STR: {
+            PangoFontDescription *d = font_desc(op->font, op->size, op->bold, op->italic);
+            PangoLayout *l = pango_layout_new(pc);
+            pango_layout_set_font_description(l, d);
+            pango_layout_set_text(l, op->text, -1);
+            if (op->underline) {
+                PangoAttrList *al = pango_attr_list_new();
+                pango_attr_list_insert(al, pango_attr_underline_new(PANGO_UNDERLINE_SINGLE));
+                pango_layout_set_attributes(l, al);
+                pango_attr_list_unref(al);
+            }
+            set_color(cr, op->color);
+            cairo_move_to(cr, op->x, op->y);
+            pango_cairo_show_layout(cr, l);
+            g_object_unref(l);
+            pango_font_description_free(d);
+            break;
+        }
+        case O_STROKE:
+            cairo_move_to(cr, op->x, op->y);
+            cairo_line_to(cr, op->x2, op->y2);
+            cairo_set_line_width(cr, op->width > 0 ? op->width : 1);
+            set_color(cr, op->color);
+            cairo_stroke(cr);
+            break;
+        case O_PIC: {
+            GdkPixbuf *pb = load_pic(op->text);
+            if (!pb || gdk_pixbuf_get_width(pb) <= 0 || gdk_pixbuf_get_height(pb) <= 0) { placeholder(cr, op); break; }
+            cairo_save(cr);
+            cairo_translate(cr, op->x, op->y);
+            cairo_scale(cr, op->w / gdk_pixbuf_get_width(pb), op->h / gdk_pixbuf_get_height(pb));
+            gdk_cairo_set_source_pixbuf(cr, pb, 0, 0);
+            cairo_paint(cr);
+            cairo_restore(cr);
+            break;
+        }
+        case O_BITMAP: {
+            cairo_surface_t *s = g_hash_table_lookup(bitmaps, op->text);
+            if (!s) { placeholder(cr, op); break; }
+            cairo_save(cr);
+            cairo_translate(cr, op->x, op->y);
+            cairo_scale(cr, op->w / cairo_image_surface_get_width(s), op->h / cairo_image_surface_get_height(s));
+            cairo_set_source_surface(cr, s, 0, 0);
+            cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+            cairo_paint(cr);
+            cairo_restore(cr);
+            break;
+        }
+        case O_CLIP:
+            if (debug) fprintf(stderr, "  op %d clip %.0f,%.0f %.0fx%.0f\n", i, op->x, op->y, op->w, op->h);
+            cairo_save(cr);
+            depth++;
+            cairo_rectangle(cr, op->x, op->y, op->w, op->h);
+            cairo_clip(cr);
+            break;
+        case O_UNCLIP:
+            if (depth > 0) { cairo_restore(cr); depth--; }
+            break;
+        }
+    }
+    while (depth-- > 0) cairo_restore(cr);
+    return FALSE;
+}
+
+static void mods(Ev *e, guint state) {
+    ev_bool(e, "ctrl", state & GDK_CONTROL_MASK);
+    ev_bool(e, "alt", state & GDK_MOD1_MASK);
+    ev_bool(e, "shift", state & GDK_SHIFT_MASK);
+    ev_bool(e, "meta", state & (GDK_SUPER_MASK | GDK_META_MASK));
+}
+
+static const char *cid(GtkWidget *w) { return g_object_get_data(G_OBJECT(w), "ail-id"); }
+
+static gboolean canvas_press(GtkWidget *w, GdkEventButton *e, gpointer d) {
+    (void)d;
+    if (e->type != GDK_BUTTON_PRESS) return TRUE;
+    gtk_widget_grab_focus(w);
+    Ev ev = ev_new("click");
+    mods(&ev, e->state);
+    ev_str(&ev, "id", cid(w));
+    ev_num(&ev, "x", e->x);
+    ev_num(&ev, "y", e->y);
+    ev_str(&ev, "text", e->button == 1 ? "left" : e->button == 3 ? "right" : "other");
+    ev_send(&ev);
+    return TRUE;
+}
+
+static gboolean canvas_scroll(GtkWidget *w, GdkEventScroll *e, gpointer d) {
+    (void)d;
+    /* Points, positive dy when the content should move up (scrolling down). */
+    double dx = 0, dy = 0;
+    switch (e->direction) {
+    case GDK_SCROLL_SMOOTH: dx = e->delta_x * 16; dy = e->delta_y * 16; break;
+    case GDK_SCROLL_UP: dy = -16; break;
+    case GDK_SCROLL_DOWN: dy = 16; break;
+    case GDK_SCROLL_LEFT: dx = -16; break;
+    case GDK_SCROLL_RIGHT: dx = 16; break;
+    }
+    if (dx == 0 && dy == 0) return TRUE;
+    Ev ev = ev_new("scroll");
+    mods(&ev, e->state);
+    ev_str(&ev, "id", cid(w));
+    ev_num(&ev, "dx", dx);
+    ev_num(&ev, "dy", dy);
+    ev_send(&ev);
+    return TRUE;
+}
+
+/* The key as std.ui names it (std.ui.7): a name for special keys, else the typed
+ * character, unshifted while Control or Meta is held. */
+static const char *key_name(guint kv) {
+    switch (kv) {
+    case GDK_KEY_Return: case GDK_KEY_KP_Enter: case GDK_KEY_ISO_Enter: return "enter";
+    case GDK_KEY_Tab: case GDK_KEY_ISO_Left_Tab: return "tab";
+    case GDK_KEY_BackSpace: return "backspace";
+    case GDK_KEY_Delete: case GDK_KEY_KP_Delete: return "delete";
+    case GDK_KEY_Escape: return "escape";
+    case GDK_KEY_Up: case GDK_KEY_KP_Up: return "up";
+    case GDK_KEY_Down: case GDK_KEY_KP_Down: return "down";
+    case GDK_KEY_Left: case GDK_KEY_KP_Left: return "left";
+    case GDK_KEY_Right: case GDK_KEY_KP_Right: return "right";
+    case GDK_KEY_Home: case GDK_KEY_KP_Home: return "home";
+    case GDK_KEY_End: case GDK_KEY_KP_End: return "end";
+    case GDK_KEY_Page_Up: case GDK_KEY_KP_Page_Up: return "pageup";
+    case GDK_KEY_Page_Down: case GDK_KEY_KP_Page_Down: return "pagedown";
+    case GDK_KEY_F1: return "f1"; case GDK_KEY_F2: return "f2"; case GDK_KEY_F3: return "f3";
+    case GDK_KEY_F4: return "f4"; case GDK_KEY_F5: return "f5"; case GDK_KEY_F6: return "f6";
+    case GDK_KEY_F7: return "f7"; case GDK_KEY_F8: return "f8"; case GDK_KEY_F9: return "f9";
+    case GDK_KEY_F10: return "f10"; case GDK_KEY_F11: return "f11"; case GDK_KEY_F12: return "f12";
+    }
+    return NULL;
+}
+
+static gboolean canvas_key(GtkWidget *w, GdkEventKey *e, gpointer d) {
+    (void)d;
+    const char *name = key_name(e->keyval);
+    char buf[8] = { 0 };
+    if (!name) {
+        guint kv = e->keyval;
+        if (e->state & (GDK_CONTROL_MASK | GDK_SUPER_MASK | GDK_META_MASK)) kv = gdk_keyval_to_lower(kv);
+        gunichar u = gdk_keyval_to_unicode(kv);
+        if (!u) return FALSE; /* a bare modifier or an unnamed key */
+        buf[g_unichar_to_utf8(u, buf)] = 0;
+        name = buf;
+    }
+    Ev ev = ev_new("key");
+    mods(&ev, e->state);
+    ev_str(&ev, "id", cid(w));
+    ev_str(&ev, "text", name);
+    ev_send(&ev);
+    return TRUE;
+}
+
+/* Last size reported per canvas id, so a rebuilt canvas does not repeat it. */
+static GHashTable *reported; /* id -> double[2] */
+
+static void canvas_alloc(GtkWidget *w, GdkRectangle *a, gpointer d) {
+    (void)d;
+    const char *id = cid(w);
+    double *r = g_hash_table_lookup(reported, id);
+    if (!r) {
+        r = g_new0(double, 2);
+        g_hash_table_insert(reported, g_strdup(id), r);
+    }
+    if (r[0] == a->width && r[1] == a->height) return;
+    r[0] = a->width; r[1] = a->height;
+    double cw, ch;
+    cell_size(gtk_widget_get_pango_context(w), &cw, &ch);
+    Ev ev = ev_new("resize");
+    ev_str(&ev, "id", id);
+    ev_num(&ev, "dx", a->width);
+    ev_num(&ev, "dy", a->height);
+    ev_num(&ev, "cell_w", cw);
+    ev_num(&ev, "cell_h", ch);
+    ev_send(&ev);
+}
+
+/* ---- Widgets for the tree ---- */
+
+static GHashTable *field_text; /* what each field shows: the user's typing, until the program sends a new value */
+static GHashTable *last_sent;
+static gboolean suppress = FALSE;
+static GtkWidget *window, *content = NULL;
+static Node *current = NULL;
+static GHashTable *by_id; /* id -> GtkWidget* for the focus */
+
+/* The texts of the edits sent for a field since the program last answered with a value it chose
+ * itself (as in the Windows host). A view that echoes an edit sent before the newest one is out of
+ * date, since typing has gone on: it must not overwrite the box. One that echoes the newest edit is
+ * in step. Any other value is the program's own choice and wins. */
+static GHashTable *edits; /* id -> GPtrArray of char* */
+
+static void edit_note(const char *id, const char *text) {
+    GPtrArray *a = g_hash_table_lookup(edits, id);
+    if (!a) {
+        a = g_ptr_array_new_with_free_func(g_free);
+        g_hash_table_insert(edits, g_strdup(id), a);
+    }
+    g_ptr_array_add(a, g_strdup(text));
+}
+
+/* TRUE when `text` is an echo of an edit, so the box keeps what it has. */
+static gboolean edit_echo(const char *id, const char *text) {
+    GPtrArray *a = g_hash_table_lookup(edits, id);
+    if (!a || a->len == 0) return FALSE;
+    for (int at = (int)a->len - 1; at >= 0; at--) {
+        if (strcmp(g_ptr_array_index(a, at), text)) continue;
+        if ((guint)at == a->len - 1) {
+            g_ptr_array_set_size(a, 0);
+            g_hash_table_insert(last_sent, g_strdup(id), g_strdup(text));
+        } else {
+            g_ptr_array_remove_range(a, 0, at + 1);
+        }
+        return TRUE;
+    }
+    g_ptr_array_set_size(a, 0);
+    return FALSE;
+}
+
+static void sync_fields(const Node *n) {
+    if (n->kind == N_FIELD && !edit_echo(n->id, n->text)) {
+        const char *last = g_hash_table_lookup(last_sent, n->id);
+        if (!last || strcmp(last, n->text)) {
+            g_hash_table_insert(last_sent, g_strdup(n->id), g_strdup(n->text));
+            g_hash_table_insert(field_text, g_strdup(n->id), g_strdup(n->text));
+        }
+    }
+    for (int i = 0; i < n->nkids; i++) sync_fields(n->kids[i]);
+}
+
+static void on_button(GtkButton *b, gpointer d) { (void)d; send_id("press", cid(GTK_WIDGET(b))); }
+
+static void on_changed(GtkEditable *e, gpointer d) {
+    (void)d;
+    if (suppress) return;
+    const char *t = gtk_entry_get_text(GTK_ENTRY(e));
+    g_hash_table_insert(field_text, g_strdup(cid(GTK_WIDGET(e))), g_strdup(t));
+    edit_note(cid(GTK_WIDGET(e)), t);
+    Ev ev = ev_new("edit");
+    ev_str(&ev, "id", cid(GTK_WIDGET(e)));
+    ev_str(&ev, "text", t);
+    ev_send(&ev);
+}
+
+static void on_activate(GtkEntry *e, gpointer d) { (void)d; send_id("submit", cid(GTK_WIDGET(e))); }
+
+static void on_toggled(GtkToggleButton *b, gpointer d) {
+    (void)d;
+    if (suppress) return;
+    Ev ev = ev_new("toggle");
+    ev_str(&ev, "id", cid(GTK_WIDGET(b)));
+    ev_str(&ev, "text", gtk_toggle_button_get_active(b) ? "on" : "off");
+    ev_send(&ev);
+}
+
+static void set_id(GtkWidget *w, const char *id) {
+    g_object_set_data_full(G_OBJECT(w), "ail-id", g_strdup(id), g_free);
+    g_hash_table_insert(by_id, g_strdup(id), w);
+}
+
+static void canvas_size(GtkWidget *w, const Node *n) {
+    if (debug) fprintf(stderr, "canvas %s w %.0f h %.0f ops %d\n", n->id, n->w, n->h, n->nops);
+    gtk_widget_set_size_request(w, n->w > 0 ? (int)n->w : -1, n->h > 0 ? (int)n->h : -1);
+    gtk_widget_set_hexpand(w, n->w <= 0);
+    gtk_widget_set_vexpand(w, n->h <= 0);
+    gtk_widget_set_halign(w, n->w > 0 ? GTK_ALIGN_START : GTK_ALIGN_FILL);
+    gtk_widget_set_valign(w, n->h > 0 ? GTK_ALIGN_START : GTK_ALIGN_FILL);
+}
+
+static GtkWidget *build(Node *n) {
+    GtkWidget *w = NULL;
+    switch (n->kind) {
+    case N_LABEL:
+        w = gtk_label_new(n->text);
+        gtk_label_set_selectable(GTK_LABEL(w), TRUE);
+        gtk_widget_set_halign(w, GTK_ALIGN_FILL);
+        gtk_label_set_xalign(GTK_LABEL(w), 0);
+        gtk_widget_set_hexpand(w, TRUE);
+        break;
+    case N_BUTTON:
+        w = gtk_button_new_with_label(n->text);
+        set_id(w, n->id);
+        g_signal_connect(w, "clicked", G_CALLBACK(on_button), NULL);
+        break;
+    case N_FIELD: {
+        w = gtk_entry_new();
+        set_id(w, n->id);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(w), n->hint);
+        const char *t = g_hash_table_lookup(field_text, n->id);
+        suppress = TRUE;
+        gtk_entry_set_text(GTK_ENTRY(w), t ? t : n->text);
+        suppress = FALSE;
+        gtk_widget_set_hexpand(w, TRUE);
+        g_signal_connect(w, "changed", G_CALLBACK(on_changed), NULL);
+        g_signal_connect(w, "activate", G_CALLBACK(on_activate), NULL);
+        break;
+    }
+    case N_TOGGLE:
+        w = gtk_check_button_new_with_label(n->text);
+        set_id(w, n->id);
+        suppress = TRUE;
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(w), n->on);
+        suppress = FALSE;
+        g_signal_connect(w, "toggled", G_CALLBACK(on_toggled), NULL);
+        break;
+    case N_COLUMN:
+    case N_ROW:
+        w = gtk_box_new(n->kind == N_COLUMN ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL, 6);
+        for (int i = 0; i < n->nkids; i++) {
+            GtkWidget *k = build(n->kids[i]);
+            gtk_box_pack_start(GTK_BOX(w), k, FALSE, TRUE, 0);
+        }
+        break;
+    case N_SPACER:
+        w = gtk_fixed_new();
+        gtk_widget_set_hexpand(w, TRUE);
+        gtk_widget_set_vexpand(w, TRUE);
+        break;
+    case N_CANVAS:
+        w = gtk_drawing_area_new();
+        set_id(w, n->id);
+        gtk_widget_set_can_focus(w, TRUE);
+        gtk_widget_add_events(w, GDK_BUTTON_PRESS_MASK | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK | GDK_KEY_PRESS_MASK);
+        gtk_style_context_add_class(gtk_widget_get_style_context(w), "view");
+        canvas_size(w, n);
+        g_signal_connect(w, "draw", G_CALLBACK(canvas_draw), n);
+        g_signal_connect(w, "button-press-event", G_CALLBACK(canvas_press), NULL);
+        g_signal_connect(w, "scroll-event", G_CALLBACK(canvas_scroll), NULL);
+        g_signal_connect(w, "key-press-event", G_CALLBACK(canvas_key), NULL);
+        g_signal_connect(w, "size-allocate", G_CALLBACK(canvas_alloc), NULL);
+        break;
+    }
+    n->widget = w;
+    return w;
+}
+
+/* The same widgets can show `b` when it has `a`'s shape: the same kinds, in the same places. */
+static gboolean same_shape(const Node *a, const Node *b) {
+    if (a->kind != b->kind || a->nkids != b->nkids) return FALSE;
+    if ((a->kind == N_CANVAS || a->kind == N_BUTTON || a->kind == N_TOGGLE || a->kind == N_FIELD) && strcmp(a->id, b->id)) return FALSE;
+    for (int i = 0; i < a->nkids; i++) if (!same_shape(a->kids[i], b->kids[i])) return FALSE;
+    return TRUE;
+}
+
+/* Moves `a`'s widgets to `b` and brings them up to date. A canvas's draw callback reads
+ * its node, so it is pointed at `b` (the old tree is freed afterwards). */
+static void update_in_place(Node *a, Node *b) {
+    GtkWidget *w = a->widget;
+    b->widget = w;
+    suppress = TRUE;
+    switch (b->kind) {
+    case N_LABEL:
+        if (strcmp(a->text, b->text)) gtk_label_set_text(GTK_LABEL(w), b->text);
+        break;
+    case N_BUTTON:
+        if (strcmp(a->text, b->text)) gtk_button_set_label(GTK_BUTTON(w), b->text);
+        break;
+    case N_FIELD: {
+        const char *want = g_hash_table_lookup(field_text, b->id);
+        if (!want) want = b->text;
+        if (strcmp(gtk_entry_get_text(GTK_ENTRY(w)), want)) gtk_entry_set_text(GTK_ENTRY(w), want);
+        if (strcmp(a->hint, b->hint)) gtk_entry_set_placeholder_text(GTK_ENTRY(w), b->hint);
+        break;
+    }
+    case N_TOGGLE:
+        if (strcmp(a->text, b->text)) gtk_button_set_label(GTK_BUTTON(w), b->text);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(w), b->on);
+        break;
+    case N_CANVAS:
+        g_signal_handlers_disconnect_by_func(w, G_CALLBACK(canvas_draw), a);
+        g_signal_connect(w, "draw", G_CALLBACK(canvas_draw), b);
+        canvas_size(w, b);
+        gtk_widget_queue_draw(w);
+        break;
+    default: break;
+    }
+    suppress = FALSE;
+    for (int i = 0; i < b->nkids; i++) update_in_place(a->kids[i], b->kids[i]);
+}
+
+static char *last_focus = NULL;
+
+static void show_view(const char *title, const char *focus, Node *tree) {
+    gtk_window_set_title(GTK_WINDOW(window), title);
+    sync_fields(tree);
+    if (current && same_shape(current, tree)) {
+        update_in_place(current, tree);
+        node_free(current);
+    } else {
+        /* Keep the keyboard focus (and the cursor in a field) across a rebuild. */
+        GtkWidget *fw = gtk_window_get_focus(GTK_WINDOW(window));
+        char *fid = fw && cid(fw) ? g_strdup(cid(fw)) : NULL;
+        int pos = fw && GTK_IS_EDITABLE(fw) ? gtk_editable_get_position(GTK_EDITABLE(fw)) : 0;
+        if (content) gtk_widget_destroy(content);
+        g_hash_table_remove_all(by_id);
+        node_free(current);
+        content = build(tree);
+        gtk_container_add(GTK_CONTAINER(window), content);
+        gtk_widget_show_all(content);
+        if (fid) {
+            GtkWidget *w = g_hash_table_lookup(by_id, fid);
+            if (w) {
+                gtk_widget_grab_focus(w);
+                if (GTK_IS_EDITABLE(w)) gtk_editable_set_position(GTK_EDITABLE(w), pos);
+            }
+            g_free(fid);
+        }
+    }
+    current = tree;
+    if (strcmp(focus, last_focus ? last_focus : "")) {
+        g_free(last_focus);
+        last_focus = g_strdup(focus);
+        GtkWidget *w = *focus ? g_hash_table_lookup(by_id, focus) : NULL;
+        if (w) gtk_widget_grab_focus(w);
+    }
+}
+
+/* ---- Reading views from standard input (std.app.7) ---- */
+
+static gboolean first_view = TRUE, started = FALSE;
+
+static void handle_line(const char *line) {
+    const char *p = line;
+    JVal *obj = jparse(&p);
+    if (!obj || obj->kind != J_OBJ) { jfree(obj); return; }
+    const char *t = jstr(obj, "t");
+    if (!strcmp(t, "measure")) {
+        answer_measure(jget(obj, "runs"));
+    } else if (!strcmp(t, "view")) {
+        if (first_view) {
+            first_view = FALSE;
+            if ((int)jnum(obj, "v") != 1) {
+                fprintf(stderr, "AIL App Host: the program speaks another protocol version\n");
+                jfree(obj);
+                gtk_main_quit();
+                return;
+            }
+        }
+        JVal *title = jget(obj, "title");
+        Node *tree = decode_node(jget(obj, "tree"));
+        show_view(title && title->kind == J_STR ? title->str : "AIL", jstr(obj, "focus"), tree);
+        if (!started) {
+            started = TRUE;
+            send_simple("start");
+        }
+    }
+    jfree(obj);
+}
+
+static gboolean on_stdin(GIOChannel *ch, GIOCondition cond, gpointer d) {
+    (void)d; (void)cond;
+    for (;;) {
+        gchar *line = NULL;
+        gsize len;
+        GIOStatus st = g_io_channel_read_line(ch, &line, &len, NULL, NULL);
+        if (st == G_IO_STATUS_NORMAL) {
+            handle_line(line);
+            g_free(line);
+        } else if (st == G_IO_STATUS_AGAIN) {
+            return TRUE;
+        } else {
+            g_free(line);
+            gtk_main_quit();
+            return FALSE;
+        }
+    }
+}
+
+static gboolean on_delete(GtkWidget *w, GdkEvent *e, gpointer d) {
+    (void)w; (void)e; (void)d;
+    send_simple("close");
+    return FALSE;
+}
+
+int main(int argc, char **argv) {
+    gtk_init(&argc, &argv);
+    bitmaps = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)cairo_surface_destroy);
+    pics = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, unref_pic);
+    reported = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    field_text = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    last_sent = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    by_id = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    edits = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref);
+    debug = g_getenv("AIL_HOST_DEBUG") != NULL;
+
+    window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "AIL");
+    gtk_window_set_default_size(GTK_WINDOW(window), 1000, 720);
+    GdkGeometry g = { .min_width = 320, .min_height = 200 };
+    gtk_window_set_geometry_hints(GTK_WINDOW(window), NULL, &g, GDK_HINT_MIN_SIZE);
+    gtk_container_set_border_width(GTK_CONTAINER(window), 8);
+    g_signal_connect(window, "delete-event", G_CALLBACK(on_delete), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    gtk_widget_show(window);
+
+    GIOChannel *in = g_io_channel_unix_new(0);
+    g_io_channel_set_encoding(in, NULL, NULL);
+    g_io_channel_set_flags(in, G_IO_FLAG_NONBLOCK, NULL);
+    g_io_add_watch(in, G_IO_IN | G_IO_HUP | G_IO_ERR, on_stdin, NULL);
+    gtk_main();
+    return 0;
+}
