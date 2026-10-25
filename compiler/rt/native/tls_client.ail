@@ -172,7 +172,7 @@ fn tc_raw_read(o int, p int, n int) int
     fd := load64(o + NET_FD)
     mut got := 0
     while got < n
-        r := os_read(fd, p + got, n - got)
+        r := net_sys_recv(fd, p + got, n - got)
         if r > 0
             got += r
             continue
@@ -436,6 +436,10 @@ fn tc_finished(hl int, base int, th int, out int)
     kdh_hmac(hl, fk, hl, th, hl, out)
 
 fn tc_random(p int, n int) int
+    if target() == 3
+        # ProcessPrng (bcryptprimitives) fills the buffer and cannot fail.
+        import_call("ProcessPrng", p, n, 0, 0)
+        return 0
     path := os_cstr(OS_PATH_A, "/dev/urandom")
     fd := os_open(path, 0, 0)
     if fd < 0
@@ -479,6 +483,15 @@ fn tc_roots(st int, anchor int) List[List[int]]
     if load64(str_addr(custom)) > 0
         if not tc_load_file(custom, mut out, anchor)
             tc_err(st, 1, "SSL_CERT_FILE names `{custom}`, which holds no certificates")
+        return out
+    if target() == 3
+        if wnet_roots(mut out, anchor) > 0
+            return out
+        tc_err(
+            st,
+            1,
+            "no trusted root certificates found in the Windows root store; set SSL_CERT_FILE to a PEM bundle",
+        )
         return out
     paths := if target() == 2 then ["/etc/ssl/cert.pem"] else [
         "/etc/ssl/certs/ca-certificates.crt",
