@@ -1,2 +1,0 @@
-cargo:rerun-if-changed=/home/user/ail/bootstrap/../docs/spec
-cargo:rerun-if-changed=/home/user/ail/bootstrap/../docs/decisions/README.md
