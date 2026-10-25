@@ -884,8 +884,23 @@ fn tensor_softmax(a int) int
     tensor_copy_words(t + 32, a + 32, rank)
     da := tdata_w(a)
     out := tensor_data(t)
-    mut base := 0
-    while base < n
+    rows := if w == 0 then 0 else n / w
+    if n >= 65536 and rows > 1
+        env := tensor_env()
+        store64(env, 4)
+        store64(env + 8, ek)
+        store64(env + 16, out)
+        store64(env + 24, da)
+        store64(env + 40, w)
+        if tensor_par(env, 0, rows, 1048576)
+            return tensor_pack(t)
+    softmax_rows(ek, da, out, w, 0, rows)
+    tensor_pack(t)
+
+## Rows `lo..hi` of `w` words each of a softmax (std.tensor.13).
+fn softmax_rows(ek int, da int, out int, w int, lo int, hi int)
+    for row in lo..hi
+        base := row * w
         mut top := 0.0 - fm_inf()
         for j in 0..w
             x := loadf(da + 8 * (base + j))
@@ -898,8 +913,6 @@ fn tensor_softmax(a int) int
             total += e
         for j in 0..w
             storef(out + 8 * (base + j), elem_round(ek, loadf(out + 8 * (base + j)) / total))
-        base += w
-    tensor_pack(t)
 
 ## `t.to_f32()` (std.tensor.22): each element rounded to `f32`.
 fn tensor_to_f32(a int) int

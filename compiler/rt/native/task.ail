@@ -526,6 +526,12 @@ fn tensor_chunk(rec int)
             vec_zip32(op, out + 4 * lo, da + 4 * lo, db + 4 * lo, hi - lo)
         else
             vec_zip(op, out + 8 * lo, da + 8 * lo, db + 8 * lo, hi - lo, 0)
+    elif job == 3
+        # Chunks `lo..hi` of a fused chain: plan = word 3, root = 4, n = 5.
+        fuse_range(da, db, out, kind, load64(env + 40), lo, hi)
+    elif job == 4
+        # Rows `lo..hi` of a softmax: row width = word 5.
+        softmax_rows(kind, da, out, load64(env + 40), lo, hi)
     else
         # Elements `lo..hi` of `a op s`: op = word 5, left = word 6, s = word 7.
         op := load64(env + 40)
