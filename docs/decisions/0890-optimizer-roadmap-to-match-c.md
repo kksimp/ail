@@ -95,8 +95,10 @@ get it together (ADR 0008). Measured on binarytrees, fasta and fannkuch on ail-l
 same checkout with and without the commit). Result (2026-10-25, Mac): no change, instruction
 counts within 0.1M on all six programs. The hot functions of binarytrees, fannkuch and fasta
 have no allocation calls: binarytrees' time is the recursive `make`/`check` and two
-`list_push` per node. The pass stays (it removes real calls, and the self-host passes) but
-pass 1 as a speed lever is replaced by the codegen items below.
+`list_push` per node. The inlining was removed again (2026-10-25): it gained nothing and
+enlarged every function that builds a struct or list, and the Mac gate got slower. Pass 1 as a
+speed lever is replaced by the codegen items below; escape analysis (1b) waits for a profile
+that shows allocation.
 
 ## Pass 2 first slice: ARM64 call and global overheads
 
