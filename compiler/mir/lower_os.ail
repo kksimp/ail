@@ -175,7 +175,7 @@ fn Lower.lower_shuffle(mut self, npos ast.Pos, args List[ast.Arg]) Val?
         return unsupported(npos, "this call of `random.shuffle`")
     v := lower_value(args[0].value, none)?
     e := v.ty.elem() else return unsupported(npos, "`random.shuffle` of a `{v.ty.name()}`")
-    size := if e == Ty.Bool then 1 else 8
+    size := e.elem_bytes()
     call("rt.random_shuffle", [v.id, konst(size, Ty.Int)], Ty.Unit)
     Val(id: -1, ty: Ty.Unit)
 

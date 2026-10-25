@@ -96,6 +96,10 @@ pub fn Ty.is_sized(self) bool
         Sized(_) => true
         _ => false
 
+## Bytes one element of a list of `self` takes: 1 for a `bool` (native-abi.md §2), else 8.
+pub fn Ty.elem_bytes(self) int
+    if self == Ty.Bool then 1 else 8
+
 pub fn Ty.is_tensor(self) bool
     match self
         Tensor(_) => true
