@@ -2123,6 +2123,9 @@ fn report(
                 shown := excerpt(src, w.0, w.1)
                 if not shown.is_empty()
                     print(shown)
+            # trace.snap.1: the call stack of a trap, as the JSON snapshot carries it.
+            if not v.frames.is_empty() and v.message.starts_with("trap[")
+                print(v.frames)
             seen := traces.get(v.name) else []
             for e in seen
                 t := trace_text(e)
