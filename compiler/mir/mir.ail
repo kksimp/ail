@@ -96,10 +96,22 @@ pub fn Ty.is_sized(self) bool
         Sized(_) => true
         _ => false
 
-## Bytes one element of a list of `self` takes: 1 for a `bool` or a `u8`
-## (native-abi.md §2, ADR 0907), else 8.
+## Bytes one element of a list of `self` takes: 1 for a `bool` or a `u8`, 2 for
+## a `u16`, 4 for a `u32` (native-abi.md §2, ADRs 0907 and 0912), else 8.
 pub fn Ty.elem_bytes(self) int
-    if self == Ty.Bool or self == Ty.Sized("u8") then 1 else 8
+    match self
+        Bool => 1
+        Sized(n) => sized_elem_bytes(n)
+        _ => 8
+
+fn sized_elem_bytes(name str) int
+    if name == "u8"
+        return 1
+    if name == "u16"
+        return 2
+    if name == "u32"
+        return 4
+    8
 
 pub fn Ty.is_tensor(self) bool
     match self
