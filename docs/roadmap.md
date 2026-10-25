@@ -54,8 +54,8 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
    Native runtime and ABI (lane 122, ADRs 0404–0409): [native-abi.md](design/native-abi.md); `compiler/rt/rt.ail` has number text, strings, lists and traps on a machine model; syscalls and entry wait for the encoders.
 3. **Dependencies:** git dependencies and `ail.lock` (no registry, ADR 0383);
    in-house TLS for `std.net` (ADR 0360, done: ADRs 0366–0369); hardware
-   AES-GCM (AES-NI and PCLMULQDQ on x86-64, the crypto extension on ARM64
-   macOS; Linux ARM64 still on the bit-sliced code) and proxy support
+   AES-GCM (AES-NI and PCLMULQDQ on x86-64, the crypto extension on ARM64,
+   detected through AT_HWCAP on Linux) and proxy support
    ([ADR 0869](decisions/0869-http-proxy-from-the-environment.md)) are done.
 4. **Rust-free check (designer, 2026-10-20):** when the shipped toolchain
    no longer needs Rust (end of Stage 4), rebuild `tools/edit` with the
@@ -114,7 +114,7 @@ std API still needs its own ADR first.
    memory. Parity fixes for real sites are interleaved.
 7. **Packages and networking** (`std/net`, packages): done (hardware
    AES-GCM, proxy support, git dependencies and `ail.lock` in the native
-   loader); Linux ARM64 AES capability detection remains.
+   loader).
 8. **Tensors and hardware** (`std/tensor`, backends): CPU gaps, then Vulkan
    and Metal, then NPUs; weaker atomic orderings (OQ-097).
 9. **Optimizer** (`compiler/mir` passes): purity-driven speed passes of
