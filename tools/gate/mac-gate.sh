@@ -31,14 +31,13 @@ fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
 # The interpreter-only suites (snapshot, budget, parallel, replay; the bytecode tier is dropped, ADR 0873) are out of the gate until
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
-# D3: these suites run on ./ail (the default); the rest still call the Rust binary (GATE_RUST=1) until their reds are fixed.
-native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain contracts api_card edit net spec pe asm"
-suites="tools misc limits api_queries native_misc nativex globals"
-[ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay"
-# The Rust binary is still built for the suites above that call it.
-run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
-run gate_ail env GATE_RUST=1 ./ail run tools/gate/gate.ail $suites
-run gate_native perl -e 'alarm 2400; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
+# D3: every suite runs on ./ail. Only the interpreter-only suites (GATE_INTERP=1) still call the Rust binary.
+native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain contracts api_card edit net spec pe asm tools api_queries misc limits native_misc nativex globals"
+run gate_native perl -e 'alarm 4800; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
+if [ "${GATE_INTERP:-0}" = 1 ]; then
+  run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
+  run gate_interp env GATE_RUST=1 ./ail run tools/gate/gate.ail snapshot budget parallel replay
+fi
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }
