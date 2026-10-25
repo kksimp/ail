@@ -448,7 +448,7 @@ fn Lower.gen_copy(mut self, name str, t Ty)
             branch(op("lt", [i, n], Ty.Bool), body, [], exit, [])
             cur = body
             item := copy_value(Val(id: op("get", [x, i], e), ty: e))
-            call("rt.list_push", [out, item], Ty.Unit)
+            call(push_fn(e), [out, item], Ty.Unit)
             jump(head, [op("add", [i, konst(1, Ty.Int)], Ty.Int)])
             cur = exit
             finish(return_of(out))

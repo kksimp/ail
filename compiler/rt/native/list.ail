@@ -17,6 +17,28 @@ fn list_set_word(data int, size int, i int, w int)
     else
         store64(data + 8 * i, w)
 
+## A list of bytes (a `List[u8]`) as a list of words: for the operations that
+## read 8-byte elements (sort, sum, min, max, ordering; ADR 0907).
+fn list_widen(xs List[int]) List[int]
+    p := list_addr(xs)
+    n := load64(p)
+    out := list_alloc(n, 8)
+    q := list_addr(out)
+    src := load64(p + 16)
+    dst := load64(q + 16)
+    for i in 0..n
+        store64(dst + 8 * i, load8(src + i))
+    store64(q, n)
+    out
+
+## Writes the words of `wide` back into the bytes of `xs`, as many as `xs` has.
+fn list_narrow_into(xs List[int], wide List[int])
+    p := list_addr(xs)
+    dst := load64(p + 16)
+    src := load64(list_addr(wide) + 16)
+    for i in 0..load64(p)
+        store8(dst + i, load64(src + 8 * i))
+
 ## `xs.extend(ys)`.
 fn list_extend(xs List[int], ys List[int], size int)
     p := list_addr(xs)

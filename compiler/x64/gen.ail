@@ -1057,7 +1057,7 @@ fn Gen.push(mut self, i mir.Inst)
     v := i.args[1]
     if f.vals[v].is_float()
         a.vmovsd_mr(at_index(S1, RAX, 8, 0), xmm(v, X0))
-    elif f.vals[v].elem_bytes() == 1
+    elif i.name == "rt.list_pushb"
         a.mov8_mr(at_index(S1, RAX, 1, 0), gpr(v, RDX))
     else
         a.mov_mr(at_index(S1, RAX, 8, 0), gpr(v, RDX))
