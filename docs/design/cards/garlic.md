@@ -1,12 +1,12 @@
 # garlic
 entry: main in garlic.ail
-tests: 133 (`ail test` lists them)
+tests: 135 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
     dep image path ../pdf/image caps fs
 
-## (root) (96 items)
+## (root) (99 items)
 
 ## attach (10 items)
 
