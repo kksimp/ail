@@ -72,6 +72,9 @@ def run(binary, args, cwd=None, tmp=None, stdin=None, stderr=True):
     if tmp:
         out = out.replace(tmp, "T")
     out = re.sub(r"/(?:tmp|var/folders)/[^\"/ ]*/", "TMP/", out)
+    # The native `api --ast` ends with `"asks":[]` (the `uhwhatnow?` positions, ADR 0872), which the Rust
+    # tree has no field for; an empty list says nothing, so it is dropped before comparing.
+    out = out.replace(',"asks":[]', "")
     LAST[threading.get_ident()] = out
     return r.returncode, h(out)
 
