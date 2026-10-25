@@ -1,0 +1,11 @@
+fn signed() i8
+    -128
+
+fn unsigned() u64
+    4000000000
+
+fn main()
+    print(signed())          # -128
+    print(unsigned())        # 4000000000
+    print(7)                 # an int literal
+    print(1.5)               # a float literal

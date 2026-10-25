@@ -1,0 +1,10 @@
+fn find(id int) int?
+    if id > 0
+        return id * 10
+    none
+
+fn main()
+    print(find(2))                                # 20
+    print(find(-1))                               # none: none is the absent value
+    x := find(1) else 0                           # else gives a plain int
+    print(x)                                      # 10

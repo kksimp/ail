@@ -1,0 +1,4 @@
+fn main()
+    pairs := [[1, 2], [3, 4]]
+    flat := [x for row in pairs for x in row if x % 2 == 0]
+    print(flat)                       # [2, 4]

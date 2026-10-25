@@ -1,0 +1,13 @@
+struct User
+    id int
+    name str
+    email str?
+
+fn main()
+    u := User(id: 7, name: "Ada", email: none)
+    v := User(name: "Lin", email: "l@x", id: 8)   # named arguments in any order
+    id := 9
+    name := "Kim"
+    w := User(id, name, email: none)              # shorthand and named together
+    print(u.name)                                 # Ada
+    print(v.id + w.id)                            # 17

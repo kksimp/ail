@@ -1,0 +1,29 @@
+struct Point
+    x int
+    y int
+
+enum Color
+    Red
+    Green
+
+fn Point.sum(self) int            # method; `self` is read-only
+    x + y                         # fields and methods by bare name (self.x)
+
+fn Point.shift(mut self, dx int)  # may change self
+    x += dx
+
+fn Point.origin() Point           # associated function: Point.origin()
+    Point(x: 0, y: 0)
+
+fn is_red(c Color) bool
+    match c
+        Red => true
+        Green => false
+
+fn main()
+    mut p := Point(y: 2, x: 1)    # name fields, in any order
+    p.shift(3)                    # `mut self` methods need a `mut` variable
+    print(p.sum())                # method calls always have ()
+    c := Color.Red                # qualify a variant...
+    print(is_red(Green))          # ...unless its type is known from context
+    p.x = 10                      # fields of a `mut` variable can be assigned

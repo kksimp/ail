@@ -1,0 +1,6 @@
+## Adds two numbers.
+fn add(a int, b int) int
+    a + b
+# A plain comment ends the doc run above; it is not a doc comment.
+fn main()
+    print(add(1, 2))

@@ -1,0 +1,5 @@
+use std.ui
+
+fn main()
+    print(ui.RED)                    # the colors are ints
+    print(ui.BLACK)

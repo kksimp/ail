@@ -1,0 +1,6 @@
+
+fn main()
+    mut xs := [1, 2, 3]
+    xs.insert(1, 9)       # [1, 9, 2, 3]
+    n := xs.remove_at(0)  # 1
+    xs.extend([4, 5])     # [9, 2, 3, 4, 5]

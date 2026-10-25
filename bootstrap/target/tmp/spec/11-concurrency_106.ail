@@ -1,0 +1,10 @@
+fn publish(data Atomic[int], ready Atomic[bool])
+    data.store(42, order: Relaxed)
+    ready.store(true, order: Release)   # data is visible to an Acquire load that sees true
+
+fn main()
+    data := Atomic(0)
+    ready := Atomic(false)
+    publish(data, ready)
+    if ready.load(order: Acquire)
+        print(data.load(order: Relaxed))

@@ -1,0 +1,13 @@
+use std.net
+
+fn answer(srv net.Server) !
+    ex := srv.accept()?
+    q := ex.request.query.get("name") else "world"
+    ex.respond(net.Response(status: 200, headers: {}, body: "hello {q}"))?
+
+fn main() !
+    srv := net.serve("127.0.0.1:0")?
+    t := spawn answer(srv)
+    r := net.get("http://{srv.addr()}/?name=ail")?
+    print(r.body)
+    t.wait()?

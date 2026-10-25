@@ -1,0 +1,11 @@
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+
+fn area(s Shape) int
+    match s
+        Circle(r) => 3 * r * r
+        Rect(w, _) => w * w       # `_` skips a field; bare `Rect =>` skips all
+
+fn main()
+    print("")

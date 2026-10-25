@@ -1,0 +1,21 @@
+use std.fs
+
+struct Pt
+    xx int
+
+fn Pt.shift(mut self, d int)
+    xx += d
+
+## Adds.
+fn plus(a int, b int) int
+    requires a >= 0
+    a + b + 0
+
+## Twice.
+fn twice(n int) int
+    plus(n, n)
+
+fn main()
+    mut p := Pt(xx: twice(2))
+    p.shift(plus(3, 4))
+    print(p)

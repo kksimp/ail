@@ -1,0 +1,7 @@
+
+fn main()
+    "a\r\nb\n".lines()             # ["a", "b"]
+    "a\n\n".lines()                # ["a", ""]
+    "  hi ".trim()                # hi
+    "key=v".strip_prefix("key=")  # v
+    "h\u{e9}".chars()              # ['h', 'é']

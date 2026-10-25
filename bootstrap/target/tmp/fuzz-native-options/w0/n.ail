@@ -1,0 +1,78 @@
+error struct Empty "the list is empty"
+error struct Big "the number is too big"
+
+fn find(xs List[int], want int) int?
+    for i in 0..xs.len()
+        if xs[i] == want
+            return i
+    none
+
+fn pick(n int) int?
+    if n % 3 == 0
+        return none
+    n * 4
+
+fn halve(x float) float?
+    if x < 0.0
+        return none
+    x / 2.0
+
+fn first(xs List[int]) int ! Empty
+    if xs.len() == 0
+        return Empty()
+    xs[0]
+
+fn small(n int) int ! Big
+    if n > 61
+        return Big()
+    n
+
+fn both(a List[int], b List[int]) int ! Empty | Big
+    x := small(first(a)?)?
+    y := small(first(b)?)?
+    x + y
+
+fn check(n int) ! Big
+    if n > 61
+        return Big()
+
+fn lookup(xs List[int], i int) int?
+    if i < 0 or i >= xs.len()
+        return none
+    xs[i]
+
+fn twice(xs List[int], i int) int ! Empty
+    v := first(xs)?
+    w := lookup(xs, i) else return Empty()
+    v + w
+
+fn main()
+    xs := []
+    if pick(13) == none
+        print("missing")
+    print(twice([-12], 7) else -3)
+    print(pick(3) else -7)
+    mut count3 := 0
+    for i in 0..10
+        v := small(i * 49) else continue
+        count3 += v
+    print(count3)
+    if pick(-5) != none
+        print("found")
+    print(twice([243, 92], 31) else -3)
+    print(twice([], 23) else -3)
+    mut count7 := 0
+    for i in 0..12
+        v := small(i * 1) else continue
+        count7 += v
+    print(count7)
+    w8 := small(-4 * 11) else err
+        print("failed: {err}")
+        0
+    print(w8)
+    if pick(3) == none
+        print("missing")
+    check(8 * 9) else err
+        print("check: {err}")
+    print(find(xs, 14) else -1)
+    print("done")

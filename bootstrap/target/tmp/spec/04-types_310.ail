@@ -1,0 +1,8 @@
+fn lookup(m Map[str, int?], k str) int??
+    m.get(k)
+
+fn flat(m Map[str, int?], k str) int?
+    lookup(m, k) else none
+
+fn main()
+    print("")

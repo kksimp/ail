@@ -1,0 +1,10 @@
+fn main()
+    ports := {"http": 80, "https": 443}
+    primes := [2, 3, 5, 7]
+    seen := Set[int]()
+    counts := Map[str, int]()
+    names := List[str]()
+    empty := Map[str, int]()
+    print(primes.len())                           # 4
+    print(ports["https"])                         # 443
+    print(seen.len() + counts.len() + names.len() + empty.len())   # 0

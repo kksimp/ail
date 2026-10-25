@@ -1,0 +1,16 @@
+fn main()
+    mut m := Map[str, int]()
+    m["a"] = 1
+    m["b"] = 2
+    m["a"] = 5                                    # keeps the first position
+    m["a"] += 1                                   # 6
+    m["c"] += 1                                   # a missing key starts from zero
+    print(m.keys())                               # [a, b, c]
+    mut g := Map[int, Map[int, str]]()
+    g[1] = Map[int, str]()
+    g[1][2] = "x"                                 # inserts key 2 into g[1]
+    print(g[1][2])                                # x
+    mut counts := Map[str, int]()
+    for w in ["a", "b", "a"]
+        counts[w] += 1
+    print(counts["a"])                            # 2

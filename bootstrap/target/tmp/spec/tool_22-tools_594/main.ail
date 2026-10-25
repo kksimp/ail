@@ -1,0 +1,8 @@
+enum Dir
+    North
+    South
+fn name(d Dir) str
+    match d
+        North => "n"
+fn main()
+    print(name(Dir.North))

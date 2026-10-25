@@ -1,0 +1,4 @@
+fn largest(xs List[int]) int
+    xs.max() else 0
+fn main()
+    print(largest([3, 9, 2]))

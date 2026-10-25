@@ -1,0 +1,11 @@
+fn main()
+    mut w := ui.open("Demo", 40, 10) else return   # fails headless
+    w.put(1, 1, "Hello", 0xFFFFFF, 0x000000)      # col, row, text, fg, bg
+    w.present()
+    while true
+        match w.next_event()
+            Key(key, _, _, _) =>                   # "a", "enter"; (key, ctrl, alt, shift)
+                if key == "escape"
+                    break
+            Close => break
+            Resize(_, _) | Mouse(_, _, _, _) | Scroll(_) => w.present()

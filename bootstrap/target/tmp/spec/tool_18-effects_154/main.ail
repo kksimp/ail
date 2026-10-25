@@ -1,0 +1,8 @@
+fn inner()
+    print("deep")
+
+fn outer()
+    inner()
+
+fn main()
+    outer()

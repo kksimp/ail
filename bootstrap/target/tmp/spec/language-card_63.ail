@@ -1,0 +1,6 @@
+
+fn main()
+    x := 1           # `:=` declares a new name (immutable)
+    mut n := 0       # mutable
+    n = 5            # `=` changes an existing `mut` name
+    n += 1           # also -= *= /= %=

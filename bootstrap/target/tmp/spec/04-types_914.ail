@@ -1,0 +1,5 @@
+fn main()
+    print("2.5E-3".to_float())   # 0.0025
+    print("1e999".to_float())    # inf
+    print("+1".to_float())       # none
+    print(".5".to_float())       # none

@@ -1,0 +1,9 @@
+error enum Oops
+    Bad "bad"
+fn load() int ! Oops
+    Bad
+fn run() int ! Oops
+    load()
+    1
+fn main() ! Oops
+    print(run()?)

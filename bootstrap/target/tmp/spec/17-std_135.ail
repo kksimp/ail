@@ -1,0 +1,6 @@
+use std.fs
+
+fn main() !
+    for p in fs.glob("examples/*.ail")
+        m := fs.metadata(p)?
+        print("{p} {m.size}")

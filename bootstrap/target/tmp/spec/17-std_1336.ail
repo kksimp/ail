@@ -1,0 +1,7 @@
+use std.net
+
+fn main()
+    r := net.get("ftp://example.com/") else err
+        print(err.kind)              # bad_url: the scheme is not http or https
+        return
+    print(r.status)

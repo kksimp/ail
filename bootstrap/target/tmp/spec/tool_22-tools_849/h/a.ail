@@ -1,0 +1,5 @@
+## A program whose captured call returns a handle (replay.cap.2).
+fn main() !
+    print("a")
+    p := proc.start("sort", [])?
+    proc.kill(move p)

@@ -1,0 +1,5 @@
+[{"op":"rename","id":"fn:gone","to":"kept"},
+ {"op":"import","module":"std.fs"},
+ {"op":"insert","after":"fn:add","text":"fn twice(n int) int\n    n * 2"},
+ {"op":"replace_body","id":"fn:kept","body":"3"},
+ {"op":"replace","id":"fn:main","text":"fn main()\n    print(twice(kept()))"}]

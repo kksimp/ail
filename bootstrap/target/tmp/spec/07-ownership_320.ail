@@ -1,0 +1,8 @@
+unique struct File
+    fd int
+
+struct Holder
+    f File
+
+fn main()
+    print("")

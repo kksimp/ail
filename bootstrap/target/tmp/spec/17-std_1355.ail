@@ -1,0 +1,6 @@
+use std.random
+
+fn main()
+    random.seed(7)
+    print(random.int(3, 3))          # 3: both bounds are inclusive
+    print(random.float() < 1.0)      # true

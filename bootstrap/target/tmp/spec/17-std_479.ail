@@ -1,0 +1,7 @@
+use std.net
+
+fn main() !
+    r := net.get("https://example.com/health") else err
+        print("{err.kind}: {err.message}")
+        return
+    print("{r.status} {r.headers["content-type"]}")

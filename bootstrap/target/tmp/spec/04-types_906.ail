@@ -1,0 +1,5 @@
+fn main()
+    print(0.1 + 0.2)         # 0.30000000000000004
+    print(1.0 / 0.0)         # inf: no trap
+    print(0.0 / 0.0 == 0.0 / 0.0)   # false: nan is unequal to itself
+    print("{1000.0} {0.0001} {-0.0} {1e16} {1e-5}")  # 1000.0 0.0001 -0.0 1e+16 1e-05

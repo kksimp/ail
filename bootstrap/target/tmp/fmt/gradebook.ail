@@ -1,0 +1,40 @@
+# A class report: structs, enums, methods, `match`, loops and interpolation.
+
+enum Grade
+    A
+    B
+    C
+    F
+
+struct Student
+    name str
+    score int
+
+fn Student.grade(self) Grade
+    if self.score >= 90
+        A
+    elif self.score >= 80
+        B
+    elif self.score >= 70
+        C
+    else
+        F
+
+fn Grade.label(self) str
+    match self
+        A => "excellent"
+        B => "good"
+        C => "passing"
+        F => "failing"
+
+fn main()
+    students := [
+        Student(name: "Ada", score: 95),
+        Student(name: "Linus", score: 82),
+        Student(name: "Grace", score: 67),
+    ]
+    mut total := 0
+    for s in students
+        print("{s.name}: {s.score} ({s.grade().label()})")
+        total += s.score
+    print("class average: {total / students.len()}")

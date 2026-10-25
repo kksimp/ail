@@ -1,0 +1,3 @@
+# manifest
+package notes
+dep textkit path ../textkit caps fs

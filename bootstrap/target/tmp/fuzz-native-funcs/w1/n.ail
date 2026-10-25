@@ -1,0 +1,52 @@
+fn f0(n int) int
+    n * 4 + 6
+
+fn f1(n int) int
+    (n - 4) * (n - 4)
+
+fn f2(n int) int
+    n % 7 - 16
+
+fn f3(n int) int
+    n * 8 + 7
+
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+fn twice(f fn(int) int, x int) int
+    f(f(x))
+
+fn pick(which int) fn(int) int
+    if which % 2 == 0
+        f0
+    else
+        f3
+
+fn each(f fn(int), n int)
+    for i in 0..n
+        f(i)
+
+fn show(n int)
+    print("show {n}")
+
+fn mix(a int, b float, c int) float
+    a.to_float() * b + c.to_float()
+
+fn many(f fn(int, float, int) float, a int) float
+    f(a, 1.5, a + 1)
+
+fn main()
+    shift0 := 1
+    print([-8, 16, 10, -4, -7, 27, 22, -1].sorted(by: |x| (x - shift0) * (x - shift0)))
+    print([-3, 17, 26, 17].sorted(by: |x| x % 6))
+    print([8, 28].sorted())
+    print(List[int]().sorted(by: |x| x))
+    print([2.5, -1.0, 22.25, 9.0].sorted(by: |f| f.to_int() * -1))
+    print([25, 20, 5, 11, -4, 3, -6].sorted(by: |x| -x))
+    print(["b", "a", "é", "", "ab"].sorted(by: |v| v.len()))
+    print([2.5, -1.0, 24.25, 9.0].sorted(by: |f| f.to_int() * -1))
+    print([4, 5, 27, 26, -10, -8].sorted(by: |x| -x))
+    print(List[int]().sorted(by: |x| x))
+    print(twice(f1, -8))
+    g11 := f0
+    print(g11(29))

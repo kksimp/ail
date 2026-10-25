@@ -1,0 +1,3 @@
+## Prints a greeting.
+fn main()
+    print("hi")

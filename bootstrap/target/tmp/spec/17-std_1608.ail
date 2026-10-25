@@ -1,0 +1,15 @@
+use std.time.date
+use std.tz
+
+fn main() !
+    a := date.utc(1700000000000)
+    print(a.iso())                                   # 2023-11-14T22:13:20Z
+    b := date.at(1700000000000, "Europe/Paris")?
+    print(b.iso())
+    print(a.unix_ms() == b.unix_ms())                # true: the same instant
+    print(a == b)                                    # false: the fields differ
+    print(a.before(b))                               # false
+    print(a.in_zone("UTC")?.hour)
+    print(a.format("%Y-%m-%d %H:%M:%S %a %b"))
+    print(tz.offset("Europe/Paris", 1700000000) else 0)
+    print(tz.system().len() > 0)

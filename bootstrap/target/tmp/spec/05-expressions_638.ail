@@ -1,0 +1,16 @@
+fn sign(n int) int
+    if n < 0
+        return -1             # return leaves the function early
+    1                         # the body's last expression is the result
+
+fn tail(start int) int
+    mut n := start
+    while true                # diverges: the function ends here
+        if n > 0
+            return n
+        n = n + 1
+
+fn main()
+    y := sign(-5)
+    print(y)                  # -1
+    print(tail(3))            # 3

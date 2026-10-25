@@ -1,0 +1,7 @@
+fn main()
+    mut squares := [0, 0, 0, 0]
+    mut total := 0
+    for i in 0..4
+        squares[i] = i * i
+        total += i
+    print("{squares} {total}")

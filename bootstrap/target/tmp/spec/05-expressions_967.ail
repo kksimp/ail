@@ -1,0 +1,5 @@
+fn area(w int, h int) int
+    todo
+
+fn main()
+    print("started")

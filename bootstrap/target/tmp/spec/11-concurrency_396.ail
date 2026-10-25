@@ -1,0 +1,17 @@
+# norun: the order of the two streams depends on how the child's writes race, so
+# the output differs between runs; the example is checked, not compared.
+use std.proc
+use std.task
+
+fn main() !
+    c := proc.start("sh", ["-c", "echo a; echo b >&2"])?
+    mut open := true
+    while open
+        i := task.select([c.out, c.err])
+        if i == none
+            open = false
+        elif i == 0
+            print("out {c.out.recv()}")
+        else
+            print("err {c.err.recv()}")
+    proc.wait(move c)?

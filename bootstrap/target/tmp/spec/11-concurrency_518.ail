@@ -1,0 +1,9 @@
+fn main()
+    mut squares := List[int]()
+    for _ in 0..64
+        squares.push(0)
+    mut total := 0
+    par for i in 0..64
+        squares[i] = i * i
+        total += i
+    print("{squares[63]} {total}")

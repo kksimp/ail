@@ -1,0 +1,11 @@
+fn count(hits Atomic[int], n int)
+    for _ in 0..n
+        hits.add(1)
+
+fn main() !
+    hits := Atomic(0)
+    g := TaskGroup()
+    for _ in 0..4
+        g.add(spawn count(hits, 100))
+    g.wait_all()?
+    print(hits.load())

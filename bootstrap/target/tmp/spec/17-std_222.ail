@@ -1,0 +1,6 @@
+use std.proc
+
+fn main() !
+    r := proc.run("git", ["status", "--short"])?
+    if r.status != 0
+        print("git failed: {r.err}")

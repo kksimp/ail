@@ -1,0 +1,10 @@
+fn main()
+    mut groups := Map[str, List[int]]()
+    groups.push("odd", 1)
+    groups.push("odd", 3)
+    groups.push("even", 2)
+    print(groups["odd"])                          # [1, 3]
+    mut seen := Set[str]()
+    print(seen.add("a"))                          # true
+    print(seen.add("a"))                          # false: already there
+    print(seen.remove("a"))                       # true

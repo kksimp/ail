@@ -1,0 +1,21 @@
+SQUARES := squares(5)
+WORDS := "fn if else".split(" ")
+ORIGIN := Point(x: 0, y: 0).moved(3, 4)
+
+struct Point
+    x int
+    y int
+
+fn Point.moved(self, dx int, dy int) Point
+    Point(x: self.x + dx, y: self.y + dy)
+
+fn squares(n int) List[int]
+    mut out := List[int]()
+    for i in 0..n
+        out.push(i * i)
+    out
+
+fn main()
+    print(SQUARES)
+    print(WORDS[1])
+    print(ORIGIN)

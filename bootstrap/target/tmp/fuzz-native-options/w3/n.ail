@@ -1,0 +1,85 @@
+error struct Empty "the list is empty"
+error struct Big "the number is too big"
+
+fn find(xs List[int], want int) int?
+    for i in 0..xs.len()
+        if xs[i] == want
+            return i
+    none
+
+fn pick(n int) int?
+    if n % 4 == 0
+        return none
+    n * 4
+
+fn halve(x float) float?
+    if x < 0.0
+        return none
+    x / 2.0
+
+fn first(xs List[int]) int ! Empty
+    if xs.len() == 0
+        return Empty()
+    xs[0]
+
+fn small(n int) int ! Big
+    if n > 28
+        return Big()
+    n
+
+fn both(a List[int], b List[int]) int ! Empty | Big
+    x := small(first(a)?)?
+    y := small(first(b)?)?
+    x + y
+
+fn check(n int) ! Big
+    if n > 28
+        return Big()
+
+fn lookup(xs List[int], i int) int?
+    if i < 0 or i >= xs.len()
+        return none
+    xs[i]
+
+fn twice(xs List[int], i int) int ! Empty
+    v := first(xs)?
+    w := lookup(xs, i) else return Empty()
+    v + w
+
+fn main()
+    xs := [5, 250, 106]
+    if p := find(xs, 25)
+        print("p {p}")
+    elif q := lookup(xs, 25)
+        print("q {q}")
+    else
+        print("neither")
+    print(find(xs, 30) else -1)
+    mut o2 := pick(5)
+    print(o2 else 5)
+    o2 = none
+    print(o2 else 100)
+    o2 = 5
+    print(o2 else 100)
+    w3 := small(30 * 11) else err
+        print("failed: {err}")
+        0
+    print(w3)
+    m4 := first([128, 264, 21]) else
+        print("fallback block")
+        7
+    print(m4)
+    print(twice([165, 28], 32) else -3)
+    w6 := small(-2 * 11) else err
+        print("failed: {err}")
+        0
+    print(w6)
+    print(both([], [145, 18]) else -9)
+    print(halve(18.5) else 0.0)
+    print(both([88, -6, 115], [109, 220, 252]) else -9)
+    print(halve(28.5) else 0.0)
+    print(halve(1.5) else 0.0)
+    print(twice([91, 159, 29], 5) else -3)
+    check(12 * 9) else err
+        print("check: {err}")
+    print("done")

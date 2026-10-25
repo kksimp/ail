@@ -1,0 +1,7 @@
+use std.net
+
+fn main() !
+    l := net.listen("127.0.0.1:0")?
+    c := net.connect("127.0.0.1", 80)?
+    t := net.connect_tls("example.com", 443)?
+    print(l.addr())

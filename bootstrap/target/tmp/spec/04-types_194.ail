@@ -1,0 +1,7 @@
+struct User
+    id i64
+    name str
+    email str?
+
+fn main()
+    print("")

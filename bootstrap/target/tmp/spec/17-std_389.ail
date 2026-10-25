@@ -1,0 +1,9 @@
+use std.proc
+
+fn main() !
+    c := proc.start("sort", [])?
+    c.stdin.send("b\na\n")
+    c.stdin.close()
+    for line in c.out
+        print(line)
+    print(proc.wait(move c)?)

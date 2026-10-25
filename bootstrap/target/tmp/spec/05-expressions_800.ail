@@ -1,0 +1,9 @@
+enum Dir
+    North
+    East
+
+fn main()
+    d := Dir.East
+    print(d == East)                  # true: the expected type qualifies East
+    print(2.0 < 3.0)
+    print("a" <= "b")

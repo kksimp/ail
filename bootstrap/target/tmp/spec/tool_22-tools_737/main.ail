@@ -1,0 +1,11 @@
+## Doubles a number.
+##
+## ```ail
+## print(double(2))
+## # => 5
+## ```
+fn double(n int) int
+    n * 2
+
+fn main()
+    print(double(1))

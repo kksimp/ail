@@ -1,0 +1,6 @@
+fn helper() int
+    4
+
+fn main()
+    helper := 3               # a local may shadow a function for its block
+    print(helper)

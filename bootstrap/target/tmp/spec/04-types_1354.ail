@@ -1,0 +1,3 @@
+fn main()
+    m := {"a": 3}
+    print(m["z"])                                 # traps: the key "z" is missing

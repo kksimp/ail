@@ -1,0 +1,6 @@
+
+fn main()
+    s := "Héllo"
+    a := s.slice(1, 3)       # "él"
+    i := s.find("llo")       # 2
+    t := s.replace("l", "L") # "HéLLo"

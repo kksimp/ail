@@ -1,0 +1,6 @@
+unique struct Conn
+    id int
+
+fn main()
+    pool := [Conn(id: 1)]
+    print(pool[0].id)

@@ -1,0 +1,6 @@
+fn f(x int) int
+    requires old(x) > 0
+    x
+
+fn main()
+    print("")

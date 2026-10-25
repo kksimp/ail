@@ -1,0 +1,5 @@
+use std.proc
+
+fn main() !
+    r := proc.run_bytes("sort", [], b"b\na\n")?
+    print("{r.status} {r.out.len()}")

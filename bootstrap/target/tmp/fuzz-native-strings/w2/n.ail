@@ -1,0 +1,18 @@
+fn main()
+    print("[{"tail\n":>0}]".ends_with("0123456789"))
+    print("[{"[{"  pad ":*^3}]":>1}]" < "x,y,,z".slice(1, 5))
+    print("Hello".contains("x,y,,z"))
+    s3 := "[{"ABC abc":*^9}]".to_str().slice(2, 4)
+    print(s3)
+    print("[{"Hello":*^3}]".byte_len())
+    s5 := "ABC abc"
+    print(s5)
+    s6 := "[{"[{s5:>3}]":*^1}]"
+    print(s6)
+    print(s3.to_str().len())
+    s8 := "{"a\tb"}{"ABC abc".replace("ABC abc", "tail\n")}".trim()
+    print(s8)
+    s9 := "Hello"
+    print(s9)
+    for c in s3.pad_right(11, ' ').slice(1, 3).chars()
+        print(c.is_alpha())

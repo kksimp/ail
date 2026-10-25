@@ -1,0 +1,19 @@
+fn main()
+    # probe 0
+    print(deep(100000))
+    # probe 1
+    print((100).to_float() / (-1).to_float())
+    # probe 2
+    print((4294967296).min(-100).max(-1))
+
+struct Pt
+    a int
+    b int
+
+fn Pt.sum(self) int
+    a + b
+
+fn deep(n int) int
+    if n == 0
+        return 0
+    1 + deep(n - 1)

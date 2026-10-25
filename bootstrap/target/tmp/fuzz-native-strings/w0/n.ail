@@ -1,0 +1,10 @@
+fn main()
+    for c in "a\tb".pad_right(1, '.').chars()
+        print(c.to_upper())
+    print("".to_str().to_lower().len())
+    s2 := "tail\n"
+    print(s2)
+    print("[{"a".pad_right(7, '.'):*^4}]".len())
+    s4 := "[{s2.trim():*^2}]".pad_left(10, ' ')
+    print(s4)
+    print(s4.slice(1, 4) >= "0123456789")

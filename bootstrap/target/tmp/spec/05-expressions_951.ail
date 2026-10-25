@@ -1,0 +1,3 @@
+fn main()
+    zero := 0
+    print(10 / zero)                  # traps: division by zero

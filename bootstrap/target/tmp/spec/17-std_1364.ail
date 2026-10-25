@@ -1,0 +1,5 @@
+use std.proc
+
+fn main()
+    print(proc.which("sh") != none)  # true on Linux and macOS
+    print(proc.which("no-such-program-for-ail"))   # none

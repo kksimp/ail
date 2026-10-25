@@ -1,0 +1,6 @@
+{"ail_record":1,"program":"prog.ail","args":[],"seed":1792559924805961257,"limit":67108864}
+{"call":"time.now_ms","line":2,"col":15,"result":1792559924807}
+{"call":"fs.read_text","line":4,"col":16,"result":"a\nb\nc\n"}
+{"call":"env.get","line":5,"col":17,"result":"first"}
+{"call":"io.read_line","line":6,"col":16,"result":"hello"}
+{"call":"fs.read_text","line":7,"col":16,"result":{"fail":{"struct":"fs.IoError","fields":["missing.txt","not_found"]},"context":[],"trace":[[7,16]]}}

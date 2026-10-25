@@ -1,0 +1,41 @@
+use util.text
+
+pub trait Shape
+    fn area(self) int
+    fn name(self) str
+
+pub struct Circle
+    r int
+
+pub fn Circle.unit() Circle
+    Circle(r: 1)
+
+impl Shape for Circle
+    fn area(self) int
+        3 * square(r)
+    fn name(self) str
+        text.banner("circle")
+
+pub enum Form
+    Round(r int)
+    Box(w int, h int)
+
+pub fn describe(f Form) str
+    match f
+        Round(r) => "round of radius {r}"
+        Form.Box(w, h) => "box of {w * h}"
+
+pub fn total(shapes List[any Shape]) int
+    mut sum := 0
+    for s in shapes
+        sum += s.area()
+    sum
+
+pub struct Stack[T]
+    items List[T]
+
+pub fn Stack[T].size(self) int
+    items.len()
+
+pub fn Stack[T].new() Stack[T]
+    Stack(items: [])

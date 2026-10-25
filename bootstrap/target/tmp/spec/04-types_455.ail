@@ -1,0 +1,4 @@
+
+fn main()
+    "7".pad_left(3, '0')        # 007
+    "ab".pad_right(4, ' ')      # "ab  "

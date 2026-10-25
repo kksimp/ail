@@ -1,0 +1,5 @@
+fn one() float
+    1                            # an int literal in a float position is a float literal
+
+fn main()
+    print(one())                 # 1.0

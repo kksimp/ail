@@ -1,0 +1,6 @@
+fn bump(mut xs List[int])
+    ensures xs.len() == old(xs.len()) + 1
+    xs.push(7)
+
+fn main()
+    print("")

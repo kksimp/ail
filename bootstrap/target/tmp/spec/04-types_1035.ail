@@ -1,0 +1,9 @@
+struct Pos
+    row int
+    col int
+
+fn main()
+    row := 2
+    col := 5
+    p := Pos(row, col)                            # positional: both fields are int
+    print(p.col)                                  # 5

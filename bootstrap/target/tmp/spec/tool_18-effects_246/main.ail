@@ -1,0 +1,5 @@
+use std.random
+
+fn main()
+    random.seed(1)
+    print(random.int(1, 6) <= 6)

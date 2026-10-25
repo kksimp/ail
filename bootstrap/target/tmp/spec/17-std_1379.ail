@@ -1,0 +1,23 @@
+use std.ui
+
+fn main()
+    mut w := ui.open("Demo", 40, 5) else err
+        print("no window: {err.kind}")
+        return
+    w.clear(0x202020)
+    w.put(1, 1, "Hi", 0xFFFFFF, 0x202020)
+    w.put_styled(1, 2, "bold", 0xFFFFFF, 0x202020, ui.Style(bold: true, italic: false, underline: false))
+    w.set_cursor(3, 1, Block)
+    w.set_title("Demo 2")
+    w.set_font_size(18)
+    print(w.font_size())
+    ui.clipboard_set("copied")
+    print(ui.clipboard_get() else "")
+    w.present()
+    e := w.poll_event() else Close
+    match e
+        Mouse(_, _, _, _) => print("click")
+        Scroll(_) => print("wheel")
+        _ => print("other")
+    print(w.modifiers().shift)
+    w.close()

@@ -1,0 +1,7 @@
+fn main()
+    print(6.bit_and(3))         # 2
+    print(6.bit_or(3))          # 7
+    print(6.bit_xor(3))         # 5
+    print(0.bit_not())          # -1
+    print(1.shl(4))             # 16
+    print(-16.shr(2))           # -4: the sign bit is copied in

@@ -1,0 +1,11 @@
+fn show(x int??)
+    print(x)
+
+fn find(id int) int?
+    if id > 0
+        return id
+    none
+
+fn main()
+    v := find(1)                                  # an int?
+    show(v)                                       # error: int? does not convert to int??

@@ -1,0 +1,6 @@
+fn main()
+    n := 65
+    match n
+        65 => print("A")
+        65 => print("again")     # error: already covered by the arm above
+        _ => print("other")

@@ -1,0 +1,3 @@
+fn main()
+    name := "bo"
+    print("hi " + name)

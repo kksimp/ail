@@ -1,0 +1,11 @@
+
+fn main()
+    mut m := Map[str, int]()
+    m["a"] = 1              # inserts
+    m["a"] = 2              # replaces; "a" keeps its position
+    m["a"] += 1             # 3
+    x := m["z"]             # traps: key "z" is missing
+    mut g := Map[int, Map[int, str]]()
+    g[1] = Map[int, str]()
+    g[1][2] = "x"           # inserts key 2 into g[1]
+    g[3][4] = "y"           # traps: g has no key 3

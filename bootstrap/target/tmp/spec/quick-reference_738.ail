@@ -1,0 +1,13 @@
+fn main() !
+    text := fs.read_text("in.txt")?          # str ! fs.IoError
+    fs.write_text("out.txt", text)?           # also append_text
+    names := fs.list_dir(".")?                # sorted names
+    srcs := fs.glob("src/**/*.ail")            # also fs.walk(dir)?: every file, sorted
+    r := proc.run("git", ["status"])?         # no shell; fails only if it can't start
+    print("{r.status} {r.out} {r.err}")      # proc.Output
+    s := proc.run("sort", [], text, 5000)?     # input, then a time limit (kind timed_out)
+    c := proc.start("make", [])?              # returns at once; c.stdin, c.out, c.err are Channel[str]
+    i := task.select([c.out, c.err])          # index of a channel with a value; none when all closed
+    for line in c.out                         # lines as they arrive; ends when the stream does
+        print(line)
+    print(proc.wait(move c)?)                 # status; `kill(move c)` ends it (a unique value)

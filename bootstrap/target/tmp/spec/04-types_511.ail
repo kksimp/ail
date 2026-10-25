@@ -1,0 +1,8 @@
+
+fn main()
+    c := 'f'
+    c.is_alpha()            # true
+    c.to_digit(16)          # 15
+    c.to_digit(10)          # none
+    c.code()                # 102
+    char.from_code(0x41)    # 'A'

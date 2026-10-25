@@ -1,0 +1,16 @@
+use std.time.date
+
+fn main()
+    d := date.Date(year: 2024, month: 2, day: 29)
+    print(d.iso())                                   # 2024-02-29
+    print(d.days())                                  # 19782
+    print(d.weekday())                               # 4: a Thursday
+    print(d.yday())                                  # 60
+    print(date.Date.from_days(0).iso())              # 1970-01-01
+    print(date.Date.new(2023, 2, 29) == none)        # true: no such day
+    print(d.add_days(365).iso())                     # 2025-02-28
+    print(d.since(date.Date(year: 2024, month: 1, day: 1)))   # 59
+    print(date.Date(year: 2024, month: 1, day: 31).add_months(1).iso())   # 2024-02-29
+    print(d.add_years(1).iso())                      # 2025-02-28
+    print(date.is_leap(1900))                        # false
+    print(date.days_in_month(2023, 2))               # 28

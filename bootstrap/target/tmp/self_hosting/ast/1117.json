@@ -1,0 +1,3 @@
+{"fns":[],"structs":[],"enums":[],"traits":[],"impls":[],"consts":[{"name":"msg","pos":{"line":1.0,"col":1.0},"doc":null,"value":{"kind":"Call","callee":{"kind":"Name","name":"format","pos":{"line":1.0,"col":8.0}},"args":[{"label":null,"mutable":false,"moved":false,"value":{"kind":"Str","value":"Hello, ! You have  new messages.","pos":{"line":1.0,"col":15.0}},"param":null},{"label":null,"mutable":false,"moved":false,"value":{"kind":"Name","name":"name","pos":{"line":1.0,"col":55.0}},"param":null},{"label":null,"mutable":false,"moved":false,"value":{"kind":"Name","name":"count","pos":{"line":1.0,"col":61.0}},"param":null}],"pos":{"line":1.0,"col":14.0}}}],"uses":[],"public":[],"files":[],"grants":[],"generated":[]}
+1:23 diag lex.str.2
+1:36 diag lex.str.2

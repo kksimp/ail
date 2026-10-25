@@ -1,0 +1,12 @@
+error enum Oops
+    Bad
+
+fn risky() int ! Oops
+    return Oops.Bad
+
+
+fn main()
+    n := risky() else err
+        print("failed: {err}")
+        0
+    print(n)

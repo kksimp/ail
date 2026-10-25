@@ -1,0 +1,17 @@
+unique struct Conn
+    id int
+
+impl Drop for Conn
+    fn drop(mut self)
+        print("close {id}")
+
+# prints "open 1", "open 2", "took 2", "close 2", then "close 1" when the block ends
+
+fn main()
+    mut pool := List[Conn]()
+    pool.push(move Conn(id: 1))
+    pool.push(move Conn(id: 2))
+    for c in pool
+        print("open {c.id}")
+    if c := pool.pop()
+        print("took {c.id}")

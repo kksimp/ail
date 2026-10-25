@@ -1,0 +1,10 @@
+error enum Oops
+    Bad
+
+fn check(n int) int ! Oops
+    if n < 0
+        return Oops.Bad
+    n
+
+fn main()
+    print("")

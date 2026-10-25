@@ -1,0 +1,16 @@
+# fuzz-input: text
+# fuzz-needs:
+# Strings: slicing, case, splitting and formatting on adversarial text never crash,
+# and the pieces of a split join back to the whole.
+
+fn main()
+    s := "\n"
+    t := "é😀 b\\  ab\{ab😀\\ \\"
+    parts := s.split(",")
+    if parts.join(",") != s
+        print("FAIL split then join changed the text")
+    print(s.to_upper().to_lower().len() >= 0)
+    print(s.chars().len() == s.chars().len())
+    print(s.contains(t))
+    print("{s:>8}|{t:<4}|")
+    print(s.trim().len() <= s.len())

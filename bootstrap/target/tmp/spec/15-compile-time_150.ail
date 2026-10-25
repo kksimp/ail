@@ -1,0 +1,14 @@
+@derive(derive_loud) trait Loud
+    fn loud(self) str
+
+fn derive_loud(t TypeInfo) str ! DeriveError
+    print("deriving {t.name}")
+    "fn loud(self) str\n    \"{t.name}!\"\n"
+
+struct Bell
+    size int
+
+impl Loud for Bell
+
+fn main()
+    print(Bell(size: 1).loud())

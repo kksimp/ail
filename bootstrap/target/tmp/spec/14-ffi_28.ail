@@ -1,0 +1,6 @@
+extern c "libm" fn hypot(a float, b float) float
+extern c fn abs(x i32) i32
+extern c fn strlen(s *u8) int
+
+fn main()
+    print("")

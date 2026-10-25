@@ -1,0 +1,52 @@
+fn f0(n int) int
+    if n > 6 then n - 8 else n + 8
+
+fn f1(n int) int
+    if n > 2 then n - 3 else n + 3
+
+fn apply(f fn(int) int, x int) int
+    f(x)
+
+fn twice(f fn(int) int, x int) int
+    f(f(x))
+
+fn pick(which int) fn(int) int
+    if which % 2 == 0
+        f0
+    else
+        f1
+
+fn each(f fn(int), n int)
+    for i in 0..n
+        f(i)
+
+fn show(n int)
+    print("show {n}")
+
+fn mix(a int, b float, c int) float
+    a.to_float() * b + c.to_float()
+
+fn many(f fn(int, float, int) float, a int) float
+    f(a, 1.5, a + 1)
+
+fn main()
+    print(pick(39)(39))
+    print(pick(33)(33))
+    print(twice(f1, 1))
+    print([-1, 19, -5, 24, 23, 29].sorted(by: |x| -x))
+    mut total4 := 0
+    for k in 0..3
+        h := if k % 2 == 0 then f0 else f0
+        total4 += h(k)
+    print(total4)
+    print(twice(f0, 22))
+    print(["b", "a", "é", "", "ab"].sorted(by: |v| v.len()))
+    mut total7 := 0
+    for k in 0..2
+        h := if k % 2 == 0 then f0 else f0
+        total7 += h(k)
+    print(total7)
+    g8 := f1
+    print(g8(34))
+    print([13, 5, 7, 14, 17].sorted(by: |x| -x))
+    print(many(mix, 12))

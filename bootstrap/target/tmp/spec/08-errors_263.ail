@@ -1,0 +1,16 @@
+error enum A
+    X
+error enum B
+    Y
+
+fn a() int ! A
+    return A.X
+
+fn b() int ! B
+    return B.Y
+
+fn both() int ! A | B
+    return a()? + b()?
+
+fn main()
+    print("")

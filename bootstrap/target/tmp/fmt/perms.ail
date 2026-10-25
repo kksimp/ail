@@ -1,0 +1,38 @@
+## An agent-style permission checker: a Unix mode is one number and each
+## permission is one bit, read with `bit_and` (expr.bit.1).
+##   ./ail run examples/perms.ail
+
+BITS := [256, 128, 64, 32, 16, 8, 4, 2, 1]
+MARKS := ["r", "w", "x", "r", "w", "x", "r", "w", "x"]
+
+fn has(mode int, bit int) bool
+    mode.bit_and(bit) != 0
+
+fn symbolic(mode int) str
+    mut out := []
+    for i in 0..9
+        out.push(if has(mode, BITS[i]) then MARKS[i] else "-")
+    out.join("")
+
+fn can(mode int, who int, want int) bool
+    has(mode, BITS[who * 3 + want])
+
+struct File
+    name str
+    mode int
+
+fn main() !
+    files := [
+        File(name: "notes.txt", mode: 420),
+        File(name: "run.sh", mode: 493),
+        File(name: "secret.key", mode: 384),
+        File(name: "shared", mode: 509),
+    ]
+    for f in files
+        owner_write := if can(f.mode, 0, 1) then "yes" else "no"
+        other_read := if can(f.mode, 2, 0) then "yes" else "no"
+        print("{f.name:<12}{symbolic(f.mode)}  owner write: {owner_write}, others read: {other_read}")
+    mut owner := 0
+    for w in 0..3
+        owner += if has(384, BITS[w]) then 1 else 0
+    print("mode 0o600 has {owner} owner bits")

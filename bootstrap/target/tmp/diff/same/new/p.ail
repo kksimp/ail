@@ -1,0 +1,16 @@
+## Adds.
+pub fn add(a int, b int, c int) int
+    requires c >= 0
+    a + b
+
+fn same() int
+    2
+
+fn fresh() int
+    todo
+
+@test fn adds()
+    assert(add(1, 2, 0) == 4)
+
+fn main()
+    print(add(1, 2, 0))

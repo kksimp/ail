@@ -1,0 +1,19 @@
+fn main()
+    # probe 0
+    mut xs := [3, 1, 2]
+    xs.swap(4294967296, 2)
+    print(xs)
+    # probe 1
+    print([1].min())
+
+struct Pt
+    a int
+    b int
+
+fn Pt.sum(self) int
+    a + b
+
+fn deep(n int) int
+    if n == 0
+        return 0
+    1 + deep(n - 1)

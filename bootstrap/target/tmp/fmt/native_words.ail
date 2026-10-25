@@ -1,0 +1,18 @@
+# Strings in the native subset: join, len, `chars`, a literal with
+# interpolation, and `to_int() else` as a binding's value.
+fn parse_or_zero(s str) int
+    n := s.to_int() else 0
+    n
+
+fn main()
+    words := ["native", "code", "runs", "fast"]
+    print(words.join(" "))
+    mut letters := 0
+    for w in words
+        print("{w}: {w.len()} bytes, {w.chars().len()} characters")
+        letters += w.len()
+    print("{letters} letters in all")
+    mut total := 0
+    for field in ["3", "4", "x", "10"]
+        total += parse_or_zero(field)
+    print("sum of 3, 4, x and 10 is {total}")

@@ -1,0 +1,16 @@
+struct Point
+    x int
+
+fn Point.shift(mut self, d int)
+    x += d
+
+## Adds.
+fn add(a int, b int) int
+    requires a >= 0
+    a + b
+
+fn old() int
+    1
+
+fn main()
+    print(nope)

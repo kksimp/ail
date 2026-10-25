@@ -1,0 +1,22 @@
+
+fn main()
+    b := b"hello\x00\n"
+    print(b.len())                       # 7
+    print(b[1])                          # 101
+    print(b[1..3])                       # b"el"
+    print(b[..2] + b[3..])               # b"helo\x00\n"
+    print(b.hex())                       # 68656c6c6f000a
+    print("hi".to_bytes().to_list())     # [104, 105]
+    print(bytes.from_base64("aGk=") else b"")
+    for x in b"abc"
+        print(x)                         # 97 98 99
+    print(b.to_str() else "bad")         # bad: the NUL byte is valid UTF-8, so this prints the text
+    print(b"\xff".text().len())          # 1: one U+FFFD
+    print(b.find(b"ll") else -1)         # 2
+    print(b.contains(b"lo"))             # true
+    print(b.starts_with(b"he"))          # true
+    print(b.ends_with(b"\n"))            # true
+    print("é".to_bytes().len())          # 2
+    print(bytes.zeros(3).hex())          # 000000
+    print(bytes.from_list([104, 105]))   # b"hi"
+    print(bytes.from_hex("ff") else b"") # b"\xff"

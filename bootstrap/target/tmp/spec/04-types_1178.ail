@@ -1,0 +1,5 @@
+fn main()
+    x := 2.5
+    print("{x:.0} {x:.2}")                        # 2 2.50: half to even
+    n := 255
+    print("{n:x}")                                # ff

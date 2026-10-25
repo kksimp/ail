@@ -1,0 +1,4 @@
+use geo
+
+pub fn far() int
+    geo.origin().x

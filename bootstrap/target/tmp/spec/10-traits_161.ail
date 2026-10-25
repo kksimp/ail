@@ -1,0 +1,13 @@
+trait Zero
+    fn zero() Self
+
+impl Zero for int
+    fn zero() int
+        0
+
+fn zeros[T Zero](n int) List[T]
+    [T.zero() for _ in 0..n]
+
+
+fn main()
+    print(zeros[int](3))     # [0, 0, 0]

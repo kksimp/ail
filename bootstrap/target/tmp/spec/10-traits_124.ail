@@ -1,0 +1,8 @@
+trait Named Eq
+    fn name(self) str
+
+fn same_name[T Named](a T, b T) bool
+    a == b or a.name() == b.name()
+
+fn main()
+    print("")

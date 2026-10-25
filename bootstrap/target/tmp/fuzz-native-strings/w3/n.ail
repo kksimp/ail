@@ -1,0 +1,9 @@
+fn main()
+    print("x,y,,z".pad_left(3, '0') < "0123456789".pad_right(2, '-').trim())
+    for c in "0123456789".to_upper().chars()
+        print(c.is_lower())
+    s2 := "0123456789"
+    print(s2)
+    s3 := "[{"[{s2:*^10}]":>1}]"
+    print(s3)
+    print(s2.chars().len())

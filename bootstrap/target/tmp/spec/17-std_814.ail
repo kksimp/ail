@@ -1,0 +1,8 @@
+use std.random
+
+fn main()
+    random.seed(1)
+    mut deck := [1, 2, 3, 4, 5]
+    random.shuffle(mut deck)
+    print(deck.len())
+    print(random.int(1, 6) <= 6)

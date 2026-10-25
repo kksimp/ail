@@ -1,0 +1,6 @@
+struct Point
+    x int
+
+fn main()
+    Point := 3                # error: a local may not take a type's name
+    print(Point)

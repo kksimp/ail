@@ -1,0 +1,12 @@
+fn kind(c char) int
+    match c
+        '0' | '1' => 1
+        'a' | 'b' | 'c' => 2
+        '\n' => return 0
+        _ => 3
+
+fn main()
+    print(kind('1'))          # 1
+    print(kind('b'))          # 2
+    print(kind('\n'))         # 0
+    print(kind('z'))          # 3

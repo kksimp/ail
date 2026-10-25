@@ -1,0 +1,13 @@
+struct Counter
+    n int
+
+fn Counter.bump(mut self)
+    n += 1
+
+
+fn main()
+    a := ref Counter(n: 0)
+    b := a
+    b.bump()
+    assert(a.n == 1)
+    assert(a == b)

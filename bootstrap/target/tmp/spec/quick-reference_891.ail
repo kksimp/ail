@@ -1,0 +1,14 @@
+use std.mem
+
+extern c "libm" fn hypot(a float, b float) float
+extern c fn strlen(s *u8) int
+
+fn c_length(text str) int
+    unsafe
+        p := mem.cstr(text)
+        n := strlen(p)
+        mem.free(p)
+        n
+
+fn main()
+    print("")

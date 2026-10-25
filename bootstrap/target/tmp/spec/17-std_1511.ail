@@ -1,0 +1,7 @@
+use std.compress
+
+fn main()
+    text := compress.inflate(b"\x01\x02\x03") else err
+        print(err.kind)               # corrupt: malformed data
+        b""
+    print(text.len())

@@ -1,0 +1,128 @@
+struct Pt
+    a int
+    b int
+
+fn Pt.sum(self) int
+    a + b
+
+fn Pt.shift(mut self, d int)
+    a += d
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn Shape.area(self) int
+    match self
+        Circle(r) => 3 * r * r
+        Rect(w, h) => w * h
+        Dot => 0
+
+fn mul(a int, b int) int
+    a * b
+
+trait Weigh
+    fn weight(self) int
+    fn heavy(self) bool
+        weight() > 10
+
+impl Weigh for Pt
+    fn weight(self) int
+        a * 2 + b
+
+fn largest[T Ord](items List[T]) T
+    mut best := items[0]
+    for x in items
+        if x > best
+            best = x
+    best
+
+fn guarded(x int) int
+    requires x == x
+    ensures result >= 0 or result < 0
+    x
+
+fn chain(x int) !int
+    y := check_pos(x)? "chain"
+    y + 1
+
+error enum Fail
+    Neg(n int)
+
+fn check_pos(x int) int ! Fail
+    if x < 0
+        return Fail.Neg(n: x)
+    x
+
+fn pick(xs List[int], i int) int?
+    if i >= 0 and i < xs.len()
+        return xs[i]
+    none
+
+fn f0(p0 :=, p1 int) int
+    v1 := Pt(b: p1.min(p1), a: Pt(a: 7, b: 0).b)
+    v2 := ((6.4 - 7.7) / (8.9 - 0.7))
+    (p0 % 1)
+
+fn f1(p0 int, p1 int) int
+    v3 := {"a": p1, "b": p1}.values()
+    if true
+        for k4 in "Hi".lines()
+            print((p1 * p0))
+            t5 := spawn check_pos(Pt(a: 4, b: 1).sum())
+            w6 := t5.wait() else 0
+            print((p0 - 18))
+        t7 := spawn f0(p1, (p1 + 14))
+        w8 := t7.wait() else 0
+        print(19)
+    else
+        v9 := Pt(b: (pick([1, 2], 1) else 0), a: "x y".len())
+        v13 := match Shape.Rect(w: p0, h: p1)
+            Circle(r10) => r10 + Shape.Dot.area()
+            Rect(w11, _) => w11 * (pick([1, 2], 1) else 0)
+            Dot => p1
+        print((v13 * p1))
+    Pt(b: p1, a: p0).weight()
+
+fn main()
+    if o14 := pick([18 + j15 for j15 in 0..4], f1(16, 3))
+        if true
+            print((o14 + o14))
+            v16 := ((5.3 / 6.8) * 6.0)
+            print("")
+        elif [6, 4, 9].contains(15)
+            print("{("a")}/{(true)}")
+        else
+            if "".trim().contains("a")
+                print("Hi".lines().join("-"))
+                mut m17 := [8, 9].join(",").repeat(1)
+                print(m17 == m17)
+            elif not (false)
+                print(19)
+            else
+                mu18 := Mutex(19)
+                x19 := mu18.lock()
+                mu18.unlock(x19 + 1)
+                print({"a": ("x y".slice(0, 0).len() + ("Hi".find("a") else 1)), "b": x19}.get("b"))
+                print(not (false))
+            print((5.9).to_int())
+        print(7)
+    else
+        print("Hi".trim())
+    if o20 := pick([15, 14, 1], 10)
+        match Shape.Dot
+            Circle(r21) => print(r21)
+            Rect(w22, h23) => print(w22 + h23)
+            Dot => print("{(Pt(a: 7, b: 5))}".len() + (8.5).to_int())
+        print([7].contains(o20))
+    else
+        print(true)
+    mut m24 := Pt(b: 19, a: 15)
+    if "x y".to_upper().contains("a")
+        print("x y" == "a")
+    for k25 in 0..=2
+        print(14)
+        v26 := Shape.Rect(w: "a".len(), h: (k25 - k25))
+        print(["a", "b"].join("-"))
+    print((7.1 * (0.4 + 6.4)))

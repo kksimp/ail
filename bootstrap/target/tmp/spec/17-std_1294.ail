@@ -1,0 +1,12 @@
+use std.fs
+
+fn main() !
+    fs.write_text("fs_d.txt", "hello")?
+    m := fs.metadata("fs_d.txt")?
+    print(m.size)                    # 5
+    print(m.is_dir)                  # false
+    fs.copy("fs_d.txt", "fs_d2.txt")?
+    fs.rename("fs_d2.txt", "fs_d3.txt")?
+    print(fs.read_text("fs_d3.txt")?)  # hello
+    fs.remove("fs_d.txt")?
+    fs.remove("fs_d3.txt")?

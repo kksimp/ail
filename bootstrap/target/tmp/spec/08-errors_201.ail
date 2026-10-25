@@ -1,0 +1,6 @@
+fn port(text str) !int
+    text.to_int()? "port {text}"
+
+fn main()
+    print(port("8080") else 0)   # 8080
+    print(port("http") else -1)  # -1

@@ -1,0 +1,9 @@
+use std.fs
+
+fn load(path str) str ! fs.IoError
+    fs.read_text(path)? "loading {path}"
+
+fn main()
+    text := fs.read_text("notes.txt") else err
+        print("{err.kind}: {err.path}")
+        ""

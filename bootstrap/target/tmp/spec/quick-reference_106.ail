@@ -1,0 +1,12 @@
+fn squares(n int) List[int]
+    mut out := List[int]()
+    for i in 0..n
+        out.push(i * i)
+    out
+
+fn main()
+    MAX_DEPTH := 64
+    KEYWORDS := {"if", "else", "while"}     # a Set[str]
+    WORDS := "fn if else".split(" ")
+    SQUARES := squares(8)                   # squares must be free of I/O
+

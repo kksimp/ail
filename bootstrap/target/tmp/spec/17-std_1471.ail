@@ -1,0 +1,8 @@
+use std.compress
+
+fn main() !
+    compress.gzip_file("notes.txt", "notes.txt.gz")?
+    compress.gunzip_file("notes.txt.gz", "notes2.txt")?
+    compress.zip_dir("site", "site.zip")?
+    compress.unzip("site.zip", "unpacked")?
+    print("done")                     # the system gzip and unzip read this output

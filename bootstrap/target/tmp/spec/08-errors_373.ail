@@ -1,0 +1,9 @@
+error enum Oops
+    Bad
+
+fn first(xs List[int]) int ! Oops
+    m := xs.max() else return Oops.Bad
+    m
+
+fn main()
+    print("")

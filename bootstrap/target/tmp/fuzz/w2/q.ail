@@ -1,0 +1,133 @@
+struct Pt
+    a int
+    b int
+
+fn Pt.sum(self) int
+    a + b
+
+fn Pt.shift(mut self, d int)
+    a += d
+
+enum Shape
+    Circle(r int)
+    Rect(w int, h int)
+    Dot
+
+fn Shape.area(self) int
+    match self
+        Circle(r) => 3 * r * r
+        Rect(w, h) => w * h
+        Dot => 0
+
+fn mul(a int, b int) int
+    a * b
+
+trait Weigh
+    fn weight(self) int
+    fn heavy(self) bool
+        weight() > 10
+
+impl Weigh for Pt
+    fn weight(self) int
+        a * 2 + b
+
+fn largest[T Ord](items List[T]) T
+    mut best := items[0]
+    for x in items
+        if x > best
+            best = x
+    best
+
+fn guarded(x int) int
+    requires x == x
+    ensures result >= 0 or result < 0
+    x
+
+fn chain(x int) !int
+    y := check_pos(x)? "chain"
+    y + 1
+
+error enum Fail
+    Neg(n int)
+
+fn check_pos(x int) int ! Fail
+    if x < 0
+        return Fail.Neg(n: x)
+    x
+
+fn pick(xs List[int], i int) int?
+    if i >= 0 and i < xs.len()
+        return xs[i]
+    none
+
+fn f0(p0 int, p1 int) int
+    if o1 := pick([p0 + j2 for j2 in 0..3], 10.min(p0))
+        v3 := pick([1, 2], 1)
+        print(o1 <= o1)
+    else
+        print([4].contains(p0))
+    12
+
+fn f1(p0 int, p1 int) int
+    mut m4 := {"a": p1.min(p1), "b": 18}
+    print(("x y".slice(0, 0).len() + ("a".find("a") else 1)))
+    if (m4.contains("a")) and ("b" == "ab")
+        print(Pt(a: 4, b: 5).weight())
+        v5 := Pt(b: "ab".len(), a: ("b".slice(0, 0).len() + ("Hi".find("a") else 1)))
+        print((3.0).to_int())
+    elif (true) and (false)
+        print("a".len())
+    else
+        print("n={(p1)}")
+    ch6 := Channel[int](4)
+    ch6.send(largest([7, 15, 1]))
+    ch6.send([7, 9, 8].len())
+    ch6.close()
+    r7 := ch6.recv() else 0
+    12
+
+fn f2(p0 int, p1 int) int
+    v8 := Pt(b: (check_pos(2) else 0), a: (p1 + p0))
+    print(["", "Hi"])
+    mut m9 := [3].join(",")
+    if {"a": p0, "b": p0}.contains("a")
+        mu10 := Mutex(p0)
+        x11 := mu10.lock()
+        mu10.unlock(x11 + 1)
+        for k12 in ["ab", "b"]
+            print("n={((5 % 2))}")
+            print(16)
+        print(largest([0, 1, 1]))
+    elif {"a": 0, "b": 5}.contains("a")
+        print([6, 9, 8, 2].contains(6))
+    mut m13 := Pt(a: 4, b: 3)
+    ("Hi".repeat(1).slice(0, 0).len() + ("".find("a") else 1))
+
+fn main()
+    mut w14 := 0
+    while w14 < 4
+        w14 += 1
+        print((check_pos(4) else 0))
+    print(19.min(10))
+    print("a")
+    print(Pt(b: Pt(a: 7, b: 4).b, a: [6, 4].len().min(w14)))
+    v15 := 0.9
+    print("{("n={(w14)}")}/{(w14 != 0)}")
+    for k16 in [4, w14, 1]
+        print([3, 9].contains(k16))
+    mut m17 := [4, 4]
+    mu18 := Mutex((pick([1, 2], 1) else 0))
+    x19 := mu18.lock()
+    mu18.unlock(x19 + 1)
+    if m17.len() < ("Hi".slice(0, 0).len() + ("a".find("a") else 1))
+        print(m17.join(","))
+        v20 := Shape.Dot
+        print(false)
+    else
+        ch21 := Channel[int](4)
+        ch21.send(w14)
+        ch21.send(Pt(a: 2, b: 6).sum())
+        ch21.close()
+        r22 := ch21.recv() else 0
+        print(true)
+    print((16 % 3))

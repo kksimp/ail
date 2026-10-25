@@ -1,0 +1,5 @@
+pub struct P
+    pub x int
+
+pub fn origin() P
+    P(x: 0)

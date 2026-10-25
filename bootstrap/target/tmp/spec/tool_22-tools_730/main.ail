@@ -1,0 +1,7 @@
+@test
+fn repeated()
+    for i in [1, 2]
+        assert_eq(i, 1)
+
+fn main()
+    print("")

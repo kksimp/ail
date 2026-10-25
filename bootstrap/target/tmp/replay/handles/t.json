@@ -1,0 +1,2 @@
+{"ail_record":1,"program":"sleep.ail","args":[],"seed":1792559924817024861,"limit":67108864}
+{"call":"time.sleep_ms","line":2,"col":10,"trap":"std.time.2","message":"can't sleep for -1 milliseconds"}

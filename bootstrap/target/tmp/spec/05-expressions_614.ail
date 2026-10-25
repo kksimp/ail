@@ -1,0 +1,5 @@
+fn scale(n int, by int) int
+    n * by
+
+fn main()
+    print(scale(4, 3))        # 12: one argument per parameter, each of its type

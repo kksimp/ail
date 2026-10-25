@@ -1,0 +1,9 @@
+pub struct Account
+    pub owner str
+    balance int          # private: other modules call Account.open()
+
+pub fn Account.open(owner str) Account
+    Account(owner, balance: 0)
+
+fn main()
+    print("")

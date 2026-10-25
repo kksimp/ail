@@ -1,0 +1,4 @@
+fn main()
+    mut total := 0
+    total = "two"             # error: the value must have the type of total
+    print(total)

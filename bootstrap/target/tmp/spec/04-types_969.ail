@@ -1,0 +1,5 @@
+fn too_big() u8
+    256                            # error: 256 doesn't fit in u8
+
+fn main()
+    print("")

@@ -1,0 +1,5 @@
+use std.io
+use std.fs as io                      # error: `io` is already the name of a module
+
+fn main()
+    print("")

@@ -1,0 +1,6 @@
+use std.time
+
+fn main()
+    start := time.now_ms()
+    time.sleep_ms(1)
+    print(time.now_ms() >= start)    # true

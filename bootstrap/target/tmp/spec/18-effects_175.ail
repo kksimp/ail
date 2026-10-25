@@ -1,0 +1,15 @@
+trait Speak
+    fn say(self) str
+
+struct Dog
+    name str
+
+impl Speak for Dog
+    fn say(self) str
+        "woof from {self.name}"
+
+fn talk(s any Speak) str
+    s.say()
+
+fn main()
+    print(talk(Dog(name: "rex")))

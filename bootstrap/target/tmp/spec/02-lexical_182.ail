@@ -1,0 +1,7 @@
+
+fn main()
+    pat := r"\d+\.\d+"                  # the text \d+\.\d+
+    src := r"""
+        fn main()
+            print("{x}")
+        """                              # the text fn main() ... print("{x}")

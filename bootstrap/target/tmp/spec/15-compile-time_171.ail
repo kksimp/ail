@@ -1,0 +1,16 @@
+@derive(derive_size) trait Size
+    fn size(self) int
+
+fn derive_size(t TypeInfo) str ! DeriveError
+    if t.kind == TypeKind.Enum
+        return DeriveError("`Size` needs a struct; `{t.name}` is an enum")
+    "fn size(self) int\n    {t.fields.len()}\n"
+
+enum Light
+    On
+    Off
+
+impl Size for Light
+
+fn main()
+    print(Light.On.size())

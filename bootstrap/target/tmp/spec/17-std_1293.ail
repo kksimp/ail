@@ -1,0 +1,18 @@
+use std.proc
+
+fn main() !
+    r := proc.run("sh", ["-c", "printf hi"])?
+    print(r.status)                  # 0
+    print(r.out)                     # hi
+    s := proc.run("sh", ["-c", "exit 3"])?
+    print(s.status)                  # 3: a process that fails is still a successful run
+    echoed := proc.run("sh", ["-c", "cat"], "b\na\n", 2000)?
+    print(echoed.out)                # the input is the standard input
+    t := proc.run("sh", ["-c", "sleep 5"], none, 100) else err
+        print(err.kind)              # timed_out
+        return
+    print(t.status)
+    u := proc.run("no-such-program-for-ail", []) else err
+        print(err.kind)              # not_found
+        return
+    print(u.status)

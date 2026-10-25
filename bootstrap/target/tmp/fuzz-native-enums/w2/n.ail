@@ -1,0 +1,107 @@
+enum Color
+    Red
+    Green
+    Blue
+
+enum Shape
+    Dot
+    Circle(r int)
+    Rect(w int, h int)
+    Label(text str, size int)
+
+enum Tree
+    Leaf
+    Node(left Tree, value int, right Tree)
+
+fn code(c Color) int
+    match c
+        Red => 7
+        Green => 26
+        Blue => 7
+
+fn area(s Shape) int
+    match s
+        Dot => 0
+        Circle(r) => 3 * r * r
+        Rect(w, h) => w * h
+        Label(_, n) => n
+
+fn big(s Shape) bool
+    match s
+        Circle(r) if r > 7 => true
+        Rect(w, h) if w * h > 26 => true
+        Circle(_) | Rect(_, _) => false
+        Dot | Label(_, _) => false
+
+fn name(s Shape) str
+    match s
+        Dot => "dot"
+        Circle(_) => "circle"
+        Rect(_, _) => "rect"
+        Label(t, _) => t
+
+fn bucket(n int) str
+    match n
+        0 => "zero"
+        1 | 2 | 3 => "few"
+        4..6 => "some"
+        _ => "many"
+
+fn word(s str) int
+    match s
+        "one" => 1
+        "two" | "three" => 23
+        _ => 0
+
+fn insert(t Tree, v int) Tree
+    match t
+        Leaf => Node(left: Leaf, value: v, right: Leaf)
+        Node(l, x, rt) =>
+            if v < x
+                Node(left: insert(l, v), value: x, right: rt)
+            else
+                Node(left: l, value: x, right: insert(rt, v))
+
+fn sum(t Tree) int
+    match t
+        Leaf => 0
+        Node(l, x, rt) => sum(l) + x + sum(rt)
+
+fn depth(t Tree) int
+    match t
+        Leaf => 0
+        Node(l, _, rt) =>
+            dl := depth(l)
+            dr := depth(rt)
+            if dl > dr then dl + 1 else dr + 1
+
+fn pick(i int) Color
+    match i % 3
+        0 => Red
+        1 => Green
+        _ => Blue
+
+fn main()
+    mut total0 := 0
+    for i in 0..8
+        total0 += code(pick(i))
+    print(total0)
+    print(area(Shape.Label("", 22)))
+    print(bucket(2))
+    print(word(["one", "two", "three", "four"][18 % 4]))
+    print(word(["one", "two", "three", "four"][1 % 4]))
+    print(big(Shape.Dot))
+    mut t6 := Tree.Leaf
+    for i in 0..4
+        t6 = insert(t6, (i * 6) % 6)
+    print(sum(t6))
+    print(depth(t6))
+    print(Shape.Rect(w: 5, h: 7) == Shape.Circle(9))
+    shapes8 := [Shape.Rect(w: 11, h: 2), Shape.Label("", 27), Shape.Dot]
+    mut sum8 := 0
+    for s in shapes8
+        sum8 += area(s)
+    print(sum8)
+    print(shapes8[0] == shapes8[1])
+    print(name(Shape.Label("a", 11)))
+    print("done")

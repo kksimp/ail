@@ -1,0 +1,4 @@
+
+fn main()
+    mut out := []
+    out.push("a")          # out is List[str]

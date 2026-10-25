@@ -1,0 +1,2 @@
+fn main()
+    print(1 < 2 < 3)                  # error: two comparisons in sequence

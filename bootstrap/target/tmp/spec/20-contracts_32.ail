@@ -1,0 +1,6 @@
+fn h(x int)
+    print(x)
+    requires x > 0
+
+fn main()
+    print("")

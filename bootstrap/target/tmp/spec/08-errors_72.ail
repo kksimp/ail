@@ -1,0 +1,12 @@
+error enum ParseError
+    Empty
+    BadNumber(text str)
+
+fn parse_qty(s str) int ! ParseError
+    if s == ""
+        return Empty
+    n := s.to_int() else return BadNumber(text: s)
+    n
+
+fn main()
+    print("")

@@ -1,0 +1,9 @@
+unsafe fn twice(x int) int
+    x * 2
+
+fn safe_twice(x int) int
+    unsafe
+        twice(x)
+
+fn main()
+    print("")

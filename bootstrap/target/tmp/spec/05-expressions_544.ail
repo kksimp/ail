@@ -1,0 +1,5 @@
+fn main()
+    x := 1                    # immutable: never reassigned
+    mut y := 2                # mutable
+    y = y + x                 # `=` assigns to an existing mut binding
+    print(y)                  # 3

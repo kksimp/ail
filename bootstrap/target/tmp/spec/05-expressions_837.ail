@@ -1,0 +1,12 @@
+enum Dir
+    North
+    East
+    South
+
+fn name(d Dir) str
+    match d                      # error: South is not covered
+        North => "n"
+        East => "e"
+
+fn main()
+    print("")

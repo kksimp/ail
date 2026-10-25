@@ -1,0 +1,5 @@
+use std.compress
+
+fn main() !
+    z := compress.gzip("abc abc abc abc")
+    print(compress.gunzip(z)?.to_str() else "binary")

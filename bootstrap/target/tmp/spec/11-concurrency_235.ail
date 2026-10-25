@@ -1,0 +1,12 @@
+fn worker(jobs Channel[int])
+    for v in jobs
+        print("got {v}")
+    print("stopped: {task.cancelled()}")
+
+fn main() !
+    jobs := Channel[int](4)
+    g := TaskGroup()
+    g.add(spawn worker(jobs))
+    jobs.send(1)
+    g.cancel()
+    g.wait_all()?

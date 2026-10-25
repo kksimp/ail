@@ -1,0 +1,7 @@
+@test fn loops()
+    for i in 0..3
+        assert_eq(i * 2, 0)
+
+@test fn named()
+    want := 3
+    assert_eq(1 + 1, want)

@@ -1,0 +1,7 @@
+struct User
+    id int
+    name str
+
+fn main()
+    u := User(id: 1)                              # error: `name` is not set
+    print(u.id)

@@ -1,0 +1,5 @@
+fn first(xs List[int]) int
+    xs.max() else 0
+
+fn main()
+    print("")

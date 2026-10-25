@@ -1,0 +1,8 @@
+struct Node
+    value int
+    children List[ref Node]
+
+
+fn main()
+    root := ref Node(value: 1, children: [])
+    root.value = 2

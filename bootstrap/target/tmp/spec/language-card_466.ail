@@ -1,0 +1,10 @@
+fn main()
+    xs := [1, 2, 3, 4]
+    mut out := [0, 0, 0, 0]
+    par for i in 0..4               # asserts the iterations are independent
+        out[i] = xs[i] * xs[i]
+    sq := [x * x par for x in xs]   # a list computed on the thread pool
+    n := Atomic(0)                  # shared by tasks and `par for` without a lock
+    par for x in xs
+        n.add(x)
+    print("{out} {sq} {n.load()}")

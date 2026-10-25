@@ -1,0 +1,5 @@
+fn scale(n int, by int) int
+    n * by
+
+fn main()
+    print(scale(4))           # error: one argument per parameter

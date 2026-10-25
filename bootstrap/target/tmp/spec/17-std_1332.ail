@@ -1,0 +1,8 @@
+use std.io
+
+fn main()
+    line := io.read_line() else "no input"
+    print(line)                      # no input: the harness gives an empty standard input
+    print(io.read_all().len())       # 0
+    io.eprint("to standard error")
+    io.exit(0)

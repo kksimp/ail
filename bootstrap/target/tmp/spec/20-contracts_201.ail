@@ -1,0 +1,13 @@
+struct Account
+    balance int
+    limit int
+    invariant balance >= 0
+    invariant balance <= limit
+
+fn Account.deposit(mut self, n int)
+    balance += n
+
+fn main()
+    mut a := Account(balance: 5, limit: 10)
+    a.deposit(3)
+    print(a.balance)

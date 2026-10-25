@@ -1,0 +1,9 @@
+use std.hash
+
+fn main()
+    print(hash.sha256("abc"))         # ba7816bf...: the FIPS 180-4 digest
+    print(hash.sha384("abc").len())   # 96 hex digits
+    print(hash.sha512("abc").len())   # 128 hex digits
+    print(hash.hmac_sha256("key", "The quick brown fox jumps over the lazy dog").len())   # 64
+    print(hash.crc32("abc"))          # 891568578
+    print(hash.hash64("abc") == hash.hash64("abc"))   # true: the same on every run

@@ -1,0 +1,3 @@
+# a comment line
+fn main()
+    print(1)

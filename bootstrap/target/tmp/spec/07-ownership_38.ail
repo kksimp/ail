@@ -1,0 +1,6 @@
+
+fn main()
+    mut counts := Map[str, int]()
+    counts["a"] = 1      # inserts
+    counts["a"] += 1     # fine: "a" is present
+    counts["b"] += 1     # traps: "b" is missing

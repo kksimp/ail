@@ -1,0 +1,13 @@
+enum Token
+    Number(v int)
+    Plus
+    Label(s str)
+
+fn kind(t Token) str
+    match t
+        Number | Label => "atom"   # bare: any fields, binds nothing
+        Plus => "op"
+
+fn main()
+    print(kind(Token.Number(v: 4)))   # atom
+    print(kind(Plus))                 # op

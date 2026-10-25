@@ -1,0 +1,5 @@
+
+fn main()
+    flags := 5.bit_or(8)        # 13
+    low := flags.bit_and(4)     # 4
+    hi := (-8).shr(1)           # -4

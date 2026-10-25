@@ -1,0 +1,10 @@
+unique struct Conn
+    id int
+
+fn Conn.finish(move self) int
+    id
+
+fn main()
+    c := Conn(id: 1)
+    print(c.id)
+    n := c.finish()

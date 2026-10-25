@@ -1,0 +1,5 @@
+@test fn add_commutes(a int, b int)
+    assert_eq(a + b, b + a)
+
+fn main()
+    print("")

@@ -1,0 +1,4 @@
+
+fn main()
+    n := 1
+    print("{n:.2}")      # compile-time error: write {n.to_float():.2}

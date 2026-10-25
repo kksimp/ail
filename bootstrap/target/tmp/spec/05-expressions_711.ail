@@ -1,0 +1,19 @@
+fn main()
+    mut sum := 0
+    for x in [1, 2, 3, 4, 5]
+        if x == 2
+            continue          # next iteration
+        if x == 5
+            break             # leaves the innermost loop
+        sum += x
+    print(sum)                # 1 + 3 + 4 = 8
+    for i in 0..3
+        print(i)              # 0 1 2
+    for i in 0..=2
+        print(i)              # 0 1 2
+    mut n := 0
+    while n < 3
+        n += 1
+    print(n)                  # 3
+    for s in {"a", "b"}
+        print(s)              # a b: insertion order

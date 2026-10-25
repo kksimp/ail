@@ -1,0 +1,8 @@
+use std.proc
+
+fn main() !
+    c := proc.start("sh", ["-c", "echo err 1>&2"])?
+    msg := c.err.recv()               # `none` once the stream ends
+    print(msg)
+    status := proc.wait(move c)?
+    print(status)

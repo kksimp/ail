@@ -1,0 +1,9 @@
+error enum LoadError
+    MissingEquals "missing '='"
+    BadName(text str) "bad cell name '{text}'"
+
+error struct NotFound "nothing at {path}"
+    path str
+
+fn main()
+    print(LoadError.BadName(text: "Z9"))   # bad cell name 'Z9'

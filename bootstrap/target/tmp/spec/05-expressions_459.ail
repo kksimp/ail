@@ -1,0 +1,9 @@
+struct Person
+    name str
+    age int
+
+fn main()
+    people := [Person(name: "bo", age: 30), Person(name: "al", age: 25)]
+    print([p.name for p in people.sorted(by: |p| p.age)])   # ["al", "bo"]
+    counts := {"b": 2, "a": 2, "c": 5}
+    print(counts.keys().sorted().sorted(by: |k| -counts[k]).take(2))   # ["c", "a"]

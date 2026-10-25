@@ -1,0 +1,6 @@
+struct Pair
+    a int
+    a str                                         # error: duplicate field name
+
+fn main()
+    print("")
