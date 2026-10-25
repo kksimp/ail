@@ -491,7 +491,11 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 return Val(id: table_keys(r.id, kt), ty: Ty.List(kt))
             if name == "values" and vs.len() == 0
                 if vt.elem_bytes() < 8
-                    narrow := call("rt.map_values_n", [r.id, konst(vt.elem_bytes(), Ty.Int)], Ty.List(vt))
+                    narrow := call(
+                        "rt.map_values_n",
+                        [r.id, konst(vt.elem_bytes(), Ty.Int)],
+                        Ty.List(vt),
+                    )
                     return Val(id: narrow, ty: Ty.List(vt))
                 return Val(id: call("rt.map_values", [r.id], Ty.List(vt)), ty: Ty.List(vt))
             if name == "get" and vs.len() == 1
