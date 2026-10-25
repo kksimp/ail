@@ -62,7 +62,7 @@ pub struct Fixup
     pub tail int
 
 pub struct Asm
-    pub code List[int]
+    pub code List[u8]
     pub labels List[int]
     pub fixups List[Fixup]
 
@@ -70,15 +70,15 @@ pub fn new_asm() Asm
     Asm(code: [], labels: [], fixups: [])
 
 fn Asm.byte(mut self, b int)
-    code.push(b.bit_and(255))
+    code.push(b.bit_and(255).to_u8())
 
 fn Asm.u32(mut self, v int)
     for i in 0..4
-        code.push(v.shr(8 * i).bit_and(255))
+        code.push(v.shr(8 * i).bit_and(255).to_u8())
 
 fn Asm.u64(mut self, v int)
     for i in 0..8
-        code.push(v.shr(8 * i).bit_and(255))
+        code.push(v.shr(8 * i).bit_and(255).to_u8())
 
 fn fits8(v int) bool
     v >= -128 and v <= 127
@@ -461,7 +461,7 @@ pub fn Asm.resolve_labels(mut self)
             unreachable("label {f.label} was never placed")
         rel := to - (f.at + 4)
         for i in 0..4
-            code[f.at + i] = rel.shr(8 * i).bit_and(255)
+            code[f.at + i] = rel.shr(8 * i).bit_and(255).to_u8()
     fixups = rest
 
 # ---- vector (VEX) ----

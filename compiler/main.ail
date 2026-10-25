@@ -328,11 +328,7 @@ fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
 
 ## The executable of `m` for `target`, written to `out`.
 fn finish_build(m mir.Module, file str, out str, target str)
-    hex := executable_hex(m, file, target)
-    exe := bytes.from_hex(hex.replace("\n", "")) else
-        io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
-        io.exit(2)
-        return
+    exe := executable_bytes(m, file, target)
     fs.write_bytes(out, exe) else err
         io.eprint("error[native.build.3]: can't write {out}: {err}")
         io.exit(2)
@@ -458,17 +454,31 @@ fn imported_text(file_arg str, text str, std str) str
 ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 ## `path` names the program: the macOS target takes its name from it.
 fn executable_hex(m mir.Module, path str, target str) str
+    obj.hex(executable_list(m, path, target))
+
+## The same executable as bytes. This goes through hex text on purpose: the
+## seed's lowering keeps a `List[u8]` one word an element (ADR 0907), so the
+## stage-1 compiler can't hand one to the runtime's `bytes.from_list`.
+fn executable_bytes(m mir.Module, path str, target str) bytes
+    hex := executable_hex(m, path, target)
+    exe := bytes.from_hex(hex.replace("\n", "")) else
+        io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
+        io.exit(2)
+        return b""
+    exe
+
+fn executable_list(m mir.Module, path str, target str) List[u8]
     match target
-        "x86_64-linux" => obj.hex(obj.elf(x64.generate(m), obj.X86_64))
-        "aarch64-linux" => obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64))
-        "x86_64-windows" => obj.hex(obj.pe_image(x64.generate_windows(m)))
+        "x86_64-linux" => obj.elf(x64.generate(m), obj.X86_64)
+        "aarch64-linux" => obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)
+        "x86_64-windows" => obj.pe_image(x64.generate_windows(m))
         "aarch64-macos" =>
             name := path.split("/").last() else path
-            obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", "")))
+            obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))
         _ =>
             io.eprint("error[native.build.3]: unknown target `{target}`")
             io.exit(2)
-            ""
+            []
 
 ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn runtime_syntax(path str, text str)
@@ -742,11 +752,7 @@ fn run_generators(
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
         io.exit(1)
         return []
-    hex := executable_hex(m, "derive", host_target())
-    exe := bytes.from_hex(hex.replace("\n", "")) else
-        io.eprint("error[native.build.3]: the generator program isn't hexadecimal")
-        io.exit(2)
-        return []
+    exe := executable_bytes(m, "derive", host_target())
     tmp := env.get("TMPDIR") else "/tmp"
     file := "{tmp}/ail-derive-{time.now_ms()}"
     fs.write_bytes(file, exe) else err
