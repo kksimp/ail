@@ -24,6 +24,6 @@ error: invalid digit 'x'
 error: no digits
 0
 error: division by zero
-true
+false
 error: negative exponent
 false
