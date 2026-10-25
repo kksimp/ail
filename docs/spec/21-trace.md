@@ -300,7 +300,7 @@ local on its own line: `      NAME = VALUE`. *(ADR 0886, ADR 0641)*
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
 
-```ail skip=bootstrap tool=run,--json,FILE status=1 expect="severity":"trap" rules=trace.snap.4
+```ail tool=run,--json,FILE status=1 expect="severity":"trap" rules=trace.snap.4
 fn inner(xs List[int]) int
     xs[5]
 

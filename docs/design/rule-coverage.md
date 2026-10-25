@@ -290,6 +290,4 @@ or reason.
 | `err.type.4` | unowned | match exhaustiveness on an inferred error set; lane 223 marks its example `skip=bootstrap` |
 | `ffi.decl.1` | RR-4 | its spec block is `skip=bootstrap`; the native CLI builds C declarations (nativex `ffi_*` programs), so a runnable block is still to be written |
 | `mod.vis.3` | RR-4 | its spec block shows a directory layout (`skip=context`); the package cases in tests/cases/packages check it |
-| `test.run.5` | RR-4 | its spec block is `skip=bootstrap`; `ail test` prints the trap snapshot natively (tools/ailtest), the block needs un-skipping after a native run |
-| `trace.snap.4` | RR-4 | its spec block is `skip=bootstrap`; `run --json` trap output is native (tools/trapjson.awk), the block needs un-skipping after a native run |
 
