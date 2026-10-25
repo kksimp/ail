@@ -25,7 +25,7 @@ entry: main in main.ail
 
 ## fix (54 items)
 
-## fixrun (26 items)
+## fixrun (17 items)
 
 ## fmt (64 items)
 

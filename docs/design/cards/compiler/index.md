@@ -11,7 +11,7 @@ doc  18 items
 edit  51 items
 explain  37 items
 fix  54 items
-fixrun  26 items
+fixrun  17 items
 fmt  64 items
 load  102 items
 mir  492 items
