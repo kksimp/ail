@@ -79,6 +79,7 @@ pub AIL_STD_MODULES := [
     "std.net.http",
     "std.screen",
     "std.screen.pixels",
+    "std.screen.cells",
     "std.screen.view",
     "std.net.jar",
     "std.time.date",
