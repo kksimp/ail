@@ -5,7 +5,7 @@
 ## native TLS client (ADR 0836 slice 3, ADR 0368): ECDSA over P-256 and P-384
 ## (FIPS 186-4, SEC 1), RSA PKCS#1 v1.5 and RSASSA-PSS (RFC 8017). Verification
 ## only, over the numbers of tls_big.ail; the same checks and the same answers
-## as bootstrap/src/net/crypto/sig.rs. Hashes are named by `alg`: 0 SHA-256,
+## as 77592931:bootstrap/src/net/crypto/sig.rs. Hashes are named by `alg`: 0 SHA-256,
 ## 1 SHA-384, 2 SHA-512. Curves by `curve`: 0 P-256, 1 P-384.
 
 fn sig_hlen(alg int) int

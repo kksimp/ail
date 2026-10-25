@@ -6,7 +6,7 @@
 ## addresses: keys, nonces, messages and outputs are bytes in memory. Add,
 ## rotate and xor only, and Poly1305 in 26-bit limbs, so no branch or index
 ## depends on a key or on message bytes; the tag is compared in constant
-## time. The same algorithms and test vectors as bootstrap/src/net/crypto
+## time. The same algorithms and test vectors as 77592931:bootstrap/src/net/crypto
 ## (ADR 0366).
 
 TLS_M32 := 4294967295

@@ -1,5 +1,5 @@
 ## How types relate (ADR 0377): `accepts`, `mismatch`, error sets, type
-## parameter inference (`bind`, `subst_unknown`), as `bootstrap/src/check.rs`
+## parameter inference (`bind`, `subst_unknown`), as `77592931:bootstrap/src/check.rs`
 ## and `check/traits.rs` define them.
 use ast
 use fix

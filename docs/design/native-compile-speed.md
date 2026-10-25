@@ -74,7 +74,7 @@ module separately.
 
 ## Not in this lane
 
-The 0.47 s front end belongs to the Rust bootstrap (`bootstrap/src/`). The
+The 0.47 s front end belongs to the Rust bootstrap (`77592931:bootstrap/src/`). The
 fix is to cache the checked compiler closure per source hash under
 `$XDG_CACHE_HOME/ail`, which needs a serialiser for `Program` and
 `Resolved`. That changes the bootstrap's data model and needs the designer's

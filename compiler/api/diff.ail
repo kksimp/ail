@@ -1,5 +1,5 @@
 ## `ail api --diff OLD NEW [--json]` (api.diff.1-5, ADR 0729), as
-## `bootstrap/src/api/apidiff.rs`: what changed in the public API between two
+## `77592931:bootstrap/src/api/apidiff.rs`: what changed in the public API between two
 ## versions of a file or package. Declarations are matched by id (api.id.1);
 ## only the public ones count, and a change that can break a caller is marked
 ## `breaking:`.

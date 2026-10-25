@@ -26,7 +26,7 @@ USAGE := [
 ## (edit.op.1-7, ADRs 0397, 0399): structured edits by declaration id. They
 ## apply in order to the file or package at PATH, every changed file is
 ## formatted, the program is checked, and the answer is the diagnostics of
-## the new state. A port of `command` in `bootstrap/src/edit.rs`.
+## the new state. A port of `command` in `77592931:bootstrap/src/edit.rs`.
 pub fn command(args List[str], std str) int
     mut dry := false
     mut show_diff := false

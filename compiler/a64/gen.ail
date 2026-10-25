@@ -880,7 +880,7 @@ fn Gen.push(mut self, i mir.Inst)
     a.ldr(S1, l, 16)
     if float
         a.str_d_idx(r, S1, S2)
-    elif f.vals[v] == mir.Ty.Bool
+    elif f.vals[v].elem_bytes() == 1
         a.strb_idx(r, S1, S2)
     else
         a.str_idx(r, S1, S2)
@@ -1258,7 +1258,7 @@ fn Gen.list_get(mut self, i mir.Inst)
         return
     d := out_gpr(i.dst, S1)
     # A `List[bool]` holds one byte per element (native-abi.md §2).
-    if f.vals[i.dst] == mir.Ty.Bool
+    if f.vals[i.dst].elem_bytes() == 1
         if at[0] < 0
             a.ldrb_off(d, S2, at[1] / 8)
         else
@@ -1282,7 +1282,7 @@ fn Gen.list_set(mut self, i mir.Inst)
     # x0 is free between calls.
     r := gpr(v, 0)
     at := list_index(i)
-    if f.vals[v] == mir.Ty.Bool
+    if f.vals[v].elem_bytes() == 1
         if at[0] < 0
             a.strb_off(r, S2, at[1] / 8)
         else

@@ -35,7 +35,7 @@ source ──lex/parse──▶ AST ──resolve/type/expand──▶ HIR ─�
 
 ## 2. AST
 
-What the bootstrap has today (`bootstrap/src/ast.rs`): per-file declarations
+What the bootstrap has today (`77592931:bootstrap/src/ast.rs`): per-file declarations
 and expressions with positions, produced by `parser.rs` from the lexer's
 tokens. `ail fmt` works from the token stream and its comment side table,
 not from the AST, so the AST needs no trivia.

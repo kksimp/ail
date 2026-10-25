@@ -33,7 +33,7 @@ fn is_list_edit(name str) bool
 
 ## Bytes of one element of a list of `e`.
 fn elem_bytes(e Ty) int
-    if e == Ty.Bool then 1 else 8
+    e.elem_bytes()
 
 ## How `contains` compares: 0 integers and bools, 1 strings, 2 floats; -1 if
 ## the element type has no native equality yet.

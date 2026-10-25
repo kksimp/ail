@@ -978,11 +978,11 @@ fn version(
                 if i.op == "get"
                     r.op = "ldx"
                     r.args = [base, vm[i.args[1]]]
-                    r.imm = if f.vals[i.dst] == Ty.Bool then 1 else 8
+                    r.imm = f.vals[i.dst].elem_bytes()
                 else
                     r.op = "stx"
                     r.args = [base, vm[i.args[1]], vm[i.args[2]]]
-                    r.imm = if f.vals[i.args[2]] == Ty.Bool then 1 else 8
+                    r.imm = f.vals[i.args[2]].elem_bytes()
             insts.push(r)
         t := blk.term
         mut nt := t

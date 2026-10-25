@@ -1,4 +1,4 @@
-## Implicit `self` (trait.method.6-7, ADR 0141), as `bootstrap/src/implicit_self.rs`.
+## Implicit `self` (trait.method.6-7, ADR 0141), as `77592931:bootstrap/src/implicit_self.rs`.
 ## Inside a method, the receiver's fields and methods are in scope by bare
 ## name. This pass rewrites `x` to `self.x` and `f(...)` to `self.f(...)`, and
 ## reports locals and parameters that would hide a member.

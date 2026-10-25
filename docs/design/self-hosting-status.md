@@ -17,7 +17,7 @@
 `ail run compiler tokens|parse FILE...` against `ail api --tokens`
 and `ail api --ast` on every `.ail` file in the repository, byte for byte;
 diagnostics are a rule and a position (ADR 0373). The selftest runs both
-(`bootstrap/tests/self_hosting.rs`).
+(`77592931:bootstrap/tests/self_hosting.rs`).
 
 | Stage | Source | Files | Agreement |
 |---|---|---|---|
@@ -92,11 +92,11 @@ manifest checks eff.cap.4–5 (ADR 0740).
   operators, `tensor.Tensor(...)`), `std.ui` window methods and named
   colors, the hidden-module check std.use.4, and `print`'s wording for a
   function with no result.
-- **Outside the checker:** eff.cap.4–5 (`bootstrap/src/packages.rs`), which
+- **Outside the checker:** eff.cap.4–5 (`77592931:bootstrap/src/packages.rs`), which
   come from package manifests and aren't in the AST dump; 5 diagnostics, all
   in `packages/caps_denied`.
 - **Size:** `compiler/check/` is 11,000 lines of AIL, against 11,551 lines of
-  Rust in `bootstrap/src/check*`.
+  Rust in `77592931:bootstrap/src/check*`.
 - **Speed:** checking `compiler` and `tools/edit` (7 MB of AST JSON) takes
   about 15 s under the tree-walking interpreter, against under 1 s for
   `ail check`. This is the next thing to bring down, through the bytecode
