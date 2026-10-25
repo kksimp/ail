@@ -29,12 +29,12 @@ else
   fails=$((fails+1)); echo "RED selfhost stage 1: ./ail build compiler/main.ail"; head -8 "$out/selfhost1.log" | cut -c1-200
 fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
-# The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
+# The interpreter-only suites (snapshot, budget, parallel, replay; the bytecode tier is dropped, ADR 0873) are out of the gate until
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
 # D3: these suites run on ./ail (the default); the rest still call the Rust binary (GATE_RUST=1) until their reds are fixed.
 native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain spec pe asm"
 suites="tools contracts misc limits api_queries api_card edit net native_misc nativex globals"
-[ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
+[ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay"
 # The Rust binary is still built for the suites above that call it.
 run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
 run gate_ail env GATE_RUST=1 ./ail run tools/gate/gate.ail $suites
