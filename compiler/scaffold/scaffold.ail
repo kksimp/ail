@@ -1,4 +1,4 @@
-## `ail new NAME` (spec tool.new.1-4, ADR 0903): a new package directory that
+## `ail new NAME` (spec tool.new.1-2, ADR 0903): a new package directory that
 ## runs and tests at once. NAME starts with a lowercase letter and holds
 ## lowercase letters, digits, `_` and `-`. An existing NAME is never touched.
 
@@ -18,13 +18,13 @@ pub fn command(args List[str]) int
         io.eprint("usage: ail new NAME")
         return 2
     name := args[0]
-    # tool.new.2: the name is a package name and a directory name.
+    # tool.new.1: the name is a package name and a directory name.
     if not valid(name)
-        io.eprint("error[tool.new.2]: `{name}` isn't a package name; use lowercase letters, digits, `_` and `-`, starting with a letter")
+        io.eprint("error[tool.new.1]: `{name}` isn't a package name; use lowercase letters, digits, `_` and `-`, starting with a letter")
         return 2
-    # tool.new.3: nothing that exists is overwritten.
+    # tool.new.1: nothing that exists is overwritten.
     if fs.exists(name)
-        io.eprint("error[tool.new.3]: `{name}` already exists; choose another name")
+        io.eprint("error[tool.new.1]: `{name}` already exists; choose another name")
         return 2
     fs.make_dir(name) else err
         io.eprint("error: {err.kind}")
@@ -32,7 +32,7 @@ pub fn command(args List[str]) int
     fs.write_text("{name}/ail.pkg", "package {name}\n") else err
         io.eprint("error: {err.kind}")
         return 1
-    fs.write_text("{name}/main.ail", "## {name}: say what this program does.\n\n## The greeting for `who`.\nfn greet(who str) str\n    \"Hello, \{who}!\"\n\nfn main()\n    print(greet(\"world\"))\n\n@test\nfn greets()\n    assert_eq(greet(\"ail\"), \"Hello, ail!\")\n") else err
+    fs.write_text("{name}/main.ail", "## {name}: say what this program does.\n\n## The greeting for `who`.\nfn greet(who str) str\n    \"Hello, \{who}!\"\n\nfn main()\n    print(greet(\"world\"))\n\n@test fn greets()\n    assert_eq(greet(\"ail\"), \"Hello, ail!\")\n") else err
         io.eprint("error: {err.kind}")
         return 1
     print("created {name}/ (ail.pkg, main.ail)")

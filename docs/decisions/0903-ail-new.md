@@ -4,7 +4,7 @@
 - **Date:** 2026-10-25
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 22 — Tools
-- **Spec rules:** tool.new.1-4 ([22-tools](../spec/22-tools.md))
+- **Spec rules:** tool.new.1-2 ([22-tools](../spec/22-tools.md))
 
 ## Context
 
@@ -18,7 +18,7 @@ no command that makes a first program that runs and tests.
 `compiler/main.ail`) creates `NAME/ail.pkg` and `NAME/main.ail` with a `greet`
 function, a `main` and a `@test`, and prints `ail run NAME` and
 `ail test NAME/main.ail`. Names are lowercase letters, digits, `_` and `-`; an
-existing path is never touched (tool.new.1-4). Native only, no Rust (ADR 0873).
+existing path is never touched (tool.new.1-2). Native only, no Rust (ADR 0873).
 
 ## Rejected alternatives
 

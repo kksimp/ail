@@ -642,19 +642,15 @@ fn main()
 (`package NAME`, [mod.pkg.1](12-modules.md)) and `main.ail`: a `greet`
 function, a `main` that prints its result and a `@test` that checks it, so
 `ail run NAME` and `ail test NAME/main.ail` work at once, and prints the two
-commands. *(ADR 0903)*
+commands. `NAME` starts with a lowercase letter and holds lowercase letters,
+digits, `_` and `-`; any other name, and any `NAME` that already exists as a
+file or directory, is refused with exit status 2, and nothing is created or
+changed. *(ADR 0903)*
 
-**tool.new.2** — `NAME` starts with a lowercase letter and holds lowercase
-letters, digits, `_` and `-`. Any other name is refused with exit status 2 and
-nothing is created. *(ADR 0903)*
-
-**tool.new.3** — An existing `NAME`, file or directory, is refused with exit
-status 2 and left as it was. *(ADR 0903)*
-
-**tool.new.4** — The generated `main.ail` passes `ail check`, `ail fmt --check`
+**tool.new.2** — The generated `main.ail` passes `ail check`, `ail fmt --check`
 and its own `@test`. *(ADR 0903)*
 
-```ail rules=tool.new.1,tool.new.4
+```ail rules=tool.new.1,tool.new.2
 ## demo: say what this program does.
 
 ## The greeting for `who`.
@@ -664,8 +660,7 @@ fn greet(who str) str
 fn main()
     print(greet("world"))
 
-@test
-fn greets()
+@test fn greets()
     assert_eq(greet("ail"), "Hello, ail!")
 ```
 
