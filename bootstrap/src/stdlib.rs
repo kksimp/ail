@@ -290,6 +290,7 @@ const AIL_MODULES: &[(&str, &str, &str)] = &[
     ("std.screen.pixels", "<std>/screen/pixels.ail", include_str!("std/screen/pixels.ail")),
     ("std.screen.view", "<std>/screen/view.ail", include_str!("std/screen/view.ail")),
     ("std.time.date", "<std>/time/date.ail", include_str!("std/time/date.ail")),
+    ("std.toml", "<std>/toml/toml.ail", include_str!("std/toml/toml.ail")),
     ("std.ui.widgets", "<std>/ui/widgets.ail", include_str!("std/ui/widgets.ail")),
 ];
 
