@@ -34,13 +34,17 @@ fn vals_verbose() bool
     t != 0 and load64(t + VALS_N * 16) != 0
 
 ## `vals_enter` of a `--verbose` build.
+## The frame pointer is read here, not in `vals_enter`, which would see this function's frame.
 fn vals_enter_verbose() int
+    fp := load64(frame_ptr())
     store64(vals_table() + VALS_N * 16, 1)
-    vals_enter()
+    vals_enter_at(fp)
 
 ## A function begins: its spill goes under its frame pointer, the caller's of this one.
 fn vals_enter() int
-    fp := load64(frame_ptr())
+    vals_enter_at(load64(frame_ptr()))
+
+fn vals_enter_at(fp int) int
     sp := alloc(8 * (VALS_SLOTS + 1), 13)
     e := vals_slot(vals_table(), fp)
     store64(e, fp)
