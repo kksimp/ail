@@ -33,6 +33,8 @@ H_HEADS := 32
 H_BUMP := 72
 H_BEND := 112
 H_DIRTY := 152
+## Windows only: the end of the committed part of the heap region.
+H_COMMIT := 300
 
 # Not a power of two: 257 cache lines, so each page starts one cache set
 # later than the one before (ADR 0562). With 16384, every page of a size class
@@ -65,6 +67,29 @@ fn heap_reserve(n int) int
     flags := if t == 2 then 4162 else 16418
     syscall(k, 0, n, 3, flags, -1, 0)
 
+## The heap region itself. Windows reserves address space only and commits
+## it as the heap grows (`heap_commit`): committing all of it up front took
+## the whole commit limit, so a child process of a program (`ail test`
+## building) could not start (run.limit.2).
+fn heap_reserve_region(n int) int
+    if target() == 3
+        p := import_call("VirtualAlloc", 0, n, 8192, 4)
+        return if p == 0 then -1 else p
+    heap_reserve(n)
+
+## Commit the heap up to `end`, in steps of 4 MiB (Windows; elsewhere pages
+## are committed by touching them).
+fn heap_commit(end int)
+    if target() != 3 or end <= hs(H_COMMIT)
+        return
+    mut to := end + 4194304
+    if to > hs(H_LIMIT)
+        to = hs(H_LIMIT)
+    from := hs(H_COMMIT)
+    if import_call("VirtualAlloc", from, to - from, 4096, 4) == 0
+        fail(1, 0, 0)
+    hset(H_COMMIT, to)
+
 fn heap_state() int
     load64(global(HEAP))
 
@@ -82,21 +107,23 @@ fn heap_init(top int)
     store64(global(HEAP), m)
     store64(global(STACK_TOP), top)
     mut size := 17179869184
-    mut base := heap_reserve(size + PAGE)
+    mut base := heap_reserve_region(size + PAGE)
     while base < 0 and size > 67108864
         size = size / 2
-        base = heap_reserve(size + PAGE)
+        base = heap_reserve_region(size + PAGE)
     if base < 0
         fail(1, 0, 0)
     aligned := (base + PAGE - 1) / PAGE * PAGE
     hset(H_BASE, aligned)
     hset(H_TOP, aligned)
+    hset(H_COMMIT, aligned)
     hset(H_LIMIT, aligned + size)
     pages := heap_reserve(size / PAGE * 8)
     if pages < 0
         fail(1, 0, 0)
     hset(H_PAGES, pages)
-    mut cap := 536870912
+    # Windows commits it all now, so the queue starts smaller there.
+    mut cap := if target() == 3 then 33554432 else 536870912
     mut marks := heap_reserve(cap)
     while marks < 0 and cap > 1048576
         cap = cap / 2
@@ -210,6 +237,7 @@ fn heap_pages_try(np int, tried int, zero int) int
     hset(H_REUSED, if run > 0 then 1 else 0)
     if run > 0 and zero != 0
         zero_words(p, run * PAGE)
+    heap_commit(end)
     hset(H_TOP, end)
     p
 
