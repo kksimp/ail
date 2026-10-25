@@ -25,7 +25,7 @@ pub struct PeDll
 ## `dir_size` (the byte sizes of the address tables and the descriptors),
 ## and `slots` (each function's address-table RVA under `imp:NAME`).
 struct PeImports
-    bytes List[int]
+    bytes List[u8]
     iat int
     iat_size int
     dir_size int
@@ -33,7 +33,7 @@ struct PeImports
 
 ## A PE32+ executable for `img` that imports `dlls`. The entry point is
 ## `img.entry` in the code. Every relocation resolves here.
-pub fn pe(img codegen.Image, dlls List[PeDll]) List[int]
+pub fn pe(img codegen.Image, dlls List[PeDll]) List[u8]
     code_rva := PE_SECTION_ALIGN
     rdata := align_up(code_rva + img.code.len(), PE_SECTION_ALIGN)
     idata := align_up(rdata + img.data.len(), PE_SECTION_ALIGN)
@@ -45,14 +45,14 @@ pub fn pe(img codegen.Image, dlls List[PeDll]) List[int]
     text_raw := align_up(img.code.len(), PE_FILE_ALIGN)
     rdata_raw := align_up(img.data.len(), PE_FILE_ALIGN)
     idata_raw := align_up(idata_len, PE_FILE_ALIGN)
-    mut out := List[int]()
+    mut out := List[u8]()
     # The DOS header, with `e_lfanew` at 0x3C pointing past it to 0x80.
-    out.extend([77, 90])
+    out.extend(bytes_of([77, 90]))
     pe_pad(mut out, 60)
     put(mut out, 128, 4)
     pe_pad(mut out, 128)
     # The PE signature and the COFF header: no symbols, no line numbers.
-    out.extend([80, 69, 0, 0])
+    out.extend(bytes_of([80, 69, 0, 0]))
     put(mut out, PE_MACHINE, 2)
     put(mut out, 4, 2)
     put(mut out, 0, 4)
@@ -63,8 +63,8 @@ pub fn pe(img codegen.Image, dlls List[PeDll]) List[int]
     put(mut out, 35, 2)
     # The optional header (PE32+): the standard fields first.
     put(mut out, 523, 2)
-    out.push(1)
-    out.push(0)
+    out.push(1.to_u8())
+    out.push(0.to_u8())
     put(mut out, text_raw, 4)
     put(mut out, rdata_raw + idata_raw, 4)
     put(mut out, bss_size, 4)
@@ -134,10 +134,10 @@ pub fn pe(img codegen.Image, dlls List[PeDll]) List[int]
 
 ## One 40-byte section header: the name padded to 8 bytes, the virtual
 ## size and address, the file size and offset, then the characteristics.
-fn pe_section(mut out List[int], name str, size int, rva int, raw int, at int, flags int)
+fn pe_section(mut out List[u8], name str, size int, rva int, raw int, at int, flags int)
     bytes := codegen.utf8(name)
     for i in 0..8
-        out.push(if i < bytes.len() then bytes[i] else 0)
+        out.push(if i < bytes.len() then bytes[i] else 0.to_u8())
     put(mut out, size, 4)
     put(mut out, rva, 4)
     put(mut out, raw, 4)
@@ -174,7 +174,7 @@ fn pe_imports(dlls List[PeDll], base int) PeImports
             pos = align_up(pos, 2)
             hints.push(base + pos)
             pos += 2 + f.chars().len() + 1
-    mut out := List[int]()
+    mut out := List[u8]()
     mut slots := Map[str, int]()
     for i in 0..dlls.len()
         put(mut out, lookups[i], 4)
@@ -195,13 +195,13 @@ fn pe_imports(dlls List[PeDll], base int) PeImports
         first += d.funcs.len()
     for d in dlls
         out.extend(codegen.utf8(d.name))
-        out.push(0)
+        out.push(0.to_u8())
     for d in dlls
         for f in d.funcs
             pe_pad(mut out, align_up(out.len(), 2))
             put(mut out, 0, 2)
             out.extend(codegen.utf8(f))
-            out.push(0)
+            out.push(0.to_u8())
     PeImports(
         bytes: out,
         iat: if lookups.len() > 0 then iats[0] else 0,
@@ -213,7 +213,7 @@ fn pe_imports(dlls List[PeDll], base int) PeImports
 ## A PE32+ executable for `img`, with its imports taken from the `imp:NAME`
 ## relocations: each distinct name gets one address-table slot, grouped under
 ## the DLL that `pe_dll_of` names for it (ADR 0598).
-pub fn pe_image(img codegen.Image) List[int]
+pub fn pe_image(img codegen.Image) List[u8]
     mut names := List[str]()
     for r in img.relocs
         if r.sym.starts_with("imp:")
@@ -265,7 +265,7 @@ PE_DLLS := ["KERNEL32.dll", "WS2_32.dll", "bcryptprimitives.dll", "crypt32.dll",
 
 ## The code with its relocations resolved, for `.text` at RVA `code_rva`,
 ## `.rdata` at `rdata` and `.bss` at `bss`.
-fn pe_resolve(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int) List[int]
+fn pe_resolve(img codegen.Image, slots Map[str, int], code_rva int, rdata int, bss int) List[u8]
     mut out := img.code
     for r in img.relocs
         if r.kind != "rel32"
@@ -275,7 +275,7 @@ fn pe_resolve(img codegen.Image, slots Map[str, int], code_rva int, rdata int, b
         mut w := pe_read32(out, r.at)
         w = to + pe_signed32(w) - (pc + 4 + r.tail)
         for i in 0..4
-            out[r.at + i] = w.shr(8 * i).bit_and(255)
+            out[r.at + i] = w.shr(8 * i).bit_and(255).to_u8()
     out
 
 ## The RVA of a relocation's symbol.
@@ -289,14 +289,14 @@ fn pe_address(img codegen.Image, slots Map[str, int], code_rva int, rdata int, b
     code_rva + (img.funcs.get(sym) else unreachable("no function {sym}"))
 
 ## Zero bytes, up to `n` in all.
-fn pe_pad(mut out List[int], n int)
+fn pe_pad(mut out List[u8], n int)
     while out.len() < n
-        out.push(0)
+        out.push(0.to_u8())
 
-fn pe_read32(bytes List[int], at int) int
+fn pe_read32(bytes List[u8], at int) int
     mut v := 0
     for i in 0..4
-        v = v.bit_or(bytes[at + i].shl(8 * i))
+        v = v.bit_or(bytes[at + i].to_int().shl(8 * i))
     v
 
 fn pe_signed32(v int) int
@@ -307,21 +307,21 @@ fn pe_signed32(v int) int
 ## `WriteFile`, then calls `ExitProcess`. Win64 convention: four register
 ## arguments, 32 bytes of shadow space, and the fifth argument at
 ## `[rsp + 32]`. `sub rsp, 56` leaves the stack 16-byte aligned at each call.
-pub fn pe_sample() List[int]
+pub fn pe_sample() List[u8]
     mut img := codegen.new_image()
-    img.code.extend([72, 131, 236, 56])
-    img.code.extend([185, 245, 255, 255, 255])
+    img.code.extend(bytes_of([72, 131, 236, 56]))
+    img.code.extend(bytes_of([185, 245, 255, 255, 255]))
     pe_call_import(mut img, "GetStdHandle")
-    img.code.extend([72, 137, 193])
-    img.code.extend([72, 141, 21, 0, 0, 0, 0])
+    img.code.extend(bytes_of([72, 137, 193]))
+    img.code.extend(bytes_of([72, 141, 21, 0, 0, 0, 0]))
     img.relocs.push(codegen.Reloc(at: img.code.len() - 4, kind: "rel32", sym: "d:msg", tail: 0))
     msg := codegen.utf8("hello from AIL on Windows\n")
-    img.code.extend([65, 184])
+    img.code.extend(bytes_of([65, 184]))
     put(mut img.code, msg.len(), 4)
-    img.code.extend([76, 141, 76, 36, 40])
-    img.code.extend([72, 199, 68, 36, 32, 0, 0, 0, 0])
+    img.code.extend(bytes_of([76, 141, 76, 36, 40]))
+    img.code.extend(bytes_of([72, 199, 68, 36, 32, 0, 0, 0, 0]))
     pe_call_import(mut img, "WriteFile")
-    img.code.extend([49, 201])
+    img.code.extend(bytes_of([49, 201]))
     pe_call_import(mut img, "ExitProcess")
     # After ExitProcess, so it never runs: its import puts WS2_32.dll in the table.
     pe_call_import(mut img, "closesocket")
@@ -331,7 +331,7 @@ pub fn pe_sample() List[int]
 
 ## `call qword ptr [rip + slot]` through the import `name`: FF 15 and a rel32.
 fn pe_call_import(mut img codegen.Image, name str)
-    img.code.extend([255, 21, 0, 0, 0, 0])
+    img.code.extend(bytes_of([255, 21, 0, 0, 0, 0]))
     img.relocs.push(codegen.Reloc(
         at: img.code.len() - 4,
         kind: "rel32",

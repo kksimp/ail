@@ -75,7 +75,7 @@ fn rotr(x int, n int) int
     x.shr(n).bit_or(x.shl(32 - n)).bit_and(M32)
 
 ## The digest of `bytes[from..to]`, as 32 bytes.
-pub fn sha256(bytes List[int], from int, to int) List[int]
+pub fn sha256(bytes List[u8], from int, to int) List[u8]
     mut h := [
         1779033703,
         3144134277,
@@ -91,7 +91,7 @@ pub fn sha256(bytes List[int], from int, to int) List[int]
     mut tail := List[int]()
     full := n / 64 * 64
     for i in from + full..to
-        tail.push(bytes[i])
+        tail.push(bytes[i].to_int())
     tail.push(128)
     while tail.len() % 64 != 56
         tail.push(0)
@@ -105,7 +105,7 @@ pub fn sha256(bytes List[int], from int, to int) List[int]
             mut v := 0
             for b in 0..4
                 p := off + 4 * t + b
-                byte := if p < full then bytes[from + p] else tail[p - full]
+                byte := if p < full then bytes[from + p].to_int() else tail[p - full]
                 v = v.shl(8).bit_or(byte)
             w[t] = v
         for t in 16..64
@@ -146,8 +146,8 @@ pub fn sha256(bytes List[int], from int, to int) List[int]
         h[6] = (h[6] + g).bit_and(M32)
         h[7] = (h[7] + hh).bit_and(M32)
         off += 64
-    mut out := List[int]()
+    mut out := List[u8]()
     for v in h
         for k in 0..4
-            out.push(v.shr(8 * (3 - k)).bit_and(255))
+            out.push(v.shr(8 * (3 - k)).bit_and(255).to_u8())
     out

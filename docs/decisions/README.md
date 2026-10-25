@@ -716,6 +716,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0900](0900-refuse-rust-only-routes.md) | `./ail` refuses `test --native` and `selftest --test` (Rust-only routes) | Accepted | 2026-10-24 |
 | [0901](0901-std-toml.md) | `std.toml`: TOML read into the `Json` value *(delegated)* | Accepted | 2026-10-25 |
 | [0902](0902-std-bigint.md) | `std.bigint`: integers of any size *(delegated)* | Accepted | 2026-10-25 |
+| [0907](0907-list-u8-one-byte.md) | Native `List[u8]` holds one byte per element *(delegated)* | Accepted | 2026-10-25 |
 | [0905](0905-std-app-serif-font.md) | `std.app` text family `serif` and Garlic's font-family mapping | Accepted | 2026-10-25 |
 | [0906](0906-retire-native-coverage-tracker.md) | The native coverage tracker is retired; its report stays as a snapshot *(delegated)* | Accepted | 2026-10-25 |
 | [0904](0904-rust-bootstrap-deleted.md) | The Rust bootstrap is deleted (D5) | Accepted | 2026-10-25 |
@@ -724,3 +725,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0882](0882-edit-impact.md) | Edit impact: which tests and effects an edit touches (`ail edit --impact`, `ail ask --affected`, `ail test --affected`) | Accepted | 2026-10-24 |
 | [0885](0885-contracts-checked-by-fuzzing.md) | Contracts checked by fuzzing: `ail test --contracts` gives a counterexample for a failing `requires` or `ensures` | Accepted | 2026-10-24 |
 | [0890](0890-optimizer-roadmap-to-match-c.md) | Optimizer roadmap to match C at -O2/-O3: allocation, register allocation, inlining, loop opts, range analysis, auto-vectorization, maps, tail calls; speed-only per ADR 0874 *(delegated)* | Accepted | 2026-10-24 |
+| [0908](0908-apps-in-their-own-repositories.md) | The apps (Garlic, Garlic Press, ail-edit, Clove) live in their own private AGPL-3.0 repositories; ail holds the language only | Accepted | 2026-10-25 |

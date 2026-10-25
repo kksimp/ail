@@ -1,3 +1,0 @@
-package garlic
-dep garlicjs path js
-dep image path ../pdf/image caps fs

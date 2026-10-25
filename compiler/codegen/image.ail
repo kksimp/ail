@@ -21,10 +21,10 @@ pub struct CallRow
     pub func str
 
 pub struct Image
-    pub code List[int]
+    pub code List[u8]
     pub funcs Map[str, int]
     pub relocs List[Reloc]
-    pub data List[int]
+    pub data List[u8]
     pub data_syms Map[str, int]
     ## The size of the runtime's globals, in 8-byte slots.
     pub globals int
@@ -93,33 +93,33 @@ pub fn import_slot(mut img Image, sym str) int
     img.imports.push(sym)
     img.imports.len() - 1
 
-pub fn align(mut bytes List[int], n int)
+pub fn align(mut bytes List[u8], n int)
     while bytes.len() % n != 0
         bytes.push(0)
 
-pub fn push64(mut bytes List[int], v int)
+pub fn push64(mut bytes List[u8], v int)
     for i in 0..8
-        bytes.push(v.shr(8 * i).bit_and(255))
+        bytes.push(v.shr(8 * i).bit_and(255).to_u8())
 
 ## The UTF-8 bytes of a string.
-pub fn utf8(s str) List[int]
-    mut out := List[int]()
+pub fn utf8(s str) List[u8]
+    mut out := List[u8]()
     for c in s.chars()
         n := c.code()
         if n < 128
-            out.push(n)
+            out.push(n.to_u8())
         elif n < 2048
-            out.push(192 + n.shr(6))
-            out.push(128 + n.bit_and(63))
+            out.push((192 + n.shr(6)).to_u8())
+            out.push((128 + n.bit_and(63)).to_u8())
         elif n < 65536
-            out.push(224 + n.shr(12))
-            out.push(128 + n.shr(6).bit_and(63))
-            out.push(128 + n.bit_and(63))
+            out.push((224 + n.shr(12)).to_u8())
+            out.push((128 + n.shr(6).bit_and(63)).to_u8())
+            out.push((128 + n.bit_and(63)).to_u8())
         else
-            out.push(240 + n.shr(18))
-            out.push(128 + n.shr(12).bit_and(63))
-            out.push(128 + n.shr(6).bit_and(63))
-            out.push(128 + n.bit_and(63))
+            out.push((240 + n.shr(18)).to_u8())
+            out.push((128 + n.shr(12).bit_and(63)).to_u8())
+            out.push((128 + n.shr(6).bit_and(63)).to_u8())
+            out.push((128 + n.bit_and(63)).to_u8())
     out
 
 ## The constant texts a trap stub passes to `rt.trap` (native-abi.md §7):
@@ -182,7 +182,7 @@ pub fn add_call_table(mut img Image, m mir.Module)
     push64(mut img.code, keys.len())
     for w in words
         push64(mut img.code, w)
-    mut strs := List[int]()
+    mut strs := List[u8]()
     mut offs := List[int]()
     base := 24 + 8 * words.len() + 16 * keys.len()
     for key in keys
@@ -202,7 +202,7 @@ pub fn add_call_table(mut img Image, m mir.Module)
     img.code.extend(strs)
 
 ## A string object (native-abi.md §2) appended to `out`, padded to 8 bytes.
-fn add_text(mut out List[int], s str)
+fn add_text(mut out List[u8], s str)
     bytes := utf8(s)
     push64(mut out, bytes.len())
     push64(mut out, s.chars().len())

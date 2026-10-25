@@ -127,6 +127,8 @@ Style:
 
 ## Repository layout
 
+The apps live in their own repositories (AGPL-3.0, private): [garlic](https://github.com/kksimp/garlic) (browser), [garlic-press](https://github.com/kksimp/garlic-press) (PDF viewer), [ail-edit](https://github.com/kksimp/ail-edit) (code editor) and [clove](https://github.com/kksimp/clove) (compressor). Each pins an ail commit in `.ail-version`. This repo does not test them.
+
 ```
 AGENTS.md                 this file
 CLAUDE.md                 imports AGENTS.md for Claude Code
@@ -159,17 +161,13 @@ tools/
   card-wording-audit.py   checks the language card's calls against the spec (ADR 0698)
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
-  edit/                   a code editor written in AIL (ADR 0180)
   fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against its frozen goldens
   golden/                 golden.py: explain, fmt, fix, api and edit against outputs frozen from the Rust binary (tests/golden/), so they check with no Rust binary (D0)
   explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against its frozen goldens
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
-  garlic/                 Garlic, a text-mode web browser written in AIL
-    js/                   its JavaScript engine (docs/design/garlic-js.md)
   native-net/             the native HTTP client against the interpreter, over a scripted local server (ADR 0830)
   native-tls/             the native TLS primitives against the Rust client's test vectors (ADR 0836)
   native/                 writes compiler/rt/native/unicode.ail, the native runtime's Unicode tables (ADR 0567)
-  pdf/                    PDF reader, searcher and viewer written in AIL (ADR 0520)
   perfbench/              drag-race programs: AIL, C and Python twins
   self-compile/           survey of the native subset over the compiler's own source
   tokbench/               token measurement harness (Python; measurement only, ADR 0070)

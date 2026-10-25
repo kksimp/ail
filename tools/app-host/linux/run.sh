@@ -3,7 +3,7 @@
 # an AIL program with it. From the repository root:
 #   tools/app-host/linux/run.sh                      # build only
 #   tools/app-host/linux/run.sh examples/app_todo.ail
-#   tools/app-host/linux/run.sh --native tools/garlic/garlic.ail URL   # compiled, not interpreted
+#   tools/app-host/linux/run.sh --native ../garlic/garlic.ail URL   # compiled, not interpreted
 # Needs a C compiler, pkg-config and the GTK 3 headers; installs them with apt
 # when they are missing. No other packages.
 set -euo pipefail

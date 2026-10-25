@@ -41,3 +41,9 @@ newline-delimited JSON, so a Windows host is a renderer only; apps don't change.
   measuring differs from the canvas's.
 - **A new compiler install (MSVC, .NET SDK).** Violates the no-setup rule.
 - **Writing the host in AIL.** Needs native FFI callbacks (`ffi.decl.3`).
+
+## Amendment 2026-10-25: modern look
+
+The host no longer looks like Windows 98. It reads the app's first canvas fill as the window colour and uses it for the form, native controls and the title bar (dark or light, with the caption and border colour, via `DwmSetWindowAttribute`; ignored before Windows 10 1809). Text fields are borderless pills with an accent ring on focus, buttons are flat, and the UI face stays Segoe UI (Segoe UI Variable measures and draws bold at different widths in GDI+). Slanted strokes are anti-aliased while rectangles stay pixel-exact. A canvas that fills the window removes the 8 px frame. Rejected: a host theme option in the protocol (apps already express the look through their canvas colours).
+
+A box whose canvases are painted in one colour is a surface of that colour: its fields, buttons and labels take their colours from it, not from the window's (a toolbar lighter than the tab strip above it).

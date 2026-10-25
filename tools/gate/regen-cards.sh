@@ -1,7 +1,7 @@
 #!/bin/bash
 cd "$(git rev-parse --show-toplevel)"
 A=./ail
-for pair in tools/edit:edit std:std tools/garlic:garlic tools/garlic/js:garlic-js tools/pdf:pdf compiler:compiler; do
+for pair in std:std compiler:compiler; do
   d=${pair%%:*}; n=${pair##*:}
   # Write through a temporary file so a failing generator never commits an empty card.
   $A api --card $d > /tmp/card.$$ && mv /tmp/card.$$ docs/design/cards/$n.md || { echo "card failed: $d" >&2; exit 1; }
