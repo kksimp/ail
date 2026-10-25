@@ -114,7 +114,7 @@ struct Lower
     ## Where each `uhwhatnow?` hole is, `FILE:LINE:COL` (expr.hole.3).
     asks Set[str]
     ## The `.ct` copies of the functions constants call (ct.eval.3, lower_ctsteps.ail).
-    ct CtSteps
+    ctsteps CtSteps
     ## `any T` implementations and dispatchers (ADR 0616).
     traits Traits
     ## `problems.len()` when the current function began.
@@ -293,7 +293,7 @@ pub fn lower_package_par(
         uniq: new_uniq(),
         unw: new_unwind(),
         asks: ask_keys(srcs),
-        ct: new_ct_steps(),
+        ctsteps: new_ct_steps(),
         traits: new_traits(),
         fn_problems: 0,
         fn_failed: false,
