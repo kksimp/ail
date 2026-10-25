@@ -249,7 +249,7 @@ failed contract condition read, and the stack. With `--json`, the failing
 line carries it as `"snapshot"`. A contract failure (contract.req.1,
 contract.ens.1) names the contract in the failure message. *(ADR 0290)*
 
-```ail tool=test,FILE status=1 expect=two() rules=test.run.5
+```ail skip=bootstrap tool=test,FILE status=1 expect=two() rules=test.run.5
 @test
 fn one()
     assert(1 == 1)

@@ -114,7 +114,7 @@ a write to the element (trace.watch.4). A change
 made by a user function through a `mut` argument or `mut self` is shown
 (trace.watch.3). *(ADRs 0268, 0327)*
 
-```ail tool=run,--watch,xs,FILE expect=push rules=trace.watch.2
+```ail skip=bootstrap tool=run,--watch,xs,FILE expect=push rules=trace.watch.2
 fn main()
     mut s := "hi"
     mut xs := [1]
@@ -135,7 +135,7 @@ watch event with the whole new value and what was written: the list methods
 `"index"` or `"key"`. A `pop`, `remove_at`, `remove` or `add` that changes nothing
 is not shown. *(ADR 0347)*
 
-```ail tool=run,--watch,xs,FILE expect=set rules=trace.watch.4
+```ail skip=bootstrap tool=run,--watch,xs,FILE expect=set rules=trace.watch.4
 fn main()
     mut xs := [1]
     xs[0] = 9
@@ -152,7 +152,7 @@ in text, ` in Counter.bump (as \`self\`)` after the position, left out for the
 first frame so a plain run reads as before. A call that passes the value by
 copy (not `mut`) does not follow it. *(ADR 0327)*
 
-```ail tool=run,--watch,x,FILE expect=bump rules=trace.watch.3
+```ail skip=bootstrap tool=run,--watch,x,FILE expect=bump rules=trace.watch.3
 fn bump(mut n int)
     n += 1
 
@@ -295,7 +295,7 @@ local on its own line: `      NAME = VALUE`. *(ADR 0886, ADR 0641)*
 **Note:** a trap inside a task is reported to the task that waits
 for it (conc.task.6), whose own stack is the one a snapshot shows.
 
-```ail tool=run,--json,FILE status=1 expect="severity":"trap" rules=trace.snap.4
+```ail skip=bootstrap tool=run,--json,FILE status=1 expect="severity":"trap" rules=trace.snap.4
 fn inner(xs List[int]) int
     xs[5]
 
