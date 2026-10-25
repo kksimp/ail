@@ -7,7 +7,7 @@ use ast
 use check
 use load
 
-DIFF_USAGE := "usage: ail api --diff OLD NEW [--json]   (two files, or two package directories)\n       ail api --diff --rev REV PATH [--json]   (PATH as of git revision REV against now)"
+DIFF_USAGE := "usage: ail api --diff OLD NEW [--budget N] [--json]   (two files, or two package directories)\n       ail api --diff --rev REV PATH [--json]   (PATH as of git revision REV against now)"
 
 ## The compared keys of a public declaration (api.diff.2); a body is not part of an API.
 DIFF_KEYS := ["signature", "effects", "fails_with", "requires", "ensures", "default"]
@@ -152,7 +152,7 @@ fn changed_line(d Decl, diffs List[DiffChange], why List[str], json bool) str
 
 ## The report of `a` (OLD) against `b` (NEW), and how many declarations
 ## changed (api.diff.1-5).
-pub fn render_diff(old str, new str, a List[Decl], b List[Decl], json bool)(str, int)
+pub fn render_diff(old str, new str, a List[Decl], b List[Decl], json bool, budget int)(str, int)
     mut old_by := Map[str, Decl]()
     for d in a
         old_by[d.id] = d
@@ -164,6 +164,7 @@ pub fn render_diff(old str, new str, a List[Decl], b List[Decl], json bool)(str,
     mut changed := 0
     mut breaking := 0
     mut lines := List[str]()
+    mut hot := List[bool]()
     for d in b
         if o := old_by.get(d.id)
             mut diffs := List[DiffChange]()
@@ -178,6 +179,7 @@ pub fn render_diff(old str, new str, a List[Decl], b List[Decl], json bool)(str,
                 if why.len() > 0
                     breaking += 1
                 lines.push(changed_line(d, diffs, why, json))
+                hot.push(why.len() > 0)
         else
             added += 1
             w := added_breaks(d)
@@ -186,14 +188,29 @@ pub fn render_diff(old str, new str, a List[Decl], b List[Decl], json bool)(str,
                 breaking += 1
                 why.push(w)
             lines.push(decl_line("added", d, why, json))
+            hot.push(why.len() > 0)
     for d in a
         if not new_ids.contains(d.id)
             removed += 1
             breaking += 1
             lines.push(decl_line("removed", d, ["removed"], json))
+            hot.push(true)
+    # api.diff.5: over a `--budget`, the lines that are not breaking go first, from the end.
+    mut keep := [true for l in lines]
+    if budget > 0
+        mut size := 0
+        for l in lines
+            size += estimate_tokens(l)
+        mut at := lines.len()
+        while size > budget and at > 0
+            at -= 1
+            if not hot[at]
+                keep[at] = false
+                size -= estimate_tokens(lines[at])
     mut out := ""
-    for l in lines
-        out = "{out}{l}\n"
+    for k in 0..lines.len()
+        if keep[k]
+            out = "{out}{lines[k]}\n"
     if json
         out = "{out}\{\"summary\":true,\"old\":{quote(old)},\"new\":{quote(new)},\"added\":{added},\"removed\":{removed},\"changed\":{changed},\"breaking\":{breaking}}\n"
     else
@@ -265,6 +282,7 @@ pub fn diff_command(args List[str], std str) int
     mut paths := List[str]()
     mut rev := ""
     mut json := false
+    mut budget := 0
     mut i := 0
     while i < args.len()
         a := args[i]
@@ -278,6 +296,14 @@ pub fn diff_command(args List[str], std str) int
                 rev = args[i]
                 i += 1
             "--json" => json = true
+            "--budget" =>
+                v := if i < args.len() then args[i] else ""
+                n := v.to_int() else 0
+                if n <= 0
+                    io.eprint("error: `--budget` needs a positive number of tokens (api.diff.5)\n{DIFF_USAGE}")
+                    return 2
+                budget = n
+                i += 1
             _ =>
                 if a.starts_with("--")
                     io.eprint("error: unknown option `{a}`\n{DIFF_USAGE}")
@@ -309,7 +335,7 @@ pub fn diff_command(args List[str], std str) int
         return 2
     remove_scrap(scrap)
     shown_old := old
-    result := render_diff(shown_old, new, before, after, json)
+    result := render_diff(shown_old, new, before, after, json, budget)
     print(result.0.strip_suffix("\n") else result.0)
     if result.1 == 0 then 0 else 1
 
