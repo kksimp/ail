@@ -30,6 +30,10 @@ iterations as workers", so a 16-iteration loop of one add would pay a dispatch.
 4. **Stage 2, not in this ADR:** fork-join of independent calls. It needs the
    effect sets of ADR 0163 and its own cost model; it gets its own ADR.
 
+5. **Bounded proof.** The native build does not type-check, so the proof loads
+   and checks the program a second time. A program over 3 MB of source (about
+   60k lines, the compiler itself) skips it and runs its loops in order.
+
 ## Rejected alternatives
 
 - **Keep `--parallel` opt-in:** the designer wants multicore without flags.

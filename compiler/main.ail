@@ -594,7 +594,13 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     # for the programs that name them (json.prelude.1, ADR 0808).
     if mentions_prelude(srcs)
         srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
-    m := mir.lower_package_par(srcs, rt, lazy, proven_loop_keys(path, std)) else err
+    # The proof checks the whole program once more, so a program over about
+    # 60k lines keeps its loops in order (ADR 0911).
+    mut size := 0
+    for src in srcs
+        size += src.text.len()
+    pooled := if size > PROOF_MAX_BYTES then Set[str]() else proven_loop_keys(path, std)
+    m := mir.lower_package_par(srcs, rt, lazy, pooled) else err
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -613,6 +619,9 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             file_lines: [],
         )
     m
+
+## Source bytes past which the loop proof is skipped (ADR 0911).
+PROOF_MAX_BYTES := 3000000
 
 ## Whether the independent loops may go to the pool (conc.par.8): by default,
 ## unless `AIL_PARALLEL=0`; `--deterministic` keeps every loop on one thread
