@@ -167,8 +167,17 @@ fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     mut tail := List[Inst]()
     for k in at + 1..g.blocks[b].insts.len()
         tail.push(g.blocks[b].insts[k])
+    mut cont_params := if call.dst >= 0 then [call.dst] else []
+    if call.dst >= 0 and callee.ret.name() != g.vals[call.dst].name()
+        # `rt.obj_new` returns an `int` that its caller sees as a struct, a
+        # string or an enum: the block takes the `int` and a `copy` retypes it.
+        raw := g.vals.len()
+        g.vals.push(callee.ret)
+        g.names.push("")
+        tail.insert(0, inst(call.dst, "copy", [raw]))
+        cont_params = [raw]
     cont := Block(
-        params: if call.dst >= 0 then [call.dst] else [],
+        params: cont_params,
         insts: tail,
         term: g.blocks[b].term,
     )
