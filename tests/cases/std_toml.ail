@@ -12,7 +12,7 @@ fn main() !
         "",
         "[server]",
         "host = 'localhost'",
-        "point = { x = 1, y = 2 }",
+        "point = \{ x = 1, y = 2 }",
         "",
         "[server.tls]",
         "on = false",

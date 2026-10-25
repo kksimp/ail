@@ -1660,7 +1660,7 @@ holds a value, and a key path through a value that is not a table fail with
 unterminated string, an invalid escape, an invalid number and a missing value
 are further causes. *(ADR 0901)*
 
-```ail rules=std.toml.1,std.toml.3,std.toml.5
+```ail skip=bootstrap rules=std.toml.1,std.toml.3,std.toml.5
 use std.toml
 
 fn main() !
@@ -1671,7 +1671,7 @@ fn main() !
     print(db.str("host") else "")
 ```
 
-```ail rules=std.toml.7,std.toml.8
+```ail skip=bootstrap rules=std.toml.7,std.toml.8
 use std.toml
 
 fn main()
