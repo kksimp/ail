@@ -592,6 +592,59 @@ pub fn Asm.vpd256_rrr(mut self, op str, dst int, a int, b int)
 pub fn Asm.vpd256_rrm(mut self, op str, dst int, a int, m Mem)
     vex256_rm(1, 1, sd_opcode(op), dst, a, m)
 
+## `vandpd` (84) and `vandnpd` (85) on ymm registers: `dst = a & b` and
+## `dst = ~a & b`; the memory form takes `b` from `[m]`.
+pub fn Asm.vlogic256_rrr(mut self, op int, dst int, a int, b int)
+    vex256_rr(1, 1, op, dst, a, b)
+
+pub fn Asm.vlogic256_rrm(mut self, op int, dst int, a int, m Mem)
+    vex256_rm(1, 1, op, dst, a, m)
+
+## `vcmppd dst, a, b, pred` on ymm registers (`pred` 17: `a < b`, 18: `a <= b`,
+## 30: `a > b`, all false for NaN); the memory form takes `b` from `[m]`.
+pub fn Asm.vcmppd_rrr(mut self, dst int, a int, b int, pred int)
+    vex256_rr(1, 1, 194, dst, a, b)
+    byte(pred)
+
+pub fn Asm.vcmppd_rrm(mut self, dst int, a int, m Mem, pred int)
+    vex256_rm(1, 1, 194, dst, a, m)
+    byte(pred)
+
+## `vroundpd dst, src, mode` (9: floor, 10: ceil, both without the inexact trap).
+pub fn Asm.vroundpd(mut self, dst int, src int, mode int)
+    vex256_rr(1, 3, 9, dst, 0, src)
+    byte(mode)
+
+## `vblendvpd dst, a, b, mask`: each lane of `b` where the lane of `mask` has its
+## sign bit set, else of `a`.
+pub fn Asm.vblendvpd(mut self, dst int, a int, b int, mask int)
+    vex256_rr(1, 3, 75, dst, a, b)
+    byte(mask * 16)
+
+## `vcvtpd2dq xmm, ymm` (four doubles to four `int32`, rounded to nearest) and
+## `vpmovsxdq ymm, xmm` (four `int32` to four `int64`).
+pub fn Asm.vcvtpd2dq(mut self, dst int, src int)
+    vex256_rr(3, 1, 230, dst, 0, src)
+
+pub fn Asm.vpmovsxdq(mut self, dst int, src int)
+    vex256_rr(1, 2, 37, dst, 0, src)
+
+## `vpaddq dst, a, [m]` and `vpsllq dst, src, imm` on ymm registers.
+pub fn Asm.vpaddq_rrm(mut self, dst int, a int, m Mem)
+    vex256_rm(1, 1, 212, dst, a, m)
+
+pub fn Asm.vpsllq(mut self, dst int, src int, imm int)
+    vex256_rr(1, 1, 115, 6, dst, src)
+    byte(imm)
+
+## `vmovmskpd r32, ymm`: the four sign bits.
+pub fn Asm.vmovmskpd(mut self, dst int, src int)
+    vex256_rr(1, 1, 80, dst, 0, src)
+
+## `vmovups xmm, [m]`: four singles into the low half.
+pub fn Asm.vmovups_rm128(mut self, dst int, m Mem)
+    vex_rm(0, 1, 0, 16, dst, 0, m, 0)
+
 ## `vmovups` between a ymm register and memory: eight singles.
 pub fn Asm.vmovups_rm(mut self, dst int, m Mem)
     vex256_rm(0, 1, 16, dst, 0, m)

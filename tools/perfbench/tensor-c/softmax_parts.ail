@@ -1,0 +1,28 @@
+# Where the softmax race spends its time: each operation of softmax.ail alone, 100 rounds on a
+# 512x512 tensor, in milliseconds (a single-thread run: AIL_DETERMINISTIC=1).
+use std.time
+
+fn main()
+    n := 512
+    x := tensor.from([((i * 7919) % 1009).to_float() * 0.01 for i in 0..n * n], [n, n])
+    f := x.to_f32()
+    y := x.softmax()
+    mut keep := 0
+    t0 := time.now_ms()
+    for r in 0..100
+        keep += x.softmax().len()
+    t1 := time.now_ms()
+    for r in 0..100
+        keep += f.softmax().len()
+    t2 := time.now_ms()
+    for r in 0..100
+        keep += f.softmax().to_float().len()
+    t3 := time.now_ms()
+    for r in 0..100
+        keep += y.argmax(1).sum()
+    t4 := time.now_ms()
+    for r in 0..100
+        keep += y.sum(1).map(|s| s * 1000.0).round().sum()
+    t5 := time.now_ms()
+    print("softmax float {t1 - t0} ms, f32 {t2 - t1} ms, f32+to_float {t3 - t2} ms, argmax(1).sum {t4 - t3} ms, sum(1).map.round.sum {t5 - t4} ms")
+    print(keep)
