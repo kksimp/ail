@@ -114,7 +114,11 @@ fn Lower.lower_spawn_let(mut self, name str, pos ast.Pos, value ast.Expr)
     inner := match value
         Unary(_, x, _) => x
         _ => value
-    h := lower_spawn(inner, pos) else
+    # The trace names the `spawn` keyword, not the start of the statement.
+    at := match value
+        Unary(_, _, p) => p
+        _ => pos
+    h := lower_spawn(inner, at) else
         declare(name, Ty.Unknown, -1)
         return
     declare(name, Ty.Int, h.id)
@@ -223,6 +227,7 @@ fn Lower.wait_try_var(mut self, tname str, npos ast.Pos) Maybe?
     res := tk.rets.get(key)?
     h := read_var(key, cur)
     own := tk.fails.contains(key)
+    trace_wait(h, npos)
     wt := if res.is_unit() or res.is_float() then Ty.Int else res
     w := call("rt.task_try", [h, trace_line(npos), konst(if own then 1 else 0, Ty.Int)], wt)
     chan_deadlock_trap(npos)
