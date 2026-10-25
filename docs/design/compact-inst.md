@@ -29,6 +29,15 @@ Each step is its own PR with ail-linux self-build wall time and max RSS from the
 3. **Inline the first operands in `Inst`.** Replace `args` by `a`, `b`, `c` plus `rest List[int]` (usually the shared empty list) for up to 3 operands, with an accessor `Inst.operands()` for the cold users. This drops the 32 B list object and the data block (80 B of 144 B, about 55% of instruction memory, an estimated 130 MB). It is a wide change: `.args` is read in about 30 files under `compiler/mir`, `x64`, `a64`; it should land as a mechanical PR (accessors first, the layout change last) through the hot-file queue, with the optimizer lane since `inline.ail`, `fold.ail`, `forward.ail` and `reuse.ail` rewrite `args`.
 4. **Fewer instructions.** Count `Inst` per pass (`AIL_OPT_OFF` knobs exist for each) before and after inlining and generic instantiation; if monomorphization or inlining multiplies instructions that later passes delete, free them earlier (a function's blocks are dead once emitted).
 
+## Census after step 1 (#900, ail-linux, 2026-10-25)
+
+Two phases, with different remedies:
+
+- **Mid-build (MIR passes):** about 3.3M list objects and 3.3M list data blocks, 2.5M structs, 370 MB live. Steps 2 and 3 apply here. This is the 1.5 GB heap peak, because the 3x budget is taken on the largest live set.
+- **Codegen and link:** the object counts fall to 1.06M, but kind 3 (list data) grows from 42 MB to 199 MB with a constant count. A few lists are growing: the emitted image is `List[int]`, 8 bytes per byte of code and data, doubled by `list_grow`, then copied again by `link`/`elf`/`macho` into a second `List[int]`. An 8 MB binary costs 64 MB per copy.
+
+Step 5 (new): hold the image and the object file in a byte buffer (`bytes` or a `List[bool]`-style 1-byte list), or reserve the exact size up front where it is known. That is 8x on the largest single allocations of the build, without touching `Inst`. Check first how `codegen.Image` and `put` are typed.
+
 ## Rejected
 
 - **Collector pacing** (budget 2x or 1x above a live threshold): +6.6% wall for -19.7% RSS; the cost scales with the saving.
