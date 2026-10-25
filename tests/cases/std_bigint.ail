@@ -22,9 +22,9 @@ fn main() !
     print(bigint.from_int(0).is_zero())
     print(b.is_negative())
     print(bigint.from_int(-9223372036854775807 - 1).to_text())
-    print(bigint.parse("9223372036854775807")?.to_int() else -1)
-    print(bigint.parse("9223372036854775808")?.to_int() else -1)
-    print(bigint.parse("-9223372036854775808")?.to_int() else -1)
+    print(bigint.parse("9223372036854775807")?.as_int() else -1)
+    print(bigint.parse("9223372036854775808")?.as_int() else -1)
+    print(bigint.parse("-9223372036854775808")?.as_int() else -1)
     print(bigint.parse("1000000000")?.mul(bigint.parse("1000000000")?).to_text())
     bad := bigint.parse("12x") else err
         print("error: {err}")

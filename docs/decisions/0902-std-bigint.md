@@ -16,7 +16,7 @@ Python hit the 64-bit `int` limit silently or with a trap.
 
 `std.bigint`, written in AIL (`std/bigint/bigint.ail`), imported with
 `use std.bigint`: `BigInt` (sign and base-10^9 limbs), `from_int`, `parse`,
-`to_text`, `to_int`, `add`, `sub`, `mul`, `divmod` (toward zero), `pow`,
+`to_text`, `as_int`, `add`, `sub`, `mul`, `divmod` (toward zero), `pow`,
 `factorial`, `cmp`, `negate`, `abs`, `is_zero`, `is_negative` and
 `BigIntError` (std.bigint.1-9). Base 10^9 makes `to_text` and `parse` linear
 and keeps a limb product inside a 64-bit `int`. Division is schoolbook with a

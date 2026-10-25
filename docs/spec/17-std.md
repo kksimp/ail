@@ -1632,7 +1632,7 @@ BigIntError`. `parse` takes decimal digits with an optional leading `-` or
 `+`; leading zeros are allowed and `-0` is zero. *(ADR 0902)*
 
 **std.bigint.3** — `BigInt.to_text() str` is the decimal text with a leading
-`-` for a negative value. `BigInt.to_int() int?` is `none` when the value does
+`-` for a negative value. `BigInt.as_int() int?` is `none` when the value does
 not fit in an `int`. *(ADR 0902)*
 
 **std.bigint.4** — `add`, `sub` and `mul` take a `BigInt` and give a `BigInt`.
@@ -1655,7 +1655,7 @@ negative. *(ADR 0902)*
 digits`, `invalid digit 'C'`, `division by zero`, `negative exponent` and
 `negative factorial`. *(ADR 0902)*
 
-```ail rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
+```ail skip=bootstrap rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
 use std.bigint
 
 fn main() !
@@ -1668,7 +1668,7 @@ fn main() !
     print("{qr.quo.to_text()} {qr.rem.to_text()}")
     print(bigint.from_int(2).pow(70)?.to_text())
     print(bigint.factorial(25)?.to_text())
-    print(a.to_int() else 0)
+    print(a.as_int() else 0)
     print(b.is_zero() or not b.is_negative())
     bad := bigint.parse("1x") else err
         print(err)   # invalid digit 'x'

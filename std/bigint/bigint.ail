@@ -152,7 +152,7 @@ pub fn parse(text str) BigInt ! BigIntError
     mut end := s.len()
     while end > 0
         start := if end > 9 then end - 9 else 0
-        limbs.push(s.slice(start, end).to_int() else 0)
+        limbs.push(s.slice(start, end).as_int() else 0)
         end = start
     make(neg, limbs)
 
@@ -170,7 +170,7 @@ pub fn BigInt.to_text(self) str
     out
 
 ## The value as an `int`, or `none` when it does not fit (std.bigint.3).
-pub fn BigInt.to_int(self) int?
+pub fn BigInt.as_int(self) int?
     if limbs.len() > 3
         return none
     # 9223372036854775807 is the largest int; the smallest is its negation less one.
