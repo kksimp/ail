@@ -1660,15 +1660,20 @@ holds a value, and a key path through a value that is not a table fail with
 unterminated string, an invalid escape, an invalid number and a missing value
 are further causes. *(ADR 0901)*
 
-```ail skip=bootstrap rules=std.toml.1,std.toml.3,std.toml.5
+```ail skip=bootstrap rules=std.toml.1,std.toml.2,std.toml.3,std.toml.4,std.toml.5,std.toml.6
 use std.toml
 
 fn main() !
-    doc := toml.parse("name = \"app\"\nport = 8080\n[db]\nhost = \"h\"\n")?
+    src := "name = \"a\\tb\"\nport = 8080\nlit = 'c:\\x'\nx.y = [1,\n 2, ]\npt = \{ k = true }\n[db]\nhost = \"h\"\n[[db.node]]\nid = 1\n"
+    doc := toml.parse(src)?
     print(doc.str("name") else "")
+    print(doc.str("lit") else "")
     print(doc.num("port") else 0.0)
+    print((doc.get("x") else Json.Null).to_text())
+    print((doc.get("pt") else Json.Null).to_text())
     db := doc.get("db") else Json.Null
     print(db.str("host") else "")
+    print((db.get("node") else Json.Null).to_text())
 ```
 
 ```ail skip=bootstrap rules=std.toml.7,std.toml.8

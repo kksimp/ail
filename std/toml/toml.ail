@@ -162,7 +162,7 @@ fn TomlParser.put(self, node Json, path List[str], val Json, mode int) !Json
                 sub := put(Json.Obj([]), rest, val, mode)?
                 ms.push(JsonMember(key, sub))
             Json.Obj(ms)
-        _ => return fail("key path runs through a value that is not a table")
+        Json.Null | Json.Bool(_) | Json.Num(_) | Json.Str(_) => return fail("key path runs through a value that is not a table")
 
 ## A key: bare, "quoted" or 'literal', with dots between parts (std.toml.4).
 fn TomlParser.key_path(mut self) !List[str]
