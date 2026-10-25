@@ -1623,10 +1623,7 @@ fn Gate.api_card(mut self, tmp str)
     if r2.status != 2
         red("card --budget many", "exit {r2.status}")
     # api.card.6, api.card.7: the committed module and index cards, and the whole cards, are fresh.
-    for pair in [
-        ["compiler", "compiler"],
-        ["std", "std"],
-    ]
+    for pair in [["compiler", "compiler"], ["std", "std"]]
         index := ail_run(["api", "--card", "--index", pair[0]]) else return
         if index.status != 0
             red("card index {pair[0]}", index.err)
@@ -1656,10 +1653,7 @@ fn Gate.api_card(mut self, tmp str)
                 red("card module {module}", m.err)
             elif slurp("docs/design/cards/{pair[1]}/{file}.md") != m.out
                 red("card {pair[1]}/{file}.md", "is stale; regenerate it for {pair[0]}")
-    for pair in [
-        ["std", "std.md"],
-        ["compiler", "compiler.md"],
-    ]
+    for pair in [["std", "std.md"], ["compiler", "compiler.md"]]
         w := ail_run(["api", "--card", pair[0]]) else return
         if w.status != 0
             red("card {pair[0]}", w.err)
