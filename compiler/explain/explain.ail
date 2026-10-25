@@ -5,7 +5,7 @@
 ## at build time; this one reads `docs/spec/*.md`, the ADR index and the
 ## fixable list from the repository, `AIL_ROOT` or the parent of `AIL_COMPILER`
 ## (the same rule `ail build` uses for the runtime).
-## `tools/explain/parity.sh` compares the two.
+## `tools/explain/parity.sh` checks it against the goldens frozen from the Rust one.
 
 ## The code for an implementation limit; not a rule ID (spec README, rule 6).
 UNSUPPORTED := "bootstrap.unsupported"

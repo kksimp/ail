@@ -161,9 +161,9 @@ tools/
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
   fix/                    parity.py, run-parity.py: the AIL fix machinery (compiler/fix/) against the Rust one
-  fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against the Rust one
+  fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against its frozen goldens
   golden/                 golden.py: explain, fmt, fix, api and edit against outputs frozen from the Rust binary (tests/golden/), so they check with no Rust binary (D0)
-  explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against the Rust one
+  explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against its frozen goldens
   fuzz/                   fuzz and differential harness (ADRs 0269-0271)
   garlic/                 Garlic, a text-mode web browser written in AIL
     js/                   its JavaScript engine (docs/design/garlic-js.md)
