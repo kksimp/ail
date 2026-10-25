@@ -1949,6 +1949,8 @@ fn out_fn(t Ty) str
         Tensor(_) => "rt.out_tensor"
         Bytes => "rt.out_bytes_lit"
         List(e) =>
+            if e == Ty.Sized("u8")
+                return "rt.out_list_u8"
             match e
                 Int | Sized(_) => "rt.out_list_int"
                 Float => "rt.out_list_float"
@@ -1970,7 +1972,7 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
         while leaf.elem() != none
             depth += 1
             leaf = leaf.elem() else Ty.Unknown
-        k := match leaf
+        mut k := match leaf
             Int | Sized(_) => 0
             Float => 1
             Bool => 2
@@ -1978,6 +1980,8 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             Char => 4
             F32 => 5
             _ => -1
+        if leaf == Ty.Sized("u8")
+            k = 6
         if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)
