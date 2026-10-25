@@ -921,13 +921,15 @@ fn list_push(xs List[int], v int)
 fn list_pushf(xs List[int], x float)
     list_push(xs, float_bits(x))
 
-## `b` is a `bool` (0 or 1) or a `u8` (0 to 255): one byte either way.
-fn list_pushb(xs List[int], b int)
+## `b` is a `bool` (0 or 1) or a `u8` (0 to 255): one byte either way. The code
+## generators inline a push by the type of its value (`elem_bytes`), so a caller
+## in the runtime passes a `u8`, not an `int`.
+fn list_pushb(xs List[int], b u8)
     p := list_addr(xs)
     n := load64(p)
     if n == load64(p + 8)
         list_grow(p, 1)
-    store8(load64(p + 16) + n, b)
+    store8(load64(p + 16) + n, b.to_int())
     store64(p, n + 1)
 
 fn list_copy(xs List[int], size int) List[int]
