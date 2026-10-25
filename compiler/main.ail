@@ -379,11 +379,10 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
     src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
-    # `--parallel` may put any loop on the pool (conc.par.8).
-    tasks := mir.uses_tasks(src) or mentions_ui(src) or proven_loop_keys(
-        path,
-        "{dir}/../../../std",
-    ).len() > 0
+    # A `for` the pool may take (conc.par.8) needs it; a text test keeps the checker out of this path.
+    tasks := mir.uses_tasks(src)
+        or mentions_ui(src)
+        or parallel_on() and src.contains("for ")
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
