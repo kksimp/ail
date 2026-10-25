@@ -4,7 +4,6 @@ __pycache__/
 .DS_Store
 # Leftover private Rust toolchain (ADR 0087, retired), verification worktrees (ADR 0085), build output.
 .toolchain/
-bootstrap/target/
 .verify/
 tools/fuzz/failures/
 *.whl
