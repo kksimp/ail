@@ -169,9 +169,10 @@ for f in "$tests"/*.ail; do
         fail=$((fail + 1)); failed+=("$name (build)"); continue
     fi
     want_out=$(./ail run "$f" 2> "$out/want.err" < /dev/null); want_rc=$?
+    # `ail run` prints the checker's warnings first; a built program has none. Compare the trap line.
     got_out=$("$exe" 2> "$out/got.err" < /dev/null); got_rc=$?
     if [ "$want_out" == "$got_out" ] && [ "$want_rc" == "$got_rc" ] &&
-        [ "$(head -1 "$out/want.err")" == "$(head -1 "$out/got.err")" ]; then
+        [ "$(grep -m1 'trap\[' "$out/want.err")" == "$(grep -m1 'trap\[' "$out/got.err")" ]; then
         pass=$((pass + 1))
     else
         fail=$((fail + 1)); failed+=("$name (output)")
