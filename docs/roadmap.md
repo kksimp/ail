@@ -37,6 +37,15 @@ These are recommendations only. Each will be put to the designer as a question.
    **Done** (2026-10-20): `ail fmt`, ADRs 0169–0170, style in
    [design/formatting.md](design/formatting.md).
 
+## Rust bootstrap deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md))
+
+`bootstrap/`, the interpreter, `cargo` and the private Rust toolchain
+([ADR 0087](decisions/0087-private-rust-toolchain.md)) are gone; `./ail` builds from
+the published seed ([ADR 0855](decisions/0855-retire-the-rust-bootstrap.md)). Notes
+below that name the bootstrap, the interpreter, `tools/verify.sh` selftests or the
+bytecode tier are history. The remaining plan is "After Rust removal" and the
+backlog queue below.
+
 ## Next milestone (Stage 2, milestone 8; drafted 2026-10-20)
 
 Drawn from what is still open after the overnight buildout; the order is a
@@ -57,8 +66,8 @@ Day 1 of batch 2 reached `main` on 2026-10-21 as PR #223 (106 lane pull requests
    AES-GCM (AES-NI and PCLMULQDQ on x86-64, the crypto extension on ARM64,
    detected through AT_HWCAP on Linux) and proxy support
    ([ADR 0869](decisions/0869-http-proxy-from-the-environment.md)) are done.
-4. **Rust-free check (designer, 2026-10-20):** when the shipped toolchain
-   no longer needs Rust (end of Stage 4), rebuild `tools/edit` with the
+4. **Rust-free check (designer, 2026-10-20):** now that the shipped toolchain
+   no longer needs Rust (ADR 0904), rebuild `tools/edit` with the
    self-hosted toolchain and compare it with the Rust-bootstrap baseline in
    [editor-baseline.md](design/editor-baseline.md) (start-up, `ail check`
    time, test time, tokens, memory, and keystroke/redraw latency).

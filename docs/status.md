@@ -2,11 +2,12 @@
 
 _Last updated: 2026-10-21_
 
-**Current stage:** 2 — Bootstrap front end and interpreter. The Stage 1 core
-design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
-Linux x86-64 and macOS ARM64 gate every change ([ADR 0085](decisions/0085-interim-local-testing-gate.md));
-Windows is tested when convenient. The Linux selftest passes; macOS
-verification of the 2026-10-20 batch is pending. See
+**Current stage:** 2 — native self-hosting. The Rust bootstrap and interpreter are
+deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the compiler, checker
+and tools are written in AIL and `ail` builds itself from the published seed. The
+Stage 1 core design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
+The Mac gate ([ADR 0842](decisions/0842-mac-first-gate.md)) gates every change;
+Linux and Windows are tested on the designer's VMs. See
 [language-card.md](language-card.md) for the supported subset, and [roadmap.md](roadmap.md) for what comes next.
 
 ## What is implemented
@@ -68,7 +69,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native code generation (ADR 0816): parameters stay in their arrival registers (no swap moves at entry), and load and store primitives take `base + i*8 + k` addresses; wordfreq 254.6M → 214.4M instructions, binarytrees 412.2M → 368.3M, fannkuch 284.6M → 261.3M, fasta 81.3M → 72.5M.
 - Native drag race (ADR 0390): eleven perfbench programs build natively and match the interpreter byte for byte; times against `clang -O2`, `gcc -O2` and Python, and the compiler's own speed, are in [native-performance.md](design/native-performance.md). First optimisations (ADR 0391): lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols. Structs and methods (ADR 0392), with the heap header every native object uses. Packages and modules (ADR 0393): `ail build DIR` and `use` load modules as `ail run` does. List comprehensions and slices (ADR 0532). Bounds checks (ADRs 0577–0578, native.bce.1–2): counted and two-pointer loops are versioned with length guards so their list accesses lose their checks, row loads are hoisted, and accesses vouched for by an earlier access or `push` lose theirs; lists filled by counted loops are sized first (ADR 0579, native.bce.3). fannkuch 442M → 296M instructions, matmul 223M → 157M. Loops with a computed start or an unchanging step, and indexes bounded by a constant loop bound, are versioned too (ADRs 0622–0624, native.bce.7–9): nbody 163M → 120M instructions, sieve 118M → 91M. Integer arguments past the registers go on the stack (ADR 0533). The macOS OS layer moves to libSystem calls once dyld imports land; Linux keeps raw syscalls (ADR 0534). Recursive calls check the stack and trap under err.trap.1 instead of crashing (ADR 0535).
 - Self-compile survey (ADR 0585, 0586): `tools/self-compile/run.sh` lowers every compiler module and groups the 937 native-subset problems by file and construct; the top blockers and owners are in [self-compile-status.md](design/self-compile-status.md).
-- Native coverage (ADRs 0583–0584): `tools/native-coverage/run.sh` runs `ail build` on the 538 examples, cases and perfbench programs and reports which native.subset.1 constructs block the most; the baseline is in [native-coverage.md](design/native-coverage.md).
+- Native coverage (ADRs 0583–0584): the tracker is retired (ADR 0906) because it compared native output with the interpreter; the last baseline is a frozen snapshot in [native-coverage.md](design/native-coverage.md).
 - Native drag race (ADR 0390): eleven perfbench programs build natively and match the interpreter byte for byte; times against `clang -O2`, `gcc -O2` and Python, and the compiler's own speed, are in [native-performance.md](design/native-performance.md). First optimisations (ADR 0391): lifetime holes, MIR folding and CSE, inlining of small leaf functions, inline `push`, byte-sized `List[bool]`, ELF symbols. Structs and methods (ADR 0392), with the heap header every native object uses. Bounds checks (ADRs 0577–0578, native.bce.1–2): counted and two-pointer loops are versioned with length guards so their list accesses lose their checks, row loads are hoisted, and accesses vouched for by an earlier access or `push` lose theirs; lists filled by counted loops are sized first (ADR 0579, native.bce.3). fannkuch 442M → 296M instructions, matmul 223M → 157M.
 - Native key functions and function values (ADRs 0571-0573): `sorted`/`sort` with `by: |x| e` compile inline with a stable runtime merge sort; function values are function addresses called with `icall`.
 - Native contracts (ADR 0612): `requires` is checked in the caller at the call, `ensures` and `old(e)` in the function at each return, with the interpreter's message; conditions call unchecked `.nc` copies (contract.run.2). Struct `invariant` lines are checked at construction and after `mut self` methods. Contracts across modules and function values of contracted functions are not yet native.
@@ -212,4 +213,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-117 with gaps), 52 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-042, OQ-050, OQ-060, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097.
 
 - 2026-10-24: D4 (ADR 0855): `./ail` builds the native CLI only from the published seed (stage 0); the cargo fallback is gone. The Rust binary is still built for `AIL_RUST=1` routes until D5.
-- 2026-10-25: D5 (ADR 0865): `./ail`, `ail.ps1`, the Mac gate and the tools no longer run or read the Rust bootstrap (`AIL_RUST`, `AIL_BINARY`, `GATE_RUST` and cargo are gone); every gate suite runs on the native CLI. `bootstrap/` (the Rust compiler, interpreter and their tests) is deleted on Kaleb's go-ahead; the frozen goldens in `tests/golden/` stay.
+- 2026-10-25: D5 (ADR 0865): `./ail`, `ail.ps1`, the Mac gate and the tools no longer run or read the Rust bootstrap (`AIL_RUST`, `AIL_BINARY`, `GATE_RUST` and cargo are gone); every gate suite runs on the native CLI. `bootstrap/` (the Rust compiler, interpreter and their tests) is deleted on Kaleb's go-ahead ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the frozen goldens in `tests/golden/` stay.

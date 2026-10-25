@@ -1,8 +1,7 @@
 # Constructs outside the native subset, and their owners (lane 242)
 
-One list for three readers: `ail explain native.subset.1` (bootstrap/src/explain.rs),
-`tools/native-coverage/coverage.py` (its owner column), and the selftest in
-`bootstrap/tests/native_subset_table.rs`. Each row: a construct, the wording of its
+One list for two readers: `ail explain native.subset.1` and the `native_misc`
+gate suite (`tools/gate/gate.ail`, which checks each row). Each row: a construct, the wording of its
 `native.subset.1` message (plain text, backticks removed, as a substring of the
 message), and its owner: a PR (`#184`), a lane (`lane 120`), several of those
 separated by commas, or `unowned`. The first row whose wording matches a message

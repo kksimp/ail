@@ -3,10 +3,10 @@
 Run these top to bottom in PowerShell 7 or Windows PowerShell 5.1, from the
 repository root. Each line is one command, and each step says what to expect.
 A step that fails stays on the list: note the output and the ADR it cites.
-Windows is a first-class target (AGENTS.md, settled constraints). The Linux
-selftest is the merge gate, so this list is for the designer's check on Windows.
+Windows is a first-class target (AGENTS.md, settled constraints). The Mac gate
+(ADR 0842) is the merge gate, so this list is for the designer's check on Windows.
 
-1. `powershell -ExecutionPolicy Bypass -File .\ail.ps1 selftest` — expect the first run to install Rust privately into `.toolchain\` (ADR 0087), then `test result: ok` lines and no `FAILED`.
+1. `powershell -ExecutionPolicy Bypass -File .\ail.ps1 selftest` — the native gate suites (ADR 0865). The first run fetches the published seed (ADR 0855) and builds the native `ail`; there is no Rust (ADR 0904). Expect no `FAILED`.
 2. `.\ail.ps1 run examples\hello.ail` — expect the text in `examples\hello.out`.
 3. `.\ail.ps1 run bootstrap\tests\cases\std_path.ail` — expect `bootstrap\tests\cases\std_path.out`. Covers `std.path` separators (ADR 0504).
 4. `.\ail.ps1 run bootstrap\tests\cases\std_proc_which.ail` — expect `true` and a `not_found` ProcError. Covers process lookup (ADR 0505).

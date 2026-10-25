@@ -10,7 +10,7 @@ AIL is read and written by AI agents, and an agent learns the language from the
 first diagnostic it sees. The corpus in `tests/mistakes/` (109 small
 programs) holds one plausible mistake each, written as if AIL were Python,
 Rust, Go or TypeScript. Each has `NAME.rules` (the diagnostics' rule IDs) and,
-when `ail fix` leaves it clean, `NAME.fixed`. `cargo test --test mistakes`
+when `ail fix` leaves it clean, `NAME.fixed`. the gate's mistakes suite
 runs it; it fails if a diagnostic loses its help, a cascade returns, or fewer
 than 60% of the programs are fixed.
 

@@ -11,7 +11,8 @@ compiler that answers structured questions about your program.
 main.ail      ail build · ail run · ail test · ail fmt · ail check
 ```
 
-> **Status:** Stage 2. The bootstrap interpreter runs its first programs.
+> **Status:** Stage 2, native self-hosting. The Rust bootstrap is deleted
+> ([ADR 0904](docs/decisions/0904-rust-bootstrap-deleted.md)); `ail` builds itself.
 > See [docs/status.md](docs/status.md).
 
 ## Try it
@@ -44,7 +45,7 @@ Linux, Windows, and macOS are all first-class.
 All targets are 64-bit and little-endian. x86-64 and ARM64 are developed in
 strict lockstep ([ADR 0008](docs/decisions/0008-isa-priority-policy.md)). For
 now, testing is local on Linux and macOS
-([ADR 0085](docs/decisions/0085-interim-local-testing-gate.md)).
+([ADR 0842](docs/decisions/0842-mac-first-gate.md)).
 
 ## Documentation
 

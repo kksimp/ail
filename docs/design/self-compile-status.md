@@ -83,7 +83,7 @@ Also seen, smaller: `.extend()` on `List[int]` (4, 176), `for mut` and
 Minimal native cases for the blocked constructs live in
 `tests/native/selfc/` (`selfc_NAME.ail`, with `selfc_NAME.out` from
 `ail run`). They are not in `tests/native/run/`, so they do not gate
-`cargo test --test native`; a case that fails is a blocker, not a broken test.
+the gate's native suite; a case that fails is a blocker, not a broken test.
 `tools/self-compile/selfc-cases.sh` builds each one and prints the pass count.
 
 Current: **25 of 29 pass** (rerun on bd982d24; was 20 on 1c370770, 16 on fcc7f33d). The four still failing are `.contains()` and `.extend()` on lists, `unreachable`, and a sorted closure. The survey is stale in one large way: the
