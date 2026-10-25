@@ -1500,7 +1500,7 @@ fn Gate.budget(mut self, tmp str)
     # budget.out.4: the JSON note.
     j := ail_run(["check", "--json", "--budget", "10", f]) else return
     last := j.err.lines().last() else ""
-    if not last.starts_with("\{\"budget\":10,\"from\":0,\"shown\":1,\"total\":3,\"tokens\":")
+    if not last.starts_with("\{\"budget\":10,\"from\":0,\"shown\":1,\"full\":1,\"total\":3,\"tokens\":")
         or not last.ends_with("\"omitted\":\{\"warning\":2},\"next\":1}")
         red("budget json note", last)
     # budget.out.3: a test summary is always shown; failures come first.
