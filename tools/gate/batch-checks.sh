@@ -18,7 +18,7 @@ run build ./ail --version
 for d in compiler tools/garlic; do run check-${d##*/} ./ail check $d; done
 # The file build nativex and self-host stage 1 do: it sees only main.ail and what it `use`s (item 267).
 run build-cli env AIL_ROOT="$PWD" AIL_COMPILER="$PWD/compiler" ./ail build compiler/main.ail -o "$out/ail-cli"
-run fmt ./ail fmt --check compiler examples tools/garlic
+run fmt ./ail fmt --check compiler examples tools/garlic tools/gate
 # Every native run program has a frozen golden, or a pending.txt line (item 282; goldens.ail reds it on the Mac otherwise).
 missing_goldens() {
   local g=tests/native/golden bad=0
