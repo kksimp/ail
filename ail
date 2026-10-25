@@ -245,11 +245,16 @@ if [ "${AIL_RUST:-}" != 1 ]; then
         die "\`ail selftest --test NAME\` ran one cargo test and is retired: name a gate suite, as \`ail selftest cases\`, or run \`ail test FILE\` (ADR 0900)"
     fi
 fi
+# `--budget`/`--from` anywhere in `check` or `test` runs the command under the budget (budget.out.1-7).
+has_budget=
+if [ "${1:-}" = check ] || [ "${1:-}" = test ]; then
+    for a in "${@:2}"; do case "$a" in --budget | --from) has_budget=1 ;; esac; done
+fi
 native_errors=
 if [ "${1:-}" = check ]; then
     for a in "${@:2}"; do [ "$a" = --errors ] && native_errors=1; done
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         # The published seed is stage 0: it builds the native CLI (ADR 0855, D4); there is no cargo fallback.
@@ -308,9 +313,26 @@ if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || 
         AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"
     fi
     if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi
+    if [ "$1" = test ] && [ -n "$has_budget" ]; then
+        # `ail test --budget [N] [--from K] [--json] FILE`: the native runner under the budget (budget.out.3).
+        bopts=(); copts=(); prev=
+        for a in "${@:2}"; do
+            case "$prev:$a" in
+                --budget:*[!0-9]* | --budget:) ;;
+                --budget:* | --from:*) bopts+=("$a"); prev=; continue ;;
+            esac
+            prev=
+            case "$a" in
+                --budget | --from) bopts+=("$a"); prev="$a" ;;
+                --json) bopts+=("$a"); copts+=("$a") ;;
+                *) copts+=("$a") ;;
+            esac
+        done
+        AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget test "${bopts[@]}" -- "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${copts[@]}"
+    fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ -n "$native_errors" ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-errors "$@"; fi
-    if [ "$1" = check ] && { [ "${2:-}" = --budget ] || [ "${2:-}" = --from ]; }; then
+    if [ "$1" = check ] && [ -n "$has_budget" ]; then
         # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).
         bopts=(); copts=(); prev=
         for a in "${@:2}"; do
