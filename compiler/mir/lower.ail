@@ -2039,6 +2039,9 @@ fn Lower.lower_method(
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)
         return struct_call("{m}.{name}", none, args, expr_pos(recv))
+    if name == "sum" and args.len() == 0
+        if ws := tensor_widen_sum(recv)
+            return ws
     r := deref_use(lower_value(recv, none)?, expr_pos(recv))
     if e := atomic_elem(r.ty)
         return lower_atomic_method(r.id, e, name, npos, args)
