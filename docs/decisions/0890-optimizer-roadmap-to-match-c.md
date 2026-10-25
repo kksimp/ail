@@ -108,6 +108,15 @@ the callee-saved registers with one `str`/`ldr` each. (a) `adr_sym` of `globals`
 x86-64 already checks the stack with one `cmp rsp, [mem]` and has no pair form to use, so
 nothing is owed there (ADR 0008).
 
+## Pass 3 first slice: self-recursive calls inlined once
+
+`compiler/mir/opt_unroll.ail`: a user function of at most 60 instructions with one to three
+direct self calls gets a copy of its own body at each of those calls (the copy's own
+recursive calls stay calls). A recursion of depth d then makes about d / 2 calls, and each
+pair shares the frame, the callee-saved saves and the stack check. gcc -O3 does this
+(binarytrees is 2.3x of -O3 against 1.6x of -O2). Trap sites keep their frames, so traces
+are unchanged. `AIL_OPT_OFF=unroll` turns it off, so one binary gives the A/B.
+
 ## Rationale
 
 The listed gaps point at allocation and register pressure first, not at `-O3` loop

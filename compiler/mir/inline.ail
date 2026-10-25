@@ -30,7 +30,8 @@ pub fn inline_module(mut out Module)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
         budget := expand_calls(mut f, leaves, bodies, mut out.sites)
-        if budget < INLINE_BUDGET
+        unrolled := unroll_self(mut f, mut out.sites)
+        if budget < INLINE_BUDGET or unrolled
             simplify_in(mut f)
             fold_in(mut f)
             simplify_in(mut f)
@@ -142,7 +143,7 @@ fn first_call(blk Block, leaves Set[str], self_name str) int
 ## each `return` jumps to a new block, holding the rest of `b`, whose
 ## parameter is the call's value. The callee's checks are copied with a
 ## link to the call, a frame of the stack a trap prints (trace.frame.2).
-fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
+pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     nv := g.vals.len()
     nb := g.blocks.len()
     rest := nb + callee.blocks.len()
