@@ -37,6 +37,12 @@ struct ParSite
     pos ast.Pos
     ## The function that holds the loop (a stack names it, not the chunk).
     owner str
+    ## The module state of the function that holds the loop: the chunk is
+    ## lowered after the module, so it needs them to resolve names.
+    prefix str
+    file int
+    aliases Map[str, str]
+    self_ty str
     ## Static work of one iteration in operations (`ParScan.work`), for the
     ## cost model of a loop the compiler chose to run in parallel (conc.par.12).
     work int
@@ -639,6 +645,10 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         body: body,
         pos: pos,
         owner: fname,
+        prefix: prefix,
+        file: file,
+        aliases: aliases,
+        self_ty: self_ty,
         work: sc.work + 1,
     )
 
@@ -769,6 +779,25 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     rec := ps[0]
     tk.in_chunk = true
     tk.owner = p.owner
+    was := ParSite(
+        var: "",
+        by_list: false,
+        caps: [],
+        accs: [],
+        atomic: false,
+        body: [],
+        pos: p.pos,
+        owner: "",
+        prefix: prefix,
+        file: file,
+        aliases: aliases,
+        self_ty: self_ty,
+        work: 0,
+    )
+    prefix = p.prefix
+    file = p.file
+    aliases = p.aliases
+    self_ty = p.self_ty
     pos := p.pos
     env := rec_word(rec, 0)
     for i in 0..p.caps.len()
@@ -818,6 +847,10 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     tk.in_chunk = false
     tk.owner = ""
     tk.accs = Set[str]()
+    prefix = was.prefix
+    file = was.file
+    aliases = was.aliases
+    self_ty = was.self_ty
     synth_end(ps)
 
 ## After `acc += e` in a chunk: keep the lowest and highest running sum, so
