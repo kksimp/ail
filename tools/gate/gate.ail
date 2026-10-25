@@ -1412,8 +1412,8 @@ fn Gate.fmt(mut self, tmp str)
                 red("fmt {f}", "not in canonical layout")
             checked += 1
             continue
-        # std.ui programs open a real window; only their formatting is checked.
-        if source.contains("ui.open(")
+        # std.ui and std.app programs open a real window; only their formatting is checked.
+        if source.contains("ui.open(") or source.contains("use std.app")
             checked += 1
             continue
         copy := "{dir}/{name}"
