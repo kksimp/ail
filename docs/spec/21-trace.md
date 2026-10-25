@@ -168,12 +168,14 @@ standard error, `watch: NAME = VALUE at LINE:COL`, then the summary line
 (trace.run.4); over `--replay R` (replay.run.1) the same run is repeated exactly,
 so it answers "when did `NAME` become 0?" on a recorded run. The events are the
 assignments and `mut NAME := e` of trace.watch.1; the element writes of
-trace.watch.4 `push`, `pop`, `insert`, `remove_at`, `NAME[i] = e`, `NAME[k] = e` and a map's
-`remove` end in their note (`[push 3 at index 2]`); and a `mut` argument or `mut self`
+trace.watch.4 `push`, `pop`, `insert`, `remove_at`, `swap`, `extend`, `clear`, `reverse`,
+`sort`, `NAME[i] = e`, `NAME[k] = e`, and a map's `remove` and a set's `add` and `remove`
+(only when they change it) end in their note (`[push 3 at index 2]`, `[swap at index 0, 2]`,
+`[add 3]`); and a `mut` argument or `mut self`
 that holds the watched variable is followed into the callee (trace.watch.3), the event
-ending in ` in FN` and ` (as \`p\`)` when the callee's name differs. The other mutating
-methods (`swap`, `extend`, `clear`, `reverse`, `sort`, a set's `add` and `remove`) and the
-JSON form are not shown yet. *(ADRs 0868, 0886)*
+ending in ` in FN` and ` (as \`p\`)` when the callee's name differs. With `--json` each
+event is the one-line object of trace.watch.4's JSON form (`{"api":1,"trace":"watch",...}`).
+*(ADRs 0868, 0886)*
 
 ```ail tool=run,--watch,n,FILE expect=watch: rules=trace.watch.5
 fn main()
