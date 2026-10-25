@@ -417,6 +417,8 @@ static void placeholder(cairo_t *cr, const Op *op) {
     cairo_fill(cr);
 }
 
+static const char *cid(GtkWidget *w);
+
 static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
     Node *n = data;
     gtk_render_background(gtk_widget_get_style_context(wd), cr, 0, 0, gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd));
