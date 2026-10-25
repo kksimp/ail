@@ -99,7 +99,13 @@ fn gc_sweep()
     base := hs(H_BASE)
     pt := hs(H_PAGES)
     top_i := (hs(H_TOP) - base) / PAGE
+    # The blocks of each class's page being filled that were never handed out
+    # (`BUMP` to `BEND`) hold an old object's words, since a reused page isn't
+    # zeroed: they are free whatever their bits say. Words 200-279 of the
+    # state block keep the windows through the sweep.
     for c in 0..40
+        hset(200 + c, hs(H_BUMP + c))
+        hset(240 + c, hs(H_BEND + c))
         hset(H_HEADS + c, 0)
         hset(H_BUMP + c, 0)
         hset(H_BEND + c, 0)
@@ -122,7 +128,7 @@ fn gc_sweep()
             while k >= 0
                 bs := pb + k * csz
                 h := load64(bs)
-                if h.bit_and(256) != 0
+                if h.bit_and(256) != 0 and (bs < hs(200 + idx) or bs >= hs(240 + idx))
                     store64(bs, h.bit_xor(256))
                     marked += 1
                 else

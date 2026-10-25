@@ -26,22 +26,40 @@ pub fn Hub.new() Hub
 ## A token an agent must present: 24 bytes from the system's random source,
 ## else from the generator (attach.wire.2).
 pub fn make_token() str
+    got := system_token()
+    if got.chars().len() == 48
+        return got
+    fallback_token()
+
+## 48 hex digits from the operating system, or "": `/dev/urandom` through `sh`, and on Windows
+## .NET's random number generator through PowerShell.
+fn system_token() str
+    if (env.get("OS") else "") == "Windows_NT"
+        script := "$b = New-Object byte[] 24; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); -join ($b | ForEach-Object \{ $_.ToString('x2') })"
+        out := proc.run("powershell", ["-NoProfile", "-Command", script], none, none) else err
+            return ""
+        if out.ok()
+            return out.text().trim()
+        return ""
     out := proc.run(
         "sh",
         ["-c", "head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \\n'"],
         none,
         none,
     ) else err
-        return fallback_token()
-    got := out.text().trim()
-    if out.ok() and got.chars().len() == 48
-        return got
-    fallback_token()
+        return ""
+    if out.ok()
+        return out.text().trim()
+    ""
 
 fn fallback_token() str
     mut s := ""
-    for k in 0..4
-        s = "{s}{random.int(0, 1000000000000).to_hex()}"
+    for k in 0..6
+        h := random.int(0, 4294967295).to_hex()
+        mut pad := ""
+        for i in 0..8 - h.chars().len()
+            pad = "{pad}0"
+        s = "{s}{pad}{h}"
     s
 
 ## The app `inner` with the attach protocol answered between its events
@@ -107,7 +125,7 @@ fn listen_loop(l net.Listener, inbox app.Inbox, hub Hub)
 ## Where the address and token are published: `$TMPDIR/ail-attach-PORT.json`,
 ## mode 0600 (attach.wire.1).
 pub fn token_path(port str) str
-    dir := env.get("TMPDIR") else "/tmp"
+    dir := env.get("TMPDIR") else (env.get("TEMP") else "/tmp")
     "{dir}/ail-attach-{port}.json"
 
 ## Runs `a` in its window as `app.run` does, with the attach listener on
@@ -126,8 +144,10 @@ pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
     # Create the file empty, restrict it, then put the token in it.
     fs.write_text(path, "") else err
         return app.AppError(kind: "attach", message: "can't write {path}: {err}")
-    chmod := proc.run("chmod", ["600", path], none, none) else err
-        return app.AppError(kind: "attach", message: "can't restrict {path}: {err}")
+    # The owner-only mode is a Unix one; a Windows file is the user's by its folder.
+    if (env.get("OS") else "") != "Windows_NT"
+        chmod := proc.run("chmod", ["600", path], none, none) else err
+            return app.AppError(kind: "attach", message: "can't restrict {path}: {err}")
     fs.write_text(path, "\{\"addr\":\"{addr}\",\"token\":\"{token}\"}\n") else err
         return app.AppError(kind: "attach", message: "can't write {path}: {err}")
     hub := Hub.new()
