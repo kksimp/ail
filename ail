@@ -314,7 +314,8 @@ if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || 
         if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget run $budget_opts -- "$exe" "$@"; fi
         if [ -n "${snap_json:-}" ]; then
             snap_err="$(mktemp)"
-            (AIL="$root/ail" exec -a "$run_file" "$exe" "$@") 2>"$snap_err"; snap_rc=$?
+            snap_rc=0
+            (AIL="$root/ail" exec -a "$run_file" "$exe" "$@") 2>"$snap_err" || snap_rc=$?
             awk -v main="$run_file" -f "$root/tools/trapjson.awk" < "$snap_err" >&2; rm -f "$snap_err"
             exit "$snap_rc"
         fi
