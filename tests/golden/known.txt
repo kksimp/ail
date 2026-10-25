@@ -6,8 +6,6 @@ attach_observe
 derive_generated_invalid
 derive_generator_effects
 derive_junk_text
-derive_json_unbounded
-derive_generator_fails
 # Rust adds a `method:TRAIT.self` reference next to the call of a trait method through
 # an implicit `self`; it names no declaration, and the native references omit it.
 --symbols tests/cases/implicit_self.ail
