@@ -212,4 +212,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-117 with gaps), 52 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-042, OQ-050, OQ-060, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097.
 
 - 2026-10-24: D4 (ADR 0855): `./ail` builds the native CLI only from the published seed (stage 0); the cargo fallback is gone. The Rust binary is still built for `AIL_RUST=1` routes until D5.
-- 2026-10-25: D5 (ADR 0865): `./ail`, `ail.ps1`, the Mac gate and the tools no longer run or read the Rust bootstrap (`AIL_RUST`, `AIL_BINARY`, `GATE_RUST` and cargo are gone); every gate suite runs on the native CLI. `bootstrap/` is deleted in the next change.
+- 2026-10-25: D5 (ADR 0865): `./ail`, `ail.ps1`, the Mac gate and the tools no longer run or read the Rust bootstrap (`AIL_RUST`, `AIL_BINARY`, `GATE_RUST` and cargo are gone); every gate suite runs on the native CLI. `bootstrap/` (the Rust compiler, interpreter and their tests) is deleted on Kaleb's go-ahead; the frozen goldens in `tests/golden/` stay.
