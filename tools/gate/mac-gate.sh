@@ -3,12 +3,12 @@
 #   tools/gate/mac-gate.sh [--full]    from the repository root, on the branch under test
 # Native only (ADR 0865): runs gate.ail's suites, which build and run everything with
 # the native compiler, and prints one line per failing test plus the first 3 lines of
-# its message. The cargo selftest (the interpreter and Rust-internal tests) runs only
-# with --full, and the self-host stage T only on request (gate.ail selfhost). Silence means green:
+# its message. --full adds the interpreter-only suites (the same as GATE_INTERP=1; the cargo
+# selftest is gone), and the self-host stage T runs only on request (gate.ail selfhost). Silence means green:
 # the last line is `GATE GREEN` or `GATE RED (N failures)`. Full logs stay in
 # $TMPDIR/ail-gate/*.log for a look when a failure needs more.
 set -u
-full=0; [ "${1:-}" = "--full" ] && full=1
+[ "${1:-}" = "--full" ] && GATE_INTERP=1
 cd "$(git rev-parse --show-toplevel)"
 # A std.app program (examples/app_todo.ail) would open the host's window and wait for ever on this Mac:
 # a host path that doesn't exist makes `app.run` fail at once instead.
@@ -21,8 +21,6 @@ run() { # run NAME CMD...
   echo "RED $name"
   grep -E "^test .* FAILED|panicked at|differs from|^error|disagreement|Symbol not found" "$out/$name.log" | head -8 | cut -c1-200
 }
-# The cargo copies of the ported suites are deleted (B6's list); --full runs what is left.
-[ "$full" = 1 ] && run selftest ./ail selftest --no-fail-fast
 # Self-host stage 1: the native compiler must build from compiler/main.ail. nativex reuses it
 # (NATIVE_COMPILER), so this is not an extra build; a failure is red here and in nativex.
 if ./ail build compiler/main.ail -o "$out/native-compiler" >"$out/selfhost1.log" 2>&1; then
