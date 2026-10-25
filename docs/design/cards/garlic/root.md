@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 108 (`ail test` lists them)
+tests: 109 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -105,6 +105,7 @@ fn show_ops(List[draw.Op]) List[str]
 fn resized(float, float) std.app.Event
 fn clicked(float, float) std.app.Event
 fn node_with(Browser, str, str, str) int
+fn probe_font(str) str
 fn pixel_text(List[draw.Op]) List[str]
 fn pixels(str, float) gfx.Scene
 fn bench_run(int, str, html.Doc, css.Sheet) int
@@ -114,4 +115,4 @@ fn flat(gfx.Scene) List[str]
 fn fwd_slashes(str) str
 ```
 
-trimmed to fit 2000 tokens (~1544); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1552); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

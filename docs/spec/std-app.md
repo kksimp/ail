@@ -32,7 +32,7 @@ is `0.0` fills the space left in that direction. The builders
 **std.app.3** — `enum Op` is a canvas's display list, drawn in order, in
 points from the canvas's top-left corner, colors `0xRRGGBB`:
 `Str(x, y, text, font, size, fg, bold, italic, underline)` (`font` is
-`mono` or `sans`; `(x, y)` is the text's top-left corner),
+`mono`, `sans` or `serif`, ADR 0905; `(x, y)` is the text's top-left corner),
 `Fill(x, y, w, h, color)`, `Stroke(x1, y1, x2, y2, color, width)`,
 `Pic(x, y, w, h, src)` (an image file path or URL),
 `Bitmap(x, y, w, h, id, pw, ph, data)` (a `pw` by `ph` image scaled to the
@@ -116,7 +116,7 @@ and `view` without a window. *(ADR 0838)*
 
 **std.app.13** — `trait App` also has `measures(self) List[Measure]` (default
 empty) and `measured(mut self, runs List[Measure], widths List[float])`
-(default does nothing). `struct Measure` is `text`, `font` (`mono` or `sans`),
+(default does nothing). `struct Measure` is `text`, `font` (`mono`, `sans` or `serif`),
 `size`, `bold` and `italic`. After each `update`, while `measures()` is not
 empty (at most 4 rounds), `run` sends `{"v":1,"t":"measure","runs":[...]}` with
 the same fields per run, and waits for the host's `{"kind":"measured","text":W}`

@@ -23,8 +23,8 @@ pub struct gfx.Probe  ## A text run whose width the host can measure (docs/spec/
     pub text str
     pub size float
     pub bold bool
-    pub mono bool
-pub fn gfx.probe_key(text str, size float, bold bool, mono bool) str  ## The key of a run in the measured table.
+    pub font str  ## The host font family: `sans`, `mono` or `serif`.
+pub fn gfx.probe_key(text str, size float, bold bool, font str) str  ## The key of a run in the measured table.
 pub fn gfx.text_width(text str, size float, bold bool, mono bool) float  ## The width in pixels of `text` at `size`, in a proportional or (`mono`)
 pub fn gfx.length(v str, size float, rel float) float?  ## A length in pixels: `px`, `em`, `rem`, `pt`, `%` (of `rel`) or `0`.
 pub fn gfx.color(v str) int?  ## A color: `#rgb`, `#rrggbb`, `rgb()`, `rgba()` or a name. `none` for
@@ -34,4 +34,4 @@ pub fn gfx.layout_with(d html.Doc, url str, width float, sheet css.Sheet, sizes 
 pub fn gfx.layout_measured(d html.Doc, url str, width float, sheet css.Sheet, sizes Map[str, List[int]], meas Map[str, float], editing int) gfx.Scene  ## `layout_with` using the run widths in `meas` (`probe_key`), drawing text
 ```
 
-trimmed to fit 2000 tokens (~820); dropped: private items
+trimmed to fit 2000 tokens (~840); dropped: private items
