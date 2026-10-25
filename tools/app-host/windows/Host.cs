@@ -884,11 +884,14 @@ static class Program
         using (var g = Graphics.FromImage(bmp))
         {
             g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+            // A run that ends in a space (the text before a bold or linked word) must count it.
+            var fmt = new StringFormat(StringFormat.GenericTypographic);
+            fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
             foreach (object r in runs)
             {
                 Font f = Fonts.Get(Json.Text(Json.Get(r, "font")), Json.Num(Json.Get(r, "size")),
                                    Json.Flag(Json.Get(r, "bold")), Json.Flag(Json.Get(r, "italic")), false);
-                float w = g.MeasureString(Json.Text(Json.Get(r, "text")), f, 100000, StringFormat.GenericTypographic).Width;
+                float w = g.MeasureString(Json.Text(Json.Get(r, "text")), f, 100000, fmt).Width;
                 widths.Add(w.ToString("0.000", CultureInfo.InvariantCulture));
             }
         }
