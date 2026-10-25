@@ -5,7 +5,7 @@ entry: main in main.ail
 
 ## a64 (74 items)
 
-## api (208 items)
+## api (211 items)
 
 ## ast (129 items)
 
