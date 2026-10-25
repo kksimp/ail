@@ -1,6 +1,6 @@
 # garlic: (root)
 entry: main in garlic.ail
-tests: 106 (`ail test` lists them)
+tests: 107 (`ail test` lists them)
 ail.pkg:
     package garlic
     dep garlicjs path js
@@ -90,6 +90,7 @@ fn attached_main(mut Garlic, str) ! [clock env fail fs io mutates net net.serve 
 fn flag(List[str], str) str?
 fn usage() [io]
 VALUE_FLAGS := ...
+fn cli_target(str) str [fs io]
 fn target_of(List[str]) str
 fn op_line(draw.Op) str
 fn pixels_dump(mut Browser, float) [clock fs io mutates net]
@@ -107,6 +108,7 @@ fn bench_run(int, str, html.Doc, css.Sheet) int
 fn bench(List[str]) [clock fs io]
 fn bitmap_data_lens(List[std.app.Op]) List[List[int]]
 fn flat(gfx.Scene) List[str]
+fn fwd_slashes(str) str
 ```
 
-trimmed to fit 2000 tokens (~1481); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1502); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
