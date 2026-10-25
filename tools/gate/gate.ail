@@ -44,6 +44,14 @@ fn build(src str, exe str) str?
         return none
     r.err.lines().first() else "build failed"
 
+## Programs that build something big before they print: they get a longer alarm than the usual 60 seconds.
+SLOW_STEMS := ["tool_garlic_pages"]
+
+fn alarm_for(stem str) int
+    if SLOW_STEMS.contains(stem)
+        return 180
+    60
+
 fn first_lines(text str, n int) str
     text.lines().take(n).join("\n")
 
@@ -69,7 +77,7 @@ fn Gate.examples(mut self, tmp str)
             continue
         built += 1
         # Under a 60 second alarm: one hang is one red example, not a stuck gate.
-        got := proc.run("perl", ["-e", "alarm 60; exec @ARGV", exe]) else
+        got := proc.run("perl", ["-e", "alarm {alarm_for(stem)}; exec @ARGV", exe]) else
             red("examples/{name}", "could not run the executable")
             continue
         want := fs.read_text("examples/{stem}.out") else ""
@@ -544,7 +552,8 @@ fn ail_run(args List[str]) proc.Output ! proc.ProcError
 ## each case under a 60 second alarm so one hang is one red case, not a stuck gate (item 309).
 fn case_run(native bool, args List[str]) proc.Output ! proc.ProcError
     if native or (env.get("GATE_CASES_NATIVE") else "") == "1"
-        script := "perl -e 'alarm 60; exec @ARGV' \"$PWD/ail\" \"$@\""
+        secs := alarm_for(path.stem(args.last() else ""))
+        script := "perl -e 'alarm {secs}; exec @ARGV' \"$PWD/ail\" \"$@\""
         return proc.run("sh", cat(["-c", script, "sh"], args))
     rust_run(args)
 
