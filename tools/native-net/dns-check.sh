@@ -42,8 +42,7 @@ while [ ! -s "$tmp/dnsport" ]; do sleep 0.1; done
 dport=$(head -1 "$tmp/dnsport")
 printf 'nameserver 127.0.0.1\n' > "$tmp/resolv.conf"
 cp -r compiler "$tmp/compiler"
-mkdir -p "$tmp/bootstrap"
-cp -r bootstrap/src "$tmp/bootstrap/src"
+cp -r std "$tmp/std"
 sed -i "s|\"/etc/resolv.conf\"|\"$tmp/resolv.conf\"|" "$tmp/compiler/rt/native/net_dns.ail"
 sed -i "s|net_sockaddr(ns, 53)|net_sockaddr(ns, $dport)|" "$tmp/compiler/rt/native/net_dns.ail"
 export AIL_COMPILER="$tmp/compiler"

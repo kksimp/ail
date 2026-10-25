@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# The AIL command-line tool (bootstrap edition). From the repository root:
+# The AIL command-line tool. From the repository root:
 #
 #   ./ail run examples/hello.ail     check and run a program
 #   ./ail check FILE                 check without running (add --json for tools)
 #   ./ail selftest                   the Mac gate (tools/gate/mac-gate.sh)
 #
-# There is no Rust toolchain here (ADR 0855, D4): the published seed (tools/release/fetch-seed.sh) builds the native CLI.
+# There is no Rust toolchain here (ADR 0855): the published seed (tools/release/fetch-seed.sh) builds the native CLI.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # std.app.10: a program finds the app host built under the toolchain.
 export AIL_ROOT="$root"
-binary="$root/bootstrap/target/release/ail"
 
 die() { echo "ail: $*" >&2; exit 2; }
 
@@ -77,13 +76,9 @@ fi
 
 # The native CLI (ADR 0855) is the default: `ail fmt ...`, `ail test FILE` (tools/ailtest), `ail api FILE`, `ail build`,
 # `ail check FILE` and `ail run [--timeout MS] [--max-memory MB] FILE [ARGS]` are done by compiler/main.ail
-# built natively into .native/ail (by the published seed, stage 0; no cargo fallback): `check-program` first,
-# then the program from the build cache, exec'd so it keeps the terminal. `AIL_RUST=1` (or a pinned AIL_BINARY) is the
-# one way to the Rust `ail` and its interpreter, until the Rust is deleted; a program outside the native subset is an error.
-# Anything else, and `run` with other options before the file, goes to the Rust `ail` below.
+# built natively into .native/ail (by the published seed, stage 0): `check-program` first, then the program from the build
+# cache, exec'd so it keeps the terminal. A program outside the native subset is an error; a command with no native form is refused.
 # `ail api` natively: one file, with at most --outline, --text, --pretty and --symbols.
-native_on=1
-if [ "${AIL_RUST:-}" = 1 ] || [ -n "${AIL_BINARY:-}" ]; then native_on=0; fi
 # trace.run.1: the tracing options belong to `run` and `test`.
 if [ "${1:-}" != run ] && [ "${1:-}" != test ]; then
     for trace_arg in "$@"; do
@@ -105,7 +100,7 @@ run_opts=
 budget_opts=
 run_skip=0
 check_opts=
-if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
+if [ "${1:-}" = run ]; then
     run_args=("$@")
     k=1
     while [ "$k" -lt "${#run_args[@]}" ]; do
@@ -234,16 +229,14 @@ if [ "${1:-}" = effects ]; then
     [ "$files" = 1 ] || native_effects=
 fi
 # Routes only the Rust bootstrap could run are refused (ADR 0900): `test --native` compared native builds with the
-# interpreter, and `selftest --test NAME` ran one cargo test. `AIL_RUST=1` still reaches the Rust `ail` until it is deleted.
-if [ "${AIL_RUST:-}" != 1 ]; then
-    if [ "${1:-}" = test ]; then
-        for a in "${@:2}"; do
-            [ "$a" = --native ] && die "\`ail test --native\` is retired: \`ail test\` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)"
-        done
-    fi
-    if [ "${1:-}" = selftest ] && [ "${2:-}" = --test ]; then
-        die "\`ail selftest --test NAME\` ran one cargo test and is retired: name a gate suite, as \`ail selftest cases\`, or run \`ail test FILE\` (ADR 0900)"
-    fi
+# interpreter, and `selftest --test NAME` ran one cargo test.
+if [ "${1:-}" = test ]; then
+    for a in "${@:2}"; do
+        [ "$a" = --native ] && die "\`ail test --native\` is retired: \`ail test\` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)"
+    done
+fi
+if [ "${1:-}" = selftest ] && [ "${2:-}" = --test ]; then
+    die "\`ail selftest --test NAME\` ran one cargo test and is retired: name a gate suite, as \`ail selftest cases\`, or run \`ail test FILE\` (ADR 0900)"
 fi
 # `--budget`/`--from` anywhere in `check` or `test` runs the command under the budget (budget.out.1-7).
 has_budget=
@@ -254,10 +247,10 @@ native_errors=
 if [ "${1:-}" = check ]; then
     for a in "${@:2}"; do [ "$a" = --errors ] && native_errors=1; done
 fi
-if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
-        # The published seed is stage 0: it builds the native CLI (ADR 0855, D4); there is no cargo fallback.
+        # The published seed is stage 0: it builds the native CLI (ADR 0855).
         mkdir -p "$root/.native"
         want_tag="$(head -n 1 "$root/tools/release/SEED_TAG" 2>/dev/null || true)"
         if [ ! -x "$root/.native/seed" ] || [ "$(cat "$root/.native/seed.tag" 2>/dev/null)" != "$want_tag" ]; then
@@ -375,7 +368,7 @@ fi
 
 # `ail selftest` with no arguments is the native gate (ADR 0865, item 252): tools/gate/mac-gate.sh runs gate.ail's suites with the
 # native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers.
-if [ "${1:-}" = selftest ] && [ "$native_on" = 1 ]; then
+if [ "${1:-}" = selftest ]; then
     if [ "$#" = 1 ]; then exec "$root/tools/gate/mac-gate.sh"; fi
     if [ "${2:-}" = --fuzz ]; then
         # The AIL fuzzers (tools/fuzz/suite.ail, modules.ail): programs and module inputs, no Rust harness.
@@ -390,30 +383,19 @@ if [ "${1:-}" = selftest ] && [ "$native_on" = 1 ]; then
 fi
 
 # `ail test` is native only (plan.md step B): the AIL runner (tools/ailtest/ailtest.ail) builds the tests natively and
-# runs each. A test it can't build is reported `skip` with the construct that blocks it. `--trace` belongs
-# to the interpreter and is refused until it is ported.
+# runs each. A test it can't build is reported `skip` with the construct that blocks it.
 if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     for test_arg in "${@:2}"; do
         case "$test_arg" in
             --watch | --watch=*)
-                echo "ail test: $test_arg is not native yet (interpreter only: AIL_RUST=1 ./ail test ...)" >&2
-                [ "${AIL_RUST:-}" = 1 ] || exit 2 ;;
+                echo "ail test: $test_arg is not native yet" >&2
+                exit 2 ;;
         esac
     done
-    if [ "${AIL_RUST:-}" != 1 ]; then
-        AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}"
-    fi
-fi
-
-# A test run pins the binary it is testing (AIL_BINARY), so a program that starts `ail` itself isn't
-# rebuilt under it when the sources change mid-run.
-if [ "${1:-}" != selftest ] && [ -n "${AIL_BINARY:-}" ] && [ -x "$AIL_BINARY" ]; then
-    exec "$AIL_BINARY" "$@"
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}"
 fi
 
 if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail 0.1.0 (native)"; exit 0; fi
 
-# Everything else had no native form: the Rust `ail` is gone from here (D4). A binary built by hand from bootstrap/ still runs
-# with AIL_RUST=1 until D5 deletes it.
-if [ "${AIL_RUST:-}" = 1 ] && [ -x "$binary" ]; then exec "$binary" "$@"; fi
-die "\`ail ${1:-}\` has no native form; run \`./ail\` with a command from docs/quick-reference.md (D4: no cargo bootstrap)"
+# Everything else has no native form.
+die "\`ail ${1:-}\` has no native form; run \`./ail\` with a command from docs/quick-reference.md"

@@ -3,12 +3,12 @@
 
 Every fenced block whose info string is exactly `ail` or `ail fragment` is
 checked, in every Markdown file under `docs/` and in `README.md`, except
-`docs/spec/` (checked by `bootstrap/tests/spec.rs` in `./ail selftest`) and
+`docs/spec/` (checked by the `spec` suite of `./ail selftest`) and
 the quick reference and language card (their token budgets are checked
 elsewhere, and they are listed here but not edited).
 
 - `ail` is checked as a whole program.
-- `ail fragment` is wrapped the way `spec.rs` wraps one: column-0
+- `ail fragment` is wrapped the way the spec suite wraps one: column-0
   declarations stay top level and every other line goes into `fn main()`.
 - Any other tag (`ail excerpt`, `ail skip=context`, `ail norun`, `ail
   rules=...`, `text`, `sh`) is not checked. An excerpt is an incomplete

@@ -10,8 +10,7 @@ cd "$(dirname "$0")/../.."
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 cp -r compiler "$tmp/compiler"
-mkdir -p "$tmp/bootstrap"
-cp -r bootstrap/src "$tmp/bootstrap/src"
+cp -r std "$tmp/std"
 cp tools/native-tls/tlsprim.ail "$tmp/compiler/rt/native/tlsprim.ail"
 python3 - "$tmp/compiler/rt/native/hash.ail" <<'PY'
 import sys

@@ -6,11 +6,9 @@
 #
 # If scripts are blocked: powershell -ExecutionPolicy Bypass -File .\ail.ps1 run examples\hello.ail
 #
-# Like ./ail (ADR 0855, D4): the native CLI (compiler\main.ail built into .native\ail.exe) does run, build, check,
+# Like ./ail (ADR 0855): the native CLI (compiler\main.ail built into .native\ail.exe) does run, build, check,
 # test FILE, fmt, fix, diff, explain, edit, ask, api, effects and pkg. The published seed (stage 0), downloaded and
-# verified by tools\release\fetch-seed.ps1, builds it; there is no cargo fallback. AIL_RUST=1 (or a pinned AIL_BINARY)
-# is the one way to the Rust `ail` and its interpreter, until the Rust is deleted: it needs the pinned Rust (ADR 0087),
-# installed privately into .toolchain\ on first use. Not yet native here: `run --record/--replay/--budget`.
+# verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --record/--replay/--budget`.
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
@@ -18,108 +16,17 @@ $root = $PSScriptRoot
 function Fwd([string]$p) { $p -replace '\\', '/' }
 # std.app.10: a program finds the app host built under the toolchain.
 $env:AIL_ROOT = (Fwd $root)
-$bootstrap = Join-Path $root 'bootstrap'
-$manifest = Join-Path $bootstrap 'Cargo.toml'
-$pin = (Select-String -Path (Join-Path $bootstrap 'rust-toolchain.toml') -Pattern '^channel\s*=\s*"(.*)"').Matches[0].Groups[1].Value
-$toolDir = if ($env:AIL_TOOLCHAIN_DIR) { $env:AIL_TOOLCHAIN_DIR } else { Join-Path $root '.toolchain' }
 # Windows PowerShell 5.1 doesn't define $IsLinux/$IsMacOS, so they read as false there.
 $onWindows = -not ($IsLinux -or $IsMacOS)
 $exe = if ($onWindows) { '.exe' } else { '' }
-$binary = Join-Path (Join-Path (Join-Path $bootstrap 'target') 'release') "ail$exe"
-
-# A test run pins the binary it is testing (AIL_BINARY): a program that starts `ail` itself isn't rebuilt under it.
-if ($args.Count -gt 0 -and $args[0] -ne 'selftest' -and $env:AIL_BINARY -and (Test-Path $env:AIL_BINARY)) {
-    & $env:AIL_BINARY @args
-    exit $LASTEXITCODE
-}
-
 function Fail([string]$message) {
     [Console]::Error.WriteLine("ail: $message")
     exit 2
 }
 
-function Get-HostTriple {
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
-    if ($onWindows) {
-        # The GNU toolchain links with its bundled tools, so Visual Studio isn't needed on x64.
-        if ($arch -eq 'X64') { return 'x86_64-pc-windows-gnu' }
-        if ($arch -eq 'Arm64') { return 'aarch64-pc-windows-msvc' }
-    } elseif ($IsLinux) {
-        if ($arch -eq 'X64') { return 'x86_64-unknown-linux-gnu' }
-        if ($arch -eq 'Arm64') { return 'aarch64-unknown-linux-gnu' }
-    } elseif ($IsMacOS -and $arch -eq 'Arm64') {
-        return 'aarch64-apple-darwin'
-    }
-    Fail "unsupported host architecture: $arch"
-}
-
-function Install-PrivateRust {
-    $triple = Get-HostTriple
-    [Console]::Error.WriteLine("ail: installing Rust $pin privately into .toolchain (first run only; takes a few minutes) ...")
-    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ail-rust-" + [guid]::NewGuid())
-    New-Item -ItemType Directory -Path $tmp | Out-Null
-    $init = Join-Path $tmp "rustup-init$exe"
-    $url = "https://static.rust-lang.org/rustup/dist/$triple/rustup-init$exe"
-    try {
-        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $init
-        Invoke-WebRequest -UseBasicParsing -Uri "$url.sha256" -OutFile "$init.sha256"
-    } catch {
-        Fail "couldn't download $url"
-    }
-    $expected = ((Get-Content "$init.sha256" -Raw).Trim() -split '\s+')[0].ToLower()
-    $actual = (Get-FileHash -Algorithm SHA256 $init).Hash.ToLower()
-    if ($expected -ne $actual) { Fail 'rustup-init checksum mismatch; not installing' }
-    if (-not $onWindows) { & chmod +x $init }
-    $log = Join-Path $tmp 'install.log'
-    # Windows PowerShell 5.1 turns a native command's stderr into an error record, which `Stop` would take for a failure.
-    $ErrorActionPreference = 'Continue'
-    & $init -y --no-modify-path --profile minimal --default-toolchain $pin --default-host $triple *> $log
-    $ErrorActionPreference = 'Stop'
-    if ($LASTEXITCODE -ne 0) {
-        Get-Content $log | ForEach-Object { [Console]::Error.WriteLine($_) }
-        Fail 'Rust installation failed'
-    }
-    Remove-Item -Recurse -Force $tmp
-    [Console]::Error.WriteLine("ail: Rust $pin installed")
-}
-
-# Pick cargo: the system's if it matches the pin, otherwise the private copy. Only the Rust paths (AIL_RUST=1,
-# AIL_SELFTEST=cargo and the commands the native CLI doesn't do yet) come here.
-function Get-Cargo {
-    $systemRust = $null
-    if ((Get-Command cargo -ErrorAction SilentlyContinue) -and (Get-Command rustc -ErrorAction SilentlyContinue)) {
-        $systemRust = ((& rustc --version) -split ' ')[1]
-    }
-    # bootstrap/src/std is a symlink to ../../std; a Windows checkout without symlink rights makes it a text file,
-    # which the Rust build cannot read through. A junction does the same job.
-    $stdLink = Join-Path $bootstrap 'src\std'
-    if ($onWindows -and (Test-Path $stdLink -PathType Leaf)) {
-        Remove-Item -Force $stdLink
-        New-Item -ItemType Junction -Path $stdLink -Target (Join-Path $root 'std') | Out-Null
-        & git -C $root update-index --assume-unchanged -- bootstrap/src/std 2>$null
-    }
-    if ($systemRust -eq $pin) { return 'cargo' }
-    $env:RUSTUP_HOME = Join-Path $toolDir 'rustup'
-    $env:CARGO_HOME = Join-Path $toolDir 'cargo'
-    $env:RUSTUP_TOOLCHAIN = $pin
-    $cargoBin = Join-Path $env:CARGO_HOME 'bin'
-    $c = Join-Path $cargoBin "cargo$exe"
-    if (-not (Test-Path $c)) {
-        Install-PrivateRust
-    } else {
-        $installed = & (Join-Path $cargoBin "rustup$exe") toolchain list 2>$null
-        if (-not ($installed | Where-Object { $_ -like "$pin*" })) {
-            & (Join-Path $cargoBin "rustup$exe") toolchain install --profile minimal $pin
-            if ($LASTEXITCODE -ne 0) { Fail "couldn't install Rust $pin" }
-        }
-    }
-    return $c
-}
-
 $cmd = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
 # A path that exists is handed on with forward slashes (see Fwd).
 $rest = @($args | Select-Object -Skip 1 | ForEach-Object { if ("$_" -and (Test-Path -LiteralPath "$_" -ErrorAction SilentlyContinue)) { Fwd "$_" } else { $_ } })
-$nativeOn = ($env:AIL_RUST -ne '1') -and (-not $env:AIL_BINARY)
 function Add-Instrument([string]$what) {
     $env:AIL_INSTRUMENT = if ($env:AIL_INSTRUMENT) { "$($env:AIL_INSTRUMENT),$what" } else { $what }
 }
@@ -147,7 +54,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 # `run`'s options before the file (the same set as ./ail).
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
 $runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @()
-if ($cmd -eq 'run' -and $nativeOn) {
+if ($cmd -eq 'run') {
     $k = 0
     :scan while ($k -lt $rest.Count) {
         $a = [string]$rest[$k]
@@ -197,8 +104,8 @@ if ($cmd -eq 'run' -and $nativeOn) {
     $runSkip = $k
 }
 
-$native1 = $nativeOn -and $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'api'
-$route = $nativeOn -and (
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'api'
+$route = (
     $runFile -or $native1 -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
@@ -218,7 +125,7 @@ if ($route) {
         $stale = [bool]$newer
     }
     if ($stale) {
-        # The published seed is stage 0: it builds the native CLI (ADR 0855, D4); there is no cargo fallback.
+        # The published seed is stage 0: it builds the native CLI (ADR 0855).
         New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
         $seed = Join-Path $nativeDir "seed$exe"
         $tagFile = Join-Path $nativeDir 'seed.tag'
@@ -289,9 +196,8 @@ if ($route) {
 }
 
 # `ail selftest` with no arguments is the native gate (ADR 0865): tools\gate\win-gate.ps1 runs gate.ail's suites with the
-# native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers;
-# `AIL_SELFTEST=cargo` keeps the cargo tests.
-if ($cmd -eq 'selftest' -and $nativeOn -and $env:AIL_SELFTEST -ne 'cargo') {
+# native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers.
+if ($cmd -eq 'selftest') {
     if ($rest.Count -eq 0) { & (Join-Path $root 'tools\gate\win-gate.ps1'); exit $LASTEXITCODE }
     if ($rest[0] -eq '--fuzz') {
         if ($rest.Count -lt 2) { Fail 'usage: ail selftest --fuzz N [SEED]' }
@@ -307,21 +213,5 @@ if ($cmd -eq 'selftest' -and $nativeOn -and $env:AIL_SELFTEST -ne 'cargo') {
     exit $LASTEXITCODE
 }
 
-# What is left goes to the Rust `ail`, which is only for AIL_RUST=1 (or AIL_BINARY) and the commands not native yet.
-$cargo = Get-Cargo
-
-if ($cmd -eq 'selftest') {
-    & $cargo test --quiet --release --manifest-path $manifest @($args | Select-Object -Skip 1)
-    exit $LASTEXITCODE
-}
-
-if (-not (Test-Path $binary)) { [Console]::Error.WriteLine('ail: building the bootstrap (first run only) ...') }
-& $cargo build --quiet --release --manifest-path $manifest
-if ($LASTEXITCODE -ne 0) {
-    if ($onWindows -and (Get-HostTriple) -eq 'aarch64-pc-windows-msvc') {
-        Fail 'building failed; on Windows ARM64 the Visual Studio Build Tools (C++ workload) are required'
-    }
-    Fail 'building the bootstrap failed'
-}
-& $binary @args
-exit $LASTEXITCODE
+# Everything else has no native form.
+Fail "`ail $cmd` has no native form; run `.\ail.ps1` with a command from docs/quick-reference.md"
