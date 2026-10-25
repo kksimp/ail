@@ -1,6 +1,7 @@
 # 0746. One table of native-subset constructs, with owners
 
 - Status: Accepted
+- **Amended by:** [ADR 0906](0906-retire-native-coverage-tracker.md)
 - Date: 2026-10-21
 - Decided by: AI (delegated, ADR 0076)
 

@@ -2,7 +2,7 @@
 
 Measured with `ail test --native` (ADR 0679, native.test.1-5) on 2026-10-21 at the
 batch head fbf9a99, Linux x86-64, four cores, about 15 s for the whole tree.
-`tools/native-coverage` rewrites its own report, so these numbers live here.
+The retired `tools/native-coverage` wrote its own report, so these numbers live here.
 
 | source | tests | match | DIFFER | not in the native subset yet | skipped (property tests, files the interpreter rejects) |
 |---|---:|---:|---:|---:|---:|
