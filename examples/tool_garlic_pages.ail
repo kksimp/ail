@@ -11,7 +11,12 @@ fn main() !
     garlic := "{here}/../tools/garlic/garlic.ail"
     names := fs.list_dir(pages)? "listing pages"
     exe := "{env.get("TMPDIR") else "/tmp"}/tool-garlic-pages-{time.now_ms()}"
-    built := proc.run("{here}/../ail", ["build", garlic, "-o", exe], none, 300000)? "building Garlic"
+    built := proc.run(
+        "{here}/../ail",
+        ["build", garlic, "-o", exe],
+        none,
+        300000,
+    )? "building Garlic"
     if not built.ok()
         print("build failed: {built.err}")
         return
