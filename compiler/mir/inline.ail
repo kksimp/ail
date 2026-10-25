@@ -176,11 +176,7 @@ fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
         g.names.push("")
         tail.insert(0, inst(call.dst, "copy", [raw]))
         cont_params = [raw]
-    cont := Block(
-        params: cont_params,
-        insts: tail,
-        term: g.blocks[b].term,
-    )
+    cont := Block(params: cont_params, insts: tail, term: g.blocks[b].term)
     mut head := List[Inst]()
     for k in 0..at
         head.push(g.blocks[b].insts[k])
