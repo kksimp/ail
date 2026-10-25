@@ -146,6 +146,23 @@ fn Lower.map_remove_value(mut self, m Val, k int, vt Ty, pos ast.Pos) Val?
     cur = join
     Val(id: r, ty: t)
 
+## `m.remove(k)` as a statement of the watched map (trace.watch.4): the entry is read, removed, and
+## shown as `[remove OLD at key K]`; a missing key changes nothing and is not shown.
+fn Lower.watch_map_remove(mut self, m Val, kid int, kt Ty, vt Ty, npos ast.Pos)
+    e := call("rt.map_find", [m.id, kid], Ty.Int)
+    has := op("ne", [e, konst(0, Ty.Int)], Ty.Bool)
+    found := new_block()
+    done_b := new_block()
+    branch(has, found, [], done_b, [])
+    seal(found)
+    cur = found
+    old := Val(id: entry_value(e, vt), ty: vt)
+    call("rt.map_remove", [m.id, kid], Ty.Unit)
+    watch_note(npos, m, "remove", old, "key", Val(id: kid, ty: kt))
+    jump(done_b, [])
+    seal(done_b)
+    cur = done_b
+
 ## A call that returns a stored word, as a value of type `t`.
 fn Lower.word_call(mut self, name str, args List[int], t Ty) int
     if t.is_float()
@@ -330,6 +347,7 @@ fn Lower.lower_map_assign(
                 stored = copy_if_place(value, Val(id: convert(r, vt, pos), ty: vt))
             uniq_drop_entry(m.id, kid, vt)
             call("rt.map_set", [m.id, kid, to_word(stored, vt)], Ty.Unit)
+            watch_note(pos, m, "set", Val(id: stored, ty: vt), "key", Val(id: kid, ty: kt))
         _ => problem(ipos, "assigning into a `{m.ty.name()}`")
 
 ## `m.get(k) else ...` (err.else.1-2): the value, else a fallback or a
@@ -454,6 +472,9 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                 kid := convert(vs[0], kt, npos)
                 if not is_statement(npos)
                     return map_remove_value(r, kid, vt, npos)
+                if watch_here(npos)
+                    watch_map_remove(r, kid, kt, vt, npos)
+                    return Val(id: -1, ty: Ty.Unit)
                 call("rt.map_remove", [r.id, kid], Ty.Unit)
                 return Val(id: -1, ty: Ty.Unit)
             if name == "top" and vs.len() == 1 and vt == Ty.Int and kt != Ty.Bool

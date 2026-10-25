@@ -99,7 +99,13 @@ fn gc_sweep()
     base := hs(H_BASE)
     pt := hs(H_PAGES)
     top_i := (hs(H_TOP) - base) / PAGE
+    # The blocks of each class's page being filled that were never handed out
+    # (`BUMP` to `BEND`) hold an old object's words, since a reused page isn't
+    # zeroed: they are free whatever their bits say. Words 200-279 of the
+    # state block keep the windows through the sweep.
     for c in 0..40
+        hset(200 + c, hs(H_BUMP + c))
+        hset(240 + c, hs(H_BEND + c))
         hset(H_HEADS + c, 0)
         hset(H_BUMP + c, 0)
         hset(H_BEND + c, 0)
@@ -122,7 +128,7 @@ fn gc_sweep()
             while k >= 0
                 bs := pb + k * csz
                 h := load64(bs)
-                if h.bit_and(256) != 0
+                if h.bit_and(256) != 0 and (bs < hs(200 + idx) or bs >= hs(240 + idx))
                     store64(bs, h.bit_xor(256))
                     marked += 1
                 else
@@ -153,7 +159,161 @@ fn gc_sweep()
     hset(H_NOFIT, 0)
     hset(H_ALLOCD, 0)
     hset(H_THRESH, if live * 3 > MIN_THRESH then live * 3 else MIN_THRESH)
-    hset(H_FASTLIM, if load64(global(MULTI)) == 0 then hs(H_THRESH) else 0)
+    hset(H_FASTLIM, if load64(global(MULTI)) == 0 and hs(26) == 0 then hs(H_THRESH) else 0)
+
+## `AIL_GC_VERIFY` set: before marking, check every allocated block's header
+## (a payload that fits the block, no stray flag bits) and say which block is
+## wrong, with its neighbour, then exit 70. Finds heap corruption at the first
+## collection after it happens. Costs nothing when the variable is unset.
+fn gc_bad_header(bs int, prev int, csz int, what int)
+    flush()
+    out_str("gc verify: bad header ")
+    out_int(what)
+    out_str(" at block ")
+    out_int(bs - hs(H_BASE))
+    out_str(" size ")
+    out_int(csz)
+    out_str(" word ")
+    out_int(load64(bs))
+    out_str(" previous block word ")
+    out_int(load64(prev))
+    out_str(" previous block size ")
+    out_int(csz)
+    out_str(" allocations ")
+    out_int(hs(27))
+    out_str(" base ")
+    out_int(hs(H_BASE))
+    out_str(" words")
+    for k in 0..6
+        out_str(" ")
+        out_int(load64(bs - 16 + 8 * k))
+    out_str("\n")
+    trace_frames_n(0)
+    flush_to(2)
+    sys_exit(70)
+
+## `AIL_GC_VERIFY=lo,hi,stride`: besides every collection, check the heap at
+## allocations lo, lo+stride, ... below hi (counted from the start), so a bad
+## header is caught within `stride` allocations of the store that made it.
+## The failing report names the allocation count and the callers.
+fn gv_tick()
+    c := hs(27) + 1
+    hset(27, c)
+    if hs(26) == 2 and c >= hs(28) and c < hs(29) and (c - hs(28)) % hs(30) == 0
+        gc_verify()
+
+## Every free list: each node lies in a page of its class, on a block boundary,
+## with a zero header. A dangling write into a freed block breaks the chain
+## word it holds, so this finds that write at the next check.
+fn gc_verify_chains()
+    base := hs(H_BASE)
+    top := hs(H_TOP)
+    pt := hs(H_PAGES)
+    for idx in 1..37
+        mut node := hs(H_HEADS + idx)
+        mut prev := base + 16
+        mut steps := 0
+        while node != 0
+            if node < base or node >= top
+                gc_bad_header(prev, prev, 0, 4)
+            pi := (node - base) / PAGE
+            t := load64(pt + 8 * pi)
+            pb := base + pi * PAGE
+            csz := t.shr(16).bit_and(65535)
+            if t.bit_and(255) != 1 or t.shr(8).bit_and(255) != idx
+                gc_bad_header(prev, prev, csz, 5)
+            if (node - pb) % csz != 0
+                gc_bad_header(prev, prev, csz, 6)
+            if load64(node) != 0
+                gc_bad_header(node, prev, csz, 7)
+            prev = node
+            node = load64(node + 8)
+            steps += 1
+            if steps > 100000000
+                gc_bad_header(prev, prev, csz, 8)
+
+fn gc_verify()
+    gc_verify_chains()
+    base := hs(H_BASE)
+    pt := hs(H_PAGES)
+    top_i := (hs(H_TOP) - base) / PAGE
+    mut pi := 0
+    while pi < top_i
+        t := load64(pt + 8 * pi)
+        tag := t.bit_and(255)
+        pb := base + pi * PAGE
+        if tag == 1
+            idx := t.shr(8).bit_and(255)
+            csz := t.shr(16).bit_and(65535)
+            per := PAGE / csz
+            for k in 0..per
+                bs := pb + k * csz
+                h := load64(bs)
+                fresh := bs >= hs(H_BUMP + idx) and bs < hs(H_BEND + idx)
+                if h != 0 and not fresh
+                    if h.shr(16) > csz - 8
+                        gc_bad_header(bs, if k > 0 then bs - csz else bs, csz, 1)
+                    if h.bit_and(65280) != 0
+                        gc_bad_header(bs, if k > 0 then bs - csz else bs, csz, 2)
+            pi += 1
+        elif tag == 2
+            np := t.shr(8)
+            h := load64(pb)
+            if h.shr(16) > np * PAGE - 8 or h.bit_and(65280) != 0
+                gc_bad_header(pb, pb, np * PAGE, 3)
+            pi += np
+        else
+            pi += 1
+
+## `AIL_GC_STATS` set: before each sweep, the live bytes and blocks by object
+## kind on standard error (the table is words 300-363 and 380-443 of the heap
+## state block). Costs nothing when the variable is unset.
+fn gc_census()
+    base := hs(H_BASE)
+    pt := hs(H_PAGES)
+    top_i := (hs(H_TOP) - base) / PAGE
+    for k in 0..64
+        hset(300 + k, 0)
+        hset(380 + k, 0)
+    mut pi := 0
+    while pi < top_i
+        t := load64(pt + 8 * pi)
+        tag := t.bit_and(255)
+        pb := base + pi * PAGE
+        if tag == 1
+            csz := t.shr(16).bit_and(65535)
+            per := PAGE / csz
+            for k in 0..per
+                h := load64(pb + k * csz)
+                if h.bit_and(256) != 0
+                    kind := h.bit_and(63)
+                    hset(300 + kind, hs(300 + kind) + csz)
+                    hset(380 + kind, hs(380 + kind) + 1)
+            pi += 1
+        elif tag == 2
+            np := t.shr(8)
+            h := load64(pb)
+            if h.bit_and(256) != 0
+                kind := h.bit_and(63)
+                hset(300 + kind, hs(300 + kind) + np * PAGE)
+                hset(380 + kind, hs(380 + kind) + 1)
+            pi += np
+        else
+            pi += 1
+    flush()
+    out_str("gc census: heap ")
+    out_int((hs(H_TOP) - base) / 1048576)
+    out_str(" MB")
+    for k in 0..64
+        if hs(380 + k) != 0
+            out_str(", kind ")
+            out_int(k)
+            out_str(" ")
+            out_int(hs(300 + k) / 1048576)
+            out_str(" MB/")
+            out_int(hs(380 + k))
+    out_str("\n")
+    flush_to(2)
 
 ## Collect garbage. Called by `alloc` when enough has been allocated.
 fn gc_collect()
@@ -161,6 +321,8 @@ fn gc_collect()
     # collector holds the allocation lock, so none can allocate meanwhile.
     gc_stop_world()
     m := heap_state()
+    if hs(26) != 0
+        gc_verify()
     sp := gc_regs(m + 8 * H_REGS)
     hset(H_MARKN, 0)
     gc_scan_range(m + 8 * H_REGS, m + 8 * (H_REGS + 10))
@@ -168,5 +330,7 @@ fn gc_collect()
     gc_scan_threads()
     gc_scan_range(global(OUT_BUF), globals_end())
     gc_drain()
+    if hs(25) != 0
+        gc_census()
     gc_sweep()
     gc_start_world()

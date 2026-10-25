@@ -320,6 +320,67 @@ fn Checker.check_pure(self) List[Diag]
             break
     out
 
+## The capabilities `--deny` takes (eff.cap.2).
+CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
+
+## What `--deterministic` denies (eff.det.1).
+DETERMINISTIC_DENY := ["clock", "net", "proc", "random"]
+
+## What `--deterministic` denies (eff.det.1).
+pub fn deterministic_deny() List[str]
+    DETERMINISTIC_DENY
+
+## `--deny LIST` (eff.cap.2): the capabilities, sorted and without repeats, and the usage error
+## text (empty when the list is fine).
+pub fn parse_deny(list str)(List[str], str)
+    mut out := List[str]()
+    for raw in list.split(",")
+        name := raw.trim()
+        if name == "all"
+            for c in CAPABILITIES
+                out.push(c)
+        elif CAPABILITIES.contains(name)
+            out.push(name)
+        else
+            rule := if [
+                "io",
+                "fail",
+                "mutates",
+                "unsafe",
+                "spawn",
+            ].contains(name) then "eff.cap.3" else "eff.cap.2"
+            return ([], "`{name}` is not a capability; `--deny` takes a comma-separated list of {CAPABILITIES.join(", ")} or `all` ({rule})")
+    mut uniq := List[str]()
+    for c in out.sorted()
+        if not uniq.contains(c)
+            uniq.push(c)
+    (uniq, "")
+
+## eff.cap.1: `main` must not reach a denied capability. One diagnostic per
+## capability, naming the chain of calls.
+fn Checker.check_denied(self) List[Diag]
+    if denied.len() == 0
+        return []
+    mut main := -1
+    for i in 0..prog.fns.len()
+        f := prog.fns[i]
+        if f.name == "main" and f.owner == none and f.within == ast.Within.TopLevel
+            main = i
+    if main < 0
+        return []
+    fx := infer_effects(prog, facts())
+    mut out := List[Diag]()
+    for e in fx.sets[main]
+        if denied.contains(e)
+            out.push(
+                new_diag(
+                    "eff.cap.1",
+                    prog.fns[main].pos,
+                    "the program reaches the denied capability `{e}`: {fx.chain(prog, main, e)}",
+                ).with_help("remove the call, or run without denying `{e}`"),
+            )
+    out
+
 ## `has effects io and fs via f -> save -> fs.write_text`, grouping effects
 ## that come from the same chain.
 fn reasons(prog ast.Program, fx Effects, i int, bad List[str]) str

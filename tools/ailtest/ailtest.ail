@@ -16,6 +16,9 @@
 ## functions), and shrinks a failing input. A parameter of another type
 ## (`bytes`, a type from another module) makes the test `skip`. The exit status is 0 if every test that ran passed.
 ##   ail run tools/ailtest/ailtest.ail [--json] [--cases N] [--seed S] FILE
+## `--contracts` fuzzes every function's `requires` and `ensures` and reports a counterexample (contract.fuzz.1).
+## `--affected [--since REV]` runs only the tests that the changes since git revision REV
+## (default `HEAD`) can reach, from `ail ask FILE --affected` (test.affected.1).
 ## Rewriting follows bootstrap/src/native_test.rs (native.test.2).
 
 ## The compiler to drive: `$AIL`, else `./ail`.
@@ -60,9 +63,22 @@ struct Verdict
     seed int
     input str
     snaps List[SnapRec]
+    frames str
+    ## test.run.2: what the test wrote, `  | ` standard output and `  ! ` standard error lines.
+    shown str
 
 fn plain(name str, status str, message str) Verdict
-    Verdict(name: name, status: status, message: message, cases: 0, seed: 0, input: "", snaps: [])
+    Verdict(
+        name: name,
+        status: status,
+        message: message,
+        cases: 0,
+        seed: 0,
+        input: "",
+        snaps: [],
+        frames: "",
+        shown: "",
+    )
 
 fn indent(l str) int
     l.len() - l.trim_start().len()
@@ -101,7 +117,13 @@ fn split_top(text str) List[str]
 fn parse_params(text str) List[Param]
     mut out := List[Param]()
     for part in split_top(text)
-        sp := part.find(" ") else part.len()
+        # `a(int, str)`: a tuple type may follow its name with no space.
+        mut sp := part.len()
+        for k in 0..part.len()
+            c := part.slice(k, k + 1)
+            if c == " " or c == "("
+                sp = k
+                break
         out.push(Param(name: part.slice(0, sp), ty: part.slice(sp, part.len()).trim()))
     out
 
@@ -238,6 +260,94 @@ fn bad_params(text str, decls Map[str, Decl]) str
         if not r.is_empty()
             return r
     ""
+
+## The text between the parentheses opened at `open` of `sig`, and what follows the closing one.
+fn paren_parts(sig str, open int)(str, str)?
+    cs := sig.chars()
+    mut depth := 0
+    for j in open..cs.len()
+        if cs[j] == '('
+            depth += 1
+        elif cs[j] == ')'
+            depth -= 1
+            if depth == 0
+                return (sig.slice(open + 1, j), sig.slice(j + 1, cs.len()).trim())
+    none
+
+struct Synth
+    lines List[str]
+    names Set[str]
+    skipped List[Skipped]
+
+## The effects of function `name`, from `ail effects --json` text; `none` when it isn't listed.
+fn effects_of(json str, name str) str?
+    key := "\"fn:{name}\":["
+    at := json.find(key) else return none
+    rest := json.slice(at + key.len(), json.len())
+    end := rest.find("]") else return none
+    rest.slice(0, end)
+
+## contract.fuzz.1-3: a property test for each free function that has `requires` or
+## `ensures` lines. It skips an input that fails the `requires`, and calls the
+## function, whose own `ensures` then traps on a counterexample, which the
+## property machinery shrinks. A method, a generic function and a function with a `mut`
+## or `move` parameter are left alone.
+fn contract_tests(lines List[str], effects str) Synth
+    mut out := Synth(lines: [], names: Set[str](), skipped: [])
+    mut i := 0
+    while i < lines.len()
+        l := lines[i]
+        i += 1
+        text := (l.strip_prefix("pub ") else l)
+        if not text.starts_with("fn ")
+            continue
+        sig := text.slice(3, text.len())
+        open := sig.find("(") else continue
+        name := sig.slice(0, open).trim()
+        if name.is_empty() or name.contains(".") or name.contains("[")
+            continue
+        parts := paren_parts(sig, open) else continue
+        mut conds := List[str]()
+        mut has_ensures := false
+        mut j := i
+        while j < lines.len() and indent(lines[j]) > 0
+            c := lines[j].trim()
+            if c.starts_with("requires ")
+                conds.push(c.slice(9, c.len()))
+            elif c.starts_with("ensures ")
+                has_ensures = true
+            else
+                break
+            j += 1
+        if conds.is_empty() and not has_ensures
+            continue
+        params := parse_params(parts.0)
+        mut plain := true
+        for p in params
+            if p.name == "mut" or p.name == "move"
+                plain = false
+        if not plain
+            continue
+        # contract.fuzz.3: a function with effects is not called with generated inputs.
+        fx := effects_of(effects, name) else ""
+        if fx != ""
+            out.skipped.push(Skipped(
+                name: "contract_{name}",
+                why: "has effects ({fx.replace("\"", "")}), so it isn't run with generated inputs",
+            ))
+            continue
+        args := [p.name for p in params].join(", ")
+        fallible := parts.1.contains("!")
+        call := if fallible then "_ := {name}({args}) else return" else "_ := {name}({args})"
+        test_name := "contract_{name}"
+        out.names.add(test_name)
+        out.lines.push("")
+        out.lines.push("@test fn {test_name}({parts.0})")
+        for c in conds
+            out.lines.push("    if not ({c})")
+            out.lines.push("        return")
+        out.lines.push("    {call}")
+    out
 
 ## Every plain `@test fn NAME()` and the property tests.
 fn find_tests(lines List[str]) Found
@@ -434,7 +544,7 @@ fn rewrite(
         for piece in rewritten[j].split("\n")
             out.push(piece)
             origin.push(j)
-    mut tail := "\nfn main()\n    args := env.args()\n    k := args[0].len()\n"
+    mut tail := "\nfn main() !\n    ail_args := env.args()\n    k := ail_args[0].len()\n"
     mut slot := 1
     mut done := Set[str]()
     mut decs := ""
@@ -447,9 +557,9 @@ fn rewrite(
         for pi in 0..t.params.len()
             ty := parse_ty(t.params[pi].ty, w.decls) else continue
             decs = "{decs}{decoders(w, ty, mut done)}"
-            tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(args[{pi + 1}].split(\"\\u\{1f}\"), mut ail_c{pi})\n"
+            tail = "{tail}        mut ail_c{pi} := AilCur(i: 0)\n        ail_p{pi} := {decoder_name(ty)}(ail_args[{pi + 1}].split(\"\\u\{1f}\"), mut ail_c{pi})\n"
             call.push("ail_p{pi}")
-        tail = "{tail}        {t.name}({call.join(", ")}) else err\n            io.eprint(\"error: \{err}\")\n            io.exit(1)\n        io.exit(0)\n"
+        tail = "{tail}        {t.name}({call.join(", ")})?\n        io.exit(0)\n"
         slot += 1
     for i in 0..mf.tests.len()
         if mdropped.contains(i)
@@ -472,14 +582,67 @@ fn short(msg str) str
 
 ## The first line of a trap or failure, as `trap[RULE]: text at L:C`.
 fn describe(err str, lead int) str
-    first := err.lines().first() else ""
+    mut first := err.lines().first() else ""
+    # Lines the test wrote to standard error come before the trap report.
+    for l in err.lines()
+        if l.contains(": trap[")
+            first = l
+            break
     if idx := first.find(": trap[")
         head := first.slice(0, idx)
         parts := head.split(":")
         if parts.len() >= 3
             line := (parts[parts.len() - 2].to_int() else lead) - lead
             return "{first.slice(idx + 2, first.len())} at {line}:{parts[parts.len() - 1]}"
+    for l in err.lines()
+        if l.starts_with("  at ") and not l.contains(" in ")
+            parts := l.split(":")
+            if parts.len() >= 3
+                if ln := parts[parts.len() - 2].to_int()
+                    return "{first} at {ln - lead}:{parts[parts.len() - 1]}"
     first
+
+## `msg` with its ` at L:C` mapped from the augmented source back to FILE's lines.
+fn remap_at(msg str, origin List[int]) str
+    w := where_at(msg) else return msg
+    cut := msg.rfind(" at ") else return msg
+    if w.0 < 1 or w.0 > origin.len() or origin[w.0 - 1] <= 0
+        return msg
+    "{msg.slice(0, cut)} at {origin[w.0 - 1]}:{w.1}"
+
+## What a failed test wrote (test.run.2): standard output as `  | LINE`, then standard error as
+## `  ! LINE`, without the trap report, its frames or the snapshot records.
+fn shown_of(out str, err str) str
+    mut lines := List[str]()
+    for l in out.lines()
+        lines.push("  | {l}")
+    for l in err.lines()
+        if l.contains(": trap[") or l.starts_with("  at ") or l.starts_with("ail-snapshot ")
+            continue
+        lines.push("  ! {l}")
+    lines.join("\n")
+
+## The call-stack lines of a trap report, `  at L:C in fn()`, with the copy's lead lines taken off.
+fn frames_of(err str, lead int) str
+    mut out := List[str]()
+    for l in err.lines()
+        rest := l.strip_prefix("  at ") else continue
+        sp := rest.find(" in ") else continue
+        if rest.slice(sp, rest.len()) == " in main()"
+            continue
+        pos := rest.slice(0, sp).split(":")
+        if pos.len() != 2
+            continue
+        ln := pos[0].to_int() else continue
+        out.push("  at {ln - lead}:{pos[1]}{rest.slice(sp, rest.len())}")
+    out.join("\n")
+
+## The excerpt of a trap's snapshot: the source line and a caret under the column.
+fn snap_excerpt(src List[str], line int, col int) str
+    if line < 1 or line > src.len()
+        return ""
+    gutter := "  {line}"
+    "{gutter} | {src[line - 1]}\n{spaces(gutter.len())} | {spaces(col - 1)}^"
 
 ## ---- Property tests (test.prop.1-5) ----
 
@@ -1077,14 +1240,98 @@ fn run_prop(w World, lead int, exe str, slot int, t TestFn, cases int, seed int)
     Prop(status: "pass", message: "", cases: cases, input: "")
 
 ## Run the test binary on `arg`, with the trace limit `lim` (trace.run.4) when there is one.
-fn started(exe str, arg str, lim str) !proc.Output
-    if lim.is_empty()
+fn started(exe str, arg str, envs List[str]) !proc.Output
+    if envs.is_empty()
         return proc.run(exe, [arg], none, RUN_LIMIT_MS)?
-    proc.run("env", ["AIL_TRACE_LIMIT={lim}", exe, arg], none, RUN_LIMIT_MS)?
+    mut argv := envs
+    argv.push(exe)
+    argv.push(arg)
+    proc.run("env", argv, none, RUN_LIMIT_MS)?
 
-fn run_one(exe str, slot int, lead int, lim str) Verdict
+## ---- Record and replay of tests (replay.rec.1, replay.run.1, replay.nat.1) ----
+
+## The environment of one test's process: the trace limit, and the file its calls go to or come from.
+fn test_env(lim str, rec str, rep str, seed int, steps str) List[str]
+    mut envs := List[str]()
+    if not steps.is_empty()
+        envs.push("AIL_MAX_STEPS={steps}")
+    if not lim.is_empty()
+        envs.push("AIL_TRACE_LIMIT={lim}")
+    if not rec.is_empty()
+        envs.push("AIL_RECORD={rec}")
+        envs.push("AIL_SEED={seed}")
+    if not rep.is_empty()
+        envs.push("AIL_REPLAY={rep}")
+        envs.push("AIL_SEED={seed}")
+    envs
+
+fn rec_header(file str, seed int) str
+    "\{\"ail_record\":1,\"program\":{json_str(file)},\"args\":[],\"seed\":{seed},\"limit\":67108864}"
+
+## A recording's sections: each `{"test":NAME}` line and the call lines after it.
+fn rec_sections(text str) Map[str, str]
+    mut out := Map[str, str]()
+    mut name := ""
+    for l in text.lines()
+        if l.starts_with("\{\"test\":\"")
+            name = l.slice(9, l.len() - 2)
+            out[name] = ""
+        elif not name.is_empty()
+            out[name] = "{out[name]}{l}\n"
+    out
+
+fn rec_seed(text str) int
+    head := text.lines().first() else ""
+    at := head.find("\"seed\":") else return 0
+    rest := head.slice(at + 7, head.len())
+    end := rest.find(",") else rest.len()
+    rest.slice(0, end).to_int() else 0
+
+## The environment for the test NAME under `--record` or `--replay`, with its recording file written first.
+fn rec_prepare(
+    mode str,
+    exe str,
+    name str,
+    seed int,
+    head str,
+    secs Map[str, str],
+    lim str,
+    steps str,
+) !List[str]
+    tmp := "{exe}.rec"
+    if mode == "record"
+        fs.write_text(tmp, "")? "writing {tmp}"
+        return test_env(lim, tmp, "", seed, steps)
+    if mode == "replay"
+        fs.write_text(tmp, "{head}\n{secs.get(name) else ""}")? "writing {tmp}"
+        return test_env(lim, "", tmp, seed, steps)
+    test_env(lim, "", "", 0, steps)
+
+## `line` with the `"line":N` of each call line moved up by `lead`, the lines the runner added at the top.
+fn rec_unlead(body str, lead int) str
+    if lead == 0
+        return body
+    mut out := List[str]()
+    for l in body.lines()
+        at := l.find("\"line\":") else
+            out.push(l)
+            continue
+        rest := l.slice(at + 7, l.len())
+        end := rest.find(",") else rest.len()
+        n := rest.slice(0, end).to_int() else 0
+        out.push("{l.slice(0, at + 7)}{n - lead}{rest.slice(end, rest.len())}")
+    "{out.join("\n")}\n"
+
+## The recorded lines of the test NAME when it failed, as a section of the recording (replay.rec.2).
+fn rec_section(mode str, exe str, name str, v Verdict, lead int) str
+    if mode != "record" or v.status != "fail"
+        return ""
+    body := fs.read_text("{exe}.rec") else ""
+    "\{\"test\":{json_str(name)}}\n{rec_unlead(body, lead)}"
+
+fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := started(exe, arg, lim) else
+    r := started(exe, arg, envs) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status == 0
         return Verdict(
@@ -1095,10 +1342,22 @@ fn run_one(exe str, slot int, lead int, lim str) Verdict
             seed: 0,
             input: "",
             snaps: snap_records(r.err),
+            frames: "",
+            shown: "",
         )
     if r.status == 4
         return plain("", "fail", "error: no such test")
-    plain("", "fail", describe(r.err, lead))
+    Verdict(
+        name: "",
+        status: "fail",
+        message: describe(r.err, lead),
+        cases: 0,
+        seed: 0,
+        input: "",
+        snaps: [],
+        frames: frames_of(r.err, lead),
+        shown: shown_of(r.out, r.err),
+    )
 
 ## ---- Doc examples (test.doc.1-3) ----
 
@@ -1106,6 +1365,8 @@ fn run_one(exe str, slot int, lead int, lim str) Verdict
 ## `doctests` command (compiler/doc); `names` maps each generated function to `doc:Name`.
 struct Augmented
     lines List[str]
+    origin List[int]
+    fences Map[str, int]
     names Map[str, str]
     where Map[str, List[int]]
     note str
@@ -1131,21 +1392,45 @@ fn ensure_native_cli() bool
     m.status == 0
 
 fn doc_augment(file str) Augmented
-    none_found := Augmented(lines: [], names: {}, where: {}, note: "")
+    none_found := Augmented(lines: [], names: {}, where: {}, fences: {}, origin: [], note: "")
     if not ensure_native_cli()
-        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't build")
+        return Augmented(
+            lines: [],
+            names: {},
+            where: {},
+            fences: {},
+            origin: [],
+            note: "the native CLI for doc examples didn't build",
+        )
     r := proc.run(native_cli(), ["doctests", file]) else
-        return Augmented(lines: [], names: {}, where: {}, note: "the native CLI for doc examples didn't run")
+        return Augmented(
+            lines: [],
+            names: {},
+            where: {},
+            fences: {},
+            origin: [],
+            note: "the native CLI for doc examples didn't run",
+        )
     if r.status != 0
-        return Augmented(lines: [], names: {}, where: {}, note: "doc examples: {short(r.err)}")
+        return Augmented(
+            lines: [],
+            names: {},
+            where: {},
+            fences: {},
+            origin: [],
+            note: "doc examples: {short(r.err)}",
+        )
     out := r.out.split("\n")
     mut names := Map[str, str]()
     mut where := Map[str, List[int]]()
+    mut fences := Map[str, int]()
     mut i := 0
     while i < out.len() and out[i].contains(" doc_example_") and out[i].starts_with("doc:")
         parts := out[i].split(" ")
         names[parts[1]] = parts[0]
         for part in parts
+            if f := part.strip_prefix("fence=")
+                fences[parts[0]] = f.to_int() else 0
             if csv := part.strip_prefix("lines=")
                 where[parts[1]] = [n.to_int() else 0 for n in csv.split(",") if not n.is_empty()]
         i += 1
@@ -1153,9 +1438,20 @@ fn doc_augment(file str) Augmented
         return none_found
     # The source, then an empty line from `print`, then the origin list.
     mut end := out.len()
+    mut origin := List[int]()
     while end > i and (out[end - 1].is_empty() or out[end - 1].starts_with("["))
+        if out[end - 1].starts_with("[")
+            inner := out[end - 1].slice(1, out[end - 1].len() - 1)
+            origin = [w.trim().to_int() else 0 for w in inner.split(",") if not w.trim().is_empty()]
         end -= 1
-    Augmented(lines: out[i..end], names: names, where: where, note: "")
+    Augmented(
+        lines: out[i..end],
+        names: names,
+        where: where,
+        fences: fences,
+        origin: origin,
+        note: "",
+    )
 
 ## The lines a doc example's output must equal: its `# =>` lines (test.doc.2).
 fn doc_expected(lines List[str], t TestFn) List[str]
@@ -1171,9 +1467,17 @@ fn debug_list(xs List[str]) str
         parts.push("\"{x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")}\"")
     "[{parts.join(", ")}]"
 
-fn run_doc(exe str, slot int, lead int, expected List[str], update bool, orig List[int], lim str) Verdict
+fn run_doc(
+    exe str,
+    slot int,
+    lead int,
+    expected List[str],
+    update bool,
+    orig List[int],
+    envs List[str],
+) Verdict
     arg := ["x" for _ in 0..slot].join("")
-    r := started(exe, arg, lim) else
+    r := started(exe, arg, envs) else
         return plain("", "fail", "error: can't start the test binary")
     if r.status != 0
         return plain("", "fail", describe(r.err, lead))
@@ -1188,9 +1492,19 @@ fn run_doc(exe str, slot int, lead int, expected List[str], update bool, orig Li
     if same
         return plain("", "pass", "")
     if update and not orig.is_empty()
-        csv := [ "{n}" for n in orig ].join(",")
+        csv := ["{n}" for n in orig].join(",")
         rec := SnapRec(line: orig[0], col: -1, text: "{csv}\n{r.out}")
-        return Verdict(name: "", status: "pass", message: "", cases: 0, seed: 0, input: "", snaps: [rec])
+        return Verdict(
+            name: "",
+            status: "pass",
+            message: "",
+            cases: 0,
+            seed: 0,
+            input: "",
+            snaps: [rec],
+            frames: "",
+            shown: "",
+        )
     plain(
         "",
         "fail",
@@ -1493,12 +1807,18 @@ fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
         model := dl[first - 1]
         mark := model.find("# =>") else continue
         prefix := model.slice(0, mark)
-        replaced := [ if l.is_empty() then "{prefix}# =>" else "{prefix}# => {l}" for l in output.lines() ]
+        replaced := [
+            if l.is_empty() then "{prefix}# =>" else "{prefix}# => {l}"
+            for l in output.lines()
+        ]
         mut before := List[str]()
         for n in nums
             if n >= 1 and n <= dl.len()
                 before.push(dl[n - 1])
-        if before.len() == replaced.len() and [b.trim_end() for b in before] == [b.trim_end() for b in replaced]
+        if before.len() == replaced.len() and [b.trim_end() for b in before] == [
+            b.trim_end()
+            for b in replaced
+        ]
             continue
         mut kept := List[str]()
         for i in 0..dl.len()
@@ -1507,7 +1827,13 @@ fn snap_update(file str, text str, recs List[SnapRec], dry bool, json bool) !
             elif not nums.contains(i + 1)
                 kept.push(dl[i])
         dl = kept
-        sorted.push(SnapChange(kind: "doc", line: first, col: 1, old: before.join("\n"), new: replaced.join("\n")))
+        sorted.push(SnapChange(
+            kind: "doc",
+            line: first,
+            col: 1,
+            old: before.join("\n"),
+            new: replaced.join("\n"),
+        ))
     new = dl.join("\n")
     sorted = sorted.sorted(by: |c| (c.line, c.col))
     mut out := ""
@@ -1742,7 +2068,13 @@ fn take_trace(exe str) List[str]
     fs.remove(path) else return text.lines()
     text.lines()
 
-fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]) int
+fn report(
+    vs List[Verdict],
+    json bool,
+    src List[str],
+    traces Map[str, List[str]],
+    at_pos Map[str, (int, int)],
+) int
     mut passed := 0
     mut failed := 0
     mut skipped := 0
@@ -1757,7 +2089,11 @@ fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]
         if json
             extra := if v.cases > 0 then ",\"cases\":{v.cases},\"seed\":{unsigned_text(v.seed)}" else ""
             input := if v.input.is_empty() then "" else ",\"input\":{json_str(v.input)}"
-            at := if w := where_at(v.message) then ",\"line\":{w.0},\"col\":{w.1}" else ""
+            mut at := if w := where_at(v.message) then ",\"line\":{w.0},\"col\":{w.1}" else ""
+            if at.is_empty()
+                and (v.status == "pass" or v.name.starts_with("doc:"))
+                and at_pos.contains(v.name)
+                at = ",\"line\":{at_pos[v.name].0},\"col\":{at_pos[v.name].1}"
             raw := traces.get(v.name) else []
             mut events := List[str]()
             for e in raw
@@ -1765,7 +2101,20 @@ fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]
                 if not j.is_empty()
                     events.push(j)
             shown := if events.is_empty() then "" else ",\"trace\":[{events.join(",")}]"
-            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(v.message)}{extra}{input}{shown}}")
+            mut msg := v.message
+            if w := where_at(msg)
+                if cut := msg.rfind(" at ")
+                    msg = msg.slice(0, cut)
+            mut snap := ""
+            if v.status == "fail"
+                and v.cases == 0
+                and not v.frames.is_empty()
+                and msg.starts_with("trap[")
+                if w := where_at(v.message)
+                    ex := snap_excerpt(src, w.0, w.1)
+                    if not ex.is_empty()
+                        snap = ",\"snapshot\":{json_str("{ex}\n{v.frames}")}"
+            print("\{\"test\":{json_str(v.name)},\"status\":\"{v.status}\"{at},\"message\":{json_str(msg)}{extra}{input}{snap}{shown}}")
         elif v.status == "pass"
             print("ok {v.name}{tail}")
         elif v.status == "fail"
@@ -1781,6 +2130,8 @@ fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]
                     print("  {t}")
             if not v.input.is_empty()
                 print("  input: {v.input}")
+            if not v.shown.is_empty()
+                print(v.shown)
         else
             print("skip {v.name}: {v.message}")
     # conc.sched.2: a failure under a random schedule names the seed that replays it.
@@ -1800,8 +2151,19 @@ fn report(vs List[Verdict], json bool, src List[str], traces Map[str, List[str]]
 fn seed_for(name str, has_seed bool, given int) int
     if has_seed then given else default_seed(name)
 
+## The tests that changes since git revision `since` can reach (`ail ask FILE --affected`).
+fn affected_names(file str, since str) List[str]
+    r := proc.run(ail_path(), ["ask", file, "--affected", "--rev", since]) else err
+        io.eprint("error: can't run `ail ask`: {err}")
+        io.exit(2)
+        return []
+    if r.status != 0
+        io.eprint(r.err)
+        io.exit(2)
+    [l.trim() for l in r.out.lines() if l.trim() != ""]
+
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
@@ -1817,8 +2179,23 @@ fn main() !
     mut want := ""
     mut trace := false
     mut trace_limit := ""
+    mut affected := false
+    mut since := "HEAD"
+    mut contracts := false
+    mut max_steps := ""
+    mut rec_mode := ""
+    mut rec_file := ""
     for a in env.args()
-        if want == "--cases"
+        if want == "--since"
+            since = a
+            want = ""
+        elif a == "--affected"
+            affected = true
+        elif a == "--contracts"
+            contracts = true
+        elif a == "--since"
+            want = a
+        elif want == "--cases"
             cases = a.to_int() else usage()
             want = ""
         elif want == "--seed"
@@ -1836,6 +2213,17 @@ fn main() !
             want = ""
         elif a == "--trace-limit"
             want = a
+        elif want == "--max-steps"
+            max_steps = a
+            want = ""
+        elif a == "--max-steps"
+            want = a
+        elif want == "--record" or want == "--replay"
+            rec_mode = want.slice(2, want.len())
+            rec_file = a
+            want = ""
+        elif a == "--record" or a == "--replay"
+            want = a
         elif a == "--dry-run"
             dry = true
         elif a == "--coverage"
@@ -1848,9 +2236,29 @@ fn main() !
             files.push(a)
     if not want.is_empty()
         io.exit(usage())
+    if rec_mode == "replay" and files.is_empty()
+        # replay.run.1: the recording's own program.
+        rhead := (fs.read_text(rec_file) else "").lines().first() else ""
+        pat := rhead.find("\"program\":\"") else 0
+        prest := rhead.slice(pat + 11, rhead.len())
+        files.push(prest.slice(0, prest.find("\"") else 0))
     if files.len() != 1 or (dry and not update)
         io.exit(usage())
     file := files[0]
+    mut rec_head := ""
+    mut rec_secs := Map[str, str]()
+    mut rec_seed_n := 0
+    mut rec_out := ""
+    if rec_mode == "replay"
+        rtext := fs.read_text(rec_file) else
+            io.eprint("error: can't read the recording {rec_file} (replay.run.1)")
+            io.exit(2)
+        rec_head = rtext.lines().first() else ""
+        rec_secs = rec_sections(rtext)
+        rec_seed_n = rec_seed(rtext)
+    elif rec_mode == "record"
+        rec_seed_n = (env.get("AIL_SEED") else "").to_int() else time.now_ms()
+        rec_head = rec_header(file, rec_seed_n)
     checked := proc.run(ail_path(), ["check", file])? "running ail check"
     if checked.status != 0 and not checked.err.contains("error[mod.main.1]")
         io.eprint(checked.err)
@@ -1859,6 +2267,8 @@ fn main() !
     mut lines := text.lines()
     mut doc_names := Map[str, str]()
     mut doc_where := Map[str, List[int]]()
+    mut doc_origin := List[int]()
+    mut at_pos := Map[str, (int, int)]()
     mut has_docs := false
     for l in lines
         if l.trim() == "## ```ail"
@@ -1872,19 +2282,64 @@ fn main() !
             lines = aug.lines
             doc_names = aug.names
             doc_where = aug.where
-    found := find_tests(lines)
+            doc_origin = aug.origin
+            for fname in aug.fences.keys()
+                at_pos[fname] = (aug.fences[fname], 1)
+    mut synth := Set[str]()
+    mut skipped_contracts := List[Skipped]()
+    if contracts
+        fxr := proc.run(ail_path(), ["effects", "--json", file])? "running ail effects"
+        made := contract_tests(lines, fxr.out)
+        if made.names.is_empty() and made.skipped.is_empty()
+            print("no contracts to check")
+            io.exit(0)
+        for k in made.skipped
+            skipped_contracts.push(k)
+        lines.extend(made.lines)
+        synth = made.names
+    mut found := find_tests(lines)
+    if contracts
+        # contract.fuzz.1: only the generated checks run.
+        mut only := List[TestFn]()
+        for t in found.tests
+            if synth.contains(t.name)
+                only.push(t)
+            else
+                found.left_out.push(Span(first: t.first, last: t.last))
+        found.tests = only
+        found.skipped = [k for k in found.skipped if synth.contains(k.name)]
+    if affected
+        # test.affected.1: only the tests the changes since `since` can reach; the
+        # rest are left out of the build like a test the backend can't build.
+        names := affected_names(file, since)
+        mut keep := List[TestFn]()
+        for t in found.tests
+            if names.contains(t.name)
+                keep.push(t)
+            else
+                found.left_out.push(Span(first: t.first, last: t.last))
+        io.eprint("affected: {keep.len()} of {found.tests.len()} tests")
+        found.tests = keep
     w := World(decls: parse_decls(lines))
+    for t in found.tests
+        if t.header < lines.len()
+            col := (lines[t.header].find(t.name) else 0) + 1
+            at_pos[t.name] = (t.header + 1, col)
     mut verdicts := List[Verdict]()
     for s in found.skipped
+        verdicts.push(plain(s.name, "skip", s.why))
+    for s in skipped_contracts
         verdicts.push(plain(s.name, "skip", s.why))
     if not doc_note.is_empty()
         verdicts.push(plain("doc examples", "skip", doc_note))
     dir := path.dir(file)
-    mf := module_tests(lines, dir)
+    mut mf := module_tests(lines, dir)
+    if contracts
+        mf = ModFiles(tests: [], skipped: [], lines: Map[str, List[str]]())
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
     if found.tests.len() == 0 and mf.tests.is_empty()
-        io.exit(report(verdicts, json, text.lines(), {}))
+        io.exit(report(verdicts, json, text.lines(), {}, at_pos))
     stem := path.stem(file)
     copy_name := ".ail-test-{stem}.ail"
     mut scratch := ""
@@ -1934,6 +2389,8 @@ fn main() !
             for m in [
                 if coverage.is_empty() then "" else "lines",
                 if trace then "tests" else "",
+                if rec_mode.is_empty() then "" else "record",
+                if max_steps.is_empty() then "" else "steps",
             ] if m != ""
         ].join(",")
         b := if modes.is_empty()
@@ -2016,15 +2473,58 @@ fn main() !
             for j in 0..i
                 if not dropped.contains(j)
                     slot += 1
+            vname := if doc_names.contains(t.name) then doc_names[t.name] else t.name
+            if rec_mode == "replay" and not rec_secs.contains(vname)
+                continue
             if doc_names.contains(t.name)
-                v := run_doc(exe, slot, last_lead, doc_expected(lines, t), update, doc_where.get(t.name) else [], trace_limit)
-                verdicts.push(Verdict(name: doc_names[t.name], status: v.status, message: v.message, cases: 0, seed: 0, input: "", snaps: v.snaps))
+                envs := rec_prepare(
+                    rec_mode,
+                    exe,
+                    vname,
+                    rec_seed_n,
+                    rec_head,
+                    rec_secs,
+                    trace_limit,
+                    max_steps,
+                )?
+                v := run_doc(
+                    exe,
+                    slot,
+                    last_lead,
+                    doc_expected(lines, t),
+                    update,
+                    doc_where.get(t.name) else [],
+                    envs,
+                )
+                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
+                verdicts.push(Verdict(
+                    name: doc_names[t.name],
+                    status: v.status,
+                    message: remap_at(v.message, doc_origin),
+                    cases: 0,
+                    seed: 0,
+                    input: "",
+                    snaps: v.snaps,
+                    frames: v.frames,
+                    shown: v.shown,
+                ))
                 if trace and v.status == "fail"
                     traces[doc_names[t.name]] = take_trace(exe)
                 elif trace
                     take_trace(exe)
             elif t.params.is_empty()
-                v := run_one(exe, slot, last_lead, trace_limit)
+                envs := rec_prepare(
+                    rec_mode,
+                    exe,
+                    vname,
+                    rec_seed_n,
+                    rec_head,
+                    rec_secs,
+                    trace_limit,
+                    max_steps,
+                )?
+                v := run_one(exe, slot, last_lead, envs)
+                rec_out = "{rec_out}{rec_section(rec_mode, exe, vname, v, last_lead)}"
                 if trace and v.status == "fail"
                     traces[t.name] = take_trace(exe)
                 elif trace
@@ -2037,6 +2537,8 @@ fn main() !
                     seed: 0,
                     input: "",
                     snaps: v.snaps,
+                    frames: v.frames,
+                    shown: v.shown,
                 ))
             else
                 p := run_prop(
@@ -2056,6 +2558,8 @@ fn main() !
                     seed: seed_for(t.name, has_seed, seed_given),
                     input: p.input,
                     snaps: [],
+                    frames: "",
+                    shown: "",
                 ))
     mut kept := 0
     for j in 0..found.tests.len()
@@ -2075,16 +2579,57 @@ fn main() !
             for j in 0..mi
                 if not mdropped.contains(j)
                     slot += 1
-            v := run_one(exe, slot, 0, trace_limit)
+            if rec_mode == "replay" and not rec_secs.contains(name)
+                continue
+            envs := rec_prepare(
+                rec_mode,
+                exe,
+                name,
+                rec_seed_n,
+                rec_head,
+                rec_secs,
+                trace_limit,
+                max_steps,
+            )?
+            v := run_one(exe, slot, 0, envs)
+            rec_out = "{rec_out}{rec_section(rec_mode, exe, name, v, 0)}"
             verdicts.push(plain(name, v.status, v.message))
+    if rec_mode == "record"
+        fs.write_text(rec_file, "{rec_head}\n{rec_out}")? "writing the recording {rec_file}"
     if update
         mut recs := List[SnapRec]()
+        # snap.update.3: the assertion that reaches a literal with a second, different value fails.
+        cs := text.chars()
+        mut starts := [0]
+        for k in 0..cs.len()
+            if cs[k] == '\n'
+                starts.push(k + 1)
+        mut seen := Map[str, str]()
+        mut failed := Set[str]()
+        for i in 0..verdicts.len()
+            for r in verdicts[i].snaps
+                if r.col < 0
+                    continue
+                key := "{r.line}:{r.col}"
+                prior := seen.get(key) else ""
+                if not seen.contains(key)
+                    seen[key] = r.text
+                elif prior != r.text
+                    and not failed.contains(key)
+                    and r.line >= 1
+                    and r.line <= starts.len()
+                    failed.add(key)
+                    start := starts[r.line - 1] + r.col - 1
+                    end := literal_end(cs, start)
+                    if end >= 0 and verdicts[i].status == "pass"
+                        verdicts[i].status = "fail"
+                        verdicts[i].message = "trap[test.assert.1]: assertion failed: left is {r.text}, right is {chars_text(cs, start, end)}"
         for v in verdicts
             for r in v.snaps
                 if r.col != 0
                     recs.push(r)
         snap_update(file, text, recs, dry, json)?
-    code := report(verdicts, json, text.lines(), traces)
+    code := report(verdicts, json, text.lines(), traces, at_pos)
     if not coverage.is_empty() and built
         mut skip := Set[str]()
         for t in found.tests
@@ -2111,6 +2656,7 @@ fn main() !
             "{exe}.sites",
             "{exe}.hits",
             "{exe}.trace",
+            "{exe}.rec",
         ]) else io.exit(code)
     else
         _ := proc.run("rm", ["-rf", scratch]) else io.exit(code)

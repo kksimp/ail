@@ -146,6 +146,7 @@ struct Lower
     unchecked bool
     unchecked_list List[str]
     unchecked_seen Set[str]
+    auto_par Set[str]
     ## The `ensures` of the function being lowered, its label, and the keys
     ## of its receiver, parameters and `old(e)` values.
     ens List[ast.Contract]
@@ -232,6 +233,16 @@ pub fn lower_package(input List[Source], rt ast.Program?) Module ! Problems
 ## `lower_package` with the sources from `lazy` on the prelude's, lowered
 ## as the program reaches them (ADR 0808).
 pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module ! Problems
+    lower_package_par(input, rt, lazy, Set[str]())
+
+## `lower_package_with` that also runs the loops named by `pooled` as `par for`
+## (`file:line:col` keys; `ail run --parallel`, conc.par.8).
+pub fn lower_package_par(
+    input List[Source],
+    rt ast.Program?,
+    lazy int,
+    pooled Set[str],
+) Module ! Problems
     srcs := with_error_owners(shadow_free(input, lazy))
     mut l := Lower(
         path: srcs[0].path,
@@ -299,6 +310,7 @@ pub fn lower_package_with(input List[Source], rt ast.Program?, lazy int) Module 
         unchecked: false,
         unchecked_list: [],
         unchecked_seen: Set[str](),
+        auto_par: pooled,
         ens: [],
         ens_label: "",
         ens_vars: [],
@@ -463,6 +475,8 @@ fn Lower.problem(mut self, pos ast.Pos, message str)
 fn Lower.declare_all(mut self, prog ast.Program, pre str)
     for c in prog.consts
         if is_const_expr(c.value)
+            if pre == "rt." and consts.contains("rt.{c.name}")
+                problem(c.pos, "runtime constant `{c.name}` is defined in two runtime files")
             consts["{pre}{c.name}"] = c.value
             const_home["{pre}{c.name}"] = file
         elif pre != "rt."
@@ -539,6 +553,10 @@ fn Lower.declare_fn(mut self, f ast.FnDecl, pre str)
             problem(r.pos, "`{f.name}`: its result type isn't in the native subset yet")
             Ty.Unknown
         rty = t
+    # Codegen keys functions by name, so a second runtime definition would
+    # silently replace the first, whatever its types (#771, `win_write`).
+    if pre == "rt." and sigs.contains(fn_key(f, pre))
+        problem(f.pos, "runtime function `{f.name}` is defined in two runtime files")
     sigs[fn_key(f, pre)] = Sig(params: params, ret: rty, fails: can_fail)
     note_mut_self(f, fn_key(f, pre))
     if can_fail
@@ -953,6 +971,7 @@ fn Lower.end_fn(mut self, name str, pos ast.Pos)
     if problems.len() > fn_problems or fn_failed
         facts.moves = []
         return
+    instr_end()
     mut func := elide_moves(
         Func(
             name: name,
@@ -1027,6 +1046,7 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
                     result = lower_block(inner, true) else Val(id: -2, ty: Ty.Unit)
                     continue
         lower_stmt(s)
+        instr_after(s)
     defer_exit()
     end_scope_exits(if body.len() > 0 then group_end_at(body[body.len() - 1]) else none)
     scopes.pop()
@@ -1137,7 +1157,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
-            if is_par
+            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return
@@ -1281,6 +1301,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
+            watch_note(pos, l, "set", Val(id: v, ty: elem), "index", i)
         Member(recv, name, mpos) => assign_member(recv, name, op, value, mpos, pos)
         _ => problem(pos, "this assignment target isn't in the native subset yet")
 
@@ -1830,7 +1851,9 @@ fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) 
                 )))
             check_mut_overlap(args, npos)
             check_requires(key, vs, npos)
+            instr_watch_cells(cells)
             res := Val(id: user_call(contract_key(key), vs, sig.ret, npos, name), ty: sig.ret)
+            instr_watch_cells_end(cells)
             cells_back(cells)
             res
         Member =>
@@ -2005,6 +2028,8 @@ fn Lower.lower_method(
         return struct_call("{a}.{name}", none, args, expr_pos(recv))
     if n := type_name(recv)
         return struct_call("{n}.{name}", none, args, expr_pos(recv))
+    if cal := qualified_generic_callee(recv, name, npos)
+        return lower_generic_callee(cal, args, npos, want)
     if m := module_name(recv)
         if structs.contains("{m}.{name}")
             return new_struct("{m}.{name}", args, npos)

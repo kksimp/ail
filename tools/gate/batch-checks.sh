@@ -10,10 +10,10 @@ run() { # run NAME CMD...
   "$@" >"$out/$name.log" 2>&1 && return 0
   # SIGBUS (135): the native CLI was rebuilt under a running copy; one rerun settles it.
   [ $? = 135 ] && "$@" >"$out/$name.log" 2>&1 && return 0
-  fails=$((fails+1)); echo "RED $name"; grep -vE '^\s*$' "$out/$name.log" | tail -6 | cut -c1-200
+  fails=$((fails+1)); echo "RED $name"; grep -vE '^\s*$|: 0$' "$out/$name.log" | tail -12 | cut -c1-200
 }
-# ./ail rebuilds the bootstrap binary (it embeds the compiler) when its sources changed.
-run build ./ail --version
+# ./ail no longer builds the Rust binary (D4): build it here for the AIL_RUST=1 routes below, until D5.
+run build cargo build --release -q --manifest-path bootstrap/Cargo.toml
 [ $fails = 0 ] || { echo "CHECKS RED ($fails)"; exit 1; }
 for d in compiler tools/garlic; do run check-${d##*/} ./ail check $d; done
 # The file build nativex and self-host stage 1 do: it sees only main.ail and what it `use`s (item 267).

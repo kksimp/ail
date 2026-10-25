@@ -33,12 +33,14 @@ fi
 # The gate in AIL (RR-4): the program suites without cargo. The native run programs are nativex's.
 # The interpreter-only suites (snapshot, budget, parallel, replay, bytecode) are out of the gate until
 # the interpreter is deleted (plan.md step B); `GATE_INTERP=1` runs them too.
-suites="examples tools cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm"
+# D3: these suites run on ./ail (the default); the rest still call the Rust binary (GATE_RUST=1) until their reds are fixed.
+native_suites="cases mistakes sched docs fmt diff build_cache cli git_deps examples fix explain"
+suites="tools contracts misc limits api_queries api_card edit net spec native_misc nativex globals pe asm"
 [ "${GATE_INTERP:-0}" = 1 ] && suites="$suites snapshot budget parallel replay bytecode"
-# Until step D, the cases suite still runs `ail run` through the Rust binary (AIL_BINARY), whose
-# `ail explain` embeds docs/spec: keep it in step with the tree, or a spec change reads as a diff.
+# The Rust binary is still built for the suites above that call it.
 run rust_build cargo build --release -q --manifest-path bootstrap/Cargo.toml
-run gate_ail ./ail run tools/gate/gate.ail $suites
+run gate_ail env GATE_RUST=1 ./ail run tools/gate/gate.ail $suites
+run gate_native perl -e 'alarm 2400; exec @ARGV' ./ail run tools/gate/gate.ail $native_suites
 # Every native binary must start (dyld/kernel32 mix-ups once aborted all of them).
 if ./ail build tests/native/run/arith.ail -o "$out/hello" >/dev/null 2>&1; then
   "$out/hello" >/dev/null 2>&1 || { fails=$((fails+1)); echo "RED native binaries do not start"; }

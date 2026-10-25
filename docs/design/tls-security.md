@@ -95,8 +95,11 @@ been verified to do. Update it in the same change as the code.
 
 ## Limits
 
-- AES-GCM runs about 10 MB/s in software (ChaCha20-Poly1305 about
-  290 MB/s; Linux x86-64, release build). Hardware AES and carry-less
-  multiply are a follow-up.
+- AES-GCM uses AES-NI and PCLMULQDQ on x86-64 and the AES and PMULL
+  instructions on ARM64 macOS (`compiler/rt/native/tls_aes_hw.ail`,
+  `compiler/x64/kernels_aes.ail`); elsewhere it runs the bit-sliced code,
+  about 10 MB/s (ChaCha20-Poly1305 about 290 MB/s; Linux x86-64, release
+  build). Linux ARM64 stays on the bit-sliced code until it reads the CPU
+  capabilities. `tools/native-tls/aes-bench.sh` measures it.
 - TLS 1.2, client certificates, 0-RTT, session resumption and key shares
   other than X25519 are not implemented (ADRs 0360, 0367).

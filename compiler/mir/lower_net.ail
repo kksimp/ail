@@ -148,6 +148,9 @@ fn Lower.net_call(
         vs.push(convert(v, f.params[i], expr_pos(a.value)))
     for v in after
         vs.push(v)
+    trace_effect(f.rt, f.params, [vs[k] for k in lead.len()..lead.len() + f.params.len()], pos)
     if f.fails
         vs.push(trace_line(pos))
+    if instr.rec
+        return rec_net_call(f, vs, pos)
     Val(id: call(f.rt, vs, f.ret), ty: f.ret)

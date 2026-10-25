@@ -1,0 +1,242 @@
+## Edit impact (api.impact.1-4, ADR 0868 item 3): which declarations an edit
+## changed, which functions and `@test` functions it can reach, and whose
+## effects it changed. Reachability is the checker's own graph: a function is
+## affected when it names a changed declaration (a call, a field, a type, a
+## constant) or calls an affected function. It is conservative: it may name a
+## test the edit can't change, never miss one.
+use ast
+use check
+use load
+
+## What an edit touches.
+pub struct Impact
+    ## Declarations whose text changed, or that are new.
+    pub changed List[str]
+    ## Functions that are, or reach, a changed declaration.
+    pub affected List[str]
+    ## The affected `@test` functions, in source order.
+    pub tests List[str]
+    ## Functions whose effects differ, with the effects before and after.
+    pub effects List[EffectChange]
+
+pub struct EffectChange
+    pub id str
+    pub old List[str]
+    pub new List[str]
+
+## One loaded and checked version of a program.
+struct Snap
+    prog ast.Program
+    texts List[str]
+    analysis check.Analysis
+    api Api
+    decls List[(ast.Pos, str)]
+
+fn snapshot(loaded load.Loaded, analysis check.Analysis) Snap
+    api := new_whole_api(loaded.program, Facts(
+        effects: analysis.effects,
+        errors: analysis.errors,
+        symbols: analysis.symbols,
+        weak_symbols: analysis.weak_symbols,
+    ))
+    mut decls := List[(ast.Pos, str)]()
+    flatten_decls(api.items(), mut decls)
+    Snap(prog: loaded.program, texts: loaded.texts, analysis: analysis, api: api, decls: decls)
+
+fn indent_width(l str) int
+    l.len() - l.trim_start().len()
+
+fn skippable(l str) bool
+    t := l.trim()
+    t == "" or t.starts_with("#")
+
+## `line` without its leading attributes: `@test fn f` is `fn f`, `@test` is empty.
+fn without_attrs(line str) str
+    mut rest := line.trim()
+    while rest.starts_with("@")
+        cut := rest.find(" ") else rest.len()
+        rest = rest.slice(cut, rest.len()).trim_start()
+    rest
+
+## The declaration starting at `line` of `text`, as one string without blank
+## and comment lines: its attributes and doc comments aren't part of it.
+fn block_text(text str, line int) str
+    lines := text.lines()
+    mut i := line - 1
+    if i < 0 or i >= lines.len()
+        return ""
+    while i < lines.len()
+        and lines[i].trim_start().starts_with("@")
+        and without_attrs(lines[i]) == ""
+        i += 1
+    if i >= lines.len()
+        return ""
+    base := indent_width(lines[i])
+    # Attributes written on the declaration's line (`@test fn f`) aren't part of it either.
+    head := "{lines[i].slice(0, base)}{without_attrs(lines[i])}"
+    mut out := [head]
+    for j in i + 1..lines.len()
+        l := lines[j]
+        if skippable(l)
+            continue
+        if indent_width(l) <= base
+            break
+        out.push(l.trim_end())
+    out.join("\n")
+
+fn is_top_decl(id str) bool
+    id.starts_with("fn:")
+        or id.starts_with("method:")
+        or id.starts_with("type:")
+        or id.starts_with("trait:")
+        or id.starts_with("const:")
+
+## The text of every function, type, trait and constant of a version, by id.
+fn Snap.texts_by_id(self) Map[str, str]
+    mut out := Map[str, str]()
+    for d in decls
+        if not is_top_decl(d.1) or d.0.line >= 1073741824
+            continue
+        mut at := -1
+        for i in 0..prog.files.len()
+            if prog.files[i].base < d.0.line
+                at = i
+        if at < 0 or at >= texts.len()
+            continue
+        out[d.1] = block_text(texts[at], d.0.line - prog.files[at].base)
+    out
+
+## Every id a function names, by function id.
+fn Snap.uses_of(self) Map[str, List[str]]
+    found := collect_refs(prog, analysis.symbols, analysis.weak_symbols)
+    mut out := Map[str, List[str]]()
+    for r in found.refs
+        if r.within < 0 or r.within >= api.fn_ids.len()
+            continue
+        f := api.fn_ids[r.within]
+        mut list := out.get(f) else []
+        list.push(r.id)
+        out[f] = list
+    out
+
+fn Snap.is_test(self, i int) bool
+    for a in prog.fns[i].attrs
+        if a.name == "test"
+            return true
+    false
+
+fn same_set(a List[str], b List[str]) bool
+    a.sorted(by: |x| x) == b.sorted(by: |x| x)
+
+## The ids that a change to `id` can reach beyond itself: a type's fields and
+## variants, and the trait method an implementation fills in.
+fn also_reaches(id str, known List[str]) List[str]
+    mut out := List[str]()
+    if id.starts_with("type:")
+        owner := id.slice(5, id.len())
+        for k in known
+            if k.starts_with("field:{owner}.") or k.starts_with("variant:{owner}.")
+                out.push(k)
+    if id.starts_with("method:")
+        parts := id.slice(7, id.len()).split(".")
+        if parts.len() == 3
+            out.push("method:{parts[1]}.{parts[2]}")
+    out
+
+## What changed between `old` and `new` can reach (api.impact.1-3).
+pub fn impact_between(
+    old load.Loaded,
+    old_analysis check.Analysis,
+    new load.Loaded,
+    new_analysis check.Analysis,
+) Impact
+    before := snapshot(old, old_analysis)
+    after := snapshot(new, new_analysis)
+    old_text := before.texts_by_id()
+    new_text := after.texts_by_id()
+    mut changed := List[str]()
+    for id in new_text.keys().sorted(by: |x| x)
+        if old_text.get(id) != new_text.get(id)
+            changed.push(id)
+    uses := after.uses_of()
+    mut users := Map[str, List[str]]()
+    mut known := Set[str]()
+    mut known_list := List[str]()
+    for f in uses.keys()
+        for u in uses[f]
+            if not known.contains(u)
+                known.add(u)
+                known_list.push(u)
+            mut list := users.get(u) else []
+            if not list.contains(f)
+                list.push(f)
+            users[u] = list
+    mut queue := List[str]()
+    mut seeded := Set[str]()
+    for id in changed
+        queue.push(id)
+        seeded.add(id)
+        for x in also_reaches(id, known_list)
+            if not seeded.contains(x)
+                seeded.add(x)
+                queue.push(x)
+    mut affected := Set[str]()
+    for id in changed
+        if id.starts_with("fn:") or id.starts_with("method:")
+            affected.add(id)
+    mut at := 0
+    while at < queue.len()
+        id := queue[at]
+        at += 1
+        for f in users.get(id) else []
+            if not affected.contains(f)
+                affected.add(f)
+                queue.push(f)
+    mut tests := List[str]()
+    mut ordered := List[str]()
+    for i in 0..after.api.fn_ids.len()
+        id := after.api.fn_ids[i]
+        if affected.contains(id) and after.prog.fns[i].pos.line < 1073741824
+            ordered.push(id)
+            if after.is_test(i)
+                tests.push(after.prog.fns[i].name)
+    mut effects := List[EffectChange]()
+    mut old_fx := Map[str, List[str]]()
+    for i in 0..before.api.fn_ids.len()
+        if i < old_analysis.effects.len()
+            old_fx[before.api.fn_ids[i]] = old_analysis.effects[i]
+    for i in 0..after.api.fn_ids.len()
+        id := after.api.fn_ids[i]
+        now := if i < new_analysis.effects.len() then new_analysis.effects[i] else []
+        if was := old_fx.get(id)
+            if not same_set(was, now)
+                effects.push(EffectChange(id: id, old: was, new: now))
+        elif now.len() > 0 and after.prog.fns[i].pos.line < 1073741824
+            effects.push(EffectChange(id: id, old: [], new: now))
+    Impact(changed: changed, affected: ordered, tests: tests, effects: effects)
+
+fn effect_list(xs List[str]) str
+    if xs.len() == 0 then "(none)" else xs.join(", ")
+
+## The impact as text lines (api.impact.4).
+pub fn impact_text(i Impact) str
+    mut out := List[str]()
+    out.push("impact: {i.changed.len()} changed, {i.affected.len()} functions affected, {i.tests.len()} tests")
+    if i.changed.len() > 0
+        out.push("  changed: {i.changed.join(", ")}")
+    if i.tests.len() > 0
+        out.push("  tests: {i.tests.join(", ")}")
+    for e in i.effects
+        out.push("  effects: {e.id} {effect_list(e.old)} -> {effect_list(e.new)}")
+    out.join("\n")
+
+fn json_strs(xs List[str]) str
+    "[{[quote(x) for x in xs].join(",")}]"
+
+## The impact as a JSON object (api.impact.4).
+pub fn impact_json(i Impact) str
+    fx := [
+        "\{\"id\":{quote(e.id)},\"old\":{json_strs(e.old)},\"new\":{json_strs(e.new)}}"
+        for e in i.effects
+    ]
+    "\{\"changed\":{json_strs(i.changed)},\"affected\":{json_strs(i.affected)},\"tests\":{json_strs(i.tests)},\"effects\":[{fx.join(",")}]}"

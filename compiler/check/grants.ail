@@ -4,8 +4,6 @@
 ## the package (a public one if any reaches it).
 use ast
 
-CAPABILITIES := ["fs", "env", "proc", "clock", "random", "net", "net.serve", "ui", "app"]
-
 fn Checker.check_grants(self) List[Diag]
     if prog.grants.len() == 0
         return []
