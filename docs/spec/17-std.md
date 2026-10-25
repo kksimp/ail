@@ -1621,6 +1621,71 @@ fn main()
     print(rows.len())
 ```
 
+## Configuration files: `std.toml`
+
+**std.toml.1** — `use std.toml` provides `parse(text str) Json ! TomlError`,
+which reads a TOML 1.0 document into the `Json` value ([std-json](std-json.md)):
+tables are `Obj` (members in document order), arrays are `Arr`, strings are
+`Str` and booleans are `Bool`, so `get`, `at`, `as_str` and the other `Json`
+accessors read it. *(ADR 0901)*
+
+**std.toml.2** — Basic strings (`"..."`, `"""..."""`) take the escapes `\b \t
+\n \f \r \" \\ \uXXXX \UXXXXXXXX`; in a `"""` string a backslash at the end
+of a line drops the break and the blanks after it. Literal strings (`'...'`,
+`'''...'''`) take no escapes. A line break right after an opening `"""` or
+`'''` is dropped. *(ADR 0901)*
+
+**std.toml.3** — Integers (decimal, `0x`, `0o`, `0b`, `_` between digits, a
+leading `+` or `-`) and floats read as `Num`, so an integer beyond 2^53 loses
+precision. A date, time or date-time (`1979-05-27`, `07:32:00`,
+`1979-05-27 07:32:00Z`) is kept as the `Str` of its TOML spelling. *(ADR 0901)*
+
+**std.toml.4** — A key is bare (letters, digits, `_`, `-`), `"quoted"` or
+`'literal'`; dots between parts name nested tables (`a.b = 1`). *(ADR 0901)*
+
+**std.toml.5** — `[a.b]` opens a table, creating the tables on its path.
+`[[a]]` appends a new table to the array of tables `a`; a path through an array
+of tables goes into its last table. *(ADR 0901)*
+
+**std.toml.6** — Arrays may span lines, hold comments and end in a comma, and
+may mix types. An inline table `{ k = v, ... }` is a table on one line.
+*(ADR 0901)*
+
+**std.toml.7** — A key set twice in a table, a table opened on a name that
+holds a value, and a key path through a value that is not a table fail with
+`TomlError`. *(ADR 0901)*
+
+**std.toml.8** — `TomlError` is an error with `why str` and `line int`
+(1-based, the line where the parser stopped); its text is `WHY (line N)`. An
+unterminated string, an invalid escape, an invalid number and a missing value
+are further causes. *(ADR 0901)*
+
+```ail skip=bootstrap rules=std.toml.1,std.toml.2,std.toml.3,std.toml.4,std.toml.5,std.toml.6
+use std.toml
+
+fn main() !
+    src := "name = \"a\\tb\"\nport = 8080\nlit = 'c:\\x'\nx.y = [1,\n 2, ]\npt = \{ k = true }\n[db]\nhost = \"h\"\n[[db.node]]\nid = 1\n"
+    doc := toml.parse(src)?
+    print(doc.str("name") else "")
+    print(doc.str("lit") else "")
+    print(doc.num("port") else 0.0)
+    print((doc.get("x") else Json.Null).to_text())
+    print((doc.get("pt") else Json.Null).to_text())
+    db := doc.get("db") else Json.Null
+    print(db.str("host") else "")
+    print((db.get("node") else Json.Null).to_text())
+```
+
+```ail skip=bootstrap rules=std.toml.7,std.toml.8
+use std.toml
+
+fn main()
+    doc := toml.parse("a = 1\na = 2\n") else err
+        print(err)   # duplicate key 'a' (line 2)
+        Json.Null
+    print(doc.to_text())
+```
+
 ## Command-line arguments: `std.args`
 
 **std.args.1** — `use std.args` provides the spec makers `flag(name, short,

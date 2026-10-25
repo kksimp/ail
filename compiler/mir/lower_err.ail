@@ -930,6 +930,7 @@ SHOWN_STD_AIL := [
     "std.screen.",
     "std.net.jar.",
     "std.time.date.",
+    "std.toml.",
     "std.ui.widgets.",
 ]
 

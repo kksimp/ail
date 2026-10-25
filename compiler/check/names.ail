@@ -83,6 +83,7 @@ pub AIL_STD_MODULES := [
     "std.screen.view",
     "std.net.jar",
     "std.time.date",
+    "std.toml",
     "std.ui.widgets",
 ]
 
