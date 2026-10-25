@@ -42,6 +42,14 @@ fn Lower.words_of(mut self, r Val, e Ty) int
         return call("rt.list_widen", [r.id], r.ty)
     r.id
 
+## The value `v` for a one-byte list slot: the code generators size a store by
+## the value's own type, and a converted value (`x.to_u8()`) keeps its source's,
+## so it is copied into a value of the element type (ADR 0907).
+fn Lower.slot_val(mut self, v int, elem Ty) int
+    if elem.elem_bytes() == 1 and elem != Ty.Bool
+        return op("copy", [v], elem)
+    v
+
 ## How `contains` compares: 0 integers and bools, 1 strings, 2 floats; -1 if
 ## the element type has no native equality yet.
 fn eq_kind(e Ty) int

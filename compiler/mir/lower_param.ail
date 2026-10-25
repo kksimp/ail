@@ -54,7 +54,7 @@ fn Lower.note_mut_param(mut self, p ast.Param, key str, v int)
 ## The value to bind to `key` after `key = v` of type `ty`.
 fn Lower.assign_param(mut self, key str, ty Ty, v int, pos ast.Pos) int
     if r := facts.elem_ref.get("{fname}|{key}")
-        mut set := inst(-1, "set", [r.list, r.index, v])
+        mut set := inst(-1, "set", [r.list, r.index, slot_val(v, ty)])
         set.site = bounds_site(r.pos)
         emit_void(set)
         return v

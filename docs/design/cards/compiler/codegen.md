@@ -42,10 +42,10 @@ pub struct codegen.CallRow  ## A user call: its return address (an offset in `co
     pub pos int
     pub func str
 pub struct codegen.Image
-    pub code List[int]
+    pub code List[u8]
     pub funcs Map[str, int]
     pub relocs List[codegen.Reloc]
-    pub data List[int]
+    pub data List[u8]
     pub data_syms Map[str, int]
     pub globals int  ## The size of the runtime's globals, in 8-byte slots.
     pub entry int  ## The entry point's offset in `code`.
@@ -59,9 +59,9 @@ pub struct codegen.Sites  ## The module's sites, shared by reference: a code gen
 pub fn codegen.add_f64(mut img codegen.Image, x float) str [mutates]  ## A float constant in the read-only data; gives its symbol.
 pub fn codegen.linux_import(sym str) bool  ## Whether `sym` (a `libsys.` name without its prefix) is a libc function a
 pub fn codegen.import_slot(mut img codegen.Image, sym str) int [mutates]  ## The slot of import `sym`, added on first use.
-pub fn codegen.align(mut bytes List[int], n int) [mutates]
-pub fn codegen.push64(mut bytes List[int], v int) [mutates]
-pub fn codegen.utf8(s str) List[int]  ## The UTF-8 bytes of a string.
+pub fn codegen.align(mut bytes List[u8], n int) [mutates]
+pub fn codegen.push64(mut bytes List[u8], v int) [mutates]
+pub fn codegen.utf8(s str) List[u8]  ## The UTF-8 bytes of a string.
 pub fn codegen.add_trap_texts(mut img codegen.Image, m mir.Module, k int, op str) [mutates]  ## The constant texts a trap stub passes to `rt.trap` (native-abi.md §7):
 pub fn codegen.add_call_table(mut img codegen.Image, m mir.Module) [mutates]  ## Append the call table the runtime reads to print a trap's stack
 pub fn codegen.split_edges(f mir.Func) mir.Func  ## Split each branch edge that passes arguments: the new block jumps to the

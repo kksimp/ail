@@ -15,7 +15,7 @@ PHDR := 56
 pub X86_64 := 62
 pub AARCH64 := 183
 
-pub fn elf(img codegen.Image, machine int) List[int]
+pub fn elf(img codegen.Image, machine int) List[u8]
     if img.imports.len() > 0
         return elf_dynamic(img, machine)
     code_off := EHDR + 2 * PHDR
@@ -23,41 +23,41 @@ pub fn elf(img codegen.Image, machine int) List[int]
     size := data_off + img.data.len()
     bss := align_up(BASE + size, PAGE)
     code := link(img, BASE + code_off, BASE + data_off, bss)
-    mut out := List[int]()
+    mut out := List[u8]()
     header(mut out, machine, BASE + code_off + img.entry)
     segment(mut out, 5, 0, BASE, size, size)
     segment(mut out, 6, 0, bss, 0, 8 * img.globals)
     out.extend(code)
     while out.len() < data_off
-        out.push(0)
+        out.push(0.to_u8())
     out.extend(img.data)
     symbols(mut out, img, BASE + code_off, code_off)
     out
 
 ## `.text`, `.symtab`, `.strtab` and `.shstrtab`, then the section headers,
 ## which `header` left zero and this fills in.
-fn symbols(mut out List[int], img codegen.Image, text_addr int, text_off int)
+fn symbols(mut out List[u8], img codegen.Image, text_addr int, text_off int)
     names := img.funcs.keys().sorted(by: |n| img.funcs[n])
-    mut strtab := [0]
-    mut syms := List[int]()
+    mut strtab := [0.to_u8()]
+    mut syms := List[u8]()
     for _ in 0..24
-        syms.push(0)
+        syms.push(0.to_u8())
     for k in 0..names.len()
         name := names[k]
         at := img.funcs[name]
         size := if k + 1 < names.len() then img.funcs[names[k + 1]] - at else img.code.len() - at
         put(mut syms, strtab.len(), 4)
         # STB_GLOBAL, STT_FUNC
-        syms.push(18)
-        syms.push(0)
+        syms.push(18.to_u8())
+        syms.push(0.to_u8())
         put(mut syms, 1, 2)
         put(mut syms, text_addr + at, 8)
         put(mut syms, size, 8)
         strtab.extend(codegen.utf8(name))
-        strtab.push(0)
+        strtab.push(0.to_u8())
     shstr := codegen.utf8("\0.text\0.symtab\0.strtab\0.shstrtab\0")
     while out.len() % 8 != 0
-        out.push(0)
+        out.push(0.to_u8())
     sym_off := out.len()
     out.extend(syms)
     str_off := out.len()
@@ -65,10 +65,10 @@ fn symbols(mut out List[int], img codegen.Image, text_addr int, text_off int)
     sh_off := out.len()
     out.extend(shstr)
     while out.len() % 8 != 0
-        out.push(0)
+        out.push(0.to_u8())
     headers := out.len()
     for _ in 0..64
-        out.push(0)
+        out.push(0.to_u8())
     elf_section(mut out, 1, 1, 6, text_addr, text_off, img.code.len(), 0, 0, 16, 0)
     elf_section(mut out, 7, 2, 0, 0, sym_off, syms.len(), 3, 1, 8, 24)
     elf_section(mut out, 15, 3, 0, 0, str_off, strtab.len(), 0, 0, 1, 0)
@@ -79,7 +79,7 @@ fn symbols(mut out List[int], img codegen.Image, text_addr int, text_off int)
     patch(mut out, 62, 4, 2)
 
 fn elf_section(
-    mut out List[int],
+    mut out List[u8],
     name int,
     kind int,
     flags int,
@@ -103,15 +103,15 @@ fn elf_section(
     put(mut out, entsize, 8)
 
 ## Overwrite `n` little-endian bytes at `at`.
-fn patch(mut out List[int], at int, v int, n int)
+fn patch(mut out List[u8], at int, v int, n int)
     for i in 0..n
-        out[at + i] = v.shr(8 * i).bit_and(255)
+        out[at + i] = v.shr(8 * i).bit_and(255).to_u8()
 
-fn header(mut out List[int], machine int, entry int)
+fn header(mut out List[u8], machine int, entry int)
     header_n(mut out, machine, entry, 2)
 
-fn header_n(mut out List[int], machine int, entry int, nphdr int)
-    out.extend([127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+fn header_n(mut out List[u8], machine int, entry int, nphdr int)
+    out.extend(bytes_of([127, 69, 76, 70, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))
     put(mut out, 2, 2)
     put(mut out, machine, 2)
     put(mut out, 1, 4)
@@ -127,7 +127,7 @@ fn header_n(mut out List[int], machine int, entry int, nphdr int)
     put(mut out, 0, 2)
 
 ## A `PT_LOAD` program header; `flags` is R 4, W 2, X 1.
-fn segment(mut out List[int], flags int, offset int, vaddr int, filesz int, memsz int)
+fn segment(mut out List[u8], flags int, offset int, vaddr int, filesz int, memsz int)
     put(mut out, 1, 4)
     put(mut out, flags, 4)
     put(mut out, offset, 8)
@@ -142,9 +142,9 @@ fn interpreter(machine int) str
     if machine == AARCH64 then "/lib/ld-linux-aarch64.so.1" else "/lib64/ld-linux-x86-64.so.2"
 
 ## A NUL-terminated string's bytes.
-fn cstr(s str) List[int]
+fn cstr(s str) List[u8]
     mut b := codegen.utf8(s)
-    b.push(0)
+    b.push(0.to_u8())
     b
 
 ## A dynamic ELF executable (ffi.load.1, ADR 0870): the same two segments as
@@ -154,12 +154,12 @@ fn cstr(s str) List[int]
 ## which does not go through libc's start-up: the loader has already
 ## initialised libc. Only a program that calls an `extern c fn` outside the
 ## runtime's libc subset has imports, so every other program stays static.
-fn elf_dynamic(img codegen.Image, machine int) List[int]
+fn elf_dynamic(img codegen.Image, machine int) List[u8]
     nphdr := 6
     interp := cstr(interpreter(machine))
     nsym := img.imports.len() + 1
     # .dynstr: "", the C library, then each import.
-    mut dynstr := [0]
+    mut dynstr := [0.to_u8()]
     needed := dynstr.len()
     soname := 6
     dynstr.extend(cstr("libc.so.{soname}"))
@@ -168,18 +168,18 @@ fn elf_dynamic(img codegen.Image, machine int) List[int]
         name_at.push(dynstr.len())
         dynstr.extend(cstr(n))
     # .dynsym: the null symbol, then the imports (STB_WEAK, STT_FUNC, undefined).
-    mut dynsym := List[int]()
+    mut dynsym := List[u8]()
     for _ in 0..24
-        dynsym.push(0)
+        dynsym.push(0.to_u8())
     for k in 0..img.imports.len()
         put(mut dynsym, name_at[k], 4)
-        dynsym.push(34)
-        dynsym.push(0)
+        dynsym.push(34.to_u8())
+        dynsym.push(0.to_u8())
         put(mut dynsym, 0, 2)
         put(mut dynsym, 0, 8)
         put(mut dynsym, 0, 8)
     # DT_HASH: one bucket, empty chains (the program defines no symbols).
-    mut hash := List[int]()
+    mut hash := List[u8]()
     put(mut hash, 1, 4)
     put(mut hash, nsym, 4)
     put(mut hash, 0, 4)
@@ -200,7 +200,7 @@ fn elf_dynamic(img codegen.Image, machine int) List[int]
     bss := align_up(BASE + size, PAGE)
     code := link(img, BASE + code_off, BASE + data_off, bss)
     glob_dat := if machine == AARCH64 then 1025 else 6
-    mut out := List[int]()
+    mut out := List[u8]()
     header_n(mut out, machine, BASE + code_off + img.entry, nphdr)
     # PT_PHDR, PT_INTERP, the two loads, PT_DYNAMIC and PT_GNU_STACK.
     phdr(mut out, 6, 4, EHDR, BASE + EHDR, nphdr * PHDR, nphdr * PHDR, 8)
@@ -210,17 +210,17 @@ fn elf_dynamic(img codegen.Image, machine int) List[int]
     phdr(mut out, 2, 4, dyn_off, BASE + dyn_off, dyn_len, dyn_len, 8)
     phdr(mut out, 1685382481, 6, 0, 0, 0, 0, 16)
     while out.len() < interp_off
-        out.push(0)
+        out.push(0.to_u8())
     out.extend(interp)
     while out.len() < hash_off
-        out.push(0)
+        out.push(0.to_u8())
     out.extend(hash)
     while out.len() < sym_off
-        out.push(0)
+        out.push(0.to_u8())
     out.extend(dynsym)
     out.extend(dynstr)
     while out.len() < rela_off
-        out.push(0)
+        out.push(0.to_u8())
     for k in 0..img.imports.len()
         put(mut out, bss + 8 * (img.globals + k), 8)
         put(mut out, (k + 1).shl(32) + glob_dat, 8)
@@ -237,21 +237,21 @@ fn elf_dynamic(img codegen.Image, machine int) List[int]
     dynamic_entry(mut out, 24, 0)
     dynamic_entry(mut out, 0, 0)
     while out.len() < code_off
-        out.push(0)
+        out.push(0.to_u8())
     out.extend(code)
     while out.len() < data_off
-        out.push(0)
+        out.push(0.to_u8())
     out.extend(img.data)
     symbols(mut out, img, BASE + code_off, code_off)
     out
 
-fn dynamic_entry(mut out List[int], tag int, value int)
+fn dynamic_entry(mut out List[u8], tag int, value int)
     put(mut out, tag, 8)
     put(mut out, value, 8)
 
 ## A non-load program header.
 fn phdr(
-    mut out List[int],
+    mut out List[u8],
     kind int,
     flags int,
     offset int,
