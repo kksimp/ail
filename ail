@@ -195,6 +195,12 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
         while [ "$rec_i" -lt "${#run_args[@]}" ]; do rec_list="$rec_list${rec_list:+,}\"$(rec_q "${run_args[$rec_i]}")\""; rec_i=$((rec_i + 1)); done
         printf '{"ail_record":1,"program":"%s","args":[%s],"seed":%s,"limit":67108864}\n' "$(rec_q "$run_file")" "$rec_list" "$AIL_SEED" > "$AIL_RECORD" || die "can't write the recording $AIL_RECORD"
     fi
+    # trace.snap.4: `--json` alone makes a trap one JSON object (tools/trapjson.awk reads the verbose report).
+    snap_json=
+    if [ -z "${trace_run:-}" ] && [ "$budget_opts" = " --json" ] && [ -n "${native_run:-}" ]; then
+        snap_json=1; budget_opts=""
+        export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values,verbose"
+    fi
     case "$budget_opts" in "" | *--budget*) ;; *) native_run= ;; esac
 fi
 # run.limit.4: the limit options belong to `run` and `test`; `check` with one is a usage error.
@@ -275,7 +281,32 @@ if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || 
     if [ "$1" = diff ]; then shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" diff "$@"; fi
     if [ "$1" = explain ] || [ "$1" = edit ] || [ "$1" = ask ] || [ "$1" = new ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
     if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
-    if [ "$1" = api ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"; fi
+    if [ "$1" = api ]; then
+        shift
+        bdiff=
+        for a in "$@"; do [ "$a" = --diff ] && bdiff=1; done
+        if [ -n "$bdiff" ]; then
+            # `ail api --diff ... --budget [N] [--from K]`: the native diff under the budget (api.diff.5, budget.out.1-7).
+            bopts=(api --diff); aopts=(); prev=
+            for a in "$@"; do
+                case "$prev:$a" in
+                    --budget:*[!0-9]* | --budget:) ;;
+                    --budget:* | --from:*) bopts+=("$a"); prev=; continue ;;
+                esac
+                prev=
+                case "$a" in
+                    --budget | --from) bopts+=("$a"); prev="$a" ;;
+                    --diff) ;;
+                    --json) bopts+=("$a"); aopts+=("$a") ;;
+                    *) aopts+=("$a") ;;
+                esac
+            done
+            case " ${bopts[*]} " in
+                *" --budget "* | *" --from "*) AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget "${bopts[@]}" -- "$native" api --diff "${aopts[@]}" ;;
+            esac
+        fi
+        AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" api "$@"
+    fi
     if [ "$1" = effects ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" effects "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ -n "$native_errors" ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-errors "$@"; fi
@@ -306,6 +337,13 @@ if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || 
         shift "$run_skip"
         # shellcheck disable=SC2086
         if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget run $budget_opts -- "$exe" "$@"; fi
+        if [ -n "${snap_json:-}" ]; then
+            snap_err="$(mktemp)"
+            snap_rc=0
+            (AIL="$root/ail" exec -a "$run_file" "$exe" "$@") 2>"$snap_err" || snap_rc=$?
+            awk -v main="$run_file" -f "$root/tools/trapjson.awk" < "$snap_err" >&2; rm -f "$snap_err"
+            exit "$snap_rc"
+        fi
         # `env.program()` is the source path, as it was given (std.env.4), so paths next to the source work:
         # argv[0] is set to it rather than the cached executable. `AIL` names this wrapper.
         AIL="$root/ail" exec -a "$run_file" "$exe" "$@"

@@ -2009,7 +2009,7 @@ fn address(text str) str
 SEARCH_ENGINES := [
     ("ddg", "https://html.duckduckgo.com/html/?q="),
     ("b", "https://www.bing.com/search?q="),
-    ("brave", "https://search.brave.com/search?q="),
+    ("y", "https://search.yahoo.com/search?p="),
     ("g", "https://www.google.com/search?q="),
 ]
 
@@ -2020,7 +2020,7 @@ fn is_query(t str) bool
         return true
     not t.contains(".") and not t.starts_with("localhost")
 
-## The results URL for a typed query: `ddg|b|brave|g words` picks an engine.
+## The results URL for a typed query: `ddg|b|y|g words` picks an engine.
 fn search_url(t str) str
     for e in SEARCH_ENGINES
         rest := t.strip_prefix("{e.0} ") else continue
@@ -2717,11 +2717,12 @@ fn flag(args List[str], name str) str?
     if at + 1 < args.len() then args[at + 1] else none
 
 fn usage()
-    print("usage: ail run tools/garlic/garlic.ail [--width N] [--height N] [--follow N | --find TEXT | --do ACTION:ARG]... [--viewport] [--budget TOKENS] [--diff] [--no-js] [--console] [--print | --json | --links | --session | --pixels-dump [--pixel-width N] | --keys] URL|FILE (options may come before or after it)")
+    print("usage: ail run tools/garlic/garlic.ail [--width N] [--height N] [--follow N | --find TEXT | --do ACTION:ARG]... [--viewport] [--budget TOKENS] [--diff] [--no-js] [--console] [--print | --json | --links | --session | --pixels-dump [--pixel-width N] | --marks FILE.svg [--pixel-width N] | --keys] URL|FILE (options may come before or after it)")
 
 ## Flags that take a value, so the address is the first argument that is
 ## neither a flag nor a value.
 VALUE_FLAGS := {
+    "--marks",
     "--csv",
     "--extract",
     "--at",
@@ -2735,6 +2736,17 @@ VALUE_FLAGS := {
     "--budget",
     "--pixel-width",
 }
+
+## The command-line target: words (`"ddg ail language"`) search like the
+## address field; URLs, existing files and anything else stay as given.
+fn cli_target(t str) str
+    if t != ""
+        and page.scheme(t) == ""
+        and not fs.exists(t)
+        and is_query(t)
+        and not t.starts_with("/")
+        return search_url(t)
+    t
 
 fn target_of(args List[str]) str
     mut k := 0
@@ -2802,6 +2814,68 @@ fn pixels_dump(mut b Browser, width float)
             == 0 then "failed" else (if b.bits.contains(at) then "decoded" else "too big to decode")
         print("image {at} {dims[0]}x{dims[1]} {state}")
 
+## Text for an XML attribute or element.
+fn xml_esc(t str) str
+    t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+## `--marks FILE.svg`: the pixel layout as an SVG with every link and control
+## boxed and tagged with the node number the page model and actions use (a
+## set-of-marks picture). Images are drawn as labelled placeholders.
+fn write_marks(mut b Browser, path str, width float) !
+    images.prefetch(
+        b.doc,
+        page.base_of(b.doc, b.url),
+        b.url,
+        b.cj,
+        image_options(),
+        mut b.sizes,
+        mut b.bits,
+    )
+    s := gfx.layout_with(b.doc, b.url, width, b.sheet, b.sizes)
+    fs.write_text(path, marks_svg(s, width))?
+    print("wrote {path}: {s.hits.len()} boxes")
+
+fn marks_svg(s gfx.Scene, width float) str
+    mut out := List[str]()
+    out.push("<svg xmlns='http://www.w3.org/2000/svg' width='{width.round()}' height='{s.height.round()}'>")
+    out.push("<rect width='100%' height='100%' fill='#{s.bg.to_hex().pad_left(6, '0')}'/>")
+    for op in s.ops
+        match op
+            Rect(
+                x,
+                y,
+                w,
+                h,
+                c,
+            ) => out.push("<rect x='{x.round()}' y='{y.round()}' width='{w.round()}' height='{h.round()}' fill='#{c.to_hex().pad_left(6, '0')}'/>")
+            Str(
+                x,
+                y,
+                t,
+                _,
+                size,
+                fg,
+                _,
+                _,
+                _,
+            ) => out.push("<text x='{x.round()}' y='{(y + size).round()}' font-size='{size.round()}' fill='#{fg.to_hex().pad_left(6, '0')}'>{xml_esc(t)}</text>")
+            Pic(
+                x,
+                y,
+                w,
+                h,
+                _,
+            ) => out.push("<rect x='{x.round()}' y='{y.round()}' width='{w.round()}' height='{h.round()}' fill='none' stroke='#888' stroke-dasharray='4'/>")
+            Text(_, _, _, _, _, _, _) => out = out
+    for h in s.hits
+        id := if h.node >= 0 then h.node else h.anchor
+        if id >= 0
+            out.push("<rect x='{h.x.round()}' y='{h.y.round()}' width='{h.w.round()}' height='{h.h.round()}' fill='none' stroke='#e0a800' stroke-width='2'/>")
+            out.push("<rect x='{h.x.round()}' y='{(h.y - 14.0).round()}' width='{"{id}".chars().len() * 8 + 6}' height='14' fill='#ffdd33'/>")
+            out.push("<text x='{(h.x + 3.0).round()}' y='{(h.y - 3.0).round()}' font-size='11' font-weight='bold' fill='#000'>{id}</text>")
+    out.push("</svg>")
+    out.join("\n")
+
 fn main() !
     args := env.args()
     if args.len() > 0 and args[0] == "--bench"
@@ -2820,7 +2894,7 @@ fn main() !
         mut srv := Browser.empty("about:blank", width, height)
         srv.serve((flag(args, "--allow") else "*").split(","))
         return
-    mut b := Browser.new(target_of(args), width, height)
+    mut b := Browser.new(cli_target(target_of(args)), width, height)
     b.viewport_only = args.contains("--viewport")
     b.diff = args.contains("--diff")
     b.budget = (flag(args, "--budget") else "0").to_int() else 0
@@ -2838,7 +2912,13 @@ fn main() !
                 (at + 1).min(spec.chars().len()),
                 spec.chars().len(),
             ))
-    if args.contains("--pixels-dump")
+    if args.contains("--marks")
+        write_marks(
+            mut b,
+            flag(args, "--marks") else "marks.svg",
+            (flag(args, "--pixel-width") else "960").to_float() else 960.0,
+        )?
+    elif args.contains("--pixels-dump")
         pixels_dump(mut b, (flag(args, "--pixel-width") else "960").to_float() else 960.0)
     elif args.contains("--session")
         b.session()
@@ -3451,8 +3531,27 @@ fn node_with(b Browser, tag str, attr str, value str) int
 @test fn the_address_field_searches_for_words()
     assert_eq(address("rust lang"), "https://html.duckduckgo.com/html/?q=rust+lang")
     assert_eq(address("b rust lang"), "https://www.bing.com/search?q=rust+lang")
-    assert_eq(address("brave cats"), "https://search.brave.com/search?q=cats")
+    assert_eq(address("y cats"), "https://search.yahoo.com/search?p=cats")
     assert_eq(address("projects.voltare.us/x"), "https://projects.voltare.us/x")
+
+@test fn the_command_line_searches_for_words_but_keeps_files_and_urls()
+    assert_eq(cli_target("b ail language"), "https://www.bing.com/search?q=ail+language")
+    assert_eq(cli_target("https://example.com/a b"), "https://example.com/a b")
+    assert_eq(cli_target("{testdata()}/index.html"), "{testdata()}/index.html")
+    assert_eq(cli_target("missing.html"), "missing.html")
+
+@test fn marks_box_and_number_every_link_and_control()
+    s := gfx.layout(
+        html.parse("<p><a href=/x>go</a></p><input name=q>"),
+        "file:///t.html",
+        400.0,
+        css.parse("", 0),
+    )
+    doc := marks_svg(s, 400.0)
+    assert(doc.starts_with("<svg "))
+    assert(doc.contains("stroke='#e0a800'"))
+    assert(doc.contains("go</text>"))
+    assert_eq(xml_esc("a<b&\"c"), "a&lt;b&amp;&quot;c")
 
 @test fn urlencode_escapes_utf8()
     assert_eq(urlencode("a b~é€/"), "a+b%7E%C3%A9%E2%82%AC%2F")
@@ -3522,7 +3621,7 @@ fn node_with(b Browser, tag str, attr str, value str) int
     assert_eq(b.answer().split("\"id\":").len(), 1)
 
 @test fn budgets_keep_the_viewport_then_key_nodes()
-    pg := Browser.new("/dev/null", 60, 4).pg
+    pg := Browser.empty("", 60, 4).pg
     assert(pg.to_json_budget(0, 4, 400).contains("\"omitted\":0"))
     ## A fixed URL, so the budget doesn't depend on where the checkout is.
     index := fs.read_text("{testdata()}/index.html") else ""
@@ -3791,19 +3890,14 @@ fn bench(args List[str])
             _ => out = out
     out
 
+## Compares a native Garlic with the interpreter's layout. A native build of
+## Garlic takes minutes, far past the test runner's 30 s per test, so the test
+## only runs when the gate has built one and names it in `GARLIC_NATIVE_EXE`
+## (`./ail build tools/garlic/garlic.ail -o EXE`).
 @test fn the_native_build_draws_the_same_pixels_as_the_interpreter()
-    root := testdata().replace("/tools/garlic/testdata", "")
-    exe := "{env.cwd()}/garlic-native-test"
-    built := proc.run(
-        "{root}/ail",
-        ["build", "{root}/tools/garlic/garlic.ail", "-o", exe],
-        none,
-        600000,
-    )?
-    assert(built.ok())
+    exe := env.get("GARLIC_NATIVE_EXE") else return
     html_file := "{testdata()}/voltare-full.html"
-    native := proc.run(exe, [html_file, "--pixels-dump"], none, 60000)?
-    fs.remove(exe) else return
+    native := proc.run(exe, [html_file, "--pixels-dump"], none, 25000)?
     b := Browser.new(html_file, 100, 32)
     mut want := List[str]()
     s := gfx.layout(b.doc, b.url, 960.0, b.sheet)
@@ -4126,6 +4220,11 @@ fn flat(s gfx.Scene) List[str]
     )
     assert(flat(s).contains("below@0,84"))
 
+## A path as it can sit inside a JSON string: Windows backslashes become
+## slashes, which every Garlic file open accepts.
+fn fwd_slashes(p str) str
+    p.replace("\\", "/")
+
 @test fn serve_answers_mcp_requests()
     mut b := Browser.empty("about:blank", 80, 24)
     mut g := Guard(allow: ["*"], log: [], fixed: [], ok_once: false)
@@ -4139,7 +4238,7 @@ fn flat(s gfx.Scene) List[str]
     )
     call := b.rpc(
         mut g,
-        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{testdata()}/form.html\"}}}",
+        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{fwd_slashes(testdata())}/form.html\"}}}",
     )
     assert(call.contains("\"content\""))
     assert(call.contains("textbox"))
@@ -4156,7 +4255,7 @@ fn flat(s gfx.Scene) List[str]
     mut open := Guard(allow: ["*"], log: [], fixed: [], ok_once: false)
     b.rpc(
         mut open,
-        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{testdata()}/form.html\"}}}",
+        "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":\{\"name\":\"open\",\"arguments\":\{\"url\":\"{fwd_slashes(testdata())}/form.html\"}}}",
     )
     held := b.rpc(
         mut open,

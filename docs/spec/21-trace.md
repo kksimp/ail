@@ -114,7 +114,7 @@ a write to the element (trace.watch.4). A change
 made by a user function through a `mut` argument or `mut self` is shown
 (trace.watch.3). *(ADRs 0268, 0327)*
 
-```ail skip=bootstrap tool=run,--watch,xs,FILE expect=push rules=trace.watch.2
+```ail tool=run,--watch,xs,FILE expect=push rules=trace.watch.2
 fn main()
     mut s := "hi"
     mut xs := [1]
@@ -135,7 +135,7 @@ watch event with the whole new value and what was written: the list methods
 `"index"` or `"key"`. A `pop`, `remove_at`, `remove` or `add` that changes nothing
 is not shown. *(ADR 0347)*
 
-```ail skip=bootstrap tool=run,--watch,xs,FILE expect=set rules=trace.watch.4
+```ail tool=run,--watch,xs,FILE expect=set rules=trace.watch.4
 fn main()
     mut xs := [1]
     xs[0] = 9
@@ -152,7 +152,7 @@ in text, ` in Counter.bump (as \`self\`)` after the position, left out for the
 first frame so a plain run reads as before. A call that passes the value by
 copy (not `mut`) does not follow it. *(ADR 0327)*
 
-```ail skip=bootstrap tool=run,--watch,x,FILE expect=bump rules=trace.watch.3
+```ail tool=run,--watch,x,FILE expect=bump rules=trace.watch.3
 fn bump(mut n int)
     n += 1
 
@@ -264,7 +264,10 @@ fn main()
 
 **trace.snap.4** — With `--json`, the trap is one JSON object on standard
 error with `"severity":"trap"`, the rule, position and message, the source
-line, the condition's values, and the stack. *(ADR 0267)*
+line, the condition's values, and the stack. Natively `./ail` builds the program with
+`--values --verbose` and `tools/trapjson.awk` turns the report into that object, so
+the arguments and locals of every frame are given as in the interpreter's. Without
+`--trace`, `--json` is the only option that does this; with it, trace.run.1 applies. *(ADR 0267)*
 
 **trace.frame.1** — An executable built by `ail build` reports a trap with
 the stack the interpreter reports (trace.snap.2, trace.snap.3), without the
