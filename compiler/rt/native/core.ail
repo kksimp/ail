@@ -902,12 +902,13 @@ fn list_push(xs List[int], v int)
 fn list_pushf(xs List[int], x float)
     list_push(xs, float_bits(x))
 
-fn list_pushb(xs List[int], b bool)
+## `b` is a `bool` (0 or 1) or a `u8` (0 to 255): one byte either way.
+fn list_pushb(xs List[int], b int)
     p := list_addr(xs)
     n := load64(p)
     if n == load64(p + 8)
         list_grow(p, 1)
-    store8(load64(p + 16) + n, if b then 1 else 0)
+    store8(load64(p + 16) + n, b)
     store64(p, n + 1)
 
 fn list_copy(xs List[int], size int) List[int]

@@ -42,7 +42,8 @@ libSystem but import nothing, and are signed ad hoc by the backend
 
 All values are 64-bit and little-endian (ADR 0007). In registers and in list
 elements each scalar takes 8 bytes, except that a `List[bool]` element takes
-one byte, 0 or 1 (ADR 0391). A list's length never decreases in the native
+one byte, 0 or 1 (ADR 0391), and a `List[u8]` element one byte, 0 to 255
+(ADR 0907). A list's length never decreases in the native
 subset, and the optimiser relies on it (ADR 0578): an operation that
 shortens a list must be added to the optimiser's decision first.
 
@@ -76,7 +77,7 @@ the object is built, which makes `s.len()` free and byte indexing impossible.
 ```text
 +0   u64  len     elements in use
 +8   u64  cap     elements allocated
-+16  ptr  data    cap * 8 bytes (cap bytes for List[bool]), separate allocation
++16  ptr  data    cap * 8 bytes (cap bytes for List[bool] and List[u8]), separate allocation
 ```
 
 `data` is separate so `push` can grow without moving the header the caller
@@ -101,7 +102,7 @@ that reached `main` first (`error: TEXT`, the trace, status 1).
 pointer minus 8: bits 0-7 kind, bit 8 mark (collector only), bits 9-15
 reserved, bits 16-63 payload bytes. Kinds: 1 string, 2 list header, 3 list
 data, 4 struct, 5 enum payload, 6 closure, 7 map, 8 set, 9 bytes, 10 boxed
-optional/result, 11 pointer-free words (`List[bool]` data), 12-255 reserved.
+optional/result, 11 pointer-free words (`List[bool]` and `List[u8]` data), 12-255 reserved.
 The object pointer is 8-byte aligned (16-byte blocks start 8 bytes before it).
 Literals in read-only data have no header and are never freed.
 

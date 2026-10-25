@@ -419,7 +419,7 @@ fn map_keys_bool(m int) List[int]
     for i in 0..load64(m + 8)
         e := ents + 24 * i
         if load64(e) >= 0
-            list_pushb(out, load64(e + 8) != 0)
+            list_pushb(out, load64(e + 8))
     out
 
 fn map_values(m int) List[int]
@@ -437,7 +437,7 @@ fn map_values_bool(m int) List[int]
     for i in 0..load64(m + 8)
         e := ents + 24 * i
         if load64(e) >= 0
-            list_pushb(out, load64(e + 16) != 0)
+            list_pushb(out, load64(e + 16))
     out
 
 # ---- value semantics (own.val.1) ----

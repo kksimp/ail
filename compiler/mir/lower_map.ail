@@ -75,7 +75,7 @@ fn value_mode(v Ty) List[int]
     while t.elem() != none
         depth += 1
         t = t.elem() else Ty.Unknown
-    [1, depth * 256 + (if t == Ty.Bool then 1 else 8)]
+    [1, depth * 256 + t.elem_bytes()]
 
 # ---- building blocks ----
 
@@ -430,7 +430,7 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
     # `s.sorted(by: |x| e)` sorts the set's elements as a list (expr.key.1).
     if name == "sorted" and args.len() == 1 and not is_pending_table(r.ty)
         if et := set_elem(r.ty)
-            keys := call("rt.map_keys", [r.id], Ty.List(et))
+            keys := call(if et.elem_bytes() == 1 then "rt.map_keys_bool" else "rt.map_keys", [r.id], Ty.List(et))
             return lower_sorted(Val(id: keys, ty: Ty.List(et)), name, args, npos)
     # `s.sorted()` of composite elements: as a list of them, by their order.
     if name == "sorted" and args.len() == 0 and not is_pending_table(r.ty)
@@ -477,14 +477,14 @@ fn Lower.lower_coll_method(mut self, r Val, name str, npos ast.Pos, args List[as
                     return Val(id: -1, ty: Ty.Unit)
                 call("rt.map_remove", [r.id, kid], Ty.Unit)
                 return Val(id: -1, ty: Ty.Unit)
-            if name == "top" and vs.len() == 1 and vt == Ty.Int and kt != Ty.Bool
+            if name == "top" and vs.len() == 1 and vt == Ty.Int and kt.elem_bytes() != 1
                 n := convert(vs[0], Ty.Int, npos)
                 return Val(id: call("rt.map_top", [r.id, n], Ty.List(kt)), ty: Ty.List(kt))
             if name == "keys" and vs.len() == 0
-                f := if kt == Ty.Bool then "rt.map_keys_bool" else "rt.map_keys"
+                f := if kt.elem_bytes() == 1 then "rt.map_keys_bool" else "rt.map_keys"
                 return Val(id: call(f, [r.id], Ty.List(kt)), ty: Ty.List(kt))
             if name == "values" and vs.len() == 0
-                f := if vt == Ty.Bool then "rt.map_values_bool" else "rt.map_values"
+                f := if vt.elem_bytes() == 1 then "rt.map_values_bool" else "rt.map_values"
                 return Val(id: call(f, [r.id], Ty.List(vt)), ty: Ty.List(vt))
             if name == "get" and vs.len() == 1
                 return map_get(r, convert(vs[0], kt, npos), vt, npos)
@@ -573,7 +573,7 @@ fn Lower.map_push_vals(mut self, m Val, vt Ty, kid int, x Val, xe ast.Expr, npos
 fn Lower.iter_coll(mut self, v Val) Val
     match v.ty
         Set(e) =>
-            f := if e == Ty.Bool then "rt.map_keys_bool" else "rt.map_keys"
+            f := if e.elem_bytes() == 1 then "rt.map_keys_bool" else "rt.map_keys"
             Val(id: call(f, [v.id], Ty.List(e)), ty: Ty.List(e))
         # `for b in bytes` walks a list of the bytes as `u8`.
         Bytes =>
@@ -626,7 +626,8 @@ fn Lower.as_set(mut self, v Val, e Ty, pos ast.Pos) int?
     if v.ty == Ty.Set(e)
         return v.id
     if v.ty == Ty.List(e)
-        return call("rt.set_from_list", [kind_val(e), v.id], Ty.Set(e))
+        words := if e.elem_bytes() == 1 then call("rt.list_widen", [v.id], v.ty) else v.id
+        return call("rt.set_from_list", [kind_val(e), words], Ty.Set(e))
     problem(pos, "expected a set or list of `{e.name()}`, found `{v.ty.name()}`")
     none
 
