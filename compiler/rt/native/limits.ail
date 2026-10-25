@@ -99,6 +99,8 @@ fn limits_check()
         out_str("trap[run.limit.1]: run took longer than --timeout ")
         out_int(load64(global(LIM_MS)))
         out_str(" ms (raise it, or find the loop)\n")
+        # The snapshot (run.limit.1, trace.snap.1): where the run was, as the other traps show it.
+        trace_frames_n(0)
         flush_to(2)
         sys_exit(1)
 

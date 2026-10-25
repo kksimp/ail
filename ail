@@ -113,7 +113,7 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
         case "$a" in
             --timeout | --max-memory)
                 v="${run_args[$((k + 1))]-}"
-                case "$v" in "" | *[!0-9]*) break ;; esac
+                case "$v" in "" | *[!0-9]* | 0) die "error[run.limit.4]: \`$a\` needs a positive whole number (run.limit.4)" ;; esac
                 run_opts="$run_opts $a $v"; k=$((k + 2)) ;;
             --budget)
                 v="${run_args[$((k + 1))]-}"
@@ -202,6 +202,12 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
         export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values,verbose"
     fi
     case "$budget_opts" in "" | *--budget*) ;; *) native_run= ;; esac
+fi
+# run.limit.4: the limit options belong to `run` and `test`; `check` with one is a usage error.
+if [ "${1:-}" = check ]; then
+    for a in "${@:2}"; do
+        case "$a" in --timeout | --max-memory | --max-steps) die "error[run.limit.4]: \`$a\` works with \`ail run\` and \`ail test\` (run.limit.4)" ;; esac
+    done
 fi
 native_build=
 if [ "${1:-}" = build ]; then
