@@ -25,6 +25,8 @@ fn source_text(path str) !str [fail fs io]
     fails with fs.IoError
 fn imported_text(file_arg str, text str, std str) str [env fs io]
 fn executable_hex(m mir.Module, path str, target str) str [io]
+fn executable_bytes(m mir.Module, path str, target str) bytes [io]
+fn executable_list(m mir.Module, path str, target str) List[u8] [io]
 fn runtime_syntax(path str, text str) [io]
 fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
@@ -72,4 +74,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1218); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1268); dropped: private items, doc comments

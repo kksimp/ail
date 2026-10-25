@@ -34,7 +34,7 @@ pub struct Fixup
     pub sym str
 
 pub struct Asm
-    pub code List[int]
+    pub code List[u8]
     pub labels List[int]
     pub fixups List[Fixup]
 
@@ -43,7 +43,7 @@ pub fn new_asm() Asm
 
 fn Asm.word(mut self, w int)
     for i in 0..4
-        code.push(w.shr(8 * i).bit_and(255))
+        code.push(w.shr(8 * i).bit_and(255).to_u8())
 
 pub fn Asm.here(self) int
     code.len()
@@ -529,10 +529,10 @@ pub fn Asm.brk(mut self)
 
 ## Patch a field at `at` for a target `delta` bytes away (or, for `adrp`
 ## and `add12`, the target address `to` and the field's address `pc`).
-pub fn patch(mut code List[int], f Fixup, pc int, to int)
+pub fn patch(mut code List[u8], f Fixup, pc int, to int)
     mut w := 0
     for i in 0..4
-        w = w.bit_or(code[f.at + i].shl(8 * i))
+        w = w.bit_or(code[f.at + i].to_int().shl(8 * i))
     match f.kind
         "b26" => w = w.bit_or((to - pc).shr(2).bit_and(67108863))
         "b19" => w = w.bit_or((to - pc).shr(2).bit_and(524287) * 32)
@@ -541,7 +541,7 @@ pub fn patch(mut code List[int], f Fixup, pc int, to int)
             w = w.bit_or(pages.bit_and(3) * 536870912).bit_or(pages.shr(2).bit_and(524287) * 32)
         _ => w = w.bit_or(to.bit_and(4095) * 1024)
     for i in 0..4
-        code[f.at + i] = w.shr(8 * i).bit_and(255)
+        code[f.at + i] = w.shr(8 * i).bit_and(255).to_u8()
 
 ## Patch every branch to a local label; symbol fixups stay for the writer.
 pub fn Asm.resolve_labels(mut self)
