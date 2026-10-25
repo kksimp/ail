@@ -251,7 +251,8 @@ static void node_free(Node *n) {
 }
 
 /* Bitmaps are kept by id so a later view can omit the data (std.app.3). */
-static gboolean debug = FALSE; /* AIL_HOST_DEBUG=1 logs canvas sizes and ops to stderr */
+static gboolean debug = FALSE; /* AIL_HOST_DEBUG=FILE logs canvas sizes and clips to FILE (=1: stderr) */
+static FILE *dbg;
 
 static GHashTable *bitmaps; /* id -> cairo_surface_t* */
 
@@ -427,7 +428,7 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
     if (debug) {
         double cx1, cy1, cx2, cy2;
         cairo_clip_extents(cr, &cx1, &cy1, &cx2, &cy2);
-        fprintf(stderr, "draw canvas %s alloc %dx%d ops %d clip %.0f,%.0f-%.0f,%.0f\n", cid(wd),
+        fprintf(dbg, "draw canvas %s alloc %dx%d ops %d clip %.0f,%.0f-%.0f,%.0f\n", cid(wd),
                 gtk_widget_get_allocated_width(wd), gtk_widget_get_allocated_height(wd), n->nops, cx1, cy1, cx2, cy2);
     }
     for (int i = 0; i < n->nops; i++) {
@@ -487,7 +488,7 @@ static gboolean canvas_draw(GtkWidget *wd, cairo_t *cr, gpointer data) {
             break;
         }
         case O_CLIP:
-            if (debug) fprintf(stderr, "  op %d clip %.0f,%.0f %.0fx%.0f\n", i, op->x, op->y, op->w, op->h);
+            if (debug) fprintf(dbg, "  op %d clip %.0f,%.0f %.0fx%.0f\n", i, op->x, op->y, op->w, op->h);
             cairo_save(cr);
             depth++;
             cairo_rectangle(cr, op->x, op->y, op->w, op->h);
@@ -699,7 +700,7 @@ static void set_id(GtkWidget *w, const char *id) {
 }
 
 static void canvas_size(GtkWidget *w, const Node *n) {
-    if (debug) fprintf(stderr, "canvas %s w %.0f h %.0f ops %d\n", n->id, n->w, n->h, n->nops);
+    if (debug) fprintf(dbg, "canvas %s w %.0f h %.0f ops %d\n", n->id, n->w, n->h, n->nops);
     gtk_widget_set_size_request(w, n->w > 0 ? (int)n->w : -1, n->h > 0 ? (int)n->h : -1);
     gtk_widget_set_hexpand(w, n->w <= 0);
     gtk_widget_set_vexpand(w, n->h <= 0);
@@ -921,7 +922,11 @@ int main(int argc, char **argv) {
     last_sent = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     by_id = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     edits = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref);
-    debug = g_getenv("AIL_HOST_DEBUG") != NULL;
+    const char *dv = g_getenv("AIL_HOST_DEBUG");
+    debug = dv && *dv;
+    dbg = debug && strcmp(dv, "1") ? fopen(dv, "w") : stderr;
+    if (!dbg) dbg = stderr;
+    if (debug) setvbuf(dbg, NULL, _IOLBF, 0);
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "AIL");

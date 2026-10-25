@@ -72,6 +72,7 @@ pub STD_MODULES := [
 pub AIL_STD_MODULES := [
     "std.app",
     "std.args",
+    "std.bigint",
     "std.attach",
     "std.attach.serve",
     "std.csv",
@@ -83,6 +84,7 @@ pub AIL_STD_MODULES := [
     "std.screen.view",
     "std.net.jar",
     "std.time.date",
+    "std.toml",
     "std.ui.widgets",
 ]
 
