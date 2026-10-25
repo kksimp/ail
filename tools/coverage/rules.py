@@ -16,7 +16,7 @@ import os, re, sys, time
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFINE = re.compile(r"^\*\*([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)\*\*", re.M)
 MENTION = re.compile(r"\b([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+)\.(\d+)(?:[-–](\d+))?")
-TEST_DIRS = ["tests", "examples", "tools/edit", "compiler", "tools/fuzz"]
+TEST_DIRS = ["tests", "examples", "compiler", "tools/fuzz"]
 TEXT_EXT = {".ail", ".rules", ".err", ".trap", ".rs", ".out", ".test", ".stderr", ".expected", ".md", ".sh", ".txt"}
 
 

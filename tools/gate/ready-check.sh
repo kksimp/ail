@@ -16,7 +16,6 @@ if [ -n "$ail" ]; then
   ./ail fmt --check $ail >"${TMPDIR:-/tmp}/ready-fmt.$$" 2>&1 || { red "fmt: run ./ail fmt on"; grep '^--- ' "${TMPDIR:-/tmp}/ready-fmt.$$" | cut -c5-; }
   rm -f "${TMPDIR:-/tmp}/ready-fmt.$$"
   case "$ail" in *compiler/*) ./ail check compiler >/dev/null 2>&1 || red "./ail check compiler";; esac
-  case "$ail" in *tools/garlic/*) ./ail check tools/garlic >/dev/null 2>&1 || red "./ail check tools/garlic";; esac
 fi
 for f in $(echo "$files" | grep -E '\.sh$|^ail$' || true); do bash -n "$f" 2>/dev/null || red "bash -n $f"; done
 # Conflict markers a merge of main left behind.

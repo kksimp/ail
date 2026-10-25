@@ -136,10 +136,10 @@ dropped: LIST`.
 diagnostics are printed and the exit code is 2, as for api.out.5. A missing
 path or a bad option is exit code 2.
 
-**api.card.5** — `docs/design/cards/edit.md` and `std.md` are the output for
-`tools/edit` and `std`; the `api_card` gate suite fails
+**api.card.5** — `docs/design/cards/compiler.md` and `std.md` are the output for
+`compiler` and `std`; the `api_card` gate suite fails
 when either differs from the command's output. Regenerate with
-`./ail api --card tools/edit > docs/design/cards/edit.md`.
+`./ail api --card compiler > docs/design/cards/compiler.md`.
 
 **api.card.6** — `--module NAME` prints the card of one module of the
 package, with the same levels and budget as api.card.3. NAME is a module
