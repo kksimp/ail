@@ -7,8 +7,7 @@ design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.
 Linux x86-64 and macOS ARM64 gate every change ([ADR 0085](decisions/0085-interim-local-testing-gate.md));
 Windows is tested when convenient. The Linux selftest passes; macOS
 verification of the 2026-10-20 batch is pending. See
-[bootstrap/README.md](../bootstrap/README.md) for the supported subset and
-pipeline, and [roadmap.md](roadmap.md) for what comes next.
+[language-card.md](language-card.md) for the supported subset, and [roadmap.md](roadmap.md) for what comes next.
 
 ## What is implemented
 
@@ -136,7 +135,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - **Tests:** `@test`, `assert`, `ail test` (ADRs 0167–0168); `ail test --update` rewrites stale literal expectations, `# =>` lines and `.out` files (ADR 0395); `ail run --record R` / `--replay R` and `ail test --record R` repeat a run or a failed test from its recorded effects (ADR 0398); property tests with `--cases`, `--seed`, shrinking; doc examples as tests (ADRs 0198–0201); `--coverage`, `--trace`.
 - **Formatter:** `ail fmt` (ADRs 0169–0170) with chained-call lines, own-line attributes and long-line splitting (ADRs 0323–0324, 0346–0347); examples and test cases are canonical.
 - **Benchmarks:** `tools/tokbench` (tokens), `tools/perfbench` (speed), and the agent-tool corpus of ten programs with Python twins, 5.7% under Python in tokens ([program-measurements-r5.md](design/program-measurements-r5.md), [r8](design/program-measurements-r8.md); ADRs 0217–0218, 0337). One command builds two revisions and prints the before/after table for tokens and speed: [measurements.md](design/measurements.md), `tools/bench/run.sh` (ADR 0492). Round three adds ten programs on today's library, 14.6% over Python in total; the gaps are dates, bit operators, bytes and tuples ([program-measurements-agent-r3.md](design/program-measurements-agent-r3.md); ADR 0477).
-- **Conformance and fuzzing:** `bootstrap/tests/spec.rs` checks every `ail` block in `docs/spec/`, the quick reference and the language card (ADRs 0172, 0174, 0276); the fuzz and differential harness `tools/fuzz/run.sh` runs a 200-program smoke inside `./ail selftest` (ADRs 0269–0271). Module fuzzers (`tests/fuzz/modules/`, one template per module, ADR 0461) run in the same selftest and in `ail selftest --fuzz N [SEED]`; their first finding was `parse_json("1e999")` printing `inf` (ADR 0464). `tools/coverage/rules.py` lists spec rules no test names ([rule-coverage.md](design/rule-coverage.md), ADR 0463). `tools/perfbench/run.sh --all` is the drag race against native AIL, C and Python (ADR 0460, [drag-race.md](design/drag-race.md)). `docs/language-card.md` is the whole language within 8,000 tokens.
+- **Conformance and fuzzing:** the `spec` gate suite (`tools/gate/spec.ail`) checks every `ail` block in `docs/spec/`, the quick reference and the language card (ADRs 0172, 0174, 0276); the fuzz and differential harness `tools/fuzz/run.sh` runs a 200-program smoke inside `./ail selftest` (ADRs 0269–0271). Module fuzzers (`tests/fuzz/modules/`, one template per module, ADR 0461) run in the same selftest and in `ail selftest --fuzz N [SEED]`; their first finding was `parse_json("1e999")` printing `inf` (ADR 0464). `tools/coverage/rules.py` lists spec rules no test names ([rule-coverage.md](design/rule-coverage.md), ADR 0463). `tools/perfbench/run.sh --all` is the drag race against native AIL, C and Python (ADR 0460, [drag-race.md](design/drag-race.md)). `docs/language-card.md` is the whole language within 8,000 tokens.
 
 ### Editor
 
@@ -213,3 +212,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-117 with gaps), 52 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-042, OQ-050, OQ-060, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097.
 
 - 2026-10-24: D4 (ADR 0855): `./ail` builds the native CLI only from the published seed (stage 0); the cargo fallback is gone. The Rust binary is still built for `AIL_RUST=1` routes until D5.
+- 2026-10-25: D5 (ADR 0865): `./ail`, `ail.ps1`, the Mac gate and the tools no longer run or read the Rust bootstrap (`AIL_RUST`, `AIL_BINARY`, `GATE_RUST` and cargo are gone); every gate suite runs on the native CLI. `bootstrap/` is deleted in the next change.

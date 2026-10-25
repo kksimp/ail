@@ -143,9 +143,8 @@ docs/
   decisions/              Architecture Decision Records (ADRs), one per decision
   spec/                   normative language specification with rule IDs
   design/                 non-normative design notes, research, and constraints
-ail                       command-line entry point; sets up its private Rust toolchain (ADR 0087)
+ail                       command-line entry point; builds the native CLI from the published seed (ADR 0855)
 ail.ps1                   the same entry point for Windows
-bootstrap/                Rust bootstrap: lexer, parser, checker, interpreter (ADR 0023)
 compiler/                 the front end, checker and native backend written in AIL (ADR 0022)
 examples/                 example programs; NAME.out holds the expected output
 tools/
@@ -160,7 +159,6 @@ tools/
   check-doc-dupes.py      checks the ADR index, glossary and quick-reference std rows, and the cards' examples, for exact repeats
   coverage/               rule coverage report
   edit/                   a code editor written in AIL (ADR 0180)
-  fix/                    parity.py, run-parity.py: the AIL fix machinery (compiler/fix/) against the Rust one
   fmt/                    parity.sh: the AIL formatter (compiler/fmt/) against its frozen goldens
   golden/                 golden.py: explain, fmt, fix, api and edit against outputs frozen from the Rust binary (tests/golden/), so they check with no Rust binary (D0)
   explain/                parity.sh: `ail explain` in AIL (compiler/explain/) against its frozen goldens

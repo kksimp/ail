@@ -27,9 +27,8 @@ fn main()
     print("Hello, world!")
 ```
 
-The first run installs a private copy of Rust inside the repository and builds
-the bootstrap ([bootstrap/README.md](bootstrap/README.md)). Nothing outside the
-repository is changed. On Windows use `.\ail.ps1 run examples\hello.ail`
+The first run downloads the published seed compiler, checks it, and builds the
+native `ail` with it into `.native/`. Nothing outside the repository is changed. On Windows use `.\ail.ps1 run examples\hello.ail`
 (not yet tested on Windows).
 
 ## Targets
