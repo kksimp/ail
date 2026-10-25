@@ -19,6 +19,8 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_mm32"
         or name == "rt.vec_widen"
         or name == "rt.vec_narrow"
+        or name == "rt.vec_sum16"
+        or name == "rt.vec_sum16_32"
         or is_aes_kernel(name)
 
 ## Add the kernel `name` to `img`.
@@ -33,6 +35,8 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_mm32" => kernel_mm32(mut a)
         "rt.vec_widen" => kernel_widen(mut a)
         "rt.vec_narrow" => kernel_narrow(mut a)
+        "rt.vec_sum16" => kernel_sum16(mut a, false)
+        "rt.vec_sum16_32" => kernel_sum16(mut a, true)
         "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
         "rt.vec_scal" => kernel_scal(mut a)
         _ => unreachable("a64: unknown kernel {name}")
@@ -546,4 +550,57 @@ fn kernel_mm32(mut a Asm)
     a.alu_ri("sub", 6, 6, 1)
     a.b(scalar)
     a.bind(done)
+    a.ret()
+
+## `rt.vec_sum16(p, q, n, s)` and `rt.vec_sum16_32(p, n, s)`: the 16 partial
+## sums of std.tensor.5 over the first `n` (a multiple of 16) elements of `p`,
+## or of the products with `q` (doubles), halved down to four; the four sums go
+## to `s[0..3]`. `vec_sum16_32` reads singles from `p` and widens them. Lane
+## `i` of a block of 16 is element `i`, two lanes in each of v0..v7; the product
+## and the sum are each rounded. x0 = p, x1 = q, x2 = n, x3 = s (`_32`: x0 = p,
+## x1 = n, x2 = s).
+fn kernel_sum16(mut a Asm, single bool)
+    if single
+        a.mov_rr(3, 2)
+        a.mov_rr(2, 1)
+    for k in 0..8
+        a.vzero(k)
+    plain := a.label()
+    pl := a.label()
+    dl := a.label()
+    fin := a.label()
+    if not single
+        a.cbz(1, plain)
+        a.bind(dl)
+        a.cbz(2, fin)
+        for k in 0..8
+            a.ldr_q_post(16, 0)
+            a.ldr_q_post(17, 1)
+            a.vop("fmul", 16, 16, 17)
+            a.vop("fadd", k, k, 16)
+        a.alu_ri("sub", 2, 2, 16)
+        a.b(dl)
+    a.bind(plain)
+    a.bind(pl)
+    a.cbz(2, fin)
+    for g in 0..4
+        if single
+            a.ldr_q_post(16, 0)
+            a.vcvtl(17, 16)
+            a.vcvtl2(18, 16)
+            a.vop("fadd", 2 * g, 2 * g, 17)
+            a.vop("fadd", 2 * g + 1, 2 * g + 1, 18)
+        else
+            for j in 0..2
+                a.ldr_q_post(16, 0)
+                a.vop("fadd", 2 * g + j, 2 * g + j, 16)
+    a.alu_ri("sub", 2, 2, 16)
+    a.b(pl)
+    a.bind(fin)
+    for k in 0..4
+        a.vop("fadd", k, k, k + 4)
+    a.vop("fadd", 0, 0, 2)
+    a.vop("fadd", 1, 1, 3)
+    a.str_q(0, 3, 0)
+    a.str_q(1, 3, 16)
     a.ret()
