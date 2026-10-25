@@ -36,6 +36,7 @@ pub struct Loaded
 STD_MODULES := [
     ("std.app", "app/app.ail"),
     ("std.args", "args/args.ail"),
+    ("std.bigint", "bigint/bigint.ail"),
     ("std.attach", "attach/attach.ail"),
     ("std.attach.serve", "attach/serve.ail"),
     ("std.csv", "csv/csv.ail"),

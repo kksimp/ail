@@ -1621,6 +1621,61 @@ fn main()
     print(rows.len())
 ```
 
+## Integers of any size: `std.bigint`
+
+**std.bigint.1** — `use std.bigint` provides `struct BigInt`, an integer of
+any size. Its operations never overflow; they are limited by memory only.
+*(ADR 0902)*
+
+**std.bigint.2** — `from_int(n int) BigInt` and `parse(text str) BigInt !
+BigIntError`. `parse` takes decimal digits with an optional leading `-` or
+`+`; leading zeros are allowed and `-0` is zero. *(ADR 0902)*
+
+**std.bigint.3** — `BigInt.to_text() str` is the decimal text with a leading
+`-` for a negative value. `BigInt.to_int() int?` is `none` when the value does
+not fit in an `int`. *(ADR 0902)*
+
+**std.bigint.4** — `add`, `sub` and `mul` take a `BigInt` and give a `BigInt`.
+`cmp(o)` gives -1, 0 or 1. `negate()` and `abs()` give a `BigInt`. *(ADR 0902)*
+
+**std.bigint.5** — `divmod(o) QuoRem ! BigIntError` divides toward zero:
+`quo` is the quotient and `rem` has the sign of the dividend, so
+`quo * o + rem` is the dividend. *(ADR 0902)*
+
+**std.bigint.6** — `pow(n int) BigInt ! BigIntError` is `self` to the power
+`n >= 0`; `pow(0)` is 1. *(ADR 0902)*
+
+**std.bigint.7** — `factorial(n int) BigInt ! BigIntError` is `n!` for `n >= 0`.
+*(ADR 0902)*
+
+**std.bigint.8** — `is_zero()` and `is_negative()` give `bool`; zero is never
+negative. *(ADR 0902)*
+
+**std.bigint.9** — `BigIntError` is an error with `why str`. Its causes are `no
+digits`, `invalid digit 'C'`, `division by zero`, `negative exponent` and
+`negative factorial`. *(ADR 0902)*
+
+```ail rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
+use std.bigint
+
+fn main() !
+    a := bigint.parse("123456789012345678901234567890")?
+    b := bigint.from_int(-7)
+    print(a.add(b).to_text())
+    print(a.mul(b).to_text())
+    print(a.cmp(b))
+    qr := a.divmod(b)?
+    print("{qr.quo.to_text()} {qr.rem.to_text()}")
+    print(bigint.from_int(2).pow(70)?.to_text())
+    print(bigint.factorial(25)?.to_text())
+    print(a.to_int() else 0)
+    print(b.is_zero() or not b.is_negative())
+    bad := bigint.parse("1x") else err
+        print(err)   # invalid digit 'x'
+        b
+    print(bad.to_text())
+```
+
 ## Command-line arguments: `std.args`
 
 **std.args.1** — `use std.args` provides the spec makers `flag(name, short,

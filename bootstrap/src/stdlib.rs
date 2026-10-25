@@ -282,6 +282,7 @@ const FIRST_LINE: usize = PRELUDE_LINE + (1 << 20);
 const AIL_MODULES: &[(&str, &str, &str)] = &[
     ("std.app", "<std>/app/app.ail", include_str!("std/app/app.ail")),
     ("std.args", "<std>/args/args.ail", include_str!("std/args/args.ail")),
+    ("std.bigint", "<std>/bigint/bigint.ail", include_str!("std/bigint/bigint.ail")),
     ("std.csv", "<std>/csv/csv.ail", include_str!("std/csv/csv.ail")),
     ("std.log", "<std>/log/log.ail", include_str!("std/log/log.ail")),
     ("std.net.http", "<std>/net/http.ail", include_str!("std/net/http.ail")),

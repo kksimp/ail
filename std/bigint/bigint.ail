@@ -1,0 +1,265 @@
+## std.bigint (spec std.bigint.1-9, ADR 0902): integers of any size. A value is
+## a sign and a magnitude of base-10^9 limbs, least significant first, with
+## no zero limb at the top; zero has no limbs and is never negative.
+
+## Why a text or an operation is refused (std.bigint.9).
+pub error struct BigIntError "{why}"
+    pub why str
+
+## A big integer (std.bigint.1).
+pub struct BigInt
+    neg bool
+    limbs List[int]
+
+## Quotient and remainder of a division (std.bigint.5).
+pub struct QuoRem
+    pub quo BigInt
+    pub rem BigInt
+
+BASE := 1000000000
+
+fn trim(limbs List[int]) List[int]
+    mut out := limbs
+    while out.len() > 0 and out[out.len() - 1] == 0
+        out.pop()
+    out
+
+fn make(neg bool, limbs List[int]) BigInt
+    t := trim(limbs)
+    BigInt(neg: neg and t.len() > 0, limbs: t)
+
+## The magnitude comparison: -1, 0 or 1.
+fn cmp_mag(a List[int], b List[int]) int
+    if a.len() != b.len()
+        return if a.len() < b.len() then -1 else 1
+    mut i := a.len() - 1
+    while i >= 0
+        if a[i] != b[i]
+            return if a[i] < b[i] then -1 else 1
+        i -= 1
+    0
+
+fn add_mag(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut carry := 0
+    mut i := 0
+    while i < a.len() or i < b.len() or carry > 0
+        mut s := carry
+        if i < a.len()
+            s += a[i]
+        if i < b.len()
+            s += b[i]
+        out.push(s % BASE)
+        carry = s / BASE
+        i += 1
+    out
+
+## `a - b` for `a >= b` in magnitude.
+fn sub_mag(a List[int], b List[int]) List[int]
+    mut out := List[int]()
+    mut borrow := 0
+    for i in 0..a.len()
+        mut d := a[i] - borrow
+        if i < b.len()
+            d -= b[i]
+        if d < 0
+            d += BASE
+            borrow = 1
+        else
+            borrow = 0
+        out.push(d)
+    trim(out)
+
+fn mul_mag(a List[int], b List[int]) List[int]
+    if a.len() == 0 or b.len() == 0
+        return List[int]()
+    mut res := List[int]()
+    for _ in 0..(a.len() + b.len())
+        res.push(0)
+    for i in 0..a.len()
+        mut carry := 0
+        for j in 0..b.len()
+            cur := res[i + j] + a[i] * b[j] + carry
+            res[i + j] = cur % BASE
+            carry = cur / BASE
+        mut k := i + b.len()
+        while carry > 0
+            cur := res[k] + carry
+            res[k] = cur % BASE
+            carry = cur / BASE
+            k += 1
+    trim(res)
+
+fn mul_small(a List[int], m int) List[int]
+    mul_mag(a, trim([m]))
+
+## Magnitude division: the quotient and remainder of `a` by `b` (b is not zero).
+fn divmod_mag(a List[int], b List[int]) QuoRem
+    mut quo := List[int]()
+    mut rem := List[int]()
+    mut i := a.len() - 1
+    while i >= 0
+        # rem = rem * BASE + a[i]
+        mut shifted := [a[i]]
+        for l in rem
+            shifted.push(l)
+        rem = trim(shifted)
+        # The largest d in 0..BASE-1 with b * d <= rem, by bisection.
+        mut lo := 0
+        mut hi := BASE - 1
+        while lo < hi
+            mid := (lo + hi + 1) / 2
+            if cmp_mag(mul_small(b, mid), rem) <= 0
+                lo = mid
+            else
+                hi = mid - 1
+        quo.push(lo)
+        rem = sub_mag(rem, mul_small(b, lo))
+        i -= 1
+    quo.reverse()
+    QuoRem(quo: make(false, quo), rem: make(false, rem))
+
+## The big integer equal to `n` (std.bigint.2).
+pub fn from_int(n int) BigInt
+    # Work on -(n + 1) for a negative n, so the smallest int does not overflow.
+    mut m := n
+    if n < 0
+        m = -(n + 1)
+    mut limbs := List[int]()
+    while m > 0
+        limbs.push(m % BASE)
+        m = m / BASE
+    if n < 0
+        return make(true, add_mag(limbs, [1]))
+    make(false, limbs)
+
+## The big integer written in `text`: decimal digits with an optional leading
+## `-` or `+` (std.bigint.2).
+pub fn parse(text str) BigInt ! BigIntError
+    mut s := text
+    mut neg := false
+    if s.starts_with("-")
+        neg = true
+        s = s.slice(1, s.len())
+    elif s.starts_with("+")
+        s = s.slice(1, s.len())
+    if s.len() == 0
+        return BigIntError(why: "no digits")
+    for c in s.chars()
+        if not c.is_digit()
+            return BigIntError(why: "invalid digit '{c}'")
+    mut limbs := List[int]()
+    mut end := s.len()
+    while end > 0
+        start := if end > 9 then end - 9 else 0
+        limbs.push(s.slice(start, end).to_int() else 0)
+        end = start
+    make(neg, limbs)
+
+## The decimal text (std.bigint.3).
+pub fn BigInt.to_text(self) str
+    if limbs.len() == 0
+        return "0"
+    mut out := "{limbs[limbs.len() - 1]}"
+    mut i := limbs.len() - 2
+    while i >= 0
+        out = "{out}{"{limbs[i]}".pad_left(9, '0')}"
+        i -= 1
+    if neg
+        return "-{out}"
+    out
+
+## The value as an `int`, or `none` when it does not fit (std.bigint.3).
+pub fn BigInt.to_int(self) int?
+    if limbs.len() > 3
+        return none
+    # 9223372036854775807 is the largest int; the smallest is its negation less one.
+    limit := from_int(9223372036854775807)
+    if neg
+        if cmp_mag(limbs, add_mag(limit.limbs, [1])) > 0
+            return none
+        mut v := 0
+        mut i := limbs.len() - 1
+        while i >= 0
+            v = v * BASE - limbs[i]
+            i -= 1
+        return v
+    if cmp_mag(limbs, limit.limbs) > 0
+        return none
+    mut v := 0
+    mut i := limbs.len() - 1
+    while i >= 0
+        v = v * BASE + limbs[i]
+        i -= 1
+    v
+
+pub fn BigInt.is_zero(self) bool
+    limbs.len() == 0
+
+pub fn BigInt.is_negative(self) bool
+    neg
+
+## -1, 0 or 1 as `self` is less than, equal to or greater than `o` (std.bigint.4).
+pub fn BigInt.cmp(self, o BigInt) int
+    if neg != o.neg
+        return if neg then -1 else 1
+    c := cmp_mag(limbs, o.limbs)
+    if neg
+        return -c
+    c
+
+pub fn BigInt.negate(self) BigInt
+    make(not neg, limbs)
+
+pub fn BigInt.abs(self) BigInt
+    make(false, limbs)
+
+## `self + o` (std.bigint.4).
+pub fn BigInt.add(self, o BigInt) BigInt
+    if neg == o.neg
+        return make(neg, add_mag(limbs, o.limbs))
+    c := cmp_mag(limbs, o.limbs)
+    if c == 0
+        return make(false, List[int]())
+    if c > 0
+        return make(neg, sub_mag(limbs, o.limbs))
+    make(o.neg, sub_mag(o.limbs, limbs))
+
+## `self - o` (std.bigint.4).
+pub fn BigInt.sub(self, o BigInt) BigInt
+    add(o.negate())
+
+## `self * o` (std.bigint.4).
+pub fn BigInt.mul(self, o BigInt) BigInt
+    make(neg != o.neg, mul_mag(limbs, o.limbs))
+
+## `self / o` and `self % o`, truncated toward zero: the remainder has the
+## sign of `self` (std.bigint.5). Dividing by zero is an error (std.bigint.9).
+pub fn BigInt.divmod(self, o BigInt) QuoRem ! BigIntError
+    if o.limbs.len() == 0
+        return BigIntError(why: "division by zero")
+    r := divmod_mag(limbs, o.limbs)
+    QuoRem(quo: make(neg != o.neg, r.quo.limbs), rem: make(neg, r.rem.limbs))
+
+## `self` to the power `n`, for `n >= 0` (std.bigint.6).
+pub fn BigInt.pow(self, n int) BigInt ! BigIntError
+    if n < 0
+        return BigIntError(why: "negative exponent")
+    mut result := from_int(1)
+    mut base := self
+    mut e := n
+    while e > 0
+        if e % 2 == 1
+            result = result.mul(base)
+        base = base.mul(base)
+        e = e / 2
+    result
+
+## The product 1 * 2 * ... * n (std.bigint.7).
+pub fn factorial(n int) BigInt ! BigIntError
+    if n < 0
+        return BigIntError(why: "negative factorial")
+    mut r := from_int(1)
+    for i in 2..(n + 1)
+        r = r.mul(from_int(i))
+    r

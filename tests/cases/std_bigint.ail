@@ -1,0 +1,44 @@
+## std.bigint.1-9: parse, print, arithmetic, division, powers and errors.
+use std.bigint
+
+fn main() !
+    a := bigint.parse("123456789012345678901234567890")?
+    b := bigint.parse("-987654321098765432109")?
+    print(a.add(b).to_text())
+    print(a.sub(b).to_text())
+    print(a.mul(b).to_text())
+    qr := a.divmod(b)?
+    print(qr.quo.to_text())
+    print(qr.rem.to_text())
+    print(bigint.from_int(2).pow(100)?.to_text())
+    print(bigint.factorial(30)?.to_text())
+    print(bigint.from_int(-5).to_text())
+    print(bigint.from_int(0).negate().to_text())
+    print(bigint.parse("+0007")?.to_text())
+    print(a.cmp(b))
+    print(b.cmp(a))
+    print(a.cmp(a))
+    print(b.abs().to_text())
+    print(bigint.from_int(0).is_zero())
+    print(b.is_negative())
+    print(bigint.from_int(-9223372036854775807 - 1).to_text())
+    print(bigint.parse("9223372036854775807")?.to_int() else -1)
+    print(bigint.parse("9223372036854775808")?.to_int() else -1)
+    print(bigint.parse("-9223372036854775808")?.to_int() else -1)
+    print(bigint.parse("1000000000")?.mul(bigint.parse("1000000000")?).to_text())
+    bad := bigint.parse("12x") else err
+        print("error: {err}")
+        bigint.from_int(0)
+    print(bad.to_text())
+    bad2 := bigint.parse("") else err
+        print("error: {err}")
+        bigint.from_int(0)
+    print(bad2.to_text())
+    z := a.divmod(bigint.from_int(0)) else err
+        print("error: {err}")
+        bigint.QuoRem(quo: a, rem: a)
+    print(z.quo.is_zero())
+    p := a.pow(-1) else err
+        print("error: {err}")
+        a
+    print(p.is_zero())
