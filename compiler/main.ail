@@ -461,10 +461,11 @@ fn executable_hex(m mir.Module, path str, target str) str
 ## stage-1 compiler can't hand one to the runtime's `bytes.from_list`.
 fn executable_bytes(m mir.Module, path str, target str) bytes
     hex := executable_hex(m, path, target)
-    bytes.from_hex(hex.replace("\n", "")) else
+    exe := bytes.from_hex(hex.replace("\n", "")) else
         io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
         io.exit(2)
-        b""
+        return b""
+    exe
 
 fn executable_list(m mir.Module, path str, target str) List[u8]
     match target
