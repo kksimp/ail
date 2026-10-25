@@ -315,6 +315,23 @@ fn Lower.tensor_reduce(mut self, r Val, kind int, axis_arg ast.Arg?, npos ast.Po
         return Val(id: out, ty: r.ty)
     tensor_first(out, e)
 
+## `x.to_float().sum()` of a `Tensor[f32]` named `x`: the double sum of the
+## widened elements, read straight from the singles with no widened copy
+## (std.tensor.5, std.tensor.22; bit for bit the same). None for any other shape.
+fn Lower.tensor_widen_sum(mut self, recv ast.Expr) Val?
+    match recv
+        Method(inner, n, _, margs) =>
+            if n != "to_float" or margs.len() != 0
+                return none
+            match inner
+                Name(_, _) =>
+                    v := lower_value(inner, none) else return none
+                    if v.ty.is_tensor() and tensor_elem(v.ty) == Ty.F32
+                        return Val(id: call("rt.tensor_sum_f", [v.id], Ty.Float), ty: Ty.Float)
+                    none
+                _ => none
+        _ => none
+
 fn Lower.lower_tensor_method(mut self, r Val, name str, npos ast.Pos, args List[ast.Arg]) Val?
     for a in args
         if a.label != none or a.mutable

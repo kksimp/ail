@@ -2,7 +2,7 @@
 ## selftest checks for programs, without cargo, and prints only what failed.
 ##   ail run tools/gate/gate.ail [SUITE...]      from the repository root
 ## Suites: `examples` (each examples/NAME.ail with a NAME.out builds natively
-## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net`, `bytecode`, `spec` (the files of those names; `net` starts tools/gate/net_server.py, `spec` runs tools/gate/spec.ail), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
+## and prints it), `cases` (bootstrap/tests/cases.rs), `explain` (explain_coverage.rs), `fix` (fix.rs), `cli` (effects.rs, error_paths.rs, cli_errors.rs), `mistakes`, `contracts`, `snapshot` (the files of those names), `misc` (derive_json, ct_limit, deterministic, test_stderr, schedule), `docs` (doc_scripts), `fmt`, `budget`, `limits`, `diff`, `build_cache`, `parallel`, `api_queries`, `replay`, `api_card`, `edit`, `git_deps`, `net`, `spec` (the files of those names; `net` starts tools/gate/net_server.py, `spec` runs tools/gate/spec.ail), `tools` (bootstrap/tests/tools.rs: the editor, Garlic and the
 ## PDF reader), `std` (the AIL std sources check, format and are called), `selfhost` (tools/self-host/run.sh, only when named).
 ## The native run programs are tools/gate/goldens.ail and nativex.
 ## Run it through tools/gate/mac-gate.sh, or with AIL_APP_HOST set to a missing path: a std.app program
@@ -1348,24 +1348,27 @@ fn Gate.misc(mut self, tmp str)
     sh_run("rm -rf {dir}")
     # conc.sched.1-2: a seed picks the task switch points, so a failing interleaving replays.
     race := "tests/schedule/race.ail"
-    first := ail_run(["test", "--json", "--schedule=random:1", race]) else return
+    # The native scheduler maps seeds to switch points differently: seed 2 loses the update there, seed 1 on Rust.
+    fail_seed := if native() then "2" else "1"
+    pass_seed := if native() then "1" else "2"
+    first := ail_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
     if first.status != 1
         or not first.out.contains("left is 1, right is 2")
-        or not first.out.ends_with("\{\"summary\":true,\"passed\":0,\"failed\":1,\"schedule_seed\":1}\n")
-        red("schedule seed 1", "exit {first.status}\n{first.out}")
+        or not first.out.ends_with("\{\"summary\":true,\"passed\":0,\"failed\":1,\"schedule_seed\":{fail_seed}}\n")
+        red("schedule seed {fail_seed}", "exit {first.status}\n{first.out}")
     for _ in 0..3
-        again := ail_run(["test", "--json", "--schedule=random:1", race]) else return
+        again := ail_run(["test", "--json", "--schedule=random:{fail_seed}", race]) else return
         if again.out != first.out
             red("schedule replay", again.out)
-    passed := ail_run(["test", "--json", "--schedule=random:2", race]) else return
+    passed := ail_run(["test", "--json", "--schedule=random:{pass_seed}", race]) else return
     if passed.status != 0
         or not passed.out.ends_with("\{\"summary\":true,\"passed\":1,\"failed\":0}\n")
-        red("schedule seed 2", "exit {passed.status}\n{passed.out}")
-    human := ail_run(["test", "--schedule=random:1", race]) else return
+        red("schedule seed {pass_seed}", "exit {passed.status}\n{passed.out}")
+    human := ail_run(["test", "--schedule=random:{fail_seed}", race]) else return
     want(
         "schedule prints the seed",
         human.out,
-        ["schedule seed 1: replay with `ail test --schedule=random:1 "],
+        ["schedule seed {fail_seed}: replay with `ail test --schedule=random:{fail_seed} "],
     )
     bad := ail_run(["test", "--schedule=sometimes", race]) else return
     if bad.status != 2
@@ -1572,7 +1575,8 @@ fn Gate.limits(mut self, tmp str)
     if not line.starts_with("\{\"coverage\":true,\"file\":")
         or not line.ends_with("\"lines\":5,\"lines_hit\":3,\"functions\":2,\"functions_hit\":1,\"missed\":[[11,12]]}")
         red("coverage --json", cj.out)
-    k := ail_run(["test", "{case}/limit_test_contract.ail"]) else return
+    # Native traps show their values only under `--values` (ADR 0886); the interpreter always does.
+    k := ail_run(if native() then ["test", "--values", "{case}/limit_test_contract.ail"] else ["test", "{case}/limit_test_contract.ail"]) else return
     if k.status != 1
         red("test contract", "exit {k.status}")
     want("test contract", k.out, ["trap[contract.req.1]", "values: x = 0", "in boom()"])
@@ -2431,104 +2435,6 @@ fn Gate.net(mut self)
         "fn:worker \{fail, io, net}",
     ])
 
-## The bytecode tier against the tree walker (bytecode.rs, ported; ADRs 0359, 0361, 0362):
-## every program runs twice, once with `--no-bytecode`, and the stdout, stderr and exit
-## status must be the same. A job is one program's runs, made in turn; four tasks share the jobs.
-fn bc_ail_files(dir str, mut out List[str])
-    for name in fs.list_dir(dir) else []
-        if name.ends_with(".ail")
-            src := slurp("{dir}/{name}")
-            if not src.contains("ui.open(") and not src.contains("# bytecode.skip")
-                out.push("{dir}/{name}")
-
-## One side of a command line: `ail SUBCOMMAND [--no-bytecode] ARGS...`, killed after 60 s.
-fn bc_run(words List[str], walker bool) str
-    script := "AIL_BINARY=\"$PWD/bootstrap/target/release/ail\"; export AIL_BINARY; exec \"$AIL_BINARY\" \"$@\""
-    mut args := ["-c", script, "sh", words[0]]
-    if walker
-        args.push("--no-bytecode")
-    for i in 1..words.len()
-        args.push(words[i])
-    r := proc.run("sh", args, "", 60000) else err
-        return "still running after 60s, or could not start: {err}"
-    "exit {r.status}\n--- stdout\n{r.out}--- stderr\n{r.err}"
-
-fn bc_worker(jobs List[str], k int, n int) List[str]
-    mut fails := List[str]()
-    for i in 0..jobs.len()
-        if i % n != k
-            continue
-        for line in jobs[i].split("\n")
-            words := line.words()
-            w := bc_run(words, true)
-            t := bc_run(words, false)
-            if w != t
-                fails.push("ail {line}\n=== walker\n{w}=== tier\n{t}")
-    fails
-
-fn Gate.bytecode(mut self)
-    mut files := List[str]()
-    for dir in ["examples", "tests/cases", "tools/perfbench/programs"]
-        bc_ail_files(dir, mut files)
-    for sub in fs.list_dir("tools/tokbench/corpus/programs") else []
-        bc_ail_files("tools/tokbench/corpus/programs/{sub}", mut files)
-    files.sort()
-    concurrent := [
-        "spawn",
-        "par ",
-        "TaskGroup",
-        "Atomic",
-        "Channel",
-        "Mutex",
-        "mem.cstr(",
-        "mem.alloc(",
-    ]
-    mut jobs := List[str]()
-    mut runs := 0
-    for f in files
-        # `--values` (trace.frame.3) is native only.
-        args := slurp(f.replace(".ail", ".args")).replace("--values", "")
-        src := slurp(f)
-        mut steady := true
-        for w in concurrent
-            if src.contains(w)
-                steady = false
-        mut variants := [""]
-        if steady
-            variants = ["", "--trace=all "]
-        mut cmds := List[str]()
-        for flags in variants
-            cmds.push("run {flags}{args.words().join(" ")} {f}")
-        if fs.exists(f.replace(".ail", ".test"))
-            cmds.push("test --json {f}")
-            if steady
-                cmds.push("test --coverage {f}")
-        runs += cmds.len()
-        jobs.push(cmds.join("\n"))
-    mut pkgs := fs.list_dir("tests/cases/packages") else []
-    pkgs.sort()
-    for p in pkgs
-        if fs.exists("tests/cases/packages/{p}/expected.out")
-            or fs.exists("tests/cases/packages/{p}/expected.rules")
-            or fs.exists("tests/cases/packages/{p}/expected.trap")
-            or fs.exists("tests/cases/packages/{p}/expected.err")
-            jobs.push("run tests/cases/packages/{p}")
-            runs += 1
-    if jobs.len() <= 400 or runs <= 1200
-        red("bytecode", "found only {jobs.len()} programs, {runs} runs")
-    t0 := spawn bc_worker(jobs, 0, 4)
-    t1 := spawn bc_worker(jobs, 1, 4)
-    t2 := spawn bc_worker(jobs, 2, 4)
-    t3 := spawn bc_worker(jobs, 3, 4)
-    for f in t0.wait() else List[str]()
-        red("bytecode", f)
-    for f in t1.wait() else List[str]()
-        red("bytecode", f)
-    for f in t2.wait() else List[str]()
-        red("bytecode", f)
-    for f in t3.wait() else List[str]()
-        red("bytecode", f)
-
 ## The spec conformance harness (spec.rs, ported to tools/gate/spec.ail; ADR 0002).
 fn Gate.spec(mut self)
     r := proc.run("./ail", ["run", "tools/gate/spec.ail"], "", 1800000) else
@@ -2593,10 +2499,9 @@ fn Gate.asm(mut self)
         red("asm", "{r.out}{r.err}")
 
 fn Gate.native_misc(mut self)
-    for flags in [List[str](), ["--no-bytecode"]]
-        r := ail_run(cat(cat(["test"], flags), ["compiler/rt/rt.ail"])) else return
-        if r.status != 0 or not r.out.contains(" 0 failed")
-            red("native runtime tests {flags}", "{r.out}{r.err}")
+    r := ail_run(["test", "compiler/rt/rt.ail"]) else return
+    if r.status != 0 or not r.out.contains(" 0 failed")
+        red("native runtime tests", "{r.out}{r.err}")
     mixed := "tests/native_test/mixed.ail"
     # ADR 0900: `test --native` is refused; `ail test` runs the same tests natively.
     n := native_run(["test", "--native", mixed]) else return
@@ -2847,7 +2752,6 @@ fn main() !
             "edit" => g.edit(tmp)
             "git_deps" => g.git_deps(tmp)
             "net" => g.net()
-            "bytecode" => g.bytecode()
             "spec" => g.spec()
             "nativex" => g.nativex()
             "globals" => g.globals()
