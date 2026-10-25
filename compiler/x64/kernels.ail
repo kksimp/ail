@@ -18,6 +18,8 @@ pub fn is_kernel(name str) bool
         or name == "rt.vec_widen"
         or name == "rt.vec_narrow"
         or name == "rt.vec_scal32"
+        or name == "rt.vec_sum16"
+        or name == "rt.vec_sum16_32"
         or name == "rt.fill"
         or is_aes_kernel(name)
 
@@ -32,6 +34,8 @@ pub fn gen_kernel(mut img codegen.Image, name str)
         "rt.vec_widen" => kernel_widen(mut a)
         "rt.vec_narrow" => kernel_narrow(mut a)
         "rt.vec_scal32" => kernel_scal32(mut a)
+        "rt.vec_sum16" => kernel_sum16(mut a, false)
+        "rt.vec_sum16_32" => kernel_sum16(mut a, true)
         "rt.fill" => kernel_fill(mut a)
         "rt.aes_hw_ok" | "rt.aes_hw_blocks" | "rt.aes_hw_ghash" => gen_aes_kernel(mut a, name)
         _ => kernel_scal(mut a)
@@ -485,5 +489,57 @@ fn kernel_narrow(mut a Asm)
     a.alu_ri("sub", R11, 1)
     a.jmp(scalar)
     a.bind(done)
+    a.vzeroupper()
+    a.ret()
+
+## `rt.vec_sum16(p, q, n, s)` and `rt.vec_sum16_32(p, n, s)`: the 16 partial
+## sums of std.tensor.5 over the first `n` (a multiple of 16) elements of `p`,
+## or of the products with `q` (doubles), halved down to four; the four sums go
+## to `s[0..3]`. `vec_sum16_32` reads singles from `p` and widens them. Element
+## `i` of a block of 16 adds to lane `i`, four lanes in each of ymm0..ymm3; the
+## product and the sum are each rounded (no fused multiply-add). rdi = p,
+## rsi = q, rdx = n, rcx = s (`_32`: rdi = p, rsi = n, rdx = s).
+fn kernel_sum16(mut a Asm, single bool)
+    if single
+        a.mov_rr(RCX, RDX)
+        a.mov_rr(RDX, RSI)
+    for k in 0..4
+        a.vpd_rrr(87, k, k, k)
+    plain := a.label()
+    pl := a.label()
+    dl := a.label()
+    fin := a.label()
+    if not single
+        a.alu_ri("cmp", RSI, 0)
+        a.jcc(CC_E, plain)
+        a.bind(dl)
+        a.alu_ri("cmp", RDX, 0)
+        a.jcc(CC_E, fin)
+        for k in 0..4
+            a.vmovupd_rm(4, at(RDI, 32 * k))
+            a.vpd256_rrm("fmul", 4, 4, at(RSI, 32 * k))
+            a.vpd256_rrr("fadd", k, k, 4)
+        a.alu_ri("add", RDI, 128)
+        a.alu_ri("add", RSI, 128)
+        a.alu_ri("sub", RDX, 16)
+        a.jmp(dl)
+    a.bind(plain)
+    a.bind(pl)
+    a.alu_ri("cmp", RDX, 0)
+    a.jcc(CC_E, fin)
+    for k in 0..4
+        if single
+            a.vcvtps2pd_rm(4, at(RDI, 16 * k))
+            a.vpd256_rrr("fadd", k, k, 4)
+        else
+            a.vpd256_rrm("fadd", k, k, at(RDI, 32 * k))
+    a.alu_ri("add", RDI, if single then 64 else 128)
+    a.alu_ri("sub", RDX, 16)
+    a.jmp(pl)
+    a.bind(fin)
+    a.vpd256_rrr("fadd", 0, 0, 2)
+    a.vpd256_rrr("fadd", 1, 1, 3)
+    a.vpd256_rrr("fadd", 0, 0, 1)
+    a.vmovupd_mr(at(RCX, 0), 0)
     a.vzeroupper()
     a.ret()

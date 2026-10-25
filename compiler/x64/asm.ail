@@ -588,6 +588,10 @@ pub fn Asm.vmovupd_mr(mut self, m Mem, src int)
 pub fn Asm.vpd256_rrr(mut self, op str, dst int, a int, b int)
     vex256_rr(1, 1, sd_opcode(op), dst, a, b)
 
+## `vaddpd`, `vmulpd` with a memory operand: `dst = a op [m]` on ymm registers.
+pub fn Asm.vpd256_rrm(mut self, op str, dst int, a int, m Mem)
+    vex256_rm(1, 1, sd_opcode(op), dst, a, m)
+
 ## `vmovups` between a ymm register and memory: eight singles.
 pub fn Asm.vmovups_rm(mut self, dst int, m Mem)
     vex256_rm(0, 1, 16, dst, 0, m)
