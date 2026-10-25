@@ -75,6 +75,9 @@ def run(binary, args, cwd=None, tmp=None, stdin=None, stderr=True):
     # The native `api --ast` ends with `"asks":[]` (the `uhwhatnow?` positions, ADR 0872), which the Rust
     # tree has no field for; an empty list says nothing, so it is dropped before comparing.
     out = out.replace(',"asks":[]', "")
+    # The Rust diagnostics for generated code print the line with the second file's base added
+    # (`f.ail:1048580:44`); the native ones print the line (`f.ail:4:44`), which is right.
+    out = re.sub(r"\.ail:(\d+):", lambda m: ".ail:%d:" % (int(m.group(1)) - 1048576) if 1048576 <= int(m.group(1)) < 1073741824 else m.group(0), out)
     # Likewise the parameter flag `"observe":false` (`@observe`, ADR 0879).
     out = out.replace(',"observe":false', "").replace('"observe":false,', "")
     LAST[threading.get_ident()] = out
