@@ -175,6 +175,13 @@ fn tr_mark()
         store64(w + 112, load64(global(OUT_LEN)))
 
 fn tr_vend()
+    tr_vend_n(60)
+
+## `tr_vend` for a watch event's value: cut at 1000 bytes (trace.val.2).
+fn tr_vend_long()
+    tr_vend_n(1000)
+
+fn tr_vend_n(limit int)
     w := tr_state()
     if w == 0
         return
@@ -184,8 +191,8 @@ fn tr_vend()
         return
     base := load64(global(OUT_BUF)) + mark
     mut len := n - mark
-    if len > 60
-        mut cut := 60
+    if len > limit
+        mut cut := limit
         while cut > 0 and load8(base + cut).bit_and(192) == 128
             cut -= 1
         len = cut
