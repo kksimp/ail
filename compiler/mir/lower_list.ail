@@ -66,13 +66,16 @@ fn Lower.lower_list_edit(
             return unsupported(npos, "`.extend()` of a `{vs[0].ty.name()}` onto a `{r.ty.name()}`")
         ys := copy_if_place(args[0].value, vs[0])
         call("rt.list_extend", [r.id, ys, size], Ty.Unit)
+        watch_plain(npos, r, "extend")
         return unit
     if name == "clear" and vs.len() == 0
         uniq_clear(r)
         call("rt.list_clear", [r.id], Ty.Unit)
+        watch_plain(npos, r, "clear")
         return unit
     if name == "reverse" and vs.len() == 0
         call("rt.list_reverse", [r.id, size], Ty.Unit)
+        watch_plain(npos, r, "reverse")
         return unit
     if name == "remove_at" and vs.len() == 1
         # The read checks the index (type.coll.4); the call then removes it.
@@ -149,6 +152,7 @@ fn Lower.lower_list_edit(
         call("rt.list_sort", [target, konst(k, Ty.Int)], Ty.Unit)
         if name == "sorted"
             return Val(id: target, ty: r.ty)
+        watch_plain(npos, r, "sort")
         return unit
     if is_set_op(name) and vs.len() == 1
         return set_op(r, name, vs[0], npos)
@@ -157,6 +161,8 @@ fn Lower.lower_list_edit(
         checked("get", [r.id, vs[0].id], bounds_site(npos), e)
         checked("get", [r.id, vs[1].id], bounds_site(npos), e)
         call("rt.list_swap", [r.id, vs[0].id, vs[1].id, size], Ty.Unit)
+        sw := WNote(kind: "swap", elem: none, label: "index", at: vs[0], at2: vs[1])
+        watch_note_if(npos, 0 - 1, r, sw)
         return unit
     if name == "take" and vs.len() == 1
         n := convert(vs[0], Ty.Int, npos)

@@ -135,7 +135,7 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
             --watch)
                 v="${run_args[$((k + 1))]-}"
                 case "$v" in "" | *[!A-Za-z0-9_]*) die "\`--watch\` needs a variable name, e.g. \`--watch total\` (trace.watch.1)" ;; esac
-                export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}watch=$v"; k=$((k + 2)) ;;
+                export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}watch=$v"; trace_run=1; k=$((k + 2)) ;;
             --no-contracts) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}nocontracts"; k=$((k + 1)) ;;
             --trace | --trace=all) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace,traceeffects"; trace_run=1; k=$((k + 1)) ;;
             --trace=calls) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace"; trace_run=1; k=$((k + 1)) ;;
