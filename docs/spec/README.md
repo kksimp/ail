@@ -40,14 +40,15 @@ Rules for rule IDs:
 4. Every rule cites the ADR(s) that justify it.
 5. Compiler diagnostics and the AI semantic API will cite rule IDs.
 6. Implementation limits (a construct the current implementation doesn't
-   support yet) use the code `bootstrap.unsupported`. That is not a rule ID. The
+   support yet) use the code `bootstrap.unsupported` (the code's name outlived the Rust bootstrap,
+   ADR 0904). That is not a rule ID. The
    diagnostic names the spec rule of the unsupported construct.
 
 ### Examples and conformance tests
 
 Every fenced block tagged `ail` in a chapter is a **conformance test**
 (ADR 0002). the `spec` gate suite (`tools/gate/spec.ail`) runs `ail check --json` on each one
-during `./ail selftest` and reports failures by chapter and line. The
+during the `spec` gate suite (`./ail selftest spec`) and reports failures by chapter and line. The
 same rules apply to `docs/quick-reference.md` and `docs/language-card.md`, where a block
 without `fn main` is a fragment without a tag (to save tokens). The fence
 line says what to expect:
@@ -57,19 +58,19 @@ line says what to expect:
 | ```` ```ail ```` | A whole program: must check without errors (warnings are fine). |
 | ```` ```ail fragment ```` | A snippet. Column-0 declarations (`struct`, `enum`, `error`, `unique`, `fn`, `trait`, `impl`, `const`, `use`, `type`, `@attribute`, `pub`, and `#` comments before them) stay top level; every other line goes into a generated `fn main()`. Must then check without errors. |
 | ```` ```ail error=RULE ```` | Must report `RULE` among its errors. Handled as `fragment` when it has no `fn main`. |
-| ```` ```ail skip=bootstrap ```` | Uses a feature the bootstrap doesn't implement yet. Counted, not run. Remove the tag when the feature lands. |
+| ```` ```ail skip=bootstrap ```` | Uses a feature that isn't built yet (the name dates from the Rust bootstrap, ADR 0904). Counted, not run. Remove the tag when the feature lands. |
 | ```` ```ail skip=context ```` | An illustration that uses declarations the chapter doesn't show. Counted, not run. Prefer making the example self-contained. |
 | ```` ```ail excerpt ```` | Outside `docs/spec/`: an incomplete snippet whose point is one line or one step. Not checked by `tools/check-doc-snippets.py`. Every other `ail` or `ail fragment` block in the docs must check. |
 | ```` ```ail skip=bootstrap rules=ID ```` | Counted for the rules it cites, not checked or run (ADR 0498): the feature is specified but not yet built. |
 | ```` ```ail norun ```` | Checked but not run: it traps on purpose, or needs a window, network or input the harness doesn't have. |
-| ```` ```ail rules=ID,ID ```` | Demonstrates the listed rules (ADR 0498). Every rule of the types, expressions, std, effects and tools chapters must be demonstrated; `AIL_LIST_UNCOVERED=1 ./ail selftest --test spec -- --nocapture` lists the rest. |
+| ```` ```ail rules=ID,ID ```` | Demonstrates the listed rules (ADR 0498). Every rule of the types, expressions, std, effects and tools chapters must be demonstrated; `AIL_LIST_UNCOVERED=1 ./ail selftest spec` lists the rest. |
 | ```` ```ail flags=A,B ```` | Checked with those `ail check` flags, such as `--deterministic` or `--deny fs`. Not run. |
 | ```` ```ail tool=A,B,FILE expect=TEXT ```` | Runs `ail A B FILE` on the block and requires `TEXT` in stdout (ADR 0500). `DIR` is the block's directory. |
 | ```` ```ail pkg=DIR status=N ```` | With `tool=`: `DIR` is a copy of the case package `tests/cases/packages/DIR`, and the tool must exit N. |
 | ```` ```ail fixture=DIR ```` | Checks the case fixture `tests/cases/DIR`, which must report each rule in `rules=` (ADR 0500). |
 
-A program that checks clean and has a `main` is also run on both interpreter
-tiers, and both must print the same output (ADR 0499). Blocks marked `norun`,
+A program that checks clean and has a `main` is also built and run natively
+and must print its `.out` golden (ADR 0499, amended by ADR 0904). Blocks marked `norun`,
 `flags=`, `tool=` or `fixture=` are not run that way.
 
 An unknown tag fails the suite. Blocks in other languages (`text`, `ebnf`)

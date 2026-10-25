@@ -2,11 +2,12 @@
 
 _Last updated: 2026-10-21_
 
-**Current stage:** 2 — Bootstrap front end and interpreter. The Stage 1 core
-design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
-Linux x86-64 and macOS ARM64 gate every change ([ADR 0085](decisions/0085-interim-local-testing-gate.md));
-Windows is tested when convenient. The Linux selftest passes; macOS
-verification of the 2026-10-20 batch is pending. See
+**Current stage:** 2 — native self-hosting. The Rust bootstrap and interpreter are
+deleted ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the compiler, checker
+and tools are written in AIL and `ail` builds itself from the published seed. The
+Stage 1 core design is complete ([ADR 0086](decisions/0086-finish-core-design-before-stage-2.md)).
+The Mac gate ([ADR 0842](decisions/0842-mac-first-gate.md)) gates every change;
+Linux and Windows are tested on the designer's VMs. See
 [language-card.md](language-card.md) for the supported subset, and [roadmap.md](roadmap.md) for what comes next.
 
 ## What is implemented
@@ -212,4 +213,4 @@ Legend: **—** not started · **Q** questions open · **D** decided (ADR) ·
 See [open-questions.md](open-questions.md): 62 questions kept (IDs OQ-001 to OQ-117 with gaps), 52 resolved. Open: OQ-006, OQ-023, OQ-029, OQ-030, OQ-037, OQ-042, OQ-050, OQ-060, OQ-091, OQ-092, OQ-093, OQ-094, OQ-095, OQ-097.
 
 - 2026-10-24: D4 (ADR 0855): `./ail` builds the native CLI only from the published seed (stage 0); the cargo fallback is gone. The Rust binary is still built for `AIL_RUST=1` routes until D5.
-- 2026-10-25: D5 (ADR 0865): `./ail`, `ail.ps1`, the Mac gate and the tools no longer run or read the Rust bootstrap (`AIL_RUST`, `AIL_BINARY`, `GATE_RUST` and cargo are gone); every gate suite runs on the native CLI. `bootstrap/` (the Rust compiler, interpreter and their tests) is deleted on Kaleb's go-ahead; the frozen goldens in `tests/golden/` stay.
+- 2026-10-25: D5 (ADR 0865): `./ail`, `ail.ps1`, the Mac gate and the tools no longer run or read the Rust bootstrap (`AIL_RUST`, `AIL_BINARY`, `GATE_RUST` and cargo are gone); every gate suite runs on the native CLI. `bootstrap/` (the Rust compiler, interpreter and their tests) is deleted on Kaleb's go-ahead ([ADR 0904](decisions/0904-rust-bootstrap-deleted.md)); the frozen goldens in `tests/golden/` stay.

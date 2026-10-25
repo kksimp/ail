@@ -13,10 +13,10 @@ humans and AI agents are both first-class programmers. Source files use `.ail`.
 The CLI is `ail` (`ail build`, `ail run`, `ail test`, `ail fmt`, `ail check`).
 
 The project is in **Stage 2: native self-hosting**. The Rust bootstrap and its
-interpreter are deleted (D5, ADR 0865); the compiler is written in AIL and builds itself from a
+interpreter are deleted (D5, ADR 0904); the compiler is written in AIL and builds itself from a
 published seed (ADR 0855). The core design is done ([ADR 0086](docs/decisions/0086-finish-core-design-before-stage-2.md))
 and the remaining design topics continue alongside. The first milestone is
-`./ail run examples/hello.ail` on macOS. Every implemented behaviour must
+`./ail run examples/hello.ail` on macOS (met). Every implemented behaviour must
 cite its spec rule ID in code and in diagnostics.
 
 ## Git workflow
@@ -24,21 +24,23 @@ cite its spec rule ID in code and in diagnostics.
 Per [ADR 0028](docs/decisions/0028-git-workflow.md):
 - **`main` is the only long-lived branch.** Always reduce back to `main`.
 - **Docs and spec changes:** commit directly to `main`.
-- **Code changes (Stage 2+):** use a short-lived branch. **Interim gate
-  ([ADR 0085](docs/decisions/0085-interim-local-testing-gate.md)):** there's no
-  hosted CI. The AI runs `./ail selftest` on Linux x86-64, and the designer
-  runs `tools/verify.sh BRANCH` on macOS ARM64. Windows is tested by the
-  designer when convenient and doesn't gate.
+- **Code changes:** use a short-lived branch. There's no hosted CI.
 - **Gate ([ADR 0842](docs/decisions/0842-mac-first-gate.md)):** `tools/gate/mac-gate.sh`
-  on the designer's Mac is the gate (the integrator runs it for every chain). No
-  Linux VM runs; lanes do not open their own Mac sessions.
+  on the designer's Mac is the gate (the integrator runs it for every chain).
+  Lanes do not open their own Mac sessions. Builds and tests run only on the
+  designer's machines (the Mac, `ail-linux`, `ail-win`), never in a cloud
+  container. There is no cargo; `./ail selftest` is the native gate suites
+  (ADR 0865) and `ail test` runs a program's tests.
 - **Merging ([ADR 0109](docs/decisions/0109-merge-via-pull-requests.md)):** when
-  both pass, open a pull request for the branch and merge it through GitHub.
-  GitHub deletes the branch on merge (repository setting). There's no
-  GitHub-hosted testing.
+  the gate passes, open a pull request for the branch and merge it through GitHub.
+  GitHub deletes the branch on merge (repository setting).
 - **One checker:** checker changes go in `compiler/check/` only. There is no
   Rust checker to compare with any more; `tests/checker_known_new.txt` is history
-  ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md)).
+  ([ADR 0740](docs/decisions/0740-self-hosted-checker-parity-gate.md), amended
+  by [ADR 0904](docs/decisions/0904-rust-bootstrap-deleted.md)).
+- **Native only ([ADR 0865](docs/decisions/0865-no-double-work.md)):** new
+  features get no interpreter code. Native-only cases are listed in
+  `tests/cases/native_only.txt`.
 - **Native lowering ([ADR 0823](docs/decisions/0823-lower-ail-feature-files.md)):**
   a native feature lives in its own `compiler/mir/lower_*.ail` file. It may
   add at most one dispatch line and one state field to `lower.ail`. Only a
