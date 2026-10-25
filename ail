@@ -195,6 +195,12 @@ if [ "${1:-}" = run ] && [ "$native_on" = 1 ]; then
         while [ "$rec_i" -lt "${#run_args[@]}" ]; do rec_list="$rec_list${rec_list:+,}\"$(rec_q "${run_args[$rec_i]}")\""; rec_i=$((rec_i + 1)); done
         printf '{"ail_record":1,"program":"%s","args":[%s],"seed":%s,"limit":67108864}\n' "$(rec_q "$run_file")" "$rec_list" "$AIL_SEED" > "$AIL_RECORD" || die "can't write the recording $AIL_RECORD"
     fi
+    # trace.snap.4: `--json` alone makes a trap one JSON object (tools/trapjson.awk reads the verbose report).
+    snap_json=
+    if [ -z "${trace_run:-}" ] && [ "$budget_opts" = " --json" ] && [ -n "${native_run:-}" ]; then
+        snap_json=1; budget_opts=""
+        export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values,verbose"
+    fi
     case "$budget_opts" in "" | *--budget*) ;; *) native_run= ;; esac
 fi
 # run.limit.4: the limit options belong to `run` and `test`; `check` with one is a usage error.
@@ -331,6 +337,13 @@ if [ "$native_on" = 1 ] && { [ -n "$native_errors" ] || [ -n "$native_api" ] || 
         shift "$run_skip"
         # shellcheck disable=SC2086
         if [ -n "$budget_opts" ]; then AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget run $budget_opts -- "$exe" "$@"; fi
+        if [ -n "${snap_json:-}" ]; then
+            snap_err="$(mktemp)"
+            snap_rc=0
+            (AIL="$root/ail" exec -a "$run_file" "$exe" "$@") 2>"$snap_err" || snap_rc=$?
+            awk -v main="$run_file" -f "$root/tools/trapjson.awk" < "$snap_err" >&2; rm -f "$snap_err"
+            exit "$snap_rc"
+        fi
         # `env.program()` is the source path, as it was given (std.env.4), so paths next to the source work:
         # argv[0] is set to it rather than the cached executable. `AIL` names this wrapper.
         AIL="$root/ail" exec -a "$run_file" "$exe" "$@"
