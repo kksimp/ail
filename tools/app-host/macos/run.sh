@@ -41,6 +41,13 @@ PLIST
         "$here"/Sources/*.swift -o "$exe"
 fi
 
+# Garlic's Dock icon (tools/garlic/icon); the host reads AIL_APP_ICON.
+for a in "$@"; do
+    case "$a" in
+        */garlic/garlic.ail|garlic.ail) export AIL_APP_ICON="$root/tools/garlic/icon/garlic-512.png" ;;
+    esac
+done
+
 if [ "${1:-}" = "--native" ]; then
     # Build the program natively (ADR 0022) and run it against this host.
     [ "$#" -ge 2 ] || { echo "usage: run.sh --native PROGRAM.ail [ARGS...]" >&2; exit 2; }
