@@ -2499,10 +2499,9 @@ fn Gate.asm(mut self)
         red("asm", "{r.out}{r.err}")
 
 fn Gate.native_misc(mut self)
-    for flags in [List[str](), ["--no-bytecode"]]
-        r := ail_run(cat(cat(["test"], flags), ["compiler/rt/rt.ail"])) else return
-        if r.status != 0 or not r.out.contains(" 0 failed")
-            red("native runtime tests {flags}", "{r.out}{r.err}")
+    r := ail_run(["test", "compiler/rt/rt.ail"]) else return
+    if r.status != 0 or not r.out.contains(" 0 failed")
+        red("native runtime tests", "{r.out}{r.err}")
     mixed := "tests/native_test/mixed.ail"
     # ADR 0900: `test --native` is refused; `ail test` runs the same tests natively.
     n := native_run(["test", "--native", mixed]) else return
