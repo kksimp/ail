@@ -626,7 +626,10 @@ fn shown_of(out str, err str) str
     for l in out.lines()
         lines.push("  | {l}")
     for l in err.lines()
-        if l.contains(": trap[") or l.starts_with("  at ") or l.starts_with("ail-snapshot ") or is_excerpt_line(l)
+        if l.contains(": trap[")
+            or l.starts_with("  at ")
+            or l.starts_with("ail-snapshot ")
+            or is_excerpt_line(l)
             continue
         lines.push("  ! {l}")
     lines.join("\n")
@@ -2435,7 +2438,12 @@ fn main() !
         if not modes.is_empty()
             prog = "env"
             cmd = ["AIL_INSTRUMENT={modes}", "AIL_INSTRUMENT_SITES={exe}.sites", ail_path()]
-        cmd.extend(build_args(if modes.is_empty() then List[str]() else ["--no-cache"], timeout, copy, exe))
+        cmd.extend(build_args(
+            if modes.is_empty() then List[str]() else ["--no-cache"],
+            timeout,
+            copy,
+            exe,
+        ))
         b := proc.run(prog, cmd)? "running ail build"
         if b.status == 0
             built = true
