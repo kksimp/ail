@@ -37,10 +37,12 @@ entry: main in main.ail
 
 ## pkg (44 items)
 
+## scaffold (2 items)
+
 ## syntax (110 items)
 
 ## watch (4 items)
 
 ## x64 (88 items)
 
-trimmed to fit 4000 tokens (~209); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
+trimmed to fit 4000 tokens (~219); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names, signatures (names only)
