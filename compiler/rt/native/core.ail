@@ -803,7 +803,8 @@ fn data_kind(size int) int
 ## Elements are 8 bytes, but a `List[bool]`'s are 1 (`size`).
 fn list_alloc(cap int, size int) List[int]
     p := alloc(24, KIND_LIST)
-    c := if cap < 4 then 4 else cap
+    # Exactly `cap` (at least 1): a one-element list is a 16-byte block, not 48.
+    c := if cap < 1 then 1 else cap
     store64(p + 8, c)
     store64(p + 16, alloc_raw(size * c, data_kind(size)))
     list_at(p)
@@ -851,7 +852,12 @@ fn copy_list(dst int, src int, n int)
         copy_bytes(dst, src, n)
 
 fn list_grow(p int, size int)
-    cap := if load64(p + 8) < 8 then 16 else load64(p + 8) * 2
+    old := load64(p + 8)
+    mut cap := old * 2
+    if old < 4
+        cap = 4
+    elif old < 8
+        cap = 16
     data := alloc_raw(size * cap, data_kind(size))
     copy_list(data, load64(p + 16), size * load64(p))
     store64(p + 8, cap)
