@@ -1,0 +1,47 @@
+## std.toml.1-7: tables, arrays of tables, strings, numbers, dates and errors.
+use std.toml
+
+fn main() !
+    src := [
+        "# a config",
+        "title = \"demo\"",
+        "debug = true",
+        "ports = [8000, 8001, 0x10]",
+        "ratio = 1_0.5",
+        "when = 1979-05-27T07:32:00Z",
+        "",
+        "[server]",
+        "host = 'localhost'",
+        "point = { x = 1, y = 2 }",
+        "",
+        "[server.tls]",
+        "on = false",
+        "",
+        "[[user]]",
+        "name = \"ann\"",
+        "",
+        "[[user]]",
+        "name = \"bo\"",
+        "tags = [\"a\", \"b\"]",
+    ].join("\n")
+    doc := toml.parse(src)?
+    print(doc.str("title") else "")
+    print((doc.get("debug") else Json.Null).to_text())
+    print((doc.get("ports") else Json.Null).to_text())
+    print((doc.get("ratio") else Json.Null).to_text())
+    print((doc.str("when") else ""))
+    server := (doc.get("server") else Json.Null)
+    print((server.str("host") else ""))
+    print((server.get("point") else Json.Null).to_text())
+    print((server.get("tls") else Json.Null).to_text())
+    print((doc.get("user") else Json.Null).to_text())
+    print(toml.parse("a.b.c = 1\na.d = \"x\\ty\"\n")?.to_text())
+    print(toml.parse("s = \"\"\"\nline1\nline2 \\\n   joined\"\"\"\n")?.to_text())
+    bad := toml.parse("a = 1\na = 2\n") else err
+        print("error: {err}")
+        Json.Null
+    print(bad.to_text())
+    bad2 := toml.parse("x = \n") else err
+        print("error: {err}")
+        Json.Null
+    print(bad2.to_text())

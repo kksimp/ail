@@ -1,0 +1,15 @@
+demo
+true
+[8000,8001,16]
+10.5
+1979-05-27T07:32:00Z
+localhost
+{"x":1,"y":2}
+{"on":false}
+[{"name":"ann"},{"name":"bo","tags":["a","b"]}]
+{"a":{"b":{"c":1},"d":"x\ty"}}
+{"s":"line1\nline2 joined"}
+error: duplicate key 'a' (line 2)
+null
+error: expected a value (line 1)
+null
