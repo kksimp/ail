@@ -36,7 +36,7 @@ RUN_TIMEOUT = 60
 
 SOURCES = [
     ("examples", os.path.join(ROOT, "examples", "*.ail")),
-    ("cases", os.path.join(ROOT, "bootstrap", "tests", "cases", "*.ail")),
+    ("cases", os.path.join(ROOT, "tests", "cases", "*.ail")),
     ("perfbench", os.path.join(ROOT, "tools", "perfbench", "programs", "*.ail")),
 ]
 SUBSET = re.compile(r"error\[native\.subset\.1\]: (.*)")
