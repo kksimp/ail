@@ -1,0 +1,101 @@
+## The step limit of a constant (ct.eval.3, ADR 0226). Constants are computed
+## by `init.consts` before `main` (lower_const.ail). A program function that
+## `init.consts` calls is called as its `.ct` copy instead: the same function,
+## lowered again, whose statements count toward the limit and whose own calls
+## go to `.ct` copies in turn (rt/native/ctsteps.ail). Run-time code is
+## unchanged, so a program pays nothing outside its constants, and a program
+## whose constants call nothing has no copies. Calls through generic
+## instances, fn values and `any` aren't copied, so their steps aren't counted.
+use ast
+
+## The copies asked for, and the three globals the counting uses (-1 until
+## the first copy): the steps run, the limit, and the constant's name.
+struct CtSteps
+    list List[str]
+    seen Set[str]
+    count int
+    limit int
+    name int
+
+fn new_ct_steps() CtSteps
+    CtSteps(list: [], seen: Set[str](), count: -1, limit: -1, name: -1)
+
+## Whether the function being lowered is a `.ct` copy.
+fn Lower.in_ct_copy(self) bool
+    fname.ends_with(".ct")
+
+## The function a call at `pos` goes to: `name`, or its `.ct` copy when the
+## call is in `init.consts` or in a copy. A call in `init.consts` first names
+## its constant and restarts the count (ct.eval.3 counts each constant).
+fn Lower.ct_call(mut self, name str, pos ast.Pos) str
+    top := fname == "init.consts"
+    if not top and not in_ct_copy()
+        return name
+    if not fn_decl.contains(name)
+        return name
+    if ct.count < 0
+        ct.count = new_global("ct.steps", Ty.Int)
+        ct.limit = new_global("ct.limit", Ty.Int)
+        ct.name = new_global("ct.name", Ty.Str)
+    if top
+        store(global_addr(ct.count), 0, konst(0, Ty.Int))
+        store(global_addr(ct.name), 0, str_value(ct_const_at(pos)))
+    if not ct.seen.contains(name)
+        ct.seen.add(name)
+        ct.list.push(name)
+        sigs["{name}.ct"] = sigs[name]
+    "{name}.ct"
+
+## The constant of the current file whose value holds `pos`: the last one
+## declared at or before it.
+fn Lower.ct_const_at(self, pos ast.Pos) str
+    mut best := ""
+    mut line := -1
+    for c in global_consts
+        if c.file != file
+            continue
+        p := c.decl.pos
+        if p.line <= pos.line and p.line > line
+            best = c.decl.name
+            line = p.line
+    best
+
+## The start of statement `s` in a `.ct` copy counts one step.
+fn Lower.ct_stmt(mut self, s ast.Stmt)
+    if not in_ct_copy() or ct.count < 0
+        return
+    at := stmt_start(s)
+    name := load(global_addr(ct.name), 0, Ty.Str)
+    count := global_addr(ct.count)
+    limit := global_addr(ct.limit)
+    where := str_value(path)
+    line := konst(at.line, Ty.Int)
+    col := konst(at.col, Ty.Int)
+    call("rt.ctsteps_step", [count, limit, name, where, line, col], Ty.Unit)
+
+## Lower the `.ct` copies asked for, and those they ask for. Their problems
+## are the originals', already reported.
+fn Lower.gen_ct_copies(mut self)
+    # The copies run only while constants are computed: no coverage sites,
+    # trace events or values of their own (ADR 0871).
+    saved := instr
+    instr.on = false
+    instr.calls = false
+    instr.rec = false
+    instr.steps = false
+    instr.vals = false
+    instr.trace = false
+    instr.effects = false
+    mut i := 0
+    while i < ct.list.len()
+        key := ct.list[i]
+        i += 1
+        f := fn_decl.get(key) else continue
+        enter_file(fn_file[key])
+        before := problems.len()
+        lower_fn_as(f, "{key}.ct", key, fn_owner(f))
+        stamp_problems()
+        while problems.len() > before
+            problems.pop()
+            problem_files.pop()
+    instr = saved
