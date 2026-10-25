@@ -1262,20 +1262,48 @@ fn tensor_arg(a int, max int, axis int, has int) int
     for b in 0..before
         for c in 0..after
             base := da + 8 * (b * n * after + c)
-            mut best := 0
-            for k in 1..n
-                if ek == 0
-                    x := load64(base + 8 * k * after)
-                    y := load64(base + 8 * best * after)
-                    if (max != 0 and x > y) or (max == 0 and x < y)
-                        best = k
-                else
-                    x := loadf(base + 8 * k * after)
-                    y := loadf(base + 8 * best * after)
-                    if (max != 0 and x > y) or (max == 0 and x < y)
-                        best = k
-            store64(out + 8 * (b * after + c), best)
+            store64(out + 8 * (b * after + c), arg_scan(base, n, 8 * after, ek, max))
     t
+
+## The index of the first largest (`max` non-zero) or smallest of `n` elements
+## `step` bytes apart from `p`: `int` when `ek` is 0, else `float` (a NaN never
+## replaces the best so far, and a NaN first element is never replaced).
+fn arg_scan(p int, n int, step int, ek int, max int) int
+    mut best := 0
+    mut q := p + step
+    if ek == 0
+        mut bv := load64(p)
+        if max != 0
+            for k in 1..n
+                x := load64(q)
+                if x > bv
+                    bv = x
+                    best = k
+                q += step
+        else
+            for k in 1..n
+                x := load64(q)
+                if x < bv
+                    bv = x
+                    best = k
+                q += step
+        return best
+    mut fv := loadf(p)
+    if max != 0
+        for k in 1..n
+            x := loadf(q)
+            if x > fv
+                fv = x
+                best = k
+            q += step
+    else
+        for k in 1..n
+            x := loadf(q)
+            if x < fv
+                fv = x
+                best = k
+            q += step
+    best
 
 ## A float as Rust's `Display` writes it, for a fault message: `1` for `1.0`.
 fn put_display_float(x float)
