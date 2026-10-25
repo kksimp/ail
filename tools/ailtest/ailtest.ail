@@ -612,12 +612,24 @@ fn remap_at(msg str, origin List[int]) str
 
 ## What a failed test wrote (test.run.2): standard output as `  | LINE`, then standard error as
 ## `  ! LINE`, without the trap report, its frames or the snapshot records.
+## A line of the trap report's own source excerpt, `  3 | code` or `    | ^`: the verdict prints it itself.
+fn is_excerpt_line(l str) bool
+    rest := l.trim_start()
+    mut i := 0
+    while i < rest.len() and rest.slice(i, i + 1) >= "0" and rest.slice(i, i + 1) <= "9"
+        i += 1
+    tail := rest.slice(i, rest.len()).trim_start()
+    tail == "|" or tail.starts_with("| ")
+
 fn shown_of(out str, err str) str
     mut lines := List[str]()
     for l in out.lines()
         lines.push("  | {l}")
     for l in err.lines()
-        if l.contains(": trap[") or l.starts_with("  at ") or l.starts_with("ail-snapshot ")
+        if l.contains(": trap[")
+            or l.starts_with("  at ")
+            or l.starts_with("ail-snapshot ")
+            or is_excerpt_line(l)
             continue
         lines.push("  ! {l}")
     lines.join("\n")
