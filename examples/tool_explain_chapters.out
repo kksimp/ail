@@ -1,4 +1,4 @@
-api 54 0
+api 55 0
 attach 15 0
 budget 7 0
 bundle 4 0
@@ -26,9 +26,10 @@ plat 8 0
 refl 4 0
 replay 11 0
 run 6 0
+shrink 4 0
 snap 6 0
 std 273 1
-task 11 0
+task 12 0
 test 25 0
 tool 2 0
 trace 22 0
@@ -36,4 +37,4 @@ trait 43 4
 type 117 10
 unsafe 21 0
 verify 5 0
-all 1080 54
+all 1086 54
