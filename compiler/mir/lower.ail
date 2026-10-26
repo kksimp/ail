@@ -338,6 +338,10 @@ pub fn lower_package_par(
     if r := rt
         l.declare_all(r, "rt.")
     l.tk.on = l.sigs.contains("rt.task_new")
+    l.tk.auto_only = l.tk.on
+    for src in srcs
+        if uses_tasks(src.text) or src.text.contains("std.ui") or src.text.contains("std.app")
+            l.tk.auto_only = false
     l.problem_files = [0 for _ in l.problems]
     for k in 0..srcs.len()
         before := l.problems.len()

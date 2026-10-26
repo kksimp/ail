@@ -68,6 +68,10 @@ pub struct TaskState
     ## How many of `sites` have their function: `build_task_fns` runs again
     ## after the instances a chunk body asked for are made.
     built int
+    ## The task runtime is linked only for loops the compiler runs on the
+    ## pool: no `spawn`, atomics, channels or UI in the program, so ordinary
+    ## code still runs its trap cleanups (the runtime skips them on workers).
+    auto_only bool
 
 pub fn new_task_state() TaskState
     TaskState(
@@ -82,6 +86,7 @@ pub fn new_task_state() TaskState
         accs: Set[str](),
         exits: [],
         built: 0,
+        auto_only: false,
     )
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
