@@ -184,7 +184,8 @@ pub fn control_id(n app.Node, want str) str
         Canvas(id, _, _, _) => if id == want or "{5000000 + hash(id)}" == want then id else ""
         Column(kids) => first_control(kids, want)
         Row(kids) => first_control(kids, want)
-        _ => ""
+        Label(_) => ""
+        Spacer => ""
 
 fn first_control(kids List[app.Node], want str) str
     for k in kids
