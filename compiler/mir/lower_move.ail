@@ -204,6 +204,16 @@ fn Lower.body_place_tail(self, body List[ast.Stmt], any_name bool) bool
         Eval(x) => place_tail(x, any_name)
         _ => false
 
+## Whether the value of `e` can be an object that something else still holds: a place, or the
+## stored element `get`, `first` or `last` hands out, through `?` or `else` (own.val.1).
+fn aliases_place(e ast.Expr) bool
+    match e
+        Name | Index | Member => true
+        Try(x, _, _) => aliases_place(x)
+        OrElse(x, _, _) => aliases_place(x)
+        Method(_, name, _, _) => name == "get" or name == "first" or name == "last"
+        _ => false
+
 fn is_branchy(e ast.Expr) bool
     match e
         If | Match => true
