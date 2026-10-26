@@ -1317,10 +1317,10 @@ fn has_loop(b List[ast.Stmt]) bool
 ## it can reach itself, or it reaches a function that has a loop.
 fn heavy_fn(cx ParContext, i int) bool
     mut seen := Set[int]()
-    mut todo := [i]
+    mut queue := [i]
     mut first := true
-    while todo.len() > 0
-        j := todo.pop() else break
+    while queue.len() > 0
+        j := queue.pop() else break
         if seen.contains(j) and not first
             if j == i
                 return true
@@ -1334,7 +1334,7 @@ fn heavy_fn(cx ParContext, i int) bool
             if k == i
                 return true
             if not seen.contains(k)
-                todo.push(k)
+                queue.push(k)
     false
 
 ## The call of a `name := f(args)` statement that conc.par.15 may fork, or none.
