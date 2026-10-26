@@ -5,6 +5,8 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
+| **ALPN** | Application-Layer Protocol Negotiation (RFC 7301): a TLS extension in which the client lists protocols (`h2`, `http/1.1`) and the server names the one it will speak. The native `std.net` offers it on `https://` ([ADR 0913](decisions/0913-http2-client-over-alpn.md)). |
 | **ABI** | Application Binary Interface: calling conventions, data layout, and symbol rules that let separately compiled code interoperate. Windows x64 and the System V ABI (Linux, macOS) differ. |
 | **Absent** | The prelude error `Absent` ("a value is absent") that `?` on a `none` fails with in a function whose errors are inferred, or in a test (ADR 0279, `err.prop.5`). |
 | **Ad hoc signature** | A code signature with no certificate: SHA-256 hashes of the file's pages in a code directory. Apple Silicon runs only signed executables; `ail build` signs Mach-O files this way itself (ADR 0389). |
