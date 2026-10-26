@@ -339,7 +339,7 @@ records come first. The note says which records are in one line and gives
 `--from K`, which shows record `K + 1` expanded. A JSON line is its own
 one-line form ([ADR 0868](../decisions/0868-ai-first-tooling-after-rust-removal.md) item 6, [ADR 0880](../decisions/0880-budgeted-diagnostic-forms.md)).
 
-```ail tool=check,--budget,200,FILE expect=full status=2 rules=budget.out.7
+```ail tool=check,--budget,200,FILE expect=budget status=2 rules=budget.out.7
 fn main()
     x := 1
     x = 2
