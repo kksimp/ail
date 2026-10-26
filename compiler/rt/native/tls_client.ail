@@ -768,7 +768,11 @@ fn tc_alpn(st int, p int, n int) int
             pl := load8(q + 2)
             if pl == 2 and load8(q + 3) == 104 and load8(q + 4) == 50
                 store64(st + TS_ALPN, 2)
-            elif pl != 8 or load8(q + 3) != 104 or load8(q + 4) != 116 or load8(q + 5) != 116 or load8(q + 6) != 112
+            elif pl != 8
+                or load8(q + 3) != 104
+                or load8(q + 4) != 116
+                or load8(q + 5) != 116
+                or load8(q + 6) != 112
                 return tc_err(
                     st,
                     0,

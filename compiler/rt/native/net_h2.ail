@@ -541,7 +541,10 @@ fn h2_read(c int) int
     p := load64(rb)
     n := load8(p) * 65536 + load8(p + 1) * 256 + load8(p + 2)
     if n > H2_MAXF
-        h2_fail(c, "the server sent a frame of {n} bytes, over the 16384 allowed (FRAME_SIZE_ERROR)")
+        h2_fail(
+            c,
+            "the server sent a frame of {n} bytes, over the 16384 allowed (FRAME_SIZE_ERROR)",
+        )
         return 0
     store64(c + H2_FT, load8(p + 3))
     store64(c + H2_FF, load8(p + 4))
@@ -634,7 +637,10 @@ fn h2_handle(c int) int
     n := load64(c + H2_FL)
     p := load64(load64(c + H2_RB)) + 9
     if load64(c + H2_INBLK) != 0 and ty != 9
-        return h2_fail(c, "the server interrupted a header block with a frame of type {ty} (PROTOCOL_ERROR)")
+        return h2_fail(
+            c,
+            "the server interrupted a header block with a frame of type {ty} (PROTOCOL_ERROR)",
+        )
     if ty == 0
         if s == 0
             return h2_fail(c, "the server sent DATA on stream 0 (PROTOCOL_ERROR)")
@@ -649,7 +655,10 @@ fn h2_handle(c int) int
         if s == 1
             store64(c + H2_TRCV, load64(c + H2_TRCV) + n)
             if load64(c + H2_FINAL) == 0
-                return h2_fail(c, "the server sent DATA before the response's headers (PROTOCOL_ERROR)")
+                return h2_fail(
+                    c,
+                    "the server sent DATA before the response's headers (PROTOCOL_ERROR)",
+                )
             body := load64(c + H2_BODY)
             if load64(body + 8) + len > 268435456
                 return h2_fail(c, "the response body is over 256 MiB")
@@ -682,7 +691,10 @@ fn h2_handle(c int) int
         return 1
     if ty == 9
         if load64(c + H2_INBLK) == 0 or s != 1
-            return h2_fail(c, "the server sent a CONTINUATION without a header block (PROTOCOL_ERROR)")
+            return h2_fail(
+                c,
+                "the server sent a CONTINUATION without a header block (PROTOCOL_ERROR)",
+            )
         blk := load64(c + H2_BLK)
         if load64(blk + 8) + n > HTTP_MAX_HEAD
             return h2_fail(c, "the response headers are too long")
@@ -701,7 +713,10 @@ fn h2_handle(c int) int
             v := h2_r32(p + i + 2)
             if id == 4
                 if v > 2147483647
-                    return h2_fail(c, "the server's initial window is over 2^31 - 1 (FLOW_CONTROL_ERROR)")
+                    return h2_fail(
+                        c,
+                        "the server's initial window is over 2^31 - 1 (FLOW_CONTROL_ERROR)",
+                    )
                 tw := load64(c + H2_TWIN) + v - load64(c + H2_IWIN)
                 if tw > 2147483647
                     return h2_fail(c, "the server's window is over 2^31 - 1 (FLOW_CONTROL_ERROR)")
@@ -724,12 +739,18 @@ fn h2_handle(c int) int
         if s == 0
             w := load64(c + H2_SWIN) + inc
             if w > 2147483647
-                return h2_fail(c, "the server's connection window is over 2^31 - 1 (FLOW_CONTROL_ERROR)")
+                return h2_fail(
+                    c,
+                    "the server's connection window is over 2^31 - 1 (FLOW_CONTROL_ERROR)",
+                )
             store64(c + H2_SWIN, w)
         elif s == 1
             w := load64(c + H2_TWIN) + inc
             if w > 2147483647
-                return h2_fail(c, "the server's stream window is over 2^31 - 1 (FLOW_CONTROL_ERROR)")
+                return h2_fail(
+                    c,
+                    "the server's stream window is over 2^31 - 1 (FLOW_CONTROL_ERROR)",
+                )
             store64(c + H2_TWIN, w)
         return 1
     if ty == 7
