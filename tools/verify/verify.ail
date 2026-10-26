@@ -1,4 +1,4 @@
-## `ail verify --diff` (ADR 0909, verify.run.1-4): what a change proved, what the
+## `ail verify --diff` (ADR 0909, verify.run.1-5): what a change proved, what the
 ## tests exercised and what nothing looked at.
 ##   ail run tools/verify/verify.ail --diff [--rev REV] [--json] FILE
 ## It composes the commands that exist: `ail ask FILE --affected` for the changes
