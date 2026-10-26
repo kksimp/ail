@@ -31,7 +31,7 @@ pub fn verify(f Func) List[str]
         blk := f.blocks[b]
         for k in 0..blk.insts.len()
             i := blk.insts[k]
-            for u in i.args
+            for u in i.operands()
                 check_use(f, dom, def_block, def_index, u, b, k, mut errs)
             check_types(f, i, mut errs)
         for u in blk.term.uses()
@@ -94,7 +94,7 @@ fn check_types(f Func, i Inst, mut errs List[str])
         _ => ""
     if want == ""
         return
-    for a in i.args
+    for a in i.operands()
         # A `char` is an `int` in a register (type.char.1).
         have := register_kind(f.vals[a])
         if have != want

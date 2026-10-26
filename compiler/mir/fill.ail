@@ -54,7 +54,7 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
         return none
     if r >= 0
         sr := inst_of(f, defs, latch[rk]) else return none
-        if sr.op != "add" or sr.args[0] != r or sr.site >= 0 or const_of(f, defs, sr.args[1]) != 1
+        if sr.op != "add" or sr.arg(0) != r or sr.site >= 0 or const_of(f, defs, sr.arg(1)) != 1
             return none
         if defs[latch[rk]].block != c.body
             return none
@@ -74,9 +74,9 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
     if at < 0
         return none
     s := bb.insts[at]
-    base := s.args[0]
-    ix := s.args[1]
-    v := s.args[2]
+    base := s.arg(0)
+    ix := s.arg(1)
+    v := s.arg(2)
     if lp.member[defs[base].block] or (ix != c.p and ix != r) or s.elem_off() != 0
         return none
     if s.imm != 1 and s.imm != 8
@@ -92,7 +92,7 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
         if b == c.body
             continue
         for i in f.blocks[b].insts
-            for a in i.args
+            for a in i.operands()
                 if defs[a].block == c.body
                     return none
         for u in f.blocks[b].term.uses()
@@ -112,7 +112,7 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
         if lp.member[b]
             continue
         for i in f.blocks[b].insts
-            for a in i.args
+            for a in i.operands()
                 if a == c.p
                     p_out = true
                 if a == r and r >= 0
@@ -143,7 +143,10 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
         if lp.member[b]
             continue
         for k in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[k].args = [swap(a, c.p, ep, r, er) for a in g.blocks[b].insts[k].args]
+            g.blocks[b].insts[k] = g.blocks[b].insts[k].with_args([
+                swap(a, c.p, ep, r, er)
+                for a in g.blocks[b].insts[k].operands()
+            ])
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = swap(t.cond, c.p, ep, r, er)

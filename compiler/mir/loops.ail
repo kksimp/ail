@@ -132,8 +132,8 @@ pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
     cmp := inst_of(f, defs, t.cond)?
     if (cmp.op != "lt" and cmp.op != "gt") or defs[t.cond].block != lp.header
         return none
-    p := if cmp.op == "lt" then cmp.args[0] else cmp.args[1]
-    hi := if cmp.op == "lt" then cmp.args[1] else cmp.args[0]
+    p := if cmp.op == "lt" then cmp.arg(0) else cmp.arg(1)
+    hi := if cmp.op == "lt" then cmp.arg(1) else cmp.arg(0)
     k := param_index(h, p)
     if k < 0
         return none
@@ -153,7 +153,7 @@ pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
                 if lt.targets[e] != lp.header
                     continue
                 dec := inst_of(f, defs, lt.args[e][kq])?
-                if dec.op != "sub" or dec.args[0] != q or const_of(f, defs, dec.args[1]) != 1
+                if dec.op != "sub" or dec.arg(0) != q or const_of(f, defs, dec.arg(1)) != 1
                     return none
     lo := f.blocks[lp.pre].term.args[0][k]
     if start := const_of(f, defs, lo)
@@ -171,9 +171,9 @@ pub fn counted(f Func, defs List[Def], lp LoopInfo) Counted?
             if lt.targets[e] != lp.header
                 continue
             step := inst_of(f, defs, lt.args[e][k])?
-            if step.op != "add" or step.args[0] != p
+            if step.op != "add" or step.arg(0) != p
                 return none
-            by := step.args[1]
+            by := step.arg(1)
             if const_of(f, defs, by) == 1
                 if strided
                     return none

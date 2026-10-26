@@ -195,7 +195,13 @@ pub fn Ty.name(self) str
 pub struct Inst
     pub dst int
     pub op str
-    pub args List[int]
+    ## How many operands, and the first three inline; `more` holds the rest
+    ## (`none`, no allocation, up to three). Read them with `arg`, `operands`.
+    pub n int
+    pub a int
+    pub b int
+    pub c int
+    pub more List[int]?
     pub imm int
     pub fimm float
     pub name str
@@ -205,6 +211,66 @@ pub struct Inst
 ## integer instruction uses, so that `Inst` keeps its fields; ADR 0625).
 pub fn Inst.elem_off(self) int
     fimm.to_int()
+
+## The operands of an instruction go through these accessors, so that how
+## `Inst` stores them can change (see docs/design/compact-inst.md).
+pub fn Inst.arg(self, k int) int
+    if k == 0
+        return a
+    if k == 1
+        return b
+    if k == 2
+        return c
+    ms := more else return -1
+    ms[k - 3]
+
+pub fn Inst.argc(self) int
+    n
+
+pub fn Inst.operands(self) List[int]
+    [self.arg(k) for k in 0..n]
+
+pub fn Inst.with_args(self, xs List[int]) Inst
+    packed(dst, op, xs, imm, fimm, name, site)
+
+pub fn Inst.with_arg(self, k int, v int) Inst
+    mut r := self
+    if k == 0
+        r.a = v
+    elif k == 1
+        r.b = v
+    elif k == 2
+        r.c = v
+    else
+        mut ms := more else return self
+        ms[k - 3] = v
+        r.more = ms
+    r
+
+fn tail_of(xs List[int]) List[int]?
+    if xs.len() <= 3
+        return none
+    [xs[k] for k in 3..xs.len()]
+
+fn nth(xs List[int], k int) int
+    if k < xs.len()
+        return xs[k]
+    -1
+
+fn packed(dst int, op str, xs List[int], imm int, fimm float, name str, site int) Inst
+    Inst(
+        dst: dst,
+        op: op,
+        n: xs.len(),
+        a: nth(xs, 0),
+        b: nth(xs, 1),
+        c: nth(xs, 2),
+        more: tail_of(xs),
+        imm: imm,
+        fimm: fimm,
+        name: name,
+        site: site,
+    )
 
 ## The bytes per element of the list that push callee `name` fills: a
 ## `List[u8]` or `List[bool]` 1, a `List[u16]` 2, a `List[u32]` 4, else 8.
@@ -219,7 +285,7 @@ pub fn push_bytes(name str) int
         _ => 8
 
 pub fn inst(dst int, op str, args List[int]) Inst
-    Inst(dst: dst, op: op, args: args, imm: 0, fimm: 0.0, name: "", site: -1)
+    packed(dst, op, args, 0, 0.0, "", -1)
 
 ## How a block ends: `jump` (one target), `branch` on `cond` (targets: if
 ## true, if false), `return` (`value`, -1 for none), or `unreachable`

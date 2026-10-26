@@ -31,9 +31,9 @@ pub fn keep_lengths(f Func) Func
         for b in lp.blocks
             for i in g.blocks[b].insts
                 if is_room_push(i)
-                    and not lp.member[defs[i.args[0]].block]
-                    and not lists.contains(i.args[0])
-                    lists.push(i.args[0])
+                    and not lp.member[defs[i.arg(0)].block]
+                    and not lists.contains(i.arg(0))
+                    lists.push(i.arg(0))
         for x in lists
             g = keep_length(g, defs, dom, loops, lp, latch, x)
     simplify_in(mut g)
@@ -67,8 +67,8 @@ fn keep_length(
     for b in lp.blocks
         for k in 0..g.blocks[b].insts.len()
             i := g.blocks[b].insts[k]
-            if i.args.contains(x)
-                if not is_room_push(i) or i.args[0] != x or i.args[1] == x
+            if i.operands().contains(x)
+                if not is_room_push(i) or i.arg(0) != x or i.arg(1) == x
                     return g0
                 if b == lp.header or not dom[latch][b]
                     return g0
@@ -128,7 +128,7 @@ fn keep_length(
     while k >= 0
         p := pushes[k]
         old := g.blocks[p.block].insts[p.at]
-        mut st := inst(-1, "stx", [d, lens[k], old.args[1]])
+        mut st := inst(-1, "stx", [d, lens[k], old.arg(1)])
         st.imm = size
         nxt := if k + 1 < pushes.len() then lens[k + 1] else cur
         bump := inst(nxt, "add", [lens[k], one])
