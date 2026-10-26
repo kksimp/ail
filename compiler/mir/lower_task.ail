@@ -75,6 +75,9 @@ pub struct TaskState
     ## pool: no `spawn`, atomics, channels or UI in the program, so ordinary
     ## code still runs its trap cleanups (the runtime skips them on workers).
     auto_only bool
+    ## Cost of each function called from a loop body, and those being costed.
+    fcost Map[str, int]
+    fbusy Set[str]
     ## Fork-join (conc.par.15): calls to `redirect` go to its `.seq` copy, which
     ## `no_fork` keeps from forking; `seq_list` holds the copies still to make.
     redirect str
@@ -99,6 +102,8 @@ pub fn new_task_state() TaskState
         exits: [],
         built: 0,
         auto_only: false,
+        fcost: {},
+        fbusy: Set[str](),
         redirect: "",
         no_fork: false,
         seq_list: [],
@@ -502,7 +507,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         file: file,
         aliases: aliases,
         self_ty: self_ty,
-        work: sc.work + 1,
+        work: sc.work + 1 + callee_work(sc, prefix, 0),
         calls: sc.calls,
     )
 
@@ -827,3 +832,35 @@ fn Lower.lower_atomic_method(
         cur = exit
         return Val(id: old, ty: Ty.Int)
     unsupported(npos, "`.{name}()` on `{Ty.Atomic(elem).name()}`")
+
+## Operations the functions `sc` calls cost, each times its loop multiplier
+## (conc.par.14). A function that reaches itself counts as `PAR_HEAVY` (4096),
+## and the sum stays far from `int`.
+fn Lower.callee_work(mut self, sc ast.ParScan, pre str, depth int) int
+    mut total := 0
+    for i in 0..sc.callees.len()
+        total += fn_cost("{pre}{sc.callees[i]}", depth) * sc.callee_mult[i]
+        if total > 1000000000
+            return 1000000000
+    total
+
+## Operations one call of function `key` costs, by the same count as a loop body.
+fn Lower.fn_cost(mut self, key str, depth int) int
+    if c := tk.fcost.get(key)
+        return c
+    if tk.fbusy.contains(key) or depth > 3
+        return 4096
+    f := fn_decl.get(key) else return 0
+    body := f.body else return 0
+    tk.fbusy.add(key)
+    mut sc := ast.new_scan()
+    ast.scan_block(mut sc, body, 0)
+    pre := key.slice(0, key.len() - f.name.len())
+    mut w := sc.work + callee_work(sc, pre, depth + 1)
+    # A loop in the callee may run any number of times: count it as heavy.
+    if sc.looped and w < 4096
+        w = 4096
+    tk.fbusy.remove(key)
+    c := if w > 1000000000 then 1000000000 else w
+    tk.fcost[key] = c
+    c
