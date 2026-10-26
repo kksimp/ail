@@ -1,18 +1,22 @@
-# The edges of traits in the native subset (ADR 0616): only structs convert
-# to `any Trait`, and an `any` value doesn't print yet.
+# The edges of traits in the native subset (ADR 0616): structs and primitives
+# convert to `any Trait`, an enum doesn't yet.
 trait Named
     fn name(self) str
 
 struct Cat
     lives int
 
+enum Color
+    Red
+    Blue
+
 impl Named for Cat
     fn name(self) str
         "cat"
 
-impl Named for int
+impl Named for Color
     fn name(self) str
-        "int"
+        "color"
 
 fn show(n any Named) str
     n.name()
@@ -22,5 +26,5 @@ fn echo(n any Named) any Named
 
 fn main()
     print(show(Cat(lives: 9)))
-    print(show(3))
+    print(show(Color.Red))
     print(echo(Cat(lives: 2)))
