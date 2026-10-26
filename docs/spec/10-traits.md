@@ -350,7 +350,7 @@ struct Scene
 **trait.any.3** — Where a value of type `any Trait` is expected, a value of any
 type implementing `Trait` converts to it implicitly. *(ADR 0129)*
 
-```ail skip=bootstrap rules=trait.any.3
+```ail rules=trait.any.3
 trait Shape
     fn area(self) float
 
@@ -384,7 +384,7 @@ fn main()
     print(show(1))
 ```
 
-```ail skip=bootstrap
+```ail
 trait Shape
     fn area(self) float
 
@@ -402,7 +402,7 @@ fn main()
 **trait.any.5** — `any Trait` satisfies a constraint `Trait` only when every
 method of `Trait` can be called through it (`trait.any.4`). *(ADR 0129)*
 
-```ail skip=bootstrap rules=trait.any.5
+```ail rules=trait.any.5
 trait Shape
     fn area(self) float
 

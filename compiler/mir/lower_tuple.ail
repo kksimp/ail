@@ -441,7 +441,7 @@ fn Lower.tuple_displayable(mut self, xs List[Ty], mut seen Set[str]) bool
 ## Whether every implementation of trait `n` has a text form.
 fn Lower.any_displayable(mut self, n str, mut seen Set[str]) bool
     for s in traits.impls.get(n) else []
-        if not displayable(Ty.Struct(s), mut seen)
+        if not displayable(impl_ty(s), mut seen)
             return false
     true
 
