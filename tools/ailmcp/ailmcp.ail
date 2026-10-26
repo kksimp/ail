@@ -14,15 +14,60 @@ struct Tool
 
 fn tools() List[Tool]
     [
-        Tool(name: "ail_check", about: "Check a program; the diagnostics are the answer (exit 0 means clean).", props: ["program"], needs: ["program"]),
-        Tool(name: "ail_test", about: "Run a program's tests; with `since` only those a change since that git revision can reach.", props: ["program", "since"], needs: ["program"]),
-        Tool(name: "ail_ask", about: "Ask the checker's graph a plain-words question: who writes field F, what calls f, which effects reach f.", props: ["program", "question"], needs: ["program", "question"]),
-        Tool(name: "ail_impact", about: "What a change since a git revision (default HEAD) touches: changed, affected, tests, effects, as JSON.", props: ["program", "rev"], needs: ["program"]),
-        Tool(name: "task_start", about: "Open the task: record the goal and the base revision (ADR 0917).", props: ["program", "goal", "rev"], needs: ["program", "goal"]),
-        Tool(name: "task_status", about: "The open task's impact since its base and whether it was verified.", props: [], needs: []),
-        Tool(name: "task_verify", about: "Check, then run the affected tests; record green or red.", props: [], needs: []),
-        Tool(name: "task_finish", about: "Close the task; refused unless the last verify was green.", props: [], needs: []),
-        Tool(name: "task_abort", about: "Close the task without finishing it.", props: [], needs: []),
+        Tool(
+            name: "ail_check",
+            about: "Check a program; the diagnostics are the answer (exit 0 means clean).",
+            props: ["program"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_test",
+            about: "Run a program's tests; with `since` only those a change since that git revision can reach.",
+            props: ["program", "since"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_ask",
+            about: "Ask the checker's graph a plain-words question: who writes field F, what calls f, which effects reach f.",
+            props: ["program", "question"],
+            needs: ["program", "question"],
+        ),
+        Tool(
+            name: "ail_impact",
+            about: "What a change since a git revision (default HEAD) touches: changed, affected, tests, effects, as JSON.",
+            props: ["program", "rev"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "task_start",
+            about: "Open the task: record the goal and the base revision (ADR 0917).",
+            props: ["program", "goal", "rev"],
+            needs: ["program", "goal"],
+        ),
+        Tool(
+            name: "task_status",
+            about: "The open task's impact since its base and whether it was verified.",
+            props: [],
+            needs: [],
+        ),
+        Tool(
+            name: "task_verify",
+            about: "Check, then run the affected tests; record green or red.",
+            props: [],
+            needs: [],
+        ),
+        Tool(
+            name: "task_finish",
+            about: "Close the task; refused unless the last verify was green.",
+            props: [],
+            needs: [],
+        ),
+        Tool(
+            name: "task_abort",
+            about: "Close the task without finishing it.",
+            props: [],
+            needs: [],
+        ),
     ]
 
 fn member(key str, value Json) JsonMember
@@ -36,8 +81,16 @@ fn strs(xs List[str]) Json
 
 fn tool_json(t Tool) Json
     props := obj([member(p, obj([member("type", Json.Str("string"))])) for p in t.props])
-    schema := obj([member("type", Json.Str("object")), member("properties", props), member("required", strs(t.needs))])
-    obj([member("name", Json.Str(t.name)), member("description", Json.Str(t.about)), member("inputSchema", schema)])
+    schema := obj([
+        member("type", Json.Str("object")),
+        member("properties", props),
+        member("required", strs(t.needs)),
+    ])
+    obj([
+        member("name", Json.Str(t.name)),
+        member("description", Json.Str(t.about)),
+        member("inputSchema", schema),
+    ])
 
 ## The `ail` arguments for a tool call, or why the call is wrong (mcp.call.2).
 struct Cmd
@@ -64,7 +117,14 @@ fn command(name str, a Json) Cmd
             "ail_ask" =>
                 out = ["ask", program]
                 out.extend(a.text("question", "").split(" "))
-            "ail_impact" => out = ["ask", program, "--affected", "--json", "--rev", if rev == "" then "HEAD" else rev]
+            "ail_impact" => out = [
+                "ask",
+                program,
+                "--affected",
+                "--json",
+                "--rev",
+                if rev == "" then "HEAD" else rev,
+            ]
             "task_start" =>
                 out = ["task", "start", program, a.text("goal", ""), "--json"]
                 if rev != ""
@@ -74,11 +134,19 @@ fn command(name str, a Json) Cmd
     Cmd(argv: [], why: "unknown tool {name}")
 
 fn reply(id Json, result Json)
-    print(obj([member("jsonrpc", Json.Str("2.0")), member("id", id), member("result", result)]).to_text())
+    print(
+        obj([
+            member("jsonrpc", Json.Str("2.0")),
+            member("id", id),
+            member("result", result),
+        ]).to_text(),
+    )
 
 fn failure(id Json, code int, message str)
     err := obj([member("code", Json.Num(code.to_float())), member("message", Json.Str(message))])
-    print(obj([member("jsonrpc", Json.Str("2.0")), member("id", id), member("error", err)]).to_text())
+    print(
+        obj([member("jsonrpc", Json.Str("2.0")), member("id", id), member("error", err)]).to_text(),
+    )
 
 ## A tool result (mcp.call.1): the text and whether the command failed (mcp.call.1).
 fn tool_result(text str, bad bool) Json
@@ -108,7 +176,11 @@ fn handle(req Json)
         "initialize" =>
             info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.1.0"))])
             caps := obj([member("tools", obj([]))])
-            reply(id, obj([member("protocolVersion", Json.Str(params.text("protocolVersion", PROTOCOL))), member("capabilities", caps), member("serverInfo", info)]))
+            reply(id, obj([
+                member("protocolVersion", Json.Str(params.text("protocolVersion", PROTOCOL))),
+                member("capabilities", caps),
+                member("serverInfo", info),
+            ]))
         "ping" => reply(id, obj([]))
         "tools/list" => reply(id, obj([member("tools", Json.Arr([tool_json(t) for t in tools()]))]))
         "tools/call" => call(id, params)
