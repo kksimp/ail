@@ -1246,6 +1246,15 @@ fn Gate.diff(mut self, tmp str)
     if at.status != 0
         or at.out != "0 added, 0 removed, 0 changed; diagnostics +0 -0; tests not run\n"
         red("diff attribute layout", "exit {at.status}\n{at.out}")
+    # diff.out.9: the same function under another name is a rename, not a removal and an addition.
+    fs.write_text(old, "fn plus(a int, b int) int\n    a + b\n\nfn main()\n    print(plus(1, 2))\n") else return
+    fs.write_text(new, "fn sum(a int, b int) int\n    a + b\n\nfn main()\n    print(sum(1, 2))\n") else return
+    rn := ail_run(["diff", "--no-tests", old, new]) else return
+    want("diff rename", rn.out, [
+        "> fn:plus -> fn:sum (renamed)\n",
+        "~ fn:main (body changed)\n",
+        "0 added, 0 removed, 1 changed, 1 renamed; diagnostics +0 -0; tests not run\n",
+    ])
     fs.write_text(old, old_src) else return
     fs.write_text(new, new_src) else return
     j := ail_run(["diff", "--json", old, new]) else return
