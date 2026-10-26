@@ -682,7 +682,7 @@ impl Named for P               # a second impl of the same trait
         "again"
 ```
 
-```ail skip=bootstrap rules=trait.auto.4
+```ail rules=trait.auto.4
 # A method named `to_str` declared outside an impl of ToStr should be rejected, and the
 # diagnostic should suggest the impl. The bootstrap accepts `fn to_str(p P) str`: a bootstrap bug.
 fn main()
