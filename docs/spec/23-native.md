@@ -440,7 +440,7 @@ block or changed after it is built) may have no object: the field reads use
 the values it was built from. Constructors that only build their result
 (`Vec.add`) are inlined into their callers first, so that chains such as
 `a.sub(b).unit()` qualify. Nothing a program can observe changes, only the
-allocation. `AIL_OPT_OFF=sroa` turns it off. *(ADR 0913)*
+allocation. `AIL_OPT_OFF=sroa` turns it off. *(ADR 0923)*
 
 ```ail rules=native.sroa.1
 struct P
