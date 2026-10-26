@@ -691,7 +691,7 @@ fn main()
     print(parse("ab") else 0)   # 2
 ```
 
-```ail norun rules=err.type.4
+```ail skip=bootstrap rules=err.type.4
 error struct A
     why str
 
