@@ -1341,7 +1341,7 @@ fn rec_section(mode str, exe str, name str, v Verdict, lead int) str
     body := fs.read_text("{exe}.rec") else ""
     "\{\"test\":{json_str(name)}}\n{rec_unlead(body, lead)}"
 
-## ---- Failure bundles (bundle.write.1-3, bundle.run.1-2, ADR 0910) ----
+## ---- Failure bundles (bundle.write.1-2, bundle.run.1-2, ADR 0910) ----
 
 ## The hash a bundle records of its program's text (FNV-1a, as `default_seed`).
 fn text_hash(text str) int

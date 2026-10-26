@@ -1235,3 +1235,9 @@ does. The program is the bundle's `program`.
 `program_hash`, `--bundle` says so on standard error before it runs; the result
 is the run's own.
 
+```ail skip=bootstrap pkg=bundle_env tool=test,--bundle-failure=out,t.ail status=1 expect=bundle: rules=bundle.write.1,bundle.write.2
+```
+
+```ail skip=bootstrap pkg=bundle_env tool=test,--bundle,bad.json status=1 expect=differs rules=bundle.run.1,bundle.run.2
+```
+
