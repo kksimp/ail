@@ -109,6 +109,7 @@ HUFF = (
 
 
 PORT = 0
+CONNS = 0
 HUFF_CODES = [(int(HUFF[i * 10:i * 10 + 8], 16), int(HUFF[i * 10 + 8:i * 10 + 10], 16)) for i in range(257)]
 
 
@@ -259,6 +260,10 @@ class Conn:
         self.swin = 65535
         self.iwin = 65535
         self.ping_acked = False
+        global CONNS
+        CONNS += 1
+        self.number = CONNS
+        self.requests = 0
 
     def send(self, data):
         self.sock.sendall(data)
@@ -330,6 +335,13 @@ def serve_h2(conn, tls):
     if recv_exact(tls, 24) != b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n":
         return
     c.send(frame(4, 0, 0))
+    try:
+        serve_streams(c, tls)
+    except (EOFError, OSError):
+        pass
+
+
+def serve_streams(c, tls):
     block = b""
     method = path = ""
     headers = []
@@ -340,6 +352,7 @@ def serve_h2(conn, tls):
         if ty == 1 or ty == 9:
             if ty == 1:
                 sid = sid1
+                c.swin = c.iwin
                 off = 0
                 if fl & 8:
                     off = 1
@@ -356,7 +369,7 @@ def serve_h2(conn, tls):
                 path = d.get(":path", "")
             if ty == 1 and fl & 1:
                 respond(c, sid, method, path, headers, body)
-                return
+                body = b""
         elif ty == 0:
             if fl & 8:
                 p = p[1:len(p) - p[0]]
@@ -365,7 +378,7 @@ def serve_h2(conn, tls):
                 c.send(frame(8, 0, 0, struct.pack(">I", len(p))) + frame(8, 0, sid, struct.pack(">I", len(p))))
             if fl & 1:
                 respond(c, sid, method, path, headers, body)
-                return
+                body = b""
 
 
 def respond(c, sid, method, path, headers, body):
@@ -380,7 +393,10 @@ def respond(c, sid, method, path, headers, body):
         c.send(frame(1, 4, sid, block))
         c.send_data(sid, data)
 
-    if path == "/hello":
+    c.requests += 1
+    if path == "/which":
+        reply(200, ctype, ("conn %d request %d\n" % (c.number, c.requests)).encode())
+    elif path == "/hello":
         reply(200, ctype + f_lit("x-proto", "h2") + f_lit(55, "a=1") + f_lit(55, "b=2")
               + f_lit(28, "14" if not head else "14"), b"hello over h2\n")
     elif path == "/hdrs":
@@ -446,13 +462,6 @@ def respond(c, sid, method, path, headers, body):
         c.send(frame(3, 0, sid, struct.pack(">I", 2)))
     else:
         reply(404, ctype, b"unknown path")
-    # Wait for the client to hang up, so the response isn't cut short.
-    c.sock.settimeout(2)
-    try:
-        while True:
-            c.next_frame()
-    except (EOFError, OSError, socket.timeout):
-        pass
 
 
 def serve_h1(tls):

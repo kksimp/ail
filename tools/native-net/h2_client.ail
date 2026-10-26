@@ -33,9 +33,28 @@ fn same(label str, base str, path str, o net.Options, method str, want str)
     else
         print("{label}: {r.status} {r.body.len()} bytes {r.body == want}")
 
+## Three requests in a row share one connection (a pooled HTTP/2 connection):
+## the server numbers its connections, renumbered here by first appearance.
+fn which(base str)
+    mut ids := ["-"]
+    for i in 0..3
+        r := net.get("{base}/which") else err
+            print("which {i}: error {err.kind}")
+            return
+        parts := r.body.trim().split(" ")
+        mut at := -1
+        for j in 0..ids.len()
+            if ids[j] == parts[1]
+                at = j
+        if at < 0
+            ids.push(parts[1])
+            at = ids.len() - 1
+        print("which {i}: connection {at} request {parts[3]}")
+
 fn main()
     base := env.args()[0]
     plain := net.options()
+    which(base)
     show("hello", base, "/hello", plain, "GET")
     r := net.get("{base}/hello") else err
         print("hello: error {err.kind}")

@@ -1,3 +1,6 @@
+which 0: connection 1 request 1
+which 1: connection 1 request 2
+which 2: connection 1 request 3
 hello: 200 hello over h2
   x-proto h2
   set-cookie a=1|b=2

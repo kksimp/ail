@@ -40,7 +40,8 @@ fingerprint, no automation masking.
   SETTINGS changes, WINDOW_UPDATE). SETTINGS, PING, GOAWAY, RST_STREAM,
   CONTINUATION, padding and priority fields are handled; push is refused with
   `ENABLE_PUSH` 0. Failures are kind `protocol` with the HTTP/2 error name.
-- One request per connection; the connection is closed afterwards, not pooled.
+- One request at a time per connection, but the connection is kept: an idle HTTP/2 connection waits in the pool of std.net.19 (its own key, with its HPACK table, windows and next stream id) and the next request to the origin opens stream 3, 5, ... on it. A GOAWAY, an unread frame or an unfinished record means it is closed instead. A pooled connection the server closed, or a request it did not process (GOAWAY), is sent again on a new connection when the method may be repeated, as for HTTP/1.1.
+- `AIL_NET_DEBUG` set prints a line on standard error per request naming the protocol.
 
 Code: `compiler/rt/native/net_h2.ail`, the ALPN parts of `tls_client.ail`, and
 the dispatch in `http_exchange_on`. Check: `tools/native-net/h2-check.sh`.
@@ -49,9 +50,10 @@ the dispatch in `http_exchange_on`. Check: `tools/native-net/h2-check.sh`.
 
 - **Copying Chrome's TLS fingerprint (GREASE, cipher order, extension order):**
   against the project's stance; the ask is HTTP/2 by the standards only.
-- **Multiplexing and pooling h2 connections now:** a larger change (stream
-  table, a reader task); one request per connection is correct and is the
-  follow-up if it matters.
+- **Multiplexing (several streams at once):** a larger change (stream
+  table, a reader task); sequential reuse of the pooled connection gets the
+  handshake savings that matter (measured: a fresh handshake per request made
+  repeat fetches 3 to 6 times slower than pooled HTTP/1.1).
 - **Huffman-coding what we send:** saves bytes on the wire only; the decoder
   needs the table anyway, so the encoder can follow.
 - **A user switch on `net.Options`:** a public API change; `AIL_HTTP2=0` is
