@@ -78,10 +78,12 @@ fn answer(json bool, fields List[str], text str)
     else
         print(text)
 
+## No open task (task.state.2).
 fn no_task() int
     io.eprint("error: no open task here; start one with `ail task start PROGRAM GOAL...` (task.state.2)")
     2
 
+## `start` (task.start.1: the base must compare; task.state.2: one open task per directory).
 fn start(args List[str], json bool) !int
     mut rev := "HEAD"
     mut words := List[str]()
