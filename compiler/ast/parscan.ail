@@ -15,7 +15,7 @@ pub struct ParScan
     pub other Set[str]
     ## Names whose value a method call or `mut` argument may change.
     pub mutated Set[str]
-    ## Operations one iteration costs: nested loops count 16 times (conc.par.12).
+    ## Operations one iteration costs: nested loops count 16 times (conc.par.14).
     pub work int
     pub mult int
     ## What the first construct the parallel version doesn't take is.

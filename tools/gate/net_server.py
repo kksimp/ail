@@ -2,6 +2,7 @@
 Usage: python3 -I tools/gate/net_server.py PORT"""
 import socket
 import sys
+import time
 
 
 # Every reply says `Connection: close`: this server closes after one request, and a
@@ -28,12 +29,18 @@ def serve(conn):
         reply = "HTTP/1.1 302 Found\r\nConnection: close\r\nLocation: /hello\r\nContent-Length: 0\r\n\r\n"
     elif path == "/chunked":
         reply = "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n"
+    elif path == "/linger":
+        # Promises keep-alive and then closes without reading another request: a pooled
+        # socket whose next request dies before any reply (std.net.19, ADR 0915).
+        reply = "HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nlingering"
     elif path == "/echo":
         text = f"{method} {path} {content_type} {length} {body.decode(errors='replace')}"
         reply = f"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{text}"
     else:
         reply = "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 12\r\n\r\nno such page"
     conn.sendall(reply.encode())
+    if path == "/linger":
+        time.sleep(0.3)
 
 
 s = socket.socket()

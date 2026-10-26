@@ -1,0 +1,229 @@
+## `ail task` in AIL (ADR 0917, task.*): one open task per directory, kept in `.ail-task`.
+##   ail run tools/ailtask/ailtask.ail start PROGRAM GOAL... [--rev REV]
+##   ail run tools/ailtask/ailtask.ail status|verify|finish|abort [--json]
+## It adds no analysis: `status` is `ail ask PROGRAM --affected --json`, `verify` is `ail check`
+## then `ail test --affected`, and every answer ends with `next`, the one command to run after it.
+
+## The task file in the current directory (task.state.1).
+STATE := ".ail-task"
+
+## Lines of failing output `verify` shows (task.verify.3).
+TAIL_LINES := 20
+
+struct Job
+    program str
+    goal str
+    rev str
+    ## `none`, `green` or `red`: the last `verify`.
+    last str
+
+## The compiler to drive: `$AIL`, else `./ail`.
+fn ail_path() str
+    env.get("AIL") else "./ail"
+
+fn quote(s str) str
+    "\"{s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
+
+fn load_task() Job?
+    text := fs.read_text(STATE) else return none
+    mut t := Job(program: "", goal: "", rev: "", last: "none")
+    for l in text.lines()
+        at := l.find("=") else continue
+        k := l.slice(0, at)
+        v := l.slice(at + 1, l.len())
+        if k == "program"
+            t.program = v
+        elif k == "goal"
+            t.goal = v
+        elif k == "rev"
+            t.rev = v
+        elif k == "last"
+            t.last = v
+    if t.program.is_empty()
+        return none
+    t
+
+fn save_task(t Job) !
+    fs.write_text(
+        STATE,
+        "program={t.program}\ngoal={t.goal}\nrev={t.rev}\nlast={t.last}\n",
+    )? "writing {STATE}"
+
+## The output's last `TAIL_LINES` lines.
+fn tail(out str) str
+    ls := [l for l in out.lines() if l.trim() != ""]
+    from := if ls.len() > TAIL_LINES then ls.len() - TAIL_LINES else 0
+    ls[from..].join("\n")
+
+struct Ran
+    status int
+    ## Stdout, then stderr.
+    out str
+
+## Runs `ail ARGS...`.
+fn ail(args List[str]) Ran
+    r := proc.run(ail_path(), args) else err
+        return Ran(status: 2, out: "can't run ail: {err}")
+    Ran(status: r.status, out: "{r.out}{r.err}")
+
+fn usage() int
+    io.eprint("usage: ailtask start PROGRAM GOAL... [--rev REV] | status | verify | finish | abort  [--json]")
+    io.exit(2)
+    2
+
+## Prints the answer (task.out.1): `fields` are JSON members already rendered, `text` the same for a person.
+fn answer(json bool, fields List[str], text str)
+    if json
+        print("\{{fields.join(",")}}")
+    else
+        print(text)
+
+## No open task (task.state.2).
+fn no_task() int
+    io.eprint("error: no open task here; start one with `ail task start PROGRAM GOAL...` (task.state.2)")
+    2
+
+## `start` (task.start.1: the base must compare; task.state.2: one open task per directory).
+fn start(args List[str], json bool) !int
+    mut rev := "HEAD"
+    mut words := List[str]()
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        i += 1
+        if a == "--rev"
+            if i >= args.len()
+                io.eprint("error: `--rev` needs a git revision (task.start.1)")
+                return 2
+            rev = args[i]
+            i += 1
+        elif a != "--json"
+            words.push(a)
+    if words.len() < 2
+        return usage()
+    if open := load_task()
+        io.eprint("error: task `{open.goal}` is already open; run `ail task finish` or `ail task abort` first (task.state.2)")
+        return 2
+    got := ail(["ask", words[0], "--affected", "--rev", rev, "--json"])
+    if got.status != 0
+        io.eprint("error: {rev} can't be compared with {words[0]} (task.start.1)\n{got.out}")
+        return 2
+    t := Job(program: words[0], goal: words[1..].join(" "), rev: rev, last: "none")
+    save_task(t)?
+    next := "edit {t.program}, then `ail task verify`"
+    answer(
+        json,
+        [
+            "\"task\":\"open\"",
+            "\"program\":{quote(t.program)}",
+            "\"goal\":{quote(t.goal)}",
+            "\"rev\":{quote(rev)}",
+            "\"next\":{quote(next)}",
+        ],
+        "task open: {t.goal}\nbase {rev}; next: {next}",
+    )
+    0
+
+## `status` (task.status.1): the impact since the base and the last verify.
+fn status(json bool) int
+    t := load_task() else return no_task()
+    got := ail(["ask", t.program, "--affected", "--rev", t.rev, "--json"])
+    if got.status != 0
+        io.eprint("error: {got.out}")
+        return 2
+    next := if t.last == "green" then "ail task finish" else "ail task verify"
+    answer(
+        json,
+        [
+            "\"task\":\"open\"",
+            "\"goal\":{quote(t.goal)}",
+            "\"verified\":{quote(t.last)}",
+            "\"impact\":{got.out.trim()}",
+            "\"next\":{quote(next)}",
+        ],
+        "task: {t.goal}\nverified: {t.last}\nimpact: {got.out.trim()}\nnext: {next}",
+    )
+    0
+
+## `verify` (task.verify.1-3): check, then the affected tests; records the result for `finish`.
+fn verify(json bool) !int
+    mut t := load_task() else return no_task()
+    mut stage := "check"
+    mut ok := true
+    mut shown := ""
+    chk := ail(["check", t.program])
+    if chk.status != 0
+        ok = false
+        shown = tail(chk.out)
+    else
+        stage = "test"
+        tst := ail(["test", t.program, "--affected", "--since", t.rev])
+        if tst.status != 0
+            ok = false
+            shown = tail(tst.out)
+    t.last = if ok then "green" else "red"
+    save_task(t)?
+    next := if ok then "ail task finish" else "fix the {stage} failure above, then `ail task verify`"
+    result := if ok then "green" else "red"
+    answer(
+        json,
+        [
+            "\"result\":\"{result}\"",
+            "\"stage\":{quote(stage)}",
+            "\"output\":{quote(shown)}",
+            "\"next\":{quote(next)}",
+        ],
+        "verify {result} at {stage}\n{shown}\nnext: {next}",
+    )
+    # task.verify.2
+    if ok then 0 else 1
+
+## `finish` (task.finish.1-2, task.finish.2: the state file goes): refuses unless the last `verify` was green, then reports and closes the task.
+fn finish(json bool) !int
+    t := load_task() else return no_task()
+    if t.last != "green"
+        io.eprint("error: the last verify was {t.last}; run `ail task verify` first (task.finish.1)")
+        return 1
+    got := ail(["ask", t.program, "--affected", "--rev", t.rev, "--json"])
+    if got.status != 0
+        io.eprint("error: {got.out}")
+        return 2
+    gone := proc.run("rm", ["-f", STATE]) else return 2
+    if gone.status != 0
+        return 2
+    answer(
+        json,
+        [
+            "\"task\":\"done\"",
+            "\"goal\":{quote(t.goal)}",
+            "\"verified\":\"green\"",
+            "\"impact\":{got.out.trim()}",
+            "\"next\":\"none\"",
+        ],
+        "task done: {t.goal}\nimpact: {got.out.trim()}",
+    )
+    0
+
+fn abort() int
+    t := load_task() else return no_task()
+    gone := proc.run("rm", ["-f", STATE]) else return 2
+    if gone.status != 0
+        return 2
+    print("task aborted: {t.goal}")
+    0
+
+fn main() !
+    args := env.args()
+    if args.len() == 0
+        io.exit(usage())
+    json := args.contains("--json")
+    rest := args[1..]
+    mut code := 2
+    match args[0]
+        "start" => code = start(rest, json)?
+        "status" => code = status(json)
+        "verify" => code = verify(json)?
+        "finish" => code = finish(json)?
+        "abort" => code = abort()
+        _ => code = usage()
+    io.exit(code)

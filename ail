@@ -402,6 +402,11 @@ if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}"
 fi
 
+# `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
+if [ "${1:-}" = task ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"
+fi
+
 if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail 0.1.0 (native)"; exit 0; fi
 
 # Everything else has no native form.

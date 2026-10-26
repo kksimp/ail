@@ -399,8 +399,8 @@ error types, its `requires`/`ensures`, the trait method it implements,
 whether a trait method has a default, its doc comment, or, for functions and
 methods, the text of its body (the lines after its first, to the next
 declaration, without trailing blank and comment lines). Members (fields,
-variants, methods) are declarations of their own. When either side is
-rejected, declarations are not compared.
+variants, methods) are declarations of their own. When either side has
+syntax or load errors, declarations are not compared (`diff.out.8` for check errors).
 
 **diff.out.3** — Diagnostics are matched by rule, file (relative to the
 compared path) and message, counting repeats; line numbers are shown but not
@@ -438,6 +438,15 @@ subsequence, at most 12 lines and then `... N more changed lines`. With
 ```
 
 ```ail pkg=diff_pair tool=diff,--rev,nosuch,main.ail status=2 expect=diff.out.5 rules=diff.out.5
+```
+
+**diff.out.8** — A side with check errors but no syntax or load errors is still
+compared, as far as its declarations resolve: the report starts with `api:
+partial, NEW has errors; compared as far as they allow` (JSON: `{"change":"api",
+"op":"partial","reason":...}`) and its diagnostics are listed as usual. Tests are
+not run on a side with errors.
+
+```ail pkg=diff_partial tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=partial, rules=diff.out.8
 ```
 
 **api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
@@ -629,9 +638,51 @@ unknown revision is an error: exit status 2.
 **api.impact.4** — The impact is the changed declarations, the affected
 functions, the affected tests and the *effects* changes: each function whose
 effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
-`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`.
+`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`,
+and, only when they apply, `"via":{id:next}` (for each affected function, the declaration it
+names or calls on its way to a changed one), `"reaches":{test:[ids]}` (the changed declaration
+each affected test reaches) and `"partial":true` (`api.impact.5`). Text output adds one
+`via: fn:test > fn:caller > fn:changed` line per affected test.
+
+**api.impact.5** — When the edited version has check errors (not syntax or load
+errors) the impact is still printed, read from the graph as far as it resolves, with
+`"partial":true` (text: a `partial:` line), and the errors are shown. `ail ask
+--affected` and `ail edit --impact` do this for the edited version only: a signature
+change that breaks its callers lists those callers as affected, which are the
+functions that now need an edit. The version at the revision must still check. The
+exit status stays 2 for `ail edit` while it has errors.
 
 ```ail skip=bootstrap tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
+fn main()
+    print(1)
+```
+
+## Agent tasks
+
+`ail task` records one change from start to finish
+([ADR 0917](../decisions/0917-ail-task-protocol.md)).
+
+**task.state.1** — The open task is the file `.ail-task` of the current directory: `program`, `goal`, `rev` and `last` (`none`, `green` or `red`) as `key=value` lines.
+
+**task.state.2** — A directory has one open task. `start` with one open, and any other subcommand with none, is an error: exit status 2.
+
+**task.start.1** — `ail task start PROGRAM GOAL... [--rev REV]` opens a task whose base is `REV` (default `HEAD`). The program must compare against the base as `api.impact.3` does; if it can't, no task is opened: exit status 2.
+
+**task.verify.1** — `ail task verify` runs `ail check PROGRAM`, then, if that passes, `ail test PROGRAM --affected --since REV`, and records `green` only when both pass.
+
+**task.verify.2** — Exit status is 0 for green and 1 for red.
+
+**task.verify.3** — A red result shows the stage that failed (`check` or `test`) and the last 20 non-blank lines of its output.
+
+**task.status.1** — `ail task status` prints the goal, the last verify result and the impact since the base (`api.impact.4`).
+
+**task.finish.1** — `ail task finish` is refused (exit status 1) unless the last verify was green.
+
+**task.finish.2** — A finished or aborted task removes `.ail-task`.
+
+**task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
+
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.status.1,task.finish.1,task.finish.2,task.out.1
 fn main()
     print(1)
 ```
@@ -1044,6 +1095,9 @@ has an `impact` member.
 ```ail skip=bootstrap pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
 ```
 
+```ail skip=bootstrap pkg=edit_impact_sig tool=edit,--dry-run,--impact,main.ail stdin=edits.json status=2 expect=partial: rules=edit.out.5,api.impact.2,api.impact.5
+```
+
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5
 @test
 fn adds()
@@ -1180,6 +1234,12 @@ does. The program is the bundle's `program`.
 **bundle.run.2** — When the program's text no longer has the bundle's
 `program_hash`, `--bundle` says so on standard error before it runs; the result
 is the run's own.
+
+```ail skip=bootstrap pkg=bundle_env tool=test,--bundle-failure=out,t.ail status=1 expect=bundle: rules=bundle.write.1,bundle.write.2
+```
+
+```ail skip=bootstrap pkg=bundle_env tool=test,--bundle,bad.json status=1 expect=differs rules=bundle.run.1,bundle.run.2
+```
 
 ## Verifying a change
 
