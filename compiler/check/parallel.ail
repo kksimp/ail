@@ -1357,7 +1357,13 @@ fn heavy_fn(cx ParContext, i int) bool
                         ast.scan_block(mut sc, [ast.Stmt.Eval(value: a.value)], 0)
                     if sc.bad
                         return none
-                    return ForkCall(name: name, callee: n, idx: i, pos: pos, reads: sc.names.sorted())
+                    return ForkCall(
+                        name: name,
+                        callee: n,
+                        idx: i,
+                        pos: pos,
+                        reads: sc.names.sorted(),
+                    )
                 _ => return none
         Assign | While | For | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => return none
 
