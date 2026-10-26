@@ -237,15 +237,7 @@ fn Folder.rewrite(mut self, i Inst, mut vals List[Ty], mut names List[str]) List
                     names.push("")
                     names.push("")
                     rem := def(i.arg(0)) else i
-                    band := Inst(
-                        dst: masked,
-                        op: "band",
-                        args: [rem.arg(0), mask],
-                        imm: 0,
-                        fimm: 0.0,
-                        name: "",
-                        site: -1,
-                    )
+                    band := inst(masked, "band", [rem.arg(0), mask])
                     r = r.with_args([masked, i.arg(1)])
                     defs.push(-1)
                     defs.push(-1)
@@ -301,7 +293,11 @@ fn small(n int) bool
     n >= -3037000499 and n <= 3037000499
 
 fn konst(dst int, n int) Inst
-    Inst(dst: dst, op: "const", args: [], imm: n, fimm: 0.0, name: "", site: -1)
+    mut k := inst(dst, "const", [])
+    k.imm = n
+    k
 
 fn fkonst(dst int, x float) Inst
-    Inst(dst: dst, op: "fconst", args: [], imm: 0, fimm: x, name: "", site: -1)
+    mut k := inst(dst, "fconst", [])
+    k.fimm = x
+    k
