@@ -176,7 +176,7 @@ fn verify(json bool) !int
     # task.verify.2
     if ok then 0 else 1
 
-## `finish` (task.finish.1-2): refuses unless the last `verify` was green, then reports and closes the task.
+## `finish` (task.finish.1-2, task.finish.2: the state file goes): refuses unless the last `verify` was green, then reports and closes the task.
 fn finish(json bool) !int
     t := load_task() else return no_task()
     if t.last != "green"

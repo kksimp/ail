@@ -5,7 +5,7 @@
 
 PROTOCOL := "2025-03-26"
 
-## A tool: its name, description, the string arguments it takes and which are required.
+## The tools (mcp.tools.1). A tool: its name, description, the string arguments it takes and which are required.
 struct Tool
     name str
     about str
@@ -79,7 +79,7 @@ fn failure(id Json, code int, message str)
     err := obj([member("code", Json.Num(code.to_float())), member("message", Json.Str(message))])
     print(obj([member("jsonrpc", Json.Str("2.0")), member("id", id), member("error", err)]).to_text())
 
-## A tool result: the text and whether the command failed (mcp.call.1).
+## A tool result (mcp.call.1): the text and whether the command failed (mcp.call.1).
 fn tool_result(text str, bad bool) Json
     content := Json.Arr([obj([member("type", Json.Str("text")), member("text", Json.Str(text))])])
     obj([member("content", content), member("isError", Json.Bool(bad))])
@@ -96,6 +96,7 @@ fn call(id Json, params Json)
         return
     reply(id, tool_result("{ran.out}{ran.err}", ran.status != 0))
 
+## One message (mcp.proto.1: `initialize`, `ping`, `tools/list`, `tools/call`; anything else is -32601).
 fn handle(req Json)
     method := req.text("method", "")
     id := req.get("id") else
