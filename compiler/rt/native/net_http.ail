@@ -662,7 +662,7 @@ fn pool_put_h2(key str, h int, ms int, c int)
 
 ## One request, on a pooled connection when there is one (std.net.19). A
 ## pooled connection that fails before a response byte arrives is dropped and
-## the request is sent again on a new one, if its method may be repeated.
+## the request is sent again, once, on a new one (any method, ADR 0915).
 fn http_exchange(method str, url str, body str, ctype str, spec int, next int, at str) int
     r := http_exchange_on(method, url, body, ctype, spec, next, false, at)
     if r == -1
@@ -693,11 +693,10 @@ fn http_exchange_on(
     key := "{scheme}://{host}:{port}"
     if px != 0
         key = "{key} via {str_at(load64(px))}:{load64(px + 8)}"
-    again := method == "GET"
-        or method == "HEAD"
-        or method == "PUT"
-        or method == "DELETE"
-        or method == "OPTIONS"
+    # Any method is sent again, once, on a new connection when a pooled one
+    # dies (reset or end of file) before a response byte, as browsers do
+    # (ADR 0915). The body is a string held here, so it can be replayed.
+    again := true
     # HTTP/2 is offered by ALPN (ADR 0913) unless the body streams
     # (`net.open`) or `AIL_HTTP2=0`; a server that picks `http/1.1` gets the
     # HTTP/1.1 request below on the same connection. An idle HTTP/2
