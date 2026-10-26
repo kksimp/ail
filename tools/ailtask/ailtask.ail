@@ -44,7 +44,10 @@ fn load_task() Job?
     t
 
 fn save_task(t Job) !
-    fs.write_text(STATE, "program={t.program}\ngoal={t.goal}\nrev={t.rev}\nlast={t.last}\n")? "writing {STATE}"
+    fs.write_text(
+        STATE,
+        "program={t.program}\ngoal={t.goal}\nrev={t.rev}\nlast={t.last}\n",
+    )? "writing {STATE}"
 
 ## The output's last `TAIL_LINES` lines.
 fn tail(out str) str
@@ -108,7 +111,13 @@ fn start(args List[str], json bool) !int
     next := "edit {t.program}, then `ail task verify`"
     answer(
         json,
-        ["\"task\":\"open\"", "\"program\":{quote(t.program)}", "\"goal\":{quote(t.goal)}", "\"rev\":{quote(rev)}", "\"next\":{quote(next)}"],
+        [
+            "\"task\":\"open\"",
+            "\"program\":{quote(t.program)}",
+            "\"goal\":{quote(t.goal)}",
+            "\"rev\":{quote(rev)}",
+            "\"next\":{quote(next)}",
+        ],
         "task open: {t.goal}\nbase {rev}; next: {next}",
     )
     0
@@ -156,7 +165,12 @@ fn verify(json bool) !int
     result := if ok then "green" else "red"
     answer(
         json,
-        ["\"result\":\"{result}\"", "\"stage\":{quote(stage)}", "\"output\":{quote(shown)}", "\"next\":{quote(next)}"],
+        [
+            "\"result\":\"{result}\"",
+            "\"stage\":{quote(stage)}",
+            "\"output\":{quote(shown)}",
+            "\"next\":{quote(next)}",
+        ],
         "verify {result} at {stage}\n{shown}\nnext: {next}",
     )
     # task.verify.2
@@ -177,7 +191,13 @@ fn finish(json bool) !int
         return 2
     answer(
         json,
-        ["\"task\":\"done\"", "\"goal\":{quote(t.goal)}", "\"verified\":\"green\"", "\"impact\":{got.out.trim()}", "\"next\":\"none\""],
+        [
+            "\"task\":\"done\"",
+            "\"goal\":{quote(t.goal)}",
+            "\"verified\":\"green\"",
+            "\"impact\":{got.out.trim()}",
+            "\"next\":\"none\"",
+        ],
         "task done: {t.goal}\nimpact: {got.out.trim()}",
     )
     0
