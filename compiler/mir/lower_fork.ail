@@ -38,6 +38,17 @@ struct ForkCall
         _ => ""
 
 ## The index after the run that starts at `i`.
+## The one dispatch from `lower_block`: lowers the fork run starting at
+## `body[i]`, and reports true for it and for the statements it covered.
+fn Lower.fork_stmt(mut self, body List[ast.Stmt], i int) bool
+    m := fork_mark(body[i])
+    if m == "C"
+        return true
+    if m != "F"
+        return false
+    lower_fork_run(body[i..fork_run_end(body, i)])
+    true
+
 fn Lower.fork_run_end(self, body List[ast.Stmt], i int) int
     mut j := i + 1
     while j < body.len() and fork_mark(body[j]) == "C"
