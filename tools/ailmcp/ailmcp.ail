@@ -23,8 +23,8 @@ fn tools() List[Tool]
         Tool(
             name: "ail_test",
             about: "Run a program's tests, writing a reproducible bundle per failure; with `since` only those a change since that git revision can reach; with `bundle` (a path from an earlier failure) rerun exactly that failure.",
-            props: ["program", "since"],
-            needs: ["program"],
+            props: ["program", "since", "bundle"],
+            needs: [],
         ),
         Tool(
             name: "ail_ask",
