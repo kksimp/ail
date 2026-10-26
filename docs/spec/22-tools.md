@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -662,6 +662,16 @@ change that breaks its callers lists those callers as affected, which are the
 functions that now need an edit. The version at the revision must still check. The
 exit status stays 2 for `ail edit` while it has errors.
 
+**api.impact.6** — A changed type reaches its members by line. When only the text of
+existing fields or variants changed, only those members are seeded: a function that
+reads another field is not affected, and neither is one that only names the type.
+When a field or variant was added or removed, or the type's own line changed, the
+type and all its members are seeded, as constructors and matches must change. The
+changed list is the same either way. *(ADR 0868 item 3)*
+
+```ail skip=bootstrap pkg=edit_impact_field tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=via: rules=edit.out.5,api.impact.6
+```
+
 ```ail skip=bootstrap tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
 fn main()
     print(1)
@@ -686,6 +696,8 @@ fn main()
 
 **task.verify.4** — The test stage runs with `--bundle-failure` (`bundle.write.1`). A red test stage lists the bundle files it wrote as `bundles` (`--json`), and `next` names `ail test --bundle PATH` for the first.
 
+**task.verify.5** — A green `verify` also runs `ail verify --diff --json --rev REV PROGRAM` (`verify.run.1`) and reports its JSON as `diff`, `null` when it prints none.
+
 **task.status.1** — `ail task status` prints the goal, the last verify result and the impact since the base (`api.impact.4`).
 
 **task.finish.1** — `ail task finish` is refused (exit status 1) unless the last verify was green.
@@ -694,7 +706,7 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
-```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.status.1,task.finish.1,task.finish.2,task.out.1
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.out.1
 fn main()
     print(1)
 ```
@@ -709,7 +721,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
-**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones. `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead.
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `ail_verify`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones. `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead.
 
 **mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
 
@@ -1302,3 +1314,26 @@ When REV cannot be unpacked or run, every failed test is new.
 fn main()
     print("hi")
 ```
+
+## Shrinking a failure bundle
+
+**shrink.run.1** — `ail replay --shrink [--time MS] [-o OUT] BUNDLE` takes a failure
+bundle (`bundle.write.1-2`). A file that is not a bundle, or a bundle whose test does
+not fail when replayed (`bundle.run.1`), is an error (exit 2) and nothing is written
+([ADR 0920](../decisions/0920-replay-shrink.md)).
+**shrink.run.2** — The texts the recorded calls returned (a file read, an
+environment value, a process's output) are cut line by line, largest cuts first. A
+cut stays when `ail test --bundle` still fails with the same `FAIL` line, test name
+and message included, as the unshrunk bundle; otherwise it is undone. Numbers,
+booleans and the order of calls are never changed.
+**shrink.run.3** — The search stops after `--time` milliseconds (default 60000),
+counted from the first cut, and keeps the cuts made so far. The limit is checked
+between tries, so a run can overrun it by the try in progress and the first replay
+that proves the bundle fails.
+**shrink.run.4** — When anything was cut, the smaller bundle is written to OUT
+(default: BUNDLE with `.min` added) and the command prints `shrunk`; when nothing
+could be cut it writes nothing and prints `nothing to cut`. Both exit 0.
+
+```ail skip=bootstrap tool=replay,--shrink,nosuch.json status=2 expect=shrink.run.1 rules=shrink.run.1,shrink.run.2,shrink.run.3,shrink.run.4
+```
+

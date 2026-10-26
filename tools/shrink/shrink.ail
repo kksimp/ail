@@ -1,0 +1,129 @@
+## `ail replay --shrink` (wishlist 7.7, ADR 0920, shrink.run.1-4): the smallest recording of a failing test.
+##   ail run tools/shrink/shrink.ail [--time MS] [-o OUT] BUNDLE
+## BUNDLE is a failure bundle (bundle.write.1-2). Each text a recorded call returned
+## (a file read, an environment value, a process's output) is cut line by line, and a cut
+## stays when `ail test --bundle` still fails with the same `FAIL` line (shrink.run.2).
+## `--time MS` (default 60000) stops the search and keeps what it has cut (shrink.run.3).
+## The result is written to OUT (default BUNDLE with `.min` added) when anything shrank (shrink.run.4).
+## The exit status is 0 when it wrote a smaller bundle or found nothing to cut, 2 when the
+## bundle does not fail or can't be read.
+
+## The compiler to drive: `$AIL`, else `./ail`.
+fn ail_path() str
+    env.get("AIL") else "./ail"
+
+## Where the text of a call line's `"result":"..."` starts and ends in the line (the quotes included).
+struct Lit
+    first int
+    last int
+
+## The span of the string value of `"result"` in `line`, and none when the result is not a string.
+fn result_lit(line str) Lit?
+    key := "\"result\":\""
+    at := line.find(key) else return none
+    first := at + key.len() - 1
+    cs := line.chars()
+    mut i := first + 1
+    while i < cs.len()
+        if cs[i] == '\\'
+            i += 2
+        elif cs[i] == '"'
+            return Lit(first: first, last: i + 1)
+        else
+            i += 1
+    none
+
+## The text of a JSON string literal.
+fn decode(lit str) str
+    j := parse_json(lit) else return ""
+    j.as_str() else ""
+
+fn usage() int
+    io.eprint("usage: ail replay --shrink [--time MS] [-o OUT] BUNDLE")
+    io.exit(2)
+    2
+
+## The `FAIL name: message` line `bundle_text` produces when replayed, and none when it does not fail.
+fn failure_of(bundle_text str, scratch str, test str) str?
+    fs.write_text(scratch, bundle_text) else return none
+    r := proc.run(ail_path(), ["test", "--bundle", scratch]) else return none
+    for l in r.out.lines()
+        if l.starts_with("FAIL {test}:")
+            return l
+    none
+
+fn main() !
+    mut budget := 60000
+    mut out := ""
+    mut want := ""
+    mut files := List[str]()
+    for a in env.args()
+        if want == "--time"
+            budget = a.to_int() else usage()
+            want = ""
+        elif want == "-o"
+            out = a
+            want = ""
+        elif a == "--time" or a == "-o"
+            want = a
+        elif a == "--shrink"
+            continue
+        else
+            files.push(a)
+    if not want.is_empty() or files.len() != 1
+        io.exit(usage())
+    path := files[0]
+    text := fs.read_text(path) else
+        io.eprint("error: can't read the bundle {path} (shrink.run.1)")
+        io.exit(2)
+        return
+    lines := text.lines()
+    if lines.len() < 3 or not lines[0].starts_with("\{\"ail_bundle\":1")
+        io.eprint("error: {path} is not a failure bundle (shrink.run.1)")
+        io.exit(2)
+    head := lines[0]
+    tat := head.find("\"test\":\"") else 0
+    trest := head.slice(tat + 8, head.len())
+    test := trest.slice(0, trest.find("\"") else 0)
+    scratch := "{path}.try"
+    baseline := failure_of(text, scratch, test) else
+        io.eprint("error: {test} does not fail when {path} is replayed, so there is nothing to shrink (shrink.run.1)")
+        io.exit(2)
+        return
+    started := time.now_ms()
+    mut cur := lines
+    mut cuts := 0
+    for i in 3..cur.len()
+        lit := result_lit(cur[i]) else continue
+        before := cur[i].slice(0, lit.first)
+        after := cur[i].slice(lit.last, cur[i].len())
+        mut parts := decode(cur[i].slice(lit.first, lit.last)).split("\n")
+        mut chunk := parts.len() / 2
+        while chunk >= 1 and time.now_ms() - started < budget
+            mut at := 0
+            while at < parts.len() and time.now_ms() - started < budget
+                mut kept := List[str]()
+                for k in 0..parts.len()
+                    if k < at or k >= at + chunk
+                        kept.push(parts[k])
+                trial := "{before}{Json.Str(kept.join("\n")).to_text()}{after}"
+                mut next := cur
+                next[i] = trial
+                got := failure_of("{next.join("\n")}\n", scratch, test) else
+                    at += chunk
+                    continue
+                if got == baseline
+                    parts = kept
+                    cur = next
+                    cuts += 1
+                else
+                    at += chunk
+            chunk = chunk / 2
+    _ := proc.run("rm", ["-f", scratch]) else io.exit(2)
+    if cuts == 0
+        print("nothing to cut in {path}")
+        io.exit(0)
+    dest := if out.is_empty() then "{path}.min" else out
+    fs.write_text(dest, "{cur.join("\n")}\n")? "writing {dest}"
+    print("shrunk {path}: {cuts} cuts, written to {dest}")
+    io.exit(0)

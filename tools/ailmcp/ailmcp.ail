@@ -27,6 +27,12 @@ fn tools() List[Tool]
             needs: [],
         ),
         Tool(
+            name: "ail_verify",
+            about: "What a change since a git revision (default HEAD) proved, what tests exercised and what nothing looked at (ail verify --diff, as JSON).",
+            props: ["program", "rev"],
+            needs: ["program"],
+        ),
+        Tool(
             name: "ail_ask",
             about: "Ask the checker's graph a plain-words question: who writes field F, what calls f, which effects reach f.",
             props: ["program", "question"],
@@ -123,6 +129,14 @@ fn command(name str, a Json) Cmd
             "ail_ask" =>
                 out = ["ask", program]
                 out.extend(a.text("question", "").split(" "))
+            "ail_verify" => out = [
+                "verify",
+                "--diff",
+                "--json",
+                "--rev",
+                if rev == "" then "HEAD" else rev,
+                program,
+            ]
             "ail_impact" => out = [
                 "ask",
                 program,
