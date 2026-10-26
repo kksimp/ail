@@ -1264,3 +1264,8 @@ the failed tests. `--json` prints the same parts as one object with
 **verify.run.5** — A failure is *new* unless the test also fails when the tree at
 REV (`git archive REV`) is tested; it is then *old*. Check errors are always new.
 When REV cannot be unpacked or run, every failed test is new.
+
+```ail skip=bootstrap tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5
+fn main()
+    print("hi")
+```
