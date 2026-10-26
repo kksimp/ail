@@ -1341,6 +1341,65 @@ fn rec_section(mode str, exe str, name str, v Verdict, lead int) str
     body := fs.read_text("{exe}.rec") else ""
     "\{\"test\":{json_str(name)}}\n{rec_unlead(body, lead)}"
 
+## ---- Failure bundles (bundle.write.1-3, bundle.run.1-2, ADR 0910) ----
+
+## The hash a bundle records of its program's text (FNV-1a, as `default_seed`).
+fn text_hash(text str) int
+    default_seed(text)
+
+## The name of a test as a file name: letters, digits and `_` stay, the rest becomes `-`.
+fn bundle_file_name(name str) str
+    mut out := ""
+    for c in name.chars()
+        k := c.code()
+        if (k >= 97 and k <= 122) or (k >= 65 and k <= 90) or (k >= 48 and k <= 57) or k == 95
+            out = "{out}{c}"
+        else
+            out = "{out}-"
+    out
+
+## The whole number after `"KEY":` on `line`, and 0 when it is missing.
+fn num_after(line str, key str) int
+    at := line.find("\"{key}\":") else return 0
+    rest := line.slice(at + key.len() + 3, line.len())
+    comma := rest.find(",") else rest.len()
+    brace := rest.find("}") else rest.len()
+    end := if comma < brace then comma else brace
+    rest.slice(0, end).to_int() else 0
+
+## `text` without its first line when it is a bundle (`bundle`), which is a header line before a recording.
+fn strip_bundle(text str, bundle bool) str
+    if not bundle
+        return text
+    lines := text.lines()
+    if lines.len() < 2
+        return ""
+    "{lines[1..].join("\n")}\n"
+
+## Writes a bundle for each failed test into `dir`: a header line, the recording's header and the test's
+## recorded calls (bundle.write.1-2). Returns how many it wrote.
+fn write_bundles(dir str, file str, text str, vs List[Verdict], head str, rec_out str) !int
+    secs := rec_sections("{head}\n{rec_out}")
+    mut n := 0
+    got := proc.run(ail_path(), ["--version"])? "running ail --version"
+    ver := got.out.trim()
+    sched := env.get("AIL_SCHEDULE") else ""
+    for v in vs
+        if v.status != "fail"
+            continue
+        if n == 0
+            _ := proc.run("mkdir", ["-p", dir])? "creating {dir}"
+        calls := secs.get(v.name) else ""
+        header := "\{\"ail_bundle\":1,\"test\":{json_str(v.name)},\"program\":{json_str(file)},\"program_hash\":{text_hash(text)},\"compiler\":{json_str(ver)},\"message\":{json_str(v.message)},\"cases\":{v.cases},\"property_seed\":{unsigned_text(v.seed)},\"input\":{json_str(v.input)},\"schedule\":{json_str(sched)}}"
+        at := "{dir}/{bundle_file_name(v.name)}.json"
+        fs.write_text(
+            at,
+            "{header}\n{head}\n\{\"test\":{json_str(v.name)}}\n{calls}",
+        )? "writing the bundle {at}"
+        io.eprint("bundle: {at}")
+        n += 1
+    n
+
 fn run_one(exe str, slot int, lead int, envs List[str]) Verdict
     arg := ["x" for _ in 0..slot].join("")
     r := started(exe, arg, envs) else
@@ -2187,7 +2246,7 @@ fn build_args(extra List[str], timeout str, copy str, exe str) List[str]
     a
 
 fn usage() int
-    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] FILE")
+    io.eprint("usage: ailtest [--json] [--affected [--since REV]] [--bundle-failure[=DIR]] [--bundle FILE] [--contracts] [--update [--dry-run]] [--coverage[=lines]] [--trace[=calls]] [--trace-limit N] [--timeout MS] [--values] [--cases N] [--seed S] FILE")
     io.exit(2)
     2
 
@@ -2211,6 +2270,8 @@ fn main() !
     mut values := false
     mut rec_mode := ""
     mut rec_file := ""
+    mut bundle_dir := ""
+    mut bundle_run := ""
     for a in env.args()
         if want == "--since"
             since = a
@@ -2256,12 +2317,21 @@ fn main() !
         elif a == "--values"
             # trace.frame.3, ADR 0886: the traps of the tests show the values in scope.
             values = true
+        elif want == "--bundle"
+            bundle_run = a
+            rec_mode = "replay"
+            rec_file = a
+            want = ""
         elif want == "--record" or want == "--replay"
             rec_mode = want.slice(2, want.len())
             rec_file = a
             want = ""
-        elif a == "--record" or a == "--replay"
+        elif a == "--record" or a == "--replay" or a == "--bundle"
             want = a
+        elif a == "--bundle-failure"
+            bundle_dir = ".ail/bundles"
+        elif a.starts_with("--bundle-failure=")
+            bundle_dir = a.slice(17, a.len())
         elif a == "--dry-run"
             dry = true
         elif a == "--coverage"
@@ -2276,21 +2346,31 @@ fn main() !
         io.exit(usage())
     if rec_mode == "replay" and files.is_empty()
         # replay.run.1: the recording's own program.
-        rhead := (fs.read_text(rec_file) else "").lines().first() else ""
+        rhead := strip_bundle(
+            fs.read_text(rec_file) else "",
+            not bundle_run.is_empty(),
+        ).lines().first() else ""
         pat := rhead.find("\"program\":\"") else 0
         prest := rhead.slice(pat + 11, rhead.len())
         files.push(prest.slice(0, prest.find("\"") else 0))
     if files.len() != 1 or (dry and not update)
         io.exit(usage())
     file := files[0]
+    mut own_rec := false
+    if not bundle_dir.is_empty() and rec_mode.is_empty()
+        # bundle.write.1: the failures are recorded as `--record` does, into a file of ours.
+        rec_mode = "record"
+        rec_file = "{bundle_dir}.rec"
+        own_rec = true
     mut rec_head := ""
     mut rec_secs := Map[str, str]()
     mut rec_seed_n := 0
     mut rec_out := ""
     if rec_mode == "replay"
-        rtext := fs.read_text(rec_file) else
+        mut rtext := fs.read_text(rec_file) else
             io.eprint("error: can't read the recording {rec_file} (replay.run.1)")
             io.exit(2)
+        rtext = strip_bundle(rtext, not bundle_run.is_empty())
         rec_head = rtext.lines().first() else ""
         rec_secs = rec_sections(rtext)
         rec_seed_n = rec_seed(rtext)
@@ -2302,6 +2382,13 @@ fn main() !
         io.eprint(checked.err)
         io.exit(2)
     text := fs.read_text(file)? "reading {file}"
+    if not bundle_run.is_empty()
+        saved := num_after(
+            (fs.read_text(bundle_run) else "").lines().first() else "",
+            "program_hash",
+        )
+        if saved != text_hash(text)
+            io.eprint("note: {file} differs from the program the bundle was written for, so the failure may have changed (bundle.run.2)")
     mut lines := text.lines()
     mut doc_names := Map[str, str]()
     mut doc_where := Map[str, List[int]]()
@@ -2638,8 +2725,10 @@ fn main() !
             v := run_one(exe, slot, 0, envs)
             rec_out = "{rec_out}{rec_section(rec_mode, exe, name, v, 0)}"
             verdicts.push(plain(name, v.status, v.message))
-    if rec_mode == "record"
+    if rec_mode == "record" and not own_rec
         fs.write_text(rec_file, "{rec_head}\n{rec_out}")? "writing the recording {rec_file}"
+    if not bundle_dir.is_empty()
+        _ := write_bundles(bundle_dir, file, text, verdicts, rec_head, rec_out)?
     if update
         mut recs := List[SnapRec]()
         # snap.update.3: the assertion that reaches a literal with a second, different value fails.

@@ -1,6 +1,6 @@
-# 22. Tools: api, explain, fix, budgets, diff, edit, replay, snapshots
+# 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -1158,3 +1158,26 @@ a type the program doesn't have traps the same way.
 
 ```ail skip=bootstrap pkg=replay_env tool=run,--replay,cut.json status=1 expect=replay.rec.4 rules=replay.rec.4
 ```
+
+## Failure bundles
+
+**bundle.write.1** — `ail test FILE --bundle-failure[=DIR]` records the tests as
+`--record` does (`replay.rec.1`) and, for each test that failed, writes
+`DIR/NAME.json` (default `.ail/bundles`; `NAME` keeps letters, digits and `_`,
+other characters become `-`). It writes nothing when every test passes and
+prints `bundle: PATH` on standard error for each file
+([ADR 0910](../decisions/0910-test-bundle-failure.md)).
+**bundle.write.2** — A bundle is JSON lines. The first line is
+`{"ail_bundle":1,"test","program","program_hash","compiler","message","cases","property_seed","input","schedule"}`:
+the test, the program path as given, the FNV-1a hash of its text, the
+`ail --version` text, the failure message, and, for a property test, its case
+count, seed and shrunk input (`test.prop.3`), and the `AIL_SCHEDULE` it ran under
+(`conc.sched.2`). The rest is the recording of `replay.rec.2`: its first line,
+`{"test":NAME}`, and the test's calls.
+**bundle.run.1** — `ail test --bundle PATH` runs the test of the bundle again
+from its recording, as `--replay` does (`replay.run.1`), and reports as `ail test`
+does. The program is the bundle's `program`.
+**bundle.run.2** — When the program's text no longer has the bundle's
+`program_hash`, `--bundle` says so on standard error before it runs; the result
+is the run's own.
+

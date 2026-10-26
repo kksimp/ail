@@ -13,7 +13,7 @@ A failing test is cheap to see and expensive to reproduce: the agent needs the p
 
 ## Decision
 
-`ail test --bundle-failure[=PATH] FILE` records every failing test (`--record`, ADR 0398) and, for each, writes one JSON file (default `.ail/bundles/NAME.json`) holding: the test name and program text hash; the property seed and the shrunk counterexample; the schedule seed; the ADR 0398 recording; the first diagnostics in `--budget` form; the compiler version and target. Nothing is written when all tests pass. `ail test --bundle PATH` reruns exactly that failure and reports whether the same trap repeats, or `changed` with the new diagnostic when the program differs from the hash. Computed only when asked for.
+`ail test FILE --bundle-failure[=DIR]` records every failing test (`--record`, ADR 0398) and, for each, writes one file (in DIR, default `.ail/bundles/NAME.json`; a JSON header line followed by the recording's JSON lines, `bundle.write.1-2`) holding: the test name and program text hash; the property seed and the shrunk counterexample; the schedule seed; the ADR 0398 recording; the failure message; the compiler version. Nothing is written when all tests pass. `ail test --bundle PATH` (`bundle.run.1-2`) reruns exactly that failure and reports as `ail test` does, with a note on standard error when the program differs from the hash. Computed only when asked for.
 
 ## Rationale
 
@@ -21,7 +21,7 @@ Token usage first: one path replaces the seeds, flags and fixtures an agent woul
 
 ## Consequences
 
-Tests that read the disk replay against the real disk, as with ADR 0398; the bundle says so. Bundles are plain JSON and may hold recorded inputs, so they are not for publishing without a look.
+Tests that read the disk replay against the real disk, as with ADR 0398; a bundle holds no disk contents. Bundles are plain text and may hold recorded inputs, so they are not for publishing without a look.
 
 ## Rejected alternatives
 
