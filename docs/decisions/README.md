@@ -730,3 +730,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0911](0911-default-automatic-parallel-loops.md) | Native code runs proven independent loops in parallel by default, past a work threshold | Proposed | 2026-10-25 |
 | [0913](0913-http2-client-over-alpn.md) | An HTTP/2 client over ALPN in the native `std.net` *(delegated)* | Accepted | 2026-10-26 |
 | [0914](0914-automatic-fork-join-of-independent-calls.md) | Run independent pure calls in a straight-line block as a fork-join, when each is worth it | Proposed | 2026-10-26 |
+| [0916](0916-agent-end-to-end-benchmark.md) | Agent end-to-end benchmark: the same model builds and fixes software in AIL and in C, with logged debug rounds and oracle-generated cases *(delegated)* | Proposed | 2026-10-26 |

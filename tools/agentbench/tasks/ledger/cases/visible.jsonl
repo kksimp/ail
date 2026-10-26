@@ -1,0 +1,4 @@
+{"name": "balance-basic", "args": ["balance"], "stdin": "date,account,amount_cents,memo\n2026-01-05,cash,1000,pay\n2026-01-06,food,-250,lunch\n2026-02-01,cash,-5,fee\n", "stdout": "cash\t9.95\nfood\t-2.50\n", "code": 0}
+{"name": "monthly-basic", "args": ["monthly"], "stdin": "date,account,amount_cents,memo\n2026-01-05,cash,1000,pay\n2026-01-31,food,-250,\n2026-02-01,cash,-5,fee\n", "stdout": "2026-01\t7.50\n2026-02\t-0.05\n", "code": 0}
+{"name": "top-ties", "args": ["top", "2"], "stdin": "date,account,amount_cents,memo\n2026-01-01,a,100,x\n2026-01-02,b,-100,y\n2026-01-03,c,50,z\n", "stdout": "2026-01-01\ta\t1.00\tx\n2026-01-02\tb\t-1.00\ty\n", "code": 0}
+{"name": "bad-lines", "args": ["balance"], "stdin": "date,account,amount_cents,memo\n2026-13-01,a,1,m\n2026-01-01,,1,m\n2026-01-01,a,1x,m\n2026-01-01,a,1\n2026-01-01,a,7,ok\n", "stdout": "a\t0.07\n", "code": 2}
