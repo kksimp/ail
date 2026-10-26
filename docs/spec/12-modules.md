@@ -131,7 +131,7 @@ and from the module's top-level names. `use a.b as c` resolves a clash.
 **Note:** The standard modules (`use std.fs` and others) are in
 [chapter 17](17-std.md).
 
-```ail
+```ail norun
 use net.http
 
 pub fn fetch(url str) Data ! FetchError
