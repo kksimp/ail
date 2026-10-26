@@ -622,7 +622,10 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             lines: [],
             files: [],
             file_lines: [],
+            notes: [],
         )
+    for note in m.notes
+        io.eprint(note)
     m
 
 ## Source bytes past which the loop proof is skipped (ADR 0911).

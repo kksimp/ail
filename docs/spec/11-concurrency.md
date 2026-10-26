@@ -517,6 +517,13 @@ a call 8). An iteration of at least 4096 operations sends any loop of two or mor
 iterations to the pool, whatever the worker count. The result and the trap are
 the sequential ones either way. *(ADR 0911)*
 
+**conc.par.13** — A written `par for` that the native compiler runs in order, because its
+body has a construct the chunked version doesn't take (a `match`, a constructor, a method on a
+captured list, a field of `self`, and so on), prints
+`FILE:LINE:COL: warning[conc.par.13]: `par for V` runs in order: REASON` on standard error
+when the program is built. The result is the sequential one. A loop the compiler chose
+says nothing. *(ADR 0911)*
+
 **conc.par.9** — The pool has one thread per hardware thread, at most 8,
 unless the environment variable `AIL_THREADS` sets the number. With one
 thread, or under `--deterministic`, every loop and task runs as if there

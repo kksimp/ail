@@ -373,6 +373,8 @@ pub struct Module
     ## Every source file of the program and its lines; file 0 is `path`.
     pub files List[str]
     pub file_lines List[List[str]]
+    ## Warnings of the build, `FILE:LINE:COL: warning[RULE]: TEXT`, printed to standard error.
+    pub notes List[str]
 
 ## Whether an instruction may be removed when its value is unused.
 pub fn Inst.is_pure(self) bool

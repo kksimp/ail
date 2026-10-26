@@ -417,6 +417,7 @@ pub fn lower_package_par(
         lines: srcs[0].text.lines(),
         files: [src.path for src in srcs],
         file_lines: [src.text.lines() for src in srcs],
+        notes: l.tk.notes,
     )
     inline_module(mut m)
     mark_recursion(mut m)
