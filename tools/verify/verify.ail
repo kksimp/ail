@@ -4,7 +4,7 @@
 ## It composes the commands that exist: `ail ask FILE --affected` for the changes
 ## and the tests they reach (api.impact.1-4), `ail check FILE` for the proof and
 ## `ail test FILE --affected` for the tests. The exit status is 0 when the program
-## checks and no affected test fails, 1 when not, and 2 for a usage error.
+## checks and no affected test fails that did not already fail at REV, 1 when not, and 2 for a usage error.
 
 ## The compiler to drive: `$AIL`, else `./ail`.
 fn ail_path() str
@@ -29,6 +29,28 @@ fn obj(members List[(str, Json)]) Json
 
 fn text_list(xs List[str]) Json
     Json.Arr([Json.Str(x) for x in xs])
+
+## The names of the tests that fail in the program at git revision `rev` (verify.run.5), and none
+## when that revision can't be built or run. The tree at REV is unpacked into a scratch directory.
+fn failing_at(file str, rev str) List[str]
+    if file.starts_with("/")
+        return []
+    mut names := List[str]()
+    made := proc.run("mktemp", ["-d"]) else return names
+    tmp := made.out.trim()
+    pre := proc.run("git", ["rev-parse", "--show-prefix"]) else return names
+    unpacked := proc.run("sh", ["-c", "git archive '{rev}' | tar -x -C '{tmp}'"]) else return names
+    if unpacked.status == 0
+        old := proc.run(ail_path(), [
+            "test",
+            "{tmp}/{pre.out.trim()}{file}",
+            "--json",
+        ]) else return names
+        for t in parse_json_lines(old.out)
+            if t.text("status", "") == "fail"
+                names.push(t.text("test", ""))
+    _ := proc.run("rm", ["-rf", tmp]) else return names
+    names
 
 fn main() !
     mut rev := "HEAD"
@@ -68,6 +90,14 @@ fn main() !
         io.exit(2)
         return
     changed := strs(impact, "changed")
+    # verify.run.4: the changed declarations each affected test reaches (`reaches`, api.impact.4), when given.
+    mut reached := Set[str]()
+    mut per_test := false
+    if reaches := impact.get("reaches")
+        per_test = true
+        for t in strs(impact, "tests")
+            for id in strs(reaches, t)
+                reached.add(id)
     mut effects := List[str]()
     for e in impact.arr("effects") else []
         effects.push("{e.text("id", "?")}: {strs(e, "old").join(" ")} -> {strs(e, "new").join(" ")}")
@@ -106,6 +136,12 @@ fn main() !
     mut unverified := List[str]()
     if check_ok and not changed.is_empty() and passed.len() + failed.len() == 0
         unverified.push("no test ran for the {changed.len()} changed declarations")
+    elif per_test
+        for c in changed
+            if not reached.contains(c)
+                unverified.push("no test reaches {c}")
+    if impact.flag("partial", false)
+        unverified.push("the edited version has check errors, so the impact is partial")
     for e in effects
         unverified.push("effects changed: {e}")
     for s in skipped
@@ -113,8 +149,18 @@ fn main() !
     mut failures := List[str]()
     for e in check_errors
         failures.push("check: {e}")
+    # verify.run.5: a failing test that also fails at REV is old; the rest are new.
+    mut old_fails := List[str]()
+    if not failed.is_empty()
+        old_fails = failing_at(file, rev)
+    mut blocking := check_errors.len()
     for f in failed
-        failures.push("test: {f}")
+        name := f.slice(0, f.find(":") else f.len())
+        if old_fails.contains(name)
+            failures.push("old test: {f}")
+        else
+            failures.push("new test: {f}")
+            blocking += 1
     if json
         print(
             obj([
@@ -140,4 +186,4 @@ fn main() !
         print("failures: {failures.len()}")
         for f in failures
             print("  {f}")
-    io.exit(if failures.is_empty() then 0 else 1)
+    io.exit(if blocking == 0 then 0 else 1)

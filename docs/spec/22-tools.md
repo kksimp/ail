@@ -1186,8 +1186,8 @@ is the run's own.
 **verify.run.1** — `ail verify --diff [--rev REV] [--json] FILE` compares `FILE`
 with git revision REV (default `HEAD`) as `ail ask FILE --affected` does
 (`api.impact.3`) and prints four parts: *proved*, *tested*, *unverified* and
-*failures*. The exit status is 0 when there are no failures, 1 when there are,
-and 2 for a usage error or a program that cannot be compared
+*failures*. The exit status is 0 when there is no check error and no new
+failure (`verify.run.5`), 1 otherwise, and 2 for a usage error or a program that cannot be compared
 ([ADR 0909](../decisions/0909-ail-verify-diff.md)).
 **verify.run.2** — *Proved* says whether `ail check FILE` accepts the program
 (a missing `main` is not an error) and lists the changed declarations
@@ -1195,8 +1195,12 @@ and 2 for a usage error or a program that cannot be compared
 **verify.run.3** — *Tested* is the affected tests (`api.impact.3`) that
 `ail test FILE --affected` ran: the names that passed and the names that failed.
 **verify.run.4** — *Unverified* lists what no result speaks for: that no test
-ran for the changed declarations, each function whose effects changed
+ran for the changed declarations, each changed declaration that no affected
+test reaches (when `ail ask --affected --json` gives `reaches`), a partial impact
+(`"partial":true`), each function whose effects changed
 (`api.impact.4`), and each skipped test. *Failures* lists the check errors and
 the failed tests. `--json` prints the same parts as one object with
 `"verify":1`.
-
+**verify.run.5** — A failure is *new* unless the test also fails when the tree at
+REV (`git archive REV`) is tested; it is then *old*. Check errors are always new.
+When REV cannot be unpacked or run, every failed test is new.

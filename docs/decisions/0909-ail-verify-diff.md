@@ -20,9 +20,7 @@ After a fix, an agent says "done" because the last command printed no error. Not
 3. **unverified:** that no test ran for the changed declarations, functions whose effects changed, and skipped tests.
 4. **failures:** check errors and failed tests.
 
-Version 1 is coarse on purpose: the impact graph names the tests a whole change reaches, not which test reaches which declaration, and REV's own check and test results are not re-run, so a failure is not yet split into new and old. Per-declaration reach, a `new`/`old` split and a list of contracts only checked at run time are the next slices.
-
-Exit status is 0 when the check is clean and no new failure exists, 1 otherwise. "Unverified" never fails the command; it is the information. `--json` prints the same four parts; `--budget N` trims by rank: new failures first, then unverified, tested, proved. Everything is computed only when asked for (ADR 0868).
+The graph's `reaches` (which changed declarations each test reaches) and `partial` keys, when present, refine *unverified*; a failed test that also fails in the tree at REV is *old* and does not fail the command (`verify.run.4-5`). A contract only checked at run time and not hit by a test is a later slice.
 
 Version 1 uses only features that exist. `ail try` ([0893](0893-ail-try.md)), `--mutate` (0896) and `ail infer` (0895) are Proposed; when they land, `verify` reports mutation survivors under *tested* and suggests contracts under *unverified*.
 
