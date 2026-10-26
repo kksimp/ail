@@ -960,8 +960,9 @@ pool, up to 4 idle per scheme, host and port and 32 in all, for at most 30
 seconds (less if the server's `Keep-Alive: timeout=` says so). The next
 request to the same origin, redirects included, uses it; a pooled connection
 the server has closed is dropped when found, and a request that fails on one
-before any response byte arrived is sent again on a new connection if its
-method is `GET`, `HEAD`, `PUT`, `DELETE` or `OPTIONS`. The header
+before any response byte arrived (a reset or end of file) is sent again, once, on a new
+connection, whatever its method, as browsers do (ADR 0915); a failure after a response
+byte, or on a new connection, is not. The header
 `Connection: close` in `opts.headers` sends that header and keeps nothing.
 The header `Transfer-Encoding: chunked` sends the body of `POST`, `PUT` and
 `PATCH` as chunks of at most 8 KiB, with no `Content-Length`. Interim `1xx`

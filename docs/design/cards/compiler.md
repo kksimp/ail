@@ -11,7 +11,7 @@ entry: main in main.ail
 
 ## budget (27 items)
 
-## check (349 items)
+## check (357 items)
 
 ## codegen (55 items)
 

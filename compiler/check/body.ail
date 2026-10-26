@@ -89,6 +89,11 @@ pub fn parallel_rows(p ast.Program) List[ParRow]
     c := checked_fns(p, false, [])
     c.parallel_rows()
 
+## The runs of independent pure calls that could fork (conc.par.15): `ail effects --parallel`.
+pub fn fork_rows(p ast.Program) List[ForkRow]
+    c := checked_fns(p, false, [])
+    c.fork_rows()
+
 ## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
 pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     mut c := checked_fns(p, full, denied)
