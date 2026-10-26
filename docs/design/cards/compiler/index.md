@@ -4,7 +4,7 @@ a64  74 items
 api  211 items
 ast  142 items
 budget  27 items
-check  349 items
+check  357 items
 codegen  55 items
 derive  40 items
 doc  18 items
