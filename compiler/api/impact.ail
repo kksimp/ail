@@ -1,4 +1,4 @@
-## Edit impact (api.impact.1-4, ADR 0868 item 3): which declarations an edit
+## Edit impact (api.impact.1-5, ADR 0868 item 3): which declarations an edit
 ## changed, which functions and `@test` functions it can reach, and whose
 ## effects it changed. Reachability is the checker's own graph: a function is
 ## affected when it names a changed declaration (a call, a field, a type, a
@@ -18,6 +18,13 @@ pub struct Impact
     pub tests List[str]
     ## Functions whose effects differ, with the effects before and after.
     pub effects List[EffectChange]
+    ## For each affected function, the declaration it names or calls on the way to
+    ## a changed one (the next step of its path), in `affected` order.
+    pub via List[(str, str)]
+    ## For each affected test, the changed declarations it reaches.
+    pub reaches List[(str, List[str])]
+    ## The new version has check errors, so the impact is read from the graph as far as it resolves.
+    pub partial bool
 
 pub struct EffectChange
     pub id str
@@ -184,6 +191,14 @@ pub fn impact_between(
     for id in changed
         if id.starts_with("fn:") or id.starts_with("method:")
             affected.add(id)
+    # `next[f]`: the declaration `f` was reached from; `root[x]`: the first changed declaration that reached `x`.
+    mut next := Map[str, str]()
+    mut root := Map[str, str]()
+    for id in changed
+        root[id] = id
+        for x in also_reaches(id, known_list)
+            if not root.contains(x)
+                root[x] = id
     mut at := 0
     while at < queue.len()
         id := queue[at]
@@ -191,15 +206,22 @@ pub fn impact_between(
         for f in users.get(id) else []
             if not affected.contains(f)
                 affected.add(f)
+                next[f] = id
+                root[f] = root.get(id) else id
                 queue.push(f)
     mut tests := List[str]()
     mut ordered := List[str]()
+    mut via := List[(str, str)]()
+    mut reaches := List[(str, List[str])]()
     for i in 0..after.api.fn_ids.len()
         id := after.api.fn_ids[i]
         if affected.contains(id) and after.prog.fns[i].pos.line < 1073741824
             ordered.push(id)
+            if n := next.get(id)
+                via.push((id, n))
             if after.is_test(i)
                 tests.push(after.prog.fns[i].name)
+                reaches.push((after.prog.fns[i].name, [root.get(id) else id]))
     mut effects := List[EffectChange]()
     mut old_fx := Map[str, List[str]]()
     for i in 0..before.api.fn_ids.len()
@@ -213,7 +235,15 @@ pub fn impact_between(
                 effects.push(EffectChange(id: id, old: was, new: now))
         elif now.len() > 0 and after.prog.fns[i].pos.line < 1073741824
             effects.push(EffectChange(id: id, old: [], new: now))
-    Impact(changed: changed, affected: ordered, tests: tests, effects: effects)
+    Impact(
+        changed: changed,
+        affected: ordered,
+        tests: tests,
+        effects: effects,
+        via: via,
+        reaches: reaches,
+        partial: false,
+    )
 
 fn effect_list(xs List[str]) str
     if xs.len() == 0 then "(none)" else xs.join(", ")
@@ -228,6 +258,21 @@ pub fn impact_text(i Impact) str
         out.push("  tests: {i.tests.join(", ")}")
     for e in i.effects
         out.push("  effects: {e.id} {effect_list(e.old)} -> {effect_list(e.new)}")
+    # Why each test is affected: its path to a changed declaration.
+    mut next := Map[str, str]()
+    for v in i.via
+        next[v.0] = v.1
+    for t in i.tests
+        mut at := "fn:{t}"
+        mut path := [at]
+        while path.len() < 64
+            n := next.get(at) else break
+            at = n
+            path.push(at)
+        if path.len() > 1
+            out.push("  via: {path.join(" > ")}")
+    if i.partial
+        out.push("  partial: the edited version has errors; callers shown are those that name a changed declaration")
     out.join("\n")
 
 fn json_strs(xs List[str]) str
@@ -239,4 +284,13 @@ pub fn impact_json(i Impact) str
         "\{\"id\":{quote(e.id)},\"old\":{json_strs(e.old)},\"new\":{json_strs(e.new)}}"
         for e in i.effects
     ]
-    "\{\"changed\":{json_strs(i.changed)},\"affected\":{json_strs(i.affected)},\"tests\":{json_strs(i.tests)},\"effects\":[{fx.join(",")}]}"
+    mut more := ""
+    if i.via.len() > 0
+        vs := ["{quote(v.0)}:{quote(v.1)}" for v in i.via]
+        more = "{more},\"via\":\{{vs.join(",")}}"
+    if i.reaches.len() > 0
+        rs := ["{quote(r.0)}:{json_strs(r.1)}" for r in i.reaches]
+        more = "{more},\"reaches\":\{{rs.join(",")}}"
+    if i.partial
+        more = "{more},\"partial\":true"
+    "\{\"changed\":{json_strs(i.changed)},\"affected\":{json_strs(i.affected)},\"tests\":{json_strs(i.tests)},\"effects\":[{fx.join(",")}]{more}}"

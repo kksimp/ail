@@ -60,6 +60,8 @@ struct STest
 ## One side of the comparison.
 struct SSide
     has_decls bool
+    ## Check errors only: the declarations are read as far as they resolve (diff.out.8).
+    partial bool
     decls List[SDecl]
     diags List[SFound]
     has_tests bool
@@ -133,12 +135,19 @@ fn sd_body(prog ast.Program, texts List[str], line int, next int)(str, List[str]
         last = if next - file.base - 1 < src.len() then next - file.base - 1 else src.len()
     lo := if first < last then first else last
     mut text := src[lo..last]
+    # The next declaration's attribute lines (`@test`) sit above its own line, so they end up
+    # here too; they are not this body (api.impact.1).
     while text.len() > 0
         tail := text[text.len() - 1]
-        if tail.trim() == "" or tail.trim_start().starts_with("#")
+        if tail.trim() == ""
+            or tail.trim_start().starts_with("#")
+            or tail.trim_start().starts_with("@")
             text.pop()
         else
             break
+    # Attributes written on the declaration's own line (`@test fn f`) are not part of it either.
+    if text.len() > 0
+        text[0] = "{text[0].slice(0, indent_width(text[0]))}{without_attrs(text[0])}"
     # FNV-1a: stable across runs and platforms.
     mut h := -3750763034362895579
     joined := text.join("\n")
@@ -199,10 +208,13 @@ fn sd_side(path_arg str, run_tests bool, std str) SSide ! DiffError
         found = [load.shown_check(d) for d in analysis.report.diags]
     found = [d for d in found if is_dir or d.rule != "mod.main.1"]
     mut rejected := false
+    mut broken := false
     mut diags := List[SFound]()
     for d in found
         if not d.warning
-            rejected = true
+            broken = true
+            # Syntax and load errors leave no program to read; check errors do (diff.out.8).
+            rejected = loaded.diags.len() > 0
         here := load.locate(loaded.program.files, d.pos)
         rel := if here.0 == root then "" else (here.0.strip_prefix(root) else here.0)
         diags.push(SFound(
@@ -248,11 +260,18 @@ fn sd_side(path_arg str, run_tests bool, std str) SSide ! DiffError
                 decls[k] = d
     mut tests := List[STest]()
     mut has_tests := false
-    if run_tests and not is_dir and not rejected
+    if run_tests and not is_dir and not broken
         got := sd_tests(path_arg)
         has_tests = got.0
         tests = got.1
-    SSide(has_decls: not rejected, decls: decls, diags: diags, has_tests: has_tests, tests: tests)
+    SSide(
+        has_decls: not rejected,
+        partial: broken and not rejected,
+        decls: decls,
+        diags: diags,
+        has_tests: has_tests,
+        tests: tests,
+    )
 
 ## Each test's outcome, from `ail test --json` in a child (diff.out.4); false
 ## when the tests could not be run.
@@ -380,6 +399,13 @@ fn sd_render(old str, new str, a SSide, b SSide, json bool)(str, int)
             lines.push("\{\"change\":\"api\",\"op\":\"unavailable\",\"reason\":{quote("{which} has errors")}}")
         else
             lines.push("api: not compared, {which} has errors")
+    # diff.out.8: a side with check errors is compared as far as it resolves.
+    if a.has_decls and b.has_decls and (a.partial or b.partial)
+        which := if b.partial then new else old
+        if json
+            lines.push("\{\"change\":\"api\",\"op\":\"partial\",\"reason\":{quote("{which} has errors")}}")
+        else
+            lines.push("api: partial, {which} has errors; compared as far as they allow")
     # diff.out.3: diagnostics by rule, file and message, counted.
     mut left := Map[str, int]()
     for f in a.diags
