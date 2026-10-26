@@ -395,6 +395,11 @@ if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}"
 fi
 
+# `ail mcp` (ADR 0918): the compiler's tools as an MCP server on stdio, tools/ailmcp/ailmcp.ail.
+if [ "${1:-}" = mcp ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
+fi
+
 # `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
 if [ "${1:-}" = task ]; then
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"

@@ -731,3 +731,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0913](0913-http2-client-over-alpn.md) | An HTTP/2 client over ALPN in the native `std.net` *(delegated)* | Accepted | 2026-10-26 |
 | [0914](0914-automatic-fork-join-of-independent-calls.md) | Run independent pure calls in a straight-line block as a fork-join, when each is worth it | Proposed | 2026-10-26 |
 | [0917](0917-ail-task-protocol.md) | `ail task`: start, status, verify and finish one change with a recorded base and a stated next step *(delegated)* | Accepted | 2026-10-26 |
+| [0918](0918-ail-mcp-compiler-tools.md) | `ail mcp`: the compiler's own tools (check, test, ask, impact, task) as an MCP server on stdio *(delegated)* | Accepted | 2026-10-26 |
