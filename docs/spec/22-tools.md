@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`, `shrink`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -1304,3 +1304,26 @@ When REV cannot be unpacked or run, every failed test is new.
 fn main()
     print("hi")
 ```
+
+## Shrinking a failure bundle
+
+**shrink.run.1** — `ail replay --shrink [--time MS] [-o OUT] BUNDLE` takes a failure
+bundle (`bundle.write.1-2`). A file that is not a bundle, or a bundle whose test does
+not fail when replayed (`bundle.run.1`), is an error (exit 2) and nothing is written
+([ADR 0920](../decisions/0920-replay-shrink.md)).
+**shrink.run.2** — The texts the recorded calls returned (a file read, an
+environment value, a process's output) are cut line by line, largest cuts first. A
+cut stays when `ail test --bundle` still fails with the same `FAIL` line, test name
+and message included, as the unshrunk bundle; otherwise it is undone. Numbers,
+booleans and the order of calls are never changed.
+**shrink.run.3** — The search stops after `--time` milliseconds (default 60000),
+counted from the first cut, and keeps the cuts made so far. The limit is checked
+between tries, so a run can overrun it by the try in progress and the first replay
+that proves the bundle fails.
+**shrink.run.4** — When anything was cut, the smaller bundle is written to OUT
+(default: BUNDLE with `.min` added) and the command prints `shrunk`; when nothing
+could be cut it writes nothing and prints `nothing to cut`. Both exit 0.
+
+```ail skip=bootstrap tool=replay,--shrink,nosuch.json status=2 expect=shrink.run.1 rules=shrink.run.1,shrink.run.2,shrink.run.3,shrink.run.4
+```
+

@@ -252,7 +252,7 @@ native_errors=
 if [ "${1:-}" = check ]; then
     for a in "${@:2}"; do [ "$a" = --errors ] && native_errors=1; done
 fi
-if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = attach ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = test ] && [ -n "$has_bundle" ]; } || [ "${1:-}" = verify ]; }; then
+if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = attach ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = test ] && [ -n "$has_bundle" ]; } || [ "${1:-}" = verify ] || { [ "${1:-}" = replay ] && [ "${2:-}" = --shrink ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         # The published seed is stage 0: it builds the native CLI (ADR 0855).
@@ -328,6 +328,8 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         done
         AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget test "${bopts[@]}" -- "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${copts[@]}"
     fi
+    # shrink.run.1: `ail replay --shrink BUNDLE` cuts a failure bundle's recorded texts (tools/shrink/shrink.ail).
+    if [ "$1" = replay ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/shrink/shrink.ail" "$@"; fi
     # verify.run.1: `ail verify --diff` composes `ask --affected`, `check` and `test --affected` (tools/verify/verify.ail).
     if [ "$1" = verify ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/verify/verify.ail" "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
