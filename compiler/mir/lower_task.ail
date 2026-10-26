@@ -309,6 +309,10 @@ fn Lower.synth_begin(mut self, name str, params List[Ty]) List[int]
     var_vals = {}
     nvars = 0
     loops = []
+    ens = []
+    inv_key = ""
+    borrowed = Set[str]()
+    facts.moves = []
     cur = new_block()
     sealed[cur] = true
     mut ps := List[int]()
@@ -336,6 +340,7 @@ fn Lower.synth_end(mut self, params List[int])
             pos: ast.Pos(line: 1, col: 1),
             message: "internal error: invalid MIR: {err}",
         ))
+    facts.moves = []
     funcs.push(func)
 
 ## For each `spawn` site a function `task.K(rec)` that loads the arguments
