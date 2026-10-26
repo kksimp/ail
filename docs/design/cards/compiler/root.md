@@ -32,6 +32,7 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs
     fails with fs.IoError
 fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
+PROOF_MAX_BYTES := 1500000
 fn parallel_on() bool [env]
 fn proven_loop_keys(file str, std str) Set[str] [clock env fs io proc]
 fn mentions_prelude(srcs List[mir.Source]) bool
@@ -74,4 +75,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1268); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1276); dropped: private items, doc comments
