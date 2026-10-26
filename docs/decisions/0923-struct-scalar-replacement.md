@@ -5,7 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture
 - **Spec rules:** [native.sroa.1](../spec/23-native.md)
-- **Builds on:** [ADR 0391](0391-native-backend-optimisations.md) (inlining), [ADR 0392](0392-native-structs.md) (struct objects), [ADR 0890](0890-optimizer-roadmap-to-match-c.md) (optimizer roadmap)
+- **Builds on:** [ADR 0391](0391-native-backend-optimisations.md) (inlining), [ADR 0392](0392-native-structs-and-methods.md) (struct objects), [ADR 0890](0890-optimizer-roadmap-to-match-c.md) (optimizer roadmap)
 
 ## Context
 
