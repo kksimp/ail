@@ -327,7 +327,8 @@ fn rec_next(name str) int
     while eol < d + n and load8(eol) != 10
         eol += 1
     mut e := q + i
-    while e + 8 < eol and not (load8(e) == 34 and load8(e + 1) == 114 and load8(e + 2) == 101 and load8(e + 3) == 115 and load8(e + 8) == 58)
+    while e + 8 < eol
+        and not (load8(e) == 34 and load8(e + 1) == 114 and load8(e + 2) == 101 and load8(e + 3) == 115 and load8(e + 8) == 58)
         e += 1
     if e + 8 >= eol
         # A call recorded without a result (`"uncaptured":true`, replay.nat.1): a replay can't answer it.
