@@ -456,6 +456,9 @@ and `id`), counted as `N renamed` in the summary when there is any, and not as a
 addition and a removal. A function whose body also mentions its own name differs
 in body, so it stays an addition and a removal.
 
+```ail pkg=diff_rename tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=(renamed) rules=diff.out.9
+```
+
 **api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
 API between two versions of a file or package directory. `ail api --diff
 --rev REV PATH` compares `PATH` as git has it at `REV` against `PATH` now,
