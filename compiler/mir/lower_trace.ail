@@ -36,7 +36,9 @@ fn Lower.frame_name(self) str
 
 ## `f` for the instance `f[int]` of a generic function, as the interpreter
 ## names its frames (trace.frame.1).
-pub fn plain_name(name str) str
+pub fn plain_name(full str) str
+    # The `.seq` copy of a fork-join function (conc.par.15) is named as the original.
+    name := if full.ends_with(".seq") then full.slice(0, full.len() - 4) else full
     if not name.contains("[")
         return name
     mut out := List[str]()

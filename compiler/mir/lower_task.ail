@@ -72,6 +72,12 @@ pub struct TaskState
     ## pool: no `spawn`, atomics, channels or UI in the program, so ordinary
     ## code still runs its trap cleanups (the runtime skips them on workers).
     auto_only bool
+    ## Fork-join (conc.par.15): calls to `redirect` go to its `.seq` copy, which
+    ## `no_fork` keeps from forking; `seq_list` holds the copies still to make.
+    redirect str
+    no_fork bool
+    seq_list List[str]
+    seq_built int
     ## Why the last `par_plan` ran the loop in order, and the warnings of the build.
     why str
     notes List[str]
@@ -90,6 +96,10 @@ pub fn new_task_state() TaskState
         exits: [],
         built: 0,
         auto_only: false,
+        redirect: "",
+        no_fork: false,
+        seq_list: [],
+        seq_built: 0,
         why: "",
         notes: [],
     )
@@ -359,6 +369,7 @@ fn Lower.synth_end(mut self, params List[int])
 fn Lower.build_task_fns(mut self)
     if not tk.on
         return
+    gen_fork_seqs()
     first := tk.built
     tk.built = tk.sites.len()
     for k in first..tk.sites.len()

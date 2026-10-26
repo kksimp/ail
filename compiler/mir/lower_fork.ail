@@ -20,7 +20,7 @@ struct ForkCall
 
 ## `F` for the first call of a run, `C` for a later one, else "".
 @allow("expr.match.3") fn Lower.fork_mark(self, s ast.Stmt) str
-    if auto_par.len() == 0
+    if auto_par.len() == 0 or tk.no_fork
         return ""
     match s
         Let(_, _, _, value, o) =>
@@ -155,6 +155,9 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
         z := lower_value(fork_zero(p), p.ret) else return
         declare(p.name, p.ret, z.id)
         keys.push(lookup(p.name) else "")
+    for p in plan
+        if p.key == fname
+            want_seq(p.key)
     fork_blk := new_block()
     seq := new_block()
     join := new_block()
@@ -168,7 +171,8 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
     mut handles := List[int]()
     for k in 1..n
         p := plan[k]
-        h := spawn_call(p.key, p.fname, p.npos, p.args, p.cpos, p.lpos) else return
+        target := if p.key == fname then "{p.key}.seq" else p.key
+        h := spawn_call(target, p.fname, p.npos, p.args, p.cpos, p.lpos) else return
         handles.push(h.id)
     first := lower_value(plan[0].value, none) else return
     write_var(keys[0], cur, first.id)
@@ -190,7 +194,7 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
         # The task trapped: clear its failure and run the call here, in order.
         cur = again
         call("rt.err_take", [], Ty.Str)
-        v := lower_value(p.value, none) else return
+        v := call_in_order(p) else return
         write_var(keys[k], cur, v.id)
         jump(next, [])
         seal(next)
@@ -199,8 +203,43 @@ fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
     seal(seq)
     cur = seq
     for p in plan
-        v := lower_value(p.value, none) else return
+        v := call_in_order(p) else return
         write_var(lookup(p.name) else "", cur, v.id)
     jump(join, [])
     seal(join)
     cur = join
+
+## The call of `p` run here, in order: a recursive function's own calls go to
+## its `.seq` copy, which never checks for room to fork.
+fn Lower.call_in_order(mut self, p ForkCall) Val?
+    was := tk.redirect
+    if p.key == fname
+        tk.redirect = fname
+    v := lower_value(p.value, none)
+    tk.redirect = was
+    v
+
+## Register the `.seq` copy of `key`.
+fn Lower.want_seq(mut self, key str)
+    if not tk.seq_list.contains(key)
+        tk.seq_list.push(key)
+        sigs["{key}.seq"] = sigs[key]
+
+## Lower the `.seq` copies asked for: the function again with no fork runs,
+## calling itself through the copy. Their problems are the originals'.
+fn Lower.gen_fork_seqs(mut self)
+    while tk.seq_built < tk.seq_list.len()
+        key := tk.seq_list[tk.seq_built]
+        tk.seq_built += 1
+        f := fn_decl.get(key) else continue
+        enter_file(fn_file[key])
+        before := problems.len()
+        tk.no_fork = true
+        tk.redirect = key
+        lower_fn_as(f, "{key}.seq", key, fn_owner(f))
+        tk.no_fork = false
+        tk.redirect = ""
+        stamp_problems()
+        while problems.len() > before
+            problems.pop()
+            problem_files.pop()
