@@ -889,10 +889,8 @@ fn Gen.push(mut self, i mir.Inst)
     a.ldr(S1, l, 16)
     if float
         a.str_d_idx(r, S1, S2)
-    elif i.name == "rt.list_pushb"
-        a.strb_idx(r, S1, S2)
     else
-        a.str_idx(r, S1, S2)
+        store_elem(r, S1, S2, 0, mir.push_bytes(i.name))
     a.alu_ri("add", S2, S2, 1)
     a.str(S2, l, 0)
     if room
@@ -1266,16 +1264,9 @@ fn Gen.list_get(mut self, i mir.Inst)
         put_fpr(i.dst, d)
         return
     d := out_gpr(i.dst, S1)
-    # A `List[bool]` holds one byte per element (native-abi.md §2).
-    if f.vals[i.dst].elem_bytes() == 1
-        if at[0] < 0
-            a.ldrb_off(d, S2, at[1] / 8)
-        else
-            a.ldrb_idx(d, S2, at[0])
-    elif at[0] < 0
-        a.ldr(d, S2, at[1])
-    else
-        a.ldr_idx(d, S2, at[0])
+    # A `List[bool]` or `List[u8]` holds one byte per element, a `List[u16]`
+    # two and a `List[u32]` four (native-abi.md §2).
+    load_elem(d, S2, at[0], at[1] / 8, f.vals[i.dst].elem_bytes())
     put_gpr(i.dst, d)
 
 fn Gen.list_set(mut self, i mir.Inst)
@@ -1291,15 +1282,7 @@ fn Gen.list_set(mut self, i mir.Inst)
     # x0 is free between calls.
     r := gpr(v, 0)
     at := list_index(i)
-    if f.vals[v].elem_bytes() == 1
-        if at[0] < 0
-            a.strb_off(r, S2, at[1] / 8)
-        else
-            a.strb_idx(r, S2, at[0])
-    elif at[0] < 0
-        a.str(r, S2, at[1])
-    else
-        a.str_idx(r, S2, at[0])
+    store_elem(r, S2, at[0], at[1] / 8, f.vals[v].elem_bytes())
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577):
 ## the index's register, or -1 with a constant index's element number.
@@ -1328,15 +1311,7 @@ fn Gen.indexed_load(mut self, i mir.Inst)
         put_fpr(i.dst, d)
         return
     d := out_gpr(i.dst, S1)
-    if i.imm == 1
-        if x < 0
-            a.ldrb_off(d, base, -1 - x)
-        else
-            a.ldrb_idx(d, base, x)
-    elif x < 0
-        a.ldr(d, base, 8 * (-1 - x))
-    else
-        a.ldr_idx(d, base, x)
+    load_elem(d, base, x, -1 - x, i.imm)
     put_gpr(i.dst, d)
 
 fn Gen.indexed_store(mut self, i mir.Inst)
@@ -1349,14 +1324,49 @@ fn Gen.indexed_store(mut self, i mir.Inst)
         else
             a.str_d_idx(fpr(v, X0), base, x)
         return
-    r := gpr(v, 0)
-    if i.imm == 1
+    store_elem(gpr(v, 0), base, x, -1 - x, i.imm)
+
+## An element of `w` bytes (1, 2, 4 or 8) at `base[x]` (`x` an index register)
+## or, when `x` is negative, at element `k`. A load zero-extends.
+fn Gen.load_elem(mut self, d int, base int, x int, k int, w int)
+    if w == 1
         if x < 0
-            a.strb_off(r, base, -1 - x)
+            a.ldrb_off(d, base, k)
+        else
+            a.ldrb_idx(d, base, x)
+    elif w == 2
+        if x < 0
+            a.ldrh_off(d, base, k)
+        else
+            a.ldrh_idx(d, base, x)
+    elif w == 4
+        if x < 0
+            a.ldr_w_off(d, base, k)
+        else
+            a.ldr_w_idx(d, base, x)
+    elif x < 0
+        a.ldr(d, base, 8 * k)
+    else
+        a.ldr_idx(d, base, x)
+
+fn Gen.store_elem(mut self, r int, base int, x int, k int, w int)
+    if w == 1
+        if x < 0
+            a.strb_off(r, base, k)
         else
             a.strb_idx(r, base, x)
+    elif w == 2
+        if x < 0
+            a.strh_off(r, base, k)
+        else
+            a.strh_idx(r, base, x)
+    elif w == 4
+        if x < 0
+            a.str_w_off(r, base, k)
+        else
+            a.str_w_idx(r, base, x)
     elif x < 0
-        a.str(r, base, 8 * (-1 - x))
+        a.str(r, base, 8 * k)
     else
         a.str_idx(r, base, x)
 

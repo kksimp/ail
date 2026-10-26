@@ -1057,10 +1057,9 @@ fn Gen.push(mut self, i mir.Inst)
     v := i.args[1]
     if f.vals[v].is_float()
         a.vmovsd_mr(at_index(S1, RAX, 8, 0), xmm(v, X0))
-    elif i.name == "rt.list_pushb"
-        a.mov8_mr(at_index(S1, RAX, 1, 0), gpr(v, RDX))
     else
-        a.mov_mr(at_index(S1, RAX, 8, 0), gpr(v, RDX))
+        w := mir.push_bytes(i.name)
+        store_w(at_index(S1, RAX, w, 0), v, w)
     a.alu_ri("add", RAX, 1)
     a.mov_mr(at(l, 0), RAX)
     if room
@@ -1399,15 +1398,11 @@ fn Gen.list_get(mut self, i mir.Inst)
         d := out_xmm(i.dst, X0)
         a.vmovsd_rm(d, mem)
         put_xmm(i.dst, d)
-    elif t.elem_bytes() == 1
-        mem := list_index(i, 1)
-        d := out_gpr(i.dst, S1)
-        a.movzx8_rm(d, mem)
-        put_gpr(i.dst, d)
     else
-        mem := list_index(i, 8)
+        w := t.elem_bytes()
+        mem := list_index(i, w)
         d := out_gpr(i.dst, S1)
-        a.mov_rm(d, mem)
+        load_w(d, mem, w)
         put_gpr(i.dst, d)
 
 fn Gen.list_set(mut self, i mir.Inst)
@@ -1416,12 +1411,9 @@ fn Gen.list_set(mut self, i mir.Inst)
     if t.is_float()
         x := xmm(v, X0)
         a.vmovsd_mr(list_index(i, 8), x)
-    elif t.elem_bytes() == 1
-        mem := list_index(i, 1)
-        store_byte(mem, v)
     else
-        mem := list_index(i, 8)
-        store_word(mem, v)
+        w := t.elem_bytes()
+        store_w(list_index(i, w), v, w)
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577).
 fn Gen.indexed_mem(mut self, i mir.Inst) Mem
@@ -1436,13 +1428,9 @@ fn Gen.indexed_load(mut self, i mir.Inst)
         d := out_xmm(i.dst, X0)
         a.vmovsd_rm(d, mem)
         put_xmm(i.dst, d)
-    elif i.imm == 1
-        d := out_gpr(i.dst, S1)
-        a.movzx8_rm(d, mem)
-        put_gpr(i.dst, d)
     else
         d := out_gpr(i.dst, S1)
-        a.mov_rm(d, mem)
+        load_w(d, mem, i.imm)
         put_gpr(i.dst, d)
 
 fn Gen.indexed_store(mut self, i mir.Inst)
@@ -1450,8 +1438,27 @@ fn Gen.indexed_store(mut self, i mir.Inst)
     mem := indexed_mem(i)
     if f.vals[v].is_float()
         a.vmovsd_mr(mem, xmm(v, X0))
-    elif i.imm == 1
+    else
+        store_w(mem, v, i.imm)
+
+## An element of `w` bytes (1, 2, 4 or 8): a load zero-extends it.
+fn Gen.load_w(mut self, d int, mem Mem, w int)
+    if w == 1
+        a.movzx8_rm(d, mem)
+    elif w == 2
+        a.movzx16_rm(d, mem)
+    elif w == 4
+        a.mov32_rm(d, mem)
+    else
+        a.mov_rm(d, mem)
+
+fn Gen.store_w(mut self, mem Mem, v int, w int)
+    if w == 1
         store_byte(mem, v)
+    elif w == 2
+        a.mov16_mr(mem, gpr(v, RDX))
+    elif w == 4
+        a.mov32_mr(mem, gpr(v, RDX))
     else
         store_word(mem, v)
 

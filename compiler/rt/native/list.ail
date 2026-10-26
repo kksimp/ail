@@ -4,22 +4,39 @@
 ## List methods that edit or search a list (type.coll.9, type.coll.11,
 ## type.coll.14; ADR 0605). Lists are the objects of native-abi.md §2:
 ## +0 len, +8 cap, +16 data. `size` is an element's bytes: 8, or 1 for a
-## `List[bool]`.
+## `List[bool]` or `List[u8]`, 2 for a `List[u16]`, 4 for a `List[u32]`.
 
 fn list_get_word(data int, size int, i int) int
     if size == 1
         return load8(data + i)
-    load64(data + 8 * i)
+    if size == 8
+        return load64(data + 8 * i)
+    narrow_get(data + size * i, size)
 
 fn list_set_word(data int, size int, i int, w int)
     if size == 1
         store8(data + i, w)
-    else
+    elif size == 8
         store64(data + 8 * i, w)
+    else
+        narrow_set(data + size * i, size, w)
 
-## A list of bytes (a `List[u8]`) as a list of words: for the operations that
-## read 8-byte elements (sort, sum, min, max, ordering; ADR 0907).
-fn list_widen(xs List[int]) List[int]
+## The unsigned little-endian `size` bytes (2 or 4) at `p`.
+fn narrow_get(p int, size int) int
+    mut w := 0
+    for k in 0..size
+        w = w.bit_or(load8(p + k).shl(8 * k))
+    w
+
+## The low `size` bytes (2 or 4) of `w` at `p`, little-endian.
+fn narrow_set(p int, size int, w int)
+    for k in 0..size
+        store8(p + k, w.shr(8 * k).bit_and(255))
+
+## A list of `size`-byte elements (a `List[u8]`, `List[u16]` or `List[u32]`) as
+## a list of words: for the operations that read 8-byte elements (sort, sum,
+## min, max, ordering; ADRs 0907, 0912).
+fn list_widen(xs List[int], size int) List[int]
     p := list_addr(xs)
     n := load64(p)
     out := list_alloc(n, 8)
@@ -27,17 +44,18 @@ fn list_widen(xs List[int]) List[int]
     src := load64(p + 16)
     dst := load64(q + 16)
     for i in 0..n
-        store64(dst + 8 * i, load8(src + i))
+        store64(dst + 8 * i, list_get_word(src, size, i))
     store64(q, n)
     out
 
-## Writes the words of `wide` back into the bytes of `xs`, as many as `xs` has.
-fn list_narrow_into(xs List[int], wide List[int])
+## Writes the words of `wide` back into the `size`-byte elements of `xs`, as
+## many as `xs` has.
+fn list_narrow_into(xs List[int], wide List[int], size int)
     p := list_addr(xs)
     dst := load64(p + 16)
     src := load64(list_addr(wide) + 16)
     for i in 0..load64(p)
-        store8(dst + i, load64(src + 8 * i))
+        list_set_word(dst, size, i, load64(src + 8 * i))
 
 ## `xs.extend(ys)`.
 fn list_extend(xs List[int], ys List[int], size int)
