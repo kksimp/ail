@@ -1,4 +1,4 @@
-# 0921. `std.app` `Font`: web fonts in the display list, kept by the host under an id
+# 0922. `std.app` `Font`: web fonts in the display list, kept by the host under an id
 
 - **Status:** Accepted
 - **Date:** 2026-10-26
