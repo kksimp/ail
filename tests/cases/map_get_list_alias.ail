@@ -1,0 +1,25 @@
+# own.val.1: a binding from `m.get(k) else d`, `m.get(k)?` or `xs.first()`
+# is a copy; changing it leaves the map or list alone.
+fn take_last(adj Map[str, List[str]], k str) List[str]
+    mut s := adj.get(k) else List[str]()
+    s.pop()
+    s
+
+fn take_first(adj Map[str, List[str]], k str) List[str]?
+    mut s := adj.get(k)?
+    s.pop()
+    s
+
+fn pop_head(xs List[List[int]]) List[int]
+    mut h := xs.first() else []
+    h.push(9)
+    h
+
+fn main()
+    m := {"a": ["x", "y"]}
+    r := take_last(m, "a")
+    print("{r} {m}")
+    q := take_first(m, "a") else []
+    print("{q} {m}")
+    ys := [[1], [2]]
+    print("{pop_head(ys)} {ys}")
