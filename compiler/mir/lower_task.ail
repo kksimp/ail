@@ -46,6 +46,9 @@ struct ParSite
     ## Static work of one iteration in operations (`ParScan.work`), for the
     ## cost model of a loop the compiler chose to run in parallel (conc.par.14).
     work int
+    ## The body calls a function (`ParScan.calls`): a written `par for` over
+    ## such a body goes to the pool from two iterations (conc.par.14).
+    calls bool
 
 pub struct TaskState
     ## Whether the task runtime is linked (so `print` takes the output lock).
@@ -500,6 +503,7 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         aliases: aliases,
         self_ty: self_ty,
         work: sc.work + 1,
+        calls: sc.calls,
     )
 
 fn root_of(e ast.Expr) str
@@ -572,7 +576,8 @@ fn Lower.lower_par_for(
     join := new_block()
     # A written `par for` needs only the iteration count (conc.par.8); a loop the
     # compiler chose also needs enough work to repay the pool (conc.par.14).
-    weight := konst(plan.work, Ty.Int)
+    # 4096 is `PAR_HEAVY` in rt/native/task.ail.
+    weight := konst(if not auto and plan.calls then 4096 else plan.work, Ty.Int)
     chosen := konst(if auto then 1 else 0, Ty.Int)
     branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
@@ -650,6 +655,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         aliases: aliases,
         self_ty: self_ty,
         work: 0,
+        calls: false,
     )
     # Problems of the loop's body belong to its own file, not the one lowered before or after.
     stamp_problems()

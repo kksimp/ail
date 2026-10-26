@@ -18,6 +18,8 @@ pub struct ParScan
     ## Operations one iteration costs: nested loops count 16 times (conc.par.14).
     pub work int
     pub mult int
+    ## The body calls a function or a method that may change its receiver.
+    pub calls bool
     ## What the first construct the parallel version doesn't take is.
     pub why str
     ## A construct the parallel version doesn't take.
@@ -33,6 +35,7 @@ pub fn new_scan() ParScan
         mutated: Set[str](),
         work: 0,
         mult: 1,
+        calls: false,
         why: "",
         bad: false,
     )
@@ -160,6 +163,7 @@ fn scan_expr(mut sc ParScan, e Expr)
                     Fmt(x, _) => scan_expr(mut sc, x)
         Call(callee, args, _) =>
             scan_cost(mut sc, 8)
+            sc.calls = true
             match callee
                 Name => scan_args(mut sc, args)
                 _ => refuse(
@@ -169,6 +173,7 @@ fn scan_expr(mut sc ParScan, e Expr)
         Method(recv, name, _, args) =>
             scan_cost(mut sc, 2)
             if not READ_ONLY.contains(name)
+                sc.calls = true
                 r := root_name(recv) else
                     refuse(mut sc, "a method call on a temporary")
                     return
