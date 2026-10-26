@@ -44,7 +44,7 @@ struct ParSite
     aliases Map[str, str]
     self_ty str
     ## Static work of one iteration in operations (`ParScan.work`), for the
-    ## cost model of a loop the compiler chose to run in parallel (conc.par.12).
+    ## cost model of a loop the compiler chose to run in parallel (conc.par.14).
     work int
 
 pub struct TaskState
@@ -560,7 +560,7 @@ fn Lower.lower_par_for(
     seq := new_block()
     join := new_block()
     # A written `par for` needs only the iteration count (conc.par.8); a loop the
-    # compiler chose also needs enough work to repay the pool (conc.par.12).
+    # compiler chose also needs enough work to repay the pool (conc.par.14).
     weight := konst(plan.work, Ty.Int)
     chosen := konst(if auto then 1 else 0, Ty.Int)
     branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])

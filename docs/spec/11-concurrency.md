@@ -510,7 +510,7 @@ one `+=` outside nested loops; any other loop, a loop that captures a handle
 or a `ref`, and a loop with fewer than twice as many iterations as the pool has
 threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
 
-**conc.par.12** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
+**conc.par.14** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
 a call 8). An iteration of at least 4096 operations sends any loop of two or more
@@ -529,6 +529,14 @@ unless the environment variable `AIL_THREADS` sets the number. With one
 thread, or under `--deterministic`, every loop and task runs as if there
 were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
 how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
+
+**conc.par.15** — `ail effects --parallel` lists each run of two or more adjacent
+`name := f(args)` statements where every `f` is a free function with no impure effect,
+no argument is `mut`, and no argument mentions a name an earlier statement of the run
+defines. The row says `fork` when at least two of the callees are heavy (they have a
+loop, are recursive, or reach a function with a loop) and `inline` otherwise. This is the
+analysis of the fork-join of independent calls; running a `fork` run on the pool is
+not implemented yet. *(ADR 0914)*
 
 **conc.par.10** — A task whose function has no `io`, `unsafe`, `spawn` or
 capability effect and calls no method of a handle, directly or through the

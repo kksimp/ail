@@ -6,3 +6,5 @@ hello, agent
 Wikipedia
 404 no such page
 POST /echo application/x-www-form-urlencoded 8 name=ail
+lingering
+POST /echo text/plain 3 n=1
