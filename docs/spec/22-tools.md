@@ -661,7 +661,11 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
-<<<<<<< HEAD
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.status.1,task.finish.1,task.finish.2,task.out.1
+fn main()
+    print(1)
+```
+
 ## MCP server
 
 `ail mcp` serves the compiler's tools to an agent
@@ -677,12 +681,6 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 **mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
 
 **mcp.call.2** — A call that lacks a required argument, or names no tool, is error -32602 and runs nothing.
-=======
-```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.status.1,task.finish.1,task.finish.2,task.out.1
-fn main()
-    print(1)
-```
->>>>>>> claude/project-thread-lpppf7
 
 ```ail skip=bootstrap tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.call.1,mcp.call.2
 fn main()
