@@ -61,6 +61,12 @@ now, testing is local on Linux and macOS
 
 AI agents: read [AGENTS.md](AGENTS.md) first.
 
+## Community token
+
+An AIL community token exists on pump.fun: [HFwDPcrXvYLNTyNbv4CQuqx3rH54f4AHNRn1n56Npump](https://pump.fun/coin/HFwDPcrXvYLNTyNbv4CQuqx3rH54f4AHNRn1n56Npump).
+
+It is not an investment and gives no rights in the project. The address above is the only official one; treat any other as an impersonation.
+
 ## License
 
 Apache License 2.0 with a Runtime Library Exception. See [LICENSE](LICENSE):
