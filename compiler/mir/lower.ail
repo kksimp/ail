@@ -608,6 +608,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                     if is_number(e)
                         or e.is_sized()
                         or e == Ty.Str
+                        or e == Ty.Bytes
                         or needs_copy(e)
                         or is_enum(e)
                         or is_shared_opt(e)
