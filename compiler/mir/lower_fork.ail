@@ -78,8 +78,8 @@ fn positive(v str) bool
             match value
                 Call(callee, args, cpos) =>
                     match callee
-                        Name(fname, npos) =>
-                            key := "{prefix}{fname}"
+                        Name(fn_name, npos) =>
+                            key := "{prefix}{fn_name}"
                             if bad.contains(key)
                                 return none
                             sig := sigs.get(key)?
@@ -95,7 +95,7 @@ fn positive(v str) bool
                                 lpos: lpos,
                                 value: value,
                                 key: key,
-                                fname: fname,
+                                fname: fn_name,
                                 npos: npos,
                                 cpos: cpos,
                                 args: args,
