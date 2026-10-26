@@ -168,7 +168,15 @@ pub fn run[T app.App + attach.Observe](mut a T) ! app.AppError
     inbox := app.new_inbox()
     g := TaskGroup()
     g.add(spawn listen_loop(l, inbox, hub))
-    mut w := Watched(inner: a, token: token, tr: attach.Tracker.new(), hub: hub, w: 800.0, h: 600.0, input: (env.get("AIL_ATTACH_INPUT") else "") == "1")
+    mut w := Watched(
+        inner: a,
+        token: token,
+        tr: attach.Tracker.new(),
+        hub: hub,
+        w: 800.0,
+        h: 600.0,
+        input: (env.get("AIL_ATTACH_INPUT") else "") == "1",
+    )
     app.run_with(mut w, app.host_path()?, [], inbox)?
     a = w.inner
     l.close()
