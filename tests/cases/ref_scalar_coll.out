@@ -1,0 +1,9 @@
+3
+true
+ref [1, 2, 3]
+1
+ref 7
+true
+false
+ref hi
+2
