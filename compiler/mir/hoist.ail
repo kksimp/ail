@@ -23,15 +23,15 @@ MAX_LISTS := 4
 pub fn hoist_headers(f Func) Func
     if opt_off("hoist") or f.name.starts_with("rt.")
         return f
-    loops := find_loops(f)
-    if loops.len() == 0
-        return f
     cand := candidates(f)
-    mut any := false
+    mut found := false
     for c in cand
         if c
-            any = true
-    if not any
+            found = true
+    if not found
+        return f
+    loops := find_loops(f)
+    if loops.len() == 0
         return f
     defs := defs_of(f)
     mut g := f
