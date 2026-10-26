@@ -1,0 +1,33 @@
+fn blocks(b bytes, size int) (List[bytes], List[int])
+    mut parts := List[bytes]()
+    mut lens := List[int]()
+    mut p := 0
+    while p < b.len()
+        hi := (p + size).min(b.len())
+        parts.push(b[p..hi])
+        lens.push(hi - p)
+        p = hi
+    (parts, lens)
+
+fn joined(parts List[bytes]) bytes
+    mut out := b""
+    for p in parts
+        out = out + p
+    out
+
+fn upper(parts List[bytes]) List[bytes]
+    mut out := [b"" for _ in 0..parts.len()]
+    for i in 0..parts.len()
+        out[i] = if parts[i].len() > 2 then parts[i] else b"xx"
+    out
+
+fn main()
+    parts, lens := blocks(b"abcdefgh", 3)
+    print(parts.len())
+    print(lens)
+    print(parts[2].text())
+    print(parts[0][1..3].text())
+    print(joined(parts).text())
+    kept := upper(parts)
+    print(kept[2].text())
+    print(joined(kept).text())
