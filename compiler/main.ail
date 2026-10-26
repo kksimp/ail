@@ -380,7 +380,7 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
     # A `for` the pool may take (conc.par.8) needs it; a text test keeps the checker out of this path.
-    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on() and src.contains("for ")
+    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on() and has_for_loop(src)
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -620,6 +620,13 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
 
 ## Source bytes past which the loop proof is skipped (ADR 0911).
 PROOF_MAX_BYTES := 1500000
+
+## Whether a source has a `for` loop (not `impl T for U`): a line starting with `for `.
+fn has_for_loop(text str) bool
+    for l in text.lines()
+        if l.trim().starts_with("for ")
+            return true
+    false
 
 ## Whether the independent loops may go to the pool (conc.par.8): by default,
 ## unless `AIL_PARALLEL=0`; `--deterministic` keeps every loop on one thread
