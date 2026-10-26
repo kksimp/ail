@@ -738,3 +738,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0918](0918-ail-mcp-compiler-tools.md) | `ail mcp`: the compiler's own tools (check, test, ask, impact, task) as an MCP server on stdio *(delegated)* | Accepted | 2026-10-26 |
 | [0919](0919-attach-input-opt-in.md) | `ail run --attach-input`: an opt-in `input` request so an agent can click and type in a running app | Accepted | 2026-10-26 |
 | [0920](0920-replay-shrink.md) | `ail replay --shrink`: the smallest recording that still fails the same way | Accepted | 2026-10-26 |
+| [0921](0921-std-app-font-op.md) | `std.app` `Font`: web fonts in the display list, kept by the host under an id | Accepted | 2026-10-26 |
