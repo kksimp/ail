@@ -592,7 +592,7 @@ POOL_IDLE_MS := 30000
 fn pool_get() int
     p := load64(global(NET_POOL))
     if p == 0
-        p = obj_new(8 + 32 * POOL_TOTAL, 4)
+        p = obj_new(16 + 32 * POOL_TOTAL, 4)
         store64(global(NET_POOL), p)
     p
 
@@ -613,6 +613,7 @@ fn pool_take(key str) int
         e := p + 8 + 32 * i
         if str_at(load64(e + 8)) == key
             h := load64(e)
+            sp := load64(e + 24)
             o := net_obj(h)
             dead := o == 0 or now >= load64(e + 16) or net_wait(load64(o + NET_FD), 1, 0) != 0
             pool_forget(p, i)
@@ -621,6 +622,9 @@ fn pool_take(key str) int
             else
                 store64(o + NET_POS, 0)
                 store64(o + NET_LEN, 0)
+                # The spare word of the entry (the state of an HTTP/2
+                # connection, else 0) is left after the entries.
+                store64(p + 8 + 32 * POOL_TOTAL, sp)
                 return h
         i -= 1
     0
@@ -649,6 +653,12 @@ fn pool_put(key str, h int, ms int)
     store64(e + 16, time_mono_ms() + ms)
     store64(e + 24, 0)
     store64(p, n + 1)
+
+## `pool_put` for an HTTP/2 connection with its state `c`.
+fn pool_put_h2(key str, h int, ms int, c int)
+    pool_put(key, h, ms)
+    p := pool_get()
+    store64(p + 8 + 32 * (load64(p) - 1) + 24, c)
 
 ## One request, on a pooled connection when there is one (std.net.19). A
 ## pooled connection that fails before a response byte arrives is dropped and
@@ -688,9 +698,23 @@ fn http_exchange_on(
         or method == "PUT"
         or method == "DELETE"
         or method == "OPTIONS"
+    # HTTP/2 is offered by ALPN (ADR 0913) unless the body streams
+    # (`net.open`) or `AIL_HTTP2=0`; a server that picks `http/1.1` gets the
+    # HTTP/1.1 request below on the same connection. An idle HTTP/2
+    # connection waits in the pool under `key2`, with its state.
+    h2ok := scheme == "https"
+        and (spec == 0 or load64(spec + 32) == 0)
+        and os_env_get("AIL_HTTP2") != "0"
+    key2 := "{key} h2"
     mut h := 0
+    mut h2c := 0
     if not fresh and not http_closes(if spec == 0 then 0 else load64(spec))
-        h = pool_take(key)
+        if h2ok
+            h = pool_take(key2)
+            if h != 0
+                h2c = load64(pool_get() + 8 + 32 * POOL_TOTAL)
+        if h == 0
+            h = pool_take(key)
     reused := h != 0
     if h == 0 and px != 0
         h = net_dial_ms(
@@ -711,13 +735,7 @@ fn http_exchange_on(
     if scheme == "https" and not reused and px != 0
         if not proxy_tunnel(h, host, port, px, url, at)
             return 0
-    # HTTP/2 is offered by ALPN (ADR 0913) unless the body streams
-    # (`net.open`) or `AIL_HTTP2=0`; a server that picks `http/1.1` gets the
-    # HTTP/1.1 request below on the same connection.
-    h2 := scheme == "https"
-        and not reused
-        and (spec == 0 or load64(spec + 32) == 0)
-        and os_env_get("AIL_HTTP2") != "0"
+    h2 := h2ok and not reused
     if scheme == "https" and not reused
         te := tc_connect_alpn(o, host, if h2 then 1 else 0)
         if te != 0
@@ -729,7 +747,11 @@ fn http_exchange_on(
             net_close(h)
             return 0
         if h2 and load64(load64(o + NET_TLS) + TS_ALPN) == 2
-            return h2_exchange(h, method, url, body, ctype, spec, next, u, at)
+            return h2_exchange(h, method, url, body, ctype, spec, next, u, key2, at)
+        why := if h2 then "" else " (h2 not offered)"
+        net_debug("net: http/1.1 {method} {url}{why}")
+    if h2c != 0
+        return h2_request(h2c, method, body, ctype, spec, next, u, again, true, key2, at)
     # The request.
     hdrs := if spec == 0 then 0 else load64(spec)
     strip := spec != 0 and load64(spec + 24) != 0

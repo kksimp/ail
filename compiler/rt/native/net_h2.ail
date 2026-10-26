@@ -51,12 +51,26 @@ H2_FT := 256
 H2_FF := 264
 H2_FS := 272
 H2_FL := 280
-H2_BYTES := 288
+H2_SID := 288
+H2_NEXT := 296
+H2_NOREUSE := 304
+H2_GOT := 312
+H2_RETRY := 320
+H2_BYTES := 328
 
 # Our SETTINGS: INITIAL_WINDOW_SIZE, and the connection window we open.
 H2_RWIN := 6291456
 H2_CWIN := 16777216
 H2_MAXF := 16384
+
+## With `AIL_NET_DEBUG` set, a line on standard error naming the protocol a
+## request used.
+fn net_debug(msg str)
+    if os_env_get("AIL_NET_DEBUG") != ""
+        err_begin()
+        out_str(msg)
+        out_str("\n")
+        err_end()
 
 fn h2_pow2(bits int) int
     mut v := 1
@@ -546,6 +560,7 @@ fn h2_read(c int) int
             "the server sent a frame of {n} bytes, over the 16384 allowed (FRAME_SIZE_ERROR)",
         )
         return 0
+    store64(c + H2_GOT, 1)
     store64(c + H2_FT, load8(p + 3))
     store64(c + H2_FF, load8(p + 4))
     store64(c + H2_FS, h2_r32(p + 5).bit_and(2147483647))
@@ -577,7 +592,7 @@ fn h2_pump(c int) int
         if k > H2_MAXF
             k = H2_MAXF
         last := pos + k == total
-        if h2_frame(c, 0, if last then 1 else 0, 1, s + 16 + pos, k) == 0
+        if h2_frame(c, 0, if last then 1 else 0, load64(c + H2_SID), s + 16 + pos, k) == 0
             return 0
         store64(c + H2_SWIN, sw - k)
         store64(c + H2_TWIN, tw - k)
@@ -598,7 +613,7 @@ fn h2_send_headers(c int, blk int, end_stream bool) int
         mut fl := if last then 4 else 0
         if first and end_stream
             fl += 1
-        if h2_frame(c, if first then 1 else 9, fl, 1, p + off, k) == 0
+        if h2_frame(c, if first then 1 else 9, fl, load64(c + H2_SID), p + off, k) == 0
             return 0
         off += k
         first = false
@@ -624,7 +639,7 @@ fn h2_credit(c int) int
             return 0
         store64(c + H2_CRCV, 0)
     if load64(c + H2_TRCV) >= H2_RWIN / 4 and load64(c + H2_DONE) == 0
-        if h2_window_update(c, 1, load64(c + H2_TRCV)) == 0
+        if h2_window_update(c, load64(c + H2_SID), load64(c + H2_TRCV)) == 0
             return 0
         store64(c + H2_TRCV, 0)
     1
@@ -636,6 +651,7 @@ fn h2_handle(c int) int
     s := load64(c + H2_FS)
     n := load64(c + H2_FL)
     p := load64(load64(c + H2_RB)) + 9
+    sid := load64(c + H2_SID)
     if load64(c + H2_INBLK) != 0 and ty != 9
         return h2_fail(
             c,
@@ -652,7 +668,7 @@ fn h2_handle(c int) int
             off = 1
             len = n - 1 - load8(p)
         store64(c + H2_CRCV, load64(c + H2_CRCV) + n)
-        if s == 1
+        if s == sid
             store64(c + H2_TRCV, load64(c + H2_TRCV) + n)
             if load64(c + H2_FINAL) == 0
                 return h2_fail(
@@ -667,7 +683,7 @@ fn h2_handle(c int) int
                 store64(c + H2_DONE, 1)
         return h2_credit(c)
     if ty == 1
-        if s != 1
+        if s != sid
             return h2_fail(c, "the server sent HEADERS on stream {s} (PROTOCOL_ERROR)")
         mut off := 0
         mut len := n
@@ -690,7 +706,7 @@ fn h2_handle(c int) int
         store64(c + H2_INBLK, 1)
         return 1
     if ty == 9
-        if load64(c + H2_INBLK) == 0 or s != 1
+        if load64(c + H2_INBLK) == 0 or s != sid
             return h2_fail(
                 c,
                 "the server sent a CONTINUATION without a header block (PROTOCOL_ERROR)",
@@ -744,7 +760,7 @@ fn h2_handle(c int) int
                     "the server's connection window is over 2^31 - 1 (FLOW_CONTROL_ERROR)",
                 )
             store64(c + H2_SWIN, w)
-        elif s == 1
+        elif s == sid
             w := load64(c + H2_TWIN) + inc
             if w > 2147483647
                 return h2_fail(
@@ -758,14 +774,16 @@ fn h2_handle(c int) int
             return h2_fail(c, "the server sent a GOAWAY of {n} bytes (FRAME_SIZE_ERROR)")
         last := h2_r32(p).bit_and(2147483647)
         code := h2_r32(p + 4)
-        if last < 1
+        store64(c + H2_NOREUSE, 1)
+        if last < sid
+            store64(c + H2_RETRY, 1)
             return h2_fail(
                 c,
                 "the server won't process the request: GOAWAY, {h2_err_name(code)} ({code})",
             )
         return 1
     if ty == 3
-        if s == 1
+        if s == sid
             if n != 4
                 return h2_fail(c, "the server sent a RST_STREAM of {n} bytes (FRAME_SIZE_ERROR)")
             code := h2_r32(p)
@@ -777,8 +795,9 @@ fn h2_handle(c int) int
 
 # ---- the exchange ----
 
-## One request over HTTP/2 on the TLS connection `h` (ALPN chose `h2`): the
-## response object as `http_exchange_on` makes it, or 0 after a failure.
+## One request over HTTP/2 on the new TLS connection `h` (ALPN chose `h2`):
+## the response object as `http_exchange_on` makes it, or 0 after a failure.
+## The connection then waits in the pool under `key2` (see `h2_request`).
 fn h2_exchange(
     h int,
     method str,
@@ -788,8 +807,17 @@ fn h2_exchange(
     spec int,
     next int,
     u int,
+    key2 str,
     at str,
 ) int
+    c := h2_open(h, url, at)
+    if c == 0
+        return 0
+    h2_request(c, method, body, ctype, spec, next, u, false, false, key2, at)
+
+## The state of a connection `h`, with the preface and our SETTINGS sent; 0
+## after a write failure (the connection is closed).
+fn h2_open(h int, url str, at str) int
     o := net_obj(h)
     c := obj_new(H2_BYTES, 4)
     for i in 0..H2_BYTES / 8
@@ -804,6 +832,7 @@ fn h2_exchange(
     store64(c + H2_TWIN, 65535)
     store64(c + H2_IWIN, 65535)
     store64(c + H2_DMAX, 4096)
+    store64(c + H2_NEXT, 1)
     dyn := obj_new(8 * 260, 4)
     for i in 0..260
         store64(dyn + 8 * i, 0)
@@ -820,11 +849,6 @@ fn h2_exchange(
         ni += 1
     store64(c + H2_SN, sn)
     store64(c + H2_SV, sv)
-    headers := map_new(1, 0, 0)
-    all := map_new(1, 1, 8)
-    store64(c + H2_HEADERS, headers)
-    store64(c + H2_ALL, all)
-    store64(c + H2_BODY, hb_new())
     store64(c + H2_BLK, hb_new())
     # The preface, our SETTINGS (no push; a large stream window; a header
     # list limit), and a larger connection window.
@@ -844,13 +868,52 @@ fn h2_exchange(
     store8(st + 12, 0)
     store8(st + 13, 6)
     h2_w32(st + 14, 262144)
-    if h2_frame(c, 4, 0, 0, st, 18) == 0
+    if h2_frame(c, 4, 0, 0, st, 18) == 0 or h2_window_update(c, 0, H2_CWIN - 65535) == 0
         net_close(h)
         return 0
-    if h2_window_update(c, 0, H2_CWIN - 65535) == 0
-        net_close(h)
-        return 0
-    # The request.
+    c
+
+## A failed request on `c`: the connection is closed. A reused connection
+## that the server had closed, or a request it says it did not process
+## (GOAWAY), is -1, to be sent again on a new connection when `again`.
+fn h2_abort(c int, again bool, reused bool) int
+    net_close(load64(c + H2_H))
+    if reused and again
+        if load64(c + H2_RETRY) != 0 or (load64(c + H2_GOT) == 0 and http_conn_lost())
+            err_clear()
+            return -1
+    0
+
+## One request on the stream `H2_NEXT` of `c`, a new connection or one from
+## the pool (`reused`). After a response that leaves the connection clean and
+## open it waits in the pool under `key2` with its state.
+fn h2_request(
+    c int,
+    method str,
+    body str,
+    ctype str,
+    spec int,
+    next int,
+    u int,
+    again bool,
+    reused bool,
+    key2 str,
+    at str,
+) int
+    h := load64(c + H2_H)
+    o := load64(c + H2_O)
+    url := str_at(load64(c + H2_URL))
+    store64(c + H2_AT, str_addr(at))
+    for k in [H2_STATUS, H2_FINAL, H2_KEEP, H2_ENDS, H2_INBLK, H2_DONE, H2_SEND, H2_SENDPOS, H2_TRCV, H2_ERR, H2_GOT, H2_RETRY]
+        store64(c + k, 0)
+    headers := map_new(1, 0, 0)
+    all := map_new(1, 1, 8)
+    store64(c + H2_HEADERS, headers)
+    store64(c + H2_ALL, all)
+    store64(c + H2_BODY, hb_new())
+    store64(c + H2_SID, load64(c + H2_NEXT))
+    store64(c + H2_NEXT, load64(c + H2_NEXT) + 2)
+    store64(c + H2_TWIN, load64(c + H2_IWIN))
     host := str_at(load64(u + 8))
     port := load64(u + 16)
     path := str_at(load64(u + 24))
@@ -862,16 +925,15 @@ fn h2_exchange(
     blk := hb_new()
     h2_build(c, blk, method, h2_authority(hdrs, dflt), path, has_body, blen, ctype, hdrs, strip)
     if h2_send_headers(c, blk, blen == 0) == 0
-        net_close(h)
-        return 0
+        return h2_abort(c, again, reused)
     if blen > 0
         store64(c + H2_SEND, str_addr(body))
     while load64(c + H2_DONE) == 0
         if h2_pump(c) == 0 or h2_read(c) == 0 or h2_handle(c) == 0
-            net_close(h)
-            return 0
-    net_close(h)
+            return h2_abort(c, again, reused)
     status := load64(c + H2_STATUS)
+    how := if reused then " (pooled connection)" else ""
+    net_debug("net: h2 {method} {url} -> {status}{how}")
     b := load64(c + H2_BODY)
     text := net_text(load64(b), load64(b + 8))
     raw := str_new(load64(b + 8), load64(b + 8))
@@ -888,161 +950,19 @@ fn h2_exchange(
         store64(next, str_addr(http_resolve(url, loc)))
     else
         store64(next, 0)
+    # Kept for the next request to this origin when nothing is half read:
+    # no GOAWAY, the socket buffer and the TLS record drained, no end of
+    # stream, and streams left to open.
+    st := load64(o + NET_TLS)
+    if load64(c + H2_NOREUSE) == 0
+        and load64(c + H2_NEXT) < 2000000000
+        and load64(o + NET_POS) == load64(o + NET_LEN)
+        and load64(o + NET_FLAGS).bit_and(NET_EOF) == 0
+        and load64(st + TS_PPOS) >= load64(st + TS_PLEN)
+        and load64(st + TS_CLOSED) == 0
+        and load64(c + H2_INBLK) == 0
+        store64(o + NET_DEADLINE, 0)
+        pool_put_h2(key2, h, POOL_IDLE_MS, c)
+    else
+        net_close(h)
     resp
-
-# ---- tables ----
-
-## The HPACK static table (RFC 7541 Appendix A): names, then values; index 0 is unused.
-fn h2_static_names() List[str]
-    xs := [
-        "",
-        ":authority",
-        ":method",
-        ":method",
-        ":path",
-        ":path",
-        ":scheme",
-        ":scheme",
-        ":status",
-        ":status",
-        ":status",
-        ":status",
-        ":status",
-        ":status",
-        ":status",
-        "accept-charset",
-        "accept-encoding",
-        "accept-language",
-        "accept-ranges",
-        "accept",
-        "access-control-allow-origin",
-        "age",
-        "allow",
-        "authorization",
-        "cache-control",
-        "content-disposition",
-        "content-encoding",
-        "content-language",
-        "content-length",
-        "content-location",
-        "content-range",
-        "content-type",
-        "cookie",
-        "date",
-        "etag",
-        "expect",
-        "expires",
-        "from",
-        "host",
-        "if-match",
-        "if-modified-since",
-        "if-none-match",
-        "if-range",
-        "if-unmodified-since",
-        "last-modified",
-        "link",
-        "location",
-        "max-forwards",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "range",
-        "referer",
-        "refresh",
-        "retry-after",
-        "server",
-        "set-cookie",
-        "strict-transport-security",
-        "transfer-encoding",
-        "user-agent",
-        "vary",
-        "via",
-        "www-authenticate",
-    ]
-    xs
-
-fn h2_static_values() List[str]
-    xs := [
-        "",
-        "",
-        "GET",
-        "POST",
-        "/",
-        "/index.html",
-        "http",
-        "https",
-        "200",
-        "204",
-        "206",
-        "304",
-        "400",
-        "404",
-        "500",
-        "",
-        "gzip, deflate",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-    ]
-    xs
-
-## The Huffman code of RFC 7541 Appendix B, symbols 0 to 256 in order: ten hex
-## digits each (the code in eight, its length in bits in two), twenty to a string.
-fn h2_huff_table() List[str]
-    xs := [
-        "00001ff80d007fffd8170fffffe21c0fffffe31c0fffffe41c0fffffe51c0fffffe61c0fffffe71c0fffffe81c00ffffea183ffffffc1e0fffffe91c0fffffea1c3ffffffd1e0fffffeb1c0fffffec1c0fffffed1c0fffffee1c0fffffef1c0ffffff01c",
-        "0ffffff11c0ffffff21c3ffffffe1e0ffffff31c0ffffff41c0ffffff51c0ffffff61c0ffffff71c0ffffff81c0ffffff91c0ffffffa1c0ffffffb1c0000001406000003f80a000003f90a00000ffa0c00001ff90d0000001506000000f808000007fa0b",
-        "000003fa0a000003fb0a000000f908000007fb0b000000fa0800000016060000001706000000180600000000050000000105000000020500000019060000001a060000001b060000001c060000001d060000001e060000001f060000005c07000000fb08",
-        "00007ffc0f000000200600000ffb0c000003fc0a00001ffa0d00000021060000005d070000005e070000005f0700000060070000006107000000620700000063070000006407000000650700000066070000006707000000680700000069070000006a07",
-        "0000006b070000006c070000006d070000006e070000006f07000000700700000071070000007207000000fc080000007307000000fd0800001ffb0d0007fff01300001ffc0d00003ffc0e000000220600007ffd0f000000030500000023060000000405",
-        "00000024060000000505000000250600000026060000002706000000060500000074070000007507000000280600000029060000002a0600000007050000002b0600000076070000002c06000000080500000009050000002d0600000077070000007807",
-        "00000079070000007a070000007b0700007ffe0f000007fc0b00003ffd0e00001ffd0d0ffffffc1c000fffe614003fffd216000fffe714000fffe814003fffd316003fffd416003fffd516007fffd917003fffd616007fffda17007fffdb17007fffdc17",
-        "007fffdd17007fffde1700ffffeb18007fffdf1700ffffec1800ffffed18003fffd716007fffe01700ffffee18007fffe117007fffe217007fffe317007fffe417001fffdc15003fffd816007fffe517003fffd916007fffe617007fffe71700ffffef18",
-        "003fffda16001fffdd15000fffe914003fffdb16003fffdc16007fffe817007fffe917001fffde15007fffea17003fffdd16003fffde1600fffff018001fffdf15003fffdf16007fffeb17007fffec17001fffe015001fffe115003fffe016001fffe215",
-        "007fffed17003fffe116007fffee17007fffef17000fffea14003fffe216003fffe316003fffe416007ffff017003fffe516003fffe616007ffff11703ffffe01a03ffffe11a000fffeb140007fff113003fffe716007ffff217003fffe81601ffffec19",
-        "03ffffe21a03ffffe31a03ffffe41a07ffffde1b07ffffdf1b03ffffe51a00fffff11801ffffed190007fff213001fffe31503ffffe61a07ffffe01b07ffffe11b03ffffe71a07ffffe21b00fffff218001fffe415001fffe51503ffffe81a03ffffe91a",
-        "0ffffffd1c07ffffe31b07ffffe41b07ffffe51b000fffec1400fffff318000fffed14001fffe615003fffe916001fffe715001fffe815007ffff317003fffea16003fffeb1601ffffee1901ffffef1900fffff41800fffff51803ffffea1a007ffff417",
-        "03ffffeb1a07ffffe61b03ffffec1a03ffffed1a07ffffe71b07ffffe81b07ffffe91b07ffffea1b07ffffeb1b0ffffffe1c07ffffec1b07ffffed1b07ffffee1b07ffffef1b07fffff01b03ffffee1a3fffffff1e",
-    ]
-    xs
