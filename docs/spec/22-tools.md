@@ -706,7 +706,7 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
-```ail tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.out.1
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.verify.5,task.status.1,task.finish.1,task.finish.2,task.out.1
 fn main()
     print(1)
 ```
@@ -1176,7 +1176,7 @@ fn adds()
     assert_eq(1 + 1, 3)
 ```
 
-```ail pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
+```ail skip=bootstrap pkg=snap_out tool=test,--update,FILE expect=updated rules=snap.update.5
 ```
 ## Record and replay
 **replay.rec.1** — `ail run --record R FILE` runs `FILE` as `ail run` does
