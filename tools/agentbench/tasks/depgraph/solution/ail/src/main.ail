@@ -92,7 +92,10 @@ fn main()
             io.exit(4)
         out = reach(if cmd == "deps" then g.needs else g.needed, args[1]).sorted()
     elif cmd == "cycles"
-        out = [n for n in g.nodes.sorted() if reach(g.needs, n).contains(n)]
+        for n in g.nodes.sorted()
+            found := reach(g.needs, n)
+            if found.contains(n)
+                out.push(n)
     else
         out = order(g)
         if out.len() < g.nodes.len()
