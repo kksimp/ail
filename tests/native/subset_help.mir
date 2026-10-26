@@ -24,12 +24,13 @@ fn loop_by_index(v0:xs List[List[int]]) int
   b0(v0:xs List[List[int]]):
     v1:total int = const 0
     v3 int = len v0:xs
+    v12 int = data v0:xs
     jump b1(v1:total)
   b1(v4 int):
     v5 bool = lt v4, v3
     branch v5, b2(), b3()
   b2:
-    v6:x List[int] = get v0:xs, v4
+    v6:x List[int] = ldx v12, v4 *8
     v7 int = const 1
     call rt.list_push(v6:x, v7)
     v9 int = add v4, v7

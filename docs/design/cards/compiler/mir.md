@@ -13,6 +13,7 @@ pub fn mir.fold(mir.Func) mir.Func
 pub fn mir.fold_in(mut mir.Func) [mutates]
 pub fn mir.rpo(mir.Func) List[int]
 pub fn mir.forward_loads(mir.Func) mir.Func
+pub fn mir.hoist_headers(mir.Func) mir.Func [env]
 pub fn mir.inline_module(mut mir.Module) [env mutates]
 pub fn mir.inline_call(mut mir.Func, int, int, mir.Func, mut List[mir.Site]) [mutates]
 pub fn mir.merge_blocks(mir.Func) mir.Func
@@ -90,4 +91,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1368); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1387); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
