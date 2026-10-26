@@ -629,7 +629,19 @@ unknown revision is an error: exit status 2.
 **api.impact.4** — The impact is the changed declarations, the affected
 functions, the affected tests and the *effects* changes: each function whose
 effects (`eff.infer.1`) differ, with the effects before and after. As JSON:
-`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`.
+`{"changed":[ids],"affected":[ids],"tests":[names],"effects":[{"id","old":[...],"new":[...]}]}`,
+and, only when they apply, `"via":{id:next}` (for each affected function, the declaration it
+names or calls on its way to a changed one), `"reaches":{test:[ids]}` (the changed declaration
+each affected test reaches) and `"partial":true` (`api.impact.5`). Text output adds one
+`via: fn:test > fn:caller > fn:changed` line per affected test.
+
+**api.impact.5** — When the edited version has check errors (not syntax or load
+errors) the impact is still printed, read from the graph as far as it resolves, with
+`"partial":true` (text: a `partial:` line), and the errors are shown. `ail ask
+--affected` and `ail edit --impact` do this for the edited version only: a signature
+change that breaks its callers lists those callers as affected, which are the
+functions that now need an edit. The version at the revision must still check. The
+exit status stays 2 for `ail edit` while it has errors.
 
 ```ail skip=bootstrap tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
 fn main()
@@ -1042,6 +1054,9 @@ has an `impact` member.
 ```
 
 ```ail skip=bootstrap pkg=edit_impact tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=tests: rules=edit.out.5,api.impact.1,api.impact.2,api.impact.4
+```
+
+```ail skip=bootstrap pkg=edit_impact_sig tool=edit,--dry-run,--impact,main.ail stdin=edits.json status=2 expect=partial: rules=edit.out.5,api.impact.2,api.impact.5
 ```
 
 ```ail tool=test,--update,FILE expect=updated rules=snap.update.1,snap.update.2,snap.update.5

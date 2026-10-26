@@ -135,12 +135,14 @@ pub fn command(args List[str], std str) int
     ) else ""
     # edit.out.5: `--impact` says which tests and effects the edit touches.
     mut touched := ""
-    if impact and errors == 0
+    # With check errors in the edited text it is a partial impact (api.impact.5): the callers that now need edits.
+    if impact and (errors == 0 or loaded.diags.len() == 0)
         before_edit := load.load_with(path, std, Map[str, str]()) else err
             io.eprint("error: {err.message}")
             return 2
         was := check.analyze(before_edit.program, true)
-        shown := api.impact_between(before_edit, was, loaded, analysis)
+        mut shown := api.impact_between(before_edit, was, loaded, analysis)
+        shown.partial = errors > 0
         touched = if json then ",\"impact\":{api.impact_json(shown)}" else api.impact_text(shown)
     kept := not dry and not (if_clean and errors > 0)
     if kept
