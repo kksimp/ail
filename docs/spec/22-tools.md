@@ -661,6 +661,11 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.status.1,task.finish.1,task.finish.2,task.out.1
+fn main()
+    print(1)
+```
+
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
