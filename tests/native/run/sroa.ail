@@ -1,0 +1,40 @@
+# A struct built and read inside one function needs no object (native.sroa.1);
+# one that is returned, stored, passed on or reassigned still behaves as a value.
+struct P
+    x float
+    y float
+
+fn P.add(self, o P) P
+    P(x: x + o.x, y: y + o.y)
+
+fn P.scale(self, k float) P
+    P(x: x * k, y: y * k)
+
+fn P.dot(self, o P) float
+    x * o.x + y * o.y
+
+fn norm(a P) float
+    a.add(a).scale(0.5).dot(a)
+
+fn pick(c bool, a P, b P) P
+    mut r := a
+    if c
+        r = b.add(b)
+    r
+
+fn main()
+    a := P(x: 1.0, y: 2.0)
+    b := P(x: 3.0, y: 4.0)
+    print(norm(a))
+    print(a.add(b).scale(2.0).dot(P(x: 1.0, y: 1.0)))
+    mut ps := List[P]()
+    for i in 0..3
+        ps.push(a.scale(i.to_float()))
+    print(ps[2].y)
+    c := pick(true, a, b)
+    d := pick(false, a, b)
+    print(c.x + d.y)
+    mut m := a.add(b)
+    m.x = 10.0
+    print(m.add(a).x)
+    print(a.x)
