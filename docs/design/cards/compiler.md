@@ -5,7 +5,7 @@ entry: main in main.ail
 
 ## a64 (74 items)
 
-## api (211 items)
+## api (214 items)
 
 ## ast (142 items)
 
@@ -33,7 +33,7 @@ entry: main in main.ail
 
 ## load (102 items)
 
-## mir (489 items)
+## mir (490 items)
 
 ## obj (65 items)
 
