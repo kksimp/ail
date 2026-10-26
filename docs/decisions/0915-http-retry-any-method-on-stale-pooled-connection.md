@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-26
-- **Decided by:** the designer ("follow current browser standards", 2026-10-26)
+- **Decided by:** the designer, Kaleb, 2026-10-26: "should the HTTP client retry a POST once on a fresh connection when a reused one dies before any reply? ... follow current browser standards"
 - **Topic:** 17 — Standard library (`std.net`)
 - **Spec rules:** std.net.19 (amended)
 - **Builds on:** [ADR 0913](0913-http2-client-over-alpn.md)
@@ -13,7 +13,7 @@ The client keeps idle connections in a pool (std.net.19). A server may close one
 
 ## Decision
 
-When a request on a **reused** pooled connection fails with a reset or end of file **before any response byte**, the client sends it again once on a new connection, **whatever its method**. This is what Chromium and Firefox do. It never resends after any response byte arrived, never on a connection it just opened, and never more than once. The body is a string held by the client, so it can be replayed. HTTP/2 keeps its rule (a reused connection that fails or answers GOAWAY for a stream it did not process) for every method too.
+When a request on a **reused** pooled connection fails with a reset or end of file **before any response byte**, the client sends it again once on a new connection, **whatever its method**. This matches current Chromium and Firefox, which both resend any method once on a fresh connection when a reused keep-alive socket fails before any response byte. It never resends after any response byte arrived, never on a connection it just opened, and never more than once. The body is a string held by the client, so it can be replayed. HTTP/2 keeps its rule (a reused connection that fails or answers GOAWAY for a stream it did not process) for every method too.
 
 ## Consequences
 
@@ -24,4 +24,5 @@ When a request on a **reused** pooled connection fails with a reset or end of fi
 
 - **Keep the method list.** A stale pooled socket fails `POST` on any real server that closes idle connections; callers cannot tell it from a real failure.
 - **Retry on any failure, or more than once.** It duplicates side effects after a reply started and hides real outages.
+- **Retry only idempotent methods (RFC 9110 section 9.2.2), the old rule.** The RFC allows an automatic retry only for them, but a stale pooled socket is common and the failure is invisible to the caller; browsers resend every method here and the designer chose their behaviour. The cost is stated under Consequences.
 - **Retry only with an idempotency key.** Browsers do not require one, and the designer asked for the browser behaviour.
