@@ -131,6 +131,16 @@ if [ "${1:-}" = run ]; then
                 v="${run_args[$((k + 1))]-}"
                 case "$v" in "" | *[!A-Za-z0-9_]*) die "\`--watch\` needs a variable name, e.g. \`--watch total\` (trace.watch.1)" ;; esac
                 export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}watch=$v"; trace_run=1; k=$((k + 2)) ;;
+            --at)
+                v="${run_args[$((k + 1))]-}"
+                probe_tail="${v##*:}"
+                case "$probe_tail" in "" | *[!0-9]*) die "error[probe.run.4]: \`--at\` needs FILE:LINE, e.g. \`--at main.ail:12\` (probe.run.4)" ;; esac
+                [ "$probe_tail" != "$v" ] && [ "${v%:*}" != "" ] || die "error[probe.run.4]: \`--at\` needs FILE:LINE, e.g. \`--at main.ail:12\` (probe.run.4)"
+                probe_at="$v"; k=$((k + 2)) ;;
+            --show)
+                v="${run_args[$((k + 1))]-}"
+                case "$v" in "" | *[!A-Za-z0-9_,]*) die "error[probe.run.4]: \`--show\` needs variable names, e.g. \`--show i,total\` (probe.run.4)" ;; esac
+                probe_show="${v//,/|}"; k=$((k + 2)) ;;
             --no-contracts) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}nocontracts"; k=$((k + 1)) ;;
             --trace | --trace=all) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace,traceeffects"; trace_run=1; k=$((k + 1)) ;;
             --trace=calls) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}trace"; trace_run=1; k=$((k + 1)) ;;
@@ -161,6 +171,11 @@ if [ "${1:-}" = run ]; then
         esac
     done
     run_skip=$k
+    # probe.run.1: `--at FILE:LINE --show a,b` builds the probe in; each needs the other.
+    if [ -n "${probe_at:-}${probe_show:-}" ]; then
+        [ -n "${probe_at:-}" ] && [ -n "${probe_show:-}" ] || die "error[probe.run.4]: \`--at\` and \`--show\` go together, e.g. \`--at main.ail:12 --show i,total\` (probe.run.4)"
+        export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}probe=$probe_at:$probe_show"; trace_run=1
+    fi
     # trace.run.1: with a trace, `--json` makes the events JSON objects.
     if [ "${trace_run:-}" = 1 ] && [ "$budget_opts" = " --json" ]; then
         budget_opts=""; export AIL_TRACE_JSON=1 AIL_INSTRUMENT="$AIL_INSTRUMENT,tracejson"

@@ -43,6 +43,8 @@ pub struct Instr
     tjson bool
     ## `watch=NAME`: the variable whose assignments are events (`--watch`, trace.watch.1).
     watch str
+    ## `probe=FILE:LINE:a|b`: the values shown at the start of a line (`--at`, `--show`, lower_probe.ail).
+    probe Probe
     ## The element write of the statement being lowered that is shown with a note
     ## (trace.watch.4): `wpos` identifies the operation (the method name's or the assignment's
     ## position, line 0 for none) and `wat` is the position the event shows. `noted` is set
@@ -299,6 +301,7 @@ fn new_instr() Instr
         effects: modes.split(",").contains("traceeffects"),
         tjson: modes.split(",").contains("tracejson"),
         watch: watch_name(modes),
+        probe: probe_spec(modes),
         wpos: ast.Pos(line: 0, col: 0),
         wat: ast.Pos(line: 0, col: 0),
         noted: false,
@@ -318,6 +321,7 @@ fn instr_owned(p str) bool
 fn Lower.instr_stmt(mut self, s ast.Stmt)
     if instr.watch != ""
         watch_stmt(s)
+    probe_stmt(s)
     if instr.sp >= 0 and instr.owner == fname
         vals_spill()
     if not (instr.on or instr.steps)

@@ -1,0 +1,83 @@
+## Probes (ADR 0921, probe.run.1-4): with `AIL_INSTRUMENT=probe=FILE:LINE:a|b` in the
+## environment, the statements that start on line LINE of FILE print the values of the
+## variables `a` and `b` in scope, as `probe: FILE:LINE a = V, b = W`, on standard
+## error. The events share the budget of the watch events (trace.run.4). Without
+## the mode nothing is emitted. The dispatch is one call at the top of `instr_stmt`
+## (lower_instr.ail).
+use ast
+
+## The line to probe and the names to show; `line` is 0 for no probe.
+pub struct Probe
+    file str
+    line int
+    names List[str]
+
+## The probe of the `probe=FILE:LINE:a|b` mode among `modes`, if any (probe.run.1).
+fn probe_spec(modes str) Probe
+    for m in modes.split(",")
+        if not m.starts_with("probe=")
+            continue
+        body := m.slice(6, m.len())
+        c2 := body.rfind(":") else continue
+        names := body.slice(c2 + 1, body.len()).split("|")
+        head := body.slice(0, c2)
+        c1 := head.rfind(":") else continue
+        n := head.slice(c1 + 1, head.len()).to_int() else continue
+        return Probe(file: head.slice(0, c1), line: n, names: names)
+    Probe(file: "", line: 0, names: [])
+
+## Whether the file `path` is the one the probe names, given in full or from some directory down.
+fn probe_file(path str, file str) bool
+    path == file or path.ends_with("/{file}") or file.ends_with("/{path}")
+
+## The value of variable `name` in scope: its text, or as JSON when `json`; `<unset>` for a name that
+## is not a variable here and `<type>` for a value the describers can't print (probe.run.2).
+fn Lower.probe_value(mut self, name str, json bool, pos ast.Pos)
+    key := lookup(name) else
+        say("<unset>")
+        return
+    ty := var_ty.get(key) else
+        say("<unset>")
+        return
+    if not vals_printable(ty, structs)
+        say("<type>")
+        return
+    v := Val(id: read_var(key, cur), ty: ty)
+    if json
+        watch_value(v, pos)
+    else
+        describe(v, pos)
+
+## The start of statement `s`: a probe event when it starts on the probed line (probe.run.1).
+fn Lower.probe_stmt(mut self, s ast.Stmt)
+    p := instr.probe
+    if p.line == 0 or is_rt or unchecked or fname.ends_with(".nc") or not instr_owned(path)
+        return
+    if instr_line(s) != p.line or not probe_file(path, p.file)
+        return
+    pos := ast.Pos(line: p.line, col: 0)
+    opened := call("rt.watch_open", [], Ty.Bool)
+    on := new_block()
+    cont := new_block()
+    branch(opened, on, [], cont, [])
+    seal(on)
+    cur = on
+    if instr.tjson
+        say("\{\"api\":1,\"trace\":\"probe\",\"at\":\"{jq(path)}:{p.line}\"")
+        for name in p.names
+            say(",\"{jq(name)}\":\"")
+            probe_value(name, true, pos)
+            say("\"")
+        say("}\n")
+    else
+        say("probe: {path}:{p.line}")
+        mut sep := " "
+        for name in p.names
+            say("{sep}{name} = ")
+            probe_value(name, false, pos)
+            sep = ", "
+        say("\n")
+    call("rt.watch_close", [], Ty.Unit)
+    jump(cont, [])
+    seal(cont)
+    cur = cont
