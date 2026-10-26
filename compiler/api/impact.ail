@@ -98,11 +98,15 @@ fn is_top_decl(id str) bool
         or id.starts_with("trait:")
         or id.starts_with("const:")
 
-## The text of every function, type, trait and constant of a version, by id.
-fn Snap.texts_by_id(self) Map[str, str]
+fn is_member(id str) bool
+    id.starts_with("field:") or id.starts_with("variant:")
+
+## The text of every function, type, trait and constant of a version, by id; with `members`, of every
+## field and variant instead.
+fn Snap.texts_by_id(self, members bool) Map[str, str]
     mut out := Map[str, str]()
     for d in decls
-        if not is_top_decl(d.1) or d.0.line >= 1073741824
+        if (if members then not is_member(d.1) else not is_top_decl(d.1)) or d.0.line >= 1073741824
             continue
         mut at := -1
         for i in 0..prog.files.len()
@@ -150,6 +154,39 @@ fn also_reaches(id str, known List[str]) List[str]
             out.push("method:{parts[1]}.{parts[2]}")
     out
 
+## The ids a change to type `id` seeds (api.impact.6). When only existing fields or variants changed, just
+## those: a function that reads another field is not affected. When one was added or removed, or the
+## type's own line changed, the type and every member, as before.
+fn id_and(id str, rest List[str]) List[str]
+    mut out := [id]
+    for x in rest
+        out.push(x)
+    out
+
+fn type_seeds(
+    id str,
+    old_members Map[str, str],
+    new_members Map[str, str],
+    known List[str],
+) List[str]
+    owner := id.slice(5, id.len())
+    mut touched := List[str]()
+    mut shape := false
+    for m in new_members.keys().sorted(by: |x| x)
+        if not (m.starts_with("field:{owner}.") or m.starts_with("variant:{owner}."))
+            continue
+        if not old_members.contains(m)
+            shape = true
+        elif old_members.get(m) != new_members.get(m)
+            touched.push(m)
+    for m in old_members.keys()
+        if (m.starts_with("field:{owner}.") or m.starts_with("variant:{owner}."))
+            and not new_members.contains(m)
+            shape = true
+    if shape or touched.len() == 0
+        return id_and(id, also_reaches(id, known))
+    touched
+
 ## What changed between `old` and `new` can reach (api.impact.1-3).
 pub fn impact_between(
     old load.Loaded,
@@ -159,8 +196,10 @@ pub fn impact_between(
 ) Impact
     before := snapshot(old, old_analysis)
     after := snapshot(new, new_analysis)
-    old_text := before.texts_by_id()
-    new_text := after.texts_by_id()
+    old_text := before.texts_by_id(false)
+    new_text := after.texts_by_id(false)
+    old_members := before.texts_by_id(true)
+    new_members := after.texts_by_id(true)
     mut changed := List[str]()
     for id in new_text.keys().sorted(by: |x| x)
         if old_text.get(id) != new_text.get(id)
@@ -181,9 +220,7 @@ pub fn impact_between(
     mut queue := List[str]()
     mut seeded := Set[str]()
     for id in changed
-        queue.push(id)
-        seeded.add(id)
-        for x in also_reaches(id, known_list)
+        for x in (if id.starts_with("type:") then type_seeds(id, old_members, new_members, known_list) else id_and(id, also_reaches(id, known_list)))
             if not seeded.contains(x)
                 seeded.add(x)
                 queue.push(x)
@@ -196,7 +233,7 @@ pub fn impact_between(
     mut root := Map[str, str]()
     for id in changed
         root[id] = id
-        for x in also_reaches(id, known_list)
+        for x in (if id.starts_with("type:") then type_seeds(id, old_members, new_members, known_list) else also_reaches(id, known_list))
             if not root.contains(x)
                 root[x] = id
     mut at := 0

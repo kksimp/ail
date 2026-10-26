@@ -1,11 +1,11 @@
 # compiler
 entry: main in main.ail
 
-## (root) (63 items)
+## (root) (62 items)
 
 ## a64 (74 items)
 
-## api (214 items)
+## api (217 items)
 
 ## ast (142 items)
 
@@ -13,7 +13,7 @@ entry: main in main.ail
 
 ## budget (27 items)
 
-## check (357 items)
+## check (362 items)
 
 ## codegen (55 items)
 
@@ -33,7 +33,7 @@ entry: main in main.ail
 
 ## load (102 items)
 
-## mir (490 items)
+## mir (493 items)
 
 ## obj (65 items)
 
