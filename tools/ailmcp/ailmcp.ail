@@ -163,7 +163,10 @@ fn call(id Json, params Json)
     ran := proc.run(env.get("AIL") else "./ail", cmd.argv) else err
         reply(id, tool_result("can't run ail: {err}", true))
         return
-    reply(id, tool_result("{ran.out}{ran.err}", ran.status != 0))
+    text := "{ran.out}{ran.err}"
+    # A clean check prints nothing; say so (mcp.call.1).
+    shown := if text.trim() == "" then "ok (exit {ran.status})" else text
+    reply(id, tool_result(shown, ran.status != 0))
 
 ## One message (mcp.proto.1: `initialize`, `ping`, `tools/list`, `tools/call`; anything else is -32601).
 fn handle(req Json)
