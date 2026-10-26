@@ -7,11 +7,11 @@ entry: main in main.ail
 
 ## api (211 items)
 
-## ast (129 items)
+## ast (142 items)
 
 ## budget (27 items)
 
-## check (347 items)
+## check (349 items)
 
 ## codegen (55 items)
 
@@ -31,7 +31,7 @@ entry: main in main.ail
 
 ## load (102 items)
 
-## mir (500 items)
+## mir (488 items)
 
 ## obj (65 items)
 
