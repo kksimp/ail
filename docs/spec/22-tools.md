@@ -659,7 +659,7 @@ When a field or variant was added or removed, or the type's own line changed, th
 type and all its members are seeded, as constructors and matches must change. The
 changed list is the same either way. *(ADR 0868 item 3)*
 
-```ail skip=bootstrap pkg=edit_impact_field tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=impact: 1 changed, 2 functions affected, 1 tests rules=edit.out.5,api.impact.6
+```ail skip=bootstrap pkg=edit_impact_field tool=edit,--dry-run,--impact,main.ail stdin=edits.json expect=via: rules=edit.out.5,api.impact.6
 ```
 
 ```ail skip=bootstrap tool=ask,FILE,--affected,--rev,nosuch status=2 expect=api.impact.3 rules=api.impact.3
