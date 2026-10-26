@@ -3,6 +3,7 @@
 a64  74 items
 api  211 items
 ast  142 items
+attachcli  6 items
 budget  27 items
 check  357 items
 codegen  55 items
