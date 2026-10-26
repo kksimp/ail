@@ -39,7 +39,9 @@ TS_SUITE := 336
 TS_HL := 344
 TS_RAK := 352
 TS_WAK := 360
-TS_BYTES := 368
+TS_ALPN := 368
+TS_ALPNO := 376
+TS_BYTES := 384
 
 # Global slot 42: the cache of trusted roots (tc_cached_roots).
 TLS_ROOTS := 42
@@ -532,7 +534,7 @@ fn tc_cached_roots(st int) List[List[int]]
 
 # ---- the handshake ----
 
-fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien int) int
+fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien int, alpn int) int
     mut b := 4
     b = tc_w16(ch, b, 771)
     copy_bytes(ch + b, rnd, 32)
@@ -570,6 +572,17 @@ fn tc_client_hello(ch int, host str, rnd int, pubkey int, cookie int, cookien in
     b = tc_w16(ch, b, 16)
     for s in [1027, 1283, 2052, 2053, 2054, 1025, 1281, 1537]
         b = tc_w16(ch, b, s)
+    # ALPN (RFC 7301): `h2` then `http/1.1`, when the caller can speak HTTP/2.
+    if alpn != 0
+        b = tc_w16(ch, b, 16)
+        b = tc_w16(ch, b, 14)
+        b = tc_w16(ch, b, 12)
+        b = tc_w8(ch, b, 2)
+        b = tc_w8(ch, b, 104)
+        b = tc_w8(ch, b, 50)
+        b = tc_w8(ch, b, 8)
+        copy_bytes(ch + b, str_addr("http/1.1") + 16, 8)
+        b += 8
     b = tc_w16(ch, b, 51)
     b = tc_w16(ch, b, 38)
     b = tc_w16(ch, b, 36)
@@ -737,11 +750,44 @@ fn tc_scheme_alg(scheme int) int
     0
 
 ## Handshake over the connected socket object `o` for `host`: 0 or an error.
+## The ALPN extension (RFC 7301) among the `n` bytes of EncryptedExtensions
+## at `p`: `TS_ALPN` is 2 for `h2`, else 1 (`http/1.1`, also when none was
+## named). A protocol that wasn't offered is an error (no_application_protocol).
+fn tc_alpn(st int, p int, n int) int
+    store64(st + TS_ALPN, 1)
+    mut i := 0
+    while i + 4 <= n
+        ty := tc_r16(p + i)
+        len := tc_r16(p + i + 2)
+        if i + 4 + len > n
+            return tc_bad(st, "EncryptedExtensions")
+        if ty == 16 and load64(st + TS_ALPNO) != 0
+            q := p + i + 4
+            if len < 4 or tc_r16(q) + 2 != len or load8(q + 2) + 3 != len
+                return tc_bad(st, "ALPN extension")
+            pl := load8(q + 2)
+            if pl == 2 and load8(q + 3) == 104 and load8(q + 4) == 50
+                store64(st + TS_ALPN, 2)
+            elif pl != 8 or load8(q + 3) != 104 or load8(q + 4) != 116 or load8(q + 5) != 116 or load8(q + 6) != 112
+                return tc_err(
+                    st,
+                    0,
+                    "the server chose an application protocol that wasn't offered (no_application_protocol)",
+                )
+        i += 4 + len
+    0
+
 fn tc_connect(o int, host str) int
+    tc_connect_alpn(o, host, 0)
+
+## `tc_connect`, offering ALPN `h2` and `http/1.1` when `alpn` is not 0; the
+## server's choice is then `TS_ALPN` (2 `h2`, 1 `http/1.1`).
+fn tc_connect_alpn(o int, host str, alpn int) int
     st := obj_new(TS_BYTES, 4)
     for i in 0..TS_BYTES / 8
         store64(st + 8 * i, 0)
     store64(o + NET_TLS, st)
+    store64(st + TS_ALPNO, alpn)
     store64(st + TS_REC, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
     store64(st + TS_PBUF, alloc_raw(TC_REC_MAX + 32, KIND_BYTES))
     store64(st + TS_HS, alloc_raw(TC_HS_MAX + 16, KIND_BYTES))
@@ -757,7 +803,7 @@ fn tc_connect(o int, host str) int
     pubkey := alloc_raw(32, KIND_BYTES)
     x25519_base(pubkey, rnd + 64)
     ch := alloc_raw(900, KIND_BYTES)
-    chn := tc_client_hello(ch, host, rnd, pubkey, 0, 0)
+    chn := tc_client_hello(ch, host, rnd, pubkey, 0, 0, alpn)
     w := tc_write_record(o, 22, ch, chn)
     if w < 0
         return w
@@ -817,7 +863,7 @@ fn tc_connect(o int, host str) int
             return e
         tc_drop(st)
         ch2 := alloc_raw(900 + load64(ck + 8), KIND_BYTES)
-        ch2n := tc_client_hello(ch2, host, rnd, pubkey, load64(ck), load64(ck + 8))
+        ch2n := tc_client_hello(ch2, host, rnd, pubkey, load64(ck), load64(ck + 8), alpn)
         w = tc_write_record(o, 22, ch2, ch2n)
         if w < 0
             return w
@@ -890,6 +936,9 @@ fn tc_connect(o int, host str) int
     m := load64(st + TS_MLEN)
     if m < 6 or tc_r16(hs + 4) + 6 != m
         return tc_bad(st, "EncryptedExtensions")
+    e = tc_alpn(st, hs + 6, m - 6)
+    if e != 0
+        return e
     e = tc_tr_add(st, hs, m)
     if e != 0
         return e

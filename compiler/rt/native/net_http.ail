@@ -711,8 +711,15 @@ fn http_exchange_on(
     if scheme == "https" and not reused and px != 0
         if not proxy_tunnel(h, host, port, px, url, at)
             return 0
+    # HTTP/2 is offered by ALPN (ADR 0913) unless the body streams
+    # (`net.open`) or `AIL_HTTP2=0`; a server that picks `http/1.1` gets the
+    # HTTP/1.1 request below on the same connection.
+    h2 := scheme == "https"
+        and not reused
+        and (spec == 0 or load64(spec + 32) == 0)
+        and os_env_get("AIL_HTTP2") != "0"
     if scheme == "https" and not reused
-        te := tc_connect(o, host)
+        te := tc_connect_alpn(o, host, if h2 then 1 else 0)
         if te != 0
             if te <= -1000000
                 msg := str_at(load64(load64(o + NET_TLS) + TS_MSG))
@@ -721,6 +728,8 @@ fn http_exchange_on(
             net_io_fail(o, te, at)
             net_close(h)
             return 0
+        if h2 and load64(load64(o + NET_TLS) + TS_ALPN) == 2
+            return h2_exchange(h, method, url, body, ctype, spec, next, u, at)
     # The request.
     hdrs := if spec == 0 then 0 else load64(spec)
     strip := spec != 0 and load64(spec + 24) != 0
