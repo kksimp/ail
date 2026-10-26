@@ -39,6 +39,10 @@ iterations as workers", so a 16-iteration loop of one add would pay a dispatch.
    pays for the proof. Trade-off: a very large app (over 1.5 MB) gets no
    automatic loops until the build reuses a checked program; its `par for`
    still works.
+6. **A written `par for` that falls back says why (conc.par.13).** The lowering
+   scan names the first construct it refuses; `ail build` and `ail run` print a
+   warning, and `ail check` warns the same way: the scan lives in `ast/parscan.ail`, shared with the
+   checker.
 
 ## Rejected alternatives
 

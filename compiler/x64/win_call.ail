@@ -154,4 +154,5 @@ pub fn win_sample() mir.Module
         lines: [],
         files: ["win_sample.ail"],
         file_lines: [[]],
+        notes: [],
     )

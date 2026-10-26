@@ -72,6 +72,9 @@ pub struct TaskState
     ## pool: no `spawn`, atomics, channels or UI in the program, so ordinary
     ## code still runs its trap cleanups (the runtime skips them on workers).
     auto_only bool
+    ## Why the last `par_plan` ran the loop in order, and the warnings of the build.
+    why str
+    notes List[str]
 
 pub fn new_task_state() TaskState
     TaskState(
@@ -87,6 +90,8 @@ pub fn new_task_state() TaskState
         exits: [],
         built: 0,
         auto_only: false,
+        why: "",
+        notes: [],
     )
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
@@ -408,222 +413,34 @@ fn Lower.gen_task_dispatch(mut self)
 
 # ---- parallel loops (conc.par.*, ADR 0601) ----
 
-## What a loop body does, for deciding whether its chunks can run apart.
-struct ParScan
-    ## Every name the body mentions, and those it declares itself.
-    names Set[str]
-    decls Set[str]
-    ## Reads of a name (not as the target of an assignment).
-    reads Map[str, int]
-    ## `x += e` statements outside nested loops, by name.
-    adds Map[str, int]
-    ## Names assigned in any other way.
-    other Set[str]
-    ## Names whose value a method call or `mut` argument may change.
-    mutated Set[str]
-    ## Operations one iteration costs: nested loops count 16 times (conc.par.12).
-    work int
-    mult int
-    ## A construct the parallel version doesn't take.
-    bad bool
-
-fn new_scan() ParScan
-    ParScan(
-        names: Set[str](),
-        decls: Set[str](),
-        reads: {},
-        adds: {},
-        other: Set[str](),
-        mutated: Set[str](),
-        work: 0,
-        mult: 1,
-        bad: false,
-    )
-
-## Methods that only read their receiver.
-READ_ONLY := [
-    "len",
-    "abs",
-    "min",
-    "max",
-    "to_float",
-    "to_int",
-    "sqrt",
-    "floor",
-    "ceil",
-    "bit_and",
-    "bit_or",
-    "bit_xor",
-    "shl",
-    "shr",
-    "join",
-    "chars",
-]
-
-fn is_add(op ast.BinOp?) bool
-    o := op else return false
-    match o
-        Add => true
-        _ => false
-
-fn root_name(e ast.Expr) str?
-    match e
-        Name(n, _) => n
-        Index(r, _, _) => root_name(r)
-        _ => none
-
-fn scan_block(mut sc ParScan, body List[ast.Stmt], depth int)
-    for s in body
-        scan_stmt(mut sc, s, depth)
-
-fn count_up(mut m Map[str, int], key str)
-    mut n := 1
-    if prev := m.get(key)
-        n = prev + 1
-    m[key] = n
-
-fn scan_stmt(mut sc ParScan, s ast.Stmt, depth int)
-    match s
-        Let(name, _, _, value, otherwise) =>
-            if otherwise != none
-                sc.bad = true
-            scan_expr(mut sc, value)
-            sc.decls.add(name)
-        LetTuple(_, _, _) => sc.bad = true
-        Assign(target, op, value, _) =>
-            scan_expr(mut sc, value)
-            match target
-                Name(n, _) =>
-                    sc.names.add(n)
-                    if is_add(op) and depth == 0
-                        count_up(mut sc.adds, n)
-                    else
-                        sc.other.add(n)
-                Index(r, i, _) =>
-                    scan_expr(mut sc, i)
-                    scan_place(mut sc, r)
-                _ => sc.bad = true
-        While(cond, body, _) =>
-            sc.mult = sc.mult * 16
-            scan_expr(mut sc, cond)
-            scan_block(mut sc, body, depth + 1)
-            sc.mult = sc.mult / 16
-        For(_, var, _, _, iter, body, _) =>
-            scan_expr(mut sc, iter)
-            sc.decls.add(var)
-            sc.mult = sc.mult * 16
-            scan_block(mut sc, body, depth + 1)
-            sc.mult = sc.mult / 16
-        Break(_) =>
-            if depth == 0
-                sc.bad = true
-        Continue(_) => return
-        Eval(e) => scan_expr(mut sc, e)
-        Return(_, _) => sc.bad = true
-        Handle(_, _) | Defer(_, _) | With(_, _, _, _, _) | Unsafe(_, _) => sc.bad = true
-
-## The place an element is stored into: the indexes are read, the list is
-## only named.
-fn scan_place(mut sc ParScan, e ast.Expr)
-    match e
-        Name(n, _) => sc.names.add(n)
-        Index(r, i, _) =>
-            scan_expr(mut sc, i)
-            scan_place(mut sc, r)
-        _ => sc.bad = true
-
-## `n` operations per run of the innermost loop; the total stays far from `int`.
-fn scan_cost(mut sc ParScan, n int)
-    if sc.work < 1000000000
-        sc.work += n * sc.mult
-
-fn scan_expr(mut sc ParScan, e ast.Expr)
-    match e
-        Int | Float | Bool | Str => return
-        Name(n, _) =>
-            sc.names.add(n)
-            count_up(mut sc.reads, n)
-        Interp(parts, _) =>
-            for p in parts
-                match p
-                    Lit => continue
-                    Hole(x) => scan_expr(mut sc, x)
-                    Fmt(x, _) => scan_expr(mut sc, x)
-        Call(callee, args, _) =>
-            scan_cost(mut sc, 8)
-            match callee
-                Name => scan_args(mut sc, args)
-                _ => sc.bad = true
-        Method(recv, name, _, args) =>
-            scan_cost(mut sc, 2)
-            if not READ_ONLY.contains(name)
-                r := root_name(recv) else
-                    sc.bad = true
-                    return
-                sc.mutated.add(r)
-            scan_expr(mut sc, recv)
-            scan_args(mut sc, args)
-        Index(r, i, _) =>
-            scan_cost(mut sc, 2)
-            scan_expr(mut sc, r)
-            scan_expr(mut sc, i)
-        Unary(o, x, _) =>
-            match o
-                Spawn => sc.bad = true
-                Neg | Not => scan_expr(mut sc, x)
-        Binary(_, a, b, _) =>
-            scan_cost(mut sc, 1)
-            scan_expr(mut sc, a)
-            scan_expr(mut sc, b)
-        ListLit(items, _) =>
-            for x in items
-                scan_expr(mut sc, x)
-        Range(a, b, _, _) =>
-            if x := a
-                scan_expr(mut sc, x)
-            if y := b
-                scan_expr(mut sc, y)
-        If(branches, els, _, _) =>
-            for b in branches
-                match b.cond
-                    Test(x) => scan_expr(mut sc, x)
-                    Bind => sc.bad = true
-                scan_block(mut sc, b.body, 1)
-            if body := els
-                scan_block(mut sc, body, 1)
-        _ => sc.bad = true
-
-fn scan_args(mut sc ParScan, args List[ast.Arg])
-    for a in args
-        if a.mutable
-            r := root_name(a.value) else
-                sc.bad = true
-                return
-            sc.mutated.add(r)
-        scan_expr(mut sc, a.value)
+## Run the loop in order, and say why (`tk.why`, shown for a written `par for`).
+fn Lower.decline(mut self, why str) ParSite?
+    tk.why = why
+    none
 
 ## Whether a `par for` can run its iterations in chunks on the pool, and
 ## what its chunks need (conc.par.8): it writes only list elements and `int`
 ## accumulators, each updated by one `+=` outside nested loops.
 fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos) ParSite?
+    tk.why = ""
     if not tk.on or tk.in_chunk
         return none
     mut by_list := false
     match iter
         Range(a, b, incl, _) =>
             if a == none or b == none or incl
-                return none
+                return decline("the loop is not `lo..hi` (an open or inclusive range)")
         Name(n, _) =>
-            key := lookup(n)?
-            e := var_ty[key].elem()?
+            key := lookup(n) else return decline("the loop is over `{n}`, which is not a local list")
+            e := var_ty[key].elem() else return decline("`{n}` is not a list")
             if e.elem() != none or mutates(body, iter)
-                return none
+                return decline("the list `{n}` is nested or changed in the body")
             by_list = true
-        _ => return none
-    mut sc := new_scan()
-    scan_block(mut sc, body, 0)
+        _ => return decline("the loop is not over `lo..hi` or a list variable")
+    mut sc := ast.new_scan()
+    ast.scan_block(mut sc, body, 0)
     if sc.bad
-        return none
+        return decline("the body has {sc.why}")
     mut caps := List[Cap]()
     mut accs := List[str]()
     mut atomic := false
@@ -633,30 +450,30 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         key := lookup(n) else
             # A field of `self` is not in the chunk's scope: run in order.
             if self_slot(n) >= 0
-                return none
+                return decline("the body reads the field `{n}` of `self`; copy it to a local first")
             continue
         ty := var_ty[key]
         if sc.decls.contains(n)
-            return none
+            return decline("the body declares `{n}`, which an outer variable also has")
         if ty.is_unknown() or ty.is_unit() or tk.rets.contains(key)
-            return none
+            return decline("the body uses `{n}`, whose type or kind a chunk can't capture")
         if sc.mutated.contains(n) and ty.elem() != none
-            return none
+            return decline("the body changes the captured list `{n}` (`push` or a `mut` argument)")
         n_adds := sc.adds.get(n) else 0
         n_reads := sc.reads.get(n) else 0
         if n_adds > 0
             if ty != Ty.Int or n_adds != 1 or n_reads > 0 or sc.other.contains(n)
-                return none
+                return decline("`{n}` is updated by more than one `+=`, is read, or is not an `int`")
             accs.push(n)
         elif sc.other.contains(n)
-            return none
+            return decline("the body assigns the outer variable `{n}`")
         if ty.elem() == none and atomic_elem(ty) != none
             atomic = true
         caps.push(Cap(name: n, ty: ty))
     if accs.len() > 3 or atomic and accs.len() > 0
-        return none
+        return decline("more than three `+=` accumulators, or an atomic with one")
     if by_list
-        key := lookup(root_of(iter))?
+        key := lookup(root_of(iter)) else return decline("the list is not a local")
         caps.push(Cap(name: "__plist", ty: var_ty[key]))
     ParSite(
         var: var,
@@ -692,6 +509,13 @@ fn Lower.lower_par_for(
     auto bool,
 )
     plan := par_plan(var, iter, body, pos) else
+        # A written `par for` is a promise of speed: say when it isn't kept.
+        # `ail check` already warned about what the shared scan refuses.
+        shared := tk.why.starts_with("the body has") or tk.why.starts_with("the loop is not over")
+        if not auto and tk.why != "" and not tk.in_chunk and not shared
+            note := "{file_paths[file]}:{pos.line}:{pos.col}: warning[conc.par.13]: `par for {var}` runs in order: {tk.why}"
+            if not tk.notes.contains(note)
+                tk.notes.push(note)
         lower_for(var, iter, body, false, pos)
         return
     scopes.push(Map[str, str]())
