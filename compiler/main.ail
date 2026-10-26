@@ -379,8 +379,13 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
     src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
-    # A `for` the pool may take (conc.par.8) needs it; a text test keeps the checker out of this path.
-    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on() and has_for_loop(src)
+    # A loop the pool may take (conc.par.8) needs it, and only then: with the
+    # task runtime a trap no longer runs the program's cleanups (unwind_live).
+    tasks := mir.uses_tasks(src)
+        or mentions_ui(src)
+        or parallel_on()
+        and has_for_loop(src)
+        and par_keys(path, "{dir}/../../../std", src.len()).len() > 0
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -597,7 +602,7 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     mut size := 0
     for src in srcs
         size += src.text.len()
-    pooled := if size > PROOF_MAX_BYTES then Set[str]() else proven_loop_keys(path, std)
+    pooled := par_keys(path, std, size)
     m := mir.lower_package_par(srcs, rt, lazy, pooled) else err
         for i in 0..err.items.len()
             p := err.items[i]
@@ -620,6 +625,13 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
 
 ## Source bytes past which the loop proof is skipped (ADR 0911).
 PROOF_MAX_BYTES := 1500000
+
+## The proven loops of the program, none when it is too big to check again
+## (ADR 0911).
+fn par_keys(file str, std str, size int) Set[str]
+    if size > PROOF_MAX_BYTES
+        return Set[str]()
+    proven_loop_keys(file, std)
 
 ## Whether a source has a `for` loop (not `impl T for U`): a line starting with `for `.
 fn has_for_loop(text str) bool
