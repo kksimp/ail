@@ -264,7 +264,14 @@ fn sd_side(path_arg str, run_tests bool, std str) SSide ! DiffError
         got := sd_tests(path_arg)
         has_tests = got.0
         tests = got.1
-    SSide(has_decls: not rejected, partial: broken and not rejected, decls: decls, diags: diags, has_tests: has_tests, tests: tests)
+    SSide(
+        has_decls: not rejected,
+        partial: broken and not rejected,
+        decls: decls,
+        diags: diags,
+        has_tests: has_tests,
+        tests: tests,
+    )
 
 ## Each test's outcome, from `ail test --json` in a child (diff.out.4); false
 ## when the tests could not be run.
