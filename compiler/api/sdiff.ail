@@ -137,7 +137,9 @@ fn sd_body(prog ast.Program, texts List[str], line int, next int)(str, List[str]
     # here too; they are not this body (api.impact.1).
     while text.len() > 0
         tail := text[text.len() - 1]
-        if tail.trim() == "" or tail.trim_start().starts_with("#") or tail.trim_start().starts_with("@")
+        if tail.trim() == ""
+            or tail.trim_start().starts_with("#")
+            or tail.trim_start().starts_with("@")
             text.pop()
         else
             break

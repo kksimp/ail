@@ -1237,7 +1237,8 @@ fn Gate.diff(mut self, tmp str)
     fs.write_text(old, "fn a() int\n    1\n\n@test\nfn t()\n    assert(a() == 1)\n") else return
     fs.write_text(new, "fn a() int\n    1\n\n@test fn t()\n    assert(a() == 1)\n") else return
     at := ail_run(["diff", "--no-tests", old, new]) else return
-    if at.status != 0 or at.out != "0 added, 0 removed, 0 changed; diagnostics +0 -0; tests not run\n"
+    if at.status != 0
+        or at.out != "0 added, 0 removed, 0 changed; diagnostics +0 -0; tests not run\n"
         red("diff attribute layout", "exit {at.status}\n{at.out}")
     fs.write_text(old, old_src) else return
     fs.write_text(new, new_src) else return
