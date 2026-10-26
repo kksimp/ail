@@ -521,7 +521,7 @@ the sequential ones either way. *(ADR 0911)*
 body has a construct the chunked version doesn't take (a `match`, a constructor, a method on a
 captured list, a field of `self`, and so on), prints
 `FILE:LINE:COL: warning[conc.par.13]: `par for V` runs in order: REASON` on standard error
-when the program is built. The result is the sequential one. A loop the compiler chose
+when the program is built, and `ail check` warns the same way. The result is the sequential one. A loop the compiler chose
 says nothing. *(ADR 0911)*
 
 **conc.par.9** — The pool has one thread per hardware thread, at most 8,

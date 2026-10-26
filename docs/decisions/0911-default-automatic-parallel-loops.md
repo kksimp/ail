@@ -41,8 +41,8 @@ iterations as workers", so a 16-iteration loop of one add would pay a dispatch.
    still works.
 6. **A written `par for` that falls back says why (conc.par.13).** The lowering
    scan names the first construct it refuses; `ail build` and `ail run` print a
-   warning. The `ail check` warning is a follow-up: the checker would need the
-   same scan.
+   warning, and `ail check` warns the same way: the scan lives in `ast/parscan.ail`, shared with the
+   checker.
 
 ## Rejected alternatives
 
