@@ -161,3 +161,28 @@ fn main() !
     mut c := Counter(n: 0)
     app.run(mut c)?
 ```
+
+## The client
+
+**attach.cli.1** — `ail attach` with no argument prints `127.0.0.1:PORT` for each
+program whose discovery file (`attach.wire.1`) is in `$TMPDIR` (`/tmp` without it),
+one per line; exit status 1 with a message when there is none. `ail attach
+[--port N] observe|screen|heap [key=value ...]` sends that query to the program,
+with the token from its discovery file, and prints the reply line. The pairs are
+the request's members: `x`, `y`, `w`, `h`, `budget` and `since` are numbers,
+`names` is a comma-separated list, anything else is a string (`role`, `color`,
+`text`). *(ADR 0884)*
+
+**attach.cli.2** — With several programs published, `--port N` names one; without it
+the command stops with exit status 2 and says so. A connection or protocol error is
+exit status 2.
+
+**attach.cli.3** — The exit status is 1 when the reply is an error reply (it has an
+`"error"` member), otherwise 0. The client sends no query but those of
+`attach.wire.4`; every one only reads.
+
+```ail skip=bootstrap rules=attach.cli.1,attach.cli.2,attach.cli.3
+# ail attach                              127.0.0.1:41873
+# ail attach screen role=button budget=200
+# ail attach observe names=n,total since=3
+```
