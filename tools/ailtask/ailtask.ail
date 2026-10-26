@@ -10,7 +10,7 @@ STATE := ".ail-task"
 ## Lines of failing output `verify` shows (task.verify.3).
 TAIL_LINES := 20
 
-struct Task
+struct Job
     program str
     goal str
     rev str
@@ -24,9 +24,9 @@ fn ail_path() str
 fn quote(s str) str
     "\"{s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\""
 
-fn load_task() Task?
+fn load_task() Job?
     text := fs.read_text(STATE) else return none
-    mut t := Task(program: "", goal: "", rev: "", last: "none")
+    mut t := Job(program: "", goal: "", rev: "", last: "none")
     for l in text.lines()
         at := l.find("=") else continue
         k := l.slice(0, at)
@@ -43,14 +43,14 @@ fn load_task() Task?
         return none
     t
 
-fn save_task(t Task) !
+fn save_task(t Job) !
     fs.write_text(STATE, "program={t.program}\ngoal={t.goal}\nrev={t.rev}\nlast={t.last}\n")? "writing {STATE}"
 
 ## The output's last `TAIL_LINES` lines.
 fn tail(out str) str
     ls := [l for l in out.lines() if l.trim() != ""]
     from := if ls.len() > TAIL_LINES then ls.len() - TAIL_LINES else 0
-    ls.slice(from, ls.len()).join("\n")
+    ls[from..].join("\n")
 
 struct Ran
     status int
@@ -61,7 +61,7 @@ struct Ran
 fn ail(args List[str]) Ran
     r := proc.run(ail_path(), args) else err
         return Ran(status: 2, out: "can't run ail: {err}")
-    Ran(status: r.status, out: r.out + r.err)
+    Ran(status: r.status, out: "{r.out}{r.err}")
 
 fn usage() int
     io.eprint("usage: ailtask start PROGRAM GOAL... [--rev REV] | status | verify | finish | abort  [--json]")
@@ -96,14 +96,14 @@ fn start(args List[str], json bool) !int
             words.push(a)
     if words.len() < 2
         return usage()
-    if load_task() != none
-        io.eprint("error: a task is already open; run `ail task finish` or `ail task abort` first (task.state.2)")
+    if open := load_task()
+        io.eprint("error: task `{open.goal}` is already open; run `ail task finish` or `ail task abort` first (task.state.2)")
         return 2
     got := ail(["ask", words[0], "--affected", "--rev", rev, "--json"])
     if got.status != 0
         io.eprint("error: {rev} can't be compared with {words[0]} (task.start.1)\n{got.out}")
         return 2
-    t := Task(program: words[0], goal: words[1..].join(" "), rev: rev, last: "none")
+    t := Job(program: words[0], goal: words[1..].join(" "), rev: rev, last: "none")
     save_task(t)?
     next := "edit {t.program}, then `ail task verify`"
     answer(
@@ -172,7 +172,9 @@ fn finish(json bool) !int
     if got.status != 0
         io.eprint("error: {got.out}")
         return 2
-    _ := proc.run("rm", ["-f", STATE]) else return 2
+    gone := proc.run("rm", ["-f", STATE]) else return 2
+    if gone.status != 0
+        return 2
     answer(
         json,
         ["\"task\":\"done\"", "\"goal\":{quote(t.goal)}", "\"verified\":\"green\"", "\"impact\":{got.out.trim()}", "\"next\":\"none\""],
@@ -181,9 +183,11 @@ fn finish(json bool) !int
     0
 
 fn abort() int
-    _ := load_task() else return no_task()
-    _ := proc.run("rm", ["-f", STATE]) else return 2
-    print("task aborted")
+    t := load_task() else return no_task()
+    gone := proc.run("rm", ["-f", STATE]) else return 2
+    if gone.status != 0
+        return 2
+    print("task aborted: {t.goal}")
     0
 
 fn main() !
