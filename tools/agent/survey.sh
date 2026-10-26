@@ -43,7 +43,7 @@ fn main()
     print(show(c))
 A
 git add . && git commit -qm base
-step() { echo; echo "=== \$ ail $*"; "$ail" "$@" 2>&1 | head -${LINES_MAX:-40}; echo "[exit ${PIPESTATUS[0]}]"; }
+step() { echo; echo "=== \$ ail $*"; "$ail" "$@" 2>&1 | head -${LINES_MAX:-90}; echo "[exit ${PIPESTATUS[0]}]"; }
 step test main.ail
 step api main.ail
 step ask main.ail --help
