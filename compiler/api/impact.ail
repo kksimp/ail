@@ -163,7 +163,12 @@ fn id_and(id str, rest List[str]) List[str]
         out.push(x)
     out
 
-fn type_seeds(id str, old_members Map[str, str], new_members Map[str, str], known List[str]) List[str]
+fn type_seeds(
+    id str,
+    old_members Map[str, str],
+    new_members Map[str, str],
+    known List[str],
+) List[str]
     owner := id.slice(5, id.len())
     mut touched := List[str]()
     mut shape := false
@@ -175,7 +180,8 @@ fn type_seeds(id str, old_members Map[str, str], new_members Map[str, str], know
         elif old_members.get(m) != new_members.get(m)
             touched.push(m)
     for m in old_members.keys()
-        if (m.starts_with("field:{owner}.") or m.starts_with("variant:{owner}.")) and not new_members.contains(m)
+        if (m.starts_with("field:{owner}.") or m.starts_with("variant:{owner}."))
+            and not new_members.contains(m)
             shape = true
     if shape or touched.len() == 0
         return id_and(id, also_reaches(id, known))
