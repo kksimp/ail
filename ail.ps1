@@ -81,6 +81,7 @@ if ($cmd -eq 'run') {
                 if ($v -notmatch '^[1-9]\d*$') { Fail '`--trace-limit` needs a positive number of events (trace.run.4)' }
                 $env:AIL_TRACE_LIMIT = $v; $k += 2; continue
             }
+            '^--attach-input$' { $env:AIL_ATTACH_INPUT = '1'; $k++; continue }
             '^--verbose$' { $k++; continue }
             '^--values$' { Add-Instrument 'values'; $k++; continue }
             '^--deterministic$' { $env:AIL_DETERMINISTIC = '1'; $checkOpts += '--deterministic'; $k++; continue }

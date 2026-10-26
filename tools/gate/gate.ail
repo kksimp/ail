@@ -1985,6 +1985,19 @@ fn Gate.net(mut self)
         "\"names\":[\"n\",\"m\"]",
         "\"since\":2",
     ])
+    # attach.input.1-2: `input` sends its pairs as members; `kind` and `id` stay strings, `x` a number.
+    apid2 := net_start("python3 -I tools/gate/attach_server.py {aport} {ad}/req.txt", aport)
+    ip := sh_run("TMPDIR={ad} ./ail attach input kind=click id=cv x=3 y=4 shift=true")
+    net_stop(apid2)
+    want("attach input request", slurp("{ad}/req.txt"), [
+        "\"q\":\"input\"",
+        "\"kind\":\"click\"",
+        "\"id\":\"cv\"",
+        "\"x\":3",
+        "\"shift\":true",
+    ])
+    if ip.status != 0
+        red("attach input", "exit {ip.status}\n{ip.out}{ip.err}")
     nobody := sh_run("TMPDIR={ad}/nowhere ./ail attach")
     if nobody.status != 1 or not nobody.err.contains("no program publishes")
         red("attach none", "exit {nobody.status}\n{nobody.err}")
