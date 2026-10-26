@@ -957,7 +957,11 @@ fn Checker.check_par(self) List[Diag]
             if v := judge(cx, f, s)
                 verdicts.push(v)
     mut out := List[Diag]()
+    # Loops already reported as errors (conc.par.5) get no second word.
+    mut failed := Set[int]()
     for v in verdicts.sorted(by: |v| v.pos.line * 100000 + v.pos.col)
+        if v.is_par and v.sequential
+            failed.add(v.pos.line * 100000 + v.pos.col)
         if v.is_par and v.sequential
             mut d := new_diag(
                 "conc.par.5",
@@ -974,7 +978,7 @@ fn Checker.check_par(self) List[Diag]
         for s in loops(body)
             match s
                 For(is_par, var, _, mutable, iter, lbody, pos) =>
-                    if not is_par or mutable
+                    if not is_par or mutable or failed.contains(pos.line * 100000 + pos.col)
                         continue
                     why := native_refusal(iter, lbody)
                     if why != ""
