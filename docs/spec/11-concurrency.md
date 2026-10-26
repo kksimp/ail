@@ -513,7 +513,8 @@ threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
 **conc.par.14** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
-a call 8). An iteration of at least 4096 operations sends any loop of two or more
+a call 8 plus the cost of the function it names, found the same way; a function that
+reaches itself counts as 4096). An iteration of at least 4096 operations sends any loop of two or more
 iterations to the pool, whatever the worker count. A written `par for` whose body calls a
 function counts as that heavy, so it goes to the pool from two iterations. The result and the trap are
 the sequential ones either way. *(ADR 0911)*

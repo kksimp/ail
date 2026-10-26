@@ -20,6 +20,10 @@ pub struct ParScan
     pub mult int
     ## The body calls a function or a method that may change its receiver.
     pub calls bool
+    ## Functions the body calls by name, with the loop multiplier at each call
+    ## (conc.par.14: a callee's own cost counts toward the loop's).
+    pub callees List[str]
+    pub callee_mult List[int]
     ## What the first construct the parallel version doesn't take is.
     pub why str
     ## A construct the parallel version doesn't take.
@@ -36,6 +40,8 @@ pub fn new_scan() ParScan
         work: 0,
         mult: 1,
         calls: false,
+        callees: [],
+        callee_mult: [],
         why: "",
         bad: false,
     )
@@ -165,7 +171,11 @@ fn scan_expr(mut sc ParScan, e Expr)
             scan_cost(mut sc, 8)
             sc.calls = true
             match callee
-                Name => scan_args(mut sc, args)
+                Name(fn_name, _) =>
+                    if sc.callees.len() < 64
+                        sc.callees.push(fn_name)
+                        sc.callee_mult.push(sc.mult)
+                    scan_args(mut sc, args)
                 _ => refuse(
                     mut sc,
                     "a call of a method value or closure, or a constructor with a path",
