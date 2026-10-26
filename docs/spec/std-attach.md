@@ -16,7 +16,7 @@ as text. *(ADR 0884)*
 **attach.observe.2** — An `@observe` field of any other type is a compile-time
 error whose `help` lists the allowed types. *(ADR 0884)*
 
-```ail skip=bootstrap rules=attach.observe.2
+```ail error=attach.observe.2 rules=attach.observe.2
 struct Cart
     @observe total int?
     name str
@@ -26,7 +26,7 @@ fn main()
     print(c.name)
 ```
 
-```ail skip=bootstrap rules=attach.observe.1
+```ail rules=attach.observe.1
 enum Mode
     On
     Off
@@ -75,7 +75,7 @@ the summary the program supplies, or an error when it has none. `input`
 revision `since`. A `Tracker` raises its revision once per `update` that adds
 a value or changes one. *(ADR 0884)*
 
-```ail skip=bootstrap rules=attach.wire.2,attach.wire.3,attach.wire.4,attach.wire.5
+```ail rules=attach.wire.2,attach.wire.3,attach.wire.4,attach.wire.5
 use std.attach
 use std.screen
 
@@ -102,7 +102,7 @@ and the app answers between its other events with the observed values (the
 `Observe` trait), the screen of its view tree (`std.screen.view`) and the
 protocol reply. A client that sends nothing for 5 seconds is dropped. *(ADR 0884)*
 
-```ail skip=bootstrap rules=attach.observe.4,attach.wire.1,attach.wire.6
+```ail norun rules=attach.observe.4,attach.wire.1,attach.wire.6
 use std.app
 use std.attach
 use std.attach.serve
@@ -143,7 +143,7 @@ Attach off adds no listener, no thread and no `observed` method (zero cost).
 **attach.run.3** — The cache key of a build includes whether attach is on.
 *(ADR 0884)*
 
-```ail skip=bootstrap rules=attach.run.1,attach.run.2,attach.run.3
+```ail norun rules=attach.run.1,attach.run.2,attach.run.3
 # ail run counter.ail            attach on: the socket is served
 # ail run --no-attach counter.ail   attach off
 # ail build --attach counter.ail -o counter
@@ -188,7 +188,7 @@ result with `observe` or `screen`. *(ADR 0919)*
 (`start`, `resize`, `external`, or none) gets an error reply and changes nothing.
 *(ADR 0919)*
 
-```ail skip=bootstrap rules=attach.input.1,attach.input.2,attach.input.3
+```ail fragment rules=attach.input.1,attach.input.2,attach.input.3
 # ail run --attach-input shop.ail
 # ail attach input kind=press id=pay
 # ail attach input kind=edit id=name text=Ada
@@ -216,7 +216,7 @@ exit status 2.
 `"error"` member), otherwise 0. The client sends no query but those of
 `attach.wire.4`; only `input` acts (`attach.input.1`).
 
-```ail skip=bootstrap rules=attach.cli.1,attach.cli.2,attach.cli.3
+```ail fragment rules=attach.cli.1,attach.cli.2,attach.cli.3
 # ail attach                              127.0.0.1:41873
 # ail attach screen role=button budget=200
 # ail attach observe names=n,total since=3
