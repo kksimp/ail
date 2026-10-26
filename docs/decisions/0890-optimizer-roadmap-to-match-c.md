@@ -124,6 +124,29 @@ pair shares the frame, the callee-saved saves and the stack check. gcc -O3 does 
 (binarytrees is 2.3x of -O3 against 1.6x of -O2). Trap sites keep their frames, so traces
 are unchanged. `AIL_OPT_OFF=unroll` turns it off, so one binary gives the A/B.
 
+## Pass 4 (amendment, 2026-10-26): loop-invariant list headers
+
+Measured with `perf stat` on ail-linux (main 66224b97, gcc 13 `-O2`): AIL runs 21.8 G
+instructions on lzr against gcc's 8.75 G, 26.5 G against 10.2 G on vm and 33.3 G against
+19.4 G on matmul 1400, with the same branch misses. The gap is instruction count. Every
+`xs[i]` reloads the list's length (for the check) and its element pointer (for the
+load) from the header, two loads before the element, and a `while` loop gets no help
+from the counted-loop versioning of ADR 0577.
+
+`compiler/mir/hoist.ail` (`AIL_OPT_OFF=hoist` turns it off): in a loop whose only uses
+of a list are `get`, `set` and `len`, the list a parameter or a call's result and defined
+outside the loop (never a field or an element, which another holder can push to), the
+length and element pointer are read once in the loop's preheader. A `get` becomes the new
+op `bounds index, len` followed by `ldx`; a `set` becomes `bounds` and `stx`; `len`
+becomes a copy. `bounds` compiles to a compare and a branch to the same trap stub, which
+is given the length instead of reading it from the list, so the message, index, length and
+site are unchanged (native.bce.11). At most four lists per loop (two registers each).
+The element pointer is an interior pointer, which keeps the block alive for the collector.
+
+Rejected: interchanging loops for matmul (it changes which overflow traps first); hoisting
+for every list value (a list built by `push` in the loop, or reached through a field,
+can change under the loop).
+
 ## Rationale
 
 The listed gaps point at allocation and register pressure first, not at `-O3` loop

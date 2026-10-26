@@ -1,0 +1,118 @@
+## Loop-invariant list headers (ADR 0890). `xs[i]` loads the list's length
+## to check the index and its element pointer to read the element, both from
+## the list header, at every access. When a loop only reads and writes the
+## elements of a list it didn't build (`xs[i]`, `xs[i] = v`, `xs.len()`), the
+## header can't change under it, so the loop instead reads the length and the
+## element pointer once, before it: a `get` becomes `bounds i, len` and an
+## `ldx data, i`, a `set` becomes `bounds` and `stx`. The check runs where it
+## did, with the same index, length and site, so a trap is unchanged.
+##
+## Which lists: a parameter of the function or the result of a call (never a
+## field or an element, which another holder may push to), defined outside the
+## loop, and used in the loop only by `get`, `set` and `len`. A call in the
+## loop that is handed the list, a `push` and any other use rule it out for
+## that loop. The element pointer is an interior pointer into the list's
+## block, which keeps the block alive for the collector (gc.ail).
+##
+## Rule: native.bce.11.
+
+## The most lists hoisted from one loop (each costs two registers).
+MAX_LISTS := 4
+
+## The pass on one function.
+pub fn hoist_headers(f Func) Func
+    if opt_off("hoist") or f.name.starts_with("rt.")
+        return f
+    loops := find_loops(f)
+    if loops.len() == 0
+        return f
+    cand := candidates(f)
+    mut any := false
+    for c in cand
+        if c
+            any = true
+    if not any
+        return f
+    defs := defs_of(f)
+    mut g := f
+    # The outermost loops first, so an inner loop finds nothing left to do.
+    for lp in loops.sorted(by: |l| 0 - l.blocks.len())
+        if lp.pre < 0 or g.blocks[lp.pre].term.kind != "jump"
+            continue
+        if g.blocks[lp.pre].term.targets[0] != lp.header
+            continue
+        g = hoist_in(g, lp, cand, defs)
+    g
+
+## `cand[v]`: `v` is a list that is a parameter or a call's result.
+fn candidates(f Func) List[bool]
+    mut out := [false for _ in 0..f.vals.len()]
+    for p in f.blocks[0].params
+        if is_list(f.vals[p])
+            out[p] = true
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.dst >= 0 and is_list(f.vals[i.dst])
+                out[i.dst] = true
+    out
+
+fn hoist_in(g0 Func, lp LoopInfo, cand List[bool], defs List[Def]) Func
+    mut g := g0
+    # How each candidate is used in the loop: `count[v]` accesses, and
+    # `bad[v]` for a use that rules it out.
+    mut count := [0 for _ in 0..g.vals.len()]
+    mut bad := [false for _ in 0..g.vals.len()]
+    for b in lp.blocks
+        for i in g.blocks[b].insts
+            for k in 0..i.argc()
+                v := i.arg(k)
+                if v >= cand.len() or not cand[v] or lp.member[defs[v].block]
+                    continue
+                if k == 0 and (i.op == "get" or i.op == "set" or i.op == "len")
+                    count[v] += 1
+                else
+                    bad[v] = true
+        for v in g.blocks[b].term.uses()
+            if v < cand.len() and cand[v] and not lp.member[defs[v].block]
+                bad[v] = true
+    mut ok := List[int]()
+    for x in 0..cand.len()
+        if cand[x] and not bad[x] and count[x] > 0
+            ok.push(x)
+    # Each list holds two registers across the loop: the busiest few only.
+    mut lens := Map[int, int]()
+    mut datas := Map[int, int]()
+    busy := count
+    for x in ok.sorted(by: |v| 0 - busy[v]).take(MAX_LISTS)
+        lv := new_val(mut g, Ty.Int)
+        g.blocks[lp.pre].insts.push(inst(lv, "len", [x]))
+        lens[x] = lv
+        dv := new_val(mut g, Ty.Int)
+        g.blocks[lp.pre].insts.push(inst(dv, "data", [x]))
+        datas[x] = dv
+    if lens.len() == 0
+        return g
+    for b in lp.blocks
+        mut out := List[Inst]()
+        for i in g.blocks[b].insts
+            x := i.arg(0)
+            if (i.op != "get" and i.op != "set" and i.op != "len") or not lens.contains(x)
+                out.push(i)
+                continue
+            if i.op == "len"
+                out.push(inst(i.dst, "copy", [lens[x]]))
+                continue
+            if i.site >= 0
+                mut chk := inst(-1, "bounds", [i.arg(1), lens[x]])
+                chk.site = i.site
+                out.push(chk)
+            if i.op == "get"
+                mut ld := inst(i.dst, "ldx", [datas[x], i.arg(1)])
+                ld.imm = g.vals[i.dst].elem_bytes()
+                out.push(ld)
+            else
+                mut st := inst(-1, "stx", [datas[x], i.arg(1), i.arg(2)])
+                st.imm = g.vals[i.arg(2)].elem_bytes()
+                out.push(st)
+        g.blocks[b].insts = out
+    g
