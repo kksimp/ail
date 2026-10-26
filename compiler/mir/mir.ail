@@ -258,7 +258,19 @@ fn nth(xs List[int], k int) int
     -1
 
 fn packed(dst int, op str, xs List[int], imm int, fimm float, name str, site int) Inst
-    Inst(dst: dst, op: op, n: xs.len(), a: nth(xs, 0), b: nth(xs, 1), c: nth(xs, 2), more: tail_of(xs), imm: imm, fimm: fimm, name: name, site: site)
+    Inst(
+        dst: dst,
+        op: op,
+        n: xs.len(),
+        a: nth(xs, 0),
+        b: nth(xs, 1),
+        c: nth(xs, 2),
+        more: tail_of(xs),
+        imm: imm,
+        fimm: fimm,
+        name: name,
+        site: site,
+    )
 
 ## The bytes per element of the list that push callee `name` fills: a
 ## `List[u8]` or `List[bool]` 1, a `List[u16]` 2, a `List[u32]` 4, else 8.
