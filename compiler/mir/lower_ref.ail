@@ -1,19 +1,28 @@
-## `ref S` in the native subset (native.subset.4, own.ref.1-6, ADR 0067): a shared, mutable
-## cell holding a struct. The cell is the struct object itself, so a `ref S`
-## is the object's pointer: copies of the reference share it, field and
+## `ref T` in the native subset (native.subset.4, own.ref.1-6, ADR 0067): a shared, mutable
+## cell. For a struct, list, map or set the cell is the object itself, so a
+## `ref T` is the object's pointer: copies of the reference share it, field and
 ## method access apply to it without a dereference (own.ref.3), `ref e`
 ## builds a new object from a copy of `e` (own.ref.5), and `==` compares the
-## pointers (own.ref.6). A `ref` of anything but a struct isn't in the subset
-## yet.
+## pointers (own.ref.6). A number, `bool`, `char` or `str` goes in a new
+## one-slot object (`ref_scalar`), read back by `deref_use`.
 
 use ast
 
-## `ref T` for a struct `T`.
+## `ref T` for a struct, list, map, set or scalar `T`.
 fn Lower.ref_type(mut self, inner ast.TypeRef) Ty?
     t := type_of(inner)?
     match t
-        Struct => Ty.Ref(t)
-        _ => none
+        Struct | List | Map | Set => Ty.Ref(t)
+        _ =>
+            if ref_scalar(t)
+                return Ty.Ref(t)
+            none
+
+## A type whose `ref` cell is a one-slot object of its own.
+fn ref_scalar(t Ty) bool
+    match t
+        Int | Float | Bool | Char | Str | Sized(_) => true
+        _ => false
 
 ## The struct a `ref` value holds, as a value of the struct's own type: the
 ## same pointer, for field and method access.
@@ -32,4 +41,10 @@ fn Lower.lower_new_ref(mut self, value ast.Expr, pos ast.Pos, want Ty?) Val?
     v := lower_value(value, if inner.is_unknown() then none else inner)?
     match v.ty
         Struct => Val(id: copy_value(v), ty: Ty.Ref(v.ty))
-        _ => unsupported(pos, "`ref` of a `{v.ty.name()}`")
+        List | Map | Set => Val(id: copy_if_place(value, v), ty: Ty.Ref(v.ty))
+        _ =>
+            if not ref_scalar(v.ty)
+                return unsupported(pos, "`ref` of a `{v.ty.name()}`")
+            cell := call("rt.obj_new", [konst(8, Ty.Int), konst(OBJ_STRUCT, Ty.Int)], Ty.Ref(v.ty))
+            store(cell, 0, v.id)
+            Val(id: cell, ty: Ty.Ref(v.ty))

@@ -449,6 +449,16 @@ not run on a side with errors.
 ```ail pkg=diff_partial tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=partial, rules=diff.out.8
 ```
 
+**diff.out.9** — An added function or method that is a removed one under another
+name (same kind, same signature once the name is left out, same body text) is a
+*rename*: one line `> fn:old -> fn:new (renamed)` (JSON: `"op":"renamed"` with `from`
+and `id`), counted as `N renamed` in the summary when there is any, and not as an
+addition and a removal. A function whose body also mentions its own name differs
+in body, so it stays an addition and a removal.
+
+```ail pkg=diff_rename tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=(renamed) rules=diff.out.9
+```
+
 **api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
 API between two versions of a file or package directory. `ail api --diff
 --rev REV PATH` compares `PATH` as git has it at `REV` against `PATH` now,
