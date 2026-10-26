@@ -108,12 +108,12 @@ fn span_of(
         and i.op != "div"
         and i.op != "rem"
         return verdict(true, top())
-    a := arg_span(f, defs, i.args[0], mut spans, mut limited, held)
+    a := arg_span(f, defs, i.arg(0), mut spans, mut limited, held)
     if not a.known
         return verdict(false, top())
     if i.op == "neg"
         return verdict(true, exact(0 - a.hi, 0 - a.lo))
-    b := arg_span(f, defs, i.args[1], mut spans, mut limited, held)
+    b := arg_span(f, defs, i.arg(1), mut spans, mut limited, held)
     if not b.known
         return verdict(false, top())
     match i.op

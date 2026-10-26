@@ -65,7 +65,7 @@ fn remove_trivial_params(mut g Func)
     final := [resolve(repl, v) for v in 0..repl.len()]
     for b in 0..g.blocks.len()
         for i in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[i].args = [final[a] for a in g.blocks[b].insts[i].args]
+            g.blocks[b].insts[i] = g.blocks[b].insts[i].with_args([final[a] for a in g.blocks[b].insts[i].operands()])
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = final[t.cond]
@@ -81,7 +81,7 @@ fn branch_on_inner(mut g Func)
     for blk in g.blocks
         for i in blk.insts
             if i.op == "not" and i.dst >= 0
-                negated[i.dst] = i.args[0]
+                negated[i.dst] = i.arg(0)
     for b in 0..g.blocks.len()
         mut t := g.blocks[b].term
         if t.kind != "branch" or not negated.contains(t.cond)
@@ -102,7 +102,7 @@ fn thread_bools(mut g Func)
     mut consts := Map[int, int]()
     for blk in g.blocks
         for i in blk.insts
-            for u in i.args
+            for u in i.operands()
                 uses[u] += 1
             if i.op == "const" and i.dst >= 0
                 consts[i.dst] = i.imm
@@ -182,7 +182,7 @@ fn remove_dead(mut g Func)
     mut work := List[int]()
     for b in 0..nb
         for i in 0..g.blocks[b].insts.len()
-            for u in g.blocks[b].insts[i].args
+            for u in g.blocks[b].insts[i].operands()
                 uses[u] += 1
             d := g.blocks[b].insts[i].dst
             if d >= 0
@@ -206,7 +206,7 @@ fn remove_dead(mut g Func)
             continue
         dead[b][i] = true
         removed = true
-        for u in ins.args
+        for u in ins.operands()
             uses[u] -= 1
             if uses[u] == 0 and def_block[u] >= 0
                 work.push(u)

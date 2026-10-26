@@ -145,13 +145,13 @@ pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
     for k in 0..at
         head.push(g.blocks[b].insts[k])
     g.blocks[b].insts = head
-    g.blocks[b].term = jump_to(nb, call.args)
+    g.blocks[b].term = jump_to(nb, call.operands())
     for blk in callee.blocks
         mut insts := List[Inst]()
         for i in blk.insts
             mut c := i
             c.dst = if i.dst >= 0 then i.dst + nv else -1
-            c.args = [a + nv for a in i.args]
+            c = c.with_args([a + nv for a in i.operands()])
             if frame >= 0 and i.site >= 0
                 if not cloned.contains(i.site)
                     mut s := sites[i.site]
@@ -218,7 +218,7 @@ pub fn merge_blocks_in(mut g Func)
 fn rename(mut g Func, repl List[int])
     for b in 0..g.blocks.len()
         for k in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[k].args = [repl[a] for a in g.blocks[b].insts[k].args]
+            g.blocks[b].insts[k] = g.blocks[b].insts[k].with_args([repl[a] for a in g.blocks[b].insts[k].operands()])
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = repl[t.cond]

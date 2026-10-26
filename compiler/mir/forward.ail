@@ -62,7 +62,7 @@ pub fn forward_loads(f Func) Func
     mut g := f
     for b in 0..n
         for at in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[at].args = [resolve_val(repl, a) for a in g.blocks[b].insts[at].args]
+            g.blocks[b].insts[at] = g.blocks[b].insts[at].with_args([resolve_val(repl, a) for a in g.blocks[b].insts[at].operands()])
         g.blocks[b].insts = [
             g.blocks[b].insts[at]
             for at in 0..g.blocks[b].insts.len() if not gone[b][at]
@@ -94,7 +94,7 @@ fn resolve_val(repl List[int], v int) int
 ## already produced for it (else -1), after recording what it reads and
 ## forgetting what it writes.
 fn remember(f Func, i Inst, mut k Known, mut repl List[int]) int
-    args := [resolve_val(repl, a) for a in i.args]
+    args := [resolve_val(repl, a) for a in i.operands()]
     if i.op == "len" or i.op == "cap" or i.op == "data"
         return look(f, i, args, mut k.header)
     if i.op == "get" or i.op == "ldx"

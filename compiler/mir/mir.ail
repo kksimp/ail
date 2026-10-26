@@ -206,6 +206,25 @@ pub struct Inst
 pub fn Inst.elem_off(self) int
     fimm.to_int()
 
+## The operands of an instruction go through these accessors, so that how
+## `Inst` stores them can change (see docs/design/compact-inst.md).
+pub fn Inst.arg(self, k int) int
+    args[k]
+
+pub fn Inst.argc(self) int
+    args.len()
+
+pub fn Inst.operands(self) List[int]
+    args
+
+pub fn Inst.with_args(self, a List[int]) Inst
+    Inst(dst: dst, op: op, args: a, imm: imm, fimm: fimm, name: name, site: site)
+
+pub fn Inst.with_arg(self, k int, v int) Inst
+    mut a := args
+    a[k] = v
+    Inst(dst: dst, op: op, args: a, imm: imm, fimm: fimm, name: name, site: site)
+
 ## The bytes per element of the list that push callee `name` fills: a
 ## `List[u8]` or `List[bool]` 1, a `List[u16]` 2, a `List[u32]` 4, else 8.
 pub fn is_push_name(name str) bool

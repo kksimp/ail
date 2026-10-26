@@ -28,7 +28,7 @@ pub fn mark_nonneg(f Func) Func
     for lp in find_loops(f)
         c := counted(f, defs, lp) else continue
         cmp := inst_of(f, defs, f.blocks[lp.header].term.cond) else continue
-        if cmp.op == "lt" and cmp.args[0] == c.p
+        if cmp.op == "lt" and cmp.arg(0) == c.p
             counter[c.p] = c.lo
             step_of[c.p] = c.step
     mut changed := true
@@ -61,9 +61,9 @@ pub fn mark_nonneg(f Func) Func
     for b in 0..f.blocks.len()
         for k in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[k]
-            if (i.op != "div" and i.op != "rem") or not nn[i.args[0]]
+            if (i.op != "div" and i.op != "rem") or not nn[i.arg(0)]
                 continue
-            d := const_of(f, defs, i.args[1]) else continue
+            d := const_of(f, defs, i.arg(1)) else continue
             if d >= 2 and d.bit_and(d - 1) == 0
                 g.blocks[b].insts[k].name = "nn"
                 touched = true
@@ -74,11 +74,11 @@ fn holds(i Inst, nn List[bool]) bool
     match i.op
         "const" => i.imm >= 0
         "len" | "cap" => true
-        "copy" => nn[i.args[0]]
-        "add" | "mul" => i.site >= 0 and nn[i.args[0]] and nn[i.args[1]]
-        "div" | "rem" => nn[i.args[0]] and nn[i.args[1]]
-        "shr" => nn[i.args[0]]
-        "band" => nn[i.args[0]] or nn[i.args[1]]
+        "copy" => nn[i.arg(0)]
+        "add" | "mul" => i.site >= 0 and nn[i.arg(0)] and nn[i.arg(1)]
+        "div" | "rem" => nn[i.arg(0)] and nn[i.arg(1)]
+        "shr" => nn[i.arg(0)]
+        "band" => nn[i.arg(0)] or nn[i.arg(1)]
         _ => false
 
 ## Replace the marked instructions: `x / 2^k` becomes `x >> k` and `x % 2^k`
@@ -93,7 +93,7 @@ pub fn rewrite_nonneg(f Func) Func
             if i.name != "nn" or (i.op != "div" and i.op != "rem")
                 out.push(i)
                 continue
-            d := const_of(f, defs, i.args[1]) else
+            d := const_of(f, defs, i.arg(1)) else
                 out.push(i)
                 continue
             c := g.vals.len()
@@ -112,7 +112,7 @@ pub fn rewrite_nonneg(f Func) Func
             else
                 k.imm = d - 1
                 r.op = "band"
-            r.args = [i.args[0], c]
+            r = r.with_args([i.arg(0), c])
             out.push(k)
             out.push(r)
             touched = true
