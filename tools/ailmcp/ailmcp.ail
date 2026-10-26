@@ -22,7 +22,7 @@ fn tools() List[Tool]
         ),
         Tool(
             name: "ail_test",
-            about: "Run a program's tests; with `since` only those a change since that git revision can reach.",
+            about: "Run a program's tests, writing a reproducible bundle per failure; with `since` only those a change since that git revision can reach; with `bundle` (a path from an earlier failure) rerun exactly that failure.",
             props: ["program", "since"],
             needs: ["program"],
         ),
@@ -111,9 +111,15 @@ fn command(name str, a Json) Cmd
         match name
             "ail_check" => out = ["check", program]
             "ail_test" =>
-                out = ["test", program]
-                if since != ""
-                    out.extend(["--affected", "--since", since])
+                bundle := a.text("bundle", "")
+                if program == "" and bundle == ""
+                    return Cmd(argv: [], why: "ail_test needs `program` or `bundle`")
+                if bundle != ""
+                    out = ["test", "--bundle", bundle]
+                else
+                    out = ["test", program, "--bundle-failure"]
+                    if since != ""
+                        out.extend(["--affected", "--since", since])
             "ail_ask" =>
                 out = ["ask", program]
                 out.extend(a.text("question", "").split(" "))

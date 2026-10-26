@@ -151,19 +151,24 @@ fn verify(json bool) !int
     mut stage := "check"
     mut ok := true
     mut shown := ""
+    # The reproducible failure files `ail test --bundle-failure` wrote (task.verify.4).
+    mut bundles := List[str]()
     chk := ail(["check", t.program])
     if chk.status != 0
         ok = false
         shown = tail(chk.out)
     else
         stage = "test"
-        tst := ail(["test", t.program, "--affected", "--since", t.rev])
+        tst := ail(["test", t.program, "--affected", "--since", t.rev, "--bundle-failure"])
         if tst.status != 0
             ok = false
             shown = tail(tst.out)
+            bundles = [l.trim().slice(8, l.trim().len()) for l in tst.out.lines() if l.trim().starts_with("bundle: ")]
     t.last = if ok then "green" else "red"
     save_task(t)?
-    next := if ok then "ail task finish" else "fix the {stage} failure above, then `ail task verify`"
+    mut next := if ok then "ail task finish" else "fix the {stage} failure above, then `ail task verify`"
+    if bundles.len() > 0
+        next = "`ail test --bundle {bundles[0]}` reruns the first failure; fix it, then `ail task verify`"
     result := if ok then "green" else "red"
     answer(
         json,
@@ -171,6 +176,7 @@ fn verify(json bool) !int
             "\"result\":\"{result}\"",
             "\"stage\":{quote(stage)}",
             "\"output\":{quote(shown)}",
+            "\"bundles\":[{[quote(b) for b in bundles].join(",")}]",
             "\"next\":{quote(next)}",
         ],
         "verify {result} at {stage}\n{shown}\nnext: {next}",
