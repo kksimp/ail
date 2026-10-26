@@ -9,3 +9,4 @@ tools/fuzz/failures/
 *.whl
 .native/
 .ail-test-*
+tools/agentbench/results/
