@@ -375,6 +375,12 @@ pub fn lower_package_par(
         l.stamp_problems()
     l.gen_instances()
     l.lower_lazy(srcs)
+    # Before the generators below, so a task or chunk body's copies, drops and
+    # instances are made too (conc.par.8); the second pass takes the sites the
+    # instances it asked for hold.
+    l.build_task_fns()
+    l.gen_instances()
+    l.build_task_fns()
     l.gen_ct_copies()
     l.enter_file(0)
     l.gen_unchecked()
@@ -386,8 +392,8 @@ pub fn lower_package_par(
     l.gen_enum_eqs()
     l.gen_init_enums()
     l.call_inits()
-    l.stamp_problems()
     l.build_task_fns()
+    l.gen_task_dispatch()
     l.stamp_problems()
     if r := rt
         l.lower_rt(r)

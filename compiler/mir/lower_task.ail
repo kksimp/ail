@@ -65,6 +65,9 @@ pub struct TaskState
     accs Set[str]
     ## The `with` blocks and task groups whose scope is open (lower_sync.ail).
     exits List[ExitAct]
+    ## How many of `sites` have their function: `build_task_fns` runs again
+    ## after the instances a chunk body asked for are made.
+    built int
 
 pub fn new_task_state() TaskState
     TaskState(
@@ -78,6 +81,7 @@ pub fn new_task_state() TaskState
         owner: "",
         accs: Set[str](),
         exits: [],
+        built: 0,
     )
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
@@ -335,11 +339,14 @@ fn Lower.synth_end(mut self, params List[int])
     funcs.push(func)
 
 ## For each `spawn` site a function `task.K(rec)` that loads the arguments
-## from the record, makes the call and stores the result; and `rt.dispatch`.
+## from the record, makes the call and stores the result, and the chunk
+## function of each `par for`; sites made since the last call (ADR 0911).
 fn Lower.build_task_fns(mut self)
     if not tk.on
         return
-    for k in 0..tk.sites.len()
+    first := tk.built
+    tk.built = tk.sites.len()
+    for k in first..tk.sites.len()
         s := tk.sites[k]
         if s.loop >= 0
             build_par_fn(k, tk.pars[s.loop])
@@ -360,6 +367,11 @@ fn Lower.build_task_fns(mut self)
             prim_op(if s.ret.is_float() then "storef" else "store64", [at, r], Ty.Unit)
         finish(return_of(-1))
         synth_end(ps)
+
+## `rt.dispatch`: the task function for a site number, once every site has one.
+fn Lower.gen_task_dispatch(mut self)
+    if not tk.on
+        return
     ps := synth_begin("rt.dispatch", [Ty.Int, Ty.Int])
     # The tensor kernels' chunks (task.ail, ADR 0876).
     tyes := new_block()
