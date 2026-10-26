@@ -21,7 +21,12 @@ fn valid_name(s str) bool
     true
 
 fn parse(text str) Graph
-    mut g := Graph(nodes: Set[str](), needs: Map[str, List[str]](), needed: Map[str, List[str]](), bad: 0)
+    mut g := Graph(
+        nodes: Set[str](),
+        needs: Map[str, List[str]](),
+        needed: Map[str, List[str]](),
+        bad: 0,
+    )
     mut edges := Set[str]()
     lines := text.split("\n")
     for k in 0..lines.len()
