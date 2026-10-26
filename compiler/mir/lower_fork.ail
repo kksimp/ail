@@ -1,0 +1,256 @@
+## Lowering the fork-join of independent calls (conc.par.15, ADR 0914): a run of
+## adjacent `name := f(args)` statements the checker proved independent (each `f`
+## pure and heavy; keys `file:line:col#F` for the first call and `#C` for the rest
+## in `auto_par`) starts calls 2..n as tasks when the pool has room, runs call 1
+## on this thread, then takes the results in source order. A task that traps is
+## run again in order here, so the trap is the sequential one (conc.par.1).
+use ast
+
+## One call of a run, with what the lowering needs of its callee.
+struct ForkCall
+    name str
+    lpos ast.Pos
+    value ast.Expr
+    key str
+    fname str
+    npos ast.Pos
+    cpos ast.Pos
+    args List[ast.Arg]
+    ret Ty
+
+## `F` for the first call of a run, `C` for a later one, else "".
+@allow("expr.match.3") fn Lower.fork_mark(self, s ast.Stmt) str
+    if auto_par.len() == 0 or tk.no_fork
+        return ""
+    match s
+        Let(_, _, _, value, o) =>
+            if o != none
+                return ""
+            match value
+                Call(_, _, cpos) =>
+                    k := "{file_paths[file]}:{cpos.line}:{cpos.col}"
+                    if auto_par.contains("{k}#F")
+                        return "F"
+                    if auto_par.contains("{k}#C")
+                        return "C"
+                    ""
+                _ => ""
+        _ => ""
+
+## The index after the run that starts at `i`.
+## The one dispatch from `lower_block`: lowers the fork run starting at
+## `body[i]`, and reports true for it and for the statements it covered.
+fn Lower.fork_stmt(mut self, body List[ast.Stmt], i int) bool
+    m := fork_mark(body[i])
+    if m == "C"
+        return true
+    if m != "F"
+        return false
+    lower_fork_run(body[i..fork_run_end(body, i)])
+    true
+
+fn Lower.fork_run_end(self, body List[ast.Stmt], i int) int
+    mut j := i + 1
+    while j < body.len() and fork_mark(body[j]) == "C"
+        j += 1
+    j
+
+## Whether an argument is one the fork path can evaluate early without
+## changing a trap: a name, a literal, or `name + k` / `name - k` with a literal
+## `k`, which `fork_guard` checks against overflow first.
+@allow("expr.match.3") fn Lower.fork_arg_ok(self, e ast.Expr) bool
+    match e
+        Name(n, _) => lookup(n) != none
+        Int | Float | Bool => true
+        Binary(o, a, b, _) =>
+            match o
+                Add | Sub =>
+                    match a
+                        Name(n, _) =>
+                            key := lookup(n) else return false
+                            if var_ty[key] != Ty.Int
+                                return false
+                            match b
+                                Int(v, _) => positive(v)
+                                _ => false
+                        _ => false
+                _ => false
+        _ => false
+
+## Whether a literal's text is an `int` above zero.
+fn positive(v str) bool
+    k := v.to_int() else return false
+    k > 0
+
+## The plan of one statement of a run, or none when it can't fork.
+@allow("expr.match.3") fn Lower.fork_plan(mut self, s ast.Stmt) ForkCall?
+    match s
+        Let(name, lpos, _, value, _) =>
+            match value
+                Call(callee, args, cpos) =>
+                    match callee
+                        Name(fn_name, npos) =>
+                            key := "{prefix}{fn_name}"
+                            if bad.contains(key)
+                                return none
+                            sig := sigs.get(key)?
+                            if sig.fails or args.len() != sig.params.len()
+                                return none
+                            if not (sig.ret == Ty.Int or sig.ret == Ty.Bool or sig.ret.is_float())
+                                return none
+                            for a in args
+                                if a.label != none or a.mutable or not fork_arg_ok(a.value)
+                                    return none
+                            ForkCall(
+                                name: name,
+                                lpos: lpos,
+                                value: value,
+                                key: key,
+                                fname: fn_name,
+                                npos: npos,
+                                cpos: cpos,
+                                args: args,
+                                ret: sig.ret,
+                            )
+                        _ => none
+                _ => none
+        _ => none
+
+## A zero of the call's result type, to declare the name before the paths split.
+fn fork_zero(p ForkCall) ast.Expr
+    if p.ret.is_float()
+        return ast.Expr.Float(value: 0.0, pos: p.lpos)
+    if p.ret == Ty.Bool
+        return ast.Expr.Bool(value: false, pos: p.lpos)
+    ast.Expr.Int(value: "0", pos: p.lpos)
+
+## For `name + k` / `name - k`: leave for `seq` when the sum would overflow.
+@allow("expr.match.3") fn Lower.fork_guard(mut self, e ast.Expr, seq int)
+    match e
+        Binary(o, a, b, _) =>
+            n := match a
+                Name(n, _) => n
+                _ => return
+            mut k := 0
+            match b
+                Int(v, _) =>
+                    parsed := v.to_int() else return
+                    k = parsed
+                _ => return
+            x := lower_value(a, Ty.Int) else return
+            adding := match o
+                Add => true
+                _ => false
+            bound := if adding then 9223372036854775807 - k else -9223372036854775807 - 1 + k
+            overflows := op(if adding then "gt" else "lt", [x.id, konst(bound, Ty.Int)], Ty.Bool)
+            next := new_block()
+            branch(overflows, seq, [], next, [])
+            seal(next)
+            cur = next
+        _ => return
+
+## A run of calls: forked when the pool has room, else one after the other.
+fn Lower.lower_fork_run(mut self, run List[ast.Stmt])
+    mut plan := List[ForkCall]()
+    if tk.on and not tk.in_chunk and run.len() >= 2
+        for s in run
+            p := fork_plan(s) else break
+            plan.push(p)
+    if plan.len() != run.len()
+        for s in run
+            lower_stmt(s)
+        return
+    n := plan.len()
+    mut keys := List[str]()
+    for p in plan
+        z := lower_value(fork_zero(p), p.ret) else return
+        declare(p.name, p.ret, z.id)
+        keys.push(lookup(p.name) else "")
+    for p in plan
+        if p.key == fname
+            want_seq(p.key)
+    fork_blk := new_block()
+    seq := new_block()
+    join := new_block()
+    for k in 1..n
+        for a in plan[k].args
+            fork_guard(a.value, seq)
+    room := call("rt.fork_ok", [konst(n - 1, Ty.Int)], Ty.Bool)
+    branch(room, fork_blk, [], seq, [])
+    seal(fork_blk)
+    cur = fork_blk
+    mut handles := List[int]()
+    for k in 1..n
+        p := plan[k]
+        target := if p.key == fname then "{p.key}.seq" else p.key
+        h := spawn_call(target, p.fname, p.npos, p.args, p.cpos, p.lpos) else return
+        handles.push(h.id)
+    first := lower_value(plan[0].value, none) else return
+    write_var(keys[0], cur, first.id)
+    for k in 1..n
+        p := plan[k]
+        word := if p.ret.is_float() then Ty.Int else p.ret
+        w := call("rt.task_try", [handles[k - 1], trace_line(p.npos), konst(0, Ty.Int)], word)
+        failed := call("rt.failed", [], Ty.Bool)
+        again := new_block()
+        taken := new_block()
+        next := new_block()
+        branch(failed, again, [], taken, [])
+        seal(again)
+        seal(taken)
+        cur = taken
+        got := if p.ret.is_float() then prim_op("bits_float", [w], Ty.Float) else w
+        write_var(keys[k], cur, got)
+        jump(next, [])
+        # The task trapped: clear its failure and run the call here, in order.
+        cur = again
+        call("rt.err_take", [], Ty.Str)
+        v := call_in_order(p) else return
+        write_var(keys[k], cur, v.id)
+        jump(next, [])
+        seal(next)
+        cur = next
+    jump(join, [])
+    seal(seq)
+    cur = seq
+    for p in plan
+        v := call_in_order(p) else return
+        write_var(lookup(p.name) else "", cur, v.id)
+    jump(join, [])
+    seal(join)
+    cur = join
+
+## The call of `p` run here, in order: a recursive function's own calls go to
+## its `.seq` copy, which never checks for room to fork.
+fn Lower.call_in_order(mut self, p ForkCall) Val?
+    was := tk.redirect
+    if p.key == fname
+        tk.redirect = fname
+    v := lower_value(p.value, none)
+    tk.redirect = was
+    v
+
+## Register the `.seq` copy of `key`.
+fn Lower.want_seq(mut self, key str)
+    if not tk.seq_list.contains(key)
+        tk.seq_list.push(key)
+        sigs["{key}.seq"] = sigs[key]
+
+## Lower the `.seq` copies asked for: the function again with no fork runs,
+## calling itself through the copy. Their problems are the originals'.
+fn Lower.gen_fork_seqs(mut self)
+    while tk.seq_built < tk.seq_list.len()
+        key := tk.seq_list[tk.seq_built]
+        tk.seq_built += 1
+        f := fn_decl.get(key) else continue
+        enter_file(fn_file[key])
+        before := problems.len()
+        tk.no_fork = true
+        tk.redirect = key
+        lower_fn_as(f, "{key}.seq", key, fn_owner(f))
+        tk.no_fork = false
+        tk.redirect = ""
+        stamp_problems()
+        while problems.len() > before
+            problems.pop()
+            problem_files.pop()

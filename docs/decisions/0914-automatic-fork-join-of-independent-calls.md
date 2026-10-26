@@ -42,14 +42,30 @@ signatures: the calls share no `mut` argument and neither has `io`, `unsafe`,
    groups; (b) lowering behind the hidden depth counter; (c) benchmark on
    `fib` and merge sort; ship (b) only if (c) beats sequential on 4 cores.
 
+7. **Stage (b) as built: a live-task cap, not a depth clone.** The calls after
+   the first become `spawn`-style tasks only when `rt.fork_ok` says fewer than
+   twice as many tasks as workers are alive; otherwise the run executes in
+   order. This replaces the hidden depth counter and second clone of point 3:
+   it needs no extra function copy and no hidden parameter, and the cap bounds
+   task creation the same way. Measured on fib(35): checking for room in every
+   recursive call cost 147 ms against 50 ms sequential, so a self-recursive
+   function also gets a `.seq` copy that calls itself and never checks. Only the
+   shallow spine forks; in-order, rerun and task calls use the copy (fib(35):
+   46 ms on 1 core, 19 ms on 3, 50 ms sequential). The task graph is not fixed from run to run,
+   but results and traps are (point 4). Arguments may be a name, a literal or
+   `name +- k`, whose overflow is checked first (a failed check runs in order),
+   so evaluating them early cannot change which trap fires. Results of type
+   `int`, `float` or `bool` only; anything else runs in order.
+
 ## Rejected alternatives
 
 - **Fork every pure call:** task cost (microseconds) dwarfs most calls.
 - **A `fork` keyword only:** that is `spawn` plus `wait`, which exists.
 - **Speculative execution of impure calls:** results would not be
   bit-identical on traps and effects.
-- **Dynamic cutoff by queue length only:** non-deterministic task graphs
-  make profiles and tests harder to read; a static depth cut is stable.
+- **A static depth cut with a cloned function (the first plan):** doubles the
+  code of every recursive candidate and adds a hidden parameter. Replaced by
+  the live-task cap of point 7 because the cap is simpler and bounds tasks as well.
 
 ## Consequences
 

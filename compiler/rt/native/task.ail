@@ -573,6 +573,15 @@ fn par_worth(lo int, hi int, work int, auto int) bool
     # A loop the compiler chose also needs enough work in all.
     auto == 0 or n >= PAR_MIN_WORK / work
 
+## Whether `n` more calls of a fork-join run may start as tasks (conc.par.15):
+## not in a deterministic run, and while fewer than twice as many tasks as
+## workers are alive.
+fn fork_ok(n int) bool
+    if det_on()
+        return false
+    t := load64(pool() + P_TARGET)
+    t >= 2 and atomic_load(global(TASKS_LIVE)) + n <= 2 * t
+
 ## `n` zeroed words: the values a loop body reads and the accumulators.
 fn env_new(n int) int
     alloc(8 * n + 8, KIND_ENV)
