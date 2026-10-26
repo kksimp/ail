@@ -177,6 +177,48 @@ fn Lower.slot_of(self, n str, name str) int
             return k
     -1
 
+## The field each argument of a struct literal or variant sets, as the checker's `field_slots`
+## (type.struct.3-4): a labelled one by its name, a bare name that is a field's by that field,
+## and any other by position, in the fields no argument names. -1 for none.
+fn arg_fields(names List[str], args List[ast.Arg]) List[int]
+    mut at := List[int]()
+    mut bare := List[bool]()
+    for a in args
+        mut k := -1
+        mut free := false
+        if l := a.label
+            k = field_at(names, l.name)
+        else
+            k = shorthand_slot(names, a.value)
+            free = k < 0
+        at.push(k)
+        bare.push(free)
+    mut next := 0
+    for j in 0..at.len()
+        if bare[j]
+            while next < names.len() and at.contains(next)
+                next += 1
+            if next < names.len()
+                at[j] = next
+                next += 1
+    at
+
+fn field_at(names List[str], n str) int
+    for k in 0..names.len()
+        if names[k] == n
+            return k
+    -1
+
+## The field a bare name, or a bare member made `self.n`, sets.
+fn shorthand_slot(names List[str], value ast.Expr) int
+    match value
+        Name(n, _) => field_at(names, n)
+        Member(recv, n, np) =>
+            match recv
+                Name(s, p) => if s == "self" and p == np then field_at(names, n) else -1
+                _ => -1
+        _ => -1
+
 ## `T(a: x, b: y)` or `T(x, y)`: a new object with every field set.
 fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     slots := structs[n]
@@ -186,13 +228,14 @@ fn Lower.new_struct(mut self, n str, args List[ast.Arg], pos ast.Pos) Val?
     if args.len() != slots.len() and not left_out and not partial
         return unsupported(pos, "`{n}(...)` without every field")
     mut vs := [-1 for _ in slots]
+    ats := arg_fields([sl.name for sl in slots], args)
     for k in 0..args.len()
         a := args[k]
-        mut at := k
-        if l := a.label
-            at = slot_of(n, l.name)
-            if at < 0
+        at := ats[k]
+        if at < 0
+            if l := a.label
                 return unsupported(l.pos, "field `{l.name}` of `{n}`")
+            return unsupported(expr_pos(a.value), "too many arguments for `{n}(...)`")
         t := slots[at].ty
         v := lower_value(a.value, t)?
         vs[at] = copy_if_place(a.value, Val(id: convert(v, t, expr_pos(a.value)), ty: t))
