@@ -7,7 +7,7 @@
 ## An object qualifies when its `rt.obj_new` has constant size and kind 4,
 ## every use of it (and of its `copy`s) is a `load` or `store` slot access,
 ## every slot is stored exactly once, in the block that allocates it, before
-## any load of that slot, and every slot that is read was stored with a value of
+## found load of that slot, and every slot that is read was stored with a value of
 ## the load's type. Anything else (a call, a return, a jump argument, a store
 ## of the object itself, a second store) leaves the allocation alone.
 ## `AIL_OPT_OFF=sroa` turns the pass off.
@@ -15,7 +15,7 @@
 ## The most slots of an object that is replaced.
 SROA_SLOTS := 16
 
-## Replace the qualifying objects of `f`; returns whether any went.
+## Replace the qualifying objects of `f`; returns whether found went.
 pub fn sroa_in(mut f Func) bool
     n := f.vals.len()
     nb := f.blocks.len()
@@ -27,7 +27,7 @@ pub fn sroa_in(mut f Func) bool
     mut root := [-1 for _ in 0..n]
     mut cblk := [-1 for _ in 0..n]
     mut cslots := [0 for _ in 0..n]
-    mut any := false
+    mut found := false
     for b in 0..nb
         for i in f.blocks[b].insts
             if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and i.argc() == 2
@@ -37,8 +37,8 @@ pub fn sroa_in(mut f Func) bool
                     root[i.dst] = i.dst
                     cblk[i.dst] = b
                     cslots[i.dst] = size / 8
-                    any = true
-    if not any
+                    found = true
+    if not found
         return false
     mut grew := true
     while grew
