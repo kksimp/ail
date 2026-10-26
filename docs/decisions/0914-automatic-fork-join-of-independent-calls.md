@@ -47,7 +47,11 @@ signatures: the calls share no `mut` argument and neither has `io`, `unsafe`,
    twice as many tasks as workers are alive; otherwise the run executes in
    order. This replaces the hidden depth counter and second clone of point 3:
    it needs no extra function copy and no hidden parameter, and the cap bounds
-   task creation the same way. The task graph is not fixed from run to run,
+   task creation the same way. Measured on fib(35): checking for room in every
+   recursive call cost 147 ms against 50 ms sequential, so a self-recursive
+   function also gets a `.seq` copy that calls itself and never checks. Only the
+   shallow spine forks; in-order, rerun and task calls use the copy (fib(35):
+   46 ms on 1 core, 19 ms on 3, 50 ms sequential). The task graph is not fixed from run to run,
    but results and traps are (point 4). Arguments may be a name, a literal or
    `name +- k`, whose overflow is checked first (a failed check runs in order),
    so evaluating them early cannot change which trap fires. Results of type

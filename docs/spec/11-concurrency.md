@@ -537,7 +537,9 @@ function with a loop), no argument is `mut`, every argument is a name, a literal
 earlier, may run as a fork-join: the calls after the first start as tasks while the pool has
 room (fewer than twice as many live tasks as workers), the first runs on the calling thread,
 and the results are taken in source order. A task that traps is run again in order on the
-calling thread, so the trap is the sequential one (`conc.par.1`). `AIL_PARALLEL=0` and
+calling thread, so the trap is the sequential one (`conc.par.1`). A function that calls itself
+in such a run has a second copy for the calls made in order, which never forks; results and
+traps are the same. `AIL_PARALLEL=0` and
 `--deterministic` run the calls one after the other. `ail effects --parallel` lists the runs
 that qualify. *(ADR 0914)*
 
