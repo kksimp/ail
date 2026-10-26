@@ -567,16 +567,14 @@ fn Lower.generic_struct(
         return unsupported(pos, "`{s.name}(...)` without every field")
     mut at := List[int]()
     mut vs := List[Val]()
+    ats := arg_fields([f.name for f in s.fields], args)
     for k in 0..args.len()
         a := args[k]
-        mut j := k
-        if l := a.label
-            j = -1
-            for i in 0..s.fields.len()
-                if s.fields[i].name == l.name
-                    j = i
-            if j < 0
+        j := ats[k]
+        if j < 0
+            if l := a.label
                 return unsupported(l.pos, "field `{l.name}` of `{s.name}`")
+            return unsupported(expr_pos(a.value), "too many arguments for `{s.name}(...)`")
         ft := s.fields[j].ty
         v := lower_value(a.value, decl_type(ft, binds, gt.params, gt.file))?
         unify(ft, v.ty, gt.params, mut binds)

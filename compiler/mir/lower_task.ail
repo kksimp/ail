@@ -651,6 +651,8 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
         self_ty: self_ty,
         work: 0,
     )
+    # Problems of the loop's body belong to its own file, not the one lowered before or after.
+    stamp_problems()
     prefix = p.prefix
     file = p.file
     aliases = p.aliases
@@ -704,6 +706,7 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     tk.in_chunk = false
     tk.owner = ""
     tk.accs = Set[str]()
+    stamp_problems()
     prefix = was.prefix
     file = was.file
     aliases = was.aliases
