@@ -1674,7 +1674,7 @@ holds a value, and a key path through a value that is not a table fail with
 unterminated string, an invalid escape, an invalid number and a missing value
 are further causes. *(ADR 0901)*
 
-```ail skip=bootstrap rules=std.toml.1,std.toml.2,std.toml.3,std.toml.4,std.toml.5,std.toml.6
+```ail rules=std.toml.1,std.toml.2,std.toml.3,std.toml.4,std.toml.5,std.toml.6
 use std.toml
 
 fn main() !
@@ -1690,7 +1690,7 @@ fn main() !
     print((db.get("node") else Json.Null).to_text())
 ```
 
-```ail skip=bootstrap rules=std.toml.7,std.toml.8
+```ail rules=std.toml.7,std.toml.8
 use std.toml
 
 fn main()
@@ -1734,7 +1734,7 @@ negative. *(ADR 0902)*
 digits`, `invalid digit 'C'`, `division by zero`, `negative exponent` and
 `negative factorial`. *(ADR 0902)*
 
-```ail skip=bootstrap rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
+```ail rules=std.bigint.1,std.bigint.2,std.bigint.3,std.bigint.4,std.bigint.5,std.bigint.6,std.bigint.7,std.bigint.8,std.bigint.9
 use std.bigint
 
 fn main() !

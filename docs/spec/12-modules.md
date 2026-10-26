@@ -131,7 +131,7 @@ and from the module's top-level names. `use a.b as c` resolves a clash.
 **Note:** The standard modules (`use std.fs` and others) are in
 [chapter 17](17-std.md).
 
-```ail skip=bootstrap
+```ail
 use net.http
 
 pub fn fetch(url str) Data ! FetchError
@@ -166,7 +166,7 @@ computed at compile time (`ct.eval.*`); the bootstrap computes them before
 by zero) is an error reported at the constant before the program runs.
 *(ADR 0132)*
 
-```ail skip=bootstrap
+```ail
 pub MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}
 SCRIPTS := [["a", "b"], ["c"]]
