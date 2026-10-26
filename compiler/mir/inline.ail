@@ -26,11 +26,17 @@ pub fn inline_module(mut out Module)
         and by_name.contains("rt.list_new_for")
     grow_only := lists_only_grow(out)
     fills := by_name.contains("rt.fill")
+    if not opt_off("sroa")
+        for _ in 0..2
+            expand_allocating(mut out)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
         budget := expand_calls(mut f, leaves, bodies, mut out.sites)
         unrolled := unroll_self(mut f, mut out.sites)
-        if budget < INLINE_BUDGET or unrolled
+        mut scalar := false
+        if not f.name.starts_with("rt.") and not opt_off("sroa")
+            scalar = sroa_in(mut f)
+        if budget < INLINE_BUDGET or unrolled or scalar
             simplify_in(mut f)
             fold_in(mut f)
             simplify_in(mut f)
@@ -76,8 +82,30 @@ fn expand_calls(mut f Func, leaves Set[str], bodies Map[str, Func], mut sites Li
                 break
     budget
 
+## One round of inlining small functions that call nothing but `rt.obj_new`
+## (a struct constructor such as `Vec.add`), so that `sroa_in` can see the
+## object a chain of them builds. Callee bodies are those at the start of the
+## round; two rounds reach `a.sub(b).unit()`.
+fn expand_allocating(mut out Module)
+    mut leaves := Set[str]()
+    mut bodies := Map[str, Func]()
+    for f in out.funcs
+        if not f.name.starts_with("rt.") and inlinable_with(f, true)
+            leaves.add(f.name)
+            bodies[f.name] = f
+    for k in 0..out.funcs.len()
+        mut f := out.funcs[k]
+        if f.name.starts_with("rt.")
+            continue
+        expand_calls(mut f, leaves, bodies, mut out.sites)
+        out.funcs[k] = f
+
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
+    inlinable_with(f, false)
+
+## `inlinable`, optionally letting `rt.obj_new` calls stay in the body.
+fn inlinable_with(f Func, allocs bool) bool
     # `rt.vec_*` are replaced by assembled kernels where the target has them.
     if f.name.starts_with("rt.vec_") or f.name == "rt.fill" or f.name.starts_with("rt.aes_hw_")
         return false
@@ -85,6 +113,8 @@ fn inlinable(f Func) bool
     for blk in f.blocks
         n += blk.insts.len()
         for i in blk.insts
+            if i.op == "call" and allocs and i.name == "rt.obj_new"
+                continue
             if i.op == "call"
                 or i.op == "icall"
                 or i.op == "prim" and (i.name == "syscall" or i.name == "clone")
