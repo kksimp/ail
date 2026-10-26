@@ -1063,6 +1063,20 @@ fn Gate.fmt(mut self, tmp str)
         or not b.err.contains("lex.block.2")
         or slurp(broken) != "fn main()\n   print(1)\n"
         red("fmt broken file", "exit {b.status}\n{b.err}")
+    # A directory is checked file by file: one layout diff in a tree is exit 1 and names the file.
+    tree := "{dir}/tree"
+    fs.make_dir(tree) else return
+    fs.write_text("{tree}/ok.ail", tidy) else return
+    fs.write_text("{tree}/off.ail", "fn main()\n    print( 1 )\n") else return
+    td := ail_run(["fmt", "--check", tree]) else return
+    if td.status != 1 or not td.out.contains("off.ail") or td.out.contains("ok.ail")
+        red("fmt --check directory", "exit {td.status}\n{td.out}")
+    # Every source file of the compiler and the gate is canonical (ready-check checks the files a
+    # branch changes; DK missed a layout diff in compiler/main.ail because this suite looked only at examples).
+    for root in ["compiler", "tools/gate"]
+        tr := ail_run(["fmt", "--check", root]) else continue
+        if tr.status != 0
+            red("fmt --check {root}", "run `./ail fmt {root}`:\n{tr.out}{tr.err}")
     sh_run("rm -rf {dir}")
 
 ## `--budget N [--from K]` on every command (budget.rs, ported; budget.out.1-6, ADR 0394).
