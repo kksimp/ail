@@ -43,9 +43,10 @@ Wrapper-logged debug rounds and oracle-generated cases remove self-report and au
 
 ## Consequences
 
-- The C card must be grown to parity before the first counted trial; the placeholder does not yet reach 8,000 tokens.
+- The C card (`tools/agentbench/docs/c-libc-card.md`) is a general libc/POSIX reference sized to the AIL card; it holds generic building blocks (buffer, hash table, binary search), never a task's solution. `agentbench.py docs TASK` must pass before a counted trial.
+- Tasks: `ledger` and `depgraph` (build), `ledger-fix` (fix: the ledger with two reported defects, a lost sign on small debits and a rejected 31st). Each build task keeps a reference `solution/` per arm; `agentbench.py validate TASK` builds them and checks they pass every hidden case, and that a fix seed fails some. This proves each task is solvable in both languages before a model tries.
 - A model's prior on C is part of what is measured; the benchmark does not try to cancel it. A later task in a language the model knows less well would separate the two effects.
-- One task is a pilot, not proof. The claim needs at least three tasks and a `fix` task before it is stated.
+- Three tasks are a pilot, not proof. The headline `fix` run on a real upstream issue (not the seeded `ledger-fix`) is still to be chosen and recorded.
 
 ## Rejected alternatives
 

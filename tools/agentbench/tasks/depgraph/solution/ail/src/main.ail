@@ -1,0 +1,104 @@
+struct Graph
+    nodes Set[str]
+    needs Map[str, List[str]]
+    needed Map[str, List[str]]
+    bad int
+
+fn name_char(ch char) bool
+    match ch
+        'a'..='z' => true
+        'A'..='Z' => true
+        '0'..='9' => true
+        '_' | '.' | '-' => true
+        _ => false
+
+fn valid_name(s str) bool
+    if s.is_empty()
+        return false
+    for ch in s.chars()
+        if not name_char(ch)
+            return false
+    true
+
+fn parse(text str) Graph
+    mut g := Graph(nodes: Set[str](), needs: Map[str, List[str]](), needed: Map[str, List[str]](), bad: 0)
+    mut edges := Set[str]()
+    lines := text.split("\n")
+    for k in 0..lines.len()
+        ln := lines[k]
+        if ln.is_empty() or ln.starts_with("#")
+            continue
+        parts := ln.split(" -> ")
+        if parts.len() == 2 and valid_name(parts[0]) and valid_name(parts[1])
+            g.nodes.add(parts[0])
+            g.nodes.add(parts[1])
+            if edges.add("{parts[0]} {parts[1]}")
+                g.needs.push(parts[0], parts[1])
+                g.needed.push(parts[1], parts[0])
+        elif parts.len() == 1 and valid_name(ln)
+            g.nodes.add(ln)
+        else
+            io.eprint("error: line {k + 1}: bad line")
+            g.bad += 1
+    g
+
+fn reach(adj Map[str, List[str]], start str) Set[str]
+    mut seen := Set[str]()
+    mut stack := adj.get(start) else List[str]()
+    while not stack.is_empty()
+        n := stack.pop() else break
+        if seen.add(n)
+            next := adj.get(n) else List[str]()
+            for m in next
+                stack.push(m)
+    seen
+
+fn order(g Graph) List[str]
+    mut left := Map[str, int]()
+    mut ready := List[str]()
+    for n in g.nodes.sorted()
+        c := (g.needs.get(n) else List[str]()).len()
+        left[n] = c
+        if c == 0
+            ready.push(n)
+    mut out := List[str]()
+    while not ready.is_empty()
+        m := ready.min() else break
+        ready.remove_at(ready.index_of(m) else 0)
+        out.push(m)
+        users := g.needed.get(m) else List[str]()
+        for d in users
+            left[d] -= 1
+            if left[d] == 0
+                ready.push(d)
+    out
+
+fn usage_ok(args List[str]) bool
+    if args.len() == 1
+        return args[0] == "order" or args[0] == "cycles"
+    args.len() == 2 and (args[0] == "deps" or args[0] == "rdeps") and valid_name(args[1])
+
+fn main()
+    args := env.args()
+    if not usage_ok(args)
+        io.eprint("usage: depgraph order|cycles|deps NAME|rdeps NAME")
+        io.exit(1)
+    g := parse(io.read_all())
+    cmd := args[0]
+    mut out := List[str]()
+    if cmd == "deps" or cmd == "rdeps"
+        if not g.nodes.contains(args[1])
+            io.eprint("error: unknown {args[1]}")
+            io.exit(4)
+        out = reach(if cmd == "deps" then g.needs else g.needed, args[1]).sorted()
+    elif cmd == "cycles"
+        out = [n for n in g.nodes.sorted() if reach(g.needs, n).contains(n)]
+    else
+        out = order(g)
+        if out.len() < g.nodes.len()
+            io.eprint("error: cycle")
+            io.exit(3)
+    for n in out
+        print(n)
+    if g.bad > 0
+        io.exit(2)
