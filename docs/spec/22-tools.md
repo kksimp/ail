@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -1262,3 +1262,31 @@ is the run's own.
 ```ail skip=bootstrap pkg=bundle_env tool=test,--bundle,bad.json status=1 expect=differs rules=bundle.run.1,bundle.run.2
 ```
 
+## Verifying a change
+
+**verify.run.1** — `ail verify --diff [--rev REV] [--json] FILE` compares `FILE`
+with git revision REV (default `HEAD`) as `ail ask FILE --affected` does
+(`api.impact.3`) and prints four parts: *proved*, *tested*, *unverified* and
+*failures*. The exit status is 0 when there is no check error and no new
+failure (`verify.run.5`), 1 otherwise, and 2 for a usage error or a program that cannot be compared
+([ADR 0909](../decisions/0909-ail-verify-diff.md)).
+**verify.run.2** — *Proved* says whether `ail check FILE` accepts the program
+(a missing `main` is not an error) and lists the changed declarations
+(`api.impact.1`). A program with errors is not tested.
+**verify.run.3** — *Tested* is the affected tests (`api.impact.3`) that
+`ail test FILE --affected` ran: the names that passed and the names that failed.
+**verify.run.4** — *Unverified* lists what no result speaks for: that no test
+ran for the changed declarations, each changed declaration that no affected
+test reaches (when `ail ask --affected --json` gives `reaches`), a partial impact
+(`"partial":true`), each function whose effects changed
+(`api.impact.4`), and each skipped test. *Failures* lists the check errors and
+the failed tests. `--json` prints the same parts as one object with
+`"verify":1`.
+**verify.run.5** — A failure is *new* unless the test also fails when the tree at
+REV (`git archive REV`) is tested; it is then *old*. Check errors are always new.
+When REV cannot be unpacked or run, every failed test is new.
+
+```ail skip=bootstrap tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5
+fn main()
+    print("hi")
+```
