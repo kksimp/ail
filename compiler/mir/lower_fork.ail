@@ -123,9 +123,9 @@ fn fork_zero(p ForkCall) ast.Expr
                 Add => true
                 _ => false
             bound := if adding then 9223372036854775807 - k else -9223372036854775807 - 1 + k
-            unsafe := op(if adding then "gt" else "lt", [x.id, konst(bound, Ty.Int)], Ty.Bool)
+            overflows := op(if adding then "gt" else "lt", [x.id, konst(bound, Ty.Int)], Ty.Bool)
             next := new_block()
-            branch(unsafe, seq, [], next, [])
+            branch(overflows, seq, [], next, [])
             seal(next)
             cur = next
         _ => return
