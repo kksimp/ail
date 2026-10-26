@@ -64,10 +64,31 @@ fn Lower.declare_traits(mut self, prog ast.Program)
         key := trait_key(imp.trait_name)
         if imp.target.params != none
             continue
-        s := type_key(imp.target.name) else continue
+        mut s := ""
+        if k := type_key(imp.target.name)
+            s = k
+        elif k := prim_impl(imp.target.name)
+            s = k
+        else
+            continue
         mut impls := traits.impls.get(key) else []
         impls.push(s)
         traits.impls[key] = impls
+
+## The name of a primitive type an `impl` can be for, the key of its methods (`int.area`).
+fn prim_impl(name str) str?
+    if name == "int" or name == "float" or name == "bool" or name == "str"
+        return name
+    none
+
+## The type an entry of a trait's impl table stands for: a struct, or a primitive.
+fn impl_ty(s str) Ty
+    match s
+        "int" => Ty.Int
+        "float" => Ty.Float
+        "bool" => Ty.Bool
+        "str" => Ty.Str
+        _ => Ty.Struct(s)
 
 ## The key of a trait named here, as in `type_key`.
 fn Lower.trait_key(self, name str) str
@@ -90,7 +111,13 @@ fn Lower.any_type(self, name str) Ty?
 
 ## `v` converted to `any T` (trait.any.3): boxed with its type's tag.
 fn Lower.box_any(mut self, v Val, t str, pos ast.Pos) Val?
-    s := struct_name(v.ty) else return unsupported(pos, "converting a `{v.ty.name()}` to `any {t}`")
+    mut s := ""
+    if k := struct_name(v.ty)
+        s = k
+    elif k := prim_impl(v.ty.name())
+        s = k
+    else
+        return unsupported(pos, "converting a `{v.ty.name()}` to `any {t}`")
     impls := traits.impls.get(t) else []
     mut tag := -1
     for k in 0..impls.len()
@@ -98,7 +125,7 @@ fn Lower.box_any(mut self, v Val, t str, pos ast.Pos) Val?
             tag = k
     if tag < 0
         return unsupported(pos, "converting a `{s}` to `any {t}`")
-    payload := copy_value(v)
+    payload := if struct_name(v.ty) != none then copy_value(v) else v.id
     ty := Ty.Any(t)
     b := call("rt.obj_new", [konst(16, Ty.Int), konst(OBJ_ANY, Ty.Int)], ty)
     store(b, 0, konst(tag, Ty.Int))
@@ -202,7 +229,7 @@ fn Lower.gen_any_copy(mut self, x int, t str)
     store(b, 0, tag)
     impls := traits.impls[t]
     for k in 0..impls.len()
-        st := Ty.Struct(impls[k])
+        st := impl_ty(impls[k])
         if k + 1 < impls.len()
             yes := new_block()
             no := new_block()
@@ -210,12 +237,19 @@ fn Lower.gen_any_copy(mut self, x int, t str)
             sealed[yes] = true
             sealed[no] = true
             cur = yes
-            store(b, 1, copy_value(Val(id: load(x, 1, st), ty: st)))
+            store(b, 1, any_payload(x, st))
             finish(return_of(b))
             cur = no
         else
-            store(b, 1, copy_value(Val(id: load(x, 1, st), ty: st)))
+            store(b, 1, any_payload(x, st))
             finish(return_of(b))
+
+## The value of box `x`, for a new box: a copy of a struct, else as it is.
+fn Lower.any_payload(mut self, x int, st Ty) int
+    v := Val(id: load(x, 1, st), ty: st)
+    if struct_name(st) != none
+        return copy_value(v)
+    v.id
 
 ## The text of an `any T` value: a chain of tests on the tag, then the
 ## display text of the value's own type.
@@ -234,7 +268,7 @@ fn Lower.any_text(mut self, t str, v Val) int?
             seal(yes)
             seal(no)
             cur = yes
-        st := Ty.Struct(impls[k])
+        st := impl_ty(impls[k])
         inner := load(v.id, 1, st)
         text := display_call(Val(id: inner, ty: st)) else value_text(st, inner)
         jump(join, [text])
