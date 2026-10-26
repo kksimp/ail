@@ -674,6 +674,8 @@ fn main()
 
 **task.verify.3** — A red result shows the stage that failed (`check` or `test`) and the last 20 non-blank lines of its output.
 
+**task.verify.4** — The test stage runs with `--bundle-failure` (`bundle.write.1`). A red test stage lists the bundle files it wrote as `bundles` (`--json`), and `next` names `ail test --bundle PATH` for the first.
+
 **task.status.1** — `ail task status` prints the goal, the last verify result and the impact since the base (`api.impact.4`).
 
 **task.finish.1** — `ail task finish` is refused (exit status 1) unless the last verify was green.
@@ -682,7 +684,7 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
-```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.status.1,task.finish.1,task.finish.2,task.out.1
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.status.1,task.finish.1,task.finish.2,task.out.1
 fn main()
     print(1)
 ```
@@ -697,7 +699,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
-**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones.
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones. `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead.
 
 **mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
 
