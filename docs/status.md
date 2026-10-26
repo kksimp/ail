@@ -61,6 +61,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native BCE guards skip tests that the enclosing counted loops answer (ADR 0816 item 17): nbody 38.0M → 35.5M instructions.
 - Native code generation (ADR 0816): parameters stay in their arrival registers (no swap moves at entry); wordfreq 254.6M → 240.9M instructions, binarytrees 412.2M → 399.5M, fannkuch 284.6M → 274.8M.
 - Native map probe (ADR 0816 item 12): first-slot hit without register saves, `map_set` through the remembered entry; wordfreq 195.5M → 167.2M instructions.
+- Struct scalar replacement (ADR 0913, native.sroa.1): a struct that never leaves its function has no object, and constructors that only build their result are inlined; raytrace N=4000 9.7 s → 3.6 s on ail-linux (gcc -O2 1.75 s).
 - Native list reuse (ADR 0824, native.reuse.1): a list made in a loop that nothing keeps past the iteration is one list the preheader makes and each iteration empties; fannkuch 252M → 160M instructions, binarytrees 334M → 256M.
 - Native fill loops (ADR 0816 item 11): a counted loop storing one unchanging value (`for _ in 0..n: xs.push(true)`) becomes `rt.fill`, `rep stos` on x86-64; sieve 60.8M → 48.8M instructions.
 - Native codegen (ADR 0816 items 9-10): address sums used only by loads and stores fold into them (wordfreq 195.5M → 192.5M instructions); a path that returns without calling no longer saves callee-saved registers when the return is shared (binarytrees 247.0M → 228.1M).

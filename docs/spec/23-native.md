@@ -434,6 +434,27 @@ fn main()
         rows.push(row)
     print(rows)
 ```
+**native.sroa.1** — A struct built in a function and only read back there
+(its fields read by `.f`, never returned, stored, passed to a call, joined at a
+block or changed after it is built) may have no object: the field reads use
+the values it was built from. Constructors that only build their result
+(`Vec.add`) are inlined into their callers first, so that chains such as
+`a.sub(b).unit()` qualify. Nothing a program can observe changes, only the
+allocation. `AIL_OPT_OFF=sroa` turns it off. *(ADR 0913)*
+
+```ail rules=native.sroa.1
+struct P
+    x float
+    y float
+
+fn P.add(self, o P) P
+    P(x: x + o.x, y: y + o.y)
+
+fn main()
+    a := P(x: 1.0, y: 2.0)
+    print(a.add(a).add(a).y)
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is
