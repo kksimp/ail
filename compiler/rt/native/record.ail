@@ -289,6 +289,16 @@ fn rec_next(name str) int
                 pos += 1
         else
             break
+    # `{"truncated":true}` ends a recording that hit its size limit (replay.rec.4).
+    if pos + 2 < n and load8(d + pos + 2) == 116
+        rec_stop(
+            "replay.rec.4",
+            "the recording was cut at its size limit, so it holds no result for `",
+            name,
+            "`",
+            "",
+            "",
+        )
     if pos >= n or load8(d + pos + 2) != 99
         rec_stop(
             "replay.run.3",
