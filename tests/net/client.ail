@@ -18,3 +18,9 @@ fn main() !
     print("{missing.status} {missing.body}")
     echo := net.post("{base}/echo", "name=ail", "application/x-www-form-urlencoded")?
     print(echo.body)
+    # A pooled socket the server closes under the next request: the POST is sent again once
+    # on a new connection (std.net.19).
+    linger := net.get("{base}/linger")?
+    print(linger.body)
+    again := net.post("{base}/echo", "n=1", "text/plain")?
+    print(again.body)
