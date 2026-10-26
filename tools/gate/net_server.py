@@ -4,6 +4,10 @@ import socket
 import sys
 
 
+# Every reply says `Connection: close`: this server closes after one request, and a
+# reply without it promises keep-alive, so the client pools the socket and its next
+# request (the POST, which is not retried) can reach a socket the server has just
+# closed: `closed` at tests/net/client.ail:19, 1 run in 3.
 def serve(conn):
     f = conn.makefile("rb")
     method, path = f.readline().decode().split()[:2]
@@ -19,16 +23,16 @@ def serve(conn):
             content_type = value.strip()
     body = f.read(length)
     if path == "/hello":
-        reply = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nX-Twice: 1\r\nX-Twice: 2\r\nContent-Length: 12\r\n\r\nhello, agent"
+        reply = "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nX-Twice: 1\r\nX-Twice: 2\r\nContent-Length: 12\r\n\r\nhello, agent"
     elif path == "/moved":
-        reply = "HTTP/1.1 302 Found\r\nLocation: /hello\r\nContent-Length: 0\r\n\r\n"
+        reply = "HTTP/1.1 302 Found\r\nConnection: close\r\nLocation: /hello\r\nContent-Length: 0\r\n\r\n"
     elif path == "/chunked":
-        reply = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n"
+        reply = "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nWiki\r\n5\r\npedia\r\n0\r\n\r\n"
     elif path == "/echo":
         text = f"{method} {path} {content_type} {length} {body.decode(errors='replace')}"
         reply = f"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{text}"
     else:
-        reply = "HTTP/1.1 404 Not Found\r\nContent-Length: 12\r\n\r\nno such page"
+        reply = "HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 12\r\n\r\nno such page"
     conn.sendall(reply.encode())
 
 
