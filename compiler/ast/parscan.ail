@@ -203,9 +203,17 @@ fn scan_expr(mut sc ParScan, e Expr)
                 scan_block(mut sc, b.body, 1)
             if body := els
                 scan_block(mut sc, body, 1)
+        Member(_, name, _) => refuse(
+            mut sc,
+            "a field access `.{name}` (copy the field to a local outside the loop, or index a list)",
+        )
+        Match => refuse(mut sc, "a `match` (use `if` chains)")
+        Try | OrElse => refuse(mut sc, "`?` or `else` on an expression")
+        Comp => refuse(mut sc, "a comprehension")
+        MapLit | SetLit | TupleLit => refuse(mut sc, "a map, set or tuple literal")
         _ => refuse(
             mut sc,
-            "a `match`, constructor, lambda, field access or other expression the native parallel loop doesn't take yet",
+            "an expression the native parallel loop doesn't take yet (lambda, `none`, char or bytes literal)",
         )
 
 fn scan_args(mut sc ParScan, args List[Arg])

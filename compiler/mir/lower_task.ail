@@ -510,7 +510,9 @@ fn Lower.lower_par_for(
 )
     plan := par_plan(var, iter, body, pos) else
         # A written `par for` is a promise of speed: say when it isn't kept.
-        if not auto and tk.why != "" and not tk.in_chunk
+        # `ail check` already warned about what the shared scan refuses.
+        shared := tk.why.starts_with("the body has") or tk.why.starts_with("the loop is not over")
+        if not auto and tk.why != "" and not tk.in_chunk and not shared
             note := "{file_paths[file]}:{pos.line}:{pos.col}: warning[conc.par.13]: `par for {var}` runs in order: {tk.why}"
             if not tk.notes.contains(note)
                 tk.notes.push(note)
