@@ -3,7 +3,7 @@
 
   agentbench.py gen TASK                       # fill cases/{visible,hidden}.jsonl from the task's ref.py
   agentbench.py docs TASK                      # check the two arms' doc bundles are within tolerance
-  agentbench.py run TASK ARM TRIAL [--model M] # one trial -> results/TASK/ARM-TRIAL/ (metrics.json, transcript.jsonl)
+  agentbench.py run TASK ARM TRIAL --model M   # or AGENTBENCH_MODEL # one trial -> results/TASK/ARM-TRIAL/ (metrics.json, transcript.jsonl)
   agentbench.py score DIR                      # re-score a finished trial's workspace against the hidden cases
   agentbench.py report [RESULTS]               # markdown table over all trials
 Run on a Kaleb machine only (ADR 0842): trials call a paid model and build with `ail` / `cc`.
@@ -145,7 +145,7 @@ def main():
     for n, args in (("gen", ["task"]), ("docs", ["task"]), ("run", ["task", "arm", "trial"]), ("score", ["dir"]), ("visible", ["dir"]), ("report", [])):
         q = s.add_parser(n)
         for x in args: q.add_argument(x)
-        if n == "run": q.add_argument("--model", default="claude-sonnet-5-5")
+        if n == "run": q.add_argument("--model", default=os.environ.get("AGENTBENCH_MODEL"), required="AGENTBENCH_MODEL" not in os.environ)
         if n == "report": q.add_argument("results", nargs="?", default=os.path.join(HERE, "results"))
     a = p.parse_args(); globals()["cmd_" + a.c](a)
 

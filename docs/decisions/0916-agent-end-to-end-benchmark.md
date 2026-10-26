@@ -24,7 +24,7 @@ A harness, `tools/agentbench/`, runs **trials**. A trial gives one model one tas
 3. The arms get the same prompt apart from the language name, the same `./build` and `./test` commands, the same turn and wall-time caps, and the same model.
 4. Docs: AIL gets the language card (8,000 tokens, ADR 0276); C gets a reference card of at least the same size (`agentbench.py docs` fails if C's is more than 5% shorter, token-counted by tokbench's mean, ADR 0817). The card carries signatures and pitfalls, never solutions. No arm gets web access.
 5. C is built with `-Wall -Wextra -fsanitize=address,undefined` both for the agent and for scoring, so memory faults count as failures, as AIL's trap would. This favours neither arm: it makes C's faults visible, as AIL's are.
-6. The model is fixed per run (default `claude-sonnet-5-5`). Model identifiers go in the untracked results, never in committed docs.
+6. The model is chosen per run (`--model` or `AGENTBENCH_MODEL`, no default) and recorded only in the untracked results, never in committed files (AGENTS.md).
 
 **Metrics (per trial, `metrics.json`).**
 - Generated (output) tokens, plus input and cache tokens and cost, summed from the agent's stream-json result events.
