@@ -193,7 +193,16 @@ pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
         t := blk.term
         mut nt := t
         if t.kind == "return"
-            nt = jump_to(rest, if t.value >= 0 then [t.value + nv] else [])
+            mut rv := if t.value >= 0 then t.value + nv else -1
+            if rv >= 0 and cont_params.len() == 1 and g.vals[rv].name() != g.vals[cont_params[0]].name()
+                # `T` returned where the function says `T?` (or the reverse):
+                # the join block's parameter has the declared type.
+                cv := g.vals.len()
+                g.vals.push(g.vals[cont_params[0]])
+                g.names.push("")
+                insts.push(inst(cv, "copy", [rv]))
+                rv = cv
+            nt = jump_to(rest, if rv >= 0 then [rv] else [])
         else
             nt.cond = if t.cond >= 0 then t.cond + nv else -1
             nt.targets = [x + nb for x in t.targets]
