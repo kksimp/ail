@@ -62,11 +62,13 @@ with another one, is answered with an error and does nothing. *(ADR 0884)*
 JSON object on a line, with `"v":1`. A line that is not JSON gets an error
 reply. *(ADR 0884)*
 
-**attach.wire.4** — The queries are `observe`, `screen` and `heap`. Any other
-`q`, including one that asks to set or change something, gets an error reply
-that says all queries only read. `screen` answers with the `std.screen` query
+**attach.wire.4** — The queries are `observe`, `screen` and `heap`, and `input`
+(`attach.input.1`). Any other `q` gets an error reply that says the queries are
+those and that all but `input` only read. `screen` answers with the `std.screen` query
 named by `x`, `y`, `w`, `h`, `role`, `color`, `text` and `budget`. `heap` gives
-the summary the program supplies, or an error when it has none. *(ADR 0884)*
+the summary the program supplies, or an error when it has none. `input`
+(`attach.input.1-3`) is the one request that acts; the others only read.
+*(ADR 0884, ADR 0919)*
 
 **attach.wire.5** — `observe` answers `{"v":1,"rev":N,"values":{name:value}}`.
 `names` limits the values; `since` limits them to those that changed after
@@ -162,16 +164,49 @@ fn main() !
     app.run(mut c)?
 ```
 
+## Input
+
+**attach.input.1** — A program accepts `input` requests only when it was started
+with `ail run --attach-input` (or with `AIL_ATTACH_INPUT=1` in its environment,
+which is what the flag sets). Otherwise `input` gets an error reply that says to
+start the program with `--attach-input`, and nothing changes. The flag is off
+by default; a program started without it can never be driven. The token (`attach.wire.2`) and the 127.0.0.1-only listener
+(`attach.wire.1`) apply as for every request. *(ADR 0919)*
+
+**attach.input.2** — An `input` request is `{"v":1,"q":"input","token":T,"kind":K,...}`
+whose other members are the fields of a `std.app` `Event` (`std.app.5`: `id`,
+`text`, `x`, `y`, `dx`, `dy`, `ctrl`, `alt`, `shift`, `meta`). The program
+handles the event between its own events, through its `update`, exactly as it
+would one from the window. `id` is a control's own id (`Button("pay", ...)` is
+`pay`) or the `#N` that `screen` shows for it; an id that names no control of
+the view gets an error reply and nothing changes. A `value` member is an error:
+a field's new text is `text`. The reply is `{"v":1,"applied":K}`; the agent reads the
+result with `observe` or `screen`. *(ADR 0919)*
+
+**attach.input.3** — `kind` is one of `press`, `edit`, `submit`, `toggle`,
+`click`, `scroll` and `key`: what a person does at the window. Any other kind
+(`start`, `resize`, `external`, or none) gets an error reply and changes nothing.
+*(ADR 0919)*
+
+```ail skip=bootstrap rules=attach.input.1,attach.input.2,attach.input.3
+# ail run --attach-input shop.ail
+# ail attach input kind=press id=pay
+# ail attach input kind=edit id=name text=Ada
+# ail attach input kind=click id=board x=40 y=12
+# ail attach screen role=button
+```
+
 ## The client
 
 **attach.cli.1** — `ail attach` with no argument prints `127.0.0.1:PORT` for each
 program whose discovery file (`attach.wire.1`) is in `$TMPDIR` (`/tmp` without it),
 one per line; exit status 1 with a message when there is none. `ail attach
-[--port N] observe|screen|heap [key=value ...]` sends that query to the program,
+[--port N] observe|screen|heap|input [key=value ...]` sends that query to the program,
 with the token from its discovery file, and prints the reply line. The pairs are
-the request's members: `x`, `y`, `w`, `h`, `budget` and `since` are numbers,
+the request's members: `x`, `y`, `w`, `h`, `dx`, `dy`, `budget` and `since` are numbers,
+`ctrl`, `alt`, `shift` and `meta` are `true` or `false`,
 `names` is a comma-separated list, anything else is a string (`role`, `color`,
-`text`). *(ADR 0884)*
+`text`, `kind`, `id`). *(ADR 0884)*
 
 **attach.cli.2** — With several programs published, `--port N` names one; without it
 the command stops with exit status 2 and says so. A connection or protocol error is
@@ -179,7 +214,7 @@ exit status 2.
 
 **attach.cli.3** — The exit status is 1 when the reply is an error reply (it has an
 `"error"` member), otherwise 0. The client sends no query but those of
-`attach.wire.4`; every one only reads.
+`attach.wire.4`; only `input` acts (`attach.input.1`).
 
 ```ail skip=bootstrap rules=attach.cli.1,attach.cli.2,attach.cli.3
 # ail attach                              127.0.0.1:41873
