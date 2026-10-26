@@ -1349,12 +1349,12 @@ fn heavy_fn(cx ParContext, i int) bool
             match o
                 Add | Sub =>
                     match a
-                        Name => is_int_literal(b)
+                        Name => fork_int_lit(b)
                         _ => false
                 _ => false
         _ => false
 
-@allow("expr.match.3") fn is_int_literal(e ast.Expr) bool
+@allow("expr.match.3") fn fork_int_lit(e ast.Expr) bool
     match e
         Int => true
         _ => false
