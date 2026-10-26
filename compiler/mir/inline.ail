@@ -35,6 +35,9 @@ pub fn inline_module(mut out Module)
         unrolled := unroll_self(mut f, mut out.sites)
         mut scalar := false
         if not f.name.starts_with("rt.") and not opt_off("sroa")
+            # The join blocks of inlined calls first: a value that crosses a
+            # jump's argument counts as escaping.
+            merge_blocks_in(mut f)
             scalar = sroa_in(mut f)
         if budget < INLINE_BUDGET or unrolled or scalar
             simplify_in(mut f)
@@ -98,6 +101,7 @@ fn expand_allocating(mut out Module)
         if f.name.starts_with("rt.")
             continue
         expand_calls(mut f, leaves, bodies, mut out.sites)
+        merge_blocks_in(mut f)
         out.funcs[k] = f
 
 ## Small, calls nothing, and nothing jumps back to its entry.
