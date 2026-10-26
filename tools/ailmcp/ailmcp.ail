@@ -129,7 +129,14 @@ fn command(name str, a Json) Cmd
             "ail_ask" =>
                 out = ["ask", program]
                 out.extend(a.text("question", "").split(" "))
-            "ail_verify" => out = ["verify", "--diff", "--json", "--rev", if rev == "" then "HEAD" else rev, program]
+            "ail_verify" => out = [
+                "verify",
+                "--diff",
+                "--json",
+                "--rev",
+                if rev == "" then "HEAD" else rev,
+                program,
+            ]
             "ail_impact" => out = [
                 "ask",
                 program,
