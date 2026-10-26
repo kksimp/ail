@@ -98,12 +98,18 @@ pub fn sroa_in(mut f Func) bool
     for b in 0..nb
         for at in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[at]
-            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and root[i.dst] == i.dst and not bad[i.dst]
+            if i.op == "call"
+                and i.name == "rt.obj_new"
+                and i.dst >= 0
+                and root[i.dst] == i.dst
+                and not bad[i.dst]
                 gone[b][at] = true
                 changed = true
             elif i.op == "copy" and i.dst >= 0 and root[i.dst] >= 0 and not bad[root[i.dst]]
                 gone[b][at] = true
-            elif (i.op == "store" or i.op == "load") and root[i.arg(0)] >= 0 and not bad[root[i.arg(0)]]
+            elif (i.op == "store" or i.op == "load")
+                and root[i.arg(0)] >= 0
+                and not bad[root[i.arg(0)]]
                 gone[b][at] = true
                 if i.op == "load"
                     repl[i.dst] = sval[root[i.arg(0)] * 32 + i.imm / 8]

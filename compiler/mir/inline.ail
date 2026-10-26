@@ -198,7 +198,9 @@ pub fn inline_call(mut g Func, b int, at int, callee Func, mut sites List[Site])
         mut nt := t
         if t.kind == "return"
             mut rv := if t.value >= 0 then t.value + nv else -1
-            if rv >= 0 and cont_params.len() == 1 and g.vals[rv].name() != g.vals[cont_params[0]].name()
+            if rv >= 0
+                and cont_params.len() == 1
+                and g.vals[rv].name() != g.vals[cont_params[0]].name()
                 # `T` returned where the function says `T?` (or the reverse):
                 # the join block's parameter has the declared type.
                 cv := g.vals.len()
