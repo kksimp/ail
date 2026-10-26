@@ -853,7 +853,10 @@ fn Lower.fn_cost(mut self, key str, depth int) int
     mut sc := ast.new_scan()
     ast.scan_block(mut sc, body, 0)
     pre := key.slice(0, key.len() - f.name.len())
-    w := sc.work + callee_work(sc, pre, depth + 1)
+    mut w := sc.work + callee_work(sc, pre, depth + 1)
+    # A loop in the callee may run any number of times: count it as heavy.
+    if sc.looped and w < 4096
+        w = 4096
     tk.fbusy.remove(key)
     c := if w > 1000000000 then 1000000000 else w
     tk.fcost[key] = c

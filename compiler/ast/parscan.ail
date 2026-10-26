@@ -18,6 +18,8 @@ pub struct ParScan
     ## Operations one iteration costs: nested loops count 16 times (conc.par.14).
     pub work int
     pub mult int
+    ## The body has a loop, whose bound the count does not know.
+    pub looped bool
     ## The body calls a function or a method that may change its receiver.
     pub calls bool
     ## Functions the body calls by name, with the loop multiplier at each call
@@ -39,6 +41,7 @@ pub fn new_scan() ParScan
         mutated: Set[str](),
         work: 0,
         mult: 1,
+        looped: false,
         calls: false,
         callees: [],
         callee_mult: [],
@@ -120,6 +123,7 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
                 )
         While(cond, body, _) =>
             sc.mult = sc.mult * 16
+            sc.looped = true
             scan_expr(mut sc, cond)
             scan_block(mut sc, body, depth + 1)
             sc.mult = sc.mult / 16
@@ -127,6 +131,7 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
             scan_expr(mut sc, iter)
             sc.decls.add(var)
             sc.mult = sc.mult * 16
+            sc.looped = true
             scan_block(mut sc, body, depth + 1)
             sc.mult = sc.mult / 16
         Break(_) =>
