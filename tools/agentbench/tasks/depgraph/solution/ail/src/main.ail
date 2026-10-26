@@ -49,7 +49,10 @@ fn parse(text str) Graph
 
 fn reach(adj Map[str, List[str]], start str) Set[str]
     mut seen := Set[str]()
-    mut stack := adj.get(start) else List[str]()
+    mut stack := List[str]()
+    first := adj.get(start) else List[str]()
+    for m in first
+        stack.push(m)
     while not stack.is_empty()
         n := stack.pop() else break
         if seen.add(n)
