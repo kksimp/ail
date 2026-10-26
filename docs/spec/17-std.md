@@ -1078,6 +1078,19 @@ fn main()
     print(r.status)
 ```
 
+**std.net.31** — HTTP/2: on `https://` a new connection offers ALPN `h2` and `http/1.1` (unless the body streams, `net.open`, or `AIL_HTTP2=0` is set). When the server picks `h2` the request is sent as HTTP/2 with HPACK, the pseudo-headers `:method`, `:authority`, `:scheme`, `:path` first and the other headers in a stable browser-like order, honouring flow control; the result is the same `Response` as over HTTP/1.1. A server that picks `http/1.1` or names no protocol gets HTTP/1.1. A protocol the client did not offer fails with kind `tls`; any other HTTP/2 failure (a malformed frame or header block, GOAWAY before the request is processed, RST_STREAM) fails with kind `protocol`. An idle HTTP/2 connection is kept for the next request to its origin as in std.net.19. The native client only. *(ADR 0913)*
+
+```ail norun rules=std.net.31
+use std.net
+
+fn main()
+    # Over HTTP/2 when the server picks `h2`; the program can't tell.
+    r := net.get("https://example.test/") else err
+        print(err.kind)
+        return
+    print(r.status)
+```
+
 **std.tls.1** — TLS handshake and record failures: A record that is too long, a Finished message that does not verify, or any other handshake or record error fails with kind `tls` as a `TlsError` of kind `Protocol`, and its message names the defect. *(ADR 0360)*
 
 **std.tls.2** — certificate check failures: A certificate that is malformed, has a bad time, a trailing byte, a non-minimal length or an unexpected element, or that does not match the server, fails with kind `tls` as a `TlsError` of kind `Certificate`. *(ADR 0360)*
