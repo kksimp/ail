@@ -40,9 +40,7 @@ pub fn keep_lengths(f Func) Func
     g
 
 fn is_room_push(i Inst) bool
-    i.op == "call"
-        and i.imm == 1
-        and (i.name == "rt.list_push" or i.name == "rt.list_pushf" or i.name == "rt.list_pushb")
+    i.op == "call" and i.imm == 1 and is_push_name(i.name)
 
 ## Whether the loop calls nothing but room-guaranteed pushes (which allocate
 ## nothing).
@@ -100,7 +98,7 @@ fn keep_length(
             ek = e
     if ek < 0 or g.blocks[pre].term.targets[0] != h
         return g0
-    size := if g.blocks[pushes[0].block].insts[pushes[0].at].name == "rt.list_pushb" then 1 else 8
+    size := push_bytes(g.blocks[pushes[0].block].insts[pushes[0].at].name)
     one := konst_in(mut g, pre, 1)
     g.vals.push(Ty.Int)
     g.names.push("")

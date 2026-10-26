@@ -78,8 +78,7 @@ pub fn is_call(i mir.Inst) bool
         or i.op == "prim" and (i.name == "syscall" or i.name == "clone" or i.name == "restart")
 
 pub fn is_push(i mir.Inst) bool
-    i.op == "call"
-        and (i.name == "rt.list_push" or i.name == "rt.list_pushf" or i.name == "rt.list_pushb")
+    i.op == "call" and mir.is_push_name(i.name)
 
 ## The caller-saved registers that hold some value of the function.
 pub fn caller_used(al Alloc, t Target) List[int]

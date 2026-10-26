@@ -1787,7 +1787,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
 fn push_fn(elem Ty) str
     match elem
         Float | F32 => "rt.list_pushf"
-        _ => if elem.elem_bytes() == 1 then "rt.list_pushb" else "rt.list_push"
+        _ => push_fn_of(elem.elem_bytes())
 
 fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) Val?
     match callee
@@ -1950,8 +1950,8 @@ fn out_fn(t Ty) str
         Tensor(_) => "rt.out_tensor"
         Bytes => "rt.out_bytes_lit"
         List(e) =>
-            if e == Ty.Sized("u8")
-                return "rt.out_list_u8"
+            if e.is_sized() and e.elem_bytes() < 8
+                return narrow_out_fn(e.elem_bytes())
             match e
                 Int | Sized(_) => "rt.out_list_int"
                 Float => "rt.out_list_float"
@@ -1981,8 +1981,8 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             Char => 4
             F32 => 5
             _ => -1
-        if leaf == Ty.Sized("u8")
-            k = 6
+        if leaf.is_sized() and leaf.elem_bytes() < 8
+            k = narrow_leaf(leaf.elem_bytes())
         if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)

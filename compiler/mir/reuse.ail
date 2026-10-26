@@ -21,6 +21,8 @@ KEEPS_NOTHING := [
     "rt.list_push",
     "rt.list_pushf",
     "rt.list_pushb",
+    "rt.list_pushw",
+    "rt.list_pushd",
     "rt.list_copy",
     "rt.list_copy_deep",
     "rt.list_join",

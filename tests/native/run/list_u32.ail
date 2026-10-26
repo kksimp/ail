@@ -1,0 +1,71 @@
+# List[u32] holds four bytes per element (ADR 0912): every list operation.
+K := 16843009
+
+fn u(n int) u32
+    (n * K).to_u32()
+
+fn main()
+    mut a := List[u32]()
+    for i in 0..10
+        a.push(u(i * 25))
+    print(a.len())
+    print(a[9])
+    a[0] = u(255)
+    print(a[0])
+    print(a)
+    b := a[2..5]
+    print(b)
+    mut c := b
+    c.push(u(7))
+    print(b.len())
+    print(c.len())
+    c.extend([u(1), u(2)])
+    c.insert(0, u(9))
+    print(c)
+    print(c.remove_at(1))
+    c.reverse()
+    print(c)
+    print(c.contains(u(100)))
+    print(c.contains(u(101)))
+    pos := c.index_of(u(7)) else -1
+    print(pos)
+    print(c.sorted())
+    print(c)
+    c.sort()
+    print(c)
+    if m := c.max()
+        print(m)
+    if m := c.min()
+        print(m)
+    s := [u(3), u(4), u(5)]
+    print(s.sum())
+    print([u(1), u(2)] < [u(1), u(3)])
+    print(s == [u(3), u(4), u(5)])
+    print(s == [u(3), u(4)])
+    nested := [[u(1), u(2)], [u(3)]]
+    print(nested)
+    print(nested.flatten())
+    mut d := a
+    d[1] = u(99)
+    print(a[1])
+    print(d[1])
+    mut sq := [u(x) for x in 0..5]
+    print(sq)
+    st := {v for v in sq}
+    print(st.len())
+    print(st.contains(u(3)))
+    m := {v: v.to_int() for v in sq}
+    print(m.keys())
+    print(sq.take(2))
+    print(sq.windows(2).len())
+    sq.clear()
+    print(sq.len())
+    mut bb := List[u32]()
+    for i in 0..300
+        bb.push(((i % 200) * K).to_u32())
+    for i in 0..300
+        bb[i] = (((i * 7) % 251) * K).to_u32()
+    after := [i for i in 0..4]
+    print(bb[299])
+    print(bb[1])
+    print(after)

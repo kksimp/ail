@@ -5,6 +5,7 @@
 - **Decided by:** AI (delegated, ADR 0076)
 - **Topic:** 23 — Compiler architecture
 - **Amends:** [ADR 0391](0391-native-backend-optimisations.md)
+- **Amended by:** [ADR 0912](0912-list-u16-u32.md) (`u16` and `u32`; `rt.list_pushb` takes a `u8`, the push width follows the callee)
 
 ## Context
 

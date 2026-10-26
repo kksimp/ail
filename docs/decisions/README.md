@@ -716,6 +716,7 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0900](0900-refuse-rust-only-routes.md) | `./ail` refuses `test --native` and `selftest --test` (Rust-only routes) | Accepted | 2026-10-24 |
 | [0901](0901-std-toml.md) | `std.toml`: TOML read into the `Json` value *(delegated)* | Accepted | 2026-10-25 |
 | [0902](0902-std-bigint.md) | `std.bigint`: integers of any size *(delegated)* | Accepted | 2026-10-25 |
+| [0912](0912-list-u16-u32.md) | Native `List[u16]` and `List[u32]` hold two and four bytes per element *(delegated)* | Accepted | 2026-10-25 |
 | [0907](0907-list-u8-one-byte.md) | Native `List[u8]` holds one byte per element *(delegated)* | Accepted | 2026-10-25 |
 | [0905](0905-std-app-serif-font.md) | `std.app` text family `serif` and Garlic's font-family mapping | Accepted | 2026-10-25 |
 | [0906](0906-retire-native-coverage-tracker.md) | The native coverage tracker is retired; its report stays as a snapshot *(delegated)* | Accepted | 2026-10-25 |

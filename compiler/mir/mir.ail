@@ -96,10 +96,22 @@ pub fn Ty.is_sized(self) bool
         Sized(_) => true
         _ => false
 
-## Bytes one element of a list of `self` takes: 1 for a `bool` or a `u8`
-## (native-abi.md §2, ADR 0907), else 8.
+## Bytes one element of a list of `self` takes: 1 for a `bool` or a `u8`, 2 for
+## a `u16`, 4 for a `u32` (native-abi.md §2, ADRs 0907 and 0912), else 8.
 pub fn Ty.elem_bytes(self) int
-    if self == Ty.Bool or self == Ty.Sized("u8") then 1 else 8
+    match self
+        Bool => 1
+        Sized(n) => sized_elem_bytes(n)
+        _ => 8
+
+fn sized_elem_bytes(name str) int
+    if name == "u8"
+        return 1
+    if name == "u16"
+        return 2
+    if name == "u32"
+        return 4
+    8
 
 pub fn Ty.is_tensor(self) bool
     match self
@@ -193,6 +205,18 @@ pub struct Inst
 ## integer instruction uses, so that `Inst` keeps its fields; ADR 0625).
 pub fn Inst.elem_off(self) int
     fimm.to_int()
+
+## The bytes per element of the list that push callee `name` fills: a
+## `List[u8]` or `List[bool]` 1, a `List[u16]` 2, a `List[u32]` 4, else 8.
+pub fn is_push_name(name str) bool
+    name == "rt.list_push" or name == "rt.list_pushf" or push_bytes(name) < 8
+
+pub fn push_bytes(name str) int
+    match name
+        "rt.list_pushb" => 1
+        "rt.list_pushw" => 2
+        "rt.list_pushd" => 4
+        _ => 8
 
 pub fn inst(dst int, op str, args List[int]) Inst
     Inst(dst: dst, op: op, args: args, imm: 0, fimm: 0.0, name: "", site: -1)
