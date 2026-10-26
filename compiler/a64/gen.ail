@@ -1213,10 +1213,7 @@ fn Gen.prim(mut self, i mir.Inst)
             a.mov_ri(FP, 0)
             a.bl("rt.worker_main")
             a.brk()
-        "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(
-            loc[i.dst],
-            i.arg(0),
-        )])
+        "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(loc[i.dst], i.arg(0))])
         "float_bits" =>
             d := out_gpr(i.dst, S1)
             a.fmov_xd(d, fpr(i.arg(0), X0))

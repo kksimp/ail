@@ -123,7 +123,10 @@ fn elide_moves(f Func, moves List[int]) Func
     mut g := f
     for b in 0..nb
         for at in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[at] = g.blocks[b].insts[at].with_args([moved(repl, a) for a in g.blocks[b].insts[at].operands()])
+            g.blocks[b].insts[at] = g.blocks[b].insts[at].with_args([
+                moved(repl, a)
+                for a in g.blocks[b].insts[at].operands()
+            ])
         g.blocks[b].insts = [
             g.blocks[b].insts[at]
             for at in 0..g.blocks[b].insts.len() if not gone[b][at]

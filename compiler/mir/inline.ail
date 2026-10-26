@@ -218,7 +218,10 @@ pub fn merge_blocks_in(mut g Func)
 fn rename(mut g Func, repl List[int])
     for b in 0..g.blocks.len()
         for k in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[k] = g.blocks[b].insts[k].with_args([repl[a] for a in g.blocks[b].insts[k].operands()])
+            g.blocks[b].insts[k] = g.blocks[b].insts[k].with_args([
+                repl[a]
+                for a in g.blocks[b].insts[k].operands()
+            ])
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = repl[t.cond]

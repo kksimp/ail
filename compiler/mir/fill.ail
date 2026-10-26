@@ -143,7 +143,10 @@ fn fill_one(f Func, defs List[Def], lp LoopInfo, c Counted) Func?
         if lp.member[b]
             continue
         for k in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[k] = g.blocks[b].insts[k].with_args([swap(a, c.p, ep, r, er) for a in g.blocks[b].insts[k].operands()])
+            g.blocks[b].insts[k] = g.blocks[b].insts[k].with_args([
+                swap(a, c.p, ep, r, er)
+                for a in g.blocks[b].insts[k].operands()
+            ])
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = swap(t.cond, c.p, ep, r, er)

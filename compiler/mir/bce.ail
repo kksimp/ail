@@ -953,7 +953,10 @@ fn version(
         if inl[b]
             continue
         for k in 0..blocks[b].insts.len()
-            blocks[b].insts[k] = blocks[b].insts[k].with_args([renamed(qmap, a) for a in blocks[b].insts[k].operands()])
+            blocks[b].insts[k] = blocks[b].insts[k].with_args([
+                renamed(qmap, a)
+                for a in blocks[b].insts[k].operands()
+            ])
         mut t := blocks[b].term
         t.cond = renamed(qmap, t.cond)
         t.value = renamed(qmap, t.value)

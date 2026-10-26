@@ -65,7 +65,10 @@ fn remove_trivial_params(mut g Func)
     final := [resolve(repl, v) for v in 0..repl.len()]
     for b in 0..g.blocks.len()
         for i in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[i] = g.blocks[b].insts[i].with_args([final[a] for a in g.blocks[b].insts[i].operands()])
+            g.blocks[b].insts[i] = g.blocks[b].insts[i].with_args([
+                final[a]
+                for a in g.blocks[b].insts[i].operands()
+            ])
         mut t := g.blocks[b].term
         if t.cond >= 0
             t.cond = final[t.cond]
