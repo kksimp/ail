@@ -69,7 +69,7 @@ fn command(name str, a Json) Cmd
                 out = ["task", "start", program, a.text("goal", ""), "--json"]
                 if rev != ""
                     out.extend(["--rev", rev])
-            _ => out = ["task", name[5..], "--json"]
+            _ => out = ["task", name.slice(5, name.len()), "--json"]
         return Cmd(argv: out, why: "")
     Cmd(argv: [], why: "unknown tool {name}")
 
