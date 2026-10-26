@@ -151,7 +151,7 @@ pub fn Module.globals_used(self) int
                     consts[i.dst] = i.imm
         for b in f.blocks
             for i in b.insts
-                if i.op == "prim" and i.name == "global" and i.args.len() == 1
-                    if k := consts.get(i.args[0])
+                if i.op == "prim" and i.name == "global" and i.argc() == 1
+                    if k := consts.get(i.arg(0))
                         n = n.max(k + 1)
     n

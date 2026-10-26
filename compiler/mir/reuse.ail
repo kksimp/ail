@@ -21,6 +21,8 @@ KEEPS_NOTHING := [
     "rt.list_push",
     "rt.list_pushf",
     "rt.list_pushb",
+    "rt.list_pushw",
+    "rt.list_pushd",
     "rt.list_copy",
     "rt.list_copy_deep",
     "rt.list_join",
@@ -82,16 +84,16 @@ fn escaping(f Func, by_name Map[str, int], free List[List[bool]]) Escape
     for blk in f.blocks
         for i in blk.insts
             if i.op == "copy"
-                e.join(i.dst, i.args[0])
+                e.join(i.dst, i.arg(0))
         for k in 0..blk.term.targets.len()
             ps := f.blocks[blk.term.targets[k]].params
             for j in 0..blk.term.args[k].len()
                 e.join(ps[j], blk.term.args[k][j])
     for blk in f.blocks
         for i in blk.insts
-            for a in 0..i.args.len()
+            for a in 0..i.argc()
                 if not keeps_nothing(i, a, by_name, free)
-                    e.mark(i.args[a])
+                    e.mark(i.arg(a))
         if blk.term.value >= 0
             e.mark(blk.term.value)
     e
@@ -270,7 +272,7 @@ fn live_before(f Func, inside Set[int], live_in List[Set[int]], x int, from int)
         i := f.blocks[x].insts[k]
         if i.dst >= 0
             live.remove(i.dst)
-        for v in i.args
+        for v in i.operands()
             if inside.contains(v)
                 live.add(v)
     if from == 0

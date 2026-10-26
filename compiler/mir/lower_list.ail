@@ -35,6 +35,47 @@ fn is_list_edit(name str) bool
 fn elem_bytes(e Ty) int
     e.elem_bytes()
 
+## The list `r` of `e` as 8-byte words, for a runtime function that reads them
+## so: a `List[u8]`, `List[u16]` or `List[u32]` is widened into a copy (ADRs 0907, 0912).
+fn Lower.words_of(mut self, r Val, e Ty) int
+    if e.elem_bytes() < 8
+        return call("rt.list_widen", [r.id, konst(e.elem_bytes(), Ty.Int)], r.ty)
+    r.id
+
+## The value `v` for a narrow list slot: the code generators size a store by
+## the value's own type, and a converted value (`x.to_u8()`) keeps its source's,
+## so it is copied into a value of the element type (ADRs 0907, 0912).
+fn Lower.slot_val(mut self, v int, elem Ty) int
+    if elem.elem_bytes() < 8 and elem != Ty.Bool
+        return op("copy", [v], elem)
+    v
+
+## The push, the whole-list output and the `rt.out_list_deep` leaf kind of a list
+## whose elements take `n` bytes: 1 (`bool`, `u8`), 2 (`u16`) or 4 (`u32`); 8
+## is a plain word.
+fn push_fn_of(n int) str
+    if n == 1
+        return "rt.list_pushb"
+    if n == 2
+        return "rt.list_pushw"
+    if n == 4
+        return "rt.list_pushd"
+    "rt.list_push"
+
+fn narrow_out_fn(n int) str
+    if n == 1
+        return "rt.out_list_u8"
+    if n == 2
+        return "rt.out_list_u16"
+    "rt.out_list_u32"
+
+fn narrow_leaf(n int) int
+    if n == 1
+        return 6
+    if n == 2
+        return 7
+    8
+
 ## How `contains` compares: 0 integers and bools, 1 strings, 2 floats; -1 if
 ## the element type has no native equality yet.
 fn eq_kind(e Ty) int
@@ -149,7 +190,12 @@ fn Lower.lower_list_edit(
         mut target := r.id
         if name == "sorted"
             target = call("rt.list_copy", [r.id, size], r.ty)
-        call("rt.list_sort", [target, konst(k, Ty.Int)], Ty.Unit)
+        if e.elem_bytes() < 8
+            wide := words_of(Val(id: target, ty: r.ty), e)
+            call("rt.list_sort", [wide, konst(k, Ty.Int)], Ty.Unit)
+            call("rt.list_narrow_into", [target, wide, size], Ty.Unit)
+        else
+            call("rt.list_sort", [target, konst(k, Ty.Int)], Ty.Unit)
         if name == "sorted"
             return Val(id: target, ty: r.ty)
         watch_plain(npos, r, "sort")
@@ -177,7 +223,7 @@ fn Lower.lower_list_edit(
             k := sized_kind(e)
             texts := trap_texts("expr.arith.1", npos)
             sargs := [
-                r.id,
+                words_of(r, e),
                 konst(sized_lo(k), Ty.Int),
                 konst(sized_hi(k), Ty.Int),
                 konst(sized_code(k), Ty.Int),
@@ -201,7 +247,7 @@ fn Lower.lower_list_edit(
         if k < 0
             return unsupported(npos, "`.{name}()` on `{r.ty.name()}`")
         greatest := konst(if name == "max" then 1 else 0, Ty.Int)
-        idx := call("rt.list_extreme", [r.id, konst(k, Ty.Int), greatest], Ty.Int)
+        idx := call("rt.list_extreme", [words_of(r, e), konst(k, Ty.Int), greatest], Ty.Int)
         found := op("le", [konst(0, Ty.Int), idx], Ty.Bool)
         return opt_at(r, found, idx, e, false, npos)
     if name == "index_of" and vs.len() == 1

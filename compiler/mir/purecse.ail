@@ -253,10 +253,10 @@ fn pc_cse_calls(f Func, fx Map[str, PcFx]) Func
     mut g := f
     for b in 0..n
         for at in 0..g.blocks[b].insts.len()
-            g.blocks[b].insts[at].args = [
+            g.blocks[b].insts[at] = g.blocks[b].insts[at].with_args([
                 resolve_val(w.repl, a)
-                for a in g.blocks[b].insts[at].args
-            ]
+                for a in g.blocks[b].insts[at].operands()
+            ])
         g.blocks[b].insts = [
             g.blocks[b].insts[at]
             for at in 0..g.blocks[b].insts.len() if not w.gone[b][at]
@@ -283,7 +283,7 @@ fn pc_walk_block(mut w PcWalk, b int)
     for at in 0..insts.len()
         i := insts[at]
         if e := pc_candidate(i, w.fx)
-            args := [resolve_val(w.repl, a) for a in i.args]
+            args := [resolve_val(w.repl, a) for a in i.operands()]
             key := if e.scalar then "{i.name}|{args}" else "{i.name}|{args}|{w.epoch}"
             if prior := w.seen.get(key)
                 w.repl[i.dst] = prior
@@ -331,7 +331,7 @@ fn pc_hoist_calls(f Func, fx Map[str, PcFx]) Func
                         at += 1
                         continue
                     mut outside := true
-                    for a in i.args
+                    for a in i.operands()
                         d := defs[a]
                         if d.block >= 0 and lp.member[d.block]
                             outside = false

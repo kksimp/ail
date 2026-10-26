@@ -1,0 +1,97 @@
+# The client side of tools/native-net/h2-check.sh (std.net.31, ADR 0913):
+# `net.request` over HTTP/2 against h2_server.py, whose base URL is the first
+# argument. The server answers with canned responses over ALPN `h2`; what
+# each prints is in h2_client.out.
+use std.net
+
+fn show(label str, base str, path str, o net.Options, method str)
+    r := net.request(method, "{base}{path}", o) else err
+        print("{label}: error {err.kind}")
+        return
+    print("{label}: {r.status} {r.body.trim()}")
+
+## A request that fails: its kind and whether the message holds `word`.
+fn refused(label str, base str, path str, word str)
+    r := net.get("{base}{path}") else err
+        print("{label}: error {err.kind} {err.message.contains(word)}")
+        return
+    print("{label}: no error {r.status}")
+
+fn heads(label str, base str, path str)
+    r := net.get("{base}{path}") else err
+        print("{label}: error {err.kind}")
+        return
+    print("{label}: {r.status} {r.body.trim()}")
+    print("  names {r.headers.keys().sorted().join(",")}")
+
+fn same(label str, base str, path str, o net.Options, method str, want str)
+    r := net.request(method, "{base}{path}", o) else err
+        print("{label}: error {err.kind}")
+        return
+    if method == "POST"
+        print("{label}: {r.status} {r.body.trim()}")
+    else
+        print("{label}: {r.status} {r.body.len()} bytes {r.body == want}")
+
+## Three requests in a row share one connection (a pooled HTTP/2 connection):
+## the server numbers its connections, renumbered here by first appearance.
+fn which(base str)
+    mut ids := ["-"]
+    for i in 0..3
+        r := net.get("{base}/which") else err
+            print("which {i}: error {err.kind}")
+            return
+        parts := r.body.trim().split(" ")
+        mut at := -1
+        for j in 0..ids.len()
+            if ids[j] == parts[1]
+                at = j
+        if at < 0
+            ids.push(parts[1])
+            at = ids.len() - 1
+        print("which {i}: connection {at} request {parts[3]}")
+
+fn main()
+    base := env.args()[0]
+    plain := net.options()
+    which(base)
+    show("hello", base, "/hello", plain, "GET")
+    r := net.get("{base}/hello") else err
+        print("hello: error {err.kind}")
+        return
+    print("  x-proto {r.headers["x-proto"]}")
+    print("  set-cookie {r.all_headers["set-cookie"].join("|")}")
+    show("head", base, "/hello", plain, "HEAD")
+    show("hdrs", base, "/hdrs", plain, "GET")
+    mut h := net.options()
+    h.headers["Accept-Language"] = "en-US,en;q=0.9"
+    h.headers["User-Agent"] = "Mozilla/5.0 (compat) Garlic/1"
+    h.headers["X-Custom"] = "one"
+    h.headers["Sec-CH-UA"] = "\"Garlic\";v=\"1\""
+    h.headers["Accept"] = "text/html"
+    h.headers["Cookie"] = "k=v"
+    h.headers["Connection"] = "keep-alive"
+    h.headers["Content-Length"] = "999"
+    show("hdrs custom", base, "/hdrs", h, "GET")
+    show("redirect", base, "/redirect", plain, "GET")
+    show("nobody", base, "/nobody", plain, "GET")
+    show("missing", base, "/missing", plain, "GET")
+    show("gzip", base, "/gzip", plain, "GET")
+    show("interim", base, "/interim", plain, "GET")
+    show("split", base, "/split", plain, "GET")
+    show("ping", base, "/ping", plain, "GET")
+    heads("trailers", base, "/trailers")
+    heads("huffman", base, "/huffman")
+    d := net.get("{base}/huffman") else err
+        print("huffman: error {err.kind}")
+        return
+    print("  x-dyn {d.all_headers["x-dyn"].join("|")}")
+    print("  x-huff {d.headers["x-huff"]}")
+    same("big", base, "/big", plain, "GET", "0123456789abcdef".repeat(18750))
+    same("huge", base, "/huge", plain, "GET", "0123456789abcdef".repeat(524288))
+    mut p := net.options()
+    p.body = "0123456789abcdef".repeat(12500)
+    p.headers["Content-Type"] = "text/plain"
+    same("post", base, "/post", p, "POST", "")
+    refused("goaway", base, "/goaway", "GOAWAY")
+    refused("rst", base, "/rst", "INTERNAL_ERROR")

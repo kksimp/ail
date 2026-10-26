@@ -98,7 +98,7 @@ fn holds_lists(t Ty) bool
 ## The list `v` was fetched from, else -1.
 fn parent(f Func, defs List[Def], v int) int
     i := inst_of(f, defs, v) else return -1
-    if i.op == "get" and is_list(f.vals[v]) then i.args[0] else -1
+    if i.op == "get" and is_list(f.vals[v]) then i.arg(0) else -1
 
 ## Mark `v` and every list it is part of.
 fn taint(f Func, defs List[Def], v int, mut marks List[bool])
@@ -117,8 +117,7 @@ fn clean(f Func, defs List[Def], v int, marks List[bool]) bool
     true
 
 fn is_push(i Inst) bool
-    i.op == "call"
-        and (i.name == "rt.list_push" or i.name == "rt.list_pushf" or i.name == "rt.list_pushb")
+    i.op == "call" and is_push_name(i.name)
 
 # ---- accesses an earlier access or push already vouches for ----
 
@@ -134,7 +133,9 @@ fn earlier(dom List[List[bool]], a At, c At) bool
 
 ## Whether no operation in the module makes a list shorter (native.subset.1
 ## has `push` and no `pop`, `clear` or `remove`). Any other `rt.list_`
-## function a program calls is assumed to, which turns the next pass off.
+## function a program calls is assumed to, which turns the next pass off: a new
+## runtime helper that only reads or grows (`list_most`) belongs in `GROWS`, or
+## push loops stop keeping their length and filling (ADR 0816).
 pub fn lists_only_grow(m Module) bool
     for f in m.funcs
         for blk in f.blocks
@@ -148,6 +149,8 @@ GROWS := [
     "rt.list_push",
     "rt.list_pushf",
     "rt.list_pushb",
+    "rt.list_pushw",
+    "rt.list_pushd",
     "rt.list_copy",
     "rt.list_copy_deep",
     "rt.list_join",
@@ -157,6 +160,7 @@ GROWS := [
     "rt.list_new_for",
     "rt.list_alloc",
     "rt.list_grow",
+    "rt.list_most",
 ]
 
 ## Where lists never shrink, `xs[i]` can't fail if an access to `xs[i]` came
@@ -172,14 +176,14 @@ fn dominated(f Func) Func
         for k in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[k]
             if i.op == "get" or i.op == "set"
-                key := "{i.args[0]}|{i.args[1]}"
+                key := "{i.arg(0)}|{i.arg(1)}"
                 if not seen.contains(key)
                     seen[key] = []
                 seen[key].push(At(b: b, k: k))
             elif is_push(i)
-                if not pushes.contains(i.args[0])
-                    pushes[i.args[0]] = []
-                pushes[i.args[0]].push(At(b: b, k: k))
+                if not pushes.contains(i.arg(0))
+                    pushes[i.arg(0)] = []
+                pushes[i.arg(0)].push(At(b: b, k: k))
     mut g := f
     for b in 0..f.blocks.len()
         for k in 0..f.blocks[b].insts.len()
@@ -188,15 +192,15 @@ fn dominated(f Func) Func
                 continue
             here := At(b: b, k: k)
             mut proven := false
-            if prior := seen.get("{i.args[0]}|{i.args[1]}")
+            if prior := seen.get("{i.arg(0)}|{i.arg(1)}")
                 for p in prior
                     if earlier(dom, p, here)
                         proven = true
             if not proven
-                if l := inst_of(f, defs, i.args[1])
-                    if l.op == "len" and l.args[0] == i.args[0]
-                        born := At(b: defs[i.args[1]].block, k: defs[i.args[1]].at)
-                        if ps := pushes.get(i.args[0])
+                if l := inst_of(f, defs, i.arg(1))
+                    if l.op == "len" and l.arg(0) == i.arg(0)
+                        born := At(b: defs[i.arg(1)].block, k: defs[i.arg(1)].at)
+                        if ps := pushes.get(i.arg(0))
                             for p in ps
                                 if earlier(dom, born, p) and earlier(dom, p, here)
                                     proven = true
@@ -205,9 +209,9 @@ fn dominated(f Func) Func
                 # constant to (`base := 3` then `if ..: base = 0`), is below
                 # the number of pushes that came first: the list has at
                 # least that many elements and never shrinks.
-                if ceiling := highest(f, defs, passed, i.args[1])
+                if ceiling := highest(f, defs, passed, i.arg(1))
                     mut count := 0
-                    if ps := pushes.get(i.args[0])
+                    if ps := pushes.get(i.arg(0))
                         for p in ps
                             if earlier(dom, p, here)
                                 count += 1
@@ -283,9 +287,9 @@ fn reserve_lists(f Func) Func
             if not every
                 continue
             for i in f.blocks[b].insts
-                if not is_push(i) or lp.member[defs[i.args[0]].block]
+                if not is_push(i) or lp.member[defs[i.arg(0)].block]
                     continue
-                x := i.args[0]
+                x := i.arg(0)
                 mut at := -1
                 for k in 0..lists.len()
                     if lists[k] == x
@@ -293,7 +297,7 @@ fn reserve_lists(f Func) Func
                 if at < 0
                     lists.push(x)
                     per.push(0)
-                    size.push(if i.name == "rt.list_pushb" then 1 else 8)
+                    size.push(push_bytes(i.name))
                     at = lists.len() - 1
                 per[at] += 1
         for k in 0..lists.len()
@@ -328,7 +332,7 @@ fn reserve_lists(f Func) Func
         c1 := made.pop() else break
         mut call := made[pt.at]
         call.name = "rt.list_new_for"
-        call.args = [c1.dst, pt.hi, c2.dst, c3.dst]
+        call = call.with_args([c1.dst, pt.hi, c2.dst, c3.dst])
         mut out := [made[k] for k in 0..pt.at]
         out.push(c1)
         out.push(c2)
@@ -365,7 +369,7 @@ fn made_for(
     mut sized Set[int],
 ) bool
     nw := inst_of(f, defs, x) else return false
-    if nw.op != "call" or nw.name != "rt.list_new" or const_of(f, defs, nw.args[0]) != 0
+    if nw.op != "call" or nw.name != "rt.list_new" or const_of(f, defs, nw.arg(0)) != 0
         return false
     start := const_of(f, defs, c.lo) else return false
     d := defs[x]
@@ -378,7 +382,7 @@ fn made_for(
     if d.block != lp.pre
         return false
     for k in d.at + 1..f.blocks[d.block].insts.len()
-        if f.blocks[d.block].insts[k].args.contains(x)
+        if f.blocks[d.block].insts[k].operands().contains(x)
             return false
     not f.blocks[d.block].term.uses().contains(x)
 
@@ -512,8 +516,8 @@ fn iv_of(f Func, defs List[Def], loops List[LoopInfo], v int, depth int) Iv
             return Iv(ok: i.imm > 0 - IV_BIG and i.imm < IV_BIG, lo: i.imm, hi: i.imm)
         if i.op != "add" and i.op != "sub" and i.op != "mul"
             return no_iv()
-        a := iv_of(f, defs, loops, i.args[0], depth + 1)
-        b := iv_of(f, defs, loops, i.args[1], depth + 1)
+        a := iv_of(f, defs, loops, i.arg(0), depth + 1)
+        b := iv_of(f, defs, loops, i.arg(1), depth + 1)
         if not a.ok or not b.ok
             return no_iv()
         if i.op == "add"
@@ -536,7 +540,7 @@ fn iv_of(f Func, defs List[Def], loops List[LoopInfo], v int, depth int) Iv
         if c.step >= 0
             return no_iv()
         cmp := inst_of(f, defs, f.blocks[lp.header].term.cond) else return no_iv()
-        if cmp.op != "lt" or cmp.args[0] != v
+        if cmp.op != "lt" or cmp.arg(0) != v
             return no_iv()
         a := iv_of(f, defs, loops, c.lo, depth + 1)
         b := iv_of(f, defs, loops, c.hi, depth + 1)
@@ -568,11 +572,11 @@ fn floor_loop(f Func, defs List[Def], loops List[LoopInfo], lp LoopInfo, b int) 
         for blk in o.blocks
             for i in f.blocks[blk].insts
                 if i.op == "call" or i.op == "prim"
-                    for a in i.args
+                    for a in i.operands()
                         if is_list(f.vals[a])
                             taint(f, defs, a, mut marks)
-                elif i.op == "set" and holds_lists(f.vals[i.args[0]])
-                    taint(f, defs, i.args[0], mut marks)
+                elif i.op == "set" and holds_lists(f.vals[i.arg(0)])
+                    taint(f, defs, i.arg(0), mut marks)
         if not clean(f, defs, b, marks)
             continue
         if best < 0 or o.member[loops[best].header]
@@ -597,14 +601,14 @@ fn version(
     for b in lp.blocks
         for i in f.blocks[b].insts
             if i.op == "call" or i.op == "prim"
-                for a in i.args
+                for a in i.operands()
                     if is_list(f.vals[a])
                         taint(f, defs, a, mut lt)
                         taint(f, defs, a, mut et)
             elif i.op == "set"
-                taint(f, defs, i.args[0], mut et)
-                if holds_lists(f.vals[i.args[0]])
-                    taint(f, defs, i.args[0], mut lt)
+                taint(f, defs, i.arg(0), mut et)
+                if holds_lists(f.vals[i.arg(0)])
+                    taint(f, defs, i.arg(0), mut lt)
     # Lists the loop pushes to once or more per iteration and does nothing
     # else to: the guard checks their room for the whole loop, and the
     # pushes lose the check that the list is full (native.bce.6).
@@ -618,7 +622,7 @@ fn version(
         for b in lp.blocks
             for i in f.blocks[b].insts
                 if (i.op == "call" or i.op == "prim") and not is_push(i)
-                    for a in i.args
+                    for a in i.operands()
                         if is_list(f.vals[a])
                             taint(f, defs, a, mut nl)
         mut counted_at := Map[int, int]()
@@ -628,9 +632,9 @@ fn version(
                 if not dom[l][b]
                     every = false
             for i in f.blocks[b].insts
-                if not is_push(i) or inl[defs[i.args[0]].block]
+                if not is_push(i) or inl[defs[i.arg(0)].block]
                     continue
-                x := i.args[0]
+                x := i.arg(0)
                 if not every
                     bad.add(x)
                     continue
@@ -654,7 +658,7 @@ fn version(
         for b in lp.blocks
             for k in 0..f.blocks[b].insts.len()
                 i := f.blocks[b].insts[k]
-                if is_push(i) and roomy.contains(i.args[0]) and not bad.contains(i.args[0])
+                if is_push(i) and roomy.contains(i.arg(0)) and not bad.contains(i.arg(0))
                     roomy_keys.add(k_of(b, k))
     # Loads of an unchanging element, which the guard does once.
     mut hoists := List[Hoist]()
@@ -666,10 +670,10 @@ fn version(
             if b == lp.header
                 continue
             for i in f.blocks[b].insts
-                if i.op != "get" or hidx.contains(i.dst) or not is_list(f.vals[i.args[0]])
+                if i.op != "get" or hidx.contains(i.dst) or not is_list(f.vals[i.arg(0)])
                     continue
-                y := i.args[0]
-                ci := i.args[1]
+                y := i.arg(0)
+                ci := i.arg(1)
                 if not (fixed(defs, inl, hidx, y) and fixed(defs, inl, hidx, ci))
                     continue
                 if clean(f, defs, y, et)
@@ -695,13 +699,13 @@ fn version(
             i := f.blocks[b].insts[k]
             if i.op != "get" and i.op != "set" or hidx.contains(i.dst)
                 continue
-            x := i.args[0]
+            x := i.arg(0)
             if rows and i.site >= 0 and is_list(f.vals[x]) and not fixed(defs, inl, hidx, x)
                 # A row of a list of lists whose rows are all longer than the index.
                 pb := parent(f, defs, x)
-                still := fixed(defs, inl, hidx, i.args[1]) and clean(f, defs, x, lt)
+                still := fixed(defs, inl, hidx, i.arg(1)) and clean(f, defs, x, lt)
                 if pb >= 0 and still and floor_loop(f, defs, loops, lp, pb) >= 0
-                    needs.push(Need(kind: "row", x: pb, arg: i.args[1], off: 0))
+                    needs.push(Need(kind: "row", x: pb, arg: i.arg(1), off: 0))
                     relax.add("{b}:{k}")
                 continue
             if not (is_list(f.vals[x]) and fixed(defs, inl, hidx, x) and clean(f, defs, x, lt))
@@ -710,7 +714,7 @@ fn version(
             via[k_of(b, k)] = x
             if i.site < 0
                 continue
-            idx := i.args[1]
+            idx := i.arg(1)
             if idx == c.p
                 needs.push(Need(kind: "index", x: x, arg: 0, off: 0))
                 relax.add("{b}:{k}")
@@ -731,10 +735,10 @@ fn version(
             # `xs[y + k]` with `y` fixed in the loop and `k` a small constant: the
             # guard tests `0 <= y < len - k` once (native.bce.10).
             if ad := inst_of(f, defs, idx)
-                if ad.op == "add" and inl[defs[idx].block] and fixed(defs, inl, hidx, ad.args[0])
-                    if ko := cst(f, defs, ad.args[1])
+                if ad.op == "add" and inl[defs[idx].block] and fixed(defs, inl, hidx, ad.arg(0))
+                    if ko := cst(f, defs, ad.arg(1))
                         if ko >= 0 and ko <= 64
-                            needs.push(Need(kind: "invoff", x: x, arg: ad.args[0], off: ko))
+                            needs.push(Need(kind: "invoff", x: x, arg: ad.arg(0), off: ko))
                             relax.add("{b}:{k}")
                             relax.add("{defs[idx].block}:{defs[idx].at}")
                             continue
@@ -748,9 +752,9 @@ fn version(
                     relax.add("{b}:{k}")
                     continue
             a := inst_of(f, defs, idx) else continue
-            if a.op != "add" or a.args[0] != c.p or not inl[defs[idx].block]
+            if a.op != "add" or a.arg(0) != c.p or not inl[defs[idx].block]
                 continue
-            off := cst(f, defs, a.args[1]) else continue
+            off := cst(f, defs, a.arg(1)) else continue
             if off >= 1 and off <= 16
                 needs.push(Need(kind: "off", x: x, arg: off, off: 0))
                 relax.add("{b}:{k}")
@@ -782,7 +786,7 @@ fn version(
         if inl[b]
             continue
         for i in f.blocks[b].insts
-            for u in i.args
+            for u in i.operands()
                 if inl[defs[u].block]
                     if defs[u].block != lp.header
                         return none
@@ -879,7 +883,7 @@ fn version(
             continue
         mut hi_is_len := false
         if d := hd
-            hi_is_len = d.op == "len" and d.args[0] == nd.x
+            hi_is_len = d.op == "len" and d.arg(0) == nd.x
         idx := if nd.kind == "inv" or nd.kind == "invoff" then fresh_of(
             hoists,
             hidx,
@@ -949,7 +953,10 @@ fn version(
         if inl[b]
             continue
         for k in 0..blocks[b].insts.len()
-            blocks[b].insts[k].args = [renamed(qmap, a) for a in blocks[b].insts[k].args]
+            blocks[b].insts[k] = blocks[b].insts[k].with_args([
+                renamed(qmap, a)
+                for a in blocks[b].insts[k].operands()
+            ])
         mut t := blocks[b].term
         t.cond = renamed(qmap, t.cond)
         t.value = renamed(qmap, t.value)
@@ -968,7 +975,7 @@ fn version(
                 continue
             mut r := i
             r.dst = if i.dst >= 0 then vm[i.dst] else -1
-            r.args = [vm[a] for a in i.args]
+            r = r.with_args([vm[a] for a in i.operands()])
             if relax.contains("{b}:{k}")
                 r.site = -1
             if roomy_keys.contains(k_of(b, k))
@@ -977,12 +984,12 @@ fn version(
                 base := data[fresh_of(hoists, hidx, via[k_of(b, k)])]
                 if i.op == "get"
                     r.op = "ldx"
-                    r.args = [base, vm[i.args[1]]]
+                    r = r.with_args([base, vm[i.arg(1)]])
                     r.imm = f.vals[i.dst].elem_bytes()
                 else
                     r.op = "stx"
-                    r.args = [base, vm[i.args[1]], vm[i.args[2]]]
-                    r.imm = f.vals[i.args[2]].elem_bytes()
+                    r = r.with_args([base, vm[i.arg(1)], vm[i.arg(2)]])
+                    r.imm = f.vals[i.arg(2)].elem_bytes()
             insts.push(r)
         t := blk.term
         mut nt := t

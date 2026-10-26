@@ -328,11 +328,7 @@ fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool)
 
 ## The executable of `m` for `target`, written to `out`.
 fn finish_build(m mir.Module, file str, out str, target str)
-    hex := executable_hex(m, file, target)
-    exe := bytes.from_hex(hex.replace("\n", "")) else
-        io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
-        io.exit(2)
-        return
+    exe := executable_bytes(m, file, target)
     fs.write_bytes(out, exe) else err
         io.eprint("error[native.build.3]: can't write {out}: {err}")
         io.exit(2)
@@ -383,8 +379,15 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     mut texts := List[str]()
     src := imported_text(path, source_text(path)?, "{dir}/../../../std")
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
-    # `--parallel` may put any loop on the pool (conc.par.8).
-    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on()
+    # A loop the pool may take (conc.par.8) needs it, and only then: with the
+    # task runtime a trap no longer runs the program's cleanups (unwind_live).
+    tasks := mir.uses_tasks(src)
+        or mentions_ui(src)
+        or parallel_on() and has_for_loop(src) and par_keys(
+            path,
+            "{dir}/../../../std",
+            src.len(),
+        ).len() > 0
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -458,17 +461,31 @@ fn imported_text(file_arg str, text str, std str) str
 ## The executable of lowered program `m` for `target` as hex text (native.build.3).
 ## `path` names the program: the macOS target takes its name from it.
 fn executable_hex(m mir.Module, path str, target str) str
+    obj.hex(executable_list(m, path, target))
+
+## The same executable as bytes. This goes through hex text on purpose: the
+## seed's lowering keeps a `List[u8]` one word an element (ADR 0907), so the
+## stage-1 compiler can't hand one to the runtime's `bytes.from_list`.
+fn executable_bytes(m mir.Module, path str, target str) bytes
+    hex := executable_hex(m, path, target)
+    exe := bytes.from_hex(hex.replace("\n", "")) else
+        io.eprint("error[native.build.3]: the native backend produced something other than hexadecimal")
+        io.exit(2)
+        return b""
+    exe
+
+fn executable_list(m mir.Module, path str, target str) List[u8]
     match target
-        "x86_64-linux" => obj.hex(obj.elf(x64.generate(m), obj.X86_64))
-        "aarch64-linux" => obj.hex(obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64))
-        "x86_64-windows" => obj.hex(obj.pe_image(x64.generate_windows(m)))
+        "x86_64-linux" => obj.elf(x64.generate(m), obj.X86_64)
+        "aarch64-linux" => obj.elf(a64.generate(m, a64.LINUX), obj.AARCH64)
+        "x86_64-windows" => obj.pe_image(x64.generate_windows(m))
         "aarch64-macos" =>
             name := path.split("/").last() else path
-            obj.hex(obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", "")))
+            obj.macho(a64.generate(m, a64.MACOS), name.replace(".ail", ""))
         _ =>
             io.eprint("error[native.build.3]: unknown target `{target}`")
             io.exit(2)
-            ""
+            []
 
 ## The lexer's and the parser's diagnostics for one runtime file; any ends the run.
 fn runtime_syntax(path str, text str)
@@ -582,7 +599,13 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
     # for the programs that name them (json.prelude.1, ADR 0808).
     if mentions_prelude(srcs)
         srcs.push(parse_text("", "<prelude>", mir.prelude_text(mir.PRELUDE_EMBED)))
-    m := mir.lower_package_par(srcs, rt, lazy, proven_loop_keys(path, std)) else err
+    # The proof checks the whole program once more, so a program over about
+    # 60k lines keeps its loops in order (ADR 0911).
+    mut size := 0
+    for src in srcs
+        size += src.text.len()
+    pooled := par_keys(path, std, size)
+    m := mir.lower_package_par(srcs, rt, lazy, pooled) else err
         for i in 0..err.items.len()
             p := err.items[i]
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
@@ -599,15 +622,36 @@ fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module
             lines: [],
             files: [],
             file_lines: [],
+            notes: [],
         )
+    for note in m.notes
+        io.eprint(note)
     m
 
-## Whether `ail run --parallel` asked for the independent loops on the pool
-## (conc.par.8); `--deterministic` keeps every loop on one thread (conc.par.9).
+## Source bytes past which the loop proof is skipped (ADR 0911).
+PROOF_MAX_BYTES := 1500000
+
+## The proven loops of the program, none when it is too big to check again
+## (ADR 0911).
+fn par_keys(file str, std str, size int) Set[str]
+    if size > PROOF_MAX_BYTES
+        return Set[str]()
+    proven_loop_keys(file, std)
+
+## Whether a source has a `for` loop (not `impl T for U`): a line starting with `for `.
+fn has_for_loop(text str) bool
+    for l in text.lines()
+        if l.trim().starts_with("for ")
+            return true
+    false
+
+## Whether the independent loops may go to the pool (conc.par.8): by default,
+## unless `AIL_PARALLEL=0`; `--deterministic` keeps every loop on one thread
+## (conc.par.9).
 fn parallel_on() bool
-    on := env.get("AIL_PARALLEL") else ""
+    off := env.get("AIL_PARALLEL") else ""
     det := env.get("AIL_DETERMINISTIC") else ""
-    on == "1" and det == ""
+    off != "0" and det == ""
 
 ## The `file:line:col` of every loop of the program that `conc.par.2-4`
 ## prove independent, when `--parallel` is on.
@@ -742,11 +786,7 @@ fn run_generators(
             io.eprint("{err.files[i]}:{p.pos.line}:{p.pos.col}: error[{p.rule}]: {p.message}")
         io.exit(1)
         return []
-    hex := executable_hex(m, "derive", host_target())
-    exe := bytes.from_hex(hex.replace("\n", "")) else
-        io.eprint("error[native.build.3]: the generator program isn't hexadecimal")
-        io.exit(2)
-        return []
+    exe := executable_bytes(m, "derive", host_target())
     tmp := env.get("TMPDIR") else "/tmp"
     file := "{tmp}/ail-derive-{time.now_ms()}"
     fs.write_bytes(file, exe) else err

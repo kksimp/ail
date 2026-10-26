@@ -306,9 +306,10 @@ fn main()
 
 **native.bce.3** — A list's capacity is not observable: a native executable
 may allocate room for a list ahead of the pushes that fill it, at most 8 MiB
-of elements (2^20 elements of 8 bytes, 2^23 for a `List[bool]`) per list. A
-list that fills its first block also grows straight to 16 elements before it
-doubles. *(ADR 0579, ADR 0816, ADR 0562)*
+of elements (2^20 elements of 8 bytes, 2^23 bytes in all for a narrower list) per list. A
+list is allocated with room for exactly the elements asked for (at least 1);
+one that fills its first block grows to 4 elements, then to 16, before it
+doubles. *(ADR 0579, ADR 0816, ADR 0562, ADR 0907, ADR 0912)*
 
 ```ail rules=native.bce.3
 fn main()

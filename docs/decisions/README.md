@@ -716,6 +716,8 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0900](0900-refuse-rust-only-routes.md) | `./ail` refuses `test --native` and `selftest --test` (Rust-only routes) | Accepted | 2026-10-24 |
 | [0901](0901-std-toml.md) | `std.toml`: TOML read into the `Json` value *(delegated)* | Accepted | 2026-10-25 |
 | [0902](0902-std-bigint.md) | `std.bigint`: integers of any size *(delegated)* | Accepted | 2026-10-25 |
+| [0912](0912-list-u16-u32.md) | Native `List[u16]` and `List[u32]` hold two and four bytes per element *(delegated)* | Accepted | 2026-10-25 |
+| [0907](0907-list-u8-one-byte.md) | Native `List[u8]` holds one byte per element *(delegated)* | Accepted | 2026-10-25 |
 | [0905](0905-std-app-serif-font.md) | `std.app` text family `serif` and Garlic's font-family mapping | Accepted | 2026-10-25 |
 | [0906](0906-retire-native-coverage-tracker.md) | The native coverage tracker is retired; its report stays as a snapshot *(delegated)* | Accepted | 2026-10-25 |
 | [0904](0904-rust-bootstrap-deleted.md) | The Rust bootstrap is deleted (D5) | Accepted | 2026-10-25 |
@@ -727,3 +729,6 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0908](0908-apps-in-their-own-repositories.md) | The apps (Garlic, Garlic Press, ail-edit, Clove) live in their own private AGPL-3.0 repositories; ail holds the language only | Accepted | 2026-10-25 |
 | [0909](0909-ail-verify-diff.md) | `ail verify --diff`: proved, tested, unverified and new failures for a change | Proposed | 2026-10-25 |
 | [0910](0910-test-bundle-failure.md) | `ail test --bundle-failure`: one file that reproduces a failing test | Proposed | 2026-10-25 |
+| [0911](0911-default-automatic-parallel-loops.md) | Native code runs proven independent loops in parallel by default, past a work threshold | Proposed | 2026-10-25 |
+| [0913](0913-http2-client-over-alpn.md) | An HTTP/2 client over ALPN in the native `std.net` *(delegated)* | Accepted | 2026-10-26 |
+| [0914](0914-automatic-fork-join-of-independent-calls.md) | Run independent pure calls in a straight-line block as a fork-join, when each is worth it | Proposed | 2026-10-26 |

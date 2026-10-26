@@ -18,7 +18,8 @@ fn ord_kind(e Ty) int
         Float | F32 => 2
         List(inner) =>
             k := ord_kind(inner)
-            if k < 0 or k >= 8 then -1 else k + 8
+            # A list of bytes stores them one each, which the nested kinds don't read.
+            if k < 0 or k >= 8 or inner.elem_bytes() < 8 then -1 else k + 8
         _ => -1
 
 ## `a < b` and its kin on two lists of one type.
@@ -28,7 +29,7 @@ fn Lower.list_order(mut self, o ast.BinOp, a Val, b Val) Val?
     name := op_name(o)
     if k < 0 or not is_comparison(o) or name == "eq" or name == "ne"
         return none
-    c := call("rt.list_cmp", [a.id, b.id, konst(k, Ty.Int)], Ty.Int)
+    c := call("rt.list_cmp", [words_of(a, e), words_of(b, e), konst(k, Ty.Int)], Ty.Int)
     Val(id: op(name, [c, konst(0, Ty.Int)], Ty.Bool), ty: Ty.Bool)
 
 ## `a.cmp(b)` on two lists of one type, as an `Ordering`.
@@ -37,5 +38,5 @@ fn Lower.list_cmp_method(mut self, a Val, b Val, pos ast.Pos) Val?
     k := ord_kind(e)
     if k < 0 or not same_ty(a.ty, b.ty) or not enums.contains("Ordering")
         return unsupported(pos, "`.cmp()` on `{a.ty.name()}`")
-    c := call("rt.list_cmp", [a.id, b.id, konst(k, Ty.Int)], Ty.Int)
+    c := call("rt.list_cmp", [words_of(a, e), words_of(b, e), konst(k, Ty.Int)], Ty.Int)
     ordering(op("add", [c, konst(1, Ty.Int)], Ty.Int))

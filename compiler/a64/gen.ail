@@ -155,7 +155,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         for i in blk.insts
             if codegen.is_remat(i)
                 remat[i.dst] = i
-            for u in i.args
+            for u in i.operands()
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
@@ -314,7 +314,7 @@ fn Gen.out_checked(self, v int, i mir.Inst) int
     d := loc[v]
     if not is_reg(d) or i.site < 0
         return out_gpr(v, S1)
-    for x in i.args
+    for x in i.operands()
         if loc[x] == d
             return S1
     d
@@ -452,8 +452,8 @@ fn Gen.gen_block(mut self, b int)
     if fused > 0
         cmp := blk.insts[fused]
         mask := blk.insts[fused - 1]
-        if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.args[0] == mask.dst
-            if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0
+        if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.arg(0) == mask.dst
+            if uses[mask.dst] == 1 and imm(cmp.arg(1)) == 0
                 masked = fused - 1
     if b == wrap
         save_saved(true)
@@ -471,7 +471,7 @@ fn Gen.gen_block(mut self, b int)
             mut cc := NE
             if masked >= 0
                 bt := blk.insts[masked]
-                a.tst_rr(gpr(bt.args[0], S0), gpr(bt.args[1], S1))
+                a.tst_rr(gpr(bt.arg(0), S0), gpr(bt.arg(1), S1))
                 cc = cond_of(blk.insts[fused].op)
             elif fused >= 0
                 cc = compare(blk.insts[fused])
@@ -571,8 +571,8 @@ fn swapped(cc int) int
 
 ## Set the flags for a comparison; gives the condition that means true.
 fn Gen.compare(mut self, i mir.Inst) int
-    x := i.args[0]
-    y := i.args[1]
+    x := i.arg(0)
+    y := i.arg(1)
     cc := cond_of(i.op)
     if i.op.starts_with("f")
         a.fcmp(fpr(x, X0), fpr(y, X1))
@@ -611,14 +611,14 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         "mul" =>
             if i.site < 0 and mul_by_power(i)
                 return
-            ra := gpr(i.args[0], S0)
-            rb := gpr(i.args[1], S1)
+            ra := gpr(i.arg(0), S0)
+            rb := gpr(i.arg(1), S1)
             d := out_checked(i.dst, i)
             if i.site >= 0
                 a.smulh(S2, ra, rb)
                 a.mul(d, ra, rb)
                 a.cmp_sign(S2, d)
-                a.b_cond(NE, stub(0, i.args[0], i.args[1], i.site, "*"))
+                a.b_cond(NE, stub(0, i.arg(0), i.arg(1), i.site, "*"))
             else
                 a.mul(d, ra, rb)
             put_gpr(i.dst, d)
@@ -629,26 +629,26 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 "bor" => "orr"
                 _ => "eor"
             d := out_gpr(i.dst, S1)
-            a.alu_rr(alu, d, gpr(i.args[0], S0), gpr(i.args[1], S1))
+            a.alu_rr(alu, d, gpr(i.arg(0), S0), gpr(i.arg(1), S1))
             put_gpr(i.dst, d)
         "bnot" =>
             d := out_gpr(i.dst, S1)
-            a.mvn(d, gpr(i.args[0], S0))
+            a.mvn(d, gpr(i.arg(0), S0))
             put_gpr(i.dst, d)
         "shl" | "shr" => shift(i)
         "neg" =>
-            r := gpr(i.args[0], S0)
+            r := gpr(i.arg(0), S0)
             d := out_checked(i.dst, i)
             if i.site >= 0
                 a.negs(d, r)
                 kind := if sites.list[i.site].op == "abs" then 5 else 2
-                a.b_cond(VS, stub(kind, i.args[0], i.args[0], i.site, "-"))
+                a.b_cond(VS, stub(kind, i.arg(0), i.arg(0), i.site, "-"))
             else
                 a.neg(d, r)
             put_gpr(i.dst, d)
         "not" =>
             d := out_gpr(i.dst, S1)
-            a.eor1(d, gpr(i.args[0], S0))
+            a.eor1(d, gpr(i.arg(0), S0))
             put_gpr(i.dst, d)
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" =>
             cc := compare(i)
@@ -656,13 +656,13 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.cset(d, cc)
             put_gpr(i.dst, d)
         "fadd" | "fsub" | "fmul" | "fdiv" =>
-            xa := fpr(i.args[0], X0)
-            xb := fpr(i.args[1], X1)
+            xa := fpr(i.arg(0), X0)
+            xb := fpr(i.arg(1), X1)
             d := out_fpr(i.dst, X0)
             a.fop(i.op, d, xa, xb)
             put_fpr(i.dst, d)
         "fneg" | "abs" | "sqrt" | "floor" | "ceil" =>
-            xa := fpr(i.args[0], X0)
+            xa := fpr(i.arg(0), X0)
             d := out_fpr(i.dst, X0)
             name := match i.op
                 "fneg" => "fneg"
@@ -674,17 +674,17 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             put_fpr(i.dst, d)
         "itof" =>
             d := out_fpr(i.dst, X0)
-            a.scvtf(d, gpr(i.args[0], S0))
+            a.scvtf(d, gpr(i.arg(0), S0))
             put_fpr(i.dst, d)
         "ftoi" =>
-            xa := fpr(i.args[0], X0)
+            xa := fpr(i.arg(0), X0)
             d := out_gpr(i.dst, S1)
             a.fcvtzs(S1, xa)
             if i.site >= 0
                 # The conversion saturates: it was exact when it gives back
                 # the truncated value and isn't the largest `int`, which no
                 # float converts to exactly.
-                bad := stub(4, i.args[0], i.args[0], i.site, "")
+                bad := stub(4, i.arg(0), i.arg(0), i.site, "")
                 a.fop1("frintz", X1, xa)
                 a.scvtf(X0, S1)
                 a.fcmp(X1, X0)
@@ -696,27 +696,27 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             put_gpr(i.dst, d)
         "call" => call(i)
         "icall" => call_out(i)
-        "utrap" => a.b(stub(14, i.args[0], i.args[0], i.site, ""))
+        "utrap" => a.b(stub(14, i.arg(0), i.arg(0), i.site, ""))
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
         "data" =>
             d := out_gpr(i.dst, S1)
-            a.ldr(d, gpr(i.args[0], S0), 16)
+            a.ldr(d, gpr(i.arg(0), S0), 16)
             put_gpr(i.dst, d)
         "ldx" => indexed_load(i)
         "stx" => indexed_store(i)
         "len" =>
             d := out_gpr(i.dst, S1)
-            a.ldr(d, gpr(i.args[0], S0), 0)
+            a.ldr(d, gpr(i.arg(0), S0), 0)
             put_gpr(i.dst, d)
         "cap" =>
             d := out_gpr(i.dst, S1)
-            a.ldr(d, gpr(i.args[0], S0), 8)
+            a.ldr(d, gpr(i.arg(0), S0), 8)
             put_gpr(i.dst, d)
-        "trap" => a.b(stub(i.imm, i.args[0], i.args[1], i.site, i.name))
+        "trap" => a.b(stub(i.imm, i.arg(0), i.arg(1), i.site, i.name))
         "load" =>
-            r := gpr(i.args[0], S0)
+            r := gpr(i.arg(0), S0)
             if f.vals[i.dst].is_float()
                 d := out_fpr(i.dst, X0)
                 a.ldr_d(d, r, i.imm)
@@ -726,18 +726,18 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 a.ldr(d, r, i.imm)
                 put_gpr(i.dst, d)
         "store" =>
-            r := gpr(i.args[0], S0)
-            v := i.args[1]
+            r := gpr(i.arg(0), S0)
+            v := i.arg(1)
             if f.vals[v].is_float()
                 a.str_d(fpr(v, X0), r, i.imm)
             else
                 a.str(gpr(v, S1), r, i.imm)
-        "copy" => parallel([move_of(loc[i.dst], i.args[0])])
+        "copy" => parallel([move_of(loc[i.dst], i.arg(0))])
         _ => unreachable("a64: no code for `{i.op}`")
 
 fn Gen.add_sub(mut self, i mir.Inst)
-    x := i.args[0]
-    y := i.args[1]
+    x := i.arg(0)
+    y := i.arg(1)
     checked := i.site >= 0
     # In place when the result shares `x`'s register: the overflow stub
     # recovers `x` from the result and `y`.
@@ -765,7 +765,7 @@ fn Gen.add_sub(mut self, i mir.Inst)
 
 fn Gen.finish_add(mut self, i mir.Inst, d int, inplace bool)
     if i.site >= 0
-        l := stub(0, i.args[0], i.args[1], i.site, if i.op == "add" then "+" else "-")
+        l := stub(0, i.arg(0), i.arg(1), i.site, if i.op == "add" then "+" else "-")
         if inplace
             stubs[stubs.len() - 1].undo = if i.op == "add" then 1 else 2
         a.b_cond(VS, l)
@@ -775,8 +775,8 @@ fn Gen.finish_add(mut self, i mir.Inst, d int, inplace bool)
 ## and the smallest `int` divided by -1 traps on the negation
 ## (expr.arith.1); `msub` makes `x % -1` 0 (expr.arith.5).
 fn Gen.divide(mut self, i mir.Inst)
-    x := i.args[0]
-    y := i.args[1]
+    x := i.arg(0)
+    y := i.arg(1)
     sym := if i.op == "div" then "/" else "%"
     if k := imm(y)
         if k > 2 and k < 2147483648 and k.bit_and(k - 1) != 0
@@ -810,7 +810,7 @@ fn Gen.divide(mut self, i mir.Inst)
 ## Division and remainder by a constant `k` (not a power of two) with a high
 ## multiply (`codegen.div_magic`), not `sdiv`.
 fn Gen.magic_divide(mut self, i mir.Inst, k int)
-    ra := gpr(i.args[0], S0)
+    ra := gpr(i.arg(0), S0)
     mg := codegen.div_magic(k)
     a.mov_ri(S1, mg[0])
     a.smulh(S2, ra, S1)
@@ -830,11 +830,11 @@ fn Gen.magic_divide(mut self, i mir.Inst, k int)
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
 ## An unchecked `n * 2^k` (either order) as one shift; false for anything else.
 fn Gen.mul_by_power(mut self, i mir.Inst) bool
-    mut k := imm(i.args[1])
-    mut other := i.args[0]
+    mut k := imm(i.arg(1))
+    mut other := i.arg(0)
     if k == none
-        k = imm(i.args[0])
-        other = i.args[1]
+        k = imm(i.arg(0))
+        other = i.arg(1)
     n := k else return false
     if n < 2 or n.bit_and(n - 1) != 0
         return false
@@ -848,18 +848,18 @@ fn Gen.mul_by_power(mut self, i mir.Inst) bool
 
 fn Gen.shift(mut self, i mir.Inst)
     left := i.op == "shl"
-    if k := imm(i.args[1])
+    if k := imm(i.arg(1))
         if k >= 0 and k <= 63
             d := out_gpr(i.dst, S1)
-            a.shift_ri(if left then "lsl" else "asr", d, gpr(i.args[0], S0), k)
+            a.shift_ri(if left then "lsl" else "asr", d, gpr(i.arg(0), S0), k)
             put_gpr(i.dst, d)
             return
-    c := gpr(i.args[1], S1)
+    c := gpr(i.arg(1), S1)
     if i.site >= 0
         a.cmp_ri(c, 63)
-        a.b_cond(HI, stub(6, i.args[1], i.args[1], i.site, ""))
+        a.b_cond(HI, stub(6, i.arg(1), i.arg(1), i.site, ""))
     d := out_gpr(i.dst, S1)
-    a.shift_rr(if left then "lsl" else "asr", d, gpr(i.args[0], S0), c)
+    a.shift_rr(if left then "lsl" else "asr", d, gpr(i.arg(0), S0), c)
     put_gpr(i.dst, d)
 
 fn Gen.call(mut self, i mir.Inst)
@@ -872,11 +872,11 @@ fn Gen.call(mut self, i mir.Inst)
 ## full list calls the runtime, which grows it (native-abi.md §2).
 fn Gen.push(mut self, i mir.Inst)
     # The value first: building a constant may use the scratch registers.
-    v := i.args[1]
+    v := i.arg(1)
     float := f.vals[v].is_float()
     # x0 is free between calls.
     r := if float then fpr(v, X0) else gpr(v, 0)
-    l := gpr(i.args[0], S0)
+    l := gpr(i.arg(0), S0)
     # `imm` 1: a loop guard saw room for every push the loop makes (native.bce.6).
     room := i.imm == 1
     slow := a.label()
@@ -889,10 +889,8 @@ fn Gen.push(mut self, i mir.Inst)
     a.ldr(S1, l, 16)
     if float
         a.str_d_idx(r, S1, S2)
-    elif f.vals[v].elem_bytes() == 1
-        a.strb_idx(r, S1, S2)
     else
-        a.str_idx(r, S1, S2)
+        store_elem(r, S1, S2, 0, mir.push_bytes(i.name))
     a.alu_ri("add", S2, S2, 1)
     a.str(S2, l, 0)
     if room
@@ -938,8 +936,8 @@ fn Gen.call_out(mut self, i mir.Inst)
     # that moves don't use (a float constant goes through `S0`).
     indirect := i.op == "icall"
     mut extra := List[int]()
-    for k in 0..i.args.len()
-        v := i.args[k]
+    for k in 0..i.argc()
+        v := i.arg(k)
         if indirect and k == 0
             moves.push(move_of(S2, v))
         elif f.vals[v].is_float()
@@ -1011,13 +1009,13 @@ struct Place
 
 fn Gen.address(mut self, i mir.Inst) Place
     store := i.name.starts_with("store")
-    mut b := gpr(i.args[0], S0)
-    if i.args.len() == (if store then 3 else 2)
+    mut b := gpr(i.arg(0), S0)
+    if i.argc() == (if store then 3 else 2)
         off := i.imm / 16
         if off != 0
             a.alu_ri("add", S0, b, off)
             b = S0
-        return Place(base: b, index: gpr(i.args[1], S2), off: 0)
+        return Place(base: b, index: gpr(i.arg(1), S2), off: 0)
     Place(base: b, index: -1, off: i.imm)
 
 fn Gen.prim(mut self, i mir.Inst)
@@ -1060,19 +1058,19 @@ fn Gen.prim(mut self, i mir.Inst)
             put_fpr(i.dst, d)
         "storef32" =>
             pl := address(i)
-            v := fpr(i.args[i.args.len() - 1], X0)
+            v := fpr(i.arg(i.argc() - 1), X0)
             a.fop1("fcvt_sd", X1, v)
             a.str_s(X1, pl.base, pl.off)
         "store64" =>
             pl := address(i)
-            v := gpr(i.args[i.args.len() - 1], S1)
+            v := gpr(i.arg(i.argc() - 1), S1)
             if pl.index >= 0
                 a.str_idx(v, pl.base, pl.index)
             else
                 a.str(v, pl.base, pl.off)
         "store8" =>
             pl := address(i)
-            v := gpr(i.args[i.args.len() - 1], S1)
+            v := gpr(i.arg(i.argc() - 1), S1)
             if pl.index >= 0
                 a.strb_idx(v, pl.base, pl.index)
             else
@@ -1080,7 +1078,7 @@ fn Gen.prim(mut self, i mir.Inst)
         "pload8" | "pload16" | "pload32" | "pload64" =>
             # A raw pointer's read (ADR 0835): the width in the name, the
             # result zero-extended. Never moved, merged or dropped.
-            base := gpr(i.args[0], S0)
+            base := gpr(i.arg(0), S0)
             d := out_gpr(i.dst, S1)
             if i.name == "pload8"
                 a.ldrb(d, base)
@@ -1092,8 +1090,8 @@ fn Gen.prim(mut self, i mir.Inst)
                 a.ldr(d, base, 0)
             put_gpr(i.dst, d)
         "pstore8" | "pstore16" | "pstore32" | "pstore64" =>
-            base := gpr(i.args[0], S0)
-            v := gpr(i.args[1], S1)
+            base := gpr(i.arg(0), S0)
+            v := gpr(i.arg(1), S1)
             if i.name == "pstore8"
                 a.strb(v, base)
             elif i.name == "pstore16"
@@ -1108,7 +1106,7 @@ fn Gen.prim(mut self, i mir.Inst)
             a.dsb_sy()
         "storef" =>
             pl := address(i)
-            v := fpr(i.args[i.args.len() - 1], X0)
+            v := fpr(i.arg(i.argc() - 1), X0)
             if pl.index >= 0
                 a.str_d_idx(v, pl.base, pl.index)
             else
@@ -1119,7 +1117,7 @@ fn Gen.prim(mut self, i mir.Inst)
             # failure, which is negated here to match.
             number := if os == MACOS then S0 else S2
             regs := [number, 0, 1, 2, 3, 4, 5]
-            parallel([move_of(regs[k], i.args[k]) for k in 0..i.args.len()])
+            parallel([move_of(regs[k], i.arg(k)) for k in 0..i.argc()])
             if os == MACOS
                 a.svc(128)
                 ok := a.label()
@@ -1132,7 +1130,7 @@ fn Gen.prim(mut self, i mir.Inst)
         "global" =>
             d := out_gpr(i.dst, S1)
             a.adr_sym(d, "globals")
-            k := imm(i.args[0]) else 0
+            k := imm(i.arg(0)) else 0
             if k > 0
                 a.alu_ri("add", d, d, 8 * k)
             put_gpr(i.dst, d)
@@ -1142,7 +1140,7 @@ fn Gen.prim(mut self, i mir.Inst)
             a.alu_ri("add", d, d, 8 * nglobals)
             put_gpr(i.dst, d)
         "gc_regs" =>
-            b := gpr(i.args[0], S0)
+            b := gpr(i.arg(0), S0)
             for k in 0..10
                 a.str(19 + k, b, 8 * k)
             d := out_gpr(i.dst, S1)
@@ -1164,24 +1162,24 @@ fn Gen.prim(mut self, i mir.Inst)
         # operations, `ldar`/`stlr`, all sequentially consistent.
         "atomic_load" =>
             d := out_gpr(i.dst, S1)
-            a.ldar(d, gpr(i.args[0], S0))
+            a.ldar(d, gpr(i.arg(0), S0))
             put_gpr(i.dst, d)
-        "atomic_store" => a.stlr(gpr(i.args[1], S1), gpr(i.args[0], S0))
+        "atomic_store" => a.stlr(gpr(i.arg(1), S1), gpr(i.arg(0), S0))
         "atomic_xchg" =>
-            addr := gpr(i.args[0], S0)
-            v := gpr(i.args[1], S1)
+            addr := gpr(i.arg(0), S0)
+            v := gpr(i.arg(1), S1)
             a.swpal(v, S2, addr)
             put_gpr(i.dst, S2)
         "atomic_add" =>
-            addr := gpr(i.args[0], S0)
-            v := gpr(i.args[1], S1)
+            addr := gpr(i.arg(0), S0)
+            v := gpr(i.arg(1), S1)
             a.ldaddal(v, S2, addr)
             put_gpr(i.dst, S2)
         "atomic_cas" =>
-            addr := gpr(i.args[0], S0)
-            e := gpr(i.args[1], S2)
+            addr := gpr(i.arg(0), S0)
+            e := gpr(i.arg(1), S2)
             a.mov_rr(S2, e)
-            n := gpr(i.args[2], S1)
+            n := gpr(i.arg(2), S1)
             a.casal(S2, n, addr)
             put_gpr(i.dst, S2)
         "sp" =>
@@ -1194,7 +1192,7 @@ fn Gen.prim(mut self, i mir.Inst)
                 return
             # clone(CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM, stack, 0, 0, arg)
             # as on x86-64; the child finds `arg` still in x4.
-            parallel([move_of(1, i.args[0]), move_of(4, i.args[1])])
+            parallel([move_of(1, i.arg(0)), move_of(4, i.arg(1))])
             a.mov_ri(0, 331520)
             a.mov_ri(2, 0)
             a.mov_ri(3, 0)
@@ -1210,25 +1208,22 @@ fn Gen.prim(mut self, i mir.Inst)
             a.bind(parent)
             put_gpr(i.dst, 0)
         "restart" =>
-            parallel([move_of(S0, i.args[0]), move_of(0, i.args[1])])
+            parallel([move_of(S0, i.arg(0)), move_of(0, i.arg(1))])
             a.mov_rr(SP, S0)
             a.mov_ri(FP, 0)
             a.bl("rt.worker_main")
             a.brk()
-        "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(
-            loc[i.dst],
-            i.args[0],
-        )])
+        "str_addr" | "str_at" | "list_addr" | "list_at" => parallel([move_of(loc[i.dst], i.arg(0))])
         "float_bits" =>
             d := out_gpr(i.dst, S1)
-            a.fmov_xd(d, fpr(i.args[0], X0))
+            a.fmov_xd(d, fpr(i.arg(0), X0))
             put_gpr(i.dst, d)
         "bits_float" =>
             d := out_fpr(i.dst, X0)
-            a.fmov_dx(d, gpr(i.args[0], S0))
+            a.fmov_dx(d, gpr(i.arg(0), S0))
             put_fpr(i.dst, d)
         "f32_round" =>
-            xa := fpr(i.args[0], X0)
+            xa := fpr(i.arg(0), X0)
             d := out_fpr(i.dst, X0)
             a.fop1("fcvt_sd", X1, xa)
             a.fop1("fcvt_ds", d, X1)
@@ -1238,20 +1233,20 @@ fn Gen.prim(mut self, i mir.Inst)
 ## `xs[i]`: checks the index, then gives the elements' base in x8 and the
 ## index's register, or -1 with the byte offset for a constant index.
 fn Gen.list_index(mut self, i mir.Inst) List[int]
-    l := gpr(i.args[0], S0)
-    if k := imm(i.args[1])
+    l := gpr(i.arg(0), S0)
+    if k := imm(i.arg(1))
         if k >= 0 and k < 4095
             if i.site >= 0
                 a.ldr(S2, l, 0)
                 a.cmp_ri(S2, k)
-                a.b_cond(LS, stub(3, i.args[1], i.args[0], i.site, ""))
+                a.b_cond(LS, stub(3, i.arg(1), i.arg(0), i.site, ""))
             a.ldr(S2, l, 16)
             return [-1, 8 * k]
-    x := gpr(i.args[1], S1)
+    x := gpr(i.arg(1), S1)
     if i.site >= 0
         a.ldr(S2, l, 0)
         a.cmp_rr(x, S2)
-        a.b_cond(HS, stub(3, i.args[1], i.args[0], i.site, ""))
+        a.b_cond(HS, stub(3, i.arg(1), i.arg(0), i.site, ""))
     a.ldr(S2, l, 16)
     [x, 0]
 
@@ -1266,20 +1261,13 @@ fn Gen.list_get(mut self, i mir.Inst)
         put_fpr(i.dst, d)
         return
     d := out_gpr(i.dst, S1)
-    # A `List[bool]` holds one byte per element (native-abi.md §2).
-    if f.vals[i.dst].elem_bytes() == 1
-        if at[0] < 0
-            a.ldrb_off(d, S2, at[1] / 8)
-        else
-            a.ldrb_idx(d, S2, at[0])
-    elif at[0] < 0
-        a.ldr(d, S2, at[1])
-    else
-        a.ldr_idx(d, S2, at[0])
+    # A `List[bool]` or `List[u8]` holds one byte per element, a `List[u16]`
+    # two and a `List[u32]` four (native-abi.md §2).
+    load_elem(d, S2, at[0], at[1] / 8, f.vals[i.dst].elem_bytes())
     put_gpr(i.dst, d)
 
 fn Gen.list_set(mut self, i mir.Inst)
-    v := i.args[2]
+    v := i.arg(2)
     if f.vals[v].is_float()
         x := fpr(v, X0)
         at := list_index(i)
@@ -1291,23 +1279,15 @@ fn Gen.list_set(mut self, i mir.Inst)
     # x0 is free between calls.
     r := gpr(v, 0)
     at := list_index(i)
-    if f.vals[v].elem_bytes() == 1
-        if at[0] < 0
-            a.strb_off(r, S2, at[1] / 8)
-        else
-            a.strb_idx(r, S2, at[0])
-    elif at[0] < 0
-        a.str(r, S2, at[1])
-    else
-        a.str_idx(r, S2, at[0])
+    store_elem(r, S2, at[0], at[1] / 8, f.vals[v].elem_bytes())
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577):
 ## the index's register, or -1 with a constant index's element number.
 fn Gen.indexed_at(mut self, i mir.Inst) int
-    if k := imm(i.args[1])
+    if k := imm(i.arg(1))
         if k + i.elem_off() >= 0 and k + i.elem_off() < 4095
             return -1 - k - i.elem_off()
-    x := gpr(i.args[1], S1)
+    x := gpr(i.arg(1), S1)
     if i.elem_off() > 0
         a.alu_ri("add", S1, x, i.elem_off())
         return S1
@@ -1317,7 +1297,7 @@ fn Gen.indexed_at(mut self, i mir.Inst) int
     x
 
 fn Gen.indexed_load(mut self, i mir.Inst)
-    base := gpr(i.args[0], S0)
+    base := gpr(i.arg(0), S0)
     x := indexed_at(i)
     if f.vals[i.dst].is_float()
         d := out_fpr(i.dst, X0)
@@ -1328,20 +1308,12 @@ fn Gen.indexed_load(mut self, i mir.Inst)
         put_fpr(i.dst, d)
         return
     d := out_gpr(i.dst, S1)
-    if i.imm == 1
-        if x < 0
-            a.ldrb_off(d, base, -1 - x)
-        else
-            a.ldrb_idx(d, base, x)
-    elif x < 0
-        a.ldr(d, base, 8 * (-1 - x))
-    else
-        a.ldr_idx(d, base, x)
+    load_elem(d, base, x, -1 - x, i.imm)
     put_gpr(i.dst, d)
 
 fn Gen.indexed_store(mut self, i mir.Inst)
-    v := i.args[2]
-    base := gpr(i.args[0], S0)
+    v := i.arg(2)
+    base := gpr(i.arg(0), S0)
     x := indexed_at(i)
     if f.vals[v].is_float()
         if x < 0
@@ -1349,14 +1321,49 @@ fn Gen.indexed_store(mut self, i mir.Inst)
         else
             a.str_d_idx(fpr(v, X0), base, x)
         return
-    r := gpr(v, 0)
-    if i.imm == 1
+    store_elem(gpr(v, 0), base, x, -1 - x, i.imm)
+
+## An element of `w` bytes (1, 2, 4 or 8) at `base[x]` (`x` an index register)
+## or, when `x` is negative, at element `k`. A load zero-extends.
+fn Gen.load_elem(mut self, d int, base int, x int, k int, w int)
+    if w == 1
         if x < 0
-            a.strb_off(r, base, -1 - x)
+            a.ldrb_off(d, base, k)
+        else
+            a.ldrb_idx(d, base, x)
+    elif w == 2
+        if x < 0
+            a.ldrh_off(d, base, k)
+        else
+            a.ldrh_idx(d, base, x)
+    elif w == 4
+        if x < 0
+            a.ldr_w_off(d, base, k)
+        else
+            a.ldr_w_idx(d, base, x)
+    elif x < 0
+        a.ldr(d, base, 8 * k)
+    else
+        a.ldr_idx(d, base, x)
+
+fn Gen.store_elem(mut self, r int, base int, x int, k int, w int)
+    if w == 1
+        if x < 0
+            a.strb_off(r, base, k)
         else
             a.strb_idx(r, base, x)
+    elif w == 2
+        if x < 0
+            a.strh_off(r, base, k)
+        else
+            a.strh_idx(r, base, x)
+    elif w == 4
+        if x < 0
+            a.str_w_off(r, base, k)
+        else
+            a.str_w_idx(r, base, x)
     elif x < 0
-        a.str(r, base, 8 * (-1 - x))
+        a.str(r, base, 8 * k)
     else
         a.str_idx(r, base, x)
 

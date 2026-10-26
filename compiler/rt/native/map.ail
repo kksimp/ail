@@ -413,14 +413,10 @@ fn map_keys(m int) List[int]
             list_push(out, load64(e + 8))
     out
 
-fn map_keys_bool(m int) List[int]
-    out := list_new(load64(m))
-    ents := load64(m + 40)
-    for i in 0..load64(m + 8)
-        e := ents + 24 * i
-        if load64(e) >= 0
-            list_pushb(out, load64(e + 8) != 0)
-    out
+## The keys of a table of `bool`, `u8`, `u16` or `u32` as a list of `size`-byte
+## elements.
+fn map_keys_n(m int, size int) List[int]
+    map_words_n(m, 8, size)
 
 fn map_values(m int) List[int]
     out := list_new(load64(m))
@@ -431,13 +427,22 @@ fn map_values(m int) List[int]
             list_push(out, load64(e + 16))
     out
 
-fn map_values_bool(m int) List[int]
-    out := list_new(load64(m))
+fn map_values_n(m int, size int) List[int]
+    map_words_n(m, 16, size)
+
+## The words at offset `off` of each live entry, `size` bytes each.
+fn map_words_n(m int, off int, size int) List[int]
+    out := list_alloc(load64(m), size)
+    q := list_addr(out)
+    data := load64(q + 16)
     ents := load64(m + 40)
+    mut n := 0
     for i in 0..load64(m + 8)
         e := ents + 24 * i
         if load64(e) >= 0
-            list_pushb(out, load64(e + 16) != 0)
+            list_set_word(data, size, n, load64(e + off))
+            n += 1
+    store64(q, n)
     out
 
 # ---- value semantics (own.val.1) ----

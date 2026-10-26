@@ -304,10 +304,10 @@ fn Lower.singleton_tag(self, v int) int?
     ld := def.get(v)?
     if ld.op != "load" or ld.imm != 0
         return none
-    g := def.get(ld.args[0])?
+    g := def.get(ld.arg(0))?
     if g.op != "prim" or g.name != "global"
         return none
-    c := def.get(g.args[0])?
+    c := def.get(g.arg(0))?
     if c.op != "const"
         return none
     for sv in singletons
@@ -326,14 +326,14 @@ fn Lower.built_tag(self, v int) int?
                 def[i.dst] = i
     for blk in blocks
         for i in blk.insts
-            if i.op == "store" and i.imm == 0 and i.args[0] == v
-                if c := def.get(i.args[1])
+            if i.op == "store" and i.imm == 0 and i.arg(0) == v
+                if c := def.get(i.arg(1))
                     if c.op == "const"
                         tag = c.imm
     nw := def.get(v)?
     if nw.op != "call" or nw.name != "rt.obj_new" or tag < 0
         return none
-    kind := def.get(nw.args[1])?
+    kind := def.get(nw.arg(1))?
     if kind.op != "const" or kind.imm != OBJ_ENUM
         return none
     tag

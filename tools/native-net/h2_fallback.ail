@@ -1,0 +1,10 @@
+# The client side of the fallback checks of tools/native-net/h2-check.sh
+# (std.net.31): one GET to a server that does not pick `h2`. The base URL is
+# the first argument.
+use std.net
+
+fn main()
+    r := net.get("{env.args()[0]}/hello") else err
+        print("error {err.kind}")
+        return
+    print("{r.status} {r.body.trim()}")

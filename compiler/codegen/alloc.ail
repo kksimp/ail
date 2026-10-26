@@ -78,8 +78,7 @@ pub fn is_call(i mir.Inst) bool
         or i.op == "prim" and (i.name == "syscall" or i.name == "clone" or i.name == "restart")
 
 pub fn is_push(i mir.Inst) bool
-    i.op == "call"
-        and (i.name == "rt.list_push" or i.name == "rt.list_pushf" or i.name == "rt.list_pushb")
+    i.op == "call" and mir.is_push_name(i.name)
 
 ## The caller-saved registers that hold some value of the function.
 pub fn caller_used(al Alloc, t Target) List[int]
@@ -106,7 +105,7 @@ fn spilled_loops(f mir.Func, loc List[int]) List[int]
         for b in lp.blocks
             blk := f.blocks[b]
             for i in blk.insts
-                for a in i.args
+                for a in i.operands()
                     if loc[a] >= SLOT_BASE
                         found = true
                 if i.dst >= 0 and loc[i.dst] >= SLOT_BASE
@@ -159,7 +158,7 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
             touched.push(p)
         mut k := bstart[b] + 2
         for i in blk.insts
-            for a in i.args
+            for a in i.operands()
                 last[a] = k
             if i.dst >= 0
                 first[i.dst] = k + 1
@@ -194,20 +193,20 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
                 hints[args[j]].push(ps[j])
         for i in blk.insts
             if i.op == "copy"
-                hints[i.dst].push(i.args[0])
+                hints[i.dst].push(i.arg(0))
             elif i.dst >= 0 and IN_PLACE.contains(i.op)
                 # A result in its operand's register is one instruction
                 # fewer on x86-64 (`add d, y` with `d` already `x`).
-                hints[i.dst].push(i.args[0])
-                hints[i.args[0]].push(i.dst)
+                hints[i.dst].push(i.arg(0))
+                hints[i.arg(0)].push(i.dst)
                 if COMMUTES.contains(i.op)
-                    hints[i.dst].push(i.args[1])
-                    hints[i.args[1]].push(i.dst)
+                    hints[i.dst].push(i.arg(1))
+                    hints[i.arg(1)].push(i.dst)
     mut apart := [List[int]() for _ in 0..n]
     for blk in f.blocks
         for i in blk.insts
             if i.op == "mul" and i.site >= 0 and i.dst >= 0
-                apart[i.dst] = i.args
+                apart[i.dst] = i.operands()
     # A parameter that no hint places stays in the register it arrived in,
     # which saves the moves at the function's entry.
     mut arrive := [-1 for _ in 0..n]
@@ -230,7 +229,7 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
             if i.op == "call" and not is_push(i)
                 mut ni2 := 0
                 mut nf2 := 0
-                for a in i.args
+                for a in i.operands()
                     if f.vals[a].is_float()
                         if nf2 < t.float_args.len() and arrive[a] < 0 and short_lived(
                             start,
@@ -371,7 +370,7 @@ fn carve_holes(
             for i in blk.insts
                 if i.dst >= 0
                     hot[i.dst] = true
-                for a in i.args
+                for a in i.operands()
                     hot[a] = true
             for a in blk.term.uses()
                 hot[a] = true
@@ -443,7 +442,7 @@ fn use_weights(f mir.Func) List[int]
         for i in blk.insts
             if i.dst >= 0
                 w[i.dst] += unit
-            for a in i.args
+            for a in i.operands()
                 w[a] += unit
         for a in blk.term.uses()
             w[a] += unit
@@ -535,7 +534,7 @@ fn liveness(f mir.Func, order List[int]) List[List[int]]
                 def_at[p] = b
                 defs[b].push(p)
         for inst in blk.insts
-            for a in inst.args
+            for a in inst.operands()
                 if def_at[a] != b and read_at[a] != b
                     read_at[a] = b
                     reads[b].push(a)

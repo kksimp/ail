@@ -338,6 +338,10 @@ pub fn lower_package_par(
     if r := rt
         l.declare_all(r, "rt.")
     l.tk.on = l.sigs.contains("rt.task_new")
+    l.tk.auto_only = l.tk.on
+    for src in srcs
+        if uses_tasks(src.text) or src.text.contains("std.ui") or src.text.contains("std.app")
+            l.tk.auto_only = false
     l.problem_files = [0 for _ in l.problems]
     for k in 0..srcs.len()
         before := l.problems.len()
@@ -375,6 +379,12 @@ pub fn lower_package_par(
         l.stamp_problems()
     l.gen_instances()
     l.lower_lazy(srcs)
+    # Before the generators below, so a task or chunk body's copies, drops and
+    # instances are made too (conc.par.8); the second pass takes the sites the
+    # instances it asked for hold.
+    l.build_task_fns()
+    l.gen_instances()
+    l.build_task_fns()
     l.gen_ct_copies()
     l.enter_file(0)
     l.gen_unchecked()
@@ -386,8 +396,8 @@ pub fn lower_package_par(
     l.gen_enum_eqs()
     l.gen_init_enums()
     l.call_inits()
-    l.stamp_problems()
     l.build_task_fns()
+    l.gen_task_dispatch()
     l.stamp_problems()
     if r := rt
         l.lower_rt(r)
@@ -407,6 +417,7 @@ pub fn lower_package_par(
         lines: srcs[0].text.lines(),
         files: [src.path for src in srcs],
         file_lines: [src.text.lines() for src in srcs],
+        notes: l.tk.notes,
     )
     inline_module(mut m)
     mark_recursion(mut m)
@@ -608,6 +619,7 @@ fn Lower.type_of(mut self, t ast.TypeRef) Ty?
                     if is_number(e)
                         or e.is_sized()
                         or e == Ty.Str
+                        or e == Ty.Bytes
                         or needs_copy(e)
                         or is_enum(e)
                         or is_shared_opt(e)
@@ -1162,11 +1174,15 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         Assign(target, op, value, pos) => lower_assign(target, op, value, pos)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
-            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
+            auto := not is_par
+            # A loop the compiler chose is an outermost one: inside another loop it
+            # would pay the dispatch on every run of the outer body (conc.par.12).
+            if is_par
+                or loops.len() == 0 and auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return
-                lower_par_for(var, iter, body, pos)
+                lower_par_for(var, iter, body, pos, auto)
                 return
             lower_for(var, iter, body, mutable, pos)
         Break(pos) =>
@@ -1303,6 +1319,7 @@ fn Lower.lower_assign_body(mut self, target ast.Expr, op ast.BinOp?, value ast.E
                 r := lower_value(value, elem) else return
                 v = copy_if_place(value, Val(id: convert(r, elem, pos), ty: elem))
             uniq_drop_elem(l.id, i.id, elem, ipos)
+            v = slot_val(v, elem)
             mut set := inst(-1, "set", [l.id, i.id, v])
             set.site = bounds_site(ipos)
             emit_void(set)
@@ -1786,8 +1803,7 @@ fn Lower.lower_list(mut self, items List[ast.Expr], pos ast.Pos, want Ty?) Val?
 fn push_fn(elem Ty) str
     match elem
         Float | F32 => "rt.list_pushf"
-        Bool => "rt.list_pushb"
-        _ => "rt.list_push"
+        _ => push_fn_of(elem.elem_bytes())
 
 fn Lower.lower_call(mut self, callee ast.Expr, args List[ast.Arg], pos ast.Pos) Val?
     match callee
@@ -1950,6 +1966,8 @@ fn out_fn(t Ty) str
         Tensor(_) => "rt.out_tensor"
         Bytes => "rt.out_bytes_lit"
         List(e) =>
+            if e.is_sized() and e.elem_bytes() < 8
+                return narrow_out_fn(e.elem_bytes())
             match e
                 Int | Sized(_) => "rt.out_list_int"
                 Float => "rt.out_list_float"
@@ -1971,7 +1989,7 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
         while leaf.elem() != none
             depth += 1
             leaf = leaf.elem() else Ty.Unknown
-        k := match leaf
+        mut k := match leaf
             Int | Sized(_) => 0
             Float => 1
             Bool => 2
@@ -1979,6 +1997,8 @@ fn Lower.out(mut self, v Val, pos ast.Pos) Val?
             Char => 4
             F32 => 5
             _ => -1
+        if leaf.is_sized() and leaf.elem_bytes() < 8
+            k = narrow_leaf(leaf.elem_bytes())
         if k >= 0 and (depth > 0 or k >= 3)
             call("rt.out_list_deep", [v.id, konst(depth, Ty.Int), konst(k, Ty.Int)], Ty.Unit)
             return Val(id: -1, ty: Ty.Unit)

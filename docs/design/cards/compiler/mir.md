@@ -53,6 +53,8 @@ pub fn mir.new_traits() mir.Traits
 pub fn mir.memoize(mut mir.Module) [mutates]
 pub enum mir.Ty
 pub struct mir.Inst
+pub fn mir.is_push_name(str) bool
+pub fn mir.push_bytes(str) int
 pub fn mir.inst(int, str, List[int]) mir.Inst
 pub struct mir.Term
 pub fn mir.jump_to(int, List[int]) mir.Term
@@ -88,4 +90,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1345); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1368); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names

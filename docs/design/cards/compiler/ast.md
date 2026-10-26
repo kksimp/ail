@@ -45,6 +45,9 @@ pub struct ast.Arg  ## A call argument (own.param.2, own.move.2, type.struct.3, 
 pub struct ast.Arm
 pub enum ast.Pattern
 pub enum ast.Literal
+pub struct ast.ParScan  ## What a loop body does, for deciding whether its chunks can run apart.
+pub fn ast.new_scan() ast.ParScan
+pub fn ast.scan_block(mut ast.ParScan, List[ast.Stmt], int) [mutates]
 ```
 
-trimmed to fit 2000 tokens (~809); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)
+trimmed to fit 2000 tokens (~877); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence)

@@ -62,13 +62,13 @@ fn Lower.patch_table(mut self, v int, t Ty)
         for i in 0..blocks[b].insts.len()
             x := blocks[b].insts[i]
             if x.dst == v and x.op == "call" and x.name == "rt.map_new"
-                if const_at(x.args[0]) != -1
+                if const_at(x.arg(0)) != -1
                     return
                 for a in 0..3
-                    set_const(x.args[a], kinds[a])
+                    set_const(x.arg(a), kinds[a])
                 # A composite key's kind is its shape, a string (lower_keys.ail).
                 if not is_key_ty(kt)
-                    set_str(x.args[0], shape_of(kt, []))
+                    set_str(x.arg(0), shape_of(kt, []))
                 return
 
 ## The value of the `const` that defines `v`, else -2.

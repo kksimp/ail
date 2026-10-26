@@ -126,7 +126,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         for i in blk.insts
             if codegen.is_remat(i)
                 remat[i.dst] = i
-            for u in i.args
+            for u in i.operands()
                 uses[u] += 1
         for u in blk.term.uses()
             uses[u] += 1
@@ -136,12 +136,12 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         for i in blk.insts
             if i.op == "prim"
                 and (i.name == "load64" or i.name == "load8" or i.name == "loadf" or i.name == "store64" or i.name == "store8" or i.name == "storef")
-                addr_uses[i.args[0]] += 1
+                addr_uses[i.arg(0)] += 1
     for blk in f.blocks
         for i in blk.insts
-            if i.op == "prim" and i.name == "global" and remat[i.args[0]].op == "const"
+            if i.op == "prim" and i.name == "global" and remat[i.arg(0)].op == "const"
                 if addr_uses[i.dst] == uses[i.dst] and uses[i.dst] > 0
-                    globs[i.dst] = remat[i.args[0]].imm
+                    globs[i.dst] = remat[i.arg(0)].imm
     mut g := Gen(
         a: new_asm(),
         win: win,
@@ -467,9 +467,9 @@ fn Gen.gen_block(mut self, b int)
     if fused > 0
         cmp := blk.insts[fused]
         mask := blk.insts[fused - 1]
-        if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.args[0] == mask.dst
-            if uses[mask.dst] == 1 and imm(cmp.args[1]) == 0 and imm(mask.args[0]) == none
-                if imm32(mask.args[1]) != none or loc[mask.args[1]] >= 0
+        if (cmp.op == "eq" or cmp.op == "ne") and mask.op == "band" and cmp.arg(0) == mask.dst
+            if uses[mask.dst] == 1 and imm(cmp.arg(1)) == 0 and imm(mask.arg(0)) == none
+                if imm32(mask.arg(1)) != none or loc[mask.arg(1)] >= 0
                     masked = fused - 1
     if b == wrap
         save_registers(true)
@@ -488,10 +488,10 @@ fn Gen.gen_block(mut self, b int)
             mut cc := CC_NE
             if masked >= 0
                 bt := blk.insts[masked]
-                if k := imm32(bt.args[1])
-                    a.test_ri(gpr(bt.args[0], S0), k)
+                if k := imm32(bt.arg(1))
+                    a.test_ri(gpr(bt.arg(0), S0), k)
                 else
-                    a.test_rr(gpr(bt.args[0], S0), gpr(bt.args[1], S1))
+                    a.test_rr(gpr(bt.arg(0), S0), gpr(bt.arg(1), S1))
                 cc = cc_of(blk.insts[fused].op)
             elif fused >= 0
                 cc = compare(blk.insts[fused])
@@ -608,8 +608,8 @@ fn swapped(cc int) int
 
 ## Set the flags for a comparison; gives the condition that means true.
 fn Gen.compare(mut self, i mir.Inst) int
-    x := i.args[0]
-    y := i.args[1]
+    x := i.arg(0)
+    y := i.arg(1)
     cc := cc_of(i.op)
     if i.op.starts_with("f")
         # `a < b` is `b > a`: ucomisd sets CF for less and for NaN alike.
@@ -664,11 +664,11 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             # Into the result's register, with the operands swapped when it
             # is the second one's (ADR 0624).
             d := out_gpr(i.dst, S1)
-            mut x := i.args[0]
-            mut y := i.args[1]
+            mut x := i.arg(0)
+            mut y := i.arg(1)
             if loc[y] == d and loc[x] != d
-                x = i.args[1]
-                y = i.args[0]
+                x = i.arg(1)
+                y = i.arg(0)
             if k := imm32(y)
                 a.mov_rr(d, gpr(x, d))
                 a.alu_ri(alu, d, k)
@@ -678,20 +678,20 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 a.alu_rr(alu, d, ry)
             put_gpr(i.dst, d)
         "bnot" =>
-            a.mov_rr(S1, gpr(i.args[0], S1))
+            a.mov_rr(S1, gpr(i.arg(0), S1))
             a.not_reg(S1)
             put_gpr(i.dst, S1)
         "shl" | "shr" => shift(i)
         "neg" =>
-            a.mov_rr(S1, gpr(i.args[0], S1))
+            a.mov_rr(S1, gpr(i.arg(0), S1))
             a.neg(S1)
             if i.site >= 0
                 kind := if sites.list[i.site].op == "abs" then 5 else 2
-                a.jcc(CC_O, stub(kind, i.args[0], i.args[0], i.site, "-"))
+                a.jcc(CC_O, stub(kind, i.arg(0), i.arg(0), i.site, "-"))
             put_gpr(i.dst, S1)
         "not" =>
             r := out_gpr(i.dst, S1)
-            a.mov_rr(r, gpr(i.args[0], S0))
+            a.mov_rr(r, gpr(i.arg(0), S0))
             a.alu_ri("xor", r, 1)
             put_gpr(i.dst, r)
         "eq" | "ne" | "lt" | "le" | "gt" | "ge" | "feq" | "fne" | "flt" | "fle" | "fgt" | "fge" =>
@@ -710,13 +710,13 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.movzx8_rr(r, S1)
             put_gpr(i.dst, r)
         "fadd" | "fsub" | "fmul" | "fdiv" =>
-            xa := xmm(i.args[0], X0)
-            xb := xmm(i.args[1], X1)
+            xa := xmm(i.arg(0), X0)
+            xb := xmm(i.arg(1), X1)
             d := out_xmm(i.dst, X0)
             a.vsd_rrr(i.op, d, xa, xb)
             put_xmm(i.dst, d)
         "fneg" | "abs" =>
-            xa := xmm(i.args[0], X0)
+            xa := xmm(i.arg(0), X0)
             mask := if i.op == "fneg" then 1.shl(63) else 1.shl(63).bit_not()
             a.mov_ri(S1, mask)
             a.vmovq_xr(X1, S1)
@@ -724,7 +724,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             a.vpd_rrr(if i.op == "fneg" then 87 else 84, d, xa, X1)
             put_xmm(i.dst, d)
         "sqrt" | "floor" | "ceil" =>
-            xa := xmm(i.args[0], X0)
+            xa := xmm(i.arg(0), X0)
             d := out_xmm(i.dst, X0)
             if i.op == "sqrt"
                 a.vsd_rrr("sqrt", d, xa, xa)
@@ -732,13 +732,13 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 a.vroundsd(d, xa, xa, if i.op == "floor" then 9 else 10)
             put_xmm(i.dst, d)
         "itof" =>
-            r := gpr(i.args[0], S1)
+            r := gpr(i.arg(0), S1)
             d := out_xmm(i.dst, X0)
             a.vpd_rrr(87, d, d, d)
             a.vcvtsi2sd(d, r)
             put_xmm(i.dst, d)
         "ftoi" =>
-            xa := xmm(i.args[0], X0)
+            xa := xmm(i.arg(0), X0)
             a.vcvttsd2si(S1, xa)
             if i.site < 0
                 put_gpr(i.dst, S1)
@@ -750,36 +750,36 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             # The smallest `int` is the only value that converts to it.
             a.vmovsd_rm(X1, at_sym(f64_const(-9223372036854775807.0 - 1.0), 0))
             a.vucomisd(xa, X1)
-            bad := stub(4, i.args[0], i.args[0], i.site, "")
+            bad := stub(4, i.arg(0), i.arg(0), i.site, "")
             a.jcc(CC_P, bad)
             a.jcc(CC_NE, bad)
             a.bind(ok)
             put_gpr(i.dst, S1)
         "call" => call(i)
         "icall" => call_out(i)
-        "utrap" => a.jmp(stub(14, i.args[0], i.args[0], i.site, ""))
+        "utrap" => a.jmp(stub(14, i.arg(0), i.arg(0), i.site, ""))
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
         "data" =>
             d := out_gpr(i.dst, S1)
-            a.mov_rm(d, at(gpr(i.args[0], S0), 16))
+            a.mov_rm(d, at(gpr(i.arg(0), S0), 16))
             put_gpr(i.dst, d)
         "ldx" => indexed_load(i)
         "stx" => indexed_store(i)
         "len" =>
-            r := gpr(i.args[0], S0)
+            r := gpr(i.arg(0), S0)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(r, 0))
             put_gpr(i.dst, d)
         "cap" =>
-            r := gpr(i.args[0], S0)
+            r := gpr(i.arg(0), S0)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(r, 8))
             put_gpr(i.dst, d)
-        "trap" => a.jmp(stub(i.imm, i.args[0], i.args[1], i.site, i.name))
+        "trap" => a.jmp(stub(i.imm, i.arg(0), i.arg(1), i.site, i.name))
         "load" =>
-            r := gpr(i.args[0], S0)
+            r := gpr(i.arg(0), S0)
             if f.vals[i.dst].is_float()
                 d := out_xmm(i.dst, X0)
                 a.vmovsd_rm(d, at(r, i.imm))
@@ -789,8 +789,8 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 a.mov_rm(d, at(r, i.imm))
                 put_gpr(i.dst, d)
         "store" =>
-            r := gpr(i.args[0], S0)
-            v := i.args[1]
+            r := gpr(i.arg(0), S0)
+            v := i.arg(1)
             if f.vals[v].is_float()
                 a.vmovsd_mr(at(r, i.imm), xmm(v, X0))
             elif k := imm32(v)
@@ -798,17 +798,17 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             else
                 a.mov_mr(at(r, i.imm), gpr(v, S1))
         "copy" =>
-            parallel([move_of(loc[i.dst], i.args[0])])
+            parallel([move_of(loc[i.dst], i.arg(0))])
         _ => unreachable("x64: no code for `{i.op}`")
 
 fn Gen.arith(mut self, i mir.Inst)
-    mut x := i.args[0]
-    mut y := i.args[1]
+    mut x := i.arg(0)
+    mut y := i.arg(1)
     # An unchecked `add` or `mul` whose result takes the second operand's
     # register works in place with the operands swapped.
     if i.site < 0 and i.op != "sub" and loc[y] == loc[i.dst] and loc[x] != loc[y] and is_reg(loc[y])
-        x = i.args[1]
-        y = i.args[0]
+        x = i.arg(1)
+        y = i.arg(0)
     sym := match i.op
         "add" => "+"
         "sub" => "-"
@@ -896,8 +896,8 @@ fn Gen.arith(mut self, i mir.Inst)
 ## `idiv`: traps on a zero divisor (expr.arith.3) and on the smallest `int`
 ## divided by -1 (expr.arith.1); `x % -1` is 0 (expr.arith.5).
 fn Gen.divide(mut self, i mir.Inst)
-    x := i.args[0]
-    y := i.args[1]
+    x := i.arg(0)
+    y := i.arg(1)
     sym := if i.op == "div" then "/" else "%"
     done := a.label()
     if k := imm(y)
@@ -961,7 +961,7 @@ fn power_of_two(n int) int
 ## Signed division and remainder by `2^k` rounding toward zero, with shifts:
 ## a negative dividend is biased by `2^k - 1` first.
 fn Gen.shift_divide(mut self, i mir.Inst, k int)
-    x := gpr(i.args[0], S0)
+    x := gpr(i.arg(0), S0)
     if i.op == "div"
         # Into the result's register; the bias is taken from `x` first.
         d := out_gpr(i.dst, S1)
@@ -993,7 +993,7 @@ fn Gen.shift_divide(mut self, i mir.Inst, k int)
 ## Division and remainder by a constant `k` with a high multiply
 ## (`codegen.div_magic`), not `idiv`.
 fn Gen.magic_divide(mut self, i mir.Inst, k int)
-    x := gpr(i.args[0], S0)
+    x := gpr(i.arg(0), S0)
     mg := codegen.div_magic(k)
     a.mov_ri(RAX, mg[0])
     a.imul1(x)
@@ -1013,8 +1013,8 @@ fn Gen.magic_divide(mut self, i mir.Inst, k int)
 
 ## A shift traps on a count outside 0..=63 (expr.bit.2).
 fn Gen.shift(mut self, i mir.Inst)
-    x := i.args[0]
-    n := i.args[1]
+    x := i.arg(0)
+    n := i.arg(1)
     sar := i.op == "shr"
     if k := imm(n)
         if k >= 0 and k <= 63
@@ -1044,7 +1044,7 @@ fn Gen.call(mut self, i mir.Inst)
 ## `xs.push(v)` with room to spare is a store and a length update; only a
 ## full list calls the runtime, which grows it (native-abi.md §2).
 fn Gen.push(mut self, i mir.Inst)
-    l := gpr(i.args[0], S0)
+    l := gpr(i.arg(0), S0)
     # `imm` 1: a loop guard saw room for every push the loop makes (native.bce.6).
     room := i.imm == 1
     slow := a.label()
@@ -1054,13 +1054,12 @@ fn Gen.push(mut self, i mir.Inst)
         a.alu_rm("cmp", RAX, at(l, 8))
         a.jcc(CC_E, slow)
     a.mov_rm(S1, at(l, 16))
-    v := i.args[1]
+    v := i.arg(1)
     if f.vals[v].is_float()
         a.vmovsd_mr(at_index(S1, RAX, 8, 0), xmm(v, X0))
-    elif f.vals[v].elem_bytes() == 1
-        a.mov8_mr(at_index(S1, RAX, 1, 0), gpr(v, RDX))
     else
-        a.mov_mr(at_index(S1, RAX, 8, 0), gpr(v, RDX))
+        w := mir.push_bytes(i.name)
+        store_w(at_index(S1, RAX, w, 0), v, w)
     a.alu_ri("add", RAX, 1)
     a.mov_mr(at(l, 0), RAX)
     if room
@@ -1124,8 +1123,8 @@ fn Gen.call_out(mut self, i mir.Inst)
         for k in 0..6
             a.vmovsd_mr(at(RSP, 8 * k), 8 + k)
     mut extra := List[int]()
-    for k in 0..i.args.len()
-        v := i.args[k]
+    for k in 0..i.argc()
+        v := i.arg(k)
         if indirect and k == 0
             moves.push(move_of(S0, v))
         elif f.vals[v].is_float()
@@ -1180,17 +1179,17 @@ fn Gen.call_out(mut self, i mir.Inst)
 
 ## The memory a load or store prim addresses.
 fn Gen.address(mut self, i mir.Inst) Mem
-    v := i.args[0]
+    v := i.arg(0)
     store := i.name.starts_with("store")
     # `base + index * scale + offset` (an indexed load has two arguments,
     # an indexed store three): the primitive's `imm` holds the offset, or
     # offset * 16 + log2(scale).
-    if i.args.len() == (if store then 3 else 2)
+    if i.argc() == (if store then 3 else 2)
         mut b := gpr(v, S0)
         if globs.contains(v)
             a.lea(S0, at_sym("globals", 8 * globs[v]))
             b = S0
-        return at_index(b, gpr(i.args[1], S1), 1.shl(i.imm % 16), i.imm / 16)
+        return at_index(b, gpr(i.arg(1), S1), 1.shl(i.imm % 16), i.imm / 16)
     if globs.contains(v)
         return at_sym("globals", 8 * globs[v] + i.imm)
     at(gpr(v, S0), i.imm)
@@ -1220,11 +1219,11 @@ fn Gen.prim(mut self, i mir.Inst)
             a.vmovsd_rm(d, mem)
             put_xmm(i.dst, d)
         "store64" =>
-            store_word(address(i), i.args[i.args.len() - 1])
+            store_word(address(i), i.arg(i.argc() - 1))
         "store8" =>
-            store_byte(address(i), i.args[i.args.len() - 1])
+            store_byte(address(i), i.arg(i.argc() - 1))
         "storef" =>
-            v := xmm(i.args[i.args.len() - 1], X0)
+            v := xmm(i.arg(i.argc() - 1), X0)
             a.vmovsd_mr(address(i), v)
         "loadf32" =>
             # One packed single (ADR 0875), widened exactly.
@@ -1235,13 +1234,13 @@ fn Gen.prim(mut self, i mir.Inst)
             put_xmm(i.dst, d)
         "storef32" =>
             # The `float` (a rounded `f32` value, or rounded here) as a single.
-            v := xmm(i.args[i.args.len() - 1], X0)
+            v := xmm(i.arg(i.argc() - 1), X0)
             a.vcvtsd2ss(X1, v, v)
             a.vmovss_mr(address(i), X1)
         "pload8" | "pload16" | "pload32" | "pload64" =>
             # A raw pointer's read (ADR 0835): the width in the name, the
             # result zero-extended. Never moved, merged or dropped.
-            mem := at(gpr(i.args[0], S0), 0)
+            mem := at(gpr(i.arg(0), S0), 0)
             d := out_gpr(i.dst, S1)
             if i.name == "pload8"
                 a.movzx8_rm(d, mem)
@@ -1253,13 +1252,13 @@ fn Gen.prim(mut self, i mir.Inst)
                 a.mov_rm(d, mem)
             put_gpr(i.dst, d)
         "pstore8" | "pstore16" | "pstore32" | "pstore64" =>
-            mem := at(gpr(i.args[0], S0), 0)
+            mem := at(gpr(i.arg(0), S0), 0)
             if i.name == "pstore8"
-                store_byte(mem, i.args[1])
+                store_byte(mem, i.arg(1))
             elif i.name == "pstore64"
-                store_word(mem, i.args[1])
+                store_word(mem, i.arg(1))
             else
-                v := gpr(i.args[1], RDX)
+                v := gpr(i.arg(1), RDX)
                 if i.name == "pstore16"
                     a.mov16_mr(mem, v)
                 else
@@ -1268,38 +1267,38 @@ fn Gen.prim(mut self, i mir.Inst)
             a.mfence()
         "syscall" =>
             regs := [RAX, RDI, RSI, RDX, S0, R8, R9]
-            parallel([move_of(regs[k], i.args[k]) for k in 0..i.args.len()])
+            parallel([move_of(regs[k], i.arg(k)) for k in 0..i.argc()])
             a.syscall()
             put_gpr(i.dst, RAX)
         "global" =>
             if globs.contains(i.dst)
                 return
             d := out_gpr(i.dst, S1)
-            k := imm(i.args[0]) else 0
+            k := imm(i.arg(0)) else 0
             a.lea(d, at_sym("globals", 8 * k))
             put_gpr(i.dst, d)
         # Threads and atomics (ADRs 0599, 0600). The atomic operations are
         # sequentially consistent: x86-64 loads are acquire, stores are `xchg`.
         "atomic_load" =>
-            r := gpr(i.args[0], S0)
+            r := gpr(i.arg(0), S0)
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(r, 0))
             put_gpr(i.dst, d)
         "atomic_store" | "atomic_xchg" =>
-            cell := at(gpr(i.args[0], S0), 0)
-            parallel([move_of(RAX, i.args[1])])
+            cell := at(gpr(i.arg(0), S0), 0)
+            parallel([move_of(RAX, i.arg(1))])
             a.xchg_mr(cell, RAX)
             if i.dst >= 0
                 put_gpr(i.dst, RAX)
         "atomic_add" =>
-            cell := at(gpr(i.args[0], S0), 0)
-            parallel([move_of(RAX, i.args[1])])
+            cell := at(gpr(i.arg(0), S0), 0)
+            parallel([move_of(RAX, i.arg(1))])
             a.lock_xadd(cell, RAX)
             put_gpr(i.dst, RAX)
         "atomic_cas" =>
-            cell := at(gpr(i.args[0], S0), 0)
-            new := gpr(i.args[2], S1)
-            parallel([move_of(RAX, i.args[1])])
+            cell := at(gpr(i.arg(0), S0), 0)
+            new := gpr(i.arg(2), S1)
+            parallel([move_of(RAX, i.arg(1))])
             a.lock_cmpxchg(cell, new)
             put_gpr(i.dst, RAX)
         "sp" =>
@@ -1310,7 +1309,7 @@ fn Gen.prim(mut self, i mir.Inst)
             # clone(CLONE_VM|FS|FILES|SIGHAND|THREAD|SYSVSEM, stack, 0, 0, arg):
             # the child resumes here on the new stack with rax 0 and runs
             # `rt.worker_main(arg)`; the argument rides in r8 (unused as tls).
-            parallel([move_of(RSI, i.args[0]), move_of(R8, i.args[1])])
+            parallel([move_of(RSI, i.arg(0)), move_of(R8, i.arg(1))])
             a.mov_ri(RDI, 331520)
             a.mov_ri(RDX, 0)
             a.mov_ri(S0, 0)
@@ -1328,7 +1327,7 @@ fn Gen.prim(mut self, i mir.Inst)
         "restart" =>
             # Abandon this thread's frames: run `rt.worker_main(arg)` on a
             # fresh stack at `top`.
-            parallel([move_of(RAX, i.args[0]), move_of(RDI, i.args[1])])
+            parallel([move_of(RAX, i.arg(0)), move_of(RDI, i.arg(1))])
             a.mov_rr(RSP, RAX)
             a.alu_rr("xor", RBP, RBP)
             a.call_sym("rt.worker_main")
@@ -1338,7 +1337,7 @@ fn Gen.prim(mut self, i mir.Inst)
             a.lea(d, at_sym("globals", 8 * nglobals))
             put_gpr(i.dst, d)
         "gc_regs" =>
-            b := gpr(i.args[0], S0)
+            b := gpr(i.arg(0), S0)
             for k in 0..5
                 a.mov_mr(at(b, 8 * k), [RBX, 12, 13, 14, 15][k])
             d := out_gpr(i.dst, S1)
@@ -1357,17 +1356,17 @@ fn Gen.prim(mut self, i mir.Inst)
             a.mov_rr(d, RBP)
             put_gpr(i.dst, d)
         "str_addr" | "str_at" | "list_addr" | "list_at" =>
-            parallel([move_of(loc[i.dst], i.args[0])])
+            parallel([move_of(loc[i.dst], i.arg(0))])
         "float_bits" =>
             d := out_gpr(i.dst, S1)
-            a.vmovq_rx(d, xmm(i.args[0], X0))
+            a.vmovq_rx(d, xmm(i.arg(0), X0))
             put_gpr(i.dst, d)
         "bits_float" =>
             d := out_xmm(i.dst, X0)
-            a.vmovq_xr(d, gpr(i.args[0], S0))
+            a.vmovq_xr(d, gpr(i.arg(0), S0))
             put_xmm(i.dst, d)
         "f32_round" =>
-            xa := xmm(i.args[0], X0)
+            xa := xmm(i.arg(0), X0)
             d := out_xmm(i.dst, X0)
             a.vcvtsd2ss(X1, xa, xa)
             a.vcvtss2sd(d, X1, X1)
@@ -1378,17 +1377,17 @@ fn Gen.prim(mut self, i mir.Inst)
 ## The element's address, after the bounds check. A `List[bool]` holds one
 ## byte per element, other lists 8 (native-abi.md §2).
 fn Gen.list_index(mut self, i mir.Inst, size int) Mem
-    l := gpr(i.args[0], S0)
-    if k := imm32(i.args[1])
+    l := gpr(i.arg(0), S0)
+    if k := imm32(i.arg(1))
         if i.site >= 0
             a.alu_mi("cmp", at(l, 0), k)
-            a.jcc(CC_BE, stub(3, i.args[1], i.args[0], i.site, ""))
+            a.jcc(CC_BE, stub(3, i.arg(1), i.arg(0), i.site, ""))
         a.mov_rm(RAX, at(l, 16))
         return at(RAX, size * k)
-    x := gpr(i.args[1], S1)
+    x := gpr(i.arg(1), S1)
     if i.site >= 0
         a.alu_rm("cmp", x, at(l, 0))
-        a.jcc(CC_AE, stub(3, i.args[1], i.args[0], i.site, ""))
+        a.jcc(CC_AE, stub(3, i.arg(1), i.arg(0), i.site, ""))
     a.mov_rm(RAX, at(l, 16))
     at_index(RAX, x, size, 0)
 
@@ -1399,36 +1398,29 @@ fn Gen.list_get(mut self, i mir.Inst)
         d := out_xmm(i.dst, X0)
         a.vmovsd_rm(d, mem)
         put_xmm(i.dst, d)
-    elif t.elem_bytes() == 1
-        mem := list_index(i, 1)
-        d := out_gpr(i.dst, S1)
-        a.movzx8_rm(d, mem)
-        put_gpr(i.dst, d)
     else
-        mem := list_index(i, 8)
+        w := t.elem_bytes()
+        mem := list_index(i, w)
         d := out_gpr(i.dst, S1)
-        a.mov_rm(d, mem)
+        load_w(d, mem, w)
         put_gpr(i.dst, d)
 
 fn Gen.list_set(mut self, i mir.Inst)
-    v := i.args[2]
+    v := i.arg(2)
     t := f.vals[v]
     if t.is_float()
         x := xmm(v, X0)
         a.vmovsd_mr(list_index(i, 8), x)
-    elif t.elem_bytes() == 1
-        mem := list_index(i, 1)
-        store_byte(mem, v)
     else
-        mem := list_index(i, 8)
-        store_word(mem, v)
+        w := t.elem_bytes()
+        store_w(list_index(i, w), v, w)
 
 ## `ldx`/`stx`: the element at `base[index]`, `imm` bytes each (ADR 0577).
 fn Gen.indexed_mem(mut self, i mir.Inst) Mem
-    b := gpr(i.args[0], S0)
-    if k := imm32(i.args[1])
+    b := gpr(i.arg(0), S0)
+    if k := imm32(i.arg(1))
         return at(b, i.imm * (k + i.elem_off()))
-    at_index(b, gpr(i.args[1], S1), i.imm, i.imm * i.elem_off())
+    at_index(b, gpr(i.arg(1), S1), i.imm, i.imm * i.elem_off())
 
 fn Gen.indexed_load(mut self, i mir.Inst)
     mem := indexed_mem(i)
@@ -1436,22 +1428,37 @@ fn Gen.indexed_load(mut self, i mir.Inst)
         d := out_xmm(i.dst, X0)
         a.vmovsd_rm(d, mem)
         put_xmm(i.dst, d)
-    elif i.imm == 1
-        d := out_gpr(i.dst, S1)
-        a.movzx8_rm(d, mem)
-        put_gpr(i.dst, d)
     else
         d := out_gpr(i.dst, S1)
-        a.mov_rm(d, mem)
+        load_w(d, mem, i.imm)
         put_gpr(i.dst, d)
 
 fn Gen.indexed_store(mut self, i mir.Inst)
-    v := i.args[2]
+    v := i.arg(2)
     mem := indexed_mem(i)
     if f.vals[v].is_float()
         a.vmovsd_mr(mem, xmm(v, X0))
-    elif i.imm == 1
+    else
+        store_w(mem, v, i.imm)
+
+## An element of `w` bytes (1, 2, 4 or 8): a load zero-extends it.
+fn Gen.load_w(mut self, d int, mem Mem, w int)
+    if w == 1
+        a.movzx8_rm(d, mem)
+    elif w == 2
+        a.movzx16_rm(d, mem)
+    elif w == 4
+        a.mov32_rm(d, mem)
+    else
+        a.mov_rm(d, mem)
+
+fn Gen.store_w(mut self, mem Mem, v int, w int)
+    if w == 1
         store_byte(mem, v)
+    elif w == 2
+        a.mov16_mr(mem, gpr(v, RDX))
+    elif w == 4
+        a.mov32_mr(mem, gpr(v, RDX))
     else
         store_word(mem, v)
 

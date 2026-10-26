@@ -662,6 +662,26 @@ fn out_list_int(xs List[int])
         out_int(load64(data + 8 * i))
     out_byte(93)
 
+## A `List[u8]`, `List[u16]` or `List[u32]`: `size` bytes per element (ADRs 0907, 0912).
+fn out_list_n(xs List[int], size int)
+    p := list_addr(xs)
+    n := load64(p)
+    data := load64(p + 16)
+    out_byte(91)
+    for i in 0..n
+        out_sep(i)
+        out_int(list_get_word(data, size, i))
+    out_byte(93)
+
+fn out_list_u8(xs List[int])
+    out_list_n(xs, 1)
+
+fn out_list_u16(xs List[int])
+    out_list_n(xs, 2)
+
+fn out_list_u32(xs List[int])
+    out_list_n(xs, 4)
+
 fn out_list_bool(xs List[int])
     p := list_addr(xs)
     n := load64(p)
@@ -742,7 +762,7 @@ fn hex_digit(d int) int
     if d < 10 then 48 + d else 87 + d
 
 ## A list of lists or strings: `depth` levels of lists around elements of
-## kind `leaf` (0 int, 1 float, 2 bool, 3 str, 4 char, 5 f32).
+## kind `leaf` (0 int, 1 float, 2 bool, 3 str, 4 char, 5 f32, 6 u8, 7 u16, 8 u32).
 fn out_list_deep(xs List[int], depth int, leaf int)
     if depth == 0
         if leaf == 0
@@ -755,6 +775,12 @@ fn out_list_deep(xs List[int], depth int, leaf int)
             out_list_char(xs)
         elif leaf == 5
             out_list_f32(xs)
+        elif leaf == 6
+            out_list_u8(xs)
+        elif leaf == 7
+            out_list_u16(xs)
+        elif leaf == 8
+            out_list_u32(xs)
         else
             p := list_addr(xs)
             data := load64(p + 16)
@@ -794,7 +820,7 @@ fn obj_new(size int, kind int) int
 
 ## The kind of a list's element block: a `List[bool]`'s holds no pointers.
 fn data_kind(size int) int
-    if size == 1
+    if size < 8
         KIND_ATOMIC
     else
         KIND_LDATA
@@ -811,6 +837,17 @@ fn list_alloc(cap int, size int) List[int]
 
 fn list_new(cap int) List[int]
     list_alloc(cap, 8)
+
+## The most elements `list_new_for` and `list_reserve` make room for: 8 MiB worth
+## of them, whatever their size.
+fn list_most(size int) int
+    if size == 8
+        return 1048576
+    if size == 1
+        return 8388608
+    if size == 2
+        return 4194304
+    2097152
 
 ## A list made with room for a loop's pushes (`list_reserve` would regrow
 ## it): `(hi - lo) * per` elements of `size` bytes, at most 8 MiB of
@@ -838,7 +875,7 @@ fn fill(p int, n int, v int, size int)
 
 fn list_new_for(lo int, hi int, per int, size int) List[int]
     mut want := hi - lo
-    most := if size == 1 then 8388608 else 1048576
+    most := list_most(size)
     if want > most
         want = most
     if want < 0
@@ -865,21 +902,26 @@ fn list_grow(p int, size int)
 
 ## Room for `(hi - lo) * per` more elements of `size` bytes, at most
 ## 8 MiB worth of them, called before a loop that pushes that many (ADR 0578).
-## Only the capacity changes.
+## Only the capacity changes. A list that is full grows to at least twice its
+## capacity, so a reserve called once per iteration of an outer loop copies
+## the list O(log n) times, not once per iteration (ADR 0890).
 fn list_reserve(xs List[int], lo int, hi int, per int, size int)
     if hi <= lo
         return
     p := list_addr(xs)
     mut want := hi - lo
-    most := if size == 1 then 8388608 else 1048576
+    most := list_most(size)
     if want > most
         want = most
     need := load64(p) + want * per
     if need <= load64(p + 8)
         return
-    data := alloc_raw(size * need, data_kind(size))
+    mut cap := need
+    if cap < 2 * load64(p + 8)
+        cap = 2 * load64(p + 8)
+    data := alloc_raw(size * cap, data_kind(size))
     copy_list(data, load64(p + 16), size * load64(p))
-    store64(p + 8, need)
+    store64(p + 8, cap)
     store64(p + 16, data)
 
 ## The shortest length among the rows of a list of lists (2^62 if there are
@@ -908,12 +950,34 @@ fn list_push(xs List[int], v int)
 fn list_pushf(xs List[int], x float)
     list_push(xs, float_bits(x))
 
-fn list_pushb(xs List[int], b bool)
+## `b` is a `bool` (0 or 1) or a `u8` (0 to 255): one byte either way. The code
+## generators inline a push of `rt.list_pushb`, `rt.list_pushw` or
+## `rt.list_pushd` by the callee's width (ADRs 0907, 0912), whatever the pushed
+## value's type; these are the slow paths that grow the list.
+fn list_pushb(xs List[int], b u8)
     p := list_addr(xs)
     n := load64(p)
     if n == load64(p + 8)
         list_grow(p, 1)
-    store8(load64(p + 16) + n, if b then 1 else 0)
+    store8(load64(p + 16) + n, b.to_int())
+    store64(p, n + 1)
+
+## `xs.push(b)` on a `List[u16]`.
+fn list_pushw(xs List[int], b u16)
+    p := list_addr(xs)
+    n := load64(p)
+    if n == load64(p + 8)
+        list_grow(p, 2)
+    narrow_set(load64(p + 16) + 2 * n, 2, b.to_int())
+    store64(p, n + 1)
+
+## `xs.push(b)` on a `List[u32]`.
+fn list_pushd(xs List[int], b u32)
+    p := list_addr(xs)
+    n := load64(p)
+    if n == load64(p + 8)
+        list_grow(p, 4)
+    narrow_set(load64(p + 16) + 4 * n, 4, b.to_int())
     store64(p, n + 1)
 
 fn list_copy(xs List[int], size int) List[int]

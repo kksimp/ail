@@ -125,7 +125,8 @@ fn Lower.lower_comp_untyped(
         e := xs.ty.elem() else Ty.Unknown
         if e == Ty.Bool or not key_ok(e)
             return unsupported(pos, "{what} comprehension whose type isn't known")
-        return Val(id: call("rt.set_from_list", [kind_val(e), xs.id], Ty.Set(e)), ty: Ty.Set(e))
+        words := words_of(xs, e)
+        return Val(id: call("rt.set_from_list", [kind_val(e), words], Ty.Set(e)), ty: Ty.Set(e))
     v := value_expr else return none
     nvars += 1
     kname := "#comp{nvars}"
