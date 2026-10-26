@@ -1,0 +1,206 @@
+## What a `for` body does, for the native parallel loop (conc.par.8, ADR 0601,
+## ADR 0911): the scan the lowering and `ail check` share, so the check can say
+## when a written `par for` will run in order.
+
+## What a loop body does, for deciding whether its chunks can run apart.
+pub struct ParScan
+    ## Every name the body mentions, and those it declares itself.
+    pub names Set[str]
+    pub decls Set[str]
+    ## Reads of a name (not as the target of an assignment).
+    pub reads Map[str, int]
+    ## `x += e` statements outside nested loops, by name.
+    pub adds Map[str, int]
+    ## Names assigned in any other way.
+    pub other Set[str]
+    ## Names whose value a method call or `mut` argument may change.
+    pub mutated Set[str]
+    ## Operations one iteration costs: nested loops count 16 times (conc.par.12).
+    pub work int
+    pub mult int
+    ## What the first construct the parallel version doesn't take is.
+    pub why str
+    ## A construct the parallel version doesn't take.
+    pub bad bool
+
+pub fn new_scan() ParScan
+    ParScan(
+        names: Set[str](),
+        decls: Set[str](),
+        reads: {},
+        adds: {},
+        other: Set[str](),
+        mutated: Set[str](),
+        work: 0,
+        mult: 1,
+        why: "",
+        bad: false,
+    )
+
+## Methods that only read their receiver.
+READ_ONLY := [
+    "len",
+    "abs",
+    "min",
+    "max",
+    "to_float",
+    "to_int",
+    "sqrt",
+    "floor",
+    "ceil",
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+    "shl",
+    "shr",
+    "join",
+    "chars",
+]
+
+fn is_add(op BinOp?) bool
+    o := op else return false
+    match o
+        Add => true
+        _ => false
+
+fn root_name(e Expr) str?
+    match e
+        Name(n, _) => n
+        Index(r, _, _) => root_name(r)
+        _ => none
+
+pub fn scan_block(mut sc ParScan, body List[Stmt], depth int)
+    for s in body
+        scan_stmt(mut sc, s, depth)
+
+fn count_up(mut m Map[str, int], key str)
+    mut n := 1
+    if prev := m.get(key)
+        n = prev + 1
+    m[key] = n
+
+## The body has a construct the parallel version doesn't take; the first is named.
+fn refuse(mut sc ParScan, why str)
+    if not sc.bad
+        sc.why = why
+    sc.bad = true
+
+fn scan_stmt(mut sc ParScan, s Stmt, depth int)
+    match s
+        Let(name, _, _, value, otherwise) =>
+            if otherwise != none
+                refuse(mut sc, "a `let ... else`")
+            scan_expr(mut sc, value)
+            sc.decls.add(name)
+        LetTuple(_, _, _) => refuse(mut sc, "a tuple binding")
+        Assign(target, op, value, _) =>
+            scan_expr(mut sc, value)
+            match target
+                Name(n, _) =>
+                    sc.names.add(n)
+                    if is_add(op) and depth == 0
+                        count_up(mut sc.adds, n)
+                    else
+                        sc.other.add(n)
+                Index(r, i, _) =>
+                    scan_expr(mut sc, i)
+                    scan_place(mut sc, r)
+                _ => refuse(mut sc, "an assignment to a field or another place that is not a name or list element")
+        While(cond, body, _) =>
+            sc.mult = sc.mult * 16
+            scan_expr(mut sc, cond)
+            scan_block(mut sc, body, depth + 1)
+            sc.mult = sc.mult / 16
+        For(_, var, _, _, iter, body, _) =>
+            scan_expr(mut sc, iter)
+            sc.decls.add(var)
+            sc.mult = sc.mult * 16
+            scan_block(mut sc, body, depth + 1)
+            sc.mult = sc.mult / 16
+        Break(_) =>
+            if depth == 0
+                refuse(mut sc, "`break` out of the loop")
+        Continue(_) => return
+        Eval(e) => scan_expr(mut sc, e)
+        Return(_, _) => refuse(mut sc, "`return`")
+        Handle(_, _) | Defer(_, _) | With(_, _, _, _, _) | Unsafe(_, _) => refuse(mut sc, "`handle`, `defer`, `with` or `unsafe`")
+
+## The place an element is stored into: the indexes are read, the list is
+## only named.
+fn scan_place(mut sc ParScan, e Expr)
+    match e
+        Name(n, _) => sc.names.add(n)
+        Index(r, i, _) =>
+            scan_expr(mut sc, i)
+            scan_place(mut sc, r)
+        _ => refuse(mut sc, "a write through a field or a call result")
+
+## `n` operations per run of the innermost loop; the total stays far from `int`.
+fn scan_cost(mut sc ParScan, n int)
+    if sc.work < 1000000000
+        sc.work += n * sc.mult
+
+fn scan_expr(mut sc ParScan, e Expr)
+    match e
+        Int | Float | Bool | Str => return
+        Name(n, _) =>
+            sc.names.add(n)
+            count_up(mut sc.reads, n)
+        Interp(parts, _) =>
+            for p in parts
+                match p
+                    Lit => continue
+                    Hole(x) => scan_expr(mut sc, x)
+                    Fmt(x, _) => scan_expr(mut sc, x)
+        Call(callee, args, _) =>
+            scan_cost(mut sc, 8)
+            match callee
+                Name => scan_args(mut sc, args)
+                _ => refuse(mut sc, "a call of a method value or closure, or a constructor with a path")
+        Method(recv, name, _, args) =>
+            scan_cost(mut sc, 2)
+            if not READ_ONLY.contains(name)
+                r := root_name(recv) else
+                    refuse(mut sc, "a method call on a temporary")
+                    return
+                sc.mutated.add(r)
+            scan_expr(mut sc, recv)
+            scan_args(mut sc, args)
+        Index(r, i, _) =>
+            scan_cost(mut sc, 2)
+            scan_expr(mut sc, r)
+            scan_expr(mut sc, i)
+        Unary(o, x, _) =>
+            match o
+                Spawn => refuse(mut sc, "`spawn`")
+                Neg | Not => scan_expr(mut sc, x)
+        Binary(_, a, b, _) =>
+            scan_cost(mut sc, 1)
+            scan_expr(mut sc, a)
+            scan_expr(mut sc, b)
+        ListLit(items, _) =>
+            for x in items
+                scan_expr(mut sc, x)
+        Range(a, b, _, _) =>
+            if x := a
+                scan_expr(mut sc, x)
+            if y := b
+                scan_expr(mut sc, y)
+        If(branches, els, _, _) =>
+            for b in branches
+                match b.cond
+                    Test(x) => scan_expr(mut sc, x)
+                    Bind => refuse(mut sc, "an `if let` binding")
+                scan_block(mut sc, b.body, 1)
+            if body := els
+                scan_block(mut sc, body, 1)
+        _ => refuse(mut sc, "a `match`, constructor, lambda, field access or other expression the native parallel loop doesn't take yet")
+
+fn scan_args(mut sc ParScan, args List[Arg])
+    for a in args
+        if a.mutable
+            r := root_name(a.value) else
+                refuse(mut sc, "a `mut` argument that is not a named place")
+                return
+            sc.mutated.add(r)
+        scan_expr(mut sc, a.value)

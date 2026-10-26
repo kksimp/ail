@@ -967,7 +967,43 @@ fn Checker.check_par(self) List[Diag]
             if h := v.help
                 d = d.with_help(h)
             out.push(d)
+    for f in prog.fns
+        if is_prelude_line(f.pos.line)
+            continue
+        body := f.body else continue
+        for s in loops(body)
+            match s
+                For(is_par, var, _, mutable, iter, lbody, pos) =>
+                    if not is_par or mutable
+                        continue
+                    why := native_refusal(iter, lbody)
+                    if why != ""
+                        mut d := new_diag(
+                            "conc.par.13",
+                            pos,
+                            "`par for {var}` will run in order when compiled: {why}",
+                        )
+                        d.warning = true
+                        out.push(d)
+                Let | Assign | While | Break | Continue | Return | Eval | Handle | Defer | With | Unsafe | LetTuple => continue
     out
+
+## Why the native compiler runs a written `par for` in order, or "" when it
+## takes the loop (conc.par.13; the scan is the one the lowering uses).
+fn native_refusal(iter ast.Expr, body List[ast.Stmt]) str
+    if not simple_par_iter(iter)
+        return "the loop is not over `lo..hi` or a list variable"
+    mut sc := ast.new_scan()
+    ast.scan_block(mut sc, body, 0)
+    if sc.bad
+        return "the body has {sc.why}"
+    ""
+
+@allow("expr.match.3") fn simple_par_iter(iter ast.Expr) bool
+    match iter
+        Range(a, b, incl, _) => a != none and b != none and not incl
+        Name => true
+        _ => false
 
 ## The positions of the `for` loops (not `for mut`) of the user's functions
 ## that the judge finds independent (conc.par.8).
