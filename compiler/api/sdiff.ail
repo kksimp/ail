@@ -133,12 +133,17 @@ fn sd_body(prog ast.Program, texts List[str], line int, next int)(str, List[str]
         last = if next - file.base - 1 < src.len() then next - file.base - 1 else src.len()
     lo := if first < last then first else last
     mut text := src[lo..last]
+    # The next declaration's attribute lines (`@test`) sit above its own line, so they end up
+    # here too; they are not this body (api.impact.1).
     while text.len() > 0
         tail := text[text.len() - 1]
-        if tail.trim() == "" or tail.trim_start().starts_with("#")
+        if tail.trim() == "" or tail.trim_start().starts_with("#") or tail.trim_start().starts_with("@")
             text.pop()
         else
             break
+    # Attributes written on the declaration's own line (`@test fn f`) are not part of it either.
+    if text.len() > 0
+        text[0] = "{text[0].slice(0, indent_width(text[0]))}{without_attrs(text[0])}"
     # FNV-1a: stable across runs and platforms.
     mut h := -3750763034362895579
     joined := text.join("\n")
