@@ -381,13 +381,11 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
     # A loop the pool may take (conc.par.8) needs it, and only then: with the
     # task runtime a trap no longer runs the program's cleanups (unwind_live).
-    tasks := mir.uses_tasks(src)
-        or mentions_ui(src)
-        or parallel_on() and par_keys(
-            path,
-            "{dir}/../../../std",
-            src.len(),
-        ).len() > 0
+    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on() and par_keys(
+        path,
+        "{dir}/../../../std",
+        src.len(),
+    ).len() > 0
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
