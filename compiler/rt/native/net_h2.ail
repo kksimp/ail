@@ -904,7 +904,20 @@ fn h2_request(
     o := load64(c + H2_O)
     url := str_at(load64(c + H2_URL))
     store64(c + H2_AT, str_addr(at))
-    for k in [H2_STATUS, H2_FINAL, H2_KEEP, H2_ENDS, H2_INBLK, H2_DONE, H2_SEND, H2_SENDPOS, H2_TRCV, H2_ERR, H2_GOT, H2_RETRY]
+    for k in [
+        H2_STATUS,
+        H2_FINAL,
+        H2_KEEP,
+        H2_ENDS,
+        H2_INBLK,
+        H2_DONE,
+        H2_SEND,
+        H2_SENDPOS,
+        H2_TRCV,
+        H2_ERR,
+        H2_GOT,
+        H2_RETRY,
+    ]
         store64(c + k, 0)
     headers := map_new(1, 0, 0)
     all := map_new(1, 1, 8)
