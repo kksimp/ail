@@ -1,0 +1,17 @@
+# Live check for HTTP/2 (std.net.31), not part of any gate: GET each URL given
+# three times in a row and print the status, the size and the time of each
+# request. Run it twice, as `h2_live URL...` and as `AIL_HTTP2=0 h2_live URL...`,
+# to compare HTTP/2 (one TLS handshake per request) with pooled HTTP/1.1.
+use std.net
+use std.time
+
+fn main()
+    for url in env.args()
+        mut line := url
+        for _ in 0..3
+            t0 := time.now_ms()
+            r := net.get(url) else err
+                line = "{line} | error {err.kind}"
+                continue
+            line = "{line} | {r.status} {r.body.len()}B {time.now_ms() - t0}ms"
+        print(line)
