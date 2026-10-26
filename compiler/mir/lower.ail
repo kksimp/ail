@@ -1163,7 +1163,10 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         While(cond, body, _) => lower_while(cond, body)
         For(is_par, var, _, mutable, iter, body, pos) =>
             auto := not is_par
-            if is_par or auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
+            # A loop the compiler chose is an outermost one: inside another loop it
+            # would pay the dispatch on every run of the outer body (conc.par.12).
+            if is_par
+                or loops.len() == 0 and auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
                     problem(pos, "`for mut` isn't in the native subset yet")
                     return

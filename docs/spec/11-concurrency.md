@@ -510,7 +510,7 @@ one `+=` outside nested loops; any other loop, a loop that captures a handle
 or a `ref`, and a loop with fewer than twice as many iterations as the pool has
 threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
 
-**conc.par.12** — A loop the compiler chose (not a written `par for`) also runs
+**conc.par.12** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
 a call 8). An iteration of at least 4096 operations sends any loop of two or more
