@@ -60,11 +60,16 @@ fn Lower.fork_run_end(self, body List[ast.Stmt], i int) int
                             if var_ty[key] != Ty.Int
                                 return false
                             match b
-                                Int(v, _) => (v.to_int() else 0) > 0
+                                Int(v, _) => positive(v)
                                 _ => false
                         _ => false
                 _ => false
         _ => false
+
+## Whether a literal's text is an `int` above zero.
+fn positive(v str) bool
+    k := v.to_int() else return false
+    k > 0
 
 ## The plan of one statement of a run, or none when it can't fork.
 @allow("expr.match.3") fn Lower.fork_plan(mut self, s ast.Stmt) ForkCall?
@@ -115,8 +120,11 @@ fn fork_zero(p ForkCall) ast.Expr
             n := match a
                 Name(n, _) => n
                 _ => return
-            k := match b
-                Int(v, _) => v.to_int() else return
+            mut k := 0
+            match b
+                Int(v, _) =>
+                    parsed := v.to_int() else return
+                    k = parsed
                 _ => return
             x := lower_value(a, Ty.Int) else return
             adding := match o
