@@ -15,6 +15,7 @@
 ./ail explain [RULE]                # a rule's meaning, ADRs and example; no RULE lists all
 ./ail api [--json] [--text] [--card [--budget N]] FILE|DIR
 ./ail ask FILE who writes field F   # also: who reads F, what calls f, what does f call, which effects reach f, who uses T
+./ail attach screen role=button budget=200   # read a running std.app program: observe, screen, heap; `./ail attach` lists them
 ./ail fix [--dry-run] FILE.ail      # apply the fixes diagnostics carry
 ./ail diff OLD NEW                  # what changed by meaning
 ./ail edit FILE.ail [--test] < EDITS
