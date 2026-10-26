@@ -440,6 +440,8 @@ fn report_trapped(rec int, at1 str, at2 str)
     j -= 1
     while j >= 0 and load8(d + j) >= 48 and load8(d + j) <= 57
         j -= 1
+    # The program ends here, so the main thread's cleanups run (own.defer.1).
+    unwind_run()
     flush()
     out_str("error: Trapped(rule: \"")
     mut e := t + 5
