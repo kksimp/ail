@@ -61,7 +61,8 @@ fn command(name str, a Json) Cmd
                 out = ["test", program]
                 if since != ""
                     out.extend(["--affected", "--since", since])
-            "ail_ask" => out = ["ask", program]
+            "ail_ask" =>
+                out = ["ask", program]
                 out.extend(a.text("question", "").split(" "))
             "ail_impact" => out = ["ask", program, "--affected", "--json", "--rev", if rev == "" then "HEAD" else rev]
             "task_start" =>
