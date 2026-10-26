@@ -549,7 +549,7 @@ fn tensor_chunk(rec int)
 PAR_MIN_WORK := 65536
 
 ## Operations in one iteration past which any loop of two or more iterations
-## goes to the pool (conc.par.12).
+## goes to the pool (conc.par.13).
 PAR_HEAVY := 4096
 
 ## Whether `par for lo..hi` goes to the pool: at least twice as many
@@ -564,7 +564,7 @@ fn par_worth(lo int, hi int, work int, auto int) bool
     n := hi - lo
     if n < 2
         return false
-    # conc.par.12: heavy iterations (`PAR_HEAVY` operations each) repay the
+    # conc.par.13: heavy iterations (`PAR_HEAVY` operations each) repay the
     # pool even when there are fewer than twice as many as workers.
     if work >= PAR_HEAVY
         return true

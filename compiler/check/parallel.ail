@@ -983,7 +983,7 @@ fn Checker.check_par(self) List[Diag]
                     why := native_refusal(iter, lbody)
                     if why != ""
                         mut d := new_diag(
-                            "conc.par.13",
+                            "conc.par.14",
                             pos,
                             "`par for {var}` will run in order when compiled: {why}",
                         )
@@ -993,7 +993,7 @@ fn Checker.check_par(self) List[Diag]
     out
 
 ## Why the native compiler runs a written `par for` in order, or "" when it
-## takes the loop (conc.par.13; the scan is the one the lowering uses).
+## takes the loop (conc.par.14; the scan is the one the lowering uses).
 fn native_refusal(iter ast.Expr, body List[ast.Stmt]) str
     if not simple_par_iter(iter)
         return "the loop is not over `lo..hi` or a list variable"
