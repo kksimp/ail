@@ -163,7 +163,10 @@ fn verify(json bool) !int
         if tst.status != 0
             ok = false
             shown = tail(tst.out)
-            bundles = [l.trim().slice(8, l.trim().len()) for l in tst.out.lines() if l.trim().starts_with("bundle: ")]
+            bundles = [
+                l.trim().slice(8, l.trim().len())
+                for l in tst.out.lines() if l.trim().starts_with("bundle: ")
+            ]
     t.last = if ok then "green" else "red"
     save_task(t)?
     mut next := if ok then "ail task finish" else "fix the {stage} failure above, then `ail task verify`"
