@@ -167,6 +167,12 @@ fn verify(json bool) !int
                 l.trim().slice(8, l.trim().len())
                 for l in tst.out.lines() if l.trim().starts_with("bundle: ")
             ]
+    # A green run adds what `ail verify --diff` says no test looked at (task.verify.5).
+    mut report := "null"
+    if ok
+        rep := ail(["verify", "--diff", "--rev", t.rev, "--json", t.program])
+        if rep.out.trim().starts_with("\{")
+            report = rep.out.trim()
     t.last = if ok then "green" else "red"
     save_task(t)?
     mut next := if ok then "ail task finish" else "fix the {stage} failure above, then `ail task verify`"
@@ -180,6 +186,7 @@ fn verify(json bool) !int
             "\"stage\":{quote(stage)}",
             "\"output\":{quote(shown)}",
             "\"bundles\":[{[quote(b) for b in bundles].join(",")}]",
+            "\"diff\":{report}",
             "\"next\":{quote(next)}",
         ],
         "verify {result} at {stage}\n{shown}\nnext: {next}",

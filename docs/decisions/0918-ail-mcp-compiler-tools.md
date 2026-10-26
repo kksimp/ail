@@ -13,7 +13,7 @@ An agent reaches the compiler by running shell commands and parsing text. MCP gi
 ## Decision
 
 - `ail mcp` runs an MCP server on stdio in the current directory: one JSON-RPC message per line in and out (`initialize`, `ping`, `tools/list`, `tools/call`; a message without an id gets no reply).
-- Tools, each one `ail` command: `ail_check`, `ail_test` (with `since`: `--affected --since`), `ail_ask`, `ail_impact` (`ask --affected --json`) and `task_start`, `task_status`, `task_verify`, `task_finish`, `task_abort` (ADR 0917, `--json`).
+- Tools, each one `ail` command: `ail_check`, `ail_test` (with `since`: `--affected --since`), `ail_ask`, `ail_impact` (`ask --affected --json`), `ail_verify` (`verify --diff --json`) and `task_start`, `task_status`, `task_verify`, `task_finish`, `task_abort` (ADR 0917, `--json`).
 - A call returns the command's output as text; `isError` is true when its exit status is not 0, so a red verify or a failing check is an error result carrying the diagnostics. A missing argument is JSON-RPC error -32602, an unknown method -32601, bad JSON -32700.
 - Each tool's `inputSchema` lists string arguments and the required ones. The list is a table in `tools/ailmcp/ailmcp.ail`; a new command is one row and one dispatch line.
 - Rule keys: `mcp.proto.*`, `mcp.tools.*`, `mcp.call.*`.
