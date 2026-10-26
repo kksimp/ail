@@ -399,8 +399,8 @@ error types, its `requires`/`ensures`, the trait method it implements,
 whether a trait method has a default, its doc comment, or, for functions and
 methods, the text of its body (the lines after its first, to the next
 declaration, without trailing blank and comment lines). Members (fields,
-variants, methods) are declarations of their own. When either side is
-rejected, declarations are not compared.
+variants, methods) are declarations of their own. When either side has
+syntax or load errors, declarations are not compared (`diff.out.8` for check errors).
 
 **diff.out.3** — Diagnostics are matched by rule, file (relative to the
 compared path) and message, counting repeats; line numbers are shown but not
@@ -438,6 +438,15 @@ subsequence, at most 12 lines and then `... N more changed lines`. With
 ```
 
 ```ail pkg=diff_pair tool=diff,--rev,nosuch,main.ail status=2 expect=diff.out.5 rules=diff.out.5
+```
+
+**diff.out.8** — A side with check errors but no syntax or load errors is still
+compared, as far as its declarations resolve: the report starts with `api:
+partial, NEW has errors; compared as far as they allow` (JSON: `{"change":"api",
+"op":"partial","reason":...}`) and its diagnostics are listed as usual. Tests are
+not run on a side with errors.
+
+```ail pkg=diff_partial tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=api: partial rules=diff.out.8
 ```
 
 **api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
