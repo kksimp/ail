@@ -1096,7 +1096,8 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         got := lower_get_else(value, other, pos) else
             declare(name, Ty.Unknown, -1)
             return
-        declare(name, got.ty, got.id)
+        # `get` hands out the stored value; the binding owns a copy (own.val.1).
+        declare(name, got.ty, copy_if_place(value, got))
         return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
@@ -1237,9 +1238,9 @@ fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
         if v.ty.is_coll()
             return copy_coll(v)
         return if needs_copy(v.ty) then copy_value(v) else v.id
-    if v.ty.is_coll() and is_place(e)
+    if v.ty.is_coll() and aliases_place(e)
         return note_move(e, v, copy_coll(v))
-    if not needs_copy(v.ty) or not is_place(e)
+    if not needs_copy(v.ty) or not aliases_place(e)
         return v.id
     note_move(e, v, copy_value(v))
 
