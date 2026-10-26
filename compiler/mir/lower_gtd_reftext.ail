@@ -44,6 +44,8 @@ fn Lower.gen_ref_text(mut self, fkey str, t Ty) bool
     mut text := -1
     if key != "" and not sigs.contains("{key}.to_str") and not err_msgs.contains(key)
         text = nested_default(key, Val(id: o, ty: inner)) else str_value("")
+    elif ref_scalar(inner)
+        text = value_text(inner, load(o, 0, inner))
     else
         text = value_text(inner, o)
     call("rt.refcell_unshow", [o], Ty.Unit)

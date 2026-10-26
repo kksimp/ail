@@ -1,0 +1,22 @@
+# own.ref.1, 4-6: a `ref` of a list, map, set, number or string is a shared cell.
+fn grow(xs ref List[int], n int)
+    xs.push(n)
+
+fn main()
+    a := ref [1]
+    b := a
+    b.push(2)
+    grow(a, 3)
+    print(a.len())
+    print(a == b)
+    print(a)
+    m := ref {"k": 1}
+    print(m.len())
+    n := ref 7
+    p := n
+    print(n)
+    print(n == p)
+    print(n == ref 7)
+    s := ref "hi"
+    print(s)
+    print(s.len())

@@ -19,6 +19,8 @@ fn Lower.deref_use(mut self, v Val, pos ast.Pos) Val
             trap_close(pos)
             cur = ok
             traits.ref_obj = v.id
+            if ref_scalar(t)
+                return Val(id: load(v.id, 0, t), ty: t)
             Val(id: v.id, ty: t)
         _ =>
             traits.ref_obj = -1
