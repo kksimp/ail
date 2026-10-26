@@ -5,6 +5,7 @@ diagnostics, and AI interfaces. Entries are alphabetical.
 
 | Term | Definition |
 |---|---|
+| **Task (agent)** | One change from `ail task start` to `finish`: a base revision, a goal and the last verify result, kept in `.ail-task` ([ADR 0917](decisions/0917-ail-task-protocol.md)). |
 | **HPACK** | The header compression of HTTP/2 (RFC 7541): a static and a dynamic table of header fields, integers with prefixes, and an optional Huffman code. Implemented in `compiler/rt/native/net_h2.ail` (ADR 0913). |
 | **ALPN** | Application-Layer Protocol Negotiation (RFC 7301): a TLS extension in which the client lists protocols (`h2`, `http/1.1`) and the server names the one it will speak. The native `std.net` offers it on `https://` ([ADR 0913](decisions/0913-http2-client-over-alpn.md)). |
 | **ABI** | Application Binary Interface: calling conventions, data layout, and symbol rules that let separately compiled code interoperate. Windows x64 and the System V ABI (Linux, macOS) differ. |

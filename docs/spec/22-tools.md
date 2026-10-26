@@ -636,6 +636,36 @@ fn main()
     print(1)
 ```
 
+## Agent tasks
+
+`ail task` records one change from start to finish
+([ADR 0917](../decisions/0917-ail-task-protocol.md)).
+
+**task.state.1** — The open task is the file `.ail-task` of the current directory: `program`, `goal`, `rev` and `last` (`none`, `green` or `red`) as `key=value` lines.
+
+**task.state.2** — A directory has one open task. `start` with one open, and any other subcommand with none, is an error: exit status 2.
+
+**task.start.1** — `ail task start PROGRAM GOAL... [--rev REV]` opens a task whose base is `REV` (default `HEAD`). The program must compare against the base as `api.impact.3` does; if it can't, no task is opened: exit status 2.
+
+**task.verify.1** — `ail task verify` runs `ail check PROGRAM`, then, if that passes, `ail test PROGRAM --affected --since REV`, and records `green` only when both pass.
+
+**task.verify.2** — Exit status is 0 for green and 1 for red.
+
+**task.verify.3** — A red result shows the stage that failed (`check` or `test`) and the last 20 non-blank lines of its output.
+
+**task.status.1** — `ail task status` prints the goal, the last verify result and the impact since the base (`api.impact.4`).
+
+**task.finish.1** — `ail task finish` is refused (exit status 1) unless the last verify was green.
+
+**task.finish.2** — A finished or aborted task removes `.ail-task`.
+
+**task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
+
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.status.1,task.finish.1,task.finish.2,task.out.1
+fn main()
+    print(1)
+```
+
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
