@@ -19,7 +19,7 @@ fn ord_kind(e Ty) int
         List(inner) =>
             k := ord_kind(inner)
             # A list of bytes stores them one each, which the nested kinds don't read.
-            if k < 0 or k >= 8 or inner.elem_bytes() == 1 then -1 else k + 8
+            if k < 0 or k >= 8 or inner.elem_bytes() < 8 then -1 else k + 8
         _ => -1
 
 ## `a < b` and its kin on two lists of one type.
