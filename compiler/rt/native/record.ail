@@ -323,9 +323,23 @@ fn rec_next(name str) int
             name,
             "`",
         )
+    mut eol := q + i
+    while eol < d + n and load8(eol) != 10
+        eol += 1
     mut e := q + i
-    while not (load8(e) == 34 and load8(e + 1) == 114 and load8(e + 2) == 101 and load8(e + 3) == 115 and load8(e + 8) == 58)
+    while e + 8 < eol and not (load8(e) == 34 and load8(e + 1) == 114 and load8(e + 2) == 101 and load8(e + 3) == 115 and load8(e + 8) == 58)
         e += 1
+    if e + 8 >= eol
+        # A call recorded without a result (`"uncaptured":true`, replay.nat.1): a replay can't answer it.
+        store64(s + REC_POS, eol - d)
+        rec_stop(
+            "replay.cap.2",
+            "`",
+            name,
+            "` was recorded without a result (the native build doesn't capture it), so a replay can't answer it",
+            "",
+            "",
+        )
     p := e + 9
     mut j := p
     while j < d + n and load8(j) != 10
