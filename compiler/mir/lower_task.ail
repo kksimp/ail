@@ -44,7 +44,7 @@ struct ParSite
     aliases Map[str, str]
     self_ty str
     ## Static work of one iteration in operations (`ParScan.work`), for the
-    ## cost model of a loop the compiler chose to run in parallel (conc.par.13).
+    ## cost model of a loop the compiler chose to run in parallel (conc.par.14).
     work int
 
 pub struct TaskState
@@ -513,7 +513,7 @@ fn Lower.lower_par_for(
         # `ail check` already warned about what the shared scan refuses.
         shared := tk.why.starts_with("the body has") or tk.why.starts_with("the loop is not over")
         if not auto and tk.why != "" and not tk.in_chunk and not shared
-            note := "{file_paths[file]}:{pos.line}:{pos.col}: warning[conc.par.14]: `par for {var}` runs in order: {tk.why}"
+            note := "{file_paths[file]}:{pos.line}:{pos.col}: warning[conc.par.13]: `par for {var}` runs in order: {tk.why}"
             if not tk.notes.contains(note)
                 tk.notes.push(note)
         lower_for(var, iter, body, false, pos)
@@ -560,7 +560,7 @@ fn Lower.lower_par_for(
     seq := new_block()
     join := new_block()
     # A written `par for` needs only the iteration count (conc.par.8); a loop the
-    # compiler chose also needs enough work to repay the pool (conc.par.13).
+    # compiler chose also needs enough work to repay the pool (conc.par.14).
     weight := konst(plan.work, Ty.Int)
     chosen := konst(if auto then 1 else 0, Ty.Int)
     branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])

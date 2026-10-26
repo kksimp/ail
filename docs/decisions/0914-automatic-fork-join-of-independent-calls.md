@@ -1,8 +1,8 @@
 # 0914. Run independent calls in a straight-line block as a fork-join, when each is worth it
 
-- **Status:** Proposed
+- **Status:** Accepted (stage (a) built; stages (b) and (c) follow)
 - **Date:** 2026-10-26
-- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25
+- **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25; the plan approved by the integrator 2026-10-26 under ADR 0076 on these conditions: results and traps equal the sequential run; `AIL_PARALLEL=0` and `--deterministic` run the plain sequential clone; the stage-2 size, the self-build time and a fib/tree bench are reported against main
 - **Topic:** 11 — Concurrency; 25 — Optimization strategy
 - **Spec rules:** conc.par.1 (result and trap identical to sequential), conc.par.15 (new, below)
 - **Builds on:** [ADR 0163](0163-inferred-effect-sets.md), [ADR 0236](0236-automatic-parallel-loops.md), [ADR 0238](0238-parallel-runtime-model.md), [ADR 0599](0599-native-threads-and-task-pool.md), [ADR 0601](0601-native-par-for.md), [ADR 0911](0911-default-automatic-parallel-loops.md)

@@ -510,17 +510,17 @@ one `+=` outside nested loops; any other loop, a loop that captures a handle
 or a `ref`, and a loop with fewer than twice as many iterations as the pool has
 threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
 
-**conc.par.13** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
+**conc.par.14** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
 a call 8). An iteration of at least 4096 operations sends any loop of two or more
 iterations to the pool, whatever the worker count. The result and the trap are
 the sequential ones either way. *(ADR 0911)*
 
-**conc.par.14** — A written `par for` that the native compiler runs in order, because its
+**conc.par.13** — A written `par for` that the native compiler runs in order, because its
 body has a construct the chunked version doesn't take (a `match`, a constructor, a method on a
 captured list, a field of `self`, and so on), prints
-`FILE:LINE:COL: warning[conc.par.14]: `par for V` runs in order: REASON` on standard error
+`FILE:LINE:COL: warning[conc.par.13]: `par for V` runs in order: REASON` on standard error
 when the program is built, and `ail check` warns the same way. The result is the sequential one. A loop the compiler chose
 says nothing. *(ADR 0911)*
 
