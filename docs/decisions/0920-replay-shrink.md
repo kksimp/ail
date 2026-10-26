@@ -21,7 +21,7 @@ Token usage first: the shrunk bundle is the failure an agent reads instead of th
 
 ## Consequences
 
-Each try is one build and run of the test, so large inputs take minutes; the time budget bounds it. Only texts are cut. Lists, maps and numbers in a recording stay as recorded; cutting them is a later slice. A cut that changes control flow so the replay finds a different call next fails with a different message and is undone, so the result always fails as the original does.
+Each try is one build and run of the test, so large inputs take minutes; the time budget bounds it, checked between tries (a run overruns it by at most one try plus the first replay). Only texts are cut. Lists, maps and numbers in a recording stay as recorded; cutting them is a later slice. A cut that changes control flow so the replay finds a different call next fails with a different message and is undone, so the result always fails as the original does.
 
 ## Rejected alternatives
 

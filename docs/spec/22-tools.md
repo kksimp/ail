@@ -1304,8 +1304,10 @@ environment value, a process's output) are cut line by line, largest cuts first.
 cut stays when `ail test --bundle` still fails with the same `FAIL` line, test name
 and message included, as the unshrunk bundle; otherwise it is undone. Numbers,
 booleans and the order of calls are never changed.
-**shrink.run.3** — The search stops after `--time` milliseconds (default 60000) and
-keeps the cuts made so far.
+**shrink.run.3** — The search stops after `--time` milliseconds (default 60000),
+counted from the first cut, and keeps the cuts made so far. The limit is checked
+between tries, so a run can overrun it by the try in progress and the first replay
+that proves the bundle fails.
 **shrink.run.4** — When anything was cut, the smaller bundle is written to OUT
 (default: BUNDLE with `.min` added) and the command prints `shrunk`; when nothing
 could be cut it writes nothing and prints `nothing to cut`. Both exit 0.
