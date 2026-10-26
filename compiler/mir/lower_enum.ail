@@ -177,15 +177,13 @@ fn Lower.new_variant(mut self, v VariantRef, args List[ast.Arg]?, pos ast.Pos) V
     if a.len() != c.fields.len()
         return unsupported(pos, "`{c.name}(...)` without every field")
     mut vs := [-1 for _ in c.fields]
+    ats := arg_fields([f.name for f in c.fields], a)
     for k in 0..a.len()
-        mut at := k
-        if l := a[k].label
-            at = -1
-            for j in 0..c.fields.len()
-                if c.fields[j].name == l.name
-                    at = j
-            if at < 0
+        at := ats[k]
+        if at < 0
+            if l := a[k].label
                 return unsupported(l.pos, "field `{l.name}` of `{c.name}`")
+            return unsupported(expr_pos(a[k].value), "too many arguments for `{c.name}(...)`")
         ft := c.fields[at].ty
         x := lower_value(a[k].value, ft)?
         vs[at] = copy_if_place(a[k].value, Val(id: convert(x, ft, expr_pos(a[k].value)), ty: ft))
