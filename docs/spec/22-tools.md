@@ -687,6 +687,27 @@ fn main()
     print(1)
 ```
 
+## MCP server
+
+`ail mcp` serves the compiler's tools to an agent
+([ADR 0918](../decisions/0918-ail-mcp-compiler-tools.md)); `ail serve --mcp` is the
+different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
+
+**mcp.proto.1** — The server reads one JSON-RPC 2.0 message per line of standard input and writes one per line of standard output. It answers `initialize` (protocol version echoed, capability `tools`, server `ail`), `ping`, `tools/list` and `tools/call`; any other method is error -32601, text that isn't JSON is error -32700.
+
+**mcp.proto.2** — A message with no `id` (a notification) gets no reply.
+
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones.
+
+**mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
+
+**mcp.call.2** — A call that lacks a required argument, or names no tool, is error -32602 and runs nothing.
+
+```ail skip=bootstrap tool=mcp rules=mcp.proto.1,mcp.proto.2,mcp.tools.1,mcp.call.1,mcp.call.2
+fn main()
+    print(1)
+```
+
 ## New projects
 
 **tool.new.1** — `ail new NAME` creates the directory `NAME` holding `ail.pkg`
