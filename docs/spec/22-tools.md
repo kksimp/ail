@@ -446,7 +446,7 @@ partial, NEW has errors; compared as far as they allow` (JSON: `{"change":"api",
 "op":"partial","reason":...}`) and its diagnostics are listed as usual. Tests are
 not run on a side with errors.
 
-```ail pkg=diff_partial tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=api: partial rules=diff.out.8
+```ail pkg=diff_partial tool=diff,--no-tests,old/a.ail,new/a.ail status=1 expect=partial, rules=diff.out.8
 ```
 
 **api.diff.1** — `ail api --diff OLD NEW` lists what changed in the public
