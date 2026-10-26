@@ -662,9 +662,13 @@ fn proven_loop_keys(file str, std str) Set[str]
     loaded := load.load(file, std) else return keys
     if loaded.diags.len() > 0
         return keys
-    for at in check.proven_loops(loaded.program)
+    sites := check.par_sites(loaded.program)
+    for at in sites.loops
         found := load.locate(loaded.program.files, at)
         keys.add("{found.0}:{found.1.line}:{found.1.col}")
+    for site in sites.forks
+        found := load.locate(loaded.program.files, site.pos)
+        keys.add("{found.0}:{found.1.line}:{found.1.col}#{site.mark}")
     keys
 
 ## Whether a source names a module of the prelude written in AIL: the test

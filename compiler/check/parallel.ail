@@ -1289,9 +1289,11 @@ pub struct ForkRow
     pub func str
     ## The called functions, in source order.
     pub callees List[str]
-    ## `fork` when at least two of the calls are heavy, else `inline`.
+    ## `fork`: every run of two or more heavy independent calls.
     pub verdict str
     pub reason str
+    ## The positions of the calls, the first with mark `F` and the others `C`.
+    pub calls List[ast.Pos]
 
 ## A `name := f(args)` of a pure free function `f` without `mut` arguments.
 struct ForkCall
@@ -1337,6 +1339,26 @@ fn heavy_fn(cx ParContext, i int) bool
                 queue.push(k)
     false
 
+## An argument the fork path may evaluate before the earlier calls run: a name,
+## a literal, or `name + k` / `name - k` with a literal `k` (the lowering guards
+## the overflow; any other expression might trap or have an effect).
+@allow("expr.match.3") fn fork_arg(e ast.Expr) bool
+    match e
+        Name | Int | Float | Bool => true
+        Binary(o, a, b, _) =>
+            match o
+                Add | Sub =>
+                    match a
+                        Name => is_int_literal(b)
+                        _ => false
+                _ => false
+        _ => false
+
+@allow("expr.match.3") fn is_int_literal(e ast.Expr) bool
+    match e
+        Int => true
+        _ => false
+
 ## The call of a `name := f(args)` statement that conc.par.15 may fork, or none.
 @allow("expr.match.3") fn fork_call(cx ParContext, s ast.Stmt) ForkCall?
     match s
@@ -1350,9 +1372,11 @@ fn heavy_fn(cx ParContext, i int) bool
                     for e in cx.effects.sets[i]
                         if impure(e)
                             return none
+                    if not heavy_fn(cx, i)
+                        return none
                     mut sc := ast.new_scan()
                     for a in args
-                        if a.mutable
+                        if a.mutable or a.label != none or not fork_arg(a.value)
                             return none
                         ast.scan_block(mut sc, [ast.Stmt.Eval(value: a.value)], 0)
                     if sc.bad
@@ -1397,17 +1421,13 @@ fn fork_block(cx ParContext, fname str, b List[ast.Stmt], mut out List[ForkRow])
 fn flush_fork(cx ParContext, fname str, run List[ForkCall], mut out List[ForkRow])
     if run.len() < 2
         return
-    mut heavy := List[str]()
-    for c in run
-        if heavy_fn(cx, c.idx)
-            heavy.push(c.callee)
-    forks := heavy.len() >= 2
     out.push(ForkRow(
         pos: run[0].pos,
         func: fname,
         callees: [c.callee for c in run],
-        verdict: if forks then "fork" else "inline",
-        reason: if forks then "{heavy.join(", ")} are pure, independent and heavy" else "fewer than two of the calls are heavy (a loop or recursion)",
+        verdict: "fork",
+        reason: "{[c.callee for c in run].join(", ")} are pure, independent and heavy",
+        calls: [c.pos for c in run],
     ))
 
 ## Every run of independent pure calls in the user's functions, in source order
@@ -1423,3 +1443,16 @@ fn Checker.fork_rows(self) List[ForkRow]
             and f.within == ast.Within.TopLevel then "fn:{f.name}" else "method:{display_name(prog, f)}"
         fork_block(cx, id, body, mut out)
     out.sorted(by: |r| r.pos.line * 100000 + r.pos.col)
+
+## The calls of the runs conc.par.15 forks: their positions, the first of each
+## run with mark `F`, the rest `C` (the lowering's keys).
+pub struct ForkSite
+    pub pos ast.Pos
+    pub mark str
+
+fn Checker.fork_sites(self) List[ForkSite]
+    mut out := List[ForkSite]()
+    for r in fork_rows()
+        for k in 0..r.calls.len()
+            out.push(ForkSite(pos: r.calls[k], mark: if k == 0 then "F" else "C"))
+    out

@@ -1043,10 +1043,17 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
     scopes.push(Map[str, str]())
     defer_enter()
     mut result := Val(id: -2, ty: Ty.Unit)
+    mut skip := 0
     for i in 0..body.len()
+        if i < skip
+            continue
         s := body[i]
         if done()
             dead_block()
+        if fork_mark(s) == "F"
+            skip = fork_run_end(body, i)
+            lower_fork_run(body[i..skip])
+            continue
         instr_stmt(s)
         ct_stmt(s)
         if (want or top_unit_fails) and i == body.len() - 1
