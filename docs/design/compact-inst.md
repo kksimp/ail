@@ -38,6 +38,12 @@ Two phases, with different remedies:
 
 Step 5 (new): hold the image and the object file in a byte buffer (`bytes` or a `List[bool]`-style 1-byte list), or reserve the exact size up front where it is known. That is 8x on the largest single allocations of the build, without touching `Inst`. Check first how `codegen.Image` and `put` are typed.
 
+## Progress
+
+- Step 3a (accessors): every use of `Inst.args` in `compiler/mir`, `codegen`, `x64` and `a64` goes through `Inst.arg(k)`, `argc()`, `operands()`, `with_args(list)` and `with_arg(k, v)`, so the layout can change in one file. `Term.args` is unchanged.
+- Baseline (3612c739, ail-linux): self-build 23.99 s with `AIL_GC_STATS=1`, 1,427,712 KB max RSS. At the peak about 2.4M list objects (73 MB), 2.4M list data blocks (80 MB) and 2.0M structs (95 MB).
+- Step 3b (lane/rr1-inst2): `Inst` holds `n`, `a`, `b`, `c` and `more List[int]?` (none for up to 3 operands, the pointer itself, so no allocation). Estimated saving: about 35 B per instruction.
+
 ## Rejected
 
 - **Collector pacing** (budget 2x or 1x above a live threshold): +6.6% wall for -19.7% RSS; the cost scales with the saving.

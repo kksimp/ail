@@ -20,13 +20,13 @@ pub fn Asm.call_import(mut self, name str)
 ## stack arguments, the arguments in place, the indirect call, and the
 ## room given back. The result is rax, or xmm0 for a float (ADR 0606).
 fn Gen.libsys_call(mut self, i mir.Inst)
-    n := i.args.len()
+    n := i.argc()
     extra := if n > 4 then n - 4 else 0
     room := (32 + 8 * extra + 15) / 16 * 16
     a.alu_ri("sub", RSP, room)
     mut moves := List[Move]()
     for k in 0..n
-        v := i.args[k]
+        v := i.arg(k)
         if k >= 4
             if f.vals[v].is_float()
                 a.vmovsd_mr(at(RSP, 32 + 8 * (k - 4)), xmm(v, X0))

@@ -162,7 +162,7 @@ pub fn split_for_calls(f0 mir.Func) mir.Func
             continue
         mut seen := List[int]()
         for i in f.blocks[b].insts
-            for a in i.args
+            for a in i.operands()
                 seen.push(a)
         for a in f.blocks[b].term.uses()
             seen.push(a)
@@ -187,7 +187,7 @@ pub fn split_for_calls(f0 mir.Func) mir.Func
             insts.extend(head)
         for i in blk.insts
             mut r := i
-            r.args = [renamed(copies, a) for a in i.args]
+            r = r.with_args([renamed(copies, a) for a in i.operands()])
             insts.push(r)
         blk.insts = insts
         mut tm := blk.term
