@@ -1,7 +1,7 @@
 api 53 0
 attach 12 0
 budget 7 0
-conc 45 1
+conc 46 1
 contract 21 2
 ct 18 0
 diff 7 0
@@ -32,4 +32,4 @@ trace 22 0
 trait 43 4
 type 117 10
 unsafe 21 0
-all 1046 54
+all 1047 54

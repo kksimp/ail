@@ -17,9 +17,9 @@ fn compile_fresh(file str, out str, target str, ms str, mb str, attach bool) [cl
 fn finish_build(m mir.Module, file str, out str, target str) [fs io proc]
 fn check_dump(path str, many bool) ! [env fail fs io]
     fails with JsonError | fs.IoError
-fn runtime(dir str, path str) !ast.Program [env fail fs io]
+fn runtime(dir str, path str) !ast.Program [clock env fail fs io proc]
     fails with fs.IoError
-fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [env fail fs io]
+fn runtime_with(dir str, path str, ms str, mb str) !ast.Program [clock env fail fs io proc]
     fails with fs.IoError
 fn source_text(path str) !str [fail fs io]
     fails with fs.IoError
@@ -32,6 +32,9 @@ fn lower_file(path str, rt ast.Program?, std str) !mir.Module [clock env fail fs
     fails with fs.IoError
 fn lower_file_with(path_arg str, rt ast.Program?, std str, over str) !mir.Module [clock env fail fs io proc]
     fails with fs.IoError
+PROOF_MAX_BYTES := 1500000
+fn par_keys(file str, std str, size int) Set[str] [clock env fs io proc]
+fn has_for_loop(text str) bool
 fn parallel_on() bool [env]
 fn proven_loop_keys(file str, std str) Set[str] [clock env fs io proc]
 fn mentions_prelude(srcs List[mir.Source]) bool
@@ -74,4 +77,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1268); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1315); dropped: private items, doc comments

@@ -37,6 +37,15 @@ struct ParSite
     pos ast.Pos
     ## The function that holds the loop (a stack names it, not the chunk).
     owner str
+    ## The module state of the function that holds the loop: the chunk is
+    ## lowered after the module, so it needs them to resolve names.
+    prefix str
+    file int
+    aliases Map[str, str]
+    self_ty str
+    ## Static work of one iteration in operations (`ParScan.work`), for the
+    ## cost model of a loop the compiler chose to run in parallel (conc.par.12).
+    work int
 
 pub struct TaskState
     ## Whether the task runtime is linked (so `print` takes the output lock).
@@ -56,6 +65,13 @@ pub struct TaskState
     accs Set[str]
     ## The `with` blocks and task groups whose scope is open (lower_sync.ail).
     exits List[ExitAct]
+    ## How many of `sites` have their function: `build_task_fns` runs again
+    ## after the instances a chunk body asked for are made.
+    built int
+    ## The task runtime is linked only for loops the compiler runs on the
+    ## pool: no `spawn`, atomics, channels or UI in the program, so ordinary
+    ## code still runs its trap cleanups (the runtime skips them on workers).
+    auto_only bool
 
 pub fn new_task_state() TaskState
     TaskState(
@@ -69,6 +85,8 @@ pub fn new_task_state() TaskState
         owner: "",
         accs: Set[str](),
         exits: [],
+        built: 0,
+        auto_only: false,
     )
 
 ## Whether a program's source may use tasks, `par for` or atomics, so the
@@ -296,6 +314,10 @@ fn Lower.synth_begin(mut self, name str, params List[Ty]) List[int]
     var_vals = {}
     nvars = 0
     loops = []
+    ens = []
+    inv_key = ""
+    borrowed = Set[str]()
+    facts.moves = []
     cur = new_block()
     sealed[cur] = true
     mut ps := List[int]()
@@ -323,14 +345,18 @@ fn Lower.synth_end(mut self, params List[int])
             pos: ast.Pos(line: 1, col: 1),
             message: "internal error: invalid MIR: {err}",
         ))
+    facts.moves = []
     funcs.push(func)
 
 ## For each `spawn` site a function `task.K(rec)` that loads the arguments
-## from the record, makes the call and stores the result; and `rt.dispatch`.
+## from the record, makes the call and stores the result, and the chunk
+## function of each `par for`; sites made since the last call (ADR 0911).
 fn Lower.build_task_fns(mut self)
     if not tk.on
         return
-    for k in 0..tk.sites.len()
+    first := tk.built
+    tk.built = tk.sites.len()
+    for k in first..tk.sites.len()
         s := tk.sites[k]
         if s.loop >= 0
             build_par_fn(k, tk.pars[s.loop])
@@ -351,6 +377,11 @@ fn Lower.build_task_fns(mut self)
             prim_op(if s.ret.is_float() then "storef" else "store64", [at, r], Ty.Unit)
         finish(return_of(-1))
         synth_end(ps)
+
+## `rt.dispatch`: the task function for a site number, once every site has one.
+fn Lower.gen_task_dispatch(mut self)
+    if not tk.on
+        return
     ps := synth_begin("rt.dispatch", [Ty.Int, Ty.Int])
     # The tensor kernels' chunks (task.ail, ADR 0876).
     tyes := new_block()
@@ -390,6 +421,9 @@ struct ParScan
     other Set[str]
     ## Names whose value a method call or `mut` argument may change.
     mutated Set[str]
+    ## Operations one iteration costs: nested loops count 16 times (conc.par.12).
+    work int
+    mult int
     ## A construct the parallel version doesn't take.
     bad bool
 
@@ -401,6 +435,8 @@ fn new_scan() ParScan
         adds: {},
         other: Set[str](),
         mutated: Set[str](),
+        work: 0,
+        mult: 1,
         bad: false,
     )
 
@@ -468,12 +504,16 @@ fn scan_stmt(mut sc ParScan, s ast.Stmt, depth int)
                     scan_place(mut sc, r)
                 _ => sc.bad = true
         While(cond, body, _) =>
+            sc.mult = sc.mult * 16
             scan_expr(mut sc, cond)
             scan_block(mut sc, body, depth + 1)
+            sc.mult = sc.mult / 16
         For(_, var, _, _, iter, body, _) =>
             scan_expr(mut sc, iter)
             sc.decls.add(var)
+            sc.mult = sc.mult * 16
             scan_block(mut sc, body, depth + 1)
+            sc.mult = sc.mult / 16
         Break(_) =>
             if depth == 0
                 sc.bad = true
@@ -492,6 +532,11 @@ fn scan_place(mut sc ParScan, e ast.Expr)
             scan_place(mut sc, r)
         _ => sc.bad = true
 
+## `n` operations per run of the innermost loop; the total stays far from `int`.
+fn scan_cost(mut sc ParScan, n int)
+    if sc.work < 1000000000
+        sc.work += n * sc.mult
+
 fn scan_expr(mut sc ParScan, e ast.Expr)
     match e
         Int | Float | Bool | Str => return
@@ -505,10 +550,12 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
                     Hole(x) => scan_expr(mut sc, x)
                     Fmt(x, _) => scan_expr(mut sc, x)
         Call(callee, args, _) =>
+            scan_cost(mut sc, 8)
             match callee
                 Name => scan_args(mut sc, args)
                 _ => sc.bad = true
         Method(recv, name, _, args) =>
+            scan_cost(mut sc, 2)
             if not READ_ONLY.contains(name)
                 r := root_name(recv) else
                     sc.bad = true
@@ -517,6 +564,7 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
             scan_expr(mut sc, recv)
             scan_args(mut sc, args)
         Index(r, i, _) =>
+            scan_cost(mut sc, 2)
             scan_expr(mut sc, r)
             scan_expr(mut sc, i)
         Unary(o, x, _) =>
@@ -524,6 +572,7 @@ fn scan_expr(mut sc ParScan, e ast.Expr)
                 Spawn => sc.bad = true
                 Neg | Not => scan_expr(mut sc, x)
         Binary(_, a, b, _) =>
+            scan_cost(mut sc, 1)
             scan_expr(mut sc, a)
             scan_expr(mut sc, b)
         ListLit(items, _) =>
@@ -581,7 +630,11 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
     for n in sc.names.sorted()
         if n == var
             continue
-        key := lookup(n) else continue
+        key := lookup(n) else
+            # A field of `self` is not in the chunk's scope: run in order.
+            if self_slot(n) >= 0
+                return none
+            continue
         ty := var_ty[key]
         if sc.decls.contains(n)
             return none
@@ -614,6 +667,11 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         body: body,
         pos: pos,
         owner: fname,
+        prefix: prefix,
+        file: file,
+        aliases: aliases,
+        self_ty: self_ty,
+        work: sc.work + 1,
     )
 
 fn root_of(e ast.Expr) str
@@ -625,7 +683,14 @@ fn root_of(e ast.Expr) str
 ## enough and nothing in a chunk traps; else the loop in order, which is its
 ## meaning (conc.par.5) and, after a trap or an accumulator that would
 ## overflow, the only way to report the sequential trap (conc.par.11).
-fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast.Pos)
+fn Lower.lower_par_for(
+    mut self,
+    var str,
+    iter ast.Expr,
+    body List[ast.Stmt],
+    pos ast.Pos,
+    auto bool,
+)
     plan := par_plan(var, iter, body, pos) else
         lower_for(var, iter, body, false, pos)
         return
@@ -670,7 +735,11 @@ fn Lower.lower_par_for(mut self, var str, iter ast.Expr, body List[ast.Stmt], po
     done := new_block()
     seq := new_block()
     join := new_block()
-    branch(call("rt.par_worth", [lo, hi], Ty.Bool), par_blk, [], seq, [])
+    # A written `par for` needs only the iteration count (conc.par.8); a loop the
+    # compiler chose also needs enough work to repay the pool (conc.par.12).
+    weight := konst(plan.work, Ty.Int)
+    chosen := konst(if auto then 1 else 0, Ty.Int)
+    branch(call("rt.par_worth", [lo, hi, weight, chosen], Ty.Bool), par_blk, [], seq, [])
     seal(par_blk)
     cur = par_blk
     env := call("rt.env_new", [konst(ncaps + plan.accs.len(), Ty.Int)], Ty.Int)
@@ -732,6 +801,25 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     rec := ps[0]
     tk.in_chunk = true
     tk.owner = p.owner
+    was := ParSite(
+        var: "",
+        by_list: false,
+        caps: [],
+        accs: [],
+        atomic: false,
+        body: [],
+        pos: p.pos,
+        owner: "",
+        prefix: prefix,
+        file: file,
+        aliases: aliases,
+        self_ty: self_ty,
+        work: 0,
+    )
+    prefix = p.prefix
+    file = p.file
+    aliases = p.aliases
+    self_ty = p.self_ty
     pos := p.pos
     env := rec_word(rec, 0)
     for i in 0..p.caps.len()
@@ -781,6 +869,10 @@ fn Lower.build_par_fn(mut self, k int, p ParSite)
     tk.in_chunk = false
     tk.owner = ""
     tk.accs = Set[str]()
+    prefix = was.prefix
+    file = was.file
+    aliases = was.aliases
+    self_ty = was.self_ty
     synth_end(ps)
 
 ## After `acc += e` in a chunk: keep the lowest and highest running sum, so

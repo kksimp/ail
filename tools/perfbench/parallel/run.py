@@ -11,7 +11,7 @@ MAC = platform.system() == "Darwin"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-SIZES = {"parsum": 3000000, "mandelbrot": 1000, "spectralnorm": 1500, "nbody": 1500}
+SIZES = {"parsum": 3000000, "autopar": 3000000, "mandelbrot": 1000, "spectralnorm": 1500, "nbody": 1500}
 
 
 def args():

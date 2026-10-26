@@ -1,0 +1,35 @@
+# parsum.ail without `par`: the compiler proves the loop independent (conc.par.2-4)
+# and runs it on the pool by itself (conc.par.8, ADR 0911). Same result as the
+# sequential run. N comes from argv.
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    n := args[0].to_int() else return default
+    n
+
+fn steps(n int) int
+    mut x := n
+    mut k := 0
+    while x != 1
+        x = if x % 2 == 0 then x / 2 else 3 * x + 1
+        k += 1
+    k
+
+fn main()
+    n := size(3000000)
+    mut lengths := List[int]()
+    for _ in 0..n
+        lengths.push(0)
+    mut total := 0
+    for i in 0..n
+        s := steps(i + 1)
+        lengths[i] = s
+        total += s
+    mut longest := 0
+    for i in 0..n
+        if lengths[i] > lengths[longest]
+            longest = i
+    print("total steps: {total}")
+    print("longest: {longest + 1} with {lengths[longest]} steps")
