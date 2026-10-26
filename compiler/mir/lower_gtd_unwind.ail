@@ -34,7 +34,7 @@ fn new_unwind() Unwind
     Unwind(counts: [], idx: {}, jobs: [])
 
 fn Lower.unwind_live(self) bool
-    not is_rt and not tk.on
+    not is_rt and (not tk.on or tk.auto_only)
 
 ## A block begins.
 fn Lower.unwind_enter(mut self)

@@ -16,6 +16,10 @@ UNWIND := 48
 
 ## Register cleanup `f(x)`; its index.
 fn unwind_push(f int, x int) int
+    # The stack is the main thread's: a pool worker (an automatic parallel
+    # loop's chunk) registers nothing, and a trap there reruns the loop in order.
+    if worker_index() >= 0
+        return -1
     mut s := load64(global(UNWIND))
     if s == 0 or load64(s) == load64(s + 8)
         cap := if s == 0 then 16 else 2 * load64(s + 8)
@@ -35,10 +39,14 @@ fn unwind_push(f int, x int) int
 
 ## Entry `i` won't run: its value moved or was released.
 fn unwind_disarm(i int)
+    if i < 0 or worker_index() >= 0
+        return
     store64(load64(global(UNWIND)) + 16 + 16 * i, 0)
 
 ## The block left normally: drop its `n` entries.
 fn unwind_pop(n int)
+    if worker_index() >= 0
+        return
     s := load64(global(UNWIND))
     store64(s, load64(s) - n)
 
