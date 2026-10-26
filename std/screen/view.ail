@@ -122,3 +122,22 @@ pub fn of_node(n app.Node, w float, h float, focus str) screen.Screen
     mut items := List[screen.Item]()
     size := place(n, 0.0, 0.0, focus, mut items)
     screen.Screen(w: w.max(size.0), h: h.max(size.1), items: items)
+
+## The id of the control of view tree `n` that `want` names, or "" when none does: `want` is the control's own
+## id (`Button("pay", ...)` is "pay") or the number `#N` that `of_node` gives its item (std.screen.13).
+pub fn control_id(n app.Node, want str) str
+    match n
+        Button(id, _) => if id == want or "{1000000 + hash(id)}" == want then id else ""
+        Field(id, _, _) => if id == want or "{1000000 + hash(id)}" == want then id else ""
+        Toggle(id, _, _) => if id == want or "{1000000 + hash(id)}" == want then id else ""
+        Canvas(id, _, _, _) => if id == want or "{5000000 + hash(id)}" == want then id else ""
+        Column(kids) => first_control(kids, want)
+        Row(kids) => first_control(kids, want)
+        _ => ""
+
+fn first_control(kids List[app.Node], want str) str
+    for k in kids
+        found := control_id(k, want)
+        if found != ""
+            return found
+    ""

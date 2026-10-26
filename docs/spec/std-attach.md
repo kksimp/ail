@@ -177,7 +177,10 @@ by default; a program started without it can never be driven. The token (`attach
 whose other members are the fields of a `std.app` `Event` (`std.app.5`: `id`,
 `text`, `x`, `y`, `dx`, `dy`, `ctrl`, `alt`, `shift`, `meta`). The program
 handles the event between its own events, through its `update`, exactly as it
-would one from the window. The reply is `{"v":1,"applied":K}`; the agent reads the
+would one from the window. `id` is a control's own id (`Button("pay", ...)` is
+`pay`) or the `#N` that `screen` shows for it; an id that names no control of
+the view gets an error reply and nothing changes. A `value` member is an error:
+a field's new text is `text`. The reply is `{"v":1,"applied":K}`; the agent reads the
 result with `observe` or `screen`. *(ADR 0919)*
 
 **attach.input.3** — `kind` is one of `press`, `edit`, `submit`, `toggle`,

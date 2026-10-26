@@ -87,7 +87,14 @@ impl app.App for Watched[T app.App + attach.Observe]
             req := parse_json(ev.text) else
                 hub.replies.send("\{\"v\":1,\"error\":\"not JSON\"}")
                 return
-            sent := app.event_from_json(req)
+            mut sent := app.event_from_json(req)
+            if sent.id != ""
+                # `id` is the control's own id or the `#N` that `screen` shows for it (attach.input.2).
+                found := view.control_id(inner.view(), sent.id.strip_prefix("#") else sent.id)
+                if found == ""
+                    hub.replies.send(attach.input_unknown(sent.id))
+                    return
+                sent.id = found
             inner.update(sent)
             hub.replies.send(attach.input_applied(sent.kind))
             return
