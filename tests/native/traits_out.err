@@ -1,1 +1,1 @@
-tests/native/traits_out.ail:25:16: error[native.subset.1]: not in the native subset yet: converting a `int` to `any Named`
+tests/native/traits_out.ail:29:16: error[native.subset.1]: not in the native subset yet: converting a `Color` to `any Named`
