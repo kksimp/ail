@@ -70,17 +70,17 @@ pub fn command(args List[str]) int
     if q != "observe" and q != "screen" and q != "heap"
         io.eprint("error: unknown query `{q}`; the queries are observe, screen and heap\n{ATTACH_USAGE}")
         return 2
-    mut chosen := none
-    for a in apps
-        if port == 0 or a.port == port
-            if chosen == none or port != 0
-                chosen = a
+    mut at := -1
+    for k in 0..apps.len()
+        if port == 0 or apps[k].port == port
+            at = k
     if port == 0 and apps.len() > 1
         io.eprint("error: {apps.len()} programs publish a socket; name one with `--port N` (`ail attach` lists them)")
         return 2
-    app := chosen else
+    if at < 0
         io.eprint("error: no program publishes an attach socket{if port == 0 then "" else " on port {port}"}")
         return 2
+    app := apps[at]
     mut fields := ["\"v\":1", "\"q\":{syntax.quote(q)}", "\"token\":{syntax.quote(app.token)}"]
     for kv in rest[1..]
         eq := kv.find("=") else
