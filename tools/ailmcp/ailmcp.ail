@@ -1,0 +1,200 @@
+## `ail mcp` in AIL (ADR 0918, mcp.*): the compiler's own tools as an MCP server on stdio.
+##   ail mcp
+## One JSON-RPC message per line in, one per line out. Each tool runs the matching `ail` command in
+## the current directory and returns its output as text; it adds no analysis of its own.
+
+PROTOCOL := "2025-03-26"
+
+## The tools (mcp.tools.1). A tool: its name, description, the string arguments it takes and which are required.
+struct Tool
+    name str
+    about str
+    props List[str]
+    needs List[str]
+
+fn tools() List[Tool]
+    [
+        Tool(
+            name: "ail_check",
+            about: "Check a program; the diagnostics are the answer (exit 0 means clean).",
+            props: ["program"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_test",
+            about: "Run a program's tests; with `since` only those a change since that git revision can reach.",
+            props: ["program", "since"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "ail_ask",
+            about: "Ask the checker's graph a plain-words question: who writes field F, what calls f, which effects reach f.",
+            props: ["program", "question"],
+            needs: ["program", "question"],
+        ),
+        Tool(
+            name: "ail_impact",
+            about: "What a change since a git revision (default HEAD) touches: changed, affected, tests, effects, as JSON.",
+            props: ["program", "rev"],
+            needs: ["program"],
+        ),
+        Tool(
+            name: "task_start",
+            about: "Open the task: record the goal and the base revision (ADR 0917).",
+            props: ["program", "goal", "rev"],
+            needs: ["program", "goal"],
+        ),
+        Tool(
+            name: "task_status",
+            about: "The open task's impact since its base and whether it was verified.",
+            props: [],
+            needs: [],
+        ),
+        Tool(
+            name: "task_verify",
+            about: "Check, then run the affected tests; record green or red.",
+            props: [],
+            needs: [],
+        ),
+        Tool(
+            name: "task_finish",
+            about: "Close the task; refused unless the last verify was green.",
+            props: [],
+            needs: [],
+        ),
+        Tool(
+            name: "task_abort",
+            about: "Close the task without finishing it.",
+            props: [],
+            needs: [],
+        ),
+    ]
+
+fn member(key str, value Json) JsonMember
+    JsonMember(key: key, value: value)
+
+fn obj(members List[JsonMember]) Json
+    Json.Obj(members)
+
+fn strs(xs List[str]) Json
+    Json.Arr([Json.Str(x) for x in xs])
+
+fn tool_json(t Tool) Json
+    props := obj([member(p, obj([member("type", Json.Str("string"))])) for p in t.props])
+    schema := obj([
+        member("type", Json.Str("object")),
+        member("properties", props),
+        member("required", strs(t.needs)),
+    ])
+    obj([
+        member("name", Json.Str(t.name)),
+        member("description", Json.Str(t.about)),
+        member("inputSchema", schema),
+    ])
+
+## The `ail` arguments for a tool call, or why the call is wrong (mcp.call.2).
+struct Cmd
+    argv List[str]
+    why str
+
+fn command(name str, a Json) Cmd
+    mut out := List[str]()
+    for t in tools()
+        if t.name != name
+            continue
+        for n in t.needs
+            if (a.str(n) else "") == ""
+                return Cmd(argv: [], why: "{name} needs `{n}`")
+        program := a.text("program", "")
+        since := a.text("since", "")
+        rev := a.text("rev", "")
+        match name
+            "ail_check" => out = ["check", program]
+            "ail_test" =>
+                out = ["test", program]
+                if since != ""
+                    out.extend(["--affected", "--since", since])
+            "ail_ask" =>
+                out = ["ask", program]
+                out.extend(a.text("question", "").split(" "))
+            "ail_impact" => out = [
+                "ask",
+                program,
+                "--affected",
+                "--json",
+                "--rev",
+                if rev == "" then "HEAD" else rev,
+            ]
+            "task_start" =>
+                out = ["task", "start", program, a.text("goal", ""), "--json"]
+                if rev != ""
+                    out.extend(["--rev", rev])
+            _ => out = ["task", name.slice(5, name.len()), "--json"]
+        return Cmd(argv: out, why: "")
+    Cmd(argv: [], why: "unknown tool {name}")
+
+fn reply(id Json, result Json)
+    print(
+        obj([
+            member("jsonrpc", Json.Str("2.0")),
+            member("id", id),
+            member("result", result),
+        ]).to_text(),
+    )
+
+fn failure(id Json, code int, message str)
+    err := obj([member("code", Json.Num(code.to_float())), member("message", Json.Str(message))])
+    print(
+        obj([member("jsonrpc", Json.Str("2.0")), member("id", id), member("error", err)]).to_text(),
+    )
+
+## A tool result (mcp.call.1): the text and whether the command failed (mcp.call.1).
+fn tool_result(text str, bad bool) Json
+    content := Json.Arr([obj([member("type", Json.Str("text")), member("text", Json.Str(text))])])
+    obj([member("content", content), member("isError", Json.Bool(bad))])
+
+fn call(id Json, params Json)
+    name := params.text("name", "")
+    args := params.get("arguments") else obj([])
+    cmd := command(name, args)
+    if cmd.why != ""
+        failure(id, -32602, cmd.why)
+        return
+    ran := proc.run(env.get("AIL") else "./ail", cmd.argv) else err
+        reply(id, tool_result("can't run ail: {err}", true))
+        return
+    text := "{ran.out}{ran.err}"
+    # A clean check prints nothing; say so (mcp.call.1).
+    shown := if text.trim() == "" then "ok (exit {ran.status})" else text
+    reply(id, tool_result(shown, ran.status != 0))
+
+## One message (mcp.proto.1: `initialize`, `ping`, `tools/list`, `tools/call`; anything else is -32601).
+fn handle(req Json)
+    method := req.text("method", "")
+    id := req.get("id") else
+        # A notification (`notifications/initialized`) has no id and gets no reply (mcp.proto.2).
+        return
+    params := req.get("params") else obj([])
+    match method
+        "initialize" =>
+            info := obj([member("name", Json.Str("ail")), member("version", Json.Str("0.1.0"))])
+            caps := obj([member("tools", obj([]))])
+            reply(id, obj([
+                member("protocolVersion", Json.Str(params.text("protocolVersion", PROTOCOL))),
+                member("capabilities", caps),
+                member("serverInfo", info),
+            ]))
+        "ping" => reply(id, obj([]))
+        "tools/list" => reply(id, obj([member("tools", Json.Arr([tool_json(t) for t in tools()]))]))
+        "tools/call" => call(id, params)
+        _ => failure(id, -32601, "unknown method {method}")
+
+fn main() !
+    while true
+        line := io.read_line() else break
+        if line.trim() == ""
+            continue
+        req := parse_json(line) else err
+            failure(Json.Null, -32700, err.message)
+            continue
+        handle(req)
