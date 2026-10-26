@@ -232,7 +232,7 @@ fn main()
         print(GetTickCount())
 ```
 
-```ail rules=ffi.decl.1
+```ail skip=context rules=ffi.decl.1
 use c "stdlib.h" as libc
 
 fn main()

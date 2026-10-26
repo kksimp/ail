@@ -166,7 +166,7 @@ computed at compile time (`ct.eval.*`); the bootstrap computes them before
 by zero) is an error reported at the constant before the program runs.
 *(ADR 0132)*
 
-```ail
+```ail skip=context
 pub MAX_DEPTH := 64
 KEYWORDS := {"if", "else", "while"}
 SCRIPTS := [["a", "b"], ["c"]]
