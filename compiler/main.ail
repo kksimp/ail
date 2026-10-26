@@ -383,9 +383,11 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     # task runtime a trap no longer runs the program's cleanups (unwind_live).
     tasks := mir.uses_tasks(src)
         or mentions_ui(src)
-        or parallel_on()
-        and has_for_loop(src)
-        and par_keys(path, "{dir}/../../../std", src.len()).len() > 0
+        or parallel_on() and has_for_loop(src) and par_keys(
+            path,
+            "{dir}/../../../std",
+            src.len(),
+        ).len() > 0
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
