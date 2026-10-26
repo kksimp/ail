@@ -1,0 +1,1 @@
+[{"op":"replace","id":"fn:add","text":"fn add(mut c Cart, n int, by int)\n    c.total += n * by"}]
