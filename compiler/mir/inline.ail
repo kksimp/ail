@@ -100,8 +100,13 @@ fn expand_allocating(mut out Module)
         mut f := out.funcs[k]
         if f.name.starts_with("rt.")
             continue
-        expand_calls(mut f, leaves, bodies, mut out.sites)
-        merge_blocks_in(mut f)
+        budget := expand_calls(mut f, leaves, bodies, mut out.sites)
+        if budget < INLINE_BUDGET
+            # As after any inlining, so the constants of the copies are shared.
+            simplify_in(mut f)
+            fold_in(mut f)
+            simplify_in(mut f)
+            merge_blocks_in(mut f)
         out.funcs[k] = f
 
 ## Small, calls nothing, and nothing jumps back to its entry.
