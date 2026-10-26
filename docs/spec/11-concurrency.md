@@ -530,6 +530,14 @@ thread, or under `--deterministic`, every loop and task runs as if there
 were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
 how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
 
+**conc.par.15** — `ail effects --parallel` lists each run of two or more adjacent
+`name := f(args)` statements where every `f` is a free function with no impure effect,
+no argument is `mut`, and no argument mentions a name an earlier statement of the run
+defines. The row says `fork` when at least two of the callees are heavy (they have a
+loop, are recursive, or reach a function with a loop) and `inline` otherwise. This is the
+analysis of the fork-join of independent calls; running a `fork` run on the pool is
+not implemented yet. *(ADR 0914)*
+
 **conc.par.10** — A task whose function has no `io`, `unsafe`, `spawn` or
 capability effect and calls no method of a handle, directly or through the
 functions it calls, and whose arguments hold no handle, runs on its own
