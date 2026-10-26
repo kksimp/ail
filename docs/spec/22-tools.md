@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -1180,4 +1180,23 @@ does. The program is the bundle's `program`.
 **bundle.run.2** — When the program's text no longer has the bundle's
 `program_hash`, `--bundle` says so on standard error before it runs; the result
 is the run's own.
+
+## Verifying a change
+
+**verify.run.1** — `ail verify --diff [--rev REV] [--json] FILE` compares `FILE`
+with git revision REV (default `HEAD`) as `ail ask FILE --affected` does
+(`api.impact.3`) and prints four parts: *proved*, *tested*, *unverified* and
+*failures*. The exit status is 0 when there are no failures, 1 when there are,
+and 2 for a usage error or a program that cannot be compared
+([ADR 0909](../decisions/0909-ail-verify-diff.md)).
+**verify.run.2** — *Proved* says whether `ail check FILE` accepts the program
+(a missing `main` is not an error) and lists the changed declarations
+(`api.impact.1`). A program with errors is not tested.
+**verify.run.3** — *Tested* is the affected tests (`api.impact.3`) that
+`ail test FILE --affected` ran: the names that passed and the names that failed.
+**verify.run.4** — *Unverified* lists what no result speaks for: that no test
+ran for the changed declarations, each function whose effects changed
+(`api.impact.4`), and each skipped test. *Failures* lists the check errors and
+the failed tests. `--json` prints the same parts as one object with
+`"verify":1`.
 

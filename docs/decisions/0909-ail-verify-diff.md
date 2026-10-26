@@ -5,7 +5,7 @@
 - **Decided by:** Designer (2026-10-25, chose the feature on a decision card); the details by AI (delegated, ADR 0076), for integrator review
 - **Builds on:** [ADR 0396](0396-ail-diff-semantic-diff.md) (`ail diff`), [ADR 0882](0882-edit-impact.md) (impact and affected tests), [ADR 0211](0211-contract-runtime-checks.md) (contracts), [ADR 0394](0394-token-budgets-on-every-command.md) (`--budget`)
 - **Topic:** 22 — Tooling
-- **Planned rule keys:** `verify.run.*`, `verify.report.*`
+- **Rule keys:** `verify.run.1-4`
 
 ## Context
 
@@ -15,10 +15,12 @@ After a fix, an agent says "done" because the last command printed no error. Not
 
 `ail verify --diff [--rev REV] PROGRAM` compares PROGRAM with REV (default `HEAD`, as `ail ask --affected`) and prints one report in four parts, each a list of declarations by id (ADR 0396):
 
-1. **proved:** changed declarations whose program checks with no errors, with their `requires`/`ensures` that the checker discharged statically.
-2. **tested:** affected tests (`api.impact.2`) that ran, with pass or fail, and the changed declarations each test reaches.
-3. **unverified:** changed or affected declarations that no test reaches, contracts checked only at run time and not hit by a test, and effects that changed (ADR 0396 body hashes) without a test reaching them.
-4. **new failures:** diagnostics and failing tests present now and absent at REV. Failures present at both are listed apart as `old failures`.
+1. **proved:** whether the program checks with no errors, and the changed declarations.
+2. **tested:** the affected tests (`api.impact.3`) that ran, with pass or fail.
+3. **unverified:** that no test ran for the changed declarations, functions whose effects changed, and skipped tests.
+4. **failures:** check errors and failed tests.
+
+Version 1 is coarse on purpose: the impact graph names the tests a whole change reaches, not which test reaches which declaration, and REV's own check and test results are not re-run, so a failure is not yet split into new and old. Per-declaration reach, a `new`/`old` split and a list of contracts only checked at run time are the next slices.
 
 Exit status is 0 when the check is clean and no new failure exists, 1 otherwise. "Unverified" never fails the command; it is the information. `--json` prints the same four parts; `--budget N` trims by rank: new failures first, then unverified, tested, proved. Everything is computed only when asked for (ADR 0868).
 
