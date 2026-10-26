@@ -3,7 +3,7 @@ entry: main in main.ail
 
 ## (root)
 ```
-fn main() ! [clock env fail fs io proc]
+fn main() ! [clock env fail fs io net proc]
     fails with JsonError | fs.IoError
 BUILD_USAGE := ...
 fn positive(v str) bool
@@ -77,4 +77,4 @@ fn api_syntax(rest List[str]) [clock env fs io proc]
 fn api_cmd(rest List[str]) [clock env fs io proc]
 ```
 
-trimmed to fit 2000 tokens (~1315); dropped: private items, doc comments
+trimmed to fit 2000 tokens (~1316); dropped: private items, doc comments

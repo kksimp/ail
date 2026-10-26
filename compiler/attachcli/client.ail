@@ -1,0 +1,108 @@
+## `ail attach` (attach.cli.1-3, ADR 0884): the client of a running program's attach socket, so an
+## agent needs no hand-written socket code. `ail attach` lists the programs that publish one;
+## `ail attach [--port N] observe|screen|heap [key=value ...]` sends that query, with the token
+## from the program's discovery file, and prints the reply line. Every query only reads
+## (attach.wire.4).
+use syntax
+
+ATTACH_USAGE := "usage: ail attach [--port N] observe|screen|heap [key=value ...]   e.g. ail attach screen role=button budget=200; ail attach observe names=n,total since=3; `ail attach` alone lists the running programs"
+
+## A program that publishes an attach socket.
+struct Running
+    port int
+    token str
+
+fn tmp_dir() str
+    env.get("TMPDIR") else "/tmp"
+
+## The programs whose discovery files (`attach.wire.1`) are in the temp directory, by port.
+fn running() List[Running]
+    mut out := List[Running]()
+    dir := tmp_dir().strip_suffix("/") else tmp_dir()
+    names := fs.list_dir(dir) else return out
+    for n in names.sorted()
+        if not (n.starts_with("ail-attach-") and n.ends_with(".json"))
+            continue
+        text := fs.read_text("{dir}/{n}") else continue
+        if text.trim() == ""
+            continue
+        j := parse_json(text) else continue
+        addr := j.str("addr") else continue
+        token := j.str("token") else continue
+        port := (addr.split(":").last() else "").to_int() else continue
+        out.push(Running(port: port, token: token))
+    out
+
+## A field's JSON: a number stays a number, `names` is a list, anything else is a string.
+fn field_json(key str, value str) str
+    if key == "names"
+        return "[{[syntax.quote(n) for n in value.split(",")].join(",")}]"
+    if ["x", "y", "w", "h", "budget", "since"].contains(key)
+        if value.to_float() != none
+            return value
+    syntax.quote(value)
+
+## `ail attach ARGS`; the exit status: 0 for a reply, 1 for an error reply, 2 for a usage or connection error.
+pub fn command(args List[str]) int
+    mut port := 0
+    mut rest := List[str]()
+    mut i := 0
+    while i < args.len()
+        a := args[i]
+        i += 1
+        if a == "--port"
+            if i >= args.len()
+                io.eprint("error: `--port` needs a port number\n{ATTACH_USAGE}")
+                return 2
+            port = args[i].to_int() else 0
+            i += 1
+        else
+            rest.push(a)
+    apps := running()
+    if rest.len() == 0
+        if apps.len() == 0
+            io.eprint("no program publishes an attach socket (a std.app program started with `ail run` does)")
+            return 1
+        for a in apps
+            print("127.0.0.1:{a.port}")
+        return 0
+    q := rest[0]
+    if q != "observe" and q != "screen" and q != "heap"
+        io.eprint("error: unknown query `{q}`; the queries are observe, screen and heap\n{ATTACH_USAGE}")
+        return 2
+    mut at := -1
+    for k in 0..apps.len()
+        if port == 0 or apps[k].port == port
+            at = k
+    if port == 0 and apps.len() > 1
+        io.eprint("error: {apps.len()} programs publish a socket; name one with `--port N` (`ail attach` lists them)")
+        return 2
+    if at < 0
+        io.eprint("error: no program publishes an attach socket{if port == 0 then "" else " on port {port}"}")
+        return 2
+    app := apps[at]
+    mut fields := ["\"v\":1", "\"q\":{syntax.quote(q)}", "\"token\":{syntax.quote(app.token)}"]
+    for kv in rest[1..]
+        eq := kv.find("=") else
+            io.eprint("error: `{kv}` is not key=value\n{ATTACH_USAGE}")
+            return 2
+        key := kv.slice(0, eq)
+        fields.push("{syntax.quote(key)}:{field_json(key, kv.slice(eq + 1, kv.len()))}")
+    c := net.connect("127.0.0.1", app.port) else err
+        io.eprint("error: can't connect to 127.0.0.1:{app.port}: {err.message}")
+        return 2
+    c.set_timeout(5000)
+    c.write("\{{fields.join(",")}}\n") else err
+        io.eprint("error: {err.message}")
+        return 2
+    reply := c.read_line() else err
+        io.eprint("error: {err.message}")
+        return 2
+    c.close()
+    line := reply else
+        io.eprint("error: the program closed the connection without a reply")
+        return 2
+    print(line)
+    if line.contains("\"error\"")
+        return 1
+    0

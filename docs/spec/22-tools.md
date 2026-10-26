@@ -1,6 +1,6 @@
 # 22. Tools: api, explain, fix, budgets, diff, edit, replay, bundles, snapshots
 
-Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`
+Chapter keys: `api`, `explain`, `fix`, `budget`, `snap`, `diff`, `edit`, `replay`, `bundle`, `verify`
 
 > **Status:** Drafted (partial). These are the rules that diagnostics and other
 > chapters cite. The output formats of `ail api` are non-normative and live in
@@ -674,6 +674,8 @@ fn main()
 
 **task.verify.3** — A red result shows the stage that failed (`check` or `test`) and the last 20 non-blank lines of its output.
 
+**task.verify.4** — The test stage runs with `--bundle-failure` (`bundle.write.1`). A red test stage lists the bundle files it wrote as `bundles` (`--json`), and `next` names `ail test --bundle PATH` for the first.
+
 **task.status.1** — `ail task status` prints the goal, the last verify result and the impact since the base (`api.impact.4`).
 
 **task.finish.1** — `ail task finish` is refused (exit status 1) unless the last verify was green.
@@ -682,7 +684,7 @@ fn main()
 
 **task.out.1** — Every answer names the one command to run next (`next`). `--json` prints one object with the same fields.
 
-```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.status.1,task.finish.1,task.finish.2,task.out.1
+```ail skip=bootstrap tool=task,verify,--json rules=task.state.1,task.state.2,task.start.1,task.verify.1,task.verify.2,task.verify.3,task.verify.4,task.status.1,task.finish.1,task.finish.2,task.out.1
 fn main()
     print(1)
 ```
@@ -697,7 +699,7 @@ different feature of [ADR 0892](../decisions/0892-tool-functions-mcp-server.md).
 
 **mcp.proto.2** — A message with no `id` (a notification) gets no reply.
 
-**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones.
+**mcp.tools.1** — The tools are `ail_check`, `ail_test`, `ail_ask`, `ail_impact`, `task_start`, `task_status`, `task_verify`, `task_finish` and `task_abort`. Each has an `inputSchema` of string properties and the required ones. `ail_test` runs with `--bundle-failure`, and with `bundle` set reruns that bundle (`ail test --bundle PATH`) instead.
 
 **mcp.call.1** — A call runs the matching `ail` command in the server's directory and returns its stdout then stderr as one text content; `isError` is true when the exit status is not 0.
 
@@ -1262,3 +1264,31 @@ is the run's own.
 ```ail skip=bootstrap pkg=bundle_env tool=test,--bundle,bad.json status=1 expect=differs rules=bundle.run.1,bundle.run.2
 ```
 
+## Verifying a change
+
+**verify.run.1** — `ail verify --diff [--rev REV] [--json] FILE` compares `FILE`
+with git revision REV (default `HEAD`) as `ail ask FILE --affected` does
+(`api.impact.3`) and prints four parts: *proved*, *tested*, *unverified* and
+*failures*. The exit status is 0 when there is no check error and no new
+failure (`verify.run.5`), 1 otherwise, and 2 for a usage error or a program that cannot be compared
+([ADR 0909](../decisions/0909-ail-verify-diff.md)).
+**verify.run.2** — *Proved* says whether `ail check FILE` accepts the program
+(a missing `main` is not an error) and lists the changed declarations
+(`api.impact.1`). A program with errors is not tested.
+**verify.run.3** — *Tested* is the affected tests (`api.impact.3`) that
+`ail test FILE --affected` ran: the names that passed and the names that failed.
+**verify.run.4** — *Unverified* lists what no result speaks for: that no test
+ran for the changed declarations, each changed declaration that no affected
+test reaches (when `ail ask --affected --json` gives `reaches`), a partial impact
+(`"partial":true`), each function whose effects changed
+(`api.impact.4`), and each skipped test. *Failures* lists the check errors and
+the failed tests. `--json` prints the same parts as one object with
+`"verify":1`.
+**verify.run.5** — A failure is *new* unless the test also fails when the tree at
+REV (`git archive REV`) is tested; it is then *old*. Check errors are always new.
+When REV cannot be unpacked or run, every failed test is new.
+
+```ail skip=bootstrap tool=verify,--diff,--rev,nosuch,FILE status=2 expect=api.impact.3 rules=verify.run.1,verify.run.2,verify.run.3,verify.run.4,verify.run.5
+fn main()
+    print("hi")
+```

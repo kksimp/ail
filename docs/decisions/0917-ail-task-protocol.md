@@ -20,7 +20,7 @@ An agent doing one change calls `ail ask --affected`, `ail check`, `ail test --a
 - Every answer ends with `next`, the one command to run after it; `--json` gives the same fields.
 - It adds no analysis; it only sequences existing commands. Rule keys: `task.state.*`, `task.start.*`, `task.verify.*`, `task.finish.*`.
 - MCP: each subcommand is one tool (`task_start`, `task_status`, `task_verify`, `task_finish`) with the `--json` fields as the result, once the compiler serves MCP (ADR 0892 serves user programs only; the compiler's own tool list is a follow-up).
-- When `ail verify --diff` and `ail test --bundle-failure` (ADRs 0909, 0910) land, `verify` calls them and `finish` attaches their bundle.
+- `verify` runs the tests with `--bundle-failure` (ADR 0910) and lists the bundle files of a red run (`task.verify.4`). When `ail verify --diff` (ADR 0909) lands, `verify` calls it too.
 
 Cost when unused (ADR 0868): none. It is a separate tool run only by `ail task`.
 
