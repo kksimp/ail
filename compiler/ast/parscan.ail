@@ -105,7 +105,10 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
                 Index(r, i, _) =>
                     scan_expr(mut sc, i)
                     scan_place(mut sc, r)
-                _ => refuse(mut sc, "an assignment to a field or another place that is not a name or list element")
+                _ => refuse(
+                    mut sc,
+                    "an assignment to a field or another place that is not a name or list element",
+                )
         While(cond, body, _) =>
             sc.mult = sc.mult * 16
             scan_expr(mut sc, cond)
@@ -123,7 +126,10 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
         Continue(_) => return
         Eval(e) => scan_expr(mut sc, e)
         Return(_, _) => refuse(mut sc, "`return`")
-        Handle(_, _) | Defer(_, _) | With(_, _, _, _, _) | Unsafe(_, _) => refuse(mut sc, "`handle`, `defer`, `with` or `unsafe`")
+        Handle(_, _) | Defer(_, _) | With(_, _, _, _, _) | Unsafe(_, _) => refuse(
+            mut sc,
+            "`handle`, `defer`, `with` or `unsafe`",
+        )
 
 ## The place an element is stored into: the indexes are read, the list is
 ## only named.
@@ -156,7 +162,10 @@ fn scan_expr(mut sc ParScan, e Expr)
             scan_cost(mut sc, 8)
             match callee
                 Name => scan_args(mut sc, args)
-                _ => refuse(mut sc, "a call of a method value or closure, or a constructor with a path")
+                _ => refuse(
+                    mut sc,
+                    "a call of a method value or closure, or a constructor with a path",
+                )
         Method(recv, name, _, args) =>
             scan_cost(mut sc, 2)
             if not READ_ONLY.contains(name)
@@ -194,7 +203,10 @@ fn scan_expr(mut sc ParScan, e Expr)
                 scan_block(mut sc, b.body, 1)
             if body := els
                 scan_block(mut sc, body, 1)
-        _ => refuse(mut sc, "a `match`, constructor, lambda, field access or other expression the native parallel loop doesn't take yet")
+        _ => refuse(
+            mut sc,
+            "a `match`, constructor, lambda, field access or other expression the native parallel loop doesn't take yet",
+        )
 
 fn scan_args(mut sc ParScan, args List[Arg])
     for a in args
