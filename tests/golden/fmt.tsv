@@ -368,8 +368,8 @@ fmt plain compiler/obj/sha256.ail	f190ce23b05d3678	0	94786e5716dd3648
 fmt long compiler/obj/sha256.ail	f190ce23b05d3678	0	61d183528fb8a4e8
 fmt plain compiler/pkg/command.ail	4eb93b30b02fdc5b	0	57dc000ba2874121
 fmt long compiler/pkg/command.ail	4eb93b30b02fdc5b	0	d93070f00adb5e05
-fmt plain compiler/pkg/git.ail	233c98d1304c578b	0	b632387385f84e20
-fmt long compiler/pkg/git.ail	233c98d1304c578b	0	fba59cc1722a1657
+fmt plain compiler/pkg/git.ail	a0cc84d7a3a1463f	0	d628a1f37dd62f4b
+fmt long compiler/pkg/git.ail	a0cc84d7a3a1463f	0	6565fa7898e27a16
 fmt plain compiler/pkg/manifest.ail	79c3f21342a3032e	0	fd9ac944ea48cc62
 fmt long compiler/pkg/manifest.ail	79c3f21342a3032e	0	d8049bd6984d29a8
 fmt plain compiler/pkg/packages.ail	0ee8cc78c08ee20c	0	ee696f15354171a8
@@ -4120,8 +4120,8 @@ fmt plain tools/fuzz/suite.ail	05b76ba4ee034148	0	f18f8ac7c06e99e1
 fmt long tools/fuzz/suite.ail	05b76ba4ee034148	0	506bd9a8943a6e3c
 fmt plain tools/gate/asm.ail	6ccb1b476c70a792	0	a7b2e0cb83aad36a
 fmt long tools/gate/asm.ail	6ccb1b476c70a792	0	fe69c8228658d7a1
-fmt plain tools/gate/gate.ail	a24819d243c94753	0	723d9bf12aef1992
-fmt long tools/gate/gate.ail	a24819d243c94753	0	cd2312395adec4ee
+fmt plain tools/gate/gate.ail	cb038aebbd025b3c	0	d06c95bc70485152
+fmt long tools/gate/gate.ail	cb038aebbd025b3c	0	7f43e2c2d6ac6603
 fmt plain tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	cefff86c796ed587
 fmt long tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	7e124b641dbf1cab
 fmt plain tools/gate/goldens.ail	33c251dd83e47eac	0	9f0e88b90b7ded6c
@@ -4130,8 +4130,8 @@ fmt plain tools/gate/nativex.ail	e53638aa71f5742d	0	95760a25e9a1cb7f
 fmt long tools/gate/nativex.ail	e53638aa71f5742d	0	7721a98948094f19
 fmt plain tools/gate/pe.ail	c11e291c002ceef0	0	5047564141861220
 fmt long tools/gate/pe.ail	c11e291c002ceef0	0	af28abc29d19b50f
-fmt plain tools/gate/spec.ail	8ffaff11df2dc48c	0	2c4d60320f5f63b9
-fmt long tools/gate/spec.ail	8ffaff11df2dc48c	0	dff3fbe883ebaeb6
+fmt plain tools/gate/spec.ail	251612f1f1a06c4b	0	b76e97389940b5f2
+fmt long tools/gate/spec.ail	251612f1f1a06c4b	0	921ced568f68650d
 fmt plain tools/native-net/dns_get.ail	87ba969df08599dd	0	e6f34f83f387aafb
 fmt long tools/native-net/dns_get.ail	87ba969df08599dd	0	b132439284bf2c17
 fmt plain tools/native-net/h2_client.ail	747b6389949c1812	0	a81dba6d1fd8b2ae
