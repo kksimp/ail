@@ -12,3 +12,4 @@ tests/native/run/os_stdin.in -text
 *.pdf binary
 *.zip binary
 *.gz binary
+tools/tzdata/zones/** binary

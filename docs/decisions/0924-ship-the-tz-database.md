@@ -4,7 +4,7 @@
 - **Date:** 2026-10-27
 - **Decided by:** Designer (2026-10-27, "1A")
 - **Topic:** 17 — Standard library
-- **Spec rules:** [std.tz.1–2](../spec/17-std.md#zones-stdtz) (to be amended with the implementation)
+- **Spec rules:** [std.tz.1–3](../spec/17-std.md#zones-stdtz)
 
 ## Context
 
@@ -28,8 +28,28 @@ each system installs its own release of the database.
 
 AIL ships a copy of the IANA tz database. `std.tz` reads that copy on every OS,
 so a zone name gives the same offsets everywhere. The system zone (`std.tz.2`)
-is still found from the platform, and on Windows it is mapped from the Windows
-zone ID to its IANA name.
+is still found from the platform. On Windows it is `TZ` when that names a zone,
+else `UTC`; mapping the Windows zone ID to its IANA name is deferred (see
+Implementation).
+
+## Implementation
+
+- **Where:** `tools/tzdata/zones/` holds one slim TZif file per name (598
+  files, 342 KB; links are copies, and slim files rely on the POSIX footer
+  rule for later years). `rt.tz_offset` (`compiler/rt/native/tz.ail`) looks in
+  `AIL_ROOT/tools/tzdata/zones` first, then the system directories, which
+  Windows lacks. `ail` and `ail.ps1` set `AIL_ROOT`; a program run without it
+  falls back to the system copy.
+- **Regenerate:** `tools/tzdata/build.sh` runs `zic -b slim` over
+  `tools/tzdata/tzdata.zi`. To update, replace `tzdata.zi` with the new
+  release's file and run it. The release is recorded on the first line of
+  `tzdata.zi` (`# version 2026e`) and nowhere else.
+- **Spec:** `std.tz.1` and `std.tz.3` now say the bundled copy is read first.
+- **Windows `tz.system()`:** the Windows-to-IANA mapping needs the CLDR
+  `windowsZones` table (about 140 rows, a few times a year) and a reader for
+  the active zone ID (`tzutil /g` or the registry). Neither is in the tree, and
+  no test needs it, so it stays `TZ` else `UTC`. Open as a follow-up if a
+  program needs the local Windows zone.
 
 ## Rationale
 
@@ -39,9 +59,7 @@ public domain, so it adds no licence condition.
 
 ## Consequences
 
-- Follow-up: a tool that regenerates the bundled data from an IANA release, the
-  runtime change to read it, the Windows zone-ID mapping, and the `std.tz.1`
-  wording. These change the spec when they land.
+- Follow-up: the Windows zone-ID mapping for `tz.system()`; the CLDR table it needs is under the Unicode License v3, so the change adds a `NOTICE` entry.
 - A new IANA release means a new AIL release; the data version is recorded next
   to the data.
 - `std_tz`, `examples/calendar.ail` and the `17-std.md` zone examples can then
@@ -50,3 +68,7 @@ public domain, so it adds no licence condition.
 ## Rejected alternatives
 
 - Platform data (option B): answers differ between machines, and Windows needs a second reader and a name mapping.
+- Windows icu.dll (`ucal` functions): needs a five-argument native call the
+  runtime's `import_call` does not have, and its data follows the OS release.
+- The Windows registry as the data source: a second reader and a name mapping,
+  with answers that differ between machines.
