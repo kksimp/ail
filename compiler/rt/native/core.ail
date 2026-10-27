@@ -239,9 +239,16 @@ fn init(argc int, argv int)
     if target() == 3
         win_args_init()
     # The argument vector sits at the top of the main stack. Windows
-    # (target 3) has no limit yet: a zero limit is never reached.
+    # (target 3) has no argument vector there: the thread's own bounds say how far the stack goes.
     if target() != 3
         store64(global(STACK_LIMIT), argv - stack_use())
+    else
+        p := alloc(16, KIND_ATOMIC)
+        import_call("GetCurrentThreadStackLimits", p, p + 8, 0, 0)
+        low := load64(p)
+        size := load64(p + 8) - low
+        if low > 0 and size > 0
+            store64(global(STACK_LIMIT), if size > 2 * STACK_RESERVE then low + STACK_RESERVE else low + size / 2)
 
 ## Windows (target 3) hands the program no `argv` or `envp`: build them from
 ## `GetCommandLineW` (UTF-16, by the rules of `CommandLineToArgvW`, program
