@@ -234,10 +234,7 @@ fn main() !
     root := repo_root()
     # A directory of its own per run, so two gates at once don't clash.
     base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
-    mk1 := proc.run("mktemp", [
-        "-d",
-        "{base}/ail-spec-ail.XXXXXX",
-    ]) else return
+    mk1 := proc.run("mktemp", ["-d", "{base}/ail-spec-ail.XXXXXX"]) else return
     tmp := mk1.out.trim()
     mut files := fs.glob("docs/spec/*.md")
     files.sort()
