@@ -49,7 +49,7 @@ treats generics dynamically, which a native backend can't.
    (`List[int].m`), so `[1, 2].size()` and the generic code that calls it
    work as for a struct. An associated call `T.f(...)` on a type parameter
    (trait.assoc.1-2) calls the concrete type's `f`.
-7. **Not yet in the subset:** generic methods (`fn T.m[U]`), `any Trait`
+7. **Not yet in the subset:** generic methods of `int`, `float`, `bool`, `str` and `List` owners (those of structs and enums work, gen.method.3), `any Trait`
    values (dynamic dispatch, ADR 0616), built-in derives (`impl Ord for S`
    with no body), and optionals of a type parameter (`T?`, with lane 175's
    optionals). Generator derives (`ToJson`, `FromJson`, `Default`) reach
