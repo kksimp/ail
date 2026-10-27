@@ -491,6 +491,30 @@ fn main()
     print(p.y)
 ```
 
+**native.sroa.3** — After native.sroa.1 and 2, a call that is given a struct
+the caller has just built may be inlined when the callee calls nothing and
+only reads it, and a self-recursive function that hands such a struct to
+itself may have one copy of its own body inlined (the code that makes a
+trap's stack list every source frame is unchanged), so that the struct needs
+no object in the first level of the recursion. *(ADR 0923)*
+
+```ail rules=native.sroa.3
+struct P
+    x float
+    y float
+
+fn len2(p P) float
+    p.x * p.x + p.y * p.y
+
+fn go(p P, d int) float
+    if d == 0
+        return len2(p)
+    go(P(x: p.x + 1.0, y: p.y), d - 1)
+
+fn main()
+    print(go(P(x: 0.0, y: 3.0), 4))
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is
@@ -589,14 +613,11 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-struct Tag
-    n int
-
-fn Tag.pick[T](self, xs List[T]) T
-    xs[n]
+extern c fn sqrtf(x f32) f32
 
 fn main()
-    print(Tag(n: 0).pick([1, 2]))
+    unsafe
+        print(sqrtf(4.0.to_f32()))
 ```
 
 ```ail norun rules=native.build.2

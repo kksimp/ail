@@ -1,0 +1,25 @@
+# gen.method.3: a generic method of a plain struct or enum is one instance per type arguments.
+struct Box
+    v int
+
+enum Mode
+    Fast
+    Slow
+
+fn Box.twice[T](self, x T) List[T]
+    [x, x]
+
+fn Box.pair[A, B](self, a A, b B) str
+    "{self.v}:{a}:{b}"
+
+fn Mode.tag[T](self, x T) str
+    "{self == Mode.Fast}/{x}"
+
+fn main()
+    b := Box(v: 2)
+    print(b.twice("a").join("-"))
+    print(b.twice(b.v))
+    print(b.pair(1, "z"))
+    print(b.pair("z", 2.5))
+    print(Mode.Fast.tag(7))
+    print(Mode.Slow.tag("s"))
