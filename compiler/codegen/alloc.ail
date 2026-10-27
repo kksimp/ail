@@ -47,6 +47,9 @@ pub struct Alloc
     pub region List[bool]
     ## Moves around loops a value is idle in (ADR 0848).
     pub holes List[Hole]
+    ## For each `salloc`, the slot number (`SLOT_BASE + k`) of the first of
+    ## the `imm / 8 + 1` slots, header word included, that it owns.
+    pub sallocs Map[int, int]
 
 ## A value kept in a stack slot across a loop that never touches it, so the
 ## loop's registers go to the values it does use. At the end of block
@@ -275,6 +278,12 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
     )
     for v in queue
         s.assign(v, f.vals[v].is_float(), t)
+    mut sallocs := Map[int, int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "salloc" and i.dst >= 0
+                sallocs[i.dst] = SLOT_BASE + s.slots
+                s.slots += i.imm / 8 + 1
     mut holes := List[Hole]()
     mut hole_slot := Map[int, int]()
     for c in cuts
@@ -300,6 +309,7 @@ fn allocate_with(f mir.Func, t Target, heads List[int]) Alloc
         wrap: shrink.wrap,
         region: shrink.region,
         holes: holes,
+        sallocs: sallocs,
     )
 
 ## A value to keep in memory across one loop: the block that ends before the
