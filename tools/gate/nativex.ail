@@ -646,7 +646,7 @@ fn Run.drivers(mut self)
 ## $TMPDIR without its trailing `/` (macOS sets one): a `//` in a scratch path
 ## stops goldens that replace the root from matching normalized paths.
 fn tmp_base() str
-    base := env.get("TMPDIR") else "/tmp"
+    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
     if base.len() > 1 and base.ends_with("/") then base.slice(0, base.len() - 1) else base
 
 fn main() !

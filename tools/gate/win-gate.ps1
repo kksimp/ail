@@ -28,10 +28,11 @@ function Run([string]$name, [string[]]$cmdArgs) {
 # made it), so nativex reuses it (NATIVE_COMPILER) and there is no extra 25-minute build here.
 $native = Join-Path $root '.native\ail.exe'
 if (Test-Path $native) {
-    $env:NATIVE_COMPILER = $native
+    # Forward slashes: gate.ail hands this path to `sh -c`, which eats backslashes.
+    $env:NATIVE_COMPILER = $native -replace '\\', '/'
 } else {
     Run 'selfhost1' @('build', 'compiler/main.ail', '-o', (Join-Path $out 'native-compiler.exe'))
-    $env:NATIVE_COMPILER = Join-Path $out 'native-compiler.exe'
+    $env:NATIVE_COMPILER = (Join-Path $out 'native-compiler.exe') -replace '\\', '/'
 }
 # The program suites.
 $suites = 'examples cases explain fix cli mistakes contracts misc sched docs fmt limits diff build_cache api_queries api_card edit git_deps net spec native_misc nativex globals pe asm snapshot budget replay'.Split(' ')

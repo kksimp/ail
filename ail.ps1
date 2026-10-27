@@ -211,7 +211,10 @@ if ($route) {
             $prep = & $native prepare @runOpts $runFile 2> $errFile
             if ($LASTEXITCODE -eq 0) {
                 Remove-Item -Force $errFile
-                & ([string]($prep | Select-Object -Last 1)) @($rest | Select-Object -Skip $runSkip)
+                # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
+                $env:AIL_RUN_FILE = $runFile
+                try { & ([string]($prep | Select-Object -Last 1)) @($rest | Select-Object -Skip $runSkip) }
+                finally { Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue }
                 exit $LASTEXITCODE
             }
             [Console]::Error.Write((Get-Content $errFile -Raw)); Remove-Item -Force $errFile

@@ -282,7 +282,8 @@ fn a64(tmp str) List[str]
     fails
 
 fn main()
-    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-asm-gate"
+    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
+    tmp := "{base}/ail-asm-gate"
     mut fails := x86(tmp)
     fails.extend(a64(tmp))
     sh("rm -rf {tmp}")
