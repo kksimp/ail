@@ -579,7 +579,15 @@ fn env_vars() int
         while eq < len and load8(c + eq) != 61
             eq += 1
         if eq < len and os_utf8_chars(c, eq) >= 0 and os_utf8_chars(c + eq + 1, len - eq - 1) >= 0
-            list_push(names, str_addr(os_str_from(c, eq)))
+            nm := os_str_from(c, eq)
+            if target() == 3
+                # Windows names are case-insensitive (std.env.5): the map spells them in capitals, as Python's `os.environ` does.
+                a := str_addr(nm) + 16
+                for b in 0..eq
+                    x := load8(a + b)
+                    if x >= 97 and x <= 122
+                        store8(a + b, x - 32)
+            list_push(names, str_addr(nm))
         e += 8
     q := list_addr(names)
     data := load64(q + 16)
