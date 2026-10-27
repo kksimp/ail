@@ -3,9 +3,9 @@
 fn main() unit
   b0:
     v0 int = const 1
-    v1 int = const 8
-    v2 int = const 4
-    v3:p Point = call rt.obj_new(v1, v2)
+    v5 int = const 524292
+    v3:p Point = salloc 
+    store v3:p, v5 +-8
     store v3:p, v0 +0
     v4 str = call text.Point(v3:p)
     call rt.out_str(v4)
