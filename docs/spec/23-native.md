@@ -613,11 +613,9 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-extern c fn sqrtf(x f32) f32
-
 fn main()
-    unsafe
-        print(sqrtf(4.0.to_f32()))
+    cs := ['b', 'a']
+    print(cs.sorted(by: |c| c))
 ```
 
 ```ail norun rules=native.build.2

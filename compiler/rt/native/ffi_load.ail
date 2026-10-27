@@ -117,6 +117,18 @@ fn ffi_addr(k int, lib str, has_lib bool, name str) int
     store64(tab + 8 * k, p)
     p
 
+## An `f32` argument of a C function: the single in the low 32 bits of the float register (ffi.map.1).
+fn ffi_f32_arg(x float) float
+    p := alloc(8, KIND_ATOMIC)
+    storef32(p, x)
+    loadf(p)
+
+## An `f32` result of a C function: the single in the low 32 bits of the float register, widened exactly.
+fn ffi_f32_res(r float) float
+    p := alloc(8, KIND_ATOMIC)
+    storef(p, r)
+    loadf32(p)
+
 fn ffi_status() int
     load64(global(FFI_ST))
 

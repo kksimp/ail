@@ -2,7 +2,7 @@
 ## binds the function on the first call (`rt.ffi_addr`: `dlopen` of the library
 ## and `dlsym` of the symbol, kept in a cell), traps with `ffi.load.1` or
 ## `ffi.load.2` when it can't, and calls the address as C does (System V or
-## AAPCS64: integers and pointers in the integer registers, `float`s in the
+## AAPCS64: integers and pointers in the integer registers, `float`s and `f32`s in the
 ## float registers, narrow results extended again, ffi.map.1-2).
 use ast
 
@@ -61,26 +61,22 @@ fn Lower.lower_extern_dyn(mut self, f ast.FnDecl, name str, params List[int])
     mut ints := 0
     mut floats := 0
     for t in sig.params
-        if t == Ty.F32
-            problem(
-                f.pos,
-                "`extern c fn {f.name}`: an `f32` parameter isn't in the native subset yet",
-            )
-            return
-        if t == Ty.Float
+        if t == Ty.Float or t == Ty.F32
             floats += 1
         else
             ints += 1
-    if sig.ret == Ty.F32
-        problem(f.pos, "`extern c fn {f.name}`: an `f32` result isn't in the native subset yet")
-        return
     if ints > 6 or floats > 8
         problem(f.pos, "`extern c fn {f.name}` takes more arguments than the C registers hold")
         return
     lib := if e := f.ext then e.lib else none
     addr := ffi_bound(lib, f.name, f.pos)
     mut args := [addr]
-    args.extend(params)
+    for k in 0..params.len()
+        # A C `float` takes the single in its register (ffi.map.1).
+        if sig.params[k] == Ty.F32
+            args.push(call("rt.ffi_f32_arg", [params[k]], Ty.Float))
+        else
+            args.push(params[k])
     mut i := inst(-1, "icall", args)
     i.name = "c"
     if not is_rt
@@ -88,6 +84,9 @@ fn Lower.lower_extern_dyn(mut self, f ast.FnDecl, name str, params List[int])
     if sig.ret.is_unit()
         emit_void(i)
         finish(return_of(-1))
+    elif sig.ret == Ty.F32
+        r := emit(i, Ty.Float)
+        finish(return_of(call("rt.ffi_f32_res", [r], Ty.F32)))
     else
         r := emit(i, sig.ret)
         finish(return_of(ffi_result(r, sig.ret)))

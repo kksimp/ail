@@ -322,7 +322,12 @@ fn Run.executables(mut self, target str, runner str)
         and not fs.exists("/usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1")
         mut static_only := List[str]()
         for c in cases
-            if not ["ffi_dynamic", "ffi_missing_library", "ffi_missing_symbol"].contains(stem_of(c))
+            if not [
+                "ffi_dynamic",
+                "ffi_f32",
+                "ffi_missing_library",
+                "ffi_missing_symbol",
+            ].contains(stem_of(c))
                 static_only.push(c)
         cases = static_only
     stride := (env.get("NX_STRIDE") else "1").to_int() else 1
