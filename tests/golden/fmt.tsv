@@ -488,8 +488,8 @@ fmt plain compiler/rt/native/tls_x509.ail	42bb5327831d9a7e	0	6e07c38f96e319a7
 fmt long compiler/rt/native/tls_x509.ail	42bb5327831d9a7e	0	59c509c862f3265a
 fmt plain compiler/rt/native/trap.ail	3a7eede697737e6c	0	723c25bbf3f0fd84
 fmt long compiler/rt/native/trap.ail	3a7eede697737e6c	0	5428efb00caed469
-fmt plain compiler/rt/native/tz.ail	9eb20b908e2d1d30	0	c4939a4ace84936b
-fmt long compiler/rt/native/tz.ail	9eb20b908e2d1d30	0	c25f8f89d25a759c
+fmt plain compiler/rt/native/tz.ail	e70b3156ec60eb6f	0	0fafa145746a404e
+fmt long compiler/rt/native/tz.ail	e70b3156ec60eb6f	0	458342a5aca646ee
 fmt plain compiler/rt/native/u64.ail	092f38e087f88bb1	0	247502a7386c6392
 fmt long compiler/rt/native/u64.ail	092f38e087f88bb1	0	39f94d1fa8d333e7
 fmt plain compiler/rt/native/ui.ail	9cda0f9385cdb407	0	2cec8194b7706d14
