@@ -74,11 +74,15 @@ the same name; `*T` is a pointer. A parameter narrower than 64 bits is passed
 extended to 64 bits by its signedness. *(ADR 0432)*
 
 ```ail tool=run,FILE expect=5 rules=ffi.map.1
-extern c fn labs(x int) int
+use std.mem
+
+extern c fn strlen(s *u8) int
 
 fn main()
     unsafe
-        print(labs(-5))
+        p := mem.cstr("hello")
+        print(strlen(p))
+        mem.free(p)
 ```
 
 **ffi.map.2** — A result narrower than 64 bits is truncated to its declared

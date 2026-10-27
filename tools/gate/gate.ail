@@ -1860,12 +1860,18 @@ fn gd_ail(dir str, cwd str, path str, args str) proc.Output
     p := if path.is_empty() then "" else "PATH={path} "
     sh_run("cd {cwd} && AIL_HOME={dir}/home {p}{bin_path(root)} {args}")
 
+## A `file://` URL of the absolute path `p`; a Windows drive path (`C:/..`) takes a third slash.
+fn file_url(p str) str
+    if p.starts_with("/")
+        return "file://{p}"
+    "file:///{p}"
+
 fn gd_setup(tmp str, name str) str
     dir := "{tmp}/git-deps-{name}"
     sh_run("chmod -R u+w {dir} 2>/dev/null; rm -rf {dir}; mkdir -p {dir}/work {dir}/app")
     git_in(dir, "init -q --bare remote.git")
     git_in("{dir}/work", "init -q")
-    url := "file://{dir}/remote.git"
+    url := file_url("{dir}/remote.git")
     gd_commit(dir, url, "w * h", "v1")
     fs.write_text(
         "{dir}/app/main.ail",
@@ -1879,7 +1885,7 @@ fn Gate.git_deps(mut self, tmp str)
         print("git_deps: no git; skipping")
         return
     dir := gd_setup(tmp, "lock")
-    url := "file://{dir}/remote.git"
+    url := file_url("{dir}/remote.git")
     first := git_in("{dir}/work", "rev-parse HEAD")
     lock := "{dir}/app/ail.lock"
     # mod.pkg.7-8: the first run fetches into the cache and writes the lock.
@@ -1921,7 +1927,7 @@ fn Gate.git_deps(mut self, tmp str)
     sh_run("chmod -R u+w {dir}; rm -rf {dir}")
     # fetch errors name the dependency.
     dir2 := gd_setup(tmp, "errors")
-    url2 := "file://{dir2}/remote.git"
+    url2 := file_url("{dir2}/remote.git")
     n := gd_ail(dir2, dir2, "", "check --deny net app")
     want("git dep --deny net", n.err, ["error[mod.pkg.7]: dependency `geo` isn't in the cache"])
     if fs.exists("{dir2}/app/ail.lock")
