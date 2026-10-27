@@ -26,10 +26,10 @@ fn sr_is_struct(t Ty) bool
         Struct(_) => true
         _ => false
 
-fn sr_find(parent List[int], x int) int
+fn sr_find(uf List[int], x int) int
     mut r := x
-    while parent[r] != r
-        r = parent[r]
+    while uf[r] != r
+        r = uf[r]
     r
 
 ## The object or parameter a chain of `copy`s starts from.
@@ -51,7 +51,7 @@ pub fn sroa_in(mut f Func) bool
     # kind: 1 an allocation, 2 a copy of a member, 3 a struct block parameter.
     mut kind := [0 for _ in 0..n]
     mut src := [-1 for _ in 0..n]
-    mut parent := [v for v in 0..n]
+    mut uf := [v for v in 0..n]
     mut cblk := [-1 for _ in 0..n]
     mut cslots := [0 for _ in 0..n]
     mut found := false
@@ -79,7 +79,7 @@ pub fn sroa_in(mut f Func) bool
                 if i.op == "copy" and i.dst >= 0 and kind[i.arg(0)] > 0 and kind[i.dst] == 0
                     kind[i.dst] = 2
                     src[i.dst] = i.arg(0)
-                    parent[sr_find(parent, i.dst)] = sr_find(parent, i.arg(0))
+                    uf[sr_find(uf, i.dst)] = sr_find(uf, i.arg(0))
                     grew = true
     # Objects and parameters joined by jump arguments are one group.
     mut flagged := List[int]()
@@ -94,7 +94,7 @@ pub fn sroa_in(mut f Func) bool
                 if kind[a] == 0
                     flagged.push(ps[j])
                 else
-                    parent[sr_find(parent, a)] = sr_find(parent, ps[j])
+                    uf[sr_find(uf, a)] = sr_find(uf, ps[j])
     # How members are used: anything but slot access, `copy` and an edge into
     # a struct parameter spoils the group.
     for b in 0..nb
@@ -118,7 +118,7 @@ pub fn sroa_in(mut f Func) bool
                     flagged.push(t.args[e][j])
     mut gbad := [false for _ in 0..n]
     for v in flagged
-        gbad[sr_find(parent, v)] = true
+        gbad[sr_find(uf, v)] = true
     # The one store of each slot: its value and where it sits.
     mut sval := Map[int, int]()
     mut sat := Map[int, int]()
@@ -128,7 +128,7 @@ pub fn sroa_in(mut f Func) bool
             if i.op != "store" or kind[i.arg(0)] == 0
                 continue
             a := sr_base(src, i.arg(0))
-            g := sr_find(parent, a)
+            g := sr_find(uf, a)
             k := i.imm / 8
             key := a * 32 + k
             if kind[a] != 1 or b != cblk[a] or i.imm % 8 != 0 or k >= cslots[a] or sval.contains(key)
@@ -143,7 +143,7 @@ pub fn sroa_in(mut f Func) bool
     for a in 0..n
         if kind[a] != 1
             continue
-        g := sr_find(parent, a)
+        g := sr_find(uf, a)
         if gslots[g] == 0
             gslots[g] = cslots[a]
         elif gslots[g] != cslots[a]
@@ -160,15 +160,15 @@ pub fn sroa_in(mut f Func) bool
             else
                 gty[g * 32 + k] = t
     for v in 0..n
-        if kind[v] > 0 and gslots[sr_find(parent, v)] == 0
-            gbad[sr_find(parent, v)] = true
+        if kind[v] > 0 and gslots[sr_find(uf, v)] == 0
+            gbad[sr_find(uf, v)] = true
     for b in 0..nb
         for at in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[at]
             if i.op != "load" or kind[i.arg(0)] == 0
                 continue
             a := sr_base(src, i.arg(0))
-            g := sr_find(parent, a)
+            g := sr_find(uf, a)
             k := i.imm / 8
             if i.imm % 8 != 0 or k >= gslots[g]
                 gbad[g] = true
@@ -182,12 +182,12 @@ pub fn sroa_in(mut f Func) bool
     mut newp := Map[int, int]()
     mut live := 0
     for v in 0..n
-        if kind[v] == 0 or gbad[sr_find(parent, v)]
+        if kind[v] == 0 or gbad[sr_find(uf, v)]
             continue
         if kind[v] == 1
             live += 1
         if kind[v] == 3
-            g := sr_find(parent, v)
+            g := sr_find(uf, v)
             for k in 0..gslots[g]
                 newp[v * 32 + k] = f.vals.len()
                 f.vals.push(gty[g * 32 + k])
@@ -202,14 +202,14 @@ pub fn sroa_in(mut f Func) bool
         for at in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[at]
             if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and kind[i.dst] == 1
-                if not gbad[sr_find(parent, i.dst)]
+                if not gbad[sr_find(uf, i.dst)]
                     gone[b][at] = true
             elif i.op == "copy" and i.dst >= 0 and kind[i.dst] == 2
-                if not gbad[sr_find(parent, i.dst)]
+                if not gbad[sr_find(uf, i.dst)]
                     gone[b][at] = true
             elif (i.op == "store" or i.op == "load") and kind[i.arg(0)] > 0
                 a := sr_base(src, i.arg(0))
-                if not gbad[sr_find(parent, a)]
+                if not gbad[sr_find(uf, a)]
                     gone[b][at] = true
                     if i.op == "load"
                         key := a * 32 + i.imm / 8
@@ -219,8 +219,8 @@ pub fn sroa_in(mut f Func) bool
         mut ps := List[int]()
         mut slots := List[int]()
         for p in g.blocks[b].params
-            if kind[p] == 3 and not gbad[sr_find(parent, p)]
-                for k in 0..gslots[sr_find(parent, p)]
+            if kind[p] == 3 and not gbad[sr_find(uf, p)]
+                for k in 0..gslots[sr_find(uf, p)]
                     slots.push(newp[p * 32 + k])
             else
                 ps.push(p)
@@ -246,9 +246,9 @@ pub fn sroa_in(mut f Func) bool
             mut spread := List[int]()
             for j in 0..t.args[e].len()
                 a := t.args[e][j]
-                if kind[tp[j]] == 3 and not gbad[sr_find(parent, tp[j])]
+                if kind[tp[j]] == 3 and not gbad[sr_find(uf, tp[j])]
                     base := sr_base(src, a)
-                    for k in 0..gslots[sr_find(parent, tp[j])]
+                    for k in 0..gslots[sr_find(uf, tp[j])]
                         key := base * 32 + k
                         spread.push(sr_resolve(repl, if kind[base] == 1 then sval[key] else newp[key]))
                 else
