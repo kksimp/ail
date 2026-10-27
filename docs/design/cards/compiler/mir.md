@@ -74,6 +74,7 @@ pub fn mir.call_col(int) int
 pub fn mir.mark_nonneg(mir.Func) mir.Func
 pub fn mir.rewrite_nonneg(mir.Func) mir.Func
 pub fn mir.unroll_self(mut mir.Func, mut List[mir.Site]) bool [env mutates]
+pub fn mir.unroll_self_upto(mut mir.Func, mut List[mir.Site], int) bool [env mutates]
 pub mir.PRELUDE_EMBED := ...
 pub fn mir.pure_calls(mut mir.Module) [mutates]
 pub fn mir.keep_lengths(mir.Func) mir.Func
@@ -92,4 +93,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1405); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1436); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
