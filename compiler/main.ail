@@ -787,15 +787,17 @@ fn run_generators(
         return []
     exe := executable_bytes(m, "derive", host_target())
     tmp := env.get("TMPDIR") else "/tmp"
-    file := "{tmp}/ail-derive-{time.now_ms()}"
+    ext := exe_ext(host_target())
+    file := "{tmp}/ail-derive-{time.now_ms()}{ext}"
     fs.write_bytes(file, exe) else err
         io.eprint("error[native.build.3]: can't write {file}: {err}")
         io.exit(2)
         return []
-    _ := proc.run("chmod", ["755", file]) else err
-        io.eprint("error[native.build.3]: can't run the generators: {err}")
-        io.exit(2)
-        return []
+    if ext.is_empty()
+        _ := proc.run("chmod", ["755", file]) else err
+            io.eprint("error[native.build.3]: can't run the generators: {err}")
+            io.exit(2)
+            return []
     ran := proc.run(file, []) else err
         remove_quietly(file)
         io.eprint("error[native.build.3]: can't run the generators: {err}")
