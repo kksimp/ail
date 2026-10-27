@@ -79,7 +79,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 
 # `run`'s options before the file (the same set as ./ail).
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
-$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @()
+$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false
 if ($cmd -eq 'run') {
     $k = 0
     :scan while ($k -lt $rest.Count) {
@@ -90,25 +90,27 @@ if ($cmd -eq 'run') {
                 if ($v -notmatch '^[1-9]\d*$') { Fail "error[run.limit.4]: ``$a`` needs a positive whole number (run.limit.4)" }
                 $runOpts += @($a, $v); $k += 2; continue
             }
-            '^--(budget|from|json|record|replay)$' { Fail "``$a`` is not native on Windows yet (run it on Linux or macOS)" }
+            '^--json$' { $jsonOpt = $true; $k++; continue }
+            '^--(budget|from|record|replay)$' { Fail "``$a`` is not native on Windows yet (run it on Linux or macOS)" }
             '^--max-steps$' {
                 if ($v -notmatch '^[1-9]\d*$') { Fail '`--max-steps` needs a positive number of steps (run.limit.4)' }
                 $env:AIL_MAX_STEPS = $v; Add-Instrument 'steps'; $k += 2; continue
             }
             '^--watch$' {
                 if ($v -notmatch '^[A-Za-z0-9_]+$') { Fail '`--watch` needs a variable name, e.g. `--watch total` (trace.watch.1)' }
-                Add-Instrument "watch=$v"; $k += 2; continue
+                Add-Instrument "watch=$v"; $traceRun = $true; $k += 2; continue
             }
             '^--no-contracts$' { Add-Instrument 'nocontracts'; $k++; continue }
-            '^--trace(=calls|=all)?$' { Add-Instrument 'trace'; $k++; continue }
-            '^--trace=effects$' { Fail '`--trace=effects` is not native yet: effect events come with the next trace step (trace.run.6)' }
+            '^--trace(=all)?$' { Add-Instrument 'trace,traceeffects'; $traceRun = $true; $k++; continue }
+            '^--trace=calls$' { Add-Instrument 'trace'; $traceRun = $true; $k++; continue }
+            '^--trace=effects$' { Add-Instrument 'traceeffects'; $traceRun = $true; $k++; continue }
             '^--trace=' { Fail "``$a`` isn't a trace kind: use ``--trace``, ``--trace=calls``, ``--trace=effects`` or ``--trace=all`` (trace.run.1)" }
             '^--trace-limit$' {
                 if ($v -notmatch '^[1-9]\d*$') { Fail '`--trace-limit` needs a positive number of events (trace.run.4)' }
                 $env:AIL_TRACE_LIMIT = $v; $k += 2; continue
             }
             '^--attach-input$' { $env:AIL_ATTACH_INPUT = '1'; $k++; continue }
-            '^--verbose$' { $k++; continue }
+            '^--verbose$' { Add-Instrument 'values,verbose'; $k++; continue }
             '^--values$' { Add-Instrument 'values'; $k++; continue }
             '^--deterministic$' { $env:AIL_DETERMINISTIC = '1'; $checkOpts += '--deterministic'; $k++; continue }
             '^--deny$' {
@@ -129,6 +131,11 @@ if ($cmd -eq 'run') {
         }
     }
     $runSkip = $k
+    # trace.run.1: with a trace, `--json` makes the events JSON objects; trace.snap.4: alone, it makes a trap one JSON object.
+    if ($jsonOpt) {
+        if ($traceRun) { $env:AIL_TRACE_JSON = '1'; Add-Instrument 'tracejson' }
+        elseif ($runFile) { $snapJson = $true; Add-Instrument 'values,verbose' }
+    }
 }
 
 $native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api'
@@ -220,7 +227,25 @@ if ($route) {
                 Remove-Item -Force $errFile
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
                 $env:AIL_RUN_FILE = $runFile
-                try { & ([string]($prep | Select-Object -Last 1)) @($rest | Select-Object -Skip $runSkip) }
+                $progExe = [string]($prep | Select-Object -Last 1)
+                $progArgs = @($rest | Select-Object -Skip $runSkip)
+                if ($snapJson) {
+                    # tools/trapjson.awk turns the text trap report on stderr into one JSON object (trace.snap.4); awk comes with Git.
+                    $ErrorActionPreference = 'Continue'
+                    $errLines = New-Object System.Collections.Generic.List[string]
+                    try {
+                        & $progExe @progArgs 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $errLines.Add($_.ToString()) } else { $_ } }
+                        $rc = $LASTEXITCODE
+                    } finally { Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue }
+                    $awk = Get-Command awk -ErrorAction SilentlyContinue
+                    if ($awk) {
+                        $errLines | & $awk.Source -v "main=$runFile" -f (Join-Path $root 'tools\trapjson.awk') | ForEach-Object { [Console]::Error.WriteLine($_) }
+                    } else {
+                        $errLines | ForEach-Object { [Console]::Error.WriteLine($_) }
+                    }
+                    exit $rc
+                }
+                try { & $progExe @progArgs }
                 finally { Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue }
                 exit $LASTEXITCODE
             }
