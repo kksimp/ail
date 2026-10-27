@@ -82,7 +82,9 @@ fn Lower.match_tree(mut self, arms List[ast.Arm], s Val, tag int, en str) List[i
     for k in sorted
         sv.push(cases[k])
         sb.push(bodies[owner[k]])
-    tree_emit(sv, sb, 0, sv.len(), tag, target)
+    # A flat enum's variant index is the value itself, typed as the enum: `lt` takes an `int`.
+    key := if en != "" then op("copy", [tag], Ty.Int) else tag
+    tree_emit(sv, sb, 0, sv.len(), key, target)
     if dflt < 0
         # Exhaustive (expr.match.2): no value reaches here.
         seal(target)
