@@ -141,6 +141,10 @@ op `bounds index, len` followed by `ldx`; a `set` becomes `bounds` and `stx`; `l
 becomes a copy. `bounds` compiles to a compare and a branch to the same trap stub, which
 is given the length instead of reading it from the list, so the message, index, length and
 site are unchanged (native.bce.11). At most four lists per loop (two registers each).
+Loops of more than twelve blocks are skipped: on the vm drag-race program (an
+interpreter dispatch loop, each list touched in a few arms) the two held registers per list
+cost spills on x86-64, 1.4% to 3.0% slower than main over two rounds of five runs, so
+the pass leaves dispatch loops alone.
 The element pointer is an interior pointer, which keeps the block alive for the collector.
 
 Rejected: interchanging loops for matmul (it changes which overflow traps first); hoisting

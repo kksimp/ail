@@ -19,6 +19,12 @@
 ## The most lists hoisted from one loop (each costs two registers).
 MAX_LISTS := 4
 
+## The most blocks in a loop that is hoisted from. A loop with many blocks is
+## an interpreter-style dispatch loop: each list is touched in a few arms, so
+## the saved header loads are cheap and the two registers held across the loop
+## cost spills on x86-64 (vm: +1.4% to +3.0% slower).
+MAX_BLOCKS := 12
+
 ## The pass on one function.
 pub fn hoist_headers(f Func) Func
     if opt_off("hoist") or f.name.starts_with("rt.")
@@ -60,6 +66,8 @@ fn hoist_in(g0 Func, lp LoopInfo, cand List[bool], defs List[Def]) Func
     mut g := g0
     # How each candidate is used in the loop: `count[v]` accesses, and
     # `bad[v]` for a use that rules it out.
+    if lp.blocks.len() > MAX_BLOCKS
+        return g
     mut count := [0 for _ in 0..g.vals.len()]
     mut bad := [false for _ in 0..g.vals.len()]
     for b in lp.blocks
