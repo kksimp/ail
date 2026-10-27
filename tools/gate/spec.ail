@@ -233,9 +233,10 @@ fn show_fail(f str)
 fn main() !
     root := repo_root()
     # A directory of its own per run, so two gates at once don't clash.
+    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
     mk1 := proc.run("mktemp", [
         "-d",
-        "{env.get("TMPDIR") else "/tmp"}/ail-spec-ail.XXXXXX",
+        "{base}/ail-spec-ail.XXXXXX",
     ]) else return
     tmp := mk1.out.trim()
     mut files := fs.glob("docs/spec/*.md")
