@@ -166,14 +166,15 @@ table, which needs a new terminator and an indirect branch in both backends and 
 
 The matmul k loop is 47 bytes and its head sat 36 bytes into a 64-byte line, so every
 iteration fetched two lines. The ELF writer now starts the code on a 64-byte boundary
-(`compiler/obj/elf.ail`), and the x86-64 backend (`compiler/x64/gen.ail`) pads the block
-where the back edge of every innermost loop lands to a multiple of 32 bytes (native.align.1,
+(`compiler/obj/elf.ail`), and the x86-64 backend (`compiler/x64/gen.ail`) starts the block
+where the back edge of an innermost loop lands on a fresh 64-byte line when the loop is small
+(at most 64 bytes, guessed at 4 bytes per MIR instruction) and would otherwise straddle two lines (native.align.1,
 `AIL_OPT_OFF=align` turns it off). With a rotated test (ADR 0611) that block is the first
 body block, not the test. The padding sits on the path into the loop, run once per entry.
-Code grows by 0 to 31 bytes per innermost loop. Adopted only if the on/off A/B shows a gain
+Code grows only for the loops that would straddle: 0 to 63 bytes each. Adopted only if the on/off A/B shows a gain
 on ail-linux; ARM64 fetches 4-byte instructions and is left alone. Rejected: aligning
 function starts (the loop pad uses the function's offset instead, so no gap between
-functions), aligning every loop head, and aligning to 64.
+functions), aligning every loop head, and aligning to 32 (a 46-byte loop at 0 mod 32 still crosses a 64-byte line).
 
 ## Rationale
 

@@ -457,7 +457,7 @@ fn main()
 ```
 
 **native.align.1** — The x86-64 backend may place the first block of the body of
-an innermost loop at a multiple of 32 bytes, filling the gap with `nop`s on the
+a small innermost loop at a multiple of 64 bytes, filling the gap with `nop`s on the
 path into the loop: the program's output,
 exit status and traps are those of the unaligned code. *(ADR 0890)*
 
