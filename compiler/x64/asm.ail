@@ -99,10 +99,11 @@ fn nop_bytes(k int) List[int]
         8 => [15, 31, 132, 0, 0, 0, 0, 0]
         _ => [102, 15, 31, 132, 0, 0, 0, 0, 0]
 
-## Pad with `nop`s to the next multiple of `n` bytes (native.align.1).
-pub fn Asm.pad_to(mut self, n int)
-    while code.len() % n != 0
-        need := n - code.len() % n
+## Pad with `nop`s until the next byte is at a multiple of `n`, the function
+## starting `start` bytes into the text (native.align.1).
+pub fn Asm.pad_to(mut self, n int, start int)
+    while (start + code.len()) % n != 0
+        need := n - (start + code.len()) % n
         for b in nop_bytes(if need > 9 then 9 else need)
             byte(b)
 

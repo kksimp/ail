@@ -165,14 +165,15 @@ table, which needs a new terminator and an indirect branch in both backends and 
 ## Pass 6 (amendment, 2026-10-27): align hot loop heads on x86-64
 
 The matmul k loop is 47 bytes and its head sat 36 bytes into a 64-byte line, so every
-iteration fetched two lines. The x86-64 backend (`compiler/x64/gen.ail`) now starts each
-function at a multiple of 32 bytes and pads the head of every innermost loop to one
-(native.align.1, `AIL_OPT_OFF=align` turns it off). The padding sits on the path into the
-loop, run once per entry, not per iteration. Code grows by under 16 bytes per function on
-average and 0 to 31 per loop. Adopted only if the on/off A/B shows a gain on ail-linux;
-ARM64 fetches 4-byte instructions and is left alone. Rejected: aligning every loop head
-(outer loops gain nothing) and aligning to 64 (twice the padding for the same
-straddle fix on loops under 32 bytes).
+iteration fetched two lines. The ELF writer now starts the code on a 64-byte boundary
+(`compiler/obj/elf.ail`), and the x86-64 backend (`compiler/x64/gen.ail`) pads the block
+where the back edge of every innermost loop lands to a multiple of 32 bytes (native.align.1,
+`AIL_OPT_OFF=align` turns it off). With a rotated test (ADR 0611) that block is the first
+body block, not the test. The padding sits on the path into the loop, run once per entry.
+Code grows by 0 to 31 bytes per innermost loop. Adopted only if the on/off A/B shows a gain
+on ail-linux; ARM64 fetches 4-byte instructions and is left alone. Rejected: aligning
+function starts (the loop pad uses the function's offset instead, so no gap between
+functions), aligning every loop head, and aligning to 64.
 
 ## Rationale
 

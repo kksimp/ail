@@ -456,9 +456,9 @@ fn main()
     print(name(2))
 ```
 
-**native.align.1** — The x86-64 backend may start a function, and the head of
-an innermost loop, at a multiple of 32 bytes, filling the gap with `nop`s that
-no path through the function depends on for its result: the program's output,
+**native.align.1** — The x86-64 backend may place the first block of the body of
+an innermost loop at a multiple of 32 bytes, filling the gap with `nop`s on the
+path into the loop: the program's output,
 exit status and traps are those of the unaligned code. *(ADR 0890)*
 
 **native.reuse.1** — A list made empty inside a loop may be one object that

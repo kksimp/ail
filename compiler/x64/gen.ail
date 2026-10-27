@@ -118,25 +118,10 @@ pub fn generate(m mir.Module) codegen.Image
     codegen.add_call_table(mut img, m)
     img
 
-## Functions start, and an innermost loop's head is padded to, a multiple of
-## this many bytes, so a short hot loop doesn't straddle two cache lines
-## (native.align.1). `AIL_OPT_OFF=align` turns it off.
+## An innermost loop's head is padded to a multiple of this many bytes, so a
+## short hot loop doesn't straddle two cache lines (native.align.1). The code
+## starts on a 64-byte boundary (obj/elf.ail). `AIL_OPT_OFF=align` turns it off.
 ALIGN_LOOP := 32
-
-## `heads[b]`: block `b` is the head of an innermost loop.
-fn hot_heads(f mir.Func) List[bool]
-    mut out := [false for _ in 0..f.blocks.len()]
-    if mir.opt_off("align")
-        return out
-    loops := mir.find_loops(f)
-    for lp in loops
-        mut inner := true
-        for o in loops
-            if o.header != lp.header and lp.member[o.header]
-                inner = false
-        if inner
-            out[lp.header] = true
-    out
 
 ## `win` is set for the Windows target: `target()` is then 3 (ADR 0608).
 fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir.Func, win bool)
@@ -196,7 +181,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         else
             g.saved_ints.push(r)
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
-    heads := hot_heads(f)
+    heads := g.hot_heads()
     g.prologue(al.slots)
     # The entry block's parameters arrive in the argument registers.
     g.entry_moves()
@@ -204,7 +189,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         b := al.order[k]
         g.next_block = if k + 1 < al.order.len() then al.order[k + 1] else -1
         if heads[b]
-            g.a.pad_to(ALIGN_LOOP)
+            g.a.pad_to(ALIGN_LOOP, img.code.len())
         g.a.bind(g.blabels[b])
         g.gen_block(b)
     g.gen_stubs()
@@ -215,8 +200,6 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         codegen.add_f64(mut img, x)
     for s in g.stubs
         codegen.add_trap_texts(mut img, m, s.site, s.op)
-    while img.code.len() % ALIGN_LOOP != 0 and not mir.opt_off("align")
-        img.code.push(144.to_u8())
     base := img.code.len()
     for c in g.calls
         img.calls.push(codegen.CallRow(off: c.off + base, pos: c.pos, func: c.func))
@@ -224,6 +207,26 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
     img.code.extend(g.a.code)
     for fx in g.a.fixups
         img.relocs.push(codegen.Reloc(at: fx.at + base, kind: "rel32", sym: fx.sym, tail: fx.tail))
+
+## `heads[b]`: block `b` is where the back edge of an innermost loop lands.
+## A rotated loop test (`rotates`) is repeated at the bottom, which jumps to
+## the loop's first body block instead of the test.
+fn Gen.hot_heads(self) List[bool]
+    mut out := [false for _ in 0..f.blocks.len()]
+    if mir.opt_off("align")
+        return out
+    loops := mir.find_loops(f)
+    for lp in loops
+        mut inner := true
+        for o in loops
+            if o.header != lp.header and lp.member[o.header]
+                inner = false
+        if not inner
+            continue
+        h := lp.header
+        land := if rotates(h) then f.blocks[h].term.targets[0] else h
+        out[land] = true
+    out
 
 # ---- frame ----
 
