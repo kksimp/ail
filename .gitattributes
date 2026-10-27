@@ -1,0 +1,14 @@
+# Source, docs and expected outputs are LF on every platform, whatever core.autocrlf says: the formatter,
+# the mistakes corpus and the golden outputs compare bytes.
+* text=auto eol=lf
+# These two hold CRLF on purpose.
+tests/cases/strings_crlf.ail -text
+tests/native/run/os_stdin.in -text
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.zip binary
+*.gz binary

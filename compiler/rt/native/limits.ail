@@ -72,6 +72,9 @@ fn limits_init()
 ## Nanoseconds on a clock that doesn't go back.
 fn lim_now() int
     t := target()
+    if t == 3
+        # Windows has no syscall numbers: the performance counter (run.limit.1).
+        return win_mono_ns()
     p := load64(global(LIM_TS))
     if t == 2
         # gettimeofday on macOS: seconds, then microseconds in 32 bits.
