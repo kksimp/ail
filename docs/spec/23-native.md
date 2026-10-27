@@ -436,6 +436,26 @@ fn main()
     print(dot([1, 2, 3], [4, 5, 6], 3))
 ```
 
+**native.match.1** — A `match` over an `int` or an enum whose arms each test
+int literals (alone or with `|`) or variants, with no guard and no range, and
+at least five distinct values, may pick its arm by comparing against the
+sorted values instead of testing the arms in order. The arm that runs, its
+bindings and the order of effects are those of expr.match.1-12: the first arm
+that tests a value takes it. *(ADR 0890)*
+
+```ail rules=native.match.1
+fn name(x int) str
+    match x
+        0 => "zero"
+        1 | 2 => "small"
+        3 => "three"
+        7 => "seven"
+        _ => "other"
+
+fn main()
+    print(name(2))
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is

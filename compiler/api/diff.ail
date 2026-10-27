@@ -252,9 +252,18 @@ fn at_revision(rev str, from_path str)(str, str) ! DiffError
     is_dir := not from_path.ends_with(".ail")
     parts := from_path.split("/")
     dir := if is_dir then from_path else if parts.len() > 1 then parts[..parts.len() - 1].join("/") else "."
-    made := proc.run("mktemp", ["-d"]) else err
-        return DiffError(message: "can't create a temporary directory: {err}")
-    tmp := made.out.trim()
+    windows := (env.get("OS") else "") == "Windows_NT"
+    mut tmp := ""
+    if windows
+        # Git's `mktemp` names `/c/Users/..`, which neither git nor this program can open: make the directory here.
+        base := (env.get("TMPDIR") else (env.get("TEMP") else "C:/Windows/Temp")).replace("\\", "/")
+        tmp = "{base}/ail-rev-{time.now_ms()}"
+        fs.make_dir(tmp) else err
+            return DiffError(message: "can't create a temporary directory: {err}")
+    else
+        made := proc.run("mktemp", ["-d"]) else err
+            return DiffError(message: "can't create a temporary directory: {err}")
+        tmp = made.out.trim()
     tar := "{tmp}.tar"
     args := ["-C", dir, "archive", "--format=tar", "-o", tar, rev, "."]
     cut := proc.run("git", args) else err
@@ -263,7 +272,10 @@ fn at_revision(rev str, from_path str)(str, str) ! DiffError
     if cut.status != 0
         remove_scrap(tmp)
         return DiffError(message: "git archive --format=tar {rev} .: {cut.err.trim()}")
-    unpacked := proc.run("tar", ["-x", "-f", tar, "-C", tmp]) else err
+    # Git's GNU tar reads `C:/x` as a host name; Windows' own tar.exe doesn't.
+    system_tar := "{(env.get("SystemRoot") else "C:/Windows").replace("\\", "/")}/System32/tar.exe"
+    tar_exe := if windows and fs.exists(system_tar) then system_tar else "tar"
+    unpacked := proc.run(tar_exe, ["-x", "-f", tar, "-C", tmp]) else err
         remove_scrap(tmp)
         return DiffError(message: "can't run tar: {err}")
     remove_scrap(tar)
