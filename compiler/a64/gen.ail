@@ -69,7 +69,8 @@ struct Stub
     site int
     op str
     ## 1: the result overwrote `a`, which is result - b (an add); 2: result + b
-    ## (a sub). The stub undoes it before reporting.
+    ## (a sub); 4: `b` is already the list's length (`bounds`). The stub
+    ## undoes it before reporting.
     undo int
 
 ## Integer arguments passed in x0-x7 (native-abi.md §1).
@@ -700,6 +701,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
+        "bounds" => bounds(i)
         "data" =>
             d := out_gpr(i.dst, S1)
             a.ldr(d, gpr(i.arg(0), S0), 16)
@@ -1250,6 +1252,21 @@ fn Gen.list_index(mut self, i mir.Inst) List[int]
     a.ldr(S2, l, 16)
     [x, 0]
 
+## `bounds idx, len`: the check of a `get` or `set` whose list header was
+## hoisted out of a loop (ADR 0890): trap at `site` unless `0 <= idx < len`.
+## The stub gets the length itself, not the list.
+fn Gen.bounds(mut self, i mir.Inst)
+    l := gpr(i.arg(1), S0)
+    if k := imm(i.arg(0))
+        if k >= 0 and k < 4095
+            a.cmp_ri(l, k)
+            a.b_cond(LS, stub(3, i.arg(0), i.arg(1), i.site, ""))
+            stubs[stubs.len() - 1].undo = 4
+            return
+    a.cmp_rr(gpr(i.arg(0), S1), l)
+    a.b_cond(HS, stub(3, i.arg(0), i.arg(1), i.site, ""))
+    stubs[stubs.len() - 1].undo = 4
+
 fn Gen.list_get(mut self, i mir.Inst)
     at := list_index(i)
     if f.vals[i.dst].is_float()
@@ -1388,7 +1405,7 @@ fn Gen.gen_stubs(mut self)
             a.alu_rr("sub", 1, 1, 2)
         elif s.undo == 2
             a.alu_rr("add", 1, 1, 2)
-        if s.kind == 3
+        if s.kind == 3 and s.undo != 4
             # The list's length.
             a.ldr(2, 2, 0)
         a.bl("rt.trap")
