@@ -248,7 +248,10 @@ fn init(argc int, argv int)
         low := load64(p)
         size := load64(p + 8) - low
         if low > 0 and size > 0
-            store64(global(STACK_LIMIT), if size > 2 * STACK_RESERVE then low + STACK_RESERVE else low + size / 2)
+            store64(
+                global(STACK_LIMIT),
+                if size > 2 * STACK_RESERVE then low + STACK_RESERVE else low + size / 2,
+            )
 
 ## Windows (target 3) hands the program no `argv` or `envp`: build them from
 ## `GetCommandLineW` (UTF-16, by the rules of `CommandLineToArgvW`, program
