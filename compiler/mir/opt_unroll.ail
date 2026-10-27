@@ -16,6 +16,10 @@ UNROLL_CALLS := 3
 ## Inline the body of `f` into each of its own direct calls, once. Returns
 ## whether anything changed.
 pub fn unroll_self(mut f Func, mut sites List[Site]) bool
+    unroll_self_upto(mut f, mut sites, UNROLL_LIMIT)
+
+## `unroll_self` for a function of up to `limit` instructions.
+pub fn unroll_self_upto(mut f Func, mut sites List[Site], limit int) bool
     # `AIL_INSTRUMENT` builds (`--values`, `--trace`) keep one frame per call.
     instr := env.get("AIL_INSTRUMENT") else ""
     if f.name.starts_with("rt.") or opt_off("unroll") or instr != ""
@@ -38,7 +42,7 @@ pub fn unroll_self(mut f Func, mut sites List[Site]) bool
                 # A call to another function would lose its site when
                 # `mark_recursion` clears it, and with it the extra frame.
                 return false
-    if calls.len() == 0 or calls.len() > UNROLL_CALLS or n > UNROLL_LIMIT
+    if calls.len() == 0 or calls.len() > UNROLL_CALLS or n > limit
         return false
     body := f
     mut changed := false
