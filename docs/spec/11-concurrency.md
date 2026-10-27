@@ -510,11 +510,13 @@ one `+=` outside nested loops; any other loop, a loop that captures a handle
 or a `ref`, and a loop with fewer than twice as many iterations as the pool has
 threads, runs in order. *(ADR 0272, ADR 0275, ADR 0911)*
 
-**conc.par.12** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
+**conc.par.14** — A loop the compiler chose (not a written `par for`) must not sit inside another loop of its function, and also runs
 in order unless its iterations together cost at least 65536 operations, where
 one iteration costs the operations of its body (nested loops count 16 times,
-a call 8). An iteration of at least 4096 operations sends any loop of two or more
-iterations to the pool, whatever the worker count. The result and the trap are
+a call 8 plus the cost of the function it names, found the same way; a function that
+reaches itself, or has a loop, counts at least 4096). An iteration of at least 4096 operations sends any loop of two or more
+iterations to the pool, whatever the worker count. A written `par for` whose body calls a
+function counts as that heavy, so it goes to the pool from two iterations. The result and the trap are
 the sequential ones either way. *(ADR 0911)*
 
 **conc.par.13** — A written `par for` that the native compiler runs in order, because its
@@ -529,6 +531,19 @@ unless the environment variable `AIL_THREADS` sets the number. With one
 thread, or under `--deterministic`, every loop and task runs as if there
 were no pool. With `AIL_PAR_LOG` set, the interpreter says on standard error
 how each pooled loop and task ran. *(ADR 0272, ADR 0275)*
+
+**conc.par.15** — A run of two or more adjacent `name := f(args)` statements, where every `f` is
+a free function with no impure effect and is heavy (it has a loop, is recursive, or reaches a
+function with a loop), no argument is `mut`, every argument is a name, a literal, or
+`name + k` / `name - k` with a literal `k`, and no argument mentions a name the run defines
+earlier, may run as a fork-join: the calls after the first start as tasks while the pool has
+room (fewer than twice as many live tasks as workers), the first runs on the calling thread,
+and the results are taken in source order. A task that traps is run again in order on the
+calling thread, so the trap is the sequential one (`conc.par.1`). A function that calls itself
+in such a run has a second copy for the calls made in order, which never forks; results and
+traps are the same. `AIL_PARALLEL=0` and
+`--deterministic` run the calls one after the other. `ail effects --parallel` lists the runs
+that qualify. *(ADR 0914)*
 
 **conc.par.10** — A task whose function has no `io`, `unsafe`, `spawn` or
 capability effect and calls no method of a handle, directly or through the

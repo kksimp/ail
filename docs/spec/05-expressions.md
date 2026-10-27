@@ -565,7 +565,7 @@ that writes it in place of the hole. Where no type is expected, or nothing
 fits, it says so and lists the locals as `todo` does. The trap names the
 `uhwhatnow?`. *(ADR 0872)*
 
-```ail skip=bootstrap rules=expr.hole.3
+```ail norun rules=expr.hole.3
 struct Cart
     total int
 

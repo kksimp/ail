@@ -1,0 +1,33 @@
+# trait.any.3, 5: a value of a type with a primitive `impl` converts to `any Trait`.
+trait Shape
+    fn area(self) float
+
+impl Shape for int
+    fn area(self) float
+        1.0
+
+impl Shape for str
+    fn area(self) float
+        2.0
+
+struct Sq
+    s float
+
+impl Shape for Sq
+    fn area(self) float
+        s * s
+
+fn total(x any Shape) float
+    x.area()
+
+fn main()
+    print(total(1))
+    print(total("abc"))
+    print(total(Sq(s: 3.0)))
+    mut xs := List[any Shape]()
+    xs.push(2)
+    xs.push("hello")
+    mut sum := 0.0
+    for x in xs
+        sum += x.area()
+    print(sum)

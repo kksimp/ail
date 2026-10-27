@@ -358,7 +358,9 @@ pub fn ask_command(args List[str], std str) int
     if total == 0 then 1 else 0
 
 ## Load and check `path`; the errors shown and `none` when it has any (api.ask.6).
-fn checked(path str, std str)(load.Loaded, check.Analysis)?
+## `lenient`: check errors do not stop it (the program still loads), they are shown and
+## the result says so, for an impact read from the graph as far as it resolves (api.impact.5).
+fn checked(path str, std str, lenient bool)(load.Loaded, check.Analysis, bool)?
     loaded := load.load(path, std) else err
         io.eprint("error: {err.message}")
         return none
@@ -366,12 +368,16 @@ fn checked(path str, std str)(load.Loaded, check.Analysis)?
     analysis := check.analyze(loaded.program, true)
     if loaded.diags.len() == 0
         found = [load.shown_check(d) for d in analysis.report.diags if d.rule != "mod.main.1"]
+    mut broken := false
     for d in found
         if not d.warning
-            io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+            broken = true
+    if broken
+        io.eprint(load.report(loaded.program.files, loaded.texts, found, false))
+        if not lenient or loaded.diags.len() > 0
             io.eprint("error: {path} has errors, so it can't be compared; fix them first (api.impact.3)")
             return none
-    (loaded, analysis)
+    (loaded, analysis, broken)
 
 ## `ail ask PROGRAM --affected [--rev REV] [--json]` (api.impact.3): the tests
 ## the program's changes since git revision REV (default `HEAD`) can affect,
@@ -407,9 +413,10 @@ fn affected_command(args List[str], std str) int
         io.eprint("error: {err.message} (api.impact.3)")
         return 2
     mut code := 2
-    if old := checked(got.0, std)
-        if new := checked(path, std)
-            result := impact_between(old.0, old.1, new.0, new.1)
+    if old := checked(got.0, std, false)
+        if new := checked(path, std, true)
+            mut result := impact_between(old.0, old.1, new.0, new.1)
+            result.partial = new.2
             if json
                 print(impact_json(result))
             else

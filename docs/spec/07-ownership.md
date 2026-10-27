@@ -567,7 +567,7 @@ fn main()
     print("no lifetimes")
 ```
 
-```ail skip=bootstrap rules=own.ref.1
+```ail rules=own.ref.1
 fn main()
     a := ref [1]
     b := a              # copies of a ref share one cell
@@ -598,20 +598,20 @@ fn main()
     print(c.x)          # 3: no explicit dereference
 ```
 
-```ail skip=bootstrap rules=own.ref.4
+```ail rules=own.ref.4
 fn main()
     c := ref [1]        # an immutable binding ...
     c.push(2)           # ... can still change the cell
     print(c.len())      # 2
 ```
 
-```ail skip=bootstrap rules=own.ref.5
+```ail rules=own.ref.5
 fn main()
     c := ref 7          # a new cell holding 7
     print(c)            # ref 7
 ```
 
-```ail skip=bootstrap rules=own.ref.6
+```ail rules=own.ref.6
 fn main()
     a := ref 1
     b := a

@@ -81,6 +81,7 @@ if ($cmd -eq 'run') {
                 if ($v -notmatch '^[1-9]\d*$') { Fail '`--trace-limit` needs a positive number of events (trace.run.4)' }
                 $env:AIL_TRACE_LIMIT = $v; $k += 2; continue
             }
+            '^--attach-input$' { $env:AIL_ATTACH_INPUT = '1'; $k++; continue }
             '^--verbose$' { $k++; continue }
             '^--values$' { Add-Instrument 'values'; $k++; continue }
             '^--deterministic$' { $env:AIL_DETERMINISTIC = '1'; $checkOpts += '--deterministic'; $k++; continue }
@@ -104,7 +105,7 @@ if ($cmd -eq 'run') {
     $runSkip = $k
 }
 
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'api'
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api'
 $route = (
     $runFile -or $native1 -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
@@ -153,7 +154,7 @@ if ($route) {
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
     if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
     switch ($cmd) {
-        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'diff', 'explain', 'edit', 'ask' } { & $native $cmd @rest; exit $LASTEXITCODE }
+        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'diff', 'explain', 'edit', 'ask', 'attach' } { & $native $cmd @rest; exit $LASTEXITCODE }
         'check' {
             if ($rest[0] -in '--budget', '--from') {
                 # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).

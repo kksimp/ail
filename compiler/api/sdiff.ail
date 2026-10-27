@@ -60,6 +60,8 @@ struct STest
 ## One side of the comparison.
 struct SSide
     has_decls bool
+    ## Check errors only: the declarations are read as far as they resolve (diff.out.8).
+    partial bool
     decls List[SDecl]
     diags List[SFound]
     has_tests bool
@@ -133,12 +135,19 @@ fn sd_body(prog ast.Program, texts List[str], line int, next int)(str, List[str]
         last = if next - file.base - 1 < src.len() then next - file.base - 1 else src.len()
     lo := if first < last then first else last
     mut text := src[lo..last]
+    # The next declaration's attribute lines (`@test`) sit above its own line, so they end up
+    # here too; they are not this body (api.impact.1).
     while text.len() > 0
         tail := text[text.len() - 1]
-        if tail.trim() == "" or tail.trim_start().starts_with("#")
+        if tail.trim() == ""
+            or tail.trim_start().starts_with("#")
+            or tail.trim_start().starts_with("@")
             text.pop()
         else
             break
+    # Attributes written on the declaration's own line (`@test fn f`) are not part of it either.
+    if text.len() > 0
+        text[0] = "{text[0].slice(0, indent_width(text[0]))}{without_attrs(text[0])}"
     # FNV-1a: stable across runs and platforms.
     mut h := -3750763034362895579
     joined := text.join("\n")
@@ -199,10 +208,13 @@ fn sd_side(path_arg str, run_tests bool, std str) SSide ! DiffError
         found = [load.shown_check(d) for d in analysis.report.diags]
     found = [d for d in found if is_dir or d.rule != "mod.main.1"]
     mut rejected := false
+    mut broken := false
     mut diags := List[SFound]()
     for d in found
         if not d.warning
-            rejected = true
+            broken = true
+            # Syntax and load errors leave no program to read; check errors do (diff.out.8).
+            rejected = loaded.diags.len() > 0
         here := load.locate(loaded.program.files, d.pos)
         rel := if here.0 == root then "" else (here.0.strip_prefix(root) else here.0)
         diags.push(SFound(
@@ -248,11 +260,18 @@ fn sd_side(path_arg str, run_tests bool, std str) SSide ! DiffError
                 decls[k] = d
     mut tests := List[STest]()
     mut has_tests := false
-    if run_tests and not is_dir and not rejected
+    if run_tests and not is_dir and not broken
         got := sd_tests(path_arg)
         has_tests = got.0
         tests = got.1
-    SSide(has_decls: not rejected, decls: decls, diags: diags, has_tests: has_tests, tests: tests)
+    SSide(
+        has_decls: not rejected,
+        partial: broken and not rejected,
+        decls: decls,
+        diags: diags,
+        has_tests: has_tests,
+        tests: tests,
+    )
 
 ## Each test's outcome, from `ail test --json` in a child (diff.out.4); false
 ## when the tests could not be run.
@@ -287,6 +306,22 @@ fn sd_decl_line(op str, d SDecl, json bool) str
         return "\{\"change\":\"api\",\"op\":\"{op}\",\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"signature\":{quote(sig)}}"
     sign := if op == "added" then "+" else "-"
     "{sign} {d.id} {sig}"
+
+## A declaration's name: the last part of its id (`fn:add` is `add`, `method:Cart.add` is `add`).
+fn sd_short(id str) str
+    tail := id.split(":").last() else id
+    tail.split(".").last() else tail
+
+## Whether `d` is `o` under another name: the same kind, signature without the name, and body.
+fn sd_renamed_from(o SDecl, d SDecl) bool
+    if o.kind != d.kind or not sd_is_fn(d) or o.get("body") == "" or o.get("body") != d.get("body")
+        return false
+    o.get("signature").replace(sd_short(o.id), "") == d.get("signature").replace(sd_short(d.id), "")
+
+fn sd_renamed_line(o SDecl, d SDecl, json bool) str
+    if json
+        return "\{\"change\":\"api\",\"op\":\"renamed\",\"from\":{quote(o.id)},\"id\":{quote(d.id)},\"kind\":\"{d.kind}\",\"signature\":{quote(d.get("signature"))}}"
+    "> {o.id} -> {d.id} (renamed)"
 
 fn sd_changed_line(d SDecl, diffs List[SChange], hunk List[str], json bool) str
     if json
@@ -347,6 +382,7 @@ fn sd_render(old str, new str, a SSide, b SSide, json bool)(str, int)
     mut added := 0
     mut removed := 0
     mut changed := 0
+    mut renamed := 0
     # diff.out.2: declarations by id, in the new version's order, then the removed ones.
     if a.has_decls and b.has_decls
         mut old_by := Map[str, SDecl]()
@@ -355,6 +391,19 @@ fn sd_render(old str, new str, a SSide, b SSide, json bool)(str, int)
         mut new_ids := Set[str]()
         for d in b.decls
             new_ids.add(d.id)
+        # diff.out.9: an added function that is a removed one under another name is a rename.
+        mut taken := Set[str]()
+        mut moved := Map[str, SDecl]()
+        for d in b.decls
+            if old_by.contains(d.id) or not sd_is_fn(d)
+                continue
+            for o in a.decls
+                if new_ids.contains(o.id) or taken.contains(o.id)
+                    continue
+                if sd_renamed_from(o, d)
+                    taken.add(o.id)
+                    moved[d.id] = o
+                    break
         for d in b.decls
             if o := old_by.get(d.id)
                 mut diffs := List[SChange]()
@@ -368,10 +417,14 @@ fn sd_render(old str, new str, a SSide, b SSide, json bool)(str, int)
                         hunk = sd_hunk(o.body, d.body)
                     lines.push(sd_changed_line(d, diffs, hunk, json))
             else
-                added += 1
-                lines.push(sd_decl_line("added", d, json))
+                if r := moved.get(d.id)
+                    renamed += 1
+                    lines.push(sd_renamed_line(r, d, json))
+                else
+                    added += 1
+                    lines.push(sd_decl_line("added", d, json))
         for d in a.decls
-            if not new_ids.contains(d.id)
+            if not new_ids.contains(d.id) and not taken.contains(d.id)
                 removed += 1
                 lines.push(sd_decl_line("removed", d, json))
     else
@@ -380,6 +433,13 @@ fn sd_render(old str, new str, a SSide, b SSide, json bool)(str, int)
             lines.push("\{\"change\":\"api\",\"op\":\"unavailable\",\"reason\":{quote("{which} has errors")}}")
         else
             lines.push("api: not compared, {which} has errors")
+    # diff.out.8: a side with check errors is compared as far as it resolves.
+    if a.has_decls and b.has_decls and (a.partial or b.partial)
+        which := if b.partial then new else old
+        if json
+            lines.push("\{\"change\":\"api\",\"op\":\"partial\",\"reason\":{quote("{which} has errors")}}")
+        else
+            lines.push("api: partial, {which} has errors; compared as far as they allow")
     # diff.out.3: diagnostics by rule, file and message, counted.
     mut left := Map[str, int]()
     for f in a.diags
@@ -423,17 +483,19 @@ fn sd_render(old str, new str, a SSide, b SSide, json bool)(str, int)
             if not now_names.contains(t.name)
                 test_changes += 1
                 lines.push(sd_test_line(t.name, if t.passed then 1 else 0, -1, "", json))
-    total := added + removed + changed + gained.len() + lost.len() + test_changes
+    ren_json := if renamed > 0 then ",\"renamed\":{renamed}" else ""
+    ren_text := if renamed > 0 then ", {renamed} renamed" else ""
+    total := added + removed + changed + renamed + gained.len() + lost.len() + test_changes
     mut out := ""
     for l in lines
         out = "{out}{l}\n"
     both := a.has_tests and b.has_tests
     if json
         tests := if both then ",\"failing_before\":{sd_failing(a.tests)},\"failing_after\":{sd_failing(b.tests)}" else ""
-        out = "{out}\{\"summary\":true,\"old\":{quote(old)},\"new\":{quote(new)},\"added\":{added},\"removed\":{removed},\"changed\":{changed},\"diagnostics_added\":{gained.len()},\"diagnostics_removed\":{lost.len()},\"tests_changed\":{test_changes}{tests}}\n"
+        out = "{out}\{\"summary\":true,\"old\":{quote(old)},\"new\":{quote(new)},\"added\":{added},\"removed\":{removed},\"changed\":{changed}{ren_json},\"diagnostics_added\":{gained.len()},\"diagnostics_removed\":{lost.len()},\"tests_changed\":{test_changes}{tests}}\n"
     else
         tests := if both then "; failing tests {sd_failing(a.tests)} -> {sd_failing(b.tests)}" else "; tests not run"
-        out = "{out}{added} added, {removed} removed, {changed} changed; diagnostics +{gained.len()} -{lost.len()}{tests}\n"
+        out = "{out}{added} added, {removed} removed, {changed} changed{ren_text}; diagnostics +{gained.len()} -{lost.len()}{tests}\n"
     (out, total)
 
 fn sd_diag_line(op str, f SFound, file str, json bool) str

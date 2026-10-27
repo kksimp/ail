@@ -25,6 +25,7 @@
 use a64
 use api
 use ast
+use attachcli
 use budget
 use check
 use doc
@@ -44,7 +45,8 @@ use x64
 
 fn main() !
     args := env.args()
-    if args.len() == 0 or (args.len() < 2 and args[0] != "explain" and args[0] != "diff")
+    if args.len() == 0
+        or (args.len() < 2 and args[0] != "explain" and args[0] != "diff" and args[0] != "attach")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
         io.exit(2)
     match args[0]
@@ -145,6 +147,8 @@ fn main() !
                 path.dir(compiler_dir()),
                 "std",
             )))
+        "attach" =>
+            io.exit(attachcli.command(args[1..]))
         "ask" =>
             io.exit(api.ask_command(args[1..], path.join(path.dir(compiler_dir()), "std")))
         "run" =>
@@ -381,13 +385,11 @@ fn runtime_with(dir str, path str, ms str, mb str) !ast.Program
     # `std.ui` is written over `std.app`, so it needs the task runtime (ADR 0863).
     # A loop the pool may take (conc.par.8) needs it, and only then: with the
     # task runtime a trap no longer runs the program's cleanups (unwind_live).
-    tasks := mir.uses_tasks(src)
-        or mentions_ui(src)
-        or parallel_on() and has_for_loop(src) and par_keys(
-            path,
-            "{dir}/../../../std",
-            src.len(),
-        ).len() > 0
+    tasks := mir.uses_tasks(src) or mentions_ui(src) or parallel_on() and par_keys(
+        path,
+        "{dir}/../../../std",
+        src.len(),
+    ).len() > 0
     skip := if tasks then "notask.ail" else "task.ail"
     # Every `.ail` file of the directory, so lanes add runtime files
     # without editing this list; `prim`, `core` and `math` come first.
@@ -638,13 +640,6 @@ fn par_keys(file str, std str, size int) Set[str]
         return Set[str]()
     proven_loop_keys(file, std)
 
-## Whether a source has a `for` loop (not `impl T for U`): a line starting with `for `.
-fn has_for_loop(text str) bool
-    for l in text.lines()
-        if l.trim().starts_with("for ")
-            return true
-    false
-
 ## Whether the independent loops may go to the pool (conc.par.8): by default,
 ## unless `AIL_PARALLEL=0`; `--deterministic` keeps every loop on one thread
 ## (conc.par.9).
@@ -662,9 +657,13 @@ fn proven_loop_keys(file str, std str) Set[str]
     loaded := load.load(file, std) else return keys
     if loaded.diags.len() > 0
         return keys
-    for at in check.proven_loops(loaded.program)
+    sites := check.par_sites(loaded.program)
+    for at in sites.loops
         found := load.locate(loaded.program.files, at)
         keys.add("{found.0}:{found.1.line}:{found.1.col}")
+    for site in sites.forks
+        found := load.locate(loaded.program.files, site.pos)
+        keys.add("{found.0}:{found.1.line}:{found.1.col}#{site.mark}")
     keys
 
 ## Whether a source names a module of the prelude written in AIL: the test

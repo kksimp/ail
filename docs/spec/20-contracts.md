@@ -331,7 +331,7 @@ type is the cause).
 no I/O. With no contracts in the file, the output is `no contracts to check`
 and the status 0.
 
-```ail skip=bootstrap tool=test,--contracts,FILE status=1 expect=input: rules=contract.fuzz.1,contract.fuzz.2
+```ail tool=test,--contracts,FILE status=1 expect=input: rules=contract.fuzz.1,contract.fuzz.2
 fn half(n int) int
     requires n >= 0
     ensures result * 2 == n
@@ -341,7 +341,7 @@ fn main()
     print(half(4))
 ```
 
-```ail skip=bootstrap tool=test,--contracts,FILE expect=skip rules=contract.fuzz.3
+```ail tool=test,--contracts,FILE expect=skip rules=contract.fuzz.3
 fn shout(n int) int
     ensures result == n
     print(n)

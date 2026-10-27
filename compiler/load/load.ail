@@ -179,10 +179,12 @@ fn load_package(
             tokens.extend(toks)
             sources.push(src)
             files.push(ast.SourceFile(path: shown, module: module, base: base))
-    tokens.push(syntax.Token(
-        tok: syntax.Tok.Eof,
-        pos: ast.Pos(line: files.len() * FILE_LINES, col: 1),
-    ))
+    # The end of the input sits just past the last file's last line, so an error at it
+    # (an unclosed `fn broken(`) is reported there, not at the next file's base line.
+    mut end_line := files.len() * FILE_LINES
+    if files.len() > 0 and sources.len() == files.len()
+        end_line = files[files.len() - 1].base + sources[sources.len() - 1].lines().len() + 1
+    tokens.push(syntax.Token(tok: syntax.Tok.Eof, pos: ast.Pos(line: end_line, col: 1)))
     mut first := assemble(tokens, files, diags, std, packages)?
     first.texts = sources
     mut done := first

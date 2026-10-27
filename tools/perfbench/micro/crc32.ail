@@ -1,0 +1,17 @@
+# Microbench for std.hash.crc32 (std.hash.3): the CRC-32 of 64 KiB blocks, MiB of them, and the sum of the
+# results. Time it: `time ./ail run tools/perfbench/micro/crc32.ail 64`. The size in MiB comes from argv.
+use std.hash
+
+fn size(default int) int
+    args := env.args()
+    if args.len() == 0
+        return default
+    args[0].to_int() else default
+
+fn main()
+    mib := size(16)
+    block := "abcdefghijklmnopqrstuvwxyz012345".repeat(2048)
+    mut sum := 0
+    for i in 0..mib * 16
+        sum = (sum + hash.crc32(block)) % 4294967296
+    print("{mib} MiB, sum {sum}")

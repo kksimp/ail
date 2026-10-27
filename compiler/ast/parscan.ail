@@ -15,9 +15,17 @@ pub struct ParScan
     pub other Set[str]
     ## Names whose value a method call or `mut` argument may change.
     pub mutated Set[str]
-    ## Operations one iteration costs: nested loops count 16 times (conc.par.12).
+    ## Operations one iteration costs: nested loops count 16 times (conc.par.14).
     pub work int
     pub mult int
+    ## The body has a loop, whose bound the count does not know.
+    pub looped bool
+    ## The body calls a function or a method that may change its receiver.
+    pub calls bool
+    ## Functions the body calls by name, with the loop multiplier at each call
+    ## (conc.par.14: a callee's own cost counts toward the loop's).
+    pub callees List[str]
+    pub callee_mult List[int]
     ## What the first construct the parallel version doesn't take is.
     pub why str
     ## A construct the parallel version doesn't take.
@@ -33,6 +41,10 @@ pub fn new_scan() ParScan
         mutated: Set[str](),
         work: 0,
         mult: 1,
+        looped: false,
+        calls: false,
+        callees: [],
+        callee_mult: [],
         why: "",
         bad: false,
     )
@@ -111,6 +123,7 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
                 )
         While(cond, body, _) =>
             sc.mult = sc.mult * 16
+            sc.looped = true
             scan_expr(mut sc, cond)
             scan_block(mut sc, body, depth + 1)
             sc.mult = sc.mult / 16
@@ -118,6 +131,7 @@ fn scan_stmt(mut sc ParScan, s Stmt, depth int)
             scan_expr(mut sc, iter)
             sc.decls.add(var)
             sc.mult = sc.mult * 16
+            sc.looped = true
             scan_block(mut sc, body, depth + 1)
             sc.mult = sc.mult / 16
         Break(_) =>
@@ -160,8 +174,13 @@ fn scan_expr(mut sc ParScan, e Expr)
                     Fmt(x, _) => scan_expr(mut sc, x)
         Call(callee, args, _) =>
             scan_cost(mut sc, 8)
+            sc.calls = true
             match callee
-                Name => scan_args(mut sc, args)
+                Name(fn_name, _) =>
+                    if sc.callees.len() < 64
+                        sc.callees.push(fn_name)
+                        sc.callee_mult.push(sc.mult)
+                    scan_args(mut sc, args)
                 _ => refuse(
                     mut sc,
                     "a call of a method value or closure, or a constructor with a path",
@@ -169,6 +188,7 @@ fn scan_expr(mut sc ParScan, e Expr)
         Method(recv, name, _, args) =>
             scan_cost(mut sc, 2)
             if not READ_ONLY.contains(name)
+                sc.calls = true
                 r := root_name(recv) else
                     refuse(mut sc, "a method call on a temporary")
                     return

@@ -1,0 +1,20 @@
+struct Cart
+    total int
+    note List[int]
+
+fn show(c Cart) str
+    "{c.total}"
+
+fn note_len(c Cart) int
+    c.note.len()
+
+@test
+fn shows()
+    assert_eq(show(Cart(1, [])), "1")
+
+@test
+fn notes()
+    assert_eq(note_len(Cart(1, [])), 0)
+
+fn main()
+    print(show(Cart(1, [])))

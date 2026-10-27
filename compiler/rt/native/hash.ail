@@ -7,22 +7,86 @@
 
 M32 := 4294967295
 
-## std.hash.3: CRC-32 (RFC 1952, polynomial 0xEDB88320), bit by bit.
+CRC_POLY := 3988292384
+
+## std.hash.3: CRC-32 (RFC 1952, polynomial 0xEDB88320). A short input goes a
+## nibble at a time (a 16-word table, cheap to build); one of 1024 bytes or
+## more goes eight bytes at a time through eight 256-word tables (slicing-by-8),
+## built per call, which a long input pays for. All results are the same.
 fn hash_crc32(s str) int
     a := str_addr(s)
     n := load64(a)
-    mut crc := M32
+    if n >= 1024
+        return crc32_sliced(a + 16, n)
+    crc32_nibble(a + 16, n)
+
+## The CRC-32 of the `n` bytes at `p`, four bits at a time.
+fn crc32_nibble(p int, n int) int
+    t := alloc(128, KIND_ATOMIC)
     mut i := 0
-    while i < n
-        crc = crc.bit_xor(load8(a + 16 + i))
+    while i < 16
+        mut c := i
+        mut k := 0
+        while k < 4
+            if c.bit_and(1) == 1
+                c = c.shr(1).bit_xor(CRC_POLY)
+            else
+                c = c.shr(1)
+            k += 1
+        store64(t + 8 * i, c)
+        i += 1
+    mut crc := M32
+    mut j := 0
+    while j < n
+        crc = crc.bit_xor(load8(p + j))
+        crc = load64(t + 8 * crc.bit_and(15)).bit_xor(crc.shr(4))
+        crc = load64(t + 8 * crc.bit_and(15)).bit_xor(crc.shr(4))
+        j += 1
+    crc.bit_xor(M32)
+
+## The CRC-32 of the `n` bytes at `p`, eight at a time. Table `k` (words
+## 256 * k and up) is the table for a byte that is followed by `k` zero bytes.
+fn crc32_sliced(p int, n int) int
+    t := alloc(16384, KIND_ATOMIC)
+    mut i := 0
+    while i < 256
+        mut c := i
         mut k := 0
         while k < 8
-            if crc.bit_and(1) == 1
-                crc = crc.shr(1).bit_xor(3988292384)
+            if c.bit_and(1) == 1
+                c = c.shr(1).bit_xor(CRC_POLY)
             else
-                crc = crc.shr(1)
+                c = c.shr(1)
+            k += 1
+        store64(t + 8 * i, c)
+        i += 1
+    i = 0
+    while i < 256
+        mut c := load64(t + 8 * i)
+        mut k := 1
+        while k < 8
+            c = load64(t + 8 * (c.bit_and(255))).bit_xor(c.shr(8))
+            store64(t + 2048 * k + 8 * i, c)
             k += 1
         i += 1
+    mut crc := M32
+    mut j := 0
+    while j + 8 <= n
+        v := load64(p + j)
+        lo := v.bit_and(M32).bit_xor(crc)
+        hi := v.shr(32).bit_and(M32)
+        crc = load64(t + 14336 + 8 * lo.bit_and(255))
+            .bit_xor(load64(t + 12288 + 8 * lo.shr(8).bit_and(255)))
+            .bit_xor(load64(t + 10240 + 8 * lo.shr(16).bit_and(255)))
+            .bit_xor(load64(t + 8192 + 8 * lo.shr(24)))
+            .bit_xor(load64(t + 6144 + 8 * hi.bit_and(255)))
+            .bit_xor(load64(t + 4096 + 8 * hi.shr(8).bit_and(255)))
+            .bit_xor(load64(t + 2048 + 8 * hi.shr(16).bit_and(255)))
+            .bit_xor(load64(t + 8 * hi.shr(24)))
+        j += 8
+    while j < n
+        crc = load64(t + 8 * crc.bit_xor(load8(p + j)).bit_and(255)).bit_xor(crc.shr(8))
+        j += 1
     crc.bit_xor(M32)
 
 ## The 128-bit product of `a` and `b` as unsigned numbers, its two halves

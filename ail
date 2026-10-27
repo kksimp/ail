@@ -141,6 +141,7 @@ if [ "${1:-}" = run ]; then
                 case "$v" in "" | *[!0-9]* | 0) die "\`--trace-limit\` needs a positive number of events (trace.run.4)" ;; esac
                 export AIL_TRACE_LIMIT="$v"; k=$((k + 2)) ;;
             --verbose) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values,verbose"; k=$((k + 1)) ;;
+            --attach-input) export AIL_ATTACH_INPUT=1; k=$((k + 1)) ;;
             --no-attach) run_opts="$run_opts --no-attach"; k=$((k + 1)) ;;
             --values) export AIL_INSTRUMENT="${AIL_INSTRUMENT:+$AIL_INSTRUMENT,}values"; k=$((k + 1)) ;;
             --deterministic) export AIL_DETERMINISTIC=1; det_run=1; check_opts="$check_opts --deterministic"; k=$((k + 1)) ;;
@@ -243,11 +244,16 @@ has_budget=
 if [ "${1:-}" = check ] || [ "${1:-}" = test ]; then
     for a in "${@:2}"; do case "$a" in --budget | --from) has_budget=1 ;; esac; done
 fi
+# bundle.run.1: `test --bundle-failure[=DIR]` and `test --bundle FILE` run the native test runner whatever their argument order.
+has_bundle=
+if [ "${1:-}" = test ]; then
+    for a in "${@:2}"; do case "$a" in --bundle | --bundle-failure | --bundle-failure=*) has_bundle=1 ;; esac; done
+fi
 native_errors=
 if [ "${1:-}" = check ]; then
     for a in "${@:2}"; do [ "$a" = --errors ] && native_errors=1; done
 fi
-if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; }; }; then
+if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ] || [ -n "$native_check" ] || [ -n "$native_build" ] || [ -n "$native_run" ] || [ "${1:-}" = pkg ] || [ "${1:-}" = diff ] || [ "${1:-}" = fmt ] || [ "${1:-}" = fix ] || [ "${1:-}" = explain ] || [ "${1:-}" = edit ] || [ "${1:-}" = ask ] || [ "${1:-}" = attach ] || [ "${1:-}" = new ] || { [ "${1:-}" = check ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { { [ "${1:-}" = check ] || [ "${1:-}" = test ]; } && [ -n "$has_budget" ]; } || { [ "${1:-}" = check ] && [ "${2:-}" = --json ] && [ -n "${3:-}" ] && [ "${3#-}" = "$3" ]; } || { [ "${1:-}" = test ] && [ -n "${2:-}" ] && [ "${2#-}" = "$2" ]; } || { [ "${1:-}" = test ] && [ -n "$has_bundle" ]; } || [ "${1:-}" = verify ] || { [ "${1:-}" = replay ] && [ "${2:-}" = --shrink ]; }; }; then
     native="$root/.native/ail"
     if [ ! -x "$native" ] || [ -n "$(find "$root/compiler" "$root/std" -name '*.ail' -newer "$native" 2>/dev/null | head -n 1)" ]; then
         # The published seed is stage 0: it builds the native CLI (ADR 0855).
@@ -277,7 +283,7 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" build "$@"
     fi
     if [ "$1" = diff ]; then shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" diff "$@"; fi
-    if [ "$1" = explain ] || [ "$1" = edit ] || [ "$1" = ask ] || [ "$1" = new ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
+    if [ "$1" = explain ] || [ "$1" = edit ] || [ "$1" = ask ] || [ "$1" = attach ] || [ "$1" = new ]; then c="$1"; shift; AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" "$c" "$@"; fi
     if [ "$1" = fix ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" fix "$@"; fi
     if [ "$1" = api ]; then
         shift
@@ -323,6 +329,10 @@ if { [ -n "$native_errors" ] || [ -n "$native_api" ] || [ -n "$native_effects" ]
         done
         AIL="$root/ail" AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" budget test "${bopts[@]}" -- "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${copts[@]}"
     fi
+    # shrink.run.1: `ail replay --shrink BUNDLE` cuts a failure bundle's recorded texts (tools/shrink/shrink.ail).
+    if [ "$1" = replay ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/shrink/shrink.ail" "$@"; fi
+    # verify.run.1: `ail verify --diff` composes `ask --affected`, `check` and `test --affected` (tools/verify/verify.ail).
+    if [ "$1" = verify ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/verify/verify.ail" "$@"; fi
     if [ "$1" = test ]; then shift; AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "$@"; fi
     if [ -n "$native_errors" ]; then shift; AIL_ROOT="$root" AIL_COMPILER="$root/compiler" exec "$native" check-errors "$@"; fi
     if [ "$1" = check ] && [ -n "$has_budget" ]; then
@@ -393,6 +403,16 @@ if [ "${1:-}" = test ] && [ -n "${2:-}" ]; then
         esac
     done
     AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtest/ailtest.ail" "${@:2}"
+fi
+
+# `ail mcp` (ADR 0918): the compiler's tools as an MCP server on stdio, tools/ailmcp/ailmcp.ail.
+if [ "${1:-}" = mcp ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailmcp/ailmcp.ail" "${@:2}"
+fi
+
+# `ail task` (ADR 0917): the agent task protocol, tools/ailtask/ailtask.ail.
+if [ "${1:-}" = task ]; then
+    AIL_NATIVE_CLI= AIL="$root/ail" exec "$root/ail" run "$root/tools/ailtask/ailtask.ail" "${@:2}"
 fi
 
 if [ "${1:-}" = version ] || [ "${1:-}" = --version ]; then echo "ail 0.1.0 (native)"; exit 0; fi

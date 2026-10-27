@@ -4,7 +4,7 @@
 - **Date:** 2026-10-25
 - **Decided by:** AI (delegated, [ADR 0076](0076-delegated-decisions.md)); direction from the designer 2026-10-25
 - **Topic:** 11 — Concurrency; 25 — Optimization strategy
-- **Spec rules:** conc.par.8, conc.par.12
+- **Spec rules:** conc.par.8, conc.par.14, conc.par.13
 - **Builds on:** [ADR 0236](0236-automatic-parallel-loops.md), [ADR 0601](0601-native-par-for.md), [ADR 0239](0239-float-sum-fixed-tree.md)
 
 ## Context
@@ -19,7 +19,7 @@ iterations as workers", so a 16-iteration loop of one add would pay a dispatch.
 1. **On by default.** The checker's proven loops (`conc.par.2-4`) are lowered
    as `par for` unless `AIL_PARALLEL=0` or the run is deterministic. The task
    runtime links only into a program that has such a loop or uses tasks.
-2. **Cost model (conc.par.12).** The lowering counts operations per iteration
+2. **Cost model (conc.par.14).** The lowering counts operations per iteration
    (binary op 1, index 2, method 2, call 8, nested loop body x16). A loop the
    compiler chose goes to the pool only when `iterations x work >= 65536`
    (about 50 microseconds); else it runs in order. A written `par for` keeps

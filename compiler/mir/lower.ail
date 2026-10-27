@@ -1047,6 +1047,8 @@ fn Lower.lower_block(mut self, body List[ast.Stmt], want bool) Val?
         s := body[i]
         if done()
             dead_block()
+        if fork_stmt(body, i)
+            continue
         instr_stmt(s)
         ct_stmt(s)
         if (want or top_unit_fails) and i == body.len() - 1
@@ -1096,7 +1098,8 @@ fn Lower.lower_let_else(mut self, name str, pos ast.Pos, value ast.Expr, other a
         got := lower_get_else(value, other, pos) else
             declare(name, Ty.Unknown, -1)
             return
-        declare(name, got.ty, got.id)
+        # `get` hands out the stored value; the binding owns a copy (own.val.1).
+        declare(name, got.ty, copy_if_place(value, got))
         return
     recv := match value
         Method(r, m, _, margs) => if m == "to_int" and margs.len() == 0 then r else none
@@ -1176,7 +1179,7 @@ fn Lower.lower_stmt(mut self, s ast.Stmt)
         For(is_par, var, _, mutable, iter, body, pos) =>
             auto := not is_par
             # A loop the compiler chose is an outermost one: inside another loop it
-            # would pay the dispatch on every run of the outer body (conc.par.12).
+            # would pay the dispatch on every run of the outer body (conc.par.14).
             if is_par
                 or loops.len() == 0 and auto_par.contains("{file_paths[file]}:{pos.line}:{pos.col}")
                 if mutable
@@ -1237,9 +1240,9 @@ fn Lower.copy_if_place(mut self, e ast.Expr, v Val) int
         if v.ty.is_coll()
             return copy_coll(v)
         return if needs_copy(v.ty) then copy_value(v) else v.id
-    if v.ty.is_coll() and is_place(e)
+    if v.ty.is_coll() and aliases_place(e)
         return note_move(e, v, copy_coll(v))
-    if not needs_copy(v.ty) or not is_place(e)
+    if not needs_copy(v.ty) or not aliases_place(e)
         return v.id
     note_move(e, v, copy_value(v))
 

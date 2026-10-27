@@ -89,6 +89,21 @@ pub fn parallel_rows(p ast.Program) List[ParRow]
     c := checked_fns(p, false, [])
     c.parallel_rows()
 
+## What the lowering runs in parallel: the proven loops and the calls of the
+## runs that fork (conc.par.8, conc.par.15), from one check of the program.
+pub struct ParSites
+    pub loops List[ast.Pos]
+    pub forks List[ForkSite]
+
+pub fn par_sites(p ast.Program) ParSites
+    c := checked_fns(p, false, [])
+    ParSites(loops: c.proven_loops(), forks: c.fork_sites())
+
+## The runs of independent pure calls that could fork (conc.par.15): `ail effects --parallel`.
+pub fn fork_rows(p ast.Program) List[ForkRow]
+    c := checked_fns(p, false, [])
+    c.fork_rows()
+
 ## `analyze` that also rejects a `main` that reaches a capability of `denied` (eff.cap.1).
 pub fn analyze_denying(p ast.Program, full bool, denied List[str]) Analysis
     mut c := checked_fns(p, full, denied)
