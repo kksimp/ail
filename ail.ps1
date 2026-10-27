@@ -31,6 +31,25 @@ function Add-Instrument([string]$what) {
     $env:AIL_INSTRUMENT = if ($env:AIL_INSTRUMENT) { "$($env:AIL_INSTRUMENT),$what" } else { $what }
 }
 
+# conc.sched.1: `--schedule=fixed|random[:SEED]` of `run` and `test` becomes AIL_SCHEDULE, as ./ail does.
+if ($cmd -in 'run', 'test') {
+    $kept = @()
+    foreach ($a in $rest) {
+        if ("$a" -like '--schedule=*') {
+            $w = "$a".Substring(11)
+            if ($w -eq 'fixed') { $env:AIL_SCHEDULE = 'fixed' }
+            elseif ($w -eq 'random') {
+                $w = 'random:' + ([int64]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() % 1000000))
+                [Console]::Error.WriteLine("schedule seed $($w.Substring(7)): replay with --schedule=$w")
+                $env:AIL_SCHEDULE = $w
+            }
+            elseif ($w -match '^random:\d+$') { $env:AIL_SCHEDULE = $w }
+            else { Fail "``$a`` isn't a schedule; use ``--schedule=random`` or ``--schedule=random:SEED`` with a non-negative SEED (conc.sched.1)" }
+        } else { $kept += $a }
+    }
+    $rest = $kept
+}
+
 # Tracing and recording belong to `run` and `test` (trace.run.1, replay.rec.1).
 if ($cmd -notin 'run', 'test') {
     foreach ($a in $rest) {
@@ -111,7 +130,7 @@ $route = (
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
         (& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
-    ($cmd -eq 'test' -and (& $isFile $rest[0])) -or
+    ($cmd -eq 'test' -and $rest.Count -gt 0) -or
     ($cmd -eq 'effects' -and (@($rest | Where-Object { & $isFile $_ }).Count -eq 1)))
 if ($cmd -eq 'build' -and ($rest -contains '--derived-out')) { $route = $false }
 
@@ -171,7 +190,12 @@ if ($route) {
             }
             & $native check-program @rest; exit $LASTEXITCODE
         }
-        'test' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
+        'test' {
+            foreach ($a in $rest) {
+                if ("$a" -like '--watch*') { [Console]::Error.WriteLine("ail test: $a is not native yet"); exit 2 }
+                if ("$a" -eq '--native') { Fail '`ail test --native` is retired: `ail test` runs every test natively and there is no interpreter to compare with (native.test.1, ADR 0900)' }
+            }
+            $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\ailtest\ailtest.ail')) @rest; exit $LASTEXITCODE }
         'build' {
             # The native CLI's build doesn't check: check the file (the first operand) first.
             $f = $rest | Where-Object { (& $isFile $_) -and (Test-Path $_ -PathType Leaf) } | Select-Object -First 1
@@ -187,7 +211,10 @@ if ($route) {
             $prep = & $native prepare @runOpts $runFile 2> $errFile
             if ($LASTEXITCODE -eq 0) {
                 Remove-Item -Force $errFile
-                & ([string]($prep | Select-Object -Last 1)) @($rest | Select-Object -Skip $runSkip)
+                # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
+                $env:AIL_RUN_FILE = $runFile
+                try { & ([string]($prep | Select-Object -Last 1)) @($rest | Select-Object -Skip $runSkip) }
+                finally { Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue }
                 exit $LASTEXITCODE
             }
             [Console]::Error.Write((Get-Content $errFile -Raw)); Remove-Item -Force $errFile
@@ -215,4 +242,4 @@ if ($cmd -eq 'selftest') {
 }
 
 # Everything else has no native form.
-Fail "`ail $cmd` has no native form; run `.\ail.ps1` with a command from docs/quick-reference.md"
+Fail "``ail $cmd`` has no native form; run ``.\ail.ps1`` with a command from docs/quick-reference.md"

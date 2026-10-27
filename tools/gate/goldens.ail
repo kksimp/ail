@@ -44,7 +44,7 @@ fn Check.wanted(self, stem str) bool
     names.is_empty() or names.contains(stem)
 
 fn temp_dir() str
-    base := env.get("TMPDIR") else "/tmp"
+    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
     "{base}/ail-goldens"
 
 fn stems(dir str) List[str]

@@ -145,7 +145,8 @@ fn wine_checks(mut r Run, b bytes, tmp str)
 
 fn main()
     mut r := Run(fails: 0, checks: 0)
-    tmp := "{env.get("TMPDIR") else "/tmp"}/ail-pe-gate"
+    base := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
+    tmp := "{base}/ail-pe-gate"
     sh("rm -rf {tmp} && mkdir -p {tmp}")
     b := image("pe-sample sample") else
         print("RED pe-sample failed")

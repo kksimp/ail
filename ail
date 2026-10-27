@@ -8,6 +8,13 @@
 # There is no Rust toolchain here (ADR 0855): the published seed (tools/release/fetch-seed.sh) builds the native CLI.
 set -euo pipefail
 
+# Git for Windows' sh (the gate's scripts run `./ail` through it): this script can't build or run anything there, so hand
+# the arguments to the PowerShell twin, which does (ail.ps1, like ail.cmd for programs that start `ail` themselves).
+case "$(uname -s 2>/dev/null)" in
+    MINGW* | MSYS* | CYGWIN*)
+        exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -W)/ail.ps1" "$@" ;;
+esac
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # std.app.10: a program finds the app host built under the toolchain.
 export AIL_ROOT="$root"

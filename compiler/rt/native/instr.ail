@@ -141,7 +141,7 @@ fn instr_path(at int, named str, suffix str) int
 ## Write the hits and the trace (see the head of this file).
 fn instr_dump()
     t := load64(global(INSTR_TAB))
-    if t <= 0 or target() == 3
+    if t <= 0
         return
     store64(global(INSTR_TAB), 0)
     buf := sys_mmap(65536 + 8192)
