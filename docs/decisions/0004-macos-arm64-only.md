@@ -1,6 +1,6 @@
 # 0004. Support macOS on ARM64 only
 
-- **Status:** Accepted
+- **Status:** Accepted; Windows testing refined by [ADR 0925](0925-windows-release-gate.md)
 - **Date:** 2026-10-04
 - **Decided by:** Designer
 - **Topic:** 24 — Cross-platform ABI strategy
