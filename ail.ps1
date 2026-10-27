@@ -234,6 +234,7 @@ if ($route) {
 # native compiler. `selftest SUITE...` runs those gate suites, `selftest --fuzz N [SEED]` the AIL fuzzers.
 if ($cmd -eq 'selftest') {
     if ($rest.Count -eq 0) { & (Join-Path $root 'tools\gate\win-gate.ps1'); exit $LASTEXITCODE }
+    if ($rest[0] -eq '--test') { Fail '`ail selftest --test NAME` ran one cargo test and is retired: name a gate suite, as `ail selftest cases`, or run `ail test FILE` (ADR 0900)' }
     if ($rest[0] -eq '--fuzz') {
         if ($rest.Count -lt 2) { Fail 'usage: ail selftest --fuzz N [SEED]' }
         $n = [string]$rest[1]; $seedNo = if ($rest.Count -gt 2 -and "$($rest[2])" -match '^\d+$') { [string]$rest[2] } else { '1' }
