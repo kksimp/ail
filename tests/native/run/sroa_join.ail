@@ -1,0 +1,39 @@
+# Struct objects that meet at a join (native.sroa.2): a `mut` variable set in
+# a branch or carried round a loop behaves as a value.
+struct V
+    x float
+    y float
+
+fn V.add(self, o V) V
+    V(x: x + o.x, y: y + o.y)
+
+fn V.scale(self, k float) V
+    V(x: x * k, y: y * k)
+
+fn pick(c bool, a V) float
+    mut base := a
+    if c
+        base = V(x: 0.5, y: 0.25)
+    base.scale(2.0).x + base.y
+
+fn walk(n int) V
+    mut p := V(x: 0.0, y: 0.0)
+    for i in 0..n
+        p = p.add(V(x: i.to_float(), y: 1.0))
+    p
+
+fn main()
+    a := V(x: 3.0, y: 4.0)
+    print(pick(true, a))
+    print(pick(false, a))
+    w := walk(5)
+    print(w.x)
+    print(w.y)
+    mut q := V(x: 1.0, y: 1.0)
+    for i in 0..3
+        if i % 2 == 0
+            q = q.scale(2.0)
+        else
+            q = q.add(a)
+    print(q.x)
+    print(q.y)
