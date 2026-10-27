@@ -25,14 +25,20 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
         result = new_value(Ty.Unknown, "")
         blocks[join].params.push(result)
         rty = arms_start(want, [arm.body for arm in arms], none)
-    for arm in arms
-        if done()
+    tree := match_tree(arms, s, tag, en)
+    for idx in 0..arms.len()
+        arm := arms[idx]
+        if tree.len() > 0 and tree[idx] < 0
+            continue
+        if tree.len() == 0 and done()
             # An earlier `_` took every value: the rest can't match.
             break
-        body := new_block()
-        next := new_block()
-        if not test_pattern(arm.pat, s, tag, body, next)
-            return none
+        body := if tree.len() > 0 then tree[idx] else new_block()
+        mut next := -1
+        if tree.len() == 0
+            next = new_block()
+            if not test_pattern(arm.pat, s, tag, body, next)
+                return none
         seal(body)
         cur = body
         scopes.push(Map[str, str]())
@@ -50,8 +56,13 @@ fn Lower.lower_match(mut self, scrutinee ast.Expr, arms List[ast.Arm], pos ast.P
             finish(unreachable_term())
         rty = arm_end(join, value, v, pos, rty)
         scopes.pop()
-        seal(next)
-        cur = next
+        if tree.len() == 0
+            seal(next)
+            cur = next
+    if tree.len() > 0
+        dead := new_block()
+        seal(dead)
+        cur = dead
     finish(unreachable_term())
     seal(join)
     cur = join

@@ -151,6 +151,17 @@ Rejected: interchanging loops for matmul (it changes which overflow traps first)
 for every list value (a list built by `push` in the loop, or reached through a field,
 can change under the loop).
 
+## Pass 5 (amendment, 2026-10-27): `match` as a decision tree
+
+The vm drag-race program dispatches with a 10-arm `match op`; the arms were tried in
+order, so the last arm cost ten compares and the average about five. gcc uses a jump table.
+`compiler/mir/lower_matchtree.ail` (`AIL_OPT_OFF=matchtree` turns it off) lowers a match
+of five or more int-literal or variant arms, with no guard or range, to a binary search over
+the sorted values, so a dispatch costs about log2(arms) compares and needs no backend
+change, so x86-64 and ARM64 get it together (native.match.1). Rejected for now: a jump
+table, which needs a new terminator and an indirect branch in both backends and an
+`unreachable` bound check; reconsider if the tree's measured gain is small.
+
 ## Rationale
 
 The listed gaps point at allocation and register pressure first, not at `-O3` loop
