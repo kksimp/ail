@@ -1296,7 +1296,8 @@ fn Gate.diff(mut self, tmp str)
 
 ## The `ail build` cache (build_cache.rs, ported; ADR 0655, native.build.5).
 fn cache_entries(dir str) int
-    r := sh_run("ls {dir} 2>/dev/null | awk 'length($0) == 64' | wc -l")
+    # A Windows entry is the 64-digit key with `.exe`.
+    r := sh_run("ls {dir} 2>/dev/null | awk 'length($0) == 64 || (length($0) == 68 && $0 ~ /[.]exe$/)' | wc -l")
     r.out.trim().to_int() else 0
 
 fn Gate.build_cache(mut self, tmp str)
