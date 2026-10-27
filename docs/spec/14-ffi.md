@@ -112,11 +112,11 @@ check `unsafe.ptr.5-6`: an access outside a block, or to a freed one, is
 undefined as in C. *(ADR 0436, ADR 0844, ADR 0870)*
 
 ```ail tool=run,FILE expect=true rules=ffi.native.1
-extern c fn isdigit(c i32) i32
+extern c fn toupper(c i32) i32
 
 fn main()
     unsafe
-        print(isdigit(55) != 0)
+        print(toupper(97) == 65)
 ```
 
 ## Loading

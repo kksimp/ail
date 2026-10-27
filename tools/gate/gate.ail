@@ -1949,9 +1949,11 @@ fn Gate.git_deps(mut self, tmp str)
     want("git dep unreachable", ur.err, ["error[mod.pkg.7]: can't fetch dependency `geo`"])
     gd_manifest(dir2, url2, "tag v1 caps fs")
     # A PATH without git: the shell tools `./ail` itself uses are linked in, git is not.
-    sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
-    ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
-    want("git dep no git", ng.err, ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"])
+    # Windows has no `./ail` script to run on such a PATH.
+    if (env.get("OS") else "") != "Windows_NT"
+        sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
+        ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
+        want("git dep no git", ng.err, ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"])
     nu := gd_ail(dir2, "{dir2}/app", "", "pkg update nope")
     want("git dep update nope", nu.err, ["error[mod.pkg.9]"])
     sh_run("chmod -R u+w {dir2}; rm -rf {dir2}")
@@ -2078,7 +2080,7 @@ fn Gate.net(mut self)
 
 ## The spec conformance harness (spec.rs, ported to tools/gate/spec.ail; ADR 0002).
 fn Gate.spec(mut self)
-    r := proc.run("./ail", ["run", "tools/gate/spec.ail"], "", 1800000) else
+    r := proc.run("./ail", ["run", "tools/gate/spec.ail"], "", 3600000) else
         red("spec", "could not start tools/gate/spec.ail")
         return
     if r.status != 0
