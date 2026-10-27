@@ -1901,7 +1901,8 @@ fn Gate.git_deps(mut self, tmp str)
         red("git dep first run", "{r.out}{r.err}\n{slurp(lock)}")
     cached := "{dir}/home/deps/geo-{first}"
     # Windows keeps no write bits in the file mode, so only the `.git` half is checked there.
-    writable := (env.get("OS") else "") != "Windows_NT" and sh_run("test -z \"$(find {cached}/geo.ail -perm -u+w)\"").status != 0
+    writable := (env.get("OS") else "") != "Windows_NT"
+        and sh_run("test -z \"$(find {cached}/geo.ail -perm -u+w)\"").status != 0
     if fs.exists("{cached}/.git") or writable
         red("git dep cache", "cache files must be read-only and have no .git")
     # A moved tag changes nothing while the lock pins the commit.
@@ -1956,7 +1957,11 @@ fn Gate.git_deps(mut self, tmp str)
     if (env.get("OS") else "") != "Windows_NT"
         sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
         ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
-        want("git dep no git", ng.err, ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"])
+        want(
+            "git dep no git",
+            ng.err,
+            ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"],
+        )
     nu := gd_ail(dir2, "{dir2}/app", "", "pkg update nope")
     want("git dep update nope", nu.err, ["error[mod.pkg.9]"])
     sh_run("chmod -R u+w {dir2}; rm -rf {dir2}")
