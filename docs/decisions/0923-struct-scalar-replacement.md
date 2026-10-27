@@ -71,3 +71,12 @@ Code size grows by the inlined constructors (bounded by `INLINE_BUDGET`).
 Follow-ups: interprocedural scalar arguments (`hit(s, p, light)`), joins of
 objects through block parameters, and `mut self` field replacement (Optimizer
 lane).
+
+## Amendment 2026-10-27: joins
+
+Rule native.sroa.2: objects that meet at a block parameter (a `mut` struct
+variable assigned in a branch or a loop) form one group with the parameter.
+When every member qualifies and the parameter is only read by field access, it
+becomes one parameter per slot and each jump passes the slots of its object.
+Found by the raytrace profile: `mut base := s.col` and loop-carried vectors
+kept allocating after the first step.
