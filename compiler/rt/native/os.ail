@@ -613,6 +613,11 @@ fn os_env_home() str
 
 ## `env.program()` (std.env.4): the program's path as it was given.
 fn env_program() str
+    if target() == 3
+        # Windows has no `exec -a`: `ail.ps1 run` names the source file in AIL_RUN_FILE, as ./ail does with argv[0].
+        given := os_env_get("AIL_RUN_FILE")
+        if os_ok() and given.len() > 0
+            return given
     c := load64(load64(global(ARGV)))
     os_str_from(c, os_c_len(c))
 

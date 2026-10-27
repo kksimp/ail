@@ -99,8 +99,9 @@ fn cat(a List[str], b List[str]) List[str]
     r
 
 fn repo_root() str
-    r := proc.run("pwd", []) else return "."
-    r.out.trim()
+    # `pwd` from Git's sh names `/c/Users/..`, which Windows programs can't open: take the directory as the
+    # runtime sees it, with `/` for the separator (Windows takes it too).
+    env.cwd().replace("\\", "/")
 
 ## Run `./ail ARGS` in `dir` with `AIL` set, as the editor tests need.
 fn ail_in(root str, dir str, args List[str]) proc.Output
@@ -1959,7 +1960,8 @@ fn net_start(cmd str, port int) int
     pid
 
 fn net_stop(pid int)
-    sh_run("kill {pid} 2>/dev/null")
+    # On Windows (Git's sh) `kill` reaches only sh's own processes: the Windows pid is in /proc/PID/winpid.
+    sh_run("kill {pid} 2>/dev/null; [ -r /proc/{pid}/winpid ] && taskkill //F //PID $(cat /proc/{pid}/winpid) >/dev/null 2>&1; true")
 
 fn net_port(salt int) int
     r := proc.run("sh", ["-c", "echo $$"]) else return 20000 + salt
