@@ -2194,11 +2194,11 @@ fn Gate.native_misc(mut self)
 ## function is called by a test, a corpus program or an example (std.use.1).
 ## (file, function, why no case calls it); an entry that is now called fails
 ## too, so the list only shrinks.
-STD_UNTESTABLE := [["time/date.ail", "now_local", "its value is the clock in the machine's zone"], [
-    "net/http.ail",
-    "serve_dir",
-    "it serves until the program stops, so a case cannot end it",
-]]
+STD_UNTESTABLE := [
+    ["time/date.ail", "now_local", "its value is the clock in the machine's zone"],
+    ["attach/serve.ail", "run", "it serves until its window closes; attach_watched covers the wire"],
+    ["net/http.ail", "serve_dir", "it serves until the program stops, so a case cannot end it"],
+]
 
 ## Modules only `ail build` reads (ADR 0819).
 STD_NATIVE_ONLY := ["regex/regex.ail"]
