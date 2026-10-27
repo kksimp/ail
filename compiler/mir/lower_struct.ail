@@ -344,6 +344,9 @@ fn Lower.struct_call(mut self, key str, recv Val?, args List[ast.Arg], pos ast.P
     if r := recv
         if is_generic_method(key)
             return generic_method_call(key, r, args, pos)
+        if g := gen.fns.get(key)
+            if g.decl.generics.len() > 0
+                return owner_method_call(key, r, args, pos)
         if key.ends_with(".cmp") and args.len() == 1 and not sigs.contains(key)
             # The derived `cmp` of `impl Ord for T` with no body (trait.std.2).
             other := lower_value(args[0].value, r.ty)?

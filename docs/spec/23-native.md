@@ -613,14 +613,11 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-struct Tag
-    n int
-
-fn Tag.pick[T](self, xs List[T]) T
-    xs[n]
+extern c fn sqrtf(x f32) f32
 
 fn main()
-    print(Tag(n: 0).pick([1, 2]))
+    unsafe
+        print(sqrtf(4.0.to_f32()))
 ```
 
 ```ail norun rules=native.build.2
