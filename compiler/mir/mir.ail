@@ -183,6 +183,7 @@ pub fn Ty.name(self) str
 ## | `prim` | arguments | runtime primitive `name` (native-abi.md §6) |
 ## | `get` | list, index | `xs[i]`, bounds-checked at `site` (type.coll.4); `site` -1: known in bounds |
 ## | `set` | list, index, value | `xs[i] = v`, bounds-checked at `site` |
+## | `bounds` | index, len | traps at `site` unless `0 <= index < len`; the check of a `get` or `set` whose list header was hoisted (ADR 0890) |
 ## | `len` | list | `xs.len()` |
 ## | `cap` | list | how many elements `xs` has room for before `push` regrows it |
 ## | `copy` | a | the same value |

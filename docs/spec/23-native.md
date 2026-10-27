@@ -417,6 +417,25 @@ fn main()
     print(total)
 ```
 
+**native.bce.11** — A loop that only reads and writes the elements of a
+list it did not make (`xs[i]`, `xs[i] = v`, `xs.len()`) may read the list's
+length and element pointer once, before the loop, and use them for every
+access: the lists are a parameter of the function or the result of a call,
+defined outside the loop, and the loop neither passes one to a call, pushes
+to it, nor uses it in any other way. Each check keeps its place, its index,
+its site and the length it reports, so a trap is the same. *(ADR 0890)*
+
+```ail rules=native.bce.11
+fn dot(a List[int], b List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += a[i] * b[i]
+    s
+
+fn main()
+    print(dot([1, 2, 3], [4, 5, 6], 3))
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is
