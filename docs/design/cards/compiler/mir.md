@@ -84,6 +84,7 @@ pub fn mir.mark_recursion(mut mir.Module) [mutates]
 pub fn mir.reuse_lists(mut mir.Module) [mutates]
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.simplify_in(mut mir.Func) [mutates]
+pub fn mir.sroa_in(mut mir.Func) bool [mutates]
 pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
 pub fn mir.func_text(mir.Func) str
@@ -91,4 +92,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1387); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1405); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
