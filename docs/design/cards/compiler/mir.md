@@ -85,7 +85,13 @@ pub fn mir.mark_recursion(mut mir.Module) [mutates]
 pub fn mir.reuse_lists(mut mir.Module) [mutates]
 pub fn mir.simplify(mir.Func) mir.Func
 pub fn mir.simplify_in(mut mir.Func) [mutates]
+pub fn mir.sret_convert(mut mir.Module) [mutates]
 pub fn mir.sroa_in(mut mir.Func) bool [mutates]
+pub mir.STACK_MAX_BYTES := 128
+pub mir.STACK_MAX_WORDS := 24
+pub fn mir.st_is_struct(mir.Ty) bool
+pub fn mir.st_call_borrows(Map[str, List[bool]], str, int) bool
+pub fn mir.borrow_summaries(mir.Module) Map[str, List[bool]]
 pub fn mir.stackify(mut mir.Module) [mutates]
 pub fn mir.subset_help(str) str
 pub fn mir.module_text(mir.Module) str
@@ -94,4 +100,4 @@ pub fn mir.verify(mir.Func) List[str]
 pub fn mir.dominators(mir.Func) List[List[bool]]
 ```
 
-trimmed to fit 2000 tokens (~1454); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
+trimmed to fit 2000 tokens (~1555); dropped: private items, doc comments, parameter names, members, contracts and examples (docs past their first sentence), fields, variants and test names
