@@ -2044,6 +2044,12 @@ api --pretty tests/cases/gen_types_methods.ail	186b4be0e99c9c22	0	5ff37d50661f34
 api --symbols tests/cases/gen_types_methods.ail	186b4be0e99c9c22	0	8b3b1aad8af26e5b
 api --tokens tests/cases/gen_types_methods.ail	186b4be0e99c9c22	0	9446995a30bafa16
 api --ast tests/cases/gen_types_methods.ail	186b4be0e99c9c22	0	01e3a44985b88827
+api  tests/cases/generic_owner_method.ail	bdae6761f322d89b	0	4ac1829eb77ce709
+api --text tests/cases/generic_owner_method.ail	bdae6761f322d89b	0	ba924f0072ea843d
+api --pretty tests/cases/generic_owner_method.ail	bdae6761f322d89b	0	c43c2b805e73e8c5
+api --symbols tests/cases/generic_owner_method.ail	bdae6761f322d89b	0	1f16aab1df1f1627
+api --tokens tests/cases/generic_owner_method.ail	bdae6761f322d89b	0	10f711da770767fd
+api --ast tests/cases/generic_owner_method.ail	bdae6761f322d89b	0	41260fedc8f2e30d
 api  tests/cases/generics_errors.ail	54da93331073b5ba	2	6e340b9cffb37a98
 api --text tests/cases/generics_errors.ail	54da93331073b5ba	2	6e340b9cffb37a98
 api --pretty tests/cases/generics_errors.ail	54da93331073b5ba	2	6e340b9cffb37a98
@@ -5628,8 +5634,10 @@ api --diff  tests/cases/fuzz_repeat_huge.ail tests/cases/fuzz_spawn_method_on_va
 api --diff --json tests/cases/fuzz_repeat_huge.ail tests/cases/fuzz_spawn_method_on_value.ail	caab6ae0b278e082	2	5e593c5562aea5b5
 api --diff  tests/cases/fuzz_spawn_method_on_value.ail tests/cases/gen_types_methods.ail	8e553196d306f8ca	2	5e593c5562aea5b5
 api --diff --json tests/cases/fuzz_spawn_method_on_value.ail tests/cases/gen_types_methods.ail	8e553196d306f8ca	2	5e593c5562aea5b5
-api --diff  tests/cases/gen_types_methods.ail tests/cases/generics_errors.ail	11526c7a76f157cb	2	86957422bd692e1f
-api --diff --json tests/cases/gen_types_methods.ail tests/cases/generics_errors.ail	11526c7a76f157cb	2	86957422bd692e1f
+api --diff  tests/cases/gen_types_methods.ail tests/cases/generic_owner_method.ail	dc0d9cfe151ce6e2	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/gen_types_methods.ail tests/cases/generic_owner_method.ail	dc0d9cfe151ce6e2	0	05c21b9e02e99ea1
+api --diff  tests/cases/generic_owner_method.ail tests/cases/generics_errors.ail	0b40d7bdaa04e15b	2	86957422bd692e1f
+api --diff --json tests/cases/generic_owner_method.ail tests/cases/generics_errors.ail	0b40d7bdaa04e15b	2	86957422bd692e1f
 api --diff  tests/cases/generics_errors.ail tests/cases/habits_fixes_work.ail	59b401151ec133fd	2	86957422bd692e1f
 api --diff --json tests/cases/generics_errors.ail tests/cases/habits_fixes_work.ail	59b401151ec133fd	2	86957422bd692e1f
 api --diff  tests/cases/habits_fixes_work.ail tests/cases/hole_keyword_reserved.ail	2bc8b43153eece26	2	7d12cf86f2120c59
