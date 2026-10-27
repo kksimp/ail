@@ -84,6 +84,7 @@ struct Gen
     wrap int
     region List[bool]
     holes List[codegen.Hole]
+    sallocs Map[int, int]
     ## The dynamic-library symbols this function calls (Linux, ADR 0870).
     imports List[str]
 
@@ -166,6 +167,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         wrap: al.wrap,
         region: al.region,
         holes: al.holes,
+        sallocs: al.sallocs,
         imports: [],
     )
     for r in al.saved
@@ -801,6 +803,12 @@ fn Gen.gen_inst(mut self, i mir.Inst)
                 a.mov_mr(at(r, i.imm), gpr(v, S1))
         "copy" =>
             parallel([move_of(loc[i.dst], i.arg(0))])
+        "salloc" =>
+            # The object's header word has the lowest address and its first
+            # field the next one up; slots count downwards from `rbp`.
+            d := out_gpr(i.dst, S1)
+            a.lea(d, slot(sallocs[i.dst] + i.imm / 8 - 1))
+            put_gpr(i.dst, d)
         _ => unreachable("x64: no code for `{i.op}`")
 
 fn Gen.arith(mut self, i mir.Inst)

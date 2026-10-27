@@ -1,0 +1,138 @@
+## Stack allocation of objects that are only lent to calls (native.stack.1).
+## `trace(spheres, light, p, r, depth + 1)` builds the vectors `p` and `r` for
+## one call and never touches them again; the callee only reads them. Such an
+## object lives in the caller's frame instead of the heap: a `salloc`
+## replaces its `rt.obj_new`, and the header word `rt.alloc` writes is stored
+## into the frame too.
+##
+## A parameter is borrowed when every use of it in its function is a `load`
+## or an argument for a borrowed parameter of a direct call (recursion
+## included: summaries start optimistic and lose a parameter when a use
+## fails). An allocation qualifies when it has constant size and kind 4 and
+## every use is a slot `load` or `store` or an argument for a borrowed
+## parameter; anything else (a return, a jump argument, a copy, a runtime
+## call, a store of the object itself) leaves it on the heap. The object is
+## then dead when the frame's next use of its `salloc` begins, since nothing
+## carries it between iterations or calls. `AIL_OPT_OFF=stack` turns the
+## pass off.
+
+## The largest object kept in a frame, in bytes.
+STACK_MAX_BYTES := 128
+
+## The most frame words (header words included) a function gives to objects.
+STACK_MAX_WORDS := 24
+
+fn st_is_struct(t Ty) bool
+    match t
+        Struct(_) => true
+        _ => false
+
+fn st_call_borrows(sum Map[str, List[bool]], name str, j int) bool
+    g := sum.get(name) else return false
+    j < g.len() and g[j]
+
+## Whether every use of parameter `p` of `f` borrows it.
+fn st_borrowed(f Func, p int, sum Map[str, List[bool]]) bool
+    for blk in f.blocks
+        for i in blk.insts
+            for j in 0..i.argc()
+                if i.arg(j) != p
+                    continue
+                if i.op == "load" and j == 0
+                    continue
+                if i.op == "call" and st_call_borrows(sum, i.name, j)
+                    continue
+                return false
+        if blk.term.uses().contains(p)
+            return false
+    true
+
+fn borrow_summaries(m Module) Map[str, List[bool]]
+    mut sum := Map[str, List[bool]]()
+    for f in m.funcs
+        if not f.name.starts_with("rt.")
+            sum[f.name] = [st_is_struct(f.vals[p]) for p in f.blocks[0].params]
+    mut changed := true
+    while changed
+        changed = false
+        for f in m.funcs
+            ok0 := sum.get(f.name) else continue
+            mut ok := ok0
+            ps := f.blocks[0].params
+            for j in 0..ps.len()
+                if ok[j] and not st_borrowed(f, ps[j], sum)
+                    ok[j] = false
+                    sum[f.name] = ok
+                    changed = true
+    sum
+
+pub fn stackify(mut m Module)
+    sum := borrow_summaries(m)
+    for k in 0..m.funcs.len()
+        if m.funcs[k].name.starts_with("rt.")
+            continue
+        mut f := m.funcs[k]
+        if stack_objects(mut f, sum)
+            m.funcs[k] = f
+
+## Move the qualifying allocations of `f` into its frame; returns whether any went.
+fn stack_objects(mut f Func, sum Map[str, List[bool]]) bool
+    n := f.vals.len()
+    mut consts := Map[int, int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "const" and i.dst >= 0
+                consts[i.dst] = i.imm
+    mut size := [0 for _ in 0..n]
+    mut found := false
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and i.argc() == 2
+                bytes := consts.get(i.arg(0)) else continue
+                tag := consts.get(i.arg(1)) else continue
+                if tag == 4 and bytes > 0 and bytes % 8 == 0 and bytes <= STACK_MAX_BYTES
+                    size[i.dst] = bytes
+                    found = true
+    if not found
+        return false
+    mut bad := [false for _ in 0..n]
+    for blk in f.blocks
+        for i in blk.insts
+            for j in 0..i.argc()
+                v := i.arg(j)
+                if v < 0 or size[v] == 0
+                    continue
+                lent := i.op == "call" and st_call_borrows(sum, i.name, j)
+                if not (((i.op == "load" or i.op == "store") and j == 0) or lent)
+                    bad[v] = true
+        for v in blk.term.uses()
+            if size[v] > 0
+                bad[v] = true
+    mut words := 0
+    mut take := [false for _ in 0..n]
+    for v in 0..n
+        if size[v] > 0 and not bad[v] and words + size[v] / 8 + 1 <= STACK_MAX_WORDS
+            take[v] = true
+            words += size[v] / 8 + 1
+    if words == 0
+        return false
+    for b in 0..f.blocks.len()
+        mut out := List[Inst]()
+        for i in f.blocks[b].insts
+            if i.op == "call" and i.dst >= 0 and take[i.dst]
+                h := f.vals.len()
+                f.vals.push(Ty.Int)
+                f.names.push("")
+                mut hdr := inst(h, "const", [])
+                hdr.imm = 4 + size[i.dst] * 65536
+                out.push(hdr)
+                mut sa := inst(i.dst, "salloc", [])
+                sa.imm = size[i.dst]
+                out.push(sa)
+                mut st := inst(-1, "store", [i.dst, h])
+                st.imm = -8
+                out.push(st)
+            else
+                out.push(i)
+        f.blocks[b].insts = out
+    true

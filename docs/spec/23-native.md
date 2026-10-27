@@ -515,6 +515,27 @@ fn main()
     print(go(P(x: 0.0, y: 3.0), 4))
 ```
 
+**native.stack.1** — A struct built in a function that nothing but calls and
+field accesses ever sees may live in the function's frame, not the heap: when
+every use is a field read or write, or an argument for a parameter that the
+callee only reads (or passes on to such a parameter), the object is not
+carried past the call, so each activation and each iteration has its own copy
+and the callee cannot keep it. *(ADR 0923)*
+
+```ail rules=native.stack.1
+struct P
+    x float
+    y float
+
+fn depth(p P, d int) float
+    if d == 0
+        return p.x + p.y
+    depth(P(x: p.x + 1.0, y: p.y * 2.0), d - 1)
+
+fn main()
+    print(depth(P(x: 0.0, y: 1.0), 3))
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is
@@ -613,11 +634,9 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-extern c fn sqrtf(x f32) f32
-
 fn main()
-    unsafe
-        print(sqrtf(4.0.to_f32()))
+    cs := ['b', 'a']
+    print(cs.sorted(by: |c| c))
 ```
 
 ```ail norun rules=native.build.2

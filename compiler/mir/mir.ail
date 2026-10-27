@@ -192,6 +192,7 @@ pub fn Ty.name(self) str
 ## | `stx` | base, index, value | writes that element (`index + fimm`); not checked |
 ## | `load` | object | the 8-byte slot at byte offset `imm` (a struct field) |
 ## | `store` | object, value | writes the slot at byte offset `imm` |
+## | `salloc` | | the address of the second word of `imm / 8 + 1` words in the function's frame (native.stack.1); the first word is the object header; written by the `stackify` pass, never by lowering |
 ## | `trap` | a, b | traps at `site`: the runtime's message `imm` (native-abi.md §7) on `a`, `b` and the text `name`; ends its block |
 pub struct Inst
     pub dst int
