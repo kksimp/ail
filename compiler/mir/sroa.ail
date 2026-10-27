@@ -1,0 +1,141 @@
+## Scalar replacement of struct objects that stay inside one function
+## (native.sroa.1). `Vec(x: a, y: b, z: c)` allocates an object, stores the
+## fields and hands it on; when the object is only ever read back with `load`
+## (after inlining, `a.add(b).scale(k)` is a chain of such objects) its fields
+## are the stored values, so the allocation, the stores and the loads go away.
+##
+## An object qualifies when its `rt.obj_new` has constant size and kind 4,
+## every use of it (and of its `copy`s) is a `load` or `store` slot access,
+## every slot is stored exactly once, in the block that allocates it, before
+## any load of that slot, and every slot that is read was stored with a value of
+## the load's type. Anything else (a call, a return, a jump argument, a store
+## of the object itself, a second store) leaves the allocation alone.
+## `AIL_OPT_OFF=sroa` turns the pass off.
+
+## The most slots of an object that is replaced.
+SROA_SLOTS := 16
+
+## Replace the qualifying objects of `f`; returns whether any went.
+pub fn sroa_in(mut f Func) bool
+    n := f.vals.len()
+    nb := f.blocks.len()
+    mut consts := Map[int, int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "const" and i.dst >= 0
+                consts[i.dst] = i.imm
+    mut root := [-1 for _ in 0..n]
+    mut cblk := [-1 for _ in 0..n]
+    mut cslots := [0 for _ in 0..n]
+    mut found := false
+    for b in 0..nb
+        for i in f.blocks[b].insts
+            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and i.argc() == 2
+                size := consts.get(i.arg(0)) else continue
+                kind := consts.get(i.arg(1)) else continue
+                if kind == 4 and size >= 0 and size % 8 == 0 and size / 8 <= SROA_SLOTS
+                    root[i.dst] = i.dst
+                    cblk[i.dst] = b
+                    cslots[i.dst] = size / 8
+                    found = true
+    if not found
+        return false
+    mut grew := true
+    while grew
+        grew = false
+        for b in 0..nb
+            for i in f.blocks[b].insts
+                if i.op == "copy" and i.dst >= 0 and root[i.arg(0)] >= 0 and root[i.dst] < 0
+                    root[i.dst] = root[i.arg(0)]
+                    grew = true
+    mut bad := [false for _ in 0..n]
+    for b in 0..nb
+        for i in f.blocks[b].insts
+            for j in 0..i.argc()
+                if i.arg(j) < 0
+                    continue
+                r := root[i.arg(j)]
+                if r < 0
+                    continue
+                ok := (i.op == "load" and j == 0) or (i.op == "store" and j == 0) or i.op == "copy"
+                if not ok
+                    bad[r] = true
+        for v in f.blocks[b].term.uses()
+            if root[v] >= 0
+                bad[root[v]] = true
+    # The one store of each slot: its value and where it sits.
+    mut sval := Map[int, int]()
+    mut sat := Map[int, int]()
+    for b in 0..nb
+        for at in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[at]
+            if i.op != "store" or root[i.arg(0)] < 0
+                continue
+            r := root[i.arg(0)]
+            k := i.imm / 8
+            key := r * 32 + k
+            if b != cblk[r] or i.imm % 8 != 0 or k >= cslots[r] or sval.contains(key)
+                bad[r] = true
+            else
+                sval[key] = i.arg(1)
+                sat[key] = at
+    for b in 0..nb
+        for at in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[at]
+            if i.op != "load" or root[i.arg(0)] < 0
+                continue
+            r := root[i.arg(0)]
+            key := r * 32 + i.imm / 8
+            if i.imm % 8 != 0 or not sval.contains(key)
+                bad[r] = true
+            elif b == cblk[r] and at < sat[key]
+                bad[r] = true
+            elif f.vals[sval[key]].name() != f.vals[i.dst].name()
+                bad[r] = true
+    mut repl := [v for v in 0..n]
+    mut gone := [[false for _ in blk.insts] for blk in f.blocks]
+    mut changed := false
+    for b in 0..nb
+        for at in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[at]
+            if i.op == "call"
+                and i.name == "rt.obj_new"
+                and i.dst >= 0
+                and root[i.dst] == i.dst
+                and not bad[i.dst]
+                gone[b][at] = true
+                changed = true
+            elif i.op == "copy" and i.dst >= 0 and root[i.dst] >= 0 and not bad[root[i.dst]]
+                gone[b][at] = true
+            elif (i.op == "store" or i.op == "load")
+                and root[i.arg(0)] >= 0
+                and not bad[root[i.arg(0)]]
+                gone[b][at] = true
+                if i.op == "load"
+                    repl[i.dst] = sval[root[i.arg(0)] * 32 + i.imm / 8]
+    if not changed
+        return false
+    mut g := f
+    for b in 0..nb
+        mut kept := List[Inst]()
+        for at in 0..g.blocks[b].insts.len()
+            if gone[b][at]
+                continue
+            i := g.blocks[b].insts[at]
+            kept.push(i.with_args([sr_resolve(repl, a) for a in i.operands()]))
+        g.blocks[b].insts = kept
+        mut t := g.blocks[b].term
+        if t.cond >= 0
+            t.cond = sr_resolve(repl, t.cond)
+        if t.value >= 0
+            t.value = sr_resolve(repl, t.value)
+        t.args = [[sr_resolve(repl, a) for a in edge] for edge in t.args]
+        g.blocks[b].term = t
+    f = g
+    true
+
+fn sr_resolve(repl List[int], v int) int
+    mut x := v
+    while repl[x] != x
+        x = repl[x]
+    x
