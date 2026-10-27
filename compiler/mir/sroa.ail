@@ -1,19 +1,43 @@
 ## Scalar replacement of struct objects that stay inside one function
-## (native.sroa.1). `Vec(x: a, y: b, z: c)` allocates an object, stores the
-## fields and hands it on; when the object is only ever read back with `load`
-## (after inlining, `a.add(b).scale(k)` is a chain of such objects) its fields
-## are the stored values, so the allocation, the stores and the loads go away.
+## (native.sroa.1, native.sroa.2). `Vec(x: a, y: b, z: c)` allocates an
+## object, stores the fields and hands it on; when the object is only ever
+## read back with `load` (after inlining, `a.add(b).scale(k)` is a chain of
+## such objects) its fields are the stored values, so the allocation, the
+## stores and the loads go away.
 ##
 ## An object qualifies when its `rt.obj_new` has constant size and kind 4,
 ## every use of it (and of its `copy`s) is a `load` or `store` slot access,
 ## every slot is stored exactly once, in the block that allocates it, before
 ## any load of that slot, and every slot that is read was stored with a value of
-## the load's type. Anything else (a call, a return, a jump argument, a store
-## of the object itself, a second store) leaves the allocation alone.
+## the load's type. Anything else (a call, a return, a store of the object
+## itself, a second store) leaves the allocation alone.
+##
+## Objects may also meet at a block's parameter (a `mut` variable assigned in
+## a branch or a loop): the objects and parameters joined by jump arguments
+## form one group, and when the whole group qualifies the parameter becomes
+## one parameter per slot, each jump passing the slots of its object.
 ## `AIL_OPT_OFF=sroa` turns the pass off.
 
 ## The most slots of an object that is replaced.
 SROA_SLOTS := 16
+
+fn sr_is_struct(t Ty) bool
+    match t
+        Struct(_) => true
+        _ => false
+
+fn sr_find(uf List[int], x int) int
+    mut r := x
+    while uf[r] != r
+        r = uf[r]
+    r
+
+## The object or parameter a chain of `copy`s starts from.
+fn sr_base(src List[int], x int) int
+    mut r := x
+    while src[r] >= 0
+        r = src[r]
+    r
 
 ## Replace the qualifying objects of `f`; returns whether any went.
 pub fn sroa_in(mut f Func) bool
@@ -24,7 +48,10 @@ pub fn sroa_in(mut f Func) bool
         for i in blk.insts
             if i.op == "const" and i.dst >= 0
                 consts[i.dst] = i.imm
-    mut root := [-1 for _ in 0..n]
+    # kind: 1 an allocation, 2 a copy of a member, 3 a struct block parameter.
+    mut kind := [0 for _ in 0..n]
+    mut src := [-1 for _ in 0..n]
+    mut uf := [v for v in 0..n]
     mut cblk := [-1 for _ in 0..n]
     mut cslots := [0 for _ in 0..n]
     mut found := false
@@ -32,90 +59,177 @@ pub fn sroa_in(mut f Func) bool
         for i in f.blocks[b].insts
             if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and i.argc() == 2
                 size := consts.get(i.arg(0)) else continue
-                kind := consts.get(i.arg(1)) else continue
-                if kind == 4 and size >= 0 and size % 8 == 0 and size / 8 <= SROA_SLOTS
-                    root[i.dst] = i.dst
+                tag := consts.get(i.arg(1)) else continue
+                if tag == 4 and size >= 0 and size % 8 == 0 and size / 8 <= SROA_SLOTS
+                    kind[i.dst] = 1
                     cblk[i.dst] = b
                     cslots[i.dst] = size / 8
                     found = true
     if not found
         return false
+    for b in 1..nb
+        for p in f.blocks[b].params
+            if sr_is_struct(f.vals[p])
+                kind[p] = 3
     mut grew := true
     while grew
         grew = false
         for b in 0..nb
             for i in f.blocks[b].insts
-                if i.op == "copy" and i.dst >= 0 and root[i.arg(0)] >= 0 and root[i.dst] < 0
-                    root[i.dst] = root[i.arg(0)]
+                if i.op == "copy" and i.dst >= 0 and kind[i.arg(0)] > 0 and kind[i.dst] == 0
+                    kind[i.dst] = 2
+                    src[i.dst] = i.arg(0)
+                    uf[sr_find(uf, i.dst)] = sr_find(uf, i.arg(0))
                     grew = true
-    mut bad := [false for _ in 0..n]
+    # Objects and parameters joined by jump arguments are one group.
+    mut flagged := List[int]()
+    for b in 0..nb
+        t := f.blocks[b].term
+        for e in 0..t.targets.len()
+            ps := f.blocks[t.targets[e]].params
+            for j in 0..ps.len()
+                if kind[ps[j]] != 3
+                    continue
+                a := t.args[e][j]
+                if kind[a] == 0
+                    flagged.push(ps[j])
+                else
+                    uf[sr_find(uf, a)] = sr_find(uf, ps[j])
+    # How members are used: anything but slot access, `copy` and an edge into
+    # a struct parameter spoils the group.
     for b in 0..nb
         for i in f.blocks[b].insts
             for j in 0..i.argc()
-                if i.arg(j) < 0
+                v := i.arg(j)
+                if v < 0 or kind[v] == 0
                     continue
-                r := root[i.arg(j)]
-                if r < 0
-                    continue
-                ok := (i.op == "load" and j == 0) or (i.op == "store" and j == 0) or i.op == "copy"
+                ok := ((i.op == "load" or i.op == "store") and j == 0) or i.op == "copy"
                 if not ok
-                    bad[r] = true
-        for v in f.blocks[b].term.uses()
-            if root[v] >= 0
-                bad[root[v]] = true
+                    flagged.push(v)
+        t := f.blocks[b].term
+        if t.cond >= 0 and kind[t.cond] > 0
+            flagged.push(t.cond)
+        if t.value >= 0 and kind[t.value] > 0
+            flagged.push(t.value)
+        for e in 0..t.targets.len()
+            ps := f.blocks[t.targets[e]].params
+            for j in 0..t.args[e].len()
+                if kind[t.args[e][j]] > 0 and kind[ps[j]] != 3
+                    flagged.push(t.args[e][j])
+    mut gbad := [false for _ in 0..n]
+    for v in flagged
+        gbad[sr_find(uf, v)] = true
     # The one store of each slot: its value and where it sits.
     mut sval := Map[int, int]()
     mut sat := Map[int, int]()
     for b in 0..nb
         for at in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[at]
-            if i.op != "store" or root[i.arg(0)] < 0
+            if i.op != "store" or kind[i.arg(0)] == 0
                 continue
-            r := root[i.arg(0)]
+            a := sr_base(src, i.arg(0))
+            g := sr_find(uf, a)
             k := i.imm / 8
-            key := r * 32 + k
-            if b != cblk[r] or i.imm % 8 != 0 or k >= cslots[r] or sval.contains(key)
-                bad[r] = true
+            key := a * 32 + k
+            if kind[a] != 1
+                or b != cblk[a]
+                or i.imm % 8 != 0
+                or k >= cslots[a]
+                or sval.contains(key)
+                gbad[g] = true
             else
                 sval[key] = i.arg(1)
                 sat[key] = at
-    for b in 0..nb
-        for at in 0..f.blocks[b].insts.len()
-            i := f.blocks[b].insts[at]
-            if i.op != "load" or root[i.arg(0)] < 0
+    # Every slot of every object is stored, and the objects of a group agree
+    # on how many slots there are and what they hold.
+    mut gslots := [0 for _ in 0..n]
+    mut gty := Map[int, Ty]()
+    for a in 0..n
+        if kind[a] != 1
+            continue
+        g := sr_find(uf, a)
+        if gslots[g] == 0
+            gslots[g] = cslots[a]
+        elif gslots[g] != cslots[a]
+            gbad[g] = true
+        for k in 0..cslots[a]
+            key := a * 32 + k
+            if not sval.contains(key)
+                gbad[g] = true
                 continue
-            r := root[i.arg(0)]
-            key := r * 32 + i.imm / 8
-            if i.imm % 8 != 0 or not sval.contains(key)
-                bad[r] = true
-            elif b == cblk[r] and at < sat[key]
-                bad[r] = true
-            elif f.vals[sval[key]].name() != f.vals[i.dst].name()
-                bad[r] = true
-    mut repl := [v for v in 0..n]
-    mut gone := [[false for _ in blk.insts] for blk in f.blocks]
-    mut changed := false
+            t := f.vals[sval[key]]
+            if gty.contains(g * 32 + k)
+                if gty[g * 32 + k].name() != t.name()
+                    gbad[g] = true
+            else
+                gty[g * 32 + k] = t
+    for v in 0..n
+        if kind[v] > 0 and gslots[sr_find(uf, v)] == 0
+            gbad[sr_find(uf, v)] = true
     for b in 0..nb
         for at in 0..f.blocks[b].insts.len()
             i := f.blocks[b].insts[at]
-            if i.op == "call"
-                and i.name == "rt.obj_new"
-                and i.dst >= 0
-                and root[i.dst] == i.dst
-                and not bad[i.dst]
-                gone[b][at] = true
-                changed = true
-            elif i.op == "copy" and i.dst >= 0 and root[i.dst] >= 0 and not bad[root[i.dst]]
-                gone[b][at] = true
-            elif (i.op == "store" or i.op == "load")
-                and root[i.arg(0)] >= 0
-                and not bad[root[i.arg(0)]]
-                gone[b][at] = true
-                if i.op == "load"
-                    repl[i.dst] = sval[root[i.arg(0)] * 32 + i.imm / 8]
-    if not changed
+            if i.op != "load" or kind[i.arg(0)] == 0
+                continue
+            a := sr_base(src, i.arg(0))
+            g := sr_find(uf, a)
+            k := i.imm / 8
+            if i.imm % 8 != 0 or k >= gslots[g]
+                gbad[g] = true
+            elif gbad[g]
+                continue
+            elif f.vals[i.dst].name() != gty[g * 32 + k].name()
+                gbad[g] = true
+            elif kind[a] == 1 and b == cblk[a] and at < sat[a * 32 + k]
+                gbad[g] = true
+    # New parameters: one per slot of each parameter of a group that goes.
+    mut newp := Map[int, int]()
+    mut live := 0
+    for v in 0..n
+        if kind[v] == 0 or gbad[sr_find(uf, v)]
+            continue
+        if kind[v] == 1
+            live += 1
+        if kind[v] == 3
+            g := sr_find(uf, v)
+            for k in 0..gslots[g]
+                newp[v * 32 + k] = f.vals.len()
+                f.vals.push(gty[g * 32 + k])
+                f.names.push("")
+    if live == 0
         return false
     mut g := f
+    n2 := g.vals.len()
+    mut repl := [v for v in 0..n2]
+    mut gone := [[false for _ in blk.insts] for blk in f.blocks]
+    for b in 0..nb
+        for at in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[at]
+            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and kind[i.dst] == 1
+                if not gbad[sr_find(uf, i.dst)]
+                    gone[b][at] = true
+            elif i.op == "copy" and i.dst >= 0 and kind[i.dst] == 2
+                if not gbad[sr_find(uf, i.dst)]
+                    gone[b][at] = true
+            elif (i.op == "store" or i.op == "load") and kind[i.arg(0)] > 0
+                a := sr_base(src, i.arg(0))
+                if not gbad[sr_find(uf, a)]
+                    gone[b][at] = true
+                    if i.op == "load"
+                        key := a * 32 + i.imm / 8
+                        repl[i.dst] = if kind[a] == 1 then sval[key] else newp[key]
+    # Rebuild: parameters and jump arguments first.
+    for b in 0..nb
+        mut ps := List[int]()
+        mut slots := List[int]()
+        for p in g.blocks[b].params
+            if kind[p] == 3 and not gbad[sr_find(uf, p)]
+                for k in 0..gslots[sr_find(uf, p)]
+                    slots.push(newp[p * 32 + k])
+            else
+                ps.push(p)
+        ps.extend(slots)
+        g.blocks[b].params = ps
     for b in 0..nb
         mut kept := List[Inst]()
         for at in 0..g.blocks[b].insts.len()
@@ -129,7 +243,26 @@ pub fn sroa_in(mut f Func) bool
             t.cond = sr_resolve(repl, t.cond)
         if t.value >= 0
             t.value = sr_resolve(repl, t.value)
-        t.args = [[sr_resolve(repl, a) for a in edge] for edge in t.args]
+        mut edges := List[List[int]]()
+        for e in 0..t.targets.len()
+            tp := f.blocks[t.targets[e]].params
+            mut plain := List[int]()
+            mut spread := List[int]()
+            for j in 0..t.args[e].len()
+                a := t.args[e][j]
+                if kind[tp[j]] == 3 and not gbad[sr_find(uf, tp[j])]
+                    base := sr_base(src, a)
+                    for k in 0..gslots[sr_find(uf, tp[j])]
+                        key := base * 32 + k
+                        spread.push(sr_resolve(
+                            repl,
+                            if kind[base] == 1 then sval[key] else newp[key],
+                        ))
+                else
+                    plain.push(sr_resolve(repl, a))
+            plain.extend(spread)
+            edges.push(plain)
+        t.args = edges
         g.blocks[b].term = t
     f = g
     true
