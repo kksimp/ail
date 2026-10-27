@@ -670,9 +670,11 @@ fn Gate.cli_effects(mut self, tmp str)
         red("--deny io", "exit {d.status}\n{d.err}")
     fs.write_text(main, "use std.env\n\nfn main()\n    print(env.cwd())\n") else return
     root := repo_root()
-    w := sh_run("cd {dir}/gone && rmdir {dir}/gone && exec {bin_path(root)} run {main}")
-    if w.status != 1 or not w.err.contains("trap[std.env.3]")
-        red("env.cwd removed", "exit {w.status}\n{w.err}")
+    # Windows refuses to remove a directory a process is in, so std.env.3 can't be reached there.
+    if (env.get("OS") else "") != "Windows_NT"
+        w := sh_run("cd {dir}/gone && rmdir {dir}/gone && exec {bin_path(root)} run {main}")
+        if w.status != 1 or not w.err.contains("trap[std.env.3]")
+            red("env.cwd removed", "exit {w.status}\n{w.err}")
     for t in [["print(io.read_line())", "std.io.1"], ["print(io.read_all().len())", "std.io.2"]]
         fs.write_text(main, "use std.io\n\nfn main()\n    {t[0]}\n") else return
         i := sh_run("{bin_path(root)} run {main} < {dir}")
