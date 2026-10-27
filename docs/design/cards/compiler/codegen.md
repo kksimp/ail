@@ -21,6 +21,7 @@ pub struct codegen.Alloc
     pub wrap int  ## The block where the callee-saved registers are saved, or -1 for the
     pub region List[bool]
     pub holes List[codegen.Hole]  ## Moves around loops a value is idle in (ADR 0848).
+    pub sallocs Map[int, int]  ## For each `salloc`, the slot number (`SLOT_BASE + k`) of the first of
 pub struct codegen.Hole  ## A value kept in a stack slot across a loop that never touches it, so the
     pub block int
     pub store bool
@@ -72,4 +73,4 @@ pub fn codegen.wrap_block(f mir.Func, order List[int], dom List[List[bool]], blo
 pub fn codegen.div_magic(d int) List[int]  ## Division by the constant `d` (3 <= d < 2^31) with a multiply, after
 ```
 
-trimmed to fit 2000 tokens (~1444); dropped: private items
+trimmed to fit 2000 tokens (~1479); dropped: private items
