@@ -10,8 +10,8 @@ fmt plain compiler/api/ask.ail	d132d5d24b39b3d8	0	53f6acde666781a5
 fmt long compiler/api/ask.ail	d132d5d24b39b3d8	0	8bbceb1157c08baf
 fmt plain compiler/api/card.ail	8337f727c55658f8	0	b87edb8345c6ead0
 fmt long compiler/api/card.ail	8337f727c55658f8	0	b4afba71b355a699
-fmt plain compiler/api/diff.ail	a3755c25c0627def	0	1102f2c696ed31ed
-fmt long compiler/api/diff.ail	a3755c25c0627def	0	ecfe172bf63fe0c2
+fmt plain compiler/api/diff.ail	1b545f15086a3177	0	a9fa5ce201039ed0
+fmt long compiler/api/diff.ail	1b545f15086a3177	0	3823623895a1604e
 fmt plain compiler/api/errors.ail	32a5abf4fd09b872	0	d011bcf9d429d37b
 fmt long compiler/api/errors.ail	32a5abf4fd09b872	0	09a6803dd12777d5
 fmt plain compiler/api/expanded.ail	ebd9b911267435e2	0	e91c666b5755c42e
@@ -386,8 +386,8 @@ fmt plain compiler/rt/native/checked.ail	1013b564a4e45aaf	0	661414bf4d40e77a
 fmt long compiler/rt/native/checked.ail	1013b564a4e45aaf	0	5abd52051b2f04c8
 fmt plain compiler/rt/native/compress.ail	47e878da4920ba00	0	b84d496a6bfbc35b
 fmt long compiler/rt/native/compress.ail	47e878da4920ba00	0	5b1d71ab6547f42e
-fmt plain compiler/rt/native/core.ail	3d591de9d3af8d69	0	899f5043ca468213
-fmt long compiler/rt/native/core.ail	3d591de9d3af8d69	0	163179852b85e1df
+fmt plain compiler/rt/native/core.ail	0c6605aadb367a82	0	899f5043ca468213
+fmt long compiler/rt/native/core.ail	0c6605aadb367a82	0	163179852b85e1df
 fmt plain compiler/rt/native/ctsteps.ail	2eda64d9e292fa00	0	1e3ab1686ae93926
 fmt long compiler/rt/native/ctsteps.ail	2eda64d9e292fa00	0	bd940a119a75d9b2
 fmt plain compiler/rt/native/err.ail	5d63645b729464b9	0	0f95b262b4df9423
@@ -4120,8 +4120,8 @@ fmt plain tools/fuzz/suite.ail	05b76ba4ee034148	0	f18f8ac7c06e99e1
 fmt long tools/fuzz/suite.ail	05b76ba4ee034148	0	506bd9a8943a6e3c
 fmt plain tools/gate/asm.ail	6ccb1b476c70a792	0	a7b2e0cb83aad36a
 fmt long tools/gate/asm.ail	6ccb1b476c70a792	0	fe69c8228658d7a1
-fmt plain tools/gate/gate.ail	daec8cd938235060	0	125c7be64fc17459
-fmt long tools/gate/gate.ail	daec8cd938235060	0	cc4aa15175e97864
+fmt plain tools/gate/gate.ail	a24819d243c94753	0	723d9bf12aef1992
+fmt long tools/gate/gate.ail	a24819d243c94753	0	cd2312395adec4ee
 fmt plain tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	cefff86c796ed587
 fmt long tools/gate/globals.ail	1d5d0ab89cdfe6c2	0	7e124b641dbf1cab
 fmt plain tools/gate/goldens.ail	33c251dd83e47eac	0	9f0e88b90b7ded6c
