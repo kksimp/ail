@@ -33,7 +33,8 @@ struct Gate
     unbuilt List[str]
 
 fn temp_dir() str
-    raw := env.get("TMPDIR") else "/tmp"
+    # A Windows TMPDIR has backslashes, which `sh -c` scripts would eat: use `/`, which Windows takes too.
+    raw := (env.get("TMPDIR") else "/tmp").replace("\\", "/")
     base := if raw.len() > 1 and raw.ends_with("/") then raw.slice(0, raw.len() - 1) else raw
     # Not `ail-gate`: mac-gate.sh keeps its logs there.
     "{base}/ail-gate-ail"

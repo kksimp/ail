@@ -582,6 +582,11 @@ fn win_launch(cmd str, args List[int], at str, st int, ibuf int) int
     nargs := load64(al)
     data := load64(al + 16)
     script := win_is_script(exe)
+    if script
+        # cmd.exe reads `/` in a command word as a switch (`./ail.cmd` is "'.' is not recognized"): use `\`.
+        for k in 0..os_c_len(exe)
+            if load8(exe + k) == 47
+                store8(exe + k, 92)
     mut total := load64(str_addr(cmd)) + os_c_len(exe) + 8
     for i in 0..nargs
         total += 2 * load64(load64(data + 8 * i)) + 4
