@@ -31,6 +31,10 @@ Per [ADR 0028](docs/decisions/0028-git-workflow.md):
   designer's machines (the Mac, `ail-linux`, `ail-win`), never in a cloud
   container. There is no cargo; `./ail selftest` is the native gate suites
   (ADR 0865) and `ail test` runs a program's tests.
+- **Windows release rule ([ADR 0925](docs/decisions/0925-windows-release-gate.md)):**
+  the gate harness stays Unix-shaped, but before every release (published seed
+  or tag) the `native`, `examples` and `run` suites must be green on ail-win,
+  built with the tree's own stage-2 compiler.
 - **Merging ([ADR 0109](docs/decisions/0109-merge-via-pull-requests.md)):** when
   the gate passes, open a pull request for the branch and merge it through GitHub.
   GitHub deletes the branch on merge (repository setting).
