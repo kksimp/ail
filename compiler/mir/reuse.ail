@@ -105,7 +105,7 @@ fn keeps_nothing(i Inst, a int, by_name Map[str, int], free List[List[bool]]) bo
         "copy" => true
         "get" | "len" | "cap" | "data" => true
         "set" => a < 2
-        "ldx" => true
+        "ldx" | "bounds" => true
         "stx" => a < 2
         "store" => a == 0
         "load" => true

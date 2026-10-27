@@ -47,7 +47,8 @@ struct Stub
     op str
     ## 1: the result overwrote `a`, which is result - b (an add); 2: result + b
     ## (a sub); 3: the second operand was overwritten by a sum with the first,
-    ## a constant. The stub undoes it before reporting.
+    ## a constant; 4: `b` is already the list's length (`bounds`). The stub
+    ## undoes it before reporting.
     undo int
 
 struct Gen
@@ -761,6 +762,7 @@ fn Gen.gen_inst(mut self, i mir.Inst)
         "prim" => prim(i)
         "get" => list_get(i)
         "set" => list_set(i)
+        "bounds" => bounds(i)
         "data" =>
             d := out_gpr(i.dst, S1)
             a.mov_rm(d, at(gpr(i.arg(0), S0), 16))
@@ -1391,6 +1393,19 @@ fn Gen.list_index(mut self, i mir.Inst, size int) Mem
     a.mov_rm(RAX, at(l, 16))
     at_index(RAX, x, size, 0)
 
+## `bounds idx, len`: the check of a `get` or `set` whose list header was
+## hoisted out of a loop (ADR 0890): trap at `site` unless `0 <= idx < len`.
+## The stub gets the length itself, not the list.
+fn Gen.bounds(mut self, i mir.Inst)
+    l := gpr(i.arg(1), S0)
+    if k := imm32(i.arg(0))
+        a.alu_ri("cmp", l, k)
+        a.jcc(CC_BE, stub(3, i.arg(0), i.arg(1), i.site, ""))
+    else
+        a.alu_rr("cmp", gpr(i.arg(0), S1), l)
+        a.jcc(CC_AE, stub(3, i.arg(0), i.arg(1), i.site, ""))
+    stubs[stubs.len() - 1].undo = 4
+
 fn Gen.list_get(mut self, i mir.Inst)
     t := f.vals[i.dst]
     if t.is_float()
@@ -1502,7 +1517,7 @@ fn Gen.gen_stubs(mut self)
             a.alu_rr("add", RSI, RDX)
         elif s.undo == 3
             a.alu_rr("sub", RDX, RSI)
-        if s.kind == 3
+        if s.kind == 3 and s.undo != 4
             # The list's length.
             a.mov_rm(RDX, at(RDX, 0))
         a.call_sym("rt.trap")

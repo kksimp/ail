@@ -5,12 +5,13 @@ fn norm(v0:xs List[float]) float
     v1:s float = fconst 0.0
     v2 int = const 0
     v3 int = len v0:xs
+    v14 int = data v0:xs
     jump b1(v2, v1:s)
   b1(v4 int, v7:s float):
     v5 bool = lt v4, v3
     branch v5, b2(), b3()
   b2:
-    v6:x float = get v0:xs, v4
+    v6:x float = ldx v14, v4 *8
     v8 float = fmul v6:x, v6:x
     v9 float = fadd v7:s, v8
     v10 int = const 1
@@ -43,12 +44,13 @@ fn main() unit
     set v1:xs, v0, v14 !s1
     v16 List[int] = call rt.list_copy(v1:xs, v11)
     v18 int = len v16
+    v92 int = data v16
     jump b4(v0)
   b4(v19 int):
     v20 bool = lt v19, v18
     branch v20, b5(), b6()
   b5:
-    v21:x int = get v16, v19
+    v21:x int = ldx v92, v19 *8
     v22 int = const 4
     v23 bool = gt v21:x, v22
     branch v23, b8(), b10()
@@ -68,6 +70,7 @@ fn main() unit
     call rt.list_pushf(v46, v45)
     v65:s float = fconst 0.0
     v67 int = len v46
+    v94 int = data v46
     jump b17(v0, v65:s)
   b7:
     v33 int = const 1
@@ -106,7 +109,7 @@ fn main() unit
     v69 bool = lt v68, v67
     branch v69, b18(), b19()
   b18:
-    v70:x float = get v46, v68
+    v70:x float = ldx v94, v68 *8
     v72 float = fmul v70:x, v70:x
     v73 float = fadd v71:s, v72
     v74 int = const 1

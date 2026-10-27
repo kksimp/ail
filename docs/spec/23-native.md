@@ -417,6 +417,25 @@ fn main()
     print(total)
 ```
 
+**native.bce.11** — A loop that only reads and writes the elements of a
+list it did not make (`xs[i]`, `xs[i] = v`, `xs.len()`) may read the list's
+length and element pointer once, before the loop, and use them for every
+access: the lists are a parameter of the function or the result of a call,
+defined outside the loop, and the loop neither passes one to a call, pushes
+to it, nor uses it in any other way. Each check keeps its place, its index,
+its site and the length it reports, so a trap is the same. *(ADR 0890)*
+
+```ail rules=native.bce.11
+fn dot(a List[int], b List[int], n int) int
+    mut s := 0
+    for i in 0..n
+        s += a[i] * b[i]
+    s
+
+fn main()
+    print(dot([1, 2, 3], [4, 5, 6], 3))
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is
@@ -434,6 +453,44 @@ fn main()
         rows.push(row)
     print(rows)
 ```
+**native.sroa.1** — A struct built in a function and only read back there
+(its fields read by `.f`, never returned, stored, passed to a call, joined at a
+block or changed after it is built) may have no object: the field reads use
+the values it was built from. Constructors that only build their result
+(`Vec.add`) are inlined into their callers first, so that chains such as
+`a.sub(b).unit()` qualify. Nothing a program can observe changes, only the
+allocation. `AIL_OPT_OFF=sroa` turns it off. *(ADR 0923)*
+
+```ail rules=native.sroa.1
+struct P
+    x float
+    y float
+
+fn P.add(self, o P) P
+    P(x: x + o.x, y: y + o.y)
+
+fn main()
+    a := P(x: 1.0, y: 2.0)
+    print(a.add(a).add(a).y)
+```
+
+**native.sroa.2** — Struct objects that meet at a block parameter (a `mut`
+variable assigned in a branch or carried round a loop) may also have no
+object, when each of them qualifies under native.sroa.1 and the parameter is
+only read by field access: the parameter becomes one parameter per field. *(ADR 0923)*
+
+```ail rules=native.sroa.2
+struct P
+    x float
+    y float
+
+fn main()
+    mut p := P(x: 1.0, y: 2.0)
+    for i in 0..3
+        p = P(x: p.x + 1.0, y: p.y * 2.0)
+    print(p.y)
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is

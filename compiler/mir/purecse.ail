@@ -54,7 +54,7 @@ fn pc_facts_of(f Func) PcFacts
             elif pc_arith_op(i.op)
                 if i.site >= 0
                     fa.traps = true
-            elif i.op == "ftoi" or i.op == "trap" or i.op == "utrap"
+            elif i.op == "ftoi" or i.op == "trap" or i.op == "utrap" or i.op == "bounds"
                 fa.traps = true
             elif i.op == "get" or i.op == "ldx"
                 fa.reads = true
@@ -156,6 +156,8 @@ fn pc_may_write(i Inst, fx Map[str, PcFx]) bool
         e := fx.get(i.name) else return true
         return not e.readonly
     if pc_arith_op(i.op) or i.op == "get" or i.op == "ldx" or i.op == "len" or i.op == "cap"
+        return false
+    if i.op == "bounds"
         return false
     if i.op == "data" or i.op == "load" or i.op == "ftoi"
         return false

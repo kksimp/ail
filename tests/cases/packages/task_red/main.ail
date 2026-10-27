@@ -1,0 +1,2 @@
+fn main()
+    print(undefined_name)
