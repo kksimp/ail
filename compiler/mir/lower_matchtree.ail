@@ -6,6 +6,8 @@
 ## those of the in-order test, since no two arms test the same value (the
 ## first one wins) and a pattern tests only its values.
 
+use ast
+
 ## The fewest distinct values for which the tree is built.
 MATCH_TREE_MIN := 5
 
