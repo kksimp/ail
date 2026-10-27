@@ -3838,12 +3838,12 @@ api --pretty tests/cases/std_net_shutdown.ail	67b1cbf194c3f152	0	a45e81cfa67a570
 api --symbols tests/cases/std_net_shutdown.ail	67b1cbf194c3f152	0	645ac698ed2ed0a8
 api --tokens tests/cases/std_net_shutdown.ail	67b1cbf194c3f152	0	c05d241a8b23b755
 api --ast tests/cases/std_net_shutdown.ail	67b1cbf194c3f152	0	eec7d91e6e0f4b22
-api  tests/cases/std_net_stop.ail	e3741507c0acca97	0	346d5ad865270e9d
-api --text tests/cases/std_net_stop.ail	e3741507c0acca97	0	2f4837ff68106c9e
-api --pretty tests/cases/std_net_stop.ail	e3741507c0acca97	0	05349e9747109024
-api --symbols tests/cases/std_net_stop.ail	e3741507c0acca97	0	40b291ae592c5143
-api --tokens tests/cases/std_net_stop.ail	e3741507c0acca97	0	add1f28e83eb235d
-api --ast tests/cases/std_net_stop.ail	e3741507c0acca97	0	13358a612c2c7b3a
+api  tests/cases/std_net_stop.ail	bd1361950bb94f76	0	b243caa9d5169c5e
+api --text tests/cases/std_net_stop.ail	bd1361950bb94f76	0	aaf717637390c556
+api --pretty tests/cases/std_net_stop.ail	bd1361950bb94f76	0	7adc359e4cdc38df
+api --symbols tests/cases/std_net_stop.ail	bd1361950bb94f76	0	b58b329b94900fed
+api --tokens tests/cases/std_net_stop.ail	bd1361950bb94f76	0	58ca6ec04110531e
+api --ast tests/cases/std_net_stop.ail	bd1361950bb94f76	0	d8873e9dd2952091
 api  tests/cases/std_net_stream.ail	27e03cb9f83c1251	0	6e2c22c2fd0084f2
 api --text tests/cases/std_net_stream.ail	27e03cb9f83c1251	0	3d222a1b159387e4
 api --pretty tests/cases/std_net_stream.ail	27e03cb9f83c1251	0	2f5468f1b6bee7ca
@@ -6232,10 +6232,10 @@ api --diff  tests/cases/std_net_serve.ail tests/cases/std_net_server_limits.ail	
 api --diff --json tests/cases/std_net_serve.ail tests/cases/std_net_server_limits.ail	cc5f6dc32bb6cb50	0	b871455267cfd2ea
 api --diff  tests/cases/std_net_server_limits.ail tests/cases/std_net_shutdown.ail	10886188ec68ecc4	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_net_server_limits.ail tests/cases/std_net_shutdown.ail	10886188ec68ecc4	0	7915c383fad49245
-api --diff  tests/cases/std_net_shutdown.ail tests/cases/std_net_stop.ail	76bb63bb71e96988	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_net_shutdown.ail tests/cases/std_net_stop.ail	76bb63bb71e96988	0	dd2f11fbde89db29
-api --diff  tests/cases/std_net_stop.ail tests/cases/std_net_stream.ail	3813c183ad9f75bd	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/std_net_stop.ail tests/cases/std_net_stream.ail	3813c183ad9f75bd	0	4065c58ddcdcb5a0
+api --diff  tests/cases/std_net_shutdown.ail tests/cases/std_net_stop.ail	08c0c9539a14d1b2	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_net_shutdown.ail tests/cases/std_net_stop.ail	08c0c9539a14d1b2	0	dd2f11fbde89db29
+api --diff  tests/cases/std_net_stop.ail tests/cases/std_net_stream.ail	b7bccab998daebd5	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/std_net_stop.ail tests/cases/std_net_stream.ail	b7bccab998daebd5	0	4065c58ddcdcb5a0
 api --diff  tests/cases/std_net_stream.ail tests/cases/std_net_tcp.ail	52ecd3cd61a25ffe	0	1da7cd571ff6c0f4
 api --diff --json tests/cases/std_net_stream.ail tests/cases/std_net_tcp.ail	52ecd3cd61a25ffe	0	8966d222243e1ee0
 api --diff  tests/cases/std_net_tcp.ail tests/cases/std_net_timeouts.ail	aa96dfd6cacdd91f	0	1da7cd571ff6c0f4
