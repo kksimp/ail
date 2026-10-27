@@ -50,6 +50,13 @@ if ($cmd -in 'run', 'test') {
     $rest = $kept
 }
 
+# run.limit.4: the limit options belong to `run` and `test`; `check` with one is a usage error.
+if ($cmd -eq 'check') {
+    foreach ($a in $rest) {
+        if ("$a" -in '--timeout', '--max-memory', '--max-steps') { Fail "error[run.limit.4]: ``$a`` works with ``ail run`` and ``ail test`` (run.limit.4)" }
+    }
+}
+
 # Tracing and recording belong to `run` and `test` (trace.run.1, replay.rec.1).
 if ($cmd -notin 'run', 'test') {
     foreach ($a in $rest) {
@@ -80,7 +87,7 @@ if ($cmd -eq 'run') {
         $v = if ($k + 1 -lt $rest.Count) { [string]$rest[$k + 1] } else { '' }
         switch -Regex ($a) {
             '^(--timeout|--max-memory)$' {
-                if ($v -notmatch '^\d+$') { break scan }
+                if ($v -notmatch '^[1-9]\d*$') { Fail "error[run.limit.4]: ``$a`` needs a positive whole number (run.limit.4)" }
                 $runOpts += @($a, $v); $k += 2; continue
             }
             '^--(budget|from|json|record|replay)$' { Fail "``$a`` is not native on Windows yet (run it on Linux or macOS)" }
