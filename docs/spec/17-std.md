@@ -304,7 +304,7 @@ fn main()
 ```
 
 **std.env.5** — `vars() Map[str, str]` returns the environment variables
-whose names and values are UTF-8, in order of their names' bytes.
+whose names and values are UTF-8, in order of their names' bytes. On Windows, where names ignore case, they are ASCII capitals.
 *(ADR 0282)*
 
 ```ail rules=std.env.5

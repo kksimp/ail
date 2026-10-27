@@ -630,6 +630,9 @@ fn serve_accept(h int, at str) int
         if r == -4
             continue
         if r != -11 and r != -35
+            # A server closed by another task under the accept (Windows reports the socket, not the server) is `closed`.
+            if net_obj(h) == 0
+                return serve_closed(at)
             return net_fail("", net_errno_kind(-r), "can't accept a connection", at)
         # A cancelled task ends its wait (std.net.9).
         if task_cancelled()
@@ -650,6 +653,8 @@ fn serve_accept(h int, at str) int
             store64(pf + 8 * (k + 1), pfd.bit_and(4294967295).bit_or(1.shl(32)))
         w := serve_poll(pf, n + 1, 50)
         if w < 0
+            if net_obj(h) == 0
+                return serve_closed(at)
             return net_fail("", net_errno_kind(-w), "can't accept a connection", at)
         if w > 0
             for k in 0..n
