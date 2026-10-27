@@ -47,6 +47,8 @@ pub fn inline_module(mut out Module)
         out.funcs[k] = f
     if not opt_off("sroa")
         late_inline(mut out)
+    if not opt_off("stack") and not opt_off("sret")
+        sret_convert(mut out)
     if not opt_off("stack")
         stackify(mut out)
     for k in 0..out.funcs.len()
