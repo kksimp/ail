@@ -145,12 +145,15 @@ fn late_inline(mut out Module)
         fresh := fresh_objects(f)
         if fresh.len() == 0
             continue
+        # Unrolling needs a body with no other calls (it keeps one frame per
+        # call), so a function that will be unrolled has every callee inlined.
+        every := gives_fresh_to_self(f, fresh)
         mut done := 0
         mut again := true
         while again and done < LATE_BUDGET
             again = false
             for b in 0..f.blocks.len()
-                at := first_fresh_call(f.blocks[b], leaves, f.name, fresh)
+                at := first_fresh_call(f.blocks[b], leaves, f.name, fresh, every)
                 if at >= 0
                     callee := bodies[f.blocks[b].insts[at].name]
                     inline_call(mut f, b, at, callee, mut out.sites)
@@ -158,7 +161,7 @@ fn late_inline(mut out Module)
                     again = true
                     break
         mut changed := done > 0
-        if gives_fresh_to_self(f, fresh) and unroll_self_upto(mut f, mut out.sites, UNROLL_FRESH)
+        if every and unroll_self_upto(mut f, mut out.sites, UNROLL_FRESH)
             changed = true
         if changed
             merge_blocks_in(mut f)
@@ -189,10 +192,12 @@ fn fresh_objects(f Func) Set[int]
                 fresh.add(i.dst)
     fresh
 
-fn first_fresh_call(blk Block, leaves Set[str], self_name str, fresh Set[int]) int
+fn first_fresh_call(blk Block, leaves Set[str], self_name str, fresh Set[int], every bool) int
     for k in 0..blk.insts.len()
         i := blk.insts[k]
         if i.op == "call" and i.name != self_name and leaves.contains(i.name)
+            if every
+                return k
             for j in 0..i.argc()
                 if fresh.contains(i.arg(j))
                     return k
