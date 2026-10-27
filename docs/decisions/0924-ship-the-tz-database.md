@@ -59,7 +59,7 @@ public domain, so it adds no licence condition.
 
 ## Consequences
 
-- Follow-up: the Windows zone-ID mapping for `tz.system()`.
+- Follow-up: the Windows zone-ID mapping for `tz.system()`; the CLDR table it needs is under the Unicode License v3, so the change adds a `NOTICE` entry.
 - A new IANA release means a new AIL release; the data version is recorded next
   to the data.
 - `std_tz`, `examples/calendar.ail` and the `17-std.md` zone examples can then
