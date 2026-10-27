@@ -131,7 +131,11 @@ pub fn sroa_in(mut f Func) bool
             g := sr_find(uf, a)
             k := i.imm / 8
             key := a * 32 + k
-            if kind[a] != 1 or b != cblk[a] or i.imm % 8 != 0 or k >= cslots[a] or sval.contains(key)
+            if kind[a] != 1
+                or b != cblk[a]
+                or i.imm % 8 != 0
+                or k >= cslots[a]
+                or sval.contains(key)
                 gbad[g] = true
             else
                 sval[key] = i.arg(1)
@@ -250,7 +254,10 @@ pub fn sroa_in(mut f Func) bool
                     base := sr_base(src, a)
                     for k in 0..gslots[sr_find(uf, tp[j])]
                         key := base * 32 + k
-                        spread.push(sr_resolve(repl, if kind[base] == 1 then sval[key] else newp[key]))
+                        spread.push(sr_resolve(
+                            repl,
+                            if kind[base] == 1 then sval[key] else newp[key],
+                        ))
                 else
                     plain.push(sr_resolve(repl, a))
             plain.extend(spread)
