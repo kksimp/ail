@@ -55,6 +55,9 @@ def split_bin(text):
     while words and re.match(r"^[A-Z_]+=", words[0]):
         k, v = words.pop(0).split("=", 1)
         env[k] = v
+    # Cases run in scratch directories, so a relative program path (`./ail`) must not follow them.
+    if words and "/" in words[0]:
+        words[0] = os.path.abspath(words[0])
     return words, env
 
 
@@ -212,7 +215,7 @@ def main():
         print(__doc__)
         return 2
     mode = args.pop(0)
-    binary, jobs, limit, strict, tools = ["./ail"], 3, 0, False, []
+    binary, jobs, limit, strict, tools = [os.path.abspath("./ail")], 3, 0, False, []
     ref, match = None, ""
     while args:
         a = args.pop(0)

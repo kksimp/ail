@@ -2464,6 +2464,9 @@ fn main() !
     for sk in mf.skipped
         verdicts.push(plain(sk.name, "skip", sk.why))
     if found.tests.len() == 0 and mf.tests.is_empty()
+        # snap.update.5: a program with no tests still has its `.out` to update.
+        if update
+            snap_update(file, text, [], dry, json)?
         io.exit(report(verdicts, json, text.lines(), {}, at_pos))
     stem := path.stem(file)
     copy_name := ".ail-test-{stem}.ail"
