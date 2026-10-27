@@ -455,6 +455,23 @@ fn main()
     print(a.add(a).add(a).y)
 ```
 
+**native.sroa.2** — Struct objects that meet at a block parameter (a `mut`
+variable assigned in a branch or carried round a loop) may also have no
+object, when each of them qualifies under native.sroa.1 and the parameter is
+only read by field access: the parameter becomes one parameter per field. *(ADR 0923)*
+
+```ail rules=native.sroa.2
+struct P
+    x float
+    y float
+
+fn main()
+    mut p := P(x: 1.0, y: 2.0)
+    for i in 0..3
+        p = P(x: p.x + 1.0, y: p.y * 2.0)
+    print(p.y)
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is
