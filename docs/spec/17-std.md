@@ -1477,9 +1477,11 @@ fn main()
 zone `zone` at the instant `secs` (seconds since the epoch), or `none` when the
 zone isn't installed, the name is empty or unsafe (it may hold only letters,
 digits and `/ _ + -`, no `..`, no leading `/`). It reads TZif files (RFC 9636)
-from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
-POSIX rule for instants after its last transition. It has the effects `fs` and
-`env`. On Windows it reads the copy shipped in the tree (`std.tz.3`). *(ADR 0448)*
+from the copy of the IANA database shipped with AIL (`std.tz.3`), so a zone
+gives the same offsets on every OS; when that copy is missing it falls back to
+`/usr/share/zoneinfo` and the usual alternatives (none on Windows). It applies
+the file's POSIX rule for instants after its last transition. It has the
+effects `fs` and `env`. *(ADR 0448, ADR 0924)*
 
 ```ail rules=std.tz.1
 use std.tz
@@ -1499,12 +1501,13 @@ fn main()
     print(tz.system().len() > 0)
 ```
 
-**std.tz.3** — Windows has no system TZif files, so there `tz.offset` reads
-the IANA database shipped with AIL as slim TZif files in `tools/tzdata/zones`
-under `AIL_ROOT` (the tree `ail` runs from); it is `none` for every name when
-`AIL_ROOT` is unset or the file is missing. `tz.system()` is `TZ` if it names
-a safe zone, else `"UTC"` (the registry is not read). UTC and fixed offsets
-work everywhere.
+**std.tz.3** — AIL ships the IANA tz database as slim TZif files in
+`tools/tzdata/zones` under `AIL_ROOT` (the tree `ail` runs from); `tz.offset`
+looks there first. When `AIL_ROOT` is unset or the file is missing, a name is
+looked up in the system directories, and on Windows it is `none`.
+`tz.system()` is `TZ` if it names a safe zone, else the zone `/etc/localtime`
+links to, else `"UTC"` (on Windows, `TZ` else `"UTC"`). UTC and fixed offsets
+work everywhere. *(ADR 0924)*
 
 ```ail rules=std.tz.3
 use std.tz

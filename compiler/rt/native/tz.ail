@@ -353,22 +353,25 @@ fn tz_dir(k int) str
         return "/usr/share/lib/zoneinfo"
     "/etc/zoneinfo"
 
-## The directory holding the TZif files for search slot `k`. Windows has no
-## system files, so slot 0 is the copy shipped in the tree (std.tz.3).
+## The directory holding the TZif files for search slot `k`. Slot 0 is the
+## copy of the IANA database shipped in the tree (std.tz.3), found through
+## `AIL_ROOT`; the rest are the system directories, none on Windows.
 fn tz_dir_at(k int) str
-    if target() != 3
-        return tz_dir(k)
-    root := env_get("AIL_ROOT")
-    if k != 0 or str_addr(root) == 0
+    if k == 0
+        root := env_get("AIL_ROOT")
+        if str_addr(root) == 0
+            return ""
+        return str_cat3(root, "/", "tools/tzdata/zones")
+    if target() == 3
         return ""
-    str_cat3(root, "/", "tools/tzdata/zones")
+    tz_dir(k - 1)
 
 ## `tz.offset(zone, secs)` (std.tz.1) as an `int?`: the offset boxed, or 0
 ## when the zone isn't installed or its name isn't safe.
 fn tz_offset(zone str, secs int) int
     if not tz_safe(zone)
         return 0
-    for k in 0..4
+    for k in 0..5
         dir := tz_dir_at(k)
         if str_addr(dir) == 0 or load64(str_addr(dir)) == 0
             continue
