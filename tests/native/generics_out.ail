@@ -16,7 +16,7 @@ impl Named for Tag
 fn Box[T].swap[U](self, other U) Box[U]
     Box(item: other)
 
-fn Tag.pair[U](self, other U) U
+fn int.pair[U](self, other U) U
     other
 
 fn show(x any Named) str
@@ -28,7 +28,8 @@ fn keep[T](x T) T
 fn main()
     b := Box(item: 1)
     print(b.swap("a").item)
-    print(Tag(text: "t").pair(2))
+    n := 5
+    print(n.pair(2))
     print(show(Tag(text: "u")))
     m := keep({"a": 1})
     print(m.len())

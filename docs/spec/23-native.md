@@ -553,14 +553,12 @@ fn main()
 ```
 
 ```ail tool=build,FILE status=1 expect=subset rules=native.subset.1
-struct Tag
-    n int
-
-fn Tag.pick[T](self, xs List[T]) T
-    xs[n]
+fn int.pick[T](self, xs List[T]) T
+    xs[self]
 
 fn main()
-    print(Tag(n: 0).pick([1, 2]))
+    n := 0
+    print(n.pick([1, 2]))
 ```
 
 ```ail norun rules=native.build.2
