@@ -74,11 +74,15 @@ the same name; `*T` is a pointer. A parameter narrower than 64 bits is passed
 extended to 64 bits by its signedness. *(ADR 0432)*
 
 ```ail tool=run,FILE expect=5 rules=ffi.map.1
-extern c fn labs(x int) int
+use std.mem
+
+extern c fn strlen(s *u8) int
 
 fn main()
     unsafe
-        print(labs(-5))
+        p := mem.cstr("hello")
+        print(strlen(p))
+        mem.free(p)
 ```
 
 **ffi.map.2** — A result narrower than 64 bits is truncated to its declared
@@ -108,11 +112,11 @@ check `unsafe.ptr.5-6`: an access outside a block, or to a freed one, is
 undefined as in C. *(ADR 0436, ADR 0844, ADR 0870)*
 
 ```ail tool=run,FILE expect=true rules=ffi.native.1
-extern c fn isdigit(c i32) i32
+extern c fn toupper(c i32) i32
 
 fn main()
     unsafe
-        print(isdigit(55) != 0)
+        print(toupper(97) == 65)
 ```
 
 ## Loading

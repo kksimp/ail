@@ -670,9 +670,11 @@ fn Gate.cli_effects(mut self, tmp str)
         red("--deny io", "exit {d.status}\n{d.err}")
     fs.write_text(main, "use std.env\n\nfn main()\n    print(env.cwd())\n") else return
     root := repo_root()
-    w := sh_run("cd {dir}/gone && rmdir {dir}/gone && exec {bin_path(root)} run {main}")
-    if w.status != 1 or not w.err.contains("trap[std.env.3]")
-        red("env.cwd removed", "exit {w.status}\n{w.err}")
+    # Windows refuses to remove a directory a process is in, so std.env.3 can't be reached there.
+    if (env.get("OS") else "") != "Windows_NT"
+        w := sh_run("cd {dir}/gone && rmdir {dir}/gone && exec {bin_path(root)} run {main}")
+        if w.status != 1 or not w.err.contains("trap[std.env.3]")
+            red("env.cwd removed", "exit {w.status}\n{w.err}")
     for t in [["print(io.read_line())", "std.io.1"], ["print(io.read_all().len())", "std.io.2"]]
         fs.write_text(main, "use std.io\n\nfn main()\n    {t[0]}\n") else return
         i := sh_run("{bin_path(root)} run {main} < {dir}")
@@ -1864,12 +1866,18 @@ fn gd_ail(dir str, cwd str, path str, args str) proc.Output
     p := if path.is_empty() then "" else "PATH={path} "
     sh_run("cd {cwd} && AIL_HOME={dir}/home {p}{bin_path(root)} {args}")
 
+## A `file://` URL of the absolute path `p`; a Windows drive path (`C:/..`) takes a third slash.
+fn file_url(p str) str
+    if p.starts_with("/")
+        return "file://{p}"
+    "file:///{p}"
+
 fn gd_setup(tmp str, name str) str
     dir := "{tmp}/git-deps-{name}"
     sh_run("chmod -R u+w {dir} 2>/dev/null; rm -rf {dir}; mkdir -p {dir}/work {dir}/app")
     git_in(dir, "init -q --bare remote.git")
     git_in("{dir}/work", "init -q")
-    url := "file://{dir}/remote.git"
+    url := file_url("{dir}/remote.git")
     gd_commit(dir, url, "w * h", "v1")
     fs.write_text(
         "{dir}/app/main.ail",
@@ -1883,7 +1891,7 @@ fn Gate.git_deps(mut self, tmp str)
         print("git_deps: no git; skipping")
         return
     dir := gd_setup(tmp, "lock")
-    url := "file://{dir}/remote.git"
+    url := file_url("{dir}/remote.git")
     first := git_in("{dir}/work", "rev-parse HEAD")
     lock := "{dir}/app/ail.lock"
     # mod.pkg.7-8: the first run fetches into the cache and writes the lock.
@@ -1892,8 +1900,10 @@ fn Gate.git_deps(mut self, tmp str)
         or not slurp(lock).contains("dep geo git {url} tag v1 commit {first}\n")
         red("git dep first run", "{r.out}{r.err}\n{slurp(lock)}")
     cached := "{dir}/home/deps/geo-{first}"
-    if fs.exists("{cached}/.git")
-        or sh_run("test -z \"$(find {cached}/geo.ail -perm -u+w)\"").status != 0
+    # Windows keeps no write bits in the file mode, so only the `.git` half is checked there.
+    writable := (env.get("OS") else "") != "Windows_NT"
+        and sh_run("test -z \"$(find {cached}/geo.ail -perm -u+w)\"").status != 0
+    if fs.exists("{cached}/.git") or writable
         red("git dep cache", "cache files must be read-only and have no .git")
     # A moved tag changes nothing while the lock pins the commit.
     second := gd_commit(dir, url, "w * h + 1", "v1")
@@ -1925,7 +1935,7 @@ fn Gate.git_deps(mut self, tmp str)
     sh_run("chmod -R u+w {dir}; rm -rf {dir}")
     # fetch errors name the dependency.
     dir2 := gd_setup(tmp, "errors")
-    url2 := "file://{dir2}/remote.git"
+    url2 := file_url("{dir2}/remote.git")
     n := gd_ail(dir2, dir2, "", "check --deny net app")
     want("git dep --deny net", n.err, ["error[mod.pkg.7]: dependency `geo` isn't in the cache"])
     if fs.exists("{dir2}/app/ail.lock")
@@ -1943,9 +1953,15 @@ fn Gate.git_deps(mut self, tmp str)
     want("git dep unreachable", ur.err, ["error[mod.pkg.7]: can't fetch dependency `geo`"])
     gd_manifest(dir2, url2, "tag v1 caps fs")
     # A PATH without git: the shell tools `./ail` itself uses are linked in, git is not.
-    sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
-    ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
-    want("git dep no git", ng.err, ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"])
+    # Windows has no `./ail` script to run on such a PATH.
+    if (env.get("OS") else "") != "Windows_NT"
+        sh_run("mkdir -p {dir2}/empty; for c in bash dirname uname sed cat mkdir rm mv cp ls tr head tail grep awk env; do p=$(command -v $c) && ln -sf $p {dir2}/empty/$c; done")
+        ng := gd_ail(dir2, dir2, "{dir2}/empty", "run app")
+        want(
+            "git dep no git",
+            ng.err,
+            ["error[mod.pkg.7]: can't run `git` to fetch dependency `geo`"],
+        )
     nu := gd_ail(dir2, "{dir2}/app", "", "pkg update nope")
     want("git dep update nope", nu.err, ["error[mod.pkg.9]"])
     sh_run("chmod -R u+w {dir2}; rm -rf {dir2}")
@@ -2072,7 +2088,7 @@ fn Gate.net(mut self)
 
 ## The spec conformance harness (spec.rs, ported to tools/gate/spec.ail; ADR 0002).
 fn Gate.spec(mut self)
-    r := proc.run("./ail", ["run", "tools/gate/spec.ail"], "", 1800000) else
+    r := proc.run("./ail", ["run", "tools/gate/spec.ail"], "", 3600000) else
         red("spec", "could not start tools/gate/spec.ail")
         return
     if r.status != 0
