@@ -1898,8 +1898,9 @@ fn Gate.git_deps(mut self, tmp str)
         or not slurp(lock).contains("dep geo git {url} tag v1 commit {first}\n")
         red("git dep first run", "{r.out}{r.err}\n{slurp(lock)}")
     cached := "{dir}/home/deps/geo-{first}"
-    if fs.exists("{cached}/.git")
-        or sh_run("test -z \"$(find {cached}/geo.ail -perm -u+w)\"").status != 0
+    # Windows keeps no write bits in the file mode, so only the `.git` half is checked there.
+    writable := (env.get("OS") else "") != "Windows_NT" and sh_run("test -z \"$(find {cached}/geo.ail -perm -u+w)\"").status != 0
+    if fs.exists("{cached}/.git") or writable
         red("git dep cache", "cache files must be read-only and have no .git")
     # A moved tag changes nothing while the lock pins the commit.
     second := gd_commit(dir, url, "w * h + 1", "v1")
