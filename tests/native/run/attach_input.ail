@@ -1,0 +1,42 @@
+use std.attach
+use std.screen
+
+fn main()
+    sc := screen.Screen(w: 100.0, h: 100.0, items: [screen.item(1, "button", "Pay", 0xcc2222, 10.0, 10.0, 80.0, 30.0)])
+    good := parse_json("\{\"q\":\"input\",\"token\":\"t0k\",\"kind\":\"press\",\"id\":\"pay\"}") else err
+        assert(false)
+        return
+    wrong := parse_json("\{\"q\":\"input\",\"token\":\"nope\"}") else err
+        assert(false)
+        return
+    assert(attach.authorized(good, "t0k"))
+    assert(not attach.authorized(wrong, "t0k"))
+    assert(not attach.authorized(good, ""))
+    # attach.input.1: only an `input` line is an input request.
+    assert(attach.is_input("\{\"q\":\"input\",\"token\":\"t0k\"}"))
+    assert(not attach.is_input("\{\"q\":\"observe\",\"token\":\"t0k\"}"))
+    assert(not attach.is_input("not json"))
+    # attach.input.1-3: why a request is refused; "" when it may be applied.
+    line := "\{\"q\":\"input\",\"token\":\"t0k\",\"kind\":\"press\",\"id\":\"pay\"}"
+    assert_eq(attach.input_refusal(line, "t0k", true), "")
+    assert(attach.input_refusal("not json", "t0k", true).contains("not JSON"))
+    assert(attach.input_refusal(line, "other", true).contains("missing or wrong token"))
+    assert(attach.input_refusal(line, "t0k", false).contains("input is off"))
+    value := "\{\"q\":\"input\",\"token\":\"t0k\",\"kind\":\"edit\",\"id\":\"q\",\"value\":\"x\"}"
+    assert(attach.input_refusal(value, "t0k", true).contains("`value` is not a member"))
+    kind := "\{\"q\":\"input\",\"token\":\"t0k\",\"kind\":\"zap\",\"id\":\"pay\"}"
+    assert(attach.input_refusal(kind, "t0k", true).contains("`kind` must be one of press, edit, submit"))
+    assert(attach.input_unknown("pay").contains("no control `pay`"))
+    assert_eq(attach.input_applied("press"), "\{\"v\":1,\"applied\":\"press\"}")
+    # attach.wire.4: the `screen` reply carries the std.screen answer as text.
+    byrole := parse_json("\{\"q\":\"screen\",\"token\":\"t0k\",\"role\":\"button\"}") else err
+        assert(false)
+        return
+    shown := attach.screen_reply(byrole, sc)
+    assert(shown.starts_with("\{\"v\":1,\"text\":\""))
+    assert(shown.contains("button 'Pay', red"))
+    atpoint := parse_json("\{\"q\":\"screen\",\"token\":\"t0k\",\"x\":12,\"y\":12}") else err
+        assert(false)
+        return
+    assert(attach.screen_reply(atpoint, sc).contains("button 'Pay'"))
+    print("ok")
