@@ -1479,7 +1479,7 @@ zone isn't installed, the name is empty or unsafe (it may hold only letters,
 digits and `/ _ + -`, no `..`, no leading `/`). It reads TZif files (RFC 9636)
 from `/usr/share/zoneinfo` and the usual alternatives, and applies the file's
 POSIX rule for instants after its last transition. It has the effects `fs` and
-`env`. *(ADR 0448)*
+`env`. On Windows it reads the copy shipped in the tree (`std.tz.3`). *(ADR 0448)*
 
 ```ail rules=std.tz.1
 use std.tz
@@ -1499,9 +1499,12 @@ fn main()
     print(tz.system().len() > 0)
 ```
 
-**std.tz.3** — On Windows there are no TZif files: `tz.offset` is `none` for
-every name and `tz.system()` is `"UTC"`, until the registry reader of ADR 0448
-lands; UTC and fixed offsets work everywhere.
+**std.tz.3** — Windows has no system TZif files, so there `tz.offset` reads
+the IANA database shipped with AIL as slim TZif files in `tools/tzdata/zones`
+under `AIL_ROOT` (the tree `ail` runs from); it is `none` for every name when
+`AIL_ROOT` is unset or the file is missing. `tz.system()` is `TZ` if it names
+a safe zone, else `"UTC"` (the registry is not read). UTC and fixed offsets
+work everywhere.
 
 ```ail rules=std.tz.3
 use std.tz
@@ -2802,7 +2805,7 @@ fn main() !
 use std.tz
 
 fn main()
-    print(tz.system().len() > 0)                     # "UTC" on Windows until the registry reader lands
+    print(tz.system().len() > 0)                     # "UTC" on Windows unless TZ names a zone
     print(tz.offset("UTC", 0) else 0)                # 0
 ```
 
