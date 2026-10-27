@@ -1,1 +1,0 @@
-tests/native/generics_out.ail:19:8: error[native.subset.1]: `int.pair`: generic methods aren't in the native subset yet

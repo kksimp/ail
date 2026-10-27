@@ -75,6 +75,6 @@ treats generics dynamically, which a native backend can't.
 
 - `tests/native/run/generic_fns.ail`, `generic_types.ail` and
   `generic_traits.ail` and `impl_builtin.ail` match the interpreter on x86-64 and aarch64;
-  `tests/native/generics_out.ail` holds the edges.
+  `tests/cases/generic_owner_method.ail` covers generic methods of plain structs and enums.
 - Every new generic use costs a body's worth of code; a later size pass can
   share instances whose types have the same layout.
