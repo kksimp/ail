@@ -47,6 +47,8 @@ pub fn inline_module(mut out Module)
         out.funcs[k] = f
     if not opt_off("sroa")
         late_inline(mut out)
+    if not opt_off("stack")
+        stackify(mut out)
     for k in 0..out.funcs.len()
         mut f := out.funcs[k]
         if f.name.starts_with("rt.")

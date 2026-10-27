@@ -97,3 +97,21 @@ size (358 → 800 objdump lines); stage-2 +0.1%, self-build +0.7%.
 Rejected: a smaller GC trigger (`MIN_THRESH` 512 KB: raytrace −6%, matmul
 +8% to +52%, L1d misses unchanged, so the cache-window theory was wrong);
 a filter on which constructors to inline (saved 1.5% size, cost raytrace 6%).
+
+## Amendment 2026-10-27: stack allocation (native.stack.1)
+
+Objects that scalar replacement cannot remove but that are only lent to calls
+(`trace(..., p, r, depth + 1)`, `main`'s per-pixel direction) go in the frame.
+`compiler/mir/stack.ail` computes which struct parameters each function only
+reads or passes on to such parameters (optimistic fixpoint, recursion
+included); an allocation of at most 128 bytes whose uses are field accesses
+and such arguments becomes a new MIR op `salloc` (the address of
+`imm / 8 + 1` frame words, the first holding the header `rt.alloc` would
+write) plus a header store. The register allocator reserves the slots
+(`Alloc.sallocs`) and both generators lower `salloc` to an address from
+`rbp` / `sp`. At most 24 words per function. `AIL_OPT_OFF=stack` turns it off.
+Rejected: a per-site static buffer (recursion and tasks clobber it), hoisting
+the allocation out of the loop (a callee that is the same function reads the
+object while the next level overwrites it), passing the fields as extra
+arguments (the ABI has no float arguments beyond the eighth, and Windows has
+four float registers).

@@ -109,6 +109,7 @@ struct Gen
     wrap int
     region List[bool]
     holes List[codegen.Hole]
+    sallocs Map[int, int]
 
 ## Generate the whole program for `os`: the entry, then each function.
 pub fn generate(m mir.Module, os int) codegen.Image
@@ -182,6 +183,7 @@ fn gen_func(mut img codegen.Image, m mir.Module, sites ref codegen.Sites, f0 mir
         wrap: al.wrap,
         region: al.region,
         holes: al.holes,
+        sallocs: al.sallocs,
     )
     g.blabels = [g.a.label() for _ in 0..f.blocks.len()]
     g.prologue()
@@ -735,6 +737,11 @@ fn Gen.gen_inst(mut self, i mir.Inst)
             else
                 a.str(gpr(v, S1), r, i.imm)
         "copy" => parallel([move_of(loc[i.dst], i.arg(0))])
+        "salloc" =>
+            # Slots count upwards from `sp`: the header word, then the fields.
+            d := out_gpr(i.dst, S1)
+            a.alu_ri("add", d, SP, slot(sallocs[i.dst] + 1))
+            put_gpr(i.dst, d)
         _ => unreachable("a64: no code for `{i.op}`")
 
 fn Gen.add_sub(mut self, i mir.Inst)

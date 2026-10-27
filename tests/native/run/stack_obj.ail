@@ -1,0 +1,24 @@
+# Structs that are only lent to calls live in the caller's frame
+# (native.stack.1): each recursion level and each loop turn has its own.
+struct V
+    x float
+    y float
+    n int
+
+fn weigh(v V, depth int) float
+    if depth == 0
+        return v.x + v.y
+    v.y * 0.5 + weigh(V(x: v.x + 1.0, y: v.y - 0.25, n: v.n + depth), depth - 1) + v.n.to_float()
+
+fn sum_to(v V, k int) int
+    if k == 0
+        return v.n
+    v.n + sum_to(V(x: v.x, y: v.y, n: v.n + 1), k - 1)
+
+fn main()
+    print(weigh(V(x: 1.0, y: 2.0, n: 0), 0))
+    print(weigh(V(x: 1.0, y: 2.0, n: 0), 5))
+    mut total := 0
+    for i in 0..10
+        total += sum_to(V(x: 0.0, y: 0.0, n: i), 6)
+    print(total)
