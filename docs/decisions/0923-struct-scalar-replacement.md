@@ -80,3 +80,20 @@ When every member qualifies and the parameter is only read by field access, it
 becomes one parameter per slot and each jump passes the slots of its object.
 Found by the raytrace profile: `mut base := s.col` and loop-carried vectors
 kept allocating after the first step.
+
+## Amendment 2026-10-27: late inlining and unrolling (native.sroa.3)
+
+After every function has been through scalar replacement, `late_inline`
+(compiler/mir/inline.ail) inlines a call that is given an object the caller
+just built when the callee calls nothing, takes a struct and has at most
+`LATE_LIMIT` (100) instructions (`hit(sp, p, light)`), and unrolls a
+self-recursive function that passes a fresh object to itself (`opt_unroll.ail`,
+`UNROLL_FRESH` 400 instructions; every callee of such a function is inlined
+first because unrolling refuses bodies with other user calls). Scalar
+replacement runs again on the result. Raytrace N=4000 on ail-linux: 3.04 s →
+2.33 s (gcc -O2 1.8 s), instructions 24.95 G → 18.43 G; `trace` doubles in
+size (358 → 800 objdump lines); stage-2 +0.1%, self-build +0.7%.
+
+Rejected: a smaller GC trigger (`MIN_THRESH` 512 KB: raytrace −6%, matmul
++8% to +52%, L1d misses unchanged, so the cache-window theory was wrong);
+a filter on which constructors to inline (saved 1.5% size, cost raytrace 6%).

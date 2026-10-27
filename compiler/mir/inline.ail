@@ -44,6 +44,11 @@ pub fn inline_module(mut out Module)
             fold_in(mut f)
             simplify_in(mut f)
         merge_blocks_in(mut f)
+        out.funcs[k] = f
+    if not opt_off("sroa")
+        late_inline(mut out)
+    for k in 0..out.funcs.len()
+        mut f := out.funcs[k]
         if f.name.starts_with("rt.")
             f = forwarded(f)
         else
@@ -109,12 +114,113 @@ fn expand_allocating(mut out Module)
             merge_blocks_in(mut f)
         out.funcs[k] = f
 
+## After scalar replacement, a function that calls nothing and takes a struct
+## is up to this long for `late_inline`.
+LATE_LIMIT := 100
+
+## The most calls `late_inline` expands in one function.
+LATE_BUDGET := 8
+
+## A function that passes a fresh object to its own call is unrolled up to
+## this long (`late_inline`).
+UNROLL_FRESH := 400
+
+## Second inlining, after every function has been through scalar replacement:
+## a call that is given an object the caller just built goes inline when the
+## callee reads fields and calls nothing (`hit(s, p, light)` in a ray
+## tracer), so the object can go. A self-recursive function that hands a fresh
+## object to itself is unrolled once for the same reason.
+fn late_inline(mut out Module)
+    mut leaves := Set[str]()
+    mut bodies := Map[str, Func]()
+    for f in out.funcs
+        if not f.name.starts_with("rt.") and f.name != "main"
+            if takes_struct(f) and inlinable_upto(f, false, LATE_LIMIT)
+                leaves.add(f.name)
+                bodies[f.name] = f
+    for k in 0..out.funcs.len()
+        mut f := out.funcs[k]
+        if f.name.starts_with("rt.")
+            continue
+        fresh := fresh_objects(f)
+        if fresh.len() == 0
+            continue
+        # Unrolling needs a body with no other calls (it keeps one frame per
+        # call), so a function that will be unrolled has every callee inlined.
+        every := gives_fresh_to_self(f, fresh)
+        mut done := 0
+        mut again := true
+        while again and done < LATE_BUDGET
+            again = false
+            for b in 0..f.blocks.len()
+                at := first_fresh_call(f.blocks[b], leaves, f.name, fresh, every)
+                if at >= 0
+                    callee := bodies[f.blocks[b].insts[at].name]
+                    inline_call(mut f, b, at, callee, mut out.sites)
+                    done += 1
+                    again = true
+                    break
+        mut changed := done > 0
+        if every and unroll_self_upto(mut f, mut out.sites, UNROLL_FRESH)
+            changed = true
+        if changed
+            merge_blocks_in(mut f)
+            changed = sroa_in(mut f)
+            simplify_in(mut f)
+            fold_in(mut f)
+            simplify_in(mut f)
+            merge_blocks_in(mut f)
+        out.funcs[k] = f
+
+fn takes_struct(f Func) bool
+    for p in f.blocks[0].params
+        if ty_is_struct(f.vals[p])
+            return true
+    false
+
+fn ty_is_struct(t Ty) bool
+    match t
+        Struct(_) => true
+        _ => false
+
+## The values `f` builds with `rt.obj_new`.
+fn fresh_objects(f Func) Set[int]
+    mut fresh := Set[int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0
+                fresh.add(i.dst)
+    fresh
+
+fn first_fresh_call(blk Block, leaves Set[str], self_name str, fresh Set[int], every bool) int
+    for k in 0..blk.insts.len()
+        i := blk.insts[k]
+        if i.op == "call" and i.name != self_name and leaves.contains(i.name)
+            if every
+                return k
+            for j in 0..i.argc()
+                if fresh.contains(i.arg(j))
+                    return k
+    -1
+
+fn gives_fresh_to_self(f Func, fresh Set[int]) bool
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name == f.name
+                for j in 0..i.argc()
+                    if fresh.contains(i.arg(j))
+                        return true
+    false
+
 ## Small, calls nothing, and nothing jumps back to its entry.
 fn inlinable(f Func) bool
     inlinable_with(f, false)
 
 ## `inlinable`, optionally letting `rt.obj_new` calls stay in the body.
 fn inlinable_with(f Func, allocs bool) bool
+    inlinable_upto(f, allocs, INLINE_LIMIT)
+
+fn inlinable_upto(f Func, allocs bool, limit int) bool
     # `rt.vec_*` are replaced by assembled kernels where the target has them.
     if f.name.starts_with("rt.vec_") or f.name == "rt.fill" or f.name.starts_with("rt.aes_hw_")
         return false
@@ -131,7 +237,7 @@ fn inlinable_with(f Func, allocs bool) bool
         for t in blk.term.targets
             if t == 0
                 return false
-    n <= INLINE_LIMIT
+    n <= limit
 
 fn first_call(blk Block, leaves Set[str], self_name str) int
     for k in 0..blk.insts.len()

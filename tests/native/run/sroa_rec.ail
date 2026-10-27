@@ -1,0 +1,22 @@
+# A recursive function that hands a struct it just built to itself, and a
+# callee that only reads a struct it is given (native.sroa.3).
+struct R
+    x float
+    y float
+
+fn R.step(self, k float) R
+    R(x: self.x * k + self.y, y: self.y - k)
+
+fn mag(r R) float
+    r.x * r.x + r.y * r.y
+
+fn go(r R, depth int) float
+    if depth == 0
+        return mag(r)
+    next := r.step(0.5)
+    go(next, depth - 1) + mag(next) * 0.001
+
+fn main()
+    print(go(R(x: 1.0, y: 2.0), 0))
+    print(go(R(x: 1.0, y: 2.0), 1))
+    print(go(R(x: 1.0, y: 2.0), 4))
