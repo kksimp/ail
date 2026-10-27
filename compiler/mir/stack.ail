@@ -17,17 +17,17 @@
 ## pass off.
 
 ## The largest object kept in a frame, in bytes.
-STACK_MAX_BYTES := 128
+pub STACK_MAX_BYTES := 128
 
 ## The most frame words (header words included) a function gives to objects.
-STACK_MAX_WORDS := 24
+pub STACK_MAX_WORDS := 24
 
-fn st_is_struct(t Ty) bool
+pub fn st_is_struct(t Ty) bool
     match t
         Struct(_) => true
         _ => false
 
-fn st_call_borrows(sum Map[str, List[bool]], name str, j int) bool
+pub fn st_call_borrows(sum Map[str, List[bool]], name str, j int) bool
     g := sum.get(name) else return false
     j < g.len() and g[j]
 
@@ -47,7 +47,7 @@ fn st_borrowed(f Func, p int, sum Map[str, List[bool]]) bool
             return false
     true
 
-fn borrow_summaries(m Module) Map[str, List[bool]]
+pub fn borrow_summaries(m Module) Map[str, List[bool]]
     mut sum := Map[str, List[bool]]()
     for f in m.funcs
         if not f.name.starts_with("rt.")

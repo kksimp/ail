@@ -536,6 +536,23 @@ fn main()
     print(depth(P(x: 0.0, y: 1.0), 3))
 ```
 
+**native.stack.2** — A function whose every result is an object it built
+itself, and that is not used as a function value, may build the result in an
+object its caller provides; each direct caller provides one in its frame when
+it only reads the result or lends it to a call, else on the heap. *(ADR 0923)*
+
+```ail rules=native.stack.2
+struct P
+    x float
+    y float
+
+fn shift(p P) P
+    P(x: p.x + 1.0, y: p.y)
+
+fn main()
+    print(shift(shift(P(x: 0.0, y: 2.0))).x)
+```
+
 **native.reuse.2** — Where a list is replaced by a new empty one (`buf = []`)
 and no reference to the old list survives, the old list may be emptied
 instead, under the conditions of native.reuse.1 and when the old list is

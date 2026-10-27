@@ -1,0 +1,32 @@
+# A function that builds its result and returns it fills an object its caller
+# provides (native.stack.2): in the caller's frame when the result is only
+# read, on the heap when it is kept.
+struct W
+    a float
+    b float
+
+fn W.mix(self, o W, k float) W
+    W(a: self.a * k + o.a, b: self.b - o.b * k)
+
+fn chain(w W, n int) W
+    if n == 0
+        return w
+    chain(w.mix(W(a: 1.0, b: 0.5), 0.5), n - 1).mix(W(a: 0.0, b: 0.25), 2.0)
+
+fn build(k int) W
+    if k % 2 == 0
+        return W(a: k.to_float(), b: 1.0)
+    W(a: 1.0, b: k.to_float())
+
+fn main()
+    mut keep := List[W]()
+    mut total := 0.0
+    for i in 0..6
+        w := build(i)
+        total += w.a * 2.0 + w.b
+        keep.push(build(i + 1))
+    print(total)
+    print(keep[0].a + keep[5].b)
+    r := chain(W(a: 1.0, b: 2.0), 3)
+    print(r.a)
+    print(r.b)

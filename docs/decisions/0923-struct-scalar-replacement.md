@@ -115,3 +115,17 @@ the allocation out of the loop (a callee that is the same function reads the
 object while the next level overwrites it), passing the fields as extra
 arguments (the ABI has no float arguments beyond the eighth, and Windows has
 four float registers).
+
+## Amendment 2026-10-27: results in the caller's frame (native.stack.2)
+
+`compiler/mir/sret.ail` converts a function whose every `return` is an object
+it built itself (constant size, only field accesses besides the return), that
+is not main and whose address is never taken: it gains a trailing parameter,
+the object to fill, which replaces its `rt.obj_new` calls; it still returns
+the pointer. Every direct caller passes an object: a `salloc` when the result
+is only field-read or lent to a call (native.stack.1), else `rt.obj_new` as
+before. Raytrace's remaining allocations were `trace`'s returned `Vec`s.
+Rejected: returning the fields in registers (the ABI has one result register
+and no multi-value return), converting functions called through function
+values (the caller cannot know to pass the object).
+`AIL_OPT_OFF=sret` turns it off.

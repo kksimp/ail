@@ -1,0 +1,163 @@
+## Results built in the caller's frame (native.stack.2). A function whose
+## every `return` hands back an object it built itself (`Vec.add`, a ray
+## tracer's `trace`) and that nothing else keeps gets one more parameter, the
+## object to build the result in; it fills that in instead of allocating and
+## returns it. Each direct caller makes the object: in its frame (`salloc`)
+## when it only reads the result or lends it to a call, else on the heap, as
+## before. Functions whose address is taken (`fnaddr`) and `main` keep their
+## shape. `AIL_OPT_OFF=sret` turns the pass off.
+
+## Where the object a function returns is built: the constant size of the
+## `rt.obj_new` behind every `return`, 0 when the function doesn't qualify.
+fn sret_size(f Func) int
+    if not st_is_struct(f.ret)
+        return 0
+    mut consts := Map[int, int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "const" and i.dst >= 0
+                consts[i.dst] = i.imm
+    mut objs := Map[int, int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and i.argc() == 2
+                bytes := consts.get(i.arg(0)) else continue
+                tag := consts.get(i.arg(1)) else continue
+                if tag == 4 and bytes > 0 and bytes % 8 == 0 and bytes <= STACK_MAX_BYTES
+                    objs[i.dst] = bytes
+    mut size := 0
+    mut ret := Set[int]()
+    for blk in f.blocks
+        if blk.term.kind == "return"
+            v := blk.term.value
+            if v < 0
+                return 0
+            bytes := objs.get(v) else return 0
+            if size != 0 and size != bytes
+                return 0
+            size = bytes
+            ret.add(v)
+    if size == 0
+        return 0
+    # Nothing but field accesses and the return may touch these objects.
+    for blk in f.blocks
+        for i in blk.insts
+            for j in 0..i.argc()
+                if ret.contains(i.arg(j))
+                    if not ((i.op == "load" or i.op == "store") and j == 0)
+                        return 0
+        if blk.term.kind != "return"
+            for v in blk.term.uses()
+                if ret.contains(v)
+                    return 0
+    size
+
+## Give `f` its result parameter: the returned objects become that parameter.
+fn sret_callee(mut f Func)
+    mut consts := Map[int, int]()
+    for blk in f.blocks
+        for i in blk.insts
+            if i.op == "const" and i.dst >= 0
+                consts[i.dst] = i.imm
+    mut ret := Set[int]()
+    for blk in f.blocks
+        if blk.term.kind == "return"
+            ret.add(blk.term.value)
+    out := f.vals.len()
+    f.vals.push(f.ret)
+    f.names.push("out")
+    f.blocks[0].params.push(out)
+    f.params.push(out)
+    for b in 0..f.blocks.len()
+        for k in 0..f.blocks[b].insts.len()
+            i := f.blocks[b].insts[k]
+            if i.op == "call" and i.name == "rt.obj_new" and i.dst >= 0 and ret.contains(i.dst)
+                f.blocks[b].insts[k] = inst(i.dst, "copy", [out])
+
+## Pass an object for the result at each direct call of a converted function.
+fn sret_calls(mut f Func, conv Map[str, int], sum Map[str, List[bool]])
+    n := f.vals.len()
+    # A result that only field accesses and lent arguments read can live in
+    # the frame.
+    mut bad := [false for _ in 0..n]
+    for blk in f.blocks
+        for i in blk.insts
+            for j in 0..i.argc()
+                v := i.arg(j)
+                if v < 0
+                    continue
+                lent := i.op == "call" and st_call_borrows(sum, i.name, j)
+                if not (((i.op == "load" or i.op == "store") and j == 0) or lent)
+                    bad[v] = true
+        for v in blk.term.uses()
+            bad[v] = true
+    mut words := 0
+    for b in 0..f.blocks.len()
+        mut out := List[Inst]()
+        for i in f.blocks[b].insts
+            bytes := conv.get(i.name) else 0
+            if i.op != "call" or bytes == 0 or i.dst < 0
+                out.push(i)
+                continue
+            o := f.vals.len()
+            f.vals.push(f.vals[i.dst])
+            f.names.push("")
+            if not bad[i.dst] and words + bytes / 8 + 1 <= STACK_MAX_WORDS
+                words += bytes / 8 + 1
+                h := f.vals.len()
+                f.vals.push(Ty.Int)
+                f.names.push("")
+                mut hdr := inst(h, "const", [])
+                hdr.imm = 4 + bytes * 65536
+                out.push(hdr)
+                mut sa := inst(o, "salloc", [])
+                sa.imm = bytes
+                out.push(sa)
+                mut st := inst(-1, "store", [o, h])
+                st.imm = -8
+                out.push(st)
+            else
+                s := f.vals.len()
+                f.vals.push(Ty.Int)
+                f.names.push("")
+                k := f.vals.len()
+                f.vals.push(Ty.Int)
+                f.names.push("")
+                mut cs := inst(s, "const", [])
+                cs.imm = bytes
+                out.push(cs)
+                mut ck := inst(k, "const", [])
+                ck.imm = 4
+                out.push(ck)
+                mut cn := inst(o, "call", [s, k])
+                cn.name = "rt.obj_new"
+                out.push(cn)
+            mut args := i.operands()
+            args.push(o)
+            out.push(i.with_args(args))
+        f.blocks[b].insts = out
+
+pub fn sret_convert(mut m Module)
+    mut taken := Set[str]()
+    for f in m.funcs
+        for blk in f.blocks
+            for i in blk.insts
+                if i.op == "fnaddr"
+                    taken.add(i.name)
+    mut conv := Map[str, int]()
+    for f in m.funcs
+        if not f.name.starts_with("rt.") and f.name != "main" and not taken.contains(f.name)
+            size := sret_size(f)
+            if size > 0
+                conv[f.name] = size
+    if conv.len() == 0
+        return
+    sum := borrow_summaries(m)
+    for k in 0..m.funcs.len()
+        if m.funcs[k].name.starts_with("rt.")
+            continue
+        mut f := m.funcs[k]
+        if conv.contains(f.name)
+            sret_callee(mut f)
+        sret_calls(mut f, conv, sum)
+        m.funcs[k] = f
