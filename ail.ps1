@@ -8,7 +8,7 @@
 #
 # Like ./ail (ADR 0855): the native CLI (compiler\main.ail built into .native\ail.exe) does run, build, check,
 # test FILE, fmt, fix, diff, explain, edit, ask, api, effects and pkg. The published seed (stage 0), downloaded and
-# verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --record/--replay/--budget`.
+# verified by tools\release\fetch-seed.ps1, builds it. Not yet native here: `run --budget`.
 $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
@@ -79,7 +79,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
 
 # `run`'s options before the file (the same set as ./ail).
 $isFile = { param($a) $a -and -not "$a".StartsWith('-') }
-$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false
+$runFile = $null; $runSkip = 0; $runOpts = @(); $checkOpts = @(); $traceRun = $false; $jsonOpt = $false; $snapJson = $false; $recRun = $false; $repRun = $false; $replayArgs = $null
 if ($cmd -eq 'run') {
     $k = 0
     :scan while ($k -lt $rest.Count) {
@@ -91,7 +91,12 @@ if ($cmd -eq 'run') {
                 $runOpts += @($a, $v); $k += 2; continue
             }
             '^--json$' { $jsonOpt = $true; $k++; continue }
-            '^--(budget|from|record|replay)$' { Fail "``$a`` is not native on Windows yet (run it on Linux or macOS)" }
+            '^--(record|replay)$' {
+                if (-not $v) { Fail "``$a`` needs a recording file, e.g. ``$a r.json`` (replay.rec.1)" }
+                if ($a -eq '--record') { $env:AIL_RECORD = Fwd $v; $recRun = $true } else { $env:AIL_REPLAY = Fwd $v; $repRun = $true }
+                Add-Instrument 'record'; $k += 2; continue
+            }
+            '^--(budget|from)$' { Fail "``$a`` is not native on Windows yet (run it on Linux or macOS)" }
             '^--max-steps$' {
                 if ($v -notmatch '^[1-9]\d*$') { Fail '`--max-steps` needs a positive number of steps (run.limit.4)' }
                 $env:AIL_MAX_STEPS = $v; Add-Instrument 'steps'; $k += 2; continue
@@ -131,6 +136,25 @@ if ($cmd -eq 'run') {
         }
     }
     $runSkip = $k
+    # Record and replay (ADR 0873, replay.rec.1-2, replay.run.1): the recording's first line says what ran.
+    if ($repRun -and -not $recRun) {
+        $recPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AIL_REPLAY)
+        if (-not (Test-Path -LiteralPath $recPath -PathType Leaf)) { Fail "can't read the recording $($env:AIL_REPLAY) (replay.run.1)" }
+        $head = $null
+        try { $head = ([IO.File]::ReadAllLines($recPath) | Select-Object -First 1) | ConvertFrom-Json } catch { }
+        if (-not $head -or -not $head.program) { Fail "$($env:AIL_REPLAY) is not a recording (replay.run.1)" }
+        if ($null -ne $head.seed) { $env:AIL_SEED = [string]$head.seed }
+        if (-not $runFile) { $runFile = [string]$head.program }
+        $replayArgs = @($head.args | ForEach-Object { [string]$_ })
+    }
+    elseif ($recRun -and $runFile) {
+        if (-not $env:AIL_SEED) { $env:AIL_SEED = [string]([int64]([DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) * 1000003 + $PID) }
+        $quote = { param($t) '"' + ("$t" -replace '\\', '\\' -replace '"', '\"') + '"' }
+        $recArgs = @($rest | Select-Object -Skip $runSkip | ForEach-Object { & $quote $_ }) -join ','
+        $recPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:AIL_RECORD)
+        $recHead = '{"ail_record":1,"program":' + (& $quote $runFile) + ',"args":[' + $recArgs + '],"seed":' + $env:AIL_SEED + ',"limit":67108864}' + "`n"
+        try { [IO.File]::WriteAllText($recPath, $recHead, (New-Object Text.UTF8Encoding($false))) } catch { Fail "can't write the recording $($env:AIL_RECORD)" }
+    }
     # trace.run.1: with a trace, `--json` makes the events JSON objects; trace.snap.4: alone, it makes a trap one JSON object.
     if ($jsonOpt) {
         if ($traceRun) { $env:AIL_TRACE_JSON = '1'; Add-Instrument 'tracejson' }
@@ -228,7 +252,7 @@ if ($route) {
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
                 $env:AIL_RUN_FILE = $runFile
                 $progExe = [string]($prep | Select-Object -Last 1)
-                $progArgs = @($rest | Select-Object -Skip $runSkip)
+                $progArgs = if ($null -ne $replayArgs) { $replayArgs } else { @($rest | Select-Object -Skip $runSkip) }
                 if ($snapJson) {
                     # tools/trapjson.awk turns the text trap report on stderr into one JSON object (trace.snap.4); awk comes with Git.
                     $ErrorActionPreference = 'Continue'
