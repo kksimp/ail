@@ -353,14 +353,29 @@ fn tz_dir(k int) str
         return "/usr/share/lib/zoneinfo"
     "/etc/zoneinfo"
 
+## The directory holding the TZif files for search slot `k`. Slot 0 is the
+## copy of the IANA database shipped in the tree (std.tz.3), found through
+## `AIL_ROOT`; the rest are the system directories, none on Windows.
+fn tz_dir_at(k int) str
+    if k == 0
+        root := env_get("AIL_ROOT")
+        if str_addr(root) == 0
+            return ""
+        return str_cat3(root, "/", "tools/tzdata/zones")
+    if target() == 3
+        return ""
+    tz_dir(k - 1)
+
 ## `tz.offset(zone, secs)` (std.tz.1) as an `int?`: the offset boxed, or 0
-## when the zone isn't installed or its name isn't safe. Windows has no
-## TZif files (std.tz.3).
+## when the zone isn't installed or its name isn't safe.
 fn tz_offset(zone str, secs int) int
-    if target() == 3 or not tz_safe(zone)
+    if not tz_safe(zone)
         return 0
-    for k in 0..4
-        p := os_cstr(OS_PATH_A, str_cat3(tz_dir(k), "/", zone))
+    for k in 0..5
+        dir := tz_dir_at(k)
+        if str_addr(dir) == 0 or load64(str_addr(dir)) == 0
+            continue
+        p := os_cstr(OS_PATH_A, str_cat3(dir, "/", zone))
         if p == 0
             continue
         fd := os_open(p, 0, 0)
@@ -379,8 +394,6 @@ fn tz_offset(zone str, secs int) int
 ## `tz.system()` (std.tz.2): `TZ` if it names a safe zone, else the zone
 ## `/etc/localtime` links to, else `UTC`.
 fn tz_system() str
-    if target() == 3
-        return "UTC"
     t := env_get("TZ")
     if str_addr(t) != 0
         tp := str_addr(t)
@@ -391,6 +404,8 @@ fn tz_system() str
         name := str_sub(tp, from, n)
         if tz_safe(name)
             return name
+    if target() == 3
+        return "UTC"
     path := os_cstr(OS_PATH_A, "/etc/localtime")
     if path != 0
         buf := alloc(4096, KIND_ATOMIC)
