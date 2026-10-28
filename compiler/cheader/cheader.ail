@@ -436,7 +436,7 @@ pub fn module_text(src str, windows bool) str
     assert(out.contains("pub extern c fn free(a0 *u8)\n"))
 
 @test fn skips_what_the_ffi_cannot_carry()
-    src := "int printf(const char *fmt, ...);\nstruct P { int x; };\nstruct P make(void);\nint (*get(void))(int);\nlong double f(void);\nint ok(void);\n"
+    src := "int printf(const char *fmt, ...);\nstruct P \{ int x; };\nstruct P make(void);\nint (*get(void))(int);\nlong double f(void);\nint ok(void);\n"
     out := module_text(src, false)
     assert_eq(out, "pub extern c fn ok() i32\n")
 
