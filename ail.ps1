@@ -255,17 +255,28 @@ if ($route) {
                 $progArgs = if ($null -ne $replayArgs) { $replayArgs } else { @($rest | Select-Object -Skip $runSkip) }
                 if ($snapJson) {
                     # tools/trapjson.awk turns the text trap report on stderr into one JSON object (trace.snap.4); awk comes with Git.
-                    $ErrorActionPreference = 'Continue'
-                    $errLines = New-Object System.Collections.Generic.List[string]
+                    # Files and raw bytes, so no line ending is changed on the way.
+                    $winQuote = { param($t) '"' + ("$t" -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+                    $errTmp = [IO.Path]::GetTempFileName(); $outTmp = [IO.Path]::GetTempFileName()
                     try {
-                        & $progExe @progArgs 2>&1 | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $errLines.Add($_.ToString()) } else { $_ } }
-                        $rc = $LASTEXITCODE
-                    } finally { Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue }
-                    $awk = Get-Command awk -ErrorAction SilentlyContinue
-                    if ($awk) {
-                        $errLines | & $awk.Source -v "main=$runFile" -f (Join-Path $root 'tools\trapjson.awk') | ForEach-Object { [Console]::Error.WriteLine($_) }
-                    } else {
-                        $errLines | ForEach-Object { [Console]::Error.WriteLine($_) }
+                        $startArgs = @{ FilePath = $progExe; NoNewWindow = $true; PassThru = $true; RedirectStandardError = $errTmp }
+                        if ($progArgs.Count -gt 0) { $startArgs.ArgumentList = (@($progArgs | ForEach-Object { & $winQuote $_ }) -join ' ') }
+                        $proc = Start-Process @startArgs
+                        $proc.WaitForExit()
+                        $rc = $proc.ExitCode
+                        $report = $errTmp
+                        $awk = Get-Command awk -ErrorAction SilentlyContinue
+                        if ($awk) {
+                            $awkArgs = '-v ' + (& $winQuote "main=$runFile") + ' -f ' + (& $winQuote (Join-Path $root 'tools\trapjson.awk'))
+                            $a = Start-Process -FilePath $awk.Source -ArgumentList $awkArgs -NoNewWindow -PassThru -RedirectStandardInput $errTmp -RedirectStandardOutput $outTmp
+                            $a.WaitForExit()
+                            if ($a.ExitCode -eq 0) { $report = $outTmp }
+                        }
+                        $bytes = [IO.File]::ReadAllBytes($report)
+                        $stderr = [Console]::OpenStandardError(); $stderr.Write($bytes, 0, $bytes.Length); $stderr.Flush()
+                    } finally {
+                        Remove-Item Env:AIL_RUN_FILE -ErrorAction SilentlyContinue
+                        Remove-Item -Force $errTmp, $outTmp -ErrorAction SilentlyContinue
                     }
                     exit $rc
                 }
