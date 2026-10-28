@@ -3,7 +3,8 @@ use std.env
 use std.proc
 
 fn main() !
-    sorted := proc.run("sort", [], "pear\napple\nfig\n")?
+    # `tr` drops the CR that a Windows `sort.exe` writes.
+    sorted := proc.run("sh", ["-c", "sort | tr -d '\\r'"], "pear\napple\nfig\n")?
     print(sorted.out)
     quick := proc.run("sh", ["-c", "echo done"], none, 10000)?
     print(quick.out.trim())
