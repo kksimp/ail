@@ -3136,6 +3136,18 @@ api --pretty tests/cases/packages/failing/main.ail	a343bbd811cb81c7	0	91c2505e02
 api --symbols tests/cases/packages/failing/main.ail	a343bbd811cb81c7	0	700105885ef3faff
 api --tokens tests/cases/packages/failing/main.ail	a343bbd811cb81c7	0	71b45a0c75add299
 api --ast tests/cases/packages/failing/main.ail	a343bbd811cb81c7	0	2e01044dc1ff55be
+api  tests/cases/packages/ffi_header/main.ail	7dbd231f4dc7bbde	0	024c65685a6a0fc7
+api --text tests/cases/packages/ffi_header/main.ail	7dbd231f4dc7bbde	0	6e23523dd75eb3b0
+api --pretty tests/cases/packages/ffi_header/main.ail	7dbd231f4dc7bbde	0	c705d30c65ee8fba
+api --symbols tests/cases/packages/ffi_header/main.ail	7dbd231f4dc7bbde	0	0fbc453990cbcea7
+api --tokens tests/cases/packages/ffi_header/main.ail	7dbd231f4dc7bbde	0	070be400bd530112
+api --ast tests/cases/packages/ffi_header/main.ail	7dbd231f4dc7bbde	0	1b69289181041a19
+api  tests/cases/packages/ffi_header_missing/main.ail	9f539a01e0a19531	2	6e340b9cffb37a98
+api --text tests/cases/packages/ffi_header_missing/main.ail	9f539a01e0a19531	2	6e340b9cffb37a98
+api --pretty tests/cases/packages/ffi_header_missing/main.ail	9f539a01e0a19531	2	6e340b9cffb37a98
+api --symbols tests/cases/packages/ffi_header_missing/main.ail	9f539a01e0a19531	2	6e340b9cffb37a98
+api --tokens tests/cases/packages/ffi_header_missing/main.ail	9f539a01e0a19531	0	8a6940ea4fcba044
+api --ast tests/cases/packages/ffi_header_missing/main.ail	9f539a01e0a19531	0	90c807eac9dee109
 api  tests/cases/packages/geometry/extra.ail	b44090b7e85b8dca	0	de906a0e8e565e8c
 api --text tests/cases/packages/geometry/extra.ail	b44090b7e85b8dca	0	462132eb92c88100
 api --pretty tests/cases/packages/geometry/extra.ail	b44090b7e85b8dca	0	729fdd1304d0eb00
@@ -5998,8 +6010,12 @@ api --diff  tests/cases/packages/edit_ops/main.ail tests/cases/packages/failing/
 api --diff --json tests/cases/packages/edit_ops/main.ail tests/cases/packages/failing/calc/calc.ail	0a250eb234ff53b7	1	42c4ccee75e9a115
 api --diff  tests/cases/packages/failing/calc/calc.ail tests/cases/packages/failing/main.ail	65008c4d9916d390	1	f327129ea4010982
 api --diff --json tests/cases/packages/failing/calc/calc.ail tests/cases/packages/failing/main.ail	65008c4d9916d390	1	3ac06960f197a3bd
-api --diff  tests/cases/packages/failing/main.ail tests/cases/packages/geometry/extra.ail	91586e4a569c68c7	0	1da7cd571ff6c0f4
-api --diff --json tests/cases/packages/failing/main.ail tests/cases/packages/geometry/extra.ail	91586e4a569c68c7	0	d5ce133fff6cb4b2
+api --diff  tests/cases/packages/failing/main.ail tests/cases/packages/ffi_header/main.ail	64d1c5ca6ac814fb	0	1da7cd571ff6c0f4
+api --diff --json tests/cases/packages/failing/main.ail tests/cases/packages/ffi_header/main.ail	64d1c5ca6ac814fb	0	e29a2a1198654a83
+api --diff  tests/cases/packages/ffi_header/main.ail tests/cases/packages/ffi_header_missing/main.ail	a08f5090931b0f2b	2	8bf4b929c256ae53
+api --diff --json tests/cases/packages/ffi_header/main.ail tests/cases/packages/ffi_header_missing/main.ail	a08f5090931b0f2b	2	8bf4b929c256ae53
+api --diff  tests/cases/packages/ffi_header_missing/main.ail tests/cases/packages/geometry/extra.ail	1c5ac51c481ecf48	2	8bf4b929c256ae53
+api --diff --json tests/cases/packages/ffi_header_missing/main.ail tests/cases/packages/geometry/extra.ail	1c5ac51c481ecf48	2	8bf4b929c256ae53
 api --diff  tests/cases/packages/geometry/extra.ail tests/cases/packages/geometry/geo/point.ail	850ea7577b89ad7e	1	0993afd7fc03634c
 api --diff --json tests/cases/packages/geometry/extra.ail tests/cases/packages/geometry/geo/point.ail	850ea7577b89ad7e	1	37630373a111b05f
 api --diff  tests/cases/packages/geometry/geo/point.ail tests/cases/packages/geometry/geo/shapes.ail	42b50b9240c30ee1	2	3890d21a11dd864d
