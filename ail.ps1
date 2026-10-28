@@ -252,7 +252,7 @@ if ($route) {
                 # `env.program()` is the source path as given (std.env.4): ./ail sets argv[0], here an environment variable.
                 $env:AIL_RUN_FILE = $runFile
                 $progExe = [string]($prep | Select-Object -Last 1)
-                $progArgs = if ($null -ne $replayArgs) { $replayArgs } else { @($rest | Select-Object -Skip $runSkip) }
+                $progArgs = @(if ($null -ne $replayArgs) { $replayArgs } else { $rest | Select-Object -Skip $runSkip })
                 if ($snapJson) {
                     # tools/trapjson.awk turns the text trap report on stderr into one JSON object (trace.snap.4); awk comes with Git.
                     # Files and raw bytes, so no line ending is changed on the way.
@@ -262,6 +262,7 @@ if ($route) {
                         $startArgs = @{ FilePath = $progExe; NoNewWindow = $true; PassThru = $true; RedirectStandardError = $errTmp }
                         if ($progArgs.Count -gt 0) { $startArgs.ArgumentList = (@($progArgs | ForEach-Object { & $winQuote $_ }) -join ' ') }
                         $proc = Start-Process @startArgs
+                        $null = $proc.Handle   # without this, ExitCode can read empty after WaitForExit
                         $proc.WaitForExit()
                         $rc = $proc.ExitCode
                         $report = $errTmp
@@ -269,6 +270,7 @@ if ($route) {
                         if ($awk) {
                             $awkArgs = '-v ' + (& $winQuote "main=$runFile") + ' -f ' + (& $winQuote (Join-Path $root 'tools\trapjson.awk'))
                             $a = Start-Process -FilePath $awk.Source -ArgumentList $awkArgs -NoNewWindow -PassThru -RedirectStandardInput $errTmp -RedirectStandardOutput $outTmp
+                            $null = $a.Handle
                             $a.WaitForExit()
                             if ($a.ExitCode -eq 0) { $report = $outTmp }
                         }
