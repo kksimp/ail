@@ -446,6 +446,11 @@ pub fn module_name(header str) str
             out = "{out}_u{hex}_"
     out
 
+## The character with code `code`, as text ("" for none).
+fn code_char(code int) str
+    c := char.from_code(code) else return ""
+    "{c}"
+
 fn hex_digit(cs List[char], i int) int
     if i >= cs.len()
         return 0
@@ -470,11 +475,11 @@ pub fn header_of(name str) str
             while i < cs.len() and cs[i] != '_'
                 code = code * 16 + hex_digit(cs, i)
                 i += 1
-            out = "{out}{char.from_code(code)}"
+            out = "{out}{code_char(code)}"
             i += 1
         else
             code := hex_digit(cs, i + 1) * 16 + hex_digit(cs, i + 2)
-            out = "{out}{char.from_code(code)}"
+            out = "{out}{code_char(code)}"
             i += 3
     out
 
