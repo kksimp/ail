@@ -1,0 +1,455 @@
+## `use c "header.h" as name` (spec ffi.decl.1, ADR 0926): the function prototypes of a C
+## header as the source of an AIL module of `pub extern c fn` declarations. The header's own
+## text only: no `#include`, no `#if`, no macros. What the FFI cannot carry (ffi.decl.3) is
+## left out.
+
+## Words that qualify a declaration and say nothing about its type.
+QUALIFIERS := {
+    "extern",
+    "static",
+    "inline",
+    "__inline",
+    "__inline__",
+    "const",
+    "__const",
+    "volatile",
+    "__volatile__",
+    "restrict",
+    "__restrict",
+    "__restrict__",
+    "__extension__",
+    "register",
+    "_Noreturn",
+}
+
+## Words followed by a parenthesised group that is no part of the type.
+GROUPS := {
+    "__attribute__",
+    "__attribute",
+    "__asm__",
+    "__asm",
+    "asm",
+    "__declspec",
+    "_Alignas",
+}
+
+## The words of a C scalar type.
+SCALARS := {"unsigned", "signed", "char", "short", "int", "long", "float", "double", "void", "_Bool"}
+
+## AIL's reserved words (the lexer's list): a function named so is left out.
+RESERVED := {
+    "and",
+    "any",
+    "as",
+    "break",
+    "continue",
+    "defer",
+    "elif",
+    "else",
+    "ensures",
+    "enum",
+    "error",
+    "extern",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "impl",
+    "in",
+    "invariant",
+    "match",
+    "move",
+    "mut",
+    "none",
+    "not",
+    "or",
+    "par",
+    "pub",
+    "ref",
+    "requires",
+    "return",
+    "self",
+    "spawn",
+    "struct",
+    "todo",
+    "trait",
+    "true",
+    "unique",
+    "unsafe",
+    "use",
+    "while",
+    "with",
+}
+
+fn ident_start(c char) bool
+    c.is_alpha() or c == '_'
+
+fn ident_char(c char) bool
+    c.is_alpha() or c.is_digit() or c == '_'
+
+## The tokens of a header: identifiers, numbers and single symbols. Comments, preprocessor
+## lines (with their continuations), string and character literals are dropped.
+pub fn tokens(text str) List[str]
+    cs := text.chars()
+    n := cs.len()
+    mut out := List[str]()
+    mut i := 0
+    mut fresh := true
+    while i < n
+        c := cs[i]
+        if c == '\n'
+            fresh = true
+            i += 1
+        elif c.is_space()
+            i += 1
+        elif c == '#' and fresh
+            while i < n and cs[i] != '\n'
+                if cs[i] == '\\' and i + 1 < n
+                    i += 1
+                i += 1
+        elif c == '/' and i + 1 < n and cs[i + 1] == '*'
+            i += 2
+            while i + 1 < n and not (cs[i] == '*' and cs[i + 1] == '/')
+                i += 1
+            i += 2
+            fresh = false
+        elif c == '/' and i + 1 < n and cs[i + 1] == '/'
+            while i < n and cs[i] != '\n'
+                i += 1
+        elif c == '"' or c == '\''
+            i += 1
+            while i < n and cs[i] != c
+                if cs[i] == '\\'
+                    i += 1
+                i += 1
+            i += 1
+            fresh = false
+        elif ident_start(c) or c.is_digit()
+            mut word := ""
+            while i < n and (ident_char(cs[i]) or (c.is_digit() and cs[i] == '.'))
+                word = "{word}{cs[i]}"
+                i += 1
+            out.push(word)
+            fresh = false
+        else
+            out.push("{c}")
+            i += 1
+            fresh = false
+    out
+
+## The index just past the group that opens at `open` (a `(`, `[` or `\{`).
+fn after_group(toks List[str], open int) int
+    mut depth := 0
+    mut i := open
+    while i < toks.len()
+        t := toks[i]
+        if t == "(" or t == "[" or t == "\{"
+            depth += 1
+        elif t == ")" or t == "]" or t == "}"
+            depth -= 1
+            if depth == 0
+                return i + 1
+        i += 1
+    toks.len()
+
+## `toks` without qualifiers and without the groups that follow `__attribute__` and the like.
+fn clean(toks List[str]) List[str]
+    mut out := List[str]()
+    mut i := 0
+    while i < toks.len()
+        t := toks[i]
+        if GROUPS.contains(t) and i + 1 < toks.len() and toks[i + 1] == "("
+            i = after_group(toks, i + 1)
+        elif QUALIFIERS.contains(t)
+            i += 1
+        else
+            out.push(t)
+            i += 1
+    out
+
+## The AIL types of the standard typedefs a header names without defining.
+fn base_aliases(windows bool) Map[str, str]
+    mut m := Map[str, str]()
+    for name in ["size_t", "uintptr_t", "uintmax_t", "uint64_t"]
+        m[name] = "u64"
+    for name in ["ssize_t", "ptrdiff_t", "intptr_t", "intmax_t", "int64_t", "time_t", "suseconds_t"]
+        m[name] = "i64"
+    m["int8_t"] = "i8"
+    m["uint8_t"] = "u8"
+    m["int16_t"] = "i16"
+    m["uint16_t"] = "u16"
+    m["int32_t"] = "i32"
+    m["uint32_t"] = "u32"
+    for name in ["pid_t", "wchar_t"]
+        m[name] = "i32"
+    for name in ["uid_t", "gid_t", "mode_t", "socklen_t", "useconds_t"]
+        m[name] = "u32"
+    m["bool"] = "bool"
+    m["off_t"] = if windows then "i32" else "i64"
+    m["clock_t"] = if windows then "i32" else "i64"
+    if windows
+        m["wchar_t"] = "u16"
+    m
+
+## A C type read as an AIL type: `text` is the AIL spelling, empty for plain `void`.
+struct CType
+    text str
+
+fn stars_of(n int, base str) str
+    mut out := base
+    for _ in 0..n
+        out = "*{out}"
+    out
+
+## The AIL type of a run of C scalar words (`unsigned long`, `char`, `long long`), `void` as "".
+fn scalar_type(words List[str], stars int, windows bool) CType?
+    mut unsigned := false
+    mut longs := 0
+    mut has_short := false
+    mut has_char := false
+    mut has_float := false
+    mut has_double := false
+    mut has_void := false
+    mut has_bool := false
+    for w in words
+        if w == "unsigned"
+            unsigned = true
+        elif w == "long"
+            longs += 1
+        elif w == "short"
+            has_short = true
+        elif w == "char"
+            has_char = true
+        elif w == "float"
+            has_float = true
+        elif w == "double"
+            has_double = true
+        elif w == "void"
+            has_void = true
+        elif w == "_Bool"
+            has_bool = true
+    if has_void
+        if stars == 0
+            return CType(text: "")
+        return CType(text: stars_of(stars, "u8"))
+    mut name := "i32"
+    if has_bool
+        name = "bool"
+    elif has_float
+        name = "f32"
+    elif has_double
+        if longs > 0
+            return none
+        name = "float"
+    elif has_char
+        name = if unsigned or stars > 0 then "u8" else "i8"
+    elif has_short
+        name = if unsigned then "u16" else "i16"
+    elif longs > 2
+        return none
+    elif longs == 2 or (longs == 1 and not windows)
+        name = if unsigned then "u64" else "i64"
+    elif longs == 1
+        name = if unsigned then "u32" else "i32"
+    elif unsigned
+        name = "u32"
+    CType(text: stars_of(stars, name))
+
+## The type spelled by `toks` (no name among them), or none when the FFI cannot carry it.
+fn parse_type(toks List[str], aliases Map[str, str], windows bool) CType?
+    mut stars := 0
+    mut base := List[str]()
+    for t in toks
+        if t == "*"
+            stars += 1
+        elif t.starts_with("__") and not aliases.contains(t)
+            continue
+        else
+            base.push(t)
+    if base.is_empty()
+        return none
+    if base[0] == "struct" or base[0] == "union"
+        if base.len() != 2 or stars == 0
+            return none
+        return CType(text: stars_of(stars, "u8"))
+    if base[0] == "enum"
+        if base.len() != 2
+            return none
+        return CType(text: stars_of(stars, "i32"))
+    if SCALARS.contains(base[0])
+        for t in base
+            if not SCALARS.contains(t)
+                return none
+        return scalar_type(base, stars, windows)
+    if base.len() != 1
+        return none
+    if a := aliases.get(base[0])
+        return CType(text: stars_of(stars, a))
+    if stars == 0
+        return none
+    CType(text: stars_of(stars, "u8"))
+
+## One function: the C name and its `pub extern c fn` line.
+struct CFn
+    name str
+    line str
+
+## The split of `toks` at the commas outside any group.
+fn split_params(toks List[str]) List[List[str]]
+    mut out := List[List[str]]()
+    mut cur := List[str]()
+    mut depth := 0
+    for t in toks
+        if t == "(" or t == "["
+            depth += 1
+        elif t == ")" or t == "]"
+            depth -= 1
+        if t == "," and depth == 0
+            out.push(cur)
+            cur = List[str]()
+        else
+            cur.push(t)
+    out.push(cur)
+    out
+
+## The type of one parameter, with or without a name after it; none for `void`.
+fn param_type(toks List[str], aliases Map[str, str], windows bool) CType?
+    mut ts := toks
+    mut extra := 0
+    if ts.len() > 0 and ts[ts.len() - 1] == "]"
+        mut k := ts.len() - 1
+        while k > 0 and ts[k] != "["
+            k -= 1
+        ts = ts[..k]
+        extra = 1
+    mut found := parse_type(ts, aliases, windows)
+    if found == none and ts.len() > 1
+        found = parse_type(ts[..(ts.len() - 1)], aliases, windows)
+    t := found else return none
+    if t.text == ""
+        return none
+    CType(text: stars_of(extra, t.text))
+
+## The function a declaration's tokens declare, if the FFI can carry it.
+fn prototype(decl List[str], aliases Map[str, str], windows bool) CFn?
+    d := clean(decl)
+    p := d.index_of("(") else return none
+    if p < 2
+        return none
+    name := d[p - 1]
+    if RESERVED.contains(name) or name.starts_with("__")
+        return none
+    first := name.char_at(0) else return none
+    if not ident_start(first)
+        return none
+    close := after_group(d, p) - 1
+    if close <= p or d[close] != ")"
+        return none
+    ret := parse_type(d[..(p - 1)], aliases, windows) else return none
+    inner := d[(p + 1)..close]
+    mut params := List[str]()
+    mut ints := 0
+    mut floats := 0
+    if not (inner.is_empty() or (inner.len() == 1 and inner[0] == "void"))
+        for part in split_params(inner)
+            if part.contains("(") or part.contains(".")
+                return none
+            t := param_type(part, aliases, windows) else return none
+            if t.text == "f32" or t.text == "float"
+                floats += 1
+            else
+                ints += 1
+            params.push("a{params.len()} {t.text}")
+    if ints > 6 or floats > 8
+        return none
+    tail := if ret.text == "" then "" else " {ret.text}"
+    CFn(name: name, line: "pub extern c fn {name}({params.join(", ")}){tail}")
+
+## Record `typedef T name;` when `T` is a type the FFI carries.
+fn add_typedef(decl List[str], mut aliases Map[str, str], windows bool)
+    d := clean(decl[1..])
+    if d.len() < 2 or d.contains("(")
+        return
+    name := d[d.len() - 1]
+    first := name.char_at(0) else return
+    if not ident_start(first)
+        return
+    if t := parse_type(d[..(d.len() - 1)], aliases, windows)
+        if t.text != ""
+            aliases[name] = t.text
+
+## The AIL source of the module for header text `src`: one `pub extern c fn` per prototype
+## the FFI can carry, in the header's order. `windows` is whether `long` has 32 bits.
+pub fn module_text(src str, windows bool) str
+    toks := tokens(src)
+    n := toks.len()
+    mut aliases := base_aliases(windows)
+    mut seen := Set[str]()
+    mut lines := List[str]()
+    mut i := 0
+    while i < n
+        mut decl := List[str]()
+        mut depth := 0
+        mut braced := false
+        while i < n
+            t := toks[i]
+            if depth == 0 and t == "}"
+                i += 1
+                break
+            if t == "(" or t == "["
+                depth += 1
+            elif t == ")" or t == "]"
+                depth -= 1
+            if depth == 0 and t == ";"
+                i += 1
+                break
+            if depth == 0 and t == "\{"
+                if decl.len() == 1 and decl[0] == "extern"
+                    # `extern "C" \{`: look through it.
+                    i += 1
+                    decl = List[str]()
+                    continue
+                braced = true
+                i = after_group(toks, i)
+                break
+            decl.push(t)
+            i += 1
+        if decl.is_empty()
+            continue
+        if decl[0] == "typedef"
+            add_typedef(decl, mut aliases, windows)
+        else
+            if f := prototype(decl, aliases, windows)
+                if not seen.contains(f.name)
+                    seen.add(f.name)
+                    lines.push(f.line)
+    if lines.is_empty()
+        return ""
+    "{lines.join("\n")}\n"
+
+@test fn reads_scalars_and_pointers()
+    src := "int abs(int x);\nsize_t strlen(const char *s);\ndouble hypot(double, double);\nvoid free(void *p);\n"
+    out := module_text(src, false)
+    assert(out.contains("pub extern c fn abs(a0 i32) i32\n"))
+    assert(out.contains("pub extern c fn strlen(a0 *u8) u64\n"))
+    assert(out.contains("pub extern c fn hypot(a0 float, a1 float) float\n"))
+    assert(out.contains("pub extern c fn free(a0 *u8)\n"))
+
+@test fn skips_what_the_ffi_cannot_carry()
+    src := "int printf(const char *fmt, ...);\nstruct P { int x; };\nstruct P make(void);\nint (*get(void))(int);\nlong double f(void);\nint ok(void);\n"
+    out := module_text(src, false)
+    assert_eq(out, "pub extern c fn ok() i32\n")
+
+@test fn looks_through_guards_and_attributes()
+    src := "#ifndef H\n#define H\n#ifdef __cplusplus\nextern \"C\" \{\n#endif\n/* a comment */\nextern int atoi (const char *__nptr) __attribute__ ((__nothrow__)) __wur;\n// done\n#ifdef __cplusplus\n}\n#endif\nunsigned long strtoul(const char *s, char **end, int base);\n#endif\n"
+    out := module_text(src, false)
+    assert(out.contains("pub extern c fn atoi(a0 *u8) i32\n"))
+    assert(out.contains("pub extern c fn strtoul(a0 *u8, a1 **u8, a2 i32) u64\n"))
+
+@test fn long_follows_the_target()
+    assert_eq(module_text("long f(unsigned long x);\n", true), "pub extern c fn f(a0 u32) i32\n")
+    assert_eq(module_text("long f(unsigned long x);\n", false), "pub extern c fn f(a0 u64) i64\n")
+
+@test fn follows_the_headers_own_typedefs()
+    src := "typedef unsigned int id_t;\ntypedef struct node node_t;\nid_t get(node_t *n, id_t k);\n"
+    assert_eq(module_text(src, false), "pub extern c fn get(a0 *u8, a1 u32) u32\n")
