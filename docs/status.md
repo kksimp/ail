@@ -63,6 +63,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native map probe (ADR 0816 item 12): first-slot hit without register saves, `map_set` through the remembered entry; wordfreq 195.5M → 167.2M instructions.
 - Time zones (ADR 0924, decided): AIL will ship the IANA tz database so zones answer the same on every OS, Windows included; not yet implemented.
 - Windows releases (ADR 0925): the gate stays Unix-shaped; `native`, `examples` and `run` must be green on ail-win before each release.
+- C headers (ADR 0926, ffi.decl.1): `use c "header.h" as name` reads the header's function prototypes (`compiler/cheader/`) and imports them as a module of `pub extern c fn`; what the FFI cannot carry is left out.
 - Struct scalar replacement (ADR 0923, native.sroa.1): a struct that never leaves its function has no object, and constructors that only build their result are inlined; raytrace N=4000 9.7 s → 3.6 s on ail-linux (gcc -O2 1.75 s).
 - Native list reuse (ADR 0824, native.reuse.1): a list made in a loop that nothing keeps past the iteration is one list the preheader makes and each iteration empties; fannkuch 252M → 160M instructions, binarytrees 334M → 256M.
 - Native fill loops (ADR 0816 item 11): a counted loop storing one unchanging value (`for _ in 0..n: xs.push(true)`) becomes `rt.fill`, `rep stos` on x86-64; sieve 60.8M → 48.8M instructions.

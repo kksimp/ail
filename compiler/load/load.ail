@@ -6,6 +6,7 @@
 ##
 ## Spec rules: mod.unit.1-5, mod.use.1-6, mod.vis.1, json.prelude.1.
 use ast
+use cheader
 use fix
 use mir
 use pkg
@@ -143,6 +144,8 @@ fn load_package(
     mut seen := Set[str]()
     seen.add("")
     mut queue := [("", root_files)]
+    # The modules made from C headers, by module name (ffi.decl.1).
+    mut made := Map[str, str]()
     while queue.len() > 0
         item := queue.pop() else break
         module := item.0
@@ -153,6 +156,8 @@ fn load_package(
             mut src := ""
             if given := over.get(p)
                 src = given
+            elif made.contains(module)
+                src = made[module]
             else
                 src = fs.read_text(p) else return LoadError("can't read {shown}")
             base := files.len() * FILE_LINES
@@ -162,6 +167,14 @@ fn load_package(
             for d in lexed.diags
                 diags.push(at_line(d, base))
             for imp in scan_uses(toks)
+                if cheader.is_use(imp)
+                    # A C header: its module is written from the header's own text (ffi.decl.1).
+                    if not seen.contains(imp[0])
+                        seen.add(imp[0])
+                        if text := cheader.module_for(cheader.header_of(imp[0]), cheader.dir_of(p))
+                            made[imp[0]] = text
+                            queue.push((imp[0], ["<{imp[0]}>"]))
+                    continue
                 if imp[0] == "std"
                     dotted := imp.join(".")
                     if sf := std_file(dotted)
@@ -260,6 +273,11 @@ fn at_line(d syntax.Diag, base int) syntax.Diag
                             Sym(s) =>
                                 if s != "."
                                     break
+                            Str(h) =>
+                                # `use c "header.h" as name` (ffi.decl.1).
+                                if parts == ["c"]
+                                    parts = [cheader.module_name(h)]
+                                break
                             _ => break
                         j += 1
                     if parts.len() > 0

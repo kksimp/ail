@@ -427,6 +427,95 @@ pub fn module_text(src str, windows bool) str
         return ""
     "{lines.join("\n")}\n"
 
+## ---- The module a `use c "header.h" as name` stands for ----
+
+## Every module of a header is named `__c_` and the header's spelling, each character that is
+## not a letter or digit as `_` and two hex digits (`_u` and the code for a wide one), so the
+## name holds no dot, is not a name a program writes, and the header can be read back from it.
+pub fn module_name(header str) str
+    mut out := "__c_"
+    for c in header.chars()
+        code := c.code()
+        hex := "{code:x}"
+        if code < 128 and (c.is_alpha() or c.is_digit())
+            out = "{out}{c}"
+        elif code < 256
+            pair := hex.pad_left(2, '0')
+            out = "{out}_{pair}"
+        else
+            out = "{out}_u{hex}_"
+    out
+
+fn hex_digit(cs List[char], i int) int
+    if i >= cs.len()
+        return 0
+    cs[i].to_digit(16) else 0
+
+## Whether the import path `parts` is the one `module_name` makes.
+pub fn is_use(parts List[str]) bool
+    parts.len() == 1 and parts[0].starts_with("__c_")
+
+## The header a module name stands for.
+pub fn header_of(name str) str
+    cs := name.slice(4, name.len()).chars()
+    mut out := ""
+    mut i := 0
+    while i < cs.len()
+        if cs[i] != '_'
+            out = "{out}{cs[i]}"
+            i += 1
+        elif i + 1 < cs.len() and cs[i + 1] == 'u'
+            mut code := 0
+            i += 2
+            while i < cs.len() and cs[i] != '_'
+                code = code * 16 + hex_digit(cs, i)
+                i += 1
+            out = "{out}{char.from_code(code)}"
+            i += 1
+        else
+            code := hex_digit(cs, i + 1) * 16 + hex_digit(cs, i + 2)
+            out = "{out}{char.from_code(code)}"
+            i += 3
+    out
+
+## The directory part of a file path ("." for none).
+pub fn dir_of(file str) str
+    cut := file.split("/")
+    if cut.len() > 1
+        return cut[..(cut.len() - 1)].join("/")
+    "."
+
+## Where the system keeps C headers.
+SYSTEM_DIRS := [
+    "/usr/include",
+    "/usr/local/include",
+    "/usr/include/x86_64-linux-gnu",
+    "/usr/include/aarch64-linux-gnu",
+    "/opt/homebrew/include",
+    "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+]
+
+## The file of `header`: beside the importing file in `dir`, else the system's (ADR 0926).
+pub fn find(header str, dir str) str?
+    if header.starts_with("/")
+        return if fs.exists(header) then header else none
+    for d in cat_dirs(dir)
+        p := "{d}/{header}"
+        if fs.exists(p)
+            return p
+    none
+
+fn cat_dirs(dir str) List[str]
+    mut all := [dir]
+    all.extend(SYSTEM_DIRS)
+    all
+
+## The module text for `header`, or none when no file of that name is found.
+pub fn module_for(header str, dir str) str?
+    file := find(header, dir) else return none
+    text := fs.read_text(file) else return none
+    module_text(text, (env.get("OS") else "") == "Windows_NT")
+
 @test fn reads_scalars_and_pointers()
     src := "int abs(int x);\nsize_t strlen(const char *s);\ndouble hypot(double, double);\nvoid free(void *p);\n"
     out := module_text(src, false)
@@ -453,3 +542,10 @@ pub fn module_text(src str, windows bool) str
 @test fn follows_the_headers_own_typedefs()
     src := "typedef unsigned int id_t;\ntypedef struct node node_t;\nid_t get(node_t *n, id_t k);\n"
     assert_eq(module_text(src, false), "pub extern c fn get(a0 *u8, a1 u32) u32\n")
+
+@test fn module_names_round_trip()
+    for h in ["stdlib.h", "sys/stat.h", "my_lib-2.h", "caf\u{e9}.h"]
+        name := module_name(h)
+        assert(is_use([name]))
+        assert(not name.contains("."))
+        assert_eq(header_of(name), h)
