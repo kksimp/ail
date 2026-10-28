@@ -23,18 +23,21 @@ QUALIFIERS := {
 }
 
 ## Words followed by a parenthesised group that is no part of the type.
-GROUPS := {
-    "__attribute__",
-    "__attribute",
-    "__asm__",
-    "__asm",
-    "asm",
-    "__declspec",
-    "_Alignas",
-}
+GROUPS := {"__attribute__", "__attribute", "__asm__", "__asm", "asm", "__declspec", "_Alignas"}
 
 ## The words of a C scalar type.
-SCALARS := {"unsigned", "signed", "char", "short", "int", "long", "float", "double", "void", "_Bool"}
+SCALARS := {
+    "unsigned",
+    "signed",
+    "char",
+    "short",
+    "int",
+    "long",
+    "float",
+    "double",
+    "void",
+    "_Bool",
+}
 
 ## AIL's reserved words (the lexer's list): a function named so is left out.
 RESERVED := {
