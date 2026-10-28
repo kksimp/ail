@@ -45,6 +45,9 @@ use x64
 
 fn main() !
     args := env.args()
+    # tool.new.1: a bare `new` gets the `new` usage line, not the compiler's.
+    if args.len() == 1 and args[0] == "new"
+        io.exit(scaffold.command([]))
     if args.len() == 0
         or (args.len() < 2 and args[0] != "explain" and args[0] != "diff" and args[0] != "attach")
         io.eprint("usage: ail run compiler (check PROGRAM.json... | tokens FILE... | parse FILE... | mir FILE | build FILE RT)")
