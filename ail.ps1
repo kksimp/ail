@@ -162,9 +162,13 @@ if ($cmd -eq 'run') {
     }
 }
 
+# `check --errors` and `--budget`/`--from` anywhere in `check` are native too, as in ./ail.
+$checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
+$checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
+
 $native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api'
 $route = (
-    $runFile -or $native1 -or
+    $runFile -or $native1 -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
         (& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
@@ -213,7 +217,8 @@ if ($route) {
     switch ($cmd) {
         { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'diff', 'explain', 'edit', 'ask', 'attach' } { & $native $cmd @rest; exit $LASTEXITCODE }
         'check' {
-            if ($rest[0] -in '--budget', '--from') {
+            if ($checkErrors) { & $native check-errors @rest; exit $LASTEXITCODE }
+            if ($checkBudget) {
                 # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).
                 $bopts = @(); $copts = @(); $prev = ''
                 foreach ($a in $rest) {
