@@ -162,9 +162,14 @@ if ($cmd -eq 'run') {
     }
 }
 
-$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api'
+# `check --errors` and `--budget`/`--from` anywhere in `check` are native too, as in ./ail.
+$checkErrors = ($cmd -eq 'check') -and ($rest -contains '--errors')
+$checkBudget = ($cmd -eq 'check') -and (@($rest | Where-Object { "$_" -in '--budget', '--from' }).Count -gt 0)
+
+$replayShrink = ($cmd -eq 'replay') -and ($rest.Count -gt 0) -and ($rest[0] -eq '--shrink')
+$native1 = $cmd -in 'build', 'pkg', 'fmt', 'fix', 'diff', 'explain', 'edit', 'ask', 'attach', 'api', 'new', 'verify'
 $route = (
-    $runFile -or $native1 -or
+    $runFile -or $native1 -or $replayShrink -or $checkErrors -or $checkBudget -or
     ($cmd -eq 'check' -and ($rest.Count -gt 0) -and (
         ($rest[0] -in '--deny', '--deterministic', '--unsafe', '--budget', '--from') -or
         (& $isFile $rest[0]) -or ($rest[0] -eq '--json' -and (& $isFile $rest[1])))) -or
@@ -211,9 +216,10 @@ if ($route) {
     # `ail test` and tools that start `ail` themselves go through ail.cmd.
     if (-not $env:AIL) { $env:AIL = Fwd (Join-Path $root 'ail.cmd') }
     switch ($cmd) {
-        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'diff', 'explain', 'edit', 'ask', 'attach' } { & $native $cmd @rest; exit $LASTEXITCODE }
+        { $_ -in 'pkg', 'fmt', 'fix', 'api', 'effects', 'diff', 'explain', 'edit', 'ask', 'attach', 'new' } { & $native $cmd @rest; exit $LASTEXITCODE }
         'check' {
-            if ($rest[0] -in '--budget', '--from') {
+            if ($checkErrors) { & $native check-errors @rest; exit $LASTEXITCODE }
+            if ($checkBudget) {
                 # `ail check --budget [N] [--from K] [--json] FILE`: the native check under the budget (budget.out.1-7).
                 $bopts = @(); $copts = @(); $prev = ''
                 foreach ($a in $rest) {
@@ -228,6 +234,8 @@ if ($route) {
             }
             & $native check-program @rest; exit $LASTEXITCODE
         }
+        'verify' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\verify\verify.ail')) @rest; exit $LASTEXITCODE }
+        'replay' { $env:AIL_NATIVE_CLI = ''; & $native run (Fwd (Join-Path $root 'tools\shrink\shrink.ail')) @rest; exit $LASTEXITCODE }
         'test' {
             foreach ($a in $rest) {
                 if ("$a" -like '--watch*') { [Console]::Error.WriteLine("ail test: $a is not native yet"); exit 2 }

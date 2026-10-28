@@ -160,8 +160,8 @@ fmt plain compiler/load/report.ail	262751774702b0b9	0	a9e8afdfd49bde6d
 fmt long compiler/load/report.ail	262751774702b0b9	0	2fa4be9cd88b608d
 fmt plain compiler/load/resolve.ail	5e2ee3e4ce689334	0	e3f1745bd7ce2aad
 fmt long compiler/load/resolve.ail	5e2ee3e4ce689334	0	6cfbc1d4af4822ba
-fmt plain compiler/main.ail	00f251f16f618c10	0	4354099c980d0baf
-fmt long compiler/main.ail	00f251f16f618c10	0	e66e1723c0e441c8
+fmt plain compiler/main.ail	a54678cb38cba48c	0	10cbd20f861b5e86
+fmt long compiler/main.ail	a54678cb38cba48c	0	b98040a9df8e5c08
 fmt plain compiler/mir/addr.ail	4c72498d203d84d2	0	2e3bafd3040cb286
 fmt long compiler/mir/addr.ail	4c72498d203d84d2	0	0945dfda1becd9f0
 fmt plain compiler/mir/bce.ail	bfb8632508d37b2e	0	91a0ec5223f609e1
