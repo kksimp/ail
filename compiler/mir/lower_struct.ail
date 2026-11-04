@@ -171,10 +171,7 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "entries", ty: Ty.List(Ty.Struct(FS_ENTRY))),
         Slot(name: "skipped", ty: Ty.List(Ty.Str)),
     ]
-    structs[FS_VOLUME] = [
-        Slot(name: "total", ty: Ty.Int),
-        Slot(name: "free", ty: Ty.Int),
-    ]
+    structs[FS_VOLUME] = [Slot(name: "total", ty: Ty.Int), Slot(name: "free", ty: Ty.Int)]
     structs[PROC_RAW] = [
         Slot(name: "status", ty: Ty.Int),
         Slot(name: "out", ty: Ty.Bytes),

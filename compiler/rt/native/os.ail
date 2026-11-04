@@ -1399,7 +1399,14 @@ fn os_trashinfo(abs str) str
     n := abs.len()
     for i in 0..n
         b := load8(str_addr(abs) + 16 + i)
-        keep := (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122) or b == 47 or b == 45 or b == 46 or b == 95 or b == 126
+        keep := (b >= 48 and b <= 57)
+            or (b >= 65 and b <= 90)
+            or (b >= 97 and b <= 122)
+            or b == 47
+            or b == 45
+            or b == 46
+            or b == 95
+            or b == 126
         if keep
             sb_byte(b)
         else
