@@ -742,3 +742,4 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0924](0924-ship-the-tz-database.md) | Ship the IANA tz database with AIL, so zones give the same answers on every OS | Accepted | 2026-10-27 |
 | [0925](0925-windows-release-gate.md) | Windows: a Unix-shaped gate, and native, examples and run green before each release | Accepted | 2026-10-27 |
 | [0936](0936-native-map-key-cache.md) | Native string-keyed maps cache keys by object, and an insert reuses the missed probe's hash *(delegated)* | Accepted | 2026-11-04 |
+| [0937](0937-grid-flat-2d-list.md) | `Grid[T]`: a flat 2-D list in the prelude, indexed `g[i, j]` *(delegated)* | Accepted | 2026-11-04 |

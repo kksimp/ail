@@ -4,7 +4,7 @@ Chapter key: `type`
 
 > **Status:** Drafted (partial). Specified: numeric types (integers and
 > floats), structs, enums, optional types, strings, characters, the standard
-> collections, and maps and sets. Not yet designed: fixed-size arrays, SIMD
+> collections, maps and sets, and grids. Not yet designed: fixed-size arrays, SIMD
 > vector types, and const generics.
 
 ## Numeric types
@@ -1142,6 +1142,42 @@ mut ages := {"ann": 31, "bob": 27}
 ages.get("cy")          # none
 for k in ages.keys()
     print("{k}: {ages[k]}")
+```
+
+## Grids
+
+**type.grid.1** — `Grid[T]` is a 2-D list held in one flat block, row by
+row. `Grid.fill(rows, cols, v)` gives a `rows` by `cols` grid of `v`, and
+`Grid.from(xs)` the grid of the lists `xs`; a negative size, or rows of
+different lengths, trap. The type is the prelude's, read when a program names
+`Grid` and doesn't declare it. *(ADR 0937)*
+
+**type.grid.2** — `g.rows`, `g.cols` and `g.cells` (the elements, row by row,
+as a `List[T]`) are read like fields. Assigning any of them is a
+compile-time error. *(ADR 0937)*
+
+**type.grid.3** — `g[i, j]` is the element at row `i`, column `j`; both are
+`int`. It is a place: `g[i, j] = v` and `g[i, j] += v` change it when `g` is
+`mut`. An index outside `0..g.rows` or `0..g.cols` traps (type.coll.4). Any
+other index form on a grid is a compile-time error. *(ADR 0937)*
+
+**type.grid.4** — `g.row(i)` is row `i` as a list, and `g.to_list()` the
+rows as a list of lists. *(ADR 0937)*
+
+**type.grid.5** — A grid is a value (own.val.1): `h := g` copies it. `==`
+compares sizes and elements; printing shows its fields. *(ADR 0937)*
+
+**type.grid.6** — On any other value, `x[a, b]` is `x[(a, b)]`: a map with
+tuple keys reads `m[1, 2]`. *(ADR 0937)*
+
+```ail rules=type.grid.1,type.grid.3,type.grid.4
+fn main()
+    mut dp := Grid.fill(3, 3, 1)
+    for i in 1..3
+        for j in 1..3
+            dp[i, j] = dp[i - 1, j] + dp[i, j - 1]
+    print(dp[2, 2])         # 6
+    print(dp.row(2))        # [1, 3, 6]
 ```
 
 ## Examples

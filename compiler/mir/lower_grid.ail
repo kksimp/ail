@@ -1,0 +1,48 @@
+## `g[i, j]` on the prelude's `Grid[T]` (type.grid.3, ADR 0937). It is
+## `g.cells[g.flat(i, j)]`: `flat` gives -1 for a column outside the grid, so
+## the list's own bounds check traps for every index outside it, and the rest
+## (reads, `=`, `op=`, copies, the optimiser's passes) is a list element's.
+use ast
+
+## Whether `t` is an instance of the prelude's `Grid`.
+fn Lower.is_grid_ty(self, t Ty) bool
+    match t
+        Struct(n) => (gen.bases.get(n) else "") == "Grid" and lazy.names.contains("Grid")
+        _ => false
+
+## A receiver that names one place and calls nothing, so reading it twice is
+## reading it once.
+fn plain_place(e ast.Expr) bool
+    match e
+        Name => true
+        Member(r, _, _) => plain_place(r)
+        _ => false
+
+## `g.cells[g.flat(i, j)]` for `g[i, j]` when `recv` is a grid; `none` when
+## it isn't one.
+fn Lower.grid_place(mut self, recv ast.Expr, index ast.Expr, pos ast.Pos) ast.Expr?
+    items := match index
+        TupleLit(xs, _) => xs
+        _ => return none
+    if items.len() != 2 or not is_grid_ty(recv_ty(recv)?)
+        return none
+    if not plain_place(recv)
+        problem(pos, "`g[i, j]` on a grid that isn't a variable or a field isn't in the native subset yet")
+        return none
+    args := [
+        ast.Arg(label: none, mutable: false, moved: false, value: items[0], param: none),
+        ast.Arg(label: none, mutable: false, moved: false, value: items[1], param: none),
+    ]
+    ast.Expr.Index(
+        recv: ast.Expr.Member(recv: recv, name: "cells", name_pos: pos),
+        index: ast.Expr.Method(recv: recv, name: "flat", name_pos: pos, args: args),
+        pos: pos,
+    )
+
+## The type of `x[...]` where `x` is a `t`: a grid's element, else a list's.
+fn Lower.index_ty(self, t Ty) Ty?
+    if is_grid_ty(t)
+        match t
+            Struct(n) => return gen.targs.get(n)?[0]
+            _ => return none
+    t.elem()

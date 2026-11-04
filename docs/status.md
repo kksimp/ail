@@ -62,6 +62,7 @@ All verified on Linux x86-64 and macOS ARM64.
 - Native code generation (ADR 0816): parameters stay in their arrival registers (no swap moves at entry); wordfreq 254.6M → 240.9M instructions, binarytrees 412.2M → 399.5M, fannkuch 284.6M → 274.8M.
 - Native map probe (ADR 0816 item 12): first-slot hit without register saves, `map_set` through the remembered entry; wordfreq 195.5M → 167.2M instructions.
 - Native string-keyed map key cache (ADR 0936): the entry of a key object is found without hashing it again, and an insert reuses the hash of the probe that missed.
+- `Grid[T]` (ADR 0937, type.grid.1-6): a flat 2-D list in the prelude with `g[i, j]`; 6-17% fewer tokens than nested lists on 2-D code.
 - Time zones (ADR 0924, decided): AIL will ship the IANA tz database so zones answer the same on every OS, Windows included; not yet implemented.
 - Windows releases (ADR 0925): the gate stays Unix-shaped; `native`, `examples` and `run` must be green on ail-win before each release.
 - Struct scalar replacement (ADR 0923, native.sroa.1): a struct that never leaves its function has no object, and constructors that only build their result are inlined; raytrace N=4000 9.7 s → 3.6 s on ail-linux (gcc -O2 1.75 s).

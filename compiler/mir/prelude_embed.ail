@@ -902,4 +902,46 @@ struct VariantInfo
 ## Why a generator can't derive its trait for a type (ct.derive.4).
 error struct DeriveError
     message str
+## @module grid
+## `Grid[T]` (type.grid.1-6, ADR 0937): a 2-D list in one flat block, row by
+## row. It is read only when the program names `Grid` and doesn't declare
+## that name itself.
+
+## `rows`, `cols` and `cells` are read, never assigned (type.grid.2).
+struct Grid[T]
+    rows int
+    cols int
+    cells List[T]
+
+## A `rows` by `cols` grid of `v` (type.grid.1).
+fn Grid.fill(rows int, cols int, v T) Self
+    if rows < 0 or cols < 0
+        unreachable("type.grid.1: a grid can't be {rows} by {cols}")
+    Grid(rows: rows, cols: cols, cells: [v for _ in 0..rows * cols])
+
+## A grid of the lists `xs`, which must all have the same length (type.grid.1).
+fn Grid.from(xs List[List[T]]) Self
+    c := if xs.len() == 0 then 0 else xs[0].len()
+    mut cells := List[T]()
+    for x in xs
+        if x.len() != c
+            unreachable("type.grid.1: the rows of a grid must have the same length")
+        cells.extend(x)
+    Grid(rows: xs.len(), cols: c, cells: cells)
+
+## Where `g[i, j]` is in `cells` (type.grid.3): -1 for a column outside
+## `0..cols`, so that the list index traps; a row outside `0..rows` is outside
+## `cells` already.
+fn Grid.flat(self, i int, j int) int
+    if j < 0 or j >= cols
+        return -1
+    i * cols + j
+
+## Row `i` as a list (type.grid.4).
+fn Grid.row(self, i int) List[T]
+    cells[i * cols..(i + 1) * cols]
+
+## The rows as lists (type.grid.4).
+fn Grid.to_list(self) List[List[T]]
+    [row(i) for i in 0..rows]
 """

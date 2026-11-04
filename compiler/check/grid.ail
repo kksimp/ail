@@ -1,0 +1,56 @@
+## `Grid[T]` (spec 04-types, type.grid.1-6, ADR 0937): the prelude's flat
+## 2-D list. The checker adds what plain struct rules don't give: `g[i, j]`
+## is an element (type.grid.3), and the size fields are never assigned
+## (type.grid.2).
+use ast
+
+## The element type of `t` when it is the prelude's `Grid[T]`.
+@allow("expr.match.3") fn Checker.grid_elem(self, t Ty) Ty?
+    match t
+        Struct(s, args) =>
+            d := prog.structs[s]
+            if d.name == "Grid" and is_prelude_line(d.pos.line)
+                if args.len() > 0
+                    return args[0]
+                return Ty.Unknown
+        _ => return none
+    none
+
+## `g[i, j]` (type.grid.3): a row and a column, each an `int`.
+@allow("expr.match.3") fn Checker.grid_index(mut self, index ast.Expr, elem Ty) Ty
+    match index
+        TupleLit(items, _) =>
+            if items.len() != 2
+                err_help(
+                    "type.grid.3",
+                    expr_pos(index),
+                    "a grid index is a row and a column, found {items.len()} indexes",
+                    "write `g[i, j]`",
+                )
+                return elem
+            for it in items
+                t := expr(it, Ty.Int, true)
+                if not accepts(Ty.Int, t)
+                    err(
+                        "type.grid.3",
+                        expr_pos(it),
+                        "a grid index must be `int`, found {show(t)}",
+                    )
+        _ =>
+            expr(index, none, true)
+            err_help(
+                "type.grid.3",
+                expr_pos(index),
+                "a grid is indexed with a row and a column",
+                "write `g[i, j]`; `g.row(i)` gives row `i` as a list",
+            )
+    elem
+
+## `g.rows = ...`, `g.cols = ...`, `g.cells = ...` on a grid (type.grid.2).
+@allow("expr.match.3") fn Checker.grid_field_target(mut self, target ast.Expr) bool
+    match target
+        Member(recv, name, _) =>
+            if name != "rows" and name != "cols" and name != "cells"
+                return false
+            grid_elem(quiet_type(recv)) != none
+        _ => false
