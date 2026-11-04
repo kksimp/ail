@@ -265,3 +265,40 @@ fn main()
     mut q := Quiet(n: 0)
     app.run(mut q) else return
 ```
+
+```ail rules=std.app.15,std.app.16,std.app.17,std.app.18,std.app.19
+use std.app
+
+struct Pad
+    menu app.Popup?
+
+impl app.App for Pad
+    fn update(mut self, ev app.Event)
+        if ev.kind == "click" and ev.text == "right"
+            menu = app.Popup(id: "pad", x: ev.x, y: ev.y, items: ["Reveal", "Trash"])
+        if ev.kind == "popup"
+            menu = none
+
+    fn view(self) app.Node
+        app.canvas("pad", 0.0, 0.0, [app.Op.Shade(x: 0.0, y: 0.0, w: 4.0, h: 4.0, color: 0, alpha: 0.5)])
+
+    fn hover(self) bool
+        true
+
+    fn popup(self) app.Popup?
+        menu
+
+fn main()
+    ev := app.progress("scan", app.Progress(done: 3, total: 10, note: "a|b"))
+    p := app.progress_of(ev) else app.Progress(done: -1, total: -1, note: "")
+    print("{p.done}/{p.total} {p.note}")
+    print(app.progress_of(app.external("scan", "other")) == none)
+    mut pad := Pad(menu: none)
+    print(app.outline(pad.view()))
+    print(app.frame(pad).contains("\"hover\":true"))
+    j := parse_json("\{\"kind\":\"click\",\"id\":\"pad\",\"text\":\"right\",\"clicks\":2}") else Json.Null
+    c := app.event_from_json(j)
+    print(c.clicks)
+    pad.update(c)
+    print(pad.popup() != none)
+```
