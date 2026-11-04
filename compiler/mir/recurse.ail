@@ -115,8 +115,8 @@ pub fn recursive_names(m Module) Set[str]
     mut size := [0 for _ in 0..t.comps]
     for k in 0..n
         size[t.comp[k]] += 1
-    mut out := selfs
+    mut rec := selfs
     for k in 0..n
         if size[t.comp[k]] > 1
-            out.add(m.funcs[k].name)
-    out
+            rec.add(m.funcs[k].name)
+    rec
