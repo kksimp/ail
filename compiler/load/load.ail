@@ -59,6 +59,8 @@ STD_TYPES := {
     "IoError": "fs",
     "Metadata": "fs",
     "Volume": "fs",
+    "Entry": "fs",
+    "Scan": "fs",
     "Response": "net",
     "RawResponse": "net",
     "RawOutput": "proc",

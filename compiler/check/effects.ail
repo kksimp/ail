@@ -46,6 +46,7 @@ STD_EFFECTS := [
             "volume",
             "read_range",
             "trash",
+            "scan",
         ],
         effects: ["fs", "io"],
     ),

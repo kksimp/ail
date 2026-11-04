@@ -1,0 +1,12 @@
+/scan/a 0 true false 0 true
+/scan/a/b 0 true false 0 true
+/scan/a/b/f1.txt 5 false false 1 true
+/scan/a/c 0 true false 0 true
+/scan/a/c/f2.txt 2 false false 1 true
+/scan/a/g.txt 3 false false 1 true
+/scan/e 0 true false 0 true
+/scan/z.txt 11 false false 1 true
+skipped 0
+same count true
+failed: not_found /scan/nope
+failed: not_dir /scan/z.txt
