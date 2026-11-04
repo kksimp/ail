@@ -137,6 +137,16 @@ run and stops them after, in its own block, where their handles live.
 once before the first `update`. `exited` (the host's pipe closed) fails `run`
 with `host_exited`. Headless `script` has no inbox. *(ADR 0861)*
 
+**std.app.15** — `struct Progress` has `done int`, `total int` (`0` when unknown) and `note str`. `progress(source, p) Event` makes an `external` event (`std.app.14`) whose `text` is `progress|done|total|note`; `progress_of(ev) Progress?` reads it back and gives `none` for any other event. *(ADR 0930)*
+
+**std.app.16** — `trait App` has `hover(self) bool` (default `false`). While it is `true` (the `view` line carries `"hover":true`), a host sends `move` (a canvas's `id`, `x`, `y`) at most once per 16 ms with the last position, and `leave` (`id`). A host that can't track the pointer sends neither, so no app may need them. *(ADR 0931)*
+
+**std.app.17** — `Event` has `clicks int`: 1, 2 or 3 for a `click`, `0` for other kinds, from the platform's multi-click timing. *(ADR 0932)*
+
+**std.app.18** — `trait App` has `popup(self) Popup?` (default `none`); `struct Popup` is `id`, `x`, `y` and `items List[str]`. When it differs from the last one sent, `run` sends `{"v":1,"t":"popup","id":I,"x":X,"y":Y,"items":[...]}`; the host shows its native menu there and answers `{"kind":"popup","id":I,"text":LABEL}`, `text` empty if dismissed. A host with no menu answers dismissed. *(ADR 0932)*
+
+**std.app.19** — `Op.Shade(x, y, w, h, color, alpha float)` fills a rectangle with opacity `alpha` (0 to 1, clamped) over what is drawn. A host skips an op it doesn't know. *(ADR 0933)*
+
 ## Examples
 
 ```ail rules=std.app.1,std.app.2,std.app.4,std.app.5,std.app.6,std.app.11
