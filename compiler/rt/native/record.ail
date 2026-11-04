@@ -776,6 +776,68 @@ fn rec_fs_metadata(path str, at str) int
         rec_end(s)
     m
 
+## `fs.scan` (std.fs.23): `{"struct":"fs.Scan","fields":[[ENTRY,...],[PATH,...]]}`
+## with each entry the array of its nine fields.
+fn rec_fs_scan(root str, same_device bool, at str) int
+    if rec_mode() == 2
+        p := rec_next("fs.scan")
+        if rec_failed(p)
+            rec_raise(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        mut es := List[int]()
+        if rec_c_open()
+            es.push(rec_c_scan_entry())
+            while rec_c_next()
+                es.push(rec_c_scan_entry())
+        rec_c_next()
+        sk := rec_c_strs()
+        r := obj_new(16, 4)
+        store64(r, list_addr(es))
+        store64(r + 8, list_addr(sk))
+        return r
+    r := fs_scan(root, same_device, at)
+    s := rec_begin("fs.scan", 1)
+    if s != 0
+        if failed()
+            rec_fail(s)
+        else
+            rec_text(s, "\{\"struct\":\"fs.Scan\",\"fields\":[[")
+            es := list_at(load64(r))
+            for i in 0..es.len()
+                e := es[i]
+                if i > 0
+                    rec_byte(s, 44)
+                rec_byte(s, 91)
+                rec_json(s, str_at(load64(e)))
+                for k in 1..7
+                    rec_byte(s, 44)
+                    rec_int(s, load64(e + 8 * k))
+                rec_text(s, if load64(e + 56) != 0 then ",true" else ",false")
+                rec_text(s, if load64(e + 64) != 0 then ",true]" else ",false]")
+            rec_text(s, "],")
+            rec_w_strs_body(s, list_at(load64(r + 8)))
+            rec_text(s, "]}")
+        rec_end(s)
+    r
+
+## One entry of a recorded scan; the cursor is at its `[`.
+fn rec_c_scan_entry() int
+    rec_c_open()
+    e := obj_new(72, 4)
+    store64(e, str_addr(rec_c_str()))
+    for k in 1..7
+        rec_c_next()
+        store64(e + 8 * k, rec_c_int())
+    rec_c_next()
+    store64(e + 56, if rec_c_bool() then 1 else 0)
+    rec_c_next()
+    store64(e + 64, if rec_c_bool() then 1 else 0)
+    rec_c_next()
+    e
+
 fn rec_env_vars() int
     if rec_mode() == 2
         p := rec_next("env.vars")

@@ -34,6 +34,7 @@ RECORDED := [
     "fs_walk",
     "fs_glob",
     "fs_metadata",
+    "fs_scan",
     "env_vars",
     "tz_offset",
     "proc_run",

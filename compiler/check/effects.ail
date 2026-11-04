@@ -43,6 +43,7 @@ STD_EFFECTS := [
             "walk",
             "glob",
             "metadata",
+            "scan",
         ],
         effects: ["fs", "io"],
     ),

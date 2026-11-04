@@ -1,0 +1,470 @@
+## Runtime: part of the AIL native runtime; linked into user executables
+## under the Runtime Exception (see LICENSE).
+##
+## `fs.scan(root, same_device)` (std.fs.23, ADR 0927): one walk of a tree that
+## lists each entry with its length, allocated size, inode, device, link count
+## and kind. macOS reads each directory with `getattrlistbulk` (one call per
+## buffer of entries, no per-file call); Linux reads it with `getdents64` and
+## asks `statx` (no link followed) for each name; Windows lists the directory
+## and opens each name without following a reparse point (`win_scan_stat`).
+##
+## The result must not depend on scheduling (std.fs.23): each directory's
+## entries are sorted by bytes and listed in pre-order. Subtrees two levels
+## below `root` are read by tasks on the pool; the main walk leaves a mark
+## (the job's position in the entry and skipped lists) where each one goes and
+## splices its result in afterwards, so the order is the sequential one.
+## Everything a walker touches is its own (`ws`, below): the shared scratch area
+## of `os.ail` is not used here, as tasks run in parallel.
+
+# A walker (`ws`, an `env_new` block of 12 words): +0 its buffer, +8 the device
+# of `root`, +16 whether to stay on it, +24 the entries list, +32 the skipped
+# list, +40 the jobs list (the main walk only), +48 the depth whose directories
+# spawn jobs (-1: none), and for a job +56 its path, +64 its task, +72 and +80 its
+# position in the entries and skipped lists, +88 its result (0 or -errno); the main walk also +96 and +104, the lists it returns.
+SW_BUF := 0
+SW_DEV := 8
+SW_SAME := 16
+SW_ENTS := 24
+SW_SKIP := 32
+SW_JOBS := 40
+SW_SPLIT := 48
+SW_PATH := 56
+SW_REC := 64
+SW_EPOS := 72
+SW_SPOS := 80
+SW_ERR := 88
+SW_FE := 96
+SW_FS := 104
+
+# The walker's buffer: the directory entries, the NUL-terminated path, the stat
+# result, the `attrlist`, and the values of the entry being made (7 words:
+# size, alloc, modified_ms, inode, device, links, kind 0 file, 1 directory, 2 link).
+SC_DENTS_SIZE := 65536
+SC_PATH := 65536
+SC_STAT := 69704
+SC_ALIST := 69960
+SC_VALS := 70016
+SC_BUF_SIZE := 70144
+
+## The `dispatch` id of a job.
+SC_TASK := 1073741825
+
+fn sc_u32(p int) int
+    load8(p) + 256 * load8(p + 1) + 65536 * load8(p + 2) + 16777216 * load8(p + 3)
+
+fn sc_put32(p int, v int)
+    store8(p, v.bit_and(255))
+    store8(p + 1, v.shr(8).bit_and(255))
+    store8(p + 2, v.shr(16).bit_and(255))
+    store8(p + 3, v.shr(24).bit_and(255))
+
+## `s` as a NUL-terminated path in the walker's buffer, or 0 when it doesn't
+## fit or is empty.
+fn sc_cpath(ws int, s str) int
+    sp := str_addr(s)
+    n := load64(sp)
+    if n == 0 or n > OS_PATH_MAX
+        return 0
+    d := load64(ws) + SC_PATH
+    copy_bytes(d, sp + 16, n)
+    store8(d + n, 0)
+    d
+
+## `dir` joined with the `nlen` bytes of `name`, as `path.join` does.
+fn sc_join(dir str, name int, nlen int) str
+    dp := str_addr(dir)
+    dn := load64(dp)
+    sep := if dn > 0 and path_sep(load8(dp + 15 + dn)) then 0 else 1
+    mut chars := 0
+    for i in 0..nlen
+        if load8(name + i).bit_and(192) != 128
+            chars += 1
+    s := str_new(dn + sep + nlen, load64(dp + 8) + sep + chars)
+    copy_bytes(s + 16, dp + 16, dn)
+    if sep == 1
+        store8(s + 16 + dn, 47)
+    copy_bytes(s + 16 + dn + sep, name, nlen)
+    str_at(s)
+
+## An `fs.Entry` (nine words) for `path` from the values in the buffer. A
+## directory's length is 0 (std.fs.23).
+fn sc_entry(ws int, path str) int
+    v := load64(ws) + SC_VALS
+    kind := load64(v + 48)
+    e := obj_new(72, 4)
+    store64(e, str_addr(path))
+    store64(e + 8, if kind == 1 then 0 else load64(v))
+    store64(e + 16, load64(v + 8))
+    store64(e + 24, load64(v + 16))
+    store64(e + 32, load64(v + 24))
+    store64(e + 40, load64(v + 32))
+    store64(e + 48, load64(v + 40))
+    store64(e + 56, if kind == 1 then 1 else 0)
+    store64(e + 64, if kind == 2 then 1 else 0)
+    e
+
+## Shell sort of the entries in `data[0..n]` by their paths' bytes.
+fn sc_sort(data int, n int)
+    mut gap := n / 2
+    while gap > 0
+        for i in gap..n
+            v := load64(data + 8 * i)
+            mut j := i
+            while j >= gap and os_str_cmp(load64(load64(data + 8 * (j - gap))), load64(v)) > 0
+                store64(data + 8 * j, load64(data + 8 * (j - gap)))
+                j -= gap
+            store64(data + 8 * j, v)
+        gap = gap / 2
+
+# ---- reading one directory: 0, or -errno when it can't be opened or read ----
+
+## Linux: `getdents64`, then `statx(dirfd, name, AT_SYMLINK_NOFOLLOW |
+## AT_NO_AUTOMOUNT, STATX_BASIC_STATS)` for each name. `statx` fields: nlink
+## at 16, mode at 28, inode 32, size 40, blocks 48, mtime 112 (seconds, then
+## nanoseconds at 120), device major and minor at 136 and 140.
+fn sc_read_linux(ws int, dir str, ents List[int]) int
+    p := sc_cpath(ws, dir)
+    if p == 0
+        return -36
+    fd := os_open(p, os_pick(65536, 16384, 0), 0)
+    if fd < 0
+        return fd
+    buf := load64(ws)
+    st := buf + SC_STAT
+    v := buf + SC_VALS
+    nr := os_pick(332, 291, 0)
+    mut res := 0
+    while true
+        n := syscall(os_pick(217, 61, 0), fd, buf, SC_DENTS_SIZE, 0, 0, 0)
+        if n == -4
+            continue
+        if n < 0
+            res = n
+            break
+        if n == 0
+            break
+        mut at := 0
+        while at < n
+            e := buf + at
+            name := e + 19
+            nlen := os_c_len(name)
+            at += load8(e + 16) + load8(e + 17) * 256
+            if os_name_is_dots(name, nlen)
+                continue
+            # A name that vanished or can't be examined is left out.
+            if syscall(nr, fd, name, 2304, 2047, st, 0) < 0
+                continue
+            typ := (load8(st + 28) + load8(st + 29) * 256).bit_and(61440)
+            mut kind := 0
+            if typ == 16384
+                kind = 1
+            elif typ == 40960
+                kind = 2
+            store64(v, load64(st + 40))
+            store64(v + 8, load64(st + 48) * 512)
+            store64(v + 16, load64(st + 112) * 1000 + sc_u32(st + 120) / 1000000)
+            store64(v + 24, load64(st + 32))
+            store64(v + 32, sc_u32(st + 136) * 4294967296 + sc_u32(st + 140))
+            store64(v + 40, sc_u32(st + 16))
+            store64(v + 48, kind)
+            ents.push(sc_entry(ws, sc_join(dir, name, nlen)))
+    os_close(fd)
+    res
+
+## macOS: `getattrlistbulk` (syscall 461) with the attributes returned-set,
+## name, device, object type, modification time, file id, then for files the
+## link count, allocated size and data length. A record is its length (4
+## bytes), the returned set (20), then the attributes present, packed in the
+## order of their bits.
+fn sc_read_mac(ws int, dir str, ents List[int]) int
+    p := sc_cpath(ws, dir)
+    if p == 0
+        return -36
+    fd := os_open(p, 1048576, 0)
+    if fd < 0
+        return fd
+    buf := load64(ws)
+    al := buf + SC_ALIST
+    store64(al, 5)
+    sc_put32(al + 4, 2181039115)
+    store64(al + 8, 0)
+    store64(al + 16, 0)
+    sc_put32(al + 16, 517)
+    mut res := 0
+    while true
+        n := syscall(461, fd, al, buf, SC_DENTS_SIZE, 0, 0)
+        if n == -4
+            continue
+        if n < 0
+            res = n
+            break
+        if n == 0
+            break
+        mut e := buf
+        mut k := 0
+        while k < n
+            sc_mac_entry(ws, dir, e, ents)
+            e += sc_u32(e)
+            k += 1
+    os_close(fd)
+    res
+
+## One record of `getattrlistbulk` at `e`.
+fn sc_mac_entry(ws int, dir str, e int, ents List[int])
+    rc := sc_u32(e + 4)
+    rf := sc_u32(e + 16)
+    v := load64(ws) + SC_VALS
+    for i in 0..7
+        store64(v + 8 * i, 0)
+    # ATTR_CMN_ERROR: the entry could not be read.
+    if rc.bit_and(536870912) != 0
+        return
+    mut cur := e + 24
+    mut name := 0
+    mut nlen := 0
+    if rc.bit_and(1) != 0
+        off := sc_u32(cur)
+        mut rel := off
+        if off >= 2147483648
+            rel = off - 4294967296
+        name = cur + rel
+        nlen = sc_u32(cur + 4) - 1
+        cur += 8
+    if rc.bit_and(2) != 0
+        store64(v + 32, sc_u32(cur))
+        cur += 4
+    mut ty := 1
+    if rc.bit_and(8) != 0
+        ty = sc_u32(cur)
+        cur += 4
+    if rc.bit_and(1024) != 0
+        store64(v + 16, load64(cur) * 1000 + load64(cur + 8) / 1000000)
+        cur += 16
+    if rc.bit_and(33554432) != 0
+        store64(v + 24, load64(cur))
+        cur += 8
+    store64(v + 40, 1)
+    if rf.bit_and(1) != 0
+        store64(v + 40, sc_u32(cur))
+        cur += 4
+    if rf.bit_and(4) != 0
+        store64(v + 8, load64(cur))
+        cur += 8
+    if rf.bit_and(512) != 0
+        store64(v, load64(cur))
+        cur += 8
+    if name == 0 or nlen <= 0 or os_name_is_dots(name, nlen)
+        return
+    # VDIR 2, VLNK 5.
+    mut kind := 0
+    if ty == 2
+        kind = 1
+    elif ty == 5
+        kind = 2
+    store64(v + 48, kind)
+    ents.push(sc_entry(ws, sc_join(dir, name, nlen)))
+
+## Windows: the directory listing of `win.ail`, and `win_scan_stat` per name.
+fn sc_read_win(ws int, dir str, ents List[int]) int
+    p := sc_cpath(ws, dir)
+    if p == 0
+        return -36
+    fd := os_open(p, 65536, 0)
+    if fd < 0
+        return fd
+    buf := load64(ws)
+    mut res := 0
+    while true
+        n := os_getdents(fd, buf, SC_DENTS_SIZE)
+        if n == -4
+            continue
+        if n < 0
+            res = n
+            break
+        if n == 0
+            break
+        mut at := 0
+        while at < n
+            e := buf + at
+            name := e + 19
+            nlen := os_c_len(name)
+            at += load8(e + 16) + load8(e + 17) * 256
+            if os_name_is_dots(name, nlen)
+                continue
+            full := sc_join(dir, name, nlen)
+            cp := sc_cpath(ws, full)
+            if cp == 0 or win_scan_stat(cp, buf + SC_VALS) < 0
+                continue
+            ents.push(sc_entry(ws, full))
+    os_close(fd)
+    res
+
+fn sc_read_dir(ws int, dir str, ents List[int]) int
+    t := target()
+    if t == 2
+        return sc_read_mac(ws, dir, ents)
+    if t == 3
+        return sc_read_win(ws, dir, ents)
+    sc_read_linux(ws, dir, ents)
+
+## The device of `root` into the walker (followed if it is a link); 0, or -errno.
+fn sc_root(ws int, root str) int
+    p := sc_cpath(ws, root)
+    if p == 0
+        return -36
+    st := load64(ws) + SC_STAT
+    t := target()
+    if t == 3
+        v := load64(ws) + SC_VALS
+        r := win_scan_stat(p, v)
+        if r < 0
+            return r
+        store64(ws + SW_DEV, load64(v + 32))
+        return 0
+    if t == 2
+        fd := os_open(p, 1048576, 0)
+        if fd < 0
+            return fd
+        r := os_fstat(fd, st)
+        os_close(fd)
+        if r < 0
+            return r
+        store64(ws + SW_DEV, sc_u32(st))
+        return 0
+    r := syscall(os_pick(332, 291, 0), -100, p, 2048, 2047, st, 0)
+    if r < 0
+        return r
+    store64(ws + SW_DEV, sc_u32(st + 136) * 4294967296 + sc_u32(st + 140))
+    0
+
+# ---- the walk ----
+
+## List `dir` and what lies below it, in pre-order, into the walker's lists.
+## A directory at depth `SW_SPLIT` has its subdirectories handed to the pool
+## instead. 0, or -errno when `dir` itself can't be read (nothing is listed).
+fn sc_walk(ws int, dir str, depth int) int
+    mut ents := List[int]()
+    r := sc_read_dir(ws, dir, ents)
+    if r < 0
+        return r
+    q := list_addr(ents)
+    sc_sort(load64(q + 16), load64(q))
+    mut out := list_at(load64(ws + SW_ENTS))
+    mut skip := list_at(load64(ws + SW_SKIP))
+    same := load64(ws + SW_SAME) != 0
+    rdev := load64(ws + SW_DEV)
+    for i in 0..ents.len()
+        e := ents[i]
+        out.push(e)
+        # Only a real directory is entered, and with `same_device`, one on the
+        # device of the root.
+        if load64(e + 56) == 0 or load64(e + 64) != 0
+            continue
+        if same and load64(e + 40) != rdev
+            continue
+        sub := str_at(load64(e))
+        if depth == load64(ws + SW_SPLIT)
+            sc_spawn(ws, sub)
+        elif sc_walk(ws, sub, depth + 1) < 0
+            skip.push(str_addr(sub))
+    0
+
+## Queue the walk of `path` as a job.
+fn sc_spawn(ws int, path str)
+    job := env_new(12)
+    store64(job + SW_DEV, load64(ws + SW_DEV))
+    store64(job + SW_SAME, load64(ws + SW_SAME))
+    store64(job + SW_ENTS, list_addr(List[int]()))
+    store64(job + SW_SKIP, list_addr(List[int]()))
+    store64(job + SW_SPLIT, -1)
+    store64(job + SW_PATH, str_addr(path))
+    store64(job + SW_EPOS, list_at(load64(ws + SW_ENTS)).len())
+    store64(job + SW_SPOS, list_at(load64(ws + SW_SKIP)).len())
+    rec := task_new(SC_TASK)
+    store64(rec + T_ARGS, job)
+    store64(job + SW_REC, rec)
+    mut jobs := list_at(load64(ws + SW_JOBS))
+    jobs.push(job)
+    task_start(rec)
+
+## A job on the pool (`rt.dispatch` of `SC_TASK`): the walk of its path, with
+## a buffer of its own.
+fn scan_chunk(rec int)
+    job := load64(rec + T_ARGS)
+    store64(job, alloc_raw(SC_BUF_SIZE, KIND_BYTES))
+    r := sc_walk(job, str_at(load64(job + SW_PATH)), 99)
+    store64(job + SW_ERR, r)
+    store64(job, 0)
+
+## Whether job `job` ended and read its directory.
+fn sc_job_ok(job int) bool
+    atomic_load(load64(job + SW_REC) + T_STATE) == 2 and load64(job + SW_ERR) >= 0
+
+## Wait for the jobs, then the entries and skipped paths in the order of the
+## sequential walk: a job's go where its mark is.
+fn sc_merge(ws int)
+    mut entries := list_at(load64(ws + SW_FE))
+    mut skipped := list_at(load64(ws + SW_FS))
+    jobs := list_at(load64(ws + SW_JOBS))
+    for j in 0..jobs.len()
+        wait_done(load64(jobs[j] + SW_REC))
+    ents := list_at(load64(ws + SW_ENTS))
+    skip := list_at(load64(ws + SW_SKIP))
+    mut ji := 0
+    mut i := 0
+    while i <= ents.len()
+        while ji < jobs.len() and load64(jobs[ji] + SW_EPOS) == i
+            if sc_job_ok(jobs[ji])
+                je := list_at(load64(jobs[ji] + SW_ENTS))
+                for k in 0..je.len()
+                    entries.push(je[k])
+            ji += 1
+        if i < ents.len()
+            entries.push(ents[i])
+        i += 1
+    ji = 0
+    i = 0
+    while i <= skip.len()
+        while ji < jobs.len() and load64(jobs[ji] + SW_SPOS) == i
+            job := jobs[ji]
+            if sc_job_ok(job)
+                js := list_at(load64(job + SW_SKIP))
+                for k in 0..js.len()
+                    skipped.push(js[k])
+            else
+                skipped.push(load64(job + SW_PATH))
+            ji += 1
+        if i < skip.len()
+            skipped.push(skip[i])
+        i += 1
+
+## `fs.scan(root, same_device)` (std.fs.23): an `fs.Scan` of `entries` and
+## `skipped`; a `root` that can't be read fails with its own path.
+fn fs_scan(root str, same_device bool, at str) int
+    ws := env_new(14)
+    store64(ws, alloc_raw(SC_BUF_SIZE, KIND_BYTES))
+    store64(ws + SW_SAME, if same_device then 1 else 0)
+    store64(ws + SW_ENTS, list_addr(List[int]()))
+    store64(ws + SW_SKIP, list_addr(List[int]()))
+    store64(ws + SW_JOBS, list_addr(List[int]()))
+    # Subtrees go to the pool when it has two or more workers, the run isn't
+    # deterministic (conc.par.9) and the target's runtime is thread-safe here.
+    mut split := -1
+    if target() != 3 and not det_on() and load64(pool() + P_TARGET) >= 2
+        split = 1
+    store64(ws + SW_SPLIT, split)
+    mut r := sc_root(ws, root)
+    if r >= 0
+        r = sc_walk(ws, root, 0)
+    if r < 0
+        os_error(root, os_errno_kind(0 - r), at)
+        return 0
+    store64(ws + SW_FE, list_addr(List[int]()))
+    store64(ws + SW_FS, list_addr(List[int]()))
+    sc_merge(ws)
+    store64(ws, 0)
+    s := obj_new(16, 4)
+    store64(s, load64(ws + SW_FE))
+    store64(s + 8, load64(ws + SW_FS))
+    os_succeed()
+    s

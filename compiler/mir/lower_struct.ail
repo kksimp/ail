@@ -23,6 +23,10 @@ PROC_RAW := "proc.RawOutput"
 ## The result of `fs.metadata` (std.fs.10).
 FS_METADATA := "fs.Metadata"
 
+## The result of `fs.scan` (std.fs.23) and its entries.
+FS_SCAN := "fs.Scan"
+FS_ENTRY := "fs.Entry"
+
 ## The child of `proc.start` (std.proc.4): pid and the three streams.
 PROC_CHILD := "proc.Child"
 
@@ -57,6 +61,8 @@ fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
     structs[PROC_RAW] = []
     structs[FS_METADATA] = []
+    structs[FS_SCAN] = []
+    structs[FS_ENTRY] = []
     structs[PROC_CHILD] = []
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []
@@ -146,6 +152,21 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "size", ty: Ty.Int),
         Slot(name: "modified_ms", ty: Ty.Int),
         Slot(name: "is_dir", ty: Ty.Bool),
+    ]
+    structs[FS_ENTRY] = [
+        Slot(name: "path", ty: Ty.Str),
+        Slot(name: "size", ty: Ty.Int),
+        Slot(name: "alloc", ty: Ty.Int),
+        Slot(name: "modified_ms", ty: Ty.Int),
+        Slot(name: "inode", ty: Ty.Int),
+        Slot(name: "device", ty: Ty.Int),
+        Slot(name: "links", ty: Ty.Int),
+        Slot(name: "is_dir", ty: Ty.Bool),
+        Slot(name: "is_link", ty: Ty.Bool),
+    ]
+    structs[FS_SCAN] = [
+        Slot(name: "entries", ty: Ty.List(Ty.Struct(FS_ENTRY))),
+        Slot(name: "skipped", ty: Ty.List(Ty.Str)),
     ]
     structs[PROC_RAW] = [
         Slot(name: "status", ty: Ty.Int),

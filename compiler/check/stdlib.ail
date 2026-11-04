@@ -33,6 +33,7 @@ STD_FUNCTIONS := [
         "read_text",
         "remove",
         "rename",
+        "scan",
         "walk",
         "write_bytes",
         "write_text",
@@ -212,6 +213,8 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: Ty.ListOf(text))
     if key == "fs.metadata"
         return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Metadata")))
+    if key == "fs.scan"
+        return StdSig(params: [text, Ty.Bool], ret: fails_with("fs.IoError", std_struct("fs.Scan")))
     if key == "fs.rename" or key == "fs.copy"
         return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "env.args"
