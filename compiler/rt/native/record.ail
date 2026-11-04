@@ -776,6 +776,48 @@ fn rec_fs_metadata(path str, at str) int
         rec_end(s)
     m
 
+fn rec_fs_volume(path str, at str) int
+    if rec_mode() == 2
+        p := rec_next("fs.volume")
+        if rec_failed(p)
+            rec_raise(p, at)
+            return 0
+        rec_cur_to(p)
+        rec_c_fields()
+        rec_c_open()
+        m := obj_new(16, 4)
+        store64(m, rec_c_int())
+        rec_c_next()
+        store64(m + 8, rec_c_int())
+        return m
+    m := fs_volume(path, at)
+    s := rec_begin("fs.volume", 1)
+    if s != 0
+        if failed()
+            rec_fail(s)
+        else
+            rec_text(s, "\{\"struct\":\"fs.Volume\",\"fields\":[")
+            rec_int(s, load64(m))
+            rec_byte(s, 44)
+            rec_int(s, load64(m + 8))
+            rec_text(s, "]}")
+        rec_end(s)
+    m
+
+fn rec_fs_read_range(path str, off int, len int, at str) str
+    if rec_mode() == 2
+        return rec_r_bytes("fs.read_range", at)
+    r := fs_read_range(path, off, len, at)
+    rec_w_bytes("fs.read_range", r)
+    r
+
+fn rec_fs_trash(path str, at str)
+    if rec_mode() == 2
+        rec_r_unit("fs.trash", at)
+        return
+    fs_trash(path, at)
+    rec_w_unit("fs.trash", 1)
+
 fn rec_env_vars() int
     if rec_mode() == 2
         p := rec_next("env.vars")

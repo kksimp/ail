@@ -1,0 +1,20 @@
+## std.fs.24, std.fs.25 and std.fs.26 (error path): volume, read_range, trash.
+fn main() !
+    base := "{env.get("TMPDIR") else env.get("TEMP") else "/tmp"}/ail-fs-range-case"
+    fs.make_dir(base)?
+    f := "{base}/r.bin"
+    fs.write_text(f, "0123456789")?
+    v := fs.volume(base)?
+    print(v.total > 0 and v.free >= 0 and v.free <= v.total)
+    print(fs.read_range(f, 2, 4)?.to_str())
+    print(fs.read_range(f, 8, 100)?.to_str())
+    print(fs.read_range(f, 10, 5)?.len())
+    print(fs.read_range(f, 50, 5)?.len())
+    fs.read_range("{base}/missing", 0, 1) else err
+        print(err.kind)
+    fs.volume("{base}/missing") else err
+        print(err.kind)
+    fs.trash("{base}/missing") else err
+        print(err.kind)
+    fs.remove(f)?
+    fs.remove(base)?

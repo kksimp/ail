@@ -23,6 +23,9 @@ PROC_RAW := "proc.RawOutput"
 ## The result of `fs.metadata` (std.fs.10).
 FS_METADATA := "fs.Metadata"
 
+## The result of `fs.volume` (std.fs.24).
+FS_VOLUME := "fs.Volume"
+
 ## The child of `proc.start` (std.proc.4): pid and the three streams.
 PROC_CHILD := "proc.Child"
 
@@ -55,8 +58,13 @@ COMPRESS_ERROR := "compress.CompressError"
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
+    structs[FS_VOLUME] = [
+        Slot(name: "total", ty: Ty.Int),
+        Slot(name: "free", ty: Ty.Int),
+    ]
     structs[PROC_RAW] = []
     structs[FS_METADATA] = []
+    structs[FS_VOLUME] = []
     structs[PROC_CHILD] = []
     structs[IO_ERROR] = []
     structs[PROC_ERROR] = []

@@ -58,6 +58,7 @@ STD_TYPES := {
     "CompressError": "compress",
     "IoError": "fs",
     "Metadata": "fs",
+    "Volume": "fs",
     "Response": "net",
     "RawResponse": "net",
     "RawOutput": "proc",
