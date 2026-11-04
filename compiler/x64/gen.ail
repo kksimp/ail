@@ -502,6 +502,7 @@ fn Gen.gen_block(mut self, b int)
                 r := gpr(t.cond, S0)
                 a.test_rr(r, r)
             branch_to(cc, yes, no)
+        "switch" => switch_jump(t)
         "return" =>
             if t.value >= 0
                 if f.vals[t.value].is_float()
@@ -510,6 +511,25 @@ fn Gen.gen_block(mut self, b int)
                     parallel([move_of(RAX, t.value)])
             epilogue(b)
         _ => a.ud2()
+
+## A jump table (native.match.2): an index at or past the last entry (as an
+## unsigned number) goes to the last target; else `jmp` to the table's start
+## plus the entry's 32-bit distance. The table follows the jump. Each copy of
+## a dispatch (§goto) has its own `jmp`, which predicts on its own.
+fn Gen.switch_jump(mut self, t mir.Term)
+    n := t.targets.len() - 1
+    r := gpr(t.cond, S0)
+    a.alu_ri("cmp", r, n)
+    a.jcc(CC_AE, blabels[t.targets[n]])
+    table := a.label()
+    a.lea_label(S1, table)
+    a.movsxd_rm(S0, at_index(S1, r, 4, 0))
+    a.alu_rr("add", S0, S1)
+    a.jmp_reg(S0)
+    a.bind(table)
+    start := a.here()
+    for k in 0..n
+        a.table_entry(start, blabels[t.targets[k]])
 
 ## Whether block `to` is only a comparison and a branch: a jump to it is
 ## cheaper as the comparison and branch themselves, one instruction fewer
@@ -525,7 +545,15 @@ fn Gen.goto(mut self, to int, args List[int], inline bool)
     if rotates(to)
         # The loop test again here, instead of a jump back to it.
         h := f.blocks[to]
-        branch_to(compare(h.insts[h.insts.len() - 1]), h.term.targets[0], h.term.targets[1])
+        cc := compare(h.insts[h.insts.len() - 1])
+        if cc < 16 and inline and dispatch_chain(h.term.targets[0])
+            # And the body's dispatch again too (native.match.2).
+            a.jcc(invert(cc), blabels[h.term.targets[1]])
+            replay_dispatch(h.term.targets[0])
+        else
+            branch_to(cc, h.term.targets[0], h.term.targets[1])
+    elif inline and dispatch_chain(to)
+        replay_dispatch(to)
     elif inline and tail_block(to)
         h := f.blocks[to]
         for i in h.insts
@@ -533,6 +561,56 @@ fn Gen.goto(mut self, to int, args List[int], inline bool)
         goto(h.term.targets[0], h.term.args[0], false)
     else
         a.jmp(blabels[to])
+
+## The most instructions a copied dispatch has (native.match.2).
+DISPATCH_MAX := 32
+
+## Whether `to` starts a dispatch: at most four blocks, each jumping to the
+## next, the last ending in a `switch`, with at most `DISPATCH_MAX`
+## instructions, no call, and nothing the allocator moves in or out of them.
+## A jump to one repeats it (tail duplication, native.match.2), so every arm
+## of an interpreter loop ends in an indirect jump of its own, which the
+## branch predictor keys on the arm that ran.
+fn Gen.dispatch_chain(self, to int) bool
+    mut b := to
+    mut count := 0
+    for _ in 0..4
+        if b == wrap or b == 0
+            return false
+        h := f.blocks[b]
+        for i in h.insts
+            if codegen.is_call(i)
+                return false
+        for hl in holes
+            if hl.block == b
+                return false
+        count += h.insts.len()
+        if count > DISPATCH_MAX
+            return false
+        if h.term.kind == "switch"
+            return not mir.opt_off("taildup")
+        if h.term.kind != "jump" or h.term.targets[0] == b
+            return false
+        b = h.term.targets[0]
+    false
+
+## Repeat the dispatch that starts at block `to` here (§dispatch_chain): its
+## instructions, the moves into each next block's parameters, and its jump
+## table.
+fn Gen.replay_dispatch(mut self, to int)
+    mut b := to
+    while true
+        h := f.blocks[b]
+        for i in h.insts
+            gen_inst(i)
+        if h.term.kind == "switch"
+            switch_jump(h.term)
+            return
+        nxt := h.term.targets[0]
+        ps := f.blocks[nxt].params
+        args := h.term.args[0]
+        parallel([move_of(loc[ps[j]], args[j]) for j in 0..ps.len()])
+        b = nxt
 
 ## Whether `to` is one or two instructions (no call) and a jump, with nothing
 ## the allocator moves in or out of it: cheaper to repeat than to jump to.
@@ -1116,7 +1194,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         if self.win or not codegen.linux_import(sym)
             a.ud2()
             return
-    if i.site >= 0
+    if i.site >= 0 and sites.list[i.site].kind != "frame"
         # The stack check of err.trap.1 (ADR 0535): below the limit, trap.
         a.alu_rm("cmp", RSP, at_sym("globals", 8 * STACK_LIMIT))
         a.jcc(CC_B, stub(11, -1, -1, i.site, sites.list[i.site].op))
@@ -1163,7 +1241,7 @@ fn Gen.call_out(mut self, i mir.Inst)
         a.call_sym(i.name)
     if i.imm != 0
         # The return address, for a trap's stack (trace.frame.1).
-        calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: f.name))
+        calls.push(codegen.CallRow(off: a.code.len(), pos: i.imm, func: call_func(i)))
         # A call copied in by inlining (trace.frame.2) also stands for the
         # frames it was inlined into: a row for each, innermost first.
         if i.site >= 0
@@ -1186,6 +1264,13 @@ fn Gen.call_out(mut self, i mir.Inst)
             put_xmm(i.dst, 0)
         else
             put_gpr(i.dst, RAX)
+
+## The function a call is written in, for its row of a trap's stack: a call
+## copied in by inlining another function (trace.frame.2) names that function.
+fn Gen.call_func(self, i mir.Inst) str
+    if i.site >= 0 and sites.list[i.site].from >= 0
+        return sites.list[i.site].func
+    f.name
 
 ## The memory a load or store prim addresses.
 fn Gen.address(mut self, i mir.Inst) Mem

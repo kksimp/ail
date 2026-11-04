@@ -456,6 +456,53 @@ fn main()
     print(name(2))
 ```
 
+**native.match.2** — A `match` that native.match.1 takes, whose distinct values
+span at most 1024 and fill at least a third of their span, may jump through
+a table indexed by the value minus the smallest: a value outside the span or
+in a gap goes where the in-order test sends it (the `_` arm, or nowhere for an
+exhaustive `match`). Code that jumps back to such a `match` (the next
+iteration of a loop around it) may repeat the selection there. The arm that
+runs, its bindings and the order of effects are those of native.match.1.
+`AIL_OPT_OFF=switch` turns the table off and `AIL_OPT_OFF=taildup` the
+repeat. *(ADR 0939)*
+
+```ail rules=native.match.2
+fn step(op int, acc int) int
+    match op
+        0 => acc + 1
+        1 => acc * 2
+        2 => acc - 3
+        3 => 0
+        4 => acc
+        _ => -1
+
+fn main()
+    mut acc := 0
+    for op in [0, 0, 1, 2, 9]
+        acc = step(op, acc)
+    print(acc)
+```
+
+**native.inline.1** — A call may be replaced by a copy of the callee's body
+when the callee is not on a cycle of the call graph, is not `main` or part of
+the runtime, and makes no indirect call: a callee called from one place up to
+200 instructions, any other up to 30, with each caller grown by at most 400
+instructions this way, besides the leaf functions of ADR 0391. A function
+that nothing calls or names after this is left out of the executable. A trap
+in, or below, a copied body reports the callee's frame and every frame it was
+copied into (trace.frame.2). `AIL_OPT_OFF=wide` turns it off. *(ADR 0940)*
+
+```ail rules=native.inline.1
+fn scale(xs List[int], k int) int
+    mut s := 0
+    for x in xs
+        s += x * k
+    s
+
+fn main()
+    print(scale([1, 2, 3], 4))
+```
+
 **native.reuse.1** — A list made empty inside a loop may be one object that
 each iteration empties (length 0, capacity kept) instead of a new object per
 iteration, where no reference to the list can outlive the iteration: it is

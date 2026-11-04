@@ -741,3 +741,5 @@ ADRs are never deleted. Replaced decisions are marked `Superseded by NNNN`.
 | [0923](0923-struct-scalar-replacement.md) | Native: scalar replacement of struct objects that stay in one function, and inlining of constructors *(delegated)* | Accepted | 2026-10-26 |
 | [0924](0924-ship-the-tz-database.md) | Ship the IANA tz database with AIL, so zones give the same answers on every OS | Accepted | 2026-10-27 |
 | [0925](0925-windows-release-gate.md) | Windows: a Unix-shaped gate, and native, examples and run green before each release | Accepted | 2026-10-27 |
+| [0939](0939-match-jump-tables.md) | Native: `match` through a jump table, with the dispatch repeated in each arm *(delegated)* | Accepted | 2026-11-04 |
+| [0940](0940-inliner-cost-model.md) | Native: inlining functions that call others, by a call-graph cost model *(delegated)* | Accepted | 2026-11-04 |

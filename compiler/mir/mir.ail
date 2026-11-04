@@ -290,7 +290,9 @@ pub fn inst(dst int, op str, args List[int]) Inst
     packed(dst, op, args, 0, 0.0, "", -1)
 
 ## How a block ends: `jump` (one target), `branch` on `cond` (targets: if
-## true, if false), `return` (`value`, -1 for none), or `unreachable`
+## true, if false), `switch` on the `int` `cond` (targets: one per index
+## 0..n-1, then the target for any other value, compared unsigned; a jump
+## table, native.match.2), `return` (`value`, -1 for none), or `unreachable`
 ## (after a trap). `args[k]` are the values edge `k` passes to
 ## `targets[k]`'s parameters.
 pub struct Term
@@ -305,6 +307,12 @@ pub fn jump_to(target int, args List[int]) Term
 
 pub fn branch_on(cond int, yes int, no int) Term
     Term(kind: "branch", cond: cond, targets: [yes, no], args: [[], []], value: -1)
+
+## A jump table: index `k` goes to `cases[k]`, any other value to `other`.
+pub fn switch_on(cond int, cases List[int], other int) Term
+    mut ts := cases
+    ts.push(other)
+    Term(kind: "switch", cond: cond, targets: ts, args: [List[int]() for _ in 0..ts.len()], value: -1)
 
 pub fn return_of(value int) Term
     Term(kind: "return", cond: -1, targets: [], args: [], value: value)

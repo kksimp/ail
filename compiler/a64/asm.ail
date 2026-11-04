@@ -25,8 +25,9 @@ pub GT := 12
 pub LE := 13
 
 ## A field to patch once its target is placed. `kind`: "b26" (`b`, `bl`),
-## "b19" (`b.cond`, `cbz`), "adrp" or "add12" (the page and offset of a
-## symbol's address); `label` is a local label, or -1 for `sym`.
+## "b19" (`b.cond`, `cbz`), "adr" (a local label's address), "w32" (a jump
+## table entry), "adrp" or "add12" (the page and offset of a symbol's
+## address); `label` is a local label, or -1 for `sym`.
 pub struct Fixup
     pub at int
     pub kind str
@@ -493,6 +494,28 @@ pub fn Asm.b_cond(mut self, cond int, l int)
     fixups.push(Fixup(at: code.len(), kind: "b19", label: l, sym: ""))
     word(1409286144 + cond)
 
+## `br xn`: an indirect jump (a `switch`, native.match.2).
+pub fn Asm.br(mut self, n int)
+    word(3592355840 + n * 32)
+
+## `adr xd, l`: the address of local label `l`, within 1 MiB.
+pub fn Asm.adr_label(mut self, d int, l int)
+    fixups.push(Fixup(at: code.len(), kind: "adr", label: l, sym: ""))
+    word(268435456 + d)
+
+## `add xd, xn, xm, lsl #k`.
+pub fn Asm.add_lsl(mut self, d int, n int, m int, k int)
+    word(rrr(2332033024, d, n, m) + k * 1024)
+
+## `ldrsw xt, [xn]`: a signed 32-bit load.
+pub fn Asm.ldrsw(mut self, t int, n int)
+    word(3112173568 + n * 32 + t)
+
+## A jump table entry: the 32-bit distance from the entry itself to label `l`.
+pub fn Asm.table_entry(mut self, l int)
+    fixups.push(Fixup(at: code.len(), kind: "w32", label: l, sym: ""))
+    word(0)
+
 pub fn Asm.bl(mut self, sym str)
     fixups.push(Fixup(at: code.len(), kind: "b26", label: -1, sym: sym))
     word(2483027968)
@@ -536,6 +559,10 @@ pub fn patch(mut code List[u8], f Fixup, pc int, to int)
     match f.kind
         "b26" => w = w.bit_or((to - pc).shr(2).bit_and(67108863))
         "b19" => w = w.bit_or((to - pc).shr(2).bit_and(524287) * 32)
+        "adr" =>
+            d := to - pc
+            w = w.bit_or(d.bit_and(3) * 536870912).bit_or(d.shr(2).bit_and(524287) * 32)
+        "w32" => w = (to - pc).bit_and(4294967295)
         "adrp" =>
             pages := to.shr(12) - pc.shr(12)
             w = w.bit_or(pages.bit_and(3) * 536870912).bit_or(pages.shr(2).bit_and(524287) * 32)
