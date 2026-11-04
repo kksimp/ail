@@ -10,10 +10,10 @@ fn main() !
     print(fs.read_range(f, 8, 100)?.to_str())
     print(fs.read_range(f, 10, 5)?.len())
     print(fs.read_range(f, 50, 5)?.len())
-    fs.read_range("{base}/missing", 0, 1) else err
+    missing := fs.read_range("{base}/missing", 0, 1) else err
         print(err.kind)
-    fs.volume("{base}/missing") else err
-        print(err.kind)
+        b""
+    print(missing.len())
     fs.trash("{base}/missing") else err
         print(err.kind)
     fs.remove(f)?
