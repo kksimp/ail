@@ -58,10 +58,6 @@ COMPRESS_ERROR := "compress.CompressError"
 ## may name any struct) and report what isn't in the subset.
 fn Lower.declare_struct_names(mut self, prog ast.Program)
     structs[PROC_OUTPUT] = []
-    structs[FS_VOLUME] = [
-        Slot(name: "total", ty: Ty.Int),
-        Slot(name: "free", ty: Ty.Int),
-    ]
     structs[PROC_RAW] = []
     structs[FS_METADATA] = []
     structs[FS_VOLUME] = []
@@ -154,6 +150,10 @@ fn Lower.declare_struct_fields(mut self, prog ast.Program)
         Slot(name: "size", ty: Ty.Int),
         Slot(name: "modified_ms", ty: Ty.Int),
         Slot(name: "is_dir", ty: Ty.Bool),
+    ]
+    structs[FS_VOLUME] = [
+        Slot(name: "total", ty: Ty.Int),
+        Slot(name: "free", ty: Ty.Int),
     ]
     structs[PROC_RAW] = [
         Slot(name: "status", ty: Ty.Int),
