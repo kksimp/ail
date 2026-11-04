@@ -436,6 +436,29 @@ fn main()
     print(dot([1, 2, 3], [4, 5, 6], 3))
 ```
 
+**native.bce.12** — In a counted loop at least two loops deep, an `int` read
+from a list, or from a row of a list of lists, that no call, `push` or
+assignment can change in an enclosing loop may be taken to lie within
++-2^20 where a scan of the list before that enclosing loop says so; an
+accumulator that every pass of the loop changes only by `+=` or `-=` of such
+a value may be taken to lie within its start plus the loop's trip count times
+that value's range, where the guard tests the trip count. The overflow checks
+this proves can't fail may be removed (expr.arith.4); otherwise the loop with
+its checks runs, and traps where it did. *(ADR 0941)*
+
+```ail rules=native.bce.12
+fn main()
+    a := [[1, 2], [3, 4]]
+    mut t := 0
+    for i in 0..2
+        for j in 0..2
+            mut s := 0
+            for k in 0..2
+                s += a[i][k] * a[k][j]
+            t += s
+    print(t)
+```
+
 **native.match.1** — A `match` over an `int` or an enum whose arms each test
 int literals (alone or with `|`) or variants, with no guard and no range, and
 at least five distinct values, may pick its arm by comparing against the

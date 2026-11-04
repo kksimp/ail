@@ -444,6 +444,7 @@ RT_ROOTS := [
     "rt.list_pushb",
     "rt.list_reserve",
     "rt.list_rows_min",
+    "rt.datarange_absmax",
     "rt.list_new_for",
     "rt.fill",
 ]

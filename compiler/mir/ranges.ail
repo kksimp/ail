@@ -1,7 +1,8 @@
 ## Value ranges in a counted loop (ADR 0580): which checked `+`, `-`, `*` of
 ## a loop can't overflow if its held `int` operands are limited. bce.ail
 ## tests those operands once, ahead of the loop, and runs a copy of the loop
-## without the checks when they hold.
+## without the checks when they hold. Elements of lists the loop nest only
+## reads, and accumulators, get spans too (native.bce.12, ADR 0941).
 
 ## The values the guard keeps within +-LIMIT: 2^30, so a sum of two and a
 ## product of two such sums stay below 2^63.
@@ -10,6 +11,12 @@ pub LIMIT := 1073741824
 ## The largest magnitude the analysis computes with (2^62 - 1): sums of two
 ## such values can't overflow the compiler's own `int`s.
 BIG := 4611686018427387903
+
+## The elements of a list that a loop nest only reads are kept within +-DATA
+## by a scan taken before the nest (native.bce.12, ADR 0941): a product of two
+## stays below 2^40.
+pub DATA := 1048576
+
 
 struct Span
     known bool
@@ -41,6 +48,16 @@ pub struct Proven
     ## span is known (ADR 0622).
     pub lows Map[int, int]
     pub highs Map[int, int]
+    ## The lists (from `data`) whose elements the guard must keep within
+    ## +-DATA, and the most the guard must keep the bound at (0: no test).
+    pub scanned List[int]
+    pub trip int
+
+## What the passes over a loop's instructions share.
+struct Walk
+    spans Map[int, Span]
+    limited List[int]
+    scanned List[int]
 
 ## What can be proven about the checked arithmetic of the loop `lp` (a
 ## counted loop `c`) when every held `int` it reads is within +-LIMIT.
@@ -52,19 +69,100 @@ pub fn prove(
     c Counted,
     order List[int],
     held List[bool],
+    data Map[int, int],
 ) Proven
-    mut spans := Map[int, Span]()
-    mut limited := List[int]()
-    mut sites := Set[str]()
+    mut w := Walk(spans: Map[int, Span](), limited: [], scanned: [])
     # The induction value runs from its start to below its bound.
     lo0 := const_of(f, defs, c.lo) else 0
+    # At most how many passes the loop makes: its constant bound, else a
+    # limit the guard then tests (`tested`).
+    mut trip := LIMIT
+    mut tested := true
     if k := const_of(f, defs, c.bound)
         # A constant bound: the induction value stays below it.
-        spans[c.p] = exact(lo0, if k - 1 > lo0 then k - 1 else lo0)
+        w.spans[c.p] = exact(lo0, if k - 1 > lo0 then k - 1 else lo0)
+        trip = if k > 0 then k else 0
+        tested = false
     else
-        spans[c.p] = exact(lo0, LIMIT - 1)
-        if not limited.contains(c.bound)
-            limited.push(c.bound)
+        w.spans[c.p] = exact(lo0, LIMIT - 1)
+        w.limited.push(c.bound)
+    first := w
+    mut sites := walk(f, defs, lp, order, held, data, mut w)
+    # Accumulators (`s += e` on every pass, `e` not depending on `s`): known
+    # once the trip count is (native.bce.12). A trip count the guard has to
+    # test is used only when that proves every checked operation of the loop,
+    # since the test can fail where the first pass's guard would hold.
+    accs := accumulators(f, defs, lp, c, w.spans)
+    if accs.len() > 0
+        mut most := 1
+        for a in accs
+            if a.hi > most
+                most = a.hi
+            if 0 - a.lo > most
+                most = 0 - a.lo
+        if tested
+            # Room for the start (within +-LIMIT) and `trip` steps.
+            trip = (BIG - LIMIT) / most
+            if trip > LIMIT
+                trip = LIMIT
+        mut second := first
+        if trip > 0 and most <= (BIG - LIMIT) / trip
+            for a in accs
+                st := arg_span(f, defs, a.start, mut second, held, Map[int, int]())
+                if st.known
+                    second.spans[a.p] = exact(st.lo + trip * a.lo, st.hi + trip * a.hi)
+            more := walk(f, defs, lp, order, held, data, mut second)
+            if more.len() > sites.len() and (not tested or more.len() == checked_sites(f, lp))
+                w = second
+                sites = more
+            else
+                tested = false
+        else
+            tested = false
+    else
+        tested = false
+    if tested and trip == LIMIT
+        # The bound is within +-LIMIT already.
+        tested = false
+    mut lows := Map[int, int]()
+    mut highs := Map[int, int]()
+    for v in w.spans.keys()
+        sp := w.spans[v]
+        if sp.known
+            lows[v] = sp.lo
+            highs[v] = sp.hi
+    Proven(
+        sites: sites,
+        limited: w.limited,
+        lows: lows,
+        highs: highs,
+        scanned: w.scanned,
+        trip: if tested then trip else 0,
+    )
+
+## How many checked arithmetic operations the loop's body has.
+fn checked_sites(f Func, lp LoopInfo) int
+    mut n := 0
+    for b in lp.blocks
+        if b == lp.header
+            continue
+        for i in f.blocks[b].insts
+            if i.site >= 0 and is_arith(i.op) and i.dst >= 0 and f.vals[i.dst] == Ty.Int
+                n += 1
+    n
+
+## One pass over the loop's instructions in order: the spans of the `int`s
+## it computes, and the checked operations that can't overflow.
+fn walk(
+    f Func,
+    defs List[Def],
+    lp LoopInfo,
+    order List[int],
+    held List[bool],
+    data Map[int, int],
+    mut w Walk,
+) Set[str]
+    mut sites := Set[str]()
     for b in order
         if not lp.member[b] or b == lp.header
             continue
@@ -72,35 +170,90 @@ pub fn prove(
             i := f.blocks[b].insts[k]
             if i.dst < 0 or f.vals[i.dst] != Ty.Int
                 continue
-            r := span_of(f, defs, i, mut spans, mut limited, held)
+            r := span_of(f, defs, i, mut w, held, data)
             if r.safe and is_arith(i.op)
                 if i.site >= 0
                     sites.add("{b}:{k}")
-            spans[i.dst] = r.span
-    mut lows := Map[int, int]()
-    mut highs := Map[int, int]()
-    for v in spans.keys()
-        sp := spans[v]
-        if sp.known
-            lows[v] = sp.lo
-            highs[v] = sp.hi
-    Proven(sites: sites, limited: limited, lows: lows, highs: highs)
+            w.spans[i.dst] = r.span
+    sites
+
+## An accumulator: header parameter `p`, its start, and the span of what
+## one pass adds to it.
+struct Acc
+    p int
+    start int
+    lo int
+    hi int
+
+## The accumulators of the loop: header parameters (not the induction value)
+## that every path back passes either unchanged or as `p + e` or `p - e`,
+## where `e`'s span is known from the first pass (`spans`), so `e` doesn't
+## depend on `p`. After at most `trip` passes, `p` is within its start's
+## span widened by `trip` times `e`'s.
+fn accumulators(f Func, defs List[Def], lp LoopInfo, c Counted, spans Map[int, Span]) List[Acc]
+    h := f.blocks[lp.header]
+    mut out := List[Acc]()
+    for j in 0..h.params.len()
+        p := h.params[j]
+        if p == c.p or p == c.q or f.vals[p] != Ty.Int
+            continue
+        mut ok := true
+        mut dlo := 0
+        mut dhi := 0
+        for l in lp.latches
+            lt := f.blocks[l].term
+            for e in 0..lt.targets.len()
+                if lt.targets[e] != lp.header or not ok
+                    continue
+                v := lt.args[e][j]
+                if v == p
+                    continue
+                mut d := -1
+                mut minus := false
+                if i := inst_of(f, defs, v)
+                    if i.op == "add" and i.arg(0) == p and i.arg(1) != p
+                        d = i.arg(1)
+                    elif i.op == "add" and i.arg(1) == p and i.arg(0) != p
+                        d = i.arg(0)
+                    elif i.op == "sub" and i.arg(0) == p and i.arg(1) != p
+                        d = i.arg(1)
+                        minus = true
+                if d < 0 or not lp.member[defs[v].block]
+                    ok = false
+                    continue
+                mut ds := top()
+                if s := spans.get(d)
+                    ds = s
+                elif k := const_of(f, defs, d)
+                    ds = exact(k, k)
+                if not ds.known
+                    ok = false
+                    continue
+                lo := if minus then 0 - ds.hi else ds.lo
+                hi := if minus then 0 - ds.lo else ds.hi
+                if lo < dlo
+                    dlo = lo
+                if hi > dhi
+                    dhi = hi
+        if ok
+            out.push(Acc(p: p, start: f.blocks[lp.pre].term.args[0][j], lo: dlo, hi: dhi))
+    out
 
 fn is_arith(op str) bool
     op == "add" or op == "sub" or op == "mul" or op == "neg" or op == "div" or op == "rem"
 
 ## The span of an instruction's result, and whether the operation can't
 ## overflow (or is not checked at all).
-fn span_of(
-    f Func,
-    defs List[Def],
-    i Inst,
-    mut spans Map[int, Span],
-    mut limited List[int],
-    held List[bool],
-) Out
+fn span_of(f Func, defs List[Def], i Inst, mut w Walk, held List[bool], data Map[int, int]) Out
     if i.op == "const"
         return verdict(true, exact(i.imm, i.imm))
+    if i.op == "get"
+        # An element of a list the nest only reads, which the guard's scan
+        # keeps within +-DATA (native.bce.12).
+        if root := data.get(i.arg(0))
+            if not w.scanned.contains(root)
+                w.scanned.push(root)
+            return verdict(true, exact(0 - DATA, DATA))
     if i.op != "add"
         and i.op != "sub"
         and i.op != "mul"
@@ -108,12 +261,12 @@ fn span_of(
         and i.op != "div"
         and i.op != "rem"
         return verdict(true, top())
-    a := arg_span(f, defs, i.arg(0), mut spans, mut limited, held)
+    a := arg_span(f, defs, i.arg(0), mut w, held, data)
     if not a.known
         return verdict(false, top())
     if i.op == "neg"
         return verdict(true, exact(0 - a.hi, 0 - a.lo))
-    b := arg_span(f, defs, i.arg(1), mut spans, mut limited, held)
+    b := arg_span(f, defs, i.arg(1), mut w, held, data)
     if not b.known
         return verdict(false, top())
     match i.op
@@ -161,20 +314,13 @@ fn max_abs(s Span) int
 
 ## A value's span: known for what the loop computed, +-LIMIT for a held
 ## `int` (which the guard then has to test), unknown otherwise.
-fn arg_span(
-    f Func,
-    defs List[Def],
-    v int,
-    mut spans Map[int, Span],
-    mut limited List[int],
-    held List[bool],
-) Span
-    if s := spans.get(v)
+fn arg_span(f Func, defs List[Def], v int, mut w Walk, held List[bool], data Map[int, int]) Span
+    if s := w.spans.get(v)
         return s
     if k := const_of(f, defs, v)
         return exact(k, k)
     if held[v] and f.vals[v] == Ty.Int
-        if not limited.contains(v)
-            limited.push(v)
+        if not w.limited.contains(v)
+            w.limited.push(v)
         return exact(0 - LIMIT, LIMIT)
     top()
