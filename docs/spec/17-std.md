@@ -195,7 +195,7 @@ of the file and an empty `bytes` when `offset` is at or past it. A negative
 **std.fs.26** — `trash(path str) ! IoError` moves a file or a whole directory
 to the user's trash, so the user can put it back: `~/.Trash` (or the volume's
 `.Trashes`) on macOS, the freedesktop trash with its `.trashinfo` on Linux, the
-Recycle Bin on Windows. A name already in the trash gets a unique suffix. It
+Recycle Bin on Windows. On Linux the `.trashinfo` records the deletion time in UTC. A name already in the trash gets a unique suffix. It
 never copies or deletes: when no trash on the volume can be written, it fails
 with kind `other`. *(ADR 0929)*
 

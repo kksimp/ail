@@ -13,6 +13,11 @@ struct Metadata
     modified_ms int
     is_dir bool
 
+## std.fs.24 (ADR 0928)
+struct Volume
+    total int
+    free int
+
 ## std.compress (ADR 0443)
 error struct CompressError
     kind str

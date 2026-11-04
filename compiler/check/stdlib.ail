@@ -34,6 +34,9 @@ STD_FUNCTIONS := [
         "remove",
         "rename",
         "walk",
+        "volume",
+        "read_range",
+        "trash",
         "write_bytes",
         "write_text",
     ],
@@ -212,6 +215,12 @@ fn Checker.std_signature(self, module str, f str) StdSig
         return StdSig(params: [text], ret: Ty.ListOf(text))
     if key == "fs.metadata"
         return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Metadata")))
+    if key == "fs.volume"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", std_struct("fs.Volume")))
+    if key == "fs.read_range"
+        return StdSig(params: [text, Ty.Int, Ty.Int], ret: fails_with("fs.IoError", Ty.Bytes))
+    if key == "fs.trash"
+        return StdSig(params: [text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "fs.rename" or key == "fs.copy"
         return StdSig(params: [text, text], ret: fails_with("fs.IoError", Ty.Unit))
     if key == "env.args"
