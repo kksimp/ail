@@ -36,7 +36,7 @@ reaches in the nest can't change while the nest runs (value semantics).
    could send a large loop to the checked copy that the first pass would
    have relaxed.
 3. When a guard fails, the original loop runs, so traps keep their place and
-   message (as for every bce guard).
+   message (as for every bce guard). `AIL_OPT_OFF=datarange` turns 1 and 2 off.
 
 ## Rationale
 

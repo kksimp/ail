@@ -92,7 +92,7 @@ pub fn prove(
     # once the trip count is (native.bce.12). A trip count the guard has to
     # test is used only when that proves every checked operation of the loop,
     # since the test can fail where the first pass's guard would hold.
-    accs := accumulators(f, defs, lp, c, w.spans)
+    accs := if opt_off("datarange") then List[Acc]() else accumulators(f, defs, lp, c, w.spans)
     if accs.len() > 0
         mut most := 1
         for a in accs
