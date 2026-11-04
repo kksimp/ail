@@ -164,6 +164,56 @@ write or remove the process has no right to. It is the same on every platform.
 above. A program that reads `other` gets the path and the kind, not the OS text.
 *(ADR 0783)*
 
+**std.fs.23** — `scan(root str, same_device bool) Scan ! IoError` walks the
+tree below `root` once and returns `struct Scan { entries List[Entry], skipped
+List[str] }`, with `struct Entry { path str, size int, alloc int, modified_ms
+int, inode int, device int, links int, is_dir bool, is_link bool }`. It lists
+every file, directory and link below `root` (not `root` itself) in pre-order,
+each directory's names sorted by bytes, each `path` being `root` joined with
+the path below it (`path.join`). Links are not followed: an entry that is a
+link has `is_link` true, and `size` is that of the link. `size` is the length
+in bytes (`0` for a directory), `alloc` the bytes allocated on disk for the
+entry itself, which is what deleting it frees (a sparse, compressed or cloned
+file may differ from `size`), `inode` and `device` identify the file so a hard
+link seen twice can be counted once, and `links` is its hard-link count.
+`modified_ms` is as in `std.fs.10`. With `same_device` true, a directory on a
+different device than `root` is listed but not entered. A directory that can't
+be read is listed, entered no further, and its path added to `skipped`; only a
+`root` that can't be read fails. The result does not depend on how the walk is
+scheduled, so an implementation may read subtrees in parallel. *(ADR 0927)*
+
+**std.fs.24** — `volume(path str) Volume ! IoError` returns `struct Volume {
+total int, free int }`: the size in bytes of the volume holding `path` and the
+bytes a program without privilege can still write to it. *(ADR 0928)*
+
+**std.fs.25** — `read_range(path str, offset int, len int) bytes ! IoError`
+reads up to `len` bytes starting at byte `offset`. It returns fewer at the end
+of the file and an empty `bytes` when `offset` is at or past it. A negative
+`offset` or `len` traps. It fails as `read_bytes` does (`std.fs.15`,
+`std.fs.16`). *(ADR 0929)*
+
+**std.fs.26** — `trash(path str) ! IoError` moves a file or a whole directory
+to the user's trash, so the user can put it back: `~/.Trash` (or the volume's
+`.Trashes`) on macOS, the freedesktop trash with its `.trashinfo` on Linux, the
+Recycle Bin on Windows. A name already in the trash gets a unique suffix. It
+never copies or deletes: when no trash on the volume can be written, it fails
+with kind `other`. *(ADR 0929)*
+
+```ail norun rules=std.fs.23,std.fs.24,std.fs.25,std.fs.26
+use std.fs
+
+fn main() !
+    s := fs.scan("/Users/me/Library/Caches", true)?
+    mut total := 0
+    for e in s.entries
+        if not e.is_dir and not e.is_link
+            total += e.alloc
+    v := fs.volume("/")?
+    print("{total} of {v.total} bytes, {v.free} free, {s.skipped.len()} skipped")
+    head := fs.read_range("a.bin", 0, 4096)?
+    fs.trash("old.bin")?
+```
+
 ```ail rules=std.fs.20
 use std.fs
 
