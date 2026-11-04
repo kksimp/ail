@@ -88,9 +88,54 @@ struct Scan
     writes List[Write]
     reads List[Read]
     problems List[Problem]
+    ## A `continue` outside nested loops: some iteration may skip a push (conc.par.16).
+    skips bool
+    ## Where the built-in `push` calls name their receiver (`at_key`), for conc.par.16.
+    pushes List[int]
 
 fn new_scan(cx ParContext, var str, range bool) Scan
-    Scan(cx: cx, var: var, range: range, scopes: [], depth: 0, writes: [], reads: [], problems: [])
+    Scan(
+        cx: cx,
+        var: var,
+        range: range,
+        scopes: [],
+        depth: 0,
+        writes: [],
+        reads: [],
+        problems: [],
+        skips: false,
+        pushes: [],
+    )
+
+fn at_key(p ast.Pos) int
+    p.line * 100000 + p.col
+
+## conc.par.16: the receivers of the `xs.push(e)` statements at the top of a
+## loop body, by name, with where each names it; a name pushed twice is left out.
+fn top_pushes(body List[ast.Stmt]) Map[str, int]
+    mut out := Map[str, int]()
+    mut twice := Set[str]()
+    for s in body
+        recv := pushed_name(s) else continue
+        if out.contains(recv.0)
+            twice.add(recv.0)
+        out[recv.0] = at_key(recv.1)
+    for n in twice
+        out.remove(n)
+    out
+
+@allow("expr.match.3") fn pushed_name(s ast.Stmt) (str, ast.Pos)?
+    match s
+        Eval(e) =>
+            match e
+                Method(recv, name, _, args) =>
+                    if name != "push" or args.len() != 1 or args[0].mutable
+                        return none
+                    match recv
+                        Name(n, p) => (n, p)
+                        _ => none
+                _ => none
+        _ => none
 
 ## `[i]`, `[i - 1]`, `.name`; `[...]` for an index too complex to show.
 fn step_text(s Step) str
@@ -190,7 +235,9 @@ fn Scan.stmt(mut self, s ast.Stmt)
         Break(p) =>
             if depth == 0
                 exit("`break`", p)
-        Continue => return
+        Continue =>
+            if depth == 0
+                skips = true
         Return(e, p) =>
             if x := e
                 expr(x)
@@ -459,6 +506,8 @@ fn Scan.method_call(mut self, recv ast.Expr, n str, name_pos ast.Pos, args List[
             and not cx.fx.trait_calls.contains(key)
             and MUTATING.contains(n)
     if mutating
+        if n == "push" and not std_module and not cx.fx.targets.contains(key)
+            pushes.push(at_key(expr_pos(recv)))
         write(recv, none, expr_pos(recv))
     elif not (n == "len" and read_place(recv, true))
         expr(recv)
@@ -736,12 +785,17 @@ fn judge_for(
             roots.push(wr.root)
     mut reductions := List[str]()
     mut elements := List[str]()
+    mut builders := List[str]()
+    tops := top_pushes(body)
     for root in roots.sorted()
         ws := [wr for wr in scan.writes if wr.root == root]
         reads_of := [r for r in scan.reads if r.root == root]
         whole := [wr for wr in ws if is_whole(wr.kind)]
         adds := [wr for wr in ws if is_add(wr.kind)]
-        if whole.len() > 0
+        if is_builder(scan, tops, root, ws, reads_of)
+            # conc.par.16: one push per iteration, in iteration order.
+            builders.push(root)
+        elif whole.len() > 0
             problems.push(Problem(
                 rule: "conc.par.2",
                 reason: "writes `{root}`, which outlives the iteration",
@@ -875,7 +929,12 @@ fn judge_for(
         )
     mut rule := "conc.par.2"
     mut reason := "writes nothing that outlives the iteration"
-    if reductions.len() > 0
+    pushed := if builders.len()
+        == 0 then "" else "pushes one element per iteration to `{builders.join("`, `")}`"
+    if pushed != "" and reductions.len() == 0 and elements.len() == 0
+        rule = "conc.par.16"
+        reason = pushed
+    elif reductions.len() > 0
         names := ["`{r}`" for r in reductions].join(", ")
         more := if elements.len() == 0 then "" else " and writes only `{elements.join("`, `")}`"
         rule = "conc.par.4"
@@ -883,6 +942,8 @@ fn judge_for(
     elif elements.len() > 0
         rule = "conc.par.3"
         reason = "writes only `{elements.join("`, `")}`"
+    if pushed != "" and rule != "conc.par.16"
+        reason = "{reason}, and {pushed}"
     Verdict(
         pos: pos,
         var: var,
@@ -894,6 +955,15 @@ fn judge_for(
         at: pos,
         help: none,
     )
+
+## conc.par.16: `root` is a list the body builds: its one write is a built-in
+## `root.push(e)` statement at the top of the body, nothing reads it, and no
+## `continue` skips the push, so iteration `k` pushes element `k`.
+fn is_builder(scan Scan, tops Map[str, int], root str, ws List[Write], reads_of List[Read]) bool
+    at := tops.get(root) else return false
+    if scan.skips or ws.len() != 1 or reads_of.len() > 0 or ws[0].depth != 0
+        return false
+    is_whole(ws[0].kind) and at_key(ws[0].pos) == at and scan.pushes.contains(at)
 
 ## Which functions synchronise through a handle or an atomic: directly, or
 ## by calling a function that does (a fixed point over the call graph).
