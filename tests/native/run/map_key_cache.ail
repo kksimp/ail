@@ -1,0 +1,67 @@
+# The key cache of `str`-keyed maps and sets (ADR 0936): the same string
+# objects are looked up again and again, mixed with equal strings that are
+# other objects, through growth, removals and copies. Each answer is checked
+# against a list kept beside the map (type.map.1, type.map.3).
+
+struct Rng
+    state int
+
+fn Rng.int(mut self, lo int, hi int) int
+    state = (state * 3877 + 29573) % 139968
+    lo + state / 7 % (hi - lo + 1)
+
+fn main()
+    mut r := Rng(state: 11)
+    mut ks := List[str]()
+    mut twins := List[str]()
+    for i in 0..48
+        ks.push("key{i}")
+        twins.push("ke" + "y{i}")
+    mut m := Map[str, int]()
+    mut s := Set[str]()
+    mut want := [-1 for _ in 0..48]
+    mut bad := 0
+    mut copies := 0
+    for step in 0..30000
+        i := r.int(0, 47)
+        k := if r.int(0, 3) == 0 then twins[i] else ks[i]
+        op := r.int(0, 9)
+        if op <= 2
+            m[k] = step
+            s.add(k)
+            want[i] = step
+        elif op <= 4
+            m[k] += 1
+            s.add(k)
+            want[i] = if want[i] < 0 then 1 else want[i] + 1
+        elif op == 5
+            m.remove(k)
+            s.remove(k)
+            want[i] = -1
+        elif op == 6
+            c := m.get(k) else 0
+            m[k] = c + 2
+            s.add(k)
+            want[i] = if want[i] < 0 then 2 else want[i] + 2
+        got := m.get(k) else -1
+        if got != want[i] or s.contains(k) != (want[i] >= 0)
+            bad += 1
+        if step % 3000 == 2999
+            mut c := m
+            c[ks[0]] = -5
+            for j in 0..48
+                expect := if j == 0 then -5 else want[j]
+                if (c.get(ks[j]) else -1) != expect
+                    bad += 1
+                if (c.get(twins[j]) else -1) != expect
+                    bad += 1
+                if (m.get(ks[j]) else -1) != want[j]
+                    bad += 1
+            copies += 1
+    mut live := 0
+    for w in want
+        if w >= 0
+            live += 1
+    print("copies {copies}")
+    print("lengths {m.len() == live} {s.len() == live}")
+    print("mismatches {bad}")
