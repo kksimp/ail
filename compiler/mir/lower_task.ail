@@ -511,7 +511,8 @@ fn Lower.par_plan(mut self, var str, iter ast.Expr, body List[ast.Stmt], pos ast
         aliases: aliases,
         self_ty: self_ty,
         work: sc.work + 1 + callee_work(sc, prefix, 0),
-        calls: sc.calls,
+        # A built list's `push` is not a call that makes an iteration heavy (conc.par.14).
+        calls: sc.calls and (sc.callees.len() > 0 or builds.len() == 0),
         builds: builds,
     )
 

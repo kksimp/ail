@@ -116,24 +116,24 @@ fn top_pushes(body List[ast.Stmt]) Map[str, int]
     mut out := Map[str, int]()
     mut twice := Set[str]()
     for s in body
-        recv := pushed_name(s) else continue
-        if out.contains(recv.0)
-            twice.add(recv.0)
-        out[recv.0] = at_key(recv.1)
+        recv := pushed_recv(s) else continue
+        n := name_of(recv) else continue
+        if out.contains(n)
+            twice.add(n)
+        out[n] = at_key(expr_pos(recv))
     for n in twice
         out.remove(n)
     out
 
-@allow("expr.match.3") fn pushed_name(s ast.Stmt) (str, ast.Pos)?
+## The receiver of a `NAME.push(e)` statement.
+@allow("expr.match.3") fn pushed_recv(s ast.Stmt) ast.Expr?
     match s
         Eval(e) =>
             match e
                 Method(recv, name, _, args) =>
-                    if name != "push" or args.len() != 1 or args[0].mutable
+                    if name != "push" or args.len() != 1 or args[0].mutable or name_of(recv) == none
                         return none
-                    match recv
-                        Name(n, p) => (n, p)
-                        _ => none
+                    recv
                 _ => none
         _ => none
 
