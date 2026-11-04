@@ -121,7 +121,8 @@ fn hw_cores() int
     n
 
 ## The pool block, made on first use. From then on the process has more
-## than one thread, so allocation takes its lock (`MULTI`).
+## than one thread (`MULTI`): each allocates from its own cache and takes the
+## allocation lock only to refill it (ADR 0943).
 fn pool() int
     p := load64(global(TASKS))
     if p != 0
@@ -137,7 +138,8 @@ fn pool() int
     store64(global(STACKS), stacks)
     det_init(q)
     store64(global(TASKS), q)
-    hset(H_FASTLIM, 0)
+    # Each thread allocates from its own cache from now on (ADR 0943).
+    tb_init()
     store64(global(MULTI), 1)
     # The stack check compares against the main stack's limit, and a worker's
     # stack lies below it, so every recursive call in a task would trap. With
@@ -697,8 +699,14 @@ fn blocked_leave(s int)
     p := load64(global(TASKS))
     t := thread_slot()
     while true
-        while atomic_load(global(GC_REQ)) != 0
-            futex_wait_raw(global(GC_REQ), 1)
+        # `GC_REQ` 2 is the mark phase, which a parked thread helps with.
+        mut g := atomic_load(global(GC_REQ))
+        while g != 0
+            if g == 2
+                gc_par_help()
+            else
+                futex_wait_raw(global(GC_REQ), 1)
+            g = atomic_load(global(GC_REQ))
         atomic_store(p + P_PARK + 8 * t, 0)
         if atomic_load(global(GC_REQ)) == 0
             return
@@ -721,6 +729,28 @@ fn gc_stop_world()
         if t != me
             while atomic_load(p + P_PARK + 8 * t) == 0
                 yield_cpu()
+
+## Mark from the queued roots with the parked threads' help (ADR 0944),
+## when the heap is large and other threads exist; false leaves the marking
+## to `gc_drain` on this thread. Idle workers sleep on the pool's `seq`
+## word, so they are woken too; they see the phase as they leave the wait.
+fn gc_par_mark() bool
+    if load64(global(MULTI)) == 0 or hs(26) != 0 or hs(H_TOP) - hs(H_BASE) < GCP_MIN_HEAP
+        return false
+    p := load64(global(TASKS))
+    if load64(p + P_LIVE) == 0 or load64(p + P_DET + D_MODE) != 0
+        return false
+    m := heap_state()
+    atomic_store(m + 8 * H_MDONE, 0)
+    atomic_store(m + 8 * H_MBUSY, 0)
+    atomic_store(global(GC_REQ), 2)
+    futex_wake(global(GC_REQ), 2147483647)
+    futex_wake(p + P_SEQ, 2147483647)
+    gc_par_work()
+    atomic_store(global(GC_REQ), 1)
+    while atomic_load(m + 8 * H_MIN) != 0
+        yield_cpu()
+    true
 
 fn gc_start_world()
     if load64(global(MULTI)) == 0

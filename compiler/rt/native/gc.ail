@@ -1,7 +1,8 @@
 ## Runtime: part of the AIL native runtime; linked into user executables
 ## under the Runtime Exception (see LICENSE).
 ##
-## The native collector (ADR 0562, 0564): stop-the-world mark and sweep.
+## The native collector (ADR 0562, 0564): stop-the-world mark and sweep,
+## the marking shared with the parked threads on a large heap (gc_par.ail).
 ## Roots are found conservatively: every word of the stack from the current
 ## stack pointer up to the saved top, the callee-saved registers, and the
 ## runtime's global slots, taken as a pointer when it falls inside a live
@@ -36,8 +37,20 @@ fn gc_find(w int) int
         return base + t.shr(8) * PAGE
     0
 
+## A mark stack is three words: the entries' address, their capacity, and
+## the count. The collector's is the state block's `H_MARKS` words; each
+## thread helping a parallel mark has its own in its cache (gc_par.ail).
+fn gc_stack() int
+    heap_state() + 8 * H_MARKS
+
 ## Mark the object containing `w`, if any, and queue it for scanning.
 fn gc_mark(w int)
+    gc_mark_in(gc_stack(), w)
+
+## The same onto mark stack `c`. Two threads may mark one object at once
+## (parallel marking): both set the same bit and both scan it, which is only
+## work done twice.
+fn gc_mark_in(c int, w int)
     bs := gc_find(w)
     if bs != 0
         h := load64(bs)
@@ -45,16 +58,21 @@ fn gc_mark(w int)
         if kind != 0 and h.bit_and(256) == 0
             store64(bs, h.bit_or(256))
             if kind != KIND_STR and kind != KIND_BYTES and kind != KIND_ATOMIC
-                top := hs(H_MARKN)
-                if top >= hs(H_MARKCAP)
-                    fail(1, 0, 0)
-                store64(hs(H_MARKS) + 8 * top, bs)
-                hset(H_MARKN, top + 1)
+                mut top := load64(c + 16)
+                if top >= load64(c + 8)
+                    # A helper's stack hands half to the shared one; the
+                    # shared one full is out of memory.
+                    if c == gc_stack()
+                        fail(1, 0, 0)
+                    gc_par_spill(c)
+                    top = load64(c + 16)
+                store64(load64(c) + 8 * top, bs)
+                store64(c + 16, top + 1)
 
 ## Mark a list's element block and scan its first `len` words; the rest is
 ## unused. A block already marked (another pointer reached it) was queued
 ## whole, so there is nothing to do.
-fn gc_mark_list_data(w int, len int)
+fn gc_mark_list_data(c int, w int, len int)
     bs := gc_find(w)
     if bs != 0
         h := load64(bs)
@@ -62,36 +80,48 @@ fn gc_mark_list_data(w int, len int)
         if kind != 0 and h.bit_and(256) == 0
             store64(bs, h.bit_or(256))
             if kind == KIND_LDATA
-                gc_scan_range(bs + 8, bs + 8 + 8 * len)
+                gc_scan_in(c, bs + 8, bs + 8 + 8 * len)
+
+fn gc_scan_range(from int, to int)
+    gc_scan_in(gc_stack(), from, to)
 
 ## Most words are not heap addresses (integers, characters, small values), so
 ## the range test is done here once per word, with the heap bounds read once,
 ## and only a word inside the heap is looked up.
-fn gc_scan_range(from int, to int)
+fn gc_scan_in(c int, from int, to int)
     base := hs(H_BASE)
     top := hs(H_TOP)
     mut p := from
     while p < to
         w := load64(p)
         if w >= base and w < top
-            gc_mark(w)
+            gc_mark_in(c, w)
         p += 8
 
 ## Scan the queued objects until none is left.
 fn gc_drain()
-    mut top := hs(H_MARKN)
+    gc_drain_in(gc_stack(), false)
+
+## The same for mark stack `c`; with `share`, a helper hands half of a long
+## stack to the shared one while that is empty, so idle helpers get work.
+fn gc_drain_in(c int, share bool)
+    g := gc_stack()
+    mut top := load64(c + 16)
     while top > 0
         top -= 1
-        hset(H_MARKN, top)
-        bs := load64(hs(H_MARKS) + 8 * top)
+        store64(c + 16, top)
+        bs := load64(load64(c) + 8 * top)
         h := load64(bs)
         n := h.shr(16)
         if h.bit_and(255) == KIND_LIST
             # +0 len, +8 cap, +16 data: only the first `len` elements are live
-            gc_mark_list_data(load64(bs + 24), load64(bs + 8))
+            gc_mark_list_data(c, load64(bs + 24), load64(bs + 8))
         else
-            gc_scan_range(bs + 8, bs + 8 + n / 8 * 8)
-        top = hs(H_MARKN)
+            gc_scan_in(c, bs + 8, bs + 8 + n / 8 * 8)
+        top = load64(c + 16)
+        if share and top >= GCP_SHARE and atomic_load(g + 16) == 0
+            gc_par_spill(c)
+            top = load64(c + 16)
 
 ## Free what is unmarked, clear the marks, and rebuild the free lists.
 ## A page with no live block goes back to the page pool.
@@ -320,6 +350,8 @@ fn gc_collect()
     # With threads, every other one parks first (native-abi.md §10); the
     # collector holds the allocation lock, so none can allocate meanwhile.
     gc_stop_world()
+    # Blocks in the threads' caches go back first (ADR 0943).
+    tb_flush()
     m := heap_state()
     if hs(26) != 0
         gc_verify()
@@ -329,7 +361,9 @@ fn gc_collect()
     gc_scan_range(sp, stack_end_self())
     gc_scan_threads()
     gc_scan_range(global(OUT_BUF), globals_end())
-    gc_drain()
+    # With threads and a large heap the parked threads help (ADR 0944).
+    if not gc_par_mark()
+        gc_drain()
     if hs(25) != 0
         gc_census()
     gc_sweep()
